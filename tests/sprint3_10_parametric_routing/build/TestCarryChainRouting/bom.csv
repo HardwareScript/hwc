@@ -1,0 +1,6 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,100.00x10.00x4.00mm,,,,,1
+Adder[0],Adder,,,,,,1
+Adder[1],Adder,,,,,,1
+Adder[2],Adder,,,,,,1
+Adder[3],Adder,,,,,,1

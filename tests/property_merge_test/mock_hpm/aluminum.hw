@@ -1,0 +1,14 @@
+# Mock HPM Library: Aluminum Material
+# This simulates a complete material definition from an external library
+# with all 5 MPV properties
+
+material Aluminum:
+    category: conductor
+    symbol: "Al"
+    description: "Standard Aluminum from HPM Library"
+    properties:
+        resistivity: 2.65e-8Ω·m
+        thermal_conductivity: 237W/(m·K)
+        density: 2700kg/m³
+        melting_point: 933K
+        max_current_density: 2e9A/m²

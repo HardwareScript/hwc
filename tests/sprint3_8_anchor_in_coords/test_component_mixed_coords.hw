@@ -1,0 +1,94 @@
+## Sprint 3.8: Anchor References in Coordinate Expressions
+## Test: Component with mixed relative and absolute coordinates per axis
+##
+## This test verifies:
+## 1. Parser accepts anchor references inside coordinate expressions
+## 2. X coordinate can be relative while Y and Z are absolute
+## 3. Y coordinate can be relative while X and Z are absolute
+## 4. Constraint solver evaluates anchor references correctly
+##
+## Expected behavior:
+## - [x: GroundPlane.right + 1mm, y: 5mm, z: 2] parses successfully
+## - Component is placed with X relative to pour, Y and Z absolute
+## - No manual calculation required
+##
+## Use Case: Flexible component placement with per-axis control
+
+import * from @std/primitives/units
+import Silicon_P from @std/materials/doped_semiconductors
+import Copper from @std/materials/conductors
+
+## ============================================================================
+## COMPONENT DEFINITION: Test Block
+## ============================================================================
+
+component TestBlock:
+    pins: [input, output]
+    
+    layout:
+        shape: Rectangle(5mm, 5mm, 1mm)
+        
+        pin_positions:
+            input at [1mm, 1mm]
+            output at [4mm, 4mm]
+    
+    metadata:
+        component_type: "Test Block"
+    
+    render:
+        type: procedural
+        shape: box
+        body_color: "#2196F3"
+
+## ============================================================================
+## SPACE: Test Mixed Coordinates
+## ============================================================================
+
+space TestMixedCoords:
+    dimensions: 60mm by 40mm by 2mm
+    grid: 60000 by 40000 by 2
+    origin: tl by t
+    
+    ## Base substrate
+    add substrate(Silicon_P) spanning [x:1um, y:1um, z:0] to [x:59999um, y:39999um, z:1]
+    
+    ## Ground plane as anchor
+    add pour(Copper) named GroundPlane on z:1:
+        boundary: [x:10mm, y:10mm] to [x:25mm, y:20mm]
+        net: GND
+    
+    ## ========================================================================
+    ## TEST 1: X relative, Y and Z absolute
+    ## Component positioned 1mm to the right of GroundPlane at Y=5mm
+    ## ========================================================================
+    
+    add TestBlock named Block1 at [x: GroundPlane.right + 1mm, y: 5mm, z: 2]
+    
+    ## Expected: X = 25mm + 1mm = 26mm, Y = 5mm, Z = layer 2
+    
+    ## ========================================================================
+    ## TEST 2: Y relative, X and Z absolute
+    ## Component positioned 2mm above GroundPlane at X=10mm
+    ## ========================================================================
+    
+    add TestBlock named Block2 at [x: 10mm, y: GroundPlane.top + 2mm, z: 2]
+    
+    ## Expected: X = 10mm, Y = 20mm + 2mm = 22mm, Z = layer 2
+    
+    ## ========================================================================
+    ## TEST 3: Both X and Y relative, Z absolute
+    ## Component positioned relative to GroundPlane corner
+    ## ========================================================================
+    
+    add TestBlock named Block3 at [x: GroundPlane.left - 2mm, y: GroundPlane.bottom - 2mm, z: 2]
+    
+    ## Expected: X = 10mm - 2mm = 8mm, Y = 10mm - 2mm = 8mm, Z = layer 2
+    
+    ## ========================================================================
+    ## TEST 4: Using 'last' keyword in coordinate expression
+    ## Component positioned relative to the last placed component
+    ## ========================================================================
+    
+    add TestBlock named Block4 at [x: last.right + 1mm, y: 15mm, z: 2]
+    
+    ## Expected: X = Block3.right + 1mm = (8mm + 5mm) + 1mm = 14mm, Y = 15mm, Z = layer 2

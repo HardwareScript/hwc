@@ -1,0 +1,66 @@
+## Test P43: Simple component with pins touching pour
+## This test defines a simple component inline and places it so pins touch a pour
+## Expected: No P43 violation (pins touch the conductive island)
+
+import * from @std/primitives/units
+import Copper from @std/materials/conductors
+import FR4 from @std/materials/insulators
+
+## Simple test component with two pins
+component SimpleResistor:
+    pins: A, B
+    
+    layout:
+        shape: Rectangle(2mm, 1mm, 0.5mm)
+        pin_positions:
+            A at [0.5mm, 0.5mm]
+            B at [1.5mm, 0.5mm]
+    
+    electrical:
+        resistance: 1kΩ
+    
+    render:
+        type: procedural
+        shape: smd_passive
+        body_color: "#000000"
+
+module SimpleTest:
+    pins: [
+        power VCC,
+        ground GND
+    ]
+    
+    add SimpleResistor named R1
+    route R1.A to VCC
+    route R1.B to GND
+
+space TestP43SimpleComponent implements SimpleTest:
+    dimensions: 10mm by 10mm by 1mm
+    grid: 10000 by 10000 by 10
+    origin: tl by t
+    
+    nets:
+        VCC: power
+        GND: ground
+    
+    ## Base substrate on z:0 (below the copper pours)
+    add substrate(FR4) spanning [x: 0mm, y: 0mm, z: 0] to [x: 10mm, y: 10mm, z: 1]
+    
+    ## VCC pour on z:2 (above substrate) - positioned to contain resistor pin A at (3.5mm, 5.5mm)
+    ## DEVICE BINDING: Connect this pour to the resistor's A terminal
+    add pour(Copper) named VCCPour on z:2:
+        boundary: [x: 2mm, y: 4mm] to [x: 4mm, y: 7mm]
+        net: VCC
+        device: R1.A
+    
+    ## Place resistor at (3mm, 5mm, z:2)
+    ## Pin A will be at (3mm + 0.5mm, 5mm + 0.5mm) = (3.5mm, 5.5mm) - inside VCC pour
+    ## Pin B will be at (3mm + 1.5mm, 5mm + 0.5mm) = (4.5mm, 5.5mm) - inside GND pour
+    add SimpleResistor named R1 at [x: 3mm, y: 5mm, z: 2]
+    
+    ## GND pour on z:2 (same layer) - positioned to contain resistor pin B at (4.5mm, 5.5mm)
+    ## DEVICE BINDING: Connect this pour to the resistor's B terminal
+    add pour(Copper) named GNDPour on z:2:
+        boundary: [x: 4mm, y: 4mm] to [x: 6mm, y: 7mm]
+        net: GND
+        device: R1.B

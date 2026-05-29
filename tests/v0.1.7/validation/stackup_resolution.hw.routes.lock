@@ -1,0 +1,17 @@
+{
+  "version": "0.1.4",
+  "board": "StackupValidationSpace",
+  "grid": {
+    "dimensions": [
+      100,
+      100,
+      11
+    ],
+    "resolution": [
+      0.1,
+      0.1,
+      0.1
+    ]
+  },
+  "routes": []
+}

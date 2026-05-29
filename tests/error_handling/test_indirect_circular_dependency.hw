@@ -1,0 +1,71 @@
+## Error Handling Test: Indirect Circular Dependency Detection
+## This test creates a longer circular dependency chain
+##
+## Expected behavior:
+## - Build should FAIL with circular dependency error
+## - Error message should show the full chain: M1 → M2 → M3 → M1
+## - Error should explain the problem clearly
+##
+## Circular chain: M1 → M2 → M3 → M1
+
+import * from @std/primitives/units
+
+material Copper:
+    category: conductor
+    properties:
+        resistivity: 1.68e-8Ω·m
+        color: "#B87333"
+
+material FR4:
+    category: insulator
+    properties:
+        resistivity: 1e16Ω·m
+        color: "#2E7D32"
+
+component SimpleResistor:
+    pins: [A, B]
+    
+    layout:
+        shape: Rectangle(2mm, 1mm, 0.5mm)
+        pin_positions:
+            A at [0mm, 0.5mm, 0.25mm]
+            B at [2mm, 0.5mm, 0.25mm]
+    
+    electrical:
+        resistance: 1kΩ
+    
+    metadata:
+        component_type: "Resistor"
+        value: "1kΩ"
+    
+    render:
+        type: procedural
+        shape: box
+        body_color: "#B87333"
+
+space IndirectCircularDependencyTest:
+    dimensions: 30mm by 20mm by 2mm
+    grid: 300 by 200 by 20
+    origin: tl by t
+    
+    nets:
+        VCC: power
+    
+    ## Base substrate
+    add substrate(FR4) spanning [x:0.1mm, y:0.1mm, z:1] to [x:29.9mm, y:19.9mm, z:2]
+    
+    ## ========================================================================
+    ## INDIRECT CIRCULAR DEPENDENCY ERROR TEST
+    ## ========================================================================
+    ## This creates a longer circular chain:
+    ## M1 depends on M2, M2 depends on M3, M3 depends on M1
+    ## This is harder to spot manually but should be caught by the solver
+    
+    ## M1 positioned relative to M3 (M3 doesn't exist yet)
+    add SimpleResistor named M1 at M3.right + 1mm
+    
+    ## M2 positioned relative to M1 (M1 depends on M3)
+    add SimpleResistor named M2 at M1.right + 1mm
+    
+    ## M3 positioned relative to M2 (completes the circle!)
+    add SimpleResistor named M3 at M2.right + 1mm

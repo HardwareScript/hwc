@@ -1,0 +1,20 @@
+//! Component and substrate placement.
+//!
+//! This module provides functionality for placing hardware components, substrates,
+//! pours, contacts, and modules in the voxel grid. It has been refactored into
+//! smaller, focused submodules for better maintainability.
+
+mod array;
+mod component;
+mod contact;
+pub mod coordinate_evaluation; // Made public for anchor reference evaluation
+mod helpers;
+mod module;
+mod pour;
+mod substrate;
+
+// Re-export public functions
+pub use component::place_component;
+pub use contact::place_contact;
+pub use pour::place_pour;
+pub use substrate::place_substrate;

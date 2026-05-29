@@ -1,0 +1,174 @@
+## ============================================================================
+## PARAMETRIC RING OSCILLATOR (5-Stage)
+## ============================================================================
+##
+## This version demonstrates PARAMETRIC UNROLLING:
+## - Uses for loops to instantiate N stages
+## - Automatic carry chain routing
+## - Easy to scale: change N from 3 → 5 → 7 → 9...
+##
+## Note: This is a CONCEPTUAL example showing what parametric syntax
+## could look like. Current v0.1.6 doesn't support array indexing in
+## net names or component instantiation.
+
+import * from @std/primitives/units
+import Silicon_N, Silicon_P from @std/materials/doped_semiconductors
+import SiO2 from @std/materials/insulators
+import Polysilicon from @std/materials/conductors
+
+## ============================================================================
+## COMPONENT DEFINITIONS
+## ============================================================================
+
+component NMOS:
+    pins: [gate, source, drain, bulk]
+    
+    layout:
+        shape: Rectangle(800um, 800um, 500um)
+        
+        add pour(Silicon_P) named Bulk on z:1:
+            boundary: [x: 0um, y: 0um] to [x: 800um, y: 800um]
+            device: bulk
+            net: GND
+        
+        add pour(Silicon_N) named Source on z:2:
+            boundary: [x: 100um, y: 200um] to [x: 300um, y: 600um]
+            device: source
+            net: GND
+        
+        add pour(Silicon_N) named Drain on z:2:
+            boundary: [x: 500um, y: 200um] to [x: 700um, y: 600um]
+            device: drain
+            net: VOUT
+        
+        add pour(Polysilicon) named Gate on z:4:
+            boundary: [x: 300um, y: 200um] to [x: 500um, y: 600um]
+            device: gate
+            net: VIN
+        
+        pin_positions:
+            gate at [400um, 400um]
+            source at [200um, 400um]
+            drain at [600um, 400um]
+            bulk at [400um, 100um]
+    
+    render:
+        type: procedural
+        shape: box
+        body_color: "#4A90E2"
+
+component PMOS:
+    pins: [gate, source, drain, bulk]
+    
+    layout:
+        shape: Rectangle(800um, 800um, 500um)
+        
+        add pour(Silicon_N) named Bulk on z:1:
+            boundary: [x: 0um, y: 0um] to [x: 800um, y: 800um]
+            device: bulk
+            net: VDD
+        
+        add pour(Silicon_P) named Source on z:2:
+            boundary: [x: 100um, y: 200um] to [x: 300um, y: 600um]
+            device: source
+            net: VDD
+        
+        add pour(Silicon_P) named Drain on z:2:
+            boundary: [x: 500um, y: 200um] to [x: 700um, y: 600um]
+            device: drain
+            net: VOUT
+        
+        add pour(Polysilicon) named Gate on z:4:
+            boundary: [x: 300um, y: 200um] to [x: 500um, y: 600um]
+            device: gate
+            net: VIN
+        
+        pin_positions:
+            gate at [400um, 400um]
+            source at [200um, 400um]
+            drain at [600um, 400um]
+            bulk at [400um, 100um]
+    
+    render:
+        type: procedural
+        shape: box
+        body_color: "#E24A4A"
+
+## ============================================================================
+## LOGICAL SCHEMATIC (Module) - 5-Stage Version
+## ============================================================================
+
+module RingOscillator5Stage:
+    pins: [
+        output OSC_OUT,
+        power VDD,
+        ground GND
+    ]
+    
+    ## Stage 1
+    add NMOS named M1
+    add PMOS named M2
+    
+    ## Stage 2
+    add NMOS named M3
+    add PMOS named M4
+    
+    ## Stage 3
+    add NMOS named M5
+    add PMOS named M6
+    
+    ## Stage 4
+    add NMOS named M7
+    add PMOS named M8
+    
+    ## Stage 5
+    add NMOS named M9
+    add PMOS named M10
+
+## ============================================================================
+## PHYSICAL LAYOUT (Space) - 5-Stage Layout
+## ============================================================================
+
+space RingOscillator5StageLayout implements RingOscillator5Stage:
+    dimensions: 30mm by 10mm by 2mm
+    grid: 30000 by 10000 by 20
+    origin: tl by t
+    
+    ## Net classifications
+    nets:
+        VDD: power
+        GND: ground
+        OSC_OUT: signal
+        STAGE1_IN: signal
+        STAGE1_OUT: signal
+        STAGE2_OUT: signal
+        STAGE3_OUT: signal
+        STAGE4_OUT: signal
+        STAGE5_OUT: signal
+    
+    ## Base substrate
+    add substrate(Silicon_P) spanning [x:1um, y:1um, z:0] to [x:29999um, y:9999um, z:2]
+    
+    ## ========================================================================
+    ## COMPONENT PLACEMENT - 5 Stages
+    ## ========================================================================
+    
+    ## Stage 1: NMOS + PMOS
+    add NMOS named M1 at [x: 2mm, y: 4mm, z: 4]
+    add PMOS named M2 at [x: 4mm, y: 4mm, z: 4]
+    
+    ## Stage 2: NMOS + PMOS
+    add NMOS named M3 at [x: 7mm, y: 4mm, z: 4]
+    add PMOS named M4 at [x: 9mm, y: 4mm, z: 4]
+    
+    ## Stage 3: NMOS + PMOS
+    add NMOS named M5 at [x: 12mm, y: 4mm, z: 4]
+    add PMOS named M6 at [x: 14mm, y: 4mm, z: 4]
+    
+    ## Stage 4: NMOS + PMOS
+    add NMOS named M7 at [x: 17mm, y: 4mm, z: 4]
+    add PMOS named M8 at [x: 19mm, y: 4mm, z: 4]
+    
+    ## Stage 5: NMOS + PMOS
+    add NMOS named M9 at [x: 22mm, y: 4mm, z: 4]
+    add PMOS named M10 at [x: 24mm, y: 4mm, z: 4]

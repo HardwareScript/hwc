@@ -1,0 +1,81 @@
+## Test: No P12 Collision with Sufficient Pitch
+## Verifies that arrays with adequate spacing do NOT trigger P12 error
+##
+## This is the POSITIVE test case - arrays should work fine when
+## pitch is large enough to prevent overlaps.
+##
+## Expected Behavior:
+## - Compilation succeeds
+## - No P12 error
+## - All instances placed independently
+
+import * from @std/primitives/units
+import Silicon_P, Silicon_N from @std/materials/doped_semiconductors
+
+## ============================================================================
+## COMPONENT DEFINITION: Finger with Non-Overlapping Pours
+## ============================================================================
+
+component SafeFinger:
+    pins: [left, right]
+    
+    layout:
+        shape: Rectangle(3um, 10um, 0.5um)
+        
+        ## Internal pour that will NOT overlap with adjacent instances
+        ## Pour is 2um wide, pitch is 4um, so there's 2um gap between instances
+        add pour(Silicon_N) named source on z:1:
+            boundary: [x: 0.5um, y: 0um] to [x: 2.5um, y: 10um]
+            device: left
+            net: GND
+        
+        add pour(Silicon_N) named drain on z:1:
+            boundary: [x: 0.5um, y: 0um] to [x: 2.5um, y: 10um]
+            device: right
+            net: VDD
+        
+        pin_positions:
+            left at [0um, 5um]
+            right at [3um, 5um]
+    
+    metadata:
+        description: "Finger with safe spacing (no overlap)"
+    
+    render:
+        type: procedural
+        shape: box
+        body_color: "#6BFF6B"
+
+## ============================================================================
+## SPACE: No Collision Test (Sufficient Pitch)
+## ============================================================================
+
+space NoCollisionTest:
+    dimensions: 100um by 50um by 2mm
+    grid: 100000 by 50000 by 2
+    origin: tl by t
+    
+    ## Base substrate (z:0 to z:1)
+    add substrate(Silicon_P) spanning [x:1um, y:1um, z:0] to [x:99999um, y:49999um, z:1]
+    
+    ## ========================================================================
+    ## TEST 1: Horizontal stack with sufficient pitch (no overlap)
+    ## 
+    ## Pitch: 4um
+    ## Pour width: 2um
+    ## Gap: 2um between instances
+    ## 
+    ## EXPECTED: Success (no P12 error)
+    ## ========================================================================
+    add SafeFinger[5] named Safe_Array at [x: 10um, y: 20um, z: 2]:
+        layout: horizontal_stack
+        pitch: 4um
+        ## No merge: needed because pours don't overlap
+    
+    ## ========================================================================
+    ## TEST 2: Vertical stack with sufficient pitch (no overlap)
+    ## ========================================================================
+    add SafeFinger[3] named Safe_Vertical at [x: 50um, y: 10um, z: 2]:
+        layout: vertical_stack
+        pitch: 12um
+        ## No merge: needed because pours don't overlap

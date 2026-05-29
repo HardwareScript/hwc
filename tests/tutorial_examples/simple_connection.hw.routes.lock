@@ -1,0 +1,17 @@
+{
+  "version": "0.1.4",
+  "board": "SimpleConnection",
+  "grid": {
+    "dimensions": [
+      200,
+      100,
+      500
+    ],
+    "resolution": [
+      0.25,
+      0.3,
+      0.01
+    ]
+  },
+  "routes": []
+}

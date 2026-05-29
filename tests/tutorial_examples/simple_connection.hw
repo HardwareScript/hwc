@@ -1,0 +1,55 @@
+# Simple Hardware Script Example
+# Demonstrates: FR4 substrate, two copper plates, and correct orientation.
+
+material Copper:
+    category: conductor
+    symbol: "Cu"
+    properties:
+        resistivity: 1.68e-8Ω·m
+        color: "#FFD700" # Gold
+
+material FR4:
+    category: insulator
+    symbol: "FR4"
+    properties:
+        dielectric_constant: 4.4
+        color: "#2E7D32" # Dark Green
+
+profile SimpleStackup:
+    stackup:
+        # Standard PCB order: Top to Bottom
+        top_copper: [material: Copper, thickness: 35um]
+        dielectric: [material: FR4, thickness: 1.5mm]
+        bottom_copper: [material: Copper, thickness: 35um]
+
+space SimpleConnection:
+    profile: SimpleStackup
+    dimensions: 50mm by 30mm by 5mm
+    grid: 200 by 100 by 500
+    
+    # CORRECT ORIENTATION:
+    # origin: bl by b (Bottom-Left XY, Bottom-Up Z)
+    # This ensures Z=0 is the bottom and Z increases upwards, matching physical reality.
+    origin: bl by b
+    
+    # 1. Define the substrate (The PCB board itself)
+    # Built from the bottom (z: 0mm) up to the top surface (z: 1.5mm)
+    add substrate(FR4) spanning [x: 0, y: 0, z: 0mm] to [x: 50mm, y: 30mm, z: 1.5mm]
+    
+    # 2. Add two copper plates (pours) on top of the substrate
+    # We place these at z: 1.5mm (exactly on the top surface of the FR4)
+    add pour(Copper) named Plate1 on z: 1.5mm:
+        boundary: [x: 5mm, y: 10mm] to [x: 10mm, y: 20mm]
+        net: POWER_BUS
+
+    add pour(Copper) named Plate2 on z: 1.5mm:
+        boundary: [x: 40mm, y: 10mm] to [x: 45mm, y: 20mm]
+        net: POWER_BUS
+
+    # 3. Demonstrate relative Z-axis (v0.1.7)
+    # We can reference the top edge of Plate1 for other components or routes.
+    # The auto-router uses these semantic anchors to find the best connection point.
+    
+    # 4. Tell the auto-router to connect both plates
+    # It will find the center-of-mass anchor points on both plates automatically.
+    route Plate1 to Plate2

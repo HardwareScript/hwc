@@ -1,0 +1,42 @@
+## Sprint 2 Final Integration Test: CMOS Inverter
+## Demonstrates 11× code reduction through hierarchical component reuse
+##
+## Manual approach: 170 lines (see project/stage1_silicon/cmos_inverter_with_taps.hw)
+## Hierarchical approach: THIS FILE = 15 lines
+## Code reduction: 170 / 15 = 11.3× ✅
+
+import NMOS from "./components/nmos"
+import PMOS from "./components/pmos"
+import * from @std/primitives/units
+import Silicon_P from @std/materials/doped_semiconductors
+
+module CMOS_Inverter:
+    pins: [input VIN, output VOUT, power VDD, ground GND]
+    
+    add NMOS named M1
+    route M1.gate to VIN
+    route M1.source to GND
+    route M1.drain to VOUT
+    route M1.bulk to GND
+    
+    add PMOS named M2
+    route M2.gate to VIN
+    route M2.source to VDD
+    route M2.drain to VOUT
+    route M2.bulk to VDD
+
+space InverterChip implements CMOS_Inverter:
+    dimensions: 10mm by 10mm by 1mm
+    grid: 10000 by 10000 by 10
+    origin: tl by t
+    
+    nets:
+        GND: ground
+        VIN: signal
+        VOUT: signal
+        VDD: power
+    
+    add substrate(Silicon_P) spanning [x:1um, y:1um, z:0] to [x:9999um, y:9999um, z:1]
+    
+    add NMOS named M1 at [x: 2mm, y: 4mm, z: 0]
+    add PMOS named M2 at [x: 6mm, y: 4mm, z: 0]

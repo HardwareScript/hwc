@@ -1,0 +1,34 @@
+## Test P43: Floating Conductor Detection
+## This test creates a conductive island with a net assignment but no component pins touching it
+## Expected: P43 violation (Floating Conductor)
+
+import * from @std/primitives/units
+import Copper from @std/materials/conductors
+import FR4 from @std/materials/insulators
+
+module FloatingConductorTest:
+    pins: []
+
+space TestP43FloatingConductor implements FloatingConductorTest:
+    dimensions: 10mm by 10mm by 1mm
+    grid: 10000 by 10000 by 10
+    origin: tl by t
+    
+    nets:
+        VCC: power
+        GND: ground
+    
+    ## Base substrate
+    add substrate(FR4) spanning [x: 0mm, y: 0mm, z: 0] to [x: 10mm, y: 10mm, z: 1]
+    
+    ## Pour with net assignment but no component touching it
+    ## This is a floating conductor - it has a net label but no electrical connection
+    add pour(Copper) named FloatingPour on z:1:
+        boundary: [x: 2mm, y: 2mm] to [x: 4mm, y: 4mm]
+        net: VCC
+    
+    ## Another pour with a different net, also floating
+    add pour(Copper) named FloatingGND on z:1:
+        boundary: [x: 6mm, y: 6mm] to [x: 8mm, y: 8mm]
+        net: GND
+

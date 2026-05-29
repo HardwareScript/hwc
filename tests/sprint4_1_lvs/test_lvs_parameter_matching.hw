@@ -1,0 +1,156 @@
+## ============================================================================
+## Sprint 4.1: LVS Engine Test - Parameter Matching with Tolerance
+## ============================================================================
+##
+## This test verifies tolerance-based parameter matching for W/L ratios.
+## 
+## Test Cases:
+## 1. M1: W=10um, L=1um (exact match) → PASS
+## 2. M2: W=10.05um, L=1um (0.5% error, within 1% tolerance) → PASS
+## 3. M3: W=10.2um, L=1um (2% error, outside 1% tolerance) → FAIL
+
+import * from @std/primitives/units
+
+## ============================================================================
+## Logical Schematic (Module) with Parameter Specifications
+## ============================================================================
+
+module ParameterTest:
+    pins: [
+        input VIN,
+        output VOUT,
+        ground GND
+    ]
+    
+    ## Exact match case
+    add NMOS(W: 10um, L: 1um) named M1
+    route M1.gate to VIN
+    route M1.source to GND
+    route M1.drain to VOUT
+    route M1.bulk to GND
+    
+    ## Within tolerance case (0.5% error)
+    add NMOS(W: 10um, L: 1um) named M2
+    route M2.gate to VIN
+    route M2.source to GND
+    route M2.drain to VOUT
+    route M2.bulk to GND
+    
+    ## Outside tolerance case (2% error) - should fail
+    add NMOS(W: 10um, L: 1um) named M3
+    route M3.gate to VIN
+    route M3.source to GND
+    route M3.drain to VOUT
+    route M3.bulk to GND
+
+## ============================================================================
+## Physical Layout (Space)
+## ============================================================================
+
+space ParameterTestLayout implements ParameterTest:
+    dimensions: 3mm by 2mm by 1mm
+    grid: 30 by 20 by 10
+    
+    ## M1: Exact match (10um x 1um gate)
+    add pour(Polysilicon) named M1_Gate on z:5:
+        device: M1.gate
+        net: VIN
+        boundary: [x: 200um, y: 400um] to [x: 210um, y: 1400um]  # 10um x 1000um = 10um x 1um
+    
+    add pour(Silicon_N) named M1_Source on z:3:
+        device: M1.source
+        net: GND
+        boundary: [x: 200um, y: 200um] to [x: 210um, y: 400um]
+    
+    add pour(Silicon_N) named M1_Drain on z:3:
+        device: M1.drain
+        net: VOUT
+        boundary: [x: 200um, y: 1400um] to [x: 210um, y: 1600um]
+    
+    add pour(Silicon_P) named M1_Bulk on z:3:
+        device: M1.bulk
+        net: GND
+        boundary: [x: 100um, y: 700um] to [x: 200um, y: 900um]
+    
+    ## M2: Within tolerance (10.05um x 1um gate = 0.5% error)
+    add pour(Polysilicon) named M2_Gate on z:5:
+        device: M2.gate
+        net: VIN
+        boundary: [x: 600um, y: 400um] to [x: 610.05um, y: 1400um]  # 10.05um x 1000um
+    
+    add pour(Silicon_N) named M2_Source on z:3:
+        device: M2.source
+        net: GND
+        boundary: [x: 600um, y: 200um] to [x: 610.05um, y: 400um]
+    
+    add pour(Silicon_N) named M2_Drain on z:3:
+        device: M2.drain
+        net: VOUT
+        boundary: [x: 600um, y: 1400um] to [x: 610.05um, y: 1600um]
+    
+    add pour(Silicon_P) named M2_Bulk on z:3:
+        device: M2.bulk
+        net: GND
+        boundary: [x: 500um, y: 700um] to [x: 600um, y: 900um]
+    
+    ## M3: Outside tolerance (10.2um x 1um gate = 2% error)
+    add pour(Polysilicon) named M3_Gate on z:5:
+        device: M3.gate
+        net: VIN
+        boundary: [x: 1000um, y: 400um] to [x: 1010.2um, y: 1400um]  # 10.2um x 1000um
+    
+    add pour(Silicon_N) named M3_Source on z:3:
+        device: M3.source
+        net: GND
+        boundary: [x: 1000um, y: 200um] to [x: 1010.2um, y: 400um]
+    
+    add pour(Silicon_N) named M3_Drain on z:3:
+        device: M3.drain
+        net: VOUT
+        boundary: [x: 1000um, y: 1400um] to [x: 1010.2um, y: 1600um]
+    
+    add pour(Silicon_P) named M3_Bulk on z:3:
+        device: M3.bulk
+        net: GND
+        boundary: [x: 900um, y: 700um] to [x: 1000um, y: 900um]
+    
+    ## ========================================================================
+    ## Routing to connect nets across all three transistors
+    ## ========================================================================
+    
+    ## Connect VIN (gate pours on z:5) - must overlap with device gates
+    add pour(Polysilicon) named VIN_Route1 on z:5:
+        net: VIN
+        boundary: [x: 200um, y: 800um] to [x: 610.05um, y: 1000um]  # Overlap M1_Gate and M2_Gate
+    
+    add pour(Polysilicon) named VIN_Route2 on z:5:
+        net: VIN
+        boundary: [x: 600um, y: 800um] to [x: 1010.2um, y: 1000um]  # Overlap M2_Gate and M3_Gate
+    
+    ## Connect GND sources (z:3) - must overlap with device sources
+    add pour(Silicon_N) named GND_Route1 on z:3:
+        net: GND
+        boundary: [x: 200um, y: 200um] to [x: 1010.2um, y: 400um]  # Overlap all three sources
+    
+    ## Connect GND bulks (z:3) - must overlap with device bulks
+    add pour(Silicon_P) named GND_Route2 on z:3:
+        net: GND
+        boundary: [x: 100um, y: 700um] to [x: 1000um, y: 900um]  # Overlap all three bulks
+    
+    ## Bridge layer to connect sources and bulks (different materials on z:3)
+    add pour(Aluminum) named GND_Bridge on z:4:
+        net: GND
+        boundary: [x: 200um, y: 200um] to [x: 1000um, y: 900um]  # Cover both source and bulk regions
+    
+    ## Via from source region (z:3) to bridge (z:4)
+    add contact(Aluminum) named GND_Via_Src net: GND at [x: 600um, y: 300um] spanning z:3 to z:4:
+        diameter: 100um
+    
+    ## Via from bulk region (z:3) to bridge (z:4)
+    add contact(Aluminum) named GND_Via_Bulk net: GND at [x: 600um, y: 800um] spanning z:3 to z:4:
+        diameter: 100um
+    
+    ## Connect VOUT (drain pours on z:3) - must overlap with device drains
+    add pour(Silicon_N) named VOUT_Route on z:3:
+        net: VOUT
+        boundary: [x: 200um, y: 1400um] to [x: 1010.2um, y: 1600um]  # Overlap all three drains

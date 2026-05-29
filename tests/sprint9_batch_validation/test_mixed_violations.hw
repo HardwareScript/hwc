@@ -1,0 +1,89 @@
+## ============================================================================
+## SPRINT 9: MIXED VIOLATION TYPES TEST
+## ============================================================================
+##
+## Tests batch validation with multiple violation types occurring simultaneously:
+## - P44 Floating (components above substrate)
+## - P44 Buried (components below substrate)
+## - Different component types with different violation patterns
+##
+## Expected: Violations grouped by type AND by component pattern
+
+import * from @std/primitives/units
+import FR4 from @std/materials/insulators
+import Copper from @std/materials/conductors
+
+component SmallChip:
+    pins: [vdd, gnd]
+    layout:
+        shape: Rectangle(2mm, 2mm, 300um)
+    render:
+        type: procedural
+        shape: box
+        body_color: "#E74C3C"
+
+component LargeChip:
+    pins: [vdd, gnd, io]
+    layout:
+        shape: Rectangle(5mm, 5mm, 800um)
+    render:
+        type: procedural
+        shape: box
+        body_color: "#9B59B6"
+
+component TinyResistor:
+    pins: [a, b]
+    layout:
+        shape: Rectangle(1mm, 0.5mm, 100um)
+    render:
+        type: procedural
+        shape: box
+        body_color: "#F39C12"
+
+module MixedBoard:
+    pins: [power VDD, power GND]
+    
+    add SmallChip named Chip0
+    add SmallChip named Chip1
+    add SmallChip named Chip2
+    add SmallChip named Chip3
+    add LargeChip named BigChip0
+    add LargeChip named BigChip1
+    add TinyResistor named R0
+    add TinyResistor named R1
+    add TinyResistor named R2
+    add TinyResistor named R3
+    add TinyResistor named R4
+
+space MixedViolationTest implements MixedBoard:
+    dimensions: 80mm by 60mm by 15mm
+    grid: 800 by 600 by 150
+    origin: bl by b
+
+    nets:
+        VDD: power
+        GND: ground
+
+    ## Substrate at z:50-60
+    add substrate(FR4) spanning [x:0mm, y:0mm, z:50] to [x:80mm, y:60mm, z:60]
+
+    ## GROUP 1: SmallChips FLOATING at different heights
+    add SmallChip named Chip0 at [x: 10mm, y: 10mm, z: 70]  ## 10mm above substrate
+    add SmallChip named Chip1 at [x: 20mm, y: 10mm, z: 75]  ## 15mm above substrate
+    add SmallChip named Chip2 at [x: 30mm, y: 10mm, z: 70]  ## 10mm above substrate
+    add SmallChip named Chip3 at [x: 40mm, y: 10mm, z: 80]  ## 20mm above substrate
+
+    ## GROUP 2: LargeChips BURIED at same depth
+    add LargeChip named BigChip0 at [x: 15mm, y: 30mm, z: 30]  ## 20mm below substrate
+    add LargeChip named BigChip1 at [x: 35mm, y: 30mm, z: 30]  ## 20mm below substrate
+
+    ## GROUP 3: TinyResistors - MIXED (some floating, some buried)
+    add TinyResistor named R0 at [x: 10mm, y: 50mm, z: 65]  ## Floating
+    add TinyResistor named R1 at [x: 20mm, y: 50mm, z: 40]  ## Buried
+    add TinyResistor named R2 at [x: 30mm, y: 50mm, z: 65]  ## Floating
+    add TinyResistor named R3 at [x: 40mm, y: 50mm, z: 40]  ## Buried
+    add TinyResistor named R4 at [x: 50mm, y: 50mm, z: 70]  ## Floating
+
+    ## Add some copper pours that are correctly placed (should not trigger errors)
+    add pour(Copper) named GroundPlane on z:60:
+        boundary: [x:10mm, y:10mm] to [x:20mm, y:20mm]

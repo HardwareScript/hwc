@@ -1,0 +1,20 @@
+[package]
+name = "hwc-physics"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+thiserror = { workspace = true }
+hwc-materials = { workspace = true }
+hwc-parser = { workspace = true }
+hwc-diagnostics = { workspace = true }
+rayon = { workspace = true }
+rustc-hash = { workspace = true }
+compact_str = { workspace = true }
+
+[dev-dependencies]
+hwc-parser = { workspace = true }
+hwc-compiler = { workspace = true }
+hwc-engine = { workspace = true }

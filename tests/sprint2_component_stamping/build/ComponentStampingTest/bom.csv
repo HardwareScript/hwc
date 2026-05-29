@@ -1,0 +1,6 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,2.00x2.00x1.00mm,,,,,1
+R1,SimpleResistor,100Ω,,,,,1
+R2,SimpleResistor,100Ω,,,,,1
+R3,SimpleResistor,100Ω,,,,,1
+R4,SimpleResistor,100Ω,,,,,1

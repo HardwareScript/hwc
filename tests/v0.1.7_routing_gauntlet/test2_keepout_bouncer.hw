@@ -1,0 +1,43 @@
+material Copper:
+    category: conductor
+    symbol: "Cu"
+    properties:
+        resistivity: 1.68e-8Ω·m
+
+material Plastic:
+    category: insulator
+    symbol: "Pl"
+
+profile TestProfile:
+    stackup:
+        top: [material: Copper, thickness: 35um]
+        core: [material: Copper, thickness: 1.5mm]
+        bottom: [material: Copper, thickness: 35um]
+
+component Connector:
+    pins: [P1]
+    layout:
+        shape: Rectangle(1mm, 1mm, 0.1mm)
+        pin_positions:
+            P1 at [0mm, 0mm, 0mm]
+
+component LargeObstacle:
+    pins: []
+    layout:
+        # A massive 20mm x 20mm obstacle
+        shape: Rectangle(20mm, 20mm, 5mm)
+
+space KeepoutBouncer:
+    profile: TestProfile
+    dimensions: 50mm by 50mm by 10mm
+    grid: 100 by 100 by 10
+    
+    add Connector named Start at [x: 5mm, y: 25mm, z: 0mm]
+    add Connector named End at [x: 45mm, y: 25mm, z: 0mm]
+    
+    # Place obstacle directly in the shortest path (y=25mm)
+    add LargeObstacle named Block at [x: 15mm, y: 15mm, z: 0mm]
+    
+    # Test 2: Auto-route around component
+    # Success Criteria: Trace bends 90° to avoid 'Block', no R15/P12 errors.
+    route Start.P1 to End.P1

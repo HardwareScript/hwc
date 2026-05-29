@@ -1,0 +1,51 @@
+## Sprint 3.4: Parametric Unrolling - Loop Variables in Net Names
+## Test: Loop variables in net assignments for pours and contacts
+##
+## This test verifies:
+## 1. Loop variables can be used in pour net names: net: D[i]
+## 2. Loop variables can be used in contact net names: net: Bus[i]
+## 3. Unique net names are generated per iteration
+## 4. Inclusive range semantics: 0..7 produces 8 items (Ruby-style)
+##
+## Expected behavior:
+## - Parser successfully parses net names with loop variables
+## - Compiler unrolls loop and substitutes loop variable in net names
+## - Generates unique nets: D[0], D[1], D[2], ..., D[7]
+## - Token-aware substitution: DataLine_i → DataLine_0 (not DataL0ne_0)
+##
+## Use Case: 8-bit data bus with indexed nets
+
+import * from @std/primitives/units
+import Silicon_P from @std/materials/doped_semiconductors
+import Copper from @std/materials/conductors
+
+## ============================================================================
+## SPACE: Test Loop Variables in Net Names
+## ============================================================================
+
+space Test8BitBus:
+    dimensions: 100mm by 20mm by 2mm
+    grid: 100000 by 20000 by 2
+    origin: tl by t
+    
+    ## Base substrate
+    add substrate(Silicon_P) spanning [x:1um, y:1um, z:0] to [x:99999um, y:19999um, z:1]
+    
+    ## ========================================================================
+    ## TEST 1: Loop variables in pour net names with array syntax
+    ## Creates 8 pours with nets: D[0], D[1], D[2], ..., D[7]
+    ## Range: 0..7 is INCLUSIVE (Ruby-style) = 8 iterations
+    ## ========================================================================
+    for i in 0..7:
+        add pour(Copper) named DataLine_i on z:1:
+            net: D[i]
+            boundary: [x: i * 10mm + 1mm, y: 5mm] to [x: i * 10mm + 8mm, y: 7mm]
+    
+    ## ========================================================================
+    ## TEST 2: Loop variables in contact net names with array syntax
+    ## Creates 8 contacts with nets: Bus[0], Bus[1], Bus[2], ..., Bus[7]
+    ## Range: 0..7 is INCLUSIVE (Ruby-style) = 8 iterations
+    ## ========================================================================
+    for i in 0..7:
+        add contact(Copper) named Via_i net: Bus[i] at [x: i * 10mm + 4mm, y: 10mm, z: 1] spanning z:1 to z:2:
+            diameter: 0.5mm

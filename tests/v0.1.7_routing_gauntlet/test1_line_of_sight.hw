@@ -1,0 +1,31 @@
+material Copper:
+    category: conductor
+    symbol: "Cu"
+    properties:
+        resistivity: 1.68e-8Ω·m
+
+profile TestProfile:
+    stackup:
+        top: [material: Copper, thickness: 35um]
+        core: [material: Copper, thickness: 1.5mm]
+        bottom: [material: Copper, thickness: 35um]
+
+component Connector:
+    pins: [P1, P2]
+    layout:
+        shape: Rectangle(2mm, 2mm, 0.1mm)
+        pin_positions:
+            P1 at [0mm, 0mm, 0mm]
+            P2 at [1mm, 1mm, 0mm]
+
+space LineOfSight: 
+    profile: TestProfile 
+    dimensions: 50mm by 50mm by 5mm 
+    grid: 100 by 100 by 100
+    
+    add Connector named C1 at [x: 10mm, y: 10mm] on layer: top
+    add Connector named C2 at [x: 40mm, y: 10mm] on layer: top
+    
+    # Test 1: Naked Route (Auto-routing - Shortest Path)
+    # Success Criteria: Straight line, bound to netlist, P41 passes.
+    route C1.P1 to C2.P1

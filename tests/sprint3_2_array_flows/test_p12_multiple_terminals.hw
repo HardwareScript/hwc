@@ -1,0 +1,76 @@
+## Test: P12 Collision with Multiple Terminals (Partial Merge)
+## Verifies that P12 detection works when only SOME terminals are merged
+##
+## Scenario:
+## - Component has 2 internal pours: source and drain
+## - User declares merge: [source] (only source is merged)
+## - Drain pours overlap but are NOT in merge list
+## - EXPECTED: P12 error for drain overlap
+##
+## Philosophy: Explicit intent must cover ALL overlapping geometry
+
+import * from @std/primitives/units
+import Silicon_P, Silicon_N from @std/materials/doped_semiconductors
+
+## ============================================================================
+## COMPONENT DEFINITION: Finger with Two Overlapping Pours
+## ============================================================================
+
+component DualOverlapFinger:
+    pins: [gate, source, drain]
+    
+    layout:
+        shape: Rectangle(3um, 10um, 0.5um)
+        
+        ## Source pour: 2.5um wide (will overlap with pitch 2um)
+        add pour(Silicon_N) named source on z:1:
+            boundary: [x: 0um, y: 0um] to [x: 2.5um, y: 4um]
+            device: source
+            net: GND
+        
+        ## Drain pour: 2.5um wide (will also overlap with pitch 2um)
+        add pour(Silicon_N) named drain on z:1:
+            boundary: [x: 0um, y: 6um] to [x: 2.5um, y: 10um]
+            device: drain
+            net: VDD
+        
+        pin_positions:
+            gate at [1.5um, 5um]
+            source at [1.5um, 2um]
+            drain at [1.5um, 8um]
+    
+    metadata:
+        description: "Finger with two overlapping pours"
+    
+    render:
+        type: procedural
+        shape: box
+        body_color: "#FFFF6B"
+
+## ============================================================================
+## SPACE: P12 Collision Test (Partial Merge)
+## ============================================================================
+
+space P12PartialMergeTest:
+    dimensions: 50um by 50um by 2mm
+    grid: 50000 by 50000 by 2
+    origin: tl by t
+    
+    ## Base substrate (z:0 to z:1)
+    add substrate(Silicon_P) spanning [x:1um, y:1um, z:0] to [x:49999um, y:49999um, z:1]
+    
+    ## ========================================================================
+    ## TEST: Array with partial merge intent
+    ## 
+    ## Both source and drain pours overlap with pitch 2um
+    ## User only declares merge: [source]
+    ## Drain pours overlap but are NOT in merge list
+    ## 
+    ## EXPECTED ERROR: P12: Geometric Collision for drain terminal
+    ## - Compiler should detect drain overlap
+    ## - Error message should suggest: merge: [source, drain]
+    ## ========================================================================
+    add DualOverlapFinger[3] named Partial_Array at [x: 10um, y: 20um, z: 2]:
+        layout: horizontal_stack
+        pitch: 2um
+        merge: [source]  ## Only source is merged, drain will collide!

@@ -1,0 +1,44 @@
+## Sprint 2.3: Physical Continuity Test - P41 Disconnected Net
+## 
+## This test should FAIL with error P41: Physical Disconnection
+##
+## Test scenario:
+## - Two pours on the same net (VCC) that do NOT physically touch
+## - Layer 2 connectivity check will pass (both labeled VCC)
+## - Layer 3 physical continuity will FAIL (two separate islands)
+##
+## Expected error:
+## P41: Net 'VCC' has 2 disconnected islands
+
+import * from @std/primitives/units
+import Copper from @std/materials/conductors
+
+## Simple module with no routing requirements
+module DisconnectedNetTest:
+    pins: []
+
+space TestDisconnectedNet implements DisconnectedNetTest:
+    dimensions: 10mm by 10mm by 1mm
+    grid: 10000 by 10000 by 10
+    origin: tl by t
+    
+    ## Net classifications
+    nets:
+        VCC: power
+        GND: ground
+    
+    ## Island 1: VCC pour at left side
+    add pour(Copper) named VCC_Left on z:1:
+        boundary: [x: 1mm, y: 1mm] to [x: 3mm, y: 8mm]
+        net: VCC
+    
+    ## Island 2: VCC pour at right side (NOT touching Island 1)
+    ## Gap of 2mm between them - no physical connection!
+    add pour(Copper) named VCC_Right on z:1:
+        boundary: [x: 5mm, y: 1mm] to [x: 8mm, y: 8mm]
+        net: VCC
+    
+    ## GND pour on a separate layer with Z-gap (no face contact)
+    add pour(Copper) named GND_Plane on z:3:
+        boundary: [x: 1mm, y: 1mm] to [x: 8mm, y: 8mm]
+        net: GND

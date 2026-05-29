@@ -1,0 +1,12 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,0.05x0.05x2.00mm,,,,,1
+F_Array[0]_source,Pour,0.0000mm² net:GND,Layer 1,,Silicon_N,0.000020mm³
+F_Array[1]_source,Pour,0.0000mm² net:GND,Layer 1,,Silicon_N,0.000020mm³
+F_Array[2]_source,Pour,0.0000mm² net:GND,Layer 1,,Silicon_N,0.000020mm³
+F_Array[0-2].source,Pour,0.0001mm² net:GND,Layer 1,,Silicon_N,0.000050mm³
+F_Array[0],Finger,,,,,Simple finger for merge testing,1
+F_Array[0]_source,Pour(Silicon_N),,,,,,1
+F_Array[1],Finger,,,,,Simple finger for merge testing,1
+F_Array[1]_source,Pour(Silicon_N),,,,,,1
+F_Array[2],Finger,,,,,Simple finger for merge testing,1
+F_Array[2]_source,Pour(Silicon_N),,,,,,1

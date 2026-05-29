@@ -1,0 +1,76 @@
+## Test: Custom Tolerance in Device Definitions
+## 
+## This test verifies that tolerance can be specified in device definitions
+## and is correctly used during LVS parameter matching.
+##
+## Expected behavior:
+## - W/L tolerance: 2% (custom, more lenient than default 1%)
+## - AS/AD tolerance: 10% (custom, more lenient than default 5%)
+## - PS/PD tolerance: 10% (custom, more lenient than default 5%)
+
+import * from @std/primitives/units
+
+## Custom NMOS with relaxed tolerances for prototyping
+device CustomNMOS:
+    terminals: [gate, source, drain, bulk]
+    materials:
+        gate: [Polysilicon, Aluminum]
+        source: Silicon_N
+        drain: Silicon_N
+        bulk: Silicon_P
+    tolerance:
+        W: 2%
+        L: 2%
+        AS: 10%
+        AD: 10%
+        PS: 10%
+        PD: 10%
+
+## Module with slightly mismatched dimensions (within 2% tolerance)
+module TestCircuit:
+    pins: [
+        input VIN,
+        output VOUT,
+        ground GND
+    ]
+    
+    ## Specify W=100um, L=100um
+    add CustomNMOS(W: 100um, L: 100um) named M1
+    route M1.gate to VIN
+    route M1.source to GND
+    route M1.drain to VOUT
+    route M1.bulk to GND
+
+## Space with actual geometry (W=101um, L=101um = 1% error, should pass)
+space TestLayout implements TestCircuit:
+    dimensions: 2mm by 2mm by 1mm
+    grid: 20 by 20 by 10
+    
+    ## Gate (Polysilicon) - 101um x 1mm
+    add pour(Polysilicon) named M1_Gate on z:5:
+        net: VIN
+        device: M1.gate
+        boundary: [x: 0.2mm, y: 0.4mm] to [x: 0.301mm, y: 1.4mm]  ## 101um wide
+    
+    ## Source (Silicon_N) - 101um x 200um
+    add pour(Silicon_N) named M1_Source on z:3:
+        net: GND
+        device: M1.source
+        boundary: [x: 0.2mm, y: 0.2mm] to [x: 0.301mm, y: 0.4mm]
+    
+    ## Drain (Silicon_N) - 101um x 200um
+    add pour(Silicon_N) named M1_Drain on z:3:
+        net: VOUT
+        device: M1.drain
+        boundary: [x: 0.2mm, y: 1.4mm] to [x: 0.301mm, y: 1.6mm]
+    
+    ## Bulk (Silicon_P) - 100um x 200um
+    add pour(Silicon_P) named M1_Bulk on z:3:
+        net: GND
+        device: M1.bulk
+        boundary: [x: 0.1mm, y: 0.7mm] to [x: 0.2mm, y: 0.9mm]
+
+## Expected Result:
+## - Physical W = 101um, Logical W = 100um → 1% error → PASS (within 2% tolerance)
+## - Physical L = 101um, Logical L = 100um → 1% error → PASS (within 2% tolerance)
+## - LVS should PASS with custom tolerance

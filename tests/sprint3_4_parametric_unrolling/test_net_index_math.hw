@@ -1,0 +1,70 @@
+## Sprint 3.4: Parametric Unrolling - Mathematical Expressions in Net Indices
+## Test: Loop variables with arithmetic in net names
+##
+## This test verifies:
+## 1. Expression evaluation in net indices: net: D[i+1]
+## 2. Complex arithmetic: net: Bus[i*2], net: Data[i*8+7]
+## 3. Correct evaluation order (no "ghost" issues)
+##
+## Expected behavior:
+## - Parser parses arithmetic expressions in net indices
+## - Unroller evaluates expressions BEFORE creating net names
+## - Physical nets match mathematical intent exactly
+##
+## Use Case: Offset buses, interleaved signals, bit-sliced architectures
+
+import * from @std/primitives/units
+import Silicon_P from @std/materials/doped_semiconductors
+import Copper from @std/materials/conductors
+
+## ============================================================================
+## SPACE: Test Mathematical Expressions in Net Indices
+## ============================================================================
+
+space TestNetIndexMath:
+    dimensions: 200mm by 20mm by 2mm
+    grid: 200000 by 20000 by 2
+    origin: tl by t
+    
+    ## Base substrate
+    add substrate(Silicon_P) spanning [x:1um, y:1um, z:0] to [x:199999um, y:19999um, z:1]
+    
+    ## ========================================================================
+    ## TEST 1: Simple offset (i+1)
+    ## Creates nets: D[1], D[2], D[3], D[4] (offset by 1)
+    ## Use case: 1-indexed buses (hardware convention)
+    ## ========================================================================
+    for i in 0..3:
+        add pour(Copper) named Offset_i on z:1:
+            net: D[i + 1]
+            boundary: [x: i * 10mm + 1mm, y: 2mm] to [x: i * 10mm + 8mm, y: 4mm]
+    
+    ## ========================================================================
+    ## TEST 2: Multiplication (i*2)
+    ## Creates nets: Even[0], Even[2], Even[4], Even[6] (even numbers only)
+    ## Use case: Interleaved signals, differential pairs
+    ## ========================================================================
+    for i in 0..3:
+        add pour(Copper) named Even_i on z:1:
+            net: Even[i * 2]
+            boundary: [x: i * 10mm + 1mm, y: 6mm] to [x: i * 10mm + 8mm, y: 8mm]
+    
+    ## ========================================================================
+    ## TEST 3: Complex expression (i*8+7)
+    ## Creates nets: Byte[7], Byte[15], Byte[23], Byte[31]
+    ## Use case: Bit-sliced architectures, MSB of each byte
+    ## ========================================================================
+    for i in 0..3:
+        add pour(Copper) named MSB_i on z:1:
+            net: Byte[i * 8 + 7]
+            boundary: [x: i * 10mm + 1mm, y: 10mm] to [x: i * 10mm + 8mm, y: 12mm]
+    
+    ## ========================================================================
+    ## TEST 4: Subtraction (7-i)
+    ## Creates nets: Rev[7], Rev[6], Rev[5], Rev[4] (reverse order)
+    ## Use case: Bit reversal, endianness conversion
+    ## ========================================================================
+    for i in 0..3:
+        add pour(Copper) named Rev_i on z:1:
+            net: Rev[7 - i]
+            boundary: [x: i * 10mm + 1mm, y: 14mm] to [x: i * 10mm + 8mm, y: 16mm]

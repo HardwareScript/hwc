@@ -1,0 +1,76 @@
+## Sprint 3, Task 3.2: Array Flows (Transistor Fingers)
+## Tests that the parser can handle array syntax for component instantiation
+##
+## This test verifies:
+## 1. Parser accepts ComponentType[count] syntax
+## 2. Array configuration: layout, pitch, merge
+## 3. Horizontal and vertical stack layouts
+## 4. Explicit merge intent (NO IMPLICIT MAGIC)
+##
+## Use Case: Multi-finger transistors for higher current capacity
+## - 4-finger NMOS: 4× current capacity vs single transistor
+## - Explicit merge: [source, drain] reduces area and parasitic capacitance
+## - Common in analog design for matched devices
+
+import * from @std/primitives/units
+import Silicon_P, Silicon_N from @std/materials/doped_semiconductors
+import Aluminum from @std/materials/conductors
+
+## ============================================================================
+## COMPONENT DEFINITION: Simple Transistor Finger
+## ============================================================================
+
+component TransistorFinger:
+    pins: [gate, source, drain]
+    
+    layout:
+        shape: Rectangle(2um, 10um, 0.5um)
+    
+    metadata:
+        component_type: "Transistor Finger"
+        description: "Single finger of a multi-finger transistor"
+    
+    render:
+        type: procedural
+        shape: box
+        body_color: "#FF6B6B"
+
+## ============================================================================
+## SPACE: Test Array Syntax
+## ============================================================================
+
+space ArrayFlowsTest:
+    dimensions: 100um by 100um by 2mm
+    grid: 100000 by 100000 by 2
+    origin: tl by t
+    
+    ## Base substrate
+    add substrate(Silicon_P) spanning [x:1um, y:1um, z:0] to [x:99999um, y:99999um, z:1]
+    
+    ## ========================================================================
+    ## TEST 1: Horizontal Stack Array (4 fingers) with EXPLICIT MERGE
+    ## Syntax: add ComponentType[count] named ArrayName at position
+    ##         layout: horizontal_stack
+    ##         pitch: spacing
+    ##         merge: [terminal_list]  # EXPLICIT INTENT
+    ## ========================================================================
+    add TransistorFinger[4] named M1_Array at [x: 10um, y: 20um, z: 1]:
+        layout: horizontal_stack
+        pitch: 3um
+        merge: [source, drain]
+    
+    ## ========================================================================
+    ## TEST 2: Vertical Stack Array (8 fingers) with EXPLICIT MERGE
+    ## ========================================================================
+    add TransistorFinger[8] named M2_Array at [x: 30um, y: 20um, z: 1]:
+        layout: vertical_stack
+        pitch: 12um
+        merge: [source, drain]
+    
+    ## ========================================================================
+    ## TEST 3: Array without merge (independent instances)
+    ## No merge: keyword means overlapping geometry would trigger P12 collision
+    ## ========================================================================
+    add TransistorFinger[3] named M3_Array at [x: 60um, y: 20um, z: 1]:
+        layout: horizontal_stack
+        pitch: 4um

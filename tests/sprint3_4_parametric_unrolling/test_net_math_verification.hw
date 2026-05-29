@@ -1,0 +1,123 @@
+## Sprint 3.4: Mathematical Expression Verification Test
+## FOOLPROOF TEST: Verifies that ALL mathematical operations evaluate correctly
+##
+## This test creates nets with KNOWN, VERIFIABLE values to prove the math works.
+## Each test has an EXPECTED OUTPUT that can be manually verified in the logs.
+##
+## PASS CRITERIA: The net names in the debug log must match the expected values EXACTLY.
+
+import * from @std/primitives/units
+import Silicon_P from @std/materials/doped_semiconductors
+import Copper from @std/materials/conductors
+
+## ============================================================================
+## SPACE: Mathematical Expression Verification
+## ============================================================================
+
+space MathVerification:
+    dimensions: 300mm by 30mm by 2mm
+    grid: 300000 by 30000 by 2
+    origin: tl by t
+    
+    ## Base substrate
+    add substrate(Silicon_P) spanning [x:1um, y:1um, z:0] to [x:299999um, y:29999um, z:1]
+    
+    ## ========================================================================
+    ## TEST 1: Addition (i + 1)
+    ## Loop: i in 0..3 → [0, 1, 2, 3]
+    ## Expression: i + 1
+    ## EXPECTED: Add[1], Add[2], Add[3], Add[4]
+    ## ========================================================================
+    for i in 0..3:
+        add pour(Copper) named Test1_i on z:1:
+            net: Add[i + 1]
+            boundary: [x: i * 10mm + 1mm, y: 2mm] to [x: i * 10mm + 8mm, y: 4mm]
+    
+    ## ========================================================================
+    ## TEST 2: Subtraction (10 - i)
+    ## Loop: i in 0..3 → [0, 1, 2, 3]
+    ## Expression: 10 - i
+    ## EXPECTED: Sub[10], Sub[9], Sub[8], Sub[7]
+    ## ========================================================================
+    for i in 0..3:
+        add pour(Copper) named Test2_i on z:1:
+            net: Sub[10 - i]
+            boundary: [x: i * 10mm + 1mm, y: 6mm] to [x: i * 10mm + 8mm, y: 8mm]
+    
+    ## ========================================================================
+    ## TEST 3: Multiplication (i * 3)
+    ## Loop: i in 0..3 → [0, 1, 2, 3]
+    ## Expression: i * 3
+    ## EXPECTED: Mul[0], Mul[3], Mul[6], Mul[9]
+    ## ========================================================================
+    for i in 0..3:
+        add pour(Copper) named Test3_i on z:1:
+            net: Mul[i * 3]
+            boundary: [x: i * 10mm + 1mm, y: 10mm] to [x: i * 10mm + 8mm, y: 12mm]
+    
+    ## ========================================================================
+    ## TEST 4: Division (i / 2) - Note: Integer division
+    ## Loop: i in 0..3 → [0, 1, 2, 3]
+    ## Expression: i / 2
+    ## EXPECTED: Div[0], Div[0], Div[1], Div[1] (integer division)
+    ## ========================================================================
+    for i in 0..3:
+        add pour(Copper) named Test4_i on z:1:
+            net: Div[i / 2]
+            boundary: [x: i * 10mm + 1mm, y: 14mm] to [x: i * 10mm + 8mm, y: 16mm]
+    
+    ## ========================================================================
+    ## TEST 5: Complex Expression (i * 8 + 7)
+    ## Loop: i in 0..3 → [0, 1, 2, 3]
+    ## Expression: i * 8 + 7
+    ## Calculation:
+    ##   i=0: 0*8+7 = 7
+    ##   i=1: 1*8+7 = 15
+    ##   i=2: 2*8+7 = 23
+    ##   i=3: 3*8+7 = 31
+    ## EXPECTED: Complex[7], Complex[15], Complex[23], Complex[31]
+    ## ========================================================================
+    for i in 0..3:
+        add pour(Copper) named Test5_i on z:1:
+            net: Complex[i * 8 + 7]
+            boundary: [x: i * 10mm + 1mm, y: 18mm] to [x: i * 10mm + 8mm, y: 20mm]
+    
+    ## ========================================================================
+    ## TEST 6: Nested Expression ((i + 1) * 2)
+    ## Loop: i in 0..3 → [0, 1, 2, 3]
+    ## Expression: (i + 1) * 2
+    ## Calculation:
+    ##   i=0: (0+1)*2 = 2
+    ##   i=1: (1+1)*2 = 4
+    ##   i=2: (2+1)*2 = 6
+    ##   i=3: (3+1)*2 = 8
+    ## EXPECTED: Nested[2], Nested[4], Nested[6], Nested[8]
+    ## ========================================================================
+    for i in 0..3:
+        add pour(Copper) named Test6_i on z:1:
+            net: Nested[(i + 1) * 2]
+            boundary: [x: i * 10mm + 1mm, y: 22mm] to [x: i * 10mm + 8mm, y: 24mm]
+    
+    ## ========================================================================
+    ## TEST 7: Reverse Order (7 - i)
+    ## Loop: i in 0..3 → [0, 1, 2, 3]
+    ## Expression: 7 - i
+    ## EXPECTED: Rev[7], Rev[6], Rev[5], Rev[4]
+    ## ========================================================================
+    for i in 0..3:
+        add pour(Copper) named Test7_i on z:1:
+            net: Rev[7 - i]
+            boundary: [x: i * 10mm + 1mm, y: 26mm] to [x: i * 10mm + 8mm, y: 28mm]
+
+## ============================================================================
+## VERIFICATION CHECKLIST (Check debug log output):
+## ============================================================================
+## ✓ TEST 1: Add[1], Add[2], Add[3], Add[4]
+## ✓ TEST 2: Sub[10], Sub[9], Sub[8], Sub[7]
+## ✓ TEST 3: Mul[0], Mul[3], Mul[6], Mul[9]
+## ✓ TEST 4: Div[0], Div[0], Div[1], Div[1]
+## ✓ TEST 5: Complex[7], Complex[15], Complex[23], Complex[31]
+## ✓ TEST 6: Nested[2], Nested[4], Nested[6], Nested[8]
+## ✓ TEST 7: Rev[7], Rev[6], Rev[5], Rev[4]
+##
+## If ALL values match, the mathematical expression evaluator is PROVEN CORRECT.

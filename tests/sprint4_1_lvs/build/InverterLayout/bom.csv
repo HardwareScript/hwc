@@ -1,0 +1,18 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,2.00x2.00x1.00mm,,,,,1
+M1_Gate,Pour,0.1600mm² net:VIN,Layer 5,,Polysilicon,0.016000mm³
+M1_Source,Pour,0.0400mm² net:GND,Layer 3,,Silicon_N,0.004000mm³
+M1_Drain,Pour,0.0400mm² net:VOUT,Layer 3,,Silicon_N,0.004000mm³
+M1_Bulk,Pour,0.0400mm² net:GND,Layer 3,,Silicon_P,0.004000mm³
+M2_Gate,Pour,0.1600mm² net:VIN,Layer 5,,Polysilicon,0.016000mm³
+M2_Source,Pour,0.0400mm² net:VDD,Layer 3,,Silicon_P,0.004000mm³
+M2_Drain,Pour,0.0400mm² net:VOUT,Layer 3,,Silicon_P,0.004000mm³
+M2_Bulk,Pour,0.0400mm² net:VDD,Layer 3,,Silicon_N,0.004000mm³
+M1_Gate,Pour(Polysilicon),,,,,,1
+M1_Source,Pour(Silicon_N),,,,,,1
+M1_Drain,Pour(Silicon_N),,,,,,1
+M1_Bulk,Pour(Silicon_P),,,,,,1
+M2_Gate,Pour(Polysilicon),,,,,,1
+M2_Source,Pour(Silicon_P),,,,,,1
+M2_Drain,Pour(Silicon_P),,,,,,1
+M2_Bulk,Pour(Silicon_N),,,,,,1

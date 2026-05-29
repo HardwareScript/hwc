@@ -1,0 +1,17 @@
+{
+  "version": "0.1.4",
+  "board": "Test16BitChained",
+  "grid": {
+    "dimensions": [
+      200000,
+      20000,
+      4
+    ],
+    "resolution": [
+      0.001,
+      0.001,
+      1.0
+    ]
+  },
+  "routes": []
+}

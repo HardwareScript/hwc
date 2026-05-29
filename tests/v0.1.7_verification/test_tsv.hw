@@ -1,0 +1,89 @@
+# Test: TSV (Through-Silicon Via) Implementation
+# 
+# This test verifies:
+# 1. TSV concentric cylindrical stamping (Liner -> Bridge -> Fill)
+# 2. TSV substrate short-circuit prevention (Liner requirement)
+# 3. TSV Keep-Out Zone (KOZ) enforcement
+
+import * from @std/primitives/units
+
+# 1. Define Materials (Simplified for test)
+material Silicon:
+    category: semiconductor
+    properties:
+        resistivity: 2.3e3Ω·m # Ohm-m (High resistivity silicon)
+        color: "#4A4A4A"
+
+material Copper:
+    category: conductor
+    properties:
+        resistivity: 1.68e-8Ω·m # Ohm-m
+        color: "#B87333"
+
+material SiO2:
+    category: insulator
+    properties:
+        dielectric_constant: 3.9
+        color: "#FFFFFF"
+
+material Titanium_Silicide:
+    category: conductor
+    properties:
+        resistivity: 1.5e-7Ω·m # Ohm-m
+        color: "#708090"
+
+# 2. Define Profile
+profile TSV_Profile:
+    description: "Profile for TSV testing"
+    
+    trace:
+        min_width: 10µm
+        min_spacing: 10µm
+    
+    via:
+        min_diameter: 20µm
+        default_diameter: 50µm
+
+module TSV_Module:
+    pins: []
+
+space TSV_Space implements TSV_Module:
+    dimensions: 2mm by 2mm by 0.5mm
+    grid: 100 by 100 by 50
+    profile: TSV_Profile
+
+    nets:
+        GND: ground
+        VDD: power
+        Signal: signal
+
+    # 1. Add Silicon Substrate
+    # We use add substrate(Silicon) spanning [x,y,z] to [x,y,z]
+    # v0.1.7 uses 1-based indexing for layers.
+    add substrate(Silicon) spanning [x: 0, y: 0, z: 1] to [x: 2mm, y: 2mm, z: 50]
+
+    # 2. Valid TSV with Liner
+    # At [x: 500µm, y: 500µm], diameter 50µm, liner 5µm.
+    # Total radius = 25µm. Liner is 5µm, so core radius is 20µm.
+    add contact(Copper) named ValidTSV at [x: 500µm, y: 500µm] spanning z:1 to z:50:
+        diameter: 50µm
+        liner: SiO2
+        liner_thickness: 5µm
+        bridge: Titanium_Silicide
+        koz: 3.0 # 3x diameter KOZ (radius 75µm)
+        net: Signal
+
+    # 3. Invalid TSV without Liner (should trigger P45 Substrate Short Circuit)
+    # We assume Silicon material is ID 5 for the short-circuit check in this version.
+    add contact(Copper) named ShortedTSV at [x: 1000µm, y: 1000µm] spanning z:1 to z:50:
+        diameter: 50µm
+        net: VDD
+        # No liner -> should fail DRC (P45)
+
+    # 4. KOZ Violation (Trace too close to TSV)
+    # TSV is at 500µm, diameter 50µm, KOZ radius is 75µm (500 + 75 = 575µm).
+    # A pour at 550µm is inside the KOZ.
+    add pour(Copper) named KOZ_Violation on z:25:
+        boundary: [x: 540µm, y: 540µm] to [x: 560µm, y: 560µm]
+        net: GND
+        # Inside KOZ of ValidTSV -> should fail DRC (KozViolation)

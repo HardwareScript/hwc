@@ -1,0 +1,99 @@
+## Standard Routing Strategies (v0.1.7 Analytic-First)
+##
+## Strategies define the "Mathematical Intent" for high-speed signal groups.
+##
+## v0.1.7 ARCHITECTURE:
+## Strategies are now declared directly inside the .hw file using the
+## `strategy:` property in a `route` statement. This ensures that
+## length-matching constraints are part of the deterministic blueprint,
+## rather than hidden in CLI flags.
+##
+## Example Usage:
+## ```hardware
+## import DDR5_Match from @std/routing/strategies
+##
+## space MyBoard:
+##     route MCU.D0 to RAM.D0:
+##         strategy: DDR5_Match
+## ```
+
+# DDR5 Length Matching Strategy
+# Standard tolerance for DDR5 is 0.1mm (100µm)
+# Uses the Trombone pattern to gain length where needed.
+strategy DDR5_Match:
+    target: match_longest
+    tolerance: 0.1mm
+    pattern: Trombone(gap: 0.3mm, amp: 2.5mm)
+
+# PCIe Gen4 Length Matching Strategy
+# Match differential pairs with tight tolerance
+# PCIe Gen4 requires ±0.05mm (50µm) matching
+strategy PCIe_Gen4_Match:
+    target: match_longest
+    tolerance: 0.05mm
+    pattern: Serpentine(wavelength: 2mm, amplitude: 1mm)
+
+# USB 3.2 Differential Pair Strategy
+# Match differential pair traces
+# USB 3.2 requires ±0.15mm (150µm) matching
+strategy USB3_Differential:
+    target: match_longest
+    tolerance: 0.15mm
+    pattern: Trombone(gap: 0.5mm, amp: 2mm)
+
+# High-Speed Serial Match Shortest Strategy
+# Match all traces to the shortest path
+# Useful when you want minimal trace length
+strategy MatchShortest_Standard:
+    target: match_shortest
+    tolerance: 0.1mm
+    pattern: Zigzag(gap: 0.5mm)
+
+# Fixed Length Strategy
+# Route all traces to a specific target length
+# Useful for clock distribution networks
+strategy FixedLength_50mm:
+    target: 50mm
+    tolerance: 0.1mm
+    pattern: Serpentine(wavelength: 3mm, amplitude: 1.5mm)
+
+# Extreme Tolerance Test Strategy
+# STRESS TEST: Force tolerance to 0.001mm (1µm)
+# This will test if the Constraint-Aware A* Router gets stuck
+# in an infinite loop trying to meet an impossible voxel budget
+strategy Extreme_Precision:
+    target: match_longest
+    tolerance: 0.001mm
+    pattern: Trombone(gap: 0.2mm, amp: 1mm)
+
+# RF Impedance Matched Strategy
+# For RF traces requiring precise length matching
+# Typical RF tolerance is ±0.01mm (10µm)
+strategy RF_Impedance_Match:
+    target: match_longest
+    tolerance: 0.01mm
+    pattern: Serpentine(wavelength: 1mm, amplitude: 0.5mm)
+
+# Memory Interface Strategy
+# For LPDDR4/LPDDR5 mobile memory interfaces
+# Requires tight matching for high-speed operation
+strategy LPDDR_Match:
+    target: match_longest
+    tolerance: 0.08mm
+    pattern: Trombone(gap: 0.25mm, amp: 2mm)
+
+# Relaxed Tolerance Strategy
+# For lower-speed signals where tight matching isn't critical
+# Tolerance of 0.5mm (500µm) for signals < 100MHz
+strategy Relaxed_Match:
+    target: match_longest
+    tolerance: 0.5mm
+    pattern: Zigzag(gap: 1mm)
+
+# Spiral Pattern Strategy
+# Uses the spiral pattern for circular routing
+# Good for compact layouts with length matching
+strategy Spiral_Compact:
+    target: match_longest
+    tolerance: 0.1mm
+    pattern: Spiral(gap: 0.5mm)

@@ -1,0 +1,69 @@
+## ============================================================================
+## Task 4.3: Bulk Connection Validation - MINIMAL PASS Case
+## ============================================================================
+##
+## This test verifies bulk validation with a single NMOS transistor.
+## All terminals are on the same layer to avoid physical continuity issues.
+##
+## Expected: ✅ Bulk validation passes (NMOS bulk connected to GND)
+
+import * from @std/primitives/units
+import * from @std/foundry/transistors
+import * from @std/materials/doped_semiconductors
+
+## ============================================================================
+## Logical Schematic (Module)
+## ============================================================================
+
+module SingleNMOS:
+    pins: [
+        input VIN,
+        output VOUT,
+        ground GND
+    ]
+    
+    ## NMOS with correct bulk connection
+    add NMOS named M1
+    route M1.gate to VIN
+    route M1.source to GND
+    route M1.drain to VOUT
+    route M1.bulk to GND  # ✅ CORRECT: NMOS bulk to GND
+
+## ============================================================================
+## Physical Layout (Space)
+## ============================================================================
+
+space SingleNMOSLayout implements SingleNMOS:
+    dimensions: 2mm by 2mm by 1mm
+    grid: 20 by 20 by 10
+    
+    ## Net classifications (required for physics-driven bulk validation)
+    net_classifications:
+        GND: ground
+        VIN: signal
+        VOUT: signal
+    
+    ## All terminals on same layer (z:3) to form a single connected island
+    ## This avoids P41 violations while testing bulk validation
+    
+    add pour(Polysilicon) named M1_Gate on z:5:
+        device: M1.gate
+        net: VIN
+        boundary: [x: 400um, y: 400um] to [x: 600um, y: 1200um]
+    
+    add pour(Silicon_N) named M1_Source on z:3:
+        device: M1.source
+        net: GND
+        boundary: [x: 400um, y: 200um] to [x: 600um, y: 400um]
+    
+    add pour(Silicon_N) named M1_Drain on z:3:
+        device: M1.drain
+        net: VOUT
+        boundary: [x: 400um, y: 1200um] to [x: 600um, y: 1400um]
+    
+    ## ✅ CORRECT: NMOS bulk (Silicon_P) connected to GND
+    ## Adjacent to source pour to form connected island
+    add pour(Silicon_P) named M1_Bulk on z:3:
+        device: M1.bulk
+        net: GND
+        boundary: [x: 200um, y: 200um] to [x: 400um, y: 400um]

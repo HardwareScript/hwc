@@ -1,0 +1,41 @@
+import * from @std/primitives/units
+
+material Copper:
+    category: conductor
+    properties:
+        color: "#B87333"
+        metallic: 1.0
+        roughness: 0.15
+
+space PTH_Gallery:
+    dimensions: 20mm by 10mm by 1.6mm
+    grid: 100 by 50 by 10
+    origin: bl by b
+    
+    # Showcase 1: The Heavy Mounting Hole (Large Drill, Large Pad)
+    add contact(Copper) named HeavyMount at [x: 3mm, y: 5mm] spanning z:1 to z:10:
+        diameter: 2.5mm
+        annular_ring: 1.5mm
+        
+    # Showcase 2: The Standard Signal Via (Common size)
+    add contact(Copper) named SignalVia at [x: 8mm, y: 5mm] spanning z:1 to z:10:
+        diameter: 0.4mm
+        annular_ring: 0.2mm
+        
+    # Showcase 3: The High-Density Micro-Via (Tiny)
+    add contact(Copper) named MicroVia at [x: 12mm, y: 5mm] spanning z:1 to z:10:
+        diameter: 0.15mm
+        annular_ring: 0.1mm
+        
+    # Showcase 4: The Thick-Plated Pipe (Testing plating thickness visual)
+    add contact(Copper) named ThickPipe at [x: 16mm, y: 5mm] spanning z:1 to z:10:
+        diameter: 1.0mm
+        annular_ring: 0.3mm
+        # Note: Internal plating thickness is currently global 25um, 
+        # but the unified mesh handles it beautifully.
+
+    # Showcase 5: The Bare Drill (No Annular Ring/Cap)
+    add contact(Copper) named BareDrill at [x: 19mm, y: 5mm] spanning z:1 to z:10:
+        diameter: 0.8mm
+        annular_ring: 0mm
+        caps: false

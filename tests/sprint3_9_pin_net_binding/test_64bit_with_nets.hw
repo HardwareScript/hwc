@@ -1,0 +1,48 @@
+## Sprint 3.9: Component Pin-to-Net Binding (Item #13)
+## Test: 64-bit adder with full net connectivity
+##
+## This test demonstrates the "Electric Ghost" fix:
+## - Loop variables in net names: A[i], B[i], Sum[i]
+## - Conditional net bindings: if i == 0 then CarryIn else Carry[i-1]
+## - Parametric unrolling with net substitution
+##
+## Expected: Netlist shows proper carry chain and bus connections
+
+import * from @std/primitives/units
+import Silicon_P from @std/materials/doped_semiconductors
+
+component FullAdder:
+    pins: [a, b, carry_in, sum, carry_out]
+    
+    layout:
+        shape: Rectangle(8mm, 4mm, 0.5mm)
+        pin_positions:
+            a at [1mm, 1mm]
+            b at [3mm, 1mm]
+            carry_in at [5mm, 1mm]
+            sum at [1mm, 3mm]
+            carry_out at [5mm, 3mm]
+    
+    metadata:
+        component_type: "1-bit Full Adder"
+    
+    render:
+        type: procedural
+        shape: box
+        body_color: "#2196F3"
+
+space Test64BitWithNets:
+    dimensions: 700mm by 10mm by 4mm
+    grid: 700000 by 10000 by 4
+    origin: tl by t
+    
+    ## Base substrate
+    add substrate(Silicon_P) spanning [x:1um, y:1um, z:0] to [x:699999um, y:9999um, z:1]
+    
+    ## 64-bit ripple carry adder with full connectivity
+    ## This demonstrates loop variable substitution in net names
+    
+    ## All bits: Use indexed net names
+    for i in 0..63:
+        add FullAdder named Adder[i] at [x: 5mm + i * 10mm, y: 5mm, z: 2]:
+            net: [a: A[i], b: B[i], carry_in: Carry[i], sum: Sum[i], carry_out: Carry[i+1]]

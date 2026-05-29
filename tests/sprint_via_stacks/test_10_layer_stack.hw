@@ -1,0 +1,36 @@
+## WEEK 3: Gap 3 - Multi-Layer Via Stacks (HIGH)
+##
+## This test verifies that the compiler automatically inserts a stack of vias
+## for nets that span multiple layers WITHOUT intermediate pours.
+##
+## Test Case:
+## - Net "VDD" has two pours on layers z:1 and z:10
+## - No intermediate pours on z:2 through z:9
+## - Compiler should auto-insert a stack of 9 vias to connect z:1 to z:10
+
+import * from @std/primitives/units
+import Copper from @std/materials/conductors
+
+module ViaStackTest:
+    pins: []
+
+space TestViaStack implements ViaStackTest:
+    dimensions: 20mm by 20mm by 1mm
+    grid: 200 by 200 by 11
+    origin: tl by t
+    
+    nets:
+        VDD: power
+    
+    ## Bottom layer pour (z:1)
+    add pour(Copper) named VDD_Bottom on z:1:
+        boundary: [x: 5mm, y: 5mm] to [x: 15mm, y: 15mm]
+        net: VDD
+    
+    ## Top layer pour (z:10)
+    add pour(Copper) named VDD_Top on z:10:
+        boundary: [x: 5mm, y: 5mm] to [x: 15mm, y: 15mm]
+        net: VDD
+    
+    ## Expected: 9 auto-inserted vias in a vertical stack
+    ## z:1->z:2, z:2->z:3, z:3->z:4, z:4->z:5, z:5->z:6, z:6->z:7, z:7->z:8, z:8->z:9, z:9->z:10

@@ -1,0 +1,52 @@
+## ============================================================================
+## BURIED COMPONENT TEST
+## ============================================================================
+##
+## This file tests the P44 (Buried Component) error reporting.
+## Component is placed at z:-1, but substrate starts at z:0.
+
+import * from @std/primitives/units
+import Copper from @std/materials/conductors
+import FR4 from @std/materials/insulators
+
+component SimplePad:
+    pins: [terminal]
+    
+    layout:
+        shape: Rectangle(2mm, 2mm, 200um)
+        
+        add pour(Copper) named Pad on z:2:
+            boundary: [x: 200um, y: 200um] to [x: 1800um, y: 1800um]
+            device: terminal
+        
+        pin_positions:
+            terminal at [1000um, 1000um]
+    
+    render:
+        type: procedural
+        shape: box
+        body_color: "#FFD700"
+
+module SimpleCircuit:
+    pins: [
+        power VDD
+    ]
+    
+    add SimplePad named PAD1
+    route PAD1.terminal to VDD
+
+space SimpleCircuitLayout implements SimpleCircuit:
+    dimensions: 10mm by 10mm by 2mm
+    grid: 10000 by 10000 by 20
+    origin: tl by t
+    
+    nets:
+        VDD: power
+    
+    ## Substrate starts at z:0
+    add substrate(FR4) spanning [x:1um, y:1um, z:0] to [x:9999um, y:9999um, z:2]
+    
+    ## ERROR: Component placed at z:-1 (buried below substrate which starts at z:0)
+    ## This should trigger P44: Component Buried in Substrate
+    add SimplePad named PAD1 at [x: 4mm, y: 4mm, z: -1]:
+        net: [terminal: VDD]

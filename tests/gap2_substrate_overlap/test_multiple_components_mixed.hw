@@ -1,0 +1,68 @@
+## GAP2: Substrate-Component Overlap Validation
+## Test: Multiple components with mixed valid/invalid placements
+##
+## This test verifies that the compiler correctly validates each component
+## independently and reports the first overlap error encountered.
+##
+## Expected behavior:
+## - First component (z:3) should be validated successfully
+## - Second component (z:1) should trigger P44 error
+## - Compilation should stop at first error
+##
+## Physical Reality:
+## - Substrate spans z:0 to z:2 → physically 0mm to 3mm
+## - LED1 at z:3 → ON TOP (valid) ✅
+## - LED2 at z:1 → INSIDE (invalid) ❌
+## - LED3 at z:4 → ABOVE (would be valid, but never reached)
+
+import * from @std/primitives/units
+import Silicon_P from @std/materials/doped_semiconductors
+import Copper from @std/materials/conductors
+
+## ============================================================================
+## COMPONENT DEFINITION: Simple LED
+## ============================================================================
+
+component LED:
+    pins: [anode, cathode]
+    
+    layout:
+        shape: Rectangle(4mm, 4mm, 0.5mm)
+        
+        pin_positions:
+            anode at [1mm, 2mm]
+            cathode at [3mm, 2mm]
+    
+    metadata:
+        component_type: "LED"
+        description: "Simple LED for testing"
+    
+    render:
+        type: procedural
+        shape: box
+        body_color: "#FF00FF"
+
+## ============================================================================
+## SPACE: Multiple Components with Mixed Placements
+## ============================================================================
+
+space TestMultipleComponentsMixed:
+    dimensions: 100mm by 100mm by 10mm
+    grid: 100000 by 100000 by 10
+    origin: bl
+    
+    ## Substrate spans z:0 to z:2 (physically 0mm to 3mm)
+    add substrate(Silicon_P) spanning [x:1um, y:1um, z:0] to [x:99999um, y:99999um, z:2]
+    
+    ## ========================================================================
+    ## MIXED PLACEMENTS:
+    ## 
+    ## LED1: z:3 → ON TOP (valid) ✅
+    ## LED2: z:1 → INSIDE (invalid) ❌ ← Should trigger P44 error here
+    ## LED3: z:4 → ABOVE (valid, but never reached due to LED2 error)
+    ## ========================================================================
+    
+    add LED named LED1 at [x: 20mm, y: 50mm, z: 3]  ## ✅ Valid
+    add LED named LED2 at [x: 50mm, y: 50mm, z: 1]  ## ❌ Invalid - should error here
+    add LED named LED3 at [x: 80mm, y: 50mm, z: 4]  ## ✅ Valid (but never reached)
+

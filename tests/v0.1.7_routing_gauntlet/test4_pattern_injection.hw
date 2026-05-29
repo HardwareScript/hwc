@@ -1,0 +1,35 @@
+import Trombone from @std/routing/patterns
+
+material Copper:
+    category: conductor
+    symbol: "Cu"
+    properties:
+        resistivity: 1.68e-8Ω·m
+
+profile TestProfile:
+    stackup:
+        top: [material: Copper, thickness: 35um]
+        core: [material: Copper, thickness: 1.5mm]
+        bottom: [material: Copper, thickness: 35um]
+
+component Pin:
+    pins: [P]
+    layout:
+        shape: Circle(0.5mm)
+
+space PatternInjection:
+    profile: TestProfile
+    dimensions: 100mm by 100mm by 2mm
+    grid: 200 by 200 by 10
+    
+    # Pins are 10mm apart
+    add Pin named A at [x: 45mm, y: 50mm, z: 0mm]
+    add Pin named B at [x: 55mm, y: 50mm, z: 0mm]
+    
+    # Test 4: Patterned Auto-Routing
+    # Success Criteria: Trace meanders to reach 30mm length, SPICE R/C reflects 30mm.
+    route A.P to B.P:
+        strategy: Trombone
+        target_length: 30mm
+        gap: 0.5mm
+        amp: 2.0mm

@@ -1,0 +1,13 @@
+## Test: Flatten module with for loop
+## Expected: 8 components, 8 routes
+
+import * from @std/primitives/units
+
+component Bit:
+    pins: [In, Out]
+
+module EightBit_Bus:
+    pins: [Bus[8]]
+    for i in 0..7:
+        add Bit named B[i]
+        route Bus[i] to B[i].In

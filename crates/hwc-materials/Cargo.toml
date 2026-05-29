@@ -1,0 +1,12 @@
+[package]
+name = "hwc-materials"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+thiserror = { workspace = true }
+miette = { workspace = true }
+rustc-hash = { workspace = true }
+compact_str = { workspace = true }

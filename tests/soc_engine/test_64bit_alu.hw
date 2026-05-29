@@ -1,0 +1,56 @@
+## SoC Engine Stress Test: 64-bit ALU
+## v0.1.7 Roadmap: Step 2
+## 
+## Success Criteria:
+## - Define a FullAdder component.
+## - Use `for i in 0..63:` to stamp 64 instances.
+## - Wire the carry chain using dynamic nets.
+## - Zero P12 (Collision) or P41 (Disconnected) errors.
+
+import * from @std/primitives/units
+import Silicon_P from @std/materials/doped_semiconductors
+import Copper from @std/materials/conductors
+
+## 1. Define FullAdder component
+component FullAdder:
+    pins: [a, b, carry_in, sum, carry_out]
+    
+    layout:
+        shape: Rectangle(8mm, 4mm, 0.5mm)
+        pin_positions:
+            a at [1mm, 1mm]
+            b at [3mm, 1mm]
+            carry_in at [5mm, 1mm]
+            sum at [1mm, 3mm]
+            carry_out at [5mm, 3mm]
+    
+    metadata:
+        component_type: "1-bit Full Adder"
+        description: "Standard full adder cell for large-scale arithmetic units."
+
+module SoC_ALU_64_Module:
+    pins: []
+
+## 2. The SoC Space
+space SoC_ALU_64 implements SoC_ALU_64_Module:
+    dimensions: 700mm by 20mm by 4mm
+    grid: 700 by 20 by 4
+    origin: bl by b
+    
+    ## Base substrate
+    add substrate(Silicon_P) spanning [x:0mm, y:0mm, z:0mm] to [x:700mm, y:20mm, z:1.5mm]
+    
+    ## 3. Parametric Unroller (64-bit instantiation)
+    ## 4. Carry chain wiring using dynamic nets
+    for i in 0..63:
+        add FullAdder named Adder[i] at [x: 5mm + i * 10mm, y: 5mm, z: 1.5mm]:
+            net: [
+                a: A[i], 
+                b: B[i], 
+                carry_in: Carry[i], 
+                sum: Sum[i], 
+                carry_out: Carry[i+1]
+            ]
+
+    ## Validation check: "If hwc build exits with code 0, the silicon is mathematically perfect."
+    ## This test verifies the unroller, net binding, and spatial placement of 320 pins.

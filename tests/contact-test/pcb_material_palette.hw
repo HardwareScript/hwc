@@ -1,0 +1,141 @@
+# PCB Material Palette Test - v0.1.6
+# Purpose: Verify PBR rendering (metallic, roughness, opacity) for 10 distinct PCB materials
+
+# 1. Polished Copper (Pads/Traces)
+material Copper_Polished:
+    category: conductor
+    properties:
+        color: "#FFCC66"
+        opacity: 1.0
+        metallic: 1.0
+        roughness: 0.1
+        anisotropy: 0.5
+        anisotropy_rotation: 1.57 # 90 degrees for brushed look
+
+# 2. Oxidized Copper (Internal Layers)
+material Copper_Oxidized:
+    category: conductor
+    properties:
+        color: "#B87333"
+        opacity: 1.0
+        metallic: 0.8
+        roughness: 0.6
+
+# 3. Standard FR4 (Substrate Core)
+material FR4_Standard:
+    category: insulator
+    properties:
+        color: "#2D5A27"
+        opacity: 1.0
+        metallic: 0.0
+        roughness: 0.8
+        ior: 1.54
+        subsurface: 0.2
+        anisotropy: 0.8 # Simulate fiberglass weave direction
+        anisotropy_rotation: 0.78 # 45 degrees cross-hatch direction
+
+# 4. Green Solder Mask (Semi-Gloss)
+material SolderMask_Green:
+    category: insulator
+    properties:
+        color: "#008000"
+        opacity: 0.8
+        metallic: 0.0
+        roughness: 0.3
+        clearcoat: 0.5
+        clearcoat_roughness: 0.1
+
+# 5. Blue Solder Mask (Matte)
+material SolderMask_Blue:
+    category: insulator
+    properties:
+        color: "#0000FF"
+        opacity: 0.8
+        metallic: 0.0
+        roughness: 0.7
+        clearcoat: 0.2
+
+# 6. Black Solder Mask (Piano Black Gloss)
+material SolderMask_Black:
+    category: insulator
+    properties:
+        color: "#1A1A1A"
+        opacity: 1.0
+        metallic: 0.0
+        roughness: 0.05
+        clearcoat: 1.0
+        clearcoat_roughness: 0.02
+
+# 7. White Silkscreen (Matte Ink)
+material Silkscreen_White:
+    category: insulator
+    properties:
+        color: "#FFFFFF"
+        opacity: 1.0
+        metallic: 0.0
+        roughness: 0.9
+
+# 8. Gold ENIG Finish (Premium)
+material Gold_ENIG:
+    category: conductor
+    properties:
+        color: "#FFD700"
+        opacity: 1.0
+        metallic: 0.95
+        roughness: 0.05
+
+# 9. Prepreg / Core (Translucent Tan)
+material Prepreg_Core:
+    category: insulator
+    properties:
+        color: "#F5DEB3"
+        opacity: 0.4
+        metallic: 0.0
+        roughness: 0.5
+        ior: 1.5
+
+# 10. Silver HASL Finish (Standard Lead-Free)
+material Silver_HASL:
+    category: conductor
+    properties:
+        color: "#C0C0C0"
+        opacity: 1.0
+        metallic: 0.95
+        roughness: 0.2
+
+# Space definition to visualize the palette
+space MaterialPalette:
+    dimensions: 110mm by 20mm by 2mm
+    grid: 110 by 20 by 2
+    origin: bl by b
+
+    # Place 10 blocks side-by-side using pour
+    add pour(Copper_Polished) named P1 on z:1:
+        boundary: [x: 5mm, y: 5mm] to [x: 10mm, y: 15mm]
+
+    add pour(Copper_Oxidized) named P2 on z:1:
+        boundary: [x: 15mm, y: 5mm] to [x: 20mm, y: 15mm]
+
+    add pour(FR4_Standard) named P3 on z:1:
+        boundary: [x: 25mm, y: 5mm] to [x: 30mm, y: 15mm]
+
+    add pour(SolderMask_Green) named P4 on z:1:
+        boundary: [x: 35mm, y: 5mm] to [x: 40mm, y: 15mm]
+
+    add pour(SolderMask_Blue) named P5 on z:1:
+        boundary: [x: 45mm, y: 5mm] to [x: 50mm, y: 15mm]
+
+    add pour(SolderMask_Black) named P6 on z:1:
+        boundary: [x: 55mm, y: 5mm] to [x: 60mm, y: 15mm]
+
+    add pour(Silkscreen_White) named P7 on z:1:
+        boundary: [x: 65mm, y: 5mm] to [x: 70mm, y: 15mm]
+
+    add pour(Gold_ENIG) named P8 on z:1:
+        boundary: [x: 75mm, y: 5mm] to [x: 80mm, y: 15mm]
+
+    add pour(Prepreg_Core) named P9 on z:1:
+        boundary: [x: 85mm, y: 5mm] to [x: 90mm, y: 15mm]
+
+    add pour(Silver_HASL) named P10 on z:1:
+        boundary: [x: 95mm, y: 5mm] to [x: 100mm, y: 15mm]

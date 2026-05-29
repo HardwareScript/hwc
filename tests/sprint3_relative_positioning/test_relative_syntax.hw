@@ -1,0 +1,28 @@
+## Sprint 3, Task 3.1: Relative Positioning Parser Test
+## 
+## This test verifies that the parser can handle relative positioning syntax:
+## - AnchorName.edge + offset
+## - Single measurement offset: M1.right + 1mm
+## - Vector offset: M1.top + [0.5mm, 1mm, 0mm]
+
+import @std/materials
+
+space RelativePositioningTest:
+    dimensions: 20mm by 20mm by 2mm
+    grid: 200 by 200 by 2
+    origin: tl by t
+
+    # First component at absolute position
+    add substrate(Silicon_P) named Substrate:
+        boundary: [x: 0mm, y: 0mm, z: 1] to [x: 20mm, y: 20mm, z: 1]
+
+    # Second component using relative positioning with single offset
+    add pour(Aluminum) named M1 on z:1:
+        boundary: [x: 2mm, y: 2mm] to [x: 6mm, y: 6mm]
+        net: VDD
+
+    # Third component using relative positioning - single measurement offset
+    # This should parse but will fail during compilation (constraint solver not integrated yet)
+    # add pour(Aluminum) named M2 on z:1:
+    #     boundary: M1.right + 1mm to M1.right + 5mm
+    #     net: GND

@@ -1,0 +1,82 @@
+## v0.1.7 Z-Axis Abstraction — High-Level (Semantic) Paradigm
+##
+## Verifies:
+## - Physical profile `stackup:` with named layers (l1, d1, l2)
+## - Pours on `layer: l1` / `layer: l2` (no raw z: N)
+## - Contact `spanning layer: l1 to layer: l2`
+##
+## Run: hwc check hwc/tests/v0.1.7_verification/test_z_axis_semantic_stackup.hw
+##      hwc build hwc/tests/v0.1.7_verification/test_z_axis_semantic_stackup.hw
+
+import * from @std/primitives/units
+import Copper, Silver from @std/materials/conductors
+import FR4 from @std/materials/insulators
+
+material TransCopper:
+    category: conductor
+    process: drilled_plated # v0.1.7: Explicitly declare that this material requires a hole
+    properties:
+        color: "#B87333"
+        opacity: 1.0        # Opaque for inspection
+        metallic: 0.8
+        roughness: 0.2
+
+material TransSilver:
+    category: conductor
+    properties:
+        color: "#C0C0C0"
+        opacity: 0.1        # Ghost-like transparency
+        metallic: 0.9
+        roughness: 0.1
+
+material TransFR4:
+    category: insulator
+    properties:
+        color: "#2D5A27"
+        opacity: 0.05       # Barely visible substrate
+        roughness: 0.8
+
+profile ZAxisTestStackup:
+    description: "Realistic 2-copper stackup for Z-axis semantic resolution"
+    stackup:
+        l1: [material: TransCopper, thickness: 35um]
+        d1: [material: TransFR4,    thickness: 0.2mm]
+        l2: [material: TransSilver, thickness: 35um]
+    
+    via:
+        min_diameter: 0.3mm
+        min_annular_ring: 0.0mm
+
+    bridge TransSilver to TransCopper:
+        interface: TransCopper
+        fill: TransCopper
+    bridge TransCopper to TransSilver:
+        interface: TransCopper
+        fill: TransCopper
+
+module ZAxisSemanticModule:
+    pins: []
+
+space ZAxisSemanticSpace implements ZAxisSemanticModule:
+    dimensions: 10mm by 10mm by 0.27mm
+    grid: 100 by 100 by 27
+    origin: bl by b
+    profile: ZAxisTestStackup
+
+    nets:
+        VDD: power
+
+    add substrate(TransFR4) spanning [x: 0mm, y: 0mm, z: 0mm] to [x: 10mm, y: 10mm, z: 0.27mm]
+
+    add pour(TransCopper) named TopPlane on layer: l1:
+        boundary: [x: 1mm, y: 1mm] to [x: 8mm, y: 8mm]
+        net: VDD
+
+    add pour(TransSilver) named BottomPlane on layer: l2:
+        boundary: [x: 1mm, y: 1mm] to [x: 8mm, y: 8mm]
+        net: VDD
+        merge: true
+
+    add contact(TransCopper) named StackVia at [x: 4mm, y: 4mm] spanning layer: l1 to layer: l2:
+        diameter: 300um
+        net: VDD

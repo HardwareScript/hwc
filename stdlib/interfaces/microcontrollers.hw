@@ -1,0 +1,365 @@
+# Hardware Script Standard Library - Microcontroller Interfaces
+# Stress Test: 100+ pin bindings to test interface mapping complexity
+# Maps logical controller signals to vendor-specific physical pins
+
+## ESP32-WROOM-32 Default Pinout
+interface ESP32_WROOM_32_Default:
+    target: ESP32_WROOM_32
+    
+    bindings:
+        Enable = ESP32_WROOM_32.EN
+        Boot = ESP32_WROOM_32.IO0
+        Reset = ESP32_WROOM_32.EN
+        LED_Builtin = ESP32_WROOM_32.IO2
+        ADC1_CH0 = ESP32_WROOM_32.IO36
+        ADC1_CH3 = ESP32_WROOM_32.IO39
+        ADC1_CH4 = ESP32_WROOM_32.IO32
+        ADC1_CH5 = ESP32_WROOM_32.IO33
+        ADC1_CH6 = ESP32_WROOM_32.IO34
+        ADC1_CH7 = ESP32_WROOM_32.IO35
+        DAC1 = ESP32_WROOM_32.IO25
+        DAC2 = ESP32_WROOM_32.IO26
+        Touch0 = ESP32_WROOM_32.IO4
+        Touch1 = ESP32_WROOM_32.IO0
+        Touch2 = ESP32_WROOM_32.IO2
+        Touch3 = ESP32_WROOM_32.IO15
+        Touch4 = ESP32_WROOM_32.IO13
+        Touch5 = ESP32_WROOM_32.IO12
+        Touch6 = ESP32_WROOM_32.IO14
+        Touch7 = ESP32_WROOM_32.IO27
+        Touch8 = ESP32_WROOM_32.IO33
+        Touch9 = ESP32_WROOM_32.IO32
+    
+    protocols:
+        I2C_Default:
+            SDA: ESP32_WROOM_32.IO21
+            SCL: ESP32_WROOM_32.IO22
+            speed: 400kHz
+        
+        SPI_Default:
+            MOSI: ESP32_WROOM_32.IO23
+            MISO: ESP32_WROOM_32.IO19
+            SCK: ESP32_WROOM_32.IO18
+            CS: ESP32_WROOM_32.IO5
+        
+        UART0:
+            TX: ESP32_WROOM_32.IO1
+            RX: ESP32_WROOM_32.IO3
+            speed: 115200Hz
+        
+        UART1:
+            TX: ESP32_WROOM_32.IO10
+            RX: ESP32_WROOM_32.IO9
+            speed: 115200Hz
+        
+        UART2:
+            TX: ESP32_WROOM_32.IO17
+            RX: ESP32_WROOM_32.IO16
+            speed: 115200Hz
+
+## ESP32-C3 Default Pinout (RISC-V)
+interface ESP32_C3_Default:
+    target: ESP32_C3
+    
+    bindings:
+        Enable = ESP32_C3.EN
+        Boot = ESP32_C3.IO9
+        LED_Builtin = ESP32_C3.IO8
+        ADC1_CH0 = ESP32_C3.IO0
+        ADC1_CH1 = ESP32_C3.IO1
+        ADC1_CH2 = ESP32_C3.IO2
+        ADC1_CH3 = ESP32_C3.IO3
+        ADC1_CH4 = ESP32_C3.IO4
+    
+    protocols:
+        I2C_Default:
+            SDA: ESP32_C3.IO5
+            SCL: ESP32_C3.IO6
+            speed: 400kHz
+        
+        SPI_Default:
+            MOSI: ESP32_C3.IO7
+            MISO: ESP32_C3.IO2
+            SCK: ESP32_C3.IO6
+            CS: ESP32_C3.IO10
+        
+        UART0:
+            TX: ESP32_C3.IO21
+            RX: ESP32_C3.IO20
+            speed: 115200Hz
+
+## STM32F103C8T6 Default Pinout (Blue Pill)
+interface STM32F103C8T6_Default:
+    target: STM32F103C8T6
+    
+    bindings:
+        Reset = STM32F103C8T6.NRST
+        Boot0 = STM32F103C8T6.BOOT0
+        LED_Builtin = STM32F103C8T6.PC13
+        USB_DP = STM32F103C8T6.PA12
+        USB_DM = STM32F103C8T6.PA11
+        ADC1_IN0 = STM32F103C8T6.PA0
+        ADC1_IN1 = STM32F103C8T6.PA1
+        ADC1_IN2 = STM32F103C8T6.PA2
+        ADC1_IN3 = STM32F103C8T6.PA3
+        ADC1_IN4 = STM32F103C8T6.PA4
+        ADC1_IN5 = STM32F103C8T6.PA5
+        ADC1_IN6 = STM32F103C8T6.PA6
+        ADC1_IN7 = STM32F103C8T6.PA7
+        ADC1_IN8 = STM32F103C8T6.PB0
+        ADC1_IN9 = STM32F103C8T6.PB1
+    
+    protocols:
+        I2C1:
+            SDA: STM32F103C8T6.PB7
+            SCL: STM32F103C8T6.PB6
+            speed: 400kHz
+        
+        I2C2:
+            SDA: STM32F103C8T6.PB11
+            SCL: STM32F103C8T6.PB10
+            speed: 400kHz
+        
+        SPI1:
+            MOSI: STM32F103C8T6.PA7
+            MISO: STM32F103C8T6.PA6
+            SCK: STM32F103C8T6.PA5
+            CS: STM32F103C8T6.PA4
+        
+        SPI2:
+            MOSI: STM32F103C8T6.PB15
+            MISO: STM32F103C8T6.PB14
+            SCK: STM32F103C8T6.PB13
+            CS: STM32F103C8T6.PB12
+        
+        USART1:
+            TX: STM32F103C8T6.PA9
+            RX: STM32F103C8T6.PA10
+            speed: 115200Hz
+        
+        USART2:
+            TX: STM32F103C8T6.PA2
+            RX: STM32F103C8T6.PA3
+            speed: 115200Hz
+        
+        USART3:
+            TX: STM32F103C8T6.PB10
+            RX: STM32F103C8T6.PB11
+            speed: 115200Hz
+
+## ATmega328P Default Pinout (Arduino Uno)
+interface ATmega328P_Default:
+    target: ATmega328P
+    
+    bindings:
+        Reset = ATmega328P.PC6_Reset
+        LED_Builtin = ATmega328P.PB5_SCK
+        ADC0 = ATmega328P.PC0_ADC0
+        ADC1 = ATmega328P.PC1_ADC1
+        ADC2 = ATmega328P.PC2_ADC2
+        ADC3 = ATmega328P.PC3_ADC3
+        ADC4 = ATmega328P.PC4_ADC4
+        ADC5 = ATmega328P.PC5_ADC5
+        PWM_D3 = ATmega328P.PD3_INT1
+        PWM_D5 = ATmega328P.PD5_T1
+        PWM_D6 = ATmega328P.PD6_AIN0
+        PWM_D9 = ATmega328P.PB1_OC1A
+        PWM_D10 = ATmega328P.PB2_SS
+        PWM_D11 = ATmega328P.PB3_MOSI
+    
+    protocols:
+        SPI:
+            MOSI: ATmega328P.PB3_MOSI
+            MISO: ATmega328P.PB4_MISO
+            SCK: ATmega328P.PB5_SCK
+            CS: ATmega328P.PB2_SS
+        
+        I2C:
+            SDA: ATmega328P.PC4_ADC4
+            SCL: ATmega328P.PC5_ADC5
+            speed: 100kHz
+        
+        UART:
+            TX: ATmega328P.PD1_TXD
+            RX: ATmega328P.PD0_RXD
+            speed: 9600Hz
+
+## RP2040 Default Pinout (Raspberry Pi Pico)
+interface RP2040_Default:
+    target: RP2040
+    
+    bindings:
+        LED_Builtin = RP2040.GPIO25
+        ADC0 = RP2040.GPIO26_ADC0
+        ADC1 = RP2040.GPIO27_ADC1
+        ADC2 = RP2040.GPIO28_ADC2
+        ADC3 = RP2040.GPIO29_ADC3
+        USB_DP = RP2040.USB_DP
+        USB_DM = RP2040.USB_DM
+        SWCLK = RP2040.SWCLK
+        SWDIO = RP2040.SWD
+        Run = RP2040.RUN
+    
+    protocols:
+        I2C0:
+            SDA: RP2040.GPIO4
+            SCL: RP2040.GPIO5
+            speed: 400kHz
+        
+        I2C1:
+            SDA: RP2040.GPIO6
+            SCL: RP2040.GPIO7
+            speed: 400kHz
+        
+        SPI0:
+            MOSI: RP2040.GPIO19
+            MISO: RP2040.GPIO16
+            SCK: RP2040.GPIO18
+            CS: RP2040.GPIO17
+        
+        SPI1:
+            MOSI: RP2040.GPIO11
+            MISO: RP2040.GPIO12
+            SCK: RP2040.GPIO10
+            CS: RP2040.GPIO13
+        
+        UART0:
+            TX: RP2040.GPIO0
+            RX: RP2040.GPIO1
+            speed: 115200Hz
+        
+        UART1:
+            TX: RP2040.GPIO8
+            RX: RP2040.GPIO9
+            speed: 115200Hz
+
+## Stress Test: STM32F407VGT6 with 100+ bindings (Discovery Board)
+interface STM32F407VGT6_Default:
+    target: STM32F407VGT6
+    
+    bindings:
+        Reset = STM32F407VGT6.NRST
+        LED_Green = STM32F407VGT6.PD12
+        LED_Orange = STM32F407VGT6.PD13
+        LED_Red = STM32F407VGT6.PD14
+        LED_Blue = STM32F407VGT6.PD15
+        Button_User = STM32F407VGT6.PA0
+        USB_DP = STM32F407VGT6.PA12
+        USB_DM = STM32F407VGT6.PA11
+        ADC1_IN0 = STM32F407VGT6.PA0
+        ADC1_IN1 = STM32F407VGT6.PA1
+        ADC1_IN2 = STM32F407VGT6.PA2
+        ADC1_IN3 = STM32F407VGT6.PA3
+        ADC1_IN4 = STM32F407VGT6.PA4
+        ADC1_IN5 = STM32F407VGT6.PA5
+        ADC1_IN6 = STM32F407VGT6.PA6
+        ADC1_IN7 = STM32F407VGT6.PA7
+        ADC1_IN8 = STM32F407VGT6.PB0
+        ADC1_IN9 = STM32F407VGT6.PB1
+        ADC1_IN10 = STM32F407VGT6.PC0
+        ADC1_IN11 = STM32F407VGT6.PC1
+        ADC1_IN12 = STM32F407VGT6.PC2
+        ADC1_IN13 = STM32F407VGT6.PC3
+        ADC1_IN14 = STM32F407VGT6.PC4
+        ADC1_IN15 = STM32F407VGT6.PC5
+        DAC1_OUT1 = STM32F407VGT6.PA4
+        DAC1_OUT2 = STM32F407VGT6.PA5
+        PWM_TIM1_CH1 = STM32F407VGT6.PE9
+        PWM_TIM1_CH2 = STM32F407VGT6.PE11
+        PWM_TIM1_CH3 = STM32F407VGT6.PE13
+        PWM_TIM1_CH4 = STM32F407VGT6.PE14
+        PWM_TIM2_CH1 = STM32F407VGT6.PA0
+        PWM_TIM2_CH2 = STM32F407VGT6.PA1
+        PWM_TIM2_CH3 = STM32F407VGT6.PA2
+        PWM_TIM2_CH4 = STM32F407VGT6.PA3
+        PWM_TIM3_CH1 = STM32F407VGT6.PC6
+        PWM_TIM3_CH2 = STM32F407VGT6.PC7
+        PWM_TIM3_CH3 = STM32F407VGT6.PC8
+        PWM_TIM3_CH4 = STM32F407VGT6.PC9
+        PWM_TIM4_CH1 = STM32F407VGT6.PD12
+        PWM_TIM4_CH2 = STM32F407VGT6.PD13
+        PWM_TIM4_CH3 = STM32F407VGT6.PD14
+        PWM_TIM4_CH4 = STM32F407VGT6.PD15
+        CAN1_TX = STM32F407VGT6.PD1
+        CAN1_RX = STM32F407VGT6.PD0
+        CAN2_TX = STM32F407VGT6.PB13
+        CAN2_RX = STM32F407VGT6.PB12
+        ETH_RMII_REF_CLK = STM32F407VGT6.PA1
+        ETH_RMII_MDIO = STM32F407VGT6.PA2
+        ETH_RMII_MDC = STM32F407VGT6.PC1
+        ETH_RMII_CRS_DV = STM32F407VGT6.PA7
+        ETH_RMII_RXD0 = STM32F407VGT6.PC4
+        ETH_RMII_RXD1 = STM32F407VGT6.PC5
+        ETH_RMII_TX_EN = STM32F407VGT6.PB11
+        ETH_RMII_TXD0 = STM32F407VGT6.PB12
+        ETH_RMII_TXD1 = STM32F407VGT6.PB13
+        SDIO_D0 = STM32F407VGT6.PC8
+        SDIO_D1 = STM32F407VGT6.PC9
+        SDIO_D2 = STM32F407VGT6.PC10
+        SDIO_D3 = STM32F407VGT6.PC11
+        SDIO_CK = STM32F407VGT6.PC12
+        SDIO_CMD = STM32F407VGT6.PD2
+    
+    protocols:
+        I2C1:
+            SDA: STM32F407VGT6.PB7
+            SCL: STM32F407VGT6.PB6
+            speed: 400kHz
+        
+        I2C2:
+            SDA: STM32F407VGT6.PB11
+            SCL: STM32F407VGT6.PB10
+            speed: 400kHz
+        
+        I2C3:
+            SDA: STM32F407VGT6.PC9
+            SCL: STM32F407VGT6.PA8
+            speed: 400kHz
+        
+        SPI1:
+            MOSI: STM32F407VGT6.PA7
+            MISO: STM32F407VGT6.PA6
+            SCK: STM32F407VGT6.PA5
+            CS: STM32F407VGT6.PA4
+        
+        SPI2:
+            MOSI: STM32F407VGT6.PB15
+            MISO: STM32F407VGT6.PB14
+            SCK: STM32F407VGT6.PB13
+            CS: STM32F407VGT6.PB12
+        
+        SPI3:
+            MOSI: STM32F407VGT6.PC12
+            MISO: STM32F407VGT6.PC11
+            SCK: STM32F407VGT6.PC10
+            CS: STM32F407VGT6.PA15
+        
+        USART1:
+            TX: STM32F407VGT6.PA9
+            RX: STM32F407VGT6.PA10
+            speed: 115200Hz
+        
+        USART2:
+            TX: STM32F407VGT6.PA2
+            RX: STM32F407VGT6.PA3
+            speed: 115200Hz
+        
+        USART3:
+            TX: STM32F407VGT6.PD8
+            RX: STM32F407VGT6.PD9
+            speed: 115200Hz
+        
+        UART4:
+            TX: STM32F407VGT6.PC10
+            RX: STM32F407VGT6.PC11
+            speed: 115200Hz
+        
+        UART5:
+            TX: STM32F407VGT6.PC12
+            RX: STM32F407VGT6.PD2
+            speed: 115200Hz
+        
+        USART6:
+            TX: STM32F407VGT6.PC6
+            RX: STM32F407VGT6.PC7
+            speed: 115200Hz

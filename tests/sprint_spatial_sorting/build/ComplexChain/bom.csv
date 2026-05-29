@@ -1,0 +1,6 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,0.20x0.10x0.00mm,,,,,1
+M1,NMOS,,,,,,1
+M2,NMOS,,,,,,1
+M3,NMOS,,,,,,1
+M4,NMOS,,,,,,1

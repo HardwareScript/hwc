@@ -1,0 +1,31 @@
+[package]
+name = "hwc-compiler"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+thiserror = { workspace = true }
+miette = { workspace = true }
+rustc-hash = { workspace = true }
+compact_str = { workspace = true }
+smallvec = { workspace = true }
+
+hwc-diagnostics = { workspace = true }
+hwc-parser = { workspace = true }
+hwc-engine = { workspace = true }
+hwc-physics = { workspace = true }
+hwc-materials = { workspace = true }
+hwc-stdlib = { workspace = true }
+include_dir = "0.7"
+bincode = "1.3"
+# hwc-export = { workspace = true }  # Temporarily excluded - needs VoxelGrid integration
+
+[build-dependencies]
+hwc-parser = { workspace = true }
+hwc-diagnostics = { workspace = true }
+rustc-hash = { workspace = true }
+compact_str = { workspace = true }
+include_dir = "0.7"
+bincode = "1.3"

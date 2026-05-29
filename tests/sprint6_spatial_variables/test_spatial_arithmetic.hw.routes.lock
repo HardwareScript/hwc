@@ -1,0 +1,17 @@
+{
+  "version": "0.1.4",
+  "board": "SpatialArithmeticTest",
+  "grid": {
+    "dimensions": [
+      1000,
+      1000,
+      200
+    ],
+    "resolution": [
+      0.1,
+      0.1,
+      0.1
+    ]
+  },
+  "routes": []
+}

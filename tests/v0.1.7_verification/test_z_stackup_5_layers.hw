@@ -1,0 +1,59 @@
+material LayerRed:
+    category: insulator
+    properties:
+        color: "#FF0000"
+
+material LayerGreen:
+    category: insulator
+    properties:
+        color: "#00FF00"
+
+material LayerBlue:
+    category: insulator
+    properties:
+        color: "#0000FF"
+
+material LayerYellow:
+    category: insulator
+    properties:
+        color: "#FFFF00"
+
+material LayerMagenta:
+    category: insulator
+    properties:
+        color: "#FF00FF"
+
+profile FiveColorStackup:
+    stackup:
+        L1: [material: LayerRed,     thickness: 1mm]
+        L2: [material: LayerGreen,   thickness: 1mm]
+        L3: [material: LayerBlue,    thickness: 1mm]
+        L4: [material: LayerYellow,  thickness: 1mm]
+        L5: [material: LayerMagenta, thickness: 1mm]
+
+space ZAxisTest:
+    profile: FiveColorStackup
+    dimensions: 20mm by 20mm by 10mm
+    grid: 40 by 40 by 100
+
+    # All layers share the same 20x20 boundary and are 1mm thick.
+    # This will create a 5mm high "Rainbow Brick" to visually prove Z-stacking.
+
+    add pour(LayerRed) named Band1 on layer: L1:
+        boundary: [x: 0mm, y: 0mm] to [x: 20mm, y: 20mm]
+
+    add pour(LayerGreen) named Band2 on layer: L2:
+        boundary: [x: 0mm, y: 0mm] to [x: 20mm, y: 20mm]
+        merge: true
+
+    add pour(LayerBlue) named Band3 on layer: L3:
+        boundary: [x: 0mm, y: 0mm] to [x: 20mm, y: 20mm]
+        merge: true
+
+    add pour(LayerYellow) named Band4 on layer: L4:
+        boundary: [x: 0mm, y: 0mm] to [x: 20mm, y: 20mm]
+        merge: true
+
+    add pour(LayerMagenta) named Band5 on layer: L5:
+        boundary: [x: 0mm, y: 0mm] to [x: 20mm, y: 20mm]
+        merge: true

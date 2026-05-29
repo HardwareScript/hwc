@@ -1,0 +1,12 @@
+## Test: Flatten simple module
+## Expected: 1 component, 1 route
+
+import * from @std/primitives/units
+
+component Resistor_0805:
+    pins: [In, Out]
+
+module LED_Driver:
+    pins: [VCC, GND]
+    add Resistor_0805(val: 100Ω, tol: 5%) named R1
+    route VCC to R1.In

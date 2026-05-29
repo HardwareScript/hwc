@@ -1,0 +1,83 @@
+## ============================================================================
+## ERROR REPORTING TEST
+## ============================================================================
+##
+## This file intentionally contains physical integrity violations to test
+## the enhanced error reporting system (Task 5.4).
+##
+## Expected violations:
+## - P44: Floating Component (component at z:4, substrate ends at z:2)
+## - P41: Disconnected Net (VDD has disconnected islands)
+
+import * from @std/primitives/units
+import Copper from @std/materials/conductors
+import FR4 from @std/materials/insulators
+
+## ============================================================================
+## COMPONENT DEFINITION
+## ============================================================================
+
+component SimpleResistor:
+    pins: [A, B]
+    
+    layout:
+        shape: Rectangle(2mm, 1mm, 200um)
+        
+        add pour(Copper) named PadA on z:2:
+            boundary: [x: 200um, y: 200um] to [x: 800um, y: 800um]
+            device: A
+        
+        add pour(Copper) named PadB on z:2:
+            boundary: [x: 1200um, y: 200um] to [x: 1800um, y: 800um]
+            device: B
+        
+        pin_positions:
+            A at [500um, 500um]
+            B at [1500um, 500um]
+    
+    render:
+        type: procedural
+        shape: box
+        body_color: "#FFD700"
+
+## ============================================================================
+## LOGICAL SCHEMATIC
+## ============================================================================
+
+module SimpleCircuit:
+    pins: [
+        power VDD,
+        ground GND
+    ]
+    
+    add SimpleResistor named R1
+    route R1.A to VDD
+    route R1.B to GND
+
+## ============================================================================
+## PHYSICAL LAYOUT (WITH INTENTIONAL ERRORS)
+## ============================================================================
+
+space SimpleCircuitLayout implements SimpleCircuit:
+    dimensions: 10mm by 10mm by 2mm
+    grid: 10000 by 10000 by 20
+    origin: tl by t
+    
+    nets:
+        VDD: power
+        GND: ground
+    
+    ## Substrate ends at z:2
+    add substrate(FR4) spanning [x:1um, y:1um, z:0] to [x:9999um, y:9999um, z:2]
+    
+    ## ERROR 1: Component placed at z:4 (floating above substrate which ends at z:2)
+    ## This should trigger P44: Floating Component
+    add SimpleResistor named R1 at [x: 3mm, y: 3mm, z: 4]:
+        net: [A: VDD, B: GND]
+    
+    ## ERROR 2: Add another resistor far away to create disconnected VDD islands
+    ## This should trigger P41: Disconnected Net
+    add SimpleResistor named R2 at [x: 7mm, y: 7mm, z: 4]:
+        net: [A: VDD, B: GND]
+    
+    ## Note: No routing between R1 and R2, so VDD will have 2 disconnected islands

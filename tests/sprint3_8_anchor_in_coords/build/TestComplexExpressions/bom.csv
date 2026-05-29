@@ -1,0 +1,12 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,80.00x40.00x2.00mm,,,,,1
+BasePlane,Pour,100.0000mm² net:GND,Layer 1,,Copper,100.000000mm³
+ComplexPour,Pour,40.0000mm² net:VDD,Layer 1,,Copper,40.000000mm³
+BasePlane,Pour(Copper),,,,,,1
+Block1,SmallBlock,,,,,,1
+Array[0],SmallBlock,,,,,,1
+Array[1],SmallBlock,,,,,,1
+Array[2],SmallBlock,,,,,,1
+Array[3],SmallBlock,,,,,,1
+FinalBlock,SmallBlock,,,,,,1
+ComplexPour,Pour(Copper),,,,,,1

@@ -1,0 +1,45 @@
+## Test P43: Floating Conductor Detection - PASS case with real component
+## This test creates pours with a real resistor component whose pins touch the pours
+## Expected: No P43 violation (conductor is properly connected to component pins)
+
+import * from @std/primitives/units
+import Copper from @std/materials/conductors
+import FR4 from @std/materials/insulators
+import Resistor_0805_4k7 from @std/components/resistors
+
+module WithComponentTest:
+    pins: [
+        power VCC,
+        ground GND
+    ]
+    
+    add Resistor_0805_4k7 named R1
+    route R1.Pin1 to VCC
+    route R1.Pin2 to GND
+
+space TestP43WithComponentPass implements WithComponentTest:
+    dimensions: 10mm by 10mm by 1mm
+    grid: 10000 by 10000 by 10
+    origin: tl by t
+    
+    nets:
+        VCC: power
+        GND: ground
+    
+    ## Base substrate
+    add substrate(FR4) spanning [x: 0mm, y: 0mm, z: 0] to [x: 10mm, y: 10mm, z: 1]
+    
+    ## VCC pour - large enough to contain the resistor's Pin1
+    ## Resistor_0805_4k7 is 2.0mm x 1.25mm, pins at 0mm and 2.0mm
+    ## Place resistor at (3mm, 5mm), so Pin1 is at (3mm, 5.625mm) and Pin2 is at (5mm, 5.625mm)
+    add pour(Copper) named VCCPour on z:1:
+        boundary: [x: 2mm, y: 4mm] to [x: 4mm, y: 7mm]
+        net: VCC
+    
+    ## Place resistor so Pin1 touches VCC pour and Pin2 touches GND pour
+    add Resistor_0805_4k7 named R1 at [x: 3mm, y: 5mm, z: 1]
+    
+    ## GND pour - large enough to contain the resistor's Pin2
+    add pour(Copper) named GNDPour on z:1:
+        boundary: [x: 4.5mm, y: 4mm] to [x: 6.5mm, y: 7mm]
+        net: GND

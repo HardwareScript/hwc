@@ -1,0 +1,20 @@
+## Test: Overlapping components error
+## Expected: Error P12 (Geometric Collision)
+
+import * from @std/primitives/units
+
+component LED:
+    pins: [Anode, Cathode]
+    layout:
+        shape: Rectangle(5mm, 5mm, 1mm)
+
+module TestCircuitModule:
+    pins: []
+
+space TestCircuit implements TestCircuitModule:
+    dimensions: 50mm by 50mm by 4mm
+    grid: 100 by 100 by 4
+    origin: bl by b
+    
+    add LED named LED1 at [x: 10mm, y: 10mm, z: 1mm]
+    add LED named LED2 at [x: 10mm, y: 10mm, z: 1mm] ## Collision!

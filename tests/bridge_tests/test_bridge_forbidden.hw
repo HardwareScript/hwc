@@ -1,0 +1,34 @@
+## Bridge System: Forbidden Bridge Test
+##
+## This test verifies that the compiler rejects transitions between layers
+## that do not have a defined bridge in the profile.
+
+import * from @std/primitives/units
+import Generic from @std/profiles/generic
+import Copper from @std/materials/conductors
+import FR4 from @std/materials/insulators
+
+module ForbiddenBridgeTest:
+    pins: []
+
+space TestForbiddenBridge implements ForbiddenBridgeTest:
+    dimensions: 20mm by 20mm by 1mm
+    grid: 20000 by 20000 by 5
+    origin: tl by t
+    profile: Generic
+    
+    nets:
+        TEST_NET: signal
+    
+    ## Pour 1: Copper on z:1
+    add pour(Copper) named Copper_Pour on z:1:
+        boundary: [x: 2mm, y: 2mm] to [x: 8mm, y: 8mm]
+        net: TEST_NET
+    
+    ## Pour 2: FR4 on z:2 - overlaps with Pour 1
+    add pour(FR4) named FR4_Pour on z:2:
+        boundary: [x: 5mm, y: 5mm] to [x: 12mm, y: 12mm]
+        net: TEST_NET
+
+    ## Expected: Compiler should fail because there is no bridge defined
+    ## between Copper and FR4 in the Generic profile.

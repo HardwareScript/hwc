@@ -1,0 +1,83 @@
+## ============================================================================
+## Sprint 4.1: LVS Engine Test - Connection Mismatch
+## ============================================================================
+##
+## This test verifies that LVS detects connection mismatches.
+## Expected: LVS FAILED - M1.drain connected to wrong net (VDD instead of VOUT)
+
+import * from @std/primitives/units
+
+## ============================================================================
+## Logical Schematic (Module)
+## ============================================================================
+
+module InverterLogic:
+    pins: [
+        input VIN,
+        output VOUT,
+        power VDD,
+        ground GND
+    ]
+    
+    add NMOS named M1
+    route M1.gate to VIN
+    route M1.source to GND
+    route M1.drain to VOUT
+    route M1.bulk to GND
+    
+    add PMOS named M2
+    route M2.gate to VIN
+    route M2.source to VDD
+    route M2.drain to VOUT
+    route M2.bulk to VDD
+
+## ============================================================================
+## Physical Layout (Space) - M1.drain connected to VDD (WRONG!)
+## ============================================================================
+
+space InverterLayout implements InverterLogic:
+    dimensions: 2mm by 2mm by 1mm
+    grid: 20 by 20 by 10
+    
+    ## NMOS Transistor (M1)
+    add pour(Polysilicon) named M1_Gate on z:5:
+        device: M1.gate
+        net: VIN
+        boundary: [x: 400um, y: 400um] to [x: 600um, y: 1200um]
+    
+    add pour(Silicon_N) named M1_Source on z:3:
+        device: M1.source
+        net: GND
+        boundary: [x: 400um, y: 200um] to [x: 600um, y: 400um]
+    
+    ## ← WRONG! Connected to VDD instead of VOUT
+    add pour(Silicon_N) named M1_Drain on z:3:
+        device: M1.drain
+        net: VDD
+        boundary: [x: 400um, y: 1200um] to [x: 600um, y: 1400um]
+    
+    add pour(Silicon_P) named M1_Bulk on z:3:
+        device: M1.bulk
+        net: GND
+        boundary: [x: 200um, y: 700um] to [x: 400um, y: 900um]
+    
+    ## PMOS Transistor (M2)
+    add pour(Polysilicon) named M2_Gate on z:5:
+        device: M2.gate
+        net: VIN
+        boundary: [x: 1000um, y: 400um] to [x: 1200um, y: 1200um]
+    
+    add pour(Silicon_P) named M2_Source on z:3:
+        device: M2.source
+        net: VDD
+        boundary: [x: 1000um, y: 200um] to [x: 1200um, y: 400um]
+    
+    add pour(Silicon_P) named M2_Drain on z:3:
+        device: M2.drain
+        net: VOUT
+        boundary: [x: 1000um, y: 1200um] to [x: 1200um, y: 1400um]
+    
+    add pour(Silicon_N) named M2_Bulk on z:3:
+        device: M2.bulk
+        net: VDD
+        boundary: [x: 1200um, y: 700um] to [x: 1400um, y: 900um]

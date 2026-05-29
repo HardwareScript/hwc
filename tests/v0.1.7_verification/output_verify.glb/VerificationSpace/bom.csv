@@ -1,0 +1,9 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,20.00x20.00x1.60mm,,,,,1
+PourA,Pour,36.0000mm² net:AutoNet,Layer 1,,Copper,5.760000mm³
+PourB,Pour,36.0000mm² net:AutoNet,Layer 2,,Copper,5.760000mm³
+PourA,Pour(Copper),,,,,,1
+PourB,Pour(Copper),,,,,,1
+LargePad,Contact(Copper),,,,,,1
+ManualVia,Contact(Copper),,,,,,1
+AutoVia_AutoNet_1_2,Contact(Copper),,,,,,1

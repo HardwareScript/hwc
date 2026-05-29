@@ -1,0 +1,7 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,10.00x10.00x1.00mm,,,,,1
+VCCPour,Pour,6.0000mm² net:VCC,Layer 2,,Copper,0.600000mm³
+GNDPour,Pour,6.0000mm² net:GND,Layer 2,,Copper,0.600000mm³
+VCCPour,Pour(Copper),,,,,,1
+GNDPour,Pour(Copper),,,,,,1
+R1,SimpleResistor,,,,,,1

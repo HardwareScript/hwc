@@ -1,0 +1,77 @@
+## GAP2: Substrate-Component Overlap Validation
+## Test: Component partially overlapping substrate (top half inside)
+##
+## This test verifies that the compiler detects partial overlap where
+## the component's bottom is inside the substrate but top extends above.
+##
+## Expected behavior:
+## - Compiler should detect overlap and throw P44 error
+## - Overlap occurs when Z ranges intersect (not just fully contained)
+##
+## Physical Reality:
+## - Substrate spans z:0 to z:2 → physically 0mm to 3mm
+## - Component at z:2 with depth 0.5mm → 3mm to 3.5mm
+## - Component bottom (3mm) overlaps with substrate top (3mm)
+## - Overlap condition: component_min_z < substrate_max_z
+
+import * from @std/primitives/units
+import Silicon_P from @std/materials/doped_semiconductors
+import Copper from @std/materials/conductors
+
+## ============================================================================
+## COMPONENT DEFINITION: Tall Component
+## ============================================================================
+
+component TallComponent:
+    pins: [A, B]
+    
+    layout:
+        shape: Rectangle(5mm, 5mm, 2mm)  ## 2mm tall (spans multiple layers)
+        
+        pin_positions:
+            A at [1mm, 2.5mm]
+            B at [4mm, 2.5mm]
+    
+    metadata:
+        component_type: "Tall Component"
+        description: "Component with significant height for overlap testing"
+    
+    render:
+        type: procedural
+        shape: box
+        body_color: "#00FFFF"
+
+## ============================================================================
+## SPACE: Component Partially Overlapping Substrate
+## ============================================================================
+
+space TestComponentPartiallyOverlapping:
+    dimensions: 100mm by 100mm by 10mm
+    grid: 100000 by 100000 by 10
+    origin: bl
+    
+    ## Substrate spans z:0 to z:2 (physically 0mm to 3mm)
+    add substrate(Silicon_P) spanning [x:1um, y:1um, z:0] to [x:99999um, y:99999um, z:2]
+    
+    ## ========================================================================
+    ## PARTIAL OVERLAP CASE: Component at z:2
+    ## 
+    ## Component dimensions:
+    ## - Starts at z:2 → physically 2mm (assuming 1mm/layer)
+    ## - Height: 2mm
+    ## - Ends at: 2mm + 2mm = 4mm
+    ## 
+    ## Substrate dimensions:
+    ## - Starts at z:0 → 0mm
+    ## - Ends at z:2 → 3mm (assuming 1.5mm/layer for z:2)
+    ## 
+    ## Overlap check:
+    ## - component_min_z (2mm) < substrate_max_z (3mm)? YES
+    ## - component_max_z (4mm) > substrate_min_z (0mm)? YES
+    ## - Therefore: OVERLAP DETECTED ❌
+    ## 
+    ## This should trigger P44 error suggesting z:3 or higher
+    ## ========================================================================
+    
+    add TallComponent named TC1 at [x: 50mm, y: 50mm, z: 2]  ## ❌ PARTIALLY INSIDE!
+

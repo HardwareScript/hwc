@@ -1,0 +1,44 @@
+## Sprint 2.3: Physical Continuity Test - P41 Z-Gap Disconnection
+## 
+## This test should FAIL with error P41: Physical Disconnection
+##
+## Test scenario:
+## - Two pours on the same net (VCC) on different Z layers
+## - XY coordinates overlap, but there's a Z-gap (no via connecting them)
+## - Should detect the Z-gap and suggest adding a via
+##
+## Expected error:
+## P41: Net 'VCC' has 2 disconnected islands
+## Suggested fix: Add a contact (via) to bridge the gap
+
+import * from @std/primitives/units
+import Copper from @std/materials/conductors
+
+module ZGapTest:
+    pins: []
+
+space TestZGap implements ZGapTest:
+    dimensions: 10mm by 10mm by 1mm
+    grid: 10000 by 10000 by 10
+    origin: tl by t
+    
+    ## Net classifications
+    nets:
+        VCC: power
+        GND: ground
+    
+    ## Layer 1: Bottom VCC pour
+    add pour(Copper) named VCC_Bottom on z:1:
+        boundary: [x: 2mm, y: 2mm] to [x: 7mm, y: 7mm]
+        net: VCC
+    
+    ## Layer 3: Top VCC pour (same XY position, but Z-gap!)
+    ## Missing via between z:1 and z:3
+    add pour(Copper) named VCC_Top on z:5:
+        boundary: [x: 2mm, y: 2mm] to [x: 7mm, y: 7mm]
+        net: VCC
+    
+    ## GND plane (properly connected, for comparison) - smaller to avoid VCC pours
+    add pour(Copper) named GND_Plane on z:3:
+        boundary: [x: 1mm, y: 1mm] to [x: 3mm, y: 3mm]
+        net: GND

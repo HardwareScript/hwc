@@ -1,0 +1,397 @@
+##[ Hardware Script Standard Library - Unit Definitions
+    
+    This file defines unit conversions and aliases for the Hardware Script compiler.
+    The compiler core only understands 4 essential units (mm, V, A, C) needed for
+    physical geometry and safety calculations. All other units are defined here.
+    
+    Users can edit this file to add custom units without recompiling the compiler.
+]##
+
+## ============================================================================
+## SI BASE UNITS
+## ============================================================================
+## These are the fundamental units from which all others are derived
+
+unit Meter:
+    symbol: "m"
+    dimension: length
+    multiplier: 1
+    description: "SI base unit of length"
+
+unit Kilogram:
+    symbol: "kg"
+    dimension: mass
+    multiplier: 1
+    description: "SI base unit of mass"
+
+unit Second:
+    symbol: "s"
+    dimension: time
+    multiplier: 1
+    description: "SI base unit of time"
+
+unit Ampere:
+    symbol: "A"
+    dimension: current
+    multiplier: 1
+    description: "SI base unit of electric current"
+
+unit Kelvin:
+    symbol: "K"
+    dimension: temperature
+    multiplier: 1
+    description: "SI base unit of thermodynamic temperature"
+
+## ============================================================================
+## LENGTH UNITS (Derived from Meter)
+## ============================================================================
+
+unit Millimeter:
+    symbol: "mm"
+    base_si: "m"
+    multiplier: 1e-3
+    dimension: length
+    description: "Most common unit for PCB dimensions"
+
+unit Micrometer:
+    symbol: "µm"
+    aliases: ["um"]
+    base_si: "m"
+    multiplier: 1e-6
+    dimension: length
+    description: "Common for chip-level features"
+
+unit Nanometer:
+    symbol: "nm"
+    base_si: "m"
+    multiplier: 1e-9
+    dimension: length
+    description: "Common for semiconductor process nodes"
+
+unit Centimeter:
+    symbol: "cm"
+    base_si: "m"
+    multiplier: 1e-2
+    dimension: length
+    description: "Convenient for board dimensions"
+
+unit Kilometer:
+    symbol: "km"
+    base_si: "m"
+    multiplier: 1e3
+    dimension: length
+
+## ============================================================================
+## CAPACITANCE UNITS
+## ============================================================================
+## Base unit: Farad (F)
+## The compiler doesn't need capacitance for routing - it's metadata for BOM
+
+unit Farad:
+    symbol: "F"
+    base_si: "F"
+    dimension: capacitance
+    description: "SI unit of electrical capacitance"
+
+unit Millifarad:
+    symbol: "mF"
+    base_si: "F"
+    multiplier: 1e-3
+    dimension: capacitance
+
+unit Microfarad:
+    symbol: "µF"
+    aliases: ["uF"]
+    base_si: "F"
+    multiplier: 1e-6
+    dimension: capacitance
+    description: "Most common capacitor unit"
+
+unit Nanofarad:
+    symbol: "nF"
+    base_si: "F"
+    multiplier: 1e-9
+    dimension: capacitance
+    description: "Common for small capacitors"
+
+unit Picofarad:
+    symbol: "pF"
+    base_si: "F"
+    multiplier: 1e-12
+    dimension: capacitance
+    description: "Common for very small capacitors"
+
+## ============================================================================
+## INDUCTANCE UNITS
+## ============================================================================
+## Base unit: Henry (H)
+
+unit Henry:
+    symbol: "H"
+    base_si: "H"
+    dimension: inductance
+    description: "SI unit of electrical inductance"
+
+unit Millihenry:
+    symbol: "mH"
+    base_si: "H"
+    multiplier: 1e-3
+    dimension: inductance
+
+unit Microhenry:
+    symbol: "µH"
+    aliases: ["uH"]
+    base_si: "H"
+    multiplier: 1e-6
+    dimension: inductance
+    description: "Most common inductor unit"
+
+unit Nanohenry:
+    symbol: "nH"
+    base_si: "H"
+    multiplier: 1e-9
+    dimension: inductance
+
+## ============================================================================
+## FREQUENCY UNITS
+## ============================================================================
+## Base unit: Hertz (Hz)
+
+unit Hertz:
+    symbol: "Hz"
+    base_si: "Hz"
+    dimension: frequency
+    description: "SI unit of frequency"
+
+unit Kilohertz:
+    symbol: "kHz"
+    base_si: "Hz"
+    multiplier: 1e3
+    dimension: frequency
+
+unit Megahertz:
+    symbol: "MHz"
+    base_si: "Hz"
+    multiplier: 1e6
+    dimension: frequency
+    description: "Common for microcontroller clocks"
+
+unit Gigahertz:
+    symbol: "GHz"
+    base_si: "Hz"
+    multiplier: 1e9
+    dimension: frequency
+    description: "Common for high-speed signals"
+
+## ============================================================================
+## TOLERANCE & PRECISION UNITS
+## ============================================================================
+## These are dimensionless ratios - pure metadata
+
+unit Percent:
+    symbol: "%"
+    dimension: ratio
+    multiplier: 0.01
+    description: "Percentage - common for resistor/capacitor tolerance"
+    examples: ["1%", "5%", "10%"]
+
+unit PartsPerMillion:
+    symbol: "ppm"
+    dimension: ratio
+    multiplier: 1e-6
+    description: "Parts per million - temperature coefficient"
+    examples: ["100ppm", "50ppm"]
+
+unit PartsPerBillion:
+    symbol: "ppb"
+    dimension: ratio
+    multiplier: 1e-9
+    description: "Parts per billion - high precision measurements"
+
+## ============================================================================
+## POWER UNITS
+## ============================================================================
+## Base unit: Watt (W)
+
+unit Watt:
+    symbol: "W"
+    base_si: "W"
+    dimension: power
+    description: "SI unit of power"
+
+unit Milliwatt:
+    symbol: "mW"
+    base_si: "W"
+    multiplier: 1e-3
+    dimension: power
+    description: "Common for low-power components"
+
+unit Kilowatt:
+    symbol: "kW"
+    base_si: "W"
+    multiplier: 1e3
+    dimension: power
+
+unit Megawatt:
+    symbol: "MW"
+    base_si: "W"
+    multiplier: 1e6
+    dimension: power
+
+## ============================================================================
+## ENERGY & BATTERY CAPACITY UNITS
+## ============================================================================
+
+unit Joule:
+    symbol: "J"
+    base_si: "J"
+    dimension: energy
+    description: "SI unit of energy"
+
+unit WattHour:
+    symbol: "Wh"
+    base_si: "J"
+    multiplier: 3600
+    dimension: energy
+    description: "Energy unit for batteries"
+
+unit MilliampereHour:
+    symbol: "mAh"
+    dimension: charge
+    description: "Battery capacity (not true SI, but industry standard)"
+    note: "Multiply by voltage to get Wh"
+    examples: ["2000mAh", "5000mAh"]
+
+unit AmpereHour:
+    symbol: "Ah"
+    dimension: charge
+    description: "Battery capacity for large batteries"
+
+## ============================================================================
+## SIGNAL STRENGTH UNITS
+## ============================================================================
+## Logarithmic units - dimensionless
+
+unit Decibel:
+    symbol: "dB"
+    dimension: logarithmic_ratio
+    description: "Logarithmic ratio unit"
+
+unit DecibelMilliwatt:
+    symbol: "dBm"
+    dimension: logarithmic_power
+    description: "Power level relative to 1 milliwatt"
+    note: "Common for RF signal strength"
+    examples: ["10dBm", "-20dBm"]
+
+unit DecibelMicrovolt:
+    symbol: "dBµV"
+    aliases: ["dBuV"]
+    dimension: logarithmic_voltage
+    description: "Voltage level relative to 1 microvolt"
+
+## ============================================================================
+## TIME UNITS (beyond seconds)
+## ============================================================================
+## Note: Seconds (s) is a core SI unit, but these are convenient aliases
+
+unit Millisecond:
+    symbol: "ms"
+    base_si: "s"
+    multiplier: 1e-3
+    dimension: time
+
+unit Microsecond:
+    symbol: "µs"
+    aliases: ["us"]
+    base_si: "s"
+    multiplier: 1e-6
+    dimension: time
+
+unit Nanosecond:
+    symbol: "ns"
+    base_si: "s"
+    multiplier: 1e-9
+    dimension: time
+    description: "Common for signal timing"
+
+unit Picosecond:
+    symbol: "ps"
+    base_si: "s"
+    multiplier: 1e-12
+    dimension: time
+    description: "High-speed signal timing"
+
+## ============================================================================
+## WIRE GAUGE UNITS
+## ============================================================================
+## Non-SI units specific to wire manufacturing
+
+unit AmericanWireGauge:
+    symbol: "AWG"
+    dimension: wire_gauge
+    description: "American Wire Gauge - wire diameter standard"
+    note: "Inverse logarithmic scale - smaller number = thicker wire"
+    examples: ["22AWG", "18AWG", "12AWG"]
+
+unit StandardWireGauge:
+    symbol: "SWG"
+    dimension: wire_gauge
+    description: "British Standard Wire Gauge"
+
+## ============================================================================
+## ANGLE UNITS (beyond degrees)
+## ============================================================================
+## Note: Degrees (°) is handled by compiler core
+
+unit Radian:
+    symbol: "rad"
+    base_si: "rad"
+    dimension: angle
+    description: "SI unit of angle"
+
+unit Milliradian:
+    symbol: "mrad"
+    base_si: "rad"
+    multiplier: 1e-3
+    dimension: angle
+
+## ============================================================================
+## CUSTOM MANUFACTURER UNITS
+## ============================================================================
+## Add your own units here - they will be recognized by the compiler
+
+## Example: Custom unit for a specific manufacturer
+## unit MyCustomUnit:
+##     symbol: "MCU"
+##     dimension: custom
+##     description: "My custom measurement unit"
+##     note: "Used in XYZ datasheet"
+
+## ============================================================================
+## NOTES FOR USERS
+## ============================================================================
+##
+## HOW TO ADD A NEW UNIT:
+## 1. Copy one of the examples above
+## 2. Change the name, symbol, and description
+## 3. Set the dimension (capacitance, inductance, ratio, etc.)
+## 4. If it's an SI prefix, set base_si and multiplier
+## 5. Save this file - no compiler recompilation needed!
+##
+## WHAT THE COMPILER DOES WITH THIS:
+## - Validates that units in your .hw files are defined here
+## - Converts values to base SI units for calculations (if needed)
+## - Passes unit strings through to BOM/documentation
+## - Does NOT require these for routing/geometry (only mm, V, A, C matter)
+##
+## DIMENSION TYPES:
+## - capacitance, inductance, frequency: Electrical properties
+## - ratio: Dimensionless (%, ppm)
+## - power, energy, charge: Power/energy related
+## - logarithmic_*: dB-based units
+## - time: Duration measurements
+## - angle: Rotational measurements
+## - wire_gauge: Wire sizing standards
+## - custom: Your own units
+##

@@ -1,0 +1,397 @@
+## ============================================================================
+## HARDWARE SCRIPT STANDARD LIBRARY: ADDERS
+## ============================================================================
+## 
+## Comprehensive adder implementations that exercise ALL logic syntax features:
+## - Enums, structs, type casts
+## - Match expressions with all pattern types
+## - If/else with inline and block bodies
+## - Nested control flow
+## - Field access, array slicing, bundling
+## - All binary operators
+## - Registers with clock domains
+## - Let bindings with explicit and inferred widths
+## - Tail expressions in blocks
+## - Comments and documentation
+##
+## This file serves as the bootstrap validation suite for the logic compiler.
+## If this compiles, the compiler handles the complete language.
+##
+## ============================================================================
+
+## ============================================================================
+## TYPE DEFINITIONS
+## ============================================================================
+
+## Adder operation modes
+enum AdderMode:
+    RippleCarry
+    CarryLookahead = 0x1
+    CarrySelect = 0x2
+    CarrySkip = 0x3
+
+## Adder configuration structure
+struct AdderConfig:
+    mode[2]
+    enable[1]
+    saturate[1]
+    signed[1]
+    unused[3]
+
+## Adder status flags
+struct AdderFlags:
+    carry[1]
+    overflow[1]
+    zero[1]
+    negative[1]
+    unused[4]
+
+## ============================================================================
+## HALF ADDER: Single-bit addition (exercises basic operators)
+## ============================================================================
+
+module HalfAdder:
+    pins: A[1], B[1], Sum[1], Carry[1]
+    
+    logic:
+        ## XOR for sum, AND for carry
+        Sum = A ^ B
+        Carry = A & B
+
+## ============================================================================
+## FULL ADDER: Single-bit with carry-in (exercises nested expressions)
+## ============================================================================
+
+module FullAdder:
+    pins: A[1], B[1], Cin[1], Sum[1], Cout[1]
+    
+    logic:
+        ## Intermediate calculations with explicit widths
+        let sum_ab[1] = A ^ B
+        let carry_ab[1] = A & B
+        
+        ## Final sum with carry-in
+        Sum = sum_ab ^ Cin
+        
+        ## Carry-out using nested operations
+        let carry_sum[1] = sum_ab & Cin
+        Cout = carry_ab | carry_sum
+
+## ============================================================================
+## RIPPLE CARRY ADDER 8-BIT: Basic multi-bit adder
+## (exercises array slicing, bundling, loops via repetition)
+## ============================================================================
+
+module RippleCarryAdder8:
+    pins: A[8], B[8], Cin[1], Sum[8], Cout[1], Flags[8]
+    
+    logic:
+        ## Bit-by-bit addition with carry propagation
+        let c0 = Cin
+        let s0 = A[0] ^ B[0] ^ c0
+        let c1 = (A[0] & B[0]) | ((A[0] ^ B[0]) & c0)
+        
+        let s1 = A[1] ^ B[1] ^ c1
+        let c2 = (A[1] & B[1]) | ((A[1] ^ B[1]) & c1)
+        
+        let s2 = A[2] ^ B[2] ^ c2
+        let c3 = (A[2] & B[2]) | ((A[2] ^ B[2]) & c2)
+        
+        let s3 = A[3] ^ B[3] ^ c3
+        let c4 = (A[3] & B[3]) | ((A[3] ^ B[3]) & c3)
+        
+        let s4 = A[4] ^ B[4] ^ c4
+        let c5 = (A[4] & B[4]) | ((A[4] ^ B[4]) & c4)
+        
+        let s5 = A[5] ^ B[5] ^ c5
+        let c6 = (A[5] & B[5]) | ((A[5] ^ B[5]) & c5)
+        
+        let s6 = A[6] ^ B[6] ^ c6
+        let c7 = (A[6] & B[6]) | ((A[6] ^ B[6]) & c6)
+        
+        let s7 = A[7] ^ B[7] ^ c7
+        let c8 = (A[7] & B[7]) | ((A[7] ^ B[7]) & c7)
+        
+        ## Bundle result bits (exercises concatenation)
+        Sum = [s0[1], s1[1], s2[1], s3[1], s4[1], s5[1], s6[1], s7[1]]
+        Cout = c8
+        
+        ## Generate flags (exercises struct construction)
+        let zero_flag = (Sum == 0x00)
+        let negative_flag = Sum[7]
+        let carry_flag = c8
+        let overflow_flag = (A[7] == B[7]) & (Sum[7] != A[7])
+        
+        Flags = [carry_flag[1], overflow_flag[1], zero_flag[1], negative_flag[1], (0 * 4)]
+
+## ============================================================================
+## CONFIGURABLE ADDER 8-BIT: Mode selection with match
+## (exercises enums, structs, casts, match expressions, field access)
+## ============================================================================
+
+module ConfigurableAdder8:
+    pins: A[8], B[8], Cin[1], ConfigRaw[8], Sum[8], Cout[1], FlagsRaw[8]
+    
+    logic:
+        ## Cast raw config to structured type (exercises type casting)
+        let config = ConfigRaw as AdderConfig
+        
+        ## Extract configuration fields (exercises field access)
+        let mode = config.mode
+        let enable = config.enable
+        let saturate = config.saturate
+        let is_signed = config.signed
+        
+        ## Select adder implementation based on mode (exercises match with enum)
+        let raw_sum = match mode:
+            AdderMode.RippleCarry:
+                ## Inline expression with proper width handling
+                ((A + B)[7..0] + Cin)[7..0]
+            
+            AdderMode.CarryLookahead:
+                ## Block with intermediate calculations
+                let p = A ^ B
+                let g = A & B
+                let c1 = g | (p & Cin)
+                (A + B + c1)[7..0]
+            
+            AdderMode.CarrySelect:
+                ## Nested if in block
+                let sum_no_carry = (A + B)[7..0]
+                let sum_with_carry = (A + B + 1)[7..0]
+                if Cin:
+                    sum_with_carry
+                else:
+                    sum_no_carry
+            
+            else:
+                ## Default case with literal
+                0x00
+        
+        ## Apply enable control (exercises if/else inline)
+        let enabled_sum = if enable: raw_sum else: 0x00
+        
+        ## Apply saturation if configured (exercises nested if with blocks)
+        let final_sum = if saturate:
+            ## Multi-line block with complex logic
+            let max_val = if is_signed: 0x7F else: 0xFF
+            let min_val = if is_signed: 0x80 else: 0x00
+            
+            ## Detect overflow conditions
+            let pos_overflow = is_signed & (A[7] == 0) & (B[7] == 0) & (enabled_sum[7] == 1)
+            let neg_overflow = is_signed & (A[7] == 1) & (B[7] == 1) & (enabled_sum[7] == 0)
+            
+            ## Saturate on overflow
+            if pos_overflow:
+                max_val
+            else:
+                if neg_overflow: min_val else: enabled_sum
+        else:
+            enabled_sum
+        
+        Sum = final_sum
+        
+        ## Calculate carry out (exercises comparison operators)
+        let carry_out = (raw_sum > 0xFF) | ((raw_sum == 0xFF) & (Cin == 1))
+        Cout = carry_out
+        
+        ## Generate status flags with all operators
+        let is_zero = (final_sum == 0x00)
+        let is_negative = final_sum[7]
+        let has_overflow = (A[7] == B[7]) & (final_sum[7] != A[7])
+        
+        ## Build flags struct (exercises struct field assignment via bundling)
+        FlagsRaw = [carry_out[1], has_overflow[1], is_zero[1], is_negative[1], (0 * 4)]
+
+## ============================================================================
+## CARRY LOOKAHEAD ADDER 16-BIT: Fast parallel adder
+## (exercises wider buses, complex expressions, shift operations)
+## ============================================================================
+
+module CarryLookaheadAdder16:
+    pins: A[16], B[16], Cin[1], Sum[16], Cout[1]
+    
+    logic:
+        ## Split into 4-bit blocks for lookahead
+        let a0 = A[3..0]
+        let a1 = A[7..4]
+        let a2 = A[11..8]
+        let a3 = A[15..12]
+        
+        let b0 = B[3..0]
+        let b1 = B[7..4]
+        let b2 = B[11..8]
+        let b3 = B[15..12]
+        
+        ## Generate and propagate for each block
+        let p0 = a0 ^ b0
+        let g0 = a0 & b0
+        
+        let p1 = a1 ^ b1
+        let g1 = a1 & b1
+        
+        let p2 = a2 ^ b2
+        let g2 = a2 & b2
+        
+        let p3 = a3 ^ b3
+        let g3 = a3 & b3
+        
+        ## Lookahead carry calculation (exercises complex boolean algebra)
+        let c1 = g0 | (p0 & Cin)
+        let c2 = g1 | (p1 & c1)
+        let c3 = g2 | (p2 & c2)
+        let c4 = g3 | (p3 & c3)
+        
+        ## Calculate sums for each block
+        let s0 = p0 ^ Cin
+        let s1 = p1 ^ c1
+        let s2 = p2 ^ c2
+        let s3 = p3 ^ c3
+        
+        ## Concatenate results (exercises multi-element bundling)
+        Sum = [s0[4], s1[4], s2[4], s3[4]]
+        Cout = c4
+
+## ============================================================================
+## SUBTRACTOR 8-BIT: Two's complement subtraction
+## (exercises unary negation via XOR and addition)
+## ============================================================================
+
+module Subtractor8:
+    pins: A[8], B[8], Diff[8], Borrow[1]
+    
+    logic:
+        ## Two's complement: A - B = A + (~B + 1)
+        let b_inverted = B ^ 0xFF
+        let sum = A + b_inverted + 1
+        
+        Diff = sum[7..0]
+        
+        ## Borrow is inverse of carry
+        let carry = (sum > 0xFF)
+        Borrow = carry ^ 1
+
+## ============================================================================
+## ADDER-SUBTRACTOR 8-BIT: Unified add/sub with control
+## (exercises mutable state, registers, clock domains)
+## ============================================================================
+
+module AdderSubtractor8:
+    pins: A[8], B[8], Sub[1], Clk[1], Rst[1], Result[8], Flags[8]
+    
+    logic:
+        ## Select operation (exercises conditional XOR)
+        let b_operand = if Sub: (B ^ 0xFF) else: B
+        let carry_in = Sub
+        
+        ## Perform operation
+        let sum = A + b_operand + carry_in
+        
+        ## Register the result (exercises Reg with clock domain)
+        let mut result_reg = Reg(clock: Clk, reset: Rst, init: 0x00)
+        result_reg.next = sum[7..0]
+        Result = result_reg
+        
+        ## Calculate flags
+        let zero = (result_reg == 0x00)
+        let negative = result_reg[7]
+        let carry = (sum > 0xFF)
+        let overflow = (A[7] == b_operand[7]) & (result_reg[7] != A[7])
+        
+        ## Register flags
+        let mut flags_reg = Reg(clock: Clk, reset: Rst, init: 0x00)
+        flags_reg.next = [carry[1], overflow[1], zero[1], negative[1], (0 * 4)]
+        Flags = flags_reg
+
+## ============================================================================
+## SATURATING ADDER 8-BIT: Clamps to min/max on overflow
+## (exercises all comparison operators, complex conditionals)
+## ============================================================================
+
+module SaturatingAdder8:
+    pins: A[8], B[8], Signed[1], Sum[8], Saturated[1]
+    
+    logic:
+        ## Calculate raw sum
+        let raw_sum = A + B
+        
+        ## Define saturation limits based on signedness  
+        let max_unsigned[8] = 0xFF
+        let max_signed[8] = 0x7F
+        let min_signed[8] = 0x80
+        
+        ## Detect overflow conditions (exercises all comparison ops)
+        let unsigned_overflow = (raw_sum > max_unsigned)
+        let signed_pos_overflow = Signed & (A[7] == 0) & (B[7] == 0) & (raw_sum[7] == 1)
+        let signed_neg_overflow = Signed & (A[7] == 1) & (B[7] == 1) & (raw_sum[7] == 0)
+        
+        ## Apply saturation (exercises nested match in if)
+        let saturated_sum = if unsigned_overflow:
+            max_unsigned
+        else:
+            if signed_pos_overflow:
+                max_signed
+            else:
+                if signed_neg_overflow:
+                    min_signed
+                else:
+                    raw_sum[7..0]
+        
+        Sum = saturated_sum
+        Saturated = unsigned_overflow | signed_pos_overflow | signed_neg_overflow
+
+## ============================================================================
+## ACCUMULATOR 8-BIT: Running sum with clear
+## (exercises register feedback, combinational paths)
+## ============================================================================
+
+module Accumulator8:
+    pins: Data[8], Add[1], Clear[1], Clk[1], Rst[1], Sum[8]
+    
+    logic:
+        ## Accumulator register
+        let mut acc = Reg(clock: Clk, reset: Rst, init: 0x00)
+        
+        ## Next value logic (exercises nested if expressions)
+        let next_val = if Clear:
+            if Add: Data else: 0x00
+        else:
+            if Add: (acc + Data)[7..0] else: acc
+        
+        acc.next = next_val
+        Sum = acc
+
+## ============================================================================
+## MULTI-OPERAND ADDER: 4-input adder tree
+## (exercises expression trees, operator precedence)
+## ============================================================================
+
+module MultiOperandAdder4x8:
+    pins: A[8], B[8], C[8], D[8], Sum[10]
+    
+    logic:
+        ## Tree structure for parallel addition
+        let sum_ab = A + B
+        let sum_cd = C + D
+        let total = sum_ab + sum_cd
+        
+        Sum = total[9..0]
+
+## ============================================================================
+## BCD ADDER: Binary-coded decimal addition
+## (exercises modulo arithmetic, correction logic)
+## ============================================================================
+
+module BCDAdder:
+    pins: A[4], B[4], Cin[1], Sum[4], Cout[1]
+    
+    logic:
+        ## Binary addition
+        let binary_sum = A + B + Cin
+        
+        ## BCD correction: if sum > 9, add 6 and set carry
+        let needs_correction = (binary_sum > 9)
+        let corrected = if needs_correction: (binary_sum + 6) else: binary_sum
+        
+        Sum = corrected[3..0]
+        Cout = needs_correction | (binary_sum > 15)

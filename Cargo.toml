@@ -1,0 +1,60 @@
+[workspace]
+members = [
+    "crates/hwc-cli",
+    "crates/hwc-diagnostics",
+    "crates/hwc-parser",
+    "crates/hwc-compiler",
+    "crates/hwc-engine",
+    "crates/hwc-physics",
+    "crates/hwc-export",
+    "crates/hwc-materials",
+    "crates/hwc-stdlib",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Hardware Script Team"]
+license = "MIT"
+repository = "https://github.com/yourusername/hwc"
+
+[workspace.dependencies]
+# Core dependencies (v0.1.4 spec: 4 total)
+logos = "0.13"
+miette = { version = "5.10", features = ["fancy"] }
+thiserror = "1.0"
+rayon = "1.10"
+rustc-hash = "2.1"
+compact_str = { version = "0.9", features = ["serde"] }
+smallvec = { version = "1.13", features = ["serde"] }
+
+# CLI-only dependencies
+clap = { version = "4.5", features = ["derive"] }
+anyhow = "1.0"
+
+# Internal crate dependencies
+hwc-diagnostics = { path = "crates/hwc-diagnostics" }
+hwc-parser = { path = "crates/hwc-parser" }
+hwc-compiler = { path = "crates/hwc-compiler" }
+hwc-engine = { path = "crates/hwc-engine" }
+hwc-physics = { path = "crates/hwc-physics" }
+hwc-export = { path = "crates/hwc-export" }
+hwc-materials = { path = "crates/hwc-materials" }
+hwc-stdlib = { path = "crates/hwc-stdlib" }
+
+# Clippy lints - strict mode (v0.1.4 spec)
+[workspace.lints.clippy]
+all = { level = "deny", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+cargo = { level = "warn", priority = -1 }
+
+# Critical for compiler reliability
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+
+# Allow some pedantic lints that are too noisy
+module_name_repetitions = "allow"
+similar_names = "allow"

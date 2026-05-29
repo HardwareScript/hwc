@@ -1,0 +1,7 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,10.00x10.00x2.00mm,,,,,1
+BottomPad,Pour,16.0000mm² net:Signal,Layer 5,,Copper,1.600000mm³
+TopPad,Pour,16.0000mm² net:Signal,Layer 15,,Copper,1.600000mm³
+BottomPad,Pour(Copper),,,,,,1
+TopPad,Pour(Copper),,,,,,1
+SmallVia,Contact(Copper),,,,,,1

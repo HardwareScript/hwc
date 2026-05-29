@@ -1,0 +1,32 @@
+import * from @std/primitives/units
+
+material FR4:
+    category: insulator
+    properties:
+        color: "#2E7D32"
+        opacity: 0.5
+
+material Copper:
+    category: conductor
+    properties:
+        color: "#B87333"
+        metallic: 1.0
+
+space DreamPTH:
+    dimensions: 5mm by 5mm by 1.67mm
+    grid: 50 by 50 by 10
+    origin: bl by b
+    
+    # Bottom Copper Layer (Z=1)
+    add substrate(Copper) spanning [x: 0mm, y: 0mm, z: 1] to [x: 5mm, y: 5mm, z: 1]
+    
+    # FR4 Substrate (Z=2 to 9)
+    add substrate(FR4) spanning [x: 0mm, y: 0mm, z: 2] to [x: 5mm, y: 5mm, z: 9]
+    
+    # Top Copper Layer (Z=10)
+    add substrate(Copper) spanning [x: 0mm, y: 0mm, z: 10] to [x: 5mm, y: 5mm, z: 10]
+    
+    # Plated through hole: diameter 0.3mm, with 0.15mm annular ring
+    add contact(Copper) named Via1 at [x: 2.5mm, y: 2.5mm] spanning z:1 to z:10:
+        diameter: 0.3mm
+        annular_ring: 0.15mm

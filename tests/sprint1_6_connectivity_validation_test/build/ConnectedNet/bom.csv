@@ -1,0 +1,6 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,1.00x1.00x1.00mm,,,,,1
+Pour_A,Pour,0.0400mm² net:VDD,Layer 7,,TestMetal,0.004000mm³
+Pour_B,Pour,0.0625mm² net:VDD,Layer 7,,TestMetal,0.006250mm³
+Pour_A,Pour(TestMetal),,,,,,1
+Pour_B,Pour(TestMetal),,,,,,1

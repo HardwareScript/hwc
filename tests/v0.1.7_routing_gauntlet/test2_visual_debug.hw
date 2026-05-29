@@ -1,0 +1,68 @@
+material Copper:
+    category: conductor
+    symbol: "Cu"
+    properties:
+        resistivity: 1.68e-8Ω·m
+        color: "#FFD700" # Gold
+        metallic: 1.0
+        roughness: 0.1
+
+material FR4:
+    category: insulator
+    properties:
+        dielectric_constant: 4.4
+        color: "#2E7D32" # Dark Green
+        opacity: 0.5     # Translucent
+        outline_opacity: 1.0
+
+profile VisualDebugProfile:
+    stackup:
+        # Standard PCB order: Top to Bottom
+        top_copper: [material: Copper, thickness: 100um] # Thicker for visibility
+        dielectric: [material: FR4, thickness: 1.5mm]
+        bottom_copper: [material: Copper, thickness: 35um]
+
+component DebugConnector:
+    pins: [P1]
+    render:
+        shape: "box"
+        color: "#C0C0C0" # Silver
+    layout:
+        # The 'Physical' component footprint is now just the housing
+        shape: Rectangle(4mm, 4mm, 2mm)
+        pin_positions:
+            # The net anchor is at the very bottom center
+            P1 at [2mm, 2mm, 0mm]
+
+space VisualDebugSpace:
+    profile: VisualDebugProfile
+    dimensions: 100mm by 50mm by 5mm
+    grid: 200 by 100 by 100
+    origin: bl by b
+    
+    # 1. THE FLOOR (Substrate)
+    # Ends at 1.5mm
+    add substrate(FR4) spanning [x: 0, y: 0, z: 0mm] to [x: 100mm, y: 50mm, z: 1.5mm]
+    
+    # 2. THE LANDING PLATES (Manual Pours)
+    # We place these at z: 1.5mm (exactly on top of the FR4)
+    # They are 100um thick (up to 1.6mm)
+    add pour(Copper) named LandingPad1 on z: 1.5mm:
+        boundary: [x: 18mm, y: 23mm] to [x: 22mm, y: 27mm]
+        net: NET_BUS
+        device: C1.P1
+
+    add pour(Copper) named LandingPad2 on z: 1.5mm:
+        boundary: [x: 78mm, y: 23mm] to [x: 82mm, y: 27mm]
+        net: NET_BUS
+        device: C2.P1
+
+    # 3. THE COMPONENTS (Stacked on top)
+    # We place the component at z: LandingPad.top
+    # This ensures the silver box sits ON the gold plate, not inside it
+    add DebugConnector named C1 at [x: 18mm, y: 23mm, z: LandingPad1.top]
+    add DebugConnector named C2 at [x: 78mm, y: 23mm, z: LandingPad2.top]
+
+    # 4. THE TRACE (Plate-to-Plate)
+    # The autorouter will now find the center-of-mass of the plates
+    route LandingPad1 to LandingPad2

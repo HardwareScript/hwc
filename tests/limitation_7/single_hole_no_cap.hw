@@ -1,0 +1,19 @@
+import * from @std/primitives/units
+
+material Copper:
+    category: conductor
+    properties:
+        color: "#B87333"
+        metallic: 1.0
+        roughness: 0.15
+
+space SingleHoleNoCap:
+    dimensions: 10mm by 10mm by 1.6mm
+    grid: 50 by 50 by 10
+    origin: bl by b
+    
+    # A single bare drill hole without top/bottom annular rings
+    add contact(Copper) named BareHole at [x: 5mm, y: 5mm] spanning z:1 to z:10:
+        diameter: 1.0mm
+        annular_ring: 0mm
+        caps: false

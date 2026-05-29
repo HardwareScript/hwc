@@ -1,0 +1,58 @@
+import * from @std/primitives/units
+
+material DrilledCopper:
+    category: conductor
+    process: drilled_plated
+    properties:
+        color: "#B87333"
+        opacity: 1.0
+        metallic: 0.8
+
+material ClearFR4:
+    category: insulator
+    properties:
+        color: "#2D5A27"
+        opacity: 0.1    # Very transparent to see the drill path
+        roughness: 0.8
+
+profile ThickBoardProfile:
+    description: "Standard 1.6mm FR4 profile for drilling verification"
+    stackup:
+        l1: [material: DrilledCopper, thickness: 35um]
+        d1: [material: ClearFR4,     thickness: 1.6mm]
+        l2: [material: DrilledCopper, thickness: 35um]
+    
+    via:
+        min_diameter: 0.5mm
+        min_annular_ring: 0.0mm
+
+module ThickDrillModule:
+    pins: []
+
+space ThickDrillSpace implements ThickDrillModule:
+    dimensions: 10mm by 10mm by 1.7mm
+    grid: 40 by 40 by 17
+    origin: bl by b
+    profile: ThickBoardProfile
+
+    nets:
+        GND: power
+
+    # Add the core substrate manually (1.6mm thick)
+    add substrate(ClearFR4) spanning [x: 0mm, y: 0mm, z: 35um] to [x: 10mm, y: 10mm, z: 1.635mm]
+
+    # Place Top and Bottom pads
+    add pour(DrilledCopper) named TopPad on layer: l1:
+        boundary: [x: 3mm, y: 3mm] to [x: 7mm, y: 7mm]
+        net: GND
+
+    add pour(DrilledCopper) named BottomPad on layer: l2:
+        boundary: [x: 3mm, y: 3mm] to [x: 7mm, y: 7mm]
+        net: GND
+        merge: true
+
+    # MANUALLY PLACE THE DRILL (This bypasses the auto-inserter error)
+    # This contact spans from the top of L1 to the bottom of L2
+    add contact(DrilledCopper) named MasterDrill at [x: 5mm, y: 5mm] spanning layer: l1 to layer: l2:
+        diameter: 1mm
+        net: GND

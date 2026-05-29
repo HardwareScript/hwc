@@ -1,0 +1,178 @@
+## ============================================================================
+## Sprint 3.12: Geometric Realization Test - Silicon with Automatic Routing
+## ============================================================================
+##
+## This test verifies that the "Three Handshakes" work for silicon designs:
+##   A. Netlist Binding - Pins electrically connected in SPICE
+##   B. Visual Realization - Traces visible in GLB/DXF
+##   C. Geometric Realization - Device extraction from routed traces
+##
+## Expected behavior:
+##   - Routes created as analytic primitives (fast)
+##   - Geometric realization triggered by 'implements' clause
+##   - Device extractor finds transistors in routed metal traces
+##   - SPICE netlist includes both components AND extracted devices
+
+import * from @std/primitives/units
+
+## Materials
+material Silicon_N:
+    category: conductor
+    properties:
+        density: 2329kg/m³
+
+material Silicon_P:
+    category: conductor
+    properties:
+        density: 2329kg/m³
+
+material Polysilicon:
+    category: conductor
+    properties:
+        density: 2320kg/m³
+
+material Copper:
+    category: conductor
+    properties:
+        density: 8960kg/m³
+
+## ============================================================================
+## Logical Truth - Two inverters in series
+## ============================================================================
+
+module TwoInverters:
+    pins: [VIN, VOUT, VDD, GND]
+    
+    ## First inverter
+    add NMOS named M1
+    route M1.drain to MID
+    route M1.gate to VIN
+    route M1.source to GND
+    route M1.bulk to GND
+    
+    add PMOS named M2
+    route M2.drain to MID
+    route M2.gate to VIN
+    route M2.source to VDD
+    route M2.bulk to VDD
+    
+    ## Second inverter
+    add NMOS named M3
+    route M3.drain to VOUT
+    route M3.gate to MID
+    route M3.source to GND
+    route M3.bulk to GND
+    
+    add PMOS named M4
+    route M4.drain to VOUT
+    route M4.gate to MID
+    route M4.source to VDD
+    route M4.bulk to VDD
+
+## ============================================================================
+## Physical Implementation with Automatic Routing
+## ============================================================================
+
+space TwoInvertersChip implements TwoInverters:
+    dimensions: 100mm by 10mm by 4um
+    grid: 100000 by 10000 by 4
+    
+    ## Substrate
+    add substrate(Silicon_P) spanning [x:1mm, y:1mm, z:0] to [x:99mm, y:9mm, z:1]
+    
+    ## First Inverter (M1 + M2) at x=20mm
+    ## NMOS M1 - Source and Drain on z:2 (active silicon layer)
+    add pour(Silicon_N) named M1_Source on z:2:
+        net: GND
+        device: M1.source
+        boundary: [x: 18mm, y: 2mm] to [x: 22mm, y: 4mm]
+    
+    add pour(Silicon_N) named M1_Drain on z:2:
+        net: MID
+        device: M1.drain
+        boundary: [x: 18mm, y: 6mm] to [x: 22mm, y: 8mm]
+    
+    add pour(Silicon_P) named M1_Bulk on z:1:
+        net: GND
+        device: M1.bulk
+        boundary: [x: 17mm, y: 1mm] to [x: 23mm, y: 4.5mm]
+    
+    ## Gate on z:3 (poly layer above oxide)
+    add pour(Polysilicon) named M1_Gate on z:3:
+        net: VIN
+        device: M1.gate
+        boundary: [x: 18mm, y: 4mm] to [x: 22mm, y: 6mm]
+    
+    ## PMOS M2 - Source and Drain on z:2
+    add pour(Silicon_P) named M2_Source on z:2:
+        net: VDD
+        device: M2.source
+        boundary: [x: 24mm, y: 2mm] to [x: 28mm, y: 4mm]
+    
+    add pour(Silicon_P) named M2_Drain on z:2:
+        net: MID
+        device: M2.drain
+        boundary: [x: 24mm, y: 6mm] to [x: 28mm, y: 8mm]
+    
+    add pour(Silicon_N) named M2_Bulk on z:1:
+        net: VDD
+        device: M2.bulk
+        boundary: [x: 23mm, y: 5.5mm] to [x: 29mm, y: 9mm]
+    
+    ## Gate on z:3
+    add pour(Polysilicon) named M2_Gate on z:3:
+        net: VIN
+        device: M2.gate
+        boundary: [x: 24mm, y: 4mm] to [x: 28mm, y: 6mm]
+    
+    ## Second Inverter (M3 + M4) at x=60mm
+    ## NMOS M3 - Source and Drain on z:2
+    add pour(Silicon_N) named M3_Source on z:2:
+        net: GND
+        device: M3.source
+        boundary: [x: 58mm, y: 2mm] to [x: 62mm, y: 4mm]
+    
+    add pour(Silicon_N) named M3_Drain on z:2:
+        net: VOUT
+        device: M3.drain
+        boundary: [x: 58mm, y: 6mm] to [x: 62mm, y: 8mm]
+    
+    add pour(Silicon_P) named M3_Bulk on z:1:
+        net: GND
+        device: M3.bulk
+        boundary: [x: 57mm, y: 1mm] to [x: 63mm, y: 4.5mm]
+    
+    ## Gate on z:3
+    add pour(Polysilicon) named M3_Gate on z:3:
+        net: MID
+        device: M3.gate
+        boundary: [x: 58mm, y: 4mm] to [x: 62mm, y: 6mm]
+    
+    ## PMOS M4 - Source and Drain on z:2
+    add pour(Silicon_P) named M4_Source on z:2:
+        net: VDD
+        device: M4.source
+        boundary: [x: 64mm, y: 2mm] to [x: 68mm, y: 4mm]
+    
+    add pour(Silicon_P) named M4_Drain on z:2:
+        net: VOUT
+        device: M4.drain
+        boundary: [x: 64mm, y: 6mm] to [x: 68mm, y: 8mm]
+    
+    add pour(Silicon_N) named M4_Bulk on z:1:
+        net: VDD
+        device: M4.bulk
+        boundary: [x: 63mm, y: 5.5mm] to [x: 69mm, y: 9mm]
+    
+    ## Gate on z:3
+    add pour(Polysilicon) named M4_Gate on z:3:
+        net: MID
+        device: M4.gate
+        boundary: [x: 64mm, y: 4mm] to [x: 68mm, y: 6mm]
+    
+    ## Metal trace connecting the two inverters (MID net) on z:3 (metal layer above poly)
+    ## This simulates what automatic routing would create
+    ## Route it above the gates to avoid collision
+    add pour(Copper) named MID_Trace on z:3:
+        net: MID
+        boundary: [x: 22mm, y: 6.5mm] to [x: 58mm, y: 7mm]

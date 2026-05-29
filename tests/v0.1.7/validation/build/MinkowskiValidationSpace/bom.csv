@@ -1,0 +1,5 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,50.00x50.00x1.10mm,,,,,1
+Start,Connector,,,,,,1
+End,Connector,,,,,,1
+Block,ObstacleBlock,,,,,,1

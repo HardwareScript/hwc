@@ -1,0 +1,30 @@
+# Simple test: Define material twice, local should win
+
+# First definition (simulating what would be in a lower layer)
+material TestMaterial:
+    category: conductor
+    symbol: "TM1"
+    description: "FIRST DEFINITION"
+    properties:
+        resistivity: 1.0e-8Ω·m
+        thermal_conductivity: 100W/(m·K)
+        density: 1000kg/m³
+        melting_point: 1000K
+        max_current_density: 1A/mm²
+
+# Second definition with same name (local override)
+material TestMaterial:
+    category: conductor
+    symbol: "TM2"
+    description: "SECOND DEFINITION - THIS SHOULD WIN"
+    properties:
+        resistivity: 2.0e-8Ω·m
+        thermal_conductivity: 200W/(m·K)
+        density: 2000kg/m³
+        melting_point: 2000K
+        max_current_density: 2A/mm²
+
+space TestBoard:
+    dimensions: 10mm by 10mm by 1.6mm
+    grid: 100 by 100 by 2
+    origin: tl by t

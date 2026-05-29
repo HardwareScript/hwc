@@ -1,0 +1,55 @@
+## Test: Explicit merge: keyword for array terminal merging
+## Verifies that the merge: keyword is parsed and processes overlapping geometry
+
+import * from @std/primitives/units
+import Silicon_P, Silicon_N from @std/materials/doped_semiconductors
+
+## Component with overlapping internal pours when arrayed
+component OverlapFinger:
+    pins: [left, right]
+    
+    layout:
+        ## Component shape: 4um wide (avoids component collision)
+        shape: Rectangle(4um, 10um, 0.5um)
+        
+        ## Internal pour: 3um wide (0.5um to 3.5um)
+        ## With pitch 4.5um, components don't overlap (4.5um > 4um shape)
+        ## But pours DO overlap (3um width, 4.5um pitch = 1.5um overlap)
+        add pour(Silicon_N) named SharedRegion on z:1:
+            boundary: [x: 0.5um, y: 0um] to [x: 3.5um, y: 10um]
+            device: left
+            net: GND
+        
+        pin_positions:
+            left at [0um, 5um]
+            right at [4um, 5um]
+    
+    metadata:
+        description: "Finger with overlapping pours for merge testing"
+    
+    render:
+        type: procedural
+        shape: box
+        body_color: "#FF6B6B"
+
+## Test space
+space MergeTest:
+    dimensions: 50um by 50um by 2mm
+    grid: 50000 by 50000 by 2
+    origin: tl by t
+    
+    ## Base substrate (z:0 to z:1)
+    add substrate(Silicon_P) spanning [x:1um, y:1um, z:0] to [x:49999um, y:49999um, z:1]
+    
+    ## Array with explicit merge intent
+    ## Component shape: 4um, pitch: 3.5um (components don't overlap: 3.5um < 4um but close)
+    ## Pour width: 3um (0.5um to 3.5um), pitch: 3.5um
+    ## Pour overlap: 0.5um (3um + 3um - 3.5um = 2.5um overlap... wait that's wrong)
+    ## Actually: Pour 0 ends at 3.5um, Pour 1 starts at 3.5um + 0.5um = 4um, so they touch but don't overlap
+    ## Let me use pitch 3um for 0.5um overlap: Pour 0: 0.5-3.5um, Pour 1: 3.5-6.5um (overlap 0.5um at 3.5um)
+    ## With merge: [left], the compiler performs Bitwise-OR melting
+    add OverlapFinger[3] named F_Array at [x: 10um, y: 20um, z: 2]:
+        layout: horizontal_stack
+        pitch: 3um
+        merge: [left]
+

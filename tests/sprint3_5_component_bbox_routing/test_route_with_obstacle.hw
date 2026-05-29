@@ -1,0 +1,113 @@
+## Sprint 3.5: Component Bounding Box Obstacle Detection (GAP3)
+## Test: Auto-router should route around component obstacles
+##
+## This test verifies that the auto-router correctly detects component
+## bounding boxes as obstacles and routes around them instead of through them.
+##
+## Layout:
+##   Pad1 (5mm, 10mm) -----> [RESISTOR BLOCKS] -----> Pad2 (45mm, 10mm)
+##                           (25mm, 10mm)
+##
+## Expected behavior:
+## - Router should detect R1 bbox as obstacle
+## - Route should go AROUND R1 (above or below), not THROUGH it
+## - Debug output should show "[COMPONENT OBSTACLE] Blocked path through component 'R1'"
+
+import * from @std/primitives/units
+import Silicon_P from @std/materials/doped_semiconductors
+import Copper from @std/materials/conductors
+
+## ============================================================================
+## COMPONENT DEFINITIONS
+## ============================================================================
+
+component Pad:
+    pins: [P1]
+    
+    layout:
+        shape: Rectangle(2mm, 2mm, 0.2mm)
+        pin_positions:
+            P1: [x: 1mm, y: 1mm, z: 0mm]
+    
+    metadata:
+        component_type: "Test Pad"
+        description: "Simple pad for routing test"
+    
+    render:
+        type: procedural
+        shape: box
+        body_color: "#FFD700"
+
+component Resistor:
+    pins: [A, K]
+    
+    layout:
+        shape: Rectangle(8mm, 4mm, 1mm)
+        pin_positions:
+            A: [x: 1mm, y: 2mm, z: 0mm]
+            K: [x: 7mm, y: 2mm, z: 0mm]
+    
+    metadata:
+        component_type: "Resistor"
+        description: "Resistor obstacle for routing test"
+    
+    render:
+        type: procedural
+        shape: box
+        body_color: "#FF5722"
+
+## ============================================================================
+## SPACE: Route Around Component Test
+## ============================================================================
+
+space TestRouteWithObstacle:
+    dimensions: 60mm by 30mm by 4mm
+    grid: 60000 by 30000 by 4
+    origin: tl by t
+    
+    ## Base substrate
+    add substrate(Silicon_P) spanning [x:1um, y:1um, z:0] to [x:59999um, y:29999um, z:2]
+    
+    ## ========================================================================
+    ## LAYOUT: Place pads and obstacle
+    ## 
+    ## Pad1 (5mm, 10mm) -----> [R1 BLOCKS] -----> Pad2 (50mm, 10mm)
+    ##                         (26mm, 10mm)
+    ## 
+    ## R1 is placed directly between Pad1 and Pad2 at the same Y coordinate.
+    ## Router MUST route around R1 (above or below), not through it.
+    ## ========================================================================
+    
+    ## Place pads on left and right
+    add Pad named Pad1 at [x: 5mm, y: 10mm, z: 3]
+    add Pad named Pad2 at [x: 50mm, y: 10mm, z: 3]
+    
+    ## Place resistor in the middle (blocking direct path)
+    add Resistor named R1 at [x: 26mm, y: 9mm, z: 3]
+    
+    ## ========================================================================
+    ## NETS: Define signal net that connects the pads
+    ## ========================================================================
+    
+    ## Define net for the signal
+    ## The auto-router will connect Pad1.P1 and Pad2.P1 on this net
+    net SIGNAL: Copper
+    
+    ## Assign pins to net
+    ## Note: This syntax may need adjustment based on actual parser support
+    connect Pad1.P1 to SIGNAL
+    connect Pad2.P1 to SIGNAL
+    
+    ## ========================================================================
+    ## VERIFICATION:
+    ## 
+    ## Build with: cargo run -- build --auto-route tests/.../test_route_with_obstacle.hw
+    ## 
+    ## Expected debug output:
+    ## - "[DEBUG ROUTER] Copying 3 component bounding boxes to router grid"
+    ## - "[DEBUG ROUTER] Copying X component pins to router grid"
+    ## - "[DEBUG ROUTER] Routing net 1/1: SIGNAL"
+    ## - "[COMPONENT OBSTACLE] Blocked path through component 'R1' at (...)"
+    ## - Route should successfully connect around R1
+    ## ========================================================================
+

@@ -1,0 +1,13 @@
+import StandardMaterials from "std:materials"
+import SimplePad from "std:components/SimplePad"
+
+space SimpleCircuitLayout:
+    dimensions: 10mm by 10mm by 2mm
+    grid: 10µm by 10µm by 0.1mm
+
+    substrate FR4 from 0mm to 2mm
+
+    layout:
+        ## Syntax error: missing colon after "at"
+        add SimplePad named PAD1 at [x: 4mm, y: 4mm, z: 0]
+            net: [terminal: VDD]

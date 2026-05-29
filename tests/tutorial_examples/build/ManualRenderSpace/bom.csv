@@ -1,0 +1,4 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,100.00x100.00x10.00mm,,,,,1
+ManualPlate1,Pour,400.0000mm²,Z 0.0050mm,,Gold,80.000000mm³
+ManualPlate2,Pour,400.0000mm²,Z 0.0050mm,,Gold,80.000000mm³

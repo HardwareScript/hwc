@@ -1,0 +1,5 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,50.00x50.00x4.00mm,,,,,1
+R1,Resistor,,,,,Simple resistor for obstacle testing,1
+R2,Resistor,,,,,Simple resistor for obstacle testing,1
+R3,Resistor,,,,,Simple resistor for obstacle testing,1

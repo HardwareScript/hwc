@@ -1,0 +1,17 @@
+{
+  "version": "0.1.4",
+  "board": "MaterialPalette",
+  "grid": {
+    "dimensions": [
+      110,
+      20,
+      2
+    ],
+    "resolution": [
+      1.0,
+      1.0,
+      1.0
+    ]
+  },
+  "routes": []
+}

@@ -1,0 +1,31 @@
+import * from @std/primitives/units
+
+# Define a material that only removes volume (Mechanical Drill)
+material MechanicalDrill:
+    category: insulator
+    process: etched        # <--- The DNA: "Remove material, don't add any"
+    properties:
+        opacity: 0.0       # <--- Physically invisible (it's a hole!)
+
+material ThickFR4:
+    category: insulator
+    properties:
+        color: "#2D5A27"
+        opacity: 0.8       # Solid green substrate
+
+module MechanicalHoleModule:
+    pins: []
+
+space MechanicalHoleSpace implements MechanicalHoleModule:
+    dimensions: 10mm by 10mm by 1.6mm
+    grid: 40 by 40 by 16
+    origin: bl by b
+
+    # 1. Create a solid 1.6mm FR4 block
+    add substrate(ThickFR4) spanning [x: 0mm, y: 0mm, z: 0mm] to [x: 10mm, y: 10mm, z: 1.6mm]
+
+    # 2. Add a 3mm Mechanical Hole in the center
+    # Because 'MechanicalDrill' is 'process: etched', this will carve a 3mm tunnel 
+    # through the FR4 and it will be recorded in the .drl file as an NPTH (Non-Plated Through Hole).
+    add contact(MechanicalDrill) named CornerHole at [x: 5mm, y: 5mm] spanning z: 0mm to z: 1.6mm:
+        diameter: 3mm

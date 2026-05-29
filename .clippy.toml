@@ -1,0 +1,5 @@
+# Clippy configuration for hwc workspace
+# This enables strict linting for high code quality
+
+# Warn on common issues
+warn-on-all-wildcard-imports = true

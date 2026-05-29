@@ -1,0 +1,67 @@
+## ============================================================================
+## Task 4.3: Bulk Connection Validation - FAIL Case (Missing Bulk)
+## ============================================================================
+##
+## This test verifies that bulk validation FAILS when a transistor is missing
+## its bulk terminal connection entirely.
+##
+## Expected: ❌ Missing bulk connection for NMOS 'M1'
+##           Expected connection to GND
+
+import * from @std/primitives/units
+import * from @std/foundry/transistors
+import * from @std/materials/doped_semiconductors
+
+## ============================================================================
+## Logical Schematic (Module)
+## ============================================================================
+
+module NmosMissingBulk:
+    pins: [
+        input VIN,
+        output VOUT,
+        ground GND
+    ]
+    
+    ## NMOS with NO bulk connection (missing bulk terminal)
+    add NMOS named M1
+    route M1.gate to VIN
+    route M1.source to GND
+    route M1.drain to VOUT
+    ## ❌ MISSING: No bulk connection!
+
+## ============================================================================
+## Physical Layout (Space)
+## ============================================================================
+
+space NmosMissingBulkLayout implements NmosMissingBulk:
+    dimensions: 2mm by 2mm by 1mm
+    grid: 20 by 20 by 10
+    
+    ## Net classifications (required for physics-driven bulk validation)
+    net_classifications:
+        GND: ground
+        VIN: signal
+        VOUT: signal
+    
+    ## ========================================================================
+    ## NMOS Transistor (M1) - Silicon layer (NO BULK!)
+    ## ========================================================================
+    
+    add pour(Polysilicon) named M1_Gate on z:5:
+        device: M1.gate
+        net: VIN
+        boundary: [x: 400um, y: 400um] to [x: 600um, y: 1200um]
+    
+    add pour(Silicon_N) named M1_Source on z:3:
+        device: M1.source
+        net: GND
+        boundary: [x: 400um, y: 200um] to [x: 600um, y: 400um]
+    
+    add pour(Silicon_N) named M1_Drain on z:3:
+        device: M1.drain
+        net: VOUT
+        boundary: [x: 400um, y: 1200um] to [x: 600um, y: 1400um]
+    
+    ## ❌ MISSING: No bulk pour defined!
+    ## This will cause device extraction to fail before bulk validation runs

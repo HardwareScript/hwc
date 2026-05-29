@@ -1,0 +1,18 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,100.00x100.00x10.00mm,,,,,1
+Ground_Left,Pour,1200.0000mm² net:ROAD,Layer 1,,Copper,1200.000000mm³
+Ground_Right,Pour,1200.0000mm² net:ROAD,Layer 1,,Copper,1200.000000mm³
+Elevated_Road,Pour,1200.0000mm² net:ROAD,Layer 5,,Copper,1200.000000mm³
+Ground_Left,Pour(Copper),,,,,,1
+Ground_Right,Pour(Copper),,,,,,1
+Elevated_Road,Pour(Copper),,,,,,1
+Via_1_5,Contact(Copper),,,,,,1
+Via_1_5,Contact(Copper),,,,,,1
+AutoVia_ROAD_1_2,Contact(Copper),,,,,,1
+AutoVia_ROAD_2_3,Contact(Copper),,,,,,1
+AutoVia_ROAD_3_4,Contact(Copper),,,,,,1
+AutoVia_ROAD_4_5,Contact(Copper),,,,,,1
+AutoVia_ROAD_1_2,Contact(Copper),,,,,,1
+AutoVia_ROAD_2_3,Contact(Copper),,,,,,1
+AutoVia_ROAD_3_4,Contact(Copper),,,,,,1
+AutoVia_ROAD_4_5,Contact(Copper),,,,,,1

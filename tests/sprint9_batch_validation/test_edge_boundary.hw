@@ -1,0 +1,58 @@
+## ============================================================================
+## SPRINT 9: EDGE BOUNDARY TEST
+## ============================================================================
+##
+## Tests components placed exactly at substrate boundaries and just beyond.
+## This validates that the error detection is precise and doesn't have off-by-one
+## errors at boundary conditions.
+##
+## Substrate: z:40-50
+## - Components at z:50 (max_z) should be VALID
+## - Components at z:51 should be INVALID (floating)
+## - Components at z:40 (min_z) should be VALID
+## - Components at z:39 should be INVALID (buried)
+
+import * from @std/primitives/units
+import FR4 from @std/materials/insulators
+
+component TestChip:
+    pins: [vdd, gnd]
+    layout:
+        shape: Rectangle(2mm, 2mm, 500um)
+    render:
+        type: procedural
+        shape: box
+        body_color: "#3498DB"
+
+module BoundaryTest:
+    pins: [power VDD]
+    
+    add TestChip named OnMaxBoundary
+    add TestChip named JustAboveMax
+    add TestChip named OnMinBoundary
+    add TestChip named JustBelowMin
+    add TestChip named WayAbove
+    add TestChip named WayBelow
+
+space EdgeBoundaryTest implements BoundaryTest:
+    dimensions: 50mm by 30mm by 10mm
+    grid: 500 by 300 by 100
+    origin: bl by b
+
+    nets:
+        VDD: power
+
+    ## Substrate at z:40-50
+    add substrate(FR4) spanning [x:0mm, y:0mm, z:40] to [x:50mm, y:30mm, z:50]
+
+    ## VALID placements (should NOT trigger errors)
+    add TestChip named OnMaxBoundary at [x: 10mm, y: 10mm, z: 50]  ## Exactly on max_z
+    add TestChip named OnMinBoundary at [x: 20mm, y: 10mm, z: 40]  ## Exactly on min_z
+
+    ## INVALID placements - just beyond boundaries (should trigger errors)
+    add TestChip named JustAboveMax at [x: 30mm, y: 10mm, z: 51]  ## 1 unit above max_z
+    add TestChip named JustBelowMin at [x: 40mm, y: 10mm, z: 39]  ## 1 unit below min_z
+
+    ## INVALID placements - far beyond boundaries (should trigger errors)
+    add TestChip named WayAbove at [x: 10mm, y: 20mm, z: 70]  ## 20 units above max_z
+    add TestChip named WayBelow at [x: 20mm, y: 20mm, z: 10]  ## 30 units below min_z

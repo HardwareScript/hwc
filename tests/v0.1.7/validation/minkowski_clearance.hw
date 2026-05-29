@@ -1,0 +1,64 @@
+# v0.1.7 Validation: Minkowski Obstacle Inflation
+# 
+# Verifies:
+# 1. Automatic obstacle inflation during routing.
+# 2. O(1) collision detection via inflated AABBs.
+# 3. Correct clearance enforcement: (Trace Width / 2) + Clearance.
+
+import * from @std/primitives/units
+import Copper from @std/materials/conductors
+import FR4 from @std/materials/insulators
+
+material Plastic:
+    category: insulator
+    properties:
+        color: "#808080"
+        opacity: 1.0
+
+profile MinkowskiTestProfile:
+    trace:
+        min_width: 1mm
+        min_spacing: 1mm
+    stackup:
+        top: [material: Copper, thickness: 50um]
+        core: [material: FR4, thickness: 1.0mm]
+        bottom: [material: Copper, thickness: 50um]
+
+component Connector:
+    pins: [P1]
+    layout:
+        shape: Rectangle(1mm, 1mm, 0.1mm)
+        pin_positions:
+            P1 at [0.5mm, 0.5mm, 0mm]
+
+component ObstacleBlock:
+    pins: []
+    layout:
+        shape: Rectangle(10mm, 10mm, 1mm)
+
+space MinkowskiValidationSpace:
+    dimensions: 50mm by 50mm by 1.1mm
+    grid: 100 by 100 by 11
+    origin: bl by b
+    profile: MinkowskiTestProfile
+
+    # 1. Add substrate (Correctly aligned to the 'core' layer: 0.05mm to 1.05mm)
+    add substrate(FR4) spanning [x: 0mm, y: 0mm, z: 0.05mm] to [x: 50mm, y: 50mm, z: 1.05mm]
+
+    # 2. Place Start and End connectors
+    add Connector named Start at [x: 5mm, y: 24.5mm] on layer: top:
+        merge: true
+    add Connector named End at [x: 44mm, y: 24.5mm] on layer: top:
+        merge: true
+
+    # 3. Place ObstacleBlock directly in the path
+    # Bounding Box: [x: 20mm, y: 20mm] to [x: 30mm, y: 30mm]
+    add ObstacleBlock named Block at [x: 20mm, y: 20mm] on layer: top:
+        merge: true
+    
+    # 4. Route with Minkowski inflation
+    # Expected behavior: 
+    # Inflation = (Width/2) + Clearance = (1mm/2) + 1mm = 1.5mm.
+    # The trace must bend around the Block with at least 1.5mm margin from [20, 20] to [30, 30].
+    route Start.P1 to End.P1:
+        width: 1mm

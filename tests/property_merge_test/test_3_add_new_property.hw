@@ -1,0 +1,36 @@
+# Test 3: Add New Property
+# Base material from HPM has only 3 properties (incomplete MPV)
+# Local override adds 2 new properties
+# Expected: Merged material should have all 5 properties
+
+# Simulate HPM import with incomplete material
+material Aluminum:
+    category: conductor
+    symbol: "Al"
+    description: "Incomplete Aluminum from HPM"
+    properties:
+        resistivity: 2.65e-8Ω·m
+        thermal_conductivity: 237W/(m·K)
+        density: 2700kg/m³
+        # Missing: melting_point and max_current_density
+
+# Local override: Add the missing properties
+material Aluminum:
+    category: conductor
+    symbol: "Al-Complete"
+    description: "Completed Aluminum with all MPV properties"
+    properties:
+        melting_point: 933K  # NEW PROPERTY
+        max_current_density: 2e9A/m²  # NEW PROPERTY
+
+space TestBoard:
+    dimensions: 100mm by 100mm by 1.6mm
+    grid: 1000 by 1000 by 2
+    origin: tl by t
+
+# Expected behavior:
+# - resistivity: 2.65e-8 (from HPM base)
+# - thermal_conductivity: 237 (from HPM base)
+# - density: 2700 (from HPM base)
+# - melting_point: 933 (from local addition)
+# - max_current_density: 2e9 (from local addition)

@@ -1,0 +1,29 @@
+# Test Contact with God-Tier Visual API
+# Demonstrates PBR material properties
+
+import Polysilicon from materials_visual
+import Silicon_N from materials_visual
+import Aluminum from materials_visual
+import Tungsten from materials_visual
+
+space Test_Visual:
+    dimensions: 2mm by 2mm by 1mm
+    grid: 2000 by 2000 by 10
+    profile: Silicon_Foundry
+    origin: tl by t
+
+    # Layer 6: Gate layer (Polysilicon) - Matte semiconductor
+    add pour(Polysilicon) named Gate on z:6:
+        boundary: [x: 400um, y: 400um] to [x: 600um, y: 600um]
+        net: GATE
+
+    # Layer 8: Metal layer (Aluminum) - Polished metal
+    add pour(Aluminum) named Metal on z:8:
+        boundary: [x: 350um, y: 350um] to [x: 650um, y: 650um]
+        net: GATE
+
+    # Contact connecting Gate (z:6) to Metal (z:8) - Tungsten solid pillar
+    add contact(Tungsten) named Via1 net: GATE at [x: 500um, y: 1500um] spanning z:6 to z:8
+
+    # Additional test: Contact without name
+    add contact(Tungsten) net: GATE at [x: 450um, y: 1550um] spanning z:6 to z:8

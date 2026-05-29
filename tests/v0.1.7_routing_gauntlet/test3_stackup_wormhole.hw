@@ -1,0 +1,32 @@
+material Copper:
+    category: conductor
+    symbol: "Cu"
+    properties:
+        resistivity: 1.68e-8Ω·m
+
+profile TestProfile:
+    stackup:
+        top: [material: Copper, thickness: 35um]
+        core: [material: Copper, thickness: 1.5mm]
+        bottom: [material: Copper, thickness: 35um]
+
+component Connector:
+    pins: [P1]
+    layout:
+        shape: Rectangle(1mm, 1mm, 0.1mm)
+        pin_positions:
+            P1 at [0mm, 0mm, 0mm]
+
+space StackupWormhole:
+    profile: TestProfile
+    dimensions: 50mm by 50mm by 2mm
+    grid: 50 by 50 by 20
+    
+    # Pin A on Top Copper
+    add Connector named C1 at [x: 10mm, y: 10mm, z: 1.5mm]
+    # Pin B on Bottom Copper
+    add Connector named C2 at [x: 40mm, y: 40mm, z: 0mm]
+    
+    # Test 3: Auto-via insertion across stackup
+    # Success Criteria: "Auto-inserted via" log, correct Z-math, .drl file output.
+    route C1.P1 to C2.P1

@@ -1,0 +1,12 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,0.20x0.20x0.00mm,,,,,1
+Supply_Rail,Pour,0.0000mm² net:VDD,Z 0.0000mm,,Copper,0.000000mm³
+Gate_A,Gate,,,,,,1
+Gate_B,Gate,,,,,,1
+Gate_C,Gate,,,,,,1
+Power_Reg,Gate,,,,,,1
+Supply_Rail,Pour(Copper),,,,,,1
+Chain_1,Gate,,,,,,1
+Chain_2,Gate,,,,,,1
+Chain_3,Gate,,,,,,1
+Chain_4,Gate,,,,,,1

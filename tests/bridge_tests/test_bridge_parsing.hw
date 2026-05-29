@@ -1,0 +1,35 @@
+## Bridge System: Parsing Test
+##
+## This test verifies that the compiler successfully parses both
+## single-line and multi-line compound bridge declarations in profiles.
+
+import * from @std/primitives/units
+
+profile TestBridgeParsingProfile:
+    description: "Profile for parsing test"
+    
+    trace:
+        min_width: 200µm
+        min_spacing: 200µm
+    
+    via:
+        min_diameter: 300µm
+        min_annular_ring: 150µm
+    
+    layer:
+        max_count: 4
+        min_thickness: 35µm
+    
+    ## 1. Single-line bridge definition
+    bridge Copper to Copper: Generic_Barrier
+    
+    ## 2. Multi-line compound bridge definition
+    bridge Silicon to Copper:
+        interface: Generic_Silicide
+        thickness: 50nm
+        fill: Tungsten
+
+space TestBridgeParsingSpace:
+    dimensions: 10mm by 10mm by 1mm
+    grid: 1000 by 1000 by 5
+    profile: TestBridgeParsingProfile

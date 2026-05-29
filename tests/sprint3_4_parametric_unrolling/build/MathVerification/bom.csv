@@ -1,0 +1,58 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,300.00x30.00x2.00mm,,,,,1
+Test1_0,Pour,14.0000mm² net:Add[1],Layer 1,,Copper,14.000000mm³
+Test1_1,Pour,14.0000mm² net:Add[2],Layer 1,,Copper,14.000000mm³
+Test1_2,Pour,14.0000mm² net:Add[3],Layer 1,,Copper,14.000000mm³
+Test1_3,Pour,14.0000mm² net:Add[4],Layer 1,,Copper,14.000000mm³
+Test2_0,Pour,14.0000mm² net:Sub[10],Layer 1,,Copper,14.000000mm³
+Test2_1,Pour,14.0000mm² net:Sub[9],Layer 1,,Copper,14.000000mm³
+Test2_2,Pour,14.0000mm² net:Sub[8],Layer 1,,Copper,14.000000mm³
+Test2_3,Pour,14.0000mm² net:Sub[7],Layer 1,,Copper,14.000000mm³
+Test3_0,Pour,14.0000mm² net:Mul[0],Layer 1,,Copper,14.000000mm³
+Test3_1,Pour,14.0000mm² net:Mul[3],Layer 1,,Copper,14.000000mm³
+Test3_2,Pour,14.0000mm² net:Mul[6],Layer 1,,Copper,14.000000mm³
+Test3_3,Pour,14.0000mm² net:Mul[9],Layer 1,,Copper,14.000000mm³
+Test4_0,Pour,14.0000mm² net:Div[0],Layer 1,,Copper,14.000000mm³
+Test4_1,Pour,14.0000mm² net:Div[0],Layer 1,,Copper,14.000000mm³
+Test4_2,Pour,14.0000mm² net:Div[1],Layer 1,,Copper,14.000000mm³
+Test4_3,Pour,14.0000mm² net:Div[1],Layer 1,,Copper,14.000000mm³
+Test5_0,Pour,14.0000mm² net:Complex[7],Layer 1,,Copper,14.000000mm³
+Test5_1,Pour,14.0000mm² net:Complex[15],Layer 1,,Copper,14.000000mm³
+Test5_2,Pour,14.0000mm² net:Complex[23],Layer 1,,Copper,14.000000mm³
+Test5_3,Pour,14.0000mm² net:Complex[31],Layer 1,,Copper,14.000000mm³
+Test6_0,Pour,14.0000mm² net:Nested[2],Layer 1,,Copper,14.000000mm³
+Test6_1,Pour,14.0000mm² net:Nested[4],Layer 1,,Copper,14.000000mm³
+Test6_2,Pour,14.0000mm² net:Nested[6],Layer 1,,Copper,14.000000mm³
+Test6_3,Pour,14.0000mm² net:Nested[8],Layer 1,,Copper,14.000000mm³
+Test7_0,Pour,14.0000mm² net:Rev[7],Layer 1,,Copper,14.000000mm³
+Test7_1,Pour,14.0000mm² net:Rev[6],Layer 1,,Copper,14.000000mm³
+Test7_2,Pour,14.0000mm² net:Rev[5],Layer 1,,Copper,14.000000mm³
+Test7_3,Pour,14.0000mm² net:Rev[4],Layer 1,,Copper,14.000000mm³
+Test1_0,Pour(Copper),,,,,,1
+Test1_1,Pour(Copper),,,,,,1
+Test1_2,Pour(Copper),,,,,,1
+Test1_3,Pour(Copper),,,,,,1
+Test2_0,Pour(Copper),,,,,,1
+Test2_1,Pour(Copper),,,,,,1
+Test2_2,Pour(Copper),,,,,,1
+Test2_3,Pour(Copper),,,,,,1
+Test3_0,Pour(Copper),,,,,,1
+Test3_1,Pour(Copper),,,,,,1
+Test3_2,Pour(Copper),,,,,,1
+Test3_3,Pour(Copper),,,,,,1
+Test4_0,Pour(Copper),,,,,,1
+Test4_1,Pour(Copper),,,,,,1
+Test4_2,Pour(Copper),,,,,,1
+Test4_3,Pour(Copper),,,,,,1
+Test5_0,Pour(Copper),,,,,,1
+Test5_1,Pour(Copper),,,,,,1
+Test5_2,Pour(Copper),,,,,,1
+Test5_3,Pour(Copper),,,,,,1
+Test6_0,Pour(Copper),,,,,,1
+Test6_1,Pour(Copper),,,,,,1
+Test6_2,Pour(Copper),,,,,,1
+Test6_3,Pour(Copper),,,,,,1
+Test7_0,Pour(Copper),,,,,,1
+Test7_1,Pour(Copper),,,,,,1
+Test7_2,Pour(Copper),,,,,,1
+Test7_3,Pour(Copper),,,,,,1

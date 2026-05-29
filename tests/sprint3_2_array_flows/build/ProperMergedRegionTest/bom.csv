@@ -1,0 +1,19 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,0.05x0.05x2.00mm,,,,,1
+M_Array[0]_source,Pour,0.0000mm² net:GND,Layer 1,,Silicon_N,0.000008mm³
+M_Array[0]_drain,Pour,0.0000mm² net:VDD,Layer 1,,Silicon_N,0.000008mm³
+M_Array[1]_source,Pour,0.0000mm² net:GND,Layer 1,,Silicon_N,0.000008mm³
+M_Array[1]_drain,Pour,0.0000mm² net:VDD,Layer 1,,Silicon_N,0.000008mm³
+M_Array[2]_source,Pour,0.0000mm² net:GND,Layer 1,,Silicon_N,0.000008mm³
+M_Array[2]_drain,Pour,0.0000mm² net:VDD,Layer 1,,Silicon_N,0.000008mm³
+M_Array[0-2].source,Pour,0.0000mm² net:GND,Layer 1,,Silicon_N,0.000020mm³
+M_Array[0-2].drain,Pour,0.0000mm² net:VDD,Layer 1,,Silicon_N,0.000020mm³
+M_Array[0],TransistorFinger,,,,,Multi-finger transistor with overlapping source/drain,1
+M_Array[0]_source,Pour(Silicon_N),,,,,,1
+M_Array[0]_drain,Pour(Silicon_N),,,,,,1
+M_Array[1],TransistorFinger,,,,,Multi-finger transistor with overlapping source/drain,1
+M_Array[1]_source,Pour(Silicon_N),,,,,,1
+M_Array[1]_drain,Pour(Silicon_N),,,,,,1
+M_Array[2],TransistorFinger,,,,,Multi-finger transistor with overlapping source/drain,1
+M_Array[2]_source,Pour(Silicon_N),,,,,,1
+M_Array[2]_drain,Pour(Silicon_N),,,,,,1

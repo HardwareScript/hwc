@@ -1,0 +1,36 @@
+## Sprint 3.3: Automatic Via Insertion - No Overlap Test
+##
+## This test verifies that the compiler does NOT insert vias
+## when pours on different layers do not overlap in XY space.
+##
+## Test Case:
+## - Net "VDD" has two pours on different layers (z:1 and z:2)
+## - The pours do NOT overlap in XY space
+## - Compiler should NOT insert any vias (and should warn about disconnected net)
+
+import * from @std/primitives/units
+import Copper from @std/materials/conductors
+
+module AutoViaNoOverlapTest:
+    pins: []
+
+space TestAutoViaNoOverlap implements AutoViaNoOverlapTest:
+    dimensions: 20mm by 20mm by 1mm
+    grid: 20000 by 20000 by 5
+    origin: tl by t
+    
+    nets:
+        VDD: power
+    
+    ## Pour 1: VDD on Metal1 (z:1) - left side
+    add pour(Copper) named VDD_Metal1 on z:1:
+        boundary: [x: 2mm, y: 2mm] to [x: 6mm, y: 6mm]
+        net: VDD
+    
+    ## Pour 2: VDD on Metal2 (z:2) - right side (no overlap)
+    add pour(Copper) named VDD_Metal2 on z:2:
+        boundary: [x: 10mm, y: 10mm] to [x: 14mm, y: 14mm]
+        net: VDD
+    
+    ## Expected: No auto-inserted vias (no overlap)
+    ## Expected: P41 violation (disconnected net)

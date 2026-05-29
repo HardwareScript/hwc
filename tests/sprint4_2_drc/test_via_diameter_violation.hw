@@ -1,0 +1,46 @@
+# Test: Via diameter violation detection
+# Task 4.2: DRC Engine - Via Checks
+#
+# This test creates a via that is too small according to the profile constraints.
+# Expected: DRC should FAIL with P41 (Via diameter violation)
+
+import * from @std/primitives/units
+import Copper from @std/materials/conductors
+
+profile StrictVia:
+    description: "Strict via constraints for testing"
+    
+    trace:
+        min_width: 100µm
+        min_spacing: 100µm
+    
+    via:
+        min_diameter: 500µm  # Require 500µm minimum
+        min_annular_ring: 200µm
+
+module ViaDiameterTest:
+    pins: []
+
+space TestViaDiameter implements ViaDiameterTest:
+    dimensions: 10mm by 10mm by 2mm
+    grid: 100 by 100 by 20
+    origin: tl by t
+    profile: StrictVia
+    
+    nets:
+        Signal: signal
+    
+    # Bottom pour on z:5
+    add pour(Copper) named BottomPad on z:5:
+        boundary: [x: 3mm, y: 3mm] to [x: 7mm, y: 7mm]
+        net: Signal
+    
+    # Top pour on z:15
+    add pour(Copper) named TopPad on z:15:
+        boundary: [x: 3mm, y: 3mm] to [x: 7mm, y: 7mm]
+        net: Signal
+    
+    # Via that is too small (100µm diameter < 500µm required)
+    # With 100µm voxel size, a single voxel column = ~100µm diameter
+    add contact(Copper) named SmallVia net: Signal at [x: 5mm, y: 5mm] spanning z:5 to z:15:
+        diameter: 100µm  # Too small! Should trigger P41 violation

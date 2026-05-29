@@ -1,0 +1,64 @@
+# Test: Verification of v0.1.7 Fixes
+# 
+# This test verifies:
+# 1. Limitation 7 Fix: "Double Cylinder" artifact removed (Bare tube rendering)
+# 2. Limitation 7 Fix: "Cylindrical Handshake" for DRC (Circular annular ring check)
+# 3. Limitation 7 Fix: "Auto-Via default_diameter" (Using profile defaults)
+
+import * from @std/primitives/units
+import Copper from @std/materials/conductors
+
+# 1. Define a profile with custom default diameter
+profile VerificationProfile:
+    description: "Profile to verify v0.1.7 fixes"
+    
+    trace:
+        min_width: 200µm
+        min_spacing: 200µm
+    
+    via:
+        min_diameter: 200µm
+        default_diameter: 600µm  # Should be used by AutoViaInserter
+        min_annular_ring: 100µm  # 100µm annular ring requirement
+
+module VerificationModule:
+    pins: []
+
+space VerificationSpace implements VerificationModule:
+    dimensions: 20mm by 20mm by 1.6mm
+    grid: 100 by 100 by 10
+    origin: bl by b
+    profile: VerificationProfile
+
+    nets:
+        AutoNet: signal
+        ManualNet: signal
+
+    # 2. Verify AutoViaInserter default_diameter
+    # Overlapping pours to trigger auto-via
+    add pour(Copper) named PourA on z:1:
+        boundary: [x: 2mm, y: 2mm] to [x: 8mm, y: 8mm]
+        net: AutoNet
+
+    add pour(Copper) named PourB on z:2:
+        boundary: [x: 4mm, y: 4mm] to [x: 10mm, y: 10mm]
+        net: AutoNet
+    
+    # 3. Verify Circular DRC Enclosure (Limitation 7 Fix)
+    # Create a large circular pad (z:1 only)
+    # Pad diameter = 0.5 + 2*0.5 = 1.5mm. Ring = 0.5mm. Pass.
+    add contact(Copper) named LargePad net: ManualNet at [x: 15mm, y: 15mm] spanning z:1 to z:1:
+        diameter: 500µm
+        annular_ring: 500µm
+        caps: true
+
+    # Create a via that lands on the pad
+    # It also touches layers 2-10 where it needs its own pad.
+    # We don't specify annular_ring, so it uses profile default (100um).
+    # Pad diameter = 0.8 + 2*0.1 = 1.0mm.
+    # At z:1, it finds LargePad (1.5mm) -> ring 0.35mm.
+    # At z:2-10, it finds its own pad (1.0mm) -> ring 0.1mm.
+    # Min ring = 0.1mm. Pass.
+    add contact(Copper) named ManualVia net: ManualNet at [x: 15mm, y: 15mm] spanning z:1 to z:10:
+        diameter: 800µm
+        caps: false # Test the bare tube rendering fix

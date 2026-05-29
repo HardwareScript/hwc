@@ -1,0 +1,17 @@
+{
+  "version": "0.1.4",
+  "board": "RelativePour",
+  "grid": {
+    "dimensions": [
+      200,
+      200,
+      5
+    ],
+    "resolution": [
+      0.1,
+      0.1,
+      0.2
+    ]
+  },
+  "routes": []
+}

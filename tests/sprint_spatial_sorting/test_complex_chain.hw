@@ -1,0 +1,40 @@
+## Test complex chain of spatial dependencies
+## Chain: M4 -> M3 -> M2 -> M1
+## All defined in reverse order
+## v0.1.6 Gap 7: Spatial Topological Sorting
+
+import * from @std/primitives/units
+import Silicon_P from @std/materials/doped_semiconductors
+
+component NMOS:
+    pins: [gate]
+    layout:
+        shape: Rectangle(10um, 10um, 1um)
+        pin_positions:
+            gate at [5um, 5um]
+
+space ComplexChain:
+    dimensions: 200um by 100um by 2um
+    grid: 2000 by 1000 by 2
+    origin: tl by t
+
+    ## Base substrate
+    add substrate(Silicon_P) spanning [x:0um, y:0um, z:0] to [x:200um, y:200um, z:1]
+
+    ## M4 depends on M3
+    add NMOS named M4 at [x: M3.right + 5um, y: 10um, z: 2]
+    
+    ## M3 depends on M2
+    add NMOS named M3 at [x: M2.right + 5um, y: 10um, z: 2]
+    
+    ## M2 depends on M1
+    add NMOS named M2 at [x: M1.right + 5um, y: 10um, z: 2]
+    
+    ## M1 is the root anchor
+    add NMOS named M1 at [x: 10um, y: 10um, z: 2]
+
+    ## Expected positions:
+    ## M1: x=10um
+    ## M2: x=10+10+5 = 25um
+    ## M3: x=25+10+5 = 40um
+    ## M4: x=40+10+5 = 55um

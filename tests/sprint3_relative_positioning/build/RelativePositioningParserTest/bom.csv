@@ -1,0 +1,9 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,20.00x20.00x2.00mm,,,,,1
+M1,TestBlock,,,,,Simple block for testing relative positioning,1
+M2,TestBlock,,,,,Simple block for testing relative positioning,1
+M3,TestBlock,,,,,Simple block for testing relative positioning,1
+M4,TestBlock,,,,,Simple block for testing relative positioning,1
+M5,TestBlock,,,,,Simple block for testing relative positioning,1
+M6,TestBlock,,,,,Simple block for testing relative positioning,1
+M7,TestBlock,,,,,Simple block for testing relative positioning,1

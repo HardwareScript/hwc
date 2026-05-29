@@ -1,0 +1,93 @@
+## Sprint 3.4: Parametric Unrolling - 64-bit Stress Test
+## Test: 64-bit adder with parametric unrolling
+##
+## This test verifies:
+## 1. Performance of sparse collision detection with 64 components
+## 2. Scalability of component metadata tracking
+## 3. Memory efficiency of sparse architecture
+##
+## Expected behavior:
+## - Build completes in under 2 seconds (debug build)
+## - Each component placement takes ~10-15ms
+## - Total: 64 components × ~12ms = ~768ms for placement
+## - Memory remains O(components), not O(voxels)
+
+import * from @std/primitives/units
+import Silicon_P from @std/materials/doped_semiconductors
+
+## ============================================================================
+## COMPONENT DEFINITION: Simple Adder Block
+## ============================================================================
+
+component Adder:
+    pins: [a, b, carry_in, sum, carry_out]
+    
+    layout:
+        shape: Rectangle(8mm, 4mm, 0.5mm)
+    
+    metadata:
+        component_type: "1-bit Adder"
+        description: "Single bit full adder for 64-bit processor"
+    
+    render:
+        type: procedural
+        shape: box
+        body_color: "#4CAF50"
+
+## ============================================================================
+## SPACE: 64-bit Adder (Stress Test)
+## ============================================================================
+
+space Test64BitAdder:
+    dimensions: 700mm by 40mm by 2mm
+    grid: 700000 by 40000 by 2
+    origin: tl by t
+    
+    ## Base substrate - large enough for 64 components
+    add substrate(Silicon_P) spanning [x:1um, y:1um, z:0] to [x:699999um, y:39999um, z:1]
+    
+    ## ========================================================================
+    ## 64-BIT ADDER: Parametric unrolling for modern processor width
+    ## 
+    ## Layout: 8 rows × 8 columns = 64 adders
+    ## - Each adder: 8mm × 4mm
+    ## - Spacing: 10mm horizontal, 5mm vertical
+    ## - Total area: 80mm × 40mm
+    ## 
+    ## This tests:
+    ## - Sparse collision detection with 64 bounding boxes
+    ## - Component metadata scaling
+    ## - Memory efficiency (should use ~10KB, not 700M × 40M voxels)
+    ## ========================================================================
+    
+    ## Row 0: Bits 0-7
+    for i in 0..7:
+        add Adder named Adder[i] at [x: i * 10mm, y: 5mm, z: 1]
+    
+    ## Row 1: Bits 8-15
+    for i in 8..15:
+        add Adder named Adder[i] at [x: (i - 8) * 10mm, y: 10mm, z: 1]
+    
+    ## Row 2: Bits 16-23
+    for i in 16..23:
+        add Adder named Adder[i] at [x: (i - 16) * 10mm, y: 15mm, z: 1]
+    
+    ## Row 3: Bits 24-31
+    for i in 24..31:
+        add Adder named Adder[i] at [x: (i - 24) * 10mm, y: 20mm, z: 1]
+    
+    ## Row 4: Bits 32-39
+    for i in 32..39:
+        add Adder named Adder[i] at [x: (i - 32) * 10mm, y: 25mm, z: 1]
+    
+    ## Row 5: Bits 40-47
+    for i in 40..47:
+        add Adder named Adder[i] at [x: (i - 40) * 10mm, y: 30mm, z: 1]
+    
+    ## Row 6: Bits 48-55
+    for i in 48..55:
+        add Adder named Adder[i] at [x: (i - 48) * 10mm, y: 35mm, z: 1]
+    
+    ## Row 7: Bits 56-63
+    for i in 56..63:
+        add Adder named Adder[i] at [x: (i - 56) * 10mm, y: 40mm, z: 1]

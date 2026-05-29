@@ -1,0 +1,10 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,100.00x100.00x20.00mm,,,,,1
+Stack1_Base,GoldChip,Gold,,,,,1
+Stack1_Middle,TungstenChip,Tungsten,,,,,1
+Stack1_Top,CopperChip,Copper,,,,,1
+Stack1_UltraTop,PolyChip,Polysilicon,,,,,1
+Stack2_Base,PolyChip,Polysilicon,,,,,1
+Stack2_Middle1,CopperChip,Copper,,,,,1
+Stack2_Middle2,TungstenChip,Tungsten,,,,,1
+Stack2_Top,GoldChip,Gold,,,,,1

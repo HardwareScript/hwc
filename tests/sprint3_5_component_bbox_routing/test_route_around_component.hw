@@ -1,0 +1,72 @@
+## Sprint 3.5: Component Bounding Box Obstacle Detection (GAP3)
+## Test: Router should avoid routing through components
+##
+## This test verifies that the auto-router correctly detects component
+## bounding boxes as obstacles and routes around them instead of through them.
+##
+## Expected behavior:
+## - Router should detect component bboxes as obstacles
+## - Routes should go AROUND components, not THROUGH them
+## - Routes can connect TO component pins (endpoints)
+## - Debug output should show "[COMPONENT OBSTACLE] Blocked path through component"
+
+import * from @std/primitives/units
+import Silicon_P from @std/materials/doped_semiconductors
+import Copper from @std/materials/conductors
+
+## ============================================================================
+## COMPONENT DEFINITION: Simple Resistor
+## ============================================================================
+
+component Resistor:
+    pins: [A, K]
+    
+    layout:
+        shape: Rectangle(5mm, 2mm, 0.5mm)
+    
+    metadata:
+        component_type: "Resistor"
+        description: "Simple resistor for obstacle testing"
+    
+    render:
+        type: procedural
+        shape: box
+        body_color: "#FF5722"
+
+## ============================================================================
+## SPACE: Route Around Component Test
+## ============================================================================
+
+space TestRouteAroundComponent:
+    dimensions: 50mm by 50mm by 4mm
+    grid: 50000 by 50000 by 4
+    origin: tl by t
+    
+    ## Base substrate
+    add substrate(Silicon_P) spanning [x:1um, y:1um, z:0] to [x:49999um, y:49999um, z:2]
+    
+    ## ========================================================================
+    ## LAYOUT: Place components to test obstacle detection
+    ## 
+    ## Layout:
+    ##   R1 (5mm, 10mm)  --->  [R2 BLOCKS PATH]  --->  R3 (45mm, 10mm)
+    ##                         (25mm, 10mm)
+    ## 
+    ## R2 is placed directly between R1 and R3.
+    ## Router MUST route around R2 (above or below), not through it.
+    ## ========================================================================
+    
+    ## Place three resistors in a line
+    add Resistor named R1 at [x: 5mm, y: 10mm, z: 3]
+    add Resistor named R2 at [x: 22.5mm, y: 10mm, z: 3]
+    add Resistor named R3 at [x: 40mm, y: 10mm, z: 3]
+    
+    ## ========================================================================
+    ## VERIFICATION:
+    ## 
+    ## 1. Build normally (no --auto-route needed for this test)
+    ## 2. Components should be placed successfully
+    ## 3. R2 should block the direct path between R1 and R3
+    ## 4. Future: When auto-router is enabled, it should route around R2
+    ## ========================================================================
+

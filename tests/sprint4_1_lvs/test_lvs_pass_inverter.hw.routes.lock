@@ -1,0 +1,17 @@
+{
+  "version": "0.1.4",
+  "board": "InverterLayout",
+  "grid": {
+    "dimensions": [
+      20,
+      20,
+      10
+    ],
+    "resolution": [
+      0.1,
+      0.1,
+      0.1
+    ]
+  },
+  "routes": []
+}

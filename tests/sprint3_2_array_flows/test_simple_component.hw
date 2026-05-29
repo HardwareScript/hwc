@@ -1,0 +1,29 @@
+## Test: Simple component placement (no array)
+## This verifies the component definition works before testing arrays
+
+import * from @std/primitives/units
+import Silicon_P from @std/materials/doped_semiconductors
+
+component TransistorFinger:
+    pins: [gate, source, drain]
+    
+    layout:
+        shape: Rectangle(2um, 10um, 0.5um)
+    
+    metadata:
+        component_type: "Transistor Finger"
+    
+    render:
+        type: procedural
+        shape: box
+        body_color: "#FF6B6B"
+
+space SimpleComponentTest:
+    dimensions: 100um by 100um by 2mm
+    grid: 100000 by 100000 by 2
+    origin: tl by t
+    
+    add substrate(Silicon_P) spanning [x:1um, y:1um, z:0] to [x:99999um, y:99999um, z:1]
+    
+    ## Single component (no array)
+    add TransistorFinger named M1 at [x: 10um, y: 20um, z: 1]

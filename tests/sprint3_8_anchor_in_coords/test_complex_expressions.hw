@@ -1,0 +1,105 @@
+## Sprint 3.8: Anchor References in Coordinate Expressions
+## Test: Complex expressions with anchor references and arithmetic
+##
+## This test verifies:
+## 1. Anchor references can be used in complex arithmetic expressions
+## 2. Multiple operations: Component.edge + offset * factor
+## 3. Mixing anchor references with loop variables
+##
+## Expected behavior:
+## - Complex expressions with anchors parse correctly
+## - Arithmetic operations work with anchor-derived values
+## - Loop variables can be combined with anchor references
+##
+## Use Case: Parametric layouts with relative positioning
+
+import * from @std/primitives/units
+import Silicon_P from @std/materials/doped_semiconductors
+import Copper from @std/materials/conductors
+
+## ============================================================================
+## COMPONENT DEFINITION: Small Block
+## ============================================================================
+
+component SmallBlock:
+    pins: [a, b]
+    
+    layout:
+        shape: Rectangle(2mm, 2mm, 0.5mm)
+        
+        pin_positions:
+            a at [500um, 500um]
+            b at [1500um, 1500um]
+    
+    metadata:
+        component_type: "Small Block"
+    
+    render:
+        type: procedural
+        shape: box
+        body_color: "#4CAF50"
+
+## ============================================================================
+## SPACE: Test Complex Expressions with Anchors
+## ============================================================================
+
+space TestComplexExpressions:
+    dimensions: 80mm by 40mm by 2mm
+    grid: 80000 by 40000 by 2
+    origin: tl by t
+    
+    ## Base substrate
+    add substrate(Silicon_P) spanning [x:1um, y:1um, z:0] to [x:79999um, y:39999um, z:1]
+    
+    ## ========================================================================
+    ## TEST 1: Anchor reference with arithmetic
+    ## Position = anchor + (offset * 2)
+    ## ========================================================================
+    
+    add pour(Copper) named BasePlane on z:1:
+        boundary: [x:5mm, y:5mm] to [x:15mm, y:15mm]
+        net: GND
+    
+    ## Component positioned with doubled offset
+    add SmallBlock named Block1 at [x: BasePlane.right + (1mm * 2), y: 10mm, z: 2]
+    
+    ## Expected: X = 15mm + 2mm = 17mm, Y = 10mm
+    
+    ## ========================================================================
+    ## TEST 2: Anchor reference in loop with loop variable
+    ## Demonstrates mixing anchor references with parametric generation
+    ## ========================================================================
+    
+    for i in 0..3:
+        add SmallBlock named Array[i] at [x: BasePlane.right + (3mm + i * 3mm), y: 5mm + i * 4mm, z: 2]
+    
+    ## Expected positions:
+    ## Array[0]: X = 15mm + 3mm = 18mm, Y = 5mm
+    ## Array[1]: X = 15mm + 6mm = 21mm, Y = 9mm
+    ## Array[2]: X = 15mm + 9mm = 24mm, Y = 13mm
+    ## Array[3]: X = 15mm + 12mm = 27mm, Y = 17mm
+    
+    ## ========================================================================
+    ## TEST 3: Nested anchor references
+    ## Component positioned relative to last loop iteration
+    ## ========================================================================
+    
+    add SmallBlock named FinalBlock at [x: last.right + 2mm, y: last.top + 1mm, z: 2]
+    
+    ## Expected: 
+    ## last = Array[3] at (27mm, 17mm) with size (2mm, 2mm)
+    ## X = 27mm + 2mm + 2mm = 31mm
+    ## Y = 17mm + 2mm + 1mm = 20mm
+    
+    ## ========================================================================
+    ## TEST 4: Pour boundary with anchor expression
+    ## Boundary calculated from anchor reference
+    ## ========================================================================
+    
+    add pour(Copper) named ComplexPour on z:1:
+        boundary: [x: BasePlane.left, y: BasePlane.bottom + 1mm] to [x: BasePlane.right + 10mm, y: BasePlane.bottom + 3mm]
+        net: VDD
+    
+    ## Expected:
+    ## From: (5mm, 15mm + 1mm) = (5mm, 16mm)
+    ## To: (15mm + 10mm, 15mm + 3mm) = (25mm, 18mm)

@@ -1,0 +1,61 @@
+## ============================================================================
+## SPRINT 9: NO VIOLATIONS TEST (Positive Control)
+## ============================================================================
+##
+## Tests that a correctly designed board with all components properly placed
+## passes validation without any errors. This is the positive control test.
+
+import * from @std/primitives/units
+import FR4 from @std/materials/insulators
+import Copper from @std/materials/conductors
+
+component Resistor:
+    pins: [a, b]
+    layout:
+        shape: Rectangle(2mm, 1mm, 500um)
+    render:
+        type: procedural
+        shape: box
+        body_color: "#E67E22"
+
+component Capacitor:
+    pins: [pos, neg]
+    layout:
+        shape: Rectangle(2mm, 2mm, 800um)
+    render:
+        type: procedural
+        shape: box
+        body_color: "#16A085"
+
+component IC:
+    pins: [vdd, gnd, input, output]
+    layout:
+        shape: Rectangle(5mm, 5mm, 1mm)
+    render:
+        type: procedural
+        shape: box
+        body_color: "#34495E"
+
+module ValidBoard:
+    pins: [power VDD, power GND]
+    
+    add Resistor named R1
+    add Resistor named R2
+    add Capacitor named C1
+    add Capacitor named C2
+    add IC named U1
+
+space NoViolationsTest:
+    dimensions: 60mm by 40mm by 10mm
+    grid: 600 by 400 by 100
+    origin: bl by b
+
+    ## Substrate at z:40-50
+    add substrate(FR4) spanning [x:0mm, y:0mm, z:40] to [x:60mm, y:40mm, z:50]
+
+    ## All components correctly placed ABOVE substrate surface (z:51 = max_z + 1)
+    add Resistor named R1 at [x: 10mm, y: 10mm, z: 51]
+    add Resistor named R2 at [x: 20mm, y: 10mm, z: 51]
+    add Capacitor named C1 at [x: 30mm, y: 10mm, z: 51]
+    add Capacitor named C2 at [x: 40mm, y: 10mm, z: 51]
+    add IC named U1 at [x: 25mm, y: 25mm, z: 51]

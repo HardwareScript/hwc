@@ -1,0 +1,35 @@
+## Bridge System: Explicit Override Test
+##
+## This test verifies that a user can explicitly override the bridge material
+## using an explicit contact placement.
+
+import * from @std/primitives/units
+import Generic from @std/profiles/generic
+import Copper from @std/materials/conductors
+
+module OverrideBridgeTest:
+    pins: []
+
+space TestOverrideBridge implements OverrideBridgeTest:
+    dimensions: 20mm by 20mm by 1mm
+    grid: 20000 by 20000 by 5
+    origin: tl by t
+    profile: Generic
+    
+    nets:
+        TEST_NET: signal
+    
+    ## Pour 1: Copper on z:1
+    add pour(Copper) named Copper_Pour on z:1:
+        boundary: [x: 2mm, y: 2mm] to [x: 8mm, y: 8mm]
+        net: TEST_NET
+    
+    ## Pour 2: Copper on z:2
+    add pour(Copper) named Copper_Pour2 on z:2:
+        boundary: [x: 5mm, y: 5mm] to [x: 12mm, y: 12mm]
+        net: TEST_NET
+
+    ## Explicit contact with bridge override
+    ## Even though Copper to Copper would use Copper fill, we override it to use SAC305_Solder
+    add contact(Copper) net: TEST_NET at [x: 6.5mm, y: 6.5mm] spanning z:1 to z:2:
+        bridge: SAC305_Solder

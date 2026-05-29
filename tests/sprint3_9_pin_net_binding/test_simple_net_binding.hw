@@ -1,0 +1,44 @@
+## Sprint 3.9: Component Pin-to-Net Binding (Item #13)
+## Test: Simple net binding without loops
+##
+## This test verifies basic pin-to-net binding syntax:
+## - Simple bindings: pin: NetName
+## - Multiple pins bound to different nets
+##
+## Expected: Component pins should be connected to named nets in the netlist
+
+import * from @std/primitives/units
+import Silicon_P from @std/materials/doped_semiconductors
+
+## Simple component with multiple pins
+component FullAdder:
+    pins: [a, b, carry_in, sum, carry_out]
+    
+    layout:
+        shape: Rectangle(8mm, 4mm, 0.5mm)
+        pin_positions:
+            a at [1mm, 1mm]
+            b at [3mm, 1mm]
+            carry_in at [5mm, 1mm]
+            sum at [1mm, 3mm]
+            carry_out at [5mm, 3mm]
+    
+    metadata:
+        component_type: "1-bit Full Adder"
+    
+    render:
+        type: procedural
+        shape: box
+        body_color: "#2196F3"
+
+space TestSimpleNetBinding:
+    dimensions: 50mm by 10mm by 4mm
+    grid: 50000 by 10000 by 4
+    origin: tl by t
+    
+    ## Base substrate
+    add substrate(Silicon_P) spanning [x:1um, y:1um, z:0] to [x:49999um, y:9999um, z:1]
+    
+    ## Component with explicit net bindings
+    add FullAdder named Adder0 at [x: 5mm, y: 5mm, z: 2]:
+        net: [a: InputA, b: InputB, carry_in: CarryIn, sum: OutputSum, carry_out: CarryOut]

@@ -1,0 +1,38 @@
+import * from @std/primitives/units
+import Generic from @std/profiles/generic
+import Copper from @std/materials/conductors
+
+module DemoBridge:
+    pins: []
+
+space Bridge3DDemo implements DemoBridge:
+    dimensions: 100mm by 100mm by 10mm
+    grid: 100000 by 100000 by 10
+    origin: tl by t
+    profile: Generic
+    
+    nets:
+        ROAD: signal
+        
+    ## The Ground Pads (z:1)
+    add pour(Copper) named Ground_Left on z:1:
+        boundary: [x: 10mm, y: 20mm] to [x: 30mm, y: 80mm]
+        net: ROAD
+        
+    add pour(Copper) named Ground_Right on z:1:
+        boundary: [x: 70mm, y: 20mm] to [x: 90mm, y: 80mm]
+        net: ROAD
+        
+    ## The Elevated Road (z:5) - Spans across the gap
+    add pour(Copper) named Elevated_Road on z:5:
+        boundary: [x: 20mm, y: 40mm] to [x: 80mm, y: 60mm]
+        net: ROAD
+        
+    ## The Giant Pillars (Contacts from z:1 to z:5)
+    ## Left Pillar
+    add contact(Copper) net: ROAD at [x: 25mm, y: 50mm] spanning z:1 to z:5:
+        diameter: 10mm
+        
+    ## Right Pillar
+    add contact(Copper) net: ROAD at [x: 75mm, y: 50mm] spanning z:1 to z:5:
+        diameter: 10mm

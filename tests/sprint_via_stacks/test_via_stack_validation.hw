@@ -1,0 +1,33 @@
+## WEEK 3: Gap 3 - Via Stack Validation
+##
+## This test verifies that the compiler reports an error when a multi-layer
+## via stack cannot be completed (e.g., missing via type in library).
+##
+## Test Case:
+## - Net "ERR" has two pours on layers z:1 and z:15
+## - The standard library only has vias up to z:11
+## - Compiler should report that it cannot find a via for z:11 to z:12
+
+import * from @std/primitives/units
+import Copper from @std/materials/conductors
+
+module ViaStackValidationErrorTest:
+    pins: []
+
+space TestViaStackValidationError implements ViaStackValidationErrorTest:
+    dimensions: 20mm by 20mm by 1mm
+    grid: 200 by 200 by 20
+    origin: tl by t
+    
+    nets:
+        ERR: power
+    
+    ## Bottom layer pour (z:1)
+    add pour(Copper) named ERR_Bottom on z:1:
+        boundary: [x: 5mm, y: 5mm] to [x: 15mm, y: 15mm]
+        net: ERR
+    
+    ## Far top layer pour (z:15)
+    add pour(Copper) named ERR_Top on z:15:
+        boundary: [x: 5mm, y: 5mm] to [x: 15mm, y: 15mm]
+        net: ERR

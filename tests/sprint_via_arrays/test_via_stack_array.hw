@@ -1,0 +1,60 @@
+## Sprint: Via Array Generation - Multi-Layer Stack Arrays
+##
+## This test verifies CONSTRAINT-DRIVEN via stack arrays.
+## Deep layer transitions on power nets automatically get via arrays.
+##
+## The Declarative Truth:
+## 1. User declares: VDD: power (net classification)
+## 2. User declares: min_spacing: 2mm (spacing constraint)
+## 3. User creates: z:1 to z:5 transition (4-layer span)
+## 4. Compiler derives: "Power net + spacing + deep stack → via stack arrays"
+##
+## Expected Result:
+## ✅ Via stack arrays for z:1→2, z:2→3, z:3→4, z:4→5
+## ✅ Each layer has grid of vias
+## ✅ All vias vertically aligned
+
+import * from @std/primitives/units
+import Copper from @std/materials/conductors
+
+## Profile with via spacing (no "array" or "stack" keywords)
+profile PowerStackArray:
+    description: "Power distribution with via spacing"
+    
+    trace:
+        min_width: 200µm
+        min_spacing: 200µm
+    
+    via:
+        min_diameter: 300µm
+        min_annular_ring: 150µm
+        min_spacing: 2mm            # This + power net + deep stack = automatic arrays
+
+module ViaStackArrayTest:
+    pins: []
+
+space TestViaStackArray implements ViaStackArrayTest:
+    dimensions: 20mm by 20mm by 1mm
+    grid: 200 by 200 by 10
+    origin: tl by t
+    profile: PowerStackArray
+    
+    nets:
+        VDD: power      # Power net → via stack arrays
+    
+    ## Bottom VDD plane (z:1)
+    add pour(Copper) named VDD_Bottom on z:1:
+        boundary: [x: 5mm, y: 5mm] to [x: 15mm, y: 15mm]
+        net: VDD
+    
+    ## Top VDD plane (z:5) - 4 layer span
+    add pour(Copper) named VDD_Top on z:5:
+        boundary: [x: 5mm, y: 5mm] to [x: 15mm, y: 15mm]
+        net: VDD
+
+## Expected behavior (derived from constraints):
+## - 10mm x 10mm overlap
+## - 2mm spacing → ~5x5 = 25 vias per layer
+## - 4 layer transitions → 25 × 4 = 100 total vias
+## - All vertically aligned in grid
+## - Zero mode strings. Pure constraint-driven physics.

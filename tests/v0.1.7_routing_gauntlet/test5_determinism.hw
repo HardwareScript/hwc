@@ -1,0 +1,33 @@
+material Copper:
+    category: conductor
+    symbol: "Cu"
+    properties:
+        resistivity: 1.68e-8Ω·m
+
+profile TestProfile:
+    stackup:
+        top: [material: Copper, thickness: 35um]
+        core: [material: Copper, thickness: 1.5mm]
+        bottom: [material: Copper, thickness: 35um]
+
+component Header8:
+    pins: [P0, P1, P2, P3, P4, P5, P6, P7]
+    layout:
+        shape: Rectangle(20mm, 5mm, 1mm)
+        pin_positions:
+            for i in 0..7:
+                P[i] at [i * 2.5mm, 0mm, 0mm]
+
+space ParallelBus:
+    profile: TestProfile
+    dimensions: 100mm by 100mm by 2mm
+    grid: 200 by 200 by 10
+    
+    add Header8 named CPU at [x: 10mm, y: 10mm, z: 0mm]
+    add Header8 named RAM at [x: 10mm, y: 80mm, z: 0mm]
+    
+    # Test 5: Parallel Determinism
+    # Scenario: 8 traces routed simultaneously in parallel bus.
+    # Success Criteria: Clean parallel routing, identical SHA-256 hash across 5 runs.
+    for i in 0..7:
+        route CPU.P[i] to RAM.P[i]

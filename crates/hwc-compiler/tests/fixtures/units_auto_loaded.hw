@@ -1,0 +1,14 @@
+## Test that units ARE auto-loaded (in prelude)
+## This should compile successfully - units available without import
+
+material TestMaterial:
+    category: conductor
+    symbol: "Test"
+    description: "Test material using units without import"
+    
+    properties:
+        density: 8960kg/m³
+        thermal_conductivity: 401W/(m·K)
+        resistivity: 1.68e-8Ω·m
+        capacitance: 10µF
+        frequency: 1MHz

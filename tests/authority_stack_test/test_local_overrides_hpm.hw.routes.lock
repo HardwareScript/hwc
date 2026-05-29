@@ -1,0 +1,17 @@
+{
+  "version": "0.1.4",
+  "board": "TestBoard",
+  "grid": {
+    "dimensions": [
+      1000,
+      1000,
+      2
+    ],
+    "resolution": [
+      0.1,
+      0.1,
+      0.8
+    ]
+  },
+  "routes": []
+}

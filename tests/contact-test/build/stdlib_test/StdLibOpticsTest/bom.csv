@@ -1,0 +1,6 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,80.00x30.00x2.00mm,,,,,1
+GlossyBody,Pour,300.0000mm²,Layer 1,,SolderMask_PianoBlack,300.000000mm³
+Substrate,Pour,400.0000mm²,Layer 1,,FR4_Visual,400.000000mm³
+BrushedMetal,Pour,200.0000mm²,Layer 1,,Copper_Brushed,200.000000mm³
+GoldFinish,Pour,200.0000mm²,Layer 1,,Gold_Polished,200.000000mm³

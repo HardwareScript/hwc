@@ -1,0 +1,10 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,100.00x20.00x2.00mm,,,,,1
+Test_0,Pour,14.0000mm² net:D[-5],Layer 1,,Copper,14.000000mm³
+Test_1,Pour,14.0000mm² net:D[-4],Layer 1,,Copper,14.000000mm³
+Test_2,Pour,14.0000mm² net:D[-3],Layer 1,,Copper,14.000000mm³
+Test_3,Pour,14.0000mm² net:D[-2],Layer 1,,Copper,14.000000mm³
+Test_0,Pour(Copper),,,,,,1
+Test_1,Pour(Copper),,,,,,1
+Test_2,Pour(Copper),,,,,,1
+Test_3,Pour(Copper),,,,,,1

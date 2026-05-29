@@ -1,0 +1,25 @@
+# Test 5: Override Prelude Material
+# This tests overriding a material from the standard library (prelude)
+# Import Copper from stdlib, then override just one property locally
+
+import Copper from @std/materials/conductors
+
+# Local override: Only change resistivity (maybe using a different copper alloy)
+material Copper:
+    category: conductor
+    symbol: "Cu-Alloy"
+    description: "Custom copper alloy with higher resistivity"
+    properties:
+        resistivity: 2.0e-8Ω·m  # OVERRIDE: Higher than standard copper (1.68e-8)
+
+space TestBoard:
+    dimensions: 100mm by 100mm by 1.6mm
+    grid: 1000 by 1000 by 2
+    origin: tl by t
+
+# Expected behavior:
+# - resistivity: 2.0e-8 (from local override)
+# - thermal_conductivity: 401 (from stdlib base)
+# - density: 8960 (from stdlib base)
+# - melting_point: 1358 (from stdlib base)
+# - max_current_density: 3e9 (from stdlib base)

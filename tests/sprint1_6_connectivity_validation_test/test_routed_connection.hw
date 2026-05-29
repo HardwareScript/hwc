@@ -1,0 +1,38 @@
+# Sprint 1.6: Routed Connection Validation Test
+# Testing: Router creates voxels when routing traces between components
+# Expected: Occupied voxels > 0 (from routed traces), connectivity check PASSES
+# Philosophy: "Connection, not density" - voxels appear only where needed (traces)
+
+import Copper from @std/materials/conductors
+
+# Define simple test pad component
+component TestPad:
+    pins: [Pin]
+    
+    layout:
+        shape: Rectangle(1mm, 1mm, 0.2mm)
+        pin_positions:
+            Pin at [0.5mm, 0.5mm]
+    
+    render:
+        type: procedural
+        shape: smd_passive
+        body_color: "#FFD700"
+
+# Test: Two pads connected by a routed trace
+space RoutedConnection:
+    dimensions: 10mm by 10mm by 2mm
+    grid: 100 by 100 by 20
+    origin: tl by t
+    
+    # Place two pads that need to be connected
+    add TestPad named Pad1 at [x:2mm, y:2mm, z:11]
+    add TestPad named Pad2 at [x:8mm, y:8mm, z:11]
+    
+    # Route a trace between them (this creates voxels!)
+    route Pad1.Pin to Pad2.Pin:
+        path:
+            - [x:2mm, y:2mm, z:11]    # Start at Pad1
+            - [x:5mm, y:2mm, z:11]    # Horizontal segment
+            - [x:5mm, y:8mm, z:11]    # Vertical segment
+            - [x:8mm, y:8mm, z:11]    # End at Pad2

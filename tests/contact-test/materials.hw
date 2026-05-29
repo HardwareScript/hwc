@@ -1,0 +1,75 @@
+# Test Contact - Material Definitions
+# Materials needed for via/contact testing
+
+# N-Doped Silicon (Electron-rich, for NMOS)
+material Silicon_N:
+    category: semiconductor
+    properties:
+        resistivity: 1.0e-3Ω·m
+        thermal_conductivity: 148W/(m·K)
+        density: 2329kg/m³
+        melting_point: 1414C
+        max_current_density: 1e6A/mm²
+        color: "#4A4A4A"
+        band_gap: 1.12eV
+        doping_type: "n-type"
+        doping_concentration: 1e16/cm³
+
+# P-Doped Silicon (Hole-rich, for PMOS)
+material Silicon_P:
+    category: semiconductor
+    properties:
+        resistivity: 2.0e-3Ω·m
+        thermal_conductivity: 148W/(m·K)
+        density: 2329kg/m³
+        melting_point: 1414C
+        max_current_density: 1e6A/mm²
+        color: "#6A6A6A"
+        band_gap: 1.12eV
+        doping_type: "p-type"
+        doping_concentration: 1e16/cm³
+
+# Silicon Dioxide (Gate Insulator)
+material SiliconDioxide:
+    category: insulator
+    properties:
+        resistivity: 1e16Ω·m
+        thermal_conductivity: 1.4W/(m·K)
+        density: 2200kg/m³
+        melting_point: 1713C
+        max_current_density: 0A/mm²
+        color: "#E0E0E0"
+        dielectric_constant: 3.9
+
+# Polysilicon (Gate Material)
+material Polysilicon:
+    category: conductor
+    properties:
+        resistivity: 1e-4Ω·m
+        thermal_conductivity: 34W/(m·K)
+        density: 2320kg/m³
+        melting_point: 1414C
+        max_current_density: 1e5A/mm²
+        color: "#808080"
+
+# Aluminum (Metal Interconnect)
+material Aluminum:
+    category: conductor
+    properties:
+        resistivity: 2.82e-8Ω·m
+        thermal_conductivity: 237W/(m·K)
+        density: 2700kg/m³
+        melting_point: 660C
+        max_current_density: 10A/mm²
+        color: "#C0C0C0"
+
+# Tungsten (Via/Contact Fill Material)
+material Tungsten:
+    category: conductor
+    properties:
+        resistivity: 5.6e-8Ω·m
+        thermal_conductivity: 173W/(m·K)
+        density: 19250kg/m³
+        melting_point: 3422C
+        max_current_density: 50A/mm²
+        color: "#505050"

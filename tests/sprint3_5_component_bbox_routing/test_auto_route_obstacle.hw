@@ -1,0 +1,72 @@
+## Sprint 3.5: Component Bounding Box Obstacle Detection (GAP3)
+## Test: Auto-router should route around component obstacles
+##
+## This test uses components with internal pours that have net assignments,
+## so the auto-router will be invoked to connect pins on the same net.
+
+import Copper from @std/materials/conductors
+import Silicon_N from @std/materials/doped_semiconductors
+
+component PadWithNet:
+    pins: [P1]
+    
+    layout:
+        shape: Rectangle(2mm, 2mm, 0.5mm)
+        
+        ## Internal pour with net assignment - this gives the pin a net
+        ## Place on z:1 to avoid substrate conflict (substrate is z:0)
+        add pour(Copper) named Terminal on z:1:
+            boundary: [x: 0.5mm, y: 0.5mm] to [x: 1.5mm, y: 1.5mm]
+            net: SIGNAL
+        
+        pin_positions:
+            P1 at [1mm, 1mm]
+    
+    render:
+        type: procedural
+        shape: box
+        body_color: "#FFD700"
+
+component BlockingResistor:
+    pins: [A, K]
+    
+    layout:
+        shape: Rectangle(8mm, 4mm, 1mm)
+        
+        ## Internal pours for terminals (different nets to avoid connecting through component)
+        ## Place on z:1 to avoid substrate conflict
+        add pour(Copper) named TerminalA on z:1:
+            boundary: [x: 0.5mm, y: 1.5mm] to [x: 1.5mm, y: 2.5mm]
+            net: NET_A
+        
+        add pour(Copper) named TerminalK on z:1:
+            boundary: [x: 6.5mm, y: 1.5mm] to [x: 7.5mm, y: 2.5mm]
+            net: NET_K
+        
+        pin_positions:
+            A at [1mm, 2mm]
+            K at [7mm, 2mm]
+    
+    render:
+        type: procedural
+        shape: box
+        body_color: "#FF5722"
+
+space TestAutoRouteObstacle:
+    dimensions: 60mm by 30mm by 4mm
+    grid: 600 by 300 by 4
+    
+    ## Add substrate
+    add substrate(Silicon_N) spanning [x:1um, y:1um, z:0] to [x:59999um, y:29999um, z:2]
+    
+    ## Place pads on left and right (both on SIGNAL net)
+    add PadWithNet named Pad1 at [x: 5mm, y: 10mm, z: 1]
+    add PadWithNet named Pad2 at [x: 50mm, y: 10mm, z: 1]
+    
+    ## Place resistor in the middle (blocking direct path)
+    add BlockingResistor named R1 at [x: 26mm, y: 9mm, z: 1]
+    
+    ## NO explicit route statement - let auto-router handle it
+    ## Auto-router will see Pad1.P1 and Pad2.P1 both on net "SIGNAL"
+    ## and route between them, avoiding R1's bounding box
+

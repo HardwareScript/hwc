@@ -1,0 +1,17 @@
+{
+  "version": "0.1.4",
+  "board": "PTH_Gallery",
+  "grid": {
+    "dimensions": [
+      100,
+      50,
+      10
+    ],
+    "resolution": [
+      0.2,
+      0.2,
+      0.16
+    ]
+  },
+  "routes": []
+}

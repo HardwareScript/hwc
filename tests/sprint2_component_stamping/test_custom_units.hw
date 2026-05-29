@@ -1,0 +1,106 @@
+## Sprint 2.2: Custom Unit System Test
+## Tests that component shapes support ANY unit, not just mm/cm/um
+##
+## This test demonstrates:
+## 1. Custom unit definitions (inches)
+## 2. Component shapes using custom units
+## 3. Unit system is NOT hardcoded to specific units
+##
+## Expected behavior:
+## - Parser successfully parses custom units in component shapes
+## - Compiler converts custom units to nanometers correctly
+## - Component placement works with any unit
+
+import * from @std/primitives/units
+import Silicon_N, Silicon_P from @std/materials/doped_semiconductors
+import SiO2 from @std/materials/insulators
+import Polysilicon from @std/materials/conductors
+
+## ============================================================================
+## CUSTOM UNIT DEFINITIONS: Imperial Units
+## ============================================================================
+
+unit Inch:
+    symbol: "inch"
+    base_si: "m"
+    multiplier: 0.0254
+    dimension: length
+    description: "Imperial unit - 1 inch = 25.4mm"
+
+unit Mil:
+    symbol: "mil"
+    base_si: "m"
+    multiplier: 0.0000254
+    dimension: length
+    description: "1 mil = 1/1000 inch = 0.0254mm (common in PCB design)"
+
+## ============================================================================
+## COMPONENT DEFINITION: Using Custom Units (inches)
+## ============================================================================
+
+component ImperialResistor:
+    pins: [terminal1, terminal2]
+    
+    layout:
+        ## Using inches for component shape - completely different from metric!
+        shape: Rectangle(0.1inch, 0.05inch, 0.02inch)
+        
+        ## Internal pours using mils (common PCB unit)
+        add pour(Polysilicon) named Body on z:1:
+            boundary: [x: 20mil, y: 5mil] to [x: 80mil, y: 45mil]
+            net: RES_BODY
+        
+        add pour(Polysilicon) named Terminal1 on z:1:
+            boundary: [x: 0mil, y: 15mil] to [x: 18mil, y: 35mil]
+            device: terminal1
+            net: IN
+        
+        add pour(Polysilicon) named Terminal2 on z:1:
+            boundary: [x: 82mil, y: 15mil] to [x: 100mil, y: 35mil]
+            device: terminal2
+            net: OUT
+        
+        pin_positions:
+            terminal1 at [7.5mil, 25mil]
+            terminal2 at [92.5mil, 25mil]
+    
+    metadata:
+        component_type: "Resistor"
+        description: "Resistor defined using imperial units (inches/mils)"
+    
+    render:
+        type: procedural
+        shape: box
+        body_color: "#8B4513"
+
+## ============================================================================
+## MODULE DEFINITION
+## ============================================================================
+
+module ImperialTest:
+    pins: [
+        input IN,
+        output OUT
+    ]
+    
+    add ImperialResistor named R1
+
+## ============================================================================
+## SPACE: Test Custom Units in Component Shapes
+## ============================================================================
+
+space TestCustomUnits implements ImperialTest:
+    dimensions: 1inch by 1inch by 0.1inch
+    grid: 10000 by 10000 by 10
+    origin: tl by t
+    
+    nets:
+        IN: signal
+        OUT: signal
+        RES_BODY: signal
+    
+    ## Substrate using inches
+    add substrate(Silicon_P) spanning [x:0.01inch, y:0.01inch, z:0] to [x:0.99inch, y:0.99inch, z:1]
+    
+    ## Place component at position specified in inches
+    add ImperialResistor named R1 at [x: 0.4inch, y: 0.4inch, z: 0]

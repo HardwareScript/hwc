@@ -1,0 +1,165 @@
+## ============================================================================
+## SPRINT 9: ERROR CAP TEST (50+ violations)
+## ============================================================================
+##
+## Tests that the compiler caps error output at 50 individual violations
+## but still provides accurate summary statistics for all violations.
+##
+## This test creates 64 floating components to exceed the 50-error cap.
+
+import * from @std/primitives/units
+import FR4 from @std/materials/insulators
+
+component BitCell:
+    pins: [d, q]
+    layout:
+        shape: Rectangle(1mm, 1mm, 200um)
+    render:
+        type: procedural
+        shape: box
+        body_color: "#3498DB"
+
+module Bus64:
+    pins: [power VDD]
+    
+    add BitCell named Bit0
+    add BitCell named Bit1
+    add BitCell named Bit2
+    add BitCell named Bit3
+    add BitCell named Bit4
+    add BitCell named Bit5
+    add BitCell named Bit6
+    add BitCell named Bit7
+    add BitCell named Bit8
+    add BitCell named Bit9
+    add BitCell named Bit10
+    add BitCell named Bit11
+    add BitCell named Bit12
+    add BitCell named Bit13
+    add BitCell named Bit14
+    add BitCell named Bit15
+    add BitCell named Bit16
+    add BitCell named Bit17
+    add BitCell named Bit18
+    add BitCell named Bit19
+    add BitCell named Bit20
+    add BitCell named Bit21
+    add BitCell named Bit22
+    add BitCell named Bit23
+    add BitCell named Bit24
+    add BitCell named Bit25
+    add BitCell named Bit26
+    add BitCell named Bit27
+    add BitCell named Bit28
+    add BitCell named Bit29
+    add BitCell named Bit30
+    add BitCell named Bit31
+    add BitCell named Bit32
+    add BitCell named Bit33
+    add BitCell named Bit34
+    add BitCell named Bit35
+    add BitCell named Bit36
+    add BitCell named Bit37
+    add BitCell named Bit38
+    add BitCell named Bit39
+    add BitCell named Bit40
+    add BitCell named Bit41
+    add BitCell named Bit42
+    add BitCell named Bit43
+    add BitCell named Bit44
+    add BitCell named Bit45
+    add BitCell named Bit46
+    add BitCell named Bit47
+    add BitCell named Bit48
+    add BitCell named Bit49
+    add BitCell named Bit50
+    add BitCell named Bit51
+    add BitCell named Bit52
+    add BitCell named Bit53
+    add BitCell named Bit54
+    add BitCell named Bit55
+    add BitCell named Bit56
+    add BitCell named Bit57
+    add BitCell named Bit58
+    add BitCell named Bit59
+    add BitCell named Bit60
+    add BitCell named Bit61
+    add BitCell named Bit62
+    add BitCell named Bit63
+
+space ErrorCapTest implements Bus64:
+    dimensions: 200mm by 20mm by 10mm
+    grid: 2000 by 200 by 100
+    origin: bl by b
+
+    nets:
+        VDD: power
+
+    ## Substrate at z:40-50
+    add substrate(FR4) spanning [x:0mm, y:0mm, z:40] to [x:200mm, y:20mm, z:50]
+
+    ## All 64 bits floating at z:60 (10mm above substrate max_z:50)
+    add BitCell named Bit0  at [x:  3mm, y: 5mm, z: 60]
+    add BitCell named Bit1  at [x:  6mm, y: 5mm, z: 60]
+    add BitCell named Bit2  at [x:  9mm, y: 5mm, z: 60]
+    add BitCell named Bit3  at [x: 12mm, y: 5mm, z: 60]
+    add BitCell named Bit4  at [x: 15mm, y: 5mm, z: 60]
+    add BitCell named Bit5  at [x: 18mm, y: 5mm, z: 60]
+    add BitCell named Bit6  at [x: 21mm, y: 5mm, z: 60]
+    add BitCell named Bit7  at [x: 24mm, y: 5mm, z: 60]
+    add BitCell named Bit8  at [x: 27mm, y: 5mm, z: 60]
+    add BitCell named Bit9  at [x: 30mm, y: 5mm, z: 60]
+    add BitCell named Bit10 at [x: 33mm, y: 5mm, z: 60]
+    add BitCell named Bit11 at [x: 36mm, y: 5mm, z: 60]
+    add BitCell named Bit12 at [x: 39mm, y: 5mm, z: 60]
+    add BitCell named Bit13 at [x: 42mm, y: 5mm, z: 60]
+    add BitCell named Bit14 at [x: 45mm, y: 5mm, z: 60]
+    add BitCell named Bit15 at [x: 48mm, y: 5mm, z: 60]
+    add BitCell named Bit16 at [x: 51mm, y: 5mm, z: 60]
+    add BitCell named Bit17 at [x: 54mm, y: 5mm, z: 60]
+    add BitCell named Bit18 at [x: 57mm, y: 5mm, z: 60]
+    add BitCell named Bit19 at [x: 60mm, y: 5mm, z: 60]
+    add BitCell named Bit20 at [x: 63mm, y: 5mm, z: 60]
+    add BitCell named Bit21 at [x: 66mm, y: 5mm, z: 60]
+    add BitCell named Bit22 at [x: 69mm, y: 5mm, z: 60]
+    add BitCell named Bit23 at [x: 72mm, y: 5mm, z: 60]
+    add BitCell named Bit24 at [x: 75mm, y: 5mm, z: 60]
+    add BitCell named Bit25 at [x: 78mm, y: 5mm, z: 60]
+    add BitCell named Bit26 at [x: 81mm, y: 5mm, z: 60]
+    add BitCell named Bit27 at [x: 84mm, y: 5mm, z: 60]
+    add BitCell named Bit28 at [x: 87mm, y: 5mm, z: 60]
+    add BitCell named Bit29 at [x: 90mm, y: 5mm, z: 60]
+    add BitCell named Bit30 at [x: 93mm, y: 5mm, z: 60]
+    add BitCell named Bit31 at [x: 96mm, y: 5mm, z: 60]
+    add BitCell named Bit32 at [x:  3mm, y: 15mm, z: 60]
+    add BitCell named Bit33 at [x:  6mm, y: 15mm, z: 60]
+    add BitCell named Bit34 at [x:  9mm, y: 15mm, z: 60]
+    add BitCell named Bit35 at [x: 12mm, y: 15mm, z: 60]
+    add BitCell named Bit36 at [x: 15mm, y: 15mm, z: 60]
+    add BitCell named Bit37 at [x: 18mm, y: 15mm, z: 60]
+    add BitCell named Bit38 at [x: 21mm, y: 15mm, z: 60]
+    add BitCell named Bit39 at [x: 24mm, y: 15mm, z: 60]
+    add BitCell named Bit40 at [x: 27mm, y: 15mm, z: 60]
+    add BitCell named Bit41 at [x: 30mm, y: 15mm, z: 60]
+    add BitCell named Bit42 at [x: 33mm, y: 15mm, z: 60]
+    add BitCell named Bit43 at [x: 36mm, y: 15mm, z: 60]
+    add BitCell named Bit44 at [x: 39mm, y: 15mm, z: 60]
+    add BitCell named Bit45 at [x: 42mm, y: 15mm, z: 60]
+    add BitCell named Bit46 at [x: 45mm, y: 15mm, z: 60]
+    add BitCell named Bit47 at [x: 48mm, y: 15mm, z: 60]
+    add BitCell named Bit48 at [x: 51mm, y: 15mm, z: 60]
+    add BitCell named Bit49 at [x: 54mm, y: 15mm, z: 60]
+    add BitCell named Bit50 at [x: 57mm, y: 15mm, z: 60]
+    add BitCell named Bit51 at [x: 60mm, y: 15mm, z: 60]
+    add BitCell named Bit52 at [x: 63mm, y: 15mm, z: 60]
+    add BitCell named Bit53 at [x: 66mm, y: 15mm, z: 60]
+    add BitCell named Bit54 at [x: 69mm, y: 15mm, z: 60]
+    add BitCell named Bit55 at [x: 72mm, y: 15mm, z: 60]
+    add BitCell named Bit56 at [x: 75mm, y: 15mm, z: 60]
+    add BitCell named Bit57 at [x: 78mm, y: 15mm, z: 60]
+    add BitCell named Bit58 at [x: 81mm, y: 15mm, z: 60]
+    add BitCell named Bit59 at [x: 84mm, y: 15mm, z: 60]
+    add BitCell named Bit60 at [x: 87mm, y: 15mm, z: 60]
+    add BitCell named Bit61 at [x: 90mm, y: 15mm, z: 60]
+    add BitCell named Bit62 at [x: 93mm, y: 15mm, z: 60]
+    add BitCell named Bit63 at [x: 96mm, y: 15mm, z: 60]

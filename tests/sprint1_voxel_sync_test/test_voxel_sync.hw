@@ -1,0 +1,40 @@
+# Sprint 1: Voxel Occupancy Sync Test
+# Testing: SubstrateLayer::sync_to_voxel_grid() populates voxel grid
+# Expected: Router can see substrate obstacles (occupied voxels > 0)
+
+import * from @std/primitives/units
+
+# Define test materials
+material TestFR4:
+    category: insulator
+    properties:
+        resistivity: 1e14Ω·m
+        thermal_conductivity: 0.3W/(m·K)
+        density: 1850kg/m³
+        melting_point: 130C
+        max_current_density: 0A/mm²
+        color: "#2E7D32"
+        dielectric_constant: 4.5
+
+material TestCopper:
+    category: conductor
+    properties:
+        resistivity: 1.68e-8Ω·m
+        thermal_conductivity: 401W/(m·K)
+        density: 8960kg/m³
+        melting_point: 1085C
+        max_current_density: 10A/mm²
+        color: "#B87333"
+
+space VoxelSyncTest:
+    dimensions: 10mm by 10mm by 2mm
+    grid: 100 by 100 by 20
+    origin: tl by t
+    
+    # Add FR4 substrate (insulator - router should traverse)
+    add substrate(TestFR4) spanning [x:0.01mm, y:0.01mm, z:1] to [x:9.99mm, y:9.99mm, z:10]
+    
+    # Add copper trace (conductor - router should avoid if different net)
+    add pour(TestCopper) named CopperTrace on z:11:
+        net: TestNet
+        boundary: [x:2mm, y:2mm] to [x:8mm, y:8mm]

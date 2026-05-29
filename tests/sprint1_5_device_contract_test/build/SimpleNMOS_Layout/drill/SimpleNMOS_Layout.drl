@@ -1,0 +1,7 @@
+M48
+; DRILL file {SimpleNMOS_Layout} date 2026-04-26
+; FORMAT={-:-/ absolute / inch / decimal}
+FMAT,2
+INCH
+%
+M30

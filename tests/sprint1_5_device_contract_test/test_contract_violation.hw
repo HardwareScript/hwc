@@ -1,0 +1,91 @@
+## Sprint 1.5: Device Contract Violation Test
+## Tests that the compiler REJECTS invalid device materials
+##
+## This test intentionally uses WRONG materials:
+## - NMOS source uses Silicon_P (should be Silicon_N)
+##
+## Expected behavior:
+## - Compiler should FAIL with detailed error message
+## - Error should show: expected Silicon_N, found Silicon_P
+## - Error should reference the device contract
+
+import * from @std/primitives/units
+import NMOS, PMOS from @std/foundry/transistors
+
+## Define materials for this test with proper visual properties
+material Polysilicon:
+    category: conductor
+    properties:
+        resistivity: 1e-4Ω·m
+        color: "#808080"
+        opacity: 1.0
+        outline_opacity: 0.0
+        roughness: 0.7
+        metallic: 0.3
+
+material Silicon_N:
+    category: semiconductor
+    properties:
+        resistivity: 1.0e-3Ω·m
+        color: "#4A4A4A"
+        opacity: 1.0
+        outline_opacity: 0.0
+        roughness: 0.7
+        metallic: 0.3
+
+material Silicon_P:
+    category: semiconductor
+    properties:
+        resistivity: 2.0e-3Ω·m
+        color: "#6A6A6A"
+        opacity: 0.3
+        outline_opacity: 0.8
+        roughness: 0.7
+        metallic: 0.3
+
+## Module definition: Logical intent
+module BrokenNMOS:
+    pins: [
+        input VIN,
+        output VOUT,
+        ground GND
+    ]
+    
+    add NMOS named M1
+    route M1.gate to VIN
+    route M1.source to GND
+    route M1.drain to VOUT
+    route M1.bulk to GND
+
+## Space definition: Physical implementation with WRONG materials
+space BrokenNMOS_Layout implements BrokenNMOS:
+    dimensions: 1mm by 1mm by 1mm
+    grid: 1000 by 1000 by 10
+    origin: tl by t
+    
+    ## Substrate layer
+    add substrate(Silicon_P) spanning [x:1um, y:1um, z:1] to [x:999um, y:999um, z:5]
+    
+    ## NMOS Gate (Polysilicon) - CORRECT
+    add pour(Polysilicon) named M1_Gate on z:3:
+        device: M1.gate
+        net: VIN
+        boundary: [x: 200um, y: 400um] to [x: 300um, y: 600um]
+    
+    ## NMOS Source (Silicon_P) - WRONG! Should be Silicon_N
+    add pour(Silicon_P) named M1_Source on z:3:
+        device: M1.source
+        net: GND
+        boundary: [x: 200um, y: 100um] to [x: 300um, y: 200um]
+    
+    ## NMOS Drain (Silicon_N) - CORRECT
+    add pour(Silicon_N) named M1_Drain on z:3:
+        device: M1.drain
+        net: VOUT
+        boundary: [x: 200um, y: 600um] to [x: 300um, y: 700um]
+    
+    ## NMOS Bulk (Silicon_P) - CORRECT
+    add pour(Silicon_P) named M1_Bulk on z:3:
+        device: M1.bulk
+        net: GND
+        boundary: [x: 100um, y: 400um] to [x: 200um, y: 500um]

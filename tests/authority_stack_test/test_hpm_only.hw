@@ -1,0 +1,9 @@
+# Test 3: HPM Authority (No Local Override)
+# When no local definition exists, HPM definition should be used
+# This test just verifies the space compiles without local materials
+
+space TestBoard:
+    dimensions: 100mm by 100mm by 1.6mm
+    grid: 1000 by 1000 by 2
+    origin: tl by t
+

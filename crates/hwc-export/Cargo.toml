@@ -1,0 +1,23 @@
+[package]
+name = "hwc-export"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+thiserror = { workspace = true }
+hwc-engine = { workspace = true }
+hwc-compiler = { workspace = true }
+hwc-parser = { workspace = true }
+hwc-materials = { workspace = true }
+chrono = { version = "0.4", features = ["serde"] }
+rustc-hash = { workspace = true }
+compact_str = { workspace = true }
+rayon = { workspace = true }
+serde_json = "1.0"
+
+[dev-dependencies]
+tempfile = "3.13"
+hwc-parser = { workspace = true }
+hwc-diagnostics = { workspace = true }

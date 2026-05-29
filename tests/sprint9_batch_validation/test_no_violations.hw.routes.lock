@@ -1,0 +1,17 @@
+{
+  "version": "0.1.4",
+  "board": "NoViolationsTest",
+  "grid": {
+    "dimensions": [
+      600,
+      400,
+      100
+    ],
+    "resolution": [
+      0.1,
+      0.1,
+      0.1
+    ]
+  },
+  "routes": []
+}

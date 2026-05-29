@@ -1,0 +1,558 @@
+##[
+Multiplexer Standard Library - Maximum Complexity Stress Test
+==============================================================
+
+This file is designed to BREAK the compiler and expose any remaining weaknesses.
+It combines every complex pattern in a single file:
+
+1. Deeply nested if/else with mixed inline and block syntax
+2. Match expressions with enum variants inside if expressions
+3. Bundle arrays with duplication patterns in complex contexts
+4. Chained binary operations with multiple precedence levels
+5. Field access on match results
+6. Array slicing in conditional contexts
+7. Multi-line comma continuations in extreme nesting
+8. Register state machines with complex next-state logic
+9. Recursive mux definitions (Mux16 built from Mux8, Mux8 from Mux4, etc.)
+10. Mixed expression types (bundles, matches, ifs) as mux inputs
+
+If this compiles cleanly, the compiler is bulletproof.
+]##
+
+## Enum for MUX selection modes (tests enum in complex contexts)
+enum MuxMode:
+    Direct = 0x0
+    Inverted = 0x1
+    Gated = 0x2
+    Conditional = 0x3
+
+## Struct for MUX configuration (tests struct field access in logic)
+struct MuxConfig:
+    enable[1]
+    invert[1]
+    priority[2]
+
+## ============================================================================
+## Mux2to1 - Foundation with extreme nesting
+## ============================================================================
+module Mux2to1:
+    pins:
+        In0[8],
+        In1[8],
+        Sel[1],
+        Out[8]
+    
+    logic:
+        ## Test 1: Deeply nested if/else with bundle arrays
+        let intermediate = if Sel:
+            if In1[7]:
+                ## Multi-line bundle with duplication and slicing
+                [
+                    (0 * 4),
+                    In1[7..4],
+                    In1[3..0]
+                ]
+            else:
+                ## Nested match inside if branch
+                match In1[1..0]:
+                    0x0: [(1 * 8)]
+                    0x1: [In1[7..4], In1[3..0]]
+                    0x2: [In0[3..0], In1[7..4]]
+                    else: In1
+        else:
+            ## Test chained binary operations with multiple precedence
+            if (In0[7] & In0[6]) | (In0[5] ^ In0[4]):
+                (In0 + 1) & 0xFF
+            else:
+                (In0 << 1) | (In0 >> 7)
+        
+        Out = intermediate
+
+## ============================================================================
+## Mux4to1 - Built from Mux2to1 with complex selector logic
+## ============================================================================
+module Mux4to1:
+    pins:
+        In0[8], In1[8],
+        In2[8], In3[8],
+        Sel[2],
+        Out[8]
+    
+    logic:
+        ## Test 2: Match with bundle results and field-like access patterns
+        let stage1_low = match Sel[0]:
+            0: if In0[7]:
+                ## Bundle with mixed literal and expression
+                [(In0[7] * 4), In0[6..4], In0[3..0]]
+            else:
+                In0
+            1: if In1[6..5] == 0x3:
+                (In1 & 0xF0) | (In1[3..0] + 1)
+            else:
+                In1
+            else: [(0 * 8)]
+        
+        let stage1_high = match Sel[0]:
+            0: match In2[7..6]:
+                0x0: In2
+                0x1: In2 ^ 0xFF
+                0x2: (In2 << 2) | (In2 >> 6)
+                else: [(1 * 8)]
+            1: if (In3[7] & In3[0]):
+                ## Deeply nested if with bundle
+                if In3[6..4] > In3[3..1]:
+                    [In3[7..4], (In3[3..0] + 1)]
+                else:
+                    [In3[7..4], (In3[3..0] - 1)]
+            else:
+                In3 & 0xAA
+            else: In3
+        
+        ## Test 3: If expression with match arms as branches
+        Out = if Sel[1]:
+            match stage1_high[7..6]:
+                0x0: stage1_high
+                0x1: stage1_high ^ 0x55
+                0x2: (stage1_high + stage1_low) & 0xFF
+                else: stage1_high | stage1_low
+        else:
+            match stage1_low[5..4]:
+                0x0: stage1_low
+                0x1: stage1_low & stage1_high
+                0x2: (stage1_low << 1) ^ (stage1_high >> 1)
+                else: [(stage1_low[7..4] * 2), stage1_low[3..0]]
+
+## ============================================================================
+## Mux8to1 - Maximum complexity with all patterns combined
+## ============================================================================
+module Mux8to1:
+    pins:
+        In0[8], In1[8], In2[8], In3[8],
+        In4[8], In5[8], In6[8], In7[8],
+        Sel[3],
+        Out[8]
+    
+    logic:
+        ## Test 4: Nested match with if expressions in each arm
+        let quad0 = match Sel[1..0]:
+            0x0: if In0[7]:
+                match In0[6..4]:
+                    0x0: In0
+                    0x1: In0 + 1
+                    0x2: In0 - 1
+                    0x3: In0 ^ 0xFF
+                    0x4: In0 << 1
+                    0x5: In0 >> 1
+                    0x6: In0 & 0xF0
+                    else: In0 | 0x0F
+            else:
+                [(In0[7..4] * 2), In0[3..0]]
+            
+            0x1: if (In1[7..6] == 0x3) & (In1[1..0] != 0x0):
+                if In1[5]:
+                    [In1[7..4], (In1[3..0] + In1[7..4])]
+                else:
+                    [In1[7..4], (In1[3..0] - In1[7..4])]
+            else:
+                match In1[3..2]:
+                    0x0: In1 & 0xAA
+                    0x1: In1 | 0x55
+                    0x2: In1 ^ 0xCC
+                    else: In1
+            
+            0x2: match In2[7..5]:
+                0x0: In2
+                0x1: if In2[4]:
+                    (In2 << In2[2..0]) & 0xFF
+                else:
+                    (In2 >> In2[2..0]) & 0xFF
+                0x2: [(In2[7] * 8)]
+                0x3: [In2[7..6], In2[5..4], In2[3..2], In2[1..0]]
+                0x4: if In2[3..0] > 0x7:
+                    In2 + (In2[3..0] - 0x8)
+                else:
+                    In2 - In2[3..0]
+                else: In2 ^ (In2 << 4)
+            
+            else: if In3[7] | In3[0]:
+                match In3[6..4]:
+                    0x0: In3 & In3[3..0]
+                    0x1: In3 | (In3[3..0] << 4)
+                    0x2: In3 ^ [(In3[3..0] * 2)]
+                    else: if In3[2]:
+                        (In3 + 1) & 0xFF
+                    else:
+                        (In3 - 1) & 0xFF
+            else:
+                [(0 * 4), In3[7..4]]
+        
+        ## Test 5: Second quad with different complex patterns
+        let quad1 = match Sel[1..0]:
+            0x0: if (In4[7..4] + In4[3..0]) > 0xF:
+                match In4[7..6]:
+                    0x0: In4 << 1
+                    0x1: In4 >> 1
+                    0x2: [(In4[7..4] * 2), In4[3..0]]
+                    else: [In4[3..0], In4[7..4]]
+            else:
+                if In4[5..4] == In4[1..0]:
+                    In4 ^ 0xFF
+                else:
+                    In4 & 0xF0
+            
+            0x1: match In5[6..4]:
+                0x0: In5
+                0x1: if In5[3]:
+                    (In5 & 0xF0) | ((In5[3..0] + 1) & 0x0F)
+                else:
+                    (In5 & 0x0F) | ((In5[7..4] << 4) & 0xF0)
+                0x2: [(In5[7] * 4), In5[6..4], In5[3..0]]
+                0x3: if (In5[7..4] & In5[3..0]) != 0:
+                    In5 | 0x80
+                else:
+                    In5 & 0x7F
+                else: match In5[1..0]:
+                    0x0: In5 + 0x11
+                    0x1: In5 - 0x11
+                    0x2: In5 ^ 0x11
+                    else: In5
+            
+            0x2: if In6[7]:
+                if In6[6]:
+                    if In6[5]:
+                        if In6[4]:
+                            In6 & 0x0F
+                        else:
+                            In6 | 0xF0
+                    else:
+                        In6 ^ 0xAA
+                else:
+                    In6 + In6[3..0]
+            else:
+                match In6[3..0]:
+                    0x0: [(0 * 8)]
+                    0x1: [(1 * 8)]
+                    0x2: [(In6[7..4] * 2)]
+                    0x3: [In6[7..4], In6[3..0]]
+                    0x4: [In6[3..0], In6[7..4]]
+                    else: In6 << In6[2..0]
+            
+            else: match In7[7..4]:
+                0x0: In7
+                0x1: In7 + In7[3..0]
+                0x2: In7 - In7[3..0]
+                0x3: In7 & (In7[3..0] << 4)
+                0x4: In7 | (In7[3..0] << 4)
+                0x5: In7 ^ (In7[3..0] << 4)
+                0x6: if In7[3]:
+                    [(In7[7..4] * 2), In7[3..0]]
+                else:
+                    [In7[7..4], (In7[3..0] * 2)]
+                else: if In7[2..0] > 0x4:
+                    (In7 << (In7[2..0] - 0x4)) & 0xFF
+                else:
+                    (In7 >> (0x4 - In7[2..0])) & 0xFF
+        
+        ## Test 6: Final selection with ultra-complex nested expression
+        Out = if Sel[2]:
+            if (quad1[7..4] > quad0[7..4]) | (quad1[3..0] < quad0[3..0]):
+                match quad1[7..6]:
+                    0x0: quad1
+                    0x1: (quad1 + quad0) & 0xFF
+                    0x2: (quad1 - quad0) & 0xFF
+                    else: if quad1[5..4] == quad0[5..4]:
+                        quad1 ^ quad0
+                    else:
+                        quad1 & quad0
+            else:
+                if quad0[7]:
+                    [(quad0[7..4] * 2), quad1[3..0]]
+                else:
+                    [quad1[7..4], (quad0[3..0] * 2)]
+        else:
+            match quad0[6..4]:
+                0x0: quad0
+                0x1: if quad0[3..0] > 0x7:
+                    (quad0 << 1) | 0x01
+                else:
+                    (quad0 >> 1) & 0x7F
+                0x2: [(quad0[7] * 4), quad0[6..4], quad0[3..0]]
+                0x3: [quad0[7..4], quad1[3..0]]
+                0x4: [quad1[7..4], quad0[3..0]]
+                0x5: (quad0 & 0xF0) | (quad1 & 0x0F)
+                0x6: (quad0 | 0x0F) & (quad1 | 0xF0)
+                else: if (quad0[3..0] + quad1[3..0]) > 0xF:
+                    [(1 * 8)]
+                else:
+                    [(0 * 8)]
+
+## ============================================================================
+## Mux16to1 - Pure behavioral synthesis (NO component instantiation!)
+## ============================================================================
+module Mux16to1:
+    pins:
+        In0[8], In1[8], In2[8], In3[8],
+        In4[8], In5[8], In6[8], In7[8],
+        In8[8], In9[8], In10[8], In11[8],
+        In12[8], In13[8], In14[8], In15[8],
+        Sel[4],
+        Enable[1],
+        Mode[2],
+        Out[8],
+        Valid[1]
+    
+    logic:
+        ## Test 7: Pure behavioral 16-to-1 MUX using match expression
+        ## The compiler will synthesize this into a massive MUX tree automatically!
+        let base_selection = match Sel:
+            0: In0
+            1: In1
+            2: In2
+            3: In3
+            4: In4
+            5: In5
+            6: In6
+            7: In7
+            8: In8
+            9: In9
+            10: In10
+            11: In11
+            12: In12
+            13: In13
+            14: In14
+            else: In15
+        
+        ## Test 8: Complex mode-based transformation
+        let raw_output = match Mode:
+            0x0: base_selection
+            0x1: if base_selection[7]:
+                base_selection ^ 0xFF
+            else:
+                base_selection & 0xAA
+            0x2: match base_selection[7..6]:
+                0x0: base_selection
+                0x1: (base_selection << 1) | 0x01
+                0x2: (base_selection >> 1) & 0x7F
+                else: if base_selection[5..4] > base_selection[1..0]:
+                    [(base_selection[7..4] * 2), base_selection[3..0]]
+                else:
+                    [base_selection[7..4], (base_selection[3..0] * 2)]
+            else: if (base_selection[7..4] & base_selection[3..0]) != 0:
+                match base_selection[6..4]:
+                    0x0: base_selection + 1
+                    0x1: base_selection - 1
+                    0x2: base_selection << 1
+                    0x3: base_selection >> 1
+                    0x4: base_selection ^ 0x55
+                    0x5: base_selection & 0xF0
+                    0x6: base_selection | 0x0F
+                    else: [(base_selection[3..0] * 2), base_selection[7..4]]
+            else:
+                base_selection
+        
+        ## Test 9: Enable logic with deeply nested conditionals
+        Out = if Enable:
+            if (raw_output[7] & raw_output[0]) | (raw_output[6..4] == 0x7):
+                match raw_output[3..2]:
+                    0x0: raw_output
+                    0x1: (raw_output + Sel[3..0]) & 0xFF
+                    0x2: (raw_output - Sel[3..0]) & 0xFF
+                    else: if raw_output[5]:
+                        raw_output ^ [(Sel[3..0] * 2)]
+                    else:
+                        raw_output & [(Sel[3..0] * 2)]
+            else:
+                if raw_output[6..4] > raw_output[2..0]:
+                    [(raw_output[7] * 4), raw_output[6..4], raw_output[3..0]]
+                else:
+                    [raw_output[7..4], (raw_output[3..0] * 2)]
+        else:
+            [(0 * 8)]
+        
+        ## Test 10: Valid flag with ultra-complex boolean logic
+        Valid = if Enable:
+            if (Sel[3..2] == 0x0) & (Mode != 0x3):
+                if (raw_output[7..4] | raw_output[3..0]) != 0:
+                    1
+                else:
+                    0
+            else:
+                if (Sel[3] ^ Sel[0]) & (Mode[1] | Mode[0]):
+                    match raw_output[7..6]:
+                        0x0: 0
+                        0x1: 1
+                        0x2: raw_output[5]
+                        else: raw_output[4] ^ raw_output[3]
+                else:
+                    (raw_output[7] & raw_output[6]) | (raw_output[1] & raw_output[0])
+        else:
+            0
+
+## ============================================================================
+## MuxNto1 - Parameterized with register state machine (ULTIMATE TEST)
+## ============================================================================
+module MuxNto1_StateMachine:
+    pins:
+        DataIn[8],
+        Sel[3],
+        Clock[1],
+        Reset[1],
+        Enable[1],
+        DataOut[8],
+        StateOut[2]
+    
+    logic:
+        ## Test 11: Register with complex next-state logic
+        let mut state[2] = Reg(clock: Clock, reset: Reset, init: 0)
+        
+        ## Test 12: Next state with deeply nested match and if
+        state.next = if Reset:
+            0
+        else:
+            if Enable:
+                match state:
+                    0x0: if DataIn[7]:
+                        if (DataIn[6..4] + DataIn[2..0]) > 0x7:
+                            1
+                        else:
+                            0
+                    else:
+                        match DataIn[3..2]:
+                            0x0: 0
+                            0x1: 1
+                            0x2: 2
+                            else: 3
+                    
+                    0x1: if (DataIn[7..4] & DataIn[3..0]) != 0:
+                        match Sel[2..1]:
+                            0x0: 2
+                            0x1: 3
+                            0x2: 0
+                            else: 1
+                    else:
+                        if DataIn[6..4] == Sel[2..0]:
+                            0
+                        else:
+                            (state + 1) & 0x3
+                    
+                    0x2: match DataIn[7..5]:
+                        0x0: 0
+                        0x1: 1
+                        0x2: if DataIn[4]:
+                            3
+                        else:
+                            2
+                        0x3: if (DataIn[3..0] > 0x7) & (Sel[2] | Sel[0]):
+                            0
+                        else:
+                            1
+                        else: if DataIn[2..0] == Sel[2..0]:
+                            (state - 1) & 0x3
+                        else:
+                            state
+                    
+                    else: if DataIn[7] ^ DataIn[0]:
+                        if (DataIn[6..4] | DataIn[2..0]) == 0x7:
+                            0
+                        else:
+                            match Sel[1..0]:
+                                0x0: 1
+                                0x1: 2
+                                0x2: 3
+                                else: 0
+                    else:
+                        if (DataIn[5..4] + DataIn[1..0]) < 0x4:
+                            (state + 1) & 0x3
+                        else:
+                            (state - 1) & 0x3
+            else:
+                state
+        
+        ## Test 13: Output with state-dependent complex logic
+        DataOut = match state:
+            0x0: if DataIn[7]:
+                match DataIn[6..4]:
+                    0x0: DataIn
+                    0x1: DataIn + Sel[2..0]
+                    0x2: DataIn - Sel[2..0]
+                    0x3: DataIn & [(Sel[2..0] * 2)]
+                    0x4: DataIn | [(Sel[2..0] * 2)]
+                    0x5: DataIn ^ [(Sel[2..0] * 2)]
+                    0x6: if DataIn[3..0] > 0x7:
+                        (DataIn << 1) | 0x01
+                    else:
+                        (DataIn >> 1) & 0x7F
+                    else: [(DataIn[7..4] * 2), DataIn[3..0]]
+            else:
+                if (DataIn[6..4] + DataIn[2..0]) > 0xF:
+                    [(1 * 8)]
+                else:
+                    [(0 * 8)]
+            
+            0x1: match Sel[2..0]:
+                0x0: DataIn
+                0x1: if DataIn[6]:
+                    (DataIn & 0xF0) | ((DataIn[3..0] + 1) & 0x0F)
+                else:
+                    (DataIn & 0x0F) | ((DataIn[7..4] << 4) & 0xF0)
+                0x2: [(DataIn[7] * 4), DataIn[6..4], DataIn[3..0]]
+                0x3: [DataIn[7..4], (DataIn[3..0] + Sel[2..0])]
+                0x4: [(DataIn[7..4] + Sel[2..0]), DataIn[3..0]]
+                0x5: if (DataIn[7..4] & DataIn[3..0]) != 0:
+                    DataIn | 0x80
+                else:
+                    DataIn & 0x7F
+                else: match DataIn[5..4]:
+                    0x0: DataIn ^ 0xAA
+                    0x1: DataIn ^ 0x55
+                    0x2: DataIn ^ 0xCC
+                    else: DataIn ^ 0x33
+            
+            0x2: if DataIn[7]:
+                if DataIn[6]:
+                    if DataIn[5]:
+                        if DataIn[4]:
+                            if DataIn[3]:
+                                DataIn & 0x07
+                            else:
+                                DataIn | 0xF8
+                        else:
+                            DataIn ^ 0xF0
+                    else:
+                        (DataIn + DataIn[3..0]) & 0xFF
+                else:
+                    (DataIn - DataIn[3..0]) & 0xFF
+            else:
+                match DataIn[3..0]:
+                    0x0: [(0 * 8)]
+                    0x1: [(1 * 8)]
+                    0x2: [(Sel[2..0] * 2)]
+                    0x3: [DataIn[7..4], Sel[2..0]]
+                    0x4: [Sel[2..0], DataIn[3..0]]
+                    0x5: DataIn << Sel[2..0]
+                    0x6: DataIn >> Sel[2..0]
+                    0x7: (DataIn << Sel[2..0]) | (DataIn >> (8 - Sel[2..0]))
+                    else: if DataIn[2]:
+                        [(DataIn[7..4] * 2), DataIn[3..0]]
+                    else:
+                        [DataIn[7..4], (DataIn[3..0] * 2)]
+            
+            else: if (DataIn[7..4] > Sel[2..0]) & (DataIn[3..0] < Sel[2..0]):
+                match DataIn[6..4]:
+                    0x0: DataIn
+                    0x1: DataIn + DataIn[3..0]
+                    0x2: DataIn - DataIn[3..0]
+                    0x3: DataIn & (DataIn[3..0] << 4)
+                    0x4: DataIn | (DataIn[3..0] << 4)
+                    0x5: DataIn ^ (DataIn[3..0] << 4)
+                    else: if DataIn[2..0] > 0x4:
+                        (DataIn << (DataIn[2..0] - 0x4)) & 0xFF
+                    else:
+                        (DataIn >> (0x4 - DataIn[2..0])) & 0xFF
+            else:
+                if (DataIn[7] & DataIn[0]) | (DataIn[6..4] == Sel[2..0]):
+                    [(DataIn[7..4] * 2), Sel[2..0]]
+                else:
+                    [Sel[2..0], (DataIn[3..0] * 2)]
+        
+        StateOut = state

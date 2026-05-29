@@ -1,0 +1,35 @@
+## Bridge System: Auto-Via Insertion Test
+##
+## This test verifies that the compiler automatically inserts a via
+## with the correct bridge interface and fill material when a transition
+## occurs between layers, using rules from the Generic profile.
+
+import * from @std/primitives/units
+import Generic from @std/profiles/generic
+import Copper from @std/materials/conductors
+import Generic_Barrier from @std/materials/bridges
+
+module AutoViaBridgeTest:
+    pins: []
+
+space TestAutoViaBridge implements AutoViaBridgeTest:
+    dimensions: 20mm by 20mm by 1mm
+    grid: 20000 by 20000 by 5
+    origin: tl by t
+    profile: Generic
+    
+    nets:
+        VDD: power
+    
+    ## Pour 1: VDD on Metal1 (z:1)
+    add pour(Copper) named VDD_Metal1 on z:1:
+        boundary: [x: 2mm, y: 2mm] to [x: 8mm, y: 8mm]
+        net: VDD
+    
+    ## Pour 2: VDD on Metal2 (z:2) - overlaps with Pour 1
+    add pour(Copper) named VDD_Metal2 on z:2:
+        boundary: [x: 5mm, y: 5mm] to [x: 12mm, y: 12mm]
+        net: VDD
+
+    ## Overlap region: [5mm, 5mm] to [8mm, 8mm]
+    ## Auto via should be inserted at [6.5mm, 6.5mm]

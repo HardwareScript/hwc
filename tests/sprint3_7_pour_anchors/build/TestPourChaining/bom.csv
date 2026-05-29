@@ -1,0 +1,10 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,100.00x30.00x2.00mm,,,,,1
+PowerRail_0,Pour,100.0000mm² net:VDD,Layer 1,,Copper,100.000000mm³
+PowerRail_1,Pour,100.0000mm² net:VDD,Layer 1,,Copper,100.000000mm³
+PowerRail_2,Pour,100.0000mm² net:VDD,Layer 1,,Copper,100.000000mm³
+PowerRail_3,Pour,100.0000mm² net:VDD,Layer 1,,Copper,100.000000mm³
+PowerRail_0,Pour(Copper),,,,,,1
+PowerRail_1,Pour(Copper),,,,,,1
+PowerRail_2,Pour(Copper),,,,,,1
+PowerRail_3,Pour(Copper),,,,,,1

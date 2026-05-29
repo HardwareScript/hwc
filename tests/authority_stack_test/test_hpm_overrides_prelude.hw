@@ -1,0 +1,9 @@
+# Test 6: HPM Overrides Prelude
+# HPM imports should override prelude definitions
+# This test verifies that prelude units work (actual HPM override testing is in Rust unit tests)
+
+space TestBoard:
+    dimensions: 100mm by 100mm by 1.6mm
+    grid: 1000 by 1000 by 2
+    origin: tl by t
+

@@ -1,0 +1,123 @@
+# Sprint 1.6: Sparse Connectivity Validation Test
+# Testing: Connectivity checker can "see" geometry through sparse substrate layers
+# Expected: 0 occupied voxels BUT connectivity checker detects all connections
+# Philosophy: "Connection, not density" - sparse architecture proves physical truth
+
+import * from @std/primitives/units
+
+# Define test materials
+material TestSilicon:
+    category: semiconductor
+    properties:
+        resistivity: 1.0e-3Ω·m
+        thermal_conductivity: 148W/(m·K)
+        density: 2329kg/m³
+        melting_point: 1414C
+        max_current_density: 1e6A/mm²
+        color: "#4A4A4A"
+        band_gap: 1.12eV
+
+material TestPolysilicon:
+    category: conductor
+    properties:
+        resistivity: 1.0e-4Ω·m
+        thermal_conductivity: 30W/(m·K)
+        density: 2330kg/m³
+        melting_point: 1414C
+        max_current_density: 1e5A/mm²
+        color: "#8B4513"
+
+material TestMetal:
+    category: conductor
+    properties:
+        resistivity: 2.82e-8Ω·m
+        thermal_conductivity: 237W/(m·K)
+        density: 2700kg/m³
+        melting_point: 660C
+        max_current_density: 10A/mm²
+        color: "#C0C0C0"
+
+# Test Case 1: Connected Net (should PASS connectivity check)
+space ConnectedNet:
+    dimensions: 1mm by 1mm by 1mm
+    grid: 100 by 100 by 10
+    origin: tl by t
+    
+    # Substrate wafer
+    add substrate(TestSilicon) spanning [x:0.01mm, y:0.01mm, z:1] to [x:0.99mm, y:0.99mm, z:6]
+    
+    # Two pours on the same net that physically touch
+    add pour(TestMetal) named Pour_A on z:7:
+        net: VDD
+        boundary: [x:0.2mm, y:0.2mm] to [x:0.4mm, y:0.4mm]
+    
+    add pour(TestMetal) named Pour_B on z:7:
+        net: VDD
+        boundary: [x:0.35mm, y:0.35mm] to [x:0.6mm, y:0.6mm]
+    
+    # These pours overlap, so connectivity checker should see them as connected
+
+# Test Case 2: Disconnected Net (should FAIL connectivity check)
+space DisconnectedNet:
+    dimensions: 1mm by 1mm by 1mm
+    grid: 100 by 100 by 10
+    origin: tl by t
+    
+    # Substrate wafer
+    add substrate(TestSilicon) spanning [x:0.01mm, y:0.01mm, z:1] to [x:0.99mm, y:0.99mm, z:6]
+    
+    # Two pours on the same net that DO NOT touch (gap between them)
+    add pour(TestMetal) named Pour_A on z:7:
+        net: VDD
+        boundary: [x:0.1mm, y:0.1mm] to [x:0.3mm, y:0.3mm]
+    
+    add pour(TestMetal) named Pour_B on z:7:
+        net: VDD
+        boundary: [x:0.5mm, y:0.5mm] to [x:0.7mm, y:0.7mm]
+    
+    # These pours have a gap, so connectivity checker should detect disconnection
+
+# Test Case 3: Multi-Layer Connection (vertical via)
+space VerticalConnection:
+    dimensions: 1mm by 1mm by 1mm
+    grid: 100 by 100 by 10
+    origin: tl by t
+    
+    # Substrate wafer
+    add substrate(TestSilicon) spanning [x:0.01mm, y:0.01mm, z:1] to [x:0.99mm, y:0.99mm, z:6]
+    
+    # Pour on layer 7
+    add pour(TestMetal) named Metal1 on z:7:
+        net: Signal
+        boundary: [x:0.3mm, y:0.3mm] to [x:0.5mm, y:0.5mm]
+    
+    # Pour on layer 8 (overlapping in XY)
+    add pour(TestMetal) named Metal2 on z:8:
+        net: Signal
+        boundary: [x:0.35mm, y:0.35mm] to [x:0.55mm, y:0.55mm]
+    
+    # These should be connected via Z-adjacency (layers touch)
+
+# Test Case 4: Complex Net with Multiple Connections
+space ComplexNet:
+    dimensions: 2mm by 2mm by 1mm
+    grid: 200 by 200 by 10
+    origin: tl by t
+    
+    # Substrate wafer
+    add substrate(TestSilicon) spanning [x:0.01mm, y:0.01mm, z:1] to [x:1.99mm, y:1.99mm, z:6]
+    
+    # Create a chain of connected pours (A -> B -> C)
+    add pour(TestMetal) named Pour_A on z:7:
+        net: GND
+        boundary: [x:0.2mm, y:0.5mm] to [x:0.6mm, y:0.7mm]
+    
+    add pour(TestMetal) named Pour_B on z:7:
+        net: GND
+        boundary: [x:0.5mm, y:0.5mm] to [x:1.0mm, y:0.7mm]
+    
+    add pour(TestMetal) named Pour_C on z:7:
+        net: GND
+        boundary: [x:0.9mm, y:0.5mm] to [x:1.4mm, y:0.7mm]
+    
+    # All three should be detected as connected (A overlaps B, B overlaps C)

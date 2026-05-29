@@ -1,0 +1,56 @@
+## Sprint 6: Spatial Arithmetic & Boundary Validation
+## This test exercises the full range of spatial variables and arithmetic
+## including min_z, last.bottom, and coordinate offsets.
+
+import * from @std/primitives/units
+import Gold, Copper from @std/materials/conductors
+import Silicon_P from @std/materials/doped_semiconductors
+
+component Chip:
+    layout:
+        shape: Rectangle(5mm, 5mm, 500um)
+    render:
+        type: procedural
+        shape: box
+
+space SpatialArithmeticTest:
+    dimensions: 100mm by 100mm by 20mm
+    grid: 1000 by 1000 by 200
+    origin: bl by b
+
+    ## Define a substrate from z:10 to z:15
+    add substrate(Silicon_P) spanning [x:0mm, y:0mm, z:10] to [x:100mm, y:100mm, z:15]
+
+    ## 1. Test substrate.max_z with arithmetic offset
+    ## Place a chip 1mm above the substrate surface
+    add Chip named FloatingChip at [x: 10mm, y: 10mm, z: substrate.max_z + 2]:
+        allow_substrate_overlap: true
+
+    ## 2. Test last.top with arithmetic offset
+    ## Stack another chip 500um above the FloatingChip
+    ## FloatingChip top is at 15 (substrate.max_z) + 2 (offset) + 1 (chip height 500um = 1 layer if voxel is 500um?)
+    ## Wait, grid is 20mm / 200 = 100um per voxel. 
+    ## So 500um = 5 voxels.
+    ## FloatingChip (height 5 voxels) base is at 17. Top is at 17 + 5 = 22.
+    add Chip named StackedChip at [x: 10mm, y: 10mm, z: last.top + 5]:
+        allow_substrate_overlap: true
+
+    ## 3. Test last.bottom
+    ## Place a chip at the same base level as the StackedChip
+    add Chip named LevelChip at [x: 20mm, y: 10mm, z: last.bottom]:
+        allow_substrate_overlap: true
+
+    ## 4. Test substrate.min_z
+    ## Place a chip at the very bottom of the substrate
+    add Chip named BuriedChip at [x: 30mm, y: 10mm, z: substrate.min_z]:
+        allow_substrate_overlap: true
+
+    ## 5. Test X/Y arithmetic with anchors
+    ## Place a chip to the right of LevelChip with a 5mm gap
+    add Chip named SideChip at [x: last.right + 10, y: 10mm, z: substrate.max_z]:
+        allow_substrate_overlap: true
+
+    ## 6. Test complex expressions (Nested arithmetic)
+    ## Note: Voxel size is 100um. 10 voxels = 1mm.
+    add Chip named ComplexChip at [x: 60mm, y: 60mm, z: (substrate.max_z + substrate.min_z) / 2]:
+        allow_substrate_overlap: true

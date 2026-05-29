@@ -1,0 +1,58 @@
+# Test: Via checks should pass with proper design
+# Task 4.2: DRC Engine - Via Checks
+#
+# This test creates vias that meet all diameter and enclosure requirements.
+# Expected: DRC should PASS (no P41 or P42 violations)
+
+import * from @std/primitives/units
+import Copper from @std/materials/conductors
+
+profile ReasonableVia:
+    description: "Reasonable via constraints"
+    
+    trace:
+        min_width: 100µm
+        min_spacing: 100µm
+    
+    via:
+        min_diameter: 300µm
+        min_annular_ring: 150µm
+
+space TestViaPass:
+    dimensions: 10mm by 10mm by 2mm
+    grid: 100 by 100 by 20
+    origin: tl by t
+    profile: ReasonableVia
+    
+    nets:
+        VCC: power
+        GND: ground
+    
+    # VCC connection with proper via
+    add pour(Copper) named VCC_Bottom on z:5:
+        boundary: [x: 1mm, y: 1mm] to [x: 4mm, y: 4mm]  # 3mm x 3mm pad
+        net: VCC
+    
+    add pour(Copper) named VCC_Top on z:15:
+        boundary: [x: 1mm, y: 1mm] to [x: 4mm, y: 4mm]  # 3mm x 3mm pad
+        net: VCC
+    
+    # Via with 400µm diameter in 3mm pad
+    # Annular ring = (1500µm - 200µm) = 1300µm > 150µm required ✓
+    add contact(Copper) named VCC_Via net: VCC at [x: 2.5mm, y: 2.5mm] spanning z:5 to z:15:
+        diameter: 400µm
+    
+    # GND connection with proper via
+    add pour(Copper) named GND_Bottom on z:5:
+        boundary: [x: 6mm, y: 6mm] to [x: 9mm, y: 9mm]  # 3mm x 3mm pad
+        net: GND
+    
+    add pour(Copper) named GND_Top on z:15:
+        boundary: [x: 6mm, y: 6mm] to [x: 9mm, y: 9mm]  # 3mm x 3mm pad
+        net: GND
+    
+    # Via with 350µm diameter in 3mm pad
+    # Annular ring = (1500µm - 175µm) = 1325µm > 150µm required ✓
+    add contact(Copper) named GND_Via net: GND at [x: 7.5mm, y: 7.5mm] spanning z:5 to z:15:
+        diameter: 350µm
+

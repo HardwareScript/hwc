@@ -1,0 +1,66 @@
+## GAP2: Substrate-Component Overlap Validation
+## Test: Component placed ABOVE substrate should succeed
+##
+## This test verifies that components placed on top of the substrate
+## (not overlapping) compile successfully without errors.
+##
+## Expected behavior:
+## - Compiler should accept the placement without errors
+## - Component should be placed successfully at z:3 (above substrate)
+## - Build should complete successfully
+##
+## Physical Reality:
+## - Substrate spans z:0 to z:2 → physically 0mm to 3mm
+## - Component at z:3 → physically at 3mm (ON TOP of substrate) ✅
+## - This is the correct way to place components
+
+import * from @std/primitives/units
+import Silicon_P from @std/materials/doped_semiconductors
+import Copper from @std/materials/conductors
+
+## ============================================================================
+## COMPONENT DEFINITION: Simple LED
+## ============================================================================
+
+component LED:
+    pins: [anode, cathode]
+    
+    layout:
+        shape: Rectangle(4mm, 4mm, 0.5mm)
+        
+        pin_positions:
+            anode at [1mm, 2mm]
+            cathode at [3mm, 2mm]
+    
+    metadata:
+        component_type: "LED"
+        description: "Simple LED for testing"
+    
+    render:
+        type: procedural
+        shape: box
+        body_color: "#00FF00"
+
+## ============================================================================
+## SPACE: Component Above Substrate (Should Succeed)
+## ============================================================================
+
+space TestComponentAboveSubstrate:
+    dimensions: 100mm by 100mm by 10mm
+    grid: 100000 by 100000 by 10
+    origin: bl
+    
+    ## Substrate spans z:0 to z:2 (physically 0mm to 3mm)
+    add substrate(Silicon_P) spanning [x:1um, y:1um, z:0] to [x:99999um, y:99999um, z:2]
+    
+    ## ========================================================================
+    ## SUCCESS CASE: Component placed at z:3 (ABOVE substrate)
+    ## 
+    ## This is the correct placement:
+    ## - Substrate ends at z:2 (3mm)
+    ## - Component starts at z:3 (3mm)
+    ## - No overlap → Physical Reality satisfied ✅
+    ## ========================================================================
+    
+    add LED named LED1 at [x: 50mm, y: 50mm, z: 3]  ## ✅ ON TOP OF SUBSTRATE
+

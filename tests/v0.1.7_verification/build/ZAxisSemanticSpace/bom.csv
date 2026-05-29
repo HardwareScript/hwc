@@ -1,0 +1,7 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,10.00x10.00x0.27mm,,,,,1
+TopPlane,Pour,49.0000mm² net:VDD,Z 0.0002mm,,Copper,0.490000mm³
+BottomPlane,Pour,49.0000mm² net:VDD,Z 0.0000mm,,Copper,0.490000mm³
+TopPlane,Pour(Copper),,,,,,1
+BottomPlane,Pour(Copper),,,,,,1
+StackVia,Contact(Copper),,,,,,1

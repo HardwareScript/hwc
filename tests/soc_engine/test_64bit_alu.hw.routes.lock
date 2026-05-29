@@ -1,0 +1,17 @@
+{
+  "version": "0.1.4",
+  "board": "SoC_ALU_64",
+  "grid": {
+    "dimensions": [
+      700,
+      20,
+      4
+    ],
+    "resolution": [
+      1.0,
+      1.0,
+      1.0
+    ]
+  },
+  "routes": []
+}

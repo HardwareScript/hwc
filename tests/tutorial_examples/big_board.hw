@@ -1,0 +1,38 @@
+# Manual Render Test: Big Board
+# Purpose: Testing GLB rendering of semi-transparent volumes and manual plates.
+# No auto-routing, no netlists, just raw geometry.
+
+material Gold:
+    category: conductor
+    properties:
+        color: "#FFD700"
+        opacity: 1.0
+        metallic: 1.0
+        roughness: 0.1
+
+material GlassGreen:
+    category: insulator
+    properties:
+        color: "#2E7D32"
+        opacity: 0.3     # Very transparent for render testing
+        metallic: 0.0
+        roughness: 0.1
+
+space ManualRenderSpace:
+    # Large 100x100mm area
+    dimensions: 100mm by 100mm by 10mm
+    grid: 200 by 200 by 50
+    origin: bl by b
+    
+    # 1. The Main Block (Large transparent box)
+    # Using 'substrate' as a raw volume primitive
+    add substrate(GlassGreen) spanning [x: 0mm, y: 0mm, z: 0mm] to [x: 100mm, y: 100mm, z: 5mm]
+    
+    # 2. Two Manual Gold Plates
+    # We use 'pour' here just to draw the 3D rectangle on top of the block.
+    # No 'net' property means no logical connectivity.
+    add pour(Gold) named ManualPlate1 on z: 5mm:
+        boundary: [x: 20mm, y: 40mm] to [x: 40mm, y: 60mm]
+
+    add pour(Gold) named ManualPlate2 on z: 5mm:
+        boundary: [x: 60mm, y: 40mm] to [x: 80mm, y: 60mm]

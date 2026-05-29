@@ -1,0 +1,56 @@
+## PMOS Transistor Component Definition
+## Reusable P-channel MOSFET with internal geometry
+
+import * from @std/primitives/units
+import Silicon_N, Silicon_P from @std/materials/doped_semiconductors
+import SiO2 from @std/materials/insulators
+import Polysilicon from @std/materials/conductors
+
+component PMOS:
+    pins: [gate, source, drain, bulk]
+    
+    layout:
+        shape: Rectangle(800um, 800um, 500um)
+        
+        ## Layer 1: Bulk (N-well) - connects to VDD
+        add pour(Silicon_N) named Bulk on z:1:
+            boundary: [x: 0um, y: 0um] to [x: 800um, y: 800um]
+            device: bulk
+            net: VDD
+        
+        ## Layer 2: Source (P-type silicon) - hole source
+        add pour(Silicon_P) named Source on z:2:
+            boundary: [x: 100um, y: 200um] to [x: 300um, y: 600um]
+            device: source
+            net: VDD
+        
+        ## Layer 2: Drain (P-type silicon) - hole drain
+        add pour(Silicon_P) named Drain on z:2:
+            boundary: [x: 500um, y: 200um] to [x: 700um, y: 600um]
+            device: drain
+            net: VOUT
+        
+        ## Layer 3: Gate oxide (SiO2 insulator)
+        add pour(SiO2) named GateOxide on z:3:
+            boundary: [x: 250um, y: 150um] to [x: 550um, y: 650um]
+        
+        ## Layer 4: Gate (Polysilicon) - control terminal
+        add pour(Polysilicon) named Gate on z:4:
+            boundary: [x: 300um, y: 200um] to [x: 500um, y: 600um]
+            device: gate
+            net: VIN
+        
+        pin_positions:
+            gate at [400um, 400um]
+            source at [200um, 400um]
+            drain at [600um, 400um]
+            bulk at [400um, 100um]
+    
+    metadata:
+        component_type: "PMOS Transistor"
+        description: "P-channel MOSFET with internal geometry"
+    
+    render:
+        type: procedural
+        shape: box
+        body_color: "#E24A4A"

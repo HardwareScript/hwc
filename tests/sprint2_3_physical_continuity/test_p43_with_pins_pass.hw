@@ -1,0 +1,63 @@
+## Test P43: Floating Conductor Detection - PASS case
+## This test creates a conductive island with a net assignment AND component pins touching it
+## Expected: No P43 violation (conductor is properly connected to component)
+
+import * from @std/primitives/units
+import Copper from @std/materials/conductors
+import FR4 from @std/materials/insulators
+import Silicon_P from @std/materials/doped_semiconductors
+
+## Simple component with two pins for testing
+component TestResistor:
+    pins: Plus, Minus
+    
+    layout:
+        shape: Rectangle(2mm, 1mm, 0.5mm)
+        pin_positions:
+            Plus at [0.5mm, 0.5mm]
+            Minus at [1.5mm, 0.5mm]
+    
+    electrical:
+        resistance: 100Ω
+    
+    render:
+        type: procedural
+        shape: smd_passive
+        body_color: "#000000"
+
+module WithPinsTest:
+    pins: [
+        power VCC,
+        ground GND
+    ]
+    
+    add TestResistor named R1
+    route R1.Plus to VCC
+    route R1.Minus to GND
+
+space TestP43WithPinsPass implements WithPinsTest:
+    dimensions: 10mm by 10mm by 1mm
+    grid: 10000 by 10000 by 10
+    origin: tl by t
+    
+    nets:
+        VCC: power
+        GND: ground
+    
+    ## Base substrate
+    add substrate(FR4) spanning [x: 0mm, y: 0mm, z: 0] to [x: 10mm, y: 10mm, z: 1]
+    
+    ## Pour with net assignment
+    add pour(Copper) named VCCPour on z:1:
+        boundary: [x: 2mm, y: 2mm] to [x: 8mm, y: 8mm]
+        net: VCC
+    
+    ## Component with pins that touch the pour
+    ## The resistor's pins will be inside the pour's bounding box
+    add TestResistor named R1 at [x: 5mm, y: 5mm, z: 1]
+    
+    ## GND pour for the other pin
+    add pour(Copper) named GNDPour on z:1:
+        boundary: [x: 2mm, y: 6mm] to [x: 4mm, y: 8mm]
+        net: GND
+

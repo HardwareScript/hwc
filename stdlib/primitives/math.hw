@@ -1,0 +1,53 @@
+##[ Hardware Script Standard Library - Mathematical Constants
+    
+    This file defines mathematical and physical constants for the Hardware Script compiler.
+    These constants are available globally without import and are resolved at parse time.
+    
+    The parser replaces constant names with their values during AST construction,
+    enabling compile-time constant folding and eliminating runtime lookups.
+]##
+
+## ============================================================================
+## MATHEMATICAL CONSTANTS
+## ============================================================================
+
+const PI: 3.14159265358979323846
+const E: 2.71828182845904523536
+
+## ============================================================================
+## PHYSICAL CONSTANTS
+## ============================================================================
+
+const SPEED_OF_LIGHT: 299792458  # m/s
+const VACUUM_PERMITTIVITY: 8.854187817e-12  # F/m (ε₀)
+const VACUUM_PERMEABILITY: 1.25663706212e-6  # H/m (µ₀)
+const BOLTZMANN_CONSTANT: 1.380649e-23  # J/K
+
+## ============================================================================
+## NOTES FOR USERS
+## ============================================================================
+##
+## HOW TO ADD A NEW CONSTANT:
+## 1. Use the format: const NAME: value
+## 2. Use UPPERCASE_WITH_UNDERSCORES for constant names
+## 3. Add a comment with units (if applicable)
+## 4. Save this file - no compiler recompilation needed!
+##
+## WHAT THE COMPILER DOES WITH THIS:
+## - Parses constants at startup into the Prelude layer
+## - Replaces constant names with values during parsing
+## - Enables compile-time constant folding (e.g., PI * 2 becomes 6.28...)
+## - Constants are available globally without import
+##
+## EXAMPLES OF USE:
+## - impedance: 50 * PI  # Calculates at compile time
+## - wavelength: SPEED_OF_LIGHT / frequency
+## - thermal_noise: BOLTZMANN_CONSTANT * temperature
+##
+## WHY THESE CONSTANTS?
+## - PI, E: Universal mathematical constants
+## - SPEED_OF_LIGHT: Needed for high-speed signal timing calculations
+## - VACUUM_PERMITTIVITY: Essential for calculating capacitance
+## - VACUUM_PERMEABILITY: Essential for calculating inductance
+## - BOLTZMANN_CONSTANT: Needed for thermal noise calculations
+##

@@ -1,0 +1,96 @@
+## v0.1.7 Z-Axis Abstraction — Assembly (Physical) Paradigm
+##
+## Verifies pours and substrate spanning with physical Z coordinates only.
+##
+## Run: hwc check hwc/tests/v0.1.7_verification/test_z_axis_assembly_physical.hw
+
+import * from @std/primitives/units
+import Copper, Silver, Gold from @std/materials/conductors
+import FR4 from @std/materials/insulators
+
+material TransCopper:
+    category: conductor
+    process: drilled_plated # v0.1.7: Explicitly declare that this material requires a hole
+    properties:
+        color: "#B87333"
+        opacity: 1.0        # Opaque for inspection
+        metallic: 0.8
+        roughness: 0.2
+
+material TransSilver:
+    category: conductor
+    properties:
+        color: "#C0C0C0"
+        opacity: 0.1        # Ghost-like transparency
+        metallic: 0.9
+        roughness: 0.1
+
+material TransGold:
+    category: conductor
+    properties:
+        color: "#FFD700"
+        opacity: 0.1        # Ghost-like transparency
+        metallic: 1.0
+        roughness: 0.05
+
+material TransFR4:
+    category: insulator
+    properties:
+        color: "#2D5A27"
+        opacity: 0.05       # Barely visible substrate
+        roughness: 0.8
+
+profile ZAxisAssemblyProfile:
+    description: "Profile with bridges for multi-material Z-axis test"
+    
+    via:
+        min_diameter: 0.3mm
+        min_annular_ring: 0.0mm
+
+    bridge TransSilver to TransCopper:
+        interface: TransCopper
+        fill: TransCopper
+    bridge TransCopper to TransSilver:
+        interface: TransCopper
+        fill: TransCopper
+    bridge TransGold to TransCopper:
+        interface: TransCopper
+        fill: TransCopper
+    bridge TransCopper to TransGold:
+        interface: TransCopper
+        fill: TransCopper
+    bridge TransSilver to TransGold:
+        interface: TransCopper
+        fill: TransCopper
+    bridge TransGold to TransSilver:
+        interface: TransCopper
+        fill: TransCopper
+
+module ZAxisAssemblyModule:
+    pins: []
+
+space ZAxisAssemblySpace implements ZAxisAssemblyModule:
+    dimensions: 20mm by 20mm by 1mm
+    grid: 100 by 100 by 10
+    origin: bl by b
+    profile: ZAxisAssemblyProfile
+
+    nets:
+        VDD: power
+
+    add substrate(TransFR4) spanning [x: 0mm, y: 0mm, z: 0mm] to [x: 20mm, y: 20mm, z: 0.1mm]
+
+    add pour(TransCopper) named PhysicalMid on z: 500um:
+        boundary: [x: 2mm, y: 2mm] to [x: 18mm, y: 18mm]
+        net: VDD
+        merge: true
+
+    add pour(TransSilver) named LowSlab on z: 100um:
+        boundary: [x: 2mm, y: 2mm] to [x: 18mm, y: 18mm]
+        net: VDD
+        merge: true
+
+    add pour(TransGold) named HighSlab on z: 200um:
+        boundary: [x: 2mm, y: 2mm] to [x: 18mm, y: 18mm]
+        net: VDD
+        merge: true

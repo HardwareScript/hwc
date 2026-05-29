@@ -1,0 +1,35 @@
+## Test forward reference in spatial positioning
+## M2 is defined before M1, but M2 depends on M1.right
+## v0.1.6 Gap 7: Spatial Topological Sorting
+
+import * from @std/primitives/units
+import Silicon_P from @std/materials/doped_semiconductors
+import Copper from @std/materials/conductors
+
+component NMOS:
+    pins: [gate, source, drain]
+    layout:
+        shape: Rectangle(10um, 10um, 1um)
+        pin_positions:
+            gate at [5um, 5um]
+            source at [2um, 2um]
+            drain at [8um, 8um]
+
+space ForwardRef:
+    dimensions: 100um by 100um by 2um
+    grid: 1000 by 1000 by 2
+    origin: tl by t
+
+    ## Base substrate
+    add substrate(Silicon_P) spanning [x:0um, y:0um, z:0] to [x:100um, y:100um, z:1]
+
+    ## M2 depends on M1, but M1 is defined later
+    add NMOS named M2 at [x: M1.right + 2um, y: 10um, z: 2]
+    
+    ## M1 is defined here
+    add NMOS named M1 at [x: 10um, y: 10um, z: 2]
+
+    ## Verify placement (logic check)
+    ## M1 at [10um, 10um, 1]
+    ## M1.right = 10um + 10um = 20um
+    ## M2 at [20um + 2um, 10um, 1] = [22um, 10um, 1]

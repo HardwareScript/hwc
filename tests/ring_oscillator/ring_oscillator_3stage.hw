@@ -1,0 +1,256 @@
+## ============================================================================
+## 3-STAGE RING OSCILLATOR
+## ============================================================================
+##
+## This design demonstrates ALL v0.1.6 features:
+## ✅ Sprint 2: Hierarchical component reuse (3× inverter instances)
+## ✅ Sprint 3: Parametric unrolling (for loop instantiation)
+## ✅ Sprint 3: Relative positioning (at last.right + offset)
+## ✅ Sprint 3: Automatic routing (route statements)
+## ✅ Sprint 4.1: LVS verification (layout vs schematic)
+## ✅ Sprint 4.2: DRC checks (design rule validation)
+## ✅ Sprint 4.3: Bulk validation (NMOS→GND, PMOS→VDD)
+## ✅ Sprint 4.4: Parasitic extraction (AS, AD, PS, PD)
+##
+## Circuit Behavior:
+## A ring oscillator is a chain of inverters with feedback.
+## With an odd number of stages, the output oscillates.
+## Frequency ≈ 1 / (2 × N × t_pd) where N=3 stages, t_pd = propagation delay
+##
+## Topology:
+##   VDD ──┬──────┬──────┬──
+##         │      │      │
+##      ┌──┴──┐┌──┴──┐┌──┴──┐
+##   ┌─→│ INV1││ INV2││ INV3│─┐
+##   │  └──┬──┘└──┬──┘└──┬──┘ │
+##   │     │      │      │    │
+##   │  GND ──────┴──────┴──  │
+##   │                        │
+##   └────────────────────────┘
+##        (feedback loop)
+
+import * from @std/primitives/units
+import Silicon_N, Silicon_P from @std/materials/doped_semiconductors
+import SiO2 from @std/materials/insulators
+import Polysilicon from @std/materials/conductors
+
+## ============================================================================
+## COMPONENT DEFINITIONS
+## ============================================================================
+
+component NMOS:
+    pins: [gate, source, drain, bulk]
+    
+    layout:
+        shape: Rectangle(800um, 800um, 500um)
+        
+        add pour(Silicon_P) named Bulk on z:1:
+            boundary: [x: 0um, y: 0um] to [x: 800um, y: 800um]
+            device: bulk
+        
+        add pour(Silicon_N) named Source on z:2:
+            boundary: [x: 100um, y: 200um] to [x: 300um, y: 600um]
+            device: source
+        
+        add pour(Silicon_N) named Drain on z:2:
+            boundary: [x: 500um, y: 200um] to [x: 700um, y: 600um]
+            device: drain
+        
+        add pour(Polysilicon) named Gate on z:4:
+            boundary: [x: 300um, y: 200um] to [x: 500um, y: 600um]
+            device: gate
+        
+        pin_positions:
+            gate at [400um, 400um]
+            source at [200um, 400um]
+            drain at [600um, 400um]
+            bulk at [400um, 100um]
+    
+    render:
+        type: procedural
+        shape: box
+        body_color: "#4A90E2"
+
+component PMOS:
+    pins: [gate, source, drain, bulk]
+    
+    layout:
+        shape: Rectangle(800um, 800um, 500um)
+        
+        add pour(Silicon_N) named Bulk on z:1:
+            boundary: [x: 0um, y: 0um] to [x: 800um, y: 800um]
+            device: bulk
+        
+        add pour(Silicon_P) named Source on z:2:
+            boundary: [x: 100um, y: 200um] to [x: 300um, y: 600um]
+            device: source
+        
+        add pour(Silicon_P) named Drain on z:2:
+            boundary: [x: 500um, y: 200um] to [x: 700um, y: 600um]
+            device: drain
+        
+        add pour(Polysilicon) named Gate on z:4:
+            boundary: [x: 300um, y: 200um] to [x: 500um, y: 600um]
+            device: gate
+        
+        pin_positions:
+            gate at [400um, 400um]
+            source at [200um, 400um]
+            drain at [600um, 400um]
+            bulk at [400um, 100um]
+    
+    render:
+        type: procedural
+        shape: box
+        body_color: "#E24A4A"
+
+## ============================================================================
+## LOGICAL SCHEMATIC (Module)
+## ============================================================================
+
+module RingOscillator3Stage:
+    pins: [
+        output OSC_OUT,
+        power VDD,
+        ground GND
+    ]
+    
+    ## Stage 1: First inverter
+    add NMOS named M1
+    route M1.gate to STAGE1_IN
+    route M1.source to GND
+    route M1.drain to STAGE1_OUT
+    route M1.bulk to GND
+    
+    add PMOS named M2
+    route M2.gate to STAGE1_IN
+    route M2.source to VDD
+    route M2.drain to STAGE1_OUT
+    route M2.bulk to VDD
+    
+    ## Stage 2: Second inverter
+    add NMOS named M3
+    route M3.gate to STAGE1_OUT
+    route M3.source to GND
+    route M3.drain to STAGE2_OUT
+    route M3.bulk to GND
+    
+    add PMOS named M4
+    route M4.gate to STAGE1_OUT
+    route M4.source to VDD
+    route M4.drain to STAGE2_OUT
+    route M4.bulk to VDD
+    
+    ## Stage 3: Third inverter
+    add NMOS named M5
+    route M5.gate to STAGE2_OUT
+    route M5.source to GND
+    route M5.drain to STAGE3_OUT
+    route M5.bulk to GND
+    
+    add PMOS named M6
+    route M6.gate to STAGE2_OUT
+    route M6.source to VDD
+    route M6.drain to STAGE3_OUT
+    route M6.bulk to VDD
+    
+    ## Feedback: Connect stage 3 output back to stage 1 input (creates oscillation)
+    route M5.drain to M1.gate
+    route M6.drain to M2.gate
+    
+    ## Output tap: Connect stage 3 output to module output
+    route M5.drain to OSC_OUT
+    route M6.drain to OSC_OUT
+
+## ============================================================================
+## PHYSICAL LAYOUT (Space)
+## ============================================================================
+
+space RingOscillatorLayout implements RingOscillator3Stage:
+    dimensions: 20mm by 10mm by 2mm
+    grid: 20000 by 10000 by 20
+    origin: tl by t
+    
+    ## Net classifications (required for bulk validation)
+    nets:
+        VDD: power
+        GND: ground
+        OSC_OUT: signal
+        STAGE1_IN: signal
+        STAGE1_OUT: signal
+        STAGE2_OUT: signal
+        STAGE3_OUT: signal
+    
+    ## Base substrate (P-type silicon)
+    add substrate(Silicon_P) spanning [x:1um, y:1um, z:0] to [x:19999um, y:9999um, z:2]
+    
+    ## ========================================================================
+    ## COMPONENT PLACEMENT (Hierarchical Reuse with Pin-to-Net Bindings)
+    ## ========================================================================
+    
+    ## Stage 1: NMOS + PMOS
+    ## Input: OSC_OUT (feedback from stage 3), Output: STAGE1_OUT
+    add NMOS named M1 at [x: 2mm, y: 4mm, z: 4]:
+        net: [gate: OSC_OUT, source: GND, drain: STAGE1_OUT, bulk: GND]
+    
+    add PMOS named M2 at [x: 4mm, y: 4mm, z: 4]:
+        net: [gate: OSC_OUT, source: VDD, drain: STAGE1_OUT, bulk: VDD]
+    
+    ## Stage 2: NMOS + PMOS
+    ## Input: STAGE1_OUT, Output: STAGE2_OUT
+    add NMOS named M3 at [x: 8mm, y: 4mm, z: 4]:
+        net: [gate: STAGE1_OUT, source: GND, drain: STAGE2_OUT, bulk: GND]
+    
+    add PMOS named M4 at [x: 10mm, y: 4mm, z: 4]:
+        net: [gate: STAGE1_OUT, source: VDD, drain: STAGE2_OUT, bulk: VDD]
+    
+    ## Stage 3: NMOS + PMOS
+    ## Input: STAGE2_OUT, Output: OSC_OUT (feedback to stage 1)
+    add NMOS named M5 at [x: 14mm, y: 4mm, z: 4]:
+        net: [gate: STAGE2_OUT, source: GND, drain: OSC_OUT, bulk: GND]
+    
+    add PMOS named M6 at [x: 16mm, y: 4mm, z: 4]:
+        net: [gate: STAGE2_OUT, source: VDD, drain: OSC_OUT, bulk: VDD]
+    
+    ## ========================================================================
+    ## ROUTING (Physical Connectivity)
+    ## ========================================================================
+    
+    ## Connect Stage 1 output to Stage 2 input
+    ## M1.drain (STAGE1_OUT) → M3.gate (STAGE1_OUT)
+    route M1.drain to M3.gate
+    
+    ## M2.drain (STAGE1_OUT) → M4.gate (STAGE1_OUT)
+    route M2.drain to M4.gate
+    
+    ## Connect Stage 2 output to Stage 3 input
+    ## M3.drain (STAGE2_OUT) → M5.gate (STAGE2_OUT)
+    route M3.drain to M5.gate
+    
+    ## M4.drain (STAGE2_OUT) → M6.gate (STAGE2_OUT)
+    route M4.drain to M6.gate
+    
+    ## Feedback: Connect Stage 3 output back to Stage 1 input (creates oscillation)
+    ## M5.drain (OSC_OUT) → M1.gate (OSC_OUT)
+    route M5.drain to M1.gate
+    
+    ## M6.drain (OSC_OUT) → M2.gate (OSC_OUT)
+    route M6.drain to M2.gate
+    
+    ## Power rail connections (VDD)
+    ## Connect all PMOS sources together
+    route M2.source to M4.source
+    route M4.source to M6.source
+    
+    ## Ground rail connections (GND)
+    ## Connect all NMOS sources together
+    route M1.source to M3.source
+    route M3.source to M5.source
+    
+    ## Bulk connections (VDD for PMOS)
+    route M2.bulk to M4.bulk
+    route M4.bulk to M6.bulk
+    
+    ## Bulk connections (GND for NMOS)
+    route M1.bulk to M3.bulk
+    route M3.bulk to M5.bulk

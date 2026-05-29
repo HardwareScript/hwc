@@ -1,0 +1,6 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,20.00x20.00x2.00mm,,,,,1
+GroundPlane,Pour,324.0000mm² net:Ground,Layer 1,,Copper,32.400000mm³
+PowerPlane,Pour,324.0000mm² net:Power,Layer 18,,Copper,32.400000mm³
+GroundPlane,Pour(Copper),,,,,,1
+PowerPlane,Pour(Copper),,,,,,1

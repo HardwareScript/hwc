@@ -1,0 +1,17 @@
+{
+  "version": "0.1.4",
+  "board": "StandingCard",
+  "grid": {
+    "dimensions": [
+      100,
+      100,
+      1
+    ],
+    "resolution": [
+      1.0,
+      1.0,
+      1.6
+    ]
+  },
+  "routes": []
+}

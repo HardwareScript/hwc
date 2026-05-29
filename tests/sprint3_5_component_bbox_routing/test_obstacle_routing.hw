@@ -1,0 +1,55 @@
+## Sprint 3.5: Component Bounding Box Obstacle Detection (GAP3)
+## Test: Auto-router should route around component obstacles
+##
+## Layout:
+##   Pad1 (5mm, 10mm) -----> [RESISTOR BLOCKS] -----> Pad2 (45mm, 10mm)
+##                           (25mm, 10mm)
+##
+## Expected: Router detects R1 bbox and routes AROUND it, not THROUGH it
+
+import Copper from @std/materials/conductors
+
+component SimplePad:
+    pins: [P1]
+    
+    layout:
+        shape: Rectangle(2mm, 2mm, 0.5mm)
+        pin_positions:
+            P1 at [1mm, 1mm]
+    
+    render:
+        type: procedural
+        shape: box
+        body_color: "#FFD700"
+
+component Resistor:
+    pins: [A, K]
+    
+    layout:
+        shape: Rectangle(8mm, 4mm, 1mm)
+        pin_positions:
+            A at [1mm, 2mm]
+            K at [7mm, 2mm]
+    
+    render:
+        type: procedural
+        shape: box
+        body_color: "#FF5722"
+
+space TestObstacleRouting:
+    dimensions: 60mm by 30mm by 4mm
+    grid: 600 by 300 by 4
+    
+    ## Add substrate (required for routing)
+    add substrate(Copper) spanning [x:1um, y:1um, z:0] to [x:59999um, y:29999um, z:2]
+    
+    ## Place pads on left and right
+    add SimplePad named Pad1 at [x: 5mm, y: 10mm, z: 1]
+    add SimplePad named Pad2 at [x: 50mm, y: 10mm, z: 1]
+    
+    ## Place resistor in the middle (blocking direct path at same Y coordinate)
+    add Resistor named R1 at [x: 26mm, y: 9mm, z: 1]
+    
+    ## Route between pads - router must go around R1
+    route Pad1.P1 to Pad2.P1
+

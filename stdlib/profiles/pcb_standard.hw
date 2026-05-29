@@ -1,0 +1,631 @@
+# PCB Standard Profiles - JLCPCB/PCBWay Manufacturing Specs
+#
+# These profiles define real-world manufacturing constraints from popular PCB fabs
+# Based on JLCPCB and PCBWay standard capabilities (as of 2024)
+#
+# References:
+# - JLCPCB Capabilities: https://jlcpcb.com/capabilities/pcb-capabilities
+# - PCBWay Capabilities: https://www.pcbway.com/capabilities.html
+# - IPC-2221 Standard for PCB Design
+
+## 2-Layer PCB Profiles
+
+profile JLCPCB_2Layer_Standard:
+    description: "JLCPCB 2-layer standard process (most economical)"
+    
+    layer:
+        max_count: 2
+        min_thickness: 1.6mm
+    
+    trace:
+        min_width: 127µm
+        min_spacing: 127µm
+    
+    via:
+        min_diameter: 300µm
+        min_annular_ring: 150µm
+    
+    clearance:
+        high_voltage: 2mm
+        safety_factor: 2.0
+        low_voltage_threshold: 50V
+        medium_voltage_threshold: 150V
+    
+    thermal:
+        ambient_temp: 25C
+        max_operating_temp: 85C
+        max_temp_rise: 20C
+        clustering_threshold: 5mm
+    
+    manufacturing:
+        copper_thickness: 35µm
+        ipc2221_k_external: 0.048
+        ipc2221_k_internal: 0.024
+    
+    stackup:
+        dielectric_height: 1.6mm
+        dielectric_material: "FR4"
+        copper_thickness: 35µm
+        default_impedance: 50.0
+
+profile JLCPCB_2Layer_Fine:
+    description: "JLCPCB 2-layer fine pitch (5mil trace/space)"
+    
+    layer:
+        max_count: 2
+        min_thickness: 1.6mm
+    
+    trace:
+        min_width: 100µm
+        min_spacing: 100µm
+    
+    via:
+        min_diameter: 250µm
+        min_annular_ring: 125µm
+    
+    clearance:
+        high_voltage: 2mm
+        safety_factor: 2.0
+        low_voltage_threshold: 50V
+        medium_voltage_threshold: 150V
+    
+    thermal:
+        ambient_temp: 25C
+        max_operating_temp: 85C
+        max_temp_rise: 20C
+        clustering_threshold: 5mm
+    
+    manufacturing:
+        copper_thickness: 35µm
+        ipc2221_k_external: 0.048
+        ipc2221_k_internal: 0.024
+    
+    stackup:
+        dielectric_height: 1.6mm
+        dielectric_material: "FR4"
+        copper_thickness: 35µm
+        default_impedance: 50.0
+
+profile PCBWay_2Layer_Standard:
+    description: "PCBWay 2-layer standard process"
+    
+    layer:
+        max_count: 2
+        min_thickness: 1.6mm
+    
+    trace:
+        min_width: 152µm
+        min_spacing: 152µm
+    
+    via:
+        min_diameter: 300µm
+        min_annular_ring: 150µm
+    
+    clearance:
+        high_voltage: 2mm
+        safety_factor: 2.0
+        low_voltage_threshold: 50V
+        medium_voltage_threshold: 150V
+    
+    thermal:
+        ambient_temp: 25C
+        max_operating_temp: 85C
+        max_temp_rise: 20C
+        clustering_threshold: 5mm
+    
+    manufacturing:
+        copper_thickness: 35µm
+        ipc2221_k_external: 0.048
+        ipc2221_k_internal: 0.024
+    
+    stackup:
+        dielectric_height: 1.6mm
+        dielectric_material: "FR4"
+        copper_thickness: 35µm
+        default_impedance: 50.0
+
+## 4-Layer PCB Profiles
+
+profile JLCPCB_4Layer_Standard:
+    description: "JLCPCB 4-layer standard process (with ground/power planes)"
+    
+    layer:
+        max_count: 4
+        min_thickness: 1.6mm
+    
+    trace:
+        min_width: 127µm
+        min_spacing: 127µm
+    
+    via:
+        min_diameter: 300µm
+        min_annular_ring: 150µm
+    
+    clearance:
+        high_voltage: 2mm
+        safety_factor: 2.0
+        low_voltage_threshold: 50V
+        medium_voltage_threshold: 150V
+    
+    thermal:
+        ambient_temp: 25C
+        max_operating_temp: 85C
+        max_temp_rise: 20C
+        clustering_threshold: 5mm
+    
+    manufacturing:
+        copper_thickness: 35µm
+        ipc2221_k_external: 0.048
+        ipc2221_k_internal: 0.024
+    
+    stackup:
+        dielectric_height: 200µm
+        dielectric_material: "FR4"
+        copper_thickness: 35µm
+        default_impedance: 50.0
+
+profile JLCPCB_4Layer_Impedance:
+    description: "JLCPCB 4-layer with controlled impedance (50Ω/90Ω)"
+    
+    layer:
+        max_count: 4
+        min_thickness: 1.6mm
+    
+    trace:
+        min_width: 100µm
+        min_spacing: 100µm
+    
+    via:
+        min_diameter: 250µm
+        min_annular_ring: 125µm
+    
+    clearance:
+        high_voltage: 2mm
+        safety_factor: 2.0
+        low_voltage_threshold: 50V
+        medium_voltage_threshold: 150V
+    
+    thermal:
+        ambient_temp: 25C
+        max_operating_temp: 85C
+        max_temp_rise: 20C
+        clustering_threshold: 5mm
+    
+    manufacturing:
+        copper_thickness: 35µm
+        ipc2221_k_external: 0.048
+        ipc2221_k_internal: 0.024
+    
+    stackup:
+        dielectric_height: 200µm
+        dielectric_material: "FR4"
+        copper_thickness: 35µm
+        default_impedance: 50.0
+
+profile PCBWay_4Layer_Standard:
+    description: "PCBWay 4-layer standard process"
+    
+    layer:
+        max_count: 4
+        min_thickness: 1.6mm
+    
+    trace:
+        min_width: 127µm
+        min_spacing: 127µm
+    
+    via:
+        min_diameter: 300µm
+        min_annular_ring: 150µm
+    
+    clearance:
+        high_voltage: 2mm
+        safety_factor: 2.0
+        low_voltage_threshold: 50V
+        medium_voltage_threshold: 150V
+    
+    thermal:
+        ambient_temp: 25C
+        max_operating_temp: 85C
+        max_temp_rise: 20C
+        clustering_threshold: 5mm
+    
+    manufacturing:
+        copper_thickness: 35µm
+        ipc2221_k_external: 0.048
+        ipc2221_k_internal: 0.024
+    
+    stackup:
+        dielectric_height: 200µm
+        dielectric_material: "FR4"
+        copper_thickness: 35µm
+        default_impedance: 50.0
+
+## 6-Layer PCB Profiles
+
+profile JLCPCB_6Layer_Standard:
+    description: "JLCPCB 6-layer standard process (high-speed digital)"
+    
+    layer:
+        max_count: 6
+        min_thickness: 1.6mm
+    
+    trace:
+        min_width: 100µm
+        min_spacing: 100µm
+    
+    via:
+        min_diameter: 250µm
+        min_annular_ring: 125µm
+    
+    clearance:
+        high_voltage: 2mm
+        safety_factor: 2.0
+        low_voltage_threshold: 50V
+        medium_voltage_threshold: 150V
+    
+    thermal:
+        ambient_temp: 25C
+        max_operating_temp: 85C
+        max_temp_rise: 20C
+        clustering_threshold: 5mm
+    
+    manufacturing:
+        copper_thickness: 35µm
+        ipc2221_k_external: 0.048
+        ipc2221_k_internal: 0.024
+    
+    stackup:
+        dielectric_height: 150µm
+        dielectric_material: "FR4"
+        copper_thickness: 35µm
+        default_impedance: 50.0
+
+profile JLCPCB_6Layer_HighSpeed:
+    description: "JLCPCB 6-layer high-speed (DDR, PCIe, USB3)"
+    
+    layer:
+        max_count: 6
+        min_thickness: 1.6mm
+    
+    trace:
+        min_width: 100µm
+        min_spacing: 100µm
+    
+    via:
+        min_diameter: 200µm
+        min_annular_ring: 100µm
+    
+    clearance:
+        high_voltage: 2mm
+        safety_factor: 2.0
+        low_voltage_threshold: 50V
+        medium_voltage_threshold: 150V
+    
+    thermal:
+        ambient_temp: 25C
+        max_operating_temp: 85C
+        max_temp_rise: 20C
+        clustering_threshold: 5mm
+    
+    manufacturing:
+        copper_thickness: 35µm
+        ipc2221_k_external: 0.048
+        ipc2221_k_internal: 0.024
+    
+    stackup:
+        dielectric_height: 150µm
+        dielectric_material: "FR4"
+        copper_thickness: 35µm
+        default_impedance: 50.0
+
+profile PCBWay_6Layer_Standard:
+    description: "PCBWay 6-layer standard process"
+    
+    layer:
+        max_count: 6
+        min_thickness: 1.6mm
+    
+    trace:
+        min_width: 100µm
+        min_spacing: 100µm
+    
+    via:
+        min_diameter: 250µm
+        min_annular_ring: 125µm
+    
+    clearance:
+        high_voltage: 2mm
+        safety_factor: 2.0
+        low_voltage_threshold: 50V
+        medium_voltage_threshold: 150V
+    
+    thermal:
+        ambient_temp: 25C
+        max_operating_temp: 85C
+        max_temp_rise: 20C
+        clustering_threshold: 5mm
+    
+    manufacturing:
+        copper_thickness: 35µm
+        ipc2221_k_external: 0.048
+        ipc2221_k_internal: 0.024
+    
+    stackup:
+        dielectric_height: 150µm
+        dielectric_material: "FR4"
+        copper_thickness: 35µm
+        default_impedance: 50.0
+
+## Heavy Copper Profiles (2oz+)
+
+profile JLCPCB_2Layer_HeavyCopper:
+    description: "JLCPCB 2-layer heavy copper (2oz, high current)"
+    
+    layer:
+        max_count: 2
+        min_thickness: 1.6mm
+    
+    trace:
+        min_width: 200µm
+        min_spacing: 200µm
+    
+    via:
+        min_diameter: 400µm
+        min_annular_ring: 200µm
+    
+    clearance:
+        high_voltage: 3mm
+        safety_factor: 2.5
+        low_voltage_threshold: 50V
+        medium_voltage_threshold: 150V
+    
+    thermal:
+        ambient_temp: 25C
+        max_operating_temp: 105C
+        max_temp_rise: 30C
+        clustering_threshold: 8mm
+    
+    manufacturing:
+        copper_thickness: 70µm
+        ipc2221_k_external: 0.048
+        ipc2221_k_internal: 0.024
+    
+    stackup:
+        dielectric_height: 1.6mm
+        dielectric_material: "FR4"
+        copper_thickness: 70µm
+        default_impedance: 50.0
+
+profile PCBWay_4Layer_HeavyCopper:
+    description: "PCBWay 4-layer heavy copper (2oz, power electronics)"
+    
+    layer:
+        max_count: 4
+        min_thickness: 1.6mm
+    
+    trace:
+        min_width: 200µm
+        min_spacing: 200µm
+    
+    via:
+        min_diameter: 400µm
+        min_annular_ring: 200µm
+    
+    clearance:
+        high_voltage: 3mm
+        safety_factor: 2.5
+        low_voltage_threshold: 50V
+        medium_voltage_threshold: 150V
+    
+    thermal:
+        ambient_temp: 25C
+        max_operating_temp: 105C
+        max_temp_rise: 30C
+        clustering_threshold: 8mm
+    
+    manufacturing:
+        copper_thickness: 70µm
+        ipc2221_k_external: 0.048
+        ipc2221_k_internal: 0.024
+    
+    stackup:
+        dielectric_height: 200µm
+        dielectric_material: "FR4"
+        copper_thickness: 70µm
+        default_impedance: 50.0
+
+## High-Temperature Profiles
+
+profile JLCPCB_4Layer_HighTemp:
+    description: "JLCPCB 4-layer high-temp FR4 (automotive, industrial)"
+    
+    layer:
+        max_count: 4
+        min_thickness: 1.6mm
+    
+    trace:
+        min_width: 150µm
+        min_spacing: 150µm
+    
+    via:
+        min_diameter: 300µm
+        min_annular_ring: 150µm
+    
+    clearance:
+        high_voltage: 2.5mm
+        safety_factor: 2.5
+        low_voltage_threshold: 50V
+        medium_voltage_threshold: 150V
+    
+    thermal:
+        ambient_temp: 85C
+        max_operating_temp: 125C
+        max_temp_rise: 15C
+        clustering_threshold: 8mm
+    
+    manufacturing:
+        copper_thickness: 35µm
+        ipc2221_k_external: 0.048
+        ipc2221_k_internal: 0.024
+    
+    stackup:
+        dielectric_height: 200µm
+        dielectric_material: "FR4"
+        copper_thickness: 35µm
+        default_impedance: 50.0
+
+## Flexible PCB Profiles
+
+profile JLCPCB_Flex_2Layer:
+    description: "JLCPCB 2-layer flexible PCB (polyimide)"
+    
+    layer:
+        max_count: 2
+        min_thickness: 100µm
+    
+    trace:
+        min_width: 100µm
+        min_spacing: 100µm
+    
+    via:
+        min_diameter: 300µm
+        min_annular_ring: 150µm
+    
+    clearance:
+        high_voltage: 1.5mm
+        safety_factor: 2.0
+        low_voltage_threshold: 50V
+        medium_voltage_threshold: 150V
+    
+    thermal:
+        ambient_temp: 25C
+        max_operating_temp: 105C
+        max_temp_rise: 25C
+        clustering_threshold: 5mm
+    
+    manufacturing:
+        copper_thickness: 18µm
+        ipc2221_k_external: 0.048
+        ipc2221_k_internal: 0.024
+    
+    stackup:
+        dielectric_height: 50µm
+        dielectric_material: "Polyimide"
+        copper_thickness: 18µm
+        default_impedance: 50.0
+
+profile PCBWay_Flex_4Layer:
+    description: "PCBWay 4-layer flexible PCB (rigid-flex)"
+    
+    layer:
+        max_count: 4
+        min_thickness: 200µm
+    
+    trace:
+        min_width: 100µm
+        min_spacing: 100µm
+    
+    via:
+        min_diameter: 250µm
+        min_annular_ring: 125µm
+    
+    clearance:
+        high_voltage: 1.5mm
+        safety_factor: 2.0
+        low_voltage_threshold: 50V
+        medium_voltage_threshold: 150V
+    
+    thermal:
+        ambient_temp: 25C
+        max_operating_temp: 105C
+        max_temp_rise: 25C
+        clustering_threshold: 5mm
+    
+    manufacturing:
+        copper_thickness: 18µm
+        ipc2221_k_external: 0.048
+        ipc2221_k_internal: 0.024
+    
+    stackup:
+        dielectric_height: 50µm
+        dielectric_material: "Polyimide"
+        copper_thickness: 18µm
+        default_impedance: 50.0
+
+## RF/Microwave Profiles
+
+profile JLCPCB_4Layer_RF:
+    description: "JLCPCB 4-layer RF/microwave (controlled impedance)"
+    
+    layer:
+        max_count: 4
+        min_thickness: 1.6mm
+    
+    trace:
+        min_width: 100µm
+        min_spacing: 100µm
+    
+    via:
+        min_diameter: 200µm
+        min_annular_ring: 100µm
+    
+    clearance:
+        high_voltage: 2mm
+        safety_factor: 2.0
+        low_voltage_threshold: 50V
+        medium_voltage_threshold: 150V
+    
+    thermal:
+        ambient_temp: 25C
+        max_operating_temp: 85C
+        max_temp_rise: 20C
+        clustering_threshold: 5mm
+    
+    manufacturing:
+        copper_thickness: 35µm
+        ipc2221_k_external: 0.048
+        ipc2221_k_internal: 0.024
+    
+    stackup:
+        dielectric_height: 200µm
+        dielectric_material: "FR4"
+        copper_thickness: 35µm
+        default_impedance: 50.0
+
+profile PCBWay_2Layer_Rogers:
+    description: "PCBWay 2-layer Rogers 4003C (high-frequency RF)"
+    
+    layer:
+        max_count: 2
+        min_thickness: 508µm
+    
+    trace:
+        min_width: 100µm
+        min_spacing: 100µm
+    
+    via:
+        min_diameter: 250µm
+        min_annular_ring: 125µm
+    
+    clearance:
+        high_voltage: 2mm
+        safety_factor: 2.0
+        low_voltage_threshold: 50V
+        medium_voltage_threshold: 150V
+    
+    thermal:
+        ambient_temp: 25C
+        max_operating_temp: 85C
+        max_temp_rise: 20C
+        clustering_threshold: 5mm
+    
+    manufacturing:
+        copper_thickness: 35µm
+        ipc2221_k_external: 0.048
+        ipc2221_k_internal: 0.024
+    
+    stackup:
+        dielectric_height: 508µm
+        dielectric_material: "Rogers4003C"
+        copper_thickness: 35µm
+        default_impedance: 50.0

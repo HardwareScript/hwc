@@ -1,0 +1,594 @@
+# Silicon Foundry Profiles - ASIC/IC Manufacturing Specs
+# Stress test: Nanometer-scale dimensions to test i64 fixed-point math
+
+## Silicon Foundry Overview
+## - Process nodes: 180nm (mature), 28nm (mainstream), 5nm (cutting-edge)
+## - Metal layers: 6-15 layers for interconnect
+## - Extreme precision: Sub-100nm features
+## - Different physics: Quantum effects, electromigration, IR drop
+
+# ============================================================================
+# TSMC Process Nodes
+# ============================================================================
+
+profile TSMC_180nm:
+    description: "TSMC 180nm process (mature node, automotive/IoT)"
+    
+    layer:
+        max_count: 6
+        min_thickness: 10µm
+    
+    trace:
+        min_width: 180nm
+        min_spacing: 180nm
+    
+    via:
+        min_diameter: 200nm
+        min_annular_ring: 50nm
+    
+    clearance:
+        high_voltage: 500nm
+        safety_factor: 1.5
+        low_voltage_threshold: 1.8V
+        medium_voltage_threshold: 3.3V
+    
+    thermal:
+        ambient_temp: 25C
+        max_operating_temp: 125C
+        max_temp_rise: 50C
+        clustering_threshold: 10µm
+    
+    manufacturing:
+        copper_thickness: 500nm
+        ipc2221_k_external: 0.024
+        ipc2221_k_internal: 0.012
+    
+    stackup:
+        dielectric_height: 1µm
+        dielectric_material: "SiO2"
+        copper_thickness: 500nm
+        default_impedance: 50.0
+
+profile TSMC_90nm:
+    description: "TSMC 90nm process (legacy node, cost-effective)"
+    
+    layer:
+        max_count: 8
+        min_thickness: 8µm
+    
+    trace:
+        min_width: 90nm
+        min_spacing: 90nm
+    
+    via:
+        min_diameter: 120nm
+        min_annular_ring: 30nm
+    
+    clearance:
+        high_voltage: 300nm
+        safety_factor: 1.5
+        low_voltage_threshold: 1.2V
+        medium_voltage_threshold: 2.5V
+    
+    thermal:
+        ambient_temp: 25C
+        max_operating_temp: 125C
+        max_temp_rise: 50C
+        clustering_threshold: 5µm
+    
+    manufacturing:
+        copper_thickness: 300nm
+        ipc2221_k_external: 0.024
+        ipc2221_k_internal: 0.012
+    
+    stackup:
+        dielectric_height: 500nm
+        dielectric_material: "SiO2"
+        copper_thickness: 300nm
+        default_impedance: 50.0
+
+profile TSMC_28nm:
+    description: "TSMC 28nm process (mainstream node, mobile/embedded)"
+    
+    layer:
+        max_count: 10
+        min_thickness: 5µm
+    
+    trace:
+        min_width: 28nm
+        min_spacing: 28nm
+    
+    via:
+        min_diameter: 40nm
+        min_annular_ring: 15nm
+    
+    clearance:
+        high_voltage: 150nm
+        safety_factor: 1.5
+        low_voltage_threshold: 0.9V
+        medium_voltage_threshold: 1.8V
+    
+    thermal:
+        ambient_temp: 25C
+        max_operating_temp: 125C
+        max_temp_rise: 60C
+        clustering_threshold: 2µm
+    
+    manufacturing:
+        copper_thickness: 150nm
+        ipc2221_k_external: 0.024
+        ipc2221_k_internal: 0.012
+    
+    stackup:
+        dielectric_height: 200nm
+        dielectric_material: "Low_k_Dielectric"
+        copper_thickness: 150nm
+        default_impedance: 50.0
+
+profile TSMC_16nm_FinFET:
+    description: "TSMC 16nm FinFET process (high-performance computing)"
+    
+    layer:
+        max_count: 12
+        min_thickness: 3µm
+    
+    trace:
+        min_width: 16nm
+        min_spacing: 16nm
+    
+    via:
+        min_diameter: 25nm
+        min_annular_ring: 10nm
+    
+    clearance:
+        high_voltage: 100nm
+        safety_factor: 1.5
+        low_voltage_threshold: 0.8V
+        medium_voltage_threshold: 1.2V
+    
+    thermal:
+        ambient_temp: 25C
+        max_operating_temp: 125C
+        max_temp_rise: 70C
+        clustering_threshold: 1µm
+    
+    manufacturing:
+        copper_thickness: 100nm
+        ipc2221_k_external: 0.024
+        ipc2221_k_internal: 0.012
+    
+    stackup:
+        dielectric_height: 100nm
+        dielectric_material: "Low_k_Dielectric"
+        copper_thickness: 100nm
+        default_impedance: 50.0
+
+profile TSMC_7nm:
+    description: "TSMC 7nm process (cutting-edge, smartphone SoCs)"
+    
+    layer:
+        max_count: 15
+        min_thickness: 2µm
+    
+    trace:
+        min_width: 7nm
+        min_spacing: 7nm
+    
+    via:
+        min_diameter: 12nm
+        min_annular_ring: 5nm
+    
+    clearance:
+        high_voltage: 50nm
+        safety_factor: 1.5
+        low_voltage_threshold: 0.7V
+        medium_voltage_threshold: 1.0V
+    
+    thermal:
+        ambient_temp: 25C
+        max_operating_temp: 125C
+        max_temp_rise: 80C
+        clustering_threshold: 500nm
+    
+    manufacturing:
+        copper_thickness: 50nm
+        ipc2221_k_external: 0.024
+        ipc2221_k_internal: 0.012
+    
+    stackup:
+        dielectric_height: 50nm
+        dielectric_material: "Ultra_Low_k"
+        copper_thickness: 50nm
+        default_impedance: 50.0
+
+profile TSMC_5nm:
+    description: "TSMC 5nm process (extreme UV lithography, flagship chips)"
+    
+    layer:
+        max_count: 15
+        min_thickness: 1.5µm
+    
+    trace:
+        min_width: 5nm
+        min_spacing: 5nm
+    
+    via:
+        min_diameter: 10nm
+        min_annular_ring: 3nm
+    
+    clearance:
+        high_voltage: 30nm
+        safety_factor: 1.5
+        low_voltage_threshold: 0.6V
+        medium_voltage_threshold: 0.9V
+    
+    thermal:
+        ambient_temp: 25C
+        max_operating_temp: 125C
+        max_temp_rise: 90C
+        clustering_threshold: 300nm
+    
+    manufacturing:
+        copper_thickness: 30nm
+        ipc2221_k_external: 0.024
+        ipc2221_k_internal: 0.012
+    
+    stackup:
+        dielectric_height: 30nm
+        dielectric_material: "Ultra_Low_k"
+        copper_thickness: 30nm
+        default_impedance: 50.0
+
+profile TSMC_3nm:
+    description: "TSMC 3nm process (next-gen, extreme density)"
+    
+    layer:
+        max_count: 18
+        min_thickness: 1µm
+    
+    trace:
+        min_width: 3nm
+        min_spacing: 3nm
+    
+    via:
+        min_diameter: 8nm
+        min_annular_ring: 2nm
+    
+    clearance:
+        high_voltage: 20nm
+        safety_factor: 1.5
+        low_voltage_threshold: 0.55V
+        medium_voltage_threshold: 0.8V
+    
+    thermal:
+        ambient_temp: 25C
+        max_operating_temp: 125C
+        max_temp_rise: 100C
+        clustering_threshold: 200nm
+    
+    manufacturing:
+        copper_thickness: 20nm
+        ipc2221_k_external: 0.024
+        ipc2221_k_internal: 0.012
+    
+    stackup:
+        dielectric_height: 20nm
+        dielectric_material: "Ultra_Low_k"
+        copper_thickness: 20nm
+        default_impedance: 50.0
+
+# ============================================================================
+# Intel Process Nodes
+# ============================================================================
+
+profile Intel_22nm:
+    description: "Intel 22nm process (tri-gate FinFET)"
+    
+    layer:
+        max_count: 11
+        min_thickness: 4µm
+    
+    trace:
+        min_width: 22nm
+        min_spacing: 22nm
+    
+    via:
+        min_diameter: 30nm
+        min_annular_ring: 12nm
+    
+    clearance:
+        high_voltage: 120nm
+        safety_factor: 1.5
+        low_voltage_threshold: 0.8V
+        medium_voltage_threshold: 1.5V
+    
+    thermal:
+        ambient_temp: 25C
+        max_operating_temp: 125C
+        max_temp_rise: 70C
+        clustering_threshold: 1.5µm
+    
+    manufacturing:
+        copper_thickness: 120nm
+        ipc2221_k_external: 0.024
+        ipc2221_k_internal: 0.012
+    
+    stackup:
+        dielectric_height: 120nm
+        dielectric_material: "Low_k_Dielectric"
+        copper_thickness: 120nm
+        default_impedance: 50.0
+
+profile Intel_10nm:
+    description: "Intel 10nm process (high-density logic)"
+    
+    layer:
+        max_count: 13
+        min_thickness: 2.5µm
+    
+    trace:
+        min_width: 10nm
+        min_spacing: 10nm
+    
+    via:
+        min_diameter: 15nm
+        min_annular_ring: 6nm
+    
+    clearance:
+        high_voltage: 60nm
+        safety_factor: 1.5
+        low_voltage_threshold: 0.7V
+        medium_voltage_threshold: 1.2V
+    
+    thermal:
+        ambient_temp: 25C
+        max_operating_temp: 125C
+        max_temp_rise: 85C
+        clustering_threshold: 800nm
+    
+    manufacturing:
+        copper_thickness: 60nm
+        ipc2221_k_external: 0.024
+        ipc2221_k_internal: 0.012
+    
+    stackup:
+        dielectric_height: 60nm
+        dielectric_material: "Ultra_Low_k"
+        copper_thickness: 60nm
+        default_impedance: 50.0
+
+profile Intel_7nm:
+    description: "Intel 7nm process (renamed Intel 4)"
+    
+    layer:
+        max_count: 15
+        min_thickness: 2µm
+    
+    trace:
+        min_width: 7nm
+        min_spacing: 7nm
+    
+    via:
+        min_diameter: 12nm
+        min_annular_ring: 5nm
+    
+    clearance:
+        high_voltage: 50nm
+        safety_factor: 1.5
+        low_voltage_threshold: 0.65V
+        medium_voltage_threshold: 1.0V
+    
+    thermal:
+        ambient_temp: 25C
+        max_operating_temp: 125C
+        max_temp_rise: 90C
+        clustering_threshold: 500nm
+    
+    manufacturing:
+        copper_thickness: 50nm
+        ipc2221_k_external: 0.024
+        ipc2221_k_internal: 0.012
+    
+    stackup:
+        dielectric_height: 50nm
+        dielectric_material: "Ultra_Low_k"
+        copper_thickness: 50nm
+        default_impedance: 50.0
+
+# ============================================================================
+# Samsung Process Nodes
+# ============================================================================
+
+profile Samsung_14nm:
+    description: "Samsung 14nm FinFET process"
+    
+    layer:
+        max_count: 12
+        min_thickness: 3µm
+    
+    trace:
+        min_width: 14nm
+        min_spacing: 14nm
+    
+    via:
+        min_diameter: 20nm
+        min_annular_ring: 8nm
+    
+    clearance:
+        high_voltage: 80nm
+        safety_factor: 1.5
+        low_voltage_threshold: 0.75V
+        medium_voltage_threshold: 1.2V
+    
+    thermal:
+        ambient_temp: 25C
+        max_operating_temp: 125C
+        max_temp_rise: 75C
+        clustering_threshold: 1µm
+    
+    manufacturing:
+        copper_thickness: 80nm
+        ipc2221_k_external: 0.024
+        ipc2221_k_internal: 0.012
+    
+    stackup:
+        dielectric_height: 80nm
+        dielectric_material: "Low_k_Dielectric"
+        copper_thickness: 80nm
+        default_impedance: 50.0
+
+profile Samsung_5nm:
+    description: "Samsung 5nm process (EUV lithography)"
+    
+    layer:
+        max_count: 15
+        min_thickness: 1.5µm
+    
+    trace:
+        min_width: 5nm
+        min_spacing: 5nm
+    
+    via:
+        min_diameter: 10nm
+        min_annular_ring: 3nm
+    
+    clearance:
+        high_voltage: 30nm
+        safety_factor: 1.5
+        low_voltage_threshold: 0.6V
+        medium_voltage_threshold: 0.9V
+    
+    thermal:
+        ambient_temp: 25C
+        max_operating_temp: 125C
+        max_temp_rise: 90C
+        clustering_threshold: 300nm
+    
+    manufacturing:
+        copper_thickness: 30nm
+        ipc2221_k_external: 0.024
+        ipc2221_k_internal: 0.012
+    
+    stackup:
+        dielectric_height: 30nm
+        dielectric_material: "Ultra_Low_k"
+        copper_thickness: 30nm
+        default_impedance: 50.0
+
+# ============================================================================
+# Extreme Stress Test Profiles
+# ============================================================================
+
+profile Silicon_Extreme_1nm:
+    description: "Extreme 1nm process (stress test for nanometer math overflow/underflow)"
+    
+    layer:
+        max_count: 20
+        min_thickness: 500nm
+    
+    trace:
+        min_width: 1nm
+        min_spacing: 1nm
+    
+    via:
+        min_diameter: 3nm
+        min_annular_ring: 1nm
+    
+    clearance:
+        high_voltage: 10nm
+        safety_factor: 1.5
+        low_voltage_threshold: 0.5V
+        medium_voltage_threshold: 0.7V
+    
+    thermal:
+        ambient_temp: 25C
+        max_operating_temp: 125C
+        max_temp_rise: 100C
+        clustering_threshold: 100nm
+    
+    manufacturing:
+        copper_thickness: 10nm
+        ipc2221_k_external: 0.024
+        ipc2221_k_internal: 0.012
+    
+    stackup:
+        dielectric_height: 10nm
+        dielectric_material: "Ultra_Low_k"
+        copper_thickness: 10nm
+        default_impedance: 50.0
+
+profile Silicon_Picometer_Test:
+    description: "Picometer-scale test (extreme stress test for fixed-point precision)"
+    
+    layer:
+        max_count: 10
+        min_thickness: 100nm
+    
+    trace:
+        min_width: 100pm
+        min_spacing: 100pm
+    
+    via:
+        min_diameter: 500pm
+        min_annular_ring: 100pm
+    
+    clearance:
+        high_voltage: 1nm
+        safety_factor: 1.5
+        low_voltage_threshold: 0.3V
+        medium_voltage_threshold: 0.5V
+    
+    thermal:
+        ambient_temp: 25C
+        max_operating_temp: 125C
+        max_temp_rise: 100C
+        clustering_threshold: 10nm
+    
+    manufacturing:
+        copper_thickness: 1nm
+        ipc2221_k_external: 0.024
+        ipc2221_k_internal: 0.012
+    
+    stackup:
+        dielectric_height: 1nm
+        dielectric_material: "Graphene"
+        copper_thickness: 1nm
+        default_impedance: 50.0
+
+profile Silicon_Mixed_Scale:
+    description: "Mixed scale test (millimeter board with nanometer features)"
+    
+    layer:
+        max_count: 8
+        min_thickness: 10mm
+    
+    trace:
+        min_width: 5nm
+        min_spacing: 5nm
+    
+    via:
+        min_diameter: 10nm
+        min_annular_ring: 3nm
+    
+    clearance:
+        high_voltage: 1mm
+        safety_factor: 2.0
+        low_voltage_threshold: 1V
+        medium_voltage_threshold: 5V
+    
+    thermal:
+        ambient_temp: 25C
+        max_operating_temp: 150C
+        max_temp_rise: 50C
+        clustering_threshold: 1mm
+    
+    manufacturing:
+        copper_thickness: 30nm
+        ipc2221_k_external: 0.048
+        ipc2221_k_internal: 0.024
+    
+    stackup:
+        dielectric_height: 1mm
+        dielectric_material: "SiO2"
+        copper_thickness: 30nm
+        default_impedance: 50.0

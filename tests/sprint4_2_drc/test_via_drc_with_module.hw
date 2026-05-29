@@ -1,0 +1,54 @@
+# Test: Via DRC with Module (Professional Mode)
+# Task 4.2: DRC Engine - Via Checks with Profile Integration
+#
+# This test creates a via that violates the profile constraints.
+# Expected: DRC should FAIL with via diameter violation
+
+import * from @std/primitives/units
+import Copper from @std/materials/conductors
+
+# Define strict profile for testing
+profile StrictVia:
+    description: "Strict via constraints for DRC testing"
+    
+    trace:
+        min_width: 100µm
+        min_spacing: 100µm
+    
+    via:
+        min_diameter: 500µm  # Require 500µm minimum
+        min_annular_ring: 200µm
+    
+    thermal:
+        ambient_temp: 25°C
+        max_operating_temp: 125°C
+        max_temp_rise: 100°C  # Allow 100°C rise to avoid false positives
+
+# Simple module for Professional Mode
+module ViaDrcTest:
+    pins: []
+
+# Space with profile reference
+space TestViaDrc implements ViaDrcTest:
+    dimensions: 10mm by 10mm by 2mm
+    grid: 100 by 100 by 20
+    origin: tl by t
+    profile: StrictVia
+    
+    nets:
+        Signal: signal
+    
+    # Bottom pour on z:5
+    add pour(Copper) named BottomPad on z:5:
+        boundary: [x: 3mm, y: 3mm] to [x: 7mm, y: 7mm]
+        net: Signal
+    
+    # Top pour on z:15
+    add pour(Copper) named TopPad on z:15:
+        boundary: [x: 3mm, y: 3mm] to [x: 7mm, y: 7mm]
+        net: Signal
+    
+    # Via that is too small (100µm diameter < 500µm required)
+    # This should trigger a DRC violation
+    add contact(Copper) named SmallVia net: Signal at [x: 5mm, y: 5mm] spanning z:5 to z:15:
+        diameter: 100µm  # Too small! Should trigger via diameter violation

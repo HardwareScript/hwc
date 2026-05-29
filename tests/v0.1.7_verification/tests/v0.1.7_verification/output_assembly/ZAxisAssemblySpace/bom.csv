@@ -1,0 +1,19 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,20.00x20.00x1.00mm,,,,,1
+PhysicalMid,Pour,256.0000mm² net:VDD,Z 0.0005mm,,TransCopper,25.600000mm³
+LowSlab,Pour,256.0000mm² net:VDD,Z 0.0001mm,,TransSilver,25.600000mm³
+HighSlab,Pour,256.0000mm² net:VDD,Z 0.0002mm,,TransGold,25.600000mm³
+PhysicalMid,Pour(TransCopper),,,,,,1
+LowSlab,Pour(TransSilver),,,,,,1
+HighSlab,Pour(TransGold),,,,,,1
+AutoVia_VDD_1_6,Contact(TransCopper),,,,,,1
+AutoVia_VDD_1_6,Contact(TransCopper),,,,,,1
+AutoVia_VDD_1_6,Contact(TransCopper),,,,,,1
+AutoVia_VDD_1_6,Contact(TransCopper),,,,,,1
+AutoVia_VDD_1_6,Contact(TransCopper),,,,,,1
+AutoVia_VDD_2_6,Contact(TransCopper),,,,,,1
+AutoVia_VDD_2_6,Contact(TransCopper),,,,,,1
+AutoVia_VDD_2_6,Contact(TransCopper),,,,,,1
+AutoVia_VDD_2_6,Contact(TransCopper),,,,,,1
+AutoVia_VDD_1_3,Contact(TransCopper),,,,,,1
+AutoVia_VDD_1_3,Contact(TransCopper),,,,,,1

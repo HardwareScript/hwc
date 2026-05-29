@@ -1,0 +1,45 @@
+# Yageo RC0805FR-0710KL - 10kΩ 0805 SMD Resistor
+# Real-world component from Yageo datasheet
+# Package: 0805 (2012 Metric)
+# Tolerance: ±1%
+# Power Rating: 1/8W (0.125W)
+# Source: https://www.yageo.com/
+
+component Resistor_0805_10K:
+    metadata:
+        manufacturer: "Yageo"
+        part_number: "RC0805FR-0710KL"
+        package: "0805"
+        value: "10kΩ"
+        tolerance: "±1%"
+        power_rating: "0.125W"
+        description: "Thick Film Resistor, 0805, 10kΩ, ±1%, 0.125W"
+        datasheet: "https://www.yageo.com/upload/media/product/productsearch/datasheet/rchip/PYu-RC_Group_51_RoHS_L_12.pdf"
+        category: "Passive"
+        subcategory: "Resistor"
+    
+    pins:
+        Pin1
+        Pin2
+    
+    layout:
+        shape: Rectangle(2.0mm, 1.25mm, 0.6mm)
+        pin_positions:
+            Pin1 at [0mm, 0.625mm]
+            Pin2 at [2.0mm, 0.625mm]
+    
+    electrical:
+        resistance: 10kΩ
+        tolerance: 1%
+        max_power: 0.125W
+        max_voltage: 150V
+        temperature_coefficient: 100ppm
+        operating_temp_min: -55°C
+        operating_temp_max: 155°C
+    
+    render:
+        type: procedural
+        shape: smd_passive
+        body_color: "#1a1a1a"
+        endcap_color: "#c0c0c0"
+        label: "103"

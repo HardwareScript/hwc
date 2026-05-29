@@ -1,0 +1,49 @@
+# Kingbright WP7113SRD - 5mm Red LED
+# Real-world component specifications
+# Package: T-1 3/4 (5mm Through-Hole)
+# Color: Red (640nm)
+# Luminous Intensity: 800-1000 mcd
+# Source: https://www.kingbrightusa.com/
+
+component LED_5mm_Red:
+    metadata:
+        manufacturer: "Kingbright"
+        part_number: "WP7113SRD"
+        package: "T-1 3/4"
+        value: "Red LED"
+        color: "Red"
+        wavelength: "640nm"
+        description: "5mm Red LED, 640nm, 800mcd, 30° viewing angle"
+        datasheet: "https://www.kingbrightusa.com/images/catalog/SPEC/WP7113SRD.pdf"
+        category: "Optoelectronics"
+        subcategory: "LED"
+    
+    pins:
+        Anode
+        Cathode
+    
+    layout:
+        shape: Cylinder(2.5mm, 8.6mm)
+        pin_positions:
+            Anode at [0mm, 0mm]
+            Cathode at [2.54mm, 0mm]
+    
+    electrical:
+        forward_voltage: 2.0V
+        forward_voltage_min: 1.8V
+        forward_voltage_max: 2.4V
+        forward_current: 20mA
+        max_forward_current: 30mA
+        reverse_voltage: 5V
+        luminous_intensity: 800mcd
+        wavelength_peak: 640nm
+        viewing_angle: 30°
+        operating_temp_min: -30°C
+        operating_temp_max: 85°C
+    
+    render:
+        type: procedural
+        shape: cylinder
+        body_color: "#ff0000"
+        lead_color: "#c0c0c0"
+        emissive: true

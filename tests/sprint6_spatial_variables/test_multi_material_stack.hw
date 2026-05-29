@@ -1,0 +1,78 @@
+## Sprint 6: Multi-Material Stacking Test
+## This test verifies that different materials can be stacked
+## and correctly rendered in 3D.
+## It also tests the anchor system with substrate.max_z and last.top.
+
+import * from @std/primitives/units
+import Gold, Copper, Tungsten from @std/materials/conductors
+import Silicon_P from @std/materials/doped_semiconductors
+
+component GoldChip:
+    metadata:
+        value: "Gold"
+    layout:
+        shape: Rectangle(10mm, 10mm, 500um)
+    render:
+        type: procedural
+        shape: box
+
+component TungstenChip:
+    metadata:
+        value: "Tungsten"
+    layout:
+        shape: Rectangle(10mm, 10mm, 500um)
+    render:
+        type: procedural
+        shape: box
+
+component CopperChip:
+    metadata:
+        value: "Copper"
+    layout:
+        shape: Rectangle(10mm, 10mm, 500um)
+    render:
+        type: procedural
+        shape: box
+
+component PolyChip:
+    metadata:
+        value: "Polysilicon"
+    layout:
+        shape: Rectangle(10mm, 10mm, 500um)
+    render:
+        type: procedural
+        shape: box
+
+space MultiMaterialStack:
+    dimensions: 100mm by 100mm by 20mm
+    grid: 1000 by 1000 by 200
+    origin: bl by b
+
+    ## Add a substrate
+    add substrate(Silicon_P) spanning [x:0mm, y:0mm, z:10] to [x:100mm, y:100mm, z:15]
+
+    ## Stack 1: Gold -> Tungsten -> Copper -> Polysilicon
+    add GoldChip named Stack1_Base at [x: 10mm, y: 10mm, z: substrate.max_z]:
+        allow_substrate_overlap: true
+    
+    add TungstenChip named Stack1_Middle at [x: 10mm, y: 10mm, z: last.top]:
+        allow_substrate_overlap: true
+
+    add CopperChip named Stack1_Top at [x: 10mm, y: 10mm, z: last.top]:
+        allow_substrate_overlap: true
+
+    add PolyChip named Stack1_UltraTop at [x: 10mm, y: 10mm, z: last.top]:
+        allow_substrate_overlap: true
+
+    ## Stack 2: Reverse order (Polysilicon -> Copper -> Tungsten -> Gold)
+    add PolyChip named Stack2_Base at [x: 30mm, y: 10mm, z: substrate.max_z]:
+        allow_substrate_overlap: true
+
+    add CopperChip named Stack2_Middle1 at [x: 30mm, y: 10mm, z: last.top]:
+        allow_substrate_overlap: true
+
+    add TungstenChip named Stack2_Middle2 at [x: 30mm, y: 10mm, z: last.top]:
+        allow_substrate_overlap: true
+
+    add GoldChip named Stack2_Top at [x: 30mm, y: 10mm, z: last.top]:
+        allow_substrate_overlap: true

@@ -1,0 +1,12 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,110.00x20.00x2.00mm,,,,,1
+P1,Pour,50.0000mm²,Layer 1,,Copper_Polished,50.000000mm³
+P2,Pour,50.0000mm²,Layer 1,,Copper_Oxidized,50.000000mm³
+P3,Pour,50.0000mm²,Layer 1,,FR4_Standard,50.000000mm³
+P4,Pour,50.0000mm²,Layer 1,,SolderMask_Green,50.000000mm³
+P5,Pour,50.0000mm²,Layer 1,,SolderMask_Blue,50.000000mm³
+P6,Pour,50.0000mm²,Layer 1,,SolderMask_Black,50.000000mm³
+P7,Pour,50.0000mm²,Layer 1,,Silkscreen_White,50.000000mm³
+P8,Pour,50.0000mm²,Layer 1,,Gold_ENIG,50.000000mm³
+P9,Pour,50.0000mm²,Layer 1,,Prepreg_Core,50.000000mm³
+P10,Pour,50.0000mm²,Layer 1,,Silver_HASL,50.000000mm³

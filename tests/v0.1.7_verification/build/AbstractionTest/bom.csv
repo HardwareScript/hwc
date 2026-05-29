@@ -1,0 +1,5 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,20.00x20.00x5.00mm,,,,,1
+RedBand,Pour,400.0000mm²,Z 0.0020mm,,LayerRed,40.000000mm³
+GreenBand,Pour,400.0000mm²,Z 0.0010mm,,LayerGreen,40.000000mm³
+BlueBand,Pour,400.0000mm²,Z 0.0000mm,,LayerBlue,40.000000mm³

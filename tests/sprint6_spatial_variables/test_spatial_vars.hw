@@ -1,0 +1,34 @@
+## Sprint 6: Spatial Variables - Floor & Stack Build
+## This test creates a 'floor' of chips and stacks one on top
+## verifies that GLB orientation is correct (Horizontal board)
+
+import * from @std/primitives/units
+
+component Chip:
+    pins: [vcc, gnd]
+    layout:
+        shape: Rectangle(5mm, 5mm, 100um)
+    render:
+        type: procedural
+        shape: box
+
+space SpatialVarsTest:
+    dimensions: 50mm by 50mm by 10mm
+    grid: 1000 by 1000 by 100
+    origin: bl by b
+
+    add substrate(Silicon_P) spanning [x:0mm, y:0mm, z:10] to [x:50mm, y:50mm, z:20]
+
+    ## Create a floor of 3 chips side-by-side (Horizontal/Landscape)
+    add Chip named Floor1 at [x: 5mm, y: 5mm, z: substrate.max_z]:
+        allow_substrate_overlap: true
+    
+    add Chip named Floor2 at [x: last.right, y: 5mm, z: substrate.max_z]:
+        allow_substrate_overlap: true
+
+    add Chip named Floor3 at [x: last.right, y: 5mm, z: substrate.max_z]:
+        allow_substrate_overlap: true
+
+    ## Stack a chip on top of the middle one (Vertical Stacking)
+    add Chip named Stack1 at [x: 10mm, y: 5mm, z: last.top]:
+        allow_substrate_overlap: true

@@ -1,0 +1,15 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,20.00x20.00x1.00mm,,,,,1
+VDD_Bottom,Pour,100.0000mm² net:VDD,Layer 1,,Copper,9.090900mm³
+VDD_Top,Pour,100.0000mm² net:VDD,Layer 10,,Copper,9.090900mm³
+VDD_Bottom,Pour(Copper),,,,,,1
+VDD_Top,Pour(Copper),,,,,,1
+AutoVia_VDD_1_2,Contact(Copper),,,,,,1
+AutoVia_VDD_2_3,Contact(Copper),,,,,,1
+AutoVia_VDD_3_4,Contact(Copper),,,,,,1
+AutoVia_VDD_4_5,Contact(Copper),,,,,,1
+AutoVia_VDD_5_6,Contact(Copper),,,,,,1
+AutoVia_VDD_6_7,Contact(Copper),,,,,,1
+AutoVia_VDD_7_8,Contact(Copper),,,,,,1
+AutoVia_VDD_8_9,Contact(Copper),,,,,,1
+AutoVia_VDD_9_10,Contact(Copper),,,,,,1

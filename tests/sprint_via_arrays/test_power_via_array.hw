@@ -1,0 +1,80 @@
+## Sprint: Via Array Generation for Power Distribution
+##
+## This test verifies CONSTRAINT-DRIVEN via array generation.
+## No mode strings. No magic keywords. Pure physics.
+##
+## The Declarative Truth:
+## 1. User declares: VDD: power (net classification)
+## 2. User declares: min_spacing: 1mm (spacing constraint)
+## 3. Compiler derives: "This is a power net with spacing → maximize conductivity"
+## 4. Result: Via array automatically fills the overlap area
+##
+## Expected Result:
+## ✅ Multiple vias inserted in grid pattern (derived from constraints)
+## ✅ Via spacing respects profile min_spacing
+## ✅ Signal nets get single vias (preserve impedance)
+
+import * from @std/primitives/units
+import Copper from @std/materials/conductors
+
+## Profile with via spacing constraint (no "array" keyword needed)
+profile PowerDistribution:
+    description: "Power distribution profile with via spacing"
+    
+    trace:
+        min_width: 200µm
+        min_spacing: 200µm
+    
+    via:
+        min_diameter: 300µm
+        min_annular_ring: 150µm
+        min_spacing: 1mm            # This + power net = automatic arrays
+
+module ViaArrayTest:
+    pins: []
+
+space TestPowerViaArray implements ViaArrayTest:
+    dimensions: 20mm by 20mm by 1mm
+    grid: 200 by 200 by 10
+    origin: tl by t
+    profile: PowerDistribution
+    
+    ## Net classifications (the ONLY hint the compiler needs)
+    nets:
+        VDD: power      # Power net → will get via arrays
+        GND: ground     # Ground net → will get via arrays
+        CLK: signal     # Signal net → will get single via
+    
+    ## Bottom VDD plane (z:1) - Large area for power distribution
+    add pour(Copper) named VDD_Bottom on z:1:
+        boundary: [x: 2mm, y: 2mm] to [x: 18mm, y: 18mm]
+        net: VDD
+    
+    ## Top VDD plane (z:3) - Large area for power distribution
+    add pour(Copper) named VDD_Top on z:3:
+        boundary: [x: 2mm, y: 2mm] to [x: 18mm, y: 18mm]
+        net: VDD
+    
+    ## GND plane on middle layer - should also get via array
+    add pour(Copper) named GND_Bottom on z:2:
+        boundary: [x: 5mm, y: 5mm] to [x: 8mm, y: 8mm]
+        net: GND
+    
+    add pour(Copper) named GND_Top on z:4:
+        boundary: [x: 5mm, y: 5mm] to [x: 8mm, y: 8mm]
+        net: GND
+    
+    ## Signal net - should get SINGLE via (preserve impedance)
+    add pour(Copper) named CLK_Bottom on z:1:
+        boundary: [x: 10mm, y: 10mm] to [x: 12mm, y: 12mm]
+        net: CLK
+    
+    add pour(Copper) named CLK_Top on z:3:
+        boundary: [x: 10mm, y: 10mm] to [x: 12mm, y: 12mm]
+        net: CLK
+
+## Expected behavior (derived from constraints, not modes):
+## - VDD (power) + min_spacing → ~16x16 = 256 vias
+## - GND (ground) + min_spacing → ~3x3 = 9 vias
+## - CLK (signal) → 1 via (impedance preservation)
+## - Zero "array_pattern" keywords. Zero magic strings. Pure declarative truth.

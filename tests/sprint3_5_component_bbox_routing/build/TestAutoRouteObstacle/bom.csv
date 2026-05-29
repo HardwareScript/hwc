@@ -1,0 +1,13 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,60.00x30.00x4.00mm,,,,,1
+Pad1_Terminal,Pour,1.0000mm² net:SIGNAL,Layer 1,,Copper,1.000000mm³
+Pad2_Terminal,Pour,1.0000mm² net:SIGNAL,Layer 1,,Copper,1.000000mm³
+R1_TerminalA,Pour,1.0000mm² net:NET_A,Layer 1,,Copper,1.000000mm³
+R1_TerminalK,Pour,1.0000mm² net:NET_K,Layer 1,,Copper,1.000000mm³
+Pad1,PadWithNet,,,,,,1
+Pad1_Terminal,Pour(Copper),,,,,,1
+Pad2,PadWithNet,,,,,,1
+Pad2_Terminal,Pour(Copper),,,,,,1
+R1,BlockingResistor,,,,,,1
+R1_TerminalA,Pour(Copper),,,,,,1
+R1_TerminalK,Pour(Copper),,,,,,1

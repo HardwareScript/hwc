@@ -1,0 +1,29 @@
+[package]
+name = "hwc-cli"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "hwc"
+path = "src/main.rs"
+
+[dependencies]
+clap = { workspace = true }
+miette = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+dirs = "5.0"
+rustc-hash = { version = "2.1" }
+compact_str = { workspace = true }
+mimalloc = { version = "0.1", default-features = false }
+
+hwc-parser = { workspace = true }
+hwc-compiler = { workspace = true }
+hwc-engine = { workspace = true }
+hwc-physics = { workspace = true }
+hwc-export = { workspace = true }
+hwc-materials = { workspace = true }
+hwc-stdlib = { workspace = true }
+hwc-diagnostics = { workspace = true }

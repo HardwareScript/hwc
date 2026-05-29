@@ -1,0 +1,60 @@
+## Sprint 8: Unified Intent-Based Waivers
+## Test: Collision and Floating waivers
+##
+## This test verifies:
+## 1. P12 (Collision) is waived by 'merge: true'
+## 2. P44 (Floating) is waived by 'floating: true'
+## 3. Substrate overlap is waived by 'merge: true'
+## 4. 'merge: [list]' works for surgical waivers
+
+import * from @std/primitives/units
+import Silicon_P from @std/materials/doped_semiconductors
+import Copper from @std/materials/conductors
+
+component Transistor:
+    pins: [gate, drain, source, bulk]
+    layout:
+        shape: Rectangle(10um, 10um, 1um)
+        pin_positions:
+            gate at [5um, 5um]
+            drain at [2um, 2um]
+            source at [8um, 8um]
+            bulk at [5um, 2um]
+    render:
+        type: procedural
+        shape: box
+        body_color: "#FF5722"
+
+space WaiverTest:
+    dimensions: 1mm by 1mm by 10um
+    grid: 1000 by 1000 by 10
+    origin: tl by t
+    
+    ## Base substrate
+    add substrate(Silicon_P) spanning [x:0, y:0, z:0] to [x:1mm, y:1mm, z:5]
+    
+    ## 1. Test: Substrate Overlap (Waived)
+    ## Normally this would error (P44) because it's inside the substrate (z:2)
+    add Transistor named M1_Waived at [x:100um, y:100um, z:2]:
+        merge: true
+    
+    ## 2. Test: Floating Component (Waived)
+    ## Normally this would error (P44) because it's above the substrate (z:7)
+    add Transistor named M2_Floating at [x:200um, y:100um, z:7]:
+        floating: true
+    
+    ## 3. Test: Array Geometric Collision (Waived)
+    ## Instances overlap because pitch (5um) < width (10um)
+    add Transistor[3] named FingerArray at [x:300um, y:100um, z:5]:
+        pitch: 5um
+        layout: horizontal_stack
+        merge: true
+        
+    ## 4. Test: Surgical Waiver (Waived)
+    ## Only the 'drain' region is allowed to overlap
+    add Transistor named M3_Surgical at [x:400um, y:100um, z:6]:
+        merge: [drain]
+    
+    ## Add a target for M3_Surgical to overlap with
+    add Transistor named M3_Target at [x:402um, y:102um, z:6]:
+        merge: true

@@ -1,0 +1,46 @@
+## Sprint 2.3: Physical Continuity Test - Via Bridge (PASS)
+## 
+## This test should PASS all physical continuity checks
+##
+## Test scenario:
+## - Two pours on different Z layers (z:1 and z:3)
+## - Connected by a via (contact) that bridges z:1 to z:3
+## - All three pieces form a single conductive island
+##
+## Expected result:
+## ✅ Physical continuity check passed - all islands are properly connected
+
+import * from @std/primitives/units
+import Copper from @std/materials/conductors
+
+module ViaBridgeTest:
+    pins: []
+
+space TestViaBridge implements ViaBridgeTest:
+    dimensions: 10mm by 10mm by 1mm
+    grid: 10000 by 10000 by 10
+    origin: tl by t
+    
+    ## Net classifications
+    nets:
+        VCC: power
+        GND: ground
+    
+    ## Layer 1: Bottom VCC pour
+    add pour(Copper) named VCC_Bottom on z:1:
+        boundary: [x: 1mm, y: 1mm] to [x: 8mm, y: 8mm]
+        net: VCC
+    
+    ## Layer 3: Top VCC pour (skipping z:2 to test multi-layer via)
+    add pour(Copper) named VCC_Top on z:5:
+        boundary: [x: 1mm, y: 1mm] to [x: 8mm, y: 8mm]
+        net: VCC
+    
+    ## Via connecting bottom to top
+    ## This should create a single island containing all three geometries
+    add contact(Copper) named VCC_Via net: VCC at [x: 4mm, y: 4mm] spanning z:1 to z:5
+    
+    ## GND plane on separate layer (for comparison) - smaller to avoid via
+    add pour(Copper) named GND_Plane on z:3:
+        boundary: [x: 1mm, y: 1mm] to [x: 3mm, y: 3mm]
+        net: GND

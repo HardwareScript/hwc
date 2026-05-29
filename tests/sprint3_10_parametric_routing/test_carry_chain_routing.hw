@@ -1,0 +1,55 @@
+## Sprint 3.10: Parametric Routing
+## Test: Carry chain routing with loop-aware connectivity
+##
+## This test verifies:
+## 1. Route statements inside for loops
+## 2. Loop variable substitution in pin references
+## 3. Automatic carry chain wiring
+
+import * from @std/primitives/units
+import Silicon_P from @std/materials/doped_semiconductors
+
+## ============================================================================
+## COMPONENT DEFINITION: Simple Adder Block
+## ============================================================================
+
+component Adder:
+    pins: [a, b, carry_in, sum, carry_out]
+    
+    layout:
+        shape: Rectangle(8mm, 4mm, 0.5mm)
+        pin_positions:
+            a at [1mm, 2mm]
+            b at [3mm, 2mm]
+            carry_in at [0mm, 2mm]
+            sum at [5mm, 2mm]
+            carry_out at [8mm, 2mm]
+    
+    metadata:
+        component_type: "1-bit Adder"
+    
+    render:
+        type: procedural
+        shape: box
+        body_color: "#4CAF50"
+
+## ============================================================================
+## SPACE: 4-bit Adder with Parametric Routing
+## ============================================================================
+
+space TestCarryChainRouting:
+    dimensions: 100mm by 10mm by 4mm
+    grid: 100000 by 10000 by 4
+    origin: tl by t
+    
+    ## Base substrate
+    add substrate(Silicon_P) spanning [x:1um, y:1um, z:0] to [x:99999um, y:9999um, z:2]
+    
+    ## Place 4 adders in a row
+    add Adder named Adder[0] at [x: 5mm, y: 5mm, z: 3]
+    for i in 1..3:
+        add Adder named Adder[i] at last.right + 2mm
+    
+    ## PARAMETRIC ROUTING: Connect carry chain
+    for i in 0..2:
+        route Adder[i].carry_out to Adder[i+1].carry_in

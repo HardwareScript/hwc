@@ -1,0 +1,18 @@
+# Test 2: Local Authority Overrides HPM
+# When both local and HPM define the same symbol, local wins
+
+# Local definition overrides HPM
+material Copper:
+    category: conductor
+    properties:
+        resistivity: 1.68e-8Ω·m  # LOCAL VALUE - should win
+        thermal_conductivity: 401W/(m·K)  # LOCAL VALUE - should win
+        density: 8960kg/m³  # LOCAL VALUE - should win
+        melting_point: 1358K
+        max_current_density: 3e9A/m²
+
+space TestBoard:
+    dimensions: 100mm by 100mm by 1.6mm
+    grid: 1000 by 1000 by 2
+    origin: tl by t
+

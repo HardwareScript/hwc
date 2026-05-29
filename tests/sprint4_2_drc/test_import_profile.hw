@@ -1,0 +1,13 @@
+# Test: Import profile from separate file
+# Task 4.2: DRC Engine - Profile Import Test
+
+import * from @std/primitives/units
+import StandardPCB, HighVoltage from profiles
+
+space ImportProfileTest:
+    dimensions: 20mm by 20mm by 2mm
+    grid: 200 by 200 by 2
+    profile: StandardPCB
+    
+    # Simple empty space to test profile import
+    # The profile should be loaded from profiles.hw

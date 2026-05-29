@@ -1,0 +1,401 @@
+# High-Density Interconnect (HDI) PCB Profiles
+# Stress test: Microscopic vias, extreme trace widths, blind/buried vias
+
+## HDI Technology Overview
+## - Microvias: Laser-drilled vias (typically 75-150µm diameter)
+## - Sequential lamination: Build-up layers added incrementally
+## - Fine-pitch capability: 0.4mm BGA pitch and below
+## - Blind vias: Connect outer layer to inner layer (not through-board)
+## - Buried vias: Connect inner layers only (invisible from outside)
+
+# ============================================================================
+# JLCPCB HDI Profiles
+# ============================================================================
+
+profile JLCPCB_HDI_4Layer_1_2_1:
+    description: "JLCPCB 4-layer HDI with 1+2+1 stackup (microvias on outer layers)"
+    
+    layer:
+        max_count: 4
+        min_thickness: 0.8mm
+    
+    trace:
+        min_width: 75µm
+        min_spacing: 75µm
+    
+    via:
+        min_diameter: 100µm
+        min_annular_ring: 50µm
+    
+    clearance:
+        high_voltage: 1.5mm
+        safety_factor: 2.0
+        low_voltage_threshold: 50V
+        medium_voltage_threshold: 150V
+    
+    thermal:
+        ambient_temp: 25C
+        max_operating_temp: 130C
+        max_temp_rise: 25C
+        clustering_threshold: 4mm
+    
+    manufacturing:
+        copper_thickness: 18µm
+        ipc2221_k_external: 0.048
+        ipc2221_k_internal: 0.024
+    
+    stackup:
+        dielectric_height: 100µm
+        dielectric_material: "FR4"
+        copper_thickness: 18µm
+        default_impedance: 50.0
+
+profile JLCPCB_HDI_6Layer_1_4_1:
+    description: "JLCPCB 6-layer HDI with 1+4+1 stackup (microvias on outer layers)"
+    
+    layer:
+        max_count: 6
+        min_thickness: 1.0mm
+    
+    trace:
+        min_width: 75µm
+        min_spacing: 75µm
+    
+    via:
+        min_diameter: 150µm
+        min_annular_ring: 75µm
+    
+    clearance:
+        high_voltage: 1.5mm
+        safety_factor: 2.0
+        low_voltage_threshold: 50V
+        medium_voltage_threshold: 150V
+    
+    thermal:
+        ambient_temp: 25C
+        max_operating_temp: 130C
+        max_temp_rise: 25C
+        clustering_threshold: 4mm
+    
+    manufacturing:
+        copper_thickness: 18µm
+        ipc2221_k_external: 0.048
+        ipc2221_k_internal: 0.024
+    
+    stackup:
+        dielectric_height: 100µm
+        dielectric_material: "FR4"
+        copper_thickness: 18µm
+        default_impedance: 50.0
+
+profile JLCPCB_HDI_8Layer_2_4_2:
+    description: "JLCPCB 8-layer HDI with 2+4+2 stackup (stacked microvias)"
+    
+    layer:
+        max_count: 8
+        min_thickness: 1.2mm
+    
+    trace:
+        min_width: 75µm
+        min_spacing: 75µm
+    
+    via:
+        min_diameter: 200µm
+        min_annular_ring: 100µm
+    
+    clearance:
+        high_voltage: 1.5mm
+        safety_factor: 2.0
+        low_voltage_threshold: 50V
+        medium_voltage_threshold: 150V
+    
+    thermal:
+        ambient_temp: 25C
+        max_operating_temp: 130C
+        max_temp_rise: 25C
+        clustering_threshold: 4mm
+    
+    manufacturing:
+        copper_thickness: 18µm
+        ipc2221_k_external: 0.048
+        ipc2221_k_internal: 0.024
+    
+    stackup:
+        dielectric_height: 100µm
+        dielectric_material: "FR4"
+        copper_thickness: 18µm
+        default_impedance: 50.0
+
+# ============================================================================
+# PCBWay HDI Profiles
+# ============================================================================
+
+profile PCBWay_HDI_4Layer_Standard:
+    description: "PCBWay 4-layer HDI with standard microvias"
+    
+    layer:
+        max_count: 4
+        min_thickness: 0.8mm
+    
+    trace:
+        min_width: 75µm
+        min_spacing: 75µm
+    
+    via:
+        min_diameter: 150µm
+        min_annular_ring: 75µm
+    
+    clearance:
+        high_voltage: 1.5mm
+        safety_factor: 2.0
+        low_voltage_threshold: 50V
+        medium_voltage_threshold: 150V
+    
+    thermal:
+        ambient_temp: 25C
+        max_operating_temp: 130C
+        max_temp_rise: 25C
+        clustering_threshold: 4mm
+    
+    manufacturing:
+        copper_thickness: 18µm
+        ipc2221_k_external: 0.048
+        ipc2221_k_internal: 0.024
+    
+    stackup:
+        dielectric_height: 100µm
+        dielectric_material: "FR4"
+        copper_thickness: 18µm
+        default_impedance: 50.0
+
+profile PCBWay_HDI_6Layer_Advanced:
+    description: "PCBWay 6-layer HDI with advanced features (stacked microvias)"
+    
+    layer:
+        max_count: 6
+        min_thickness: 1.0mm
+    
+    trace:
+        min_width: 50µm
+        min_spacing: 50µm
+    
+    via:
+        min_diameter: 150µm
+        min_annular_ring: 75µm
+    
+    clearance:
+        high_voltage: 1.5mm
+        safety_factor: 2.0
+        low_voltage_threshold: 50V
+        medium_voltage_threshold: 150V
+    
+    thermal:
+        ambient_temp: 25C
+        max_operating_temp: 170C
+        max_temp_rise: 30C
+        clustering_threshold: 4mm
+    
+    manufacturing:
+        copper_thickness: 12µm
+        ipc2221_k_external: 0.048
+        ipc2221_k_internal: 0.024
+    
+    stackup:
+        dielectric_height: 100µm
+        dielectric_material: "FR4_High_Tg"
+        copper_thickness: 12µm
+        default_impedance: 50.0
+
+# ============================================================================
+# Extreme HDI Profiles (Stress Test)
+# ============================================================================
+
+profile HDI_Extreme_Microvia:
+    description: "Extreme HDI profile with 75µm microvias (stress test for anti-pad generator)"
+    
+    layer:
+        max_count: 4
+        min_thickness: 0.6mm
+    
+    trace:
+        min_width: 50µm
+        min_spacing: 50µm
+    
+    via:
+        min_diameter: 75µm
+        min_annular_ring: 25µm
+    
+    clearance:
+        high_voltage: 1mm
+        safety_factor: 2.0
+        low_voltage_threshold: 50V
+        medium_voltage_threshold: 150V
+    
+    thermal:
+        ambient_temp: 25C
+        max_operating_temp: 200C
+        max_temp_rise: 40C
+        clustering_threshold: 3mm
+    
+    manufacturing:
+        copper_thickness: 9µm
+        ipc2221_k_external: 0.048
+        ipc2221_k_internal: 0.024
+    
+    stackup:
+        dielectric_height: 50µm
+        dielectric_material: "Rogers_RO4003C"
+        copper_thickness: 9µm
+        default_impedance: 50.0
+
+profile HDI_Any_Layer_Via:
+    description: "HDI with any-layer via technology (stress test for via stacking)"
+    
+    layer:
+        max_count: 10
+        min_thickness: 1.6mm
+    
+    trace:
+        min_width: 75µm
+        min_spacing: 75µm
+    
+    via:
+        min_diameter: 150µm
+        min_annular_ring: 75µm
+    
+    clearance:
+        high_voltage: 1.5mm
+        safety_factor: 2.0
+        low_voltage_threshold: 50V
+        medium_voltage_threshold: 150V
+    
+    thermal:
+        ambient_temp: 25C
+        max_operating_temp: 170C
+        max_temp_rise: 30C
+        clustering_threshold: 4mm
+    
+    manufacturing:
+        copper_thickness: 18µm
+        ipc2221_k_external: 0.048
+        ipc2221_k_internal: 0.024
+    
+    stackup:
+        dielectric_height: 100µm
+        dielectric_material: "FR4_High_Tg"
+        copper_thickness: 18µm
+        default_impedance: 50.0
+
+profile HDI_Ultra_Fine_Pitch:
+    description: "Ultra-fine pitch HDI for 0.35mm BGA (stress test for pad spacing)"
+    
+    layer:
+        max_count: 8
+        min_thickness: 1.0mm
+    
+    trace:
+        min_width: 50µm
+        min_spacing: 50µm
+    
+    via:
+        min_diameter: 100µm
+        min_annular_ring: 50µm
+    
+    clearance:
+        high_voltage: 1mm
+        safety_factor: 2.0
+        low_voltage_threshold: 50V
+        medium_voltage_threshold: 150V
+    
+    thermal:
+        ambient_temp: 25C
+        max_operating_temp: 170C
+        max_temp_rise: 30C
+        clustering_threshold: 3mm
+    
+    manufacturing:
+        copper_thickness: 12µm
+        ipc2221_k_external: 0.048
+        ipc2221_k_internal: 0.024
+    
+    stackup:
+        dielectric_height: 75µm
+        dielectric_material: "FR4_High_Tg"
+        copper_thickness: 12µm
+        default_impedance: 50.0
+
+profile HDI_Extreme_Density:
+    description: "Maximum density HDI (stress test for routing engine at microscopic scales)"
+    
+    layer:
+        max_count: 12
+        min_thickness: 1.6mm
+    
+    trace:
+        min_width: 40µm
+        min_spacing: 40µm
+    
+    via:
+        min_diameter: 75µm
+        min_annular_ring: 25µm
+    
+    clearance:
+        high_voltage: 0.8mm
+        safety_factor: 2.0
+        low_voltage_threshold: 50V
+        medium_voltage_threshold: 150V
+    
+    thermal:
+        ambient_temp: 25C
+        max_operating_temp: 200C
+        max_temp_rise: 40C
+        clustering_threshold: 2mm
+    
+    manufacturing:
+        copper_thickness: 9µm
+        ipc2221_k_external: 0.048
+        ipc2221_k_internal: 0.024
+    
+    stackup:
+        dielectric_height: 50µm
+        dielectric_material: "Rogers_RO4003C"
+        copper_thickness: 9µm
+        default_impedance: 50.0
+
+profile HDI_Mobile_Device:
+    description: "Mobile device HDI (smartphone/tablet typical specs)"
+    
+    layer:
+        max_count: 8
+        min_thickness: 0.8mm
+    
+    trace:
+        min_width: 60µm
+        min_spacing: 60µm
+    
+    via:
+        min_diameter: 100µm
+        min_annular_ring: 40µm
+    
+    clearance:
+        high_voltage: 1mm
+        safety_factor: 2.0
+        low_voltage_threshold: 50V
+        medium_voltage_threshold: 150V
+    
+    thermal:
+        ambient_temp: 25C
+        max_operating_temp: 85C
+        max_temp_rise: 20C
+        clustering_threshold: 3mm
+    
+    manufacturing:
+        copper_thickness: 12µm
+        ipc2221_k_external: 0.048
+        ipc2221_k_internal: 0.024
+    
+    stackup:
+        dielectric_height: 75µm
+        dielectric_material: "FR4"
+        copper_thickness: 12µm
+        default_impedance: 50.0

@@ -1,0 +1,78 @@
+## ============================================================================
+## SPRINT 9: PATTERN DETECTION TEST
+## ============================================================================
+##
+## Tests the pattern detection algorithm's ability to identify and group
+## violations with different naming patterns:
+## - Sequential numbering (Cell0, Cell1, Cell2...)
+## - Non-sequential numbering (Cell5, Cell10, Cell15...)
+## - Mixed patterns (CellA, CellB, CellC...)
+## - Unrelated names that should NOT be grouped
+
+import * from @std/primitives/units
+import FR4 from @std/materials/insulators
+
+component Cell:
+    pins: [a, b]
+    layout:
+        shape: Rectangle(1mm, 1mm, 200um)
+    render:
+        type: procedural
+        shape: box
+        body_color: "#3498DB"
+
+module PatternBoard:
+    pins: [power VDD]
+    
+    ## Sequential pattern
+    add Cell named Cell0
+    add Cell named Cell1
+    add Cell named Cell2
+    add Cell named Cell3
+    
+    ## Non-sequential pattern
+    add Cell named Cell5
+    add Cell named Cell10
+    add Cell named Cell15
+    
+    ## Letter suffix pattern
+    add Cell named CellA
+    add Cell named CellB
+    add Cell named CellC
+    
+    ## Unrelated names (should not be grouped together)
+    add Cell named Alpha
+    add Cell named Beta
+    add Cell named Gamma
+
+space PatternDetectionTest implements PatternBoard:
+    dimensions: 100mm by 50mm by 10mm
+    grid: 1000 by 500 by 100
+    origin: bl by b
+
+    nets:
+        VDD: power
+
+    ## Substrate at z:40-50
+    add substrate(FR4) spanning [x:0mm, y:0mm, z:40] to [x:100mm, y:50mm, z:50]
+
+    ## GROUP 1: Sequential pattern - all floating at z:60
+    add Cell named Cell0 at [x:  5mm, y: 10mm, z: 60]
+    add Cell named Cell1 at [x: 10mm, y: 10mm, z: 60]
+    add Cell named Cell2 at [x: 15mm, y: 10mm, z: 60]
+    add Cell named Cell3 at [x: 20mm, y: 10mm, z: 60]
+
+    ## GROUP 2: Non-sequential pattern - all buried at z:30
+    add Cell named Cell5  at [x: 30mm, y: 10mm, z: 30]
+    add Cell named Cell10 at [x: 35mm, y: 10mm, z: 30]
+    add Cell named Cell15 at [x: 40mm, y: 10mm, z: 30]
+
+    ## GROUP 3: Letter suffix pattern - all floating at z:65
+    add Cell named CellA at [x: 50mm, y: 10mm, z: 65]
+    add Cell named CellB at [x: 55mm, y: 10mm, z: 65]
+    add Cell named CellC at [x: 60mm, y: 10mm, z: 65]
+
+    ## GROUP 4: Unrelated names - should each be reported individually
+    add Cell named Alpha at [x: 70mm, y: 10mm, z: 70]
+    add Cell named Beta  at [x: 75mm, y: 10mm, z: 25]
+    add Cell named Gamma at [x: 80mm, y: 10mm, z: 75]

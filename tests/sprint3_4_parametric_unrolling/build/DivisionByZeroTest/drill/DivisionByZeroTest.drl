@@ -1,0 +1,7 @@
+M48
+; DRILL file {DivisionByZeroTest} date 2026-04-30
+; FORMAT={-:-/ absolute / inch / decimal}
+FMAT,2
+INCH
+%
+M30

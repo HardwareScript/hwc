@@ -1,0 +1,185 @@
+## Performance Benchmark Test
+## This test creates a realistic PCB with many pours and contacts
+## to measure the performance of the physical continuity checker
+## Uses Artist Mode (no module) to avoid device binding complexity
+
+import * from @std/primitives/units
+import Copper from @std/materials/conductors
+import FR4 from @std/materials/insulators
+
+space BenchmarkPCB:
+    dimensions: 50mm by 50mm by 2mm
+    grid: 50000 by 50000 by 20
+    origin: tl by t
+    
+    nets:
+        VCC: power
+        GND: ground
+        SIG1: signal
+        SIG2: signal
+        SIG3: signal
+        SIG4: signal
+        SIG5: signal
+        SIG6: signal
+        SIG7: signal
+        SIG8: signal
+        SIG9: signal
+        SIG10: signal
+    
+    ## Base substrate
+    add substrate(FR4) spanning [x: 0mm, y: 0mm, z: 0] to [x: 50mm, y: 50mm, z: 1]
+    
+    ## Large VCC power plane on layer 2
+    add pour(Copper) named VCCPlane on z:2:
+        boundary: [x: 1mm, y: 1mm] to [x: 49mm, y: 24mm]
+        net: VCC
+    
+    ## Large GND ground plane on layer 2
+    add pour(Copper) named GNDPlane on z:2:
+        boundary: [x: 1mm, y: 26mm] to [x: 49mm, y: 49mm]
+        net: GND
+    
+    ## Add 20 signal routing pours on layer 2
+    add pour(Copper) named Sig1_A on z:2:
+        boundary: [x: 2mm, y: 2mm] to [x: 5mm, y: 3mm]
+        net: SIG1
+    
+    add pour(Copper) named Sig1_B on z:2:
+        boundary: [x: 6mm, y: 2mm] to [x: 9mm, y: 3mm]
+        net: SIG1
+    
+    add pour(Copper) named Sig2_A on z:2:
+        boundary: [x: 10mm, y: 2mm] to [x: 13mm, y: 3mm]
+        net: SIG2
+    
+    add pour(Copper) named Sig2_B on z:2:
+        boundary: [x: 14mm, y: 2mm] to [x: 17mm, y: 3mm]
+        net: SIG2
+    
+    add pour(Copper) named Sig3_A on z:2:
+        boundary: [x: 18mm, y: 2mm] to [x: 21mm, y: 3mm]
+        net: SIG3
+    
+    add pour(Copper) named Sig3_B on z:2:
+        boundary: [x: 22mm, y: 2mm] to [x: 25mm, y: 3mm]
+        net: SIG3
+    
+    add pour(Copper) named Sig4_A on z:2:
+        boundary: [x: 26mm, y: 2mm] to [x: 29mm, y: 3mm]
+        net: SIG4
+    
+    add pour(Copper) named Sig4_B on z:2:
+        boundary: [x: 30mm, y: 2mm] to [x: 33mm, y: 3mm]
+        net: SIG4
+    
+    add pour(Copper) named Sig5_A on z:2:
+        boundary: [x: 34mm, y: 2mm] to [x: 37mm, y: 3mm]
+        net: SIG5
+    
+    add pour(Copper) named Sig5_B on z:2:
+        boundary: [x: 38mm, y: 2mm] to [x: 41mm, y: 3mm]
+        net: SIG5
+    
+    add pour(Copper) named Sig6_A on z:2:
+        boundary: [x: 2mm, y: 5mm] to [x: 5mm, y: 6mm]
+        net: SIG6
+    
+    add pour(Copper) named Sig6_B on z:2:
+        boundary: [x: 6mm, y: 5mm] to [x: 9mm, y: 6mm]
+        net: SIG6
+    
+    add pour(Copper) named Sig7_A on z:2:
+        boundary: [x: 10mm, y: 5mm] to [x: 13mm, y: 6mm]
+        net: SIG7
+    
+    add pour(Copper) named Sig7_B on z:2:
+        boundary: [x: 14mm, y: 5mm] to [x: 17mm, y: 6mm]
+        net: SIG7
+    
+    add pour(Copper) named Sig8_A on z:2:
+        boundary: [x: 18mm, y: 5mm] to [x: 21mm, y: 6mm]
+        net: SIG8
+    
+    add pour(Copper) named Sig8_B on z:2:
+        boundary: [x: 22mm, y: 5mm] to [x: 25mm, y: 6mm]
+        net: SIG8
+    
+    add pour(Copper) named Sig9_A on z:2:
+        boundary: [x: 26mm, y: 5mm] to [x: 29mm, y: 6mm]
+        net: SIG9
+    
+    add pour(Copper) named Sig9_B on z:2:
+        boundary: [x: 30mm, y: 5mm] to [x: 33mm, y: 6mm]
+        net: SIG9
+    
+    add pour(Copper) named Sig10_A on z:2:
+        boundary: [x: 34mm, y: 5mm] to [x: 37mm, y: 6mm]
+        net: SIG10
+    
+    add pour(Copper) named Sig10_B on z:2:
+        boundary: [x: 38mm, y: 5mm] to [x: 41mm, y: 6mm]
+        net: SIG10
+    
+    ## Add 30 vias connecting layers (creates complex connectivity)
+    add contact(Copper) named Via1 net: VCC at [x: 5mm, y: 5mm] spanning z:2 to z:4
+    add contact(Copper) named Via2 net: VCC at [x: 10mm, y: 5mm] spanning z:2 to z:4
+    add contact(Copper) named Via3 net: VCC at [x: 15mm, y: 5mm] spanning z:2 to z:4
+    add contact(Copper) named Via4 net: VCC at [x: 20mm, y: 5mm] spanning z:2 to z:4
+    add contact(Copper) named Via5 net: VCC at [x: 25mm, y: 5mm] spanning z:2 to z:4
+    add contact(Copper) named Via6 net: VCC at [x: 30mm, y: 5mm] spanning z:2 to z:4
+    add contact(Copper) named Via7 net: VCC at [x: 35mm, y: 5mm] spanning z:2 to z:4
+    add contact(Copper) named Via8 net: VCC at [x: 40mm, y: 5mm] spanning z:2 to z:4
+    add contact(Copper) named Via9 net: VCC at [x: 45mm, y: 5mm] spanning z:2 to z:4
+    add contact(Copper) named Via10 net: VCC at [x: 5mm, y: 10mm] spanning z:2 to z:4
+    
+    add contact(Copper) named Via11 net: GND at [x: 5mm, y: 30mm] spanning z:2 to z:4
+    add contact(Copper) named Via12 net: GND at [x: 10mm, y: 30mm] spanning z:2 to z:4
+    add contact(Copper) named Via13 net: GND at [x: 15mm, y: 30mm] spanning z:2 to z:4
+    add contact(Copper) named Via14 net: GND at [x: 20mm, y: 30mm] spanning z:2 to z:4
+    add contact(Copper) named Via15 net: GND at [x: 25mm, y: 30mm] spanning z:2 to z:4
+    add contact(Copper) named Via16 net: GND at [x: 30mm, y: 30mm] spanning z:2 to z:4
+    add contact(Copper) named Via17 net: GND at [x: 35mm, y: 30mm] spanning z:2 to z:4
+    add contact(Copper) named Via18 net: GND at [x: 40mm, y: 30mm] spanning z:2 to z:4
+    add contact(Copper) named Via19 net: GND at [x: 45mm, y: 30mm] spanning z:2 to z:4
+    add contact(Copper) named Via20 net: GND at [x: 5mm, y: 35mm] spanning z:2 to z:4
+    
+    add contact(Copper) named Via21 net: SIG1 at [x: 3.5mm, y: 2.5mm] spanning z:2 to z:4
+    add contact(Copper) named Via22 net: SIG1 at [x: 7.5mm, y: 2.5mm] spanning z:2 to z:4
+    add contact(Copper) named Via23 net: SIG2 at [x: 11.5mm, y: 2.5mm] spanning z:2 to z:4
+    add contact(Copper) named Via24 net: SIG2 at [x: 15.5mm, y: 2.5mm] spanning z:2 to z:4
+    add contact(Copper) named Via25 net: SIG3 at [x: 19.5mm, y: 2.5mm] spanning z:2 to z:4
+    add contact(Copper) named Via26 net: SIG3 at [x: 23.5mm, y: 2.5mm] spanning z:2 to z:4
+    add contact(Copper) named Via27 net: SIG4 at [x: 27.5mm, y: 2.5mm] spanning z:2 to z:4
+    add contact(Copper) named Via28 net: SIG4 at [x: 31.5mm, y: 2.5mm] spanning z:2 to z:4
+    add contact(Copper) named Via29 net: SIG5 at [x: 35.5mm, y: 2.5mm] spanning z:2 to z:4
+    add contact(Copper) named Via30 net: SIG5 at [x: 39.5mm, y: 2.5mm] spanning z:2 to z:4
+    
+    ## Add more pours on layer 4 for complexity
+    add pour(Copper) named TopVCC on z:4:
+        boundary: [x: 1mm, y: 1mm] to [x: 48mm, y: 12mm]
+        net: VCC
+    
+    add pour(Copper) named TopGND on z:4:
+        boundary: [x: 1mm, y: 28mm] to [x: 48mm, y: 49mm]
+        net: GND
+    
+    ## Add signal pours on layer 4
+    add pour(Copper) named TopSig1 on z:4:
+        boundary: [x: 2mm, y: 14mm] to [x: 10mm, y: 15mm]
+        net: SIG1
+    
+    add pour(Copper) named TopSig2 on z:4:
+        boundary: [x: 11mm, y: 14mm] to [x: 19mm, y: 15mm]
+        net: SIG2
+    
+    add pour(Copper) named TopSig3 on z:4:
+        boundary: [x: 20mm, y: 14mm] to [x: 28mm, y: 15mm]
+        net: SIG3
+    
+    add pour(Copper) named TopSig4 on z:4:
+        boundary: [x: 29mm, y: 14mm] to [x: 37mm, y: 15mm]
+        net: SIG4
+    
+    add pour(Copper) named TopSig5 on z:4:
+        boundary: [x: 38mm, y: 14mm] to [x: 46mm, y: 15mm]
+        net: SIG5

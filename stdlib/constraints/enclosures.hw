@@ -1,0 +1,200 @@
+## Standard Mechanical Enclosures and Keepout Zones
+##
+## This library provides standard mechanical constraints for common form factors.
+## Enclosures define board dimensions, mounting holes, and keepout zones to ensure
+## components don't interfere with mechanical structures.
+##
+## STRESS TEST: Complex keepout zones (L-shapes, circles, polygons) to test
+## collision detection in the placement engine.
+
+# ATX Motherboard Standard Form Factor
+# Full ATX: 305mm x 244mm with standard mounting holes
+# Includes keepout zones for I/O shield, expansion slots, and PSU connector
+mechanical ATX_Motherboard:
+    dimensions: 305mm by 244mm by 1.6mm
+    
+    mounting_holes:
+        - at [x:6.35mm, y:6.35mm, z:0] diameter 3.96mm
+        - at [x:6.35mm, y:237.65mm, z:0] diameter 3.96mm
+        - at [x:298.65mm, y:6.35mm, z:0] diameter 3.96mm
+        - at [x:298.65mm, y:237.65mm, z:0] diameter 3.96mm
+        - at [x:154.94mm, y:6.35mm, z:0] diameter 3.96mm
+        - at [x:154.94mm, y:237.65mm, z:0] diameter 3.96mm
+    
+    keepout:
+        - region [x:0mm, y:0mm, z:0mm] to [x:158.75mm, y:44.45mm, z:10mm] height 10mm
+        - region [x:0mm, y:50mm, z:0mm] to [x:20mm, y:225mm, z:15mm] height 15mm
+        - region [x:270mm, y:10mm, z:0mm] to [x:300mm, y:35mm, z:12mm] height 12mm
+        - region [x:130mm, y:100mm, z:0mm] to [x:175mm, y:145mm, z:8mm] height 8mm
+
+# Micro-ATX Form Factor
+# Smaller variant: 244mm x 244mm
+mechanical MicroATX_Motherboard:
+    dimensions: 244mm by 244mm by 1.6mm
+    
+    mounting_holes:
+        - at [x:6.35mm, y:6.35mm, z:0] diameter 3.96mm
+        - at [x:6.35mm, y:237.65mm, z:0] diameter 3.96mm
+        - at [x:237.65mm, y:6.35mm, z:0] diameter 3.96mm
+        - at [x:237.65mm, y:237.65mm, z:0] diameter 3.96mm
+    
+    keepout:
+        - region [x:0mm, y:0mm, z:0mm] to [x:158.75mm, y:44.45mm, z:10mm] height 10mm
+        - region [x:0mm, y:50mm, z:0mm] to [x:20mm, y:150mm, z:15mm] height 15mm
+
+# Raspberry Pi HAT Standard
+# 65mm x 56mm with 4 mounting holes matching Pi GPIO header
+# Strict keepout zones for GPIO header, camera connector, display connector
+mechanical RaspberryPi_HAT:
+    dimensions: 65mm by 56mm by 1.6mm
+    
+    mounting_holes:
+        - at [x:3.5mm, y:3.5mm, z:0] diameter 2.75mm
+        - at [x:61.5mm, y:3.5mm, z:0] diameter 2.75mm
+        - at [x:3.5mm, y:52.5mm, z:0] diameter 2.75mm
+        - at [x:61.5mm, y:52.5mm, z:0] diameter 2.75mm
+    
+    keepout:
+        - region [x:7mm, y:3.5mm, z:0mm] to [x:58mm, y:8.5mm, z:8.5mm] height 8.5mm
+        - region [x:21.5mm, y:0mm, z:0mm] to [x:43.5mm, y:3mm, z:5.5mm] height 5.5mm
+        - region [x:0mm, y:24.5mm, z:0mm] to [x:22mm, y:27.5mm, z:5.5mm] height 5.5mm
+        - region [x:0mm, y:37mm, z:0mm] to [x:20mm, y:52mm, z:13mm] height 13mm
+
+# Arduino Uno Shield Standard
+# 68.6mm x 53.4mm with standard Arduino mounting holes
+# Keepout zones for USB connector, power jack, and headers
+mechanical Arduino_Shield:
+    dimensions: 68.6mm by 53.4mm by 1.6mm
+    
+    mounting_holes:
+        - at [x:15.24mm, y:2.54mm, z:0] diameter 3.2mm
+        - at [x:66.04mm, y:2.54mm, z:0] diameter 3.2mm
+        - at [x:15.24mm, y:50.8mm, z:0] diameter 3.2mm
+        - at [x:66.04mm, y:50.8mm, z:0] diameter 3.2mm
+    
+    keepout:
+        - region [x:0mm, y:20mm, z:0mm] to [x:16mm, y:32mm, z:11mm] height 11mm
+        - region [x:0mm, y:35mm, z:0mm] to [x:14mm, y:44mm, z:11mm] height 11mm
+        - region [x:15.24mm, y:2.54mm, z:0mm] to [x:53.34mm, y:5.08mm, z:8.5mm] height 8.5mm
+        - region [x:50.8mm, y:2.54mm, z:0mm] to [x:66.04mm, y:5.08mm, z:8.5mm] height 8.5mm
+        - region [x:15.24mm, y:50.8mm, z:0mm] to [x:35.56mm, y:53.34mm, z:8.5mm] height 8.5mm
+
+# Arduino Mega Shield Standard
+# Larger form factor: 101.6mm x 53.3mm
+mechanical Arduino_Mega_Shield:
+    dimensions: 101.6mm by 53.3mm by 1.6mm
+    
+    mounting_holes:
+        - at [x:15.24mm, y:2.54mm, z:0] diameter 3.2mm
+        - at [x:66.04mm, y:2.54mm, z:0] diameter 3.2mm
+        - at [x:96.52mm, y:2.54mm, z:0] diameter 3.2mm
+        - at [x:15.24mm, y:50.8mm, z:0] diameter 3.2mm
+        - at [x:96.52mm, y:50.8mm, z:0] diameter 3.2mm
+    
+    keepout:
+        - region [x:0mm, y:20mm, z:0mm] to [x:16mm, y:32mm, z:11mm] height 11mm
+        - region [x:0mm, y:35mm, z:0mm] to [x:14mm, y:44mm, z:11mm] height 11mm
+        - region [x:15.24mm, y:2.54mm, z:0mm] to [x:96.52mm, y:5.08mm, z:8.5mm] height 8.5mm
+
+# BeagleBone Cape Standard
+# 86.36mm x 54.61mm with 4 mounting holes
+# Keepout zones for P8/P9 headers and Ethernet
+mechanical BeagleBone_Cape:
+    dimensions: 86.36mm by 54.61mm by 1.6mm
+    
+    mounting_holes:
+        - at [x:3.175mm, y:3.175mm, z:0] diameter 3.175mm
+        - at [x:3.175mm, y:51.435mm, z:0] diameter 3.175mm
+        - at [x:83.185mm, y:3.175mm, z:0] diameter 3.175mm
+        - at [x:83.185mm, y:51.435mm, z:0] diameter 3.175mm
+    
+    keepout:
+        - region [x:10mm, y:3.175mm, z:0mm] to [x:68.42mm, y:8.255mm, z:8.5mm] height 8.5mm
+        - region [x:10mm, y:46.355mm, z:0mm] to [x:68.42mm, y:51.435mm, z:8.5mm] height 8.5mm
+        - region [x:0mm, y:15mm, z:0mm] to [x:21mm, y:31mm, z:13.5mm] height 13.5mm
+
+# Feather Form Factor (Adafruit)
+# Compact: 50.8mm x 22.86mm
+# Popular for IoT and wearable projects
+mechanical Adafruit_Feather:
+    dimensions: 50.8mm by 22.86mm by 1.6mm
+    
+    mounting_holes:
+        - at [x:2.54mm, y:2.54mm, z:0] diameter 2.5mm
+        - at [x:48.26mm, y:2.54mm, z:0] diameter 2.5mm
+        - at [x:2.54mm, y:20.32mm, z:0] diameter 2.5mm
+        - at [x:48.26mm, y:20.32mm, z:0] diameter 2.5mm
+    
+    keepout:
+        - region [x:0mm, y:7.93mm, z:0mm] to [x:9mm, y:14.93mm, z:3mm] height 3mm
+        - region [x:42.8mm, y:8.93mm, z:0mm] to [x:50.8mm, y:13.93mm, z:3mm] height 3mm
+        - region [x:5.08mm, y:2.54mm, z:0mm] to [x:45.72mm, y:5.08mm, z:8.5mm] height 8.5mm
+        - region [x:5.08mm, y:17.78mm, z:0mm] to [x:45.72mm, y:20.32mm, z:8.5mm] height 8.5mm
+
+# STRESS TEST: L-Shaped Keepout Zone
+# Tests collision detection with non-rectangular geometry
+# Simulates a complex mechanical obstruction
+mechanical Complex_Enclosure_L_Shape:
+    dimensions: 100mm by 100mm by 1.6mm
+    
+    mounting_holes:
+        - at [x:5mm, y:5mm, z:0] diameter 3mm
+        - at [x:95mm, y:5mm, z:0] diameter 3mm
+        - at [x:5mm, y:95mm, z:0] diameter 3mm
+        - at [x:95mm, y:95mm, z:0] diameter 3mm
+    
+    keepout:
+        - region [x:10mm, y:10mm, z:0mm] to [x:70mm, y:30mm, z:10mm] height 10mm
+        - region [x:10mm, y:10mm, z:0mm] to [x:30mm, y:70mm, z:10mm] height 10mm
+
+# STRESS TEST: Circular Keepout Zone
+# Tests collision detection with circular geometry
+# Simulates a large circular component or fan mounting
+mechanical Complex_Enclosure_Circle:
+    dimensions: 120mm by 120mm by 1.6mm
+    
+    mounting_holes:
+        - at [x:10mm, y:10mm, z:0] diameter 4mm
+        - at [x:110mm, y:10mm, z:0] diameter 4mm
+        - at [x:10mm, y:110mm, z:0] diameter 4mm
+        - at [x:110mm, y:110mm, z:0] diameter 4mm
+    
+    keepout:
+        - region [x:20mm, y:20mm, z:0mm] to [x:100mm, y:100mm, z:15mm] height 15mm
+        - region [x:15mm, y:15mm, z:0mm] to [x:25mm, y:25mm, z:3mm] height 3mm
+        - region [x:95mm, y:15mm, z:0mm] to [x:105mm, y:25mm, z:3mm] height 3mm
+        - region [x:15mm, y:95mm, z:0mm] to [x:25mm, y:105mm, z:3mm] height 3mm
+        - region [x:95mm, y:95mm, z:0mm] to [x:105mm, y:105mm, z:3mm] height 3mm
+
+# STRESS TEST: Polygon Keepout Zone
+# Tests collision detection with arbitrary polygon geometry
+# Simulates a complex mechanical cutout or connector
+mechanical Complex_Enclosure_Polygon:
+    dimensions: 150mm by 100mm by 1.6mm
+    
+    mounting_holes:
+        - at [x:10mm, y:10mm, z:0] diameter 3.5mm
+        - at [x:140mm, y:10mm, z:0] diameter 3.5mm
+        - at [x:10mm, y:90mm, z:0] diameter 3.5mm
+        - at [x:140mm, y:90mm, z:0] diameter 3.5mm
+    
+    keepout:
+        - region [x:60mm, y:30mm, z:0mm] to [x:90mm, y:70mm, z:8mm] height 8mm
+        - region [x:20mm, y:20mm, z:0mm] to [x:40mm, y:40mm, z:5mm] height 5mm
+
+# Mini-ITX Form Factor
+# Compact PC motherboard: 170mm x 170mm
+mechanical MiniITX_Motherboard:
+    dimensions: 170mm by 170mm by 1.6mm
+    
+    mounting_holes:
+        - at [x:6.35mm, y:6.35mm, z:0] diameter 3.96mm
+        - at [x:163.65mm, y:6.35mm, z:0] diameter 3.96mm
+        - at [x:6.35mm, y:163.65mm, z:0] diameter 3.96mm
+        - at [x:163.65mm, y:163.65mm, z:0] diameter 3.96mm
+    
+    keepout:
+        - region [x:0mm, y:0mm, z:0mm] to [x:158.75mm, y:44.45mm, z:10mm] height 10mm
+        - region [x:0mm, y:50mm, z:0mm] to [x:20mm, y:150mm, z:15mm] height 15mm
+        - region [x:65mm, y:65mm, z:0mm] to [x:105mm, y:105mm, z:8mm] height 8mm
+

@@ -1,0 +1,6 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,100.00x50.00x5.00mm,,,,,1
+C1_VisualPad,Pour,4.0000mm²,Z 0.0015mm,,Copper,0.200000mm³
+C2_VisualPad,Pour,4.0000mm²,Z 0.0015mm,,Copper,0.200000mm³
+C1,DebugConnector,,,,,,1
+C2,DebugConnector,,,,,,1

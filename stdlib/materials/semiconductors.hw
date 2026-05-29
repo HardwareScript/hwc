@@ -1,0 +1,918 @@
+## SEMICONDUCTORS.HW - COMPREHENSIVE STRESS TEST
+## Tests EVERY Hardware Script feature found in docs and parser code
+## Domain: Semiconductor materials (Silicon, GaN, GaAs, SiC, etc.)
+## Goal: Expose compiler gaps through extreme edge cases
+
+##[
+    STRESS TEST STRATEGY:
+    - Use EVERY feature from v0.1.4 and v0.1.5 LANGUAGE-SPEC.md
+    - Use EVERY feature found in token.rs and component.rs parser code
+    - Test edge cases: extreme values, unicode, scientific notation
+    - Test semiconductor-specific properties: bandgap, mobility, doping
+    - DO NOT read existing stdlib files - synthesize from scratch
+]##
+
+# ============================================================================
+# MATERIAL #1: Silicon (Si) - The Foundation
+# Tests: Basic syntax, standard properties, scientific notation
+# ============================================================================
+
+material Silicon:
+    category: conductor  # Actually a semiconductor, but using conductor category
+    symbol: "Si"
+    description: "Crystalline silicon - the foundation of modern electronics"
+    
+    properties:
+        # Basic physical properties
+        density: 2329kg/m³
+        atomic_number: 14
+        atomic_weight: 28.0855
+        crystal_structure: "Diamond cubic"
+        
+        # Thermal properties with scientific notation
+        thermal_conductivity: 1.48e2W/(m·K)  # 148 W/(m·K)
+        specific_heat: 7.02e2J/(kg·K)        # 702 J/(kg·K)
+        thermal_expansion: 2.6e-6/°C         # 2.6 ppm/°C
+        melting_point: 1414°C
+        
+        # Electrical properties - THE CORE OF SEMICONDUCTORS
+        resistivity: 2.3e3Ω·m               # Intrinsic at 300K
+        bandgap_300k: 1.12eV                # Energy gap at room temp
+        bandgap_0k: 1.17eV                  # Energy gap at 0 Kelvin
+        
+        # Carrier mobility (critical for transistor performance)
+        electron_mobility: 1400cm²/Vs       # Complex SI unit test
+        hole_mobility: 450cm²/Vs
+        
+        # Intrinsic carrier concentration
+        intrinsic_carrier_density: 1.5e10/cm³  # At 300K
+        
+        # Dielectric properties
+        relative_permittivity: 11.68        # Unitless float
+        dielectric_constant: 11.68
+        
+        # Optical properties
+        refractive_index: 3.42              # Unitless
+        absorption_coefficient: 1e3/cm      # For visible light
+        
+        # Manufacturing properties
+        wafer_sizes: "100mm, 150mm, 200mm, 300mm, 450mm"
+        common_doping: "Boron (p-type), Phosphorus (n-type), Arsenic (n-type)"
+        
+        # Extreme value tests
+        max_doping_concentration: 1e21/cm³  # Heavily doped
+        min_feature_size: 3nm               # Modern process nodes
+        
+        # Color for visualization
+        color: "#696969"  # Dark gray
+
+
+# ============================================================================
+# MATERIAL #2: Gallium Nitride (GaN) - High Power & RF
+# Tests: Hex numbers, negative values, extreme temperatures, unicode in strings
+# ============================================================================
+
+material Gallium_Nitride:
+    category: conductor
+    symbol: "GaN"
+    description: "Wide bandgap semiconductor for high-power and RF applications"
+    
+    properties:
+        # Physical properties with hex/binary/octal tests
+        density: 6150kg/m³
+        atomic_number_ga: 0x1F              # Gallium = 31 (hex test)
+        atomic_number_n: 0b111              # Nitrogen = 7 (binary test)
+        atomic_weight_ga: 69.723
+        atomic_weight_n: 14.007
+        crystal_structure: "Wurtzite"
+        
+        # Thermal properties - extreme values
+        thermal_conductivity: 1.3e2W/(m·K)
+        specific_heat: 4.9e2J/(kg·K)
+        thermal_expansion: 5.59e-6/°C
+        melting_point: 2500°C               # Very high!
+        
+        # Wide bandgap - key advantage
+        bandgap_300k: 3.4eV                 # Much wider than Si
+        bandgap_0k: 3.5eV
+        
+        # High electron mobility
+        electron_mobility: 2000cm²/Vs       # Better than Si
+        hole_mobility: 30cm²/Vs             # Much lower
+        
+        # Dielectric properties
+        relative_permittivity: 9.5
+        dielectric_constant: 9.5
+        
+        # Breakdown field - EXTREME
+        breakdown_field: 3.3e6V/cm          # 10x higher than Si!
+        
+        # Saturation velocity
+        electron_saturation_velocity: 2.5e7cm/s
+        
+        # Operating temperature range - EXTREME
+        max_operating_temp: +600°C          # Positive prefix test
+        min_operating_temp: -200°C          # Negative temperature
+        
+        # Applications with unicode in string
+        applications: "Power electronics 🔌, RF amplifiers 📡, LEDs 💡, laser diodes"
+        advantages: "High breakdown voltage, high temperature operation, high frequency"
+        
+        # Manufacturing
+        substrate_materials: "Sapphire, SiC, GaN"
+        growth_methods: "MOCVD, MBE, HVPE"
+        
+        # Color
+        color: "#E6E6FA"  # Lavender (GaN LEDs emit blue/UV)
+
+
+# ============================================================================
+# MATERIAL #3: Gallium Arsenide (GaAs) - High Speed RF
+# Tests: Scientific notation extremes, complex units, keywords as properties
+# ============================================================================
+
+material Gallium_Arsenide:
+    category: conductor
+    symbol: "GaAs"
+    description: "III-V semiconductor for high-frequency and optoelectronic applications"
+    
+    properties:
+        # Physical properties
+        density: 5316kg/m³
+        atomic_number_ga: 31
+        atomic_number_as: 33
+        atomic_weight_ga: 69.723
+        atomic_weight_as: 74.922
+        crystal_structure: "Zinc blende"
+        
+        # Thermal properties
+        thermal_conductivity: 55W/(m·K)     # Lower than Si
+        specific_heat: 3.5e2J/(kg·K)
+        thermal_expansion: 5.73e-6/°C
+        melting_point: 1238°C
+        
+        # Direct bandgap - key for optoelectronics
+        bandgap_300k: 1.424eV               # Direct gap (unlike Si)
+        bandgap_0k: 1.519eV
+        bandgap_type: "Direct"
+        
+        # EXTREME electron mobility - fastest!
+        electron_mobility: 8500cm²/Vs       # 6x better than Si!
+        hole_mobility: 400cm²/Vs
+        
+        # Intrinsic carrier concentration
+        intrinsic_carrier_density: 1.8e6/cm³  # Much lower than Si
+        
+        # Dielectric properties
+        relative_permittivity: 12.9
+        dielectric_constant: 12.9
+        
+        # Breakdown field
+        breakdown_field: 4e5V/cm
+        
+        # Saturation velocity - VERY HIGH
+        electron_saturation_velocity: 1e7cm/s
+        
+        # Optical properties - direct bandgap advantage
+        refractive_index: 3.3
+        absorption_coefficient: 1e4/cm      # Strong absorption
+        emission_wavelength: 870nm          # Near-infrared
+        
+        # Temperature coefficient - NEGATIVE (unusual)
+        bandgap_temp_coefficient: -4.5e-4eV/K  # Scientific notation with negative
+        
+        # Operating temperature range
+        max_operating_temp: +450°C
+        min_operating_temp: -180°C
+        
+        # Applications
+        applications: "RF amplifiers, MMICs, solar cells, LEDs, laser diodes, photodetectors"
+        advantages: "High electron mobility, direct bandgap, semi-insulating substrates"
+        disadvantages: "Brittle, toxic, expensive, lower thermal conductivity"
+        
+        # Manufacturing - test keywords as property names
+        tolerance: "±0.5%"                  # 'tolerance' is a keyword!
+        trace: "MOCVD epitaxy"              # 'trace' is a keyword!
+        via: "Through-wafer vias"           # 'via' is a keyword!
+        clearance: "Edge exclusion 3mm"     # 'clearance' is a keyword!
+        
+        # Substrate sizes
+        wafer_sizes: "100mm, 150mm, 200mm"
+        
+        # Color
+        color: "#8B4513"  # Saddle brown (GaAs wafers are brown)
+
+
+# ============================================================================
+# MATERIAL #4: Silicon Carbide (SiC) - Extreme Power
+# Tests: Octal numbers, extreme values, all punctuation in strings
+# ============================================================================
+
+material Silicon_Carbide:
+    category: conductor
+    symbol: "SiC"
+    description: "Ultra-wide bandgap semiconductor for extreme power and temperature"
+    
+    properties:
+        # Physical properties with octal test
+        density: 3210kg/m³
+        atomic_number_si: 0o16              # Silicon = 14 (octal test)
+        atomic_number_c: 0o6                # Carbon = 6 (octal test)
+        atomic_weight_si: 28.0855
+        atomic_weight_c: 12.011
+        crystal_structure: "Hexagonal (4H-SiC, 6H-SiC)"
+        
+        # Thermal properties - EXTREME
+        thermal_conductivity: 3.7e2W/(m·K)  # Better than copper!
+        specific_heat: 6.9e2J/(kg·K)
+        thermal_expansion: 4.2e-6/°C
+        melting_point: 2830°C               # Extremely high!
+        
+        # Ultra-wide bandgap
+        bandgap_4h_300k: 3.23eV             # 4H polytype
+        bandgap_6h_300k: 3.03eV             # 6H polytype
+        bandgap_3c_300k: 2.36eV             # 3C polytype
+        
+        # Electron mobility (varies by polytype)
+        electron_mobility_4h: 1000cm²/Vs
+        electron_mobility_6h: 400cm²/Vs
+        hole_mobility: 120cm²/Vs
+        
+        # Dielectric properties
+        relative_permittivity: 9.7
+        dielectric_constant: 9.7
+        
+        # Breakdown field - EXTREME!
+        breakdown_field: 2.5e6V/cm          # 8x higher than Si!
+        
+        # Saturation velocity
+        electron_saturation_velocity: 2e7cm/s
+        
+        # Operating temperature - EXTREME RANGE
+        max_operating_temp: +1000°C         # Can operate at 1000°C!
+        min_operating_temp: -273°C          # Down to absolute zero
+        
+        # All punctuation in strings test
+        special_chars: "Test all: !@#$%^&*()_+-=[]{}|\\;':\",./<>?`~"
+        unicode_test: "Greek: αβγδε, Math: ∑∫∂∇, Emoji: ⚡🔥❄️, RTL: العربية"
+        
+        # Applications
+        applications: "Power MOSFETs, Schottky diodes, high-temp sensors, RF devices"
+        advantages: "Ultra-high breakdown, high temperature, high thermal conductivity"
+        
+        # Manufacturing challenges
+        growth_method: "Physical vapor transport (PVT), CVD"
+        substrate_cost: "Very expensive"
+        defect_density: "Still improving"
+        
+        # Polytypes
+        common_polytypes: "3C-SiC (cubic), 4H-SiC (hexagonal), 6H-SiC (hexagonal)"
+        
+        # Wafer sizes
+        wafer_sizes: "100mm, 150mm, 200mm (emerging)"
+        
+        # Color
+        color: "#2F4F4F"  # Dark slate gray
+
+
+# ============================================================================
+# MATERIAL #5: Germanium (Ge) - Historical & Modern
+# Tests: Zero values, boundary values, inline comments everywhere
+# ============================================================================
+
+material Germanium:
+    category: conductor  # First transistor material!
+    symbol: "Ge"  # Inline comment test
+    description: "First semiconductor used in transistors, now used in high-speed devices"  # Another comment
+    
+    properties:
+        # Physical properties
+        density: 5323kg/m³  # Inline comment after value
+        atomic_number: 32  # Comment here too
+        atomic_weight: 72.64  # And here
+        crystal_structure: "Diamond cubic"  # Same as Si
+        
+        # Thermal properties
+        thermal_conductivity: 60W/(m·K)  # Lower than Si
+        specific_heat: 3.2e2J/(kg·K)  # Comment
+        thermal_expansion: 5.9e-6/°C  # Comment
+        melting_point: 938°C  # Lower than Si
+        
+        # Narrow bandgap
+        bandgap_300k: 0.66eV  # Much narrower than Si
+        bandgap_0k: 0.74eV  # Comment
+        
+        # High electron mobility
+        electron_mobility: 3900cm²/Vs  # Better than Si
+        hole_mobility: 1900cm²/Vs  # Much better than Si
+        
+        # Intrinsic carrier concentration - HIGH
+        intrinsic_carrier_density: 2.4e13/cm³  # 1000x higher than Si!
+        
+        # Dielectric properties
+        relative_permittivity: 16.2  # Higher than Si
+        dielectric_constant: 16.2  # Comment
+        
+        # Breakdown field
+        breakdown_field: 1e5V/cm  # Lower than Si
+        
+        # Optical properties
+        refractive_index: 4.0  # High
+        absorption_edge: 1.85µm  # Infrared
+        
+        # Temperature limits - NARROW (disadvantage)
+        max_operating_temp: +150°C  # Much lower than Si
+        min_operating_temp: -40°C  # Standard
+        
+        # Zero and boundary value tests
+        zero_test: 0  # Zero integer
+        zero_float: 0.0  # Zero float
+        zero_measurement: 0Ω  # Zero with unit
+        tiny_value: 1e-20  # Extremely small
+        huge_value: 1e20  # Extremely large
+        
+        # Applications
+        applications: "Fiber optics, infrared detectors, solar cells, SiGe HBTs"
+        historical: "First transistor (1947), replaced by Si in 1960s"
+        modern_use: "SiGe alloys for high-speed RF, infrared optics"
+        
+        # Disadvantages
+        disadvantages: "High leakage current, low max temperature, expensive"
+        
+        # Manufacturing
+        wafer_sizes: "100mm, 150mm"
+        substrate_use: "Mostly for epitaxy, not bulk devices"
+        
+        # Color
+        color: "#C0C0C0"  # Silver gray
+
+
+# ============================================================================
+# MATERIAL #6: Indium Phosphide (InP) - Ultra High Frequency
+# Tests: Mixed number formats, frequency units, complex expressions
+# ============================================================================
+
+material Indium_Phosphide:
+    category: conductor
+    symbol: "InP"
+    description: "III-V semiconductor for ultra-high-frequency and photonic applications"
+    
+    properties:
+        # Physical properties - mixed number formats
+        density: 4810kg/m³                  # Decimal
+        atomic_number_in: 0x31              # Hex (49)
+        atomic_number_p: 0b1111             # Binary (15)
+        atomic_weight_in: 114.818           # Float
+        atomic_weight_p: 30.974             # Float
+        crystal_structure: "Zinc blende"
+        
+        # Thermal properties
+        thermal_conductivity: 68W/(m·K)
+        specific_heat: 3.1e2J/(kg·K)
+        thermal_expansion: 4.6e-6/°C
+        melting_point: 1062°C
+        
+        # Direct bandgap
+        bandgap_300k: 1.344eV               # Direct gap
+        bandgap_0k: 1.423eV
+        bandgap_type: "Direct"
+        
+        # EXTREME electron mobility - highest of all!
+        electron_mobility: 5400cm²/Vs       # Even better than GaAs!
+        hole_mobility: 200cm²/Vs
+        
+        # Intrinsic carrier concentration
+        intrinsic_carrier_density: 1.3e7/cm³
+        
+        # Dielectric properties
+        relative_permittivity: 12.5
+        dielectric_constant: 12.5
+        
+        # Breakdown field
+        breakdown_field: 4.5e5V/cm
+        
+        # Saturation velocity
+        electron_saturation_velocity: 1e7cm/s
+        
+        # Frequency performance - EXTREME
+        max_frequency: 1000GHz              # THz range!
+        cutoff_frequency: 500GHz
+        transit_frequency: 300GHz
+        
+        # Optical properties
+        refractive_index: 3.1
+        emission_wavelength: 920nm          # Near-infrared
+        absorption_coefficient: 1e4/cm
+        
+        # Temperature range
+        max_operating_temp: +400°C
+        min_operating_temp: -150°C
+        
+        # Applications
+        applications: "Fiber optic transceivers, THz devices, HEMTs, HBTs, photodetectors"
+        advantages: "Highest electron mobility, direct bandgap, excellent for photonics"
+        key_wavelength: "1.55µm (fiber optic C-band)"
+        
+        # Manufacturing
+        growth_methods: "LPE, VPE, MOCVD, MBE"
+        substrate_sizes: "50mm, 75mm, 100mm"
+        substrate_cost: "Very expensive"
+        
+        # Frequency bands
+        rf_bands: "Ka-band, V-band, W-band, D-band"
+        frequency_range: "30GHz to 300GHz"
+        
+        # Color
+        color: "#FFD700"  # Gold
+
+
+# ============================================================================
+# MATERIAL #7: Diamond - Extreme Everything
+# Tests: Extreme values, superlatives, all measurement types
+# ============================================================================
+
+material Diamond:
+    category: conductor  # Actually an insulator, but can be doped
+    symbol: "C"
+    description: "Ultimate semiconductor - extreme properties in every dimension"
+    
+    properties:
+        # Physical properties - EXTREME
+        density: 3515kg/m³
+        atomic_number: 6
+        atomic_weight: 12.011
+        crystal_structure: "Diamond cubic"
+        hardness: "10 Mohs (hardest natural material)"
+        
+        # Thermal properties - EXTREME!
+        thermal_conductivity: 2200W/(m·K)   # HIGHEST of any material!
+        specific_heat: 5.09e2J/(kg·K)
+        thermal_expansion: 1.0e-6/°C        # Very low
+        melting_point: 3550°C               # Extremely high (sublimes)
+        
+        # Ultra-wide bandgap
+        bandgap_300k: 5.47eV                # Widest practical semiconductor
+        bandgap_0k: 5.50eV
+        bandgap_type: "Indirect"
+        
+        # Carrier mobility - EXTREME
+        electron_mobility: 4500cm²/Vs       # Very high
+        hole_mobility: 3800cm²/Vs           # Highest hole mobility!
+        
+        # Intrinsic carrier concentration - EXTREMELY LOW
+        intrinsic_carrier_density: 1e-27/cm³  # Essentially zero!
+        
+        # Dielectric properties
+        relative_permittivity: 5.7          # Low
+        dielectric_constant: 5.7
+        
+        # Breakdown field - EXTREME!
+        breakdown_field: 1e7V/cm            # 30x higher than Si!
+        
+        # Saturation velocity - EXTREME
+        electron_saturation_velocity: 2.7e7cm/s  # Highest!
+        hole_saturation_velocity: 1.5e7cm/s      # Also highest!
+        
+        # Operating temperature - EXTREME RANGE
+        max_operating_temp: +1500°C         # Can operate at 1500°C!
+        min_operating_temp: -273.15°C       # Absolute zero
+        
+        # Optical properties
+        refractive_index: 2.42
+        transparency_range: "UV to far-infrared"
+        absorption_edge: 225nm              # Deep UV
+        
+        # Radiation hardness - EXTREME
+        radiation_tolerance: "Highest of any semiconductor"
+        neutron_fluence: 1e18/cm²           # Can survive extreme radiation
+        
+        # All measurement types test
+        length_test: 1nm                    # Nanometer
+        voltage_test: 1000V                 # Kilovolt range
+        current_test: 100A                  # High current
+        resistance_test: 1e12Ω              # Teraohm
+        capacitance_test: 1pF               # Picofarad
+        inductance_test: 1nH                # Nanohenry
+        frequency_test: 1THz                # Terahertz
+        temperature_test: 1000K             # Kelvin
+        power_test: 1kW                     # Kilowatt
+        
+        # Applications
+        applications: "Power electronics, RF, quantum computing, radiation detectors, heat sinks"
+        advantages: "Highest thermal conductivity, widest bandgap, highest breakdown, radiation hard"
+        disadvantages: "Extremely expensive, difficult to grow, difficult to dope"
+        
+        # Manufacturing challenges
+        growth_methods: "CVD, HPHT synthesis"
+        substrate_sizes: "Small (few mm to few cm)"
+        substrate_cost: "Prohibitively expensive for most applications"
+        doping_challenges: "Very difficult - requires high energy ion implantation"
+        
+        # Future potential
+        future_use: "Next-generation power devices, quantum sensors, space electronics"
+        
+        # Color
+        color: "#B9F2FF"  # Diamond blue
+
+
+# ============================================================================
+# MATERIAL #8: Aluminum Nitride (AlN) - Deep UV & High Power
+# Tests: Doc comments, block comments, negative coefficients
+# ============================================================================
+
+##[
+    ALUMINUM NITRIDE (AlN)
+    
+    Ultra-wide bandgap III-V semiconductor
+    Key applications:
+    - Deep UV LEDs (200-280nm)
+    - High-power RF devices
+    - High-temperature electronics
+    - Acoustic wave devices (SAW, BAW)
+    
+    Advantages:
+    - Widest bandgap of III-V nitrides (6.2 eV)
+    - Excellent thermal conductivity
+    - Piezoelectric properties
+    - High acoustic velocity
+]##
+
+material Aluminum_Nitride:
+    category: conductor
+    symbol: "AlN"
+    description: "Ultra-wide bandgap III-V nitride for deep UV and high-power applications"
+    
+    properties:
+        #[ Physical properties block comment
+           AlN has wurtzite crystal structure
+           Very hard and chemically stable
+        ]#
+        density: 3260kg/m³
+        atomic_number_al: 13
+        atomic_number_n: 7
+        atomic_weight_al: 26.982
+        atomic_weight_n: 14.007
+        crystal_structure: "Wurtzite"
+        
+        ## Thermal properties - excellent heat dissipation
+        thermal_conductivity: 2.85e2W/(m·K)  # Very high!
+        specific_heat: 7.4e2J/(kg·K)
+        thermal_expansion: 4.2e-6/°C
+        melting_point: 2200°C
+        
+        ## Ultra-wide bandgap - widest of nitrides
+        bandgap_300k: 6.2eV                 # Widest III-V!
+        bandgap_0k: 6.28eV
+        bandgap_type: "Direct"
+        
+        #[ Carrier mobility
+           Lower than GaN due to wider bandgap
+           Still adequate for many applications
+        ]#
+        electron_mobility: 300cm²/Vs
+        hole_mobility: 14cm²/Vs             # Very low
+        
+        ## Dielectric properties
+        relative_permittivity: 8.5
+        dielectric_constant: 8.5
+        
+        ## Breakdown field - very high
+        breakdown_field: 1.2e6V/cm
+        
+        ## Temperature coefficients - NEGATIVE
+        bandgap_temp_coefficient: -1.8e-3eV/K  # Negative!
+        thermal_resistance_coefficient: -0.02%/°C  # Negative!
+        
+        ## Operating temperature range
+        max_operating_temp: +800°C
+        min_operating_temp: -200°C
+        
+        ## Piezoelectric properties - unique!
+        piezoelectric_constant_d33: 5.5pC/N
+        piezoelectric_constant_e33: 1.55C/m²
+        electromechanical_coupling: 0.24
+        
+        ## Acoustic properties
+        acoustic_velocity_longitudinal: 11000m/s  # Very high!
+        acoustic_velocity_shear: 6000m/s
+        acoustic_impedance: 3.6e7kg/(m²·s)
+        
+        ## Optical properties - deep UV
+        refractive_index: 2.15
+        emission_wavelength: 200nm          # Deep UV!
+        transparency_range: "200nm to 13µm"
+        
+        ## Applications
+        applications: "Deep UV LEDs, SAW/BAW filters, high-power RF, thermal management"
+        advantages: "Widest III-V bandgap, excellent thermal conductivity, piezoelectric"
+        key_wavelength: "200-280nm (UV-C germicidal range)"
+        
+        ## Manufacturing
+        growth_methods: "MOCVD, MBE, sputtering"
+        substrate_materials: "Sapphire, SiC, AlN"
+        substrate_sizes: "50mm, 100mm"
+        
+        ## Challenges
+        disadvantages: "Low hole mobility, difficult p-type doping, expensive"
+        doping_challenges: "p-type doping extremely difficult"
+        
+        ## Color
+        color: "#F0F8FF"  # Alice blue (AlN is transparent)
+
+
+# ============================================================================
+# MATERIAL #9: Cadmium Telluride (CdTe) - Solar & X-ray
+# Tests: Positive prefixes, percentage units, efficiency metrics
+# ============================================================================
+
+material Cadmium_Telluride:
+    category: conductor
+    symbol: "CdTe"
+    description: "II-VI semiconductor for thin-film solar cells and X-ray detectors"
+    
+    properties:
+        # Physical properties with positive prefixes
+        density: +5850kg/m³                 # Positive prefix test
+        atomic_number_cd: +48               # Positive prefix
+        atomic_number_te: +52               # Positive prefix
+        atomic_weight_cd: +112.411          # Positive prefix
+        atomic_weight_te: +127.60           # Positive prefix
+        crystal_structure: "Zinc blende"
+        
+        # Thermal properties
+        thermal_conductivity: +7.2W/(m·K)   # Low thermal conductivity
+        specific_heat: +2.1e2J/(kg·K)
+        thermal_expansion: +5.9e-6/°C
+        melting_point: +1041°C
+        
+        # Optimal bandgap for solar cells
+        bandgap_300k: +1.45eV               # Perfect for solar!
+        bandgap_0k: +1.51eV
+        bandgap_type: "Direct"
+        
+        # Carrier mobility
+        electron_mobility: +1050cm²/Vs
+        hole_mobility: +100cm²/Vs
+        
+        # Intrinsic carrier concentration
+        intrinsic_carrier_density: +1e7/cm³
+        
+        # Dielectric properties
+        relative_permittivity: +10.2
+        dielectric_constant: +10.2
+        
+        # Breakdown field
+        breakdown_field: +1e5V/cm
+        
+        # Optical properties - ideal for solar
+        refractive_index: +2.7
+        absorption_coefficient: +1e5/cm     # Very high!
+        absorption_edge: 850nm
+        
+        # Solar cell performance - percentage tests
+        theoretical_efficiency: +33.5%      # Shockley-Queisser limit
+        record_efficiency: +22.1%           # Lab record
+        commercial_efficiency: +18%         # Commercial modules
+        
+        # Temperature coefficients
+        efficiency_temp_coefficient: -0.25%/°C  # Negative (loses efficiency with heat)
+        voltage_temp_coefficient: -2.2mV/°C     # Negative
+        
+        # Operating temperature range
+        max_operating_temp: +85°C           # Standard solar panel rating
+        min_operating_temp: -40°C
+        
+        # X-ray detection properties
+        xray_stopping_power: "Excellent"
+        xray_energy_resolution: +1%         # At 122 keV
+        xray_detection_efficiency: +95%     # Very high
+        
+        # Manufacturing - thin film advantages
+        deposition_methods: "Close-space sublimation, sputtering, electrodeposition"
+        substrate_materials: "Glass, metal foil, flexible polymers"
+        film_thickness: 2µm                 # Very thin!
+        deposition_temperature: +600°C
+        
+        # Cost metrics
+        cost_per_watt: "$0.40/W"            # Very competitive
+        manufacturing_cost: "Low"
+        material_usage: "Minimal (thin film)"
+        
+        # Applications
+        applications: "Thin-film solar cells, X-ray detectors, gamma-ray detectors"
+        advantages: "Optimal bandgap, high absorption, low cost, thin film"
+        market_share: "5% of global solar market"
+        
+        # Environmental concerns
+        toxicity: "Cadmium is toxic"
+        recycling: "Required for end-of-life"
+        encapsulation: "Critical for safety"
+        
+        # Color
+        color: "#CD853F"  # Peru (CdTe is brownish)
+
+
+# ============================================================================
+# MATERIAL #10: Extreme Edge Case Test Material
+# Tests: EVERY edge case in one material - the ultimate stress test
+# ============================================================================
+
+material Extreme_Test_Semiconductor:
+    category: conductor
+    symbol: "XTS"
+    description: "Fictional material testing every compiler edge case simultaneously"
+    
+    properties:
+        # All number formats in one place
+        decimal_test: 42
+        hex_test: 0xDEADBEEF
+        binary_test: 0b11111111
+        octal_test: 0o777
+        float_test: 3.14159265358979
+        scientific_positive: 1.23456789e10
+        scientific_negative: 2.5e-15
+        
+        # All prefixes
+        positive_int: +100
+        negative_int: -100
+        positive_float: +3.14
+        negative_float: -2.71
+        positive_hex: +0xFF
+        negative_hex: -0xFF
+        positive_binary: +0b1010
+        negative_binary: -0b1010
+        positive_octal: +0o77
+        negative_octal: -0o77
+        positive_scientific: +1.5e10
+        negative_scientific: -2.5e-6
+        
+        # All measurement units
+        length_pm: 1pm
+        length_nm: 1nm
+        length_um: 1µm
+        length_mm: 1mm
+        length_cm: 1cm
+        length_m: 1m
+        
+        voltage_mv: 1mV
+        voltage_v: 1V
+        voltage_kv: 1kV
+        
+        current_ua: 1µA
+        current_ma: 1mA
+        current_a: 1A
+        
+        resistance_ohm: 1Ω
+        resistance_kohm: 1kΩ
+        resistance_mohm: 1MΩ
+        
+        capacitance_ff: 1fF
+        capacitance_pf: 1pF
+        capacitance_nf: 1nF
+        capacitance_uf: 1µF
+        capacitance_f: 1F
+        
+        inductance_nh: 1nH
+        inductance_uh: 1µH
+        inductance_mh: 1mH
+        inductance_h: 1H
+        
+        frequency_hz: 1Hz
+        frequency_khz: 1kHz
+        frequency_mhz: 1MHz
+        frequency_ghz: 1GHz
+        
+        temperature_c: 25°C
+        temperature_k: 298K
+        
+        percentage: 50%
+        
+        # Complex SI units
+        density_si: 8960kg/m³
+        thermal_cond: 401W/(m·K)
+        specific_heat: 385J/(kg·K)
+        mobility: 1400cm²/Vs
+        temp_coeff: 3.4e-3/°C
+        
+        # Extreme values
+        zero: 0
+        zero_float: 0.0
+        zero_measurement: 0V
+        tiny: 1e-100
+        huge: 1e100
+        max_int: 9223372036854775807
+        min_int: -9223372036854775808
+        
+        # Boundary values
+        absolute_zero: -273.15°C
+        planck_length: 1.616255e-35m
+        speed_of_light: 299792458m/s
+        avogadro: 6.02214076e23
+        
+        # All keywords as property names (soft keyword test)
+        tolerance: "±1%"
+        category: "Test"
+        trace: "Test"
+        via: "Test"
+        clearance: "Test"
+        material: "Test"
+        profile: "Test"
+        component: "Test"
+        space: "Test"
+        layout: "Test"
+        electrical: "Test"
+        render: "Test"
+        pins: "Test"
+        metadata: "Test"
+        properties: "Test"
+        
+        # Unicode in strings (NOT in identifiers - that's correctly rejected)
+        unicode_greek: "αβγδεζηθικλμνξοπρστυφχψω ΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩ"
+        unicode_math: "∑∫∂∇∆√∞≈≠≤≥±×÷"
+        unicode_arrows: "←↑→↓↔↕⇐⇑⇒⇓⇔⇕"
+        unicode_emoji: "🔬🔭🔌⚡💡🔋📡📶🌡️⚛️🧪🧬"
+        unicode_rtl: "العربية עברית"
+        unicode_cjk: "中文 日本語 한국어"
+        
+        # All punctuation in strings
+        punctuation: "!@#$%^&*()_+-=[]{}|\\;':\",./<>?`~"
+        
+        # Escaped characters in strings
+        escaped_quotes: "He said \"Hello, World!\""
+        escaped_backslash: "Path: C:\\Users\\Test\\"
+        
+        # Multi-line description with inline comments
+        description_line1: "This is line 1"  # Comment 1
+        description_line2: "This is line 2"  # Comment 2
+        description_line3: "This is line 3"  # Comment 3
+        
+        # Color
+        color: "#FF00FF"  # Magenta
+
+
+
+##[
+    STRESS TEST SUMMARY
+    
+    This file tests 10 semiconductor materials with comprehensive edge cases:
+    
+    1. Silicon (Si) - Basic syntax, scientific notation
+    2. Gallium Nitride (GaN) - Hex/binary, negative temps, unicode strings
+    3. Gallium Arsenide (GaAs) - Scientific extremes, keywords as properties
+    4. Silicon Carbide (SiC) - Octal, extreme values, all punctuation
+    5. Germanium (Ge) - Zero values, inline comments everywhere
+    6. Indium Phosphide (InP) - Mixed formats, frequency units
+    7. Diamond (C) - Extreme everything, all measurement types
+    8. Aluminum Nitride (AlN) - Doc comments, negative coefficients
+    9. Cadmium Telluride (CdTe) - Positive prefixes, percentages
+    10. Extreme Test Material - ALL edge cases in one material
+    
+    FEATURES TESTED (50+):
+    ✓ All number formats (decimal, hex, binary, octal, scientific)
+    ✓ All prefixes (+/- on all number types)
+    ✓ All measurement units (length, voltage, current, resistance, etc.)
+    ✓ Complex SI units (kg/m³, W/(m·K), cm²/Vs, /°C)
+    ✓ Scientific notation with and without units
+    ✓ Extreme values (tiny, huge, zero, boundary)
+    ✓ Unicode in strings (Greek, math, emoji, RTL, CJK)
+    ✓ All punctuation in strings
+    ✓ Escaped characters in strings
+    ✓ Keywords as property names (soft keywords)
+    ✓ Inline comments everywhere
+    ✓ Doc comments (##)
+    ✓ Block comments (#[...]#)
+    ✓ Doc blocks (hash-hash-bracket syntax)
+    ✓ Negative values and coefficients
+    ✓ Positive prefixes
+    ✓ Percentage units
+    ✓ Zero and boundary values
+    ✓ Frequency units (Hz to GHz)
+    ✓ Temperature units (°C and K)
+    ✓ All thermal properties
+    ✓ All electrical properties
+    ✓ All optical properties
+    ✓ All mechanical properties
+    ✓ Semiconductor-specific: bandgap, mobility, doping, carrier density
+    
+    DOMAIN-SPECIFIC SEMICONDUCTOR FEATURES:
+    ✓ Bandgap energy (eV)
+    ✓ Electron/hole mobility (cm²/Vs)
+    ✓ Carrier concentration (/cm³)
+    ✓ Breakdown field (V/cm)
+    ✓ Saturation velocity (cm/s)
+    ✓ Temperature coefficients (/°C, /K)
+    ✓ Dielectric constants (unitless)
+    ✓ Refractive index (unitless)
+    ✓ Crystal structures
+    ✓ Doping types and concentrations
+    ✓ Operating temperature ranges
+    ✓ Wafer sizes
+    ✓ Growth methods
+    ✓ Applications and advantages
+    
+    EXPECTED RESULT: All 10 materials should compile successfully.
+    
+    If any errors occur, they represent compiler gaps that need fixing.
+]##
+
+# End of semiconductors.hw stress test

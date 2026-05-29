@@ -1,0 +1,7 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,60.00x40.00x10.00mm,,,,,1
+R1,Resistor,,,,,,1
+R2,Resistor,,,,,,1
+C1,Capacitor,,,,,,1
+C2,Capacitor,,,,,,1
+U1,IC,,,,,,1

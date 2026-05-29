@@ -1,0 +1,19 @@
+import * from @std/primitives/units
+
+material Copper:
+    category: conductor
+    properties:
+        color: "#B87333"
+        metallic: 1.0
+        roughness: 0.2
+
+space CopperHoleTest:
+    dimensions: 2mm by 2mm by 0.5mm
+    grid: 40 by 40 by 5
+    origin: bl by b
+    
+    # Just a single PTH in space to inspect the connection between
+    # the surface annular rings (pads) and the internal plating (tube).
+    add contact(Copper) named SoloVia at [x: 1mm, y: 1mm] spanning z:1 to z:5:
+        diameter: 0.5mm
+        annular_ring: 0.25mm

@@ -1,0 +1,6 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,10.00x10.00x1.00mm,,,,,1
+FloatingPour,Pour,4.0000mm² net:VCC,Layer 1,,Copper,0.400000mm³
+FloatingGND,Pour,4.0000mm² net:GND,Layer 1,,Copper,0.400000mm³
+FloatingPour,Pour(Copper),,,,,,1
+FloatingGND,Pour(Copper),,,,,,1

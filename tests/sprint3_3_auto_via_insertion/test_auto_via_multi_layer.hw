@@ -1,0 +1,42 @@
+## Sprint 3.3: Automatic Via Insertion - Multi-Layer Test
+##
+## This test verifies that the compiler automatically inserts vias
+## for nets that span multiple layers.
+##
+## Test Case:
+## - Net "VDD" has three pours on layers z:1, z:2, and z:3
+## - All pours overlap in XY space
+## - Compiler should auto-insert 2 vias (z:1→z:2 and z:2→z:3)
+
+import * from @std/primitives/units
+import Copper from @std/materials/conductors
+
+module AutoViaMultiLayerTest:
+    pins: []
+
+space TestAutoViaMultiLayer implements AutoViaMultiLayerTest:
+    dimensions: 20mm by 20mm by 1mm
+    grid: 20000 by 20000 by 5
+    origin: tl by t
+    
+    nets:
+        VDD: power
+    
+    ## Pour 1: VDD on Metal1 (z:1)
+    add pour(Copper) named VDD_Metal1 on z:1:
+        boundary: [x: 4mm, y: 4mm] to [x: 10mm, y: 10mm]
+        net: VDD
+    
+    ## Pour 2: VDD on Metal2 (z:2) - overlaps with both Pour 1 and Pour 3
+    add pour(Copper) named VDD_Metal2 on z:2:
+        boundary: [x: 5mm, y: 5mm] to [x: 11mm, y: 11mm]
+        net: VDD
+    
+    ## Pour 3: VDD on Metal3 (z:3) - overlaps with Pour 2
+    add pour(Copper) named VDD_Metal3 on z:3:
+        boundary: [x: 6mm, y: 6mm] to [x: 12mm, y: 12mm]
+        net: VDD
+    
+    ## Expected: 2 auto-inserted vias
+    ## Via 1: z:1→z:2 at overlap center of Pour1 and Pour2
+    ## Via 2: z:2→z:3 at overlap center of Pour2 and Pour3

@@ -1,0 +1,114 @@
+## DOPED SEMICONDUCTORS - Physics-Driven Validation (v0.1.6)
+##
+## This file defines doped semiconductor materials with explicit doping_type
+## and bias_requirement properties for physics-driven bulk biasing validation.
+##
+## WHY SEPARATE FROM semiconductors.hw?
+## - Doped semiconductors are FUNDAMENTALLY DIFFERENT materials from intrinsic
+## - Different electrical properties (resistivity 23,000x lower)
+## - Different applications (transistor regions vs. sensors)
+## - Different physics requirements (biasing constraints)
+##
+## ARCHITECTURE:
+## - doping_type: "p-type" | "n-type" | "intrinsic"
+## - bias_requirement: "lowest_potential" | "highest_potential" | "none"
+##
+## The compiler reads these properties to validate bulk biasing without
+## hardcoding device type names or net names. This enables infinite scalability:
+## - Add GaN_P, GaN_N for GaN transistors
+## - Add SiC_P, SiC_N for SiC power devices
+## - Add any custom doped semiconductor
+##
+## All validation is data-driven from material properties!
+
+# ============================================================================
+# P-Type Silicon (Silicon_P) - NMOS Bulk Material
+# ============================================================================
+
+material Silicon_P:
+    category: semiconductor
+    symbol: "Si:B"
+    description: "P-type silicon (boron-doped) - used for NMOS bulk/substrate"
+    
+    properties:
+        # Physical properties
+        density: 2329kg/m³
+        thermal_conductivity: 148W/(m·K)
+        
+        # Electrical properties
+        resistivity: 10Ω·m                  # Typical for lightly doped (23,000x lower than intrinsic!)
+        band_gap: 1.12eV                    # Same as intrinsic Si
+        
+        # Carrier mobility
+        hole_mobility: 450cm²/Vs            # Majority carriers
+        electron_mobility: 1400cm²/Vs       # Minority carriers
+        
+        # Doping properties (NEW v0.1.6 - Physics-Driven Validation)
+        doping_type: "p-type"
+        dopant: "Boron"
+        carrier_type: "holes"
+        doping_concentration: 1e15/cm³      # Typical substrate doping
+        
+        # Bias requirement (NEW v0.1.6 - Physics-Driven Validation)
+        # P-type bulk must be at lowest potential to prevent forward-biasing
+        # of the bulk-source PN junction in NMOS transistors
+        bias_requirement: "lowest_potential"
+        bias_reason: "Prevent forward-biasing of bulk-source PN junction in NMOS"
+        
+        # Operating temperature
+        max_operating_temp: 150°C
+        
+        # Color for visualization
+        color: "#FFB6C1"  # Light pink (p-type convention)
+
+# ============================================================================
+# N-Type Silicon (Silicon_N) - NMOS Source/Drain, PMOS Bulk
+# ============================================================================
+
+material Silicon_N:
+    category: semiconductor
+    symbol: "Si:P"
+    description: "N-type silicon (phosphorus-doped) - used for NMOS source/drain and PMOS bulk (n-well)"
+    
+    properties:
+        # Physical properties
+        density: 2329kg/m³
+        thermal_conductivity: 148W/(m·K)
+        
+        # Electrical properties
+        resistivity: 1Ω·m                   # Typical for moderately doped (230,000x lower than intrinsic!)
+        band_gap: 1.12eV                    # Same as intrinsic Si
+        
+        # Carrier mobility
+        electron_mobility: 1400cm²/Vs       # Majority carriers
+        hole_mobility: 450cm²/Vs            # Minority carriers
+        
+        # Doping properties (NEW v0.1.6 - Physics-Driven Validation)
+        doping_type: "n-type"
+        dopant: "Phosphorus"
+        carrier_type: "electrons"
+        doping_concentration: 1e16/cm³      # Typical n-well doping
+        
+        # Bias requirement (NEW v0.1.6 - Physics-Driven Validation)
+        # N-type bulk (n-well) must be at highest potential to prevent
+        # forward-biasing of the bulk-source PN junction in PMOS transistors
+        bias_requirement: "highest_potential"
+        bias_reason: "Prevent forward-biasing of bulk-source PN junction in PMOS"
+        
+        # Operating temperature
+        max_operating_temp: 150°C
+        
+        # Color for visualization
+        color: "#ADD8E6"  # Light blue (n-type convention)
+
+# ============================================================================
+# FUTURE: Add more doped semiconductors as needed
+# ============================================================================
+# Users can add:
+# - GaN_P, GaN_N for gallium nitride transistors
+# - SiC_P, SiC_N for silicon carbide power devices
+# - GaAs_P, GaAs_N for gallium arsenide RF devices
+# - Custom doped semiconductors for specialized applications
+#
+# The compiler will automatically validate biasing based on the
+# doping_type and bias_requirement properties!

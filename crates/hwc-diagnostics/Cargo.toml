@@ -1,0 +1,16 @@
+[package]
+name = "hwc-diagnostics"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+miette = { workspace = true }
+rustc-hash = { version = "2.1" }
+compact_str = { workspace = true }
+owo-colors = "4.0"
+unicode-width = "0.1"
+thiserror = { workspace = true }
+
+[dev-dependencies]

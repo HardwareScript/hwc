@@ -1,0 +1,71 @@
+## GAP2: Substrate-Component Overlap Validation
+## Test: Component at exact substrate boundary (edge case)
+##
+## This test verifies the boundary condition where a component's bottom
+## edge exactly touches the substrate's top edge.
+##
+## Expected behavior:
+## - Component at z:3 with substrate ending at z:2 should succeed
+## - No overlap because component.min_z (3mm) >= substrate.max_z (3mm)
+## - This is the minimum safe Z position
+##
+## Physical Reality:
+## - Substrate spans z:0 to z:2 → physically 0mm to 3mm
+## - Component at z:3 → starts at 3mm (exactly at substrate top)
+## - No overlap: component_min_z (3mm) == substrate_max_z (3mm) ✅
+
+import * from @std/primitives/units
+import Silicon_P from @std/materials/doped_semiconductors
+import Copper from @std/materials/conductors
+
+## ============================================================================
+## COMPONENT DEFINITION: Simple Resistor
+## ============================================================================
+
+component Resistor:
+    pins: [A, K]
+    
+    layout:
+        shape: Rectangle(5mm, 2mm, 0.5mm)
+        
+        pin_positions:
+            A at [1mm, 1mm]
+            K at [4mm, 1mm]
+    
+    metadata:
+        component_type: "Resistor"
+        description: "Simple resistor for boundary testing"
+    
+    render:
+        type: procedural
+        shape: box
+        body_color: "#FFD700"
+
+## ============================================================================
+## SPACE: Component at Substrate Boundary (Should Succeed)
+## ============================================================================
+
+space TestComponentAtBoundary:
+    dimensions: 100mm by 100mm by 10mm
+    grid: 100000 by 100000 by 10
+    origin: bl
+    
+    ## Substrate spans z:0 to z:2 (physically 0mm to 3mm)
+    add substrate(Silicon_P) spanning [x:1um, y:1um, z:0] to [x:99999um, y:99999um, z:2]
+    
+    ## ========================================================================
+    ## BOUNDARY CASE: Component placed at z:3 (exactly at substrate top)
+    ## 
+    ## Overlap check:
+    ## - component_min_z = 3mm (z:3 * 1mm/layer)
+    ## - component_max_z = 3.5mm (3mm + 0.5mm depth)
+    ## - substrate_min_z = 0mm
+    ## - substrate_max_z = 3mm (z:2 * 1.5mm/layer, but actually z:2 end)
+    ## 
+    ## Overlap condition: component_min_z < substrate_max_z AND component_max_z > substrate_min_z
+    ## - 3mm < 3mm? NO
+    ## - Therefore: NO OVERLAP ✅
+    ## ========================================================================
+    
+    add Resistor named R1 at [x: 50mm, y: 50mm, z: 3]  ## ✅ AT BOUNDARY (SAFE)
+

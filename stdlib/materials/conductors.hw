@@ -1,0 +1,524 @@
+## Hardware Script Standard Library - Conductors (Materials Domain)
+## STRESS TEST: Tests ALL language features for material definitions
+## Domain: Pure Physics - SI units, thermal/electrical properties, extreme values
+## Status: Compiler stress test - exposing gaps in materials syntax
+
+#[
+TESTING STRATEGY:
+- Use EVERY feature from v0.1.4 and v0.1.5 LANGUAGE-SPEC.md
+- Use EVERY feature found in token.rs (lexer primitives)
+- Test edge cases: extreme values, unicode, scientific notation
+- Test materials-specific features: complex SI units, thermal properties
+- DO NOT read existing stdlib files - synthesize from scratch
+- Goal: Expose compiler gaps, not just validate working syntax
+]#
+
+## ============================================================================
+## SECTION 1: Basic Conductors with Standard Properties
+## Tests: Basic material syntax, standard SI units, simple properties
+## ============================================================================
+
+material Copper:
+    category: conductor
+    symbol: "Cu"
+    description: "Universal PCB trace material - most common conductor"
+    
+    properties:
+        density: 8960kg/m³                    # Complex unit with superscript
+        thermal_conductivity: 401W/(m·K)      # Complex unit with parentheses and dot
+        resistivity: 1.68e-8Ω·m              # Scientific notation with unicode
+        max_current_density: 35A/mm²          # Superscript 2
+        melting_point: 1085°C                 # Degree symbol
+        color: "#B87333"                      # Hex color code in string
+
+material Silver:
+    category: conductor
+    symbol: "Ag"
+    description: "Highest conductivity metal - premium RF applications"
+    
+    properties:
+        density: 10490kg/m³
+        thermal_conductivity: 429W/(m·K)
+        resistivity: 1.59e-8Ω·m
+        max_current_density: 40A/mm²
+        melting_point: 962°C
+        color: "#C0C0C0"
+
+## ============================================================================
+## SECTION 2: Scientific Notation Stress Test
+## Tests: Extreme scientific notation, positive/negative prefixes, unitless
+## ============================================================================
+
+material Gold:
+    category: conductor
+    symbol: "Au"
+    description: "Corrosion-resistant conductor for high-reliability contacts"
+    
+    properties:
+        density: 1.93e4kg/m³                  # Scientific notation (19300 kg/m³)
+        thermal_conductivity: 3.18e2W/(m·K)   # 318 W/(m·K)
+        resistivity: 2.44e-8Ω·m              # Tiny value
+        max_current_density: 3.0e1A/mm²       # 30 A/mm²
+        melting_point: +1064C                 # Explicit positive prefix
+        temp_coefficient: +3.4e-3perC         # Positive temperature coefficient
+        electron_mobility: 4.3e-3m²perVs      # Complex unit with mobility
+        color: "#FFD700"
+
+material Aluminum:
+    category: conductor
+    symbol: "Al"
+    description: "Lightweight conductor for power transmission"
+    
+    properties:
+        density: 2.70e3kg/m³                  # 2700 kg/m³
+        thermal_conductivity: 2.37e2W/(m·K)   # 237 W/(m·K)
+        resistivity: 2.82e-8Ω·m
+        max_current_density: 2.5e1A/mm²
+        melting_point: 660C
+        temp_coefficient: +4.03e-3perC
+        youngs_modulus: 7.0e10Pa              # Mechanical property (70 GPa)
+        color: "#848789"
+
+## ============================================================================
+## SECTION 3: Extreme Values and Edge Cases
+## Tests: Tiny values, huge values, negative values, zero, special numbers
+## ============================================================================
+
+material Graphene:
+    category: conductor
+    symbol: "C"
+    description: "2D carbon allotrope - theoretical conductor with extreme properties"
+    
+    properties:
+        density: 2267kg/m³
+        thermal_conductivity: 5.0e3W/(m·K)    # Extreme: 5000 W/(m·K)
+        resistivity: 1.0e-8Ω·m               # Very low
+        max_current_density: 1.0e8A/mm²       # EXTREME: 100 million A/mm²
+        melting_point: 3652C                  # Very high
+        electron_mobility: 2.0e5cm²perVs      # Extreme mobility
+        thickness: 3.35e-10m                  # Atomic scale (0.335 nm)
+        tensile_strength: 1.3e11Pa            # 130 GPa
+        color: "#2F4F4F"
+
+material Superconductor_YBCO:
+    category: conductor
+    symbol: "YBa₂Cu₃O₇"                      # Unicode subscripts in symbol
+    description: "High-temperature superconductor - zero resistance below critical temp"
+    
+    properties:
+        density: 6380kg/m³
+        thermal_conductivity: 12W/(m·K)
+        resistivity: 0.0Ω·m                   # Zero resistance (superconducting state)
+        max_current_density: 1.0e6A/mm²       # Extreme current density
+        melting_point: 1000C                  # Decomposes before melting
+        critical_temp: -180C                  # Negative temperature (93 K)
+        critical_field: 1.0e2T                # 100 Tesla
+        penetration_depth: 1.5e-7m            # London penetration depth (150 nm)
+        coherence_length: 3.0e-9m             # 3 nm
+        color: "#000000"
+
+## ============================================================================
+## SECTION 4: Unicode Stress Test
+## Tests: All unicode symbols, Greek letters, math symbols, superscripts
+## ============================================================================
+
+material Platinum:
+    category: conductor
+    symbol: "Pt"
+    description: "Noble metal - catalytic and high-temp applications 🔥⚡"  # Emoji in string
+    
+    properties:
+        density: 21450kg/m³
+        thermal_conductivity: 71.6W/(m·K)
+        resistivity: 1.06e-7Ω·m              # Ω (Omega)
+        max_current_density: 25A/mm²          # ² (superscript 2)
+        melting_point: 1768C                  # Temperature
+        temp_coefficient: +3.92e-3perC        # Temperature coefficient
+        work_function: 5.65eV                 # Electron volts
+        color: "#E5E4E2"
+        notes: "Greek: αβγδε, Math: ∑∫∂∇, Symbols: ±×÷≈≠≤≥"  # Unicode in metadata
+
+material Tungsten:
+    category: conductor
+    symbol: "W"
+    description: "Highest melting point metal - filaments and high-temp contacts"
+    
+    properties:
+        density: 19250kg/m³
+        thermal_conductivity: 173W/(m·K)
+        resistivity: 5.60e-8Ω·m
+        max_current_density: 30A/mm²
+        melting_point: 3422°C                 # Highest melting point
+        boiling_point: 5555°C                 # Extreme temperature
+        temp_coefficient: +4.5e-3/°C
+        hardness: 7.5GPa                      # Vickers hardness
+        color: "#3C3C3C"
+        special_chars: "Test all: '`<>,.?/!@#$%^&*()[]{}|\\-_=+;:~"  # All punctuation
+
+## ============================================================================
+## SECTION 5: Complex SI Units
+## Tests: Compound units, parentheses, dots, slashes, superscripts
+## ============================================================================
+
+material Nichrome:
+    category: conductor
+    symbol: "NiCr"
+    description: "Nickel-chromium alloy - heating elements and resistors"
+    
+    properties:
+        density: 8400kg/m³
+        thermal_conductivity: 13.4W/(m·K)     # W/(m·K) - parentheses
+        resistivity: 1.10e-6Ω·m              # High resistivity for heating
+        max_current_density: 20A/mm²
+        melting_point: 1400°C
+        temp_coefficient: +4.0e-4/°C          # Low temp coefficient
+        specific_heat: 450J/(kg·K)            # J/(kg·K) - complex unit
+        thermal_expansion: 1.3e-5/°C          # Coefficient of thermal expansion
+        color: "#8B8680"
+
+material Constantan:
+    category: conductor
+    symbol: "CuNi"
+    description: "Copper-nickel alloy - thermocouples and precision resistors"
+    
+    properties:
+        density: 8900kg/m³
+        thermal_conductivity: 22.7W/(m·K)
+        resistivity: 4.9e-7Ω·m
+        max_current_density: 15A/mm²
+        melting_point: 1210°C
+        temp_coefficient: +2.0e-5/°C          # Very low - almost constant resistance
+        seebeck_coefficient: -3.5e-5V/°C      # Thermoelectric property
+        thermal_emf: 4.1e-5V/°C              # Thermocouple voltage
+        color: "#B87333"
+
+## ============================================================================
+## SECTION 6: Hex, Binary, Octal Integer Properties
+## Tests: Non-decimal integer formats in properties
+## ============================================================================
+
+material Copper_Alloy_C110:
+    category: conductor
+    symbol: "Cu-ETP"
+    description: "Electrolytic Tough Pitch Copper - 99.9% pure"
+    
+    properties:
+        density: 8940kg/m³
+        thermal_conductivity: 391W/(m·K)
+        resistivity: 1.72e-8Ω·m
+        max_current_density: 35A/mm²
+        melting_point: 1083°C
+        purity_percent: 99.9%                 # Percentage
+        astm_designation: "C11000"            # String identifier
+        color_code: 0xB87333                  # Hex integer (not in string!)
+        binary_grade: 0b11111111              # Binary (255 = highest grade)
+        octal_permissions: 0o755              # Octal (Unix-style, just for testing)
+        color: "#B87333"
+
+## ============================================================================
+## SECTION 7: Frequency-Dependent Properties
+## Tests: Properties that vary with frequency (RF/microwave materials)
+## ============================================================================
+
+material Copper_RF:
+    category: conductor
+    symbol: "Cu-RF"
+    description: "High-purity copper for RF and microwave applications"
+    
+    properties:
+        density: 8960kg/m³
+        thermal_conductivity: 401W/(m·K)
+        resistivity: 1.68e-8Ω·m              # Base resistivity (DC)
+        resistivity_dc: 1.68e-8Ω·m           # DC resistivity
+        resistivity_1mhz: 1.70e-8Ω·m         # Slightly higher at 1 MHz
+        resistivity_1ghz: 1.85e-8Ω·m         # Skin effect at 1 GHz
+        resistivity_10ghz: 2.10e-8Ω·m        # Higher at 10 GHz
+        skin_depth_1mhz: 6.6e-5m             # 66 µm at 1 MHz
+        skin_depth_1ghz: 2.1e-6m             # 2.1 µm at 1 GHz
+        skin_depth_10ghz: 6.6e-7m            # 0.66 µm at 10 GHz
+        max_current_density: 35A/mm²
+        melting_point: 1085°C
+        color: "#B87333"
+
+## ============================================================================
+## SECTION 8: Negative Values and Asymmetric Properties
+## Tests: Negative temperatures, negative coefficients, asymmetric ranges
+## ============================================================================
+
+material Bismuth:
+    category: conductor
+    symbol: "Bi"
+    description: "Semimetal with unusual properties - diamagnetic and low melting point"
+    
+    properties:
+        density: 9780kg/m³
+        thermal_conductivity: 7.97W/(m·K)     # Low for a metal
+        resistivity: 1.29e-6Ω·m              # High resistivity
+        max_current_density: 10A/mm²
+        melting_point: 271°C                  # Low melting point
+        temp_coefficient: -4.0e-3/°C          # NEGATIVE temp coefficient (unusual!)
+        hall_coefficient: -1.0e-8m³/C         # Negative Hall coefficient
+        magnetic_susceptibility: -1.7e-4      # Diamagnetic (negative)
+        thermal_expansion: 1.3e-5/°C
+        operating_temp_min: -273°C            # Absolute zero (theoretical)
+        operating_temp_max: +250°C            # Before melting
+        color: "#9C9C9C"
+
+## ============================================================================
+## SECTION 9: Keywords as Property Names (Soft Keyword Test)
+## Tests: Using reserved keywords as property field names
+## ============================================================================
+
+material Copper_Test_Keywords:
+    category: conductor
+    symbol: "Cu-KW"
+    description: "Test material using keywords as property names"
+    
+    properties:
+        density: 8960kg/m³
+        thermal_conductivity: 401W/(m·K)
+        resistivity: 1.68e-8Ω·m
+        max_current_density: 35A/mm²
+        melting_point: 1085°C
+        tolerance_value: 1%                   # Testing keyword-like name
+        trace_width: 0.2mm                    # Testing keyword-like name
+        via_diameter: 0.3mm                   # Testing keyword-like name
+        clearance_min: 0.5mm                  # Testing keyword-like name
+        layer_count: 1                        # Testing keyword-like name
+        category_type: "conductor"            # Testing keyword-like name
+        material_type: "copper"               # Testing keyword-like name
+        profile_type: "standard"              # Testing keyword-like name
+        color: "#B87333"
+
+## ============================================================================
+## SECTION 10: Inline Comments Everywhere
+## Tests: Inline comments after every property
+## ============================================================================
+
+material Silver_Commented:
+    category: conductor  # This is the material category
+    symbol: "Ag"  # Chemical symbol for silver
+    description: "Silver with inline comments on every line"  # Description field
+    
+    properties:  # Start of properties block
+        density: 10490kg/m³  # Mass per unit volume
+        thermal_conductivity: 429W/(m·K)  # Heat transfer coefficient
+        resistivity: 1.59e-8Ω·m  # Electrical resistivity at 20°C
+        max_current_density: 40A/mm²  # Maximum safe current density
+        melting_point: 962°C  # Temperature at which silver melts
+        temp_coefficient: +3.8e-3/°C  # Temperature coefficient of resistance
+        color: "#C0C0C0"  # Hex color code for visualization
+
+## ============================================================================
+## SECTION 11: Doc Comments and Block Comments
+## Tests: Documentation comments (##) and block comments (#[...])
+## ============================================================================
+
+## This is a documentation comment for the next material definition
+## It should be preserved in the AST for documentation generation
+material Gold_Documented:
+    category: conductor
+    symbol: "Au"  ## Inline doc comment
+    description: "Gold with documentation comments"
+    
+    ## Block comment explaining the properties:
+    ## Gold is used in high-reliability applications because:
+    ## - It doesn't corrode
+    ## - It has excellent conductivity
+    ## - It's easy to bond
+    
+    properties:
+        density: 19300kg/m³
+        thermal_conductivity: 318W/(m·K)
+        resistivity: 2.44e-8Ω·m
+        max_current_density: 30A/mm²
+        melting_point: 1064°C
+        color: "#FFD700"
+
+##[
+Multi-line documentation block for the next material.
+This format is used for detailed documentation that spans multiple lines.
+It should be preserved in the AST.
+]##
+
+material Platinum_DocBlock:
+    category: conductor
+    symbol: "Pt"
+    description: "Platinum with doc block"
+    
+    properties:
+        density: 21450kg/m³
+        thermal_conductivity: 71.6W/(m·K)
+        resistivity: 1.06e-7Ω·m
+        max_current_density: 25A/mm²
+        melting_point: 1768°C
+        color: "#E5E4E2"
+
+## ============================================================================
+## SECTION 12: Extreme Precision and Tiny Values
+## Tests: Maximum precision floats, atomic-scale measurements
+## ============================================================================
+
+material Carbon_Nanotube:
+    category: conductor
+    symbol: "CNT"
+    description: "Single-walled carbon nanotube - nanoscale conductor"
+    
+    properties:
+        density: 1300kg/m³                    # Low density
+        thermal_conductivity: 3.5e3W/(m·K)    # Extremely high
+        resistivity: 1.0e-10Ω·m              # Near-zero resistance
+        max_current_density: 1.0e9A/mm²       # Billion amps per mm²!
+        melting_point: 3500°C
+        diameter: 1.0e-9m                     # 1 nanometer
+        wall_thickness: 3.4e-10m              # 0.34 nm (atomic scale)
+        electron_mean_free_path: 1.0e-6m      # 1 µm
+        ballistic_length: 1.0e-5m             # 10 µm
+        quantum_conductance: 7.748e-5S        # G₀ = 2e²/h (quantum unit)
+        color: "#000000"
+
+## ============================================================================
+## SECTION 13: Zero and Special Values
+## Tests: Zero values, infinity concepts, special numbers
+## ============================================================================
+
+material Perfect_Conductor:
+    category: conductor
+    symbol: "PC"
+    description: "Theoretical perfect conductor - zero resistance"
+    
+    properties:
+        density: 8960kg/m³
+        thermal_conductivity: 1.0e10W/(m·K)   # Infinite (represented as huge number)
+        resistivity: 0.0Ω·m                   # Perfect conductor
+        max_current_density: 1.0e15A/mm²      # Effectively infinite
+        melting_point: 10000°C                # Theoretical
+        temp_coefficient: 0.0/°C              # No temperature dependence
+        skin_depth: 0.0m                      # Zero skin depth
+        color: "#FFFFFF"
+
+## ============================================================================
+## SECTION 14: Multi-line String Values (if supported)
+## Tests: Long descriptions, multi-line metadata
+## ============================================================================
+
+material Copper_Detailed:
+    category: conductor
+    symbol: "Cu"
+    description: "Copper with extensive documentation and properties for comprehensive testing"
+    
+    properties:
+        density: 8960kg/m³
+        thermal_conductivity: 401W/(m·K)
+        resistivity: 1.68e-8Ω·m
+        max_current_density: 35A/mm²
+        melting_point: 1085°C
+        color: "#B87333"
+        applications: "PCB traces, power transmission, RF shielding, heat sinks, connectors"
+        standards: "ASTM B152, IPC-4101, MIL-STD-275"
+        notes: "Most common conductor in electronics. Excellent balance of conductivity, cost, and manufacturability."
+
+## ============================================================================
+## SECTION 15: Mixed Positive/Negative Prefixes
+## Tests: Explicit + and - prefixes on all number types
+## ============================================================================
+
+material Test_Prefixes:
+    category: conductor
+    symbol: "TP"
+    description: "Test material with explicit positive and negative prefixes"
+    
+    properties:
+        density: +8960kg/m³                   # Explicit positive
+        thermal_conductivity: +401W/(m·K)     # Explicit positive
+        resistivity: +1.68e-8Ω·m             # Positive scientific notation
+        max_current_density: +35A/mm²
+        melting_point: +1085°C
+        temp_coefficient_positive: +3.9e-3/°C  # Positive coefficient
+        temp_coefficient_negative: -4.0e-3/°C  # Negative coefficient
+        operating_temp_min: -273°C            # Negative temperature
+        operating_temp_max: +1000°C           # Positive temperature
+        voltage_drop: -0.5V                   # Negative voltage
+        voltage_rise: +0.5V                   # Positive voltage
+        color: "#808080"
+
+## ============================================================================
+## SECTION 16: Percentage and PPM Units
+## Tests: Percentage (%) and parts-per-million (ppm) units
+## ============================================================================
+
+material Copper_Tolerance:
+    category: conductor
+    symbol: "Cu-TOL"
+    description: "Copper with tolerance and purity specifications"
+    
+    properties:
+        density: 8960kg/m³
+        thermal_conductivity: 401W/(m·K)
+        resistivity: 1.68e-8Ω·m
+        max_current_density: 35A/mm²
+        melting_point: 1085°C
+        purity: 99.99%                        # Percentage
+        tolerance: 0.5%                       # Tolerance as percentage
+        impurity_level: 100ppm                # Parts per million
+        oxygen_content: 10ppm                 # Oxygen impurity
+        temp_coefficient: +0.39%/°C           # Percentage per degree
+        color: "#B87333"
+
+## ============================================================================
+## END OF STRESS TEST
+## ============================================================================
+
+#[
+EXPECTED COMPILER BEHAVIOR:
+- All materials should parse successfully
+- All SI units should be recognized (kg/m³, W/(m·K), Ω·m, A/mm², °C, etc.)
+- Scientific notation should work (1.68e-8, 1.0e10, etc.)
+- Unicode symbols should work in strings and units (Ω, µ, °, ², ³, ·)
+- Hex/binary/octal integers should work (0xB87333, 0b11111111, 0o755)
+- Positive/negative prefixes should work (+1085°C, -273°C, +3.9e-3/°C)
+- Keywords as property names should work (tolerance, trace, via, clearance)
+- Inline comments should work everywhere
+- Doc comments and block comments should be preserved
+- Zero values should work (0.0Ω·m, 0.0/°C)
+- Extreme values should work (1.0e15A/mm², 1.0e-10Ω·m)
+- All punctuation in strings should work
+
+GAPS TO FIND:
+- Does the parser support 'define material' syntax?
+- Does the parser support 'properties:' block?
+- Does the parser handle complex SI units with parentheses?
+- Does the parser handle superscripts (², ³)?
+- Does the parser handle unicode in property values?
+- Does the parser handle keywords as property names?
+- Does the parser handle percentage (%) and ppm units?
+- Does the parser handle multi-line property blocks?
+- Does the parser handle all comment types in materials?
+
+RUN THIS TEST:
+cd hwc
+.\target\release\hwc.exe check stdlib\materials\conductors.hw
+]#
+
+
+## ============================================================================
+## SECTION 17: Polysilicon - Semiconductor Industry Standard
+## ============================================================================
+
+material Polysilicon:
+    category: conductor
+    symbol: "poly-Si"
+    description: "Polycrystalline silicon - gate electrode material for CMOS transistors"
+    
+    properties:
+        density: 2330kg/m³
+        thermal_conductivity: 32W/(m·K)       # Lower than single-crystal Si
+        resistivity: 1.0e-4Ω·m               # Depends on doping (10-1000 Ω·cm typical)
+        max_current_density: 1A/mm²           # Lower than metals
+        melting_point: 1414°C                 # Same as crystalline silicon
+        resistivity_temp_coeff: +1.0e-3/°C    # Positive temperature coefficient
+        reference_temp: 25°C
+        grain_size: 1.0e-7m                   # ~100 nm typical grain size
+        sheet_resistance: 20Ω/sq              # Typical for gate polysilicon
+        work_function: 4.6eV                  # Mid-gap work function (undoped)
+        color: "#808080"                      # Gray color for visualization

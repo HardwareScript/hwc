@@ -1,0 +1,5 @@
+## Test that math constants ARE auto-loaded (in prelude)
+## This should compile successfully - constants available without import
+
+const TEST_CONSTANT: 3.14159
+const PI_BASED: 6.28318

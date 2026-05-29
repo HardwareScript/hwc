@@ -1,0 +1,40 @@
+## Sprint 3.4: Negative Index Guard Test
+## CRITICAL SAFETY TEST: Verifies that negative array indices are rejected
+##
+## Physical Reality Rule: Hardware indices cannot be negative.
+## In software, Array[-1] might mean "last element."
+## In hardware, Bus[-1] is a physical impossibility—an atom that doesn't exist.
+##
+## EXPECTED BEHAVIOR: Compiler must throw P44 error (Negative Array Index)
+## MUST NOT: Create nets with negative indices or crash
+
+import * from @std/primitives/units
+import Silicon_P from @std/materials/doped_semiconductors
+import Copper from @std/materials/conductors
+
+## ============================================================================
+## SPACE: Negative Index Test (Should Fail with P44 Error)
+## ============================================================================
+
+space NegativeIndexTest:
+    dimensions: 100mm by 20mm by 2mm
+    grid: 100000 by 20000 by 2
+    origin: tl by t
+    
+    ## Base substrate
+    add substrate(Silicon_P) spanning [x:1um, y:1um, z:0] to [x:99999um, y:19999um, z:1]
+    
+    ## ========================================================================
+    ## TEST: Negative Index (i - 5)
+    ## Loop: i in 0..3 → [0, 1, 2, 3]
+    ## Expression: i - 5
+    ## Result: -5, -4, -3, -2 (ALL NEGATIVE - PHYSICAL IMPOSSIBILITY)
+    ## 
+    ## EXPECTED: P44 error with message like:
+    ##   "Net index cannot be negative: D[-5]"
+    ##   "Physical Reality: Hardware indices must be >= 0"
+    ## ========================================================================
+    for i in 0..3:
+        add pour(Copper) named Test_i on z:1:
+            net: D[i - 5]
+            boundary: [x: i * 10mm + 1mm, y: 2mm] to [x: i * 10mm + 8mm, y: 4mm]

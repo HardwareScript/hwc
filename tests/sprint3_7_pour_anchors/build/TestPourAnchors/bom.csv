@@ -1,0 +1,8 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,50.00x30.00x2.00mm,,,,,1
+GroundPlane,Pour,200.0000mm² net:GND,Layer 1,,Copper,200.000000mm³
+GroundPlane,Pour(Copper),,,,,,1
+Block_Right,TestBlock,,,,,Simple component for testing pour-relative positioning,1
+Block_Left,TestBlock,,,,,Simple component for testing pour-relative positioning,1
+Block_Top,TestBlock,,,,,Simple component for testing pour-relative positioning,1
+Block_Bottom,TestBlock,,,,,Simple component for testing pour-relative positioning,1

@@ -1,0 +1,76 @@
+## Test: P12 Geometric Collision Detection (No Merge Intent)
+## Verifies that overlapping array instances WITHOUT merge: keyword trigger P12 error
+##
+## Philosophy: NO IMPLICIT MAGIC (Hardware Script Manifesto)
+## - Overlapping geometry without explicit merge intent → P12: Geometric Collision Error
+## - User must declare: "I know these overlap. Melt them."
+##
+## Expected Behavior:
+## - Compiler detects overlapping pours between array instances
+## - Throws P12 error with helpful message showing:
+##   * Which instances overlap (e.g., instances 0 and 1)
+##   * Current pitch vs suggested pitch
+##   * Suggestion to add merge: [terminal_name]
+
+import * from @std/primitives/units
+import Silicon_P, Silicon_N from @std/materials/doped_semiconductors
+
+## ============================================================================
+## COMPONENT DEFINITION: Finger with Overlapping Pours
+## ============================================================================
+
+component OverlapFinger:
+    pins: [left, right]
+    
+    layout:
+        ## Component shape: 4um wide (large enough to avoid component collision)
+        shape: Rectangle(4um, 10um, 0.5um)
+        
+        ## Internal pour: 3um wide (0.5um to 3.5um)
+        ## With pitch 4.5um, components don't overlap (4.5um > 4um shape)
+        ## But pours DO overlap (3um width, 4.5um pitch = 1.5um overlap)
+        add pour(Silicon_N) named source on z:1:
+            boundary: [x: 0.5um, y: 0um] to [x: 3.5um, y: 10um]
+            device: left
+            net: GND
+        
+        pin_positions:
+            left at [0um, 5um]
+            right at [4um, 5um]
+    
+    metadata:
+        description: "Finger with overlapping pours (requires merge intent)"
+    
+    render:
+        type: procedural
+        shape: box
+        body_color: "#FF6B6B"
+
+## ============================================================================
+## SPACE: P12 Collision Test (No Merge Intent)
+## ============================================================================
+
+space P12CollisionTest:
+    dimensions: 50um by 50um by 2mm
+    grid: 50000 by 50000 by 2
+    origin: tl by t
+    
+    ## Base substrate (z:0 to z:1)
+    add substrate(Silicon_P) spanning [x:1um, y:1um, z:0] to [x:49999um, y:49999um, z:1]
+    
+    ## ========================================================================
+    ## TEST: Array with overlapping geometry WITHOUT merge: keyword
+    ## 
+    ## Component shape: 4um wide
+    ## Pitch: 2um (components WILL overlap, but we disabled that check temporarily)
+    ## Pour width: appears to be ~2um in practice (0.011 to 0.013mm)
+    ## Pour overlap: With 2um pitch, pours at 0.011-0.013, 0.013-0.015, 0.015-0.017 WILL overlap
+    ## 
+    ## EXPECTED ERROR: P12: Geometric Collision
+    ## - Instance 0 and 1 pours overlap
+    ## - Suggested fix: merge: [left]
+    ## ========================================================================
+    add OverlapFinger[3] named F_Array at [x: 10um, y: 20um, z: 2]:
+        layout: horizontal_stack
+        pitch: 2um
+        ## NO merge: keyword → Should trigger P12 error!

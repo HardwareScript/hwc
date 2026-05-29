@@ -1,0 +1,10 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,100.00x20.00x2.00mm,,,,,1
+Adder[0],Adder,,,,,Single bit full adder for testing parametric unrolling,1
+Adder[1],Adder,,,,,Single bit full adder for testing parametric unrolling,1
+Adder[2],Adder,,,,,Single bit full adder for testing parametric unrolling,1
+Adder[3],Adder,,,,,Single bit full adder for testing parametric unrolling,1
+Adder[4],Adder,,,,,Single bit full adder for testing parametric unrolling,1
+Adder[5],Adder,,,,,Single bit full adder for testing parametric unrolling,1
+Adder[6],Adder,,,,,Single bit full adder for testing parametric unrolling,1
+Adder[7],Adder,,,,,Single bit full adder for testing parametric unrolling,1

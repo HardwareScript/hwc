@@ -1,0 +1,125 @@
+## Sprint 2.2: Component with Internal Geometry Test
+## Tests parsing and placement of components with internal pours
+##
+## This test demonstrates:
+## 1. Component definition with internal pours in layout block
+## 2. Internal pours use relative coordinates (relative to component origin)
+## 3. Component instantiation "unrolls" internal pours to absolute coordinates
+##
+## Expected behavior:
+## - Parser successfully parses internal pours in component layout
+## - Compiler transforms relative coordinates to absolute during placement
+## - Internal pours are added to space's substrate_layers
+
+import * from @std/primitives/units
+import Silicon_N, Silicon_P from @std/materials/doped_semiconductors
+import SiO2 from @std/materials/insulators
+import Polysilicon from @std/materials/conductors
+
+## ============================================================================
+## COMPONENT DEFINITION: Simple NMOS with Internal Geometry
+## This defines the component with internal pours (Sprint 2.2 feature)
+## ============================================================================
+
+component SimpleNMOS:
+    pins: [gate, source, drain, bulk]
+    
+    layout:
+        shape: Rectangle(1mm, 1mm, 0.5mm)
+        
+        ## Internal pours (relative to component origin)
+        ## These will be "unrolled" during component placement
+        
+        ## Layer 1: Bulk substrate (P-type silicon)
+        add pour(Silicon_P) named Bulk on z:1:
+            boundary: [x: 0um, y: 0um] to [x: 500um, y: 700um]
+            device: bulk
+            net: GND
+        
+        ## Layer 2: Source and Drain (N-type silicon) - now adjacent to Bulk
+        add pour(Silicon_N) named Source on z:2:
+            boundary: [x: 100um, y: 100um] to [x: 200um, y: 300um]
+            device: source
+            net: GND
+        
+        add pour(Silicon_N) named Drain on z:2:
+            boundary: [x: 300um, y: 100um] to [x: 400um, y: 300um]
+            device: drain
+            net: VOUT
+        
+        ## Layer 3: Gate oxide (SiO2 insulator between gate and channel)
+        ## Positioned ABOVE the channel (between source and drain)
+        add pour(SiO2) named GateOxide on z:3:
+            boundary: [x: 150um, y: 100um] to [x: 350um, y: 300um]
+        
+        ## Layer 4: Gate (Polysilicon) - now adjacent to GateOxide
+        ## Positioned above the oxide, spanning source to drain
+        add pour(Polysilicon) named Gate on z:4:
+            boundary: [x: 200um, y: 150um] to [x: 300um, y: 250um]
+            device: gate
+            net: VIN
+        
+        pin_positions:
+            gate at [250um, 500um]
+            source at [150um, 200um]
+            drain at [350um, 200um]
+            bulk at [250um, 350um]
+    
+    metadata:
+        component_type: "NMOS Transistor"
+        description: "Simple NMOS with internal geometry and gate oxide"
+    
+    render:
+        type: procedural
+        shape: box
+        body_color: "#4A4A4A"
+
+## ============================================================================
+## MODULE DEFINITION: Logical Intent
+## ============================================================================
+
+module SimpleNMOS_Module:
+    pins: [
+        input VIN,
+        output VOUT,
+        ground GND
+    ]
+    
+    ## Logical structure: Single NMOS transistor
+    add SimpleNMOS named M1
+    route M1.gate to VIN
+    route M1.source to GND
+    route M1.drain to VOUT
+    route M1.bulk to GND
+
+## ============================================================================
+## SPACE: Test Component Instantiation with Internal Pours
+## ============================================================================
+
+space TestComponentWithInternalPours implements SimpleNMOS_Module:
+    dimensions: 10mm by 10mm by 1mm
+    grid: 10000 by 10000 by 10
+    origin: tl by t
+    
+    ## Net classifications for physics validation (v0.1.6)
+    nets:
+        GND: ground
+        VIN: signal
+        VOUT: signal
+    
+    ## Base substrate (separate from component bulk to avoid z-fighting)
+    ## Using z:0 (below component) to avoid material interpenetration
+    add substrate(Silicon_P) spanning [x:1um, y:1um, z:0] to [x:9999um, y:9999um, z:1]
+    
+    ## ========================================================================
+    ## COMPONENT INSTANTIATION: Place component at absolute position
+    ## Internal pours should be transformed from relative to absolute coords
+    ## ========================================================================
+    
+    ## Instance 1: Place at (2mm, 2mm, 0)
+    ## Internal pours should be offset by this position
+    add SimpleNMOS named M1 at [x: 2mm, y: 2mm, z: 0]
+    
+    ## Note: The internal pours have device bindings but no net assignments yet
+    ## This is intentional for Sprint 2.2 - testing internal geometry unrolling
+    ## Net connectivity will be added in Sprint 3 with routing

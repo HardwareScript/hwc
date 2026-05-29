@@ -1,0 +1,11 @@
+# Mock HPM Library: Copper Material
+# This simulates an imported material from an external library
+
+material Copper:
+    category: conductor
+    properties:
+        resistivity: 1.72e-8  # Ω·m (slightly different from local)
+        thermal_conductivity: 385  # W/(m·K) (different from local)
+        density: 8900  # kg/m³ (different from local)
+        melting_point: 1358  # K
+        max_current_density: 3e9  # A/m²

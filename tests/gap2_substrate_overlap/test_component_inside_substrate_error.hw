@@ -1,0 +1,79 @@
+## GAP2: Substrate-Component Overlap Validation
+## Test: Component placed INSIDE substrate should trigger P44 error
+##
+## This test verifies that the compiler detects when a component is placed
+## inside the substrate material, which is physically impossible.
+##
+## Expected behavior:
+## - Compiler should throw P44: SubstrateOverlap error
+## - Error message should show:
+##   * Component Z position (layer and mm)
+##   * Substrate Z range (layers and mm)
+##   * Suggested Z position (above substrate)
+##   * Helpful fix instructions
+##
+## Physical Reality:
+## - Substrate spans z:0 to z:2 → physically 0mm to 3mm (with layer expansion)
+## - Component at z:1 → physically at 1mm (INSIDE substrate!)
+## - Components should be at z:3 or higher (ON TOP of substrate)
+
+import * from @std/primitives/units
+import Silicon_P from @std/materials/doped_semiconductors
+import Copper from @std/materials/conductors
+
+## ============================================================================
+## COMPONENT DEFINITION: Simple LED
+## ============================================================================
+
+component LED:
+    pins: [anode, cathode]
+    
+    layout:
+        shape: Rectangle(4mm, 4mm, 0.5mm)
+        
+        pin_positions:
+            anode at [1mm, 2mm]
+            cathode at [3mm, 2mm]
+    
+    metadata:
+        component_type: "LED"
+        description: "Simple LED for testing"
+    
+    render:
+        type: procedural
+        shape: box
+        body_color: "#FF0000"
+
+## ============================================================================
+## SPACE: Component Inside Substrate (Should Fail)
+## ============================================================================
+
+space TestComponentInsideSubstrate:
+    dimensions: 100mm by 100mm by 10mm
+    grid: 100000 by 100000 by 10
+    origin: bl
+    
+    ## Substrate spans z:0 to z:2 (physically 0mm to 3mm)
+    add substrate(Silicon_P) spanning [x:1um, y:1um, z:0] to [x:99999um, y:99999um, z:2]
+    
+    ## ========================================================================
+    ## ERROR CASE: Component placed at z:1 (INSIDE substrate)
+    ## 
+    ## This should trigger P44: SubstrateOverlap error with message:
+    ## 
+    ## Error: Component 'LED1' overlaps with substrate material
+    ## 
+    ##   Component placed at z:1 (1.000mm) is inside substrate (z:0 to z:2, 0.000mm to 3.000mm)
+    ##   
+    ##   Physical Reality: Components must sit ON TOP of substrate, not inside it.
+    ##   
+    ##   To fix:
+    ##   - Place component at z:3 or higher (above substrate)
+    ##   - Current: add LED named LED1 at [x: 50mm, y: 50mm, z: 1]
+    ##   - Correct: add LED named LED1 at [x: 50mm, y: 50mm, z: 3]
+    ##   
+    ##   Advanced: Use 'allow_substrate_overlap' if this is intentional (e.g., embedded components)
+    ## ========================================================================
+    
+    add LED named LED1 at [x: 50mm, y: 50mm, z: 1]  ## ❌ BURIED INSIDE SUBSTRATE!
+

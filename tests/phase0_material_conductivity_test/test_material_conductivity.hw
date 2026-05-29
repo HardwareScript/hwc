@@ -1,0 +1,98 @@
+# Phase 0: Material Conductivity Classification Test
+# Testing: MaterialRegistry properly classifies materials from MaterialDatabase
+# Expected: Conductors, Semiconductors, and Insulators are correctly identified
+
+# Define test materials of each type
+
+# CONDUCTORS - Should be classified as MaterialConductivity::Conductor
+material TestCopper:
+    category: conductor
+    properties:
+        resistivity: 1.68e-8Ω·m
+        thermal_conductivity: 401W/(m·K)
+        density: 8960kg/m³
+        melting_point: 1085C
+        max_current_density: 10A/mm²
+        color: "#B87333"
+
+material TestAluminum:
+    category: conductor
+    properties:
+        resistivity: 2.82e-8Ω·m
+        thermal_conductivity: 237W/(m·K)
+        density: 2700kg/m³
+        melting_point: 660C
+        max_current_density: 10A/mm²
+        color: "#D1D5DB"
+
+# SEMICONDUCTORS - Should be classified as MaterialConductivity::Semiconductor
+material TestSilicon:
+    category: semiconductor
+    properties:
+        resistivity: 1.0e-3Ω·m
+        thermal_conductivity: 148W/(m·K)
+        density: 2329kg/m³
+        melting_point: 1414C
+        max_current_density: 1e6A/mm²
+        color: "#4A4A4A"
+        band_gap: 1.12eV
+
+material TestSilicon_N:
+    category: semiconductor
+    properties:
+        resistivity: 1.0e-3Ω·m
+        thermal_conductivity: 148W/(m·K)
+        density: 2329kg/m³
+        melting_point: 1414C
+        max_current_density: 1e6A/mm²
+        color: "#4A4A4A"
+        band_gap: 1.12eV
+        doping_type: "n-type"
+
+# INSULATORS - Should be classified as MaterialConductivity::Insulator
+material TestSiO2:
+    category: insulator
+    properties:
+        resistivity: 1e16Ω·m
+        thermal_conductivity: 1.4W/(m·K)
+        density: 2200kg/m³
+        melting_point: 1713C
+        max_current_density: 0A/mm²
+        color: "#E0F7FA"
+        dielectric_constant: 3.9
+
+material TestFR4:
+    category: insulator
+    properties:
+        resistivity: 1e14Ω·m
+        thermal_conductivity: 0.3W/(m·K)
+        density: 1850kg/m³
+        melting_point: 130C
+        max_current_density: 0A/mm²
+        color: "#2E7D32"
+        dielectric_constant: 4.5
+
+# Define a simple space to test material usage
+space MaterialConductivityTest:
+    dimensions: 10mm by 10mm by 1mm
+    grid: 100 by 100 by 10
+    origin: tl by t
+    
+    # Use a conductor (should be routable only for same net)
+    add pour(TestCopper) named ConductorTest on z:1:
+        net: TestNet1
+        boundary: [x: 1mm, y: 1mm] to [x: 2mm, y: 2mm]
+    
+    # Use a semiconductor (should be traversable by router)
+    add pour(TestSilicon) named SemiconductorTest on z:1:
+        boundary: [x: 3mm, y: 1mm] to [x: 4mm, y: 2mm]
+    
+    # Use an insulator (should be traversable by router)
+    add pour(TestSiO2) named InsulatorTest on z:1:
+        boundary: [x: 5mm, y: 1mm] to [x: 6mm, y: 2mm]
+    
+    # Use aluminum conductor (different net - router should avoid)
+    add pour(TestAluminum) named ConductorTest2 on z:1:
+        net: TestNet2
+        boundary: [x: 7mm, y: 1mm] to [x: 8mm, y: 2mm]
+

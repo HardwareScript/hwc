@@ -1,0 +1,5 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,10.00x10.00x1.10mm,,,,,1
+BottomPour,Pour,9.0000mm²,Z 0.0000mm,,Copper,0.900000mm³
+TopPour,Pour,9.0000mm²,Z 0.0010mm,,Copper,0.900000mm³
+PhysicalVerify,Pour,9.0000mm²,Z 0.0010mm,,Gold,0.900000mm³

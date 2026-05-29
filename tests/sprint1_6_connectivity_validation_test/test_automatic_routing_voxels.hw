@@ -1,0 +1,25 @@
+## Sprint 1.6: Automatic Routing Voxel Validation Test
+
+import Copper from @std/materials/conductors
+
+component SimplePad:
+    pins: [P1]
+    
+    layout:
+        shape: Rectangle(2mm, 2mm, 0.5mm)
+        pin_positions:
+            P1 at [1mm, 1mm]
+    
+    render:
+        type: procedural
+        shape: smd_passive
+        body_color: "#FFD700"
+
+space AutoRoutedTest:
+    dimensions: 20mm by 20mm by 2mm
+    grid: 200 by 200 by 20
+    
+    add SimplePad named Pad1 at [x: 5mm, y: 10mm, z: 10]
+    add SimplePad named Pad2 at [x: 15mm, y: 10mm, z: 10]
+    
+    route Pad1.P1 to Pad2.P1

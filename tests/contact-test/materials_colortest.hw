@@ -1,0 +1,72 @@
+# Color Test Materials - Five Distinct Colors with Different Opacity
+# Purpose: Verify OBJ/MTL export system renders colors and transparency correctly
+
+# Material 1: Solid Red (Opaque)
+material RedBox:
+    category: conductor
+    properties:
+        resistivity: 1e-6Ω·m
+        thermal_conductivity: 400W/(m·K)
+        density: 8960kg/m³
+        melting_point: 1085C
+        max_current_density: 100A/mm²
+        color: "#FF0000"
+        opacity: 1.0
+        roughness: 0.3
+        metallic: 0.8
+
+# Material 2: Solid Green (Opaque)
+material GreenBox:
+    category: conductor
+    properties:
+        resistivity: 1e-6Ω·m
+        thermal_conductivity: 400W/(m·K)
+        density: 8960kg/m³
+        melting_point: 1085C
+        max_current_density: 100A/mm²
+        color: "#00FF00"
+        opacity: 1.0
+        roughness: 0.3
+        metallic: 0.8
+
+# Material 3: Solid Blue (Opaque)
+material BlueBox:
+    category: conductor
+    properties:
+        resistivity: 1e-6Ω·m
+        thermal_conductivity: 400W/(m·K)
+        density: 8960kg/m³
+        melting_point: 1085C
+        max_current_density: 100A/mm²
+        color: "#0000FF"
+        opacity: 1.0
+        roughness: 0.3
+        metallic: 0.8
+
+# Material 4: Semi-Transparent Yellow
+material YellowBox:
+    category: insulator
+    properties:
+        resistivity: 1e16Ω·m
+        thermal_conductivity: 1.4W/(m·K)
+        density: 2200kg/m³
+        melting_point: 1713C
+        max_current_density: 0A/mm²
+        color: "#FFFF00"
+        opacity: 0.5
+        roughness: 0.1
+        metallic: 0.0
+
+# Material 5: Semi-Transparent Magenta
+material MagentaBox:
+    category: insulator
+    properties:
+        resistivity: 1e16Ω·m
+        thermal_conductivity: 1.4W/(m·K)
+        density: 2200kg/m³
+        melting_point: 1713C
+        max_current_density: 0A/mm²
+        color: "#FF00FF"
+        opacity: 0.3
+        roughness: 0.1
+        metallic: 0.0

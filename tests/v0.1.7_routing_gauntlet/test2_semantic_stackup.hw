@@ -1,0 +1,49 @@
+material Copper: 
+    category: conductor 
+    properties: 
+        resistivity: 1.68e-8Ω·m 
+
+material FR4: 
+    category: insulator 
+    properties: 
+        dielectric_constant: 4.5 
+
+profile TestProfile: 
+    # The compiler reads this to calculate absolute Z-heights 
+    stackup: 
+        top:    [material: Copper, thickness: 35um] 
+        core:   [material: FR4,    thickness: 1.5mm] 
+        bottom: [material: Copper, thickness: 35um] 
+
+component Connector:
+    pins: [P1, P2]
+    layout:
+        shape: Rectangle(2mm, 2mm, 0.1mm)
+        pin_positions:
+            P1 at [0mm, 0mm, 0mm]
+            P2 at [1mm, 1mm, 0mm]
+
+space SemanticTest: 
+    profile: TestProfile 
+    dimensions: 50mm by 50mm by 2mm 
+    grid: 100 by 100 by 10 
+    
+    # 1. Semantic Pour (Top Layer) 
+    # Notice: No z-coordinate brackets. We use the 'on layer:' preposition. 
+    add pour(Copper) named TopTrace on layer: top: 
+        boundary: [x: 5mm, y: 5mm] to [x: 15mm, y: 10mm] 
+        
+    # 2. Semantic Pour (Bottom Layer) 
+    add pour(Copper) named BottomTrace on layer: bottom: 
+        boundary: [x: 20mm, y: 5mm] to [x: 30mm, y: 10mm] 
+        merge: true
+
+    # 3. Semantic Via (Spanning between named layers) 
+    # The StackupManager should automatically calculate the exact nanometer 
+    # distance from 'top' to 'bottom' through the 'core'. 
+    add contact(Copper) named MyVia at [x: 17mm, y: 7.5mm] spanning layer: top to bottom: 
+        diameter: 0.5mm 
+
+    # 4. Semantic Component Placement
+    add Connector named C1 at [x: 10mm, y: 20mm] on layer: top
+    add Connector named C2 at [x: 25mm, y: 20mm] on layer: bottom

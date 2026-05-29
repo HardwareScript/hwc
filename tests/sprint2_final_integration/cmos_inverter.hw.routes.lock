@@ -1,0 +1,17 @@
+{
+  "version": "0.1.4",
+  "board": "InverterChip",
+  "grid": {
+    "dimensions": [
+      10000,
+      10000,
+      10
+    ],
+    "resolution": [
+      0.001,
+      0.001,
+      0.1
+    ]
+  },
+  "routes": []
+}

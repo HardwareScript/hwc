@@ -1,0 +1,62 @@
+## Test: Proper merged region design (components don't overlap, pours do)
+## This demonstrates the correct way to design multi-finger transistors
+
+import * from @std/primitives/units
+import Silicon_P, Silicon_N from @std/materials/doped_semiconductors
+
+## Multi-finger transistor component
+## Key insight: Component shape is SMALLER than the pour
+## Pours extend beyond component boundaries and overlap with neighbors
+component TransistorFinger:
+    pins: [gate, source, drain]
+    
+    layout:
+        ## Component shape: 1um wide (just the gate region)
+        shape: Rectangle(1um, 10um, 0.5um)
+        
+        ## Source pour: 2um wide, extends 0.5um on each side of component
+        ## This means it goes from -0.5um to 1.5um relative to component origin
+        add pour(Silicon_N) named source on z:1:
+            boundary: [x: -0.5um, y: 0um] to [x: 1.5um, y: 4um]
+            net: GND
+        
+        ## Drain pour: 2um wide, extends 0.5um on each side
+        add pour(Silicon_N) named drain on z:1:
+            boundary: [x: -0.5um, y: 6um] to [x: 1.5um, y: 10um]
+            net: VDD
+        
+        pin_positions:
+            gate at [0.5um, 5um]
+            source at [0.5um, 2um]
+            drain at [0.5um, 8um]
+    
+    metadata:
+        description: "Multi-finger transistor with overlapping source/drain"
+    
+    render:
+        type: procedural
+        shape: box
+        body_color: "#4CAF50"
+
+## Test space
+space ProperMergedRegionTest:
+    dimensions: 50um by 50um by 2mm
+    grid: 50000 by 50000 by 2
+    origin: tl by t
+    
+    ## Base substrate (z:0 to z:1)
+    add substrate(Silicon_P) spanning [x:1um, y:1um, z:0] to [x:49999um, y:49999um, z:1]
+    
+    ## Array with explicit merge intent
+    ## Component shape: 1um, pitch: 1.5um
+    ## Components DON'T overlap (1.5um > 1um) ✓
+    ## 
+    ## Pour width: 2um (extends 0.5um on each side)
+    ## Pour 0: 9.5-11.5um, Pour 1: 11-13um, Pour 2: 12.5-14.5um
+    ## Pours OVERLAP by 0.5um! ✓
+    ## 
+    ## With merge: [source, drain], overlapping pours are merged
+    add TransistorFinger[3] named M_Array at [x: 10um, y: 20um, z: 2]:
+        layout: horizontal_stack
+        pitch: 1.5um
+        merge: [source, drain]

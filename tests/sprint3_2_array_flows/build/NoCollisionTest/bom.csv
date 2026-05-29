@@ -1,0 +1,42 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,0.10x0.05x2.00mm,,,,,1
+Safe_Array[0]_source,Pour,0.0000mm² net:GND,Layer 1,,Silicon_N,0.000020mm³
+Safe_Array[0]_drain,Pour,0.0000mm² net:VDD,Layer 1,,Silicon_N,0.000020mm³
+Safe_Array[1]_source,Pour,0.0000mm² net:GND,Layer 1,,Silicon_N,0.000020mm³
+Safe_Array[1]_drain,Pour,0.0000mm² net:VDD,Layer 1,,Silicon_N,0.000020mm³
+Safe_Array[2]_source,Pour,0.0000mm² net:GND,Layer 1,,Silicon_N,0.000020mm³
+Safe_Array[2]_drain,Pour,0.0000mm² net:VDD,Layer 1,,Silicon_N,0.000020mm³
+Safe_Array[3]_source,Pour,0.0000mm² net:GND,Layer 1,,Silicon_N,0.000020mm³
+Safe_Array[3]_drain,Pour,0.0000mm² net:VDD,Layer 1,,Silicon_N,0.000020mm³
+Safe_Array[4]_source,Pour,0.0000mm² net:GND,Layer 1,,Silicon_N,0.000020mm³
+Safe_Array[4]_drain,Pour,0.0000mm² net:VDD,Layer 1,,Silicon_N,0.000020mm³
+Safe_Vertical[0]_source,Pour,0.0000mm² net:GND,Layer 1,,Silicon_N,0.000020mm³
+Safe_Vertical[0]_drain,Pour,0.0000mm² net:VDD,Layer 1,,Silicon_N,0.000020mm³
+Safe_Vertical[1]_source,Pour,0.0000mm² net:GND,Layer 1,,Silicon_N,0.000020mm³
+Safe_Vertical[1]_drain,Pour,0.0000mm² net:VDD,Layer 1,,Silicon_N,0.000020mm³
+Safe_Vertical[2]_source,Pour,0.0000mm² net:GND,Layer 1,,Silicon_N,0.000020mm³
+Safe_Vertical[2]_drain,Pour,0.0000mm² net:VDD,Layer 1,,Silicon_N,0.000020mm³
+Safe_Array[0],SafeFinger,,,,,Finger with safe spacing (no overlap),1
+Safe_Array[0]_source,Pour(Silicon_N),,,,,,1
+Safe_Array[0]_drain,Pour(Silicon_N),,,,,,1
+Safe_Array[1],SafeFinger,,,,,Finger with safe spacing (no overlap),1
+Safe_Array[1]_source,Pour(Silicon_N),,,,,,1
+Safe_Array[1]_drain,Pour(Silicon_N),,,,,,1
+Safe_Array[2],SafeFinger,,,,,Finger with safe spacing (no overlap),1
+Safe_Array[2]_source,Pour(Silicon_N),,,,,,1
+Safe_Array[2]_drain,Pour(Silicon_N),,,,,,1
+Safe_Array[3],SafeFinger,,,,,Finger with safe spacing (no overlap),1
+Safe_Array[3]_source,Pour(Silicon_N),,,,,,1
+Safe_Array[3]_drain,Pour(Silicon_N),,,,,,1
+Safe_Array[4],SafeFinger,,,,,Finger with safe spacing (no overlap),1
+Safe_Array[4]_source,Pour(Silicon_N),,,,,,1
+Safe_Array[4]_drain,Pour(Silicon_N),,,,,,1
+Safe_Vertical[0],SafeFinger,,,,,Finger with safe spacing (no overlap),1
+Safe_Vertical[0]_source,Pour(Silicon_N),,,,,,1
+Safe_Vertical[0]_drain,Pour(Silicon_N),,,,,,1
+Safe_Vertical[1],SafeFinger,,,,,Finger with safe spacing (no overlap),1
+Safe_Vertical[1]_source,Pour(Silicon_N),,,,,,1
+Safe_Vertical[1]_drain,Pour(Silicon_N),,,,,,1
+Safe_Vertical[2],SafeFinger,,,,,Finger with safe spacing (no overlap),1
+Safe_Vertical[2]_source,Pour(Silicon_N),,,,,,1
+Safe_Vertical[2]_drain,Pour(Silicon_N),,,,,,1

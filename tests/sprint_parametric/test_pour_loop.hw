@@ -1,0 +1,24 @@
+## Advanced Parametric 3D Test
+## v0.1.6 Gap 2: Parametric Unrolling (3D Staircase)
+
+import * from @std/primitives/units
+import Copper from @std/materials/conductors
+import Silicon_P from @std/materials/doped_semiconductors
+
+space PourLoopTest:
+    dimensions: 100um by 100um by 50um
+    grid: 1000 by 1000 by 10
+    origin: tl by b  ## Bottom is z:0
+
+    ## Base substrate (bottom 2 layers)
+    add substrate(Silicon_P) spanning [x:0um, y:0um, z:0] to [x:100um, y:100um, z:2]
+
+    ## Pours at increasing heights
+    for i in 0..3:
+        add pour(Copper) named Trace[i] on z:i+3:
+            boundary: [x: 10um, y: 10um + i*20um] to [x: 90um, y: 15um + i*20um]
+            net: Bus[i]
+
+    ## Contacts with parametric vertical spanning
+    for i in 0..3:
+        add contact(Copper) named Via[i] net: Bus[i] at [x: 50um, y: 12.5um + i*20um] spanning z:0 to z:i+3

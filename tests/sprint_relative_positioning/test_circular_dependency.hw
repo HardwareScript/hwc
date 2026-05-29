@@ -1,0 +1,18 @@
+import * from @std/primitives/units
+
+component Resistor:
+    pins: [p1, p2]
+    layout:
+        shape: Rectangle(2mm, 1mm, 0.5mm)
+
+module CircularTest:
+    pins: []
+
+space CircularDep implements CircularTest:
+    dimensions: 20mm by 20mm by 1mm
+    grid: 100 by 100 by 5
+    origin: bl
+
+    # Circular dependency: R1 depends on R2, R2 depends on R1
+    add Resistor named R1 at R2.right + 2mm
+    add Resistor named R2 at R1.right + 2mm

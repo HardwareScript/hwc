@@ -1,0 +1,90 @@
+## Sprint 2: Component Stamping Test
+## Tests basic component definition with internal layout
+##
+## This test demonstrates:
+## 1. Component definition with layout block
+## 2. Component instantiation at absolute position
+## 3. Pre-rendering and bit-blit stamping
+##
+## Expected behavior:
+## - Component defines internal geometry once
+## - Component can be instantiated multiple times
+## - Each instance is stamped at specified position
+
+import * from @std/primitives/units
+
+## Define materials for this test
+material Copper:
+    category: conductor
+    properties:
+        resistivity: 1.68e-8Ω·m
+        color: "#B87333"
+        opacity: 1.0
+        outline_opacity: 0.0
+        roughness: 0.4
+        metallic: 1.0
+
+material FR4:
+    category: insulator
+    properties:
+        resistivity: 1e16Ω·m
+        color: "#2E7D32"
+        opacity: 0.8
+        outline_opacity: 0.0
+        roughness: 0.6
+        metallic: 0.0
+
+## ============================================================================
+## COMPONENT DEFINITION: Simple Resistor
+## This defines the component interface and metadata
+## ============================================================================
+
+component SimpleResistor:
+    pins: [A, B]
+    
+    layout:
+        shape: Rectangle(0.5mm, 0.1mm, 0.05mm)
+        pin_positions:
+            A at [0mm, 0.05mm, 0mm]
+            B at [0.5mm, 0.05mm, 0mm]
+    
+    electrical:
+        resistance: 100Ω
+    
+    metadata:
+        component_type: "Resistor"
+        value: "100Ω"
+    
+    render:
+        type: procedural
+        shape: box
+        body_color: "#B87333"
+
+## ============================================================================
+## SPACE: Test Component Instantiation
+## This space instantiates the component multiple times
+## ============================================================================
+
+space ComponentStampingTest:
+    dimensions: 2mm by 2mm by 1mm
+    grid: 2000 by 2000 by 10
+    origin: tl by t
+    
+    ## Base substrate
+    add substrate(FR4) spanning [x:1um, y:1um, z:1] to [x:1999um, y:1999um, z:2]
+    
+    ## ========================================================================
+    ## COMPONENT INSTANTIATION: Stamp the component at different positions
+    ## ========================================================================
+    
+    ## Instance 1: Top-left
+    add SimpleResistor named R1 at [x: 100um, y: 100um, z: 3]
+    
+    ## Instance 2: Top-right
+    add SimpleResistor named R2 at [x: 1000um, y: 100um, z: 3]
+    
+    ## Instance 3: Bottom-left
+    add SimpleResistor named R3 at [x: 100um, y: 1000um, z: 3]
+    
+    ## Instance 4: Bottom-right
+    add SimpleResistor named R4 at [x: 1000um, y: 1000um, z: 3]

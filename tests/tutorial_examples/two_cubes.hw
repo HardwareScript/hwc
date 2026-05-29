@@ -1,0 +1,35 @@
+# Two Cubes Example
+# Demonstrates: Manual placement of 3D volumes, semi-transparent materials, and correct orientation.
+
+material RedPlastic:
+    category: insulator
+    properties:
+        color: "#FF0000"
+        opacity: 0.5
+        metallic: 0.0
+        roughness: 0.2
+
+material BluePlastic:
+    category: insulator
+    properties:
+        color: "#0000FF"
+        opacity: 0.5
+        metallic: 0.0
+        roughness: 0.2
+
+space TwoCubesSpace:
+    # Space dimensions: 50x50mm area, 20mm height
+    dimensions: 50mm by 50mm by 20mm
+    grid: 100 by 100 by 40
+    
+    # origin: bl by b (Bottom-Left XY, Bottom-Up Z)
+    origin: bl by b
+    
+    # 1. Place the Red Cube
+    # Spanning from (10, 10, 0) to (20, 20, 10) -> a 10x10x10mm cube
+    add substrate(RedPlastic) spanning [x: 10mm, y: 10mm, z: 0mm] to [x: 20mm, y: 20mm, z: 10mm]
+    
+    # 2. Place the Blue Cube right beside it
+    # Spanning from (20, 10, 0) to (30, 20, 10) -> another 10x10x10mm cube
+    # They touch at X = 20mm
+    add substrate(BluePlastic) spanning [x: 20mm, y: 10mm, z: 0mm] to [x: 30mm, y: 20mm, z: 10mm]

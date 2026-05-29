@@ -1,0 +1,62 @@
+## Sprint 3.4: Parametric Unrolling in Spaces
+## Test: Basic for loop with component placement
+##
+## This test verifies:
+## 1. Parser accepts 'for i in start..end:' syntax in space blocks
+## 2. Loop variable can be used in component names: Adder[i]
+## 3. Loop variable can be used in position expressions: i * 10mm
+##
+## Expected behavior:
+## - Parser successfully parses for loop syntax
+## - Compiler unrolls loop into 8 individual component placements
+## - Components placed at: 0mm, 10mm, 20mm, 30mm, 40mm, 50mm, 60mm, 70mm
+
+import * from @std/primitives/units
+import Silicon_P from @std/materials/doped_semiconductors
+
+## ============================================================================
+## COMPONENT DEFINITION: Simple Adder Block
+## ============================================================================
+
+component Adder:
+    pins: [a, b, carry_in, sum, carry_out]
+    
+    layout:
+        shape: Rectangle(8mm, 4mm, 0.5mm)
+    
+    metadata:
+        component_type: "1-bit Adder"
+        description: "Single bit full adder for testing parametric unrolling"
+    
+    render:
+        type: procedural
+        shape: box
+        body_color: "#4CAF50"
+
+## ============================================================================
+## SPACE: Test Parametric Unrolling with For Loop
+## ============================================================================
+
+space Test8BitAdder:
+    dimensions: 100mm by 20mm by 2mm
+    grid: 100000 by 20000 by 2
+    origin: tl by t
+    
+    ## Base substrate
+    add substrate(Silicon_P) spanning [x:1um, y:1um, z:0] to [x:99999um, y:19999um, z:1]
+    
+    ## ========================================================================
+    ## PARAMETRIC UNROLLING: 8-bit adder using for loop
+    ## This replaces 8 lines of manual component placement with 2 lines
+    ## Code reduction: 8 lines → 2 lines = 4× reduction
+    ## 
+    ## CRITICAL: Hardware Script uses INCLUSIVE ranges (Ruby-style)
+    ## - 0..7 means [0,1,2,3,4,5,6,7] (8 items, both endpoints included)
+    ## - This matches hardware conventions: "bus bits 0..7" = 8 bits
+    ## 
+    ## Syntax: named Adder[i] uses native array reference syntax
+    ## Result: Adder[0], Adder[1], Adder[2], ..., Adder[7]
+    ## This is the same syntax used in logic blocks for array elements
+    ## ========================================================================
+    for i in 0..7:
+        add Adder named Adder[i] at [x: i * 10mm, y: 5mm, z: 1]

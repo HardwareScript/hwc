@@ -1,0 +1,38 @@
+## Sprint 2.3: Physical Continuity Test - P42 Short Circuit
+## 
+## This test should FAIL with error P42: Short Circuit
+##
+## Test scenario:
+## - Two pours with DIFFERENT net labels (VCC and GND) that physically touch
+## - They form a single conductive island but have conflicting net assignments
+## - This is a short circuit!
+##
+## Expected error:
+## P42: Island 0 has multiple net labels: VCC, GND
+
+import * from @std/primitives/units
+import Copper from @std/materials/conductors
+
+module ShortCircuitTest:
+    pins: []
+
+space TestShortCircuit implements ShortCircuitTest:
+    dimensions: 10mm by 10mm by 1mm
+    grid: 10000 by 10000 by 10
+    origin: tl by t
+    
+    ## Net classifications
+    nets:
+        VCC: power
+        GND: ground
+    
+    ## Pour 1: Labeled as VCC
+    add pour(Copper) named VCC_Pour on z:1:
+        boundary: [x: 1mm, y: 1mm] to [x: 5mm, y: 8mm]
+        net: VCC
+    
+    ## Pour 2: Labeled as GND but OVERLAPS with VCC_Pour!
+    ## This creates a short circuit - same physical copper, different net labels
+    add pour(Copper) named GND_Pour on z:1:
+        boundary: [x: 4mm, y: 1mm] to [x: 8mm, y: 8mm]
+        net: GND

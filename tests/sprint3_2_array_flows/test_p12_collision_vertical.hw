@@ -1,0 +1,65 @@
+## Test: P12 Geometric Collision Detection (Vertical Stack)
+## Verifies that P12 collision detection works for vertical_stack layout
+##
+## This test ensures collision detection works in Y-axis direction,
+## not just X-axis (horizontal_stack).
+
+import * from @std/primitives/units
+import Silicon_P, Silicon_N from @std/materials/doped_semiconductors
+
+## ============================================================================
+## COMPONENT DEFINITION: Vertical Finger with Overlapping Pours
+## ============================================================================
+
+component VerticalFinger:
+    pins: [top, bottom]
+    
+    layout:
+        shape: Rectangle(10um, 3um, 0.5um)
+        
+        ## Internal pour that overlaps in Y direction
+        ## Pour is 2.5um tall, pitch is 2um, so they overlap by 0.5um
+        add pour(Silicon_N) named drain on z:1:
+            boundary: [x: 0um, y: 0um] to [x: 10um, y: 2.5um]
+            device: top
+            net: VDD
+        
+        pin_positions:
+            top at [5um, 0um]
+            bottom at [5um, 3um]
+    
+    metadata:
+        description: "Vertical finger with overlapping pours"
+    
+    render:
+        type: procedural
+        shape: box
+        body_color: "#6B6BFF"
+
+## ============================================================================
+## SPACE: P12 Collision Test (Vertical Stack)
+## ============================================================================
+
+space P12CollisionVertical:
+    dimensions: 50um by 50um by 2mm
+    grid: 50000 by 50000 by 2
+    origin: tl by t
+    
+    ## Base substrate (z:0 to z:1)
+    add substrate(Silicon_P) spanning [x:1um, y:1um, z:0] to [x:49999um, y:49999um, z:1]
+    
+    ## ========================================================================
+    ## TEST: Vertical stack with overlapping geometry WITHOUT merge: keyword
+    ## 
+    ## Layout: vertical_stack (stacks along Y-axis)
+    ## Pitch: 2um (Y direction)
+    ## Pour height: 2.5um
+    ## Overlap: 0.5um between adjacent instances
+    ## 
+    ## EXPECTED ERROR: P12: Geometric Collision
+    ## - Instance 0 and 1 overlap in Y direction
+    ## ========================================================================
+    add VerticalFinger[4] named V_Array at [x: 10um, y: 10um, z: 2]:
+        layout: vertical_stack
+        pitch: 2um
+        ## NO merge: keyword → Should trigger P12 error!

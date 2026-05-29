@@ -1,0 +1,90 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,50.00x50.00x2.00mm,,,,,1
+VCCPlane,Pour,1104.0000mm² net:VCC,Layer 2,,Copper,110.400000mm³
+GNDPlane,Pour,1104.0000mm² net:GND,Layer 2,,Copper,110.400000mm³
+Sig1_A,Pour,3.0000mm² net:SIG1,Layer 2,,Copper,0.300000mm³
+Sig1_B,Pour,3.0000mm² net:SIG1,Layer 2,,Copper,0.300000mm³
+Sig2_A,Pour,3.0000mm² net:SIG2,Layer 2,,Copper,0.300000mm³
+Sig2_B,Pour,3.0000mm² net:SIG2,Layer 2,,Copper,0.300000mm³
+Sig3_A,Pour,3.0000mm² net:SIG3,Layer 2,,Copper,0.300000mm³
+Sig3_B,Pour,3.0000mm² net:SIG3,Layer 2,,Copper,0.300000mm³
+Sig4_A,Pour,3.0000mm² net:SIG4,Layer 2,,Copper,0.300000mm³
+Sig4_B,Pour,3.0000mm² net:SIG4,Layer 2,,Copper,0.300000mm³
+Sig5_A,Pour,3.0000mm² net:SIG5,Layer 2,,Copper,0.300000mm³
+Sig5_B,Pour,3.0000mm² net:SIG5,Layer 2,,Copper,0.300000mm³
+Sig6_A,Pour,3.0000mm² net:SIG6,Layer 2,,Copper,0.300000mm³
+Sig6_B,Pour,3.0000mm² net:SIG6,Layer 2,,Copper,0.300000mm³
+Sig7_A,Pour,3.0000mm² net:SIG7,Layer 2,,Copper,0.300000mm³
+Sig7_B,Pour,3.0000mm² net:SIG7,Layer 2,,Copper,0.300000mm³
+Sig8_A,Pour,3.0000mm² net:SIG8,Layer 2,,Copper,0.300000mm³
+Sig8_B,Pour,3.0000mm² net:SIG8,Layer 2,,Copper,0.300000mm³
+Sig9_A,Pour,3.0000mm² net:SIG9,Layer 2,,Copper,0.300000mm³
+Sig9_B,Pour,3.0000mm² net:SIG9,Layer 2,,Copper,0.300000mm³
+Sig10_A,Pour,3.0000mm² net:SIG10,Layer 2,,Copper,0.300000mm³
+Sig10_B,Pour,3.0000mm² net:SIG10,Layer 2,,Copper,0.300000mm³
+TopVCC,Pour,517.0000mm² net:VCC,Layer 4,,Copper,51.700000mm³
+TopGND,Pour,987.0000mm² net:GND,Layer 4,,Copper,98.700000mm³
+TopSig1,Pour,8.0000mm² net:SIG1,Layer 4,,Copper,0.800000mm³
+TopSig2,Pour,8.0000mm² net:SIG2,Layer 4,,Copper,0.800000mm³
+TopSig3,Pour,8.0000mm² net:SIG3,Layer 4,,Copper,0.800000mm³
+TopSig4,Pour,8.0000mm² net:SIG4,Layer 4,,Copper,0.800000mm³
+TopSig5,Pour,8.0000mm² net:SIG5,Layer 4,,Copper,0.800000mm³
+VCCPlane,Pour(Copper),,,,,,1
+GNDPlane,Pour(Copper),,,,,,1
+Sig1_A,Pour(Copper),,,,,,1
+Sig1_B,Pour(Copper),,,,,,1
+Sig2_A,Pour(Copper),,,,,,1
+Sig2_B,Pour(Copper),,,,,,1
+Sig3_A,Pour(Copper),,,,,,1
+Sig3_B,Pour(Copper),,,,,,1
+Sig4_A,Pour(Copper),,,,,,1
+Sig4_B,Pour(Copper),,,,,,1
+Sig5_A,Pour(Copper),,,,,,1
+Sig5_B,Pour(Copper),,,,,,1
+Sig6_A,Pour(Copper),,,,,,1
+Sig6_B,Pour(Copper),,,,,,1
+Sig7_A,Pour(Copper),,,,,,1
+Sig7_B,Pour(Copper),,,,,,1
+Sig8_A,Pour(Copper),,,,,,1
+Sig8_B,Pour(Copper),,,,,,1
+Sig9_A,Pour(Copper),,,,,,1
+Sig9_B,Pour(Copper),,,,,,1
+Sig10_A,Pour(Copper),,,,,,1
+Sig10_B,Pour(Copper),,,,,,1
+TopVCC,Pour(Copper),,,,,,1
+TopGND,Pour(Copper),,,,,,1
+TopSig1,Pour(Copper),,,,,,1
+TopSig2,Pour(Copper),,,,,,1
+TopSig3,Pour(Copper),,,,,,1
+TopSig4,Pour(Copper),,,,,,1
+TopSig5,Pour(Copper),,,,,,1
+Via1,Contact(Copper),,,,,,1
+Via2,Contact(Copper),,,,,,1
+Via3,Contact(Copper),,,,,,1
+Via4,Contact(Copper),,,,,,1
+Via5,Contact(Copper),,,,,,1
+Via6,Contact(Copper),,,,,,1
+Via7,Contact(Copper),,,,,,1
+Via8,Contact(Copper),,,,,,1
+Via9,Contact(Copper),,,,,,1
+Via10,Contact(Copper),,,,,,1
+Via11,Contact(Copper),,,,,,1
+Via12,Contact(Copper),,,,,,1
+Via13,Contact(Copper),,,,,,1
+Via14,Contact(Copper),,,,,,1
+Via15,Contact(Copper),,,,,,1
+Via16,Contact(Copper),,,,,,1
+Via17,Contact(Copper),,,,,,1
+Via18,Contact(Copper),,,,,,1
+Via19,Contact(Copper),,,,,,1
+Via20,Contact(Copper),,,,,,1
+Via21,Contact(Copper),,,,,,1
+Via22,Contact(Copper),,,,,,1
+Via23,Contact(Copper),,,,,,1
+Via24,Contact(Copper),,,,,,1
+Via25,Contact(Copper),,,,,,1
+Via26,Contact(Copper),,,,,,1
+Via27,Contact(Copper),,,,,,1
+Via28,Contact(Copper),,,,,,1
+Via29,Contact(Copper),,,,,,1
+Via30,Contact(Copper),,,,,,1

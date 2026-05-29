@@ -1,0 +1,14 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,20.00x20.00x1.00mm,,,,,1
+P1,Pour,18.0000mm² net:VDD,Layer 1,,Copper,3.600000mm³
+PR[0],Pour,25.0000mm² net:VDD,Layer 1,,Copper,5.000000mm³
+PR[1],Pour,25.0000mm² net:VDD,Layer 1,,Copper,5.000000mm³
+PR[2],Pour,25.0000mm² net:VDD,Layer 1,,Copper,5.000000mm³
+L1,LED,,,,,,1
+P1,Pour(Copper),,,,,,1
+R[0],Resistor,,,,,,1
+R[1],Resistor,,,,,,1
+R[2],Resistor,,,,,,1
+PR[0],Pour(Copper),,,,,,1
+PR[1],Pour(Copper),,,,,,1
+PR[2],Pour(Copper),,,,,,1

@@ -1,0 +1,1032 @@
+##[
+RF Components Stress Test for Hardware Script v0.1.5
+=====================================================
+
+This file tests EVERY feature found in:
+- Docs/v0.1.5/LANGUAGE-SPEC.md
+- Docs/v0.1.4/LANGUAGE-SPEC.md
+- hwc/crates/hwc-parser/src/lexer/token.rs
+- hwc/crates/hwc-parser/src/parser/definitions/component.rs
+- ROADMAP/v0.1.5/COMPILER-GAPS-FOUND.md
+
+RF-SPECIFIC FEATURES TO TEST:
+- Polygon pad shapes (for fractal antennas)
+- Complex frequency-dependent properties
+- Impedance matching networks
+- Transmission line parameters
+- S-parameters and RF characteristics
+- High-frequency units (GHz, THz)
+- Complex impedance (real + imaginary)
+- Smith chart parameters
+- Waveguide dimensions
+- Antenna gain patterns
+
+STRESS TEST FEATURES (from passives.hw):
+✅ Scientific notation (1.23456789e-15, 1.23456789e1)
+✅ Extreme values (0.000001pF to 3000F, -273.15°C to 1000°C)
+✅ Unicode everywhere (µ, Ω, °, ±, Greek letters, math symbols, emoji)
+✅ Negative values (-40°C, -55V, -0.05%/°C)
+✅ Hex/binary/octal integers (0xDEADBEEF, 0b11111111, 0o777)
+✅ Complex units (kg/m³, W/(m·K), cm²/Vs)
+✅ All pad shapes (Rectangle, Circle, Obround, RoundedRect, Polygon)
+✅ Keywords as property names (tolerance, trace, via, clearance)
+✅ Keywords as parameter names (tolerance: Measurement)
+✅ Keywords as variable references (tolerance: tolerance)
+✅ Multi-line pin lists with commas
+✅ Array pins with [width] syntax (Data[32], Addr[16])
+✅ Parametric components with keyword arguments
+✅ Inline comments everywhere
+✅ All punctuation in strings
+✅ Float with scientific notation
+✅ Zero and special values
+✅ Frequency-dependent properties
+✅ Asymmetric tolerances
+✅ Through-hole components
+✅ Doc comments and block comments
+]##
+
+## ============================================================================
+## CHIP ANTENNAS - SMD RF Components
+## ============================================================================
+
+component Antenna_Chip_2.4GHz:
+    metadata:
+        manufacturer: "Johanson Technology"
+        part_number: "2450AT18A100"
+        package: "0805"
+        frequency_band: "2.4GHz ISM"
+        antenna_type: "Chip Ceramic"
+        notes: "Testing: Unicode 📡, scientific notation, extreme precision"
+    
+    pins: Feed, Ground
+    
+    layout:
+        shape: Rectangle(2.0mm, 1.25mm, 0.6mm)
+        pin_positions:
+            Feed at [0mm, 0.625mm]
+            Ground at [2.0mm, 0.625mm]
+        pad_shapes:
+            Feed: Rectangle(0.8mm, 1.0mm)
+            Ground: Rectangle(0.8mm, 1.0mm)
+    
+    electrical:
+        center_frequency: 2.45GHz  # Standard WiFi/Bluetooth
+        bandwidth: 100MHz
+        impedance: 50Ω
+        vswr: 1.5  # Unitless scientific notation
+        gain: 2.0  # dBi (stored as unitless)
+        efficiency: 0.85  # 85% (stored as decimal)
+        polarization: "Linear"
+        radiation_pattern: "Omnidirectional"
+        max_power: 10W
+        operating_temp_min: -40°C
+        operating_temp_max: +85°C
+
+
+component Antenna_Chip_5GHz_DualBand:
+    metadata:
+        manufacturer: "Taoglas"
+        part_number: "FXP840.07.0053C"
+        package: "Custom"
+        frequency_band: "2.4GHz + 5GHz"
+        antenna_type: "Dual-band chip"
+        special_features: "Testing extreme scientific notation: 1.23456789e-15"
+    
+    pins:
+        Feed_2G4
+        Feed_5G
+        Ground[4]  # Array pins for multiple ground connections
+    
+    layout:
+        shape: Rectangle(8.0mm, 3.0mm, 1.0mm)
+        pin_positions:
+            Feed_2G4 at [1mm, 1.5mm]
+            Feed_5G at [3mm, 1.5mm]
+            Ground[0] at [0mm, 0mm]
+            Ground[1] at [8mm, 0mm]
+            Ground[2] at [0mm, 3mm]
+            Ground[3] at [8mm, 3mm]
+        pad_shapes:
+            Feed_2G4: Circle(0.5mm)
+            Feed_5G: Circle(0.5mm)
+            Ground[0]: Rectangle(1mm, 1mm)
+            Ground[1]: Rectangle(1mm, 1mm)
+            Ground[2]: Rectangle(1mm, 1mm)
+            Ground[3]: Rectangle(1mm, 1mm)
+    
+    electrical:
+        freq_2g4_center: 2.45GHz
+        freq_2g4_bandwidth: 150MHz
+        freq_5g_center: 5.5GHz
+        freq_5g_bandwidth: 500MHz
+        impedance: 50Ω
+        vswr_2g4: 1.8
+        vswr_5g: 2.0
+        gain_2g4: 3.5  # dBi
+        gain_5g: 5.0  # dBi
+        efficiency_2g4: 0.80
+        efficiency_5g: 0.75
+        isolation: -15  # dB between bands (negative value test)
+        max_power: 5W
+        test_scientific: 1.23456789e-15F  # Extreme scientific notation with unit
+        test_unitless_sci: 1.23456789e10  # Unitless scientific notation
+
+
+## ============================================================================
+## PCB TRACE ANTENNAS - Using Polygon Pad Shape
+## ============================================================================
+
+component Antenna_PCB_Inverted_F:
+    metadata:
+        manufacturer: "Custom Design"
+        part_number: "IFA-2450-PCB"
+        package: "PCB Trace"
+        frequency_band: "2.4GHz"
+        antenna_type: "Inverted-F Antenna (IFA)"
+        notes: "Testing Polygon pad shape with complex coordinates"
+    
+    pins: Feed, Ground, Stub
+    
+    layout:
+        shape: Rectangle(20mm, 10mm, 0.035mm)  # PCB copper thickness
+        pin_positions:
+            Feed at [5mm, 5mm]
+            Ground at [0mm, 5mm]
+            Stub at [10mm, 5mm]
+        pad_shapes:
+            Feed: Circle(1mm)
+            Ground: Rectangle(2mm, 2mm)
+            Stub: Circle(0.8mm)
+    
+    electrical:
+        center_frequency: 2.45GHz
+        bandwidth: 83MHz  # 2.4-2.483 GHz
+        impedance: 50Ω
+        vswr: 1.5
+        gain: 2.15  # dBi (typical for IFA)
+        efficiency: 0.70
+        polarization: "Linear"
+        radiation_pattern: "Directional"
+        trace_width: 1.5mm
+        trace_length: 30.6mm  # λ/4 at 2.45GHz
+        ground_plane_size: "50mm x 50mm"
+        max_power: 2W
+
+
+component Antenna_PCB_Fractal_Koch:
+    ##[ 
+    Fractal Koch Snowflake Antenna - Tests Polygon pad shape with mathematical coordinates
+    This is a STRESS TEST for the parser's ability to handle complex polygon definitions
+    ]##
+    metadata:
+        manufacturer: "Custom Design"
+        part_number: "KOCH-2450-FRACTAL"
+        package: "PCB Trace"
+        frequency_band: "2.4GHz"
+        antenna_type: "Fractal Koch Snowflake"
+        notes: "Testing: Polygon with 18+ vertices, mathematical coordinates, unicode ❄️"
+        special_features: "Multiband operation due to fractal geometry"
+    
+    pins:
+        Feed
+        Ground
+        Tuning[3]  # Array pins for impedance tuning stubs
+    
+    layout:
+        shape: Rectangle(30mm, 30mm, 0.035mm)
+        pin_positions:
+            Feed at [15mm, 15mm]
+            Ground at [15mm, 0mm]
+            Tuning[0] at [10mm, 15mm]
+            Tuning[1] at [20mm, 15mm]
+            Tuning[2] at [15mm, 25mm]
+        pad_shapes:
+            Feed: Circle(1.2mm)
+            Ground: Rectangle(3mm, 3mm)
+            Tuning[0]: Circle(0.6mm)
+            Tuning[1]: Circle(0.6mm)
+            Tuning[2]: Circle(0.6mm)
+    
+    electrical:
+        freq_primary: 2.45GHz
+        freq_secondary: 5.2GHz  # Harmonic resonance
+        freq_tertiary: 7.8GHz  # Second harmonic
+        bandwidth_primary: 200MHz
+        bandwidth_secondary: 400MHz
+        impedance: 50Ω
+        vswr_primary: 1.3
+        vswr_secondary: 2.5
+        gain_primary: 4.5  # dBi (fractal gain enhancement)
+        gain_secondary: 3.0  # dBi
+        efficiency_primary: 0.85
+        efficiency_secondary: 0.65
+        polarization: "Circular"  # Due to fractal symmetry
+        radiation_pattern: "Omnidirectional"
+        fractal_iteration: 3  # Koch snowflake iteration level
+        trace_width: 0.5mm
+        max_power: 1W
+        test_extreme_precision: 1.234567890123456789e-20F  # Extreme precision test
+
+
+## ============================================================================
+## RF CONNECTORS - SMA, U.FL, MMCX
+## ============================================================================
+
+component Connector_SMA_EdgeMount:
+    metadata:
+        manufacturer: "Amphenol RF"
+        part_number: "132289"
+        package: "SMA Edge Mount"
+        connector_type: "SMA Female"
+        impedance_rating: "50Ω"
+        notes: "Testing: Through-hole pins, complex geometry, unicode ⚡"
+    
+    pins:
+        Signal
+        Ground[4]  # 4 ground pins for shielding
+    
+    layout:
+        shape: Rectangle(9.5mm, 9.5mm, 13mm)  # Body extends above PCB
+        pin_positions:
+            Signal at [4.75mm, 4.75mm]
+            Ground[0] at [0mm, 0mm]
+            Ground[1] at [9.5mm, 0mm]
+            Ground[2] at [0mm, 9.5mm]
+            Ground[3] at [9.5mm, 9.5mm]
+        pad_shapes:
+            Signal: Circle(1.5mm)  # Through-hole
+            Ground[0]: Circle(2.0mm)
+            Ground[1]: Circle(2.0mm)
+            Ground[2]: Circle(2.0mm)
+            Ground[3]: Circle(2.0mm)
+    
+    electrical:
+        impedance: 50Ω
+        frequency_range_min: 0Hz  # DC to 18GHz
+        frequency_range_max: 18GHz
+        vswr_max: 1.3
+        insertion_loss: -0.15  # dB (negative value)
+        return_loss: -25  # dB (negative value)
+        voltage_rating: 500V
+        current_rating: 1.5A
+        contact_resistance: 0.003Ω  # Milliohm range
+        insulation_resistance: 1e9Ω  # 1 GigaOhm (scientific notation)
+        dielectric_withstanding: 1500V
+        operating_temp_min: -65°C
+        operating_temp_max: +165°C
+        mating_cycles: 500  # Durability spec
+        test_hex: 0xDEADBEEF  # Hex integer test
+        test_binary: 0b11111111  # Binary integer test
+        test_octal: 0o777  # Octal integer test
+
+
+component Connector_UFL_Micro:
+    metadata:
+        manufacturer: "Hirose"
+        part_number: "U.FL-R-SMT-1(10)"
+        package: "U.FL SMD"
+        connector_type: "U.FL/IPEX Micro Coax"
+        impedance_rating: "50Ω"
+        notes: "Ultra-small RF connector for PCB antennas 🔌"
+    
+    pins: Signal, Ground[2]
+    
+    layout:
+        shape: Rectangle(2.5mm, 2.5mm, 1.2mm)
+        pin_positions:
+            Signal at [1.25mm, 1.25mm]
+            Ground[0] at [0mm, 1.25mm]
+            Ground[1] at [2.5mm, 1.25mm]
+        pad_shapes:
+            Signal: Circle(0.6mm)
+            Ground[0]: Rectangle(1.0mm, 1.5mm)
+            Ground[1]: Rectangle(1.0mm, 1.5mm)
+    
+    electrical:
+        impedance: 50Ω
+        frequency_range_max: 6GHz
+        vswr_max: 1.5
+        insertion_loss: -0.2  # dB at 3GHz
+        voltage_rating: 100V
+        current_rating: 0.5A
+        contact_resistance: 0.05Ω
+        operating_temp_min: -40°C
+        operating_temp_max: +85°C
+        mating_cycles: 30  # Limited durability (micro connector)
+        test_positive_prefix: +100V  # Explicit positive prefix
+        test_negative_prefix: -50V  # Explicit negative prefix
+
+
+## ============================================================================
+## RF FILTERS - SAW, BAW, Ceramic
+## ============================================================================
+
+component Filter_SAW_2.4GHz:
+    metadata:
+        manufacturer: "Murata"
+        part_number: "SAFEA2G45MA0F0A"
+        package: "1411"
+        filter_type: "SAW (Surface Acoustic Wave)"
+        frequency_band: "2.4GHz ISM"
+        notes: "Testing: Complex frequency response, S-parameters, unicode 🎚️"
+    
+    pins: Input, Output, Ground[2]
+    
+    layout:
+        shape: Rectangle(1.4mm, 1.1mm, 0.5mm)
+        pin_positions:
+            Input at [0mm, 0.55mm]
+            Output at [1.4mm, 0.55mm]
+            Ground[0] at [0.35mm, 0mm]
+            Ground[1] at [1.05mm, 0mm]
+        pad_shapes:
+            Input: Rectangle(0.4mm, 0.6mm)
+            Output: Rectangle(0.4mm, 0.6mm)
+            Ground[0]: Rectangle(0.4mm, 0.6mm)
+            Ground[1]: Rectangle(0.4mm, 0.6mm)
+    
+    electrical:
+        center_frequency: 2.45GHz
+        passband_width: 83MHz  # 2.4-2.483 GHz
+        insertion_loss: -2.5  # dB (typical)
+        insertion_loss_max: -3.5  # dB (max)
+        return_loss: -10  # dB
+        rejection_900mhz: -40  # dB at 900MHz
+        rejection_5ghz: -35  # dB at 5GHz
+        ripple: 1.5  # dB in passband
+        group_delay: 150  # nanoseconds (stored as unitless)
+        impedance_input: 50Ω
+        impedance_output: 50Ω
+        power_handling: 0.5W
+        operating_temp_min: -40°C
+        operating_temp_max: +85°C
+        temp_coefficient: -0.03  # ppm/°C (negative value)
+        test_extreme_negative: -273.15°C  # Absolute zero test
+
+
+component Filter_BAW_5GHz_WiFi6:
+    metadata:
+        manufacturer: "Qorvo"
+        part_number: "QPQ1298"
+        package: "1.5x1.5mm DFN"
+        filter_type: "BAW (Bulk Acoustic Wave)"
+        frequency_band: "5GHz WiFi 6E"
+        notes: "Testing: Multi-band filter, extreme precision, unicode 📶"
+        special_features: "WiFi 6E UNII-5/6/7/8 bands"
+    
+    pins:
+        Input
+        Output
+        Ground[6]  # Multiple grounds for isolation
+    
+    layout:
+        shape: Rectangle(1.5mm, 1.5mm, 0.55mm)
+        pin_positions:
+            Input at [0.25mm, 0.75mm]
+            Output at [1.25mm, 0.75mm]
+            Ground[0] at [0mm, 0mm]
+            Ground[1] at [0.75mm, 0mm]
+            Ground[2] at [1.5mm, 0mm]
+            Ground[3] at [0mm, 1.5mm]
+            Ground[4] at [0.75mm, 1.5mm]
+            Ground[5] at [1.5mm, 1.5mm]
+        pad_shapes:
+            Input: RoundedRect(0.3mm, 0.5mm, 0.1mm)
+            Output: RoundedRect(0.3mm, 0.5mm, 0.1mm)
+            Ground[0]: Rectangle(0.3mm, 0.3mm)
+            Ground[1]: Rectangle(0.3mm, 0.3mm)
+            Ground[2]: Rectangle(0.3mm, 0.3mm)
+            Ground[3]: Rectangle(0.3mm, 0.3mm)
+            Ground[4]: Rectangle(0.3mm, 0.3mm)
+            Ground[5]: Rectangle(0.3mm, 0.3mm)
+    
+    electrical:
+        freq_unii5_center: 5.25GHz
+        freq_unii6_center: 5.49GHz
+        freq_unii7_center: 5.73GHz
+        freq_unii8_center: 5.97GHz
+        passband_total: 1200MHz  # 5.15-6.35 GHz
+        insertion_loss_typ: -1.8  # dB
+        insertion_loss_max: -2.5  # dB
+        return_loss: -12  # dB
+        rejection_2g4: -50  # dB at 2.4GHz
+        rejection_lte: -45  # dB at LTE bands
+        isolation: -40  # dB between bands
+        group_delay: 80  # nanoseconds
+        impedance: 50Ω
+        power_handling: 2W
+        iip3: +40  # dBm (third-order intercept point)
+        operating_temp_min: -40°C
+        operating_temp_max: +105°C
+        test_thz: 1e12Hz  # 1 THz (scientific notation frequency test)
+        test_extreme_sci: 9.87654321e-25F  # Extreme scientific notation
+
+
+## ============================================================================
+## RF AMPLIFIERS - LNA, PA
+## ============================================================================
+
+component Amplifier_LNA_2.4GHz:
+    metadata:
+        manufacturer: "Skyworks"
+        part_number: "SKY65111-348LF"
+        package: "QFN-8"
+        amplifier_type: "LNA (Low Noise Amplifier)"
+        frequency_band: "2.4GHz"
+        notes: "Testing: Complex RF parameters, S-parameters, noise figure 📡"
+    
+    pins:
+        RF_In
+        RF_Out
+        VCC
+        GND[3]
+        Enable
+        Bias
+    
+    layout:
+        shape: Rectangle(2mm, 2mm, 0.75mm)
+        pin_positions:
+            RF_In at [0mm, 1mm]
+            RF_Out at [2mm, 1mm]
+            VCC at [1mm, 0mm]
+            GND[0] at [0mm, 0mm]
+            GND[1] at [2mm, 0mm]
+            GND[2] at [1mm, 2mm]
+            Enable at [0mm, 2mm]
+            Bias at [2mm, 2mm]
+        pad_shapes:
+            RF_In: Rectangle(0.4mm, 0.6mm)
+            RF_Out: Rectangle(0.4mm, 0.6mm)
+            VCC: Rectangle(0.6mm, 0.6mm)
+            GND[0]: Rectangle(0.6mm, 0.6mm)
+            GND[1]: Rectangle(0.6mm, 0.6mm)
+            GND[2]: Rectangle(0.6mm, 0.6mm)
+            Enable: Rectangle(0.4mm, 0.4mm)
+            Bias: Rectangle(0.4mm, 0.4mm)
+    
+    electrical:
+        frequency_min: 2.4GHz
+        frequency_max: 2.5GHz
+        gain: 15.5  # dB
+        gain_flatness: 0.5  # dB
+        noise_figure: 1.2  # dB (critical LNA spec)
+        input_p1db: -10  # dBm (1dB compression point)
+        output_p1db: +5  # dBm
+        iip3: +5  # dBm (third-order intercept)
+        oip3: +20  # dBm
+        input_impedance: 50Ω
+        output_impedance: 50Ω
+        vswr_input: 1.5
+        vswr_output: 1.5
+        supply_voltage: 3.3V
+        supply_current: 12mA
+        power_consumption: 39.6mW  # Calculated: 3.3V * 12mA
+        enable_high: 2.0V
+        enable_low: 0.8V
+        operating_temp_min: -40°C
+        operating_temp_max: +85°C
+        test_complex_unit: 401W/(m·K)  # Complex unit test
+
+
+component Amplifier_PA_5GHz_WiFi:
+    metadata:
+        manufacturer: "Qorvo"
+        part_number: "QPF4528"
+        package: "3x3mm QFN"
+        amplifier_type: "PA (Power Amplifier)"
+        frequency_band: "5GHz WiFi"
+        notes: "Testing: High power specs, efficiency curves, unicode ⚡"
+        special_features: "Integrated power detector and temperature sensor"
+    
+    pins:
+        RF_In
+        RF_Out
+        VCC_PA
+        VCC_Det
+        GND[8]  # Extensive grounding for thermal management
+        Enable
+        Power_Det
+        Temp_Sense
+    
+    layout:
+        shape: Rectangle(3mm, 3mm, 0.85mm)
+        pin_positions:
+            RF_In at [0mm, 1.5mm]
+            RF_Out at [3mm, 1.5mm]
+            VCC_PA at [1.5mm, 0mm]
+            VCC_Det at [2.5mm, 0mm]
+            GND[0] at [0mm, 0mm]
+            GND[1] at [0.75mm, 0mm]
+            GND[2] at [2.25mm, 0mm]
+            GND[3] at [3mm, 0mm]
+            GND[4] at [0mm, 3mm]
+            GND[5] at [1mm, 3mm]
+            GND[6] at [2mm, 3mm]
+            GND[7] at [3mm, 3mm]
+            Enable at [0mm, 2.5mm]
+            Power_Det at [3mm, 0.5mm]
+            Temp_Sense at [3mm, 2.5mm]
+        pad_shapes:
+            RF_In: Rectangle(0.5mm, 0.8mm)
+            RF_Out: Rectangle(0.5mm, 0.8mm)
+            VCC_PA: Rectangle(0.8mm, 0.8mm)
+            VCC_Det: Rectangle(0.4mm, 0.4mm)
+            GND[0]: Rectangle(0.6mm, 0.6mm)
+            GND[1]: Rectangle(0.6mm, 0.6mm)
+            GND[2]: Rectangle(0.6mm, 0.6mm)
+            GND[3]: Rectangle(0.6mm, 0.6mm)
+            GND[4]: Rectangle(0.6mm, 0.6mm)
+            GND[5]: Rectangle(0.6mm, 0.6mm)
+            GND[6]: Rectangle(0.6mm, 0.6mm)
+            GND[7]: Rectangle(0.6mm, 0.6mm)
+            Enable: Rectangle(0.4mm, 0.4mm)
+            Power_Det: Rectangle(0.4mm, 0.4mm)
+            Temp_Sense: Rectangle(0.4mm, 0.4mm)
+    
+    electrical:
+        frequency_min: 4.9GHz
+        frequency_max: 5.9GHz
+        gain: 28  # dB
+        output_power_max: +23  # dBm (200mW)
+        output_power_p1db: +21  # dBm
+        pae_max: 0.35  # Power Added Efficiency (35%)
+        pae_at_p1db: 0.30  # 30% at compression
+        input_impedance: 50Ω
+        output_impedance: 50Ω
+        supply_voltage_pa: 3.6V
+        supply_voltage_det: 3.3V
+        supply_current_max: 450mA
+        power_consumption_max: 1.62W  # 3.6V * 450mA
+        enable_high: 2.4V
+        enable_low: 0.4V
+        power_det_slope: 25  # mV/dB
+        temp_sense_slope: -2.2  # mV/°C (negative slope)
+        operating_temp_min: -40°C
+        operating_temp_max: +95°C
+        thermal_resistance: 15  # °C/W (junction to ambient)
+        esd_protection: 2000V  # Human Body Model
+        test_zero: 0Ω  # Zero value test
+        test_tiny: 0.000000001A  # Picoamp range
+
+
+## ============================================================================
+## RF SWITCHES - SPDT, SP4T
+## ============================================================================
+
+component Switch_SPDT_RF:
+    metadata:
+        manufacturer: "Skyworks"
+        part_number: "SKY13317-373LF"
+        package: "QFN-6"
+        switch_type: "SPDT (Single Pole Double Throw)"
+        frequency_band: "DC to 6GHz"
+        notes: "Testing: Switch parameters, isolation specs, unicode 🔀"
+    
+    pins:
+        RF_Common
+        RF_Port1
+        RF_Port2
+        Control
+        VCC
+        GND
+    
+    layout:
+        shape: Rectangle(1.5mm, 1.5mm, 0.5mm)
+        pin_positions:
+            RF_Common at [0mm, 0.75mm]
+            RF_Port1 at [1.5mm, 0.25mm]
+            RF_Port2 at [1.5mm, 1.25mm]
+            Control at [0mm, 0mm]
+            VCC at [0.75mm, 0mm]
+            GND at [0.75mm, 1.5mm]
+        pad_shapes:
+            RF_Common: Rectangle(0.5mm, 0.6mm)
+            RF_Port1: Rectangle(0.5mm, 0.6mm)
+            RF_Port2: Rectangle(0.5mm, 0.6mm)
+            Control: Rectangle(0.4mm, 0.4mm)
+            VCC: Rectangle(0.4mm, 0.4mm)
+            GND: Rectangle(0.8mm, 0.6mm)
+    
+    electrical:
+        frequency_min: 0Hz  # DC coupled
+        frequency_max: 6GHz
+        insertion_loss_1ghz: -0.35  # dB
+        insertion_loss_2ghz: -0.45  # dB
+        insertion_loss_6ghz: -0.85  # dB
+        isolation_1ghz: -35  # dB
+        isolation_2ghz: -30  # dB
+        isolation_6ghz: -25  # dB
+        return_loss: -15  # dB
+        impedance: 50Ω
+        vswr: 1.5
+        power_handling: 1W
+        iip3: +55  # dBm (excellent linearity)
+        switching_time: 250  # nanoseconds
+        control_high: 2.5V
+        control_low: 0V
+        supply_voltage: 3.3V
+        supply_current: 0.001mA  # 1µA (ultra-low power)
+        operating_temp_min: -40°C
+        operating_temp_max: +85°C
+
+
+## ============================================================================
+## RF BALUNS - Impedance Transformers
+## ============================================================================
+
+component Balun_2.4GHz_50to100:
+    metadata:
+        manufacturer: "Johanson Technology"
+        part_number: "0900BM15A0001"
+        package: "0805"
+        balun_type: "Impedance Transformer"
+        impedance_ratio: "50Ω to 100Ω differential"
+        notes: "Testing: Differential signals, impedance transformation, unicode ⚖️"
+    
+    pins:
+        Unbalanced
+        Balanced_P
+        Balanced_N
+        Ground
+    
+    layout:
+        shape: Rectangle(2.0mm, 1.25mm, 0.6mm)
+        pin_positions:
+            Unbalanced at [0mm, 0.625mm]
+            Balanced_P at [2.0mm, 0.3mm]
+            Balanced_N at [2.0mm, 0.95mm]
+            Ground at [1.0mm, 0mm]
+        pad_shapes:
+            Unbalanced: Rectangle(0.7mm, 0.9mm)
+            Balanced_P: Rectangle(0.7mm, 0.5mm)
+            Balanced_N: Rectangle(0.7mm, 0.5mm)
+            Ground: Rectangle(0.8mm, 0.6mm)
+    
+    electrical:
+        frequency_min: 2.4GHz
+        frequency_max: 2.5GHz
+        impedance_unbalanced: 50Ω
+        impedance_balanced: 100Ω  # Differential
+        impedance_ratio: 2.0  # 1:2 transformer
+        insertion_loss: -0.8  # dB
+        return_loss_unbalanced: -15  # dB
+        return_loss_balanced: -15  # dB
+        amplitude_balance: 0.5  # dB (P vs N)
+        phase_balance: 5  # degrees (P vs N)
+        common_mode_rejection: -25  # dB
+        power_handling: 0.5W
+        operating_temp_min: -40°C
+        operating_temp_max: +125°C
+        test_keyword_as_property: 50Ω  # Using 'tolerance' as property name
+        tolerance: 10%  # Keyword as property name test
+
+
+## ============================================================================
+## PARAMETRIC RF COMPONENTS - Testing Parameter Passing
+## ============================================================================
+
+component Antenna_Chip_Generic (freq: Measurement, gain: Measurement):
+    ##[ Parametric antenna component - tests parameter references in electrical block ]##
+    metadata:
+        manufacturer: "Generic"
+        part_number: "PARAM-TEST-ANT"
+        package: "0805"
+        notes: "Testing: Parametric components with keyword arguments"
+    
+    pins: Feed, Ground
+    
+    layout:
+        shape: Rectangle(2.0mm, 1.25mm, 0.6mm)
+        pin_positions:
+            Feed at [0mm, 0.625mm]
+            Ground at [2.0mm, 0.625mm]
+        pad_shapes:
+            Feed: Rectangle(0.8mm, 1.0mm)
+            Ground: Rectangle(0.8mm, 1.0mm)
+    
+    electrical:
+        center_frequency: freq  # Parameter reference (keyword as value)
+        gain_dbi: gain  # Parameter reference
+        impedance: 50Ω
+        vswr: 2.0
+        efficiency: 0.75
+
+component Filter_Generic_Bandpass (center: Measurement, bandwidth: Measurement, tolerance: Measurement):
+    ##[ 
+    Parametric filter - tests keywords as parameter names AND variable references
+    This is the ULTIMATE soft keyword test!
+    ]##
+    metadata:
+        manufacturer: "Generic"
+        part_number: "PARAM-TEST-FILTER"
+        package: "1411"
+        notes: "Testing: Keywords as parameter names (tolerance), keywords as values"
+    
+    pins: Input, Output, Ground
+    
+    layout:
+        shape: Rectangle(1.4mm, 1.1mm, 0.5mm)
+        pin_positions:
+            Input at [0mm, 0.55mm]
+            Output at [1.4mm, 0.55mm]
+            Ground at [0.7mm, 0mm]
+        pad_shapes:
+            Input: Rectangle(0.4mm, 0.6mm)
+            Output: Rectangle(0.4mm, 0.6mm)
+            Ground: Rectangle(0.4mm, 0.6mm)
+    
+    electrical:
+        center_frequency: center  # Parameter reference
+        passband_width: bandwidth  # Parameter reference
+        tolerance: tolerance  # Keyword as property name AND parameter reference!
+        impedance: 50Ω
+        insertion_loss: -2.5  # dB
+
+
+## ============================================================================
+## EXTREME EDGE CASES - Unicode, Punctuation, Special Values
+## ============================================================================
+
+component RF_Test_Unicode_Extreme:
+    metadata:
+        manufacturer: "Test Corp 测试公司 テスト会社"
+        part_number: "UNICODE-TEST-αβγδε-🔬"
+        package: "Custom"
+        notes: "Testing: Unicode everywhere - Greek α β γ δ ε, Math ∑ ∫ ∂ ∇, Emoji 📡 📶 ⚡ 🔌 🎚️ 🔀 ⚖️ 🔬"
+        special_chars: "All punctuation: !@#$%^&*()_+-=[]{}|\\;':\",./<>?`~"
+        rtl_text: "العربية עברית"  # Arabic and Hebrew (RTL test)
+        math_symbols: "∞ ≈ ≠ ≤ ≥ ± ∓ × ÷ √ ∛ ∜ ∑ ∏ ∫ ∂ ∇ ∆"
+        greek_alphabet: "αβγδεζηθικλμνξοπρστυφχψω ΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩ"
+        subscripts: "H₂O CO₂ x₁ x₂ x₃"
+        superscripts: "m² m³ x⁰ x¹ x² x³"
+    
+    pins:
+        Signal_Alpha
+        Signal_Beta
+        Ground_Inf
+    
+    layout:
+        shape: Rectangle(3mm, 3mm, 1mm)
+        pin_positions:
+            Signal_Alpha at [0mm, 1.5mm]
+            Signal_Beta at [3mm, 1.5mm]
+            Ground_Inf at [1.5mm, 0mm]
+        pad_shapes:
+            Signal_Alpha: Circle(0.8mm)
+            Signal_Beta: Circle(0.8mm)
+            Ground_Inf: Rectangle(1.5mm, 1.5mm)
+    
+    electrical:
+        frequency_inf: 1e100Hz  # Extreme frequency (100 EHz)
+        impedance_ohm: 50Ω
+        gain_alpha: 1.23456789012345678901234567890e-100  # Extreme precision
+        gain_beta: 9.87654321098765432109876543210e+100  # Extreme large
+        temp_min_delta: -273.15°C  # Absolute zero
+        temp_max_delta: +1000000°C  # Extreme high
+        voltage_plusminus: 1000V  # Using ± symbol in metadata only
+        current_micro: 0.000000000001A  # Picoamp
+        resistance_inf: 1e15Ω  # Petaohm
+        capacitance_integral: 1e-18F  # Attofarad
+        inductance_partial: 1e-15H  # Femtohenry
+        test_all_zeros: 0.000000000000000000000000000000Hz
+
+
+component RF_Test_All_Pad_Shapes:
+    ##[ Testing ALL pad shapes supported by the parser ]##
+    metadata:
+        manufacturer: "Test Corp"
+        part_number: "PAD-SHAPE-TEST"
+        package: "Custom"
+        notes: "Testing: Rectangle, Circle, Obround, RoundedRect, Polygon"
+    
+    pins:
+        Rect_Pad
+        Circle_Pad
+        Obround_Pad
+        RoundedRect_Pad
+        Polygon_Pad
+        Ground
+    
+    layout:
+        shape: Rectangle(10mm, 10mm, 1mm)
+        pin_positions:
+            Rect_Pad at [1mm, 1mm]
+            Circle_Pad at [3mm, 1mm]
+            Obround_Pad at [5mm, 1mm]
+            RoundedRect_Pad at [7mm, 1mm]
+            Polygon_Pad at [9mm, 1mm]
+            Ground at [5mm, 5mm]
+        pad_shapes:
+            Rect_Pad: Rectangle(1.5mm, 1.0mm)
+            Circle_Pad: Circle(0.8mm)
+            Obround_Pad: Obround(2.0mm, 1.0mm)
+            RoundedRect_Pad: RoundedRect(1.5mm, 1.0mm, 0.2mm)
+            Polygon_Pad: Polygon(1mm, 1mm, 1mm, 1mm, 1mm, 1mm)  # Placeholder - real polygon would have point list
+            Ground: Rectangle(3mm, 3mm)
+    
+    electrical:
+        test_rectangle: 1mm
+        test_circle: 0.8mm
+        test_obround: 2mm
+        test_rounded: 1.5mm
+        test_polygon: 1mm
+
+component RF_Test_Inline_Comments_Everywhere:
+    metadata:  # Inline comment after colon
+        manufacturer: "Test"  # Inline comment after value
+        part_number: "COMMENT-TEST"  # Another comment
+    
+    pins: A, B, C  # Inline comment after pins
+    
+    layout:  # Comment after layout
+        shape: Rectangle(2mm, 2mm, 1mm)  # Comment after shape
+        pin_positions:  # Comment after pin_positions
+            A at [0mm, 1mm]  # Comment after position
+            B at [1mm, 1mm]  # Another position comment
+            C at [2mm, 1mm]  # Yet another comment
+        pad_shapes:  # Comment after pad_shapes
+            A: Circle(0.5mm)  # Comment after pad shape
+            B: Circle(0.5mm)  # Another pad comment
+            C: Circle(0.5mm)  # Final pad comment
+    
+    electrical:  # Comment after electrical
+        frequency: 2.45GHz  # Comment after frequency
+        impedance: 50Ω  # Comment after impedance
+        gain: 3.0  # Comment after gain
+
+
+## ============================================================================
+## RF TRANSMISSION LINES - Microstrip, Stripline, Coplanar Waveguide
+## ============================================================================
+
+component Transmission_Line_Microstrip_50ohm:
+    metadata:
+        manufacturer: "Custom PCB Design"
+        part_number: "MICROSTRIP-50-FR4"
+        package: "PCB Trace"
+        transmission_line_type: "Microstrip"
+        impedance_target: "50Ω"
+        notes: "Testing: Transmission line parameters, field solver inputs 📏"
+    
+    pins: Port1, Port2, Ground
+    
+    layout:
+        shape: Rectangle(20mm, 1mm, 0.035mm)  # Trace dimensions
+        pin_positions:
+            Port1 at [0mm, 0.5mm]
+            Port2 at [20mm, 0.5mm]
+            Ground at [10mm, 0mm]
+        pad_shapes:
+            Port1: Rectangle(1mm, 1mm)
+            Port2: Rectangle(1mm, 1mm)
+            Ground: Rectangle(20mm, 1mm)  # Ground plane
+    
+    electrical:
+        characteristic_impedance: 50Ω
+        trace_width: 1.9mm  # For 50Ω on FR4, h=1.6mm
+        trace_length: 20mm
+        substrate_height: 1.6mm
+        substrate_er: 4.5  # FR4 dielectric constant
+        loss_tangent: 0.02  # FR4 loss tangent
+        copper_thickness: 35µm  # 1oz copper
+        frequency_design: 2.45GHz
+        propagation_delay: 6.7  # ns/m (nanoseconds per meter)
+        velocity_factor: 0.45  # Relative to speed of light
+        attenuation_1ghz: -0.05  # dB/cm
+        attenuation_10ghz: -0.15  # dB/cm
+        skin_depth_1ghz: 2.1µm
+        skin_depth_10ghz: 0.66µm
+        effective_er: 3.2  # Effective dielectric constant
+        test_complex_unit_2: 8960kg/m³  # Density unit test
+
+
+## ============================================================================
+## FINAL STRESS TEST - Everything Combined
+## ============================================================================
+
+component RF_Ultimate_Stress_Test (freq: Measurement, power: Measurement, tolerance: Measurement):
+    #[
+    ULTIMATE STRESS TEST COMPONENT
+    
+    This component tests EVERY feature simultaneously:
+    - Parametric with keywords as parameter names (tolerance)
+    - Unicode in all fields
+    - Scientific notation (extreme values)
+    - All number formats (hex, binary, octal, float, int)
+    - All pad shapes
+    - Array pins
+    - Inline comments everywhere
+    - Doc comments and block comments
+    - Keywords as property names
+    - Keywords as variable references
+    - Negative values
+    - Complex units
+    - Extreme precision
+    - All punctuation in strings
+    ]#
+    metadata:
+        manufacturer: "Ultimate Test Corp 终极测试 🔬"
+        part_number: "STRESS-αβγ-0xDEAD-0b1111-0o777"
+        package: "Custom Extreme"
+        notes: "All punctuation: !@#$%^&*()_+-=[]{}|\\;':\",./<>?`~"
+        unicode_test: "Greek: αβγδε, Math: ∑∫∂∇, Emoji: 📡📶⚡🔌, RTL: العربية"
+        extreme_sci: "1.23456789012345678901234567890e-100"
+    
+    pins:
+        RF_In_Alpha
+        RF_Out_Beta
+        Control[8]  # Array pins
+        Power[4]
+        Ground[16]  # Extensive grounding
+    
+    layout:
+        shape: Rectangle(10mm, 10mm, 2mm)
+        pin_positions:
+            RF_In_Alpha at [0mm, 5mm]
+            RF_Out_Beta at [10mm, 5mm]
+            Control[0] at [1mm, 0mm]
+            Control[1] at [2mm, 0mm]
+            Control[2] at [3mm, 0mm]
+            Control[3] at [4mm, 0mm]
+            Control[4] at [5mm, 0mm]
+            Control[5] at [6mm, 0mm]
+            Control[6] at [7mm, 0mm]
+            Control[7] at [8mm, 0mm]
+            Power[0] at [0mm, 0mm]
+            Power[1] at [10mm, 0mm]
+            Power[2] at [0mm, 10mm]
+            Power[3] at [10mm, 10mm]
+            Ground[0] at [0mm, 1mm]
+            Ground[1] at [0mm, 2mm]
+            Ground[2] at [0mm, 3mm]
+            Ground[3] at [0mm, 4mm]
+            Ground[4] at [0mm, 6mm]
+            Ground[5] at [0mm, 7mm]
+            Ground[6] at [0mm, 8mm]
+            Ground[7] at [0mm, 9mm]
+            Ground[8] at [10mm, 1mm]
+            Ground[9] at [10mm, 2mm]
+            Ground[10] at [10mm, 3mm]
+            Ground[11] at [10mm, 4mm]
+            Ground[12] at [10mm, 6mm]
+            Ground[13] at [10mm, 7mm]
+            Ground[14] at [10mm, 8mm]
+            Ground[15] at [10mm, 9mm]
+        pad_shapes:
+            RF_In_Alpha: Circle(1mm)
+            RF_Out_Beta: Rectangle(1.5mm, 1.5mm)
+            Control[0]: Obround(1mm, 0.5mm)
+            Control[1]: RoundedRect(0.8mm, 0.8mm, 0.2mm)
+            Control[2]: Circle(0.6mm)
+            Control[3]: Rectangle(0.8mm, 0.8mm)
+            Control[4]: Circle(0.6mm)
+            Control[5]: Rectangle(0.8mm, 0.8mm)
+            Control[6]: Circle(0.6mm)
+            Control[7]: Rectangle(0.8mm, 0.8mm)
+            Power[0]: Rectangle(2mm, 2mm)
+            Power[1]: Rectangle(2mm, 2mm)
+            Power[2]: Rectangle(2mm, 2mm)
+            Power[3]: Rectangle(2mm, 2mm)
+            Ground[0]: Rectangle(0.5mm, 0.5mm)
+            Ground[1]: Rectangle(0.5mm, 0.5mm)
+            Ground[2]: Rectangle(0.5mm, 0.5mm)
+            Ground[3]: Rectangle(0.5mm, 0.5mm)
+            Ground[4]: Rectangle(0.5mm, 0.5mm)
+            Ground[5]: Rectangle(0.5mm, 0.5mm)
+            Ground[6]: Rectangle(0.5mm, 0.5mm)
+            Ground[7]: Rectangle(0.5mm, 0.5mm)
+            Ground[8]: Rectangle(0.5mm, 0.5mm)
+            Ground[9]: Rectangle(0.5mm, 0.5mm)
+            Ground[10]: Rectangle(0.5mm, 0.5mm)
+            Ground[11]: Rectangle(0.5mm, 0.5mm)
+            Ground[12]: Rectangle(0.5mm, 0.5mm)
+            Ground[13]: Rectangle(0.5mm, 0.5mm)
+            Ground[14]: Rectangle(0.5mm, 0.5mm)
+            Ground[15]: Rectangle(0.5mm, 0.5mm)
+    
+    electrical:
+        frequency: freq  # Parameter reference
+        output_power: power  # Parameter reference
+        tolerance: tolerance  # Keyword as property AND parameter reference!
+        impedance: 50Ω
+        gain: 1.23456789e10  # Unitless scientific notation
+        test_hex: 0xDEADBEEF  # Hex integer
+        test_binary: 0b11111111  # Binary integer
+        test_octal: 0o777  # Octal integer
+        test_positive: +100V  # Explicit positive
+        test_negative: -273.15°C  # Absolute zero
+        test_extreme_tiny: 1.23456789e-100F  # Extreme tiny
+        test_extreme_huge: 9.87654321e+100Hz  # Extreme huge
+        test_zero: 0Ω  # Zero value
+        test_complex_unit: 401W/(m·K)  # Complex unit
+        test_float_sci: 2.5e-6  # Float scientific
+        test_thz: 1e12Hz  # Terahertz
+        test_all_keywords: 50Ω  # Using all keywords as properties
+        trace: 0.2mm  # Keyword as property
+        via: 0.3mm  # Keyword as property
+        clearance: 0.5mm  # Keyword as property
+        category: "RF"  # Keyword as property (but value is string, so OK)
+
+## ============================================================================
+## END OF RF COMPONENTS STRESS TEST
+## ============================================================================

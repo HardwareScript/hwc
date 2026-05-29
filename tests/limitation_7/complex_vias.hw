@@ -1,0 +1,56 @@
+import * from @std/primitives/units
+
+material FR4:
+    category: insulator
+    properties:
+        color: "#2E7D32"
+  
+        subsurface: 0.8
+        clearcoat: 0.51
+
+material Copper:
+    category: conductor
+    properties:
+        color: "#B87333"
+        metallic: 1.0
+
+space MultiConnectedPCB:
+    dimensions: 10mm by 5mm by 2.0mm
+    grid: 100 by 50 by 20
+    origin: bl by b
+    
+    # 1. Bottom Copper Layer (Z=1)
+    add substrate(Copper) spanning [x: 0mm, y: 0mm, z: 1] to [x: 10mm, y: 5mm, z: 1]
+    
+    # 2. Substrate 3 (FR4) (Z=2 to 6)
+    add substrate(FR4) spanning [x: 0mm, y: 0mm, z: 2] to [x: 10mm, y: 5mm, z: 6]
+    
+    # 3. Inner Copper Layer 2 (Z=7)
+    add substrate(Copper) spanning [x: 0mm, y: 0mm, z: 7] to [x: 10mm, y: 5mm, z: 7]
+    
+    # 4. Substrate 2 (FR4) (Z=8 to 12)
+    add substrate(FR4) spanning [x: 0mm, y: 0mm, z: 8] to [x: 10mm, y: 5mm, z: 12]
+    
+    # 5. Inner Copper Layer 1 (Z=13)
+    add substrate(Copper) spanning [x: 0mm, y: 0mm, z: 13] to [x: 10mm, y: 5mm, z: 13]
+    
+    # 6. Substrate 1 (FR4) (Z=14 to 19)
+    add substrate(FR4) spanning [x: 0mm, y: 0mm, z: 14] to [x: 10mm, y: 5mm, z: 19]
+    
+    # 7. Top Copper Layer (Z=20)
+    add substrate(Copper) spanning [x: 0mm, y: 0mm, z: 20] to [x: 10mm, y: 5mm, z: 20]
+    
+    # A. Through-Hole Via: Spans the entire PCB (Z=1 to Z=20)
+    add contact(Copper) named ThroughVia at [x: 2.5mm, y: 2.5mm] spanning z:1 to z:20:
+        diameter: 0.6mm
+        annular_ring: 0.20mm
+        
+    # B. Buried Via: Spans only the middle substrate, connecting inner copper layers (Z=7 to Z=13)
+    add contact(Copper) named BuriedVia at [x: 5.0mm, y: 2.5mm] spanning z:7 to z:13:
+        diameter: 0.5mm
+        annular_ring: 0.15mm
+        
+    # C. Blind Via: Spans from top copper down to inner copper layer 1 (Z=13 to Z=20)
+    add contact(Copper) named BlindVia at [x: 7.5mm, y: 2.5mm] spanning z:13 to z:20:
+        diameter: 0.5mm
+        annular_ring: 0.15mm

@@ -1,0 +1,12 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,0.05x0.05x2.00mm,,,,,1
+F_Array[0]_SharedRegion,Pour,0.0000mm² net:GND,Layer 1,,Silicon_N,0.000030mm³
+F_Array[1]_SharedRegion,Pour,0.0000mm² net:GND,Layer 1,,Silicon_N,0.000030mm³
+F_Array[2]_SharedRegion,Pour,0.0000mm² net:GND,Layer 1,,Silicon_N,0.000030mm³
+F_Array[0-2].SharedRegion,Pour,0.0001mm² net:GND,Layer 1,,Silicon_N,0.000090mm³
+F_Array[0],OverlapFinger,,,,,Finger with overlapping pours for merge testing,1
+F_Array[0]_SharedRegion,Pour(Silicon_N),,,,,,1
+F_Array[1],OverlapFinger,,,,,Finger with overlapping pours for merge testing,1
+F_Array[1]_SharedRegion,Pour(Silicon_N),,,,,,1
+F_Array[2],OverlapFinger,,,,,Finger with overlapping pours for merge testing,1
+F_Array[2]_SharedRegion,Pour(Silicon_N),,,,,,1

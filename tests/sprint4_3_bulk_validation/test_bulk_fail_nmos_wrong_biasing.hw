@@ -1,0 +1,74 @@
+## ============================================================================
+## Task 4.3: Bulk Connection Validation - FAIL Case (NMOS Wrong Biasing)
+## ============================================================================
+##
+## This test verifies that bulk validation FAILS when NMOS bulk is connected
+## to the wrong power rail (VDD instead of GND).
+##
+## Expected: ❌ Invalid bulk biasing for NMOS 'M1'
+##           Bulk connected to 'VDD', expected 'GND'
+
+import * from @std/primitives/units
+import * from @std/foundry/transistors
+import * from @std/materials/doped_semiconductors
+
+## ============================================================================
+## Logical Schematic (Module)
+## ============================================================================
+
+module NmosWrongBulk:
+    pins: [
+        input VIN,
+        output VOUT,
+        power VDD,
+        ground GND
+    ]
+    
+    ## NMOS with WRONG bulk connection (connected to VDD instead of GND)
+    add NMOS named M1
+    route M1.gate to VIN
+    route M1.source to GND
+    route M1.drain to VOUT
+    route M1.bulk to VDD  # ❌ WRONG: NMOS bulk should be GND, not VDD!
+
+## ============================================================================
+## Physical Layout (Space)
+## ============================================================================
+
+space NmosWrongBulkLayout implements NmosWrongBulk:
+    dimensions: 2mm by 2mm by 1mm
+    grid: 20 by 20 by 10
+    
+    ## Net classifications (required for physics-driven bulk validation)
+    net_classifications:
+        VDD: power
+        GND: ground
+        VIN: signal
+        VOUT: signal
+    
+    ## ========================================================================
+    ## NMOS Transistor (M1) - Silicon layer
+    ## ========================================================================
+    
+    add pour(Polysilicon) named M1_Gate on z:5:
+        device: M1.gate
+        net: VIN
+        boundary: [x: 400um, y: 400um] to [x: 600um, y: 1200um]
+    
+    add pour(Silicon_N) named M1_Source on z:3:
+        device: M1.source
+        net: GND
+        boundary: [x: 400um, y: 200um] to [x: 600um, y: 400um]
+    
+    add pour(Silicon_N) named M1_Drain on z:3:
+        device: M1.drain
+        net: VOUT
+        boundary: [x: 400um, y: 1200um] to [x: 600um, y: 1400um]
+    
+    ## ❌ WRONG: NMOS bulk (Silicon_P) connected to VDD instead of GND
+    ## This violates physics: P-type bulk in NMOS must be at lowest potential
+    ## to prevent forward-biasing the source-bulk PN junction
+    add pour(Silicon_P) named M1_Bulk on z:3:
+        device: M1.bulk
+        net: VDD  # ❌ WRONG! Should be GND
+        boundary: [x: 200um, y: 700um] to [x: 400um, y: 900um]

@@ -1,0 +1,17 @@
+{
+  "version": "0.1.4",
+  "board": "ZAxisTest",
+  "grid": {
+    "dimensions": [
+      40,
+      40,
+      100
+    ],
+    "resolution": [
+      0.5,
+      0.5,
+      0.1
+    ]
+  },
+  "routes": []
+}

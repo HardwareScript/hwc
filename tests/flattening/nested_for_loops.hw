@@ -1,0 +1,14 @@
+## Test: Flatten module with nested for loops
+## Expected: 16 components, 16 routes
+
+import * from @std/primitives/units
+
+component Cell:
+    pins: [In, Out]
+
+module Matrix:
+    pins: [Row[4], Col[4]]
+    for row in 0..3:
+        for col in 0..3:
+            add Cell named C[row, col]
+            route Row[row] to C[row, col].In

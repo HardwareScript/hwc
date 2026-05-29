@@ -1,0 +1,40 @@
+## Sprint 3.4: Division by Zero Guard Test
+## CRITICAL SAFETY TEST: Verifies that division by zero is caught gracefully
+##
+## Compiler Safety Rule: The compiler must never crash (no Rust panics).
+## Division by zero must be caught and reported with a helpful error message.
+##
+## EXPECTED BEHAVIOR: Graceful error message like:
+##   "L12: Division by zero in expression evaluation: 10 / i (where i=0)"
+## MUST NOT: Panic or crash the compiler
+
+import * from @std/primitives/units
+import Silicon_P from @std/materials/doped_semiconductors
+import Copper from @std/materials/conductors
+
+## ============================================================================
+## SPACE: Division by Zero Test (Should Fail Gracefully)
+## ============================================================================
+
+space DivisionByZeroTest:
+    dimensions: 100mm by 20mm by 2mm
+    grid: 100000 by 20000 by 2
+    origin: tl by t
+    
+    ## Base substrate
+    add substrate(Silicon_P) spanning [x:1um, y:1um, z:0] to [x:99999um, y:19999um, z:1]
+    
+    ## ========================================================================
+    ## TEST: Division by Zero (10 / i)
+    ## Loop: i in 0..3 → [0, 1, 2, 3]
+    ## Expression: 10 / i
+    ## When i=0: 10 / 0 → DIVISION BY ZERO
+    ## 
+    ## EXPECTED: Graceful error message:
+    ##   "Division by zero in expression: 10 / i (where i=0)"
+    ##   "Location: line 38, net: Bus[10 / i]"
+    ## ========================================================================
+    for i in 0..3:
+        add pour(Copper) named Test_i on z:1:
+            net: Bus[10 / i]
+            boundary: [x: i * 10mm + 1mm, y: 2mm] to [x: i * 10mm + 8mm, y: 4mm]

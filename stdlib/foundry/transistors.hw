@@ -1,0 +1,100 @@
+## Standard Library: Foundry Primitives (v0.1.6)
+## Defines the physical contracts for semiconductor devices
+##
+## Sprint 1.5: Device Contract Enforcement
+## These device definitions specify:
+## - Required terminals for each device type
+## - Expected materials for each terminal
+##
+## The compiler uses these contracts to validate physical layouts:
+## - NMOS source/drain must use Silicon_N (n-doped)
+## - PMOS source/drain must use Silicon_P (p-doped)
+## - Gates must use Polysilicon or Aluminum (metal gate)
+## - Bulk connections enforce proper biasing
+##
+## Contract Validation:
+## - LVS engine uses these contracts to validate physical geometry
+## - Device extractor checks material constraints
+## - Physics validator ensures bulk connections are correct
+
+device NMOS:
+    ## N-channel MOSFET (NMOS Transistor)
+    ## 
+    ## Physical Requirements:
+    ## - Gate: Polysilicon or Aluminum (control terminal)
+    ## - Source: Silicon_N (n-doped silicon, electron source)
+    ## - Drain: Silicon_N (n-doped silicon, electron drain)
+    ## - Bulk: Silicon_P (p-doped substrate, must connect to GND)
+    ##
+    ## Physics Rules:
+    ## - Bulk must be connected to GND (VSS) to prevent latch-up
+    ## - Source and drain are interchangeable (symmetric device)
+    ## - Gate controls channel conductivity
+    ##
+    ## Biasing (enforced by compiler):
+    ## - Silicon_P bulk has doping_type: p-type, bias_requirement: lowest_potential
+    ## - Compiler validates bulk net is classified as "ground"
+    terminals: [gate, source, drain, bulk]
+    materials:
+        gate: [Polysilicon, Aluminum]
+        source: Silicon_N
+        drain: Silicon_N
+        bulk: Silicon_P
+
+device PMOS:
+    ## P-channel MOSFET (PMOS Transistor)
+    ## 
+    ## Physical Requirements:
+    ## - Gate: Polysilicon or Aluminum (control terminal)
+    ## - Source: Silicon_P (p-doped silicon, hole source)
+    ## - Drain: Silicon_P (p-doped silicon, hole drain)
+    ## - Bulk: Silicon_N (n-well, must connect to VDD)
+    ##
+    ## Physics Rules:
+    ## - Bulk must be connected to VDD (VCC) to prevent latch-up
+    ## - Source and drain are interchangeable (symmetric device)
+    ## - Gate controls channel conductivity
+    ##
+    ## Biasing (enforced by compiler):
+    ## - Silicon_N bulk has doping_type: n-type, bias_requirement: highest_potential
+    ## - Compiler validates bulk net is classified as "power"
+    terminals: [gate, source, drain, bulk]
+    materials:
+        gate: [Polysilicon, Aluminum]
+        source: Silicon_P
+        drain: Silicon_P
+        bulk: Silicon_N
+
+device Resistor:
+    ## Resistor (Passive Component)
+    ## 
+    ## Physical Requirements:
+    ## - Body: Polysilicon, NiCr, or diffusion resistor material
+    ## - Terminals A and B: Metal contacts at each end
+    ##
+    ## Physics Rules:
+    ## - Resistance = ρ × (L / (W × t))
+    ## - ρ = resistivity of material
+    ## - L = length, W = width, t = thickness
+    terminals: [A, B]
+    materials:
+        A: Polysilicon
+        B: Polysilicon
+
+device Capacitor:
+    ## Capacitor (Passive Component)
+    ## 
+    ## Physical Requirements:
+    ## - Top plate: Aluminum or Copper (conductor)
+    ## - Bottom plate: Aluminum or Copper (conductor)
+    ## - Dielectric: SiO2, HfO2, or other insulator (between plates)
+    ##
+    ## Physics Rules:
+    ## - Capacitance = ε₀ × εᵣ × (A / d)
+    ## - ε₀ = permittivity of free space
+    ## - εᵣ = relative permittivity of dielectric
+    ## - A = overlap area, d = dielectric thickness
+    terminals: [top, bottom]
+    materials:
+        top: Aluminum
+        bottom: Aluminum

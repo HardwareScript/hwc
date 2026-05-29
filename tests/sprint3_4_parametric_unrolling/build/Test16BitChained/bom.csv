@@ -1,0 +1,18 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,200.00x20.00x4.00mm,,,,,1
+Adder[0],Adder,,,,,Single bit full adder for 16-bit processor,1
+Adder[1],Adder,,,,,Single bit full adder for 16-bit processor,1
+Adder[2],Adder,,,,,Single bit full adder for 16-bit processor,1
+Adder[3],Adder,,,,,Single bit full adder for 16-bit processor,1
+Adder[4],Adder,,,,,Single bit full adder for 16-bit processor,1
+Adder[5],Adder,,,,,Single bit full adder for 16-bit processor,1
+Adder[6],Adder,,,,,Single bit full adder for 16-bit processor,1
+Adder[7],Adder,,,,,Single bit full adder for 16-bit processor,1
+Adder[8],Adder,,,,,Single bit full adder for 16-bit processor,1
+Adder[9],Adder,,,,,Single bit full adder for 16-bit processor,1
+Adder[10],Adder,,,,,Single bit full adder for 16-bit processor,1
+Adder[11],Adder,,,,,Single bit full adder for 16-bit processor,1
+Adder[12],Adder,,,,,Single bit full adder for 16-bit processor,1
+Adder[13],Adder,,,,,Single bit full adder for 16-bit processor,1
+Adder[14],Adder,,,,,Single bit full adder for 16-bit processor,1
+Adder[15],Adder,,,,,Single bit full adder for 16-bit processor,1

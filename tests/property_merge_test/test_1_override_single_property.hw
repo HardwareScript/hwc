@@ -1,0 +1,37 @@
+# Test 1: Override Single Property (Density)
+# Base material from HPM has all 5 MPV properties
+# Local override only specifies density
+# Expected: Merged material should have 4 properties from HPM + 1 from local
+
+# Simulate HPM import (in real system this would be: import Aluminum from @hpm/materials)
+material Aluminum:
+    category: conductor
+    symbol: "Al"
+    description: "Standard Aluminum from HPM Library"
+    properties:
+        resistivity: 2.65e-8Ω·m
+        thermal_conductivity: 237W/(m·K)
+        density: 2700kg/m³
+        melting_point: 933K
+        max_current_density: 2e9A/m²
+
+# Local override: Only change density
+material Aluminum:
+    category: conductor
+    symbol: "Al-Local"
+    description: "Local Aluminum with custom density"
+    properties:
+        density: 2800kg/m³  # OVERRIDE: Different from HPM (2700)
+
+# Use the material in a space
+space TestBoard:
+    dimensions: 100mm by 100mm by 1.6mm
+    grid: 1000 by 1000 by 2
+    origin: tl by t
+
+# Expected behavior:
+# - resistivity: 2.65e-8 (from HPM base)
+# - thermal_conductivity: 237 (from HPM base)
+# - density: 2800 (from local override)
+# - melting_point: 933 (from HPM base)
+# - max_current_density: 2e9 (from HPM base)

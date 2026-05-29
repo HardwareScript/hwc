@@ -1,0 +1,4 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,50.00x50.00x2.00mm,,,,,1
+TopTrace,Pour,50.0000mm²,Z 0.0015mm,,Copper,10.000000mm³
+BottomTrace,Pour,50.0000mm²,Z 0.0000mm,,Copper,10.000000mm³

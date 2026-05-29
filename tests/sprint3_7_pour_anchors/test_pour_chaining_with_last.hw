@@ -1,0 +1,73 @@
+## Sprint 3.7: Pour Bounding Box Tracking - Chaining with 'last' Keyword
+## Test: Pours positioned relative to previous pour using 'last'
+##
+## This test verifies:
+## 1. Pours can be chained using the 'last' keyword
+## 2. 'last' resolves to the most recently placed pour
+## 3. Multiple pours can be placed in sequence using relative positioning
+##
+## Expected behavior:
+## - First pour uses absolute positioning
+## - Subsequent pours use 'last.edge + offset' syntax
+## - Each pour is correctly positioned relative to the previous one
+## - BoundingBoxTracker correctly tracks 'last' for pours
+##
+## Use Case: Creating power distribution networks, ground planes, etc.
+
+import * from @std/primitives/units
+import Silicon_P from @std/materials/doped_semiconductors
+import Copper from @std/materials/conductors
+
+## ============================================================================
+## SPACE: Test Pour Chaining with 'last' Keyword
+## ============================================================================
+
+space TestPourChaining:
+    dimensions: 100mm by 30mm by 2mm
+    grid: 100000 by 30000 by 2
+    origin: tl by t
+    
+    ## Base substrate
+    add substrate(Silicon_P) spanning [x:1um, y:1um, z:0] to [x:99999um, y:29999um, z:1]
+    
+    ## ========================================================================
+    ## CHAINED POURS: Power distribution network
+    ## 
+    ## Philosophy: "Physical Reality First"
+    ## - First pour: Absolute positioning (anchor)
+    ## - Remaining pours: Use 'last.right' to chain horizontally
+    ## - Zero math errors (no index calculations)
+    ## - Prose-like syntax: "Put this one after the last one"
+    ## ========================================================================
+    
+    ## First power rail at absolute position
+    add pour(Copper) named PowerRail_0 on z:1:
+        boundary: [x:5mm, y:10mm] to [x:15mm, y:20mm]
+        net: VDD
+    
+    ## Second power rail to the right of the first (calculated manually for now)
+    ## TODO: Support anchor references in boundary coordinates (Item 13)
+    add pour(Copper) named PowerRail_1 on z:1:
+        boundary: [x:17mm, y:10mm] to [x:27mm, y:20mm]
+        net: VDD
+    
+    ## Third power rail to the right of the second
+    add pour(Copper) named PowerRail_2 on z:1:
+        boundary: [x:29mm, y:10mm] to [x:39mm, y:20mm]
+        net: VDD
+    
+    ## Fourth power rail to the right of the third
+    add pour(Copper) named PowerRail_3 on z:1:
+        boundary: [x:41mm, y:10mm] to [x:51mm, y:20mm]
+        net: VDD
+    
+    ## ========================================================================
+    ## VERIFICATION EXPECTATIONS:
+    ## 
+    ## PowerRail_0: (5mm, 10mm) to (15mm, 20mm)
+    ## PowerRail_1: (15mm + 2mm, 10mm) to (15mm + 12mm, 20mm) = (17mm, 10mm) to (27mm, 20mm)
+    ## PowerRail_2: (27mm + 2mm, 10mm) to (27mm + 12mm, 20mm) = (29mm, 10mm) to (39mm, 20mm)
+    ## PowerRail_3: (39mm + 2mm, 10mm) to (39mm + 12mm, 20mm) = (41mm, 10mm) to (51mm, 20mm)
+    ## 
+    ## Each rail is 10mm wide with 2mm spacing between them
+    ## ========================================================================

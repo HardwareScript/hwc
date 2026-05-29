@@ -1,0 +1,30 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,100.00x20.00x2.00mm,,,,,1
+Test1_0,Pour,14.0000mm² net:Collision[0],Layer 1,,Copper,14.000000mm³
+Test1_1,Pour,14.0000mm² net:Collision[0],Layer 1,,Copper,14.000000mm³
+Test1_2,Pour,14.0000mm² net:Collision[1],Layer 1,,Copper,14.000000mm³
+Test1_3,Pour,14.0000mm² net:Collision[1],Layer 1,,Copper,14.000000mm³
+Test2_0,Pour,14.0000mm² net:Div2[0],Layer 1,,Copper,14.000000mm³
+Test2_1,Pour,14.0000mm² net:Div2[0],Layer 1,,Copper,14.000000mm³
+Test2_2,Pour,14.0000mm² net:Div2[1],Layer 1,,Copper,14.000000mm³
+Test2_3,Pour,14.0000mm² net:Div2[1],Layer 1,,Copper,14.000000mm³
+Test2_4,Pour,14.0000mm² net:Div2[1],Layer 1,,Copper,14.000000mm³
+Test2_5,Pour,14.0000mm² net:Div2[2],Layer 1,,Copper,14.000000mm³
+VDD_Rail_0,Pour,14.0000mm² net:VDD,Layer 1,,Copper,14.000000mm³
+VDD_Rail_1,Pour,14.0000mm² net:VDD,Layer 1,,Copper,14.000000mm³
+VDD_Rail_2,Pour,14.0000mm² net:VDD,Layer 1,,Copper,14.000000mm³
+VDD_Rail_3,Pour,14.0000mm² net:VDD,Layer 1,,Copper,14.000000mm³
+Test1_0,Pour(Copper),,,,,,1
+Test1_1,Pour(Copper),,,,,,1
+Test1_2,Pour(Copper),,,,,,1
+Test1_3,Pour(Copper),,,,,,1
+Test2_0,Pour(Copper),,,,,,1
+Test2_1,Pour(Copper),,,,,,1
+Test2_2,Pour(Copper),,,,,,1
+Test2_3,Pour(Copper),,,,,,1
+Test2_4,Pour(Copper),,,,,,1
+Test2_5,Pour(Copper),,,,,,1
+VDD_Rail_0,Pour(Copper),,,,,,1
+VDD_Rail_1,Pour(Copper),,,,,,1
+VDD_Rail_2,Pour(Copper),,,,,,1
+VDD_Rail_3,Pour(Copper),,,,,,1

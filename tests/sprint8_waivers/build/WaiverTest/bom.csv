@@ -1,0 +1,9 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,1.00x1.00x0.01mm,,,,,1
+M1_Waived,Transistor,,,,,,1
+M2_Floating,Transistor,,,,,,1
+FingerArray[0],Transistor,,,,,,1
+FingerArray[1],Transistor,,,,,,1
+FingerArray[2],Transistor,,,,,,1
+M3_Surgical,Transistor,,,,,,1
+M3_Target,Transistor,,,,,,1

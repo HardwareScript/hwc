@@ -1,0 +1,30 @@
+# Test: Local Authority Overrides Standard Library
+# This test imports Copper from stdlib, then overrides it locally
+# The local version should win
+
+# Import standard Copper from stdlib
+import Copper from @std/materials/conductors
+
+# Override with local Copper (different resistivity to prove local wins)
+material Copper:
+    category: conductor
+    symbol: "Cu-Local"
+    description: "LOCAL OVERRIDE - This should be used, not stdlib"
+    properties:
+        resistivity: 9.99e-8Ω·m  # DIFFERENT from stdlib (1.68e-8)
+        thermal_conductivity: 999W/(m·K)  # DIFFERENT from stdlib (401)
+        density: 9999kg/m³  # DIFFERENT from stdlib (8960)
+        melting_point: 1358K
+        max_current_density: 35A/mm²
+
+# Import a component from stdlib that we'll use
+import Resistor_0805_4k7 from @std/components/passives
+
+space TestBoard:
+    dimensions: 50mm by 50mm by 1.6mm
+    grid: 500 by 500 by 2
+    origin: tl by t
+    
+    # Add a component - this will use our LOCAL Copper, not stdlib Copper
+    add Resistor_0805_4k7 named R1 at [x: 10mm, y: 10mm, z: 1]
+

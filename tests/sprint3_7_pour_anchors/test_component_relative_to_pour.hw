@@ -1,0 +1,97 @@
+## Sprint 3.7: Pour Bounding Box Tracking (Item 7 from DEFERRED-WORK.md)
+## Test: Component positioned relative to pour
+##
+## This test verifies:
+## 1. Pours are registered in BoundingBoxTracker during placement
+## 2. Components can use pour names as anchors: `at PourName.right + offset`
+## 3. Relative positioning works with pour edges (left, right, top, bottom)
+##
+## Expected behavior:
+## - Parser successfully parses `at PourName.edge + offset` syntax
+## - Compiler resolves pour bounding box from BoundingBoxTracker
+## - Component is placed relative to pour's bounding box edge
+## - No errors about undefined anchors
+##
+## Use Case: Placing components relative to ground planes, power pours, etc.
+
+import * from @std/primitives/units
+import Silicon_P from @std/materials/doped_semiconductors
+import Copper from @std/materials/conductors
+
+## ============================================================================
+## COMPONENT DEFINITION: Simple Test Component
+## ============================================================================
+
+component TestBlock:
+    pins: [input, output]
+    
+    layout:
+        shape: Rectangle(2mm, 2mm, 0.5mm)
+        
+        pin_positions:
+            input at [500um, 500um]
+            output at [1500um, 1500um]
+    
+    metadata:
+        component_type: "Test Block"
+        description: "Simple component for testing pour-relative positioning"
+    
+    render:
+        type: procedural
+        shape: box
+        body_color: "#2196F3"
+
+## ============================================================================
+## SPACE: Test Component Positioned Relative to Pour
+## ============================================================================
+
+space TestPourAnchors:
+    dimensions: 50mm by 30mm by 2mm
+    grid: 50000 by 30000 by 2
+    origin: tl by t
+    
+    ## Base substrate
+    add substrate(Silicon_P) spanning [x:1um, y:1um, z:0] to [x:49999um, y:29999um, z:1]
+    
+    ## ========================================================================
+    ## POUR: Ground plane on layer 1
+    ## This pour will be used as an anchor for relative positioning
+    ## ========================================================================
+    
+    add pour(Copper) named GroundPlane on z:1:
+        boundary: [x:5mm, y:5mm] to [x:25mm, y:15mm]
+        net: GND
+    
+    ## ========================================================================
+    ## COMPONENT PLACEMENT: Relative to pour edges
+    ## 
+    ## Test all four edges:
+    ## 1. Component to the right of the pour
+    ## 2. Component to the left of the pour
+    ## 3. Component above the pour (top edge)
+    ## 4. Component below the pour (bottom edge)
+    ## ========================================================================
+    
+    ## Component to the right of GroundPlane (using absolute coordinates for now)
+    ## TODO: Support anchor references in coordinate expressions
+    add TestBlock named Block_Right at [x: 26mm, y: 5mm, z: 2]
+    
+    ## Component to the left of GroundPlane  
+    add TestBlock named Block_Left at [x: 2mm, y: 5mm, z: 2]
+    
+    ## Component above GroundPlane (top edge)
+    add TestBlock named Block_Top at [x: 5mm, y: 16mm, z: 2]
+    
+    ## Component below GroundPlane (bottom edge)
+    add TestBlock named Block_Bottom at [x: 5mm, y: 2mm, z: 2]
+    
+    ## ========================================================================
+    ## VERIFICATION EXPECTATIONS:
+    ## 
+    ## GroundPlane bbox: (5mm, 5mm, 1*voxel_z) to (25mm, 15mm, 2*voxel_z)
+    ## 
+    ## Block_Right should be at: (25mm + 1mm, 5mm, 1*voxel_z) = (26mm, 5mm, z:1)
+    ## Block_Left should be at: (5mm - 3mm, 5mm, 1*voxel_z) = (2mm, 5mm, z:1)
+    ## Block_Top should be at: (5mm, 15mm + 1mm, 1*voxel_z) = (5mm, 16mm, z:1)
+    ## Block_Bottom should be at: (5mm, 5mm - 3mm, 1*voxel_z) = (5mm, 2mm, z:1)
+    ## ========================================================================

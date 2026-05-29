@@ -1,0 +1,50 @@
+import * from @std/primitives/units
+import Copper from @std/materials/conductors
+import Silicon_P from @std/materials/doped_semiconductors
+
+component LED:
+    pins: [a, k]
+    layout:
+        shape: Rectangle(1mm, 1mm, 0.5mm)
+        pin_positions:
+            a at [0.2mm, 0.5mm]
+            k at [0.8mm, 0.5mm]
+
+component Resistor:
+    pins: [p1, p2]
+    layout:
+        shape: Rectangle(2mm, 1mm, 0.5mm)
+        pin_positions:
+            p1 at [0.5mm, 0.5mm]
+            p2 at [1.5mm, 0.5mm]
+
+module RelativePourTest:
+    pins: []
+
+space RelativePour implements RelativePourTest:
+    dimensions: 20mm by 20mm by 1mm
+    grid: 200 by 200 by 5
+    origin: bl
+
+    # Substrate at z:0
+    add substrate(Silicon_P) spanning [x: 0mm, y: 0mm, z: 0] to [x: 20mm, y: 20mm, z: 0]
+
+    # Components at z:1 (above substrate)
+    add LED named L1 at [x: 2mm, y: 5mm, z: 1]:
+        net: [a: VDD, k: VDD]
+
+    # Test 1: Simple relative edge
+    # Pour P1 overlaps LED L1 and extends slightly into the PR[i] area (y=11)
+    add pour(Copper) named P1 on z:1:
+        boundary: L1.left to [x: L1.right + 2mm, y: 11mm]
+        net: VDD
+
+    # Test 2: Indexed relative edge in expression
+    for i in 0..2:
+        add Resistor named R[i] at [x: 6mm + i * 4mm, y: 12mm, z: 1]:
+            net: [p1: VDD, p2: VDD]
+        
+        # PR[i] starts at y=10, creating a 1mm overlap with P1 (which ends at y=11)
+        add pour(Copper) named PR[i] on z:1:
+            boundary: [x: R[i].left - 3mm, y: 10mm] to [x: R[i].right, y: 15mm]
+            net: VDD

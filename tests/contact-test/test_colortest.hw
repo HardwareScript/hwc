@@ -1,0 +1,43 @@
+# Color Test - Five Boxes with Different Colors and Opacity
+# Purpose: Verify that OBJ/MTL export correctly handles:
+# 1. Multiple distinct colors
+# 2. Different opacity values
+# 3. Separate meshes per material
+# 4. Proper material assignment
+
+import RedBox from materials_colortest
+import GreenBox from materials_colortest
+import BlueBox from materials_colortest
+import YellowBox from materials_colortest
+import MagentaBox from materials_colortest
+
+space ColorTest:
+    dimensions: 10mm by 10mm by 2mm
+    grid: 1000 by 1000 by 20
+    profile: Silicon_Foundry
+    origin: tl by t
+    
+    # Box 1: Red (Far Left) - Opaque
+    add pour(RedBox) named Red on z:2:
+        boundary: [x: 0.5mm, y: 4mm] to [x: 1.5mm, y: 6mm]
+        net: RED
+    
+    # Box 2: Green (Left) - Opaque
+    add pour(GreenBox) named Green on z:4:
+        boundary: [x: 2.5mm, y: 4mm] to [x: 3.5mm, y: 6mm]
+        net: GREEN
+    
+    # Box 3: Blue (Center) - Opaque
+    add pour(BlueBox) named Blue on z:6:
+        boundary: [x: 4.5mm, y: 4mm] to [x: 5.5mm, y: 6mm]
+        net: BLUE
+    
+    # Box 4: Yellow (Right) - Semi-Transparent (0.5)
+    add pour(YellowBox) named Yellow on z:8:
+        boundary: [x: 6.5mm, y: 4mm] to [x: 7.5mm, y: 6mm]
+        net: YELLOW
+    
+    # Box 5: Magenta (Far Right) - Semi-Transparent (0.3)
+    add pour(MagentaBox) named Magenta on z:10:
+        boundary: [x: 8.5mm, y: 4mm] to [x: 9.5mm, y: 6mm]
+        net: MAGENTA

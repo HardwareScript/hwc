@@ -1,0 +1,40 @@
+material LayerRed:
+    category: insulator
+    properties:
+        color: "#FF0000"
+
+material LayerGreen:
+    category: insulator
+    properties:
+        color: "#00FF00"
+
+material LayerBlue:
+    category: insulator
+    properties:
+        color: "#0000FF"
+
+profile RainbowStack:
+    stackup:
+        Top:    [material: LayerRed,   thickness: 1mm]
+        Inner:  [material: LayerGreen, thickness: 1mm]
+        Bottom: [material: LayerBlue,  thickness: 1mm]
+
+space AbstractionTest:
+    profile: RainbowStack
+    dimensions: 20mm by 20mm by 5mm
+    grid: 40 by 40 by 50
+
+    # THE ABSTRACTED WAY:
+    # Notice: No 'at' keyword for pours, and coordinate brackets [x, y] have NO Z-axis.
+    # The Z-height is looked up automatically from the 'RainbowStack' profile.
+
+    add pour(LayerRed) named RedBand on layer: Top:
+        boundary: [x: 0mm, y: 0mm] to [x: 20mm, y: 20mm]
+
+    add pour(LayerGreen) named GreenBand on layer: Inner:
+        boundary: [x: 0mm, y: 0mm] to [x: 20mm, y: 20mm]
+        merge: true
+
+    add pour(LayerBlue) named BlueBand on layer: Bottom:
+        boundary: [x: 0mm, y: 0mm] to [x: 20mm, y: 20mm]
+        merge: true

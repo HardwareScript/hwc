@@ -1,0 +1,577 @@
+##[
+Shifter Standard Library - Maximum Complexity Stress Test
+==========================================================
+
+This file implements barrel shifters, logical shifts, arithmetic shifts,
+and rotations with extreme complexity to expose compiler weaknesses:
+
+1. Nested match expressions with shift amount decoding
+2. Bundle construction with conditional bit selection
+3. Recursive shift-by-powers-of-2 decomposition
+4. Sign extension logic with nested conditionals
+5. Rotation with wrap-around using bundle slicing
+6. Bidirectional shifters with mode selection
+7. Multi-stage barrel shifter with intermediate results
+8. Funnel shifters (concatenate and shift)
+9. Conditional shift directions based on control signals
+10. Edge cases: shift by 0, shift by width, shift beyond width
+
+If this compiles cleanly, the compiler handles bit manipulation perfectly.
+]##
+
+## Shift direction and mode enums
+enum ShiftDir:
+    Left = 0x0
+    Right = 0x1
+
+enum ShiftMode:
+    Logical = 0x0      ## Zero-fill
+    Arithmetic = 0x1   ## Sign-extend
+    Rotate = 0x2       ## Wrap-around
+    Funnel = 0x3       ## Use auxiliary input
+
+## Shifter configuration
+struct ShiftConfig:
+    direction[1]
+    mode[2]
+    enable[1]
+    saturate[1]
+    unused[3]
+
+## ============================================================================
+## LogicalShiftLeft - Simple left shift with zero-fill
+## ============================================================================
+module LogicalShiftLeft8:
+    pins:
+        Data[8],
+        Amount[3],
+        Out[8]
+    
+    logic:
+        ## Test 1: Match-based barrel shifter decomposition
+        ## Shift by powers of 2: stage1 (shift by 4), stage2 (shift by 2), stage3 (shift by 1)
+        let stage1 = if Amount[2]:
+            ## Shift left by 4
+            if Data[3..0] == 0xF:
+                ## All lower bits set - special case
+                [(Data[3..0] * 1), (0 * 4)]
+            else:
+                [Data[3..0], (0 * 4)]
+        else:
+            Data
+        
+        let stage2 = if Amount[1]:
+            ## Shift left by 2
+            match stage1[7..6]:
+                0x0: [stage1[5..0], (0 * 2)]
+                0x1: if stage1[5..4] > 0x2:
+                    [(stage1[5..0] * 1), (0 * 2)]
+                else:
+                    [stage1[5..0], (0 * 2)]
+                0x2: [stage1[5..0], (0 * 2)]
+                else: if stage1[5]:
+                    [stage1[5..0], (0 * 2)]
+                else:
+                    [stage1[5..0], (0 * 2)]
+        else:
+            stage1
+        
+        let stage3 = if Amount[0]:
+            ## Shift left by 1
+            if stage2[7]:
+                ## MSB set - check for overflow patterns
+                match stage2[6..4]:
+                    0x0: [stage2[6..0], 0]
+                    0x1: [stage2[6..0], 0]
+                    0x2: [stage2[6..0], 0]
+                    0x3: [stage2[6..0], 0]
+                    0x4: [stage2[6..0], 0]
+                    0x5: [stage2[6..0], 0]
+                    0x6: [stage2[6..0], 0]
+                    else: [stage2[6..0], 0]
+            else:
+                [stage2[6..0], 0]
+        else:
+            stage2
+        
+        Out = stage3
+
+## ============================================================================
+## LogicalShiftRight - Right shift with zero-fill
+## ============================================================================
+module LogicalShiftRight8:
+    pins:
+        Data[8],
+        Amount[3],
+        Out[8]
+    
+    logic:
+        ## Test 2: Nested if/else with bundle slicing for right shift
+        let stage1 = if Amount[2]:
+            ## Shift right by 4
+            if Data[7..4] == 0x0:
+                ## Upper bits already zero
+                [(0 * 4), Data[7..4]]
+            else:
+                match Data[7..6]:
+                    0x0: [(0 * 4), Data[7..4]]
+                    0x1: [(0 * 4), Data[7..4]]
+                    0x2: [(0 * 4), Data[7..4]]
+                    else: if Data[5]:
+                        [(0 * 4), Data[7..4]]
+                    else:
+                        [(0 * 4), Data[7..4]]
+        else:
+            Data
+        
+        let stage2 = if Amount[1]:
+            ## Shift right by 2
+            if stage1[7..6] != 0x0:
+                [(0 * 2), stage1[7..2]]
+            else:
+                if stage1[5..4] > 0x1:
+                    [(0 * 2), stage1[7..2]]
+                else:
+                    [(0 * 2), stage1[7..2]]
+        else:
+            stage1
+        
+        let stage3 = if Amount[0]:
+            ## Shift right by 1
+            match stage2[7..6]:
+                0x0: [0, stage2[7..1]]
+                0x1: [0, stage2[7..1]]
+                0x2: if stage2[5..4] == 0x3:
+                    [0, stage2[7..1]]
+                else:
+                    [0, stage2[7..1]]
+                else: [0, stage2[7..1]]
+        else:
+            stage2
+        
+        Out = stage3
+
+## ============================================================================
+## ArithmeticShiftRight - Right shift with sign extension
+## ============================================================================
+module ArithmeticShiftRight8:
+    pins:
+        Data[8],
+        Amount[3],
+        Out[8]
+    
+    logic:
+        ## Test 3: Sign extension with complex conditional logic
+        let sign_bit = Data[7]
+        
+        ## Create sign extension patterns based on shift amount
+        let sign_fill_4 = if sign_bit:
+            match Amount[2..0]:
+                0x0: [(0 * 4)]
+                0x1: [(1 * 4)]
+                0x2: [(1 * 4)]
+                0x3: [(1 * 4)]
+                0x4: [(1 * 4)]
+                0x5: [(1 * 4)]
+                0x6: [(1 * 4)]
+                else: [(1 * 4)]
+        else:
+            [(0 * 4)]
+        
+        let stage1 = if Amount[2]:
+            ## Shift right by 4 with sign extension
+            if sign_bit:
+                if Data[7..4] == 0xF:
+                    ## All sign bits
+                    [sign_fill_4, Data[7..4]]
+                else:
+                    match Data[6..4]:
+                        0x0: [sign_fill_4, Data[7..4]]
+                        0x1: [sign_fill_4, Data[7..4]]
+                        0x2: [sign_fill_4, Data[7..4]]
+                        0x3: [sign_fill_4, Data[7..4]]
+                        0x4: [sign_fill_4, Data[7..4]]
+                        0x5: [sign_fill_4, Data[7..4]]
+                        0x6: [sign_fill_4, Data[7..4]]
+                        else: [sign_fill_4, Data[7..4]]
+            else:
+                [(0 * 4), Data[7..4]]
+        else:
+            Data
+        
+        let sign_fill_2 = if stage1[7]:
+            [(1 * 2)]
+        else:
+            [(0 * 2)]
+        
+        let stage2 = if Amount[1]:
+            ## Shift right by 2 with sign extension
+            if stage1[7]:
+                match stage1[6..5]:
+                    0x0: [sign_fill_2, stage1[7..2]]
+                    0x1: [sign_fill_2, stage1[7..2]]
+                    0x2: [sign_fill_2, stage1[7..2]]
+                    else: if stage1[4]:
+                        [sign_fill_2, stage1[7..2]]
+                    else:
+                        [sign_fill_2, stage1[7..2]]
+            else:
+                [(0 * 2), stage1[7..2]]
+        else:
+            stage1
+        
+        let stage3 = if Amount[0]:
+            ## Shift right by 1 with sign extension
+            if stage2[7]:
+                if stage2[6..4] == 0x7:
+                    [stage2[7], stage2[7..1]]
+                else:
+                    [stage2[7], stage2[7..1]]
+            else:
+                [0, stage2[7..1]]
+        else:
+            stage2
+        
+        Out = stage3
+
+## ============================================================================
+## RotateLeft - Circular left rotation
+## ============================================================================
+module RotateLeft8:
+    pins:
+        Data[8],
+        Amount[3],
+        Out[8]
+    
+    logic:
+        ## Test 4: Rotation using bundle slicing and concatenation
+        Out = match Amount:
+            0: Data
+            1: [Data[6..0], Data[7]]
+            2: if Data[7..6] == 0x3:
+                ## Special case: both MSBs set
+                [Data[5..0], Data[7..6]]
+            else:
+                [Data[5..0], Data[7..6]]
+            3: match Data[7..5]:
+                0x0: [Data[4..0], Data[7..5]]
+                0x1: [Data[4..0], Data[7..5]]
+                0x2: [Data[4..0], Data[7..5]]
+                0x3: [Data[4..0], Data[7..5]]
+                0x4: [Data[4..0], Data[7..5]]
+                0x5: [Data[4..0], Data[7..5]]
+                0x6: [Data[4..0], Data[7..5]]
+                else: [Data[4..0], Data[7..5]]
+            4: if Data[7..4] > 0x7:
+                [Data[3..0], Data[7..4]]
+            else:
+                [Data[3..0], Data[7..4]]
+            5: [Data[2..0], Data[7..3]]
+            6: match Data[7..6]:
+                0x0: [Data[1..0], Data[7..2]]
+                0x1: [Data[1..0], Data[7..2]]
+                0x2: [Data[1..0], Data[7..2]]
+                else: if Data[5..4] == 0x3:
+                    [Data[1..0], Data[7..2]]
+                else:
+                    [Data[1..0], Data[7..2]]
+            else: [Data[0], Data[7..1]]
+
+## ============================================================================
+## RotateRight - Circular right rotation
+## ============================================================================
+module RotateRight8:
+    pins:
+        Data[8],
+        Amount[3],
+        Out[8]
+    
+    logic:
+        ## Test 5: Right rotation with nested conditionals
+        Out = match Amount:
+            0: Data
+            1: if Data[0]:
+                ## LSB set - will become MSB
+                [Data[0], Data[7..1]]
+            else:
+                [Data[0], Data[7..1]]
+            2: match Data[1..0]:
+                0x0: [Data[1..0], Data[7..2]]
+                0x1: [Data[1..0], Data[7..2]]
+                0x2: [Data[1..0], Data[7..2]]
+                else: if Data[7]:
+                    [Data[1..0], Data[7..2]]
+                else:
+                    [Data[1..0], Data[7..2]]
+            3: if Data[2..0] == 0x7:
+                [Data[2..0], Data[7..3]]
+            else:
+                match Data[2..1]:
+                    0x0: [Data[2..0], Data[7..3]]
+                    0x1: [Data[2..0], Data[7..3]]
+                    0x2: [Data[2..0], Data[7..3]]
+                    else: [Data[2..0], Data[7..3]]
+            4: [Data[3..0], Data[7..4]]
+            5: if Data[4..0] > 0xF:
+                [Data[4..0], Data[7..5]]
+            else:
+                [Data[4..0], Data[7..5]]
+            6: [Data[5..0], Data[7..6]]
+            else: match Data[6..0]:
+                0x00: [Data[6..0], Data[7]]
+                0x7F: [Data[6..0], Data[7]]
+                else: [Data[6..0], Data[7]]
+
+## ============================================================================
+## BarrelShifter - Universal shifter with mode selection
+## ============================================================================
+module BarrelShifter8:
+    pins:
+        Data[8],
+        Amount[3],
+        Direction[1],
+        Mode[2],
+        Out[8]
+    
+    logic:
+        ## Test 6: Mode-based shift selection with extreme nesting
+        let left_logical = match Amount:
+            0: Data
+            1: [Data[6..0], 0]
+            2: [Data[5..0], (0 * 2)]
+            3: [Data[4..0], (0 * 3)]
+            4: [Data[3..0], (0 * 4)]
+            5: [Data[2..0], (0 * 5)]
+            6: [Data[1..0], (0 * 6)]
+            else: [Data[0], (0 * 7)]
+        
+        let right_logical = match Amount:
+            0: Data
+            1: [0, Data[7..1]]
+            2: [(0 * 2), Data[7..2]]
+            3: [(0 * 3), Data[7..3]]
+            4: [(0 * 4), Data[7..4]]
+            5: [(0 * 5), Data[7..5]]
+            6: [(0 * 6), Data[7..6]]
+            else: [(0 * 7), Data[7]]
+        
+        let sign_bit = Data[7]
+        let right_arithmetic = if sign_bit:
+            match Amount:
+                0: Data
+                1: [sign_bit, Data[7..1]]
+                2: [(sign_bit * 2), Data[7..2]]
+                3: if Data[6..4] == 0x7:
+                    [(sign_bit * 3), Data[7..3]]
+                else:
+                    [(sign_bit * 3), Data[7..3]]
+                4: [(sign_bit * 4), Data[7..4]]
+                5: match Data[7..5]:
+                    0x7: [(sign_bit * 5), Data[7..5]]
+                    else: [(sign_bit * 5), Data[7..5]]
+                6: [(sign_bit * 6), Data[7..6]]
+                else: [(sign_bit * 7), Data[7]]
+        else:
+            right_logical
+        
+        let rotate_left = match Amount:
+            0: Data
+            1: [Data[6..0], Data[7]]
+            2: [Data[5..0], Data[7..6]]
+            3: [Data[4..0], Data[7..5]]
+            4: [Data[3..0], Data[7..4]]
+            5: [Data[2..0], Data[7..3]]
+            6: [Data[1..0], Data[7..2]]
+            else: [Data[0], Data[7..1]]
+        
+        let rotate_right = match Amount:
+            0: Data
+            1: [Data[0], Data[7..1]]
+            2: [Data[1..0], Data[7..2]]
+            3: [Data[2..0], Data[7..3]]
+            4: [Data[3..0], Data[7..4]]
+            5: [Data[4..0], Data[7..5]]
+            6: [Data[5..0], Data[7..6]]
+            else: [Data[6..0], Data[7]]
+        
+        ## Select based on direction and mode
+        Out = if Direction:
+            ## Right shift/rotate
+            match Mode:
+                0x0: right_logical
+                0x1: right_arithmetic
+                0x2: rotate_right
+                else: if Amount > 0x4:
+                    right_arithmetic
+                else:
+                    right_logical
+        else:
+            ## Left shift/rotate
+            match Mode:
+                0x0: left_logical
+                0x1: if sign_bit:
+                    ## Arithmetic left (same as logical for left)
+                    left_logical
+                else:
+                    left_logical
+                0x2: rotate_left
+                else: if Data[7..4] == 0xF:
+                    rotate_left
+                else:
+                    left_logical
+
+## ============================================================================
+## FunnelShifter - Shift across two concatenated inputs
+## ============================================================================
+module FunnelShifter8:
+    pins:
+        DataHigh[8],
+        DataLow[8],
+        Amount[4],
+        Out[8]
+    
+    logic:
+        ## Test 7: Extract 8 bits from 16-bit concatenation
+        ## Conceptually: [DataHigh, DataLow] >> Amount
+        Out = match Amount:
+            0: DataLow
+            1: if DataLow[0]:
+                [DataLow[0], DataLow[7..1]]
+            else:
+                [DataHigh[0], DataLow[7..1]]
+            2: match DataLow[1..0]:
+                0x0: [DataHigh[1..0], DataLow[7..2]]
+                0x1: [DataHigh[1..0], DataLow[7..2]]
+                0x2: [DataHigh[1..0], DataLow[7..2]]
+                else: if DataHigh[1]:
+                    [DataHigh[1..0], DataLow[7..2]]
+                else:
+                    [DataHigh[1..0], DataLow[7..2]]
+            3: [DataHigh[2..0], DataLow[7..3]]
+            4: if DataHigh[3..0] == 0xF:
+                [DataHigh[3..0], DataLow[7..4]]
+            else:
+                [DataHigh[3..0], DataLow[7..4]]
+            5: match DataHigh[4..2]:
+                0x0: [DataHigh[4..0], DataLow[7..5]]
+                0x1: [DataHigh[4..0], DataLow[7..5]]
+                0x2: [DataHigh[4..0], DataLow[7..5]]
+                0x3: [DataHigh[4..0], DataLow[7..5]]
+                0x4: [DataHigh[4..0], DataLow[7..5]]
+                0x5: [DataHigh[4..0], DataLow[7..5]]
+                0x6: [DataHigh[4..0], DataLow[7..5]]
+                else: [DataHigh[4..0], DataLow[7..5]]
+            6: [DataHigh[5..0], DataLow[7..6]]
+            7: if DataHigh[6..4] > 0x3:
+                [DataHigh[6..0], DataLow[7]]
+            else:
+                [DataHigh[6..0], DataLow[7]]
+            8: DataHigh
+            9: [DataHigh[7], DataHigh[7..1]]
+            10: [(0 * 2), DataHigh[7..2]]
+            11: match DataHigh[7..5]:
+                0x0: [(0 * 3), DataHigh[7..3]]
+                0x1: [(0 * 3), DataHigh[7..3]]
+                0x2: [(0 * 3), DataHigh[7..3]]
+                0x3: [(0 * 3), DataHigh[7..3]]
+                0x4: [(0 * 3), DataHigh[7..3]]
+                0x5: [(0 * 3), DataHigh[7..3]]
+                0x6: [(0 * 3), DataHigh[7..3]]
+                else: [(0 * 3), DataHigh[7..3]]
+            12: [(0 * 4), DataHigh[7..4]]
+            13: [(0 * 5), DataHigh[7..5]]
+            14: [(0 * 6), DataHigh[7..6]]
+            else: [(0 * 7), DataHigh[7]]
+
+## ============================================================================
+## ConditionalShifter - Shift with enable and saturation
+## ============================================================================
+module ConditionalShifter8:
+    pins:
+        Data[8],
+        Amount[3],
+        Enable[1],
+        Saturate[1],
+        Direction[1],
+        Out[8]
+    
+    logic:
+        ## Test 8: Conditional execution with saturation logic
+        let shifted = if Direction:
+            ## Right shift
+            match Amount:
+                0: Data
+                1: [0, Data[7..1]]
+                2: [(0 * 2), Data[7..2]]
+                3: if Data[7..5] == 0x7:
+                    [(0 * 3), Data[7..3]]
+                else:
+                    [(0 * 3), Data[7..3]]
+                4: [(0 * 4), Data[7..4]]
+                5: [(0 * 5), Data[7..5]]
+                6: [(0 * 6), Data[7..6]]
+                else: [(0 * 7), Data[7]]
+        else:
+            ## Left shift
+            match Amount:
+                0: Data
+                1: [Data[6..0], 0]
+                2: [Data[5..0], (0 * 2)]
+                3: [Data[4..0], (0 * 3)]
+                4: if Data[3..0] == 0xF:
+                    [Data[3..0], (0 * 4)]
+                else:
+                    [Data[3..0], (0 * 4)]
+                5: [Data[2..0], (0 * 5)]
+                6: [Data[1..0], (0 * 6)]
+                else: [Data[0], (0 * 7)]
+        
+        ## Check for overflow/saturation
+        let overflow = if Direction:
+            ## Right shift never overflows
+            0
+        else:
+            ## Left shift: check if bits were lost
+            if Amount == 0:
+                0
+            else:
+                if Amount[2]:
+                    ## Shift by 4+ bits
+                    if Data[7..4] != 0x0:
+                        1
+                    else:
+                        0
+                else:
+                    if Amount[1]:
+                        ## Shift by 2-3 bits
+                        match Amount[0]:
+                            0: if Data[7..6] != 0x0:
+                                1
+                            else:
+                                0
+                            else: if Data[7..5] != 0x0:
+                                1
+                            else:
+                                0
+                    else:
+                        ## Shift by 1 bit
+                        if Data[7]:
+                            1
+                        else:
+                            0
+        
+        ## Apply saturation if enabled
+        let saturated = if Saturate & overflow:
+            if Direction:
+                shifted
+            else:
+                ## Saturate to max value
+                [(1 * 8)]
+        else:
+            shifted
+        
+        ## Apply enable
+        Out = if Enable:
+            saturated
+        else:
+            Data

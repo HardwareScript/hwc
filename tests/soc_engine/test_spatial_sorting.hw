@@ -1,0 +1,75 @@
+## SoC Engine Phase 1: Spatial Topological Sorting Stress Test
+## v0.1.7 Roadmap: Step 1
+## 
+## This test verifies:
+## 1. Multi-level forward references (C depends on B, B depends on A).
+## 2. Pours depending on component anchors.
+## 3. Mix of textual order and dependency order.
+## 4. Stability of 'last' keyword during sorting.
+
+import * from @std/primitives/units
+import Silicon_P from @std/materials/doped_semiconductors
+import Copper from @std/materials/conductors
+
+component Gate:
+    pins: [sig_in, sig_out]
+    layout:
+        shape: Rectangle(10um, 10um, 1um)
+        pin_positions:
+            sig_in at [2um, 5um]
+            sig_out at [8um, 5um]
+
+module SoC_Topological_Sort_Module:
+    pins: []
+
+space SoC_Topological_Sort implements SoC_Topological_Sort_Module:
+    dimensions: 200um by 200um by 2um
+    grid: 200 by 200 by 2
+    origin: bl by b
+
+    nets:
+        VDD: power
+    
+    ## Base substrate
+    add substrate(Silicon_P) spanning [x:0um, y:0um, z:0um] to [x:200um, y:200um, z:1um]
+
+    ## ------------------------------------------------------------------------
+    ## TEST 1: The "Reverse Chain" (Multi-level Forward Reference)
+    ## Textual order: C -> B -> A
+    ## Dependency order: A -> B -> C
+    ## ------------------------------------------------------------------------
+    
+    ## C depends on B
+    add Gate named Gate_C at [x: Gate_B.right + 5um, y: 10um, z: 1um]
+    
+    ## B depends on A
+    add Gate named Gate_B at [x: Gate_A.right + 5um, y: 10um, z: 1um]
+    
+    ## A is the root (defined last textually)
+    add Gate named Gate_A at [x: 10um, y: 10um, z: 1um]
+
+    ## ------------------------------------------------------------------------
+    ## TEST 2: Pour-to-Component Dependency
+    ## The pour should be placed AFTER the component it references.
+    ## ------------------------------------------------------------------------
+    
+    add pour(Copper) named Supply_Rail on z: 1um:
+        boundary: [x: Power_Reg.left, y: Power_Reg.bottom + 2um] to [x: Power_Reg.right, y: Power_Reg.bottom + 5um]
+        net: VDD
+
+    add Gate named Power_Reg at [x: 50um, y: 50um, z: 1um]
+
+    ## ------------------------------------------------------------------------
+    ## TEST 3: 'last' Keyword Preservation
+    ## 'last' must always refer to the TEXTUALLY previous component, 
+    ## even if sorting moves them around physically.
+    ## ------------------------------------------------------------------------
+    
+    add Gate named Chain_1 at [x: 100um, y: 100um, z: 1um]
+    add Gate named Chain_2 at [x: last.right + 2um, y: 100um, z: 1um] # Depends on Chain_1
+    add Gate named Chain_3 at [x: 150um, y: 150um, z: 1um]
+    add Gate named Chain_4 at [x: last.right + 2um, y: 150um, z: 1um] # Depends on Chain_3
+
+    ## Verification:
+    ## If the compiler correctly implements Step 1, this file will build 
+    ## without "Anchor Not Found" or "Circular Dependency" errors.

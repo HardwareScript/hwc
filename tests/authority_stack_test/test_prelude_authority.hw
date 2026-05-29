@@ -1,0 +1,15 @@
+# Test 5: Prelude Authority (Auto-loaded Primitives)
+# Units and constants from stdlib/primitives/ should be available without import
+
+space TestBoard:
+    dimensions: 100mm by 100mm by 1.6mm  # Uses 'mm' from prelude (units.hw)
+    grid: 1000 by 1000 by 2
+    origin: tl by t
+    
+component TestResistor:
+    pins: [A, B]
+    electrical:
+        resistance: 10000  # 10kΩ
+        tolerance: 5%  # Uses '%' from prelude (units.hw)
+
+

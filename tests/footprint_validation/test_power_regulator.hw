@@ -1,0 +1,50 @@
+## Footprint Validation Test: Power Regulator Board (v0.1.6)
+## Demonstrates importing and using standard footprints.
+
+import * from @std/footprints/basic
+
+material Copper:
+    category: conductor
+    properties:
+        resistivity: 1.68e-8Ω·m
+        color: "#B87333"
+
+material FR4:
+    category: insulator
+    properties:
+        resistivity: 1e16Ω·m
+        color: "#2E7D32"
+
+## Space definition to assemble the board
+space PowerRegulatorBoard:
+    dimensions: 50mm by 30mm by 2mm
+    grid: 100 by 100 by 10
+    origin: bl by b
+    
+    ## Add substrate (8 layers * 0.2mm = 1.6mm)
+    ## v0.1.7: Shifted to 1-based indexing for consistency (Limitation 5)
+    add substrate(FR4) spanning [0mm, 0mm, 1] to [50mm, 30mm, 8]
+    
+    ## Add components from the footprint library
+    ## Place on the top surface (layer 9, sitting on top of 8 layers)
+    add TO220 named U1 at [10mm, 15mm, 9]
+    add SOT23 named Q1 at [25mm, 10mm, 9]
+    add SOT223 named Q2 at [35mm, 20mm, 9]
+    
+    ## Add mechanical parts
+    add MountingHole_3mm named M1 at [5mm, 5mm, 1]:
+        merge: true
+    add MountingHole_3mm named M2 at [45mm, 5mm, 1]:
+        merge: true
+    add MountingHole_3mm named M3 at [5mm, 25mm, 1]:
+        merge: true
+    add MountingHole_3mm named M4 at [45mm, 25mm, 1]:
+        merge: true
+    
+    add Fiducial_1mm named FID1 at [2mm, 2mm, 9]
+    add Fiducial_1mm named FID2 at [48mm, 28mm, 9]
+    
+    ## Add a copper pour for ground (layer 9)
+    add pour(Copper) named GND_Plane on z:9:
+        boundary: [x:1mm, y:1mm] to [x:49mm, y:29mm]
+        net: GND

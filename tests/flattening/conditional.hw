@@ -1,0 +1,29 @@
+## Test: Flatten module with if conditional
+## Expected: 8 components, 8 routes (with different connections)
+
+import * from @std/primitives/units
+
+component Bit:
+    pins: [CarryIn, CarryOut, BusIn]
+    layout:
+        shape: Rectangle(5mm, 5mm, 1mm)
+
+module ALU:
+    pins: [CarryIn, Bus[8]]
+    for i in 0..7:
+        ## Specify physical position inside the module to avoid stacking collision
+        add Bit named B[i] at [x: i * 10mm, y: 0mm, z: 0mm]
+        if i = 0:
+            route CarryIn to B[i].CarryIn
+        else:
+            route B[i-1].CarryOut to B[i].CarryIn
+
+module Main:
+    pins: []
+
+space FlatteningTest implements Main:
+    dimensions: 100mm by 100mm by 4mm
+    grid: 100 by 100 by 4
+    origin: bl by b
+    
+    add ALU named MyALU at [x: 10mm, y: 10mm, z: 1mm]

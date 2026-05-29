@@ -1,0 +1,85 @@
+## Sprint 3, Task 3.1: Parser Test for Relative Positioning
+## Tests that the parser can handle relative positioning syntax
+##
+## This test verifies:
+## 1. Parser accepts AnchorName.edge + offset syntax
+## 2. Single measurement offset: M1.right + 1mm
+## 3. Vector offset: M1.bottom + [0.5mm, 1mm, 0mm]
+##
+## Expected behavior:
+## - Parser successfully parses relative positioning syntax
+## - Compilation will FAIL (constraint solver not integrated yet)
+## - This is expected - we are only testing parser acceptance
+
+import * from @std/primitives/units
+import Silicon_P from @std/materials/doped_semiconductors
+import Aluminum from @std/materials/conductors
+
+## ============================================================================
+## COMPONENT DEFINITION: Simple Test Block
+## ============================================================================
+
+component TestBlock:
+    pins: []
+    
+    layout:
+        shape: Rectangle(4mm, 4mm, 0.5mm)
+    
+    metadata:
+        component_type: "Test Block"
+        description: "Simple block for testing relative positioning"
+    
+    render:
+        type: procedural
+        shape: box
+        body_color: "#4A90E2"
+
+## ============================================================================
+## SPACE: Test Relative Positioning Syntax
+## ============================================================================
+
+space RelativePositioningParserTest:
+    dimensions: 20mm by 20mm by 2mm
+    grid: 20000 by 20000 by 2
+    origin: tl by t
+    
+    ## Base substrate
+    add substrate(Silicon_P) spanning [x:1um, y:1um, z:0] to [x:19999um, y:19999um, z:1]
+    
+    ## ========================================================================
+    ## TEST 1: Absolute positioning (baseline)
+    ## ========================================================================
+    add TestBlock named M1 at [x: 2mm, y: 2mm, z: 1]
+    
+    ## ========================================================================
+    ## TEST 2: Relative positioning with single offset - RIGHT EDGE
+    ## Syntax: AnchorName.edge + offset
+    ## Expected: Parser accepts this syntax
+    ## ========================================================================
+    add TestBlock named M2 at M1.right + 1mm
+    
+    ## ========================================================================
+    ## TEST 3: Relative positioning with single offset - TOP EDGE
+    ## ========================================================================
+    add TestBlock named M3 at M1.top + 2mm
+    
+    ## ========================================================================
+    ## TEST 4: Relative positioning with vector offset - BOTTOM EDGE
+    ## Syntax: AnchorName.edge + [x, y, z]
+    ## ========================================================================
+    add TestBlock named M4 at M1.bottom + [0.5mm, 1mm, 0mm]
+    
+    ## ========================================================================
+    ## TEST 5: Relative positioning with LEFT EDGE
+    ## ========================================================================
+    add TestBlock named M5 at M1.left + 1mm
+    
+    ## ========================================================================
+    ## TEST 6: Relative positioning with FRONT EDGE
+    ## ========================================================================
+    add TestBlock named M6 at M1.front + 0.5mm
+    
+    ## ========================================================================
+    ## TEST 7: Relative positioning with BACK EDGE
+    ## ========================================================================
+    add TestBlock named M7 at M1.back + 0.5mm

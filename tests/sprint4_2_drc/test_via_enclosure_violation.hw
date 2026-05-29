@@ -1,0 +1,45 @@
+# Test: Via enclosure (annular ring) violation detection
+# Task 4.2: DRC Engine - Via Checks
+#
+# This test creates a via with insufficient copper pad around it.
+# Expected: DRC should FAIL with P42 (Via enclosure violation)
+
+import * from @std/primitives/units
+import Copper from @std/materials/conductors
+
+profile StrictEnclosure:
+    description: "Strict enclosure constraints for testing"
+    
+    trace:
+        min_width: 100µm
+        min_spacing: 100µm
+    
+    via:
+        min_diameter: 200µm
+        min_annular_ring: 500µm  # Require 500µm annular ring
+
+space TestViaEnclosure:
+    dimensions: 10mm by 10mm by 2mm
+    grid: 100 by 100 by 20
+    origin: tl by t
+    profile: StrictEnclosure
+    
+    nets:
+        Signal: signal
+    
+    # Bottom pad - small pad that won't provide enough annular ring
+    add pour(Copper) named BottomPad on z:5:
+        boundary: [x: 4.5mm, y: 4.5mm] to [x: 5.5mm, y: 5.5mm]  # Only 1mm x 1mm pad
+        net: Signal
+    
+    # Top pad - small pad that won't provide enough annular ring
+    add pour(Copper) named TopPad on z:15:
+        boundary: [x: 4.5mm, y: 4.5mm] to [x: 5.5mm, y: 5.5mm]  # Only 1mm x 1mm pad
+        net: Signal
+    
+    # Via with 200µm diameter centered in 1mm pad
+    # Annular ring = (pad_radius - via_radius) = (500µm - 100µm) = 400µm
+    # This is less than required 500µm, should trigger P42 violation
+    add contact(Copper) named SmallPadVia net: Signal at [x: 5mm, y: 5mm] spanning z:5 to z:15:
+        diameter: 200µm
+

@@ -1,0 +1,65 @@
+# High-Fidelity Optics Test - v0.1.7
+# Purpose: Verify IOR, Clearcoat, and Transmission extensions in GLB export
+
+# 1. Glass Substrate (High Transmission, High IOR)
+material Glass_Substrate:
+    category: insulator
+    properties:
+        color: "#E0F7FA"
+        opacity: 0.1
+        ior: 1.52
+        roughness: 0.05
+        metallic: 0.0
+
+# 2. Polished Onyx (Clearcoat Gloss)
+material Onyx_Gloss:
+    category: insulator
+    properties:
+        color: "#1A1A1A"
+        opacity: 1.0
+        roughness: 0.5
+        metallic: 0.0
+        clearcoat: 1.0
+        clearcoat_roughness: 0.03
+
+# 3. Frosted Sapphire (Transmission + Roughness)
+material Sapphire_Frosted:
+    category: insulator
+    properties:
+        color: "#0F52BA"
+        opacity: 0.3
+        ior: 1.76
+        roughness: 0.6
+        metallic: 0.0
+
+# 4. Ruby Crystal (Transmission + Low Roughness)
+material Ruby_Crystal:
+    category: insulator
+    properties:
+        color: "#E0115F"
+        opacity: 0.2
+        ior: 1.76
+        roughness: 0.1
+        metallic: 0.0
+
+# Space to visualize the optics
+space OpticsTest:
+    dimensions: 60mm by 20mm by 2mm
+    grid: 60 by 20 by 2
+    origin: bl by b
+
+    # Glass slab
+    add pour(Glass_Substrate) named Glass on z:1:
+        boundary: [x: 5mm, y: 5mm] to [x: 15mm, y: 15mm]
+
+    # Glossy black block
+    add pour(Onyx_Gloss) named Onyx on z:1:
+        boundary: [x: 20mm, y: 5mm] to [x: 30mm, y: 15mm]
+
+    # Frosted blue block
+    add pour(Sapphire_Frosted) named Sapphire on z:1:
+        boundary: [x: 35mm, y: 5mm] to [x: 45mm, y: 15mm]
+
+    # Clear red block
+    add pour(Ruby_Crystal) named Ruby on z:1:
+        boundary: [x: 50mm, y: 5mm] to [x: 60mm, y: 15mm]

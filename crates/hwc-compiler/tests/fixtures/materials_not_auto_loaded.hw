@@ -1,0 +1,12 @@
+## Test that materials are NOT auto-loaded
+## This should compile successfully - we're defining our own material
+
+material TestMaterial:
+    category: conductor
+    symbol: "Test"
+    description: "Test material"
+    
+    properties:
+        density: 8960kg/m³
+        thermal_conductivity: 401W/(m·K)
+        resistivity: 1.68e-8Ω·m

@@ -1,0 +1,60 @@
+## Standard Routing Patterns (v0.1.7 Analytic-First)
+##
+## This library provides mathematical templates for meanders and delay lines.
+##
+## v0.1.7 ARCHITECTURE:
+## In the Leap-Frog routing engine, these patterns are NOT rigid paths. Instead,
+## they act as "Strategic Guides". The router uses the pattern's mathematical
+## intent to modify its A* heuristic, allowing it to meander to gain length
+## while still dynamically avoiding obstacles (components and manual traces).
+##
+## Every step is calculated analytically in nanometers, ensuring that even
+## complex meanders maintain exact physical and electrical properties.
+
+# Zigzag Pattern
+# Simple 45° meander for basic length matching.
+# Best for low-density areas with minimal obstacles.
+pattern Zigzag (gap: Measurement):
+    steps:
+        - gap r 45
+        - gap r -45
+        - gap r -45
+        - gap r 45
+
+# Trombone Pattern
+# DDR5-style meander with gap and amplitude
+# Commonly used for memory interfaces
+pattern Trombone (gap: Measurement, amp: Measurement):
+    steps:
+        - gap r 0
+        - amp r 90
+        - gap * 2 r 0
+        - amp r -90
+        - gap r 0
+
+# Serpentine Pattern
+# Wave pattern with wavelength and amplitude
+# Good for RF and high-speed differential pairs
+pattern Serpentine (wavelength: Measurement, amplitude: Measurement):
+    steps:
+        - amplitude r 90
+        - wavelength / 2 r 0
+        - amplitude * 2 r -90
+        - wavelength / 2 r 0
+        - amplitude r 90
+
+# Spiral Pattern
+# Circular spiral pattern using polar coordinates
+# Stress test for trigonometric rasterizer (cos/sin to Cartesian)
+# Uses heavy polar math to test the geometry router
+# Each step rotates -45° creating an octagonal spiral
+pattern Spiral (gap: Measurement):
+    steps:
+        - gap * 3 r -45
+        - gap * 3 r -45
+        - gap * 3 r -45
+        - gap * 3 r -45
+        - gap * 3 r -45
+        - gap * 3 r -45
+        - gap * 3 r -45
+        - gap * 3 r -45

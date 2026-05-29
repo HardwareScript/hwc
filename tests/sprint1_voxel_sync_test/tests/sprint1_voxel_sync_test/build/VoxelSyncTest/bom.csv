@@ -1,0 +1,4 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,10.00x10.00x2.00mm,,,,,1
+CopperTrace,Pour,36.0000mm² net:TestNet,Layer 11,,TestCopper,3.600000mm³
+CopperTrace,Pour(TestCopper),,,,,,1

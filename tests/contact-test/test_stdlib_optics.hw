@@ -1,0 +1,25 @@
+# Standard Library Optics Verification - v0.1.7
+# Purpose: Verify that materials from visual_optics.hw are correctly imported and rendered.
+
+import * from @std/materials/visual_optics
+
+space StdLibOpticsTest:
+    dimensions: 80mm by 30mm by 2mm
+    grid: 80 by 30 by 2
+    origin: bl by b
+
+    # 1. Piano Black Solder Mask (Clearcoat Verification)
+    add pour(SolderMask_PianoBlack) named GlossyBody on z:1:
+        boundary: [x: 5mm, y: 5mm] to [x: 20mm, y: 25mm]
+
+    # 2. Visually Accurate FR4 (Subsurface & IOR Verification)
+    add pour(FR4_Visual) named Substrate on z:1:
+        boundary: [x: 25mm, y: 5mm] to [x: 45mm, y: 25mm]
+
+    # 3. Brushed Copper (Anisotropy Verification)
+    add pour(Copper_Brushed) named BrushedMetal on z:1:
+        boundary: [x: 50mm, y: 5mm] to [x: 60mm, y: 25mm]
+
+    # 4. Gold ENIG (High Metallic Reflection)
+    add pour(Gold_Polished) named GoldFinish on z:1:
+        boundary: [x: 65mm, y: 5mm] to [x: 75mm, y: 25mm]

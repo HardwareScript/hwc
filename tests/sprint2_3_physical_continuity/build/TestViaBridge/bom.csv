@@ -1,0 +1,9 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,10.00x10.00x1.00mm,,,,,1
+VCC_Bottom,Pour,49.0000mm² net:VCC,Layer 1,,Copper,4.900000mm³
+VCC_Top,Pour,49.0000mm² net:VCC,Layer 5,,Copper,4.900000mm³
+GND_Plane,Pour,4.0000mm² net:GND,Layer 3,,Copper,0.400000mm³
+VCC_Bottom,Pour(Copper),,,,,,1
+VCC_Top,Pour(Copper),,,,,,1
+GND_Plane,Pour(Copper),,,,,,1
+VCC_Via,Contact(Copper),,,,,,1

@@ -1,0 +1,47 @@
+import * from @std/primitives/units
+
+# v0.1.7: High-Fidelity "Jelly" FR4
+material FR4:
+    category: insulator
+    properties:
+        color: "#2E7D32"
+        opacity: 0.15     # Smooth alpha transparency
+        subsurface: 0.8  # Triggers the refractive "jelly" look
+        clearcoat: 0.5   # Surface gloss
+        ior: 1.2         # Index of refraction for realistic depth
+
+material Copper:
+    category: conductor
+    properties:
+        color: "#B87333"
+        metallic: 1.0
+        roughness: 0.2
+
+space PerfectHoleTest:
+    dimensions: 10mm by 10mm by 1.6mm
+    grid: 100 by 100 by 16
+    origin: bl by b
+    
+    # 1. Physically Accurate 4-Layer Stackup
+    # Layer 1: Bottom Copper (35um)
+    add substrate(Copper) spanning [x: 0mm, y: 0mm, z: 1] to [x: 10mm, y: 10mm, z: 1]
+    
+    # Core: FR4 (approx 1.4mm)
+    add substrate(FR4) spanning [x: 0mm, y: 0mm, z: 2] to [x: 10mm, y: 10mm, z: 15]
+    
+    # Layer 4: Top Copper (35um)
+    add substrate(Copper) spanning [x: 0mm, y: 0mm, z: 16] to [x: 10mm, y: 10mm, z: 16]
+    
+    # 2. Stress Test: Multiple Concentric Holes
+    # Large Mounting Hole (3mm Drill, 4mm Pad)
+    add contact(Copper) named MountHole at [x: 5mm, y: 5mm] spanning z:1 to z:16:
+        diameter: 3.0mm
+        annular_ring: 0.5mm
+        
+    # Pattern of Small Vias to test N-Zone Triangulation
+    # 2x2 grid of vias at the corners of the board
+    for i in 0..1:
+        for j in 0..1:
+            add contact(Copper) at [x: 2mm + i*6mm, y: 2mm + j*6mm] spanning z:1 to z:16:
+                diameter: 0.6mm
+                annular_ring: 0.2mm

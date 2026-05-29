@@ -1,0 +1,32 @@
+import * from @std/primitives/units
+
+material DrilledCopper:
+    category: conductor
+    process: drilled_plated
+    properties:
+        color: "#B87333"
+        opacity: 1.0
+
+material InspectionFR4:
+    category: insulator
+    properties:
+        color: "#2D5A27"
+        opacity: 0.2    # Semi-transparent to see the tunnel
+        roughness: 0.8
+
+module VerificationModule:
+    pins: []
+
+space VerificationSpace implements VerificationModule:
+    dimensions: 10mm by 10mm by 2mm
+    grid: 40 by 40 by 20
+    origin: bl by b
+
+    # THE TEST: One single thick slab of FR4
+    add substrate(InspectionFR4) spanning [x: 0mm, y: 0mm, z: 0.2mm] to [x: 10mm, y: 10mm, z: 1.8mm]
+
+    # THE HOLE: A massive 2mm drill through the center
+    # Using a contact without a net just to trigger the drilling logic
+    # v0.1.7 FIXED: Spanning 0mm to 2mm ensures it is classified as a Through-Hole
+    add contact(DrilledCopper) named CentralHole at [x: 5mm, y: 5mm] spanning z: 0mm to z: 2mm:
+        diameter: 2mm

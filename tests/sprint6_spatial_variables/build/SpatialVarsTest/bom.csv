@@ -1,0 +1,6 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,50.00x50.00x10.00mm,,,,,1
+Floor1,Chip,,,,,,1
+Floor2,Chip,,,,,,1
+Floor3,Chip,,,,,,1
+Stack1,Chip,,,,,,1

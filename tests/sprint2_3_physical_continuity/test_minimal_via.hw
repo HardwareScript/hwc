@@ -1,0 +1,36 @@
+## Minimal Via Test - Simplest possible via connection
+##
+## This test has:
+## - One pour on z:1
+## - One pour on z:3 (skipping z:2 to avoid face contact)
+## - One via connecting them
+##
+## Expected: Should PASS (1 island with 3 nodes)
+
+import * from @std/primitives/units
+import Copper from @std/materials/conductors
+
+module MinimalViaTest:
+    pins: []
+
+space TestMinimalVia implements MinimalViaTest:
+    dimensions: 10mm by 10mm by 1mm
+    grid: 10000 by 10000 by 10
+    origin: tl by t
+    
+    nets:
+        VCC: power
+    
+    ## Bottom pour on z:1
+    add pour(Copper) named Bottom on z:1:
+        boundary: [x: 2mm, y: 2mm] to [x: 8mm, y: 8mm]
+        net: VCC
+    
+    ## Top pour on z:3 (skipping z:2)
+    add pour(Copper) named Top on z:3:
+        boundary: [x: 2mm, y: 2mm] to [x: 8mm, y: 8mm]
+        net: VCC
+    
+    ## Via connecting them - large diameter to ensure overlap
+    add contact(Copper) named Via net: VCC at [x: 5mm, y: 5mm] spanning z:1 to z:3:
+        diameter: 2mm

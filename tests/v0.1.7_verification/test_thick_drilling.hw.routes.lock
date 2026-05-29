@@ -1,0 +1,17 @@
+{
+  "version": "0.1.4",
+  "board": "ThickDrillSpace",
+  "grid": {
+    "dimensions": [
+      40,
+      40,
+      17
+    ],
+    "resolution": [
+      0.25,
+      0.25,
+      0.1
+    ]
+  },
+  "routes": []
+}

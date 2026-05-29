@@ -1,0 +1,73 @@
+## ============================================================================
+## Sprint 4.4: Parasitic Extraction Validation - Asymmetric Geometry Test
+## ============================================================================
+##
+## This test validates parasitic extraction for asymmetric source/drain regions.
+##
+## Test Geometry:
+## - Source: 20um × 10um rectangle = 200um² = 2.0e-10 m²
+## - Drain:  30um × 15um rectangle = 450um² = 4.5e-10 m²
+## - Source Perimeter: 2×(20um + 10um) = 60um = 6.0e-5 m
+## - Drain Perimeter:  2×(30um + 15um) = 90um = 9.0e-5 m
+##
+## Expected Values (with 1% tolerance):
+## - AS = 2.0e-10 m² ± 1%
+## - AD = 4.5e-10 m² ± 1%
+## - PS = 6.0e-5 m ± 1%
+## - PD = 9.0e-5 m ± 1%
+
+import * from @std/primitives/units
+
+## ============================================================================
+## Logical Schematic (Module)
+## ============================================================================
+
+module AsymmetricTest:
+    pins: [
+        input VIN,
+        output VOUT,
+        ground GND
+    ]
+    
+    add NMOS named M1
+    route M1.gate to VIN
+    route M1.source to GND
+    route M1.drain to VOUT
+    route M1.bulk to GND
+
+## ============================================================================
+## Physical Layout (Space)
+## ============================================================================
+
+space AsymmetricLayout implements AsymmetricTest:
+    dimensions: 200um by 200um by 1mm
+    grid: 200 by 200 by 10
+    
+    net_classifications:
+        GND: ground
+        VIN: signal
+        VOUT: signal
+    
+    ## Gate: 20um × 20um (W=L=20um)
+    add pour(Polysilicon) named M1_Gate on z:5:
+        device: M1.gate
+        net: VIN
+        boundary: [x: 50um, y: 50um] to [x: 70um, y: 70um]
+    
+    ## Source: 20um × 10um = 200um² area (smaller)
+    add pour(Silicon_N) named M1_Source on z:3:
+        device: M1.source
+        net: GND
+        boundary: [x: 50um, y: 40um] to [x: 70um, y: 50um]
+    
+    ## Drain: 30um × 15um = 450um² area (larger)
+    add pour(Silicon_N) named M1_Drain on z:3:
+        device: M1.drain
+        net: VOUT
+        boundary: [x: 45um, y: 70um] to [x: 75um, y: 85um]
+    
+    ## Bulk: P-type substrate (non-overlapping with source/drain)
+    add pour(Silicon_P) named M1_Bulk on z:3:
+        device: M1.bulk
+        net: GND
+        boundary: [x: 80um, y: 50um] to [x: 100um, y: 70um]

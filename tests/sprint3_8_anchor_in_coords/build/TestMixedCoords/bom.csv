@@ -1,0 +1,8 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,60.00x40.00x2.00mm,,,,,1
+GroundPlane,Pour,150.0000mm² net:GND,Layer 1,,Copper,150.000000mm³
+GroundPlane,Pour(Copper),,,,,,1
+Block1,TestBlock,,,,,,1
+Block2,TestBlock,,,,,,1
+Block3,TestBlock,,,,,,1
+Block4,TestBlock,,,,,,1

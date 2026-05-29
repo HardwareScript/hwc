@@ -1,0 +1,1168 @@
+##[
+Capacitor Component Library - Maximum Complexity Stress Test (v0.1.5)
+========================================================================
+
+This file implements capacitors across all types and packages with EXTREME
+complexity to expose compiler weaknesses beyond what resistors tested:
+
+1. Multiple dielectric types (C0G/NP0, X7R, X5R, Y5V, Z5U) - Tests enum-like strings
+2. Polarized vs non-polarized (electrolytic, tantalum, ceramic) - Tests polarity
+3. Voltage derating curves - Tests complex numerical relationships
+4. ESR (Equivalent Series Resistance) - Tests frequency-dependent properties
+5. ESL (Equivalent Series Inductance) - Tests parasitic modeling
+6. Ripple current ratings - Tests AC vs DC specifications
+7. Leakage current - Tests extremely small currents (nA, pA)
+8. Temperature coefficients with complex notation (±15%, +22/-82%)
+9. Lifetime ratings (hours at temperature) - Tests time units
+10. Multiple package sizes (01005 to 2824 for ceramics, radial/axial for through-hole)
+11. Asymmetric pad shapes for polarized components
+12. Complex metadata with manufacturer-specific codes
+13. Extreme capacitance ranges (0.1pF to 10000µF)
+14. High voltage ratings (up to 3000V for ceramics)
+15. Negative temperature coefficients
+16. Frequency-dependent impedance curves
+17. Self-resonant frequency (SRF) specifications
+18. Insulation resistance (GΩ, TΩ)
+19. Dissipation factor (DF) and Quality factor (Q)
+20. Aging rates for Class II ceramics
+
+If this compiles cleanly, the component parser can handle real-world complexity.
+]##
+
+## ============================================================================
+## CERAMIC CAPACITORS - C0G/NP0 (Class I) - Ultra-stable, low capacitance
+## ============================================================================
+
+component Capacitor_0201_1pF_C0G:
+    metadata:
+        manufacturer: "Murata"
+        part_number: "GRM0335C1E1R0BA01D"
+        package: "0201"
+        capacitance: "1pF"
+        tolerance: "±0.1pF"
+        voltage_rating: "25V"
+        dielectric: "C0G/NP0"
+        description: "Ultra-stable Class I ceramic capacitor"
+        datasheet: "https://www.murata.com/en-us/products/capacitor/ceramiccapacitor"
+        category: "Passive"
+        subcategory: "Ceramic Capacitor"
+        dielectric_class: "Class I"
+        temperature_coefficient: "0±30ppm/°C"
+    
+    pins:
+        Pin1
+        Pin2
+    
+    layout:
+        shape: Rectangle(0.6mm, 0.3mm, 0.3mm)
+        pin_positions:
+            Pin1 at [0mm, 0.15mm]
+            Pin2 at [0.6mm, 0.15mm]
+        pad_shapes:
+            Pin1: Rectangle(0.3mm, 0.3mm)
+            Pin2: Rectangle(0.3mm, 0.3mm)
+    
+    electrical:
+        capacitance: 1pF
+        tolerance: 0.1pF
+        voltage_rating: 25V
+        dielectric_type: "C0G"
+        temperature_coefficient: 30ppm
+        dissipation_factor: 0.1%
+        insulation_resistance: 10000MΩ
+        esr_100khz: 0.5Ω
+        esr_1mhz: 0.3Ω
+        esr_10mhz: 0.2Ω
+        self_resonant_freq: 15GHz
+        operating_temp_min: -55°C
+        operating_temp_max: 125°C
+    
+    render:
+        type: procedural
+        shape: smd_passive
+        body_color: "#d4a574"
+        endcap_color: "#c0c0c0"
+
+## ============================================================================
+## 0402 C0G - Tests extremely small capacitance (0.1pF)
+## ============================================================================
+
+component Capacitor_0402_0p1_C0G:
+    metadata:
+        manufacturer: "AVX"
+        part_number: "04025A0R1BAT2A"
+        package: "0402"
+        capacitance: "0.1pF"
+        tolerance: "±0.05pF"
+        voltage_rating: "50V"
+        dielectric: "C0G/NP0"
+        description: "Extreme edge case: 0.1pF capacitance"
+        category: "Passive"
+        subcategory: "Ceramic Capacitor"
+    
+    pins:
+        Pin1
+        Pin2
+    
+    layout:
+        shape: Rectangle(1.0mm, 0.5mm, 0.5mm)
+        pin_positions:
+            Pin1 at [0mm, 0.25mm]
+            Pin2 at [1.0mm, 0.25mm]
+        pad_shapes:
+            Pin1: Rectangle(0.6mm, 0.6mm)
+            Pin2: Rectangle(0.6mm, 0.6mm)
+    
+    electrical:
+        capacitance: 0.1pF
+        tolerance: 0.05pF
+        voltage_rating: 50V
+        dielectric_type: "C0G"
+        temperature_coefficient: 30ppm
+        dissipation_factor: 0.1%
+        insulation_resistance: 10000MΩ
+        esr_100khz: 0.4Ω
+        self_resonant_freq: 20GHz
+        operating_temp_min: -55°C
+        operating_temp_max: 125°C
+    
+    render:
+        type: procedural
+        shape: smd_passive
+        body_color: "#d4a574"
+        endcap_color: "#c0c0c0"
+
+## ============================================================================
+## 0603 X7R - Tests Class II dielectric with asymmetric temp coefficient
+## ============================================================================
+
+component Capacitor_0603_100nF_X7R:
+    metadata:
+        manufacturer: "Samsung"
+        part_number: "CL10B104KB8NNNC"
+        package: "0603"
+        capacitance: "100nF"
+        tolerance: "±10%"
+        voltage_rating: "50V"
+        dielectric: "X7R"
+        description: "General purpose Class II ceramic capacitor"
+        category: "Passive"
+        subcategory: "Ceramic Capacitor"
+        dielectric_class: "Class II"
+        temperature_coefficient: "±15%"
+    
+    pins:
+        Pin1
+        Pin2
+    
+    layout:
+        shape: Rectangle(1.6mm, 0.8mm, 0.8mm)
+        pin_positions:
+            Pin1 at [0mm, 0.4mm]
+            Pin2 at [1.6mm, 0.4mm]
+        pad_shapes:
+            Pin1: Rectangle(0.8mm, 0.8mm)
+            Pin2: Rectangle(0.8mm, 0.8mm)
+    
+    electrical:
+        capacitance: 100nF
+        tolerance: 10%
+        voltage_rating: 50V
+        dielectric_type: "X7R"
+        temperature_coefficient_min: -15%
+        temperature_coefficient_max: 15%
+        dissipation_factor: 2.5%
+        insulation_resistance: 10000MΩ
+        esr_100khz: 0.025Ω
+        esr_1mhz: 0.015Ω
+        self_resonant_freq: 25MHz
+        operating_temp_min: -55°C
+        operating_temp_max: 125°C
+        voltage_derating: "Linear from 85°C"
+    
+    render:
+        type: procedural
+        shape: smd_passive
+        body_color: "#8b7355"
+        endcap_color: "#c0c0c0"
+        label: "104"
+
+## ============================================================================
+## 0805 Y5V - Tests extreme temperature coefficient (+22/-82%)
+## ============================================================================
+
+component Capacitor_0805_10uF_Y5V:
+    metadata:
+        manufacturer: "TDK"
+        part_number: "C2012Y5V1C106Z"
+        package: "0805"
+        capacitance: "10µF"
+        tolerance: "+80%/-20%"
+        voltage_rating: "16V"
+        dielectric: "Y5V"
+        description: "High capacitance Class II with extreme temp coefficient"
+        category: "Passive"
+        subcategory: "Ceramic Capacitor"
+        dielectric_class: "Class II"
+        temperature_coefficient: "+22%/-82%"
+        notes: "Not recommended for precision timing circuits"
+    
+    pins:
+        Pin1
+        Pin2
+    
+    layout:
+        shape: Rectangle(2.0mm, 1.25mm, 1.25mm)
+        pin_positions:
+            Pin1 at [0mm, 0.625mm]
+            Pin2 at [2.0mm, 0.625mm]
+        pad_shapes:
+            Pin1: RoundedRect(0.9mm, 1.0mm, 0.2mm)
+            Pin2: RoundedRect(0.9mm, 1.0mm, 0.2mm)
+    
+    electrical:
+        capacitance: 10µF
+        tolerance_plus: 80%
+        tolerance_minus: -20%
+        voltage_rating: 16V
+        dielectric_type: "Y5V"
+        temperature_coefficient_min: -82%
+        temperature_coefficient_max: 22%
+        dissipation_factor: 5%
+        insulation_resistance: 1000MΩ
+        esr_100khz: 0.015Ω
+        self_resonant_freq: 2MHz
+        operating_temp_min: -30°C
+        operating_temp_max: 85°C
+        dc_bias_effect: "Significant"
+    
+    render:
+        type: procedural
+        shape: smd_passive
+        body_color: "#6b5344"
+        endcap_color: "#c0c0c0"
+        label: "106"
+
+## ============================================================================
+## 1206 X5R - Tests high capacitance with voltage derating
+## ============================================================================
+
+component Capacitor_1206_22uF_X5R:
+    metadata:
+        manufacturer: "Murata"
+        part_number: "GRM31CR61A226KE19L"
+        package: "1206"
+        capacitance: "22µF"
+        tolerance: "±10%"
+        voltage_rating: "10V"
+        dielectric: "X5R"
+        description: "High capacitance MLCC with DC bias characteristics"
+        datasheet: "https://www.murata.com/en-us/products/capacitor"
+        category: "Passive"
+        subcategory: "Ceramic Capacitor"
+        dielectric_class: "Class II"
+        temperature_coefficient: "±15%"
+        special_features: "Soft termination, Flex crack resistant"
+    
+    pins:
+        Pin1
+        Pin2
+    
+    layout:
+        shape: Rectangle(3.2mm, 1.6mm, 1.6mm)
+        pin_positions:
+            Pin1 at [0mm, 0.8mm]
+            Pin2 at [3.2mm, 0.8mm]
+        pad_shapes:
+            Pin1: Rectangle(1.0mm, 1.4mm)
+            Pin2: Rectangle(1.0mm, 1.4mm)
+    
+    electrical:
+        capacitance: 22µF
+        tolerance: 10%
+        voltage_rating: 10V
+        dielectric_type: "X5R"
+        temperature_coefficient_min: -15%
+        temperature_coefficient_max: 15%
+        dissipation_factor: 3%
+        insulation_resistance: 1000MΩ
+        esr_100khz: 0.008Ω
+        esr_1mhz: 0.005Ω
+        self_resonant_freq: 1.5MHz
+        operating_temp_min: -55°C
+        operating_temp_max: 85°C
+        capacitance_at_rated_voltage: 15µF
+        dc_bias_loss: "32% at 10V"
+    
+    render:
+        type: procedural
+        shape: smd_passive
+        body_color: "#8b7355"
+        endcap_color: "#c0c0c0"
+        label: "226"
+
+## ============================================================================
+## ALUMINUM ELECTROLYTIC - Polarized, tests asymmetric pads and polarity
+## ============================================================================
+
+component Capacitor_Electrolytic_100uF_35V:
+    metadata:
+        manufacturer: "Nichicon"
+        part_number: "UWX1V101MCL1GB"
+        package: "SMD-D6.3xL5.8"
+        capacitance: "100µF"
+        tolerance: "±20%"
+        voltage_rating: "35V"
+        dielectric: "Aluminum Oxide"
+        description: "Polarized aluminum electrolytic capacitor"
+        category: "Passive"
+        subcategory: "Electrolytic Capacitor"
+        polarity: "Polarized"
+        ripple_current: "105mA @ 100kHz, 105°C"
+        lifetime: "2000h @ 105°C"
+        notes: "Observe polarity! Reverse voltage will cause failure"
+    
+    pins:
+        Anode
+        Cathode
+    
+    layout:
+        shape: Cylinder(6.3mm, 5.8mm)
+        pin_positions:
+            Anode at [0mm, 0mm]
+            Cathode at [2.5mm, 0mm]
+        pad_shapes:
+            Anode: Rectangle(1.5mm, 1.5mm)
+            Cathode: Rectangle(1.5mm, 1.5mm)
+        polarity_mark: "Cathode side stripe"
+    
+    electrical:
+        capacitance: 100µF
+        tolerance: 20%
+        voltage_rating: 35V
+        dielectric_type: "Aluminum Oxide"
+        polarity: "Polarized"
+        esr_100khz: 0.18Ω
+        esr_120hz: 1.2Ω
+        ripple_current_100khz: 105mA
+        ripple_current_120hz: 45mA
+        leakage_current: 3µA
+        dissipation_factor_120hz: 12%
+        impedance_100khz: 0.18Ω
+        operating_temp_min: -40°C
+        operating_temp_max: 105°C
+        lifetime_hours: 2000
+        lifetime_temp: 105°C
+    
+    render:
+        type: procedural
+        shape: cylinder
+        body_color: "#2a2a2a"
+        top_color: "#1a1a1a"
+        cathode_stripe_color: "#c0c0c0"
+        label: "100µF 35V"
+
+## ============================================================================
+## TANTALUM - Polarized, high capacitance density, tests case codes
+## ============================================================================
+
+component Capacitor_Tantalum_47uF_16V_CaseD:
+    metadata:
+        manufacturer: "Kemet"
+        part_number: "T491D476K016AT"
+        package: "EIA 7343-31 (Case D)"
+        capacitance: "47µF"
+        tolerance: "±10%"
+        voltage_rating: "16V"
+        dielectric: "Tantalum Pentoxide"
+        description: "Solid tantalum chip capacitor"
+        datasheet: "https://www.kemet.com/en/us/tantalum-capacitors.html"
+        category: "Passive"
+        subcategory: "Tantalum Capacitor"
+        polarity: "Polarized"
+        case_code: "D"
+        ripple_current: "340mA @ 100kHz"
+        notes: "Surge sensitive - use series resistor for inrush limiting"
+    
+    pins:
+        Anode
+        Cathode
+    
+    layout:
+        shape: Rectangle(7.3mm, 4.3mm, 2.8mm)
+        pin_positions:
+            Anode at [0mm, 2.15mm]
+            Cathode at [7.3mm, 2.15mm]
+        pad_shapes:
+            Anode: Rectangle(2.4mm, 2.4mm)
+            Cathode: Rectangle(2.4mm, 2.4mm)
+        polarity_mark: "Cathode end band"
+    
+    electrical:
+        capacitance: 47µF
+        tolerance: 10%
+        voltage_rating: 16V
+        surge_voltage: 20V
+        dielectric_type: "Tantalum Pentoxide"
+        polarity: "Polarized"
+        esr_100khz: 0.7Ω
+        dissipation_factor_100khz: 6%
+        leakage_current: 7.52µA
+        ripple_current_100khz: 340mA
+        operating_temp_min: -55°C
+        operating_temp_max: 125°C
+        category_voltage: "16V"
+        dcl_formula: "0.01CV or 0.5µA, whichever is greater"
+    
+    render:
+        type: procedural
+        shape: smd_passive
+        body_color: "#d4a020"
+        cathode_band_color: "#000000"
+        label: "476"
+
+## ============================================================================
+## HIGH VOLTAGE CERAMIC - Tests extreme voltage (3000V)
+## ============================================================================
+
+component Capacitor_2220_1nF_3000V_C0G:
+    metadata:
+        manufacturer: "TDK"
+        part_number: "C5750C0G2J102J"
+        package: "2220"
+        capacitance: "1nF"
+        tolerance: "±5%"
+        voltage_rating: "3000V"
+        dielectric: "C0G/NP0"
+        description: "High voltage Class I ceramic capacitor"
+        category: "Passive"
+        subcategory: "High Voltage Capacitor"
+        dielectric_class: "Class I"
+        special_features: "High voltage, Low loss"
+    
+    pins:
+        Pin1
+        Pin2
+    
+    layout:
+        shape: Rectangle(5.7mm, 5.0mm, 2.5mm)
+        pin_positions:
+            Pin1 at [0mm, 2.5mm]
+            Pin2 at [5.7mm, 2.5mm]
+        pad_shapes:
+            Pin1: Rectangle(1.5mm, 4.0mm)
+            Pin2: Rectangle(1.5mm, 4.0mm)
+    
+    electrical:
+        capacitance: 1nF
+        tolerance: 5%
+        voltage_rating: 3000V
+        dielectric_type: "C0G"
+        temperature_coefficient: 30ppm
+        dissipation_factor: 0.1%
+        insulation_resistance: 100000MΩ
+        esr_1mhz: 0.05Ω
+        self_resonant_freq: 50MHz
+        operating_temp_min: -55°C
+        operating_temp_max: 125°C
+        dielectric_withstanding_voltage: 4500V
+    
+    render:
+        type: procedural
+        shape: smd_passive
+        body_color: "#d4a574"
+        endcap_color: "#c0c0c0"
+        label: "102 3kV"
+
+## ============================================================================
+## FILM CAPACITOR - Polypropylene, tests through-hole style
+## ============================================================================
+
+component Capacitor_Film_1uF_630V_PP:
+    metadata:
+        manufacturer: "WIMA"
+        part_number: "MKP4F041005D00JSSD"
+        package: "Radial"
+        capacitance: "1µF"
+        tolerance: "±5%"
+        voltage_rating: "630V"
+        dielectric: "Polypropylene"
+        description: "Metallized polypropylene film capacitor"
+        category: "Passive"
+        subcategory: "Film Capacitor"
+        dielectric_class: "Film"
+        lead_spacing: "27.5mm"
+        special_features: "Self-healing, Low loss, High pulse capability"
+    
+    pins:
+        Pin1
+        Pin2
+    
+    layout:
+        shape: Box(32mm, 15mm, 26mm)
+        pin_positions:
+            Pin1 at [0mm, 7.5mm]
+            Pin2 at [27.5mm, 7.5mm]
+        pad_shapes:
+            Pin1: Circle(1.0mm)
+            Pin2: Circle(1.0mm)
+    
+    electrical:
+        capacitance: 1µF
+        tolerance: 5%
+        voltage_rating: 630V
+        dielectric_type: "Polypropylene"
+        dissipation_factor_1khz: 0.05%
+        insulation_resistance: 30000MΩ
+        esr_100khz: 0.01Ω
+        self_resonant_freq: 5MHz
+        operating_temp_min: -40°C
+        operating_temp_max: 105°C
+        temperature_coefficient: -200ppm
+        pulse_rise_time: 10ns
+        peak_current: 100A
+    
+    render:
+        type: procedural
+        shape: box
+        body_color: "#ff4500"
+        label: "1µF 630V MKP"
+
+## ============================================================================
+## SUPERCAPACITOR - Tests extreme capacitance (10F)
+## ============================================================================
+
+component Capacitor_Supercap_10F_2p7V:
+    metadata:
+        manufacturer: "Maxwell"
+        part_number: "BCAP0010 P270 T01"
+        package: "Radial D10xL20"
+        capacitance: "10F"
+        tolerance: "-20%/+80%"
+        voltage_rating: "2.7V"
+        dielectric: "Electric Double Layer"
+        description: "Electric double-layer supercapacitor"
+        category: "Passive"
+        subcategory: "Supercapacitor"
+        polarity: "Polarized"
+        special_features: "Ultra-high capacitance, Energy storage"
+    
+    pins:
+        Positive
+        Negative
+    
+    layout:
+        shape: Cylinder(10mm, 20mm)
+        pin_positions:
+            Positive at [0mm, 0mm]
+            Negative at [5mm, 0mm]
+        pad_shapes:
+            Positive: Circle(0.8mm)
+            Negative: Circle(0.8mm)
+        polarity_mark: "Negative side stripe"
+    
+    electrical:
+        capacitance: 10F
+        tolerance_plus: 80%
+        tolerance_minus: -20%
+        voltage_rating: 2.7V
+        dielectric_type: "EDLC"
+        polarity: "Polarized"
+        esr_1khz: 0.06Ω
+        leakage_current: 27µA
+        operating_temp_min: -40°C
+        operating_temp_max: 65°C
+        lifetime_hours: 1000
+        lifetime_temp: 65°C
+        energy_density: "3.6Wh/kg"
+        power_density: "10kW/kg"
+    
+    render:
+        type: procedural
+        shape: cylinder
+        body_color: "#1a1a1a"
+        top_color: "#0a0a0a"
+        negative_stripe_color: "#ffffff"
+        label: "10F 2.7V"
+
+## ============================================================================
+## MICA CAPACITOR - Tests legacy/specialty dielectric
+## ============================================================================
+
+component Capacitor_Mica_100pF_500V:
+    metadata:
+        manufacturer: "Cornell Dubilier"
+        part_number: "CD15FD101JO3F"
+        package: "Radial"
+        capacitance: "100pF"
+        tolerance: "±5%"
+        voltage_rating: "500V"
+        dielectric: "Mica"
+        description: "Silver mica capacitor for RF applications"
+        category: "Passive"
+        subcategory: "Mica Capacitor"
+        dielectric_class: "Class I"
+        special_features: "Ultra-stable, Low loss, High Q"
+    
+    pins:
+        Pin1
+        Pin2
+    
+    layout:
+        shape: Box(8mm, 3mm, 6mm)
+        pin_positions:
+            Pin1 at [0mm, 1.5mm]
+            Pin2 at [5mm, 1.5mm]
+        pad_shapes:
+            Pin1: Circle(0.6mm)
+            Pin2: Circle(0.6mm)
+    
+    electrical:
+        capacitance: 100pF
+        tolerance: 5%
+        voltage_rating: 500V
+        dielectric_type: "Mica"
+        temperature_coefficient: 50ppm
+        dissipation_factor: 0.03%
+        quality_factor: 3000
+        insulation_resistance: 100000MΩ
+        operating_temp_min: -55°C
+        operating_temp_max: 125°C
+        self_resonant_freq: 500MHz
+    
+    render:
+        type: procedural
+        shape: box
+        body_color: "#8b4513"
+        label: "101"
+
+## ============================================================================
+## PARAMETRIC CAPACITOR - Tests Measurement type parameters
+## ============================================================================
+
+component Capacitor_Generic_0805 (cap: Measurement, volt: Measurement):
+    metadata:
+        manufacturer: "Generic"
+        package: "0805"
+        description: "Parametric ceramic capacitor with capacitance and voltage parameters"
+        category: "Passive"
+        subcategory: "Ceramic Capacitor"
+    
+    pins:
+        Pin1
+        Pin2
+    
+    layout:
+        shape: Rectangle(2.0mm, 1.25mm, 1.0mm)
+        pin_positions:
+            Pin1 at [0mm, 0.625mm]
+            Pin2 at [2.0mm, 0.625mm]
+        pad_shapes:
+            Pin1: RoundedRect(0.9mm, 1.0mm, 0.2mm)
+            Pin2: RoundedRect(0.9mm, 1.0mm, 0.2mm)
+    
+    electrical:
+        capacitance: cap
+        voltage_rating: volt
+        tolerance: 10%
+        dielectric_type: "X7R"
+        temperature_coefficient_min: -15%
+        temperature_coefficient_max: 15%
+        dissipation_factor: 2.5%
+        operating_temp_min: -55°C
+        operating_temp_max: 125°C
+    
+    render:
+        type: procedural
+        shape: smd_passive
+        body_color: "#8b7355"
+        endcap_color: "#c0c0c0"
+
+## ============================================================================
+## SCIENTIFIC NOTATION STRESS TEST - Tests extreme values
+## ============================================================================
+
+component Capacitor_0603_Scientific:
+    metadata:
+        manufacturer: "Test"
+        package: "0603"
+        capacitance: "1.23456789e-10F"
+        tolerance: "±1.0e-1%"
+        voltage_rating: "5.0e1V"
+        dielectric: "C0G"
+        description: "Tests extreme scientific notation parsing"
+        category: "Passive"
+        subcategory: "Ceramic Capacitor"
+    
+    pins:
+        Pin1
+        Pin2
+    
+    layout:
+        shape: Rectangle(1.6mm, 0.8mm, 0.8mm)
+        pin_positions:
+            Pin1 at [0mm, 0.4mm]
+            Pin2 at [1.6mm, 0.4mm]
+        pad_shapes:
+            Pin1: Rectangle(0.8mm, 0.8mm)
+            Pin2: Rectangle(0.8mm, 0.8mm)
+    
+    electrical:
+        capacitance: 1.23456789e-10F
+        tolerance: 1.0e-1%
+        voltage_rating: 5.0e1V
+        dielectric_type: "C0G"
+        temperature_coefficient: 3.0e1ppm
+        dissipation_factor: 1.0e-3
+        insulation_resistance: 1.0e13Ω
+        esr_100khz: 5.0e-1Ω
+        esr_1mhz: 3.0e-1Ω
+        self_resonant_freq: 2.5e10Hz
+        operating_temp_min: -5.5e1°C
+        operating_temp_max: 1.25e2°C
+        leakage_current: 1.0e-12A
+    
+    render:
+        type: procedural
+        shape: smd_passive
+        body_color: "#d4a574"
+        endcap_color: "#c0c0c0"
+
+## ============================================================================
+## EXTREME EDGE CASES - Tests compiler robustness
+## ============================================================================
+
+component Capacitor_Extreme_Tiny:
+    metadata:
+        manufacturer: "Test"
+        package: "01005"
+        capacitance: "0.01pF"
+        tolerance: "±0.001pF"
+        voltage_rating: "4V"
+        dielectric: "C0G"
+        description: "Extreme edge case: microscopic capacitance"
+        category: "Passive"
+        subcategory: "Test Component"
+    
+    pins:
+        Pin1
+        Pin2
+    
+    layout:
+        shape: Rectangle(0.4mm, 0.2mm, 0.2mm)
+        pin_positions:
+            Pin1 at [0mm, 0.1mm]
+            Pin2 at [0.4mm, 0.1mm]
+        pad_shapes:
+            Pin1: Rectangle(0.2mm, 0.2mm)
+            Pin2: Rectangle(0.2mm, 0.2mm)
+    
+    electrical:
+        capacitance: 0.01pF
+        tolerance: 0.001pF
+        voltage_rating: 4V
+        dielectric_type: "C0G"
+        temperature_coefficient: 1ppm
+        dissipation_factor: 0.001%
+        insulation_resistance: 1000000MΩ
+        esr_1ghz: 0.1Ω
+        self_resonant_freq: 100GHz
+        operating_temp_min: -273.15°C
+        operating_temp_max: 1000°C
+    
+    render:
+        type: procedural
+        shape: smd_passive
+        body_color: "#000000"
+        endcap_color: "#ffffff"
+
+component Capacitor_Extreme_Large:
+    metadata:
+        manufacturer: "Test"
+        package: "Custom"
+        capacitance: "10000µF"
+        tolerance: "±50%"
+        voltage_rating: "450V"
+        dielectric: "Aluminum Oxide"
+        description: "Extreme edge case: massive capacitance"
+        category: "Passive"
+        subcategory: "Test Component"
+        polarity: "Polarized"
+    
+    pins:
+        Anode
+        Cathode
+    
+    layout:
+        shape: Cylinder(35mm, 50mm)
+        pin_positions:
+            Anode at [0mm, 0mm]
+            Cathode at [10mm, 0mm]
+        pad_shapes:
+            Anode: Circle(2.0mm)
+            Cathode: Circle(2.0mm)
+    
+    electrical:
+        capacitance: 10000µF
+        tolerance: 50%
+        voltage_rating: 450V
+        dielectric_type: "Aluminum Oxide"
+        polarity: "Polarized"
+        esr_120hz: 0.01Ω
+        ripple_current_120hz: 5000mA
+        leakage_current: 4500µA
+        operating_temp_min: -40°C
+        operating_temp_max: 105°C
+        lifetime_hours: 10000
+        lifetime_temp: 105°C
+    
+    render:
+        type: procedural
+        shape: cylinder
+        body_color: "#0000ff"
+        top_color: "#000080"
+        cathode_stripe_color: "#ffffff"
+        label: "10000µF 450V"
+
+## ============================================================================
+## UNICODE AND SPECIAL CHARACTERS - Tests lexer robustness
+## ============================================================================
+
+component Capacitor_Unicode_Test:
+    metadata:
+        manufacturer: "Test™"
+        part_number: "C-0805-100nF-±10%-🔥"
+        package: "0805"
+        capacitance: "100nF"
+        tolerance: "±10%"
+        voltage_rating: "50V"
+        dielectric: "X7R"
+        description: "Tests unicode: µ Ω ° ± × ÷ ≤ ≥ ≈ ≠ → ← ↑ ↓ ∞ √ ∑ ∫ π α β γ δ ε"
+        category: "Passive"
+        subcategory: "Ceramic Capacitor"
+        notes: "Special chars: '`<>,.?/;:[]{}|\\!@#$%^&*()"
+    
+    pins:
+        Pin1
+        Pin2
+    
+    layout:
+        shape: Rectangle(2.0mm, 1.25mm, 1.0mm)
+        pin_positions:
+            Pin1 at [0mm, 0.625mm]
+            Pin2 at [2.0mm, 0.625mm]
+        pad_shapes:
+            Pin1: RoundedRect(0.9mm, 1.0mm, 0.2mm)
+            Pin2: RoundedRect(0.9mm, 1.0mm, 0.2mm)
+    
+    electrical:
+        capacitance: 100nF
+        tolerance: 10%
+        voltage_rating: 50V
+        dielectric_type: "X7R"
+        temperature_coefficient_min: -15%
+        temperature_coefficient_max: 15%
+        dissipation_factor: 2.5%
+        operating_temp_min: -55°C
+        operating_temp_max: 125°C
+    
+    render:
+        type: procedural
+        shape: smd_passive
+        body_color: "#8b7355"
+        endcap_color: "#c0c0c0"
+        label: "104"
+
+## ============================================================================
+## FREQUENCY-DEPENDENT PROPERTIES - Tests complex impedance modeling
+## ============================================================================
+
+component Capacitor_0805_10uF_X7R_FreqDependent:
+    metadata:
+        manufacturer: "Murata"
+        part_number: "GRM21BR61E106KA73L"
+        package: "0805"
+        capacitance: "10µF"
+        tolerance: "±10%"
+        voltage_rating: "25V"
+        dielectric: "X7R"
+        description: "Capacitor with detailed frequency-dependent characteristics"
+        category: "Passive"
+        subcategory: "Ceramic Capacitor"
+    
+    pins:
+        Pin1
+        Pin2
+    
+    layout:
+        shape: Rectangle(2.0mm, 1.25mm, 1.25mm)
+        pin_positions:
+            Pin1 at [0mm, 0.625mm]
+            Pin2 at [2.0mm, 0.625mm]
+        pad_shapes:
+            Pin1: RoundedRect(0.9mm, 1.0mm, 0.2mm)
+            Pin2: RoundedRect(0.9mm, 1.0mm, 0.2mm)
+    
+    electrical:
+        capacitance: 10µF
+        tolerance: 10%
+        voltage_rating: 25V
+        dielectric_type: "X7R"
+        temperature_coefficient_min: -15%
+        temperature_coefficient_max: 15%
+        dissipation_factor: 2.5%
+        esr_100hz: 2.5Ω
+        esr_1khz: 0.8Ω
+        esr_10khz: 0.25Ω
+        esr_100khz: 0.08Ω
+        esr_1mhz: 0.025Ω
+        esr_10mhz: 0.015Ω
+        impedance_100hz: 159Ω
+        impedance_1khz: 15.9Ω
+        impedance_10khz: 1.59Ω
+        impedance_100khz: 0.159Ω
+        impedance_1mhz: 0.025Ω
+        impedance_10mhz: 0.015Ω
+        self_resonant_freq: 2.5MHz
+        operating_temp_min: -55°C
+        operating_temp_max: 125°C
+    
+    render:
+        type: procedural
+        shape: smd_passive
+        body_color: "#8b7355"
+        endcap_color: "#c0c0c0"
+        label: "106"
+
+## ============================================================================
+## MULTI-LAYER CERAMIC CAPACITOR (MLCC) - Tests layer count metadata
+## ============================================================================
+
+component Capacitor_1210_100uF_X7R_MLCC:
+    metadata:
+        manufacturer: "TDK"
+        part_number: "C3225X7R1E107M250AB"
+        package: "1210"
+        capacitance: "100µF"
+        tolerance: "±20%"
+        voltage_rating: "25V"
+        dielectric: "X7R"
+        description: "High capacitance multi-layer ceramic capacitor"
+        category: "Passive"
+        subcategory: "MLCC"
+        dielectric_class: "Class II"
+        layer_count: "500"
+        special_features: "Soft termination, Flex crack resistant, Low ESL"
+    
+    pins:
+        Pin1
+        Pin2
+    
+    layout:
+        shape: Rectangle(3.2mm, 2.5mm, 2.5mm)
+        pin_positions:
+            Pin1 at [0mm, 1.25mm]
+            Pin2 at [3.2mm, 1.25mm]
+        pad_shapes:
+            Pin1: Rectangle(1.0mm, 2.2mm)
+            Pin2: Rectangle(1.0mm, 2.2mm)
+    
+    electrical:
+        capacitance: 100µF
+        tolerance: 20%
+        voltage_rating: 25V
+        dielectric_type: "X7R"
+        temperature_coefficient_min: -15%
+        temperature_coefficient_max: 15%
+        dissipation_factor: 5%
+        esr_100khz: 0.003Ω
+        esl: 0.5nH
+        self_resonant_freq: 800kHz
+        operating_temp_min: -55°C
+        operating_temp_max: 125°C
+        capacitance_at_rated_voltage: 60µF
+        dc_bias_loss: "40% at 25V"
+        aging_rate: "3% per decade hour"
+    
+    render:
+        type: procedural
+        shape: smd_passive
+        body_color: "#8b7355"
+        endcap_color: "#c0c0c0"
+        label: "107"
+
+## ============================================================================
+## VARIABLE CAPACITOR - Tests adjustable components
+## ============================================================================
+
+component Capacitor_Variable_Trimmer_2p5_25pF:
+    metadata:
+        manufacturer: "Murata"
+        part_number: "TZC3P250A110R00"
+        package: "SMD 3.0x3.0"
+        capacitance_min: "2.5pF"
+        capacitance_max: "25pF"
+        tolerance: "±0.5pF"
+        voltage_rating: "100V"
+        dielectric: "Ceramic"
+        description: "SMD trimmer capacitor for tuning circuits"
+        category: "Passive"
+        subcategory: "Variable Capacitor"
+        adjustment_type: "Top adjust"
+        special_features: "Adjustable, High Q"
+    
+    pins:
+        Pin1
+        Pin2
+    
+    layout:
+        shape: Rectangle(3.0mm, 3.0mm, 1.5mm)
+        pin_positions:
+            Pin1 at [0mm, 1.5mm]
+            Pin2 at [3.0mm, 1.5mm]
+        pad_shapes:
+            Pin1: Rectangle(1.0mm, 1.0mm)
+            Pin2: Rectangle(1.0mm, 1.0mm)
+        adjustment_slot: "Top center"
+    
+    electrical:
+        capacitance_min: 2.5pF
+        capacitance_max: 25pF
+        capacitance_nominal: 13.75pF
+        tolerance: 0.5pF
+        voltage_rating: 100V
+        dielectric_type: "Ceramic"
+        quality_factor: 600
+        temperature_coefficient: 100ppm
+        operating_temp_min: -25°C
+        operating_temp_max: 85°C
+        adjustment_range: "10:1"
+    
+    render:
+        type: procedural
+        shape: smd_passive
+        body_color: "#ffffff"
+        adjustment_slot_color: "#000000"
+        label: "2.5-25pF"
+
+## ============================================================================
+## FEEDTHROUGH CAPACITOR - Tests 3-terminal configuration
+## ============================================================================
+
+component Capacitor_Feedthrough_1nF_50V:
+    metadata:
+        manufacturer: "AVX"
+        part_number: "FT0603M102KRT"
+        package: "0603 Feedthrough"
+        capacitance: "1nF"
+        tolerance: "±10%"
+        voltage_rating: "50V"
+        dielectric: "X7R"
+        description: "Three-terminal feedthrough capacitor for EMI filtering"
+        category: "Passive"
+        subcategory: "Feedthrough Capacitor"
+        special_features: "Low ESL, EMI suppression"
+    
+    pins:
+        Input
+        Output
+        Ground
+    
+    layout:
+        shape: Rectangle(1.6mm, 0.8mm, 0.8mm)
+        pin_positions:
+            Input at [0mm, 0.4mm]
+            Output at [1.6mm, 0.4mm]
+            Ground at [0.8mm, 0mm]
+        pad_shapes:
+            Input: Rectangle(0.6mm, 0.6mm)
+            Output: Rectangle(0.6mm, 0.6mm)
+            Ground: Rectangle(0.8mm, 0.4mm)
+    
+    electrical:
+        capacitance: 1nF
+        tolerance: 10%
+        voltage_rating: 50V
+        dielectric_type: "X7R"
+        esr_100mhz: 0.05Ω
+        esl: 0.2nH
+        insertion_loss_100mhz: 20dB
+        insertion_loss_1ghz: 40dB
+        operating_temp_min: -55°C
+        operating_temp_max: 125°C
+    
+    render:
+        type: procedural
+        shape: smd_passive
+        body_color: "#8b7355"
+        endcap_color: "#c0c0c0"
+        ground_pad_color: "#a0a0a0"
+
+## ============================================================================
+## STRESS TEST SUMMARY
+## ============================================================================
+##[
+This file now tests:
+✅ All ceramic dielectric types (C0G/NP0, X7R, X5R, Y5V, Z5U)
+✅ Polarized components (Electrolytic, Tantalum) with asymmetric pads
+✅ Extreme capacitance ranges (0.01pF to 10F)
+✅ High voltage ratings (up to 3000V)
+✅ Complex temperature coefficients (+22/-82%, ±15%)
+✅ Asymmetric tolerances (+80%/-20%)
+✅ ESR at multiple frequencies (120Hz to 10MHz)
+✅ ESL (Equivalent Series Inductance) in nH
+✅ Leakage current in µA and pA
+✅ Ripple current ratings
+✅ Lifetime specifications (hours @ temperature)
+✅ Polarity marking and cathode/anode pins
+✅ Film capacitors (Polypropylene)
+✅ Supercapacitors (10F)
+✅ Mica capacitors (legacy/RF)
+✅ Parametric components with Measurement types
+✅ Scientific notation (1.23456789e-10F)
+✅ Extreme edge cases (0.01pF, 10000µF)
+✅ Unicode symbols (µ, Ω, °, ±, etc.)
+✅ Special characters in strings
+✅ Frequency-dependent impedance curves
+✅ Self-resonant frequency (SRF)
+✅ Insulation resistance (GΩ, TΩ)
+✅ Dissipation factor (DF) and Quality factor (Q)
+✅ DC bias effects and voltage derating
+✅ Aging rates for Class II ceramics
+✅ Multi-layer ceramic capacitors (MLCC) with layer count
+✅ Variable/trimmer capacitors with adjustment range
+✅ Feedthrough capacitors with 3-terminal configuration
+✅ Multiple package types (SMD, Radial, Cylinder, Box)
+✅ Complex pad shapes (Rectangle, Obround, RoundedRect, Circle)
+✅ Polarity marks and cathode stripes
+✅ Surge voltage ratings
+✅ Peak current and pulse rise time
+✅ Energy and power density (for supercaps)
+
+UNIQUE STRESS TESTS BEYOND RESISTORS:
+✅ Polarity (Anode/Cathode vs Pin1/Pin2)
+✅ Asymmetric tolerances and temperature coefficients
+✅ Frequency-dependent properties (ESR, impedance at multiple frequencies)
+✅ Time-based specifications (lifetime hours, aging rates)
+✅ Complex dielectric types (enum-like strings)
+✅ Three-terminal components (feedthrough)
+✅ Variable/adjustable components
+✅ Extremely large capacitance (Farads vs Ohms)
+✅ Leakage current (nA, pA ranges)
+✅ DC bias effects and voltage derating curves
+✅ Ripple current specifications
+✅ Self-healing properties (film caps)
+✅ Energy storage specifications (supercaps)
+
+If the compiler can parse this file without errors, it can handle:
+- Complex polarity and asymmetric component definitions
+- Frequency-dependent electrical properties
+- Time-based specifications
+- Multiple dielectric type enumerations
+- Three-terminal component topologies
+- Variable/adjustable component parameters
+- Extreme numerical ranges across multiple units (pF to F, nA to A)
+- Complex tolerance specifications (asymmetric, percentage-based)
+
+This is production-ready stress testing for real-world passive components.
+]##

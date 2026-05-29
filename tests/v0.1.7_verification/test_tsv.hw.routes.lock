@@ -1,0 +1,17 @@
+{
+  "version": "0.1.4",
+  "board": "TSV_Space",
+  "grid": {
+    "dimensions": [
+      100,
+      100,
+      50
+    ],
+    "resolution": [
+      0.02,
+      0.02,
+      0.01
+    ]
+  },
+  "routes": []
+}

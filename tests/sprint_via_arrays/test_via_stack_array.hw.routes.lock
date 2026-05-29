@@ -1,0 +1,17 @@
+{
+  "version": "0.1.4",
+  "board": "TestViaStackArray",
+  "grid": {
+    "dimensions": [
+      200,
+      200,
+      10
+    ],
+    "resolution": [
+      0.1,
+      0.1,
+      0.1
+    ]
+  },
+  "routes": []
+}

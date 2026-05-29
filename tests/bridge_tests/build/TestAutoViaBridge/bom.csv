@@ -1,0 +1,7 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,20.00x20.00x1.00mm,,,,,1
+VDD_Metal1,Pour,36.0000mm² net:VDD,Layer 1,,Copper,7.200000mm³
+VDD_Metal2,Pour,49.0000mm² net:VDD,Layer 2,,Copper,9.800000mm³
+VDD_Metal1,Pour(Copper),,,,,,1
+VDD_Metal2,Pour(Copper),,,,,,1
+AutoVia_VDD_1_2,Contact(Copper),,,,,,1

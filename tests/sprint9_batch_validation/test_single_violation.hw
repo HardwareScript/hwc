@@ -1,0 +1,38 @@
+## ============================================================================
+## SPRINT 9: SINGLE VIOLATION TEST
+## ============================================================================
+##
+## Tests that a single violation is reported clearly without pattern grouping.
+## This ensures the batch system doesn't add unnecessary complexity when there's
+## only one error to report.
+
+import * from @std/primitives/units
+import FR4 from @std/materials/insulators
+
+component Processor:
+    pins: [vdd, gnd, clk]
+    layout:
+        shape: Rectangle(10mm, 10mm, 2mm)
+    render:
+        type: procedural
+        shape: box
+        body_color: "#2C3E50"
+
+module SingleChipBoard:
+    pins: [power VDD]
+    
+    add Processor named CPU
+
+space SingleViolationTest implements SingleChipBoard:
+    dimensions: 50mm by 50mm by 10mm
+    grid: 500 by 500 by 100
+    origin: bl by b
+
+    nets:
+        VDD: power
+
+    ## Substrate at z:30-40
+    add substrate(FR4) spanning [x:0mm, y:0mm, z:30] to [x:50mm, y:50mm, z:40]
+
+    ## Single floating component
+    add Processor named CPU at [x: 20mm, y: 20mm, z: 55]

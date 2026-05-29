@@ -1,0 +1,12 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,10.00x10.00x1.00mm,,,,,1
+M1_Bulk,Pour,0.3500mm² net:GND,Layer 1,,Silicon_P,0.035000mm³
+M1_Source,Pour,0.0200mm² net:GND,Layer 2,,Silicon_N,0.002000mm³
+M1_Drain,Pour,0.0200mm² net:VOUT,Layer 2,,Silicon_N,0.002000mm³
+M1_GateOxide,Pour,0.0400mm²,Layer 3,,SiO2,0.004000mm³
+M1_Gate,Pour,0.0100mm² net:VIN,Layer 4,,Polysilicon,0.001000mm³
+M1,SimpleNMOS,,,,,Simple NMOS with internal geometry and gate oxide,1
+M1_Bulk,Pour(Silicon_P),,,,,,1
+M1_Source,Pour(Silicon_N),,,,,,1
+M1_Drain,Pour(Silicon_N),,,,,,1
+M1_Gate,Pour(Polysilicon),,,,,,1

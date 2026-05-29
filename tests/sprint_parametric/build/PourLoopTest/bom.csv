@@ -1,0 +1,14 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,0.10x0.10x0.05mm,,,,,1
+Trace[0],Pour,0.0004mm² net:Bus[0],Layer 3,,Copper,0.000002mm³
+Trace[1],Pour,0.0004mm² net:Bus[1],Layer 4,,Copper,0.000002mm³
+Trace[2],Pour,0.0004mm² net:Bus[2],Layer 5,,Copper,0.000002mm³
+Trace[3],Pour,0.0004mm² net:Bus[3],Layer 6,,Copper,0.000002mm³
+Trace[0],Pour(Copper),,,,,,1
+Trace[1],Pour(Copper),,,,,,1
+Trace[2],Pour(Copper),,,,,,1
+Trace[3],Pour(Copper),,,,,,1
+Via[0],Contact(Copper),,,,,,1
+Via[1],Contact(Copper),,,,,,1
+Via[2],Contact(Copper),,,,,,1
+Via[3],Contact(Copper),,,,,,1

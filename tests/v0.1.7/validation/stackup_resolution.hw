@@ -1,0 +1,54 @@
+# v0.1.7 Validation: Stackup & Elevation Resolution
+# 
+# Verifies:
+# 1. Semantic layer resolution (layer: top, layer: bottom)
+# 2. Physical elevation resolution (z: 1.05mm)
+# 3. Origin mapping (Bottom-Up: bl by b)
+# 4. Correct thickness resolution
+
+import * from @std/primitives/units
+import Copper from @std/materials/conductors
+import FR4 from @std/materials/insulators
+
+material Gold:
+    category: conductor
+    properties:
+        color: "#FFD700"
+        opacity: 1.0
+        metallic: 1.0
+
+material Substrate:
+    category: insulator
+    properties:
+        color: "#2E7D32"
+        opacity: 0.5
+
+profile ValidationStackup:
+    stackup:
+        top_layer:    [material: Copper, thickness: 50um]
+        core_layer:   [material: FR4,    thickness: 1.0mm]
+        bottom_layer: [material: Copper, thickness: 50um]
+
+space StackupValidationSpace:
+    dimensions: 10mm by 10mm by 1.1mm
+    grid: 100 by 100 by 11
+    origin: bl by b
+    profile: ValidationStackup
+
+    # 1. Add substrate spanning the whole volume
+    add substrate(Substrate) spanning [x: 0mm, y: 0mm, z: 0mm] to [x: 10mm, y: 10mm, z: 1.1mm]
+
+    # 2. Semantic Placement: Bottom Layer (should be at Z=0)
+    add pour(Copper) named BottomPour on layer: bottom_layer:
+        boundary: [x: 1mm, y: 1mm] to [x: 4mm, y: 4mm]
+        merge: true
+
+    # 3. Semantic Placement: Top Layer (should be at Z=1.05mm)
+    add pour(Copper) named TopPour on layer: top_layer:
+        boundary: [x: 6mm, y: 1mm] to [x: 9mm, y: 4mm]
+        merge: true
+
+    # 4. Physical Placement: Verify it matches semantic Top Layer (Z=1.05mm)
+    add pour(Gold) named PhysicalVerify on z: 1.05mm to 1.10mm:
+        boundary: [x: 6mm, y: 6mm] to [x: 9mm, y: 9mm]
+        merge: true

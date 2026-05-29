@@ -1,0 +1,36 @@
+# Profiles Library for DRC Testing
+# Task 4.2: DRC Engine
+
+profile StandardPCB:
+    description: "Standard PCB fabrication constraints"
+    
+    trace:
+        min_width: 127µm
+        min_spacing: 127µm
+    
+    via:
+        min_diameter: 300µm
+        min_annular_ring: 150µm
+    
+    layer:
+        max_count: 4
+        min_thickness: 35µm
+
+profile HighVoltage:
+    description: "High voltage design with increased clearances"
+    
+    trace:
+        min_width: 500µm
+        min_spacing: 1mm
+    
+    via:
+        min_diameter: 800µm
+        min_annular_ring: 400µm
+    
+    layer:
+        max_count: 2
+        min_thickness: 70µm
+    
+    clearance:
+        high_voltage: 5mm
+        safety_factor: 3.0

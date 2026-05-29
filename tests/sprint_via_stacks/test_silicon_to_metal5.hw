@@ -1,0 +1,33 @@
+## WEEK 3: Gap 3 - Silicon to Metal5 Routing
+##
+## This test verifies that the compiler automatically inserts a stack of vias
+## from Silicon (z:0) to a high metal layer (z:5).
+##
+## Test Case:
+## - Net "SIG" has two pours on layers z:0 (Poly) and z:5 (Metal5)
+## - Compiler should auto-insert a stack: 0->1 (Tungsten), 1->2, 2->3, 3->4, 4->5 (Copper)
+
+import * from @std/primitives/units
+import Copper from @std/materials/conductors
+import Tungsten from @std/materials/conductors
+
+module SiliconToMetalTest:
+    pins: []
+
+space TestSiliconToMetal implements SiliconToMetalTest:
+    dimensions: 20mm by 20mm by 1mm
+    grid: 200 by 200 by 10
+    origin: tl by t
+    
+    nets:
+        SIG: signal
+    
+    ## Silicon (Poly) pour (z:0)
+    add pour(Tungsten) named Silicon_Poly on z:0:
+        boundary: [x: 2mm, y: 2mm] to [x: 4mm, y: 4mm]
+        net: SIG
+    
+    ## Metal5 pour (z:5)
+    add pour(Copper) named Metal5 on z:5:
+        boundary: [x: 2mm, y: 2mm] to [x: 4mm, y: 4mm]
+        net: SIG

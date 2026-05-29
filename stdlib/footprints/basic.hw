@@ -1,0 +1,143 @@
+##[ Standard Footprint Library - Basic Packages (v0.1.6)
+    
+    Provides standard SMT and through-hole packages following the
+    Hardware Script Standard Library conventions.
+    
+    This library includes:
+    - SOT (Small Outline Transistor) packages
+    - TO (Transistor Outline) packages
+    - Generic IC packages (DIP, SOIC, QFN)
+    - Mounting holes and fiducials
+]##
+
+# ============================================================================
+# SOT Packages (Small Outline Transistor)
+# ============================================================================
+
+component SOT23:
+    metadata:
+        package: "SOT-23"
+        description: "3-pin Small Outline Transistor package"
+        category: "Package"
+    
+    pins:
+        Pin1, Pin2, Pin3
+    
+    layout:
+        shape: Rectangle(2.9mm, 2.4mm, 1.0mm)
+        pin_positions:
+            Pin1 at [0.5mm, 0.5mm]
+            Pin2 at [2.4mm, 0.5mm]
+            Pin3 at [1.45mm, 1.9mm]
+        pad_shapes:
+            Pin1: Rectangle(0.6mm, 0.8mm)
+            Pin2: Rectangle(0.6mm, 0.8mm)
+            Pin3: Rectangle(0.6mm, 0.8mm)
+            
+    render:
+        type: procedural
+        shape: smd_package
+        body_color: "#1A1A1A"
+        pin_color: "#C0C0C0"
+
+component SOT223:
+    metadata:
+        package: "SOT-223"
+        description: "4-pin Small Outline Transistor package with thermal pad"
+        category: "Package"
+    
+    pins:
+        Pin1, Pin2, Pin3, Pin4  # Pin 4 is usually the large thermal tab
+    
+    layout:
+        shape: Rectangle(6.5mm, 7.0mm, 1.7mm)
+        pin_positions:
+            Pin1 at [0.95mm, 1.5mm]
+            Pin2 at [3.25mm, 1.5mm]
+            Pin3 at [5.55mm, 1.5mm]
+            Pin4 at [3.25mm, 5.5mm]
+        pad_shapes:
+            Pin1: Rectangle(1.0mm, 1.2mm)
+            Pin2: Rectangle(1.0mm, 1.2mm)
+            Pin3: Rectangle(1.0mm, 1.2mm)
+            Pin4: Rectangle(3.3mm, 2.2mm)
+            
+    render:
+        type: procedural
+        shape: smd_package
+        body_color: "#1A1A1A"
+        pin_color: "#C0C0C0"
+
+# ============================================================================
+# TO Packages (Transistor Outline)
+# ============================================================================
+
+component TO220:
+    metadata:
+        package: "TO-220"
+        description: "Through-hole power package with metal tab"
+        category: "Package"
+    
+    pins:
+        Pin1, Pin2, Pin3
+    
+    layout:
+        shape: Rectangle(10mm, 4.5mm, 15mm)
+        pin_positions:
+            Pin1 at [2.46mm, 2.25mm]
+            Pin2 at [5.0mm, 2.25mm]
+            Pin3 at [7.54mm, 2.25mm]
+        pad_shapes:
+            Pin1: Circle(1.5mm)  # Through-hole pad
+            Pin2: Circle(1.5mm)
+            Pin3: Circle(1.5mm)
+            
+    render:
+        type: procedural
+        shape: tht_package
+        body_color: "#222222"
+        tab_color: "#D0D0D0"
+
+# ============================================================================
+# Mechanical & Fiducials
+# ============================================================================
+
+component MountingHole_3mm:
+    metadata:
+        description: "3mm diameter non-plated mounting hole"
+        category: "Mechanical"
+    
+    pins:
+        Mount
+        
+    layout:
+        shape: Rectangle(3mm, 3mm, 1.6mm)
+        pin_positions:
+            Mount at [1.5mm, 1.5mm]
+        pad_shapes:
+            Mount: Circle(3mm)
+            
+    render:
+        type: procedural
+        shape: hole
+        body_color: "#00000000"
+
+component Fiducial_1mm:
+    metadata:
+        description: "1mm diameter circular fiducial mark"
+        category: "Mechanical"
+    
+    pins:
+        Mark
+        
+    layout:
+        shape: Rectangle(1mm, 1mm, 0.1mm)
+        pin_positions:
+            Mark at [0.5mm, 0.5mm]
+        pad_shapes:
+            Mark: Circle(1mm)
+            
+    render:
+        type: procedural
+        shape: fiducial
+        body_color: "#C0C0C0"

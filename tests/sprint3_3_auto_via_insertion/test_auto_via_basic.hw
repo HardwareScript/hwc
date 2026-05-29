@@ -1,0 +1,37 @@
+## Sprint 3.3: Automatic Via Insertion - Basic Test
+##
+## This test verifies that the compiler automatically inserts vias
+## when a net transitions between layers.
+##
+## Test Case:
+## - Net "VDD" has two pours on different layers (z:1 and z:2)
+## - The pours overlap in XY space
+## - Compiler should auto-insert a via at the overlap center
+
+import * from @std/primitives/units
+import Copper from @std/materials/conductors
+
+module AutoViaBasicTest:
+    pins: []
+
+space TestAutoViaBasic implements AutoViaBasicTest:
+    dimensions: 20mm by 20mm by 1mm
+    grid: 20000 by 20000 by 5
+    origin: tl by t
+    
+    nets:
+        VDD: power
+    
+    ## Pour 1: VDD on Metal1 (z:1)
+    add pour(Copper) named VDD_Metal1 on z:1:
+        boundary: [x: 2mm, y: 2mm] to [x: 8mm, y: 8mm]
+        net: VDD
+    
+    ## Pour 2: VDD on Metal2 (z:2) - overlaps with Pour 1
+    add pour(Copper) named VDD_Metal2 on z:2:
+        boundary: [x: 5mm, y: 5mm] to [x: 12mm, y: 12mm]
+        net: VDD
+    
+    ## Expected: Auto-inserted via at overlap center [6.5mm, 6.5mm]
+    ## Overlap region: [5mm, 5mm] to [8mm, 8mm]
+    ## Center: [(5+8)/2, (5+8)/2] = [6.5mm, 6.5mm]

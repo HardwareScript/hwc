@@ -1,0 +1,17 @@
+{
+  "version": "0.1.4",
+  "board": "LineOfSight",
+  "grid": {
+    "dimensions": [
+      100,
+      100,
+      100
+    ],
+    "resolution": [
+      0.5,
+      0.5,
+      0.05
+    ]
+  },
+  "routes": []
+}

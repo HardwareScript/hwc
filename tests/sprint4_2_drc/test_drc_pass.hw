@@ -1,0 +1,21 @@
+# Test: DRC checks should pass with valid design
+# Task 4.2: DRC Engine
+
+profile TestProfile_Pass:
+    description: "Relaxed constraints for passing test"
+    
+    trace:
+        min_width: 100µm
+        min_spacing: 100µm
+    
+    via:
+        min_diameter: 200µm
+        min_annular_ring: 100µm
+
+space DRC_Pass_Test:
+    dimensions: 10mm by 10mm by 2mm
+    grid: 100 by 100 by 2
+    profile: TestProfile_Pass
+    
+    # Simple design that should pass all DRC checks
+    # Two nets with sufficient spacing

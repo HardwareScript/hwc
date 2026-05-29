@@ -1,0 +1,5 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,10.00x10.00x2.00mm,,,,,1
+PAD1_Pad,Pour,2.5600mm² net:VDD,Layer 2,,Copper,0.256000mm³
+PAD1,SimplePad,,,,,,1
+PAD1_Pad,Pour(Copper),,,,,,1

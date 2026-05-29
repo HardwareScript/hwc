@@ -1,0 +1,9 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,60.00x40.00x2.00mm,,,,,1
+GroundPlane1,Pour,100.0000mm² net:GND,Layer 1,,Copper,100.000000mm³
+PowerPlane1,Pour,60.0000mm² net:VDD,Layer 1,,Copper,60.000000mm³
+GroundPlane1,Pour(Copper),,,,,,1
+PowerPlane1,Pour(Copper),,,,,,1
+IC1,ICPackage,,,,,Integrated circuit package,1
+IC2,ICPackage,,,,,Integrated circuit package,1
+IC3,ICPackage,,,,,Integrated circuit package,1

@@ -1,0 +1,25 @@
+## Test: Unconnected pin warning
+## Expected: Warning W12 (Unconnected Pin)
+
+import * from @std/primitives/units
+
+component LED:
+    pins: [Anode, Cathode, Ground]
+
+component Battery:
+    pins: [Plus, Minus]
+
+module TestCircuitModule:
+    pins: []
+
+space TestCircuit implements TestCircuitModule:
+    dimensions: 50mm by 50mm by 4mm
+    grid: 100 by 100 by 4
+    origin: bl by b
+    
+    add Battery named Power at [x: 10mm, y: 10mm, z: 1mm]
+    add LED named LED1 at [x: 20mm, y: 20mm, z: 1mm]
+    
+    route Power.Plus to LED1.Anode
+    route LED1.Cathode to Power.Minus
+    ## LED1.Ground is left unconnected

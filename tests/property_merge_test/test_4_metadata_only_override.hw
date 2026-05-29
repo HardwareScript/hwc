@@ -1,0 +1,34 @@
+# Test 4: Metadata-Only Override
+# Base material from HPM has all properties
+# Local override only changes symbol and description (no property changes)
+# Expected: All properties kept from base, metadata from override
+
+# Simulate HPM import
+material Aluminum:
+    category: conductor
+    symbol: "Al"
+    description: "Standard Aluminum from HPM Library"
+    properties:
+        resistivity: 2.65e-8Ω·m
+        thermal_conductivity: 237W/(m·K)
+        density: 2700kg/m³
+        melting_point: 933K
+        max_current_density: 2e9A/m²
+
+# Local override: Only change metadata (symbol and description)
+material Aluminum:
+    category: conductor
+    symbol: "Al-Project"
+    description: "Project-specific Aluminum (same properties as standard)"
+    properties:
+        # No properties specified - should keep all from base
+
+space TestBoard:
+    dimensions: 100mm by 100mm by 1.6mm
+    grid: 1000 by 1000 by 2
+    origin: tl by t
+
+# Expected behavior:
+# - symbol: "Al-Project" (from local override)
+# - description: "Project-specific..." (from local override)
+# - All 5 properties kept from HPM base unchanged

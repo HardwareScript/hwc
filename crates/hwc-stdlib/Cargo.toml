@@ -1,0 +1,14 @@
+[package]
+name = "hwc-stdlib"
+version = "0.1.0"
+edition = "2021"
+authors = ["Hardware Script Team"]
+description = "Standard library for Hardware Script"
+
+[dependencies]
+hwc-parser = { path = "../hwc-parser" }
+dirs = "5.0"
+rustc-hash = { version = "2.1" }
+compact_str = { workspace = true }
+
+[dev-dependencies]

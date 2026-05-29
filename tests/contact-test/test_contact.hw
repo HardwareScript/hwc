@@ -1,0 +1,29 @@
+# Test Contact/Via Placement - GAP 1.1 Implementation
+# This demonstrates vertical interconnects between layers
+
+import Polysilicon from materials
+import Silicon_N from materials
+import Aluminum from materials
+import Tungsten from materials
+
+space Test_Contact:
+    dimensions: 2mm by 2mm by 1mm
+    grid: 2000 by 2000 by 10
+    profile: Silicon_Foundry
+    origin: tl by t
+
+    # Layer 6: Gate layer (Polysilicon)
+    add pour(Polysilicon) named Gate on z:6:
+        boundary: [x: 400um, y: 400um] to [x: 600um, y: 600um]
+        net: GATE
+
+    # Layer 8: Metal layer (Aluminum)
+    add pour(Aluminum) named Metal on z:8:
+        boundary: [x: 350um, y: 350um] to [x: 650um, y: 650um]
+        net: GATE
+
+    # Contact connecting Gate (z:6) to Metal (z:8)
+    add contact(Tungsten) named Via1 net: GATE at [x: 500um, y: 500um] spanning z:6 to z:8
+
+    # Additional test: Contact without name
+    add contact(Tungsten) net: GATE at [x: 450um, y: 450um] spanning z:6 to z:8

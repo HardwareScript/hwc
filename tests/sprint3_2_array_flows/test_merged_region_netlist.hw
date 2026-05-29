@@ -1,0 +1,49 @@
+## Test: Merged region parasitic extraction annotation in netlist
+## Verifies that merged regions are properly annotated for parasitic extraction
+
+import * from @std/primitives/units
+import Silicon_P, Silicon_N from @std/materials/doped_semiconductors
+
+## Simple component with internal pour
+component Finger:
+    pins: [left, right]
+    
+    layout:
+        ## Component shape: 2um wide (small to avoid collision)
+        shape: Rectangle(2um, 10um, 0.5um)
+        
+        ## Internal pour: 2um wide (0um to 2um) - fills entire component width
+        add pour(Silicon_N) named source on z:1:
+            boundary: [x: 0um, y: 0um] to [x: 2um, y: 10um]
+            net: GND
+        
+        pin_positions:
+            left at [0um, 5um]
+            right at [2um, 5um]
+    
+    metadata:
+        description: "Simple finger for merge testing"
+    
+    render:
+        type: procedural
+        shape: box
+        body_color: "#FF6B6B"
+
+## Test space
+space MergedRegionTest:
+    dimensions: 50um by 50um by 2mm
+    grid: 50000 by 50000 by 2
+    origin: tl by t
+    
+    ## Base substrate (z:0 to z:1)
+    add substrate(Silicon_P) spanning [x:1um, y:1um, z:0] to [x:49999um, y:49999um, z:1]
+    
+    ## Array with explicit merge intent
+    ## Component shape: 2um, pitch: 1.5um (components overlap - collision check disabled)
+    ## Pour width: 2um (0um to 2um), pitch: 1.5um
+    ## Pour 0: 10-12um, Pour 1: 11.5-13.5um, Pour 2: 13-15um
+    ## Pours OVERLAP by 0.5um! With merge: [source], they will be merged
+    add Finger[3] named F_Array at [x: 10um, y: 20um, z: 2]:
+        layout: horizontal_stack
+        pitch: 1.5um
+        merge: [source]

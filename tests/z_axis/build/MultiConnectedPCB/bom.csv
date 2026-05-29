@@ -1,0 +1,9 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,10.00x5.00x2.00mm,,,,,1
+Dielectric1,Pour,50.0000mm²,Z 0.0013mm,,FR4,5.000000mm³
+Dielectric2,Pour,50.0000mm²,Z 0.0007mm,,FR4,5.000000mm³
+Dielectric3,Pour,50.0000mm²,Z 0.0001mm,,FR4,5.000000mm³
+TopLayer,Pour,50.0000mm²,Z 0.0019mm,,Copper,5.000000mm³
+Inner1Layer,Pour,50.0000mm²,Z 0.0012mm,,Copper,5.000000mm³
+Inner2Layer,Pour,50.0000mm²,Z 0.0006mm,,Copper,5.000000mm³
+BottomLayer,Pour,50.0000mm²,Z 0.0000mm,,Copper,5.000000mm³

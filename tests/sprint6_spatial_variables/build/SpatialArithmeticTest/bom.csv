@@ -1,0 +1,8 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,100.00x100.00x20.00mm,,,,,1
+FloatingChip,Chip,,,,,,1
+StackedChip,Chip,,,,,,1
+LevelChip,Chip,,,,,,1
+BuriedChip,Chip,,,,,,1
+SideChip,Chip,,,,,,1
+ComplexChip,Chip,,,,,,1

@@ -1,0 +1,101 @@
+## Sprint 3.4: Parametric Unrolling - 64-bit with Chained Positioning
+## Test: 64-bit adder using `last` keyword for automatic spacing
+##
+## This test verifies:
+## 1. Performance with 64 components using relative positioning
+## 2. `last.right + spacing` syntax for automatic chaining
+## 3. Cleaner code than manual position calculations
+##
+## Expected behavior:
+## - Build completes in under 2 seconds (debug build)
+## - Components automatically chain with 2mm spacing
+## - No manual position math required
+
+import * from @std/primitives/units
+import Silicon_P from @std/materials/doped_semiconductors
+
+## ============================================================================
+## COMPONENT DEFINITION: Simple Adder Block
+## ============================================================================
+
+component Adder:
+    pins: [a, b, carry_in, sum, carry_out]
+    
+    layout:
+        shape: Rectangle(8mm, 4mm, 0.5mm)
+    
+    metadata:
+        component_type: "1-bit Adder"
+        description: "Single bit full adder for 64-bit processor"
+    
+    render:
+        type: procedural
+        shape: box
+        body_color: "#4CAF50"
+
+## ============================================================================
+## SPACE: 64-bit Adder with Chained Positioning
+## ============================================================================
+
+space Test64BitChained:
+    dimensions: 700mm by 40mm by 4mm
+    grid: 700000 by 40000 by 4
+    origin: tl by t
+    
+    ## Base substrate
+    add substrate(Silicon_P) spanning [x:1um, y:1um, z:0] to [x:699999um, y:39999um, z:2]
+    
+    ## ========================================================================
+    ## 64-BIT ADDER: Using `last` keyword for automatic chaining
+    ## 
+    ## Benefits of `last` keyword:
+    ## - No manual position calculations (i * 10mm)
+    ## - Easy to change spacing (just modify 2mm in one place)
+    ## - More readable: "place next to the last one"
+    ## - Automatic layout flow
+    ## 
+    ## Layout: 8 rows × 8 columns = 64 adders
+    ## - Each adder: 8mm × 4mm
+    ## - Spacing: 2mm between components
+    ## - Total width per row: 8 × (8mm + 2mm) = 80mm
+    ## ========================================================================
+    
+    ## Row 0: Bits 0-7 (first component needs absolute position)
+    add Adder named Adder[0] at [x: 5mm, y: 5mm, z: 1]
+    for i in 1..7:
+        add Adder named Adder[i] at last.right + 2mm
+    
+    ## Row 1: Bits 8-15
+    add Adder named Adder[8] at [x: 5mm, y: 10mm, z: 1]
+    for i in 9..15:
+        add Adder named Adder[i] at last.right + 2mm
+    
+    ## Row 2: Bits 16-23
+    add Adder named Adder[16] at [x: 5mm, y: 15mm, z: 1]
+    for i in 17..23:
+        add Adder named Adder[i] at last.right + 2mm
+    
+    ## Row 3: Bits 24-31
+    add Adder named Adder[24] at [x: 5mm, y: 20mm, z: 1]
+    for i in 25..31:
+        add Adder named Adder[i] at last.right + 2mm
+    
+    ## Row 4: Bits 32-39
+    add Adder named Adder[32] at [x: 5mm, y: 25mm, z: 1]
+    for i in 33..39:
+        add Adder named Adder[i] at last.right + 2mm
+    
+    ## Row 5: Bits 40-47
+    add Adder named Adder[40] at [x: 5mm, y: 30mm, z: 1]
+    for i in 41..47:
+        add Adder named Adder[i] at last.right + 2mm
+    
+    ## Row 6: Bits 48-55
+    add Adder named Adder[48] at [x: 5mm, y: 35mm, z: 1]
+    for i in 49..55:
+        add Adder named Adder[i] at last.right + 2mm
+    
+    ## Row 7: Bits 56-63
+    add Adder named Adder[56] at [x: 5mm, y: 40mm, z: 1]
+    for i in 57..63:
+        add Adder named Adder[i] at last.right + 2mm

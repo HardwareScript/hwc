@@ -1,0 +1,50 @@
+# Test: Thermal Geometry-Aware Validation
+# Sprint 4.2: Verify geometry-aware thermal models
+#
+# This test verifies that thermal validation applies appropriate thermal models
+# based on geometry type (trace, pour, via) rather than treating all conductors uniformly.
+#
+# Expected: BUILD SUCCESS - Large pours should pass thermal checks
+
+import * from @std/primitives/units
+import Copper from @std/materials/conductors
+
+profile ThermalTest:
+    description: "Thermal constraints for geometry-aware testing"
+    
+    trace:
+        min_width: 100µm
+        min_spacing: 100µm
+    
+    via:
+        min_diameter: 300µm
+        min_annular_ring: 150µm
+    
+    clearance:
+        high_voltage: 1.5mm  # Planes are 1.6mm apart, so this should pass
+        safety_factor: 1.0
+    
+    thermal:
+        ambient_temp: 25°C
+        max_operating_temp: 85°C
+        max_temp_rise: 10°C  # Conservative limit for testing
+
+space TestThermalGeometryAware:
+    dimensions: 20mm by 20mm by 2mm
+    grid: 200 by 200 by 20
+    origin: tl by t
+    profile: ThermalTest
+    
+    nets:
+        Power: power
+        Ground: ground
+    
+    # Large ground plane (2D pour - excellent thermal performance)
+    add pour(Copper) named GroundPlane on z:1:
+        boundary: [x: 1mm, y: 1mm] to [x: 19mm, y: 19mm]
+        net: Ground
+    
+    # Large power plane (2D pour - excellent thermal performance)
+    add pour(Copper) named PowerPlane on z:18:
+        boundary: [x: 1mm, y: 1mm] to [x: 19mm, y: 19mm]
+        net: Power

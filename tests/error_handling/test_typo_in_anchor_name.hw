@@ -1,0 +1,71 @@
+## Error Handling Test: Typo in Anchor Name
+## This test simulates a common user error - typo in component name
+##
+## Expected behavior:
+## - Build should FAIL with nonexistent anchor error
+## - Error should suggest "Resistor1" when user types "Resistor" or "Resistr1"
+## - Error message should be helpful and actionable
+##
+## Error: User types "Resistr1" instead of "Resistor1"
+
+import * from @std/primitives/units
+
+material Copper:
+    category: conductor
+    properties:
+        resistivity: 1.68e-8Ω·m
+        color: "#B87333"
+
+material FR4:
+    category: insulator
+    properties:
+        resistivity: 1e16Ω·m
+        color: "#2E7D32"
+
+component SimpleResistor:
+    pins: [A, B]
+    
+    layout:
+        shape: Rectangle(2mm, 1mm, 0.5mm)
+        pin_positions:
+            A at [0mm, 0.5mm, 0.25mm]
+            B at [2mm, 0.5mm, 0.25mm]
+    
+    electrical:
+        resistance: 1kΩ
+    
+    metadata:
+        component_type: "Resistor"
+        value: "1kΩ"
+    
+    render:
+        type: procedural
+        shape: box
+        body_color: "#B87333"
+
+space TypoInAnchorTest:
+    dimensions: 20mm by 20mm by 2mm
+    grid: 200 by 200 by 20
+    origin: tl by t
+    
+    nets:
+        VCC: power
+    
+    ## Base substrate
+    add substrate(FR4) spanning [x:0.1mm, y:0.1mm, z:1] to [x:19.9mm, y:19.9mm, z:2]
+    
+    ## ========================================================================
+    ## TYPO ERROR TEST
+    ## ========================================================================
+    ## User correctly places Resistor1 and Capacitor1
+    ## Then makes a typo when referencing Resistor1
+    
+    ## Resistor1: Absolute position (valid)
+    add SimpleResistor named Resistor1 at [x: 2mm, y: 10mm, z: 3]
+    
+    ## Capacitor1: Relative to Resistor1 (valid)
+    add SimpleResistor named Capacitor1 at Resistor1.right + 2mm
+    
+    ## Transistor1: Typo in anchor name (ERROR - "Resistr1" instead of "Resistor1")
+    ## Should suggest "Did you mean: 'Resistor1'?"
+    add SimpleResistor named Transistor1 at Resistr1.right + 4mm

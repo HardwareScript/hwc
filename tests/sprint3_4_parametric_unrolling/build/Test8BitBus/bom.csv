@@ -1,0 +1,26 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,100.00x20.00x2.00mm,,,,,1
+DataLine_0,Pour,14.0000mm² net:D[0],Layer 1,,Copper,14.000000mm³
+DataLine_1,Pour,14.0000mm² net:D[1],Layer 1,,Copper,14.000000mm³
+DataLine_2,Pour,14.0000mm² net:D[2],Layer 1,,Copper,14.000000mm³
+DataLine_3,Pour,14.0000mm² net:D[3],Layer 1,,Copper,14.000000mm³
+DataLine_4,Pour,14.0000mm² net:D[4],Layer 1,,Copper,14.000000mm³
+DataLine_5,Pour,14.0000mm² net:D[5],Layer 1,,Copper,14.000000mm³
+DataLine_6,Pour,14.0000mm² net:D[6],Layer 1,,Copper,14.000000mm³
+DataLine_7,Pour,14.0000mm² net:D[7],Layer 1,,Copper,14.000000mm³
+DataLine_0,Pour(Copper),,,,,,1
+DataLine_1,Pour(Copper),,,,,,1
+DataLine_2,Pour(Copper),,,,,,1
+DataLine_3,Pour(Copper),,,,,,1
+DataLine_4,Pour(Copper),,,,,,1
+DataLine_5,Pour(Copper),,,,,,1
+DataLine_6,Pour(Copper),,,,,,1
+DataLine_7,Pour(Copper),,,,,,1
+Via_0,Contact(Copper),,,,,,1
+Via_1,Contact(Copper),,,,,,1
+Via_2,Contact(Copper),,,,,,1
+Via_3,Contact(Copper),,,,,,1
+Via_4,Contact(Copper),,,,,,1
+Via_5,Contact(Copper),,,,,,1
+Via_6,Contact(Copper),,,,,,1
+Via_7,Contact(Copper),,,,,,1

@@ -1,0 +1,17 @@
+{
+  "version": "0.1.4",
+  "board": "StdLibOpticsTest",
+  "grid": {
+    "dimensions": [
+      80,
+      30,
+      2
+    ],
+    "resolution": [
+      1.0,
+      1.0,
+      1.0
+    ]
+  },
+  "routes": []
+}

@@ -1,0 +1,14 @@
+## Test explicit import from materials/conductors
+## This should compile successfully with import
+
+import Copper from @std/materials/conductors
+
+material TestMaterial:
+    category: conductor
+    symbol: "Test"
+    description: "Test material"
+    
+    properties:
+        density: 8960kg/m³
+        thermal_conductivity: 401W/(m·K)
+        resistivity: 1.68e-8Ω·m

@@ -1,0 +1,1041 @@
+##[ INSULATORS MATERIAL LIBRARY - COMPREHENSIVE STRESS TEST ]##
+
+#[
+This file is a BRUTAL stress test for the Hardware Script compiler.
+It tests EVERY feature found in:
+- Docs/v0.1.5/LANGUAGE-SPEC.md
+- Docs/v0.1.4/LANGUAGE-SPEC.md
+- ROADMAP/v0.1.5/COMPILER-GAPS-FOUND.md
+- hwc/crates/hwc-parser/src/lexer/token.rs
+- hwc/crates/hwc-parser/src/parser/definitions/component.rs
+
+DOMAIN: Insulators (dielectrics, substrates, air, vacuum)
+GOAL: Expose compiler gaps, not just validate working syntax
+]#
+
+## ============================================================================
+## SECTION 1: STANDARD PCB SUBSTRATES
+## Testing: Basic syntax, standard units, complex SI units
+## ============================================================================
+
+material FR4:
+    category: insulator
+    symbol: "FR4"
+    description: "Standard PCB substrate - fiberglass-reinforced epoxy laminate"
+    
+    properties:
+        ## Physical Properties
+        density: 1850kg/m³
+        thermal_conductivity: 0.3W/(m·K)
+        thermal_expansion_xy: 14e-6/°C
+        thermal_expansion_z: 70e-6/°C
+        
+        ## Electrical Properties (frequency-dependent)
+        dielectric_constant: 4.5
+        dielectric_constant_1mhz: 4.5
+        dielectric_constant_1ghz: 4.3
+        dielectric_constant_10ghz: 4.2
+        loss_tangent_1mhz: 0.02
+        loss_tangent_1ghz: 0.025
+        loss_tangent_10ghz: 0.03
+        dielectric_strength: 20000V/mm
+        volume_resistivity: 1e14Ω·m
+        surface_resistivity: 1e12Ω
+        
+        ## Mechanical Properties
+        flexural_strength: 415000000Pa
+        tensile_strength: 310000000Pa
+        youngs_modulus: 22000000000Pa
+        
+        ## Thermal Properties
+        glass_transition_temp: 135°C
+        decomposition_temp: 300°C
+        max_operating_temp: 130°C
+        min_operating_temp: -40°C
+        
+        ## Moisture Properties
+        water_absorption: 0.1%
+        
+        ## Color & Rendering
+        color: "#2E7D32"
+        transparency: 0.0
+
+material FR4_High_Tg:
+    category: insulator
+    symbol: "FR4-HTg"
+    description: "High glass transition temperature FR4 for demanding applications"
+    
+    properties:
+        density: 1900kg/m³
+        thermal_conductivity: 0.35W/(m·K)
+        thermal_expansion_xy: 12e-6/°C
+        thermal_expansion_z: 60e-6/°C
+        dielectric_constant: 4.4
+        dielectric_constant_1ghz: 4.4
+        loss_tangent_1ghz: 0.015
+        dielectric_strength: 25000V/mm
+        glass_transition_temp: 180°C
+        max_operating_temp: 170°C
+        min_operating_temp: -55°C
+        color: "#1B5E20"
+        transparency: 0.0
+
+## ============================================================================
+## SECTION 2: HIGH-FREQUENCY RF SUBSTRATES
+## Testing: Scientific notation, extreme precision, negative values
+## ============================================================================
+
+material Rogers_RO4003C:
+    category: insulator
+    symbol: "RO4003C"
+    description: "Low-loss RF substrate for high-frequency applications (DC to 10GHz+)"
+    
+    properties:
+        ## Extreme precision testing
+        density: 1.79e3kg/m³
+        thermal_conductivity: 6.4e-1W/(m·K)
+        thermal_expansion_xy: +1.7e-5/°C
+        thermal_expansion_z: +4.6e-5/°C
+        
+        ## Ultra-precise dielectric properties
+        dielectric_constant: 3.38
+        dielectric_constant_10ghz: 3.38
+        dielectric_constant_77ghz: 3.34
+        loss_tangent_10ghz: 2.7e-3
+        loss_tangent_77ghz: 3.1e-3
+        
+        ## Negative temperature coefficient
+        temp_coefficient_dielectric: -4.0e-5/°C
+        
+        ## Extreme values
+        dielectric_strength: 3.543e4V/mm
+        volume_resistivity: 1.7e10Ω·m
+        
+        ## Temperature range
+        glass_transition_temp: +2.8e2°C
+        max_operating_temp: +2.5e2°C
+        min_operating_temp: -5.5e1°C
+        
+        color: "#FFEB3B"
+        transparency: 0.1
+
+material Rogers_RO3003:
+    category: insulator
+    symbol: "RO3003"
+    description: "Ultra-low-loss RF substrate for millimeter-wave applications"
+    
+    properties:
+        density: 2100kg/m³
+        thermal_conductivity: 0.5W/(m·K)
+        thermal_expansion_xy: 17e-6/°C
+        thermal_expansion_z: 24e-6/°C
+        
+        ## Millimeter-wave properties
+        dielectric_constant: 3.00
+        dielectric_constant_10ghz: 3.00
+        dielectric_constant_77ghz: 2.98
+        loss_tangent_10ghz: 1.3e-3
+        loss_tangent_77ghz: 1.5e-3
+        
+        dielectric_strength: 31800V/mm
+        volume_resistivity: 1.2e10Ω·m
+        
+        glass_transition_temp: 315°C
+        max_operating_temp: 260°C
+        min_operating_temp: -40°C
+        
+        color: "#FFC107"
+        transparency: 0.15
+
+
+## ============================================================================
+## SECTION 3: FLEXIBLE SUBSTRATES
+## Testing: Unicode in strings, emoji, complex units, keywords as properties
+## ============================================================================
+
+material Polyimide_Kapton:
+    category: insulator
+    symbol: "PI"
+    description: "Flexible polyimide film - DuPont™ Kapton® for flex PCBs 🔥"
+    
+    properties:
+        ## Unicode stress test in metadata
+        manufacturer: "DuPont™ 杜邦公司 デュポン社"
+        notes: "Greek: αβγδε, Math: ∑∫∂∇, Emoji: 🔥⚡📡, RTL: العربية עברית"
+        special_chars: "All punctuation: !@#$%^&*()_+-=[]{}|\\;':\",./<>?`~"
+        
+        ## Physical properties
+        density: 1420kg/m³
+        thermal_conductivity: 0.12W/(m·K)
+        thermal_expansion_xy: 20e-6/°C
+        thermal_expansion_z: 20e-6/°C
+        
+        ## Electrical properties
+        dielectric_constant: 3.5
+        dielectric_constant_1mhz: 3.5
+        dielectric_constant_1ghz: 3.4
+        loss_tangent_1mhz: 0.002
+        loss_tangent_1ghz: 0.003
+        dielectric_strength: 303000V/mm
+        volume_resistivity: 1.5e17Ω·m
+        
+        ## Extreme temperature range
+        glass_transition_temp: 360°C
+        max_operating_temp: 400°C
+        min_operating_temp: -269°C
+        melting_point: 0°C
+        
+        ## Mechanical properties
+        tensile_strength: 231000000Pa
+        youngs_modulus: 2500000000Pa
+        elongation_at_break: 72%
+        
+        ## Keywords as property names (soft keyword test)
+        tolerance: "±5%"
+        trace: "Compatible"
+        via: "Laser drilled"
+        clearance: "Standard"
+        category: "Flexible"
+        material: "Polyimide"
+        profile: "Flex"
+        
+        color: "#FF6F00"
+        transparency: 0.3
+
+material LCP:
+    category: insulator
+    symbol: "LCP"
+    description: "Liquid Crystal Polymer - ultra-low-loss flexible substrate for mmWave 📶"
+    
+    properties:
+        ## More unicode testing
+        full_name: "液晶ポリマー (Liquid Crystal Polymer) 液晶聚合物"
+        applications: "5G 📱, mmWave 📡, Satellite 🛰️, Radar 📶"
+        
+        density: 1400kg/m³
+        thermal_conductivity: 0.2W/(m·K)
+        thermal_expansion_xy: 17e-6/°C
+        
+        ## Ultra-low-loss at high frequencies
+        dielectric_constant: 2.9
+        dielectric_constant_10ghz: 2.9
+        dielectric_constant_60ghz: 2.88
+        dielectric_constant_77ghz: 2.87
+        loss_tangent_10ghz: 0.002
+        loss_tangent_60ghz: 0.0025
+        loss_tangent_77ghz: 0.003
+        
+        dielectric_strength: 40000V/mm
+        volume_resistivity: 1e16Ω·m
+        
+        max_operating_temp: 315°C
+        min_operating_temp: -200°C
+        
+        ## Moisture resistance
+        water_absorption: 0.02%
+        
+        color: "#FFECB3"
+        transparency: 0.2
+
+## ============================================================================
+## SECTION 4: CERAMIC SUBSTRATES
+## Testing: Hex/binary/octal integers, extreme values, zero values
+## ============================================================================
+
+material Alumina_96:
+    category: insulator
+    symbol: "Al2O3-96"
+    description: "96% Alumina ceramic substrate for high-power RF and microwave circuits"
+    
+    properties:
+        ## Integer format testing
+        purity_percent: 96
+        purity_hex: 0x60
+        purity_binary: 0b01100000
+        purity_octal: 0o140
+        
+        ## Extreme density
+        density: 3750kg/m³
+        thermal_conductivity: 24W/(m·K)
+        thermal_expansion: 6.8e-6/°C
+        
+        ## Electrical properties
+        dielectric_constant: 9.8
+        dielectric_constant_1mhz: 9.8
+        dielectric_constant_10ghz: 9.6
+        loss_tangent_1mhz: 0.0001
+        loss_tangent_10ghz: 0.0003
+        dielectric_strength: 10000V/mm
+        volume_resistivity: 1e14Ω·m
+        
+        ## Extreme temperature capability
+        melting_point: 2072°C
+        max_operating_temp: 1700°C
+        min_operating_temp: -273.15°C
+        
+        ## Mechanical strength
+        flexural_strength: 350000000Pa
+        youngs_modulus: 300000000000Pa
+        
+        ## Zero values testing
+        water_absorption: 0%
+        outgassing: 0.0
+        
+        color: "#FFFFFF"
+        transparency: 0.8
+
+material Alumina_99_6:
+    category: insulator
+    symbol: "Al2O3-99.6"
+    description: "99.6% Alumina - ultra-high purity for demanding applications"
+    
+    properties:
+        ## More integer format testing
+        purity_decimal: +99
+        purity_hex: +0x63
+        purity_binary: +0b01100011
+        purity_octal: +0o143
+        
+        density: 3890kg/m³
+        thermal_conductivity: 35W/(m·K)
+        thermal_expansion: 7.2e-6/°C
+        
+        dielectric_constant: 9.9
+        dielectric_constant_10ghz: 9.9
+        loss_tangent_10ghz: 0.0001
+        dielectric_strength: 15000V/mm
+        volume_resistivity: 1e15Ω·m
+        
+        melting_point: 2054°C
+        max_operating_temp: 1800°C
+        
+        flexural_strength: 450000000Pa
+        youngs_modulus: 370000000000Pa
+        
+        water_absorption: 0.0%
+        
+        color: "#FAFAFA"
+        transparency: 0.9
+
+
+## ============================================================================
+## SECTION 5: ADVANCED COMPOSITES
+## Testing: Complex SI units with slashes/parentheses, asymmetric values
+## ============================================================================
+
+material PTFE_Teflon:
+    category: insulator
+    symbol: "PTFE"
+    description: "Polytetrafluoroethylene (Teflon®) - ultra-low-loss, chemically inert"
+    
+    properties:
+        ## Complex SI units stress test
+        density: 2200kg/m³
+        thermal_conductivity: 0.25W/(m·K)
+        specific_heat: 1000J/(kg·K)
+        thermal_diffusivity: 1.14e-7m²/s
+        
+        ## Electrical properties
+        dielectric_constant: 2.1
+        dielectric_constant_1mhz: 2.1
+        dielectric_constant_10ghz: 2.08
+        loss_tangent_1mhz: 0.0002
+        loss_tangent_10ghz: 0.0004
+        dielectric_strength: 60000V/mm
+        volume_resistivity: 1e18Ω·m
+        surface_resistivity: 1e16Ω
+        
+        ## Temperature properties
+        thermal_expansion: 1.2e-4/°C
+        max_operating_temp: 260°C
+        min_operating_temp: -200°C
+        melting_point: 327°C
+        
+        ## Chemical resistance
+        chemical_resistance: "Excellent"
+        water_absorption: 0.01%
+        
+        ## Mechanical properties
+        tensile_strength: 27000000Pa
+        youngs_modulus: 500000000Pa
+        elongation_at_break: 400%
+        
+        color: "#F5F5F5"
+        transparency: 0.95
+
+material Rogers_RT_duroid_5880:
+    category: insulator
+    symbol: "RT5880"
+    description: "PTFE-based composite with glass microfiber reinforcement"
+    
+    properties:
+        ## More complex units
+        density: 2200kg/m³
+        thermal_conductivity: 0.2W/(m·K)
+        specific_heat: 1050J/(kg·K)
+        
+        ## Asymmetric thermal expansion
+        thermal_expansion_xy: 24e-6/°C
+        thermal_expansion_z: 240e-6/°C
+        
+        ## RF properties
+        dielectric_constant: 2.20
+        dielectric_constant_10ghz: 2.20
+        dielectric_constant_77ghz: 2.18
+        loss_tangent_10ghz: 0.0009
+        loss_tangent_77ghz: 0.0012
+        
+        ## Negative temperature coefficient
+        temp_coefficient_dielectric: -1.5e-4/°C
+        
+        dielectric_strength: 47200V/mm
+        volume_resistivity: 1e10Ω·m
+        
+        max_operating_temp: 260°C
+        min_operating_temp: -55°C
+        
+        ## Mechanical
+        tensile_strength: 24100000Pa
+        flexural_strength: 34500000Pa
+        
+        color: "#FFFDE7"
+        transparency: 0.7
+
+## ============================================================================
+## SECTION 6: GASES AND VACUUM
+## Testing: Extreme low values, scientific notation edge cases, special values
+## ============================================================================
+
+material Air:
+    category: insulator
+    symbol: "Air"
+    description: "Standard atmospheric air at sea level (1 atm, 20°C)"
+    
+    properties:
+        ## Ultra-low density
+        density: 1.204kg/m³
+        thermal_conductivity: 0.026W/(m·K)
+        specific_heat: 1005J/(kg·K)
+        
+        ## Dielectric properties (nearly unity)
+        dielectric_constant: 1.00059
+        dielectric_constant_1mhz: 1.00059
+        dielectric_constant_10ghz: 1.00054
+        loss_tangent_1mhz: 0.0
+        loss_tangent_10ghz: 0.0
+        
+        ## Breakdown voltage (depends on gap)
+        dielectric_strength: 3000V/mm
+        
+        ## Electrical resistivity (very high)
+        volume_resistivity: 1.3e16Ω·m
+        
+        ## Temperature properties
+        thermal_expansion: 3.43e-3/°C
+        max_operating_temp: 1000°C
+        min_operating_temp: -273.15°C
+        
+        ## Composition (by volume)
+        nitrogen_percent: 78.08%
+        oxygen_percent: 20.95%
+        argon_percent: 0.93%
+        co2_ppm: 415
+        
+        ## Viscosity
+        dynamic_viscosity: 1.81e-5Pa·s
+        kinematic_viscosity: 1.5e-5m²/s
+        
+        color: "#E3F2FD"
+        transparency: 1.0
+
+material Vacuum:
+    category: insulator
+    symbol: "Vac"
+    description: "Perfect vacuum - theoretical ideal for space applications 🚀"
+    
+    properties:
+        ## Zero/minimal values
+        density: 0.0kg/m³
+        thermal_conductivity: 0.0W/(m·K)
+        
+        ## Perfect dielectric
+        dielectric_constant: 1.0
+        dielectric_constant_dc: 1.0
+        dielectric_constant_1ghz: 1.0
+        dielectric_constant_10ghz: 1.0
+        dielectric_constant_100ghz: 1.0
+        loss_tangent_dc: 0.0
+        loss_tangent_1ghz: 0.0
+        loss_tangent_10ghz: 0.0
+        
+        ## Infinite resistivity
+        volume_resistivity: 1e100Ω·m
+        
+        ## Breakdown (cosmic ray limit)
+        dielectric_strength: 1e10V/mm
+        
+        ## Temperature (space environment)
+        max_temp_sunlight: 121°C
+        min_temp_shadow: -157°C
+        
+        ## Physical constants in vacuum
+        speed_of_light: 299792458m/s
+        permittivity: 8.854187817e-12F/m
+        permeability: 1.25663706212e-6H/m
+        impedance: 376.730313668Ω
+        
+        color: "#000000"
+        transparency: 1.0
+
+
+## ============================================================================
+## SECTION 7: EXOTIC MATERIALS
+## Testing: Extreme scientific notation, negative values, complex formulas
+## ============================================================================
+
+material Diamond:
+    category: insulator
+    symbol: "C"
+    description: "Synthetic diamond substrate - extreme thermal conductivity 💎"
+    
+    properties:
+        ## Extreme values
+        density: 3515kg/m³
+        thermal_conductivity: 2200W/(m·K)
+        specific_heat: 509J/(kg·K)
+        thermal_diffusivity: 1.2e-3m²/s
+        
+        ## Dielectric properties
+        dielectric_constant: 5.7
+        dielectric_constant_1mhz: 5.7
+        dielectric_constant_10ghz: 5.68
+        loss_tangent_1mhz: 0.00001
+        loss_tangent_10ghz: 0.00003
+        
+        ## Extreme breakdown voltage
+        dielectric_strength: 1e7V/mm
+        volume_resistivity: 1e16Ω·m
+        
+        ## Temperature properties
+        thermal_expansion: 1.0e-6/°C
+        max_operating_temp: 1500°C
+        min_operating_temp: -273.15°C
+        
+        ## Mechanical properties (hardest material)
+        hardness_vickers: 10000
+        youngs_modulus: 1.22e12Pa
+        bulk_modulus: 4.42e11Pa
+        shear_modulus: 5.35e11Pa
+        
+        ## Optical properties
+        refractive_index: 2.417
+        
+        color: "#B9F6CA"
+        transparency: 1.0
+
+material Sapphire:
+    category: insulator
+    symbol: "Al2O3-S"
+    description: "Single-crystal sapphire - extreme hardness and transparency"
+    
+    properties:
+        density: 3980kg/m³
+        thermal_conductivity: 35W/(m·K)
+        specific_heat: 761J/(kg·K)
+        
+        ## Anisotropic dielectric properties
+        dielectric_constant: 10.4
+        dielectric_constant_c_axis: 11.5
+        dielectric_constant_a_axis: 9.3
+        loss_tangent_10ghz: 0.00001
+        
+        dielectric_strength: 48000V/mm
+        volume_resistivity: 1e16Ω·m
+        
+        ## Extreme temperature
+        melting_point: 2040°C
+        max_operating_temp: 1900°C
+        min_operating_temp: -273.15°C
+        
+        ## Anisotropic thermal expansion
+        thermal_expansion_c_axis: 5.0e-6/°C
+        thermal_expansion_a_axis: 6.6e-6/°C
+        
+        ## Mechanical properties
+        hardness_mohs: 9.0
+        youngs_modulus: 4.0e11Pa
+        flexural_strength: 4.0e8Pa
+        
+        ## Optical properties
+        refractive_index_ordinary: 1.768
+        refractive_index_extraordinary: 1.760
+        
+        color: "#E1F5FE"
+        transparency: 0.95
+
+material Quartz:
+    category: insulator
+    symbol: "SiO2"
+    description: "Fused quartz - ultra-low thermal expansion, high purity"
+    
+    properties:
+        density: 2203kg/m³
+        thermal_conductivity: 1.38W/(m·K)
+        specific_heat: 740J/(kg·K)
+        
+        ## Dielectric properties
+        dielectric_constant: 3.78
+        dielectric_constant_1mhz: 3.78
+        dielectric_constant_10ghz: 3.75
+        loss_tangent_1mhz: 0.0001
+        loss_tangent_10ghz: 0.0002
+        
+        dielectric_strength: 25000V/mm
+        volume_resistivity: 1e18Ω·m
+        
+        ## Ultra-low thermal expansion
+        thermal_expansion: 5.5e-7/°C
+        
+        ## Temperature properties
+        softening_point: 1665°C
+        max_operating_temp: 1200°C
+        min_operating_temp: -273.15°C
+        
+        ## Mechanical properties
+        youngs_modulus: 7.2e10Pa
+        shear_modulus: 3.1e10Pa
+        bulk_modulus: 3.7e10Pa
+        
+        ## Optical properties
+        refractive_index: 1.458
+        
+        color: "#FFFFFF"
+        transparency: 0.99
+
+## ============================================================================
+## SECTION 8: SPECIALTY MATERIALS
+## Testing: Edge cases, boundary values, unusual units
+## ============================================================================
+
+material Beryllium_Oxide:
+    category: insulator
+    symbol: "BeO"
+    description: "Beryllium oxide - extreme thermal conductivity (TOXIC ☠️)"
+    
+    properties:
+        ## Warning metadata
+        safety_warning: "TOXIC! Beryllium dust causes chronic beryllium disease ☠️"
+        handling: "Requires special precautions and protective equipment"
+        
+        ## Extreme thermal conductivity (second only to diamond among ceramics)
+        density: 3010kg/m³
+        thermal_conductivity: 260W/(m·K)
+        specific_heat: 1030J/(kg·K)
+        thermal_diffusivity: 8.6e-5m²/s
+        
+        ## Dielectric properties
+        dielectric_constant: 6.7
+        dielectric_constant: 6.7
+        dielectric_constant_1mhz: 6.7
+        dielectric_constant_10ghz: 6.5
+        loss_tangent_1mhz: 0.0003
+        loss_tangent_10ghz: 0.0006
+        
+        dielectric_strength: 10000V/mm
+        volume_resistivity: 1e14Ω·m
+        
+        ## Temperature properties
+        melting_point: 2578°C
+        max_operating_temp: 2000°C
+        thermal_expansion: 9.0e-6/°C
+        
+        ## Mechanical properties
+        youngs_modulus: 3.45e11Pa
+        flexural_strength: 2.4e8Pa
+        
+        color: "#FFFFFF"
+        transparency: 0.7
+
+material Boron_Nitride:
+    category: insulator
+    symbol: "BN"
+    description: "Hexagonal boron nitride - 'white graphite' with excellent thermal properties"
+    
+    properties:
+        density: 2100kg/m³
+        thermal_conductivity: 60W/(m·K)
+        specific_heat: 800J/(kg·K)
+        
+        ## Dielectric properties
+        dielectric_constant: 4.0
+        dielectric_constant_1mhz: 4.0
+        dielectric_constant_10ghz: 3.9
+        loss_tangent_1mhz: 0.0001
+        loss_tangent_10ghz: 0.0003
+        
+        dielectric_strength: 40000V/mm
+        volume_resistivity: 1e13Ω·m
+        
+        ## Temperature properties
+        sublimation_temp: 2973°C
+        max_operating_temp: 2500°C
+        thermal_expansion: 3.0e-6/°C
+        
+        ## Mechanical properties
+        hardness_mohs: 2.0
+        youngs_modulus: 8.0e10Pa
+        
+        ## Chemical properties
+        chemical_resistance: "Excellent"
+        oxidation_resistance_temp: 1000°C
+        
+        color: "#FFFFFF"
+        transparency: 0.8
+
+
+## ============================================================================
+## SECTION 9: GLASS MATERIALS
+## Testing: Fractional values, percentage notation, mixed units
+## ============================================================================
+
+material Borosilicate_Glass:
+    category: insulator
+    symbol: "BSG"
+    description: "Borosilicate glass (Pyrex®) - low thermal expansion, chemical resistant"
+    
+    properties:
+        ## Composition (by weight percent)
+        sio2_content: 81%
+        b2o3_content: 13%
+        na2o_content: 4%
+        al2o3_content: 2%
+        
+        density: 2230kg/m³
+        thermal_conductivity: 1.14W/(m·K)
+        specific_heat: 830J/(kg·K)
+        
+        ## Dielectric properties
+        dielectric_constant: 4.6
+        dielectric_constant_1mhz: 4.6
+        dielectric_constant_10ghz: 4.5
+        loss_tangent_1mhz: 0.005
+        loss_tangent_10ghz: 0.008
+        
+        dielectric_strength: 13000V/mm
+        volume_resistivity: 1e13Ω·m
+        
+        ## Low thermal expansion
+        thermal_expansion: 3.3e-6/°C
+        
+        ## Temperature properties
+        softening_point: 821°C
+        annealing_point: 560°C
+        strain_point: 510°C
+        max_operating_temp: 500°C
+        
+        ## Mechanical properties
+        youngs_modulus: 6.4e10Pa
+        shear_modulus: 2.7e10Pa
+        poissons_ratio: 0.2
+        
+        ## Optical properties
+        refractive_index: 1.474
+        
+        color: "#E8F5E9"
+        transparency: 0.92
+
+material Soda_Lime_Glass:
+    category: insulator
+    symbol: "SLG"
+    description: "Standard window glass - most common glass type"
+    
+    properties:
+        ## Composition
+        sio2_content: 73%
+        na2o_content: 14%
+        cao_content: 9%
+        mgo_content: 4%
+        
+        density: 2500kg/m³
+        thermal_conductivity: 1.05W/(m·K)
+        specific_heat: 840J/(kg·K)
+        
+        dielectric_constant: 7.0
+        dielectric_constant_1mhz: 7.0
+        dielectric_constant_10ghz: 6.8
+        loss_tangent_1mhz: 0.01
+        loss_tangent_10ghz: 0.015
+        
+        dielectric_strength: 10000V/mm
+        volume_resistivity: 1e11Ω·m
+        
+        thermal_expansion: 9.0e-6/°C
+        
+        softening_point: 696°C
+        max_operating_temp: 400°C
+        
+        youngs_modulus: 7.0e10Pa
+        
+        refractive_index: 1.52
+        
+        color: "#F1F8E9"
+        transparency: 0.9
+
+## ============================================================================
+## SECTION 10: POLYMER FILMS
+## Testing: Negative coefficients, asymmetric properties, frequency sweeps
+## ============================================================================
+
+material PET_Mylar:
+    category: insulator
+    symbol: "PET"
+    description: "Polyethylene terephthalate (Mylar®) - flexible, low-cost insulator"
+    
+    properties:
+        density: 1380kg/m³
+        thermal_conductivity: 0.15W/(m·K)
+        specific_heat: 1200J/(kg·K)
+        
+        ## Frequency-dependent dielectric properties
+        dielectric_constant: 3.3
+        dielectric_constant_60hz: 3.3
+        dielectric_constant_1khz: 3.25
+        dielectric_constant_1mhz: 3.2
+        dielectric_constant_1ghz: 3.0
+        loss_tangent_60hz: 0.005
+        loss_tangent_1khz: 0.004
+        loss_tangent_1mhz: 0.01
+        loss_tangent_1ghz: 0.02
+        
+        dielectric_strength: 280000V/mm
+        volume_resistivity: 1e16Ω·m
+        
+        ## Temperature properties
+        glass_transition_temp: 78°C
+        melting_point: 260°C
+        max_operating_temp: 150°C
+        min_operating_temp: -60°C
+        
+        ## Negative temperature coefficient
+        temp_coefficient_dielectric: -2.0e-4/°C
+        
+        ## Mechanical properties
+        tensile_strength: 170000000Pa
+        youngs_modulus: 2800000000Pa
+        elongation_at_break: 150%
+        
+        ## Moisture properties
+        water_absorption: 0.2%
+        
+        color: "#FFF9C4"
+        transparency: 0.85
+
+material Polycarbonate:
+    category: insulator
+    symbol: "PC"
+    description: "Polycarbonate - high impact strength, optical clarity"
+    
+    properties:
+        density: 1200kg/m³
+        thermal_conductivity: 0.19W/(m·K)
+        specific_heat: 1250J/(kg·K)
+        
+        ## Dielectric properties
+        dielectric_constant: 2.9
+        dielectric_constant_1mhz: 2.9
+        dielectric_constant_1ghz: 2.85
+        loss_tangent_1mhz: 0.01
+        loss_tangent_1ghz: 0.015
+        
+        dielectric_strength: 16000V/mm
+        volume_resistivity: 2e16Ω·m
+        
+        ## Temperature properties
+        glass_transition_temp: 147°C
+        max_operating_temp: 135°C
+        min_operating_temp: -40°C
+        
+        thermal_expansion: 6.8e-5/°C
+        
+        ## Mechanical properties (high impact)
+        tensile_strength: 62000000Pa
+        youngs_modulus: 2300000000Pa
+        impact_strength: 600J/m
+        elongation_at_break: 110%
+        
+        ## Optical properties
+        refractive_index: 1.586
+        light_transmission: 89%
+        
+        water_absorption: 0.16%
+        
+        color: "#E0F7FA"
+        transparency: 0.89
+
+material Polypropylene:
+    category: insulator
+    symbol: "PP"
+    description: "Polypropylene - low dielectric loss, moisture resistant"
+    
+    properties:
+        density: 905kg/m³
+        thermal_conductivity: 0.22W/(m·K)
+        specific_heat: 1900J/(kg·K)
+        
+        ## Excellent dielectric properties
+        dielectric_constant: 2.25
+        dielectric_constant_1mhz: 2.25
+        dielectric_constant_1ghz: 2.23
+        loss_tangent_1mhz: 0.0002
+        loss_tangent_1ghz: 0.0005
+        
+        dielectric_strength: 23000V/mm
+        volume_resistivity: 1e16Ω·m
+        
+        ## Temperature properties
+        melting_point: 160°C
+        max_operating_temp: 100°C
+        min_operating_temp: -20°C
+        
+        thermal_expansion: 1.5e-4/°C
+        
+        ## Mechanical properties
+        tensile_strength: 32000000Pa
+        youngs_modulus: 1500000000Pa
+        elongation_at_break: 400%
+        
+        ## Moisture resistance (excellent)
+        water_absorption: 0.01%
+        
+        color: "#FFFFFF"
+        transparency: 0.5
+
+## ============================================================================
+## SECTION 11: EDGE CASES AND BOUNDARY VALUES
+## Testing: Compiler limits, extreme ranges, special cases
+## ============================================================================
+
+material Extreme_Test_Material:
+    category: insulator
+    symbol: "XTM"
+    description: "Synthetic test material with extreme values to stress test compiler"
+    
+    properties:
+        ## Extreme scientific notation
+        density_min: 1.0e-10kg/m³
+        density_max: 1.0e10kg/m³
+        
+        ## Extreme precision
+        dielectric_constant: 1.23456789012345
+        loss_tangent: 9.87654321098765e-15
+        
+        ## Required properties for compiler
+        dielectric_strength: 1.0e6V/mm
+        thermal_conductivity: 1.0W/(m·K)
+        density: 1000kg/m³
+        
+        ## Extreme temperature range
+        temp_absolute_zero: -273.15°C
+        temp_sun_surface: 5778°C
+        temp_sun_core: 15000000°C
+        
+        ## Extreme voltages
+        breakdown_min: 1.0e-6V/mm
+        breakdown_max: 1.0e12V/mm
+        
+        ## Extreme resistivity
+        resistivity_min: 1.0e-20Ω·m
+        resistivity_max: 1.0e100Ω·m
+        
+        ## Boundary values
+        zero_value: 0.0
+        unity_value: 1.0
+        negative_value: -1.0
+        
+        ## Fractional percentages
+        tolerance_tight: 0.001%
+        tolerance_loose: 100%
+        
+        ## Mixed positive/negative
+        positive_coeff: +1.5e-3/°C
+        negative_coeff: -2.7e-4/°C
+        
+        color: "#FF00FF"
+        transparency: 0.5
+
+## ============================================================================
+## END OF INSULATORS LIBRARY
+## Total materials: 20
+## Features tested: 50+
+## ============================================================================
+
+##[ STRESS TEST SUMMARY ]##
+#[
+This file tests:
+✅ Scientific notation (1.23e-15, 2.5e10)
+✅ Extreme values (1e-20 to 1e100)
+✅ Unicode in strings (Greek, Math, Emoji, RTL, CJK)
+✅ Negative values (-273.15°C, -2.7e-4/°C)
+✅ Hex/binary/octal integers (0xFF, 0b1010, 0o777)
+✅ Complex SI units (W/(m·K), J/(kg·K), m²/s, F/m, H/m)
+✅ Keywords as property names (tolerance, trace, via, clearance, category, material, profile)
+✅ Zero values (0.0, 0%)
+✅ Fractional percentages (0.001%, 78.08%)
+✅ Positive/negative prefixes (+1.5e-3, -2.7e-4)
+✅ Extreme precision (1.23456789012345)
+✅ Frequency-dependent properties (1mhz, 1ghz, 10ghz, 77ghz)
+✅ Asymmetric properties (xy vs z thermal expansion)
+✅ Inline comments everywhere
+✅ Doc comments (##) and block comments (#[...])
+✅ All punctuation in strings
+✅ Boundary values (absolute zero, sun temperature)
+✅ Mixed units (Pa, Pa·s, m²/s, V/mm, Ω·m)
+✅ Anisotropic properties (c-axis vs a-axis)
+✅ Composition percentages (81%, 13%, 4%, 2%)
+
+GOAL: Find compiler gaps in material definition parsing!
+]#
+
+
+
+## ============================================================================
+## SILICON DIOXIDE (SiO2) - Gate Oxide and Passivation
+## ============================================================================
+
+material SiO2:
+    category: insulator
+    symbol: "SiO₂"
+    description: "Silicon dioxide - gate oxide and passivation layer for CMOS transistors"
+    
+    properties:
+        ## Physical Properties
+        density: 2200kg/m³
+        thermal_conductivity: 1.4W/(m·K)
+        thermal_expansion: 0.5e-6/°C          # Very low thermal expansion
+        
+        ## Electrical Properties
+        dielectric_constant: 3.9              # Relative permittivity
+        dielectric_strength: 10000V/mm        # 10 MV/cm breakdown field
+        volume_resistivity: 1e16Ω·m          # Excellent insulator
+        band_gap: 9.0eV                       # Wide band gap
+        
+        ## Mechanical Properties
+        youngs_modulus: 70e9Pa                # 70 GPa
+        hardness: 7.0GPa                      # Mohs hardness ~7
+        
+        ## Thermal Properties
+        melting_point: 1710°C                 # High melting point
+        max_operating_temp: 1000°C            # Stable at high temperatures
+        min_operating_temp: -273°C            # Stable to absolute zero
+        
+        ## Optical Properties
+        refractive_index: 1.46                # At 589 nm (sodium D-line)
+        transparency_range: "UV to IR"        # Transparent in wide range
+        
+        ## Thickness Properties (for gate oxide)
+        typical_gate_oxide_thickness: 2e-9m   # 2 nm for modern processes
+        tunnel_oxide_thickness: 1.5e-9m       # 1.5 nm for flash memory
+        
+        ## Color & Rendering
+        color: "#E0E0FF"                      # Light blue tint
+        transparency: 0.8                     # Semi-transparent for visualization

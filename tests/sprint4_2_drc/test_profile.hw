@@ -1,0 +1,23 @@
+# Test Profile for DRC Engine (Task 4.2)
+# This profile defines fabrication constraints for testing
+
+profile TestProfile_Standard:
+    description: "Standard PCB fabrication constraints for testing"
+    
+    trace:
+        min_width: 127µm
+        min_spacing: 127µm
+    
+    via:
+        min_diameter: 300µm
+        min_annular_ring: 150µm
+    
+    layer:
+        max_count: 4
+        min_thickness: 35µm
+
+# Test space that uses the profile
+space TestProfileSpace:
+    dimensions: 10mm by 10mm by 2mm
+    grid: 100 by 100 by 2
+    profile: TestProfile_Standard

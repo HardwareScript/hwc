@@ -1,0 +1,9 @@
+# Test 4: HPM Last Import Wins
+# When multiple HPM libraries define the same symbol, last import wins
+# This test verifies basic compilation (actual HPM testing is in Rust unit tests)
+
+space TestBoard:
+    dimensions: 100mm by 100mm by 1.6mm
+    grid: 1000 by 1000 by 2
+    origin: tl by t
+

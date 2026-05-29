@@ -1,0 +1,17 @@
+{
+  "version": "0.1.4",
+  "board": "PourLoopTest",
+  "grid": {
+    "dimensions": [
+      1000,
+      1000,
+      10
+    ],
+    "resolution": [
+      0.0001,
+      0.0001,
+      0.005
+    ]
+  },
+  "routes": []
+}

@@ -1,0 +1,13 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,50.00x30.00x2.00mm,,,,,1
+GND_Plane,Pour,1344.0000mm² net:GND,Layer 9,,Copper,268.800000mm³
+U1,TO220,,TO-220,,,Through-hole power package with metal tab,1
+Q1,SOT23,,SOT-23,,,3-pin Small Outline Transistor package,1
+Q2,SOT223,,SOT-223,,,4-pin Small Outline Transistor package with thermal pad,1
+M1,MountingHole_3mm,,,,,3mm diameter non-plated mounting hole,1
+M2,MountingHole_3mm,,,,,3mm diameter non-plated mounting hole,1
+M3,MountingHole_3mm,,,,,3mm diameter non-plated mounting hole,1
+M4,MountingHole_3mm,,,,,3mm diameter non-plated mounting hole,1
+FID1,Fiducial_1mm,,,,,1mm diameter circular fiducial mark,1
+FID2,Fiducial_1mm,,,,,1mm diameter circular fiducial mark,1
+GND_Plane,Pour(Copper),,,,,,1

@@ -1,0 +1,6 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,100.00x100.00x10.00mm,,,,,1
+Plate1,Pour,400.0000mm² net:MAIN_BUS,Z 0.0015mm,,Copper_Gold,80.000000mm³
+Plate2,Pour,400.0000mm² net:MAIN_BUS,Z 0.0015mm,,Copper_Gold,80.000000mm³
+Plate1,Pour(Copper_Gold),,,,,,1
+Plate2,Pour(Copper_Gold),,,,,,1

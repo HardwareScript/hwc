@@ -1,0 +1,91 @@
+## ============================================================================
+## SPRINT 9: BATCH VALIDATION TEST
+## ============================================================================
+##
+## Deliberately triggers 15 P44 violations (8 floating + 7 buried) to observe
+## whether the compiler reports ONE error and stops, or reports ALL of them.
+##
+## Substrate is at z:40-50. Adders placed at z:60 (floating). Mults/Regs at z:5 (buried).
+
+import * from @std/primitives/units
+import FR4 from @std/materials/insulators
+
+component AdderCell:
+    pins: [a, b, sum]
+    layout:
+        shape: Rectangle(2mm, 2mm, 500um)
+    render:
+        type: procedural
+        shape: box
+        body_color: "#4A90D9"
+
+component MultiplierCell:
+    pins: [x, y, product]
+    layout:
+        shape: Rectangle(3mm, 2mm, 500um)
+    render:
+        type: procedural
+        shape: box
+        body_color: "#E74C3C"
+
+component RegisterCell:
+    pins: [d, q, clk]
+    layout:
+        shape: Rectangle(2mm, 2mm, 500um)
+    render:
+        type: procedural
+        shape: box
+        body_color: "#2ECC71"
+
+module ALULayout:
+    pins: [
+        power VDD
+    ]
+
+    add AdderCell named Adder0
+    add AdderCell named Adder1
+    add AdderCell named Adder2
+    add AdderCell named Adder3
+    add AdderCell named Adder4
+    add AdderCell named Adder5
+    add AdderCell named Adder6
+    add AdderCell named Adder7
+    add MultiplierCell named Mult0
+    add MultiplierCell named Mult1
+    add MultiplierCell named Mult2
+    add MultiplierCell named Mult3
+    add RegisterCell named Reg0
+    add RegisterCell named Reg1
+    add RegisterCell named Reg2
+
+space BatchValidationTest implements ALULayout:
+    dimensions: 100mm by 50mm by 10mm
+    grid: 1000 by 500 by 100
+    origin: bl by b
+
+    nets:
+        VDD: power
+
+    ## Substrate: layers 40-50
+    add substrate(FR4) spanning [x:0mm, y:0mm, z:40] to [x:100mm, y:50mm, z:50]
+
+    ## GROUP 1: 8 AdderCells FLOATING above substrate (z:60 > max_z:50)
+    add AdderCell named Adder0 at [x:  5mm, y: 5mm, z: 60]
+    add AdderCell named Adder1 at [x: 15mm, y: 5mm, z: 60]
+    add AdderCell named Adder2 at [x: 25mm, y: 5mm, z: 60]
+    add AdderCell named Adder3 at [x: 35mm, y: 5mm, z: 60]
+    add AdderCell named Adder4 at [x: 45mm, y: 5mm, z: 60]
+    add AdderCell named Adder5 at [x: 55mm, y: 5mm, z: 60]
+    add AdderCell named Adder6 at [x: 65mm, y: 5mm, z: 60]
+    add AdderCell named Adder7 at [x: 75mm, y: 5mm, z: 60]
+
+    ## GROUP 2: 4 MultiplierCells BURIED below substrate (z:5 < min_z:40)
+    add MultiplierCell named Mult0 at [x: 10mm, y: 30mm, z: 5]
+    add MultiplierCell named Mult1 at [x: 25mm, y: 30mm, z: 5]
+    add MultiplierCell named Mult2 at [x: 40mm, y: 30mm, z: 5]
+    add MultiplierCell named Mult3 at [x: 55mm, y: 30mm, z: 5]
+
+    ## GROUP 3: 3 RegisterCells BURIED below substrate (z:5 < min_z:40)
+    add RegisterCell named Reg0 at [x:  5mm, y: 40mm, z: 5]
+    add RegisterCell named Reg1 at [x: 15mm, y: 40mm, z: 5]
+    add RegisterCell named Reg2 at [x: 25mm, y: 40mm, z: 5]

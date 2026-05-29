@@ -1,0 +1,29 @@
+## Test: Multiple output drivers warning
+## Expected: Warning W15 (Multiple Drivers)
+
+import * from @std/primitives/units
+
+component PowerSource:
+    pins: [Output]
+    layout:
+        shape: Rectangle(5mm, 5mm, 1mm)
+
+component LED:
+    pins: [Anode, Cathode]
+    layout:
+        shape: Rectangle(5mm, 5mm, 1mm)
+
+module TestCircuitModule:
+    pins: []
+
+space TestCircuit implements TestCircuitModule:
+    dimensions: 50mm by 50mm by 4mm
+    grid: 100 by 100 by 4
+    origin: bl by b
+    
+    add PowerSource named Source1 at [x: 10mm, y: 10mm, z: 1mm]
+    add PowerSource named Source2 at [x: 20mm, y: 10mm, z: 1mm]
+    add LED named LED1 at [x: 30mm, y: 10mm, z: 1mm]
+    
+    route Source1.Output to LED1.Anode
+    route Source2.Output to LED1.Anode ## Two outputs driving the same net

@@ -1,0 +1,61 @@
+# Test: Profile parsing with all constraint types
+# Task 4.2: DRC Engine - Profile System
+
+profile JLCPCB_4Layer:
+    description: "Standard via-in-pad limits and trace widths"
+    
+    trace:
+        min_width: 127µm
+        min_spacing: 127µm
+    
+    via:
+        min_diameter: 300µm
+        min_annular_ring: 150µm
+    
+    layer:
+        max_count: 4
+        min_thickness: 35µm
+    
+    clearance:
+        high_voltage: 2mm
+        safety_factor: 2.0
+
+profile HighVoltage_Profile:
+    description: "High voltage design with increased clearances"
+    
+    trace:
+        min_width: 500µm
+        min_spacing: 1mm
+    
+    via:
+        min_diameter: 800µm
+        min_annular_ring: 400µm
+    
+    layer:
+        max_count: 2
+        min_thickness: 70µm
+    
+    clearance:
+        high_voltage: 5mm
+        safety_factor: 3.0
+
+profile Prototype_Fast:
+    description: "Relaxed constraints for rapid prototyping"
+    
+    trace:
+        min_width: 200µm
+        min_spacing: 200µm
+    
+    via:
+        min_diameter: 400µm
+        min_annular_ring: 200µm
+    
+    layer:
+        max_count: 2
+        min_thickness: 35µm
+
+# Test that profiles can be referenced in spaces
+space ProfileTest:
+    dimensions: 50mm by 50mm by 2mm
+    grid: 500 by 500 by 2
+    profile: JLCPCB_4Layer

@@ -1,0 +1,6 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,60.00x20.00x2.00mm,,,,,1
+Glass,Pour,100.0000mm²,Layer 1,,Glass_Substrate,100.000000mm³
+Onyx,Pour,100.0000mm²,Layer 1,,Onyx_Gloss,100.000000mm³
+Sapphire,Pour,100.0000mm²,Layer 1,,Sapphire_Frosted,100.000000mm³
+Ruby,Pour,100.0000mm²,Layer 1,,Ruby_Crystal,100.000000mm³

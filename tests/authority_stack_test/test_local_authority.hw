@@ -1,0 +1,27 @@
+# Test 1: Local Authority (Highest Priority)
+# Local definitions should override everything else
+
+# Define a material locally
+material TestCopper:
+    category: conductor
+    properties:
+        resistivity: 1.68e-8Ω·m
+        thermal_conductivity: 401W/(m·K)
+        density: 8960kg/m³
+        melting_point: 1358K
+        max_current_density: 3e9A/m²
+
+# Define a profile locally
+profile TestProfile:
+    trace:
+        min_width: 0.1mm
+        min_spacing: 0.1mm
+
+# Use the locally defined material and profile
+space TestBoard:
+    dimensions: 100mm by 100mm by 1.6mm
+    grid: 1000 by 1000 by 2
+    origin: tl by t
+    profile: TestProfile
+
+

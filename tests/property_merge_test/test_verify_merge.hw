@@ -1,0 +1,29 @@
+# Property Merge Verification Test
+# This test verifies that property-level shadowing works correctly
+# by importing Copper from stdlib and overriding only the resistivity
+
+import Copper from @std/materials/conductors
+
+# Override: Only change resistivity (higher than standard)
+# All other properties (thermal_conductivity, density, melting_point, max_current_density)
+# should be inherited from the stdlib Copper
+material Copper:
+    category: conductor
+    symbol: "Cu-Custom"
+    description: "Custom copper with higher resistivity"
+    properties:
+        resistivity: 2.5e-8Ω·m  # OVERRIDE: Higher than stdlib (1.68e-8)
+
+space TestBoard:
+    dimensions: 50mm by 50mm by 1.6mm
+    grid: 500 by 500 by 2
+    origin: tl by t
+
+# If property merging works correctly:
+# - resistivity: 2.5e-8 (from local override)
+# - thermal_conductivity: 401 (from stdlib - inherited)
+# - density: 8960 (from stdlib - inherited)
+# - melting_point: 1358 (from stdlib - inherited)
+# - max_current_density: 3e9 (from stdlib - inherited)
+#
+# This means the material is COMPLETE and should pass --foundry validation

@@ -1,0 +1,6 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,50.00x30.00x5.00mm,,,,,1
+Plate1,Pour,50.0000mm² net:POWER_BUS,Z 0.0015mm,,Copper,0.500000mm³
+Plate2,Pour,50.0000mm² net:POWER_BUS,Z 0.0015mm,,Copper,0.500000mm³
+Plate1,Pour(Copper),,,,,,1
+Plate2,Pour(Copper),,,,,,1

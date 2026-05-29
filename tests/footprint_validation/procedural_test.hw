@@ -1,0 +1,23 @@
+## Procedural Component Isolation Test (v0.1.7)
+## Purpose: Debug Limitation 6 procedural meshes (TO-220)
+
+import * from @std/footprints/basic
+
+material FR4:
+    category: insulator
+    properties:
+        color: "#2E7D32"
+        opacity: 0.4  ## Make transparent to see pin penetration
+
+space ProceduralTest:
+    dimensions: 30mm by 30mm by 2mm
+    grid: 100 by 100 by 10
+    origin: bl by b
+    
+    ## Add substrate
+    add substrate(FR4) spanning [0mm, 0mm, 1] to [30mm, 30mm, 5]
+    
+    ## Place TO-220
+    ## Should sit perfectly on layer 6 (top of substrate)
+    add TO220 named U1 at [15mm, 15mm, 6]:
+        net: [Pin1: GND, Pin2: VCC, Pin3: OUT]
