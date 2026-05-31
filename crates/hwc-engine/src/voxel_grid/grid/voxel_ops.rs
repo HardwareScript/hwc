@@ -306,6 +306,7 @@ impl VoxelGrid {
             return NetHandle::none();
         }
 
+        // STEP 1: Check sparse chunks for components/traces FIRST (O(1))
         let (chunk_index, lx, ly, lz) = self.get_chunk_and_local_coords(x, y, z);
 
         // Safe read from VISIBLE plane (stable state)
@@ -315,6 +316,16 @@ impl VoxelGrid {
                 return NetHandle::new(chunk.handles[index]);
             }
         }
+
+        // STEP 2: Check substrate layers as FALLBACK (O(layers))
+        let point = Self::voxel_to_nm(x, y, z, &self.voxel_size);
+
+        for layer in self.substrate_layers.iter().rev() {
+            if layer.contains_nm(point.x, point.y, point.z) {
+                return NetHandle::new(layer.net);
+            }
+        }
+
         NetHandle::none()
     }
 

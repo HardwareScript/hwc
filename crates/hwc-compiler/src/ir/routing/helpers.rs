@@ -278,10 +278,25 @@ pub fn collect_existing_nets(
 
     nets_map
         .into_iter()
-        .map(|(net_id, voxels)| NetVoxels {
-            net_name: format!("Net_{}", net_id).into(),
-            voxels,
-            geometry_type: hwc_engine::design_rule_check::GeometryType::Trace, // Routed nets are traces
+        .map(|(net_id, voxels)| {
+            let net_name = space
+                .netlist
+                .get_net(hwc_engine::netlist::NetId::new(net_id))
+                .map(|n| n.name.clone())
+                .unwrap_or_else(|| format!("Net_{}", net_id).into());
+
+            let classification = space
+                .net_classifications
+                .get(&net_name)
+                .copied()
+                .unwrap_or(hwc_engine::space::NetClassification::Unclassified);
+
+            NetVoxels {
+                net_name,
+                voxels,
+                geometry_type: hwc_engine::design_rule_check::GeometryType::Trace, // Routed nets are traces
+                classification,
+            }
         })
         .collect()
 }

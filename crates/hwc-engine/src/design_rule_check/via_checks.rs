@@ -39,6 +39,7 @@ fn calculate_annular_ring_from_substrate(
     via_diameter_nm: i64,
     substrate_layers: &[crate::voxel_grid::SubstrateLayer],
     via_net_id: u32,
+    material_registry: &crate::voxel::MaterialRegistry,
 ) -> i64 {
     let via_center_x = (via_bbox.min.x + via_bbox.max.x) / 2;
     let via_center_y = (via_bbox.min.y + via_bbox.max.y) / 2;
@@ -48,9 +49,23 @@ fn calculate_annular_ring_from_substrate(
 
     // Find pads on the via's start/end layers
     for layer in substrate_layers {
+        // ✅ NATIVE v0.1.7 FIX: Only enforce annular rings on CONDUCTIVE layers.
+        // Vias passing through insulators (FR4, Air) do not need landing pads.
+        if !material_registry.is_conductor(layer.material) {
+            continue;
+        }
+
         // Check if this layer is on the same net as the via
         if layer.net != via_net_id {
             continue;
+        }
+
+        // ✅ v0.1.7 FIXED: Ignore "Self-Enclosure". 
+        // If the "pad" we found is actually just the via itself (same bbox), skip it.
+        // A via only needs an annular ring on a pad that is larger than itself.
+        if layer.bbox.min.x == via_bbox.min.x && layer.bbox.max.x == via_bbox.max.x &&
+           layer.bbox.min.y == via_bbox.min.y && layer.bbox.max.y == via_bbox.max.y {
+            continue; 
         }
 
         // Check if layer overlaps with via in Z
@@ -134,18 +149,22 @@ fn calculate_annular_ring_from_substrate(
         if dist_to_edge >= 0 {
             // Annular ring = distance from via edge to pad edge
             let annular_ring = dist_to_edge - via_radius;
-
+            
             if annular_ring < min_annular_ring {
                 min_annular_ring = annular_ring;
             }
         }
     }
 
-    // Return 0 if no pads found
+    // v0.1.7 FIXED: If no pads on the same net were found, return MAX instead of 0.
+    // This prevents enclosure violations on dielectric layers or layers where the via 
+    // is just passing through without a connection. The Physical Continuity Checker (P41)
+    // already ensures that the via is connected to its net.
     if min_annular_ring == i64::MAX {
-        0
+        i64::MAX
     } else {
-        min_annular_ring.max(0)
+        // v0.1.7: Don't clamp to 0. Negative values indicate the via is larger than the pad.
+        min_annular_ring
     }
 }
 
@@ -228,6 +247,7 @@ pub fn validate_via_enclosure_analytic(
     substrate_layers: &[crate::voxel_grid::SubstrateLayer],
     constraints: &ConstraintRulebook,
     netlist: &crate::netlist::NetlistArena,
+    material_registry: &crate::voxel::MaterialRegistry,
 ) -> DrcReport {
     let mut report = DrcReport::new();
 
@@ -261,10 +281,11 @@ pub fn validate_via_enclosure_analytic(
                         via_diameter_nm,
                         substrate_layers,
                         net_id,
+                        material_registry,
                     );
 
                     // Check against minimum annular ring constraint
-                    if annular_ring_nm < min_annular_ring_nm {
+                    if annular_ring_nm < min_annular_ring_nm && annular_ring_nm != i64::MAX {
                         let center = Point3D::new(
                             (bbox.min.x + bbox.max.x) / 2,
                             (bbox.min.y + bbox.max.y) / 2,

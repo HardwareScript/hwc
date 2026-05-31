@@ -54,6 +54,7 @@ pub fn unroll_component(
                 end: end.as_ref().map(|e| substitute_in_expression(e, variable, value)).transpose()?,
             }),
             hwc_parser::Elevation::Semantic(id) => Some(hwc_parser::Elevation::Semantic(id.clone())),
+            hwc_parser::Elevation::Relative => Some(hwc_parser::Elevation::Relative),
         }
     } else {
         None
@@ -103,6 +104,7 @@ pub fn unroll_pour(
             end: end.as_ref().map(|e| substitute_in_expression(e, variable, value)).transpose()?,
         },
         hwc_parser::Elevation::Semantic(id) => hwc_parser::Elevation::Semantic(id.clone()),
+        hwc_parser::Elevation::Relative => hwc_parser::Elevation::Relative,
     };
 
     Ok(PourPlacement {
@@ -145,6 +147,7 @@ pub fn unroll_contact(
             end: end.as_ref().map(|e| substitute_in_expression(e, variable, value)).transpose()?,
         },
         hwc_parser::Elevation::Semantic(id) => hwc_parser::Elevation::Semantic(id.clone()),
+        hwc_parser::Elevation::Relative => hwc_parser::Elevation::Relative,
     };
     let to_elevation = match &contact.to_elevation {
         hwc_parser::Elevation::Physical { start, end } => hwc_parser::Elevation::Physical {
@@ -152,6 +155,7 @@ pub fn unroll_contact(
             end: end.as_ref().map(|e| substitute_in_expression(e, variable, value)).transpose()?,
         },
         hwc_parser::Elevation::Semantic(id) => hwc_parser::Elevation::Semantic(id.clone()),
+        hwc_parser::Elevation::Relative => hwc_parser::Elevation::Relative,
     };
 
     Ok(ContactPlacement {

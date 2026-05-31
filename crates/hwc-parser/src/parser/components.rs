@@ -94,19 +94,29 @@ impl super::Parser {
                 self.advance(); // consume 'layer'
                 self.expect(&Token::Colon)?;
                 let layer_name = self.expect_identifier()?;
-                Some(Elevation::Semantic(layer_name))
+                if layer_name.as_str() == "self" {
+                    Some(Elevation::Relative)
+                } else {
+                    Some(Elevation::Semantic(layer_name))
+                }
             } else if self.check_identifier("z") {
                 self.advance(); // consume 'z'
                 self.expect(&Token::Colon)?;
-                let start = self.parse_expression()?;
                 
-                let mut end = None;
-                if self.check(&Token::To) {
-                    self.advance(); // consume "to"
-                    end = Some(self.parse_expression()?);
+                if self.check_identifier("relative") {
+                    self.advance();
+                    Some(Elevation::Relative)
+                } else {
+                    let start = self.parse_expression()?;
+                    
+                    let mut end = None;
+                    if self.check(&Token::To) {
+                        self.advance(); // consume "to"
+                        end = Some(self.parse_expression()?);
+                    }
+                    
+                    Some(Elevation::Physical { start, end })
                 }
-                
-                Some(Elevation::Physical { start, end })
             } else {
                 return Err(self.error("Expected 'layer' or 'z' after 'on' keyword"));
             }
@@ -494,16 +504,6 @@ impl super::Parser {
         } else {
             Ok(base_name)
         }
-    }
-
-    /// Check if current token is an identifier with specific value
-    fn check_identifier(&self, expected: &str) -> bool {
-        if let Some(spanned) = self.current() {
-            if let Token::Identifier(s) = &spanned.token {
-                return s == expected;
-            }
-        }
-        false
     }
 
     /// Parse parameters: (resistance: 10kΩ, tolerance: 1%)

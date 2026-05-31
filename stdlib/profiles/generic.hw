@@ -64,6 +64,22 @@ profile Generic:
         min_annular_ring: 200µm               # Large annular ring
         max_aspect_ratio: 10                  # Depth/diameter ratio
         default_via_fill: Generic_Via_Fill    # Default fill material
+
+    ## ========================================================================
+    ## EXPLICIT VIA DEFINITIONS (v0.1.7)
+    ## ========================================================================
+    
+    via StandardVia:
+        diameter: 0.6mm
+        annular_ring: 0.2mm
+        spanning: layer: bottom to top
+        material: Copper
+
+    via MicroVia:
+        diameter: 0.3mm
+        annular_ring: 0.15mm
+        spanning: layer: bottom to top
+        material: Copper
     
     ## ========================================================================
     ## CLEARANCE CONSTRAINTS

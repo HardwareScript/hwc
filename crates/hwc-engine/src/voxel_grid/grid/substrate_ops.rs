@@ -153,6 +153,9 @@ impl VoxelGrid {
         params: TSVParams,
         handle: crate::netlist::NetHandle,
     ) {
+        // v0.1.7: Calculate KOZ clearance from multiplier
+        let clearance_nm = ((params.koz_multiplier - 1.0) * params.diameter_nm as f32 / 2.0) as i64;
+
         // 1. Drill through all substrate layers in the path
         self.drill_tsv(
             center_x_nm,
@@ -160,6 +163,8 @@ impl VoxelGrid {
             z_start_nm,
             z_end_nm,
             params.diameter_nm,
+            handle.raw(),
+            clearance_nm,
         );
 
         // 2. Stamp the physical voxels (Liner -> Bridge -> Fill)
@@ -211,20 +216,25 @@ impl VoxelGrid {
         z_start_nm: i64,
         z_end_nm: i64,
         diameter_nm: i64,
+        net_id: NetId, // v0.1.7: Added net awareness
+        clearance_nm: i64, // v0.1.7: Added clearance awareness
     ) {
+        // v0.1.7 FIXED: Calculate bbox based on total clearance diameter
+        // to ensure intersection tests include the anti-pad area.
+        let drill_radius_nm = diameter_nm / 2 + clearance_nm;
         let bbox = BoundingBox::new(
             crate::geometry::Point3D::new(
-                center_x_nm - diameter_nm / 2,
-                center_y_nm - diameter_nm / 2,
+                center_x_nm - drill_radius_nm,
+                center_y_nm - drill_radius_nm,
                 z_start_nm,
             ),
             crate::geometry::Point3D::new(
-                center_x_nm + diameter_nm / 2,
-                center_y_nm + diameter_nm / 2,
+                center_x_nm + drill_radius_nm,
+                center_y_nm + drill_radius_nm,
                 z_end_nm,
             ),
         );
-        self.drill_hole(bbox, Some(diameter_nm));
+        self.drill_via_hole(bbox, diameter_nm, net_id, clearance_nm);
     }
 
     /// Get the number of substrate layers.
@@ -236,7 +246,7 @@ impl VoxelGrid {
     ///
     /// This is used for through-hole pins and mounting holes.
     /// Memory usage: O(N) where N is the number of substrate layers.
-    pub fn drill_hole(&mut self, hole_bbox: BoundingBox, diameter_nm: Option<i64>) {
+    pub fn drill_hole(&mut self, hole_bbox: BoundingBox, diameter_nm: Option<i64>, drill_net: NetId) {
         // 1. Bit-level clearing (for router/collision)
         self.clear_voxels_in_bbox(&hole_bbox);
 
@@ -254,14 +264,63 @@ impl VoxelGrid {
             let z_intersects = layer.bbox.min.z <= hole_bbox.max.z
                 && layer.bbox.max.z >= hole_bbox.min.z;
 
-            let is_drillable = layer.layer_type == SubstrateLayerType::Pour 
-                || layer.layer_type == SubstrateLayerType::Substrate;
+            let should_drill = match layer.layer_type {
+                SubstrateLayerType::Substrate => true, // Always drill dielectric
+                SubstrateLayerType::Pour => {
+                    // v0.1.7 FIXED: Only drill if nets are different. 
+                    // If nets match, this pin/via is SUPPOSED to connect to this pour.
+                    layer.net != drill_net
+                },
+                SubstrateLayerType::Contact => false, // Don't drill other vias
+            };
 
-            if is_drillable && xy_intersects && z_intersects {
+            if should_drill && xy_intersects && z_intersects {
                 if let Some(diameter) = diameter_nm {
                     layer.add_cylinder_cutout(hole_bbox, diameter);
                 } else {
                     layer.add_cutout(hole_bbox);
+                }
+            }
+        }
+    }
+
+    /// Drill a hole for a via, respecting net connectivity (v0.1.7).
+    ///
+    /// This is the "Auto-Drill" logic that prevents short circuits.
+    /// It drills through all Substrate layers and any Pour layers that have a DIFFERENT net.
+    /// v0.1.7: Added clearance_nm for different-net anti-pads.
+    pub fn drill_via_hole(&mut self, hole_bbox: BoundingBox, diameter_nm: i64, via_net: NetId, clearance_nm: i64) {
+        // 1. Structural clearing
+        for layer in &mut self.substrate_layers {
+            let xy_intersects = layer.bbox.min.x < hole_bbox.max.x
+                && layer.bbox.max.x > hole_bbox.min.x
+                && layer.bbox.min.y < hole_bbox.max.y
+                && layer.bbox.max.y > hole_bbox.min.y;
+
+            let z_intersects = layer.bbox.min.z <= hole_bbox.max.z
+                && layer.bbox.max.z >= hole_bbox.min.z;
+
+            if xy_intersects && z_intersects {
+                match layer.layer_type {
+                    SubstrateLayerType::Substrate => {
+                        // Always drill dielectric with the actual via diameter
+                        layer.add_cylinder_cutout(hole_bbox, diameter_nm);
+                    },
+                    SubstrateLayerType::Pour => {
+                        if layer.net == via_net {
+                            // v0.1.7 FIXED: Do NOT drill a hole in the same-net pour.
+                            // The via cylinder will "fill" this space in the 3D assembly,
+                            // and the pour must remain solid at this location to ensure
+                            // the Physical Continuity Checker (IslandBuilder) sees the contact.
+                        } else {
+                            // Different net: Drill the anti-pad (hole + clearance)
+                            // This satisfies DRC clearance rules in planes.
+                            layer.add_cylinder_cutout(hole_bbox, diameter_nm + 2 * clearance_nm);
+                        }
+                    },
+                    SubstrateLayerType::Contact => {
+                        // Don't drill other vias (handled by spacing checks)
+                    },
                 }
             }
         }

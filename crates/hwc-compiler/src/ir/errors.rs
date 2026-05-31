@@ -82,6 +82,16 @@ pub enum IrError {
     )]
     CompilationError(String),
 
+    #[error("Missing profile constraint: {field}")]
+    #[diagnostic(
+        code(C34),
+        url("https://docs.hw-script.org/errors/C34"),
+        help("The profile must specify '{field}'. Add it to the profile definition.")
+    )]
+    MissingProfileConstraint {
+        field: String,
+    },
+
     #[error("Material interpenetration detected at z = {z_nm} nm")]
     #[diagnostic(
         code(P43),
@@ -187,6 +197,9 @@ pub enum IrError {
         #[label("negative layer index evaluated here")]
         span: miette::SourceSpan,
     },
+
+    #[error("Symbol error: {0}")]
+    SymbolError(#[from] crate::SymbolError),
 
     #[error("Geometric collision in array '{array_name}': instances {instance_a} and {instance_b} have overlapping geometry", array_name = .0.array_name, instance_a = .0.instance_a, instance_b = .0.instance_b)]
     #[diagnostic(

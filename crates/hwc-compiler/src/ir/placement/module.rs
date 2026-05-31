@@ -19,10 +19,11 @@ pub fn place_module_instance(
     origin: hwc_parser::OriginPoint,
     symbol_table: &SymbolTable,
     layouts: &[hwc_parser::ModuleLayoutBlock],
-    _bbox_tracker: &mut crate::bounding_box_tracker::BoundingBoxTracker,
+    bbox_tracker: &mut crate::bounding_box_tracker::BoundingBoxTracker,
     eval_context: &hwc_parser::EvaluationContext,
     collector: &hwc_diagnostics::DiagnosticCollector,
     stackup_manager: &super::super::stackup_manager::StackupManager, // Z-Context Inheritance wired: parent's StackupManager now available for resolving semantic Z in module sub-components and intrinsic layouts
+    profile: Option<&hwc_parser::ProfileDefinition>,
 ) -> Result<(), IrError> {
     use crate::module_flattener::flatten_module;
 
@@ -106,8 +107,9 @@ pub fn place_module_instance(
                 space_dimensions: &space.dimensions,
                 symbol_table,
                 eval_context,
-                bbox_tracker: None, // TODO: enable relative anchors in intrinsic layouts
+                bbox_tracker: Some(bbox_tracker),
                 stackup_manager,
+                profile,
             };
             // Z-Context Inheritance (properly wired via stackup_manager.rs helper):
             // Resolve Z using parent's StackupManager so semantic layers (e.g. "l1") in module
@@ -146,15 +148,16 @@ pub fn place_module_instance(
         println!("   ⚠️  No layout (intrinsic or external) - using automatic offset placement (may cause collisions)");
 
         let ctx = CoordinateContext {
-            voxel_size: &space.voxel_size,
-            grid_size: &space.grid,
-            origin,
-            space_dimensions: &space.dimensions,
-            symbol_table,
-            eval_context,
-            bbox_tracker: None,
-            stackup_manager,
-        };
+                voxel_size: &space.voxel_size,
+                grid_size: &space.grid,
+                origin,
+                space_dimensions: &space.dimensions,
+                symbol_table,
+                eval_context,
+                bbox_tracker: Some(bbox_tracker),
+                stackup_manager,
+                profile,
+            };
         let base_position = coordinate_to_point(&module_placement.position, &ctx);
 
         for (idx, module_comp) in flattened.components.iter().enumerate() {
@@ -279,9 +282,10 @@ pub fn place_module_instance(
             origin,
             space_dimensions: &space.dimensions,
             symbol_table,
-            eval_context,       // Pass the universal context
-            bbox_tracker: None, // module virtual position doesn't use anchor references
+            eval_context,
+            bbox_tracker: Some(bbox_tracker),
             stackup_manager,
+            profile,
         };
         let virtual_position = coordinate_to_point(&module_placement.position, &ctx);
 
@@ -431,6 +435,7 @@ pub fn place_module_instance(
                 symbol_table,
                 eval_context,
                 stackup_manager,
+                profile,
             )
             .map_err(|e| {
                 IrError::RoutingError(format!("Failed to route module connection: {}", e))

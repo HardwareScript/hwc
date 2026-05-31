@@ -13,6 +13,7 @@ pub fn place_substrate(
     bbox_tracker: &mut crate::bounding_box_tracker::BoundingBoxTracker,
     eval_context: &hwc_parser::EvaluationContext,
     stackup_manager: &crate::ir::stackup_manager::StackupManager,
+    profile: Option<&hwc_parser::ProfileDefinition>,
 ) -> Result<(), IrError> {
     // Get or register the substrate material in the material registry
     let material_id = space.material_registry.get_or_register(&substrate.material);
@@ -29,6 +30,7 @@ pub fn place_substrate(
         eval_context,
         bbox_tracker: None, // substrate doesn't use anchor references
         stackup_manager,
+        profile,
     };
     let start = spanning_coordinate_to_point(&substrate.from, &ctx, false)
         .map_err(|e| IrError::PlacementError(e))?;
@@ -62,6 +64,7 @@ pub fn place_substrate(
         eval_context,
         bbox_tracker: None,
         stackup_manager,
+        profile,
     };
     let user_start = hwc_engine::geometry::Point3D::new(
         crate::ir::conversions::evaluate_expression_to_nm(substrate.from.x(), symbol_table)

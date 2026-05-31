@@ -57,6 +57,7 @@ impl super::super::Parser {
         let mut stackup = None;
         let mut export = None; // v0.1.6: Export & visualization rules
         let mut bridges = Vec::new(); // Phase 1: Bridge rules
+        let mut vias_list = Vec::new(); // v0.1.7: Explicit via definitions
         let mut other = rustc_hash::FxHashMap::default(); // v0.1.6: Custom fields
 
         let mut loop_iterations = 0;
@@ -90,6 +91,40 @@ impl super::super::Parser {
                 continue;
             }
 
+            // v0.1.7: Via definitions or constraints
+            if self.check(&Token::Via) {
+                self.advance(); // consume 'via'
+
+                // Check if it's a constraint block: `via:`
+                if self.check(&Token::Colon) {
+                    self.advance(); // consume ':'
+                    if let Err(e) = self.expect(&Token::Newline) {
+                        collector.report(e);
+                        self.sync_to_next_definition();
+                        continue;
+                    }
+                    if let Err(e) = self.expect(&Token::Indent) {
+                        collector.report(e);
+                        self.sync_to_next_definition();
+                        continue;
+                    }
+                    via = self.parse_via_constraints().ok();
+                    if self.check(&Token::Dedent) {
+                        self.advance();
+                    }
+                } else {
+                    // It's an explicit via definition: `via Name:`
+                    match self.parse_via_definition() {
+                        Ok(v) => vias_list.push(v),
+                        Err(e) => {
+                            collector.report(e);
+                            self.sync_to_next_definition();
+                        }
+                    }
+                }
+                continue;
+            }
+
             // v0.1.6: Check for property block identifiers
             if let Some(current) = self.current() {
                 if let Token::Identifier(name) = &current.token {
@@ -112,29 +147,6 @@ impl super::super::Parser {
                                 continue;
                             }
                             trace = self.parse_trace_constraints().ok();
-                            if self.check(&Token::Dedent) {
-                                self.advance();
-                            }
-                            continue;
-                        }
-                        "via" => {
-                            self.advance(); // consume 'via'
-                            if let Err(e) = self.expect(&Token::Colon) {
-                                collector.report(e);
-                                self.sync_to_next_definition();
-                                continue;
-                            }
-                            if let Err(e) = self.expect(&Token::Newline) {
-                                collector.report(e);
-                                self.sync_to_next_definition();
-                                continue;
-                            }
-                            if let Err(e) = self.expect(&Token::Indent) {
-                                collector.report(e);
-                                self.sync_to_next_definition();
-                                continue;
-                            }
-                            via = self.parse_via_constraints().ok();
                             if self.check(&Token::Dedent) {
                                 self.advance();
                             }
@@ -345,6 +357,7 @@ impl super::super::Parser {
             stackup,
             export, // v0.1.6: Export & visualization rules
             bridges, // Phase 1: Bridge rules
+            vias: vias_list,
             other,  // v0.1.6: Include custom fields
             span: Span::new(start_pos, end_pos),
         })
@@ -947,5 +960,80 @@ impl super::super::Parser {
 
         self.expect(&Token::CloseBracket)?;
         Ok(angles)
+    }
+
+    /// Parse explicit via definition: `via Name: ...` (v0.1.7)
+    fn parse_via_definition(&mut self) -> Result<ViaDefinition, ParseError> {
+        let start_pos = self.current_span().start;
+        let name = self.expect_identifier()?;
+        self.expect(&Token::Colon)?;
+        self.expect(&Token::Newline)?;
+        self.expect(&Token::Indent)?;
+
+        let mut diameter = None;
+        let mut annular_ring = None;
+        let mut from_layer = None;
+        let mut to_layer = None;
+        let mut material = None;
+
+        while !self.check(&Token::Dedent) && !self.is_at_end() {
+            self.skip_whitespace();
+
+            if self.check(&Token::Dedent) || self.is_at_end() {
+                break;
+            }
+
+            let field_name = self.expect_identifier()?;
+            self.expect(&Token::Colon)?;
+
+            match field_name.as_str() {
+                "diameter" => {
+                    diameter = Some(self.parse_measurement()?);
+                    self.skip_newlines();
+                }
+                "annular_ring" => {
+                    annular_ring = Some(self.parse_measurement()?);
+                    self.skip_newlines();
+                }
+                "spanning" => {
+                    // Syntax: `spanning: layer: inner2 to inner1`
+                    // or just `spanning: inner2 to inner1`
+                    if self.check_identifier("layer") {
+                        self.advance();
+                        self.expect(&Token::Colon)?;
+                    }
+                    from_layer = Some(self.expect_identifier()?);
+                    self.expect(&Token::To)?;
+                    to_layer = Some(self.expect_identifier()?);
+                    self.skip_newlines();
+                }
+                "material" => {
+                    material = Some(self.expect_identifier()?);
+                    self.skip_newlines();
+                }
+                _ => {
+                    return Err(self.error(&format!("Unknown via definition field: '{}'", field_name)));
+                }
+            }
+        }
+
+        self.expect(&Token::Dedent)?;
+
+        let end_pos = self.previous_span().end;
+
+        let diameter = diameter.ok_or_else(|| self.error("Via definition must include 'diameter'"))?;
+        let annular_ring = annular_ring.ok_or_else(|| self.error("Via definition must include 'annular_ring'"))?;
+        let from_layer = from_layer.ok_or_else(|| self.error("Via definition must include 'spanning'"))?;
+        let to_layer = to_layer.ok_or_else(|| self.error("Via definition must include 'spanning'"))?;
+
+        Ok(ViaDefinition {
+            name,
+            diameter,
+            annular_ring,
+            from_layer,
+            to_layer,
+            material,
+            span: Span::new(start_pos, end_pos),
+        })
     }
 }

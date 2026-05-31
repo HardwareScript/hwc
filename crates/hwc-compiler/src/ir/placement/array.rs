@@ -21,6 +21,7 @@ pub struct ArrayPlacementContext<'a> {
     pub eval_context: &'a hwc_parser::EvaluationContext,
     pub collector: &'a hwc_diagnostics::DiagnosticCollector,
     pub stackup_manager: &'a StackupManager,
+    pub profile: Option<&'a hwc_parser::ProfileDefinition>,
 }
 
 /// Place a component array by unrolling it into individual instances
@@ -121,28 +122,26 @@ pub fn place_component_array(
             ctx.eval_context,
             ctx.collector,
             ctx.stackup_manager,
+            ctx.profile,
         )?;
     }
 
-    // P12 Collision Detection: Check for overlapping geometry WITHOUT merge intent
-    // This implements the "NO IMPLICIT MAGIC" philosophy from Hardware Script Manifesto
-    check_array_collisions(
+    // v0.1.7: Register array instances for topological routing
+    // This handles unrolling the array into individual component bboxes
+    // so that other components can reference M1_Array[2].left correctly.
+    validate_array_collisions(
         space,
         component,
         array_config,
+        pitch_nm,
         ctx.origin,
         ctx.symbol_table,
-        ctx.layouts,
-        ctx.collector,
         ctx.stackup_manager,
+        ctx.profile,
     )?;
 
-    // Implement explicit terminal merging with merge: keyword (v0.1.6 Sprint 3.2)
+    // v0.1.7: Merge explicit terminals
     if !array_config.merge_terminals.is_empty() {
-        // println!($3"[DEBUG] Explicit merge intent declared: {:?}",
-        //    array_config.merge_terminals
-        // );
-
         merge_explicit_terminals(
             space,
             component,
@@ -150,96 +149,51 @@ pub fn place_component_array(
             ctx.origin,
             ctx.symbol_table,
             ctx.layouts,
+            ctx.stackup_manager,
+            ctx.profile,
         )?;
     }
 
     Ok(())
 }
 
-/// Check for geometric collisions in array instances without explicit merge intent.
+/// v0.1.7: P12 Collision Detector for Component Arrays
 ///
-/// **Philosophy**: NO IMPLICIT MAGIC (Hardware Script Manifesto)
+/// Ensures that transistor fingers (or other arrayed components) do not overlap
+/// their internal terminal pours (e.g. source/drain) unless explicitly waived.
 ///
-/// This function detects when array instances have overlapping geometry WITHOUT
-/// the `merge:` keyword. This enforces explicit intent for all overlapping geometry.
-///
-/// # Algorithm
-/// 1. Get component definition and layout
-/// 2. For each internal pour in the component:
-///    - Calculate bounding boxes for all array instances
-///    - Check for overlaps between adjacent instances
-///    - If overlap detected AND terminal NOT in merge list → P12 Error
-///
-/// # Error Conditions
-/// - Overlapping geometry without `merge:` keyword → P12: Geometric Collision
-/// - Provides helpful error with suggested pitch and merge syntax
-///
-/// # Example Error
-/// ```
-/// Error [P12]: Geometric collision in array 'M_Array': instances 0 and 1 have overlapping geometry
-///   Pour 'source' overlaps between instances
-///   Solution 1: Increase pitch to 3.5mm (currently 2.0mm)
-///   Solution 2: Add explicit merge intent: merge: [source]
-/// ```
-fn check_array_collisions(
+/// This catches pitch miscalculations BEFORE they hit the engine, providing
+/// beautiful hwc-style suggestions for the correct pitch.
+fn validate_array_collisions(
     space: &HardwareSpace,
     component: &hwc_parser::ComponentPlacement,
     array_config: &hwc_parser::ArrayConfig,
+    pitch_nm: i64,
     origin: hwc_parser::OriginPoint,
     symbol_table: &SymbolTable,
-    _layouts: &[hwc_parser::ModuleLayoutBlock],
-    collector: &hwc_diagnostics::DiagnosticCollector,
     stackup_manager: &StackupManager,
+    profile: Option<&hwc_parser::ProfileDefinition>,
 ) -> Result<(), IrError> {
-    // Get component definition to access internal pours
-    let component_def = symbol_table
-        .get_component(&component.component_type.name)
-        .map_err(|_| {
-            IrError::PlacementError(format!(
-                "Component '{}' not found in symbol table",
-                component.component_type.name
-            ))
-        })?;
+    // Get component definition
+    let comp_def = symbol_table.get_component(&component.component_type.name)?;
+    let layout = comp_def
+        .layout
+        .as_ref()
+        .ok_or_else(|| IrError::PlacementError(format!("Component '{}' missing layout", comp_def.name)))?;
 
-    let layout = component_def.layout.as_ref().ok_or_else(|| {
-        IrError::PlacementError(format!(
-            "Component '{}' has no layout block",
-            component.component_type.name
-        ))
-    })?;
-
-    // Evaluate pitch to nanometers
-    let pitch_nm = evaluate_measurement_to_nm(&array_config.pitch, symbol_table)?;
-
-    // Check each internal pour for collisions
+    // Check each internal pour for potential overlaps
     for pour in &layout.internal_pours {
-        // Get terminal name for this pour
-        // Priority: device binding terminal > pour name
+        // Skip pours that are meant to be shared (merging)
         let terminal_name = pour
             .device
             .as_ref()
-            .map(|binding| binding.terminal.as_str())
-            .unwrap_or_else(|| pour.name.as_str());
-
-        // Skip if this terminal is explicitly marked for merging
-        // v0.1.7: Support both legacy merge_terminals and new unified waivers
-        let is_waived = array_config.merge_terminals.iter().any(|t| t == terminal_name) ||
-                       pour.waivers.merge == hwc_parser::MergeWaiver::All ||
-                       (if let hwc_parser::MergeWaiver::Specific(list) = &pour.waivers.merge {
-                           list.contains(&compact_str::CompactString::new(terminal_name))
-                       } else {
-                           false
-                       });
-
-        if is_waived {
-            collector.report(hwc_diagnostics::WaiverApplied::new(&format!("Array '{}' allowed overlapping geometry for terminal '{}'", 
-                component.name.as_ref().map(|n| n.base.as_str()).unwrap_or(&component.component_type.name),
-                terminal_name
-            )));
-            continue; // Explicit merge intent - no collision check needed
+            .map(|d| d.terminal.as_str())
+            .unwrap_or("");
+        if array_config.merge_terminals.iter().any(|t| t == terminal_name) {
+            continue;
         }
 
-        // Calculate bounding boxes for this pour in each instance
+        // Calculate bounding boxes for this pour across all instances
         let instance_bboxes = calculate_pour_bboxes_for_array(
             space,
             component,
@@ -249,6 +203,7 @@ fn check_array_collisions(
             origin,
             symbol_table,
             stackup_manager,
+            profile,
         )?;
 
         // Check for overlaps between adjacent instances
@@ -308,6 +263,7 @@ fn calculate_pour_bboxes_for_array(
     origin: hwc_parser::OriginPoint,
     symbol_table: &SymbolTable,
     stackup_manager: &StackupManager,
+    profile: Option<&hwc_parser::ProfileDefinition>,
 ) -> Result<Vec<(usize, hwc_engine::geometry::BoundingBox)>, IrError> {
     use crate::ir::conversions::spanning_coordinate_to_point;
     use hwc_engine::geometry::{BoundingBox, Point3D};
@@ -342,6 +298,7 @@ fn calculate_pour_bboxes_for_array(
             eval_context: &hwc_parser::EvaluationContext::default(),
             bbox_tracker: None, // array pours don't use anchor references
             stackup_manager,
+            profile,
         };
         let start = spanning_coordinate_to_point(from, &ctx, false)
             .map_err(|e| IrError::PlacementError(e))?;
@@ -412,16 +369,12 @@ fn merge_explicit_terminals(
     origin: hwc_parser::OriginPoint,
     symbol_table: &SymbolTable,
     _layouts: &[hwc_parser::ModuleLayoutBlock],
+    stackup_manager: &StackupManager,
+    profile: Option<&hwc_parser::ProfileDefinition>,
 ) -> Result<(), IrError> {
     // Get component definition to access internal pours
     let component_def = symbol_table
-        .get_component(&component.component_type.name)
-        .map_err(|_| {
-            IrError::PlacementError(format!(
-                "Component '{}' not found in symbol table",
-                component.component_type.name
-            ))
-        })?;
+        .get_component(&component.component_type.name)?;
 
     let layout = component_def.layout.as_ref().ok_or_else(|| {
         IrError::PlacementError(format!(
@@ -435,8 +388,6 @@ fn merge_explicit_terminals(
 
     // For each explicitly merged terminal, find and merge overlapping pours
     for terminal_name in &array_config.merge_terminals {
-        // println!($3"[DEBUG]   Processing merged terminal: {}", terminal_name);
-
         // Find all internal pours that match this terminal
         // Match by: device binding terminal OR pour name
         let terminal_pours: Vec<_> = layout
@@ -454,16 +405,8 @@ fn merge_explicit_terminals(
             .collect();
 
         if terminal_pours.is_empty() {
-            // println!($3"[DEBUG]     No internal pours found for terminal '{}'",
-            //      terminal_name
-            //    );
             continue;
         }
-
-        // println!($3"[DEBUG]     Found {} pour(s) for terminal '{}'",
-        // terminal_pours.len(),
-        //     terminal_name
-        //   );
 
         // For each pour that binds to this terminal, merge across instances
         for pour in terminal_pours {
@@ -475,7 +418,8 @@ fn merge_explicit_terminals(
                 origin,
                 symbol_table,
                 pitch_nm,
-                &StackupManager::new(None, symbol_table, space.voxel_size.z_nm, origin.z).expect("temp"),
+                stackup_manager,
+                profile,
             )?;
         }
     }
@@ -495,6 +439,7 @@ fn merge_pour_across_instances(
     symbol_table: &SymbolTable,
     pitch_nm: i64,
     stackup_manager: &StackupManager,
+    profile: Option<&hwc_parser::ProfileDefinition>,
 ) -> Result<(), IrError> {
     // Calculate bounding boxes for this pour in each instance
     let instance_bboxes = calculate_pour_bboxes_for_array(
@@ -506,6 +451,7 @@ fn merge_pour_across_instances(
         origin,
         symbol_table,
         stackup_manager,
+        profile,
     )?;
 
     // Detect overlapping regions and merge them

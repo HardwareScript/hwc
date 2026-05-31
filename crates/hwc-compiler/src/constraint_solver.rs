@@ -401,7 +401,7 @@ impl<'a> ConstraintSolver<'a> {
     fn point_to_coordinate(&self, point: Point3D, span: Span) -> Coordinate {
         let x_mm = point.x as f64 / 1_000_000.0;
         let y_mm = point.y as f64 / 1_000_000.0;
-        let z_mm = point.z as f64 / 1_000_000_000.0;
+        let z_mm = point.z as f64 / 1_000_000.0;
 
         Coordinate::Declarative {
             x: Expression::Measurement {

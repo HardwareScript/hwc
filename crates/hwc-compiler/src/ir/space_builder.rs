@@ -58,22 +58,13 @@ pub fn create_hardware_space(
     // Load fabrication constraints from profile (v0.1.6: DRC Integration)
     if let Some(profile_name) = &space_def.profile {
         // Look up profile in symbol table
-        match symbol_table.get_profile(&profile_name.name) {
-            Ok(profile_def) => match profile_to_constraints(profile_def, symbol_table) {
-                Ok(constraints) => {
-                    space.fabrication_constraints = Some(constraints);
-                }
-                Err(e) => {
-                    eprintln!(
-                        "[WARN] Failed to convert profile '{}' to constraints: {:?}",
-                        profile_name.name, e
-                    );
-                }
-            },
-            Err(e) => {
-                eprintln!("[WARN] Profile '{}' not found: {:?}", profile_name.name, e);
-            }
-        }
+        let profile_def = symbol_table.get_profile(&profile_name.name)
+            .map_err(|e| IrError::CompilationError(format!("Profile '{}' not found: {:?}", profile_name.name, e)))?;
+            
+        let constraints = profile_to_constraints(profile_def, symbol_table)
+            .map_err(|e| IrError::CompilationError(format!("Failed to convert profile '{}' to constraints: {:?}", profile_name.name, e)))?;
+            
+        space.fabrication_constraints = Some(constraints);
     }
 
     // Process net classifications (v0.1.6)
@@ -82,6 +73,7 @@ pub fn create_hardware_space(
             hwc_parser::NetClassification::Power => hwc_engine::space::NetClassification::Power,
             hwc_parser::NetClassification::Ground => hwc_engine::space::NetClassification::Ground,
             hwc_parser::NetClassification::Signal => hwc_engine::space::NetClassification::Signal,
+            hwc_parser::NetClassification::HighVoltage => hwc_engine::space::NetClassification::HighVoltage,
             hwc_parser::NetClassification::Unclassified => {
                 hwc_engine::space::NetClassification::Unclassified
             }

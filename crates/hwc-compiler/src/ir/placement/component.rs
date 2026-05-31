@@ -2,8 +2,7 @@
 
 use super::super::conversions::{coordinate_to_point, CoordinateContext};
 use super::super::errors::IrError;
-use super::array::place_component_array;
-use super::coordinate_evaluation::{evaluate_coordinate_to_nm, CoordinateAxis};
+use super::coordinate_evaluation::CoordinateAxis;
 use super::helpers::parse_rectangle_dimensions;
 use super::module::place_module_instance;
 use super::pour::place_pour;
@@ -31,6 +30,7 @@ pub fn place_component(
     eval_context: &hwc_parser::EvaluationContext,
     collector: &hwc_diagnostics::DiagnosticCollector,
     stackup_manager: &super::super::stackup_manager::StackupManager,
+    profile: Option<&hwc_parser::ProfileDefinition>,
 ) -> Result<(), IrError> {
     // Sprint 3, Task 3.2: Check if this is an array placement
     if let Some(array_config) = &component.array_config {
@@ -41,9 +41,10 @@ pub fn place_component(
             bbox_tracker,
             eval_context,
             collector,
-            stackup_manager: &super::super::stackup_manager::StackupManager::new(None, symbol_table, space.voxel_size.z_nm, origin.z).expect("temp manager"),
+            stackup_manager,
+            profile,
         };
-        return place_component_array(space, component, array_config, &mut array_ctx);
+        return super::array::place_component_array(space, component, array_config, &mut array_ctx);
     }
 
     // Check if this is a module instantiation
@@ -59,6 +60,7 @@ pub fn place_component(
             eval_context,
             collector,
             stackup_manager,
+            profile,
         );
     }
 
@@ -83,6 +85,7 @@ pub fn place_component(
         eval_context,                     // Pass the universal context
         bbox_tracker: Some(bbox_tracker), // Pass bbox_tracker for anchor references in expressions
         stackup_manager,
+        profile,
     };
     let mut position = coordinate_to_point(&resolved_position, &ctx);
 
@@ -192,6 +195,7 @@ pub fn place_component(
             eval_context,
             bbox_tracker: Some(bbox_tracker),
             stackup_manager,
+            profile,
         };
         let z_nm = crate::ir::conversions::resolve_coordinate_z_nm(z_expr, &z_ctx, has_anchor_refs)
             .map_err(IrError::PlacementError)?;
@@ -254,166 +258,267 @@ pub fn place_component(
     // Transform relative coordinates to absolute and add to space's substrate layers
     if let Ok(component_def) = symbol_table.get_component(component.component_type.as_str()) {
         if let Some(layout) = &component_def.layout {
-            if !layout.internal_pours.is_empty() {
-                // println!(
-                //     "[DEBUG] Unrolling {} internal pours for component '{}' (optimized path)",
-                //     layout.internal_pours.len(),
-                //     name
-                // );
+            // v0.1.7: Pass A - Connect pins to nets BEFORE pour unrolling.
+            // This ensures that when pours are unrolled and call place_pour,
+            // the netlist already knows which net the pins belong to, avoiding P43 errors.
+            if !layout.pin_positions.is_empty() {
+                let component_id = space
+                    .netlist
+                    .get_component_by_name(&name)
+                    .expect("Component should exist in netlist after placement");
 
-                // Use the aligned world coordinates we just calculated
-                // This fixes the "floating connection" by syncing internal unrolling with world placement
-                let abs_x_nm = position.x;
-                let abs_y_nm = position.y;
-                let abs_z_nm = position.z;
-                
-                eprintln!("[DEBUG unroll] Component '{}' at pos.z: {} nm", name, position.z);
+                // Fetch dimensions for rotation math
+                let (width_nm, height_nm, _depth_nm) = layout.shape.as_ref()
+                    .and_then(|s| parse_rectangle_dimensions(s))
+                    .unwrap_or((1_000_000, 1_000_000, 1_000_000)); // Default 1mm if unknown
 
-                for pour in &layout.internal_pours {
-                    // Transform relative coordinates to absolute
-                    // Component position is the origin, pour boundary is relative to that
-                    if let Some((from, to)) = &pour.boundary {
-                        // Direct nanometer calculation (no AST construction)
-                        let pour_from_x_nm = evaluate_coordinate_to_nm(from.x(), symbol_table)?;
-                        let pour_from_y_nm = evaluate_coordinate_to_nm(from.y(), symbol_table)?;
-                        let pour_to_x_nm = evaluate_coordinate_to_nm(to.x(), symbol_table)?;
-                        let pour_to_y_nm = evaluate_coordinate_to_nm(to.y(), symbol_table)?;
+                for (pin_name, pin_pos) in &layout.pin_positions {
+                    let net_assignment = if let Some(binding) =
+                        component.pin_net_bindings.get(pin_name.as_str())
+                    {
+                        match binding {
+                            hwc_parser::NetBinding::Simple(net_name) => Some(net_name.clone()),
+                            hwc_parser::NetBinding::Conditional { .. } => None,
+                        }
+                    } else {
+                        layout.internal_pours.iter()
+                            .find(|pour| pour.net.is_some())
+                            .and_then(|pour| pour.net.as_ref())
+                            .map(|net_id| net_id.base.clone())
+                    };
 
-                        // Add component position to pour offsets (simple addition)
-                        let absolute_from_x_nm = abs_x_nm + pour_from_x_nm;
-                        let absolute_from_y_nm = abs_y_nm + pour_from_y_nm;
-                        let absolute_to_x_nm = abs_x_nm + pour_to_x_nm;
-                        let absolute_to_y_nm = abs_y_nm + pour_to_y_nm;
+                    if let Some(ref net_name_str) = net_assignment {
+                        let default_trace_width_nm = space.fabrication_constraints.as_ref()
+                            .map(|c| c.trace.min_width_nm)
+                            .expect("Fabrication constraints (min_trace_width) must be defined in profile");
 
-                        // Create literal expressions (no evaluation needed later)
-                        let absolute_from = hwc_parser::Coordinate::Declarative {
-                            x: hwc_parser::Expression::Measurement {
-                                value: absolute_from_x_nm as f64 / 1_000_000.0,
-                                unit: hwc_parser::Unit::Millimeter,
-                                span: hwc_parser::Span { start: 0, end: 0 },
-                            },
-                            y: hwc_parser::Expression::Measurement {
-                                value: absolute_from_y_nm as f64 / 1_000_000.0,
-                                unit: hwc_parser::Unit::Millimeter,
-                                span: hwc_parser::Span { start: 0, end: 0 },
-                            },
-                            z: hwc_parser::Expression::Measurement {
-                                value: (abs_z_nm + evaluate_coordinate_to_nm(from.z(), symbol_table).unwrap_or(0)) as f64 / 1_000_000.0,
-                                unit: hwc_parser::Unit::Millimeter,
-                                span: hwc_parser::Span { start: 0, end: 0 },
-                            },
-                            span: hwc_parser::Span { start: 0, end: 0 },
-                        };
-
-                        let absolute_to = hwc_parser::Coordinate::Declarative {
-                            x: hwc_parser::Expression::Measurement {
-                                value: absolute_to_x_nm as f64 / 1_000_000.0,
-                                unit: hwc_parser::Unit::Millimeter,
-                                span: hwc_parser::Span { start: 0, end: 0 },
-                            },
-                            y: hwc_parser::Expression::Measurement {
-                                value: absolute_to_y_nm as f64 / 1_000_000.0,
-                                unit: hwc_parser::Unit::Millimeter,
-                                span: hwc_parser::Span { start: 0, end: 0 },
-                            },
-                            z: hwc_parser::Expression::Measurement {
-                                value: (abs_z_nm + evaluate_coordinate_to_nm(to.z(), symbol_table).unwrap_or(0)) as f64 / 1_000_000.0,
-                                unit: hwc_parser::Unit::Millimeter,
-                                span: hwc_parser::Span { start: 0, end: 0 },
-                            },
-                            span: hwc_parser::Span { start: 0, end: 0 },
-                        };
-
-                        // ALIGNMENT CORRECTNESS FIX (v0.1.6 Item #1): Assign net from pin-to-net bindings
-                        //
-                        // The Problem:
-                        // - Component internal pours were registered with net: None
-                        // - Physical Continuity checker only processes pours with net assignments
-                        // - Result: Component pours were invisible to continuity validation
-                        // - Ring oscillator showed 3 disconnected inverters but passed validation
-                        //
-                        // The Fix:
-                        // - Component placements MUST provide explicit pin-to-net bindings
-                        // - Component definitions define STRUCTURE (geometry, pins)
-                        // - Space placements define CONNECTIVITY (which pins connect to which nets)
-                        // - This is the correct separation of concerns
-                        let _net_assignment = if let Some(device_binding) = &pour.device {
-                            // Get the net binding for this terminal/pin
-                            component.pin_net_bindings.get(device_binding.terminal.as_str())
-                                .and_then(|binding| match binding {
-                                    hwc_parser::NetBinding::Simple(net_name) => {
-                                        Some(hwc_parser::NetName {
-                                            base: net_name.clone(),
-                                            index: None,
-                                            span: hwc_parser::Span { start: 0, end: 0 },
-                                        })
-                                    }
-                                    hwc_parser::NetBinding::Conditional { .. } => {
-                                        // Conditional bindings should have been resolved during unrolling
-                                        eprintln!("⚠️  WARNING: Conditional net binding found during pour unrolling (should have been resolved)");
-                                        None
-                                    }
-                                })
+                        let net_id = if let Some(existing_net_id) = space.netlist.get_net_by_name(net_name_str) {
+                            existing_net_id
                         } else {
-                            None
+                            space.netlist.add_net(net_name_str.clone(), default_trace_width_nm, 2)
                         };
 
-                        // Create a new pour with absolute coordinates
-                        // v0.1.7: The internal pour's elevation must be resolved relative to the component base Z
-                        let pour_z_start_nm = stackup_manager.resolve_elevation(&pour.elevation, symbol_table).unwrap_or(0);
-                        let pour_z_end_nm = stackup_manager.resolve_elevation_top(&pour.elevation, symbol_table, space.voxel_size.z_nm).unwrap_or(pour_z_start_nm + space.voxel_size.z_nm);
+                        let pins = space.netlist.get_component_pins(component_id);
+                        if let Some(&pin_id) = pins.iter().find(|&&pid| {
+                            space.netlist.get_pin(pid).map(|p| p.name == *pin_name).unwrap_or(false)
+                        }) {
+                            space.netlist.connect_pin(pin_id, net_id);
+                        }
+                    }
 
-                        let absolute_z_start_nm = abs_z_nm + pour_z_start_nm;
-                        let absolute_z_end_nm = abs_z_nm + pour_z_end_nm;
-                        eprintln!("[DEBUG unroll-pour] '{}' absolute z: {} nm to {} nm", pour.name, absolute_z_start_nm, absolute_z_end_nm);
+                    // Calculate absolute pin position for BBox registration
+                    let (center_x, center_y) = match origin.xy {
+                        hwc_parser::OriginXY::TL => (position.x + width_nm / 2, position.y - height_nm / 2),
+                        hwc_parser::OriginXY::TR => (position.x - width_nm / 2, position.y - height_nm / 2),
+                        hwc_parser::OriginXY::BL => (position.x + width_nm / 2, position.y + height_nm / 2),
+                        hwc_parser::OriginXY::BR => (position.x - width_nm / 2, position.y + height_nm / 2),
+                    };
+                    
+                    let half_w = width_nm / 2;
+                    let half_h = height_nm / 2;
+                    let angle_rad = (rotation_deg as f64).to_radians();
+                    let cos_theta = angle_rad.cos();
+                    let sin_theta = angle_rad.sin();
 
-                        let absolute_pour = hwc_parser::PourPlacement {
-                            material: pour.material.clone(),
-                            name: hwc_parser::ComponentName::simple(format!("{}_{}", name, pour.name).into(), pour.span),
-                            elevation: hwc_parser::Elevation::Physical {
+                    let lx = (pin_pos.x * 1_000_000.0) as i64 - half_w;
+                    let ly = (pin_pos.y * 1_000_000.0) as i64 - half_h;
+
+                    let rx = (lx as f64 * cos_theta - ly as f64 * sin_theta) as i64;
+                    let ry = (lx as f64 * sin_theta + ly as f64 * cos_theta) as i64;
+
+                    let absolute_x_nm = center_x + rx;
+                    let absolute_y_nm = match origin.xy {
+                        hwc_parser::OriginXY::TL | hwc_parser::OriginXY::TR => center_y - ry,
+                        hwc_parser::OriginXY::BL | hwc_parser::OriginXY::BR => center_y + ry,
+                    };
+                    let absolute_z_nm = position.z + (pin_pos.z.unwrap_or(0.0) * 1_000_000.0) as i64;
+
+                    // Register pin in BoundingBoxTracker for relative positioning of internal pours
+                    let pin_point = hwc_engine::geometry::Point3D::new(absolute_x_nm, absolute_y_nm, absolute_z_nm);
+                    let pin_bbox = hwc_engine::geometry::BoundingBox::new(pin_point, pin_point);
+                    let pin_anchor_name = format!("{}.{}", name, pin_name);
+                    bbox_tracker.register(pin_anchor_name.clone().into(), pin_bbox, pin_point);
+
+                    // v0.1.7: Auto-Stitching (Limitation 7) - Drill and plate through-holes
+                    // We must do this during pin registration to ensure the holes and pads 
+                    // are correctly associated with the pin's net.
+                    let is_tht = component_def.render.as_ref().map(|r| r.shape.as_deref() == Some("tht_package")).unwrap_or(false);
+                    let pad_shape = layout.pad_shapes.get(pin_name);
+                    
+                    if is_tht || pad_shape.is_some() {
+                        let drill_diameter_nm = if let Some(ps) = pad_shape {
+                            if ps.starts_with("Circle(") {
+                                 let val_str = ps.trim_start_matches("Circle(").trim_end_matches(")");
+                                 (val_str.trim_end_matches("mm").parse::<f64>().unwrap_or(1.0) * 1_000_000.0) as i64
+                            } else {
+                                1_000_000
+                            }
+                        } else {
+                            1_000_000
+                        };
+
+                        if let Some(substrate_bbox) = space.substrate_bbox {
+                            let hole_bbox = hwc_engine::geometry::BoundingBox::new(
+                                hwc_engine::geometry::Point3D::new(absolute_x_nm - drill_diameter_nm / 2, absolute_y_nm - drill_diameter_nm / 2, substrate_bbox.min.z),
+                                hwc_engine::geometry::Point3D::new(absolute_x_nm + drill_diameter_nm / 2, absolute_y_nm + drill_diameter_nm / 2, substrate_bbox.max.z),
+                            );
+
+                            // Get net_id for the via/pads
+                            let via_net_id = if let Some(ref net_name_str) = net_assignment {
+                                space.netlist.get_net_by_name(net_name_str).unwrap_or(hwc_engine::netlist::NetId::new(0))
+                            } else {
+                                hwc_engine::netlist::NetId::new(0)
+                            };
+
+                            space.drill_hole(hole_bbox, Some(drill_diameter_nm), via_net_id);
+
+                            let copper_material_id = space.material_registry.get_id("Copper").unwrap_or(2);
+                            let plating_thickness_nm = 25_000;
+                            let outer_diameter_nm = drill_diameter_nm;
+                            let inner_diameter_nm = drill_diameter_nm - (2 * plating_thickness_nm);
+                            
+                            let min_annular_ring_nm = space.fabrication_constraints.as_ref()
+                                .map(|c| c.via.min_annular_ring_nm)
+                                .unwrap_or(150_000);
+                            
+                            let pad_diameter_nm = drill_diameter_nm + (2 * min_annular_ring_nm);
+
+                            space.voxel_grid.add_tube_substrate_layer(
+                                copper_material_id,
+                                via_net_id.raw(),
+                                hole_bbox,
+                                outer_diameter_nm as u32,
+                                inner_diameter_nm as u32,
+                                pad_diameter_nm as u32,
+                                16,
+                                true
+                            );
+
+                            let pad_half_nm = pad_diameter_nm / 2;
+                            let start_z_nm = (substrate_bbox.min.z / space.voxel_size.z_nm) * space.voxel_size.z_nm;
+                            let pad_bbox_start = hwc_engine::geometry::BoundingBox::new(
+                                hwc_engine::geometry::Point3D::new(absolute_x_nm - pad_half_nm, absolute_y_nm - pad_half_nm, start_z_nm),
+                                hwc_engine::geometry::Point3D::new(absolute_x_nm + pad_half_nm, absolute_y_nm + pad_half_nm, start_z_nm + space.voxel_size.z_nm),
+                            );
+                            space.voxel_grid.add_cylinder_substrate_layer(
+                                copper_material_id,
+                                via_net_id.raw(),
+                                pad_bbox_start,
+                                pad_diameter_nm,
+                                16,
+                                0
+                            );
+
+                            let end_z_nm = (substrate_bbox.max.z / space.voxel_size.z_nm - 1) * space.voxel_size.z_nm;
+                            let pad_bbox_end = hwc_engine::geometry::BoundingBox::new(
+                                hwc_engine::geometry::Point3D::new(absolute_x_nm - pad_half_nm, absolute_y_nm - pad_half_nm, end_z_nm),
+                                hwc_engine::geometry::Point3D::new(absolute_x_nm + pad_half_nm, absolute_y_nm + pad_half_nm, end_z_nm + space.voxel_size.z_nm),
+                            );
+                            space.voxel_grid.add_cylinder_substrate_layer(
+                                copper_material_id,
+                                via_net_id.raw(),
+                                pad_bbox_end,
+                                pad_diameter_nm,
+                                16,
+                                0
+                            );
+                            
+                            let board_max_z_nm = (space.grid.z_layers as i64).saturating_sub(1) * space.voxel_size.z_nm;
+                            let via = hwc_engine::geometry_router::Via::new(
+                                (absolute_x_nm, absolute_y_nm),
+                                substrate_bbox.min.z,
+                                board_max_z_nm,
+                                drill_diameter_nm,
+                                via_net_id,
+                                0,
+                                board_max_z_nm,
+                                space.voxel_size.z_nm,
+                            );
+                            space.add_vias(vec![via]);
+
+                            space.contacts.push(hwc_engine::space::ContactMetadata {
+                                name: format!("{}_{}_via", name, pin_name).into(),
+                                material_name: "Copper".into(),
+                                z_start_nm: substrate_bbox.min.z,
+                                z_end_nm: substrate_bbox.max.z,
+                                net: net_assignment.clone(),
+                                bridge: None,
+                                bbox: Some(hole_bbox),
+                                voxels: Vec::new(),
+                            });
+                        }
+                    }
+
+                    // v0.1.7: Register pin in VoxelGrid for Global Router discovery
+                    space.voxel_grid.add_component_pin(
+                        absolute_x_nm,
+                        absolute_y_nm,
+                        absolute_z_nm,
+                        name.clone().into(),
+                        pin_name.clone(),
+                        net_assignment.clone()
+                    );
+                }
+            }
+
+            if !layout.internal_pours.is_empty() {
+                for pour in &layout.internal_pours {
+                    if let Some(_) = &pour.boundary {
+                        // v0.1.7 ZEN WAY: Instead of manual absolute calculations, clone the relative pour
+                        // and let ConstraintSolver resolve the pin anchors (e.g. U1.VCC)
+                        let mut unrolled_pour = pour.clone();
+                        unrolled_pour.name = hwc_parser::ComponentName::simple(format!("{}_{}", name, pour.name).into(), pour.span);
+                        
+                        // v0.1.7: Internal Alignment Logic
+                        // If a pour has a 'device' binding (e.g. VCC), its declarative boundary 
+                        // is interpreted as being relative to that pin.
+                        let anchor_name = if let Some(binding) = &pour.device {
+                            format!("{}.{}", name, binding.terminal)
+                        } else {
+                            name.clone().into()
+                        };
+
+                        if let Some((from, to)) = &mut unrolled_pour.boundary {
+                            *from = transform_declarative_to_relative(from, &anchor_name);
+                            *to = transform_declarative_to_relative(to, &anchor_name);
+                        }
+
+                        // Update device binding to point to this specific component instance
+                        unrolled_pour.device = pour.device.as_ref().map(|d| hwc_parser::DeviceBinding {
+                            device_name: name.clone(),
+                            terminal: d.terminal.clone(),
+                            span: d.span,
+                        });
+
+                        // v0.1.7: Unrolled pads should inherit the Z of their anchor
+                        if let Some(anchor_bbox) = bbox_tracker.get(&anchor_name) {
+                            let z_nm = anchor_bbox.min.z;
+                            let value_mm = z_nm as f64 / 1_000_000.0;
+                            unrolled_pour.elevation = hwc_parser::Elevation::Physical {
                                 start: hwc_parser::Expression::Measurement {
-                                    value: absolute_z_start_nm as f64 / 1_000_000.0,
+                                    value: value_mm,
                                     unit: hwc_parser::Unit::Millimeter,
-                                    span: hwc_parser::Span { start: 0, end: 0 },
+                                    span: pour.span,
                                 },
-                                end: Some(hwc_parser::Expression::Measurement {
-                                    value: absolute_z_end_nm as f64 / 1_000_000.0,
-                                    unit: hwc_parser::Unit::Millimeter,
-                                    span: hwc_parser::Span { start: 0, end: 0 },
-                                }),
-                            },
-                            boundary: Some((absolute_from, absolute_to)),
-                            net: None, // FIX: Don't assign net directly to internal pours.
-                                       // The 'device' binding below already handles logical connectivity.
-                                       // Assigning 'net' here triggers redundant "Virtual Anchor" generation
-                                       // in place_pour, which causes the out-of-bounds ghost traces.
-                            device: pour.device.as_ref().map(|d| hwc_parser::DeviceBinding {
-                                device_name: name.clone(),
-                                terminal: d.terminal.clone(),
-                                span: d.span,
-                            }),
-                            thermal_relief: pour.thermal_relief,
-                            waivers: pour.waivers.clone(),
-                            span: pour.span,
-                        };
+                                end: None,
+                            };
+                        }
 
-                        // Place the unrolled pour
-                        // v0.1.7: Create a fallback StackupManager for this internal unrolling path
-                        let temp_manager = StackupManager::new(None, symbol_table, space.voxel_size.z_nm, origin.z)
+                        // Place the unrolled pour using relative coordinates
+                        // Use a world-space origin (BL/Bottom) because ConstraintSolver 
+                        // already resolved coordinates to absolute world space.
+                        let mut world_origin = origin;
+                        world_origin.xy = hwc_parser::OriginXY::BL;
+                        world_origin.z = hwc_parser::OriginZ::Bottom;
+
+                        let temp_manager = StackupManager::new(None, symbol_table, space.voxel_size.z_nm, world_origin.z)
                             .expect("Failed to create temp StackupManager");
-                        place_pour(space, &absolute_pour, origin, symbol_table, bbox_tracker, eval_context, collector, &temp_manager)?;
-
-                        // println!(
-                        //     "[DEBUG]   Unrolled pour '{}' -> '{}' at ({:.3}mm, {:.3}mm) net: {:?}",
-                        //     pour.name,
-                        //     absolute_pour.name,
-                        //     absolute_from_x_nm as f64 / 1_000_000.0,
-                        //     absolute_from_y_nm as f64 / 1_000_000.0,
-                        //     absolute_pour.net.as_ref().map(|n| n.to_string())
-                        // );
+                        
+                        place_pour(space, &unrolled_pour, world_origin, symbol_table, bbox_tracker, eval_context, collector, &temp_manager, profile)?;
                     }
                 }
             }
+
         }
     }
 
@@ -605,36 +710,48 @@ pub fn place_component(
                                 if skip_substrate_check {
                                     collector.report(hwc_diagnostics::WaiverApplied::new(&format!("Component '{}' allowed to overlap substrate", name)));
                                 } else {
-                                    let suggested_z_layer = substrate_max_layer + 1;
+                                    // AUTO-CARVE (v0.1.7): If the component has conductive pads that overlap 
+                                    // an insulator substrate, allow it and carve the substrate instead of erroring.
+                                    let is_substrate_insulator = space.material_registry.is_insulator(space.substrate_material_id) 
+                                                               || space.material_registry.is_semiconductor(space.substrate_material_id);
 
-                                    // Construct dynamic suggestion
-                                    let suggestion = format!(
-                                        "To fix:\n- Place component at z:{suggested_z_layer} or higher (above substrate)\n- Corrected: {}\n\nAdvanced: Use 'merge: true' waiver if this is intentional.",
-                                        original_line.replace(&format!("z: {}", component_z_layer), &format!("z: {}", suggested_z_layer))
-                                    );
+                                    if is_substrate_insulator {
+                                        // Carve the substrate!
+                                        // We use the full component bbox for carving to ensure clear keepout
+                                        space.voxel_grid.drill_hole(bbox, None, 0);
+                                        println!("   ├─ Auto-carved substrate for component '{}'", name);
+                                    } else {
+                                        let suggested_z_layer = substrate_max_layer + 1;
 
-                                    // Sprint 9: Feed both systems
-                                    let ir_x_mm = untransformed_origin.x as f64 / 1_000_000.0;
-                                    let ir_y_mm = untransformed_origin.y as f64 / 1_000_000.0;
-                                    let ir_z_mm = untransformed_origin.z as f64 / 1_000_000.0;
-                                    collector.report(IrError::SubstrateOverlap {
-                                        component: name.clone(),
-                                        component_z_layer,
-                                        component_z_mm: component_min_z as f64 / 1_000_000.0,
-                                        substrate_min_layer,
-                                        substrate_max_layer,
-                                        substrate_min_mm: substrate_min_z as f64 / 1_000_000.0,
-                                        substrate_max_mm: substrate_max_z as f64 / 1_000_000.0,
-                                        suggested_z_layer,
-                                        x_mm: ir_x_mm,
-                                        y_mm: ir_y_mm,
-                                        z_mm: ir_z_mm,
-                                        span: (component.span.start, component.span.end - component.span.start).into(),
-                                        suggestion,
-                                    });
-                                    collector.report_violation("P44", "overlaps with substrate material", group_context);
+                                        // Construct dynamic suggestion
+                                        let suggestion = format!(
+                                            "To fix:\n- Place component at z:{suggested_z_layer} or higher (above substrate)\n- Corrected: {}\n\nAdvanced: Use 'merge: true' waiver if this is intentional.",
+                                            original_line.replace(&format!("z: {}", component_z_layer), &format!("z: {}", suggested_z_layer))
+                                        );
 
-                                    return Ok(()); // Skip bbox registration — component is invalid
+                                        // Sprint 9: Feed both systems
+                                        let ir_x_mm = untransformed_origin.x as f64 / 1_000_000.0;
+                                        let ir_y_mm = untransformed_origin.y as f64 / 1_000_000.0;
+                                        let ir_z_mm = untransformed_origin.z as f64 / 1_000_000.0;
+                                        collector.report(IrError::SubstrateOverlap {
+                                            component: name.clone(),
+                                            component_z_layer,
+                                            component_z_mm: component_min_z as f64 / 1_000_000.0,
+                                            substrate_min_layer,
+                                            substrate_max_layer,
+                                            substrate_min_mm: substrate_min_z as f64 / 1_000_000.0,
+                                            substrate_max_mm: substrate_max_z as f64 / 1_000_000.0,
+                                            suggested_z_layer,
+                                            x_mm: ir_x_mm,
+                                            y_mm: ir_y_mm,
+                                            z_mm: ir_z_mm,
+                                            span: (component.span.start, component.span.end - component.span.start).into(),
+                                            suggestion,
+                                        });
+                                        collector.report_violation("P44", "overlaps with substrate material", group_context);
+
+                                        return Ok(()); // Skip bbox registration — component is invalid
+                                    }
                                 }
                             }
                         }
@@ -719,259 +836,32 @@ pub fn place_component(
                 }
             }
 
-            // v0.1.6 Sprint 3: Register component pins for P43 validation
-            // Transform pin positions from component-relative to absolute coordinates
-            if !layout.pin_positions.is_empty() {
-                // Fetch dimensions for rotation math
-                let (width_nm, height_nm, _depth_nm) = layout.shape.as_ref()
-                    .and_then(|s| parse_rectangle_dimensions(s))
-                    .unwrap_or((1_000_000, 1_000_000, 1_000_000)); // Default 1mm if unknown
-
-                // Get the component ID from the netlist
-                 let component_id = space
-                     .netlist
-                     .get_component_by_name(&name)
-                     .expect("Component should exist in netlist after placement");
-
-                for (pin_name, pin_pos) in &layout.pin_positions {
-                    // v0.1.6 Item #13: Get net assignment from pin_net_bindings (if provided)
-                    // Priority:
-                    // 1. Explicit net binding from component placement (net: [pin: NetName])
-                    // 2. Internal pour net assignment (legacy behavior)
-                    let net_assignment = if let Some(binding) =
-                        component.pin_net_bindings.get(pin_name.as_str())
-                    {
-                        // Use explicit net binding from component placement
-                        match binding {
-                            hwc_parser::NetBinding::Simple(net_name) => Some(net_name.clone()),
-                            hwc_parser::NetBinding::Conditional { .. } => {
-                                // Conditional bindings should have been resolved during unrolling
-                                eprintln!("⚠️  WARNING: Conditional net binding found during placement (should have been resolved during unrolling)");
-                                None
-                            }
-                        }
-                    } else {
-                        // Fall back to internal pour net assignment (legacy behavior)
-                        layout
-                            .internal_pours
-                            .iter()
-                            .find(|pour| {
-                                // Check if pour's net assignment exists and if pin is within pour bounds
-                                pour.net.is_some()
-                            })
-                            .and_then(|pour| pour.net.as_ref())
-                            .map(|net_id| net_id.base.clone())
-                    };
-
-                    // CRITICAL FIX (Sprint 3.9): Don't add pins here - ComponentPlacer already did that!
-                    // We just need to find the existing pin and connect it to the net.
-
-                    // Find the pin that ComponentPlacer already added
-                    let pins = space.netlist.get_component_pins(component_id);
-                    let pin_id = pins
-                        .iter()
-                        .find(|&&pid| {
-                            if let Some(p) = space.netlist.get_pin(pid) {
-                                p.name == *pin_name
-                            } else {
-                                false
-                            }
-                        })
-                        .copied()
-                        .unwrap_or_else(|| {
-                            panic!(
-                                "Pin '{}' should exist in netlist (added by ComponentPlacer)",
-                                pin_name
-                            )
-                        });
-
-                    // CRITICAL FIX (Sprint 3.9): NET MATERIALIZATION
-                    if let Some(ref net_name_str) = net_assignment {
-                        let net_id = if let Some(existing_net_id) =
-                            space.netlist.get_net_by_name(net_name_str)
-                        {
-                            existing_net_id
-                        } else {
-                            space.netlist.add_net(
-                                net_name_str.clone(),
-                                100_000, // 100μm = 0.1mm trace width
-                                2,       // Copper (MaterialId 2)
-                            )
-                        };
-
-                        // Connect the pin to the net
-                        space.netlist.connect_pin(pin_id, net_id);
-                    }
-
-                    // v0.1.7: ROTATION FIX for pins
-                    // We must calculate the absolute position using the same logic as the engine's ComponentPlacer.
-                    // This ensures the VoxelGrid pins match the physical component geometry.
-                    
-                    // CRITICAL FIX: The 'position' from coordinate_to_point is the anchor point.
-                    // For OriginXY::TL, position.y is the MAX Y (top) of the component in engine space.
-                    // To get the center, we must shift INWARD based on the origin type.
-                    let (center_x, center_y) = match origin.xy {
-                        hwc_parser::OriginXY::TL => (position.x + width_nm / 2, position.y - height_nm / 2),
-                        hwc_parser::OriginXY::TR => (position.x - width_nm / 2, position.y - height_nm / 2),
-                        hwc_parser::OriginXY::BL => (position.x + width_nm / 2, position.y + height_nm / 2),
-                        hwc_parser::OriginXY::BR => (position.x - width_nm / 2, position.y + height_nm / 2),
-                    };
-                    
-                    let half_w = width_nm / 2;
-                    let half_h = height_nm / 2;
-                    let angle_rad = (rotation_deg as f64).to_radians();
-                    let cos_theta = angle_rad.cos();
-                    let sin_theta = angle_rad.sin();
-
-                    // Pin offset from component center in user-space coordinates
-                    // (where X is right, Y is down)
-                    let lx = (pin_pos.x * 1_000_000.0) as i64 - half_w;
-                    let ly = (pin_pos.y * 1_000_000.0) as i64 - half_h;
-
-                    // Apply rotation
-                    let rx = (lx as f64 * cos_theta - ly as f64 * sin_theta) as i64;
-                    let ry = (lx as f64 * sin_theta + ly as f64 * cos_theta) as i64;
-
-                    // Apply to center. 
-                    // Note: ry must be inverted if the coordinate system Y is inverted.
-                    // For TL origin, Engine Y = SpaceHeight - User Y. So User Y increasing (down) 
-                    // means Engine Y decreasing.
-                    let absolute_x_nm = center_x + rx;
-                    let absolute_y_nm = match origin.xy {
-                        hwc_parser::OriginXY::TL | hwc_parser::OriginXY::TR => center_y - ry,
-                        hwc_parser::OriginXY::BL | hwc_parser::OriginXY::BR => center_y + ry,
-                    };
-                    let absolute_z_nm = position.z + (pin_pos.z.unwrap_or(0.0) * 1_000_000.0) as i64;
-
-                    // v0.1.7: Auto-Stitching (Limitation 7) - Drill and plate through-holes
-                    let is_tht = component_def.render.as_ref().map(|r| r.shape.as_deref() == Some("tht_package")).unwrap_or(false);
-                    let pad_shape = layout.pad_shapes.get(pin_name);
-                    
-                    if is_tht || pad_shape.is_some() {
-                        let drill_diameter_nm = if let Some(ps) = pad_shape {
-                            if ps.starts_with("Circle(") {
-                                 let val_str = ps.trim_start_matches("Circle(").trim_end_matches(")");
-                                 (val_str.trim_end_matches("mm").parse::<f64>().unwrap_or(1.0) * 1_000_000.0) as i64
-                            } else {
-                                1_000_000
-                            }
-                        } else {
-                            1_000_000
-                        };
-
-                        if let Some(substrate_bbox) = space.substrate_bbox {
-                            let hole_bbox = hwc_engine::geometry::BoundingBox::new(
-                                hwc_engine::geometry::Point3D::new(absolute_x_nm - drill_diameter_nm / 2, absolute_y_nm - drill_diameter_nm / 2, substrate_bbox.min.z),
-                                hwc_engine::geometry::Point3D::new(absolute_x_nm + drill_diameter_nm / 2, absolute_y_nm + drill_diameter_nm / 2, substrate_bbox.max.z),
-                            );
-
-                            space.drill_hole(hole_bbox, Some(drill_diameter_nm));
-
-                            let copper_material_id = space.material_registry.get_id("Copper").unwrap_or(2);
-                            let plating_thickness_nm = 25_000;
-                            let outer_diameter_nm = drill_diameter_nm;
-                            let inner_diameter_nm = drill_diameter_nm - (2 * plating_thickness_nm);
-                            
-                            let min_annular_ring_nm = space.fabrication_constraints.as_ref()
-                                .map(|c| c.via.min_annular_ring_nm)
-                                .unwrap_or(150_000);
-                            
-                            let pad_diameter_nm = drill_diameter_nm + (2 * min_annular_ring_nm);
-
-                            // Get net_id for the via/pads
-                            let via_net_id = if let Some(ref net_name_str) = net_assignment {
-                                space.netlist.get_net_by_name(net_name_str).unwrap_or(hwc_engine::netlist::NetId::new(0))
-                            } else {
-                                hwc_engine::netlist::NetId::new(0)
-                            };
-
-                            space.voxel_grid.add_tube_substrate_layer(
-                                copper_material_id,
-                                via_net_id.raw(),
-                                hole_bbox,
-                                outer_diameter_nm as u32,
-                                inner_diameter_nm as u32,
-                                pad_diameter_nm as u32,
-                                16,
-                                true
-                            );
-
-                            let pad_half_nm = pad_diameter_nm / 2;
-                            let start_z_nm = (substrate_bbox.min.z / space.voxel_size.z_nm) * space.voxel_size.z_nm;
-                            let pad_bbox_start = hwc_engine::geometry::BoundingBox::new(
-                                hwc_engine::geometry::Point3D::new(absolute_x_nm - pad_half_nm, absolute_y_nm - pad_half_nm, start_z_nm),
-                                hwc_engine::geometry::Point3D::new(absolute_x_nm + pad_half_nm, absolute_y_nm + pad_half_nm, start_z_nm + space.voxel_size.z_nm),
-                            );
-                            space.voxel_grid.add_cylinder_substrate_layer(
-                                copper_material_id,
-                                via_net_id.raw(),
-                                pad_bbox_start,
-                                pad_diameter_nm,
-                                16,
-                                0
-                            );
-
-                            let end_z_nm = (substrate_bbox.max.z / space.voxel_size.z_nm - 1) * space.voxel_size.z_nm;
-                            let pad_bbox_end = hwc_engine::geometry::BoundingBox::new(
-                                hwc_engine::geometry::Point3D::new(absolute_x_nm - pad_half_nm, absolute_y_nm - pad_half_nm, end_z_nm),
-                                hwc_engine::geometry::Point3D::new(absolute_x_nm + pad_half_nm, absolute_y_nm + pad_half_nm, end_z_nm + space.voxel_size.z_nm),
-                            );
-                            space.voxel_grid.add_cylinder_substrate_layer(
-                                copper_material_id,
-                                via_net_id.raw(),
-                                pad_bbox_end,
-                                pad_diameter_nm,
-                                16,
-                                0
-                            );
-                            
-                            let board_max_z_nm = (space.grid.z_layers as i64).saturating_sub(1) * space.voxel_size.z_nm;
-                            let via = hwc_engine::geometry_router::Via::new(
-                                (absolute_x_nm, absolute_y_nm),
-                                substrate_bbox.min.z,
-                                board_max_z_nm,
-                                drill_diameter_nm,
-                                via_net_id,
-                                0,
-                                board_max_z_nm,
-                                space.voxel_size.z_nm,
-                            );
-                            space.add_vias(vec![via]);
-
-                            space.contacts.push(hwc_engine::space::ContactMetadata {
-                                name: format!("{}_{}_via", name, pin_name).into(),
-                                material_name: "Copper".into(),
-                                z_start_nm: substrate_bbox.min.z,
-                                z_end_nm: substrate_bbox.max.z,
-                                net: net_assignment.clone(),
-                                bridge: None,
-                                bbox: Some(hole_bbox),
-                                voxels: Vec::new(),
-                            });
-                        }
-                    }
-
-                    // v0.1.7: DELETED redundant add_component_pin call.
-                    // The engine's ComponentPlacer already registers these in the Netlist.
-                    // Double-registration was causing "Ghost Nets" and out-of-bounds traces.
-                    
-                    // RE-RE-FIX: voxel_grid.get_component_pins() depends on this registration 
-                    // for the Global Router to find nets. We MUST register it here, but
-                    // ensure place_pour doesn't double-register it.
-                    space.voxel_grid.add_component_pin(
-                        absolute_x_nm,
-                        absolute_y_nm,
-                        absolute_z_nm,
-                        name.clone().into(),
-                        pin_name.clone(),
-                        net_assignment.clone()
-                    );
-
-                    // Debug output removed for production - pin registration is working correctly
-                }
-            }
+            // v0.1.7: THT Auto-Stitching moved to Pass A (above) to ensure all pin features are consistent.
+            // This block is now intentionally empty as pin connectivity and voxel registration
+            // are handled in the optimized Pass A loop above.
         }
     }
 
     Ok(())
+}
+
+fn transform_declarative_to_relative(coord: &hwc_parser::Coordinate, pin_name: &str) -> hwc_parser::Coordinate {
+    match coord {
+        hwc_parser::Coordinate::Declarative { x, y, z, span } => {
+            hwc_parser::Coordinate::Relative(hwc_parser::RelativePosition {
+                anchor: hwc_parser::AnchorReference {
+                    name: pin_name.into(),
+                    span: *span,
+                },
+                edge: hwc_parser::Edge::Left, // Point anchors resolve same for all edges
+                offset: hwc_parser::RelativeOffset::Vector {
+                    x: x.clone(),
+                    y: y.clone(),
+                    z: z.clone(),
+                },
+                span: *span,
+            })
+        }
+        _ => coord.clone(),
+    }
 }

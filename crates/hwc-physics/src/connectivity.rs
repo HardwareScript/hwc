@@ -32,6 +32,108 @@ pub struct SubstrateLayerMetadata {
     pub net: u32,
     pub net_name: Option<CompactString>, // Resolved net name for easier lookup
     pub bbox: BoundingBox,
+    pub shape: SubstrateLayerShapeMetadata, // v0.1.7: Added shape for precise collision
+    pub cutouts: Vec<CutoutMetadata>,        // v0.1.7: Added cutouts for short-circuit avoidance
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SubstrateLayerShapeMetadata {
+    Rect,
+    Cylinder { diameter: i64 },
+    Tube { outer_diameter: u32, inner_diameter: u32 },
+}
+
+#[derive(Debug, Clone)]
+pub struct CutoutMetadata {
+    pub bbox: BoundingBox,
+    pub shape: SubstrateLayerShapeMetadata,
+}
+
+impl SubstrateLayerMetadata {
+    /// Check if a point (in nanometers) is within this substrate layer.
+    /// This is a copy of the engine's contains_nm logic.
+    pub fn contains_nm(&self, x: i64, y: i64, z: i64) -> bool {
+        // First check if point is in the substrate bbox
+        if !(x >= self.bbox.min_x
+            && x <= self.bbox.max_x
+            && y >= self.bbox.min_y
+            && y <= self.bbox.max_y
+            && z >= self.bbox.min_z
+            && z <= self.bbox.max_z)
+        {
+            return false;
+        }
+
+        // Check primary shape
+        match self.shape {
+            SubstrateLayerShapeMetadata::Cylinder { diameter } => {
+                let center_x = (self.bbox.min_x + self.bbox.max_x) / 2;
+                let center_y = (self.bbox.min_y + self.bbox.max_y) / 2;
+                let dx = x - center_x;
+                let dy = y - center_y;
+                let radius = diameter / 2;
+                if dx * dx + dy * dy > radius * radius {
+                    return false;
+                }
+            }
+            SubstrateLayerShapeMetadata::Tube { outer_diameter, .. } => {
+                let center_x = (self.bbox.min_x + self.bbox.max_x) / 2;
+                let center_y = (self.bbox.min_y + self.bbox.max_y) / 2;
+                let dx = x - center_x;
+                let dy = y - center_y;
+                let outer_radius = outer_diameter as i64 / 2;
+                let dist_sq = dx * dx + dy * dy;
+                // v0.1.7: For connectivity, we treat the entire outer diameter as "connected"
+                // (even if the center is a hollow drill hole, the plating touches the pads).
+                if dist_sq > outer_radius * outer_radius {
+                    return false;
+                }
+            }
+            SubstrateLayerShapeMetadata::Rect => {}
+        }
+
+        // Check cutouts
+        for cutout in &self.cutouts {
+            let bbox = &cutout.bbox;
+            if x >= bbox.min_x
+                && x <= bbox.max_x
+                && y >= bbox.min_y
+                && y <= bbox.max_y
+                && z >= bbox.min_z
+                && z <= bbox.max_z
+            {
+                match cutout.shape {
+                    SubstrateLayerShapeMetadata::Cylinder { diameter } => {
+                        let center_x = (bbox.min_x + bbox.max_x) / 2;
+                        let center_y = (bbox.min_y + bbox.max_y) / 2;
+                        let dx = x - center_x;
+                        let dy = y - center_y;
+                        let radius = diameter / 2;
+                        if dx * dx + dy * dy <= radius * radius {
+                            return false;
+                        }
+                    }
+                    SubstrateLayerShapeMetadata::Tube { outer_diameter, inner_diameter } => {
+                        let center_x = (bbox.min_x + bbox.max_x) / 2;
+                        let center_y = (bbox.min_y + bbox.max_y) / 2;
+                        let dx = x - center_x;
+                        let dy = y - center_y;
+                        let outer_radius = outer_diameter as i64 / 2;
+                        let inner_radius = inner_diameter as i64 / 2;
+                        let dist_sq = dx * dx + dy * dy;
+                        if dist_sq <= outer_radius * outer_radius && dist_sq >= inner_radius * inner_radius {
+                            return false;
+                        }
+                    }
+                    SubstrateLayerShapeMetadata::Rect => {
+                        return false;
+                    }
+                }
+            }
+        }
+
+        true
+    }
 }
 
 #[derive(Debug, Clone)]

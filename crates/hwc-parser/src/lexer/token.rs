@@ -99,6 +99,9 @@ pub enum Token {
     #[token("spanning")]
     Spanning,
 
+    #[token("via")]
+    Via,
+
     #[token("as")]
     As,
 
@@ -556,6 +559,7 @@ impl fmt::Display for Token {
             Token::To => write!(f, "the 'to' keyword"),
             Token::By => write!(f, "the 'by' keyword"),
             Token::Spanning => write!(f, "the 'spanning' keyword"),
+            Token::Via => write!(f, "the 'via' keyword"),
             Token::As => write!(f, "the 'as' keyword"),
             Token::Implements => write!(f, "the 'implements' keyword"),
             Token::Bridge => write!(f, "the 'bridge' keyword"),

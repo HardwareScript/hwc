@@ -16,6 +16,7 @@ pub fn route_manual(
     symbol_table: &crate::SymbolTable,
     eval_context: &hwc_parser::EvaluationContext, // UNIVERSAL CONTEXT
     stackup_manager: &crate::ir::stackup_manager::StackupManager,
+    profile: Option<&hwc_parser::ProfileDefinition>,
 ) -> Result<(), IrError> {
     let ctx = CoordinateContext {
         voxel_size: &space.voxel_size,
@@ -26,6 +27,7 @@ pub fn route_manual(
         eval_context,       // Pass the universal context
         bbox_tracker: None, // waypoints don't use anchor references
         stackup_manager,
+        profile,
     };
     let waypoints: Vec<Point3D> = route
         .path

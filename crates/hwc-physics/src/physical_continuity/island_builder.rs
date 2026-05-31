@@ -1,6 +1,8 @@
 use super::spatial_grid::SpatialGrid;
 use super::types::*;
-use crate::connectivity::{BoundingBox, ContactMetadata, PourMetadata, SubstrateLayerMetadata};
+use crate::connectivity::{
+    BoundingBox, ContactMetadata, PourMetadata, SubstrateLayerMetadata,
+};
 use rustc_hash::FxHashSet;
 
 /// Island builder - constructs conductive islands using flood-fill.
@@ -153,9 +155,10 @@ impl<'a> IslandBuilder<'a> {
         visited: &FxHashSet<usize>,
     ) -> Vec<usize> {
         let mut neighbors = Vec::new();
+        let curr_node_ref = &all_nodes[curr_idx].0;
         let curr_bbox = &all_nodes[curr_idx].1;
 
-        // Get candidates from spatial grid
+        // Get candidates from spatial_grid
         let candidates = spatial_grid.get_candidates(curr_bbox);
 
         // Check each candidate for actual touching and material match
@@ -164,8 +167,9 @@ impl<'a> IslandBuilder<'a> {
                 continue;
             }
 
-            let neighbor = &all_nodes[neighbor_idx];
-            let neighbor_material = self.get_node_material(&neighbor.0);
+            let neighbor_node_ref = &all_nodes[neighbor_idx].0;
+            let neighbor_bbox = &all_nodes[neighbor_idx].1;
+            let neighbor_material = self.get_node_material(neighbor_node_ref);
 
             // Material check: v0.1.7: Allow connection if materials match OR if a bridge exists
             let materials_can_connect = if neighbor_material == material {
@@ -189,7 +193,7 @@ impl<'a> IslandBuilder<'a> {
                 continue;
             }
 
-            if self.nodes_touch(curr_bbox, &neighbor.1) {
+            if self.nodes_touch_precise(curr_node_ref, curr_bbox, neighbor_node_ref, neighbor_bbox) {
                 neighbors.push(neighbor_idx);
             }
         }
@@ -207,20 +211,17 @@ impl<'a> IslandBuilder<'a> {
         None
     }
 
-    /// Collect all geometry nodes into a unified list.
+    /// Create a unified node list from substrate layers (v0.1.7).
     ///
-    /// Returns a vector of (GeometryNodeRef, BoundingBox) tuples for efficient
-    /// flood-fill processing.
-    ///
-    /// NOTE: We only use substrate layers, not pours/contacts directly, because
-    /// substrate layers represent the actual voxel geometry. Pours and contacts
-    /// are compiled into substrate layers, so using both would create duplicates.
+    /// v0.1.7: We only use SubstrateLayers because they contain the "physical truth"
+    /// including drilled holes and cutouts. Pours and Contacts are represented
+    /// as substrate layers in the VoxelGrid.
     fn collect_all_geometry_nodes(&self) -> Vec<(GeometryNodeRef, BoundingBox)> {
         let mut nodes = Vec::new();
 
         // Add substrate layers - these represent the actual voxel geometry
-        for (idx, _layer) in self.substrate_layers.iter().enumerate() {
-            nodes.push((GeometryNodeRef::SubstrateLayer(idx), self.substrate_layers[idx].bbox.clone()));
+        for (idx, layer) in self.substrate_layers.iter().enumerate() {
+            nodes.push((GeometryNodeRef::SubstrateLayer(idx), layer.bbox.clone()));
         }
 
         nodes
@@ -243,13 +244,103 @@ impl<'a> IslandBuilder<'a> {
         }
     }
 
-    /// Check if two bounding boxes physically touch.
-    ///
-    /// This uses the same logic as connectivity.rs but operates on BoundingBox directly.
-    /// Two boxes touch if:
-    /// 1. Their XY projections overlap
-    /// 2. They either share Z space (volume overlap) OR their Z faces touch exactly
-    fn nodes_touch(&self, a: &BoundingBox, b: &BoundingBox) -> bool {
+    /// Check if two nodes physically touch, with precise cutout awareness (v0.1.7).
+    fn nodes_touch_precise(
+        &self,
+        a_ref: &GeometryNodeRef,
+        a_bbox: &BoundingBox,
+        b_ref: &GeometryNodeRef,
+        b_bbox: &BoundingBox,
+    ) -> bool {
+        // Step 1: Basic bbox touch check
+        if !self.nodes_touch_bbox(a_bbox, b_bbox) {
+            return false;
+        }
+
+        // Step 2: Precise check for SubstrateLayers (v0.1.7)
+        // If either node has cutouts or non-rect shape, we must verify contact.
+        match (a_ref, b_ref) {
+            (GeometryNodeRef::SubstrateLayer(idx_a), GeometryNodeRef::SubstrateLayer(idx_b)) => {
+                let layer_a = &self.substrate_layers[*idx_a];
+                let layer_b = &self.substrate_layers[*idx_b];
+
+                // Precise check (v0.1.7):
+                // If they only touch at a face (adjacent layers), bbox check is sufficient 
+                // because cutouts are 3D volumes and face-only contact is always conductive 
+                // if the bboxes touch.
+                let z_volume_overlap = a_bbox.min_z < b_bbox.max_z && a_bbox.max_z > b_bbox.min_z;
+                if !z_volume_overlap {
+                    return true;
+                }
+
+                // If they overlap in volume, we must check for cutouts (Auto-Drill clearance).
+                // Heuristic: Sample the center of the intersection volume.
+                let intersect_min_x = a_bbox.min_x.max(b_bbox.min_x);
+                let intersect_max_x = a_bbox.max_x.min(b_bbox.max_x);
+                let intersect_min_y = a_bbox.min_y.max(b_bbox.min_y);
+                let intersect_max_y = a_bbox.max_y.min(b_bbox.max_y);
+                let intersect_min_z = a_bbox.min_z.max(b_bbox.min_z);
+                let intersect_max_z = a_bbox.max_z.min(b_bbox.max_z);
+
+                // v0.1.7: Sample 5 points (center + 4 mid-radius points) to handle Tube/Hollow shapes
+                let test_x = (intersect_min_x + intersect_max_x) / 2;
+                let test_y = (intersect_min_y + intersect_max_y) / 2;
+                
+                let dx = (intersect_max_x - intersect_min_x) / 3;
+                let dy = (intersect_max_y - intersect_min_y) / 3;
+
+                let x_points = [test_x, test_x - dx, test_x + dx];
+                let y_points = [test_y, test_y - dy, test_y + dy];
+                
+                let z_mid = (intersect_min_z + intersect_max_z) / 2;
+                let z_points = [intersect_min_z, z_mid, intersect_max_z];
+
+                // Contact if both layers contain any of the test points
+                let mut any_contact = false;
+                for &tx in &x_points {
+                    for &ty in &y_points {
+                        // Skip corners (redundant with center/mid checks for circles)
+                        if tx != test_x && ty != test_y { continue; }
+                        
+                        for &tz in &z_points {
+                            if layer_a.contains_nm(tx, ty, tz) && layer_b.contains_nm(tx, ty, tz) {
+                                any_contact = true;
+                                break;
+                            }
+                        }
+                        if any_contact { break; }
+                    }
+                    if any_contact { break; }
+                }
+
+                if !any_contact {
+                    // Fallback: If center sample fails, try sampling the corners of the intersection
+                    // v0.1.7: Added 1nm inner offset to guarantee we hit solid copper and avoid edge precision issues.
+                    let inner_offset = 1; // 1nm
+                    let corners = [
+                        (intersect_min_x + inner_offset, intersect_min_y + inner_offset),
+                        (intersect_max_x - inner_offset, intersect_min_y + inner_offset),
+                        (intersect_min_x + inner_offset, intersect_max_y - inner_offset),
+                        (intersect_max_x - inner_offset, intersect_max_y - inner_offset),
+                    ];
+                    
+                    for (cx, cy) in corners {
+                        for &cz in &z_points {
+                            if layer_a.contains_nm(cx, cy, cz) && layer_b.contains_nm(cx, cy, cz) {
+                                return true;
+                            }
+                        }
+                    }
+                }
+
+                any_contact
+            }
+            _ => true, // Fallback to bbox check for Pours/Contacts (already analytic)
+        }
+    }
+
+    /// Check if two bounding boxes physically touch (XY edge-inclusive, Z volume-overlapping or face-touching).
+    fn nodes_touch_bbox(&self, a: &BoundingBox, b: &BoundingBox) -> bool {
         // Step 1: Check XY plane overlap (Inclusive - touching at edges is a connection)
         let x_overlap = a.min_x <= b.max_x && a.max_x >= b.min_x;
         let y_overlap = a.min_y <= b.max_y && a.max_y >= b.min_y;
@@ -263,7 +354,8 @@ impl<'a> IslandBuilder<'a> {
         let z_volume_overlap = a.min_z < b.max_z && a.max_z > b.min_z;
 
         // B) Face Contact: Their Z boundaries touch exactly (adjacent layers)
-        let z_face_contact = (a.max_z == b.min_z) || (b.max_z == a.min_z);
+        // v0.1.7: Added 1nm tolerance for rounding stability
+        let z_face_contact = (a.max_z - b.min_z).abs() <= 1 || (b.max_z - a.min_z).abs() <= 1;
 
         z_volume_overlap || z_face_contact
     }

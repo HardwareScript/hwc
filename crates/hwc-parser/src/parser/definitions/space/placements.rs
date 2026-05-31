@@ -26,7 +26,11 @@ impl crate::parser::Parser {
             self.advance(); // consume "layer"
             self.expect(&Token::Colon)?;
             let layer_name = self.expect_identifier()?;
-            Elevation::Semantic(layer_name)
+            if layer_name.as_str() == "self" {
+                Elevation::Relative
+            } else {
+                Elevation::Semantic(layer_name)
+            }
         } else {
             // Physical: `on z: <expr>` or `on z: <expr> to <expr>`
             let coord_name = self.expect_identifier()?;
@@ -34,15 +38,21 @@ impl crate::parser::Parser {
                 return Err(self.error("Expected 'z' or 'layer' for pour elevation"));
             }
             self.expect(&Token::Colon)?;
-            let start = self.parse_expression()?;
             
-            let mut end = None;
-            if self.check(&Token::To) {
-                self.advance(); // consume "to"
-                end = Some(self.parse_expression()?);
+            if self.check(&Token::Identifier("relative".into())) {
+                self.advance();
+                Elevation::Relative
+            } else {
+                let start = self.parse_expression()?;
+                
+                let mut end = None;
+                if self.check(&Token::To) {
+                    self.advance(); // consume "to"
+                    end = Some(self.parse_expression()?);
+                }
+                
+                Elevation::Physical { start, end }
             }
-            
-            Elevation::Physical { start, end }
         };
 
         self.expect(&Token::Colon)?;
@@ -296,20 +306,19 @@ impl crate::parser::Parser {
             self.advance(); // consume "layer"
             self.expect(&Token::Colon)?;
             let from_name = self.expect_identifier()?;
+            let from_elev = if from_name.as_str() == "self" { Elevation::Relative } else { Elevation::Semantic(from_name) };
+            
             self.expect(&Token::To)?;
-            // After "to" we also expect "layer" again for symmetry (or allow just the name? but spec shows "layer: l1 to l2")
-            // To be user-friendly, we'll require "layer:" again for the second part.
-            if !self.check(&Token::Identifier("layer".into())) {
-                // allow bare name after "to" for ergonomics: spanning layer: l1 to l2
-                // but for now enforce consistency; we can relax later
-            }
+            
             // Consume optional second "layer" keyword
             if self.check(&Token::Identifier("layer".into())) {
                 self.advance();
                 self.expect(&Token::Colon)?;
             }
             let to_name = self.expect_identifier()?;
-            (Elevation::Semantic(from_name), Elevation::Semantic(to_name))
+            let to_elev = if to_name.as_str() == "self" { Elevation::Relative } else { Elevation::Semantic(to_name) };
+            
+            (from_elev, to_elev)
         } else {
             // Physical / legacy
             let from_coord = self.expect_identifier()?;
@@ -317,7 +326,13 @@ impl crate::parser::Parser {
                 return Err(self.error("Expected 'z' or 'layer' for contact elevation"));
             }
             self.expect(&Token::Colon)?;
-            let from_expr = self.parse_expression()?;
+            
+            let from_elev = if self.check(&Token::Identifier("relative".into())) {
+                self.advance();
+                Elevation::Relative
+            } else {
+                Elevation::Physical { start: self.parse_expression()?, end: None }
+            };
 
             self.expect(&Token::To)?;
 
@@ -326,9 +341,15 @@ impl crate::parser::Parser {
                 return Err(self.error("Expected 'z' or 'layer' for contact elevation"));
             }
             self.expect(&Token::Colon)?;
-            let to_expr = self.parse_expression()?;
+            
+            let to_elev = if self.check(&Token::Identifier("relative".into())) {
+                self.advance();
+                Elevation::Relative
+            } else {
+                Elevation::Physical { start: self.parse_expression()?, end: None }
+            };
 
-            (Elevation::Physical { start: from_expr, end: None }, Elevation::Physical { start: to_expr, end: None })
+            (from_elev, to_elev)
         };
 
         // Optional: properties block

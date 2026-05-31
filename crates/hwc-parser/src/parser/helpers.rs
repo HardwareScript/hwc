@@ -78,6 +78,51 @@ impl super::Parser {
         }
     }
 
+    /// Check if the current token is a specific identifier (keyword-aware)
+    pub(super) fn check_identifier(&self, expected: &str) -> bool {
+        if let Some(current) = self.current() {
+            let name = match &current.token {
+                Token::Identifier(name) => Some(name.as_str()),
+                Token::Module => Some("module"),
+                Token::Component => Some("component"),
+                Token::Space => Some("space"),
+                Token::Profile => Some("profile"),
+                Token::Material => Some("material"),
+                Token::Via => Some("via"),
+                Token::Spanning => Some("spanning"),
+                Token::Interface => Some("interface"),
+                Token::Device => Some("device"),
+                Token::On => Some("on"),
+                Token::At => Some("at"),
+                Token::To => Some("to"),
+                Token::By => Some("by"),
+                Token::From => Some("from"),
+                Token::Named => Some("named"),
+                Token::Dimensions => Some("dimensions"),
+                Token::Grid => Some("grid"),
+                Token::Path => Some("path"),
+                Token::Origin => Some("origin"),
+                Token::Let => Some("let"),
+                Token::Mut => Some("mut"),
+                Token::Const => Some("const"),
+                Token::True => Some("true"),
+                Token::False => Some("false"),
+                Token::Add => Some("add"),
+                Token::Route => Some("route"),
+                Token::Expose => Some("expose"),
+                Token::Rotated => Some("rotated"),
+                Token::Implements => Some("implements"),
+                Token::Bridge => Some("bridge"),
+                _ => None,
+            };
+
+            if let Some(n) = name {
+                return n == expected;
+            }
+        }
+        false
+    }
+
     /// Check if current token matches the given token type
     pub(super) fn check(&self, token: &Token) -> bool {
         if let Some(current) = self.current() {
@@ -231,7 +276,9 @@ impl super::Parser {
     // Token Extraction
     // ========================================================================
 
-    /// Expect and consume an identifier token, returning Identifier with span
+    /// Expect and consume an identifier token, returning Identifier with span.
+    /// v0.1.6: Context-aware parsing allows keywords to be treated as identifiers
+    /// when they are in an identifier position (e.g. property names).
     pub(super) fn expect_identifier(&mut self) -> Result<crate::ast::Identifier, ParseError> {
         if let Some(current) = self.current() {
             // v0.1.6 Migration: Detect quoted string (old v0.1.5 syntax)
@@ -241,8 +288,44 @@ impl super::Parser {
                 ));
             }
 
-            if let Token::Identifier(name) = &current.token {
-                let identifier = crate::ast::Identifier::new(name.clone().into(), current.span);
+            // Treat keywords as identifiers in this context
+            let identifier_name = match &current.token {
+                Token::Identifier(name) => Some(name.clone().into()),
+                Token::Module => Some("module".into()),
+                Token::Component => Some("component".into()),
+                Token::Space => Some("space".into()),
+                Token::Profile => Some("profile".into()),
+                Token::Material => Some("material".into()),
+                Token::Via => Some("via".into()),
+                Token::Spanning => Some("spanning".into()),
+                Token::Interface => Some("interface".into()),
+                Token::Device => Some("device".into()),
+                Token::On => Some("on".into()),
+                Token::At => Some("at".into()),
+                Token::To => Some("to".into()),
+                Token::By => Some("by".into()),
+                Token::From => Some("from".into()),
+                Token::Named => Some("named".into()),
+                Token::Dimensions => Some("dimensions".into()),
+                Token::Grid => Some("grid".into()),
+                Token::Path => Some("path".into()),
+                Token::Origin => Some("origin".into()),
+                Token::Let => Some("let".into()),
+                Token::Mut => Some("mut".into()),
+                Token::Const => Some("const".into()),
+                Token::True => Some("true".into()),
+                Token::False => Some("false".into()),
+                Token::Add => Some("add".into()),
+                Token::Route => Some("route".into()),
+                Token::Expose => Some("expose".into()),
+                Token::Rotated => Some("rotated".into()),
+                Token::Implements => Some("implements".into()),
+                Token::Bridge => Some("bridge".into()),
+                _ => None,
+            };
+
+            if let Some(name) = identifier_name {
+                let identifier = crate::ast::Identifier::new(name, current.span);
                 self.advance();
                 Ok(identifier)
             } else {

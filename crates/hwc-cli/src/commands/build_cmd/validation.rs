@@ -245,10 +245,15 @@ fn run_drc_check(space: &HardwareSpace, config: &BuildConfig, start_time: Instan
 
             // eprintln!($3"[DEBUG DRC] Net '{}' geometry type: {:?}", net_name, geometry_type);
 
+            let classification = space.net_classifications.get(&net_name)
+                .copied()
+                .unwrap_or(hwc_engine::space::NetClassification::Unclassified);
+
             NetVoxels {
                 net_name,
                 voxels,
                 geometry_type,
+                classification,
             }
         })
         .collect();
@@ -369,6 +374,7 @@ fn run_drc_check(space: &HardwareSpace, config: &BuildConfig, start_time: Instan
         substrate_layers,
         &constraint_rulebook,
         &space.netlist,
+        &space.material_registry,
     );
     // eprintln!($3"[DEBUG DRC] Via enclosure check complete: {} violations", via_enclosure_report.violations.len());
 
@@ -698,6 +704,56 @@ fn convert_metadata_to_physics(
                 None
             };
 
+            let shape = match layer.shape {
+                hwc_engine::voxel_grid::SubstrateLayerShape::Rect => {
+                    hwc_physics::connectivity::SubstrateLayerShapeMetadata::Rect
+                }
+                hwc_engine::voxel_grid::SubstrateLayerShape::Cylinder { diameter, .. } => {
+                    hwc_physics::connectivity::SubstrateLayerShapeMetadata::Cylinder { diameter }
+                }
+                hwc_engine::voxel_grid::SubstrateLayerShape::Tube {
+                    outer_diameter,
+                    inner_diameter,
+                    ..
+                } => hwc_physics::connectivity::SubstrateLayerShapeMetadata::Tube {
+                    outer_diameter,
+                    inner_diameter,
+                },
+            };
+
+            let cutouts = layer
+                .cutouts
+                .iter()
+                .map(|c| hwc_physics::connectivity::CutoutMetadata {
+                    bbox: hwc_physics::connectivity::BoundingBox {
+                        min_x: c.bbox.min.x,
+                        min_y: c.bbox.min.y,
+                        min_z: c.bbox.min.z,
+                        max_x: c.bbox.max.x,
+                        max_y: c.bbox.max.y,
+                        max_z: c.bbox.max.z,
+                    },
+                    shape: match c.shape {
+                        hwc_engine::voxel_grid::SubstrateLayerShape::Rect => {
+                            hwc_physics::connectivity::SubstrateLayerShapeMetadata::Rect
+                        }
+                        hwc_engine::voxel_grid::SubstrateLayerShape::Cylinder { diameter, .. } => {
+                            hwc_physics::connectivity::SubstrateLayerShapeMetadata::Cylinder {
+                                diameter,
+                            }
+                        }
+                        hwc_engine::voxel_grid::SubstrateLayerShape::Tube {
+                            outer_diameter,
+                            inner_diameter,
+                            ..
+                        } => hwc_physics::connectivity::SubstrateLayerShapeMetadata::Tube {
+                            outer_diameter,
+                            inner_diameter,
+                        },
+                    },
+                })
+                .collect();
+
             hwc_physics::connectivity::SubstrateLayerMetadata {
                 material: layer.material,
                 net: layer.net,
@@ -710,6 +766,8 @@ fn convert_metadata_to_physics(
                     max_y: layer.bbox.max.y,
                     max_z: layer.bbox.max.z,
                 },
+                shape,
+                cutouts,
             }
         })
         .collect();

@@ -24,6 +24,9 @@ pub enum Elevation {
     },
     /// High-Level paradigm: semantic layer name from profile stackup
     Semantic(Identifier),
+    /// Relative paradigm: `on layer: self` or `on z: relative`
+    /// Resolves to the base elevation of the parent component.
+    Relative,
 }
 
 impl Elevation {
@@ -37,11 +40,16 @@ impl Elevation {
         matches!(self, Elevation::Semantic(_))
     }
 
+    /// Returns true if this elevation is relative to its parent (Relative paradigm).
+    pub fn is_relative(&self) -> bool {
+        matches!(self, Elevation::Relative)
+    }
+
     /// Returns the start expression if this is a Physical elevation.
     pub fn as_physical_start(&self) -> Option<&Expression> {
         match self {
             Elevation::Physical { start, .. } => Some(start),
-            Elevation::Semantic(_) => None,
+            Elevation::Semantic(_) | Elevation::Relative => None,
         }
     }
 
@@ -49,14 +57,14 @@ impl Elevation {
     pub fn as_physical_end(&self) -> Option<&Expression> {
         match self {
             Elevation::Physical { end, .. } => end.as_ref(),
-            Elevation::Semantic(_) => None,
+            Elevation::Semantic(_) | Elevation::Relative => None,
         }
     }
 
     /// Returns the layer identifier if this is a Semantic elevation.
     pub fn as_semantic_layer(&self) -> Option<&Identifier> {
         match self {
-            Elevation::Physical { .. } => None,
+            Elevation::Physical { .. } | Elevation::Relative => None,
             Elevation::Semantic(id) => Some(id),
         }
     }
@@ -208,6 +216,9 @@ pub enum NetClassification {
 
     /// Signal net (data, clock, control, etc.)
     Signal,
+
+    /// High voltage net (>150V) requiring special isolation
+    HighVoltage,
 
     /// Bidirectional or unclassified
     Unclassified,

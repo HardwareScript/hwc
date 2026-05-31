@@ -26,6 +26,8 @@ pub struct ProfileDefinition {
     /// Bridge rules for material transitions (Phase 1 - BRIDGE-IMPLEMENTATION.md)
     /// Syntax: `bridge FromMaterial to ToMaterial: BridgeMaterial`
     pub bridges: Vec<BridgeRule>,
+    /// Explicit via definitions (v0.1.7)
+    pub vias: Vec<ViaDefinition>,
     pub other: rustc_hash::FxHashMap<CompactString, String>, // v0.1.6: Custom constraint blocks
     pub span: Span,
 }
@@ -55,6 +57,27 @@ pub struct BridgeRule {
     pub interface_thickness: Option<Measurement>,
     /// Via fill material (e.g., "Tungsten") - fills the rest of the via
     pub fill_material: Option<CompactString>,
+    pub span: Span,
+}
+
+/// Explicit via definition within a profile (v0.1.7).
+///
+/// Syntax:
+/// ```hw
+/// via Microvia_1:
+///     diameter: 0.3mm
+///     annular_ring: 0.15mm
+///     spanning: inner2 to inner1
+///     material: Copper
+/// ```
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ViaDefinition {
+    pub name: Identifier,
+    pub diameter: Measurement,
+    pub annular_ring: Measurement,
+    pub from_layer: Identifier,
+    pub to_layer: Identifier,
+    pub material: Option<Identifier>,
     pub span: Span,
 }
 

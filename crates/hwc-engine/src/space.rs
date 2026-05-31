@@ -407,6 +407,7 @@ pub enum NetClassification {
     Power,
     Ground,
     Signal,
+    HighVoltage,
     Unclassified,
 }
 
@@ -425,6 +426,7 @@ impl std::fmt::Display for NetClassification {
             NetClassification::Power => write!(f, "power"),
             NetClassification::Ground => write!(f, "ground"),
             NetClassification::Signal => write!(f, "signal"),
+            NetClassification::HighVoltage => write!(f, "high-voltage"),
             NetClassification::Unclassified => write!(f, "unclassified"),
         }
     }
@@ -635,8 +637,8 @@ impl HardwareSpace {
     ///
     /// This is used for through-hole component pins and mounting holes.
     /// It automatically adds cutouts to all intersecting substrate layers.
-    pub fn drill_hole(&mut self, hole_bbox: BoundingBox, diameter_nm: Option<i64>) {
-        self.voxel_grid.drill_hole(hole_bbox, diameter_nm);
+    pub fn drill_hole(&mut self, hole_bbox: BoundingBox, diameter_nm: Option<i64>, drill_net: NetId) {
+        self.voxel_grid.drill_hole(hole_bbox, diameter_nm, drill_net.raw());
     }
 
     /// **v0.1.7: Realize analytic routes into voxel grid (LAZY REALIZATION)**

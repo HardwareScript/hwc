@@ -4,7 +4,7 @@ use super::super::conversions::{spanning_coordinate_to_point, CoordinateContext}
 use super::super::errors::IrError;
 use crate::ir::stackup_manager::StackupManager;
 use hwc_engine::space::PourMetadata;
-use hwc_engine::{ComponentPlacer, HardwareSpace, Point3D};
+use hwc_engine::{HardwareSpace, Point3D};
 
 /// Place a pour (material region) in the voxel grid.
 pub fn place_pour(
@@ -16,6 +16,7 @@ pub fn place_pour(
     eval_context: &hwc_parser::EvaluationContext,
     collector: &hwc_diagnostics::DiagnosticCollector,
     stackup_manager: &StackupManager,
+    profile: Option<&hwc_parser::ProfileDefinition>,
 ) -> Result<(), IrError> {
     // Get or register the pour material in the material registry
     let material_id = space.material_registry.get_or_register(&pour.material);
@@ -62,6 +63,7 @@ pub fn place_pour(
         eval_context,
         bbox_tracker: Some(bbox_tracker), // Pass bbox_tracker for anchor references in pour boundaries
         stackup_manager,
+        profile,
     };
     let start = spanning_coordinate_to_point(&from, &ctx, false)
         .map_err(|e| IrError::PlacementError(e))?;
@@ -104,18 +106,38 @@ pub fn place_pour(
         if bbox.intersects(substrate_bbox) && !skip_substrate_check {
             // This pour overlaps with the substrate - check if it's the same material
             if space.substrate_material_id != material_id {
-                let substrate_material_name = space
-                    .material_registry
-                    .get_name(space.substrate_material_id)
-                    .unwrap_or("Unknown");
+                // AUTO-CARVE (v0.1.7): If a conductor (Copper) overlaps an insulator (FR4) or 
+                // semiconductor (Silicon), automatically carve the substrate instead of erroring.
+                let is_conductor = space.material_registry.is_conductor(material_id);
+                let is_substrate_insulator = space.material_registry.is_insulator(space.substrate_material_id) 
+                                           || space.material_registry.is_semiconductor(space.substrate_material_id);
 
-                return Err(IrError::PlacementError(format!(
-                    "Substrate interpenetration detected: Pour '{}' ({}) overlaps with the base substrate ({}). \
-                     Use the same material as the substrate, or place the pour outside the substrate bounds.",
-                    pour.name,
-                    pour.material,
-                    substrate_material_name
-                )));
+                if is_conductor && is_substrate_insulator {
+                    // Carve the substrate!
+                    // Memory usage: O(N) where N is number of substrate layers
+                    // v0.1.7: Drill is net-aware. Substrate has net 0, so it will always be carved.
+                    // If we overlap another pour on the same net, it will NOT be carved.
+                    let pour_net_id = if let Some(net_name) = &pour.net {
+                        space.netlist.get_net_by_name(net_name.base.as_str()).unwrap_or(hwc_engine::netlist::NetId::new(0))
+                    } else {
+                        hwc_engine::netlist::NetId::new(0)
+                    };
+                    space.voxel_grid.drill_hole(bbox, None, pour_net_id.raw());
+                    println!("   ├─ Auto-carved substrate for pour '{}' ({})", pour.name, pour.material);
+                } else {
+                    let substrate_material_name = space
+                        .material_registry
+                        .get_name(space.substrate_material_id)
+                        .unwrap_or("Unknown");
+
+                    return Err(IrError::PlacementError(format!(
+                        "Substrate interpenetration detected: Pour '{}' ({}) overlaps with the base substrate ({}). \
+                         Use the same material as the substrate, or place the pour outside the substrate bounds.",
+                        pour.name,
+                        pour.material,
+                        substrate_material_name
+                    )));
+                }
             }
         }
     }
@@ -160,12 +182,38 @@ pub fn place_pour(
             terminal: binding.terminal.clone(),
         });
 
+    // 1. Resolve net name for unrolled component pours (v0.1.7)
+    let mut resolved_net_name = pour.net.as_ref().map(|n| n.base.clone());
+
+    if let Some(binding) = &pour.device {
+        let resolved_opt = (|| {
+            let netlist = &space.netlist;
+            let comp_id = netlist.get_component_by_name(binding.device_name.as_str())?;
+            let pins = netlist.get_component_pins(comp_id);
+
+            pins.iter().find_map(|&pin_id| {
+                let pin_data = netlist.get_pin(pin_id)?;
+                if pin_data.name == binding.terminal {
+                    let net_id = pin_data.connected_net?;
+                    let net_data = netlist.get_net(net_id)?;
+                    Some(net_data.name.to_string())
+                } else {
+                    None
+                }
+            })
+        })();
+
+        if let Some(net_name) = resolved_opt {
+            resolved_net_name = Some(net_name.into());
+        }
+    }
+
     // Register pour metadata for BOM and netlist generation
     space.pours.push(PourMetadata {
         name: pour.name.to_string(),
         material_name: pour.material.clone(),
         z_bottom_nm: z_start_nm,
-        net: pour.net.as_ref().map(|n| n.to_string()),
+        net: resolved_net_name.clone(),
         area_nm2,
         bbox: Some(bbox),
         device_binding,
@@ -176,7 +224,7 @@ pub fn place_pour(
     // GAP 1.5 FIX: ANCHOR POINT GENERATION FOR ROUTER CONNECTION
     // Calculate center-of-mass of the pour and register as a virtual pin
     // This gives the router a target coordinate for connecting traces to pours
-    let net_id = if let Some(net_name) = &pour.net {
+    let net_id = if let Some(net_name) = resolved_net_name.as_ref() {
         // Calculate center point of pour (center-of-mass)
         let center_x = (start_with_z.x + end_with_z.x) / 2;
         let center_y = (start_with_z.y + end_with_z.y) / 2;
@@ -200,16 +248,11 @@ pub fn place_pour(
         // Connect the anchor pin to the net
         // First, ensure the net exists in the netlist
         let net_id_handle =
-            if let Some(existing_net) = space.netlist.get_net_by_name(net_name.base.as_str()) {
-                // // println!($3"[DEBUG] Found existing net '{}' with ID {}", net_name.to_string(), existing_net.raw());
+            if let Some(existing_net) = space.netlist.get_net_by_name(net_name.as_str()) {
                 existing_net
             } else {
-                // Create the net if it doesn't exist yet
-                // Use default trace width and material (will be overridden by actual routes)
-
-                // // println!($3"[DEBUG] Created new net '{}' with ID {}", net_name.to_string(), new_net.raw());
                 space.netlist.add_net(
-                    net_name.to_string(),
+                    net_name.clone(),
                     100_000, // Default 0.1mm trace width
                     material_id,
                 )
@@ -230,7 +273,7 @@ pub fn place_pour(
 
                     // Also synchronize VoxelGrid metadata for the bound pin
                     // This ensures the component is exempt from collision during routing
-                    space.voxel_grid.set_pin_net(&binding.device_name, &binding.terminal, net_name.base.as_str());
+                    space.voxel_grid.set_pin_net(&binding.device_name, &binding.terminal, net_name.as_str());
                 }
             }
         }
@@ -243,7 +286,7 @@ pub fn place_pour(
             center_z,
             pour.name.to_string().into(),
             "anchor".into(),
-            Some(net_name.to_string().into())
+            Some(net_name.clone())
         );
 
         println!(
@@ -273,19 +316,15 @@ pub fn place_pour(
     // Reduced debug output - only print anomalies or errors
     // Full details available in substrate layer inspection if needed
 
-    let placer = ComponentPlacer::new();
-    placer
-        .place_substrate(
-            &mut space.voxel_grid,
-            &space.voxel_size,
-            material_id,
-            start_with_z,
-            end_with_z,
-            net_id,
-        )
-        .map_err(|e| {
-            IrError::PlacementError(format!("Failed to place pour '{}': {}", pour.name, e))
-        })?;
+    // v0.1.7 FIXED: Pours must be registered as SubstrateLayerType::Pour
+    // to prevent the Auto-Drill system from carving holes through them.
+    let bbox = hwc_engine::geometry::BoundingBox::new(start_with_z, end_with_z);
+    space.voxel_grid.add_substrate_layer(
+        material_id,
+        net_id,
+        bbox,
+        hwc_engine::voxel_grid::SubstrateLayerType::Pour,
+    );
 
     Ok(())
 }

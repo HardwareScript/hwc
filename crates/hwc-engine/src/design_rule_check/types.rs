@@ -316,6 +316,9 @@ pub struct NetVoxels {
     /// Geometry type for proper thermal/electrical analysis
     /// Added in v0.1.6 for accurate physics validation
     pub geometry_type: GeometryType,
+
+    /// Net classification (v0.1.7: for HV isolation checks)
+    pub classification: crate::space::NetClassification,
 }
 
 #[cfg(test)]
@@ -326,6 +329,7 @@ impl NetVoxels {
             net_name: net_name.into(),
             voxels,
             geometry_type: GeometryType::Trace,
+            classification: crate::space::NetClassification::Unclassified,
         }
     }
 
@@ -335,6 +339,7 @@ impl NetVoxels {
             net_name: net_name.into(),
             voxels,
             geometry_type: GeometryType::Pour,
+            classification: crate::space::NetClassification::Unclassified,
         }
     }
 
@@ -344,6 +349,7 @@ impl NetVoxels {
             net_name: net_name.into(),
             voxels,
             geometry_type: GeometryType::Contact,
+            classification: crate::space::NetClassification::Unclassified,
         }
     }
 }

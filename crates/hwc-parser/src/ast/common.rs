@@ -114,6 +114,7 @@ pub enum Unit {
     Millimeter,
     Centimeter,
     Micrometer,
+    Nanometer,
 
     // Voltage - for safety clearances
     Volt,

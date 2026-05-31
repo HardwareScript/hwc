@@ -77,42 +77,59 @@ pub struct ViaLibrary {
 }
 
 impl ViaLibrary {
-    /// Create a new via library with standard via types.
-    pub fn new_standard(fabrication: Option<&hwc_engine::constraint_manager::FabricationConstraints>) -> Self {
+    /// Create a via library from a profile definition (v0.1.7).
+    ///
+    /// This allows users to define custom vias in their profile that span specific layers.
+    /// If no explicit vias are defined, it falls back to the standard adjacent-layer library.
+    pub fn from_profile(
+        profile: Option<&hwc_parser::ProfileDefinition>,
+        stackup_manager: &crate::ir::stackup_manager::StackupManager,
+        _fabrication: Option<&hwc_engine::constraint_manager::FabricationConstraints>,
+    ) -> Self {
         let mut vias = Vec::new();
 
-        // v0.1.7: Use fabrication constraints for default via dimensions (Limitation 7)
-        let default_dia = fabrication.map(|f| f.default_via_diameter_nm as f64 / 1_000_000.0).unwrap_or(0.3);
-        let min_enclosure = fabrication.map(|f| f.min_annular_ring_nm as f64 / 1_000_000.0).unwrap_or(0.15);
+        if let Some(p) = profile {
+            for via_def in &p.vias {
+                // Resolve semantic layer names to physical indices
+                let from_layer = stackup_manager.get_index_for_layer(via_def.from_layer.as_str());
+                let to_layer = stackup_manager.get_index_for_layer(via_def.to_layer.as_str());
 
-        // Standard vias for PCB (Metal1 to Metal2, Metal2 to Metal3, etc.)
-        // Using conservative dimensions for manufacturability
-        for layer in 1..=10 {
-            vias.push(ViaType::new(
-                format!("Via{}_{}", layer, layer + 1).into(),
-                "Copper".into(),
-                layer,
-                layer + 1,
-                default_dia,
-                min_enclosure,
-            ));
+                if let (Some(from), Some(to)) = (from_layer, to_layer) {
+                    vias.push(ViaType::new(
+                        via_def.name.name.clone(),
+                        via_def
+                            .material
+                            .as_ref()
+                            .map(|m| m.name.clone())
+                            .unwrap_or_else(|| "Copper".into()),
+                        from,
+                        to,
+                        Self::measurement_to_mm(&via_def.diameter),
+                        Self::measurement_to_mm(&via_def.annular_ring),
+                    ));
+                }
+            }
         }
 
-        // Silicon vias (for IC design) - smaller dimensions
-        vias.push(ViaType::new(
-            "ContactPoly".into(),
-            "Tungsten".into(),
-            0,      // Poly layer
-            1,      // Metal1
-            0.001,  // 1um diameter
-            0.0005, // 0.5um enclosure
-        ));
+        // ❌ DELETED: No more hardcoded adjacent-layer fallback loop!
 
         Self { vias }
     }
 
+    fn measurement_to_mm(m: &hwc_parser::Measurement) -> f64 {
+        match m.unit {
+            hwc_parser::Unit::Millimeter => m.value,
+            hwc_parser::Unit::Micrometer => m.value / 1000.0,
+            hwc_parser::Unit::Nanometer => m.value / 1_000_000.0,
+            hwc_parser::Unit::Centimeter => m.value * 10.0,
+            _ => m.value, // Default to mm for unknown units
+        }
+    }
+
     /// Find the appropriate via type for a layer pair.
-    pub fn find_via_for_layers(&self, from_layer: usize, to_layer: usize) -> Option<&ViaType> {
+    ///
+    /// v0.1.7: Added `prefer_large` to select appropriate vias for Power/Signal nets.
+    pub fn find_via_for_layers(&self, from_layer: usize, to_layer: usize, prefer_large: bool) -> Option<&ViaType> {
         // Normalize layer order (always from lower to higher)
         let (start, end) = if from_layer < to_layer {
             (from_layer, to_layer)
@@ -120,9 +137,30 @@ impl ViaLibrary {
             (to_layer, from_layer)
         };
 
-        self.vias
-            .iter()
-            .find(|v| v.from_layer == start && v.to_layer == end)
+        let mut matches: Vec<&ViaType> = self.vias.iter().filter(|v| {
+            // 1. Exact match (e.g., L4 to L6 exact)
+            let exact = v.from_layer == start && v.to_layer == end;
+
+            // 2. Through-Hole Spanning Match (v0.1.7):
+            // If the via is a through-hole (starts at 0) and its top layer spans past or to
+            // our target end, it physically passes through our target layers and can connect them!
+            let is_through_hole_compat = v.from_layer == 0 && v.to_layer >= end && start >= v.from_layer;
+
+            exact || is_through_hole_compat
+        }).collect();
+
+        if matches.is_empty() {
+            return None;
+        }
+
+        // Sort by diameter to satisfy prefer_large
+        matches.sort_by(|a, b| a.diameter_mm.partial_cmp(&b.diameter_mm).unwrap());
+
+        if prefer_large {
+            matches.last().copied()
+        } else {
+            matches.first().copied()
+        }
     }
 }
 
@@ -178,14 +216,25 @@ impl AutoViaInserter {
     /// Create a new automatic via inserter with standard via library.
     pub fn new() -> Self {
         Self {
-            via_library: ViaLibrary::new_standard(None),
+            via_library: ViaLibrary { vias: Vec::new() },
         }
     }
 
     /// Create a new automatic via inserter with fabrication constraints.
-    pub fn new_with_constraints(fabrication: Option<&hwc_engine::constraint_manager::FabricationConstraints>) -> Self {
+    pub fn new_with_constraints(_fabrication: Option<&hwc_engine::constraint_manager::FabricationConstraints>) -> Self {
         Self {
-            via_library: ViaLibrary::new_standard(fabrication),
+            via_library: ViaLibrary::from_profile(None, &crate::ir::stackup_manager::StackupManager::new_empty(), None),
+        }
+    }
+
+    /// Create a new auto via inserter from a profile definition (v0.1.7).
+    pub fn from_profile(
+        profile: Option<&hwc_parser::ProfileDefinition>,
+        stackup_manager: &crate::ir::stackup_manager::StackupManager,
+        fabrication: Option<&hwc_engine::constraint_manager::FabricationConstraints>,
+    ) -> Self {
+        Self {
+            via_library: ViaLibrary::from_profile(profile, stackup_manager, fabrication),
         }
     }
 
@@ -211,6 +260,7 @@ impl AutoViaInserter {
         &self,
         space: &HardwareSpace,
         profile: Option<&hwc_parser::ProfileDefinition>,
+        stackup_manager: &crate::ir::stackup_manager::StackupManager,
     ) -> Result<Vec<ContactPlacement>, String> {
         let mut inserted_vias = Vec::new();
 
@@ -226,7 +276,7 @@ impl AutoViaInserter {
         // Step 2: For each net, find layer transitions
         for (net_name, pours) in &pours_by_net {
             let transitions =
-                self.find_layer_transitions(net_name, pours, space.voxel_size.z_nm);
+                self.find_layer_transitions(net_name, pours, stackup_manager);
 
             if transitions.is_empty() {
                 continue;
@@ -258,8 +308,8 @@ impl AutoViaInserter {
                         } else if vias.len() == 1 {
                             println!(
                                 "   │  ├─ Auto-inserted single via at ({:.3}mm, {:.3}mm) spanning z {:.3}mm to {:.3}mm",
-                                self.coord_to_mm(&vias[0].position),
-                                self.coord_to_mm(&vias[0].position),
+                                self.coord_to_mm(&vias[0].position, 'x'),
+                                self.coord_to_mm(&vias[0].position, 'y'),
                                 transition.from_z_nm as f64 / 1_000_000.0,
                                 transition.to_z_nm as f64 / 1_000_000.0,
                             );
@@ -304,7 +354,7 @@ impl AutoViaInserter {
         &self,
         net_name: &str,
         pours: &[&PourMetadata],
-        voxel_z_nm: i64,
+        stackup_manager: &crate::ir::stackup_manager::StackupManager,
     ) -> Vec<LayerTransition> {
         let mut transitions = Vec::new();
 
@@ -324,22 +374,32 @@ impl AutoViaInserter {
                             } else {
                                 (bbox2, bbox1, &pour2.name, &pour1.name, &pour2.material_name, &pour1.material_name)
                             };
-                        let voxel_z = voxel_z_nm.max(1);
-                        let from_layer = (lower_bbox.min.z / voxel_z) as usize;
-                        let to_layer = (upper_bbox.max.z / voxel_z) as usize;
-                        transitions.push(LayerTransition {
-                            net_name: net_name.to_string().into(),
-                            from_layer,
-                            to_layer,
-                            from_z_nm: lower_bbox.min.z,
-                            to_z_nm: upper_bbox.max.z,
-                            from_pour: lower_pour.clone(),
-                            to_pour: upper_pour.clone(),
-                            from_material: lower_mat.clone(),
-                            to_material: upper_mat.clone(),
-                            from_bbox: *lower_bbox,
-                            to_bbox: *upper_bbox,
-                        });
+                        
+                        // v0.1.7: Map physical Z back to semantic layer indices
+                        // Use the middle of the pour thickness to avoid boundary jitter
+                        let from_z_mid = (lower_bbox.min.z + lower_bbox.max.z) / 2;
+                        let to_z_mid = (upper_bbox.min.z + upper_bbox.max.z) / 2;
+
+                        let from_layer = stackup_manager.get_layer_index_at_z(from_z_mid);
+                        let to_layer = stackup_manager.get_layer_index_at_z(to_z_mid);
+
+                        if let (Some(from), Some(to)) = (from_layer, to_layer) {
+                            if from != to {
+                                transitions.push(LayerTransition {
+                                    net_name: net_name.to_string().into(),
+                                    from_layer: from,
+                                    to_layer: to,
+                                    from_z_nm: lower_bbox.min.z,
+                                    to_z_nm: upper_bbox.max.z,
+                                    from_pour: lower_pour.clone(),
+                                    to_pour: upper_pour.clone(),
+                                    from_material: lower_mat.clone(),
+                                    to_material: upper_mat.clone(),
+                                    from_bbox: *lower_bbox,
+                                    to_bbox: *upper_bbox,
+                                });
+                            }
+                        }
                     }
                 }
             }
@@ -363,7 +423,7 @@ impl AutoViaInserter {
         let overlap = self.find_overlap(&transition.from_bbox, &transition.to_bbox)?;
 
         // Step 2: Validate the transition/stack
-        self.validate_via_stack(transition, &overlap)?;
+        self.validate_via_stack(transition, &overlap, is_power_or_ground)?;
 
         // Step 3: Determine if we should use via arrays
         // Logic: Power/Ground nets with min_spacing constraint get arrays
@@ -386,18 +446,18 @@ impl AutoViaInserter {
         if transition.to_layer - transition.from_layer > 1 {
             // Multi-layer via stack
             if use_array {
-                self.insert_via_stack_array(transition, &overlap, profile, &bridge_stack)
+                self.insert_via_stack_array(transition, &overlap, profile, &bridge_stack, is_power_or_ground)
             } else {
-                self.insert_via_stack(transition, &overlap, &bridge_stack)
+                self.insert_via_stack(transition, &overlap, &bridge_stack, is_power_or_ground)
             }
         } else {
             // Single layer transition
             if use_array {
-                self.insert_via_array(transition, &overlap, profile, &bridge_stack)
+                self.insert_via_array(transition, &overlap, profile, &bridge_stack, is_power_or_ground)
             } else {
                 let via_type = self
                     .via_library
-                    .find_via_for_layers(transition.from_layer, transition.to_layer)
+                    .find_via_for_layers(transition.from_layer, transition.to_layer, is_power_or_ground)
                     .ok_or_else(|| {
                         format!(
                             "No via type found for layers {} to {}",
@@ -422,25 +482,39 @@ impl AutoViaInserter {
         &self,
         transition: &LayerTransition,
         overlap: &OverlapRegion,
+        is_power_or_ground: bool,
     ) -> Result<(), String> {
         let from = transition.from_layer;
         let to = transition.to_layer;
 
+        // v0.1.7: Try to find a direct via first (e.g., through-hole)
+        if self.via_library.find_via_for_layers(from, to, is_power_or_ground).is_some() {
+            return Ok(());
+        }
+
+        // Otherwise, validate the stack
+        // v0.1.7: We only care about connecting semantic layers. 
+        // If the library is missing intermediate steps, we report it clearly.
         for layer in from..to {
             let via_type = self
                 .via_library
-                .find_via_for_layers(layer, layer + 1)
+                .find_via_for_layers(layer, layer + 1, is_power_or_ground)
                 .ok_or_else(|| {
                     format!(
-                        "Via stack validation failed: No via type found to connect z:{} to z:{}",
+                        "Via stack validation failed: No via type found to connect layer {} to {}. \
+                         Transitions: {} (L{}) -> {} (L{})",
                         layer,
-                        layer + 1
+                        layer + 1,
+                        transition.from_pour,
+                        transition.from_layer,
+                        transition.to_pour,
+                        transition.to_layer
                     )
                 })?;
 
             // Check enclosure requirements for this layer transition
             self.verify_enclosure(overlap, via_type).map_err(|e| {
-                format!("Via stack enclosure error at z:{}->z:{}: {}", layer, layer + 1, e)
+                format!("Via stack enclosure error at L{}->L{}: {}", layer, layer + 1, e)
             })?;
         }
 
@@ -454,15 +528,28 @@ impl AutoViaInserter {
         transition: &LayerTransition,
         overlap: &OverlapRegion,
         bridge_stack: &crate::bridge_resolver::BridgeStack,
+        is_power_or_ground: bool,
     ) -> Result<Vec<ContactPlacement>, String> {
         let mut stack = Vec::new();
         let from = transition.from_layer;
         let to = transition.to_layer;
 
+        // v0.1.7: Use direct via if available
+        if let Some(via_type) = self.via_library.find_via_for_layers(from, to, is_power_or_ground) {
+            return Ok(vec![self.create_via_placement(
+                transition,
+                overlap,
+                via_type,
+                from,
+                to,
+                bridge_stack,
+            )]);
+        }
+
         for layer in from..to {
             let via_type = self
                 .via_library
-                .find_via_for_layers(layer, layer + 1)
+                .find_via_for_layers(layer, layer + 1, is_power_or_ground)
                 .expect("Via type should have been validated");
 
             stack.push(self.create_via_placement(
@@ -486,10 +573,11 @@ impl AutoViaInserter {
         overlap: &OverlapRegion,
         profile: Option<&hwc_parser::ProfileDefinition>,
         bridge_stack: &crate::bridge_resolver::BridgeStack,
+        is_power_or_ground: bool,
     ) -> Result<Vec<ContactPlacement>, String> {
         let via_type = self
             .via_library
-            .find_via_for_layers(transition.from_layer, transition.to_layer)
+            .find_via_for_layers(transition.from_layer, transition.to_layer, is_power_or_ground)
             .ok_or_else(|| {
                 format!(
                     "No via type found for layers {} to {}",
@@ -529,35 +617,61 @@ impl AutoViaInserter {
         overlap: &OverlapRegion,
         profile: Option<&hwc_parser::ProfileDefinition>,
         bridge_stack: &crate::bridge_resolver::BridgeStack,
+        is_power_or_ground: bool,
     ) -> Result<Vec<ContactPlacement>, String> {
         let mut all_vias = Vec::new();
         let from = transition.from_layer;
         let to = transition.to_layer;
 
-        for layer in from..to {
-            let via_type = self
-                .via_library
-                .find_via_for_layers(layer, layer + 1)
-                .expect("Via type should have been validated");
+        // v0.1.7: Determine if we can use a direct via for the whole stack
+        let direct_via_type = self.via_library.find_via_for_layers(from, to, is_power_or_ground);
 
+        if let Some(via_type) = direct_via_type {
             let array_config = self.calculate_via_array(overlap, via_type, profile)?;
-
             for row in 0..array_config.rows {
                 for col in 0..array_config.cols {
                     let x_nm = array_config.start_x_nm + (col as i64 * array_config.pitch_x_nm);
                     let y_nm = array_config.start_y_nm + (row as i64 * array_config.pitch_y_nm);
-                    
+
                     all_vias.push(self.create_via_placement_at(
                         transition,
                         via_type,
-                        layer,
-                        layer + 1,
+                        from,
+                        to,
                         x_nm,
                         y_nm,
                         row,
                         col,
                         bridge_stack,
                     ));
+                }
+            }
+        } else {
+            for layer in from..to {
+                let via_type = self
+                    .via_library
+                    .find_via_for_layers(layer, layer + 1, is_power_or_ground)
+                    .expect("Via type should have been validated");
+
+                let array_config = self.calculate_via_array(overlap, via_type, profile)?;
+
+                for row in 0..array_config.rows {
+                    for col in 0..array_config.cols {
+                        let x_nm = array_config.start_x_nm + (col as i64 * array_config.pitch_x_nm);
+                        let y_nm = array_config.start_y_nm + (row as i64 * array_config.pitch_y_nm);
+
+                        all_vias.push(self.create_via_placement_at(
+                            transition,
+                            via_type,
+                            layer,
+                            layer + 1,
+                            x_nm,
+                            y_nm,
+                            row,
+                            col,
+                            bridge_stack,
+                        ));
+                    }
                 }
             }
         }
@@ -768,13 +882,16 @@ impl AutoViaInserter {
     }
 
     /// Helper to convert Coordinate to mm for display.
-    fn coord_to_mm(&self, coord: &Coordinate) -> f64 {
+    fn coord_to_mm(&self, coord: &Coordinate, axis: char) -> f64 {
         match coord {
-            Coordinate::Declarative { x, .. } => match x {
-                Expression::Measurement { value, .. } => *value,
-                Expression::Literal { value, .. } => *value as f64,
-                _ => 0.0,
-            },
+            Coordinate::Declarative { x, y, .. } => {
+                let expr = if axis == 'x' { x } else { y };
+                match expr {
+                    Expression::Measurement { value, .. } => *value,
+                    Expression::Literal { value, .. } => *value as f64,
+                    _ => 0.0,
+                }
+            }
             _ => 0.0,
         }
     }
@@ -794,7 +911,16 @@ mod tests {
 
     #[test]
     fn test_via_library_creation() {
-        let lib = ViaLibrary::new_standard(None);
+        let mut vias = Vec::new();
+        vias.push(ViaType::new(
+            "Via1_2".into(),
+            "Copper".into(),
+            1,
+            2,
+            0.3,
+            0.15,
+        ));
+        let lib = ViaLibrary { vias };
         assert!(!lib.vias.is_empty());
 
         // Check that we have a via for Metal1-to-Metal2
@@ -905,6 +1031,15 @@ mod tests {
     #[test]
     fn test_insert_via_stack() {
         let inserter = AutoViaInserter::new();
+        
+        // Create a dummy stackup manager for the test
+        let mut symbol_table = crate::electrical_symbol_table::SymbolTable::new();
+        let stackup_manager = crate::ir::stackup_manager::StackupManager::new(
+            None,
+            &mut symbol_table,
+            hwc_parser::OriginZ::Bottom,
+            50_000,
+        ).unwrap();
 
         let transition = LayerTransition {
             net_name: "VDD".into(),

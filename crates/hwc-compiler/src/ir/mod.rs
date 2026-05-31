@@ -193,6 +193,12 @@ pub fn program_to_space(
     // eprintln!($3"[DEBUG program_to_space] Universal evaluation context built ({} constants)",
     // symbol_table.get_all_constants().len());
 
+    // Get profile definition if specified in space
+    let profile = space_def
+        .profile
+        .as_ref()
+        .and_then(|profile_name| symbol_table.get_profile(profile_name.as_str()).ok());
+
     // v0.1.7: Substrates are now part of the unified statement stream.
     // This allows multi-layer dielectric stacks (Silicon/Gold/Silicon, etc.)
     // and preserves textual order for 'last' keyword support.
@@ -291,14 +297,15 @@ pub fn program_to_space(
                     &mut bbox_tracker,
                     &eval_context,
                     &stackup_manager,
+                    profile,
                 )?;
             }
             PlacementItem::Pour(pour) => {
                 // v0.1.7: Pass StackupManager for proper Elevation resolution
-                placement::place_pour(&mut space, &pour, origin, symbol_table, &mut bbox_tracker, &eval_context, collector, &stackup_manager)?;
+                placement::place_pour(&mut space, &pour, origin, symbol_table, &mut bbox_tracker, &eval_context, collector, &stackup_manager, profile)?;
             }
             PlacementItem::Contact(contact) => {
-                placement::place_contact(&mut space, &contact, origin, symbol_table, &eval_context, &stackup_manager)?;
+                placement::place_contact(&mut space, &contact, origin, symbol_table, &eval_context, &stackup_manager, profile)?;
             }
             PlacementItem::Component(component) => {
                 component_count += 1;
@@ -312,6 +319,7 @@ pub fn program_to_space(
                     &eval_context,
                     collector,
                     &stackup_manager,
+                    profile,
                 )?;
 
                 let elapsed = item_start.elapsed();
@@ -342,7 +350,7 @@ pub fn program_to_space(
 
             if !routing::needs_automatic_routing(route) {
                 // Phase 1: Manual Route (Absolute Control)
-                routing::route_trace(&mut space, route, origin, symbol_table, &eval_context, &stackup_manager)?;
+                routing::route_trace(&mut space, route, origin, symbol_table, &eval_context, &stackup_manager, profile)?;
             } else {
                 // Phase 3 Candidate: Automatic or Patterned Route
                 if routing_mode == hwc_parser::RoutingMode::ManualOnly {
@@ -369,12 +377,6 @@ pub fn program_to_space(
         // total_placement_time.as_secs_f64() * 1000.0 / component_count as f64);
     }
 
-    // Get profile definition if specified in space
-    let profile = space_def
-        .profile
-        .as_ref()
-        .and_then(|profile_name| symbol_table.get_profile(profile_name.as_str()).ok());
-
     // Phase 2: P45 Forbidden Junction Detection (Assembly Level)
     // Validate manually placed contacts against the profile's bridge rules
     bridge_validator::validate_bridges(&space, profile)?;
@@ -392,9 +394,13 @@ pub fn program_to_space(
             hwc_engine::constraint_manager::load_fabrication_constraints(profile_name.as_str(), symbol_table).ok()
         });
 
-    let auto_via_inserter = crate::auto_via_inserter::AutoViaInserter::new_with_constraints(fab_constraints.as_ref());
+    let auto_via_inserter = crate::auto_via_inserter::AutoViaInserter::from_profile(
+        profile,
+        &stackup_manager,
+        fab_constraints.as_ref(),
+    );
     
-    match auto_via_inserter.insert_vias(&space, profile) {
+    match auto_via_inserter.insert_vias(&space, profile, &stackup_manager) {
         Ok(auto_vias) => {
             // eprintln!($3"[DEBUG program_to_space] Auto via insertion complete: {} vias inserted in {:?}",
             //     auto_vias.len(),
@@ -402,7 +408,7 @@ pub fn program_to_space(
             // );
             // Place the auto-inserted vias
             for via in &auto_vias {
-                placement::place_contact(&mut space, via, origin, symbol_table, &eval_context, &stackup_manager)?;
+                placement::place_contact(&mut space, via, origin, symbol_table, &eval_context, &stackup_manager, profile)?;
             }
         }
         Err(_e) => {

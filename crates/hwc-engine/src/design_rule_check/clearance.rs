@@ -94,18 +94,21 @@ pub fn validate_clearances(
 ) -> Vec<DrcViolation> {
     use rayon::prelude::*;
 
-    // Get required clearance from fabrication constraints (v0.1.4)
-    let required_clearance_nm = constraints
-        .fabrication
-        .as_ref()
-        .and_then(|fab| fab.high_voltage_clearance_nm)
-        .or_else(|| {
-            constraints
-                .fabrication
-                .as_ref()
-                .map(|fab| fab.min_trace_spacing_nm)
-        })
-        .unwrap_or(200_000); // Default 0.2mm
+    // Get required clearance from fabrication constraints.
+    //
+    // v0.1.7 ARCHITECTURE: Standard net-to-net spacing comes from the profile's
+    // `trace.min_spacing` field, surfaced here as `min_trace_spacing_nm`.
+    // `high_voltage_clearance_nm` is reserved exclusively for HV isolation checks
+    // (net pairs where at least one net is declared high-voltage) and must NOT be
+    // used as a general-purpose clearance — it is typically 1.5–3mm, which is
+    // physically impossible to satisfy on normal-density PCBs.
+    //
+    // If no fabrication constraints are loaded (no profile), skip the clearance
+    // check entirely — the missing-profile error is reported elsewhere.
+    let required_clearance_nm = match constraints.fabrication.as_ref() {
+        Some(fab) => fab.min_trace_spacing_nm,
+        None => return vec![], // No profile loaded — nothing to check
+    };
 
     // O(N) pre-computation of Bounding Boxes
     let bboxes: Vec<Option<BoundingBox>> = nets.iter().map(|n| get_bbox(&n.voxels)).collect();
@@ -135,14 +138,29 @@ pub fn validate_clearances(
                     None => continue,
                 };
 
+                // v0.1.7 HV ISOLATION LOGIC:
+                // Use high_voltage_clearance_nm if either net is HighVoltage.
+                // Otherwise use standard min_trace_spacing_nm.
+                let pair_required_nm = if net_a.classification == crate::space::NetClassification::HighVoltage
+                    || net_b.classification == crate::space::NetClassification::HighVoltage
+                {
+                    constraints
+                        .fabrication
+                        .as_ref()
+                        .and_then(|f| f.high_voltage_clearance_nm)
+                        .unwrap_or(required_clearance_nm)
+                } else {
+                    required_clearance_nm
+                };
+
                 // O(1) Fast Path: AABB Rejection
                 // If bounding boxes (dilated by clearance) do not overlap, skip immediately
-                if bbox_a.min_x - required_clearance_nm > bbox_b.max_x
-                    || bbox_a.max_x + required_clearance_nm < bbox_b.min_x
-                    || bbox_a.min_y - required_clearance_nm > bbox_b.max_y
-                    || bbox_a.max_y + required_clearance_nm < bbox_b.min_y
-                    || bbox_a.min_z - required_clearance_nm > bbox_b.max_z
-                    || bbox_a.max_z + required_clearance_nm < bbox_b.min_z
+                if bbox_a.min_x - pair_required_nm > bbox_b.max_x
+                    || bbox_a.max_x + pair_required_nm < bbox_b.min_x
+                    || bbox_a.min_y - pair_required_nm > bbox_b.max_y
+                    || bbox_a.max_y + pair_required_nm < bbox_b.min_y
+                    || bbox_a.min_z - pair_required_nm > bbox_b.max_z
+                    || bbox_a.max_z + pair_required_nm < bbox_b.min_z
                 {
                     continue; // Physically impossible to overlap
                 }
@@ -151,12 +169,12 @@ pub fn validate_clearances(
                 let (min_distance, location) =
                     calculate_min_distance_between_nets(&net_a.voxels, &net_b.voxels);
 
-                if min_distance < required_clearance_nm {
+                if min_distance < pair_required_nm {
                     violations.push(DrcViolation::ClearanceViolation {
                         net_a: net_a.net_name.clone(),
                         net_b: net_b.net_name.clone(),
                         actual_nm: min_distance,
-                        required_nm: required_clearance_nm,
+                        required_nm: pair_required_nm,
                         location,
                     });
                 }

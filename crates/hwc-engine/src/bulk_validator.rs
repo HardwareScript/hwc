@@ -259,6 +259,7 @@ impl BulkValidator {
             NetClassification::Power => hwc_materials::NetClassification::Power,
             NetClassification::Ground => hwc_materials::NetClassification::Ground,
             NetClassification::Signal => hwc_materials::NetClassification::Signal,
+            NetClassification::HighVoltage => hwc_materials::NetClassification::HighVoltage,
             NetClassification::Unclassified => hwc_materials::NetClassification::Unclassified,
         };
 

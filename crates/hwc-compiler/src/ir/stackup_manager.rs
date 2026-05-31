@@ -18,6 +18,9 @@ pub struct StackupManager {
     /// Maps semantic layer name to its thickness in nanometers.
     layer_thickness_nm: HashMap<String, i64>,
 
+    /// Ordered list of layer names (bottom-to-top) for index-based lookup.
+    ordered_layers: Vec<String>,
+
     /// Fallback when operating in pure Assembly mode (no profile/stackup).
     /// Planned for future use; currently Physical always evaluates the expression directly.
     #[allow(dead_code)]
@@ -25,6 +28,16 @@ pub struct StackupManager {
 }
 
 impl StackupManager {
+    /// Create an empty stackup manager for tests or fallbacks.
+    pub fn new_empty() -> Self {
+        Self {
+            layer_start_z_nm: HashMap::new(),
+            layer_thickness_nm: HashMap::new(),
+            ordered_layers: Vec::new(),
+            default_z_voxel_nm: 0,
+        }
+    }
+
     /// Creates a new StackupManager from an optional `LayerStackup`.
     ///
     /// The stackup is assumed to be defined **top-to-bottom** in the source file
@@ -40,6 +53,7 @@ impl StackupManager {
     ) -> Result<Self, IrError> {
         let mut layer_start_z_nm = HashMap::new();
         let mut layer_thickness_nm = HashMap::new();
+        let mut ordered_layers = Vec::new();
 
         if let Some(stackup) = stackup_opt {
             // Step 1: Resolve all thicknesses and calculate total height
@@ -65,6 +79,7 @@ impl StackupManager {
                      for (name, thickness_nm) in resolved.into_iter().rev() {
                          layer_start_z_nm.insert(name.clone(), current_z);
                          layer_thickness_nm.insert(name.clone(), thickness_nm);
+                         ordered_layers.push(name.clone());
                          eprintln!("[DEBUG stackup] Bottom-Up Mapping: {} -> z: {} nm (t: {} nm)", name, current_z, thickness_nm);
                          current_z += thickness_nm;
                      }
@@ -72,12 +87,19 @@ impl StackupManager {
                  hwc_parser::OriginZ::Top => {
                      // Z=0 is the top of the board.
                      // The first layer in the file is the physical top.
+                     // To maintain Bottom-Up indexing in ordered_layers, we reverse the top-down list.
                      let mut current_z = 0;
+                     let mut top_down_positions = Vec::new();
                      for (name, thickness_nm) in resolved {
-                         layer_start_z_nm.insert(name.clone(), current_z);
-                         layer_thickness_nm.insert(name.clone(), thickness_nm);
-                         eprintln!("[DEBUG stackup] Top-Down Mapping: {} -> z: {} nm (t: {} nm)", name, current_z, thickness_nm);
+                         top_down_positions.push((name.clone(), current_z, thickness_nm));
                          current_z += thickness_nm;
+                     }
+
+                     for (name, start_z, thickness) in top_down_positions.into_iter().rev() {
+                        layer_start_z_nm.insert(name.clone(), start_z);
+                        layer_thickness_nm.insert(name.clone(), thickness);
+                        ordered_layers.push(name.clone());
+                        eprintln!("[DEBUG stackup] Top-Down Mapping: {} -> z: {} nm (t: {} nm)", name, start_z, thickness);
                      }
                  }
             }
@@ -86,6 +108,7 @@ impl StackupManager {
         Ok(Self {
             layer_start_z_nm,
             layer_thickness_nm,
+            ordered_layers,
             default_z_voxel_nm,
         })
     }
@@ -94,6 +117,7 @@ impl StackupManager {
     ///
     /// - `Physical`: Evaluates the expression directly (Assembly paradigm).
     /// - `Semantic`: Looks up the pre-computed starting Z from the LayerStackup (High-Level paradigm).
+    /// - `Relative`: Returns 0 (intended for use in component-relative unrolling).
     pub fn resolve_elevation(
         &self,
         elevation: &Elevation,
@@ -116,6 +140,7 @@ impl StackupManager {
                         ))
                     })
             }
+            Elevation::Relative => Ok(0),
         }
     }
 
@@ -154,6 +179,7 @@ impl StackupManager {
                     default_layer_height_nm
                 }
             }
+            Elevation::Relative => default_layer_height_nm,
         };
         Ok(bottom + thickness.max(1))
     }
@@ -169,6 +195,30 @@ impl StackupManager {
             },
             end: None,
         }
+    }
+
+    /// Returns the 0-based semantic layer index for a physical Z position.
+    ///
+    /// The index corresponds to the `ordered_layers` vector (bottom-to-top).
+    pub fn get_layer_index_at_z(&self, z_nm: i64) -> Option<usize> {
+        for (idx, name) in self.ordered_layers.iter().enumerate() {
+            let start = *self.layer_start_z_nm.get(name)?;
+            let thickness = *self.layer_thickness_nm.get(name)?;
+            if z_nm >= start && z_nm < start + thickness {
+                return Some(idx);
+            }
+        }
+        None
+    }
+
+    /// Returns the number of semantic layers in the stackup.
+    pub fn layer_count(&self) -> usize {
+        self.ordered_layers.len()
+    }
+
+    /// Returns the semantic layer index for a named layer.
+    pub fn get_index_for_layer(&self, layer_name: &str) -> Option<usize> {
+        self.ordered_layers.iter().position(|l| l == layer_name)
     }
 
     /// Voxel slab index (0-based) from a bottom Z elevation — used only for via-library lookup in auto-via.

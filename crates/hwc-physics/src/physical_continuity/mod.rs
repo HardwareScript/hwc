@@ -120,7 +120,7 @@ impl<'a> PhysicalContinuityChecker<'a> {
     /// # Returns
     /// Vector of net-to-island bindings
     pub fn bind_nets_to_islands(&self, islands: &[ConductiveIsland]) -> Vec<NetIslandBinding> {
-        let binder = NetBinder::new(self.pours, self.contacts, self.substrate_layers);
+        let binder = NetBinder::new(self.substrate_layers);
         binder.bind_nets(islands)
     }
 

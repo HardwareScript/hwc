@@ -213,6 +213,7 @@ pub enum NetClassification {
     Power,
     Ground,
     Signal,
+    HighVoltage,
     Unclassified,
 }
 
@@ -222,6 +223,7 @@ impl std::fmt::Display for NetClassification {
             NetClassification::Power => write!(f, "power"),
             NetClassification::Ground => write!(f, "ground"),
             NetClassification::Signal => write!(f, "signal"),
+            NetClassification::HighVoltage => write!(f, "high-voltage"),
             NetClassification::Unclassified => write!(f, "unclassified"),
         }
     }

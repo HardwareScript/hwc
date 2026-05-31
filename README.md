@@ -10,7 +10,7 @@
 
 ## What is Hardware Script?
 
-Hardware Script (`.hw`) is a plain-text hardware design language that compiles to multiple industry-standard formats. Design PCBs, silicon chips, and entire systems—all from human-readable, Git-friendly text.
+Hardware Script (`.hw`) is a plain-text hardware design language that compiles to multiple industry-standard formats. Design PCBs, silicon chips, and entire systems all from human-readable, Git-friendly text.
 
 **The Goal**: Bring the npm/software workflow to hardware. Write hardware like code, compile it deterministically, and manufacture real boards from a single source of truth.
 
@@ -65,14 +65,6 @@ Hardware Script treats hardware like software:
 ---
 
 ## Quick Start
-
-### Install
-
-```bash
-curl -sSf https://hardwarescript.org/install.sh | sh
-```
-
-Installs `hwc` (compiler), `hpm` (package manager), and the standard library.
 
 ### Create a Design
 
@@ -228,19 +220,6 @@ The compiler produces a **compiled exchange binary** (`.hsx`) which the live mon
 
 ---
 
-## Comparison
-
-| Feature | Hardware Script | KiCad | Altium |
-|---------|----------------|-------|--------|
-| **Format** | Plain text | Binary + XML | Binary |
-| **Learning** | Minutes | Weeks | Months |
-| **Scriptable / LLM-friendly** | ✅ Yes | ❌ No | ❌ No |
-| **Git** | ✅ Perfect | ⚠️ Difficult | ❌ No |
-| **Scale** | PCB + Silicon | PCB only | PCB only |
-| **Price** | Free | Free | $7K/year |
-| **Compile time** | < 5ms | N/A | N/A |
-
----
 
 ## Roadmap: The 5 Critical Problems
 
@@ -292,23 +271,7 @@ add BuckConverter (input: 12V, output: 5V, current: 2A) named Converter1
 
 **Read the full roadmap**: [ROADMAP.md](ROADMAP.md)
 
----
 
-## Documentation
-
-### For Users
-
-- **[Getting Started](Docs/v0.1/GETTING-STARTED.md)** — Tutorial
-- **[Language Spec](Docs/v0.1.6/LANGUAGE-SPEC.md)** — Complete syntax reference
-- **[Ecosystem](ECOSYSTEM.md)** — The complete toolchain
-
-### For Developers
-
-- **[Compiler CLI](hwc/crates/hwc-cli)** — Compiler entry point
-- **[Parser & Lexer](hwc/crates/hwc-parser)** — Lexer and AST
-- **[Integration Tests](tests)** — Test suite written in Hardware Script
-
----
 
 ## License & Business Model
 

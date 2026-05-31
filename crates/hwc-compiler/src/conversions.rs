@@ -22,8 +22,6 @@ pub fn profile_to_constraints(
     _symbol_table: &SymbolTable,
 ) -> Result<ConstraintSet, ConversionError> {
     // Extract trace constraints
-    // Note: Profile defines minimum values. Physics calculations (IPC-2221)
-    // happen at routing time based on actual current requirements.
     let trace = if let Some(trace_def) = &profile.trace {
         TraceConstraints {
             min_width_nm: measurement_to_nm(&trace_def.min_width),
@@ -32,14 +30,9 @@ pub fn profile_to_constraints(
             default_width_nm: measurement_to_nm(&trace_def.min_width), // Use min as default
         }
     } else {
-        // Default trace constraints (IPC-2221 Class 2 minimum)
-        // Source: IPC-2221 Generic Standard on Printed Board Design
-        TraceConstraints {
-            min_width_nm: 100_000,     // 100µm (IPC-2221 Class 2)
-            max_width_nm: 0,           // unlimited
-            min_spacing_nm: 100_000,   // 100µm (IPC-2221 Class 2)
-            default_width_nm: 250_000, // 250µm (safe default)
-        }
+        return Err(ConversionError::MissingProfileConstraint(
+            "trace (min_width, min_spacing)".into(),
+        ));
     };
 
     // Extract via constraints
@@ -55,14 +48,9 @@ pub fn profile_to_constraints(
                 .unwrap_or_else(|| measurement_to_nm(&via_def.min_diameter)),
         }
     } else {
-        // Default via constraints (IPC-2221 Class 2 minimum)
-        // Source: IPC-2221 Generic Standard on Printed Board Design
-        ViaConstraints {
-            min_diameter_nm: 300_000,     // 300µm (IPC-2221 Class 2)
-            max_diameter_nm: 0,           // unlimited
-            min_annular_ring_nm: 150_000, // 150µm (IPC-2221 Class 2)
-            default_diameter_nm: 500_000, // 500µm (safe default)
-        }
+        return Err(ConversionError::MissingProfileConstraint(
+            "via (min_diameter, min_annular_ring)".into(),
+        ));
     };
 
     // Extract manufacturing constraints (copper thickness, IPC-2221 constants)
@@ -71,19 +59,25 @@ pub fn profile_to_constraints(
         .as_ref()
         .and_then(|m| m.copper_thickness.as_ref())
         .map(measurement_to_nm)
-        .unwrap_or(35_000); // Default 35µm (1oz copper per IPC-2221)
+        .ok_or_else(|| {
+            ConversionError::MissingProfileConstraint("manufacturing.copper_thickness".into())
+        })?;
 
     let _ipc2221_k_external = profile
         .manufacturing
         .as_ref()
         .and_then(|m| m.ipc2221_k_external)
-        .unwrap_or(0.048); // Default IPC-2221 external layer constant
+        .ok_or_else(|| {
+            ConversionError::MissingProfileConstraint("manufacturing.ipc2221_k_external".into())
+        })?;
 
     let _ipc2221_k_internal = profile
         .manufacturing
         .as_ref()
         .and_then(|m| m.ipc2221_k_internal)
-        .unwrap_or(0.024); // Default IPC-2221 internal layer constant
+        .ok_or_else(|| {
+            ConversionError::MissingProfileConstraint("manufacturing.ipc2221_k_internal".into())
+        })?;
 
     // Extract voltage classification thresholds
     let _low_voltage_threshold_v = profile
@@ -106,29 +100,28 @@ pub fn profile_to_constraints(
     // Reference: ROUTING-AND-PHYSICS.md - Translation 1: Dielectric Breakdown to Clearance
     let clearance = if let Some(clearance_def) = &profile.clearance {
         ClearanceConstraints {
-            // Low voltage (<50V): Based on IPC-2221 minimum spacing
-            low_voltage_nm: 200_000, // 200µm (IPC-2221 Class 2)
-            // Medium voltage (50-150V): Calculated for FR4 (20 kV/mm)
-            // 100V / 20kV/mm = 5µm, with 2× safety = 10µm, rounded up to 500µm
-            medium_voltage_nm: 500_000, // 500µm
+            // v0.1.7: Standard net-to-net spacing is now governed by trace.min_spacing.
+            // These low/medium voltage fields are legacy and not used by the DRC engine
+            // for standard spacing checks.
+            low_voltage_nm: 0,
+            medium_voltage_nm: 0,
             // High voltage (>150V): User-specified or calculated
             high_voltage_nm: clearance_def
                 .high_voltage
                 .as_ref()
                 .map(measurement_to_nm)
-                .unwrap_or(2_000_000), // Default 2mm for >150V
+                .ok_or_else(|| {
+                    ConversionError::MissingProfileConstraint("clearance.high_voltage".into())
+                })?,
             // Safety factor per IPC-2221 recommendations
-            safety_factor: clearance_def.safety_factor.unwrap_or(2.0),
+            safety_factor: clearance_def.safety_factor.ok_or_else(|| {
+                ConversionError::MissingProfileConstraint("clearance.safety_factor".into())
+            })?,
         }
     } else {
-        // Default clearance constraints (IPC-2221 Class 2)
-        // Source: IPC-2221 Generic Standard on Printed Board Design
-        ClearanceConstraints {
-            low_voltage_nm: 200_000,    // 200µm (IPC-2221 Class 2)
-            medium_voltage_nm: 500_000, // 500µm (calculated for FR4)
-            high_voltage_nm: 2_000_000, // 2mm (safe for >150V)
-            safety_factor: 2.0,         // IPC-2221 recommendation
-        }
+        return Err(ConversionError::MissingProfileConstraint(
+            "clearance (high_voltage, safety_factor)".into(),
+        ));
     };
 
     // Extract layer constraints
@@ -144,13 +137,9 @@ pub fn profile_to_constraints(
             allowed_dielectrics: vec!["fr4".into(), "air".into()], // Common PCB materials
         }
     } else {
-        // Default layer constraints (IPC-2221 standard)
-        LayerConstraints {
-            min_thickness_nm: copper_thickness_nm,
-            max_thickness_nm: 0, // unlimited
-            allowed_conductors: vec!["copper".into()],
-            allowed_dielectrics: vec!["fr4".into(), "air".into()],
-        }
+        return Err(ConversionError::MissingProfileConstraint(
+            "layer (min_thickness)".into(),
+        ));
     };
 
     // Extract thermal constraints
@@ -908,4 +897,7 @@ pub enum ConversionError {
         material: CompactString,
         property: String,
     },
+
+    #[error("Missing profile constraint: {0}")]
+    MissingProfileConstraint(String),
 }

@@ -24,11 +24,12 @@ pub fn route_trace(
     symbol_table: &crate::SymbolTable,
     eval_context: &hwc_parser::EvaluationContext, // UNIVERSAL CONTEXT
     stackup_manager: &crate::ir::stackup_manager::StackupManager,
+    profile: Option<&hwc_parser::ProfileDefinition>,
 ) -> Result<(), IrError> {
     if needs_automatic_routing(route) {
         route_automatic(space, route, symbol_table)
     } else {
-        route_manual(space, route, origin, symbol_table, eval_context, stackup_manager)
+        route_manual(space, route, origin, symbol_table, eval_context, stackup_manager, profile)
     }
 }
 

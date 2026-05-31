@@ -41,13 +41,10 @@ pub fn validate_trace_widths(
         .map(|fab| fab.min_trace_width_nm)
         .unwrap_or(100_000); // Default 0.1mm
 
-    // O(1) FAST PATH: If voxel size already meets requirement, instant success
-    if voxel_size_nm >= required_width_nm {
-        return Vec::new();
-    }
-
     // Rayon parallelism for the slow path (small voxels)
     nets.par_iter()
+        .filter(|net| net.net_name != "net_0") // v0.1.7: Ignore substrate net (net_0) for trace width checks
+        .filter(|net| matches!(net.geometry_type, crate::design_rule_check::GeometryType::Trace)) // ✅ NATIVE v0.1.7 FIX: Only run trace-width checks on actual traces.
         .filter_map(|net| {
             let actual_width_nm = measure_trace_width(&net.voxels, voxel_size_nm);
 

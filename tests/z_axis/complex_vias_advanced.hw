@@ -25,6 +25,35 @@ profile AdvancedPCBStackup:
         min_diameter: 0.3mm
         min_annular_ring: 0.1mm
 
+    trace:
+        min_width: 0.15mm
+        min_spacing: 0.15mm
+    
+    clearance:
+        high_voltage: 2.0mm
+        safety_factor: 2.0
+        
+    manufacturing:
+        copper_thickness: 35µm
+        ipc2221_k_external: 0.048
+        ipc2221_k_internal: 0.024
+
+    layer:
+        min_thickness: 1.6mm
+
+    # Explicit via definitions replace the hardcoded fallback
+    via VddViaType:
+        diameter: 0.6mm
+        annular_ring: 0.2mm
+        spanning: layer: bottom to top
+        material: Copper
+
+    via SigViaType:
+        diameter: 0.3mm
+        annular_ring: 0.1mm
+        spanning: layer: bottom to top
+        material: Copper
+
     bridge Copper to Copper:
         interface: Copper
         fill: Copper
@@ -32,22 +61,22 @@ profile AdvancedPCBStackup:
 component IC_Package:
     pins: [VCC, GND, IO]
     layout:
-        shape: Rectangle(2mm, 2mm, 0.1mm)
+        shape: Rectangle(4mm, 4mm, 0.1mm)
         pin_positions:
-            VCC at [-0.5mm, 0.5mm]
-            GND at [0.5mm, 0.5mm]
-            IO  at [0mm, -0.5mm]
+            VCC at [1.0mm, 3.5mm]
+            GND at [3.0mm, 2.0mm]
+            IO  at [2.0mm, 0.5mm]
         
-        # v0.1.7 Hybrid Hack: Use 0mm absolute to avoid double-addition bug
-        add pour(Copper) named VCC_Pad on z: 0mm:
+        # Pours represent the physical pads (1.0mm square for 0.6mm vias)
+        add pour(Copper) named VCC_Pad on layer: self:
             device: VCC
-            boundary: [x: -0.6mm, y: 0.4mm] to [x: -0.4mm, y: 0.6mm]
-        add pour(Copper) named GND_Pad on z: 0mm:
+            boundary: [x: -0.5mm, y: -0.5mm] to [x: 0.5mm, y: 0.5mm]
+        add pour(Copper) named GND_Pad on layer: self:
             device: GND
-            boundary: [x: 0.4mm, y: 0.4mm] to [x: 0.6mm, y: 0.6mm]
-        add pour(Copper) named IO_Pad on z: 0mm:
+            boundary: [x: -0.5mm, y: -0.5mm] to [x: 0.5mm, y: 0.5mm]
+        add pour(Copper) named IO_Pad on layer: self:
             device: IO
-            boundary: [x: -0.1mm, y: -0.6mm] to [x: 0.1mm, y: -0.4mm]
+            boundary: [x: -0.5mm, y: -0.5mm] to [x: 0.5mm, y: 0.5mm]
 
 module MultiConnectedModule:
     pins: [VDD, GND, SIG]
@@ -65,7 +94,7 @@ module MultiConnectedModule:
 
 space MultiConnectedPCB implements MultiConnectedModule:
     dimensions: 10mm by 5mm by 2.0mm
-    grid: 100 by 50 by 40
+    grid: 200 by 100 by 40
     origin: bl by b
     profile: AdvancedPCBStackup
     
@@ -74,47 +103,47 @@ space MultiConnectedPCB implements MultiConnectedModule:
         GND: ground
         SIG: signal
 
-    # 1. Base Substrate (v0.1.7 Engine Mode)
-    add substrate(FR4) spanning [x: 0mm, y: 0mm, z: 0mm] to [x: 10mm, y: 5mm, z: 2.0mm]
+    # 1. Base Substrate (v0.1.7 Physical Fix)
+    # Define substrate spanning only the dielectric core (0.1mm to 1.9mm)
+    # This prevents overlap with top/bottom copper layers and components.
+    add substrate(FR4) spanning [x: 0mm, y: 0mm, z: 0.1mm] to [x: 10mm, y: 5mm, z: 1.9mm]
 
     # 2. Wide Supply Rails (To satisfy 0.6mm Via Enclosure)
-    # VDD Rail (Top) - y=3.0mm, Width=1.0mm
+    # VDD Rail (Top) - y=4.5mm, Width=1.0mm
     add pour(Copper) named TopVDD on layer: top:
-        boundary: [x: 0mm, y: 2.5mm] to [x: 10mm, y: 3.5mm]
+        boundary: [x: 0mm, y: 4.0mm] to [x: 10mm, y: 5.0mm]
         net: VDD
         merge: true
-        
-    # SIG Rail (Inner1) - y=2.0mm, Width=1.0mm
+    
+    # 2. Middle signal rail (Inner1) - y=1.5mm, Width=1.0mm
     add pour(Copper) named SigRail on layer: inner1:
-        boundary: [x: 0mm, y: 1.5mm] to [x: 10mm, y: 2.5mm]
+        boundary: [x: 0mm, y: 1.0mm] to [x: 10mm, y: 2.0mm]
         net: SIG
         merge: true
-        
-    # GND Plane (Inner2) - y=3.0mm, Width=1.0mm
+    
+    # 3. Ground plane (Inner2) - y=3.0mm, Width=1.0mm
     add pour(Copper) named GndPlane on layer: inner2:
         boundary: [x: 0mm, y: 2.5mm] to [x: 10mm, y: 3.5mm]
         net: GND
         merge: true
-        
-    # Bottom VDD Plane
+    
+    # 4. Power Return (Bottom) - y=4.5mm
     add pour(Copper) named BottomVDD on layer: bottom:
-        boundary: [x: 0mm, y: 0mm] to [x: 10mm, y: 5mm]
+        boundary: [x: 0mm, y: 4.0mm] to [x: 10mm, y: 5.0mm]
         net: VDD
         merge: true
 
-    # 3. Manual Via Stiching (Bypass Auto-Via enclosure issues)
-    # Connect Bottom VDD to Top VDD rail
-    add contact(Copper) named VddVia at [x: 1.0mm, y: 3.0mm] spanning layer: bottom to top:
+    # 5. Manual Via Stitching (To satisfy VDD return path)
+    add contact(Copper) named VddVia at [x: 5.0mm, y: 4.5mm] spanning layer: bottom to top:
         diameter: 0.6mm
-        annular_ring: 0.15mm
+        annular_ring: 0.2mm
         net: VDD
 
     # 4. Component Placements
-    # U1 at (2, 2.5) -> VCC at y=3.0, IO at y=2.0
-    add IC_Package named U1 at [x: 2mm, y: 2.5mm] on layer: top:
+    add IC_Package named U1 at [x: 1mm, y: 1mm] on layer: top:
         net: [VCC: VDD, GND: GND, IO: SIG]
 
-    add IC_Package named U2 at [x: 8mm, y: 2.5mm] on layer: top:
+    add IC_Package named U2 at [x: 5.5mm, y: 1mm] on layer: top:
         net: [VCC: VDD, GND: GND, IO: SIG]
 
     # 5. Port Exposure

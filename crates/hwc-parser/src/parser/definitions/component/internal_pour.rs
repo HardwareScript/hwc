@@ -31,22 +31,32 @@ impl super::super::super::Parser {
             self.advance();
             self.expect(&Token::Colon)?;
             let layer_name = self.expect_identifier()?;
-            crate::ast::Elevation::Semantic(layer_name)
+            if layer_name.as_str() == "self" {
+                crate::ast::Elevation::Relative
+            } else {
+                crate::ast::Elevation::Semantic(layer_name)
+            }
         } else {
             let coord_name = self.expect_identifier()?;
             if coord_name.as_str() != "z" {
                 return Err(self.error("Expected 'z' or 'layer' for pour elevation"));
             }
             self.expect(&Token::Colon)?;
-            let start = self.parse_expression()?;
             
-            let mut end = None;
-            if self.check(&Token::To) {
-                self.advance(); // consume "to"
-                end = Some(self.parse_expression()?);
+            if self.check(&Token::Identifier("relative".into())) {
+                self.advance();
+                crate::ast::Elevation::Relative
+            } else {
+                let start = self.parse_expression()?;
+                
+                let mut end = None;
+                if self.check(&Token::To) {
+                    self.advance(); // consume "to"
+                    end = Some(self.parse_expression()?);
+                }
+                
+                crate::ast::Elevation::Physical { start, end }
             }
-            
-            crate::ast::Elevation::Physical { start, end }
         };
 
         self.expect(&Token::Colon)?;

@@ -829,6 +829,9 @@ impl<'a> DeviceExtractor<'a> {
             hwc_engine::space::NetClassification::Signal => {
                 hwc_materials::NetClassification::Signal
             }
+            hwc_engine::space::NetClassification::HighVoltage => {
+                hwc_materials::NetClassification::HighVoltage
+            }
             hwc_engine::space::NetClassification::Unclassified => {
                 hwc_materials::NetClassification::Unclassified
             }

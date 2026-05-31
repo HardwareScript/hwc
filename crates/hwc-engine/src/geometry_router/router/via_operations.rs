@@ -104,9 +104,10 @@ impl GeometryRouter {
             None => return,
         };
 
-        let clearance = fabrication
-            .high_voltage_clearance_nm
-            .unwrap_or(fabrication.min_trace_spacing_nm);
+        // v0.1.7 ARCHITECTURE: Anti-pad clearance comes from the profile's trace.min_spacing.
+        // high_voltage_clearance_nm (1.5–3mm) is reserved for HV isolation and must NOT
+        // govern the physical gap between a via and an adjacent copper pour on a normal PCB.
+        let clearance = fabrication.min_trace_spacing_nm;
         let antipad_radius = (via.diameter_nm + 2 * clearance) / 2;
 
         for z_nm in via.z_planes(self.voxel_size_nm) {

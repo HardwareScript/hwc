@@ -3,8 +3,62 @@
 * Format: SPICE3
 
 * ========================================
-* DEVICE EXTRACTION REQUIRES EXPLICIT BINDINGS
-* Use 'device: DeviceName.terminal' property
+* NETS
 * ========================================
+* Net: VDD (pour: TopVDD, material: Copper, z: 0.0019mm)
+* Net: SIG (pour: SigRail, material: Copper, z: 0.0012mm)
+* Net: GND (pour: GndPlane, material: Copper, z: 0.0006mm)
+* Net: VDD (pour: BottomVDD, material: Copper, z: 0.0000mm)
+* Net: VDD (pour: U1_VCC_Pad, material: Copper, z: 0.0019mm)
+* Net: GND (pour: U1_GND_Pad, material: Copper, z: 0.0019mm)
+* Net: SIG (pour: U1_IO_Pad, material: Copper, z: 0.0019mm)
+* Net: VDD (pour: U2_VCC_Pad, material: Copper, z: 0.0019mm)
+* Net: GND (pour: U2_GND_Pad, material: Copper, z: 0.0019mm)
+* Net: SIG (pour: U2_IO_Pad, material: Copper, z: 0.0019mm)
+* Net: VDD (width=100000nm, material=Copper)
+* Net: SIG (width=100000nm, material=Copper)
+*   Connected pins:
+*     - BottomVDD.anchor
+*     - VddVia.via
+*     - U1.VCC
+*     - U1_VCC_Pad.anchor
+*     - U1.VCC
+*     - U2.VCC
+*     - U2_VCC_Pad.anchor
+*     - U2.VCC
+*     - AutoVia_VDD_0_6.via
+*     - AutoVia_VDD_0_6.via
+*     - AutoVia_VDD_0_6.via
+
+* ========================================
+* COMPONENTS
+* ========================================
+XTopVDD VDD Pour(Copper)
+XSigRail SIG Pour(Copper)
+XGndPlane GND Pour(Copper)
+XBottomVDD VDD Pour(Copper)
+XVddVia VDD Contact(Copper)
+XU1 VDD GND SIG IC_Package
+XU1_VCC_Pad VDD Pour(Copper)
+XU1_GND_Pad GND Pour(Copper)
+XU1_IO_Pad SIG Pour(Copper)
+XU2 VDD GND SIG IC_Package
+XU2_VCC_Pad VDD Pour(Copper)
+XU2_GND_Pad GND Pour(Copper)
+XU2_IO_Pad SIG Pour(Copper)
+XAutoVia_VDD_0_6 VDD Contact(Copper)
+XAutoVia_VDD_0_6 VDD Contact(Copper)
+XAutoVia_VDD_0_6 VDD Contact(Copper)
+XAutoVia_SIG_4_6 SIG Contact(Copper)
+XAutoVia_SIG_4_6 SIG Contact(Copper)
+XAutoVia_GND_2_6 GND Contact(Copper)
+XAutoVia_GND_2_6 GND Contact(Copper)
+
+
+* ========================================
+* EXTRACTED DEVICES (Transistors)
+* ========================================
+MU1 0 0 0 0 IC_Package W=1.00u L=1.00u
+MU2 0 0 0 0 IC_Package W=1.00u L=1.00u
 
 .end

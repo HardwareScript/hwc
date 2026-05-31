@@ -10,10 +10,11 @@ use hwc_engine::{ComponentPlacer, HardwareSpace, Point3D};
 pub fn place_contact(
     space: &mut HardwareSpace,
     contact: &hwc_parser::ContactPlacement,
-    _origin: hwc_parser::OriginPoint,
+    origin: hwc_parser::OriginPoint,
     symbol_table: &crate::SymbolTable,
     eval_context: &hwc_parser::EvaluationContext,
     stackup_manager: &StackupManager,
+    profile: Option<&hwc_parser::ProfileDefinition>,
 ) -> Result<(), IrError> {
     // Get or register the contact material in the material registry
     let material_id = space.material_registry.get_or_register(&contact.material);
@@ -34,12 +35,13 @@ pub fn place_contact(
     let ctx = crate::ir::conversions::CoordinateContext {
         voxel_size: &space.voxel_size,
         grid_size: &space.grid,
-        origin: _origin,
+        origin,
         space_dimensions: &space.dimensions,
         symbol_table,
         eval_context,
         bbox_tracker: None,
         stackup_manager,
+        profile,
     };
     let xy_point = crate::ir::conversions::coordinate_to_point(&contact.position, &ctx);
 
@@ -235,9 +237,16 @@ pub fn place_contact(
         let process = space.material_registry.get_process(material_id)
             .unwrap_or(hwc_engine::ManufacturingProcess::Deposited);
         
+        let clearance_nm = space.fabrication_constraints.as_ref()
+            .map(|c| c.trace.min_spacing_nm)
+            .unwrap_or(150_000); // Default 150um
+
         if process == hwc_engine::ManufacturingProcess::DrilledPlated {
-            // 1. ACTION: Drill hole through all substrate layers (carves Pour/FR4)
-            space.voxel_grid.drill_hole(contact_bbox, Some(diameter_nm));
+            // 1. ACTION: Auto-Drill (v0.1.7)
+            // We use drill_via_hole to ensure we carve the substrate and OTHER-NET pours
+            // while maintaining connectivity to the target net pours.
+            // v0.1.7: Added clearance_nm for different-net anti-pads.
+            space.voxel_grid.drill_via_hole(contact_bbox, diameter_nm, net_id, clearance_nm);
 
             // 2. ACTION: Register as a manufacturing drill (for .drl and mesh cutout)
             let via = hwc_engine::geometry_router::Via::new(
@@ -278,8 +287,9 @@ pub fn place_contact(
             );
         } else if process == hwc_engine::ManufacturingProcess::Etched {
             // v0.1.7: Mechanical/Subtractive Logic
-            // 1. ACTION: Drill hole through all substrate layers
-            space.voxel_grid.drill_hole(contact_bbox, Some(diameter_nm));
+            // 1. ACTION: Auto-Drill (NPTH logic: Net 0 always drills everything)
+            // v0.1.7: Added clearance_nm (though for NPTH it usually drills everything)
+            space.voxel_grid.drill_via_hole(contact_bbox, diameter_nm, 0, clearance_nm);
 
             // 2. ACTION: Register as a Non-Plated Through Hole (NPTH) for the drill file
             let via = hwc_engine::geometry_router::Via::new(
@@ -296,6 +306,12 @@ pub fn place_contact(
             
             // NO cylinder/tube is added. The space remains empty (Void).
         } else {
+            // v0.1.7: Auto-Drill for deposited vias
+            // Even if not "drilled" in manufacturing, it must physically displace
+            // the substrate and clear different-net pours.
+            // v0.1.7: Added clearance_nm for different-net anti-pads.
+            space.voxel_grid.drill_via_hole(contact_bbox, diameter_nm, net_id, clearance_nm);
+
             // Simple via - use cylindrical placement (deposited, not drilled)
             placer
                 .place_cylinder_substrate(

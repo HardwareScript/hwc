@@ -16,6 +16,7 @@ pub struct CoordinateContext<'a> {
     pub eval_context: &'a hwc_parser::EvaluationContext,
     pub bbox_tracker: Option<&'a crate::bounding_box_tracker::BoundingBoxTracker>,
     pub stackup_manager: &'a StackupManager,
+    pub profile: Option<&'a hwc_parser::ProfileDefinition>,
 }
 
 /// GAP 2 FIX: Smart Expression Evaluator with Unit Normalization
