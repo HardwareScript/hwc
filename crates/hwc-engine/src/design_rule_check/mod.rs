@@ -39,4 +39,7 @@ pub use parallel::{validate_physics_parallel, validate_physics_sequential};
 pub use thermal::{calculate_temperature_rise, calculate_trace_length, validate_thermal};
 pub use trace_width::validate_trace_widths;
 pub use types::{DrcReport, DrcViolation, GeometryType, MaterialProperties, NetVoxels};
-pub use via_checks::{validate_via_diameters_analytic, validate_via_enclosure_analytic}; // Task 4.2
+pub use via_checks::{
+    validate_drill_to_drill_clearance, validate_via_diameters_analytic,
+    validate_via_enclosure_analytic,
+}; // Task 4.2

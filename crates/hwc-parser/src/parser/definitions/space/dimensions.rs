@@ -17,7 +17,7 @@ impl crate::parser::Parser {
         self.expect(&Token::By)?;
         let depth = self.parse_measurement()?;
 
-        self.skip_newlines();
+        self.skip_whitespace();
         let end_pos = self.previous_span().end;
 
         Ok(Dimensions {
@@ -40,7 +40,7 @@ impl crate::parser::Parser {
         self.expect(&Token::By)?;
         let z = self.expect_integer()?;
 
-        self.skip_newlines();
+        self.skip_whitespace();
         let end_pos = self.previous_span().end;
 
         Ok(Grid {
@@ -101,7 +101,7 @@ impl crate::parser::Parser {
             OriginZ::Top
         };
 
-        self.skip_newlines();
+        self.skip_whitespace();
 
         Ok(OriginPoint { xy, z })
     }

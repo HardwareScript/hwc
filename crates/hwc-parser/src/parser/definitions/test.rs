@@ -188,7 +188,7 @@ impl super::super::Parser {
                 }
             };
 
-            self.skip_newlines();
+            self.skip_whitespace();
             let end_pos = self.previous_span().end;
 
             actions.push(TestAction {
@@ -240,7 +240,7 @@ impl super::super::Parser {
                 return Err(self.error("Expected comparison operator (<, >, or =)"));
             };
 
-            self.skip_newlines();
+            self.skip_whitespace();
             let end_pos = self.previous_span().end;
 
             assertions.push(TestAssertion {

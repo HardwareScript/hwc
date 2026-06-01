@@ -205,7 +205,7 @@ impl crate::parser::Parser {
                     continue;
                 }
                 profile = self.expect_namespaced_identifier().ok();
-                self.skip_newlines();
+                self.skip_whitespace();
             } else if self.check(&Token::Mechanical) {
                 self.advance(); // consume 'mechanical'
                 if let Err(e) = self.expect(&Token::Colon) {
@@ -214,7 +214,7 @@ impl crate::parser::Parser {
                     continue;
                 }
                 mechanical = self.expect_namespaced_identifier().ok();
-                self.skip_newlines();
+                self.skip_whitespace();
             } else if self.check(&Token::Identifier("nets".into())) {
                 // Parse nets block for net classifications (v0.1.6)
                 match self.parse_nets_block() {

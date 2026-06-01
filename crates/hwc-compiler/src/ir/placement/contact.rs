@@ -142,6 +142,23 @@ pub fn place_contact(
 
     let bridge_material_id = contact.bridge.as_ref().map(|b| space.material_registry.get_or_register(b));
 
+    // v0.1.7: Register via for Excellon drill export
+    // This ensures that ALL contacts (vias, THT pins, TSVs) are registered for the drill file.
+    let board_max_z_nm = (space.grid.z_layers as i64) * space.voxel_size.z_nm;
+    let via_net_id = hwc_engine::netlist::NetId::new(net_id);
+
+    let via = hwc_engine::geometry_router::Via::new(
+        (xy_point.x, xy_point.y),
+        start_z,
+        end_z,
+        diameter_nm,
+        via_net_id,
+        0,              // min_z
+        board_max_z_nm, // max_z
+        space.voxel_size.z_nm,
+    );
+    space.add_vias(vec![via]);
+
     // v0.1.7: TSV (Through-Silicon Via) support
     if let Some(liner_material_name) = &contact.liner {
         let liner_material_id = space.material_registry.get_or_register(liner_material_name);
@@ -248,20 +265,7 @@ pub fn place_contact(
             // v0.1.7: Added clearance_nm for different-net anti-pads.
             space.voxel_grid.drill_via_hole(contact_bbox, diameter_nm, net_id, clearance_nm);
 
-            // 2. ACTION: Register as a manufacturing drill (for .drl and mesh cutout)
-            let via = hwc_engine::geometry_router::Via::new(
-                (xy_point.x, xy_point.y),
-                start_z,
-                end_z,
-                diameter_nm,
-                hwc_engine::netlist::NetId::new(net_id),
-                0,                          // board_min_z_nm
-                space.dimensions.depth_nm,  // board_max_z_nm
-                space.voxel_size.z_nm,
-            );
-            space.vias.push(via);
-
-            // 3. ACTION: Calculate Unified Via parameters (Annular Ring & Plating)
+            // 2. ACTION: Calculate Unified Via parameters (Annular Ring & Plating)
             let min_annular_ring_nm = if let Some(ring_measurement) = &contact.annular_ring {
                 crate::ir::conversions::measurement_to_nm(ring_measurement, symbol_table)
             } else {
@@ -291,19 +295,6 @@ pub fn place_contact(
             // v0.1.7: Added clearance_nm (though for NPTH it usually drills everything)
             space.voxel_grid.drill_via_hole(contact_bbox, diameter_nm, 0, clearance_nm);
 
-            // 2. ACTION: Register as a Non-Plated Through Hole (NPTH) for the drill file
-            let via = hwc_engine::geometry_router::Via::new(
-                (xy_point.x, xy_point.y),
-                start_z,
-                end_z,
-                diameter_nm,
-                hwc_engine::netlist::NetId::new(0), // No Net = NPTH
-                0,
-                space.dimensions.depth_nm,
-                space.voxel_size.z_nm,
-            );
-            space.vias.push(via);
-            
             // NO cylinder/tube is added. The space remains empty (Void).
         } else {
             // v0.1.7: Auto-Drill for deposited vias

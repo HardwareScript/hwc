@@ -93,6 +93,8 @@ pub fn place_component_array(
             position: instance_position,
             rotation: component.rotation.clone(),
             elevation: component.elevation.clone(),
+            mount: component.mount,
+            standoff: component.standoff.clone(),
             array_config: None, // Don't recursively unroll
             pin_net_bindings: component.pin_net_bindings.clone(), // v0.1.6 Item #13: Preserve net bindings
             // v0.1.7: Unified waivers (removed legacy boolean flags)

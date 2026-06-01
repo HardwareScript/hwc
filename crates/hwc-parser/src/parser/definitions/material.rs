@@ -94,11 +94,11 @@ impl super::super::Parser {
                                 Ok(cat) => category = Some(cat),
                                 Err(e) => {
                                     collector.report(e);
-                                    self.skip_newlines();
+                                    self.skip_whitespace();
                                     continue;
                                 }
                             }
-                            self.skip_newlines();
+                            self.skip_whitespace();
                             continue;
                         }
                         "process" => {
@@ -111,11 +111,11 @@ impl super::super::Parser {
                                 Ok(proc) => process = Some(proc),
                                 Err(e) => {
                                     collector.report(e);
-                                    self.skip_newlines();
+                                    self.skip_whitespace();
                                     continue;
                                 }
                             }
-                            self.skip_newlines();
+                            self.skip_whitespace();
                             continue;
                         }
                         "properties" => {
@@ -168,7 +168,7 @@ impl super::super::Parser {
                     {
                         self.advance();
                     }
-                    self.skip_newlines();
+                    self.skip_whitespace();
                     continue;
                 }
             };
@@ -182,7 +182,7 @@ impl super::super::Parser {
                 {
                     self.advance();
                 }
-                self.skip_newlines();
+                self.skip_whitespace();
                 continue;
             }
 
@@ -192,14 +192,14 @@ impl super::super::Parser {
                         Ok(s) => symbol = Some(s),
                         Err(e) => collector.report(e),
                     }
-                    self.skip_newlines();
+                    self.skip_whitespace();
                 }
                 "description" => {
                     match self.expect_string() {
                         Ok(s) => description = Some(s),
                         Err(e) => collector.report(e),
                     }
-                    self.skip_newlines();
+                    self.skip_whitespace();
                 }
                 _ => {
                     collector
@@ -211,7 +211,7 @@ impl super::super::Parser {
                     {
                         self.advance();
                     }
-                    self.skip_newlines();
+                    self.skip_whitespace();
                 }
             }
 
@@ -461,7 +461,7 @@ impl super::super::Parser {
         self.expect(&Token::Colon)?;
         let target = self.expect_identifier()?;
         
-        self.skip_newlines();
+        self.skip_whitespace();
 
         Ok(MaterialAliasDefinition {
             name,
@@ -512,7 +512,7 @@ impl super::super::Parser {
             self.expect(&Token::Colon)?;
 
             let value = self.parse_property_value()?;
-            self.skip_newlines();
+            self.skip_whitespace();
 
             properties.push(Property {
                 key: key.into(),

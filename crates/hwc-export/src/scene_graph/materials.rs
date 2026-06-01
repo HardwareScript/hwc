@@ -124,7 +124,15 @@ pub fn add_materials_from_symbol_table(
         let color = parse_hex_color(&color_hex)?;
 
         // Extract visual properties with defaults (v0.1.6 God-Tier Visual API)
-        let opacity = material_def.get_opacity() as f32;
+        let mut opacity = material_def.get_opacity() as f32;
+        
+        // v0.1.7: Force components and semiconductor bodies to be Opaque
+        if material_def.category == hwc_parser::MaterialCategory::Semiconductor || 
+           name.to_lowercase().contains("body") || 
+           name.to_lowercase().contains("component") {
+            opacity = 1.0;
+        }
+
         let outline_opacity = material_def.get_outline_opacity() as f32;
         let roughness = material_def.get_roughness() as f32;
         let metallic = material_def.get_metallic() as f32;

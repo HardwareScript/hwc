@@ -41,6 +41,11 @@ pub fn profile_to_constraints(
             min_diameter_nm: measurement_to_nm(&via_def.min_diameter),
             max_diameter_nm: 0, // Not specified in v0.1.4 profile syntax
             min_annular_ring_nm: measurement_to_nm(&via_def.min_annular_ring),
+            min_spacing_nm: via_def
+                .min_spacing
+                .as_ref()
+                .map(measurement_to_nm)
+                .unwrap_or_else(|| measurement_to_nm(&via_def.min_diameter) * 2),
             default_diameter_nm: via_def
                 .default_diameter
                 .as_ref()

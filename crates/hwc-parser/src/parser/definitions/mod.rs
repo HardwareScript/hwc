@@ -196,7 +196,7 @@ impl super::Parser {
             None
         };
 
-        self.skip_newlines();
+        self.skip_whitespace();
         let end_pos = self.previous_span().end;
 
         Ok(Import {

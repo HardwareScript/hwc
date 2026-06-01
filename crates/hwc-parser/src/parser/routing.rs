@@ -22,7 +22,7 @@ impl super::Parser {
         // Parse alias
         let alias = self.expect_identifier_string()?;
 
-        self.skip_newlines();
+        self.skip_whitespace();
         let end_pos = self.previous_span().end;
 
         Ok(Expose {
@@ -95,7 +95,7 @@ impl super::Parser {
                                 to: cutout_to,
                             });
 
-                            self.skip_newlines();
+                            self.skip_whitespace();
                         }
 
                         self.expect(&Token::Dedent)?;
@@ -108,13 +108,13 @@ impl super::Parser {
                     }
                 }
 
-                self.skip_newlines();
+                self.skip_whitespace();
             }
 
             self.expect(&Token::Dedent)?;
             cutouts
         } else {
-            self.skip_newlines();
+            self.skip_whitespace();
             Vec::new() // No cutouts
         };
 
@@ -159,7 +159,7 @@ impl super::Parser {
                 }
                 _ => return Err(self.error(&format!("Unknown routing property: '{}'", key))),
             }
-            self.skip_newlines();
+            self.skip_whitespace();
         }
 
         self.expect(&Token::Dedent)?;
@@ -259,12 +259,12 @@ impl super::Parser {
                         }
                     }
                 }
-                self.skip_newlines();
+                self.skip_whitespace();
             }
 
             self.expect(&Token::Dedent)?;
         } else {
-            self.skip_newlines();
+            self.skip_whitespace();
         }
 
         let end_pos = self.previous_span().end;

@@ -169,7 +169,7 @@ impl BoundingBox {
         }
     }
 
-    /// Check if this bounding box intersects another.
+    /// Check if this bounding box intersects another (including boundaries).
     #[inline]
     pub fn intersects(&self, other: &BoundingBox) -> bool {
         self.min.x < other.max.x

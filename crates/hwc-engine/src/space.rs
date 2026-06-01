@@ -298,6 +298,23 @@ impl AnalyticTrace {
     }
 }
 
+/// **v0.1.7: Keep-Out Zone (DRC & Auto-Placement Level)**
+///
+/// Defines a region where certain layout features (vias, traces, components)
+/// are forbidden to ensure mechanical and electrical integrity.
+#[derive(Debug, Clone)]
+pub struct KeepOutZone {
+    pub bbox: BoundingBox,
+    /// If Some, this net is exempt from this keep-out zone (allows its own traces/vias)
+    pub net_id: Option<NetId>,
+    /// If false, automatic via insertion is forbidden in this zone
+    pub allow_vias: bool,
+    /// If false, signal routing is forbidden in this zone
+    pub allow_routing: bool,
+    /// List of net names that are exempt from this keep-out zone (v0.1.7)
+    pub exempted_nets: Vec<CompactString>,
+}
+
 /// Complete hardware space with voxel grid and connectivity.
 ///
 /// This structure combines:
@@ -399,6 +416,9 @@ pub struct HardwareSpace {
     ///
     /// If None, DRC uses default constraints (IPC-2221 Class 2).
     pub fabrication_constraints: Option<hwc_materials::ConstraintSet>,
+
+    /// **v0.1.7: Keep-Out Zones for DRC and routing (NATIVE)**
+    pub keep_out_zones: Vec<KeepOutZone>,
 }
 
 /// Net classification for physics validation
@@ -523,6 +543,7 @@ impl HardwareSpace {
             component_bboxes: FxHashMap::default(), // Sprint 3.10: Native bbox tracking
             analytic_routes: Vec::new(),            // v0.1.7: Analytic route overlay
             fabrication_constraints: None,          // v0.1.6: DRC constraints from profile
+            keep_out_zones: Vec::new(),             // v0.1.7: Keep-out zones
         }
     }
 
@@ -546,6 +567,13 @@ impl HardwareSpace {
         
         // v0.1.7: Also register with VoxelGrid metadata so router/SDF can see it
         self.voxel_grid.add_component_metadata(bbox, material_id, name, component_type, blocked_z_ranges);
+    }
+
+    /// **v0.1.7: Register a Keep-Out Zone (KOZ)**
+    ///
+    /// Registers a region where certain layout features are forbidden.
+    pub fn register_keep_out_zone(&mut self, koz: KeepOutZone) {
+        self.keep_out_zones.push(koz);
     }
 
     /// **Sprint 3.10: Get all component bounding boxes (for SDF)**

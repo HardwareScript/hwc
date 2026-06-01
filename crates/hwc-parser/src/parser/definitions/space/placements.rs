@@ -423,7 +423,7 @@ impl crate::parser::Parser {
             (dia, ring, caps, bridge, liner, liner_thickness, koz, net_in_block)
         } else {
             // No properties block, just consume newline
-            self.skip_newlines();
+            self.skip_whitespace();
             (None, None, None, None, None, None, None, None)
         };
 

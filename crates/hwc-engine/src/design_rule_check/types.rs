@@ -77,6 +77,15 @@ pub enum DrcViolation {
         location: Point3D,
         reason: CompactString,
     },
+
+    /// Drill clearance violation (mechanical holes too close) (v0.1.7)
+    DrillClearanceViolation {
+        via_a: CompactString,
+        via_b: CompactString,
+        actual_nm: i64,
+        required_nm: i64,
+        location: Point3D,
+    },
 }
 
 impl fmt::Display for DrcViolation {
@@ -188,6 +197,23 @@ impl fmt::Display for DrcViolation {
                     f,
                     "Keep-out zone violation for net {} at {}: {}",
                     net, location, reason
+                )
+            }
+            DrcViolation::DrillClearanceViolation {
+                via_a,
+                via_b,
+                actual_nm,
+                required_nm,
+                location,
+            } => {
+                write!(
+                    f,
+                    "Drill clearance: {} ↔ {} at {} ({:.3}mm < {:.3}mm)",
+                    via_a,
+                    via_b,
+                    location,
+                    *actual_nm as f64 / 1_000_000.0,
+                    *required_nm as f64 / 1_000_000.0
                 )
             }
         }

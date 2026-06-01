@@ -43,7 +43,7 @@ pub fn load_fabrication_constraints<S: SymbolTableTrait>(
         extract_trace_constraints(profile_def, symbol_table)?;
 
     // Extract via constraints (required)
-    let (min_via_diameter_nm, default_via_diameter_nm, min_annular_ring_nm) =
+    let (min_via_diameter_nm, default_via_diameter_nm, min_annular_ring_nm, min_spacing_nm) =
         extract_via_constraints(profile_def, symbol_table)?;
 
     // Extract clearance constraints (optional)
@@ -58,6 +58,7 @@ pub fn load_fabrication_constraints<S: SymbolTableTrait>(
         min_via_diameter_nm,
         default_via_diameter_nm,
         min_annular_ring_nm,
+        min_spacing_nm,
         high_voltage_clearance_nm: clearance.map(|(hv, _)| hv),
         safety_factor: clearance.map(|(_, sf)| sf).unwrap_or(2.0),
         stackup,

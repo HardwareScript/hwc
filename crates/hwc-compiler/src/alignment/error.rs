@@ -30,7 +30,7 @@ impl SpatialInfo {
         let mut parts = vec![format!("pour '{}'", self.pour_name)];
 
         if let Some(z_nm) = self.z_bottom_nm {
-            let z_mm = z_nm as f64 / 1_000_000_000.0;
+            let z_mm = z_nm as f64 / 1_000_000.0;
             parts.push(format!("at z = {:.4}mm", z_mm));
         }
 

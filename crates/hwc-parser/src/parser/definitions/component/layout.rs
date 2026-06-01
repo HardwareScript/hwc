@@ -12,6 +12,7 @@ impl super::super::super::Parser {
         let mut pin_positions = rustc_hash::FxHashMap::default();
         let mut pad_shapes = rustc_hash::FxHashMap::default();
         let mut internal_pours = Vec::new();
+        let mut standoff = None;
 
         // eprintln!("[DEBUG] parse_layout_block starting, current token: {:?}, position: {}/{}", self.current().map(|s| &s.token), self.current, self.tokens.len());
 
@@ -67,6 +68,10 @@ impl super::super::super::Parser {
                 "pad_shapes" => {
                     pad_shapes = self.parse_pad_shapes_block()?;
                 }
+                "standoff" => {
+                    standoff = Some(self.parse_expression()?);
+                    self.skip_until_newline();
+                }
                 _ => {
                     // Skip unknown layout properties
                     self.skip_until_newline();
@@ -86,6 +91,7 @@ impl super::super::super::Parser {
             pin_positions,
             pad_shapes,
             internal_pours, // Sprint 2.2: Parsed internal pours from layout block
+            standoff,       // v0.1.7: Parsed stand-off height
             span: Span::new(start_pos, end_pos),
         })
     }

@@ -84,7 +84,7 @@ pub fn export(
                         pours.len(),
                         total_area,
                         first_pour.material_name,
-                        first_pour.z_bottom_nm as f64 / 1_000_000_000.0
+                        first_pour.z_bottom_nm as f64 / 1_000_000.0
                     ));
                     netlist_str
                         .push_str("*   Parasitic extraction: Treat as single electrical node\n");
@@ -100,7 +100,7 @@ pub fn export(
                     net_name,
                     pour.name,
                     pour.material_name,
-                    pour.z_bottom_nm as f64 / 1_000_000_000.0
+                    pour.z_bottom_nm as f64 / 1_000_000.0
                 ));
             }
         }

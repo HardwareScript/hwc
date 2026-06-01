@@ -173,38 +173,39 @@ pub fn add_substrate(
             continue;
         }
 
-        // v0.1.7: Automatic Surface Culling (The "Handshake" Innovation)
-        let mut base_culling = FaceCulling::none();
-        for (other_idx, other) in original_layers.iter().enumerate() {
-            if idx == other_idx {
-                continue;
-            }
-            let other_precedence = layer_precedences[other_idx];
+            // v0.1.7: Automatic Surface Culling (The "Handshake" Innovation)
+            let mut base_culling = FaceCulling::none();
+            for (other_idx, other) in original_layers.iter().enumerate() {
+                if idx == other_idx {
+                    continue;
+                }
+                let other_precedence = layer_precedences[other_idx];
 
-            // If I have HIGHER precedence (lower value), I cull my own face
-            // if I'm touching a LOWER precedence material.
-            if my_precedence < other_precedence {
-                // Check for Z-touching (1um tolerance)
-                let touching_bottom = (layer.bbox.min.z - other.bbox.max.z).abs() < 1000;
-                let touching_top = (layer.bbox.max.z - other.bbox.min.z).abs() < 1000;
+                // v0.1.7 Fix: If I have LOWER precedence (higher value), I cull my own face
+                // if I'm touching a HIGHER precedence material. This ensures pads (High)
+                // "own" the shared surface with traces (Low).
+                if my_precedence > other_precedence {
+                    // Check for Z-touching (1um tolerance)
+                    let touching_bottom = (layer.bbox.min.z - other.bbox.max.z).abs() < 1000;
+                    let touching_top = (layer.bbox.max.z - other.bbox.min.z).abs() < 1000;
 
-                if touching_bottom || touching_top {
-                    // Check for XY overlap
-                    if layer.bbox.min.x < other.bbox.max.x
-                        && layer.bbox.max.x > other.bbox.min.x
-                        && layer.bbox.min.y < other.bbox.max.y
-                        && layer.bbox.max.y > other.bbox.min.y
-                    {
-                        if touching_bottom {
-                            base_culling.bottom = true;
-                        }
-                        if touching_top {
-                            base_culling.top = true;
+                    if touching_bottom || touching_top {
+                        // Check for XY overlap
+                        if layer.bbox.min.x < other.bbox.max.x
+                            && layer.bbox.max.x > other.bbox.min.x
+                            && layer.bbox.min.y < other.bbox.max.y
+                            && layer.bbox.max.y > other.bbox.min.y
+                        {
+                            if touching_bottom {
+                                base_culling.bottom = true;
+                            }
+                            if touching_top {
+                                base_culling.top = true;
+                            }
                         }
                     }
                 }
             }
-        }
 
         let material_name = space
             .material_registry

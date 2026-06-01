@@ -3,6 +3,7 @@
 //! Shared physical-Z helpers for export pipelines. All internal logic uses nanometers.
 
 use hwc_engine::HardwareSpace;
+use hwc_compiler::ir::stackup_manager::StackupManager;
 
 /// Convert nanometers to millimeters for human-readable labels.
 pub fn z_mm(z_nm: i64) -> f64 {
@@ -25,7 +26,51 @@ pub fn grid_index_from_z(z_nm: i64, voxel_z_nm: i64) -> u8 {
 }
 
 /// DXF layer name from physical elevation (mm) and material.
-pub fn dxf_layer_name(z_center_nm: i64, material: &str) -> String {
+/// v0.1.7: Maps physical slices to logical EDA layers (Top, Bottom, Inner, Drill).
+pub fn dxf_layer_name(
+    z_center_nm: i64,
+    material: &str,
+    board_min_z: i64,
+    board_max_z: i64,
+    stackup_manager: Option<&StackupManager>,
+) -> String {
+    let material_lower = material.to_lowercase();
+
+    // 1. Global DRILL Layer
+    if material_lower == "void" || material_lower == "air" {
+        return "DRILL".to_string();
+    }
+
+    // 2. Query StackupManager for semantic layer name (v0.1.7 Fix)
+    if let Some(mgr) = stackup_manager {
+        if let Some(layer_name) = mgr.get_layer_name_at_z(z_center_nm) {
+            return format!("{}_{}", layer_name.to_uppercase(), material.to_uppercase());
+        }
+    }
+
+    // 3. Map Copper/Conductive layers to logical stackup names
+    if material_lower.contains("copper")
+        || material_lower.contains("solder")
+        || material_lower.contains("gold")
+    {
+        let tol = 1000; // 1um tolerance
+        if (z_center_nm - board_max_z).abs() <= tol || z_center_nm > board_max_z - 50000 {
+            return format!("TOP_{}", material.to_uppercase());
+        }
+        if (z_center_nm - board_min_z).abs() <= tol || z_center_nm < board_min_z + 50000 {
+            return format!("BOTTOM_{}", material.to_uppercase());
+        }
+
+        // Inner layers: calculate index
+        let total_depth = board_max_z - board_min_z;
+        if total_depth > 0 {
+            let relative_pos = (z_center_nm - board_min_z) as f64 / total_depth as f64;
+            let inner_idx = (relative_pos * 10.0).round() as i32; // Simplified inner mapping
+            return format!("INNER{}_{}", inner_idx, material.to_uppercase());
+        }
+    }
+
+    // Fallback for substrate and other materials
     format!("Z{:.4}mm_{}", z_mm(z_center_nm), material)
 }
 
@@ -75,6 +120,6 @@ mod tests {
 
     #[test]
     fn dxf_layer_name_uses_mm() {
-        assert_eq!(dxf_layer_name(350_000_000, "Copper"), "Z0.3500mm_Copper");
+        assert_eq!(dxf_layer_name(350_000_000, "Copper", 0, 1_000_000_000, None), "INNER4_COPPER");
     }
 }

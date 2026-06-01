@@ -123,6 +123,9 @@ pub struct ViaConstraints {
     /// Minimum annular ring width in nanometers
     pub min_annular_ring_nm: i64,
 
+    /// Minimum spacing between drill holes in nanometers (v0.1.7)
+    pub min_spacing_nm: i64,
+
     /// Default via diameter in nanometers
     pub default_diameter_nm: i64,
 }
@@ -262,6 +265,7 @@ impl Default for ConstraintSet {
                 min_diameter_nm: 300_000,     // 300µm
                 max_diameter_nm: 0,           // unlimited
                 min_annular_ring_nm: 150_000, // 150µm
+                min_spacing_nm: 600_000,      // 600µm (v0.1.7)
                 default_diameter_nm: 500_000, // 500µm
             },
             clearance: ClearanceConstraints {

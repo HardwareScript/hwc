@@ -5,21 +5,20 @@
 * ========================================
 * NETS
 * ========================================
-* Net: VDD (pour: TopVDD, material: Copper, z: 0.0019mm)
-* Net: SIG (pour: SigRail, material: Copper, z: 0.0012mm)
-* Net: GND (pour: GndPlane, material: Copper, z: 0.0006mm)
+* Net: VDD (pour: TopVDD, material: Copper, z: 1.9000mm)
+* Net: SIG (pour: SigRail, material: Copper, z: 1.2000mm)
+* Net: GND (pour: GndPlane, material: Copper, z: 0.6000mm)
 * Net: VDD (pour: BottomVDD, material: Copper, z: 0.0000mm)
-* Net: VDD (pour: U1_VCC_Pad, material: Copper, z: 0.0019mm)
-* Net: GND (pour: U1_GND_Pad, material: Copper, z: 0.0019mm)
-* Net: SIG (pour: U1_IO_Pad, material: Copper, z: 0.0019mm)
-* Net: VDD (pour: U2_VCC_Pad, material: Copper, z: 0.0019mm)
-* Net: GND (pour: U2_GND_Pad, material: Copper, z: 0.0019mm)
-* Net: SIG (pour: U2_IO_Pad, material: Copper, z: 0.0019mm)
+* Net: VDD (pour: U1_VCC_Pad, material: Copper, z: 1.9000mm)
+* Net: GND (pour: U1_GND_Pad, material: Copper, z: 1.9000mm)
+* Net: SIG (pour: U1_IO_Pad, material: Copper, z: 1.9000mm)
+* Net: VDD (pour: U2_VCC_Pad, material: Copper, z: 0.0000mm)
+* Net: GND (pour: U2_GND_Pad, material: Copper, z: 0.0000mm)
+* Net: SIG (pour: U2_IO_Pad, material: Copper, z: 0.0000mm)
 * Net: VDD (width=100000nm, material=Copper)
 * Net: SIG (width=100000nm, material=Copper)
 *   Connected pins:
 *     - BottomVDD.anchor
-*     - VddVia.via
 *     - U1.VCC
 *     - U1_VCC_Pad.anchor
 *     - U1.VCC
@@ -27,8 +26,27 @@
 *     - U2_VCC_Pad.anchor
 *     - U2.VCC
 *     - AutoVia_VDD_0_6.via
-*     - AutoVia_VDD_0_6.via
-*     - AutoVia_VDD_0_6.via
+*     - AutoVia_VDD_0_6_r0c1.via
+*     - AutoVia_VDD_0_6_r0c2.via
+*     - AutoVia_VDD_0_6_r0c3.via
+*     - AutoVia_VDD_0_6_r0c4.via
+*     - AutoVia_VDD_0_6_r0c5.via
+*     - AutoVia_VDD_0_6_r0c6.via
+*     - AutoVia_VDD_0_6_r0c7.via
+*     - AutoVia_VDD_0_6_r0c8.via
+*     - AutoVia_VDD_0_6_r0c9.via
+*     - AutoVia_VDD_0_6_r0c10.via
+*     - AutoVia_VDD_0_6_r1c0.via
+*     - AutoVia_VDD_0_6_r1c1.via
+*     - AutoVia_VDD_0_6_r1c2.via
+*     - AutoVia_VDD_0_6_r1c3.via
+*     - AutoVia_VDD_0_6_r1c4.via
+*     - AutoVia_VDD_0_6_r1c5.via
+*     - AutoVia_VDD_0_6_r1c6.via
+*     - AutoVia_VDD_0_6_r1c7.via
+*     - AutoVia_VDD_0_6_r1c8.via
+*     - AutoVia_VDD_0_6_r1c9.via
+*     - AutoVia_VDD_0_6_r1c10.via
 
 * ========================================
 * COMPONENTS
@@ -37,7 +55,6 @@ XTopVDD VDD Pour(Copper)
 XSigRail SIG Pour(Copper)
 XGndPlane GND Pour(Copper)
 XBottomVDD VDD Pour(Copper)
-XVddVia VDD Contact(Copper)
 XU1 VDD GND SIG IC_Package
 XU1_VCC_Pad VDD Pour(Copper)
 XU1_GND_Pad GND Pour(Copper)
@@ -47,12 +64,31 @@ XU2_VCC_Pad VDD Pour(Copper)
 XU2_GND_Pad GND Pour(Copper)
 XU2_IO_Pad SIG Pour(Copper)
 XAutoVia_VDD_0_6 VDD Contact(Copper)
-XAutoVia_VDD_0_6 VDD Contact(Copper)
-XAutoVia_VDD_0_6 VDD Contact(Copper)
+XAutoVia_VDD_0_6_r0c1 VDD Contact(Copper)
+XAutoVia_VDD_0_6_r0c2 VDD Contact(Copper)
+XAutoVia_VDD_0_6_r0c3 VDD Contact(Copper)
+XAutoVia_VDD_0_6_r0c4 VDD Contact(Copper)
+XAutoVia_VDD_0_6_r0c5 VDD Contact(Copper)
+XAutoVia_VDD_0_6_r0c6 VDD Contact(Copper)
+XAutoVia_VDD_0_6_r0c7 VDD Contact(Copper)
+XAutoVia_VDD_0_6_r0c8 VDD Contact(Copper)
+XAutoVia_VDD_0_6_r0c9 VDD Contact(Copper)
+XAutoVia_VDD_0_6_r0c10 VDD Contact(Copper)
+XAutoVia_VDD_0_6_r1c0 VDD Contact(Copper)
+XAutoVia_VDD_0_6_r1c1 VDD Contact(Copper)
+XAutoVia_VDD_0_6_r1c2 VDD Contact(Copper)
+XAutoVia_VDD_0_6_r1c3 VDD Contact(Copper)
+XAutoVia_VDD_0_6_r1c4 VDD Contact(Copper)
+XAutoVia_VDD_0_6_r1c5 VDD Contact(Copper)
+XAutoVia_VDD_0_6_r1c6 VDD Contact(Copper)
+XAutoVia_VDD_0_6_r1c7 VDD Contact(Copper)
+XAutoVia_VDD_0_6_r1c8 VDD Contact(Copper)
+XAutoVia_VDD_0_6_r1c9 VDD Contact(Copper)
+XAutoVia_VDD_0_6_r1c10 VDD Contact(Copper)
 XAutoVia_SIG_4_6 SIG Contact(Copper)
-XAutoVia_SIG_4_6 SIG Contact(Copper)
+XAutoVia_SIG_0_4 SIG Contact(Copper)
 XAutoVia_GND_2_6 GND Contact(Copper)
-XAutoVia_GND_2_6 GND Contact(Copper)
+XAutoVia_GND_0_2 GND Contact(Copper)
 
 
 * ========================================

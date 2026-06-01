@@ -121,6 +121,137 @@ pub enum DrcError {
         location: Point3D,
         reason: CompactString,
     },
+
+    /// P49: Drill-to-Drill Spacing Violation (v0.1.7)
+    #[error("Drill clearance violation between '{via_a}' and '{via_b}'")]
+    #[diagnostic(
+        code(P49),
+        url("https://docs.hw-script.org/errors/P49"),
+        help("Physical Explanation: If two mechanical drills hit locations that are too close, the drill bit will slip and fracture as it enters the second overlapping hole, ruining the board.\n\nRequired Spacing: {required_mm:.3}mm\nActual Spacing: {actual_mm:.3}mm\nLocation: {location}\n\nSolution: Increase spacing between vias or drill holes.")
+    )]
+    DrillClearanceViolation {
+        via_a: CompactString,
+        via_b: CompactString,
+        actual_mm: f64,
+        required_mm: f64,
+        location: Point3D,
+    },
+}
+
+/// Convert DRC violations to miette errors.
+///
+/// This function converts the internal DRC violation types into
+/// beautiful miette diagnostic errors with error codes and help text.
+///
+/// # Arguments
+/// * `violation` - DRC violation to convert
+///
+/// # Returns
+/// Miette diagnostic error
+impl From<&DrcViolation> for DrcError {
+    fn from(violation: &DrcViolation) -> Self {
+        match violation {
+            DrcViolation::ClearanceViolation {
+                net_a,
+                net_b,
+                actual_nm,
+                required_nm,
+                location,
+            } => DrcError::ClearanceViolation {
+                net_a: net_a.clone(),
+                net_b: net_b.clone(),
+                actual_mm: *actual_nm as f64 / 1_000_000.0,
+                required_mm: *required_nm as f64 / 1_000_000.0,
+                location: *location,
+            },
+            DrcViolation::TraceWidthViolation {
+                net,
+                actual_nm,
+                required_nm,
+                location,
+            } => DrcError::TraceWidthViolation {
+                net: net.clone(),
+                actual_mm: *actual_nm as f64 / 1_000_000.0,
+                required_mm: *required_nm as f64 / 1_000_000.0,
+                location: *location,
+            },
+            DrcViolation::ThermalViolation {
+                net,
+                temperature_c,
+                max_c,
+                location,
+            } => DrcError::ThermalViolation {
+                net: net.clone(),
+                temperature_c: *temperature_c,
+                max_c: *max_c,
+                location: *location,
+            },
+            DrcViolation::ImpedanceViolation {
+                net,
+                actual_ohm,
+                target_ohm,
+                location,
+            } => DrcError::ImpedanceViolation {
+                net: net.clone(),
+                actual_ohm: *actual_ohm,
+                target_ohm: *target_ohm,
+                location: *location,
+            },
+            DrcViolation::ViaDiameterViolation {
+                net,
+                actual_nm,
+                required_nm,
+                location,
+            } => DrcError::ViaDiameterViolation {
+                net: net.clone(),
+                actual_mm: *actual_nm as f64 / 1_000_000.0,
+                required_mm: *required_nm as f64 / 1_000_000.0,
+                location: *location,
+            },
+            DrcViolation::EnclosureViolation {
+                net,
+                actual_nm,
+                required_nm,
+                location,
+            } => DrcError::EnclosureViolation {
+                net: net.clone(),
+                actual_mm: *actual_nm as f64 / 1_000_000.0,
+                required_mm: *required_nm as f64 / 1_000_000.0,
+                location: *location,
+            },
+            DrcViolation::SubstrateShortCircuit {
+                net,
+                substrate_material,
+                location,
+            } => DrcError::SubstrateShortCircuit {
+                net: net.clone(),
+                substrate_material: substrate_material.clone(),
+                location: *location,
+            },
+            DrcViolation::KozViolation {
+                net,
+                location,
+                reason,
+            } => DrcError::KozViolation {
+                net: net.clone(),
+                location: *location,
+                reason: reason.clone(),
+            },
+            DrcViolation::DrillClearanceViolation {
+                via_a,
+                via_b,
+                actual_nm,
+                required_nm,
+                location,
+            } => DrcError::DrillClearanceViolation {
+                via_a: via_a.clone(),
+                via_b: via_b.clone(),
+                actual_mm: *actual_nm as f64 / 1_000_000.0,
+                required_mm: *required_nm as f64 / 1_000_000.0,
+                location: *location,
+            },
+        }
+    }
 }
 
 /// Convert DRC violations to miette errors.
@@ -134,94 +265,7 @@ pub enum DrcError {
 /// # Returns
 /// Miette diagnostic error
 pub fn violation_to_error(violation: &DrcViolation) -> DrcError {
-    match violation {
-        DrcViolation::ClearanceViolation {
-            net_a,
-            net_b,
-            actual_nm,
-            required_nm,
-            location,
-        } => DrcError::ClearanceViolation {
-            net_a: net_a.clone(),
-            net_b: net_b.clone(),
-            actual_mm: *actual_nm as f64 / 1_000_000.0,
-            required_mm: *required_nm as f64 / 1_000_000.0,
-            location: *location,
-        },
-        DrcViolation::TraceWidthViolation {
-            net,
-            actual_nm,
-            required_nm,
-            location,
-        } => DrcError::TraceWidthViolation {
-            net: net.clone(),
-            actual_mm: *actual_nm as f64 / 1_000_000.0,
-            required_mm: *required_nm as f64 / 1_000_000.0,
-            location: *location,
-        },
-        DrcViolation::ThermalViolation {
-            net,
-            temperature_c,
-            max_c,
-            location,
-        } => DrcError::ThermalViolation {
-            net: net.clone(),
-            temperature_c: *temperature_c,
-            max_c: *max_c,
-            location: *location,
-        },
-        DrcViolation::ImpedanceViolation {
-            net,
-            actual_ohm,
-            target_ohm,
-            location,
-        } => DrcError::ImpedanceViolation {
-            net: net.clone(),
-            actual_ohm: *actual_ohm,
-            target_ohm: *target_ohm,
-            location: *location,
-        },
-        DrcViolation::ViaDiameterViolation {
-            net,
-            actual_nm,
-            required_nm,
-            location,
-        } => DrcError::ViaDiameterViolation {
-            net: net.clone(),
-            actual_mm: *actual_nm as f64 / 1_000_000.0,
-            required_mm: *required_nm as f64 / 1_000_000.0,
-            location: *location,
-        },
-        DrcViolation::EnclosureViolation {
-            net,
-            actual_nm,
-            required_nm,
-            location,
-        } => DrcError::EnclosureViolation {
-            net: net.clone(),
-            actual_mm: *actual_nm as f64 / 1_000_000.0,
-            required_mm: *required_nm as f64 / 1_000_000.0,
-            location: *location,
-        },
-        DrcViolation::SubstrateShortCircuit {
-            net,
-            substrate_material,
-            location,
-        } => DrcError::SubstrateShortCircuit {
-            net: net.clone(),
-            substrate_material: substrate_material.clone(),
-            location: *location,
-        },
-        DrcViolation::KozViolation {
-            net,
-            location,
-            reason,
-        } => DrcError::KozViolation {
-            net: net.clone(),
-            location: *location,
-            reason: reason.clone(),
-        },
-    }
+    DrcError::from(violation)
 }
 
 /// Convert DRC report to a list of miette errors.

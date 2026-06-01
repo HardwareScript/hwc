@@ -29,39 +29,25 @@ pub fn export(
         width_mm, height_mm, depth_mm
     ));
 
-    // Add pours (mask layers, interconnects, silicon regions)
-    for pour in &space.pours {
-        let area_mm2 = pour.area_nm2 as f64 / 1_000_000_000_000.0; // nm² to mm²
-
-        // Calculate volume from area and layer thickness
-        // Assuming voxel_size.z_nm is the layer thickness
-        let thickness_nm = space.voxel_size.z_nm as f64;
-        let volume_nm3 = pour.area_nm2 as f64 * thickness_nm;
-        let volume_mm3 = volume_nm3 / 1_000_000_000_000_000_000.0; // nm³ to mm³
-
-        let net_info = pour
-            .net
-            .as_ref()
-            .map(|n| format!(" net:{}", n))
-            .unwrap_or_default();
-
-        // For pours, use volume instead of quantity
-        bom.push_str(&format!(
-            "{},Pour,{:.4}mm²{},Z {:.4}mm,,{},{:.6}mm³\n",
-            pour.name,
-            area_mm2,
-            net_info,
-            pour.z_bottom_nm as f64 / 1_000_000_000.0,
-            pour.material_name,
-            volume_mm3
-        ));
-    }
-
+    // v0.1.7: Filter out internal routing anchors and pours from the BOM.
+    // Physically orderable components are discrete parts like Resistors, ICs, etc.
+    // Pours (Copper, Silicon) are fabrication steps, not orderable items.
+    
     // Add discrete components from netlist arena
+    let mut discrete_count = 0;
     let component_count = space.netlist.component_count();
     for i in 0..component_count {
         let comp_id = hwc_engine::netlist::ComponentId::new(i as u32);
         if let Some(component) = space.netlist.get_component(comp_id) {
+            // v0.1.7: Filter out internal routing anchors
+            if component.component_type.starts_with("Pour(") 
+                || component.component_type.starts_with("Contact(")
+                || component.component_type == "Via" 
+                || component.component_type == "Anchor"
+            {
+                continue;
+            }
+
             // Try to get metadata from symbol table
             let metadata = symbol_table
                 .get_component(&component.component_type)
@@ -103,12 +89,13 @@ pub fn export(
                 part_number,
                 description
             ));
+            discrete_count += 1;
         }
     }
 
     std::fs::write(&path, bom)?;
 
-    let total_items = 1 + space.pours.len() + component_count; // substrate + pours + components
+    let total_items = 1 + discrete_count; // substrate + discrete components
     println!("   ✅ BOM: {} ({} items)", path.display(), total_items);
 
     Ok(())

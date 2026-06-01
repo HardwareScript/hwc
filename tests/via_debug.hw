@@ -1,0 +1,56 @@
+import * from @std/primitives/units
+import Copper from @std/materials/conductors
+
+material FR4:
+    category: insulator
+    properties:
+        color: "#2E7D32"
+        opacity: 0.5
+        roughness: 0.9
+
+profile ViaTestProfile:
+    stackup:
+        top:    [material: Copper, thickness: 0.1mm]
+        core:   [material: FR4,    thickness: 1.4mm]
+        bottom: [material: Copper, thickness: 0.1mm]
+    
+    via:
+        min_diameter: 0.3mm
+        min_annular_ring: 0.1mm
+        min_spacing: 0.25mm
+
+    via StandardVia:
+        diameter: 0.6mm
+        annular_ring: 0.2mm
+        spanning: layer: bottom to top
+        material: Copper
+
+    trace:
+        min_width: 0.15mm
+        min_spacing: 0.15mm
+
+module ViaTestModule:
+    pins: [P1, P2]
+
+space ViaTestBoard implements ViaTestModule:
+    dimensions: 10mm by 10mm by 1.6mm
+    grid: 100 by 100 by 16
+    origin: bl by b
+    profile: ViaTestProfile
+
+    # Large via in the center
+    add contact(Copper) named V1 at [x: 5mm, y: 5mm] spanning layer: bottom to top:
+        diameter: 0.6mm
+        annular_ring: 0.2mm
+    
+    # Another via near the edge to test "slashing"
+    add contact(Copper) named V2 at [x: 1mm, y: 5mm] spanning layer: bottom to top:
+        diameter: 0.6mm
+        annular_ring: 0.2mm
+
+    # Large copper pours to see flushing
+    add pour(Copper) named TopPlane on layer: top:
+        boundary: [x: 0mm, y: 0mm] to [x: 10mm, y: 10mm]
+    
+    add pour(Copper) named BottomPlane on layer: bottom:
+        boundary: [x: 0mm, y: 0mm] to [x: 10mm, y: 10mm]

@@ -63,7 +63,7 @@ impl Parser {
         };
 
         // Skip optional newlines
-        self.skip_newlines();
+        self.skip_whitespace();
 
         let end = self.previous_span().end;
 

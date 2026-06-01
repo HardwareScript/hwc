@@ -13,7 +13,7 @@ use crate::constraint_manager::ConstraintRulebook;
 use crate::geometry::{BoundingBox, Point3D};
 use crate::ContactMetadata;
 
-use super::types::DrcReport;
+use super::types::{DrcReport, DrcViolation};
 
 // ============================================================================
 // PRIMITIVES OVER PIXELS: Analytic Via Validation (v0.1.6)
@@ -47,10 +47,20 @@ fn calculate_annular_ring_from_substrate(
 
     let mut min_annular_ring = i64::MAX;
 
-    // Find pads on the via's start/end layers
+    // v0.1.7: Group enclosures by Z-range to handle overlapping pours (e.g. plane + pad).
+    // A via only fails if NO pour on a given layer provides sufficient enclosure.
+    let mut z_layer_max_enclosure: std::collections::HashMap<(i64, i64), i64> =
+        std::collections::HashMap::new();
+
+    // Find all conductive pours that intersect the via's Z-range
     for layer in substrate_layers {
-        // ✅ NATIVE v0.1.7 FIX: Only enforce annular rings on CONDUCTIVE layers.
-        // Vias passing through insulators (FR4, Air) do not need landing pads.
+        // ✅ NATIVE v0.1.7 FIX: Only enforce annular rings on POUR layers (pads, planes).
+        // A 'Contact' layer (via barrel) should not be used to satisfy another via's enclosure.
+        if layer.layer_type != crate::voxel_grid::SubstrateLayerType::Pour {
+            continue;
+        }
+
+        // Only enforce annular rings on CONDUCTIVE layers.
         if !material_registry.is_conductor(layer.material) {
             continue;
         }
@@ -60,29 +70,14 @@ fn calculate_annular_ring_from_substrate(
             continue;
         }
 
-        // ✅ v0.1.7 FIXED: Ignore "Self-Enclosure". 
-        // If the "pad" we found is actually just the via itself (same bbox), skip it.
-        // A via only needs an annular ring on a pad that is larger than itself.
-        if layer.bbox.min.x == via_bbox.min.x && layer.bbox.max.x == via_bbox.max.x &&
-           layer.bbox.min.y == via_bbox.min.y && layer.bbox.max.y == via_bbox.max.y {
-            continue; 
+        // ✅ v0.1.7 NATIVE FIX: A via connects to a pour if their bounding boxes intersect.
+        // This is robust against rounding offsets, handles intermediate layer connections,
+        // and eliminates the legacy strict start/end boundary checks.
+        if !layer.bbox.intersects(via_bbox) {
+            continue;
         }
 
-        // Check if layer overlaps with via in Z
-        if layer.bbox.max.z < via_bbox.min.z || layer.bbox.min.z > via_bbox.max.z {
-            continue; // No Z overlap
-        }
-
-        // Check if layer overlaps with via in XY
-        if layer.bbox.max.x < via_bbox.min.x
-            || layer.bbox.min.x > via_bbox.max.x
-            || layer.bbox.max.y < via_bbox.min.y
-            || layer.bbox.min.y > via_bbox.max.y
-        {
-            continue; // No XY overlap
-        }
-
-        // Calculate distance to edge based on pad shape (v0.1.7: Primitives Over Pixels)
+        // Calculate distance to edge based on pad shape
         let pad_min_x = layer.bbox.min.x;
         let pad_max_x = layer.bbox.max.x;
         let pad_min_y = layer.bbox.min.y;
@@ -112,13 +107,12 @@ fn calculate_annular_ring_from_substrate(
                 pad_radius - center_dist
             }
             crate::voxel_grid::SubstrateLayerShape::Rect => {
-                // Find closest pad edge to via center (AABB logic)
                 let dx = if via_center_x < pad_min_x {
                     pad_min_x - via_center_x
                 } else if via_center_x > pad_max_x {
                     via_center_x - pad_max_x
                 } else {
-                    0 // Via center is inside pad in X
+                    0
                 };
 
                 let dy = if via_center_y < pad_min_y {
@@ -126,7 +120,7 @@ fn calculate_annular_ring_from_substrate(
                 } else if via_center_y > pad_max_y {
                     via_center_y - pad_max_y
                 } else {
-                    0 // Via center is inside pad in Y
+                    0
                 };
 
                 if dx == 0 && dy == 0 {
@@ -140,32 +134,27 @@ fn calculate_annular_ring_from_substrate(
                         .min(dist_to_bottom)
                         .min(dist_to_top)
                 } else {
-                    -1 // Outside pad
+                    -1
                 }
             }
         };
 
-        // If via center is inside pad, calculate annular ring
-        if dist_to_edge >= 0 {
-            // Annular ring = distance from via edge to pad edge
-            let annular_ring = dist_to_edge - via_radius;
-            
-            if annular_ring < min_annular_ring {
-                min_annular_ring = annular_ring;
-            }
-        }
+        let enclosure = dist_to_edge - via_radius;
+        let z_range = (layer.bbox.min.z, layer.bbox.max.z);
+        let entry = z_layer_max_enclosure.entry(z_range).or_insert(i64::MIN);
+        *entry = (*entry).max(enclosure);
     }
 
-    // v0.1.7 FIXED: If no pads on the same net were found, return MAX instead of 0.
-    // This prevents enclosure violations on dielectric layers or layers where the via 
-    // is just passing through without a connection. The Physical Continuity Checker (P41)
-    // already ensures that the via is connected to its net.
-    if min_annular_ring == i64::MAX {
-        i64::MAX
-    } else {
-        // v0.1.7: Don't clamp to 0. Negative values indicate the via is larger than the pad.
-        min_annular_ring
+    if z_layer_max_enclosure.is_empty() {
+        return i64::MAX;
     }
+
+    // The via's overall enclosure is the WORST among the BEST enclosures on each layer.
+    for &enclosure in z_layer_max_enclosure.values() {
+        min_annular_ring = min_annular_ring.min(enclosure);
+    }
+
+    min_annular_ring
 }
 
 /// Validate via diameters using ContactMetadata (analytic geometry).
@@ -225,6 +214,93 @@ pub fn validate_via_diameters_analytic(
 
     if report.violations.is_empty() {
         report.add_info("All vias meet minimum diameter requirements".into());
+    }
+
+    report
+}
+
+/// Validate physical distance between vias (Drill-to-Drill Clearance) (v0.1.7).
+///
+/// This check enforces the minimum spacing between drill holes to prevent
+/// drill bit breakage during manufacturing, even if the vias share the same net.
+pub fn validate_drill_to_drill_clearance(
+    contacts: &[ContactMetadata],
+    constraints: &ConstraintRulebook,
+) -> DrcReport {
+    let mut report = DrcReport::new();
+
+    let fabrication = match &constraints.fabrication {
+        Some(fab) => fab,
+        None => return report,
+    };
+
+    // Use via min_spacing constraint from profile (if defined)
+    // If undefined, default to 2x the minimum via diameter (industry safety standard)
+    let min_drill_spacing_nm = fabrication.min_spacing_nm;
+
+    for i in 0..contacts.len() {
+        for j in (i + 1)..contacts.len() {
+            let via_a = &contacts[i];
+            let via_b = &contacts[j];
+
+            // v0.1.7: Robust drill clearance check (including same-net).
+            // Drill hits must never overlap horizontally if they share any vertical span.
+            let z_overlap = via_a.z_start_nm < via_b.z_end_nm && via_b.z_start_nm < via_a.z_end_nm;
+
+            if via_a.net.is_some() && via_a.net == via_b.net {
+                if !z_overlap {
+                    // Same-net vias that don't overlap in Z are 'stacked' and safe.
+                    continue;
+                }
+                // Same-net vias sharing a Z-range must still respect horizontal clearance
+                // to prevent interpenetrating drill cylinders.
+            } else {
+                // Different nets: even touching at the Z-boundary (z_start == other_z_end)
+                // is risky due to drill wandering, so we use a more conservative check.
+                let z_touching_or_overlapping =
+                    via_a.z_start_nm <= via_b.z_end_nm && via_a.z_end_nm >= via_b.z_start_nm;
+                if !z_touching_or_overlapping {
+                    continue;
+                }
+            }
+
+            if let (Some(bbox_a), Some(bbox_b)) = (&via_a.bbox, &via_b.bbox) {
+                // Calculate center-to-center distance in XY plane
+                let center_a_x = (bbox_a.min.x + bbox_a.max.x) / 2;
+                let center_a_y = (bbox_a.min.y + bbox_a.max.y) / 2;
+                let center_b_x = (bbox_b.min.x + bbox_b.max.x) / 2;
+                let center_b_y = (bbox_b.min.y + bbox_b.max.y) / 2;
+
+                let dx = (center_a_x - center_b_x) as f64;
+                let dy = (center_a_y - center_b_y) as f64;
+                let center_dist_nm = (dx * dx + dy * dy).sqrt() as i64;
+
+                // Calculate edge-to-edge drill clearance
+                let radius_a = calculate_via_diameter_from_bbox(bbox_a) / 2;
+                let radius_b = calculate_via_diameter_from_bbox(bbox_b) / 2;
+                let drill_clearance_nm = center_dist_nm - radius_a - radius_b;
+
+                if drill_clearance_nm < min_drill_spacing_nm {
+                    let center = Point3D::new(
+                        (center_a_x + center_b_x) / 2,
+                        (center_a_y + center_b_y) / 2,
+                        (bbox_a.min.z + bbox_b.max.z) / 2,
+                    );
+
+                    report.add_violation(DrcViolation::DrillClearanceViolation {
+                        via_a: via_a.name.clone(),
+                        via_b: via_b.name.clone(),
+                        actual_nm: drill_clearance_nm,
+                        required_nm: min_drill_spacing_nm,
+                        location: center,
+                    });
+                }
+            }
+        }
+    }
+
+    if report.violations.is_empty() {
+        report.add_info("All drill hits meet minimum spacing requirements".into());
     }
 
     report

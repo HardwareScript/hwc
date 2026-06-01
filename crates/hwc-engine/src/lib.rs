@@ -53,7 +53,7 @@ pub use placement::{
 };
 pub use routing::Router;
 pub use space::{
-    AnalyticTrace, ContactMetadata, Dimensions, GridCells, HardwareSpace, LineSegment,
+    AnalyticTrace, ContactMetadata, Dimensions, GridCells, HardwareSpace, KeepOutZone, LineSegment,
     PourMetadata, SpaceView, VoxelSize,
 };
 pub use voxel::{

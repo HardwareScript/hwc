@@ -51,6 +51,8 @@ pub struct LayoutBlock {
     /// Internal geometry (v0.1.6 Sprint 2): Pours defined inside the component
     /// These are relative to the component's origin and get "unrolled" during placement
     pub internal_pours: Vec<super::space::PourPlacement>,
+    /// Default stand-off height for the package (v0.1.7)
+    pub standoff: Option<super::Expression>,
     pub span: Span,
 }
 
@@ -83,6 +85,17 @@ pub struct RenderBlock {
     pub view: Option<CompactString>, // NEW v0.1.6: Orientation hint (e.g., "horizontal", "vertical")
 }
 
+/// Component mounting side (v0.1.7)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum MountingSide {
+    /// Mounted on the top surface of the board (Z-up)
+    Top,
+    /// Mounted on the bottom surface of the board (Z-down)
+    Bottom,
+    /// Embedded inside a dielectric cavity (3D integration)
+    Embedded,
+}
+
 /// Component placement: `add Type (params) named Instance at [X,Y,Z] rotated angle`
 /// v0.1.6 Sprint 3.2: Supports array syntax: `add Type[count] named ArrayName`
 /// v0.1.6 Sprint 3.4: Supports indexed names in loops: `named Adder[i]`
@@ -98,6 +111,10 @@ pub struct ComponentPlacement {
     pub rotation: Option<Rotation>,
     /// Z elevation (v0.1.7): either physical `z: 150um` or semantic `layer: l1`
     pub elevation: Option<super::space::Elevation>,
+    /// Component mounting plane (v0.1.7)
+    pub mount: Option<MountingSide>,
+    /// Component stand-off height (v0.1.7)
+    pub standoff: Option<super::Expression>,
     /// Array configuration (v0.1.6 Sprint 3.2)
     pub array_config: Option<ArrayConfig>,
     /// Pin-to-net bindings (v0.1.6 Item #13)

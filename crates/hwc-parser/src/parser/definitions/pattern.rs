@@ -62,7 +62,7 @@ impl super::super::Parser {
                 span: Span::new(step_start, step_end),
             });
 
-            self.skip_newlines();
+            self.skip_whitespace();
         }
 
         if self.check(&Token::Dedent) {
@@ -165,21 +165,21 @@ impl super::super::Parser {
                             self.advance();
                             self.expect(&Token::Colon)?;
                             target = Some(self.parse_strategy_target()?);
-                            self.skip_newlines();
+                            self.skip_whitespace();
                             continue;
                         }
                         "tolerance" => {
                             self.advance();
                             self.expect(&Token::Colon)?;
                             tolerance = Some(self.parse_measurement()?);
-                            self.skip_newlines();
+                            self.skip_whitespace();
                             continue;
                         }
                         "pattern" => {
                             self.advance();
                             self.expect(&Token::Colon)?;
                             pattern = Some(self.parse_pattern_instantiation()?);
-                            self.skip_newlines();
+                            self.skip_whitespace();
                             continue;
                         }
                         _ => {

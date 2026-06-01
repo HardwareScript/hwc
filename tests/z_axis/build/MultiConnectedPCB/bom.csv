@@ -1,32 +1,4 @@
 Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
 Wafer,Substrate,10.00x5.00x2.00mm,,,,,1
-TopVDD,Pour,10.0000mm² net:VDD,Z 0.0019mm,,Copper,0.500000mm³
-SigRail,Pour,10.0000mm² net:SIG,Z 0.0012mm,,Copper,0.500000mm³
-GndPlane,Pour,10.0000mm² net:GND,Z 0.0006mm,,Copper,0.500000mm³
-BottomVDD,Pour,10.0000mm² net:VDD,Z 0.0000mm,,Copper,0.500000mm³
-U1_VCC_Pad,Pour,1.0000mm² net:VDD,Z 0.0019mm,,Copper,0.050000mm³
-U1_GND_Pad,Pour,1.0000mm² net:GND,Z 0.0019mm,,Copper,0.050000mm³
-U1_IO_Pad,Pour,1.0000mm² net:SIG,Z 0.0019mm,,Copper,0.050000mm³
-U2_VCC_Pad,Pour,1.0000mm² net:VDD,Z 0.0019mm,,Copper,0.050000mm³
-U2_GND_Pad,Pour,1.0000mm² net:GND,Z 0.0019mm,,Copper,0.050000mm³
-U2_IO_Pad,Pour,1.0000mm² net:SIG,Z 0.0019mm,,Copper,0.050000mm³
-TopVDD,Pour(Copper),,,,,,1
-SigRail,Pour(Copper),,,,,,1
-GndPlane,Pour(Copper),,,,,,1
-BottomVDD,Pour(Copper),,,,,,1
-VddVia,Contact(Copper),,,,,,1
 U1,IC_Package,,,,,,1
-U1_VCC_Pad,Pour(Copper),,,,,,1
-U1_GND_Pad,Pour(Copper),,,,,,1
-U1_IO_Pad,Pour(Copper),,,,,,1
 U2,IC_Package,,,,,,1
-U2_VCC_Pad,Pour(Copper),,,,,,1
-U2_GND_Pad,Pour(Copper),,,,,,1
-U2_IO_Pad,Pour(Copper),,,,,,1
-AutoVia_VDD_0_6,Contact(Copper),,,,,,1
-AutoVia_VDD_0_6,Contact(Copper),,,,,,1
-AutoVia_VDD_0_6,Contact(Copper),,,,,,1
-AutoVia_SIG_4_6,Contact(Copper),,,,,,1
-AutoVia_SIG_4_6,Contact(Copper),,,,,,1
-AutoVia_GND_2_6,Contact(Copper),,,,,,1
-AutoVia_GND_2_6,Contact(Copper),,,,,,1

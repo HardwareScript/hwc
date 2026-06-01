@@ -86,7 +86,7 @@ impl crate::parser::Parser {
                 }
             };
 
-            self.skip_newlines();
+            self.skip_whitespace();
 
             net_declarations.push(NetDeclaration {
                 name: net_name.into(),

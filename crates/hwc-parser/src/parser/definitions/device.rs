@@ -79,11 +79,11 @@ impl super::super::Parser {
                                 Ok(terms) => terminals = Some(terms),
                                 Err(e) => {
                                     collector.report(e);
-                                    self.skip_newlines();
+                                    self.skip_whitespace();
                                     continue;
                                 }
                             }
-                            self.skip_newlines();
+                            self.skip_whitespace();
                             continue;
                         }
                         "materials" => {
@@ -164,7 +164,7 @@ impl super::super::Parser {
                     {
                         self.advance();
                     }
-                    self.skip_newlines();
+                    self.skip_whitespace();
                     continue;
                 }
             };
@@ -173,7 +173,7 @@ impl super::super::Parser {
             while !self.is_at_end() && !self.check(&Token::Newline) && !self.check(&Token::Dedent) {
                 self.advance();
             }
-            self.skip_newlines();
+            self.skip_whitespace();
         }
 
         if self.check(&Token::Dedent) {
@@ -320,7 +320,7 @@ impl super::super::Parser {
                 sv
             };
 
-            self.skip_newlines();
+            self.skip_whitespace();
 
             if mappings.contains_key(terminal.as_str()) {
                 return Err(self.error(&format!(
@@ -375,7 +375,7 @@ impl super::super::Parser {
                 return Err(self.error("Tolerance must be specified as percentage (e.g., '1%')"));
             };
 
-            self.skip_newlines();
+            self.skip_whitespace();
 
             if mappings.contains_key(param_name.as_str()) {
                 return Err(self.error(&format!(

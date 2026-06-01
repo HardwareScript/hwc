@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use hwc_parser::ast::{Elevation, Expression, LayerStackup, Span, Unit};
+use hwc_parser::ast::{Elevation, Expression, LayerStackup, MountingSide, Span, Unit};
 
 use crate::ir::conversions::evaluate_expression_to_nm;
 use crate::ir::errors::IrError;
@@ -113,6 +113,45 @@ impl StackupManager {
         })
     }
 
+    /// Returns the total board thickness in nm.
+    pub fn board_thickness_nm(&self) -> i64 {
+        self.layer_thickness_nm.values().sum()
+    }
+
+    /// Get the absolute physical Z-boundary of the board for a mounting side.
+    pub fn board_surface_z(&self, side: MountingSide) -> i64 {
+        match side {
+            MountingSide::Top => {
+                // In a bottom-up stackup, the top surface is the total thickness of the board
+                self.board_thickness_nm()
+            }
+            MountingSide::Bottom => {
+                // The bottom surface of the board is always absolute z = 0
+                0
+            }
+            MountingSide::Embedded => {
+                // Custom logic for cavities (defaults to middle layer)
+                self.board_thickness_nm() / 2
+            }
+        }
+    }
+
+    /// Get the thickness of the outermost copper layer on the specified side
+    pub fn outer_copper_thickness_nm(&self, side: MountingSide) -> i64 {
+        match side {
+            MountingSide::Top => self.get_layer_thickness("top").or_else(|| self.get_layer_thickness("L1")).unwrap_or(35_000),
+            MountingSide::Bottom => {
+                // Bottom layer is the first layer in ordered_layers (bottom-up)
+                if let Some(first) = self.ordered_layers.first() {
+                    self.get_layer_thickness(first).unwrap_or(35_000)
+                } else {
+                    35_000
+                }
+            }
+            MountingSide::Embedded => 35_000,
+        }
+    }
+
     /// Resolves any `Elevation` into an absolute Z position in nanometers.
     ///
     /// - `Physical`: Evaluates the expression directly (Assembly paradigm).
@@ -210,6 +249,29 @@ impl StackupManager {
         }
         None
     }
+
+    /// Returns the semantic layer name for a physical Z position.
+    pub fn get_layer_name_at_z(&self, z_nm: i64) -> Option<String> {
+        for name in self.ordered_layers.iter() {
+            let start = *self.layer_start_z_nm.get(name)?;
+            let thickness = *self.layer_thickness_nm.get(name)?;
+            if z_nm >= start && z_nm < start + thickness {
+                return Some(name.clone());
+            }
+        }
+        None
+    }
+
+    /// Returns the absolute Z starting position (bottom) in nm for a layer index.
+    pub fn get_z_start_nm_for_layer_index(&self, index: usize) -> i64 {
+        if let Some(name) = self.ordered_layers.get(index) {
+            self.layer_start_z_nm.get(name).copied().unwrap_or(0)
+        } else {
+            0
+        }
+    }
+
+    /// Get the semantic name of a layer by its index.
 
     /// Returns the number of semantic layers in the stackup.
     pub fn layer_count(&self) -> usize {

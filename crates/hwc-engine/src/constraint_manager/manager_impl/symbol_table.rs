@@ -134,7 +134,7 @@ pub fn extract_trace_constraints<S: SymbolTableTrait>(
 
 /// Extract via constraints from profile definition.
 ///
-/// Converts via constraints (min_diameter, min_annular_ring) from profile
+/// Converts via constraints (min_diameter, min_annular_ring, min_spacing) from profile
 /// to nanometers for use in routing.
 ///
 /// # Arguments
@@ -142,11 +142,11 @@ pub fn extract_trace_constraints<S: SymbolTableTrait>(
 /// * `symbol_table` - Symbol table for unit conversion
 ///
 /// # Returns
-/// Tuple of (min_diameter_nm, default_diameter_nm, min_annular_ring_nm), or error if constraints missing
+/// Tuple of (min_diameter_nm, default_diameter_nm, min_annular_ring_nm, min_spacing_nm), or error if constraints missing
 pub fn extract_via_constraints<S: SymbolTableTrait>(
     profile: &ProfileDefinition,
     symbol_table: &S,
-) -> Result<(i64, i64, i64), String> {
+) -> Result<(i64, i64, i64, i64), String> {
     let via = profile
         .via
         .as_ref()
@@ -160,7 +160,20 @@ pub fn extract_via_constraints<S: SymbolTableTrait>(
     };
     let min_annular_ring_nm = symbol_table.measurement_to_nm(&via.min_annular_ring)?;
 
-    Ok((min_diameter_nm, default_diameter_nm, min_annular_ring_nm))
+    // v0.1.7: Extract drill-to-drill spacing
+    let min_spacing_nm = if let Some(spacing) = &via.min_spacing {
+        symbol_table.measurement_to_nm(spacing)?
+    } else {
+        // Default to 2x the minimum via diameter (industry safety standard)
+        min_diameter_nm * 2
+    };
+
+    Ok((
+        min_diameter_nm,
+        default_diameter_nm,
+        min_annular_ring_nm,
+        min_spacing_nm,
+    ))
 }
 
 /// Extract clearance constraints from profile definition.

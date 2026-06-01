@@ -1,0 +1,91 @@
+use compact_str::CompactString;
+use hwc_engine::geometry::BoundingBox;
+use hwc_engine::space::PourMetadata;
+use rustc_hash::FxHashMap;
+
+use super::DeviceExtractor;
+use super::error::DeviceExtractionError;
+
+impl<'a> DeviceExtractor<'a> {
+    /// Group all pours by their device binding
+    ///
+    /// Creates a map: DeviceName -> (Terminal -> PourMetadata)
+    pub(super) fn group_pours_by_device_binding(
+        &self,
+    ) -> FxHashMap<CompactString, FxHashMap<CompactString, PourMetadata>> {
+        let mut bindings: FxHashMap<CompactString, FxHashMap<CompactString, PourMetadata>> =
+            FxHashMap::default();
+
+        println!(
+            "   ├─ Scanning {} pours for device bindings...",
+            self.space.pours.len()
+        );
+
+        for pour in &self.space.pours {
+            println!(
+                "      ├─ Pour '{}': device_binding = {:?}",
+                pour.name, pour.device_binding
+            );
+
+            if let Some(ref device_binding) = pour.device_binding {
+                let device_name = &device_binding.device_name;
+                let terminal = &device_binding.terminal;
+
+                bindings
+                    .entry(device_name.clone())
+                    .or_default()
+                    .insert(terminal.clone(), pour.clone());
+
+                println!(
+                    "      ├─ Bound: {}.{} → {} ({})",
+                    device_name, terminal, pour.name, pour.material_name
+                );
+            }
+        }
+
+        bindings
+    }
+
+    /// Calculate parasitic parameters from source/drain pours
+    pub(super) fn calculate_parasitics_from_pours(
+        &self,
+        source_pour: &PourMetadata,
+        drain_pour: &PourMetadata,
+    ) -> Option<(f64, f64, f64, f64)> {
+        let as_m2 = (source_pour.area_nm2 as f64) / 1e18;
+        let ad_m2 = (drain_pour.area_nm2 as f64) / 1e18;
+
+        let ps_m = source_pour
+            .bbox
+            .as_ref()
+            .map(|bbox| self.calculate_perimeter(bbox))
+            .unwrap_or(0.0);
+
+        let pd_m = drain_pour
+            .bbox
+            .as_ref()
+            .map(|bbox| self.calculate_perimeter(bbox))
+            .unwrap_or(0.0);
+
+        Some((as_m2, ad_m2, ps_m, pd_m))
+    }
+
+    /// Calculate perimeter of a bounding box
+    pub(super) fn calculate_perimeter(&self, bbox: &BoundingBox) -> f64 {
+        let width_nm = (bbox.max.x - bbox.min.x).abs() as f64;
+        let height_nm = (bbox.max.y - bbox.min.y).abs() as f64;
+        let perimeter_nm = 2.0 * (width_nm + height_nm);
+        perimeter_nm / 1e9
+    }
+
+    /// Calculate channel dimensions from gate geometry
+    pub(super) fn calculate_channel_dimensions(
+        &self,
+        gate_pour: &PourMetadata,
+    ) -> Result<(f64, f64), DeviceExtractionError> {
+        let area_nm2 = gate_pour.area_nm2 as f64;
+        let side_nm = area_nm2.sqrt();
+        let side_um = side_nm / 1000.0;
+        Ok((side_um, side_um))
+    }
+}

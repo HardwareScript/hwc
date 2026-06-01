@@ -67,6 +67,8 @@ pub fn unroll_component(
         position,
         rotation: component.rotation.clone(),
         elevation,
+        mount: component.mount,
+        standoff: component.standoff.clone(),
         array_config: component.array_config.clone(),
         pin_net_bindings,
         waivers: component.waivers.clone(), // v0.1.7: Preserve unified waivers

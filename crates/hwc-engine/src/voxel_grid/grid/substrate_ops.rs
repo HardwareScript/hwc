@@ -246,7 +246,7 @@ impl VoxelGrid {
     ///
     /// This is used for through-hole pins and mounting holes.
     /// Memory usage: O(N) where N is the number of substrate layers.
-    pub fn drill_hole(&mut self, hole_bbox: BoundingBox, diameter_nm: Option<i64>, drill_net: NetId) {
+    pub fn drill_hole(&mut self, hole_bbox: BoundingBox, diameter_nm: Option<i64>, _drill_net: NetId) {
         // 1. Bit-level clearing (for router/collision)
         self.clear_voxels_in_bbox(&hole_bbox);
 
@@ -265,11 +265,11 @@ impl VoxelGrid {
                 && layer.bbox.max.z >= hole_bbox.min.z;
 
             let should_drill = match layer.layer_type {
-                SubstrateLayerType::Substrate => true, // Always drill dielectric
+                SubstrateLayerType::Substrate => true, // Always drill dielectric (insulators)
                 SubstrateLayerType::Pour => {
-                    // v0.1.7 FIXED: Only drill if nets are different. 
-                    // If nets match, this pin/via is SUPPOSED to connect to this pour.
-                    layer.net != drill_net
+                    // v0.1.7 FIXED: Native material-aware check.
+                    // Never carve through conductive materials (Copper).
+                    false
                 },
                 SubstrateLayerType::Contact => false, // Don't drill other vias
             };

@@ -113,7 +113,7 @@ impl super::super::Parser {
                             } else {
                                 self.expect_identifier().ok()
                             };
-                            self.skip_newlines();
+                            self.skip_whitespace();
                             continue;
                         }
                         _ => {
@@ -175,7 +175,7 @@ impl super::super::Parser {
             self.expect(&Token::Equals)?;
 
             let pin_ref = self.parse_pin_reference()?;
-            self.skip_newlines();
+            self.skip_whitespace();
 
             let end_pos = self.previous_span().end;
 
@@ -230,12 +230,12 @@ impl super::super::Parser {
 
                 if prop_name.as_str() == "speed" {
                     speed = Some(self.parse_measurement()?);
-                    self.skip_newlines();
+                    self.skip_whitespace();
                 } else {
                     // It's a pin assignment: SDA: MCU.GPIO21
                     let pin_start = self.current_span().start;
                     let pin_ref = self.parse_pin_reference()?;
-                    self.skip_newlines();
+                    self.skip_whitespace();
                     let pin_end = self.previous_span().end;
 
                     pins.push(ProtocolPin {

@@ -77,7 +77,12 @@ impl Exporter {
                 output_dir,
                 compiled.space_def.as_ref(),
             ),
-            ExportFormat::Dxf => dxf::export(&compiled.space, &compiled.symbol_table, output_dir),
+            ExportFormat::Dxf => dxf::export(
+                &compiled.space,
+                &compiled.symbol_table,
+                output_dir,
+                compiled.space_def.as_ref(),
+            ),
             ExportFormat::Netlist => netlist::export(
                 &compiled.space,
                 &compiled.symbol_table,

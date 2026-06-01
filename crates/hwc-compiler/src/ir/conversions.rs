@@ -110,12 +110,33 @@ pub fn apply_z_origin_physical(z_nm: i64, origin_z: hwc_parser::OriginZ, depth_n
 pub(crate) const DIMENSIONLESS_Z_ERROR: &str =
     "Z coordinates require physical units (e.g. z: 1.5mm). Dimensionless values like z: 1 are not supported.";
 
+thread_local! {
+    static LAST_Z_LOG: std::cell::RefCell<Option<(String, usize)>> = std::cell::RefCell::new(None);
+}
+
+fn log_resolve_z(msg: String) {
+    LAST_Z_LOG.with(|last| {
+        let mut last = last.borrow_mut();
+        if let Some((prev_msg, count)) = last.as_mut() {
+            if prev_msg == &msg {
+                *count += 1;
+                return;
+            } else {
+                if *count > 1 {
+                    eprintln!("  (repeated {} times)", count);
+                }
+            }
+        }
+        eprintln!("{}", msg);
+        *last = Some((msg, 1));
+    });
+}
+
 pub fn resolve_coordinate_z_nm(
     z_expr: &Expression,
     ctx: &CoordinateContext,
     has_anchor_refs: bool,
 ) -> Result<i64, String> {
-    eprintln!("[DEBUG resolve_z] z_expr: {:?}, has_anchor_refs: {}", z_expr, has_anchor_refs);
     if has_anchor_refs && z_expr.contains_anchor_reference() {
         let tracker = ctx.bbox_tracker.ok_or("BoundingBoxTracker required")?;
         let result = super::placement::coordinate_evaluation::evaluate_coordinate_with_anchors(
@@ -124,18 +145,29 @@ pub fn resolve_coordinate_z_nm(
             tracker,
             super::placement::coordinate_evaluation::CoordinateAxis::Z,
             ctx.origin.z,
-        ).map_err(|e| e.to_string());
-        eprintln!("[DEBUG resolve_z] Anchor result: {:?}", result);
+        )
+        .map_err(|e| e.to_string());
+
+        if let Ok(val) = result {
+            log_resolve_z(format!("[Z-Axis] Anchor: {:?} -> {}nm", z_expr, val));
+        }
         return result;
     }
 
     if !z_expr_is_physical(z_expr) {
-        eprintln!("[DEBUG resolve_z] FAILED physical check for z_expr: {:?}", z_expr);
         return Err(DIMENSIONLESS_Z_ERROR.to_string());
     }
 
     let z_nm = evaluate_expression_to_nm(z_expr, ctx.symbol_table)?;
-    Ok(apply_z_origin_physical(z_nm, ctx.origin.z, ctx.space_dimensions.depth_nm))
+    let final_z = apply_z_origin_physical(z_nm, ctx.origin.z, ctx.space_dimensions.depth_nm);
+
+    let expr_summary = match z_expr {
+        Expression::Measurement { value, unit, .. } => format!("{:.3}{:?}", value, unit),
+        _ => format!("{:?}", z_expr),
+    };
+    log_resolve_z(format!("[Z-Axis] {} -> {}nm", expr_summary, final_z));
+
+    Ok(final_z)
 }
 
 pub fn coordinate_to_point(coord: &Coordinate, ctx: &CoordinateContext) -> Point3D {
