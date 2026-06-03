@@ -41,7 +41,7 @@ module Staggered_Via_Test_Module:
     pins: [SIG]
 
 space Staggered_Via_Test_Board implements Staggered_Via_Test_Module:
-    dimensions: 10mm by 10mm by 1.6mm
+    dimensions: 10mm by 10mm by 1.465mm
     grid: 100 by 100 by 32
     origin: bl by b
     profile: Staggered_Via_Test_Profile
@@ -52,7 +52,7 @@ space Staggered_Via_Test_Board implements Staggered_Via_Test_Module:
     add contact(ViaCopper) named Microvia_1 at [x: 4.5mm, y: 5mm] spanning layer: top to inner1:
         net: SIG
         diameter: 0.15mm
-        bottom_diameter: 0.1mm
+        bottom_diameter: 0.15mm
         top_cap: annular
         bottom_cap: solid
 

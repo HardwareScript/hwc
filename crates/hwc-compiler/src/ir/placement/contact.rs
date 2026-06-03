@@ -93,17 +93,12 @@ pub fn place_contact(
                 (to_name, to_bottom_nm, to_top_nm, from_name, from_bottom_nm, from_top_nm)
             };
 
-        let via_bottom = if stackup_manager.is_bottom_layer(&lower_name) {
-            lower_bottom // Bottom surface of board
-        } else {
-            lower_top - 500 // v0.1.8: Sink 500nm into target trace to prevent Z-fighting
-        };
-
-        let via_top = if stackup_manager.is_top_layer(&upper_name) {
-            upper_top // Top surface of board
-        } else {
-            upper_bottom + 500 // v0.1.8: Sink 500nm into source trace to prevent Z-fighting
-        };
+        // v0.1.9: FULL-THICKNESS PENETRATION
+        // Strategy A (2D Co-Union) handles Z-fighting by merging meshes, so we no longer
+        // need the 500nm "Micro-Sinking" workaround. Vias now span the entire thickness
+        // of their start and end layers to ensure physical continuity for stacked vias.
+        let via_bottom = lower_bottom;
+        let via_top = upper_top;
         
         (via_bottom, via_top)
     } else {
@@ -377,6 +372,27 @@ pub fn place_contact(
                 bottom_cap,
                 bottom_diameter_nm.map(|d| d as u32),
             );
+
+            // 5. ACTION: Handle Filled Vias (v0.1.9: VIPPO)
+            if contact.filled.unwrap_or(false) {
+                let fill_material_id = if let Some(fill_mat_name) = &contact.fill_material {
+                    space.material_registry.get_or_register(fill_mat_name)
+                } else {
+                    // Default to non-conductive epoxy if not specified
+                    space.material_registry.get_or_register("Epoxy")
+                };
+
+                // Add a solid cylinder of fill material inside the tube
+                // The fill diameter matches the inner diameter of the tube.
+                space.voxel_grid.add_cylinder_substrate_layer(
+                    fill_material_id,
+                    net_id, // Usually matches the via net, though epoxy is an insulator
+                    contact_bbox,
+                    inner_diameter_nm,
+                    16, // Simpler segments for fill
+                    0,  // No extra KOZ for fill
+                );
+            }
         } else if process == hwc_engine::ManufacturingProcess::Etched {
             // v0.1.7: Mechanical/Subtractive Logic
             // 1. ACTION: Auto-Drill (NPTH logic: Net 0 always drills everything)

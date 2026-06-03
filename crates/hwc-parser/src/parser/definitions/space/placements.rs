@@ -353,23 +353,12 @@ impl crate::parser::Parser {
         };
 
         // Optional: properties block
-        let (diameter, bottom_diameter, drill_diameter, plating_thickness, annular_ring, caps, top_cap, bottom_cap, bridge, liner, liner_thickness, koz, net_in_block) = if self.check(&Token::Colon) {
+        let (properties, net_in_block) = if self.check(&Token::Colon) {
             self.advance();
             self.expect(&Token::Newline)?;
             self.expect(&Token::Indent)?;
 
-            let mut dia = None;
-            let mut bottom_dia = None;
-            let mut drill_dia = None;
-            let mut plating_thick = None;
-            let mut ring = None;
-            let mut caps = None;
-            let mut top_cap = None;
-            let mut bottom_cap = None;
-            let mut bridge = None;
-            let mut liner = None;
-            let mut liner_thickness = None;
-            let mut koz = None;
+            let mut props = rustc_hash::FxHashMap::default();
             let mut net_in_block = None;
 
             while !self.is_at_end() && !self.check(&Token::Dedent) {
@@ -381,70 +370,34 @@ impl crate::parser::Parser {
                 let field_name = self.expect_identifier_or_keyword_string()?;
                 self.expect(&Token::Colon)?;
 
-                match field_name.as_str() {
-                    "diameter" => {
-                        dia = Some(self.parse_measurement()?);
-                    }
-                    "bottom_diameter" => {
-                        bottom_dia = Some(self.parse_measurement()?);
-                    }
-                    "drill_diameter" => {
-                        drill_dia = Some(self.parse_measurement()?);
-                    }
-                    "plating_thickness" => {
-                        plating_thick = Some(self.parse_measurement()?);
-                    }
-                    "annular_ring" => {
-                        ring = Some(self.parse_measurement()?);
-                    }
-                    "caps" => {
-                        if self.check(&Token::True) {
-                            self.advance();
-                            caps = Some(true);
-                        } else if self.check(&Token::False) {
-                            self.advance();
-                            caps = Some(false);
-                        } else {
-                            return Err(self.error("Expected 'true' or 'false' for caps property"));
-                        }
-                    }
-                    "top_cap" => {
-                        top_cap = Some(self.parse_cap_type()?);
-                    }
-                    "bottom_cap" => {
-                        bottom_cap = Some(self.parse_cap_type()?);
-                    }
-                    "bridge" => {
-                        bridge = Some(self.expect_namespaced_identifier_string()?);
-                    }
-                    "liner" => {
-                        liner = Some(self.expect_namespaced_identifier_string()?);
-                    }
-                    "liner_thickness" => {
-                        liner_thickness = Some(self.parse_measurement()?);
-                    }
-                    "koz" => {
-                        koz = Some(self.parse_expression()?);
-                    }
-                    "net" => {
-                        net_in_block = Some(self.parse_net_name()?);
-                    }
-                    _ => {
-                        return Err(
-                            self.error(&format!("Unknown contact property: '{}'", field_name))
-                        );
-                    }
+                if field_name == "net" {
+                    net_in_block = Some(self.parse_net_name()?);
+                } else {
+                    // v0.1.9: Generic property parsing
+                    let expr = if self.check(&Token::True) {
+                        self.advance();
+                        Expression::Variable { name: "true".into(), span: self.previous_span() }
+                    } else if self.check(&Token::False) {
+                        self.advance();
+                        Expression::Variable { name: "false".into(), span: self.previous_span() }
+                    } else if self.is_identifier_or_keyword() {
+                        let name = self.expect_namespaced_identifier_string()?;
+                        Expression::Variable { name: name.into(), span: self.previous_span() }
+                    } else {
+                        self.parse_expression()?
+                    };
+                    props.insert(field_name.into(), expr);
                 }
 
                 self.expect(&Token::Newline)?;
             }
 
             self.expect(&Token::Dedent)?;
-            (dia, bottom_dia, drill_dia, plating_thick, ring, caps, top_cap, bottom_cap, bridge, liner, liner_thickness, koz, net_in_block)
+            (props, net_in_block)
         } else {
             // No properties block, just consume newline
             self.skip_whitespace();
-            (None, None, None, None, None, None, None, None, None, None, None, None, None)
+            (rustc_hash::FxHashMap::default(), None)
         };
 
         let end_pos = self.previous_span().end;
@@ -456,18 +409,21 @@ impl crate::parser::Parser {
             from_elevation,
             to_elevation,
             net: net.or(net_in_block),
-            diameter,
-            bottom_diameter,
-            drill_diameter,
-            plating_thickness,
-            annular_ring,
-            caps,
-            top_cap,
-            bottom_cap,
-            bridge: bridge.map(|s: String| s.into()),
-            liner: liner.map(|s: String| s.into()),
-            liner_thickness,
-            koz,
+            diameter: None,
+            bottom_diameter: None,
+            drill_diameter: None,
+            plating_thickness: None,
+            annular_ring: None,
+            caps: None,
+            top_cap: None,
+            bottom_cap: None,
+            bridge: None,
+            liner: None,
+            liner_thickness: None,
+            koz: None,
+            filled: None,
+            fill_material: None,
+            properties,
             span: Span::new(start_pos, end_pos),
         })
     }

@@ -55,8 +55,10 @@ This document tracks the implementation and testing of 3D via modeling and their
   - *What it is:* Microvias on adjacent layers that are offset from each other horizontally, usually connected by a short trace on the intermediate layer.
   - *3D Representation:*
     - Displaced hollow frustums with overlapping outer pads or a connecting horizontal copper track.
-  - *Engine Implementation:*
-    - **Manifold Interaction**: Verified that offset vias can be connected by standard `add pour` traces on intermediate layers.
+  - *Engine Implementation (v0.1.7 Dynamic Cap Extraction):*
+    - **Split Export Architecture**: Instead of monolithic 3D meshes, vias are split during export into a vertical barrel (hollow tube) and 2D landing pads.
+    - **2D Clipper Union**: The 2D pads are injected into a global copper pool for each layer and merged with traces using the Vatti clipping algorithm.
+    - **Unified Manifold**: This ensures traces and via pads are welded into a single, continuous 3D mesh, eliminating Z-fighting and mesh overlaps.
   - *Engine Parameters:* `offset_distance`, `rotation_angle`.
 
 - [ ] **7. Filled and Capped Via (Via-in-Pad / VIPPO)**
@@ -68,18 +70,22 @@ This document tracks the implementation and testing of 3D via modeling and their
 
 ## List 2: Vias in Relation to the Substrate (Interactions & Clearances)
 
-- [ ] **1. Substrate Drill Void (The Cutout)**
+- [x] **1. Substrate Drill Void (The Cutout)**
   - *What it is:* The actual physical hole drilled through the FR4 substrate.
   - *3D Representation:*
     - A solid cylinder subtracted from your FR4 substrate mesh.
     - The diameter of this subtraction must equal the `drill_diameter` (before plating), which is larger than the finished via hole size.
+  - *Engine Implementation:*
+    - **Manifold Punch-Through**: The `add_substrate` function performs analytical cylinder subtractions from the substrate layers based on drill geometry.
   - *Testing Goal:* Ensure that when the FR4 is rendered, you can see clean cylindrical holes passing through it.
 
-- [ ] **2. Antipad (Plane Clearance)**
+- [x] **2. Antipad (Plane Clearance)**
   - *What it is:* When a via passes through a copper plane (like a ground or power plane) that it is not supposed to connect to, a clearance gap is required to prevent a short circuit.
   - *3D Representation:*
     - A cylinder subtracted from the inner copper plane mesh.
     - This creates a "donut hole" of empty space around the via.
+  - *Engine Implementation:*
+    - **Net-Aware Filtering**: Copper pours automatically subtract via cylinders only if they belong to different nets, ensuring isolation while maintaining connectivity for same-net landings.
   - *Engine Parameters:* `antipad_diameter` (typically `drill_diameter + 2 * clearance_requirement`).
 
 - [ ] **3. Thermal Relief (Thermal Tie Connection)**

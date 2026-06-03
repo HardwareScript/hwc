@@ -406,6 +406,9 @@ pub struct ContactPlacement {
     pub liner: Option<CompactString>, // NEW v0.1.7: TSV insulator liner material
     pub liner_thickness: Option<super::common::Measurement>, // NEW v0.1.7: TSV liner thickness
     pub koz: Option<Expression>, // NEW v0.1.7: Keep-out zone radius multiplier (e.g. 3.0)
+    pub filled: Option<bool>,    // NEW v0.1.7: Whether the via is filled
+    pub fill_material: Option<CompactString>, // NEW v0.1.7: Material used for filling
+    pub properties: rustc_hash::FxHashMap<CompactString, Expression>, // Generic properties (v0.1.9)
     pub span: Span,
 }
 

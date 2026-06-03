@@ -1,16 +1,16 @@
 {
   "version": "0.1.4",
-  "board": "Staggered_Via_Test_Board",
+  "board": "UnionTestSpace",
   "grid": {
     "dimensions": [
       100,
       100,
-      32
+      16
     ],
     "resolution": [
-      0.1,
-      0.1,
-      0.045781
+      0.2,
+      0.2,
+      0.1
     ]
   },
   "routes": []

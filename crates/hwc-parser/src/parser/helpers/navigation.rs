@@ -115,6 +115,48 @@ impl Parser {
         false
     }
 
+    /// Check if the current token is any identifier or keyword
+    pub(crate) fn is_identifier_or_keyword(&self) -> bool {
+        if let Some(current) = self.current() {
+            matches!(
+                current.token,
+                Token::Identifier(_)
+                    | Token::Module
+                    | Token::Component
+                    | Token::Space
+                    | Token::Profile
+                    | Token::Material
+                    | Token::Via
+                    | Token::Spanning
+                    | Token::Interface
+                    | Token::Device
+                    | Token::On
+                    | Token::At
+                    | Token::To
+                    | Token::By
+                    | Token::From
+                    | Token::Named
+                    | Token::Dimensions
+                    | Token::Grid
+                    | Token::Path
+                    | Token::Origin
+                    | Token::Let
+                    | Token::Mut
+                    | Token::Const
+                    | Token::True
+                    | Token::False
+                    | Token::Add
+                    | Token::Route
+                    | Token::Expose
+                    | Token::Rotated
+                    | Token::Implements
+                    | Token::Bridge
+            )
+        } else {
+            false
+        }
+    }
+
     /// Check if current token matches the given token type
     pub(crate) fn check(&self, token: &Token) -> bool {
         if let Some(current) = self.current() {

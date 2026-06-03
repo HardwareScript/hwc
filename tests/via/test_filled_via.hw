@@ -1,0 +1,61 @@
+import * from @std/primitives/units
+import FR4 from @std/materials/insulators
+
+material ViaCopper:
+    category: conductor
+    process: drilled_plated
+    properties:
+        color: "#B87333"
+        resistivity: 1.68e-8Ω·m
+
+material Epoxy:
+    category: insulator
+    process: deposited
+    properties:
+        color: "#1A1A1A"
+        dielectric_constant: 3.8
+
+profile VIPPO_Test_Profile:
+    stackup:
+        top:    [material: ViaCopper, thickness: 35um]
+        core:   [material: FR4,    thickness: 1.5mm]
+        bottom: [material: ViaCopper, thickness: 35um]
+    
+    via:
+        min_diameter: 0.3mm
+        min_annular_ring: 0.15mm
+        min_spacing: 0.25mm
+
+    trace:
+        min_width: 0.15mm
+        min_spacing: 0.15mm
+
+    manufacturing:
+        copper_thickness: 35um
+    
+    clearance:
+        high_voltage: 2mm
+        safety_factor: 2.0
+        
+    layer:
+        min_thickness: 0.1mm
+
+module VIPPO_Test_Module:
+    pins: [SIG]
+
+space VIPPO_Test_Board implements VIPPO_Test_Module:
+    dimensions: 10mm by 10mm by 1.57mm
+    grid: 100 by 100 by 16
+    origin: bl by b
+    profile: VIPPO_Test_Profile
+
+    # VIPPO: Via-in-Pad Plated Over
+    # This via is filled with Epoxy and has solid caps (Plated Over)
+    add contact(ViaCopper) named VIPPO_Via at [x: 5mm, y: 5mm] spanning layer: bottom to top:
+        net: SIG
+        diameter: 0.6mm
+        annular_ring: 0.2mm
+        top_cap: solid
+        bottom_cap: solid
+        filled: true
+        fill_material: Epoxy

@@ -87,6 +87,8 @@ impl AutoViaInserter {
             liner: None,
             liner_thickness: None,
             koz: None,
+            filled: None,
+            fill_material: None,
             span,
         }
     }

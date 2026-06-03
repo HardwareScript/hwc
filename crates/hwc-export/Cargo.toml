@@ -6,6 +6,8 @@ authors.workspace = true
 license.workspace = true
 
 [dependencies]
+clipper2-rust = "1.0"
+earcut = "0.4"
 thiserror = { workspace = true }
 hwc-engine = { workspace = true }
 hwc-compiler = { workspace = true }
