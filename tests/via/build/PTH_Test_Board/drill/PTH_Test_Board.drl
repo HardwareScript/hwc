@@ -1,0 +1,11 @@
+M48
+; DRILL file {PTH_Test_Board} date 2026-06-03
+; v0.1.7 physical Z (mm) recorded per tool pass where applicable
+; FORMAT={-:-/ absolute / inch / decimal}
+FMAT,2
+INCH
+T1C0.0236
+%
+T1
+X0.1969Y0.1969
+M30

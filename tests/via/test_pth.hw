@@ -1,0 +1,54 @@
+import * from @std/primitives/units
+import FR4 from @std/materials/insulators
+
+material ViaCopper:
+    category: conductor
+    process: drilled_plated
+    properties:
+        color: "#B87333"
+        resistivity: 1.68e-8Ω·m
+
+profile PTH_Test_Profile:
+    stackup:
+        top:    [material: ViaCopper, thickness: 35um]
+        core:   [material: FR4,    thickness: 1.5mm]
+        bottom: [material: ViaCopper, thickness: 35um]
+    
+    via:
+        min_diameter: 0.3mm
+        min_annular_ring: 0.15mm
+        min_spacing: 0.25mm
+
+    trace:
+        min_width: 0.15mm
+        min_spacing: 0.15mm
+
+    manufacturing:
+        copper_thickness: 35um
+        ipc2221_k_external: 0.048
+        ipc2221_k_internal: 0.024
+    
+    clearance:
+        high_voltage: 2mm
+        safety_factor: 2.0
+        
+    layer:
+        min_thickness: 0.1mm
+
+module PTH_Test_Module:
+    pins: [SIG]
+
+space PTH_Test_Board implements PTH_Test_Module:
+    dimensions: 10mm by 10mm by 1.57mm
+    grid: 100 by 100 by 16
+    origin: bl by b
+    profile: PTH_Test_Profile
+
+    # PTH Via: A clean cylinder with top and bottom annular rings
+    # We removed the large pours to verify the via's local geometry (cylinder + rings)
+    add contact(ViaCopper) named PTH_Via at [x: 5mm, y: 5mm] spanning layer: bottom to top:
+        net: SIG
+        diameter: 0.6mm
+        annular_ring: 0.2mm
+        top_cap: annular
+        bottom_cap: annular

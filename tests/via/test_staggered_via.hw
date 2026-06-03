@@ -1,0 +1,69 @@
+import * from @std/primitives/units
+import FR4 from @std/materials/insulators
+
+material ViaCopper:
+    category: conductor
+    process: drilled_plated
+    properties:
+        color: "#B87333"
+        resistivity: 1.68e-8Ω·m
+
+profile Staggered_Via_Test_Profile:
+    stackup:
+        top:    [material: ViaCopper, thickness: 35um]
+        d1:     [material: FR4,       thickness: 100um]
+        inner1: [material: ViaCopper, thickness: 35um]
+        core:   [material: FR4,       thickness: 1260um]
+        bottom: [material: ViaCopper, thickness: 35um]
+    
+    via:
+        min_diameter: 0.1mm
+        min_annular_ring: 0.05mm
+        min_spacing: 0.1mm
+
+    trace:
+        min_width: 0.1mm
+        min_spacing: 0.1mm
+
+    manufacturing:
+        copper_thickness: 35um
+        ipc2221_k_external: 0.048
+        ipc2221_k_internal: 0.024
+    
+    clearance:
+        high_voltage: 2mm
+        safety_factor: 2.0
+        
+    layer:
+        min_thickness: 0.05mm
+
+module Staggered_Via_Test_Module:
+    pins: [SIG]
+
+space Staggered_Via_Test_Board implements Staggered_Via_Test_Module:
+    dimensions: 10mm by 10mm by 1.6mm
+    grid: 100 by 100 by 32
+    origin: bl by b
+    profile: Staggered_Via_Test_Profile
+
+    # Staggered Vias: Microvias on adjacent layers offset horizontally.
+    
+    # 1. First Microvia (Top to Inner1) at X=4.5mm
+    add contact(ViaCopper) named Microvia_1 at [x: 4.5mm, y: 5mm] spanning layer: top to inner1:
+        net: SIG
+        diameter: 0.15mm
+        bottom_diameter: 0.1mm
+        top_cap: annular
+        bottom_cap: solid
+
+    # 2. Horizontal trace on Inner1 connecting the two vias
+    add pour(ViaCopper) named Connection_Trace on layer: inner1:
+        net: SIG
+        boundary: [x: 4.4mm, y: 4.9mm] to [x: 5.6mm, y: 5.1mm]
+
+    # 3. Second Microvia (Inner1 to Bottom) at X=5.5mm
+    add contact(ViaCopper) named Microvia_2 at [x: 5.5mm, y: 5mm] spanning layer: inner1 to bottom:
+        net: SIG
+        diameter: 0.3mm
+        top_cap: solid
+        bottom_cap: annular

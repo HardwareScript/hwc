@@ -162,6 +162,18 @@ impl<'a> DeviceExtractor<'a> {
             }
         }
 
+        // v0.1.7: Also collect nets from pours and contacts (for purely passive boards)
+        for pour in &self.space.pours {
+            if let Some(net_name) = &pour.net {
+                net_names.insert(net_name.to_string());
+            }
+        }
+        for contact in &self.space.contacts {
+            if let Some(net_name) = &contact.net {
+                net_names.insert(net_name.to_string());
+            }
+        }
+
         // For each net, check if it's declared as a port in the module
         for net_name in net_names {
             if let Some(module_direction) = module_pins.get(net_name.as_str()) {

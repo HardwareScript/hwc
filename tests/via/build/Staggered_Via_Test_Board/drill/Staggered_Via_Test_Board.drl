@@ -1,0 +1,14 @@
+M48
+; DRILL file {Staggered_Via_Test_Board} date 2026-06-03
+; v0.1.7 physical Z (mm) recorded per tool pass where applicable
+; FORMAT={-:-/ absolute / inch / decimal}
+FMAT,2
+INCH
+T1C0.0118
+T2C0.0059
+%
+T1
+X0.2165Y0.1969
+T2
+X0.1772Y0.1969
+M30

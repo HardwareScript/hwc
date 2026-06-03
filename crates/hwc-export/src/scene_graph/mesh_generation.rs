@@ -1,7 +1,7 @@
 //! Geometry generation utilities for meshes
 
 use crate::scene_graph::types::{BoxParams, Face, FaceCulling, MeshNode, Vertex};
-use hwc_engine::SpaceView;
+use hwc_engine::{SpaceView, voxel_grid::CapType};
 
 /// Create a standard box mesh for components and other primitives.
 pub fn create_box_mesh(
@@ -195,12 +195,12 @@ pub fn create_cylinder_mesh(
     }
 
     // Generate side faces
-    for i in 0..actual_segments {
-        let next = (i + 1) % actual_segments;
-        let b1 = (i * 2) as usize;
-        let t1 = (i * 2 + 1) as usize;
-        let b2 = (next * 2) as usize;
-        let t2 = (next * 2 + 1) as usize;
+    for i in 0..actual_segments as usize {
+        let next = (i + 1) % actual_segments as usize;
+        let b1 = i * 2;
+        let t1 = i * 2 + 1;
+        let b2 = next * 2;
+        let t2 = next * 2 + 1;
 
         faces.push(Face {
             vertices: vec![b1, b2, t2, t1],
@@ -487,7 +487,7 @@ fn render_hole_zone(
     hr: f64,
     map_vertex: &impl Fn(f64, f64, f64) -> Vertex,
 ) {
-    let segments = 64;
+    let segments = 64usize;
     let mut hz_verts = Vec::new();
     let mut hz_faces = Vec::new();
 
@@ -595,13 +595,22 @@ pub fn create_via_mesh(
     plating_thickness: f64,
     height: f64,
     segments: u32,
+    top_cap: CapType,
+    bottom_cap: CapType,
+    bottom_drill_dia: Option<f64>, // NEW v0.1.7: Tapered Microvia support
     material_name: &str,
     view: SpaceView,
 ) -> MeshNode {
     let (cx, cy, cz) = center;
-    let r_inner = (drill_dia / 2.0) - plating_thickness;
-    let r_plating = drill_dia / 2.0;
+    let actual_height = height;
+
+    let r_top_plating = drill_dia / 2.0;
+    let r_top_inner = r_top_plating - plating_thickness;
     let r_pad = pad_dia / 2.0;
+
+    let r_bottom_plating = bottom_drill_dia.unwrap_or(drill_dia) / 2.0;
+    let r_bottom_inner = r_bottom_plating - plating_thickness;
+
     let actual_segments = if segments == 16 { 64 } else { segments };
 
     let mut vertices = Vec::new();
@@ -614,72 +623,103 @@ pub fn create_via_mesh(
         }
     };
 
-    // v0.1.7: The Unified Via Mesh Structure
-    // We generate 4 circles of vertices at Z=0 and Z=height:
-    // 0: Inner Circle (r_inner)
-    // 1: Plating Circle (r_plating)
-    // 2: Pad Circle (r_pad)
-    
     // Add vertices for bottom (z=0)
-    for i in 0..actual_segments {
+    for i in 0..actual_segments as usize {
         let angle = (i as f64 / actual_segments as f64) * 2.0 * std::f64::consts::PI;
         let cos_a = angle.cos();
         let sin_a = angle.sin();
 
-        vertices.push(map_vertex(cx + r_inner * cos_a, cy + r_inner * sin_a, cz));   // 0: Inner Bottom
-        vertices.push(map_vertex(cx + r_plating * cos_a, cy + r_plating * sin_a, cz)); // 1: Plating Bottom
+        vertices.push(map_vertex(cx + r_bottom_inner * cos_a, cy + r_bottom_inner * sin_a, cz));   // 0: Inner Bottom
+        vertices.push(map_vertex(cx + r_bottom_plating * cos_a, cy + r_bottom_plating * sin_a, cz)); // 1: Plating Bottom
         vertices.push(map_vertex(cx + r_pad * cos_a, cy + r_pad * sin_a, cz));     // 2: Pad Bottom
     }
 
     // Add vertices for top (z=height)
     let top_offset = vertices.len();
-    for i in 0..actual_segments {
+    for i in 0..actual_segments as usize {
         let angle = (i as f64 / actual_segments as f64) * 2.0 * std::f64::consts::PI;
         let cos_a = angle.cos();
         let sin_a = angle.sin();
 
-        vertices.push(map_vertex(cx + r_inner * cos_a, cy + r_inner * sin_a, cz + height));   // 3: Inner Top
-        vertices.push(map_vertex(cx + r_plating * cos_a, cy + r_plating * sin_a, cz + height)); // 4: Plating Top
-        vertices.push(map_vertex(cx + r_pad * cos_a, cy + r_pad * sin_a, cz + height));     // 5: Pad Top
+        vertices.push(map_vertex(cx + r_top_inner * cos_a, cy + r_top_inner * sin_a, cz + actual_height));   // 3: Inner Top
+        vertices.push(map_vertex(cx + r_top_plating * cos_a, cy + r_top_plating * sin_a, cz + actual_height)); // 4: Plating Top
+        vertices.push(map_vertex(cx + r_pad * cos_a, cy + r_pad * sin_a, cz + actual_height));     // 5: Pad Top
     }
 
-    // Generate faces
-    for i in 0..actual_segments {
-        let next = (i + 1) % actual_segments;
-        
-        // Bottom indices
-        let bi_inner = (i * 3) as usize;
-        let bi_plat  = (i * 3 + 1) as usize;
-        let bi_pad   = (i * 3 + 2) as usize;
-        
-        let bnext_inner = (next * 3) as usize;
-        let bnext_plat  = (next * 3 + 1) as usize;
-        let bnext_pad   = (next * 3 + 2) as usize;
+    // Add center vertices for solid caps
+    let bottom_center_idx = vertices.len();
+    vertices.push(map_vertex(cx, cy, cz));
+    let top_center_idx = vertices.len();
+    vertices.push(map_vertex(cx, cy, cz + actual_height));
 
-        // Top indices
+    // Generate faces
+    for i in 0..actual_segments as usize {
+        let next = (i + 1) % actual_segments as usize;
+        
+        // Bottom indices (i*3)
+        let bi_inner = i * 3;
+        let bi_plat  = i * 3 + 1;
+        let bi_pad   = i * 3 + 2;
+        
+        let bnext_inner = next * 3;
+        let bnext_plat  = next * 3 + 1;
+        let bnext_pad   = next * 3 + 2;
+
+        // Top indices (top_offset + i*3)
         let ti_inner = top_offset + bi_inner;
-        let _ti_plat  = top_offset + bi_plat;
+        let ti_plat  = top_offset + bi_plat;
         let ti_pad   = top_offset + bi_pad;
         
         let tnext_inner = top_offset + bnext_inner;
-        let _tnext_plat  = top_offset + bnext_plat;
+        let tnext_plat  = top_offset + bnext_plat;
         let tnext_pad   = top_offset + bnext_pad;
 
-        // 1. Inner Wall (facing in)
+        // 1. Inner Wall (facing INWARDS)
+        // Correct CCW winding for inner tube: bi_inner -> ti_inner -> tnext_inner -> bnext_inner
         faces.push(Face { vertices: vec![bi_inner, ti_inner, tnext_inner, bnext_inner] });
 
-        // 2. Plating Wall (the drill hole wall, but only visible if no FR4)
-        // Actually, we only need the inner wall and the pad flanges for the "cup" look.
+        // 2. Plating Wall (facing OUTWARDS)
+        // Correct CCW winding for outer tube: bi_plat -> bnext_plat -> tnext_plat -> ti_plat
+        faces.push(Face { vertices: vec![bi_plat, bnext_plat, tnext_plat, ti_plat] });
         
-        // 3. Bottom Pad Flange (Ring between inner radius and pad radius)
-        faces.push(Face { vertices: vec![bi_pad, bnext_pad, bnext_inner, bi_inner] });
+        // 3. Bottom Cap
+        match bottom_cap {
+            CapType::Annular => {
+                // Ring with hole: bi_pad -> bi_inner -> bnext_inner -> bnext_pad
+                faces.push(Face {
+                    vertices: vec![bi_pad, bi_inner, bnext_inner, bnext_pad],
+                });
+            }
+            CapType::Solid => {
+                // Solid disk: bottom_center -> bi_pad -> bnext_pad
+                // Correct CCW winding for bottom face: center -> current -> next
+                faces.push(Face {
+                    vertices: vec![bottom_center_idx, bi_pad, bnext_pad],
+                });
+            }
+            CapType::None => {}
+        }
 
-        // 4. Top Pad Flange
-        faces.push(Face { vertices: vec![ti_inner, tnext_inner, tnext_pad, ti_pad] });
+        // 4. Top Cap
+        match top_cap {
+            CapType::Annular => {
+                // Ring with hole: ti_inner -> ti_pad -> tnext_pad -> tnext_inner
+                faces.push(Face {
+                    vertices: vec![ti_inner, ti_pad, tnext_pad, tnext_inner],
+                });
+            }
+            CapType::Solid => {
+                // Solid disk: top_center -> ti_pad -> tnext_pad
+                // Correct CCW winding for top face: center -> current -> next
+                faces.push(Face {
+                    vertices: vec![top_center_idx, ti_pad, tnext_pad],
+                });
+            }
+            CapType::None => {}
+        }
 
-        // 5. Outer Side Walls for Pads (Epsilon thin)
-        // Bottom pad side
-        // faces.push(Face { vertices: vec![bi_pad, bi_plat, bnext_plat, bnext_pad] }); // Not needed if pads are flat
+        // NOTE: We removed the "Pad Side Wall" (Face 5) that connected top and bottom rings.
+        // This ensures the cylinder remains a cylinder and rings remain flat disks.
     }
 
     MeshNode {
@@ -702,14 +742,13 @@ pub fn create_tube_mesh(
     material_name: &str,
     view: SpaceView,
 ) -> MeshNode {
-    let (cx, cy, cz) = center;
+    let (cx, cy, mut cz) = center;
+    let mut actual_height = height;
 
     // Apply 1μm Epsilon Offset to prevent Z-fighting with pad surfaces
-    let mut cz = cz;
-    let mut height = height;
-    if height > 0.002 {
+    if actual_height > 0.002 {
         cz += 0.001;
-        height -= 0.002;
+        actual_height -= 0.002;
     }
 
     let outer_radius = outer_diameter / 2.0;
@@ -729,7 +768,7 @@ pub fn create_tube_mesh(
     // Generate vertices for outer and inner cylinders
     let actual_segments = if segments == 16 { 64 } else { segments };
 
-    for i in 0..actual_segments {
+    for i in 0..actual_segments as usize {
         let angle = (i as f64 / actual_segments as f64) * 2.0 * std::f64::consts::PI;
         let cos_a = angle.cos();
         let sin_a = angle.sin();
@@ -737,45 +776,49 @@ pub fn create_tube_mesh(
         // Outer Bottom
         vertices.push(map_vertex(cx + outer_radius * cos_a, cy + outer_radius * sin_a, cz));
         // Outer Top
-        vertices.push(map_vertex(cx + outer_radius * cos_a, cy + outer_radius * sin_a, cz + height));
+        vertices.push(map_vertex(cx + outer_radius * cos_a, cy + outer_radius * sin_a, cz + actual_height));
         // Inner Bottom
         vertices.push(map_vertex(cx + inner_radius * cos_a, cy + inner_radius * sin_a, cz));
         // Inner Top
-        vertices.push(map_vertex(cx + inner_radius * cos_a, cy + inner_radius * sin_a, cz + height));
+        vertices.push(map_vertex(cx + inner_radius * cos_a, cy + inner_radius * sin_a, cz + actual_height));
     }
 
     // Generate faces
-    for i in 0..actual_segments {
-        let next = (i + 1) % actual_segments;
+    for i in 0..actual_segments as usize {
+        let next = (i + 1) % actual_segments as usize;
         
         // Vertex indices for current and next segment
-        let ob1 = (i * 4) as usize;
-        let ot1 = (i * 4 + 1) as usize;
-        let ib1 = (i * 4 + 2) as usize;
-        let it1 = (i * 4 + 3) as usize;
+        let ob1 = i * 4;
+        let ot1 = i * 4 + 1;
+        let ib1 = i * 4 + 2;
+        let it1 = i * 4 + 3;
         
-        let ob2 = (next * 4) as usize;
-        let ot2 = (next * 4 + 1) as usize;
-        let ib2 = (next * 4 + 2) as usize;
-        let it2 = (next * 4 + 3) as usize;
+        let ob2 = next * 4;
+        let ot2 = next * 4 + 1;
+        let ib2 = next * 4 + 2;
+        let it2 = next * 4 + 3;
 
-        // Outer side face (facing out) - Removed to avoid double cylinders for PCB drill holes
-        // faces.push(Face {
-        //     vertices: vec![ob1, ob2, ot2, ot1],
-        // });
+        // Outer side face (facing OUTWARDS)
+        // Correct CCW winding: ob1 -> ob2 -> ot2 -> ot1
+        faces.push(Face {
+            vertices: vec![ob1, ob2, ot2, ot1],
+        });
 
-        // Inner side face (facing in) - Reverse winding for correct normals
+        // Inner side face (facing INWARDS)
+        // Correct CCW winding: ib1 -> it1 -> it2 -> ib2
         faces.push(Face {
             vertices: vec![ib1, it1, it2, ib2],
         });
 
         if caps {
-            // Bottom cap (ring)
+            // Bottom cap (ring) (facing DOWN)
+            // Correct CCW winding: ob1 -> ib1 -> ib2 -> ob2
             faces.push(Face {
                 vertices: vec![ob1, ib1, ib2, ob2],
             });
 
-            // Top cap (ring)
+            // Top cap (ring) (facing UP)
+            // Correct CCW winding: ot1 -> ot2 -> it2 -> it1
             faces.push(Face {
                 vertices: vec![ot1, ot2, it2, it1],
             });

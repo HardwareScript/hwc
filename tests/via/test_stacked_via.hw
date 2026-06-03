@@ -1,0 +1,77 @@
+import * from @std/primitives/units
+import FR4 from @std/materials/insulators
+
+material ViaCopper:
+    category: conductor
+    process: drilled_plated
+    properties:
+        color: "#B87333"
+        resistivity: 1.68e-8Ω·m
+
+profile Stacked_Via_Test_Profile:
+    stackup:
+        top:    [material: ViaCopper, thickness: 35um]
+        d1:     [material: FR4,       thickness: 100um]
+        inner1: [material: ViaCopper, thickness: 35um]
+        core:   [material: FR4,       thickness: 1060um]
+        inner2: [material: ViaCopper, thickness: 35um]
+        d2:     [material: FR4,       thickness: 100um]
+        bottom: [material: ViaCopper, thickness: 35um]
+    
+    via:
+        min_diameter: 0.1mm
+        min_annular_ring: 0.05mm
+        min_spacing: 0.1mm
+
+    trace:
+        min_width: 0.1mm
+        min_spacing: 0.1mm
+
+    manufacturing:
+        copper_thickness: 35um
+        ipc2221_k_external: 0.048
+        ipc2221_k_internal: 0.024
+    
+    clearance:
+        high_voltage: 2mm
+        safety_factor: 2.0
+        
+    layer:
+        min_thickness: 0.05mm
+
+module Stacked_Via_Test_Module:
+    pins: [SIG]
+
+space Stacked_Via_Test_Board implements Stacked_Via_Test_Module:
+    dimensions: 10mm by 10mm by 1.6mm
+    grid: 100 by 100 by 32
+    origin: bl by b
+    profile: Stacked_Via_Test_Profile
+
+    # Stacked Vias: Multiple vias sharing the same XY center but spanning different Z-intervals.
+    # This demonstrates the "Microkernel" capability: the compiler doesn't need to know 
+    # about "stacking" logic; it just processes multiple primitives at the same location.
+
+    # 1. Top Microvia (Top to Inner1)
+    add contact(ViaCopper) named Top_Microvia at [x: 5mm, y: 5mm] spanning layer: top to inner1:
+        net: SIG
+        diameter: 0.15mm
+        bottom_diameter: 0.1mm
+        top_cap: annular
+        bottom_cap: solid
+
+    # 2. Buried Via (Inner1 to Inner2)
+    add contact(ViaCopper) named Buried_Via at [x: 5mm, y: 5mm] spanning layer: inner1 to inner2:
+        net: SIG
+        drill_diameter: 0.3mm
+        plating_thickness: 25um
+        top_cap: solid
+        bottom_cap: solid
+
+    # 3. Bottom Microvia (Inner2 to Bottom)
+    add contact(ViaCopper) named Bottom_Microvia at [x: 5mm, y: 5mm] spanning layer: inner2 to bottom:
+        net: SIG
+        diameter: 0.15mm
+        bottom_diameter: 0.1mm
+        top_cap: solid
+        bottom_cap: annular

@@ -69,7 +69,9 @@ impl VoxelGrid {
         inner_diameter: u32,
         pad_diameter: u32,
         segments: u32,
-        caps: bool,
+        top_cap: crate::voxel_grid::substrate_layers::CapType,
+        bottom_cap: crate::voxel_grid::substrate_layers::CapType,
+        bottom_outer_diameter: Option<u32>,
     ) {
         let layer = SubstrateLayer::new_tube(
             material,
@@ -79,7 +81,9 @@ impl VoxelGrid {
             inner_diameter,
             pad_diameter,
             segments,
-            caps,
+            top_cap,
+            bottom_cap,
+            bottom_outer_diameter,
         );
         self.substrate_layers.push(layer);
     }

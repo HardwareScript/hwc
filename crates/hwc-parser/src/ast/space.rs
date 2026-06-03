@@ -373,6 +373,17 @@ pub struct PolygonPlacement {
 /// Examples:
 /// - `add contact(Tungsten) at [x:500um, y:325um] spanning layer: l1 to l2`
 /// - `add contact(Copper) named Via1 net: VDD at [x:1mm, y:2mm] spanning z: 0um to 200um` (v0.1.7 dual paradigm)
+/// Type of cap for tube shapes (v0.1.7)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CapType {
+    /// No cap (open end)
+    None,
+    /// Annular ring (disk with a hole)
+    Annular,
+    /// Solid disk (no hole)
+    Solid,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ContactPlacement {
     pub material: CompactString, // Via fill material (Tungsten, Copper, etc.)
@@ -383,9 +394,14 @@ pub struct ContactPlacement {
     /// Ending elevation (v0.1.7)
     pub to_elevation: Elevation,
     pub net: Option<NetName>,    // Optional net name to connect to (v0.1.6: supports array syntax)
-    pub diameter: Option<super::common::Measurement>, // Optional via diameter (default from profile)
+    pub diameter: Option<super::common::Measurement>, // Optional via diameter (top diameter if tapered)
+    pub bottom_diameter: Option<super::common::Measurement>, // NEW v0.1.7: Bottom diameter for tapered microvias
+    pub drill_diameter: Option<super::common::Measurement>, // v0.1.7: Physical drill diameter
+    pub plating_thickness: Option<super::common::Measurement>, // v0.1.7: Plating thickness
     pub annular_ring: Option<super::common::Measurement>, // Optional annular ring width (Limitation 7)
-    pub caps: Option<bool>, // NEW v0.1.7: Option to enable/disable top/bottom rings
+    pub caps: Option<bool>, // Legacy v0.1.7: Option to enable/disable top/bottom rings
+    pub top_cap: Option<CapType>, // NEW v0.1.7: Specific cap type for top
+    pub bottom_cap: Option<CapType>, // NEW v0.1.7: Specific cap type for bottom
     pub bridge: Option<CompactString>, // Phase 1: Explicit bridge override
     pub liner: Option<CompactString>, // NEW v0.1.7: TSV insulator liner material
     pub liner_thickness: Option<super::common::Measurement>, // NEW v0.1.7: TSV liner thickness

@@ -295,6 +295,13 @@ impl MaterialRegistry {
         self.id_to_process.get(id as usize).copied()
     }
 
+    /// Set the manufacturing process for a material ID.
+    pub fn set_process(&mut self, id: MaterialId, process: ManufacturingProcess) {
+        if let Some(p) = self.id_to_process.get_mut(id as usize) {
+            *p = process;
+        }
+    }
+
     /// Check if a material is a semiconductor.
     #[inline]
     pub fn is_semiconductor(&self, id: MaterialId) -> bool {

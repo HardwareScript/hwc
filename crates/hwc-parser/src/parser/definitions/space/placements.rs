@@ -353,14 +353,19 @@ impl crate::parser::Parser {
         };
 
         // Optional: properties block
-        let (diameter, annular_ring, caps, bridge, liner, liner_thickness, koz, net_in_block) = if self.check(&Token::Colon) {
+        let (diameter, bottom_diameter, drill_diameter, plating_thickness, annular_ring, caps, top_cap, bottom_cap, bridge, liner, liner_thickness, koz, net_in_block) = if self.check(&Token::Colon) {
             self.advance();
             self.expect(&Token::Newline)?;
             self.expect(&Token::Indent)?;
 
             let mut dia = None;
+            let mut bottom_dia = None;
+            let mut drill_dia = None;
+            let mut plating_thick = None;
             let mut ring = None;
             let mut caps = None;
+            let mut top_cap = None;
+            let mut bottom_cap = None;
             let mut bridge = None;
             let mut liner = None;
             let mut liner_thickness = None;
@@ -380,6 +385,15 @@ impl crate::parser::Parser {
                     "diameter" => {
                         dia = Some(self.parse_measurement()?);
                     }
+                    "bottom_diameter" => {
+                        bottom_dia = Some(self.parse_measurement()?);
+                    }
+                    "drill_diameter" => {
+                        drill_dia = Some(self.parse_measurement()?);
+                    }
+                    "plating_thickness" => {
+                        plating_thick = Some(self.parse_measurement()?);
+                    }
                     "annular_ring" => {
                         ring = Some(self.parse_measurement()?);
                     }
@@ -393,6 +407,12 @@ impl crate::parser::Parser {
                         } else {
                             return Err(self.error("Expected 'true' or 'false' for caps property"));
                         }
+                    }
+                    "top_cap" => {
+                        top_cap = Some(self.parse_cap_type()?);
+                    }
+                    "bottom_cap" => {
+                        bottom_cap = Some(self.parse_cap_type()?);
                     }
                     "bridge" => {
                         bridge = Some(self.expect_namespaced_identifier_string()?);
@@ -420,11 +440,11 @@ impl crate::parser::Parser {
             }
 
             self.expect(&Token::Dedent)?;
-            (dia, ring, caps, bridge, liner, liner_thickness, koz, net_in_block)
+            (dia, bottom_dia, drill_dia, plating_thick, ring, caps, top_cap, bottom_cap, bridge, liner, liner_thickness, koz, net_in_block)
         } else {
             // No properties block, just consume newline
             self.skip_whitespace();
-            (None, None, None, None, None, None, None, None)
+            (None, None, None, None, None, None, None, None, None, None, None, None, None)
         };
 
         let end_pos = self.previous_span().end;
@@ -437,13 +457,28 @@ impl crate::parser::Parser {
             to_elevation,
             net: net.or(net_in_block),
             diameter,
+            bottom_diameter,
+            drill_diameter,
+            plating_thickness,
             annular_ring,
             caps,
+            top_cap,
+            bottom_cap,
             bridge: bridge.map(|s: String| s.into()),
             liner: liner.map(|s: String| s.into()),
             liner_thickness,
             koz,
             span: Span::new(start_pos, end_pos),
         })
+    }
+
+    fn parse_cap_type(&mut self) -> Result<CapType, ParseError> {
+        let name = self.expect_identifier()?;
+        match name.as_str() {
+            "none" => Ok(CapType::None),
+            "annular" => Ok(CapType::Annular),
+            "solid" => Ok(CapType::Solid),
+            _ => Err(self.error(&format!("Expected cap type (none, annular, solid), found '{}'", name))),
+        }
     }
 }

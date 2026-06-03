@@ -271,6 +271,24 @@ impl StackupManager {
         }
     }
 
+    /// Returns true if the layer name is the topmost physical layer.
+    pub fn is_top_layer(&self, name: &str) -> bool {
+        self.ordered_layers.last().map(|n| n == name).unwrap_or(false)
+    }
+
+    /// Returns true if the layer name is the bottommost physical layer.
+    pub fn is_bottom_layer(&self, name: &str) -> bool {
+        self.ordered_layers.first().map(|n| n == name).unwrap_or(false)
+    }
+
+    /// Returns the name of the layer at the given elevation.
+    pub fn get_layer_name(&self, elevation: &Elevation) -> Option<String> {
+        match elevation {
+            Elevation::Semantic(ident) => Some(ident.name.to_string()),
+            _ => None,
+        }
+    }
+
     /// Get the semantic name of a layer by its index.
 
     /// Returns the number of semantic layers in the stackup.

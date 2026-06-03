@@ -1,0 +1,59 @@
+import * from @std/primitives/units
+import FR4 from @std/materials/insulators
+
+material ViaCopper:
+    category: conductor
+    process: drilled_plated
+    properties:
+        color: "#B87333"
+        resistivity: 1.68e-8Ω·m
+
+profile Buried_Via_Test_Profile:
+    stackup:
+        top:    [material: ViaCopper, thickness: 35um]
+        d1:     [material: FR4,       thickness: 200um]
+        inner1: [material: ViaCopper, thickness: 35um]
+        core:   [material: FR4,       thickness: 1060um]
+        inner2: [material: ViaCopper, thickness: 35um]
+        d2:     [material: FR4,       thickness: 200um]
+        bottom: [material: ViaCopper, thickness: 35um]
+    
+    via:
+        min_diameter: 0.1mm
+        min_annular_ring: 0.05mm
+        min_spacing: 0.15mm
+
+    trace:
+        min_width: 0.1mm
+        min_spacing: 0.1mm
+
+    manufacturing:
+        copper_thickness: 35um
+        ipc2221_k_external: 0.048
+        ipc2221_k_internal: 0.024
+    
+    clearance:
+        high_voltage: 2mm
+        safety_factor: 2.0
+    
+    layer:
+        min_thickness: 0.1mm
+
+module Buried_Via_Test_Module:
+    pins: [SIG]
+
+space Buried_Via_Test_Board implements Buried_Via_Test_Module:
+    dimensions: 10mm by 10mm by 1.6mm
+    grid: 100 by 100 by 32
+    origin: bl by b
+    profile: Buried_Via_Test_Profile
+
+    # Buried Via: Connects Inner1 to Inner2
+    # Sealed at both ends (Solid caps) as per Microkernel Spec
+    add contact(ViaCopper) named Buried_Via at [x: 5mm, y: 5mm] spanning layer: inner1 to inner2:
+        net: SIG
+        drill_diameter: 0.3mm
+        plating_thickness: 25um
+        annular_ring: 0.1mm
+        top_cap: solid
+        bottom_cap: solid

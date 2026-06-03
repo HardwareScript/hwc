@@ -23,6 +23,6 @@ pub use operations::CompactionStats;
 pub use shared_buffer::{DirtyPageTracker, SharedBufferHeader, SharedVoxelBuffer, PAGE_SIZE};
 pub use stats::MemoryStats;
 pub use substrate_layers::{
-    ComponentMetadata, ComponentPin, Cutout, LinerStack, Rotation, SubstrateLayer,
+    CapType, ComponentMetadata, ComponentPin, Cutout, LinerStack, Rotation, SubstrateLayer,
     SubstrateLayerShape, SubstrateLayerType, Terminal, TSVParams,
 };

@@ -72,8 +72,13 @@ impl AutoViaInserter {
                 unit: Unit::Millimeter,
                 span,
             }),
+            bottom_diameter: None,
+            drill_diameter: None,
+            plating_thickness: None,
             annular_ring: None,
             caps: None,
+            top_cap: None,
+            bottom_cap: None,
             bridge: if bridge_stack.interface_material == bridge_stack.fill_material {
                 None
             } else {

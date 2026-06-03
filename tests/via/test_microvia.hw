@@ -1,0 +1,58 @@
+import * from @std/primitives/units
+import FR4 from @std/materials/insulators
+
+material ViaCopper:
+    category: conductor
+    process: drilled_plated
+    properties:
+        color: "#B87333"
+        resistivity: 1.68e-8Ω·m
+
+profile Microvia_Test_Profile:
+    stackup:
+        top:    [material: ViaCopper, thickness: 35um]
+        d1:     [material: FR4,       thickness: 100um]
+        inner1: [material: ViaCopper, thickness: 35um]
+        core:   [material: FR4,       thickness: 1260um]
+        bottom: [material: ViaCopper, thickness: 35um]
+    
+    via:
+        min_diameter: 0.1mm
+        min_annular_ring: 0.05mm
+        min_spacing: 0.1mm
+
+    trace:
+        min_width: 0.1mm
+        min_spacing: 0.1mm
+
+    manufacturing:
+        copper_thickness: 35um
+        ipc2221_k_external: 0.048
+        ipc2221_k_internal: 0.024
+    
+    clearance:
+        high_voltage: 2mm
+        safety_factor: 2.0
+        
+    layer:
+        min_thickness: 0.05mm
+
+module Microvia_Test_Module:
+    pins: [SIG]
+
+space Microvia_Test_Board implements Microvia_Test_Module:
+    dimensions: 10mm by 10mm by 1.6mm
+    grid: 100 by 100 by 32
+    origin: bl by b
+    profile: Microvia_Test_Profile
+
+    # Microvia: Laser-drilled, tapered, 1-layer deep (Top to Inner1)
+    # 3D Representation: Tapered hollow cone (frustum)
+    add contact(ViaCopper) named Microvia at [x: 5mm, y: 5mm] spanning layer: top to inner1:
+        net: SIG
+        diameter: 0.15mm         # Top diameter
+        bottom_diameter: 0.1mm    # Bottom diameter (tapered)
+        plating_thickness: 20um
+        annular_ring: 0.05mm
+        top_cap: annular
+        bottom_cap: solid

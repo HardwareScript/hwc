@@ -60,6 +60,17 @@ pub enum SubstrateLayerType {
     Substrate,
 }
 
+/// Type of cap for tube shapes (v0.1.7)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CapType {
+    /// No cap (open end)
+    None,
+    /// Annular ring (disk with a hole)
+    Annular,
+    /// Solid disk (no hole)
+    Solid,
+}
+
 /// Physical shape of the substrate layer (v0.1.6)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SubstrateLayerShape {
@@ -77,9 +88,13 @@ pub enum SubstrateLayerShape {
     Tube {
         outer_diameter: u32,
         inner_diameter: u32,
-        pad_diameter: u32, // v0.1.7: Unified Via support
+        pad_diameter: u32,   // v0.1.7: Unified Via support
         segments: u32,
-        caps: bool, // v0.1.7: Option to enable/disable top/bottom rings
+        top_cap: CapType,    // v0.1.7: Specific cap type for top
+        bottom_cap: CapType, // v0.1.7: Specific cap type for bottom
+        /// Bottom outer diameter for tapered vias (v0.1.7 Microvia)
+        /// If None, use outer_diameter for both ends.
+        bottom_outer_diameter: Option<u32>,
     },
 }
 
@@ -225,7 +240,9 @@ impl SubstrateLayer {
         inner_diameter: u32,
         pad_diameter: u32,
         segments: u32,
-        caps: bool,
+        top_cap: CapType,
+        bottom_cap: CapType,
+        bottom_outer_diameter: Option<u32>,
     ) -> Self {
         Self {
             material,
@@ -238,7 +255,9 @@ impl SubstrateLayer {
                 inner_diameter,
                 pad_diameter,
                 segments,
-                caps,
+                top_cap,
+                bottom_cap,
+                bottom_outer_diameter,
             },
             koz_radius_nm: 0,
         }
@@ -320,17 +339,94 @@ impl SubstrateLayer {
             SubstrateLayerShape::Tube {
                 outer_diameter,
                 inner_diameter,
+                pad_diameter,
+                top_cap,
+                bottom_cap,
+                bottom_outer_diameter,
                 ..
             } => {
                 let center_x = (self.bbox.min.x + self.bbox.max.x) / 2;
                 let center_y = (self.bbox.min.y + self.bbox.max.y) / 2;
                 let dx = x - center_x;
                 let dy = y - center_y;
-                let outer_radius = outer_diameter as i64 / 2;
-                let inner_radius = inner_diameter as i64 / 2;
                 let dist_sq = dx * dx + dy * dy;
-                if dist_sq > outer_radius * outer_radius || dist_sq < inner_radius * inner_radius {
-                    return false; // Outside the outer wall or inside the hollow center
+
+                let top_outer_radius = outer_diameter as i64 / 2;
+                let top_inner_radius = inner_diameter as i64 / 2;
+                let pad_radius = pad_diameter as i64 / 2;
+
+                // Tapered logic (v0.1.7)
+                let bottom_outer_radius = bottom_outer_diameter.unwrap_or(outer_diameter) as i64 / 2;
+                let plating_thickness = top_outer_radius - top_inner_radius;
+
+                let height_nm = self.bbox.max.z - self.bbox.min.z;
+                let t = if height_nm > 0 {
+                    (z - self.bbox.min.z) as f64 / height_nm as f64
+                } else {
+                    1.0
+                };
+
+                let current_outer_radius =
+                    (1.0 - t) * bottom_outer_radius as f64 + t * top_outer_radius as f64;
+                let current_inner_radius = current_outer_radius - plating_thickness as f64;
+
+                // v0.1.7: Unified Via Voxel Logic
+                // We define "cap regions" as 35um (standard copper) or 1 voxel thick.
+                let cap_thickness = 35_000;
+                let is_in_top_cap = z >= self.bbox.max.z - cap_thickness;
+                let is_in_bottom_cap = z <= self.bbox.min.z + cap_thickness;
+
+                if is_in_top_cap {
+                    match top_cap {
+                        CapType::None => {
+                            if dist_sq > (current_outer_radius * current_outer_radius) as i64
+                                || dist_sq < (current_inner_radius * current_inner_radius) as i64
+                            {
+                                return false;
+                            }
+                        }
+                        CapType::Annular => {
+                            if dist_sq > pad_radius * pad_radius
+                                || dist_sq < (current_inner_radius * current_inner_radius) as i64
+                            {
+                                return false;
+                            }
+                        }
+                        CapType::Solid => {
+                            if dist_sq > pad_radius * pad_radius {
+                                return false;
+                            }
+                        }
+                    }
+                } else if is_in_bottom_cap {
+                    match bottom_cap {
+                        CapType::None => {
+                            if dist_sq > (current_outer_radius * current_outer_radius) as i64
+                                || dist_sq < (current_inner_radius * current_inner_radius) as i64
+                            {
+                                return false;
+                            }
+                        }
+                        CapType::Annular => {
+                            if dist_sq > pad_radius * pad_radius
+                                || dist_sq < (current_inner_radius * current_inner_radius) as i64
+                            {
+                                return false;
+                            }
+                        }
+                        CapType::Solid => {
+                            if dist_sq > pad_radius * pad_radius {
+                                return false;
+                            }
+                        }
+                    }
+                } else {
+                    // Main tube body (wall)
+                    if dist_sq > (current_outer_radius * current_outer_radius) as i64
+                        || dist_sq < (current_inner_radius * current_inner_radius) as i64
+                    {
+                        return false;
+                    }
                 }
             }
             SubstrateLayerShape::Rect => {}

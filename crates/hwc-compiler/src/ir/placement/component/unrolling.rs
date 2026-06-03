@@ -161,7 +161,9 @@ pub fn unroll_internal_features(
                                 inner_diameter_nm as u32,
                                 pad_diameter_nm as u32,
                                 16,
-                                true
+                                hwc_engine::voxel_grid::CapType::Annular,
+                                hwc_engine::voxel_grid::CapType::Annular,
+                                None,
                             );
 
                             let pad_half_nm = pad_diameter_nm / 2;

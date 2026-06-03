@@ -50,6 +50,19 @@ impl Parser {
                 Token::Rotated => Some("rotated".into()),
                 Token::Implements => Some("implements".into()),
                 Token::Bridge => Some("bridge".into()),
+                Token::Logic => Some("logic".into()),
+                Token::Test => Some("test".into()),
+                Token::Enum => Some("enum".into()),
+                Token::Struct => Some("struct".into()),
+                Token::Unit => Some("unit".into()),
+                Token::SignalGroup => Some("signal_group".into()),
+                Token::Mechanical => Some("mechanical".into()),
+                Token::Substrate => Some("substrate".into()),
+                Token::For => Some("for".into()),
+                Token::In => Some("in".into()),
+                Token::If => Some("if".into()),
+                Token::Then => Some("then".into()),
+                Token::Else => Some("else".into()),
                 _ => None,
             };
 
@@ -128,84 +141,12 @@ impl Parser {
     /// In import paths, keywords like `logic`, `test`, etc. should be treated as identifiers.
     /// This allows paths like `logic/adders` or `test/fixtures`.
     pub(crate) fn expect_identifier_or_keyword_string(&mut self) -> Result<String, ParseError> {
-        if let Some(current) = self.current() {
-            let name = match &current.token {
-                Token::Identifier(name) => name.clone(),
-                // Allow keywords as identifiers in import paths
-                Token::Logic => "logic".into(),
-                Token::Test => "test".into(),
-                Token::Component => "component".into(),
-                Token::Space => "space".into(),
-                Token::Material => "material".into(),
-                Token::Profile => "profile".into(),
-                Token::Module => "module".into(),
-                Token::Enum => "enum".into(),
-                Token::Struct => "struct".into(),
-                Token::Unit => "unit".into(),
-                Token::Device => "device".into(),
-                Token::SignalGroup => "signal_group".into(),
-                Token::Mechanical => "mechanical".into(),
-                Token::Interface => "interface".into(),
-                Token::Bridge => "bridge".into(),
-                _ => {
-                    return Err(ParseError::UnexpectedToken {
-                        span: span_to_source_span(&current.span),
-                        expected: "identifier or keyword".into(),
-                        found: format!("{}", current.token).into(),
-                    })
-                }
-            };
-            self.advance();
-            Ok(name)
-        } else {
-            let span = if let Some(last) = self.tokens.last() {
-                span_to_source_span(&last.span)
-            } else {
-                SourceSpan::new(0.into(), 0.into())
-            };
-            Err(ParseError::UnexpectedEof { span })
-        }
+        self.expect_identifier_string()
     }
 
     /// Expect and consume an identifier or keyword token as an Identifier AST node
     pub(crate) fn expect_identifier_or_keyword(&mut self) -> Result<Identifier, ParseError> {
-        if let Some(current) = self.current() {
-            let name = match &current.token {
-                Token::Identifier(name) => name.clone(),
-                Token::Logic => "logic".into(),
-                Token::Test => "test".into(),
-                Token::Component => "component".into(),
-                Token::Space => "space".into(),
-                Token::Material => "material".into(),
-                Token::Profile => "profile".into(),
-                Token::Module => "module".into(),
-                Token::Enum => "enum".into(),
-                Token::Struct => "struct".into(),
-                Token::Unit => "unit".into(),
-                Token::Device => "device".into(),
-                Token::SignalGroup => "signal_group".into(),
-                Token::Mechanical => "mechanical".into(),
-                Token::Interface => "interface".into(),
-                Token::Bridge => "bridge".into(),
-                _ => {
-                    return Err(ParseError::UnexpectedToken {
-                        span: span_to_source_span(&current.span),
-                        expected: "identifier or keyword".into(),
-                        found: format!("{}", current.token).into(),
-                    })
-                }
-            };
-            let identifier = Identifier::new(name.into(), current.span);
-            self.advance();
-            Ok(identifier)
-        } else {
-            let span = if let Some(last) = self.tokens.last() {
-                span_to_source_span(&last.span)
-            } else {
-                SourceSpan::new(0.into(), 0.into())
-            };
-            Err(ParseError::UnexpectedEof { span })
-        }
+        self.expect_identifier()
     }
 
     /// Expect and consume a string token

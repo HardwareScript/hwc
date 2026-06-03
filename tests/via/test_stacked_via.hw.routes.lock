@@ -1,0 +1,17 @@
+{
+  "version": "0.1.4",
+  "board": "Stacked_Via_Test_Board",
+  "grid": {
+    "dimensions": [
+      100,
+      100,
+      32
+    ],
+    "resolution": [
+      0.1,
+      0.1,
+      0.05
+    ]
+  },
+  "routes": []
+}

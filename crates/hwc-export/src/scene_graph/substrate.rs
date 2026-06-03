@@ -7,6 +7,7 @@ use super::mesh_generation::{
 };
 use super::ribbon::create_extruded_ribbon;
 use super::types::{BoxParams, FaceCulling, MaterialNode, MeshNode};
+use hwc_engine::voxel_grid::CapType;
 use crate::contour_tracer::{ContourConfig, ContourTracer};
 use compact_str::CompactString;
 use hwc_engine::voxel_grid::SubstrateLayerShape;
@@ -21,6 +22,11 @@ use rustc_hash::FxHashMap;
 ///
 /// **NET-AWARE CLUSTERING**: Groups layers by (net, material, z-layer) before export.
 /// This ensures that multiple pours on the same net are merged into a single smooth shape.
+///
+/// **ARCHITECTURAL ROADMAP (Strategy A)**:
+/// In the v0.1.8 cycle, this clustering will evolve into true 2D Polygon Unioning.
+/// Instead of separate meshes for traces/pads, a 2D Clipper (Vatti algorithm) will
+/// merge all same-net shapes into a single manifold contour before extrusion.
 pub fn add_substrate(
     meshes: &mut Vec<MeshNode>,
     space: &HardwareSpace,
@@ -92,8 +98,18 @@ pub fn add_substrate(
             // 2. If materials have SAME precedence, the one with HIGHER index (added later)
             //    punches a hole in the one with LOWER index. This ensures that traces
             //    (added after pours) correctly punch through pours to avoid Z-fighting.
-            let should_subtract = other_precedence < my_precedence || 
+            let mut should_subtract = other_precedence < my_precedence || 
                 (other_precedence == my_precedence && j > i && layer.material == other.material);
+
+            // v0.1.8 FIXED: Net-Aware Filtering for Copper Pours
+            // If we are a copper pour, we never let something on the SAME NET punch a hole in us.
+            // This ensures microvias land on solid copper instead of cutting through it.
+            if layer.layer_type == hwc_engine::voxel_grid::SubstrateLayerType::Pour 
+                && layer.net != 0 
+                && layer.net == other.net 
+            {
+                should_subtract = false;
+            }
 
             if should_subtract {
                 // v0.1.7: MANIFOLD RULE
@@ -119,6 +135,15 @@ pub fn add_substrate(
             || layer.layer_type == hwc_engine::voxel_grid::SubstrateLayerType::Pour
         {
             for drill in &drills {
+                // v0.1.8 FIXED: Net-Aware Filtering for Copper Pours
+                // Do not subtract a drill from a copper pour if they share the same net.
+                if layer.layer_type == hwc_engine::voxel_grid::SubstrateLayerType::Pour 
+                    && layer.net != 0 
+                    && layer.net == drill.net 
+                {
+                    continue;
+                }
+
                 match drill.shape {
                     SubstrateLayerShape::Tube { outer_diameter, .. } => {
                         layer.add_cylinder_cutout(drill.bbox, outer_diameter as i64);
@@ -152,6 +177,11 @@ pub fn add_substrate(
 
     for (idx, layer) in substrate_layers.iter().enumerate() {
         let my_precedence = layer_precedences[idx];
+        
+        let material_name = space
+            .material_registry
+            .get_name(layer.material)
+            .unwrap_or("Unknown");
 
         // v0.1.7: Conductive Unioning (The "Redundancy" Innovation)
         // If this layer is entirely contained within another layer of the same material
@@ -169,48 +199,69 @@ pub fn add_substrate(
             }
         }
         if redundant {
-            eprintln!("[DEBUG unioning] Skipping redundant layer {} (contained within {})", idx, "other");
+            eprintln!("[DEBUG unioning] Skipping redundant layer {} (contained within other)", idx);
             continue;
         }
 
-            // v0.1.7: Automatic Surface Culling (The "Handshake" Innovation)
-            let mut base_culling = FaceCulling::none();
-            for (other_idx, other) in original_layers.iter().enumerate() {
-                if idx == other_idx {
-                    continue;
+        // v0.1.7: Automatic Surface Culling (The "Handshake" Innovation)
+        let mut base_culling = FaceCulling::none();
+        for (other_idx, other) in original_layers.iter().enumerate() {
+            if idx == other_idx {
+                continue;
+            }
+            let other_precedence = layer_precedences[other_idx];
+
+            // v0.1.7 Fix: If I have LOWER precedence (higher value), I cull my own face
+            // if I'm touching a HIGHER precedence material. This ensures pads (High)
+            // "own" the shared surface with traces (Low).
+            let mut should_cull_bottom = false;
+            let mut should_cull_top = false;
+
+            if my_precedence > other_precedence {
+                should_cull_bottom = true;
+                should_cull_top = true;
+            } else if my_precedence == other_precedence 
+                && layer.material == other.material 
+                && layer.net != 0 
+                && layer.net == other.net 
+            {
+                // v0.1.8 FIXED: Same-Net Copper Handshake (Bounding Box Match Guard)
+                // Only cull the face if the two layers share identical XY boundaries
+                // (e.g., stacked plane-to-plane interfaces). Do NOT cull for partial
+                // trace-to-via intersections, otherwise the trace top face will be deleted.
+                let bounding_boxes_match = 
+                    (layer.bbox.min.x - other.bbox.min.x).abs() < 1000 
+                    && (layer.bbox.max.x - other.bbox.max.x).abs() < 1000 
+                    && (layer.bbox.min.y - other.bbox.min.y).abs() < 1000 
+                    && (layer.bbox.max.y - other.bbox.max.y).abs() < 1000;
+
+                if bounding_boxes_match {
+                    should_cull_top = true;
                 }
-                let other_precedence = layer_precedences[other_idx];
+            }
 
-                // v0.1.7 Fix: If I have LOWER precedence (higher value), I cull my own face
-                // if I'm touching a HIGHER precedence material. This ensures pads (High)
-                // "own" the shared surface with traces (Low).
-                if my_precedence > other_precedence {
-                    // Check for Z-touching (1um tolerance)
-                    let touching_bottom = (layer.bbox.min.z - other.bbox.max.z).abs() < 1000;
-                    let touching_top = (layer.bbox.max.z - other.bbox.min.z).abs() < 1000;
+            if should_cull_bottom || should_cull_top {
+                // Check for Z-touching (1um tolerance)
+                let touching_bottom = (layer.bbox.min.z - other.bbox.max.z).abs() < 1000;
+                let touching_top = (layer.bbox.max.z - other.bbox.min.z).abs() < 1000;
 
-                    if touching_bottom || touching_top {
-                        // Check for XY overlap
-                        if layer.bbox.min.x < other.bbox.max.x
-                            && layer.bbox.max.x > other.bbox.min.x
-                            && layer.bbox.min.y < other.bbox.max.y
-                            && layer.bbox.max.y > other.bbox.min.y
-                        {
-                            if touching_bottom {
-                                base_culling.bottom = true;
-                            }
-                            if touching_top {
-                                base_culling.top = true;
-                            }
+                if touching_bottom || touching_top {
+                    // Check for XY overlap
+                    if layer.bbox.min.x < other.bbox.max.x
+                        && layer.bbox.max.x > other.bbox.min.x
+                        && layer.bbox.min.y < other.bbox.max.y
+                        && layer.bbox.max.y > other.bbox.min.y
+                    {
+                        if touching_bottom && should_cull_bottom {
+                            base_culling.bottom = true;
+                        }
+                        if touching_top && should_cull_top {
+                            base_culling.top = true;
                         }
                     }
                 }
             }
-
-        let material_name = space
-            .material_registry
-            .get_name(layer.material)
-            .unwrap_or("Unknown");
+        }
 
         // Rule 3: Skip rendering "Void" or "Air" materials standalone
         if material_name == "Void" || material_name == "Air" {
@@ -255,6 +306,9 @@ pub fn add_substrate(
                                 0.025, // Plating thickness 25um
                                 depth,
                                 segments,
+                                CapType::Annular,
+                                CapType::Annular,
+                                None, // Not tapered
                                 material_name,
                                 space.view,
                             ));
@@ -280,15 +334,20 @@ pub fn add_substrate(
                 inner_diameter,
                 pad_diameter,
                 segments,
-                caps,
+                top_cap,
+                bottom_cap,
+                bottom_outer_diameter,
             } => {
                 let outer_diameter_mm = outer_diameter as f64 / 1_000_000.0;
                 let inner_diameter_mm = inner_diameter as f64 / 1_000_000.0;
                 let pad_diameter_mm = pad_diameter as f64 / 1_000_000.0;
+                let bottom_outer_diameter_mm = bottom_outer_diameter.map(|d| d as f64 / 1_000_000.0);
                 let center_x_mm = (min_x_mm + max_x_mm) / 2.0;
                 let center_y_mm = (min_y_mm + max_y_mm) / 2.0;
 
-                if caps {
+                // v0.1.7 FIXED: Always use unified via mesh for tubes with caps
+                // This ensures annular rings are generated even if no substrate is present.
+                if top_cap != CapType::None || bottom_cap != CapType::None {
                     meshes.push(create_via_mesh(
                         &format!("Unified_Via_{}", idx),
                         (center_x_mm, center_y_mm, min_z_mm),
@@ -297,6 +356,9 @@ pub fn add_substrate(
                         (outer_diameter_mm - inner_diameter_mm) / 2.0,
                         depth,
                         segments,
+                        top_cap,
+                        bottom_cap,
+                        bottom_outer_diameter_mm,
                         material_name,
                         space.view,
                     ));

@@ -46,8 +46,10 @@ pub fn place_contact(
     let xy_point = crate::ir::conversions::coordinate_to_point(&contact.position, &ctx);
 
     // Calculate via diameter (use default if not specified)
-    // Default via diameter: 100um (0.1mm) = 100,000nm
-    let diameter_nm = if let Some(diameter_measurement) = &contact.diameter {
+    // v0.1.7: Support explicit drill_diameter vs legacy diameter
+    let diameter_nm = if let Some(drill_dia) = &contact.drill_diameter {
+        crate::ir::conversions::measurement_to_nm(drill_dia, symbol_table)
+    } else if let Some(diameter_measurement) = &contact.diameter {
         // Use the canonical conversion method
         crate::ir::conversions::measurement_to_nm(diameter_measurement, symbol_table)
     } else {
@@ -68,8 +70,46 @@ pub fn place_contact(
         space.voxel_size.z_nm,
     )?;
 
-    let start_z = from_bottom_nm.min(to_bottom_nm);
-    let end_z = from_top_nm.max(to_top_nm);
+    // v0.1.8 FIXED: Net-Aware Z-Span Calculation for Blind/Buried Vias
+    // Vias should not cut through inner layers; they should stop at the nearest boundary.
+    // 1. Top Layer: Span from Top Surface.
+    // 2. Bottom Layer: Span from Bottom Surface.
+    // 3. Inner Layer (Upper): Span from Bottom Surface (contact from below).
+    // 4. Inner Layer (Lower): Span from Top Surface (contact from above).
+    //
+    // **MICRO-SINKING (v0.1.8)**: To prevent coplanar Z-fighting at the interface, 
+    // we sink the via 500nm into the target copper layer. This ensures volumetric 
+    // overlap, which will eventually be unified into a single manifold mesh 
+    // via Strategy A (2D Co-Union).
+    let (start_z, end_z) = if let (Some(from_name), Some(to_name)) = (
+        stackup_manager.get_layer_name(&contact.from_elevation),
+        stackup_manager.get_layer_name(&contact.to_elevation),
+    ) {
+        // Semantic mode: Use boundary rules
+        let (lower_name, lower_bottom, lower_top, upper_name, upper_bottom, upper_top) = 
+            if from_bottom_nm < to_bottom_nm {
+                (from_name, from_bottom_nm, from_top_nm, to_name, to_bottom_nm, to_top_nm)
+            } else {
+                (to_name, to_bottom_nm, to_top_nm, from_name, from_bottom_nm, from_top_nm)
+            };
+
+        let via_bottom = if stackup_manager.is_bottom_layer(&lower_name) {
+            lower_bottom // Bottom surface of board
+        } else {
+            lower_top - 500 // v0.1.8: Sink 500nm into target trace to prevent Z-fighting
+        };
+
+        let via_top = if stackup_manager.is_top_layer(&upper_name) {
+            upper_top // Top surface of board
+        } else {
+            upper_bottom + 500 // v0.1.8: Sink 500nm into source trace to prevent Z-fighting
+        };
+        
+        (via_bottom, via_top)
+    } else {
+        // Physical mode: Fallback to inclusive min/max
+        (from_bottom_nm.min(to_bottom_nm), from_top_nm.max(to_top_nm))
+    };
 
     // Create a cylindrical via by filling voxels within radius
     let placer = ComponentPlacer::new();
@@ -250,9 +290,18 @@ pub fn place_contact(
         }
     } else {
         // v0.1.7: Unified Manufacturing Process Logic
-        // We now check the material's declared process DNA instead of guessing based on category.
-        let process = space.material_registry.get_process(material_id)
-            .unwrap_or(hwc_engine::ManufacturingProcess::Deposited);
+        // We now check the material's declared process DNA in the symbol table
+        let mut process = hwc_engine::ManufacturingProcess::Deposited;
+        if let Some(material_def) = symbol_table.materials().get(&contact.material) {
+            process = match material_def.process {
+                hwc_parser::ManufacturingProcess::DrilledPlated => hwc_engine::ManufacturingProcess::DrilledPlated,
+                hwc_parser::ManufacturingProcess::Etched => hwc_engine::ManufacturingProcess::Etched,
+                hwc_parser::ManufacturingProcess::Deposited => hwc_engine::ManufacturingProcess::Deposited,
+            };
+        }
+        
+        // Also ensure the engine's registry knows about this process for downstream checks
+        space.material_registry.set_process(material_id, process);
         
         let clearance_nm = space.fabrication_constraints.as_ref()
             .map(|c| c.trace.min_spacing_nm)
@@ -275,8 +324,45 @@ pub fn place_contact(
             };
 
             let pad_diameter_nm = diameter_nm + (2 * min_annular_ring_nm);
-            let plating_thickness_nm = 25_000; // Standard 1-mil plating
+            let plating_thickness_nm = if let Some(pt) = &contact.plating_thickness {
+                crate::ir::conversions::measurement_to_nm(pt, symbol_table)
+            } else {
+                25_000 // Standard 1-mil plating
+            };
             let inner_diameter_nm = diameter_nm - (2 * plating_thickness_nm);
+
+            let bottom_diameter_nm = contact.bottom_diameter.as_ref()
+                .map(|d| crate::ir::conversions::measurement_to_nm(d, symbol_table));
+
+            // Determine Cap Types (v0.1.7 Unified Parametric Interconnect)
+            // 1. Check explicit top/bottom caps (User/Stdlib Space)
+            // 2. Fallback to legacy 'caps' boolean
+            // 3. Default to Annular
+            let top_cap = match contact.top_cap {
+                Some(hwc_parser::CapType::None) => hwc_engine::voxel_grid::CapType::None,
+                Some(hwc_parser::CapType::Annular) => hwc_engine::voxel_grid::CapType::Annular,
+                Some(hwc_parser::CapType::Solid) => hwc_engine::voxel_grid::CapType::Solid,
+                None => {
+                    if contact.caps.unwrap_or(true) {
+                        hwc_engine::voxel_grid::CapType::Annular
+                    } else {
+                        hwc_engine::voxel_grid::CapType::None
+                    }
+                }
+            };
+
+            let bottom_cap = match contact.bottom_cap {
+                Some(hwc_parser::CapType::None) => hwc_engine::voxel_grid::CapType::None,
+                Some(hwc_parser::CapType::Annular) => hwc_engine::voxel_grid::CapType::Annular,
+                Some(hwc_parser::CapType::Solid) => hwc_engine::voxel_grid::CapType::Solid,
+                None => {
+                    if contact.caps.unwrap_or(true) {
+                        hwc_engine::voxel_grid::CapType::Annular
+                    } else {
+                        hwc_engine::voxel_grid::CapType::None
+                    }
+                }
+            };
 
             // 4. ACTION: Add ONE Unified Via Layer (Tube + Flanges)
             space.voxel_grid.add_tube_substrate_layer(
@@ -287,7 +373,9 @@ pub fn place_contact(
                 inner_diameter_nm as u32, // Void Hole Dia
                 pad_diameter_nm as u32,   // Flange/Pad Dia
                 64,                       // segments
-                contact.caps.unwrap_or(true)
+                top_cap,
+                bottom_cap,
+                bottom_diameter_nm.map(|d| d as u32),
             );
         } else if process == hwc_engine::ManufacturingProcess::Etched {
             // v0.1.7: Mechanical/Subtractive Logic
