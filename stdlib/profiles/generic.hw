@@ -50,8 +50,8 @@ profile Generic:
     ## ========================================================================
     
     trace:
-        min_width: 200µm                      # Conservative 8mil traces
-        min_spacing: 200µm                    # Conservative 8mil spacing
+        min_width: 0.2mm                      # Conservative 8mil traces
+        min_spacing: 0.2mm                    # Conservative 8mil spacing
         max_width: 10mm                       # Power planes
         max_length: 1m                        # Reasonable board size
     
@@ -60,10 +60,9 @@ profile Generic:
     ## ========================================================================
     
     via:
-        min_diameter: 400µm                   # Conservative via size
-        min_annular_ring: 200µm               # Large annular ring
+        min_diameter: 0.4mm                   # Conservative via size
+        min_annular_ring: 0.2mm               # Large annular ring
         max_aspect_ratio: 10                  # Depth/diameter ratio
-        default_via_fill: Generic_Via_Fill    # Default fill material
 
     ## ========================================================================
     ## EXPLICIT VIA DEFINITIONS (v0.1.7)
@@ -80,7 +79,7 @@ profile Generic:
         annular_ring: 0.15mm
         spanning: layer: bottom to top
         material: Copper
-    
+
     ## ========================================================================
     ## CLEARANCE CONSTRAINTS
     ## ========================================================================
@@ -88,9 +87,6 @@ profile Generic:
     clearance:
         high_voltage: 3mm                     # Conservative HV clearance
         safety_factor: 2.5                    # Extra safety margin
-        low_voltage_threshold: 50V
-        medium_voltage_threshold: 150V
-        high_voltage_threshold: 300V
     
     ## ========================================================================
     ## THERMAL CONSTRAINTS
@@ -107,28 +103,24 @@ profile Generic:
     ## ========================================================================
     
     manufacturing:
-        copper_thickness: 35µm                # 1oz copper
+        copper_thickness: 35um                # 1oz copper
         ipc2221_k_external: 0.048             # IPC-2221 constants
         ipc2221_k_internal: 0.024
-        min_feature_size: 100µm               # Conservative minimum
     
     ## ========================================================================
-    ## STACKUP DEFINITION
+    ## STACKUP DEFINITION (v0.1.7)
     ## ========================================================================
     
     stackup:
-        dielectric_height: 200µm              # Inter-layer spacing
-        dielectric_material: "FR4"            # Standard PCB material
-        copper_thickness: 35µm                # 1oz copper
-        default_impedance: 50.0               # Standard impedance
+        top:    [material: Copper, thickness: 35um]
+        core:   [material: FR4,    thickness: 1.5mm]
+        bottom: [material: Copper, thickness: 35um]
     
     ## ========================================================================
     ## BRIDGE RULES - Material Transition Mappings
     ## ========================================================================
     
     ## Silicon-to-Metal Bridges (IC Fabrication)
-    ## Used when routing from silicon layers to metal layers
-    
     bridge Silicon to Metal:
         interface: Generic_Silicide
         thickness: 50nm
@@ -160,8 +152,6 @@ profile Generic:
         fill: Generic_Via_Fill
     
     ## Metal-to-Metal Bridges (Inter-layer Vias)
-    ## Used for standard via connections between metal layers
-    
     bridge Metal to Metal:
         interface: Generic_Barrier
         thickness: 20nm
@@ -183,44 +173,38 @@ profile Generic:
         fill: Tungsten
     
     ## Die-to-Die Bridges (3D Integration)
-    ## Used for chiplet interconnects and 3D stacking
-    
     bridge Die to Die:
         interface: Generic_Gold_Bump
-        thickness: 5µm
+        thickness: 5um
         fill: Gold
     
     bridge Silicon to Silicon:
         interface: Generic_Gold_Bump
-        thickness: 5µm
+        thickness: 5um
         fill: Gold
     
     bridge Chip to Chip:
         interface: Generic_Gold_Bump
-        thickness: 5µm
+        thickness: 5um
         fill: Gold
     
     ## PCB-to-Component Bridges (Board Assembly)
-    ## Used for component mounting and through-hole connections
-    
     bridge PCB to Component:
         interface: Generic_Solder
-        thickness: 100µm
+        thickness: 100um
         fill: Generic_Solder
     
     bridge Copper to Pad:
         interface: Generic_Solder
-        thickness: 100µm
+        thickness: 100um
         fill: Generic_Solder
     
     bridge Trace to Pin:
         interface: Generic_Solder
-        thickness: 100µm
+        thickness: 100um
         fill: Generic_Solder
     
     ## Substrate Bridges (Backside Connections)
-    ## Used for substrate contacts and backside metallization
-    
     bridge Silicon to Substrate:
         interface: Generic_Silicide
         thickness: 100nm
@@ -228,7 +212,7 @@ profile Generic:
     
     bridge Die to Package:
         interface: Generic_Solder
-        thickness: 50µm
+        thickness: 50um
         fill: Generic_Solder
 
 ## ============================================================================
@@ -240,7 +224,7 @@ profile Generic_IC:
     
     layer:
         max_count: 10                         # More metal layers for ICs
-        min_thickness: 500µm                  # Silicon wafer
+        min_thickness: 500um                  # Silicon wafer
     
     trace:
         min_width: 100nm                      # Nanometer-scale features
@@ -249,12 +233,11 @@ profile Generic_IC:
     via:
         min_diameter: 200nm                   # Nanoscale vias
         min_annular_ring: 50nm
-        default_via_fill: Tungsten            # Standard IC via fill
-    
-    manufacturing:
-        min_feature_size: 100nm               # Sub-micron features
-    
-    ## IC-specific bridge rules
+
+    stackup:
+        m1: [material: Aluminum, thickness: 500nm]
+        d1: [material: SiliconDioxide, thickness: 1um]
+        si: [material: Silicon, thickness: 500um]
     
     bridge Silicon_N to Copper:
         interface: Cobalt_Silicide
@@ -284,37 +267,34 @@ profile Generic_PCB:
         min_thickness: 1.6mm
     
     trace:
-        min_width: 200µm                      # 8mil traces
-        min_spacing: 200µm
+        min_width: 0.2mm                      # 8mil traces
+        min_spacing: 0.2mm
     
     via:
-        min_diameter: 400µm
-        min_annular_ring: 200µm
-        default_via_fill: Copper              # Plated through-hole
+        min_diameter: 0.4mm
+        min_annular_ring: 0.2mm
     
     manufacturing:
-        copper_thickness: 35µm                # 1oz copper
-        min_feature_size: 200µm
+        copper_thickness: 35um                # 1oz copper
     
     stackup:
-        dielectric_material: "FR4"
-        copper_thickness: 35µm
-    
-    ## PCB-specific bridge rules
+        top: [material: Copper, thickness: 35um]
+        core: [material: FR4, thickness: 1.5mm]
+        bottom: [material: Copper, thickness: 35um]
     
     bridge Copper to Copper:
         interface: Copper                     # Direct plating
-        thickness: 35µm
+        thickness: 35um
         fill: Copper
     
     bridge Copper to Pad:
         interface: SAC305_Solder
-        thickness: 100µm
+        thickness: 100um
         fill: SAC305_Solder
     
     bridge Trace to Component:
         interface: SAC305_Solder
-        thickness: 100µm
+        thickness: 100um
         fill: SAC305_Solder
 
 profile Generic_3D:
@@ -322,27 +302,26 @@ profile Generic_3D:
     
     layer:
         max_count: 20                         # Multiple die stacks
-        min_thickness: 50µm                   # Thinned silicon
+        min_thickness: 50um                   # Thinned silicon
     
     via:
-        min_diameter: 5µm                     # TSV diameter
-        min_annular_ring: 2µm
+        min_diameter: 5um                     # TSV diameter
+        min_annular_ring: 2um
         max_aspect_ratio: 20                  # High aspect ratio TSVs
-        default_via_fill: Copper              # TSV fill
     
-    manufacturing:
-        min_feature_size: 1µm                 # TSV features
-    
-    ## 3D-specific bridge rules
-    
+    stackup:
+        top: [material: Gold, thickness: 5um]
+        si: [material: Silicon, thickness: 50um]
+        bottom: [material: Gold, thickness: 5um]
+
     bridge Silicon to Silicon:
         interface: Micro_Bump
-        thickness: 15µm
+        thickness: 15um
         fill: Copper
     
     bridge Die to Die:
         interface: Micro_Bump
-        thickness: 15µm
+        thickness: 15um
         fill: Copper
     
     bridge TSV to Metal:
@@ -355,133 +334,26 @@ profile Generic_Package:
     
     layer:
         max_count: 4                          # Package substrate
-        min_thickness: 400µm
+        min_thickness: 400um
     
     via:
-        min_diameter: 100µm
-        min_annular_ring: 50µm
-        default_via_fill: Copper
-    
-    ## Package-specific bridge rules
+        min_diameter: 100um
+        min_annular_ring: 50um
     
     bridge Die to Package:
         interface: Copper_Pillar
-        thickness: 60µm
+        thickness: 60um
         fill: Copper
     
     bridge Package to PCB:
         interface: SAC305_Solder
-        thickness: 500µm                      # BGA ball height
+        thickness: 500um                      # BGA ball height
         fill: SAC305_Solder
     
     bridge Chip to Substrate:
         interface: Copper_Pillar
-        thickness: 60µm
+        thickness: 60um
         fill: Copper
-
-## ============================================================================
-## MATERIAL ALIASES - Convenience Names
-## ============================================================================
-
-#[
-Material aliases allow users to use common names that map to specific materials.
-This improves code readability and matches industry terminology.
-
-Example:
-    bridge Silicon to M1:  # M1 is aliased to Copper
-        interface: Cobalt_Silicide
-]#
-
-material_alias M1: Copper
-material_alias M2: Copper
-material_alias M3: Copper
-material_alias M4: Copper
-material_alias M5: Copper
-material_alias M6: Copper
-material_alias M7: Aluminum
-material_alias M8: Aluminum
-
-material_alias Metal1: Copper
-material_alias Metal2: Copper
-material_alias Metal3: Copper
-material_alias Metal4: Copper
-
-material_alias Poly: Polysilicon
-material_alias Gate: Polysilicon
-
-material_alias N_Plus: Silicon_N
-material_alias P_Plus: Silicon_P
-material_alias N_Well: Silicon_N
-material_alias P_Well: Silicon_P
-
-material_alias Via_Fill: Generic_Via_Fill
-material_alias Contact_Fill: Tungsten
-
-material_alias Solder: SAC305_Solder
-material_alias Lead_Free: SAC305_Solder
-material_alias Leaded: SnPb_Eutectic
-
-material_alias Bump: Generic_Gold_Bump
-material_alias C4: Solder_Bump_C4
-
-## ============================================================================
-## USAGE EXAMPLES
-## ============================================================================
-
-#[
-EXAMPLE 1: Basic IC Routing (Router Level - Automatic)
-
-import @std/profiles/generic
-
-space my_chip:
-    route M1.source to GND
-    # Compiler automatically:
-    # 1. Detects Silicon → Copper transition
-    # 2. Looks up: bridge Silicon to Copper
-    # 3. Inserts Generic_Silicide (50nm) + Tungsten fill
-
-EXAMPLE 2: Manual Assembly (Assembly Level - Explicit)
-
-import @std/profiles/generic
-
-space my_chip:
-    add pour(Silicon_N) on z:1
-    
-    # User MUST explicitly add bridge
-    add contact(Generic_Silicide) at [50µm, 50µm] spanning z:2 to z:2:
-        diameter: 500nm
-    
-    add contact(Tungsten) at [50µm, 50µm] spanning z:3 to z:5:
-        diameter: 500nm
-    
-    add pour(Copper) on z:6
-
-EXAMPLE 3: Override Bridge Material
-
-import @std/profiles/generic
-
-space my_chip:
-    route M1.source to GND:
-        bridge: Cobalt_Silicide  # Override Generic_Silicide
-
-EXAMPLE 4: PCB Assembly
-
-import @std/profiles/generic_pcb
-
-space my_board:
-    route power_trace to component_pad
-    # Uses SAC305_Solder bridge automatically
-
-EXAMPLE 5: 3D Chiplet
-
-import @std/profiles/generic_3d
-
-space my_chiplet:
-    route die1.signal to die2.signal
-    # Uses Micro_Bump bridge automatically
-
-See: BRIDGE-IMPLEMENTATION.md Section 9 (User Experience Examples)
-]#
 
 ## ============================================================================
 ## END OF GENERIC PROFILE

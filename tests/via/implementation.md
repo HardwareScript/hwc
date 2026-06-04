@@ -61,11 +61,13 @@ This document tracks the implementation and testing of 3D via modeling and their
     - **Unified Manifold**: This ensures traces and via pads are welded into a single, continuous 3D mesh, eliminating Z-fighting and mesh overlaps.
   - *Engine Parameters:* `offset_distance`, `rotation_angle`.
 
-- [ ] **7. Filled and Capped Via (Via-in-Pad / VIPPO)**
+- [x] **7. Filled and Capped Via (Via-in-Pad / VIPPO)**
   - *What it is:* A via positioned directly inside a component landing pad. To prevent solder from flowing down the hole, it is filled and capped.
   - *3D Representation:*
     - A solid cylinder (instead of hollow) representing the fill material (conductive/non-conductive epoxy).
     - Flat, solid copper disks (caps) on the outer layers that completely seal the cylinder ends, making them perfectly flush with the landing pad.
+  - *Engine Implementation:*
+    - **Unified Parametric Interconnect**: Exporter now correctly honors `top_cap` and `bottom_cap` from the IR.
   - *Engine Parameters:* `fill_material_color`, `cap_thickness`.
 
 ## List 2: Vias in Relation to the Substrate (Interactions & Clearances)

@@ -72,17 +72,13 @@ pub fn profile_to_constraints(
         .manufacturing
         .as_ref()
         .and_then(|m| m.ipc2221_k_external)
-        .ok_or_else(|| {
-            ConversionError::MissingProfileConstraint("manufacturing.ipc2221_k_external".into())
-        })?;
+        .unwrap_or(0.048); // IPC-2221 default for external layers
 
     let _ipc2221_k_internal = profile
         .manufacturing
         .as_ref()
         .and_then(|m| m.ipc2221_k_internal)
-        .ok_or_else(|| {
-            ConversionError::MissingProfileConstraint("manufacturing.ipc2221_k_internal".into())
-        })?;
+        .unwrap_or(0.024); // IPC-2221 default for internal layers
 
     // Extract voltage classification thresholds
     let _low_voltage_threshold_v = profile

@@ -44,10 +44,18 @@ profile TSMC_180nm:
         ipc2221_k_internal: 0.012
     
     stackup:
-        dielectric_height: 1µm
-        dielectric_material: "SiO2"
-        copper_thickness: 500nm
-        default_impedance: 50.0
+        m1: [material: Copper, thickness: 500nm]
+        d1: [material: SiO2,   thickness: 1µm]
+        m2: [material: Copper, thickness: 500nm]
+        d2: [material: SiO2,   thickness: 1µm]
+        m3: [material: Copper, thickness: 500nm]
+        d3: [material: SiO2,   thickness: 1µm]
+        m4: [material: Copper, thickness: 500nm]
+        d4: [material: SiO2,   thickness: 1µm]
+        m5: [material: Copper, thickness: 500nm]
+        d5: [material: SiO2,   thickness: 1µm]
+        m6: [material: Copper, thickness: 500nm]
+        si: [material: Silicon, thickness: 10µm]
 
 profile TSMC_90nm:
     description: "TSMC 90nm process (legacy node, cost-effective)"
@@ -82,10 +90,22 @@ profile TSMC_90nm:
         ipc2221_k_internal: 0.012
     
     stackup:
-        dielectric_height: 500nm
-        dielectric_material: "SiO2"
-        copper_thickness: 300nm
-        default_impedance: 50.0
+        m1: [material: Copper, thickness: 300nm]
+        d1: [material: SiO2,   thickness: 500nm]
+        m2: [material: Copper, thickness: 300nm]
+        d2: [material: SiO2,   thickness: 500nm]
+        m3: [material: Copper, thickness: 300nm]
+        d3: [material: SiO2,   thickness: 500nm]
+        m4: [material: Copper, thickness: 300nm]
+        d4: [material: SiO2,   thickness: 500nm]
+        m5: [material: Copper, thickness: 300nm]
+        d5: [material: SiO2,   thickness: 500nm]
+        m6: [material: Copper, thickness: 300nm]
+        d6: [material: SiO2,   thickness: 500nm]
+        m7: [material: Copper, thickness: 300nm]
+        d7: [material: SiO2,   thickness: 500nm]
+        m8: [material: Copper, thickness: 300nm]
+        si: [material: Silicon, thickness: 8µm]
 
 profile TSMC_28nm:
     description: "TSMC 28nm process (mainstream node, mobile/embedded)"
@@ -120,10 +140,26 @@ profile TSMC_28nm:
         ipc2221_k_internal: 0.012
     
     stackup:
-        dielectric_height: 200nm
-        dielectric_material: "Low_k_Dielectric"
-        copper_thickness: 150nm
-        default_impedance: 50.0
+        m1:  [material: Copper, thickness: 150nm]
+        d1:  [material: SiO2,   thickness: 200nm]
+        m2:  [material: Copper, thickness: 150nm]
+        d2:  [material: SiO2,   thickness: 200nm]
+        m3:  [material: Copper, thickness: 150nm]
+        d3:  [material: SiO2,   thickness: 200nm]
+        m4:  [material: Copper, thickness: 150nm]
+        d4:  [material: SiO2,   thickness: 200nm]
+        m5:  [material: Copper, thickness: 150nm]
+        d5:  [material: SiO2,   thickness: 200nm]
+        m6:  [material: Copper, thickness: 150nm]
+        d6:  [material: SiO2,   thickness: 200nm]
+        m7:  [material: Copper, thickness: 150nm]
+        d7:  [material: SiO2,   thickness: 200nm]
+        m8:  [material: Copper, thickness: 150nm]
+        d8:  [material: SiO2,   thickness: 200nm]
+        m9:  [material: Copper, thickness: 150nm]
+        d9:  [material: SiO2,   thickness: 200nm]
+        m10: [material: Copper, thickness: 150nm]
+        si:  [material: Silicon, thickness: 5µm]
 
 profile TSMC_16nm_FinFET:
     description: "TSMC 16nm FinFET process (high-performance computing)"
@@ -158,10 +194,30 @@ profile TSMC_16nm_FinFET:
         ipc2221_k_internal: 0.012
     
     stackup:
-        dielectric_height: 100nm
-        dielectric_material: "Low_k_Dielectric"
-        copper_thickness: 100nm
-        default_impedance: 50.0
+        m1:  [material: Copper, thickness: 100nm]
+        d1:  [material: SiO2,   thickness: 100nm]
+        m2:  [material: Copper, thickness: 100nm]
+        d2:  [material: SiO2,   thickness: 100nm]
+        m3:  [material: Copper, thickness: 100nm]
+        d3:  [material: SiO2,   thickness: 100nm]
+        m4:  [material: Copper, thickness: 100nm]
+        d4:  [material: SiO2,   thickness: 100nm]
+        m5:  [material: Copper, thickness: 100nm]
+        d5:  [material: SiO2,   thickness: 100nm]
+        m6:  [material: Copper, thickness: 100nm]
+        d6:  [material: SiO2,   thickness: 100nm]
+        m7:  [material: Copper, thickness: 100nm]
+        d7:  [material: SiO2,   thickness: 100nm]
+        m8:  [material: Copper, thickness: 100nm]
+        d8:  [material: SiO2,   thickness: 100nm]
+        m9:  [material: Copper, thickness: 100nm]
+        d9:  [material: SiO2,   thickness: 100nm]
+        m10: [material: Copper, thickness: 100nm]
+        d10: [material: SiO2,   thickness: 100nm]
+        m11: [material: Copper, thickness: 100nm]
+        d11: [material: SiO2,   thickness: 100nm]
+        m12: [material: Copper, thickness: 100nm]
+        si:  [material: Silicon, thickness: 3µm]
 
 profile TSMC_7nm:
     description: "TSMC 7nm process (cutting-edge, smartphone SoCs)"
@@ -196,10 +252,36 @@ profile TSMC_7nm:
         ipc2221_k_internal: 0.012
     
     stackup:
-        dielectric_height: 50nm
-        dielectric_material: "Ultra_Low_k"
-        copper_thickness: 50nm
-        default_impedance: 50.0
+        m1:  [material: Copper, thickness: 50nm]
+        d1:  [material: SiO2,   thickness: 50nm]
+        m2:  [material: Copper, thickness: 50nm]
+        d2:  [material: SiO2,   thickness: 50nm]
+        m3:  [material: Copper, thickness: 50nm]
+        d3:  [material: SiO2,   thickness: 50nm]
+        m4:  [material: Copper, thickness: 50nm]
+        d4:  [material: SiO2,   thickness: 50nm]
+        m5:  [material: Copper, thickness: 50nm]
+        d5:  [material: SiO2,   thickness: 50nm]
+        m6:  [material: Copper, thickness: 50nm]
+        d6:  [material: SiO2,   thickness: 50nm]
+        m7:  [material: Copper, thickness: 50nm]
+        d7:  [material: SiO2,   thickness: 50nm]
+        m8:  [material: Copper, thickness: 50nm]
+        d8:  [material: SiO2,   thickness: 50nm]
+        m9:  [material: Copper, thickness: 50nm]
+        d9:  [material: SiO2,   thickness: 50nm]
+        m10: [material: Copper, thickness: 50nm]
+        d10: [material: SiO2,   thickness: 50nm]
+        m11: [material: Copper, thickness: 50nm]
+        d11: [material: SiO2,   thickness: 50nm]
+        m12: [material: Copper, thickness: 50nm]
+        d12: [material: SiO2,   thickness: 50nm]
+        m13: [material: Copper, thickness: 50nm]
+        d13: [material: SiO2,   thickness: 50nm]
+        m14: [material: Copper, thickness: 50nm]
+        d14: [material: SiO2,   thickness: 50nm]
+        m15: [material: Copper, thickness: 50nm]
+        si:  [material: Silicon, thickness: 2µm]
 
 profile TSMC_5nm:
     description: "TSMC 5nm process (extreme UV lithography, flagship chips)"
@@ -234,10 +316,36 @@ profile TSMC_5nm:
         ipc2221_k_internal: 0.012
     
     stackup:
-        dielectric_height: 30nm
-        dielectric_material: "Ultra_Low_k"
-        copper_thickness: 30nm
-        default_impedance: 50.0
+        m1:  [material: Copper, thickness: 30nm]
+        d1:  [material: SiO2,   thickness: 30nm]
+        m2:  [material: Copper, thickness: 30nm]
+        d2:  [material: SiO2,   thickness: 30nm]
+        m3:  [material: Copper, thickness: 30nm]
+        d3:  [material: SiO2,   thickness: 30nm]
+        m4:  [material: Copper, thickness: 30nm]
+        d4:  [material: SiO2,   thickness: 30nm]
+        m5:  [material: Copper, thickness: 30nm]
+        d5:  [material: SiO2,   thickness: 30nm]
+        m6:  [material: Copper, thickness: 30nm]
+        d6:  [material: SiO2,   thickness: 30nm]
+        m7:  [material: Copper, thickness: 30nm]
+        d7:  [material: SiO2,   thickness: 30nm]
+        m8:  [material: Copper, thickness: 30nm]
+        d8:  [material: SiO2,   thickness: 30nm]
+        m9:  [material: Copper, thickness: 30nm]
+        d9:  [material: SiO2,   thickness: 30nm]
+        m10: [material: Copper, thickness: 30nm]
+        d10: [material: SiO2,   thickness: 30nm]
+        m11: [material: Copper, thickness: 30nm]
+        d11: [material: SiO2,   thickness: 30nm]
+        m12: [material: Copper, thickness: 30nm]
+        d12: [material: SiO2,   thickness: 30nm]
+        m13: [material: Copper, thickness: 30nm]
+        d13: [material: SiO2,   thickness: 30nm]
+        m14: [material: Copper, thickness: 30nm]
+        d14: [material: SiO2,   thickness: 30nm]
+        m15: [material: Copper, thickness: 30nm]
+        si:  [material: Silicon, thickness: 1.5µm]
 
 profile TSMC_3nm:
     description: "TSMC 3nm process (next-gen, extreme density)"
@@ -272,10 +380,42 @@ profile TSMC_3nm:
         ipc2221_k_internal: 0.012
     
     stackup:
-        dielectric_height: 20nm
-        dielectric_material: "Ultra_Low_k"
-        copper_thickness: 20nm
-        default_impedance: 50.0
+        m1:  [material: Copper, thickness: 20nm]
+        d1:  [material: SiO2,   thickness: 20nm]
+        m2:  [material: Copper, thickness: 20nm]
+        d2:  [material: SiO2,   thickness: 20nm]
+        m3:  [material: Copper, thickness: 20nm]
+        d3:  [material: SiO2,   thickness: 20nm]
+        m4:  [material: Copper, thickness: 20nm]
+        d4:  [material: SiO2,   thickness: 20nm]
+        m5:  [material: Copper, thickness: 20nm]
+        d5:  [material: SiO2,   thickness: 20nm]
+        m6:  [material: Copper, thickness: 20nm]
+        d6:  [material: SiO2,   thickness: 20nm]
+        m7:  [material: Copper, thickness: 20nm]
+        d7:  [material: SiO2,   thickness: 20nm]
+        m8:  [material: Copper, thickness: 20nm]
+        d8:  [material: SiO2,   thickness: 20nm]
+        m9:  [material: Copper, thickness: 20nm]
+        d9:  [material: SiO2,   thickness: 20nm]
+        m10: [material: Copper, thickness: 20nm]
+        d10: [material: SiO2,   thickness: 20nm]
+        m11: [material: Copper, thickness: 20nm]
+        d11: [material: SiO2,   thickness: 20nm]
+        m12: [material: Copper, thickness: 20nm]
+        d12: [material: SiO2,   thickness: 20nm]
+        m13: [material: Copper, thickness: 20nm]
+        d13: [material: SiO2,   thickness: 20nm]
+        m14: [material: Copper, thickness: 20nm]
+        d14: [material: SiO2,   thickness: 20nm]
+        m15: [material: Copper, thickness: 20nm]
+        d15: [material: SiO2,   thickness: 20nm]
+        m16: [material: Copper, thickness: 20nm]
+        d16: [material: SiO2,   thickness: 20nm]
+        m17: [material: Copper, thickness: 20nm]
+        d17: [material: SiO2,   thickness: 20nm]
+        m18: [material: Copper, thickness: 20nm]
+        si:  [material: Silicon, thickness: 1µm]
 
 # ============================================================================
 # Intel Process Nodes
@@ -314,10 +454,28 @@ profile Intel_22nm:
         ipc2221_k_internal: 0.012
     
     stackup:
-        dielectric_height: 120nm
-        dielectric_material: "Low_k_Dielectric"
-        copper_thickness: 120nm
-        default_impedance: 50.0
+        m1:  [material: Copper, thickness: 120nm]
+        d1:  [material: SiO2,   thickness: 120nm]
+        m2:  [material: Copper, thickness: 120nm]
+        d2:  [material: SiO2,   thickness: 120nm]
+        m3:  [material: Copper, thickness: 120nm]
+        d3:  [material: SiO2,   thickness: 120nm]
+        m4:  [material: Copper, thickness: 120nm]
+        d4:  [material: SiO2,   thickness: 120nm]
+        m5:  [material: Copper, thickness: 120nm]
+        d5:  [material: SiO2,   thickness: 120nm]
+        m6:  [material: Copper, thickness: 120nm]
+        d6:  [material: SiO2,   thickness: 120nm]
+        m7:  [material: Copper, thickness: 120nm]
+        d7:  [material: SiO2,   thickness: 120nm]
+        m8:  [material: Copper, thickness: 120nm]
+        d8:  [material: SiO2,   thickness: 120nm]
+        m9:  [material: Copper, thickness: 120nm]
+        d9:  [material: SiO2,   thickness: 120nm]
+        m10: [material: Copper, thickness: 120nm]
+        d10: [material: SiO2,   thickness: 120nm]
+        m11: [material: Copper, thickness: 120nm]
+        si:  [material: Silicon, thickness: 4µm]
 
 profile Intel_10nm:
     description: "Intel 10nm process (high-density logic)"
@@ -352,10 +510,32 @@ profile Intel_10nm:
         ipc2221_k_internal: 0.012
     
     stackup:
-        dielectric_height: 60nm
-        dielectric_material: "Ultra_Low_k"
-        copper_thickness: 60nm
-        default_impedance: 50.0
+        m1:  [material: Copper, thickness: 60nm]
+        d1:  [material: SiO2,   thickness: 60nm]
+        m2:  [material: Copper, thickness: 60nm]
+        d2:  [material: SiO2,   thickness: 60nm]
+        m3:  [material: Copper, thickness: 60nm]
+        d3:  [material: SiO2,   thickness: 60nm]
+        m4:  [material: Copper, thickness: 60nm]
+        d4:  [material: SiO2,   thickness: 60nm]
+        m5:  [material: Copper, thickness: 60nm]
+        d5:  [material: SiO2,   thickness: 60nm]
+        m6:  [material: Copper, thickness: 60nm]
+        d6:  [material: SiO2,   thickness: 60nm]
+        m7:  [material: Copper, thickness: 60nm]
+        d7:  [material: SiO2,   thickness: 60nm]
+        m8:  [material: Copper, thickness: 60nm]
+        d8:  [material: SiO2,   thickness: 60nm]
+        m9:  [material: Copper, thickness: 60nm]
+        d9:  [material: SiO2,   thickness: 60nm]
+        m10: [material: Copper, thickness: 60nm]
+        d10: [material: SiO2,   thickness: 60nm]
+        m11: [material: Copper, thickness: 60nm]
+        d11: [material: SiO2,   thickness: 60nm]
+        m12: [material: Copper, thickness: 60nm]
+        d12: [material: SiO2,   thickness: 60nm]
+        m13: [material: Copper, thickness: 60nm]
+        si:  [material: Silicon, thickness: 2.5µm]
 
 profile Intel_7nm:
     description: "Intel 7nm process (renamed Intel 4)"
@@ -390,10 +570,36 @@ profile Intel_7nm:
         ipc2221_k_internal: 0.012
     
     stackup:
-        dielectric_height: 50nm
-        dielectric_material: "Ultra_Low_k"
-        copper_thickness: 50nm
-        default_impedance: 50.0
+        m1:  [material: Copper, thickness: 50nm]
+        d1:  [material: SiO2,   thickness: 50nm]
+        m2:  [material: Copper, thickness: 50nm]
+        d2:  [material: SiO2,   thickness: 50nm]
+        m3:  [material: Copper, thickness: 50nm]
+        d3:  [material: SiO2,   thickness: 50nm]
+        m4:  [material: Copper, thickness: 50nm]
+        d4:  [material: SiO2,   thickness: 50nm]
+        m5:  [material: Copper, thickness: 50nm]
+        d5:  [material: SiO2,   thickness: 50nm]
+        m6:  [material: Copper, thickness: 50nm]
+        d6:  [material: SiO2,   thickness: 50nm]
+        m7:  [material: Copper, thickness: 50nm]
+        d7:  [material: SiO2,   thickness: 50nm]
+        m8:  [material: Copper, thickness: 50nm]
+        d8:  [material: SiO2,   thickness: 50nm]
+        m9:  [material: Copper, thickness: 50nm]
+        d9:  [material: SiO2,   thickness: 50nm]
+        m10: [material: Copper, thickness: 50nm]
+        d10: [material: SiO2,   thickness: 50nm]
+        m11: [material: Copper, thickness: 50nm]
+        d11: [material: SiO2,   thickness: 50nm]
+        m12: [material: Copper, thickness: 50nm]
+        d12: [material: SiO2,   thickness: 50nm]
+        m13: [material: Copper, thickness: 50nm]
+        d13: [material: SiO2,   thickness: 50nm]
+        m14: [material: Copper, thickness: 50nm]
+        d14: [material: SiO2,   thickness: 50nm]
+        m15: [material: Copper, thickness: 50nm]
+        si:  [material: Silicon, thickness: 2µm]
 
 # ============================================================================
 # Samsung Process Nodes
@@ -432,10 +638,30 @@ profile Samsung_14nm:
         ipc2221_k_internal: 0.012
     
     stackup:
-        dielectric_height: 80nm
-        dielectric_material: "Low_k_Dielectric"
-        copper_thickness: 80nm
-        default_impedance: 50.0
+        m1:  [material: Copper, thickness: 80nm]
+        d1:  [material: SiO2,   thickness: 80nm]
+        m2:  [material: Copper, thickness: 80nm]
+        d2:  [material: SiO2,   thickness: 80nm]
+        m3:  [material: Copper, thickness: 80nm]
+        d3:  [material: SiO2,   thickness: 80nm]
+        m4:  [material: Copper, thickness: 80nm]
+        d4:  [material: SiO2,   thickness: 80nm]
+        m5:  [material: Copper, thickness: 80nm]
+        d5:  [material: SiO2,   thickness: 80nm]
+        m6:  [material: Copper, thickness: 80nm]
+        d6:  [material: SiO2,   thickness: 80nm]
+        m7:  [material: Copper, thickness: 80nm]
+        d7:  [material: SiO2,   thickness: 80nm]
+        m8:  [material: Copper, thickness: 80nm]
+        d8:  [material: SiO2,   thickness: 80nm]
+        m9:  [material: Copper, thickness: 80nm]
+        d9:  [material: SiO2,   thickness: 80nm]
+        m10: [material: Copper, thickness: 80nm]
+        d10: [material: SiO2,   thickness: 80nm]
+        m11: [material: Copper, thickness: 80nm]
+        d11: [material: SiO2,   thickness: 80nm]
+        m12: [material: Copper, thickness: 80nm]
+        si:  [material: Silicon, thickness: 3µm]
 
 profile Samsung_5nm:
     description: "Samsung 5nm process (EUV lithography)"
@@ -470,10 +696,36 @@ profile Samsung_5nm:
         ipc2221_k_internal: 0.012
     
     stackup:
-        dielectric_height: 30nm
-        dielectric_material: "Ultra_Low_k"
-        copper_thickness: 30nm
-        default_impedance: 50.0
+        m1:  [material: Copper, thickness: 30nm]
+        d1:  [material: SiO2,   thickness: 30nm]
+        m2:  [material: Copper, thickness: 30nm]
+        d2:  [material: SiO2,   thickness: 30nm]
+        m3:  [material: Copper, thickness: 30nm]
+        d3:  [material: SiO2,   thickness: 30nm]
+        m4:  [material: Copper, thickness: 30nm]
+        d4:  [material: SiO2,   thickness: 30nm]
+        m5:  [material: Copper, thickness: 30nm]
+        d5:  [material: SiO2,   thickness: 30nm]
+        m6:  [material: Copper, thickness: 30nm]
+        d6:  [material: SiO2,   thickness: 30nm]
+        m7:  [material: Copper, thickness: 30nm]
+        d7:  [material: SiO2,   thickness: 30nm]
+        m8:  [material: Copper, thickness: 30nm]
+        d8:  [material: SiO2,   thickness: 30nm]
+        m9:  [material: Copper, thickness: 30nm]
+        d9:  [material: SiO2,   thickness: 30nm]
+        m10: [material: Copper, thickness: 30nm]
+        d10: [material: SiO2,   thickness: 30nm]
+        m11: [material: Copper, thickness: 30nm]
+        d11: [material: SiO2,   thickness: 30nm]
+        m12: [material: Copper, thickness: 30nm]
+        d12: [material: SiO2,   thickness: 30nm]
+        m13: [material: Copper, thickness: 30nm]
+        d13: [material: SiO2,   thickness: 30nm]
+        m14: [material: Copper, thickness: 30nm]
+        d14: [material: SiO2,   thickness: 30nm]
+        m15: [material: Copper, thickness: 30nm]
+        si:  [material: Silicon, thickness: 1.5µm]
 
 # ============================================================================
 # Extreme Stress Test Profiles
@@ -512,10 +764,46 @@ profile Silicon_Extreme_1nm:
         ipc2221_k_internal: 0.012
     
     stackup:
-        dielectric_height: 10nm
-        dielectric_material: "Ultra_Low_k"
-        copper_thickness: 10nm
-        default_impedance: 50.0
+        m1:  [material: Copper, thickness: 10nm]
+        d1:  [material: SiO2,   thickness: 10nm]
+        m2:  [material: Copper, thickness: 10nm]
+        d2:  [material: SiO2,   thickness: 10nm]
+        m3:  [material: Copper, thickness: 10nm]
+        d3:  [material: SiO2,   thickness: 10nm]
+        m4:  [material: Copper, thickness: 10nm]
+        d4:  [material: SiO2,   thickness: 10nm]
+        m5:  [material: Copper, thickness: 10nm]
+        d5:  [material: SiO2,   thickness: 10nm]
+        m6:  [material: Copper, thickness: 10nm]
+        d6:  [material: SiO2,   thickness: 10nm]
+        m7:  [material: Copper, thickness: 10nm]
+        d7:  [material: SiO2,   thickness: 10nm]
+        m8:  [material: Copper, thickness: 10nm]
+        d8:  [material: SiO2,   thickness: 10nm]
+        m9:  [material: Copper, thickness: 10nm]
+        d9:  [material: SiO2,   thickness: 10nm]
+        m10: [material: Copper, thickness: 10nm]
+        d10: [material: SiO2,   thickness: 10nm]
+        m11: [material: Copper, thickness: 10nm]
+        d11: [material: SiO2,   thickness: 10nm]
+        m12: [material: Copper, thickness: 10nm]
+        d12: [material: SiO2,   thickness: 10nm]
+        m13: [material: Copper, thickness: 10nm]
+        d13: [material: SiO2,   thickness: 10nm]
+        m14: [material: Copper, thickness: 10nm]
+        d14: [material: SiO2,   thickness: 10nm]
+        m15: [material: Copper, thickness: 10nm]
+        d15: [material: SiO2,   thickness: 10nm]
+        m16: [material: Copper, thickness: 10nm]
+        d16: [material: SiO2,   thickness: 10nm]
+        m17: [material: Copper, thickness: 10nm]
+        d17: [material: SiO2,   thickness: 10nm]
+        m18: [material: Copper, thickness: 10nm]
+        d18: [material: SiO2,   thickness: 10nm]
+        m19: [material: Copper, thickness: 10nm]
+        d19: [material: SiO2,   thickness: 10nm]
+        m20: [material: Copper, thickness: 10nm]
+        si:  [material: Silicon, thickness: 500nm]
 
 profile Silicon_Picometer_Test:
     description: "Picometer-scale test (extreme stress test for fixed-point precision)"
@@ -550,10 +838,26 @@ profile Silicon_Picometer_Test:
         ipc2221_k_internal: 0.012
     
     stackup:
-        dielectric_height: 1nm
-        dielectric_material: "Graphene"
-        copper_thickness: 1nm
-        default_impedance: 50.0
+        m1:  [material: Copper,   thickness: 1nm]
+        d1:  [material: Graphene, thickness: 1nm]
+        m2:  [material: Copper,   thickness: 1nm]
+        d2:  [material: Graphene, thickness: 1nm]
+        m3:  [material: Copper,   thickness: 1nm]
+        d3:  [material: Graphene, thickness: 1nm]
+        m4:  [material: Copper,   thickness: 1nm]
+        d4:  [material: Graphene, thickness: 1nm]
+        m5:  [material: Copper,   thickness: 1nm]
+        d5:  [material: Graphene, thickness: 1nm]
+        m6:  [material: Copper,   thickness: 1nm]
+        d6:  [material: Graphene, thickness: 1nm]
+        m7:  [material: Copper,   thickness: 1nm]
+        d7:  [material: Graphene, thickness: 1nm]
+        m8:  [material: Copper,   thickness: 1nm]
+        d8:  [material: Graphene, thickness: 1nm]
+        m9:  [material: Copper,   thickness: 1nm]
+        d9:  [material: Graphene, thickness: 1nm]
+        m10: [material: Copper,   thickness: 1nm]
+        si:  [material: Silicon,  thickness: 100nm]
 
 profile Silicon_Mixed_Scale:
     description: "Mixed scale test (millimeter board with nanometer features)"
@@ -588,7 +892,19 @@ profile Silicon_Mixed_Scale:
         ipc2221_k_internal: 0.024
     
     stackup:
-        dielectric_height: 1mm
-        dielectric_material: "SiO2"
-        copper_thickness: 30nm
-        default_impedance: 50.0
+        m1: [material: Copper, thickness: 30nm]
+        d1: [material: SiO2,   thickness: 1mm]
+        m2: [material: Copper, thickness: 30nm]
+        d2: [material: SiO2,   thickness: 1mm]
+        m3: [material: Copper, thickness: 30nm]
+        d3: [material: SiO2,   thickness: 1mm]
+        m4: [material: Copper, thickness: 30nm]
+        d4: [material: SiO2,   thickness: 1mm]
+        m5: [material: Copper, thickness: 30nm]
+        d5: [material: SiO2,   thickness: 1mm]
+        m6: [material: Copper, thickness: 30nm]
+        d6: [material: SiO2,   thickness: 1mm]
+        m7: [material: Copper, thickness: 30nm]
+        d7: [material: SiO2,   thickness: 1mm]
+        m8: [material: Copper, thickness: 30nm]
+        si: [material: Silicon, thickness: 10mm]

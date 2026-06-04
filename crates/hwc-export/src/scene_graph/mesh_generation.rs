@@ -155,7 +155,7 @@ pub fn create_component_box(
     })
 }
 
-/// Create a cylindrical mesh (v0.1.6)
+/// Create a cylindrical mesh with fully triangulated top/bottom solid caps
 pub fn create_cylinder_mesh(
     name: &str,
     center: (f64, f64, f64),
@@ -171,7 +171,7 @@ pub fn create_cylinder_mesh(
     let mut vertices = Vec::new();
     let mut faces = Vec::new();
 
-    // v0.1.7: Unified map_vertex for consistency across all mesh types
+    // Helper to map 2D coordinates to 3D scene space based on active view
     let map_vertex = |ex: f64, ey: f64, ez: f64| -> Vertex {
         match view {
             SpaceView::Horizontal => Vertex { x: ex, y: ez, z: ey },
@@ -179,22 +179,27 @@ pub fn create_cylinder_mesh(
         }
     };
 
-    // Generate vertices for top and bottom caps
-    // Using 64 segments by default for "Perfect Circle" look if segments is 16
     let actual_segments = if segments == 16 { 64 } else { segments };
 
+    // 1. Generate vertices for top and bottom rings
     for i in 0..actual_segments {
         let angle = (i as f64 / actual_segments as f64) * 2.0 * std::f64::consts::PI;
         let dx = radius * angle.cos();
         let dy = radius * angle.sin();
 
-        // Bottom vertex
+        // Bottom vertex: Index i * 2
         vertices.push(map_vertex(cx + dx, cy + dy, cz));
-        // Top vertex
+        // Top vertex: Index i * 2 + 1
         vertices.push(map_vertex(cx + dx, cy + dy, cz + height));
     }
 
-    // Generate side faces
+    // 2. Add center vertices for triangulated solid caps
+    let bottom_center_idx = vertices.len();
+    vertices.push(map_vertex(cx, cy, cz));
+    let top_center_idx = vertices.len();
+    vertices.push(map_vertex(cx, cy, cz + height));
+
+    // 3. Generate side walls (Quads) and triangulate caps
     for i in 0..actual_segments as usize {
         let next = (i + 1) % actual_segments as usize;
         let b1 = i * 2;
@@ -202,29 +207,24 @@ pub fn create_cylinder_mesh(
         let b2 = next * 2;
         let t2 = next * 2 + 1;
 
+        // Side walls (Quads)
         faces.push(Face {
             vertices: vec![b1, b2, t2, t1],
         });
-    }
 
-    // Generate top and bottom caps
-    if !culling.bottom {
-        let mut bottom_cap = Vec::new();
-        for i in 0..actual_segments {
-            bottom_cap.push((i * 2) as usize);
+        // v0.1.8 FIXED: Triangulate bottom cap using a triangle fan (facing down)
+        if !culling.bottom {
+            faces.push(Face {
+                vertices: vec![bottom_center_idx, b2, b1],
+            });
         }
-        bottom_cap.reverse(); // Reverse for correct winding order
-        faces.push(Face {
-            vertices: bottom_cap,
-        });
-    }
 
-    if !culling.top {
-        let mut top_cap = Vec::new();
-        for i in 0..actual_segments {
-            top_cap.push((i * 2 + 1) as usize);
+        // v0.1.8 FIXED: Triangulate top cap using a triangle fan (facing up)
+        if !culling.top {
+            faces.push(Face {
+                vertices: vec![top_center_idx, t1, t2],
+            });
         }
-        faces.push(Face { vertices: top_cap });
     }
 
     MeshNode {

@@ -59,7 +59,7 @@ space Staggered_Via_Test_Board implements Staggered_Via_Test_Module:
     # 2. Horizontal trace on Inner1 connecting the two vias
     add pour(ViaCopper) named Connection_Trace on layer: inner1:
         net: SIG
-        boundary: [x: 4.4mm, y: 4.9mm] to [x: 5.6mm, y: 5.1mm]
+        boundary: [x: 4.5mm, y: 4.9mm] to [x: 5.5mm, y: 5.1mm]
 
     # 3. Second Microvia (Inner1 to Bottom) at X=5.5mm
     add contact(ViaCopper) named Microvia_2 at [x: 5.5mm, y: 5mm] spanning layer: inner1 to bottom:

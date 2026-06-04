@@ -45,10 +45,13 @@ profile JLCPCB_HDI_4Layer_1_2_1:
         ipc2221_k_internal: 0.024
     
     stackup:
-        dielectric_height: 100µm
-        dielectric_material: "FR4"
-        copper_thickness: 18µm
-        default_impedance: 50.0
+        top:    [material: Copper, thickness: 18µm]
+        d1:     [material: FR4,    thickness: 100µm]
+        inner1: [material: Copper, thickness: 18µm]
+        core:   [material: FR4,    thickness: 528µm]
+        inner2: [material: Copper, thickness: 18µm]
+        d2:     [material: FR4,    thickness: 100µm]
+        bottom: [material: Copper, thickness: 18µm]
 
 profile JLCPCB_HDI_6Layer_1_4_1:
     description: "JLCPCB 6-layer HDI with 1+4+1 stackup (microvias on outer layers)"
@@ -83,10 +86,17 @@ profile JLCPCB_HDI_6Layer_1_4_1:
         ipc2221_k_internal: 0.024
     
     stackup:
-        dielectric_height: 100µm
-        dielectric_material: "FR4"
-        copper_thickness: 18µm
-        default_impedance: 50.0
+        top:    [material: Copper, thickness: 18µm]
+        d1:     [material: FR4,    thickness: 100µm]
+        inner1: [material: Copper, thickness: 18µm]
+        d2:     [material: FR4,    thickness: 100µm]
+        inner2: [material: Copper, thickness: 18µm]
+        core:   [material: FR4,    thickness: 492µm]
+        inner3: [material: Copper, thickness: 18µm]
+        d3:     [material: FR4,    thickness: 100µm]
+        inner4: [material: Copper, thickness: 18µm]
+        d4:     [material: FR4,    thickness: 100µm]
+        bottom: [material: Copper, thickness: 18µm]
 
 profile JLCPCB_HDI_8Layer_2_4_2:
     description: "JLCPCB 8-layer HDI with 2+4+2 stackup (stacked microvias)"
@@ -121,10 +131,21 @@ profile JLCPCB_HDI_8Layer_2_4_2:
         ipc2221_k_internal: 0.024
     
     stackup:
-        dielectric_height: 100µm
-        dielectric_material: "FR4"
-        copper_thickness: 18µm
-        default_impedance: 50.0
+        top:    [material: Copper, thickness: 18µm]
+        d1:     [material: FR4,    thickness: 100µm]
+        inner1: [material: Copper, thickness: 18µm]
+        d2:     [material: FR4,    thickness: 100µm]
+        inner2: [material: Copper, thickness: 18µm]
+        d3:     [material: FR4,    thickness: 100µm]
+        inner3: [material: Copper, thickness: 18µm]
+        core:   [material: FR4,    thickness: 456µm]
+        inner4: [material: Copper, thickness: 18µm]
+        d4:     [material: FR4,    thickness: 100µm]
+        inner5: [material: Copper, thickness: 18µm]
+        d5:     [material: FR4,    thickness: 100µm]
+        inner6: [material: Copper, thickness: 18µm]
+        d6:     [material: FR4,    thickness: 100µm]
+        bottom: [material: Copper, thickness: 18µm]
 
 # ============================================================================
 # PCBWay HDI Profiles
@@ -163,10 +184,13 @@ profile PCBWay_HDI_4Layer_Standard:
         ipc2221_k_internal: 0.024
     
     stackup:
-        dielectric_height: 100µm
-        dielectric_material: "FR4"
-        copper_thickness: 18µm
-        default_impedance: 50.0
+        top:    [material: Copper, thickness: 18µm]
+        d1:     [material: FR4,    thickness: 100µm]
+        inner1: [material: Copper, thickness: 18µm]
+        core:   [material: FR4,    thickness: 528µm]
+        inner2: [material: Copper, thickness: 18µm]
+        d2:     [material: FR4,    thickness: 100µm]
+        bottom: [material: Copper, thickness: 18µm]
 
 profile PCBWay_HDI_6Layer_Advanced:
     description: "PCBWay 6-layer HDI with advanced features (stacked microvias)"
@@ -201,10 +225,17 @@ profile PCBWay_HDI_6Layer_Advanced:
         ipc2221_k_internal: 0.024
     
     stackup:
-        dielectric_height: 100µm
-        dielectric_material: "FR4_High_Tg"
-        copper_thickness: 12µm
-        default_impedance: 50.0
+        top:    [material: Copper,      thickness: 12µm]
+        d1:     [material: FR4_High_Tg, thickness: 100µm]
+        inner1: [material: Copper,      thickness: 12µm]
+        d2:     [material: FR4_High_Tg, thickness: 100µm]
+        inner2: [material: Copper,      thickness: 12µm]
+        core:   [material: FR4_High_Tg, thickness: 528µm]
+        inner3: [material: Copper,      thickness: 12µm]
+        d3:     [material: FR4_High_Tg, thickness: 100µm]
+        inner4: [material: Copper,      thickness: 12µm]
+        d4:     [material: FR4_High_Tg, thickness: 100µm]
+        bottom: [material: Copper,      thickness: 12µm]
 
 # ============================================================================
 # Extreme HDI Profiles (Stress Test)
@@ -243,10 +274,13 @@ profile HDI_Extreme_Microvia:
         ipc2221_k_internal: 0.024
     
     stackup:
-        dielectric_height: 50µm
-        dielectric_material: "Rogers_RO4003C"
-        copper_thickness: 9µm
-        default_impedance: 50.0
+        top:    [material: Copper,         thickness: 9µm]
+        d1:     [material: Rogers_RO4003C, thickness: 50µm]
+        inner1: [material: Copper,         thickness: 9µm]
+        core:   [material: Rogers_RO4003C, thickness: 464µm]
+        inner2: [material: Copper,         thickness: 9µm]
+        d2:     [material: Rogers_RO4003C, thickness: 50µm]
+        bottom: [material: Copper,         thickness: 9µm]
 
 profile HDI_Any_Layer_Via:
     description: "HDI with any-layer via technology (stress test for via stacking)"
@@ -281,10 +315,25 @@ profile HDI_Any_Layer_Via:
         ipc2221_k_internal: 0.024
     
     stackup:
-        dielectric_height: 100µm
-        dielectric_material: "FR4_High_Tg"
-        copper_thickness: 18µm
-        default_impedance: 50.0
+        top:    [material: Copper,      thickness: 18µm]
+        d1:     [material: FR4_High_Tg, thickness: 100µm]
+        inner1: [material: Copper,      thickness: 18µm]
+        d2:     [material: FR4_High_Tg, thickness: 100µm]
+        inner2: [material: Copper,      thickness: 18µm]
+        d3:     [material: FR4_High_Tg, thickness: 100µm]
+        inner3: [material: Copper,      thickness: 18µm]
+        d4:     [material: FR4_High_Tg, thickness: 100µm]
+        inner4: [material: Copper,      thickness: 18µm]
+        core:   [material: FR4_High_Tg, thickness: 620µm]
+        inner5: [material: Copper,      thickness: 18µm]
+        d5:     [material: FR4_High_Tg, thickness: 100µm]
+        inner6: [material: Copper,      thickness: 18µm]
+        d6:     [material: FR4_High_Tg, thickness: 100µm]
+        inner7: [material: Copper,      thickness: 18µm]
+        d7:     [material: FR4_High_Tg, thickness: 100µm]
+        inner8: [material: Copper,      thickness: 18µm]
+        d8:     [material: FR4_High_Tg, thickness: 100µm]
+        bottom: [material: Copper,      thickness: 18µm]
 
 profile HDI_Ultra_Fine_Pitch:
     description: "Ultra-fine pitch HDI for 0.35mm BGA (stress test for pad spacing)"
@@ -319,10 +368,21 @@ profile HDI_Ultra_Fine_Pitch:
         ipc2221_k_internal: 0.024
     
     stackup:
-        dielectric_height: 75µm
-        dielectric_material: "FR4_High_Tg"
-        copper_thickness: 12µm
-        default_impedance: 50.0
+        top:    [material: Copper,      thickness: 12µm]
+        d1:     [material: FR4_High_Tg, thickness: 75µm]
+        inner1: [material: Copper,      thickness: 12µm]
+        d2:     [material: FR4_High_Tg, thickness: 75µm]
+        inner2: [material: Copper,      thickness: 12µm]
+        d3:     [material: FR4_High_Tg, thickness: 75µm]
+        inner3: [material: Copper,      thickness: 12µm]
+        core:   [material: FR4_High_Tg, thickness: 454µm]
+        inner4: [material: Copper,      thickness: 12µm]
+        d4:     [material: FR4_High_Tg, thickness: 75µm]
+        inner5: [material: Copper,      thickness: 12µm]
+        d5:     [material: FR4_High_Tg, thickness: 75µm]
+        inner6: [material: Copper,      thickness: 12µm]
+        d6:     [material: FR4_High_Tg, thickness: 75µm]
+        bottom: [material: Copper,      thickness: 12µm]
 
 profile HDI_Extreme_Density:
     description: "Maximum density HDI (stress test for routing engine at microscopic scales)"
@@ -357,10 +417,29 @@ profile HDI_Extreme_Density:
         ipc2221_k_internal: 0.024
     
     stackup:
-        dielectric_height: 50µm
-        dielectric_material: "Rogers_RO4003C"
-        copper_thickness: 9µm
-        default_impedance: 50.0
+        top:     [material: Copper,         thickness: 9µm]
+        d1:      [material: Rogers_RO4003C, thickness: 50µm]
+        inner1:  [material: Copper,         thickness: 9µm]
+        d2:      [material: Rogers_RO4003C, thickness: 50µm]
+        inner2:  [material: Copper,         thickness: 9µm]
+        d3:      [material: Rogers_RO4003C, thickness: 50µm]
+        inner3:  [material: Copper,         thickness: 9µm]
+        d4:      [material: Rogers_RO4003C, thickness: 50µm]
+        inner4:  [material: Copper,         thickness: 9µm]
+        d5:      [material: Rogers_RO4003C, thickness: 50µm]
+        inner5:  [material: Copper,         thickness: 9µm]
+        core:    [material: Rogers_RO4003C, thickness: 992µm]
+        inner6:  [material: Copper,         thickness: 9µm]
+        d6:      [material: Rogers_RO4003C, thickness: 50µm]
+        inner7:  [material: Copper,         thickness: 9µm]
+        d7:      [material: Rogers_RO4003C, thickness: 50µm]
+        inner8:  [material: Copper,         thickness: 9µm]
+        d8:      [material: Rogers_RO4003C, thickness: 50µm]
+        inner9:  [material: Copper,         thickness: 9µm]
+        d9:      [material: Rogers_RO4003C, thickness: 50µm]
+        inner10: [material: Copper,         thickness: 9µm]
+        d10:     [material: Rogers_RO4003C, thickness: 50µm]
+        bottom:  [material: Copper,         thickness: 9µm]
 
 profile HDI_Mobile_Device:
     description: "Mobile device HDI (smartphone/tablet typical specs)"
@@ -395,7 +474,18 @@ profile HDI_Mobile_Device:
         ipc2221_k_internal: 0.024
     
     stackup:
-        dielectric_height: 75µm
-        dielectric_material: "FR4"
-        copper_thickness: 12µm
-        default_impedance: 50.0
+        top:    [material: Copper, thickness: 12µm]
+        d1:     [material: FR4,    thickness: 75µm]
+        inner1: [material: Copper, thickness: 12µm]
+        d2:     [material: FR4,    thickness: 75µm]
+        inner2: [material: Copper, thickness: 12µm]
+        d3:     [material: FR4,    thickness: 75µm]
+        inner3: [material: Copper, thickness: 12µm]
+        core:   [material: FR4,    thickness: 254µm]
+        inner4: [material: Copper, thickness: 12µm]
+        d4:     [material: FR4,    thickness: 75µm]
+        inner5: [material: Copper, thickness: 12µm]
+        d5:     [material: FR4,    thickness: 75µm]
+        inner6: [material: Copper, thickness: 12µm]
+        d6:     [material: FR4,    thickness: 75µm]
+        bottom: [material: Copper, thickness: 12µm]

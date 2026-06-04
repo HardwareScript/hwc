@@ -160,8 +160,6 @@ pub fn unroll_contact(
         hwc_parser::Elevation::Relative => hwc_parser::Elevation::Relative,
     };
 
-    let koz = contact.koz.as_ref().map(|k| substitute_in_expression(k, variable, value)).transpose()?;
-
     // Substitute loop variable in generic properties (v0.1.9)
     let mut properties = rustc_hash::FxHashMap::default();
     for (name, expr) in &contact.properties {
@@ -178,20 +176,6 @@ pub fn unroll_contact(
         from_elevation,
         to_elevation,
         net,
-        diameter: contact.diameter.clone(),
-        bottom_diameter: contact.bottom_diameter.clone(),
-        drill_diameter: contact.drill_diameter.clone(),
-        plating_thickness: contact.plating_thickness.clone(),
-        annular_ring: contact.annular_ring.clone(),
-        caps: contact.caps,
-        top_cap: contact.top_cap,
-        bottom_cap: contact.bottom_cap,
-        bridge: contact.bridge.clone(),
-        liner: contact.liner.clone(),
-        liner_thickness: contact.liner_thickness.clone(),
-        koz,
-        filled: contact.filled,
-        fill_material: contact.fill_material.clone(),
         properties,
         span: contact.span,
     })

@@ -1,0 +1,21 @@
+import * from @std/primitives/units
+import FR4 from @std/materials/insulators
+import Generic from @std/profiles/generic
+
+material DebugEpoxy:
+    category: insulator
+    process: deposited
+    properties:
+        color: "#00FF00" # Bright Green to make it obvious
+        dielectric_constant: 3.8
+
+space Debug_Fill_Board:
+    dimensions: 5mm by 5mm by 1.6mm
+    grid: 50 by 50 by 10
+    origin: bl by b
+    profile: Generic
+
+    # This is EXACTLY how VIPPO fill is implemented: 
+    # A standalone Contact with process: deposited (Cylinder shape in Engine)
+    add contact(DebugEpoxy) named Fill_Test at [x: 2.5mm, y: 2.5mm] spanning layer: top to top:
+        diameter: 1.0mm

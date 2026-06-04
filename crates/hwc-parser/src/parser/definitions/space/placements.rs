@@ -409,32 +409,8 @@ impl crate::parser::Parser {
             from_elevation,
             to_elevation,
             net: net.or(net_in_block),
-            diameter: None,
-            bottom_diameter: None,
-            drill_diameter: None,
-            plating_thickness: None,
-            annular_ring: None,
-            caps: None,
-            top_cap: None,
-            bottom_cap: None,
-            bridge: None,
-            liner: None,
-            liner_thickness: None,
-            koz: None,
-            filled: None,
-            fill_material: None,
             properties,
             span: Span::new(start_pos, end_pos),
         })
-    }
-
-    fn parse_cap_type(&mut self) -> Result<CapType, ParseError> {
-        let name = self.expect_identifier()?;
-        match name.as_str() {
-            "none" => Ok(CapType::None),
-            "annular" => Ok(CapType::Annular),
-            "solid" => Ok(CapType::Solid),
-            _ => Err(self.error(&format!("Expected cap type (none, annular, solid), found '{}'", name))),
-        }
     }
 }

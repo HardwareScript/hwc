@@ -394,20 +394,6 @@ pub struct ContactPlacement {
     /// Ending elevation (v0.1.7)
     pub to_elevation: Elevation,
     pub net: Option<NetName>,    // Optional net name to connect to (v0.1.6: supports array syntax)
-    pub diameter: Option<super::common::Measurement>, // Optional via diameter (top diameter if tapered)
-    pub bottom_diameter: Option<super::common::Measurement>, // NEW v0.1.7: Bottom diameter for tapered microvias
-    pub drill_diameter: Option<super::common::Measurement>, // v0.1.7: Physical drill diameter
-    pub plating_thickness: Option<super::common::Measurement>, // v0.1.7: Plating thickness
-    pub annular_ring: Option<super::common::Measurement>, // Optional annular ring width (Limitation 7)
-    pub caps: Option<bool>, // Legacy v0.1.7: Option to enable/disable top/bottom rings
-    pub top_cap: Option<CapType>, // NEW v0.1.7: Specific cap type for top
-    pub bottom_cap: Option<CapType>, // NEW v0.1.7: Specific cap type for bottom
-    pub bridge: Option<CompactString>, // Phase 1: Explicit bridge override
-    pub liner: Option<CompactString>, // NEW v0.1.7: TSV insulator liner material
-    pub liner_thickness: Option<super::common::Measurement>, // NEW v0.1.7: TSV liner thickness
-    pub koz: Option<Expression>, // NEW v0.1.7: Keep-out zone radius multiplier (e.g. 3.0)
-    pub filled: Option<bool>,    // NEW v0.1.7: Whether the via is filled
-    pub fill_material: Option<CompactString>, // NEW v0.1.7: Material used for filling
     pub properties: rustc_hash::FxHashMap<CompactString, Expression>, // Generic properties (v0.1.9)
     pub span: Span,
 }

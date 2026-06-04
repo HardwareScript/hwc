@@ -265,11 +265,19 @@ impl Expression {
                 unit: unit.clone(),
             }),
             Expression::Percentage { value, .. } => Ok(Value::Percentage(*value)),
-            Expression::Variable { name, .. } => context
-                .get(name)
-                .copied()
-                .map(Value::Number)
-                .ok_or_else(|| format!("Undefined variable '{}' in expression", name)),
+            Expression::Variable { name, .. } => {
+                if name == "true" {
+                    Ok(Value::Number(1))
+                } else if name == "false" {
+                    Ok(Value::Number(0))
+                } else {
+                    context
+                        .get(name)
+                        .copied()
+                        .map(Value::Number)
+                        .ok_or_else(|| format!("Undefined variable '{}' in expression", name))
+                }
+            }
             Expression::Binary {
                 left,
                 operator,

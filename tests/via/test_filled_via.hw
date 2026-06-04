@@ -55,7 +55,7 @@ space VIPPO_Test_Board implements VIPPO_Test_Module:
         net: SIG
         diameter: 0.6mm
         annular_ring: 0.2mm
-        top_cap: solid
+        top_cap: none
         bottom_cap: solid
         filled: true
         fill_material: Epoxy

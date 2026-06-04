@@ -43,10 +43,9 @@ profile JLCPCB_2Layer_Standard:
         ipc2221_k_internal: 0.024
     
     stackup:
-        dielectric_height: 1.6mm
-        dielectric_material: "FR4"
-        copper_thickness: 35µm
-        default_impedance: 50.0
+        top:    [material: Copper, thickness: 35µm]
+        core:   [material: FR4,    thickness: 1.6mm]
+        bottom: [material: Copper, thickness: 35µm]
 
 profile JLCPCB_2Layer_Fine:
     description: "JLCPCB 2-layer fine pitch (5mil trace/space)"
@@ -81,10 +80,9 @@ profile JLCPCB_2Layer_Fine:
         ipc2221_k_internal: 0.024
     
     stackup:
-        dielectric_height: 1.6mm
-        dielectric_material: "FR4"
-        copper_thickness: 35µm
-        default_impedance: 50.0
+        top:    [material: Copper, thickness: 35µm]
+        core:   [material: FR4,    thickness: 1.6mm]
+        bottom: [material: Copper, thickness: 35µm]
 
 profile PCBWay_2Layer_Standard:
     description: "PCBWay 2-layer standard process"
@@ -119,10 +117,9 @@ profile PCBWay_2Layer_Standard:
         ipc2221_k_internal: 0.024
     
     stackup:
-        dielectric_height: 1.6mm
-        dielectric_material: "FR4"
-        copper_thickness: 35µm
-        default_impedance: 50.0
+        top:    [material: Copper, thickness: 35µm]
+        core:   [material: FR4,    thickness: 1.6mm]
+        bottom: [material: Copper, thickness: 35µm]
 
 ## 4-Layer PCB Profiles
 
@@ -159,10 +156,13 @@ profile JLCPCB_4Layer_Standard:
         ipc2221_k_internal: 0.024
     
     stackup:
-        dielectric_height: 200µm
-        dielectric_material: "FR4"
-        copper_thickness: 35µm
-        default_impedance: 50.0
+        top:    [material: Copper, thickness: 35µm]
+        d1:     [material: FR4,    thickness: 200µm]
+        inner1: [material: Copper, thickness: 35µm]
+        core:   [material: FR4,    thickness: 1.06mm]
+        inner2: [material: Copper, thickness: 35µm]
+        d2:     [material: FR4,    thickness: 200µm]
+        bottom: [material: Copper, thickness: 35µm]
 
 profile JLCPCB_4Layer_Impedance:
     description: "JLCPCB 4-layer with controlled impedance (50Ω/90Ω)"
@@ -197,10 +197,13 @@ profile JLCPCB_4Layer_Impedance:
         ipc2221_k_internal: 0.024
     
     stackup:
-        dielectric_height: 200µm
-        dielectric_material: "FR4"
-        copper_thickness: 35µm
-        default_impedance: 50.0
+        top:    [material: Copper, thickness: 35µm]
+        d1:     [material: FR4,    thickness: 200µm]
+        inner1: [material: Copper, thickness: 35µm]
+        core:   [material: FR4,    thickness: 1.06mm]
+        inner2: [material: Copper, thickness: 35µm]
+        d2:     [material: FR4,    thickness: 200µm]
+        bottom: [material: Copper, thickness: 35µm]
 
 profile PCBWay_4Layer_Standard:
     description: "PCBWay 4-layer standard process"
@@ -235,10 +238,13 @@ profile PCBWay_4Layer_Standard:
         ipc2221_k_internal: 0.024
     
     stackup:
-        dielectric_height: 200µm
-        dielectric_material: "FR4"
-        copper_thickness: 35µm
-        default_impedance: 50.0
+        top:    [material: Copper, thickness: 35µm]
+        d1:     [material: FR4,    thickness: 200µm]
+        inner1: [material: Copper, thickness: 35µm]
+        core:   [material: FR4,    thickness: 1.06mm]
+        inner2: [material: Copper, thickness: 35µm]
+        d2:     [material: FR4,    thickness: 200µm]
+        bottom: [material: Copper, thickness: 35µm]
 
 ## 6-Layer PCB Profiles
 
@@ -275,10 +281,17 @@ profile JLCPCB_6Layer_Standard:
         ipc2221_k_internal: 0.024
     
     stackup:
-        dielectric_height: 150µm
-        dielectric_material: "FR4"
-        copper_thickness: 35µm
-        default_impedance: 50.0
+        top:    [material: Copper, thickness: 35µm]
+        d1:     [material: FR4,    thickness: 150µm]
+        inner1: [material: Copper, thickness: 35µm]
+        d2:     [material: FR4,    thickness: 150µm]
+        inner2: [material: Copper, thickness: 35µm]
+        core:   [material: FR4,    thickness: 800µm]
+        inner3: [material: Copper, thickness: 35µm]
+        d3:     [material: FR4,    thickness: 150µm]
+        inner4: [material: Copper, thickness: 35µm]
+        d4:     [material: FR4,    thickness: 150µm]
+        bottom: [material: Copper, thickness: 35µm]
 
 profile JLCPCB_6Layer_HighSpeed:
     description: "JLCPCB 6-layer high-speed (DDR, PCIe, USB3)"
@@ -313,10 +326,17 @@ profile JLCPCB_6Layer_HighSpeed:
         ipc2221_k_internal: 0.024
     
     stackup:
-        dielectric_height: 150µm
-        dielectric_material: "FR4"
-        copper_thickness: 35µm
-        default_impedance: 50.0
+        top:    [material: Copper, thickness: 35µm]
+        d1:     [material: FR4,    thickness: 150µm]
+        inner1: [material: Copper, thickness: 35µm]
+        d2:     [material: FR4,    thickness: 150µm]
+        inner2: [material: Copper, thickness: 35µm]
+        core:   [material: FR4,    thickness: 800µm]
+        inner3: [material: Copper, thickness: 35µm]
+        d3:     [material: FR4,    thickness: 150µm]
+        inner4: [material: Copper, thickness: 35µm]
+        d4:     [material: FR4,    thickness: 150µm]
+        bottom: [material: Copper, thickness: 35µm]
 
 profile PCBWay_6Layer_Standard:
     description: "PCBWay 6-layer standard process"
@@ -351,10 +371,17 @@ profile PCBWay_6Layer_Standard:
         ipc2221_k_internal: 0.024
     
     stackup:
-        dielectric_height: 150µm
-        dielectric_material: "FR4"
-        copper_thickness: 35µm
-        default_impedance: 50.0
+        top:    [material: Copper, thickness: 35µm]
+        d1:     [material: FR4,    thickness: 150µm]
+        inner1: [material: Copper, thickness: 35µm]
+        d2:     [material: FR4,    thickness: 150µm]
+        inner2: [material: Copper, thickness: 35µm]
+        core:   [material: FR4,    thickness: 800µm]
+        inner3: [material: Copper, thickness: 35µm]
+        d3:     [material: FR4,    thickness: 150µm]
+        inner4: [material: Copper, thickness: 35µm]
+        d4:     [material: FR4,    thickness: 150µm]
+        bottom: [material: Copper, thickness: 35µm]
 
 ## Heavy Copper Profiles (2oz+)
 
@@ -391,10 +418,9 @@ profile JLCPCB_2Layer_HeavyCopper:
         ipc2221_k_internal: 0.024
     
     stackup:
-        dielectric_height: 1.6mm
-        dielectric_material: "FR4"
-        copper_thickness: 70µm
-        default_impedance: 50.0
+        top:    [material: Copper, thickness: 70µm]
+        core:   [material: FR4,    thickness: 1.6mm]
+        bottom: [material: Copper, thickness: 70µm]
 
 profile PCBWay_4Layer_HeavyCopper:
     description: "PCBWay 4-layer heavy copper (2oz, power electronics)"
@@ -429,10 +455,13 @@ profile PCBWay_4Layer_HeavyCopper:
         ipc2221_k_internal: 0.024
     
     stackup:
-        dielectric_height: 200µm
-        dielectric_material: "FR4"
-        copper_thickness: 70µm
-        default_impedance: 50.0
+        top:    [material: Copper, thickness: 70µm]
+        d1:     [material: FR4,    thickness: 200µm]
+        inner1: [material: Copper, thickness: 70µm]
+        core:   [material: FR4,    thickness: 920µm]
+        inner2: [material: Copper, thickness: 70µm]
+        d2:     [material: FR4,    thickness: 200µm]
+        bottom: [material: Copper, thickness: 70µm]
 
 ## High-Temperature Profiles
 
@@ -469,10 +498,13 @@ profile JLCPCB_4Layer_HighTemp:
         ipc2221_k_internal: 0.024
     
     stackup:
-        dielectric_height: 200µm
-        dielectric_material: "FR4"
-        copper_thickness: 35µm
-        default_impedance: 50.0
+        top:    [material: Copper, thickness: 35µm]
+        d1:     [material: FR4,    thickness: 200µm]
+        inner1: [material: Copper, thickness: 35µm]
+        core:   [material: FR4,    thickness: 1.06mm]
+        inner2: [material: Copper, thickness: 35µm]
+        d2:     [material: FR4,    thickness: 200µm]
+        bottom: [material: Copper, thickness: 35µm]
 
 ## Flexible PCB Profiles
 
@@ -509,10 +541,9 @@ profile JLCPCB_Flex_2Layer:
         ipc2221_k_internal: 0.024
     
     stackup:
-        dielectric_height: 50µm
-        dielectric_material: "Polyimide"
-        copper_thickness: 18µm
-        default_impedance: 50.0
+        top:    [material: Copper,           thickness: 18µm]
+        core:   [material: Polyimide_Kapton, thickness: 50µm]
+        bottom: [material: Copper,           thickness: 18µm]
 
 profile PCBWay_Flex_4Layer:
     description: "PCBWay 4-layer flexible PCB (rigid-flex)"
@@ -547,10 +578,13 @@ profile PCBWay_Flex_4Layer:
         ipc2221_k_internal: 0.024
     
     stackup:
-        dielectric_height: 50µm
-        dielectric_material: "Polyimide"
-        copper_thickness: 18µm
-        default_impedance: 50.0
+        top:    [material: Copper,           thickness: 18µm]
+        d1:     [material: Polyimide_Kapton, thickness: 50µm]
+        inner1: [material: Copper,           thickness: 18µm]
+        core:   [material: Polyimide_Kapton, thickness: 50µm]
+        inner2: [material: Copper,           thickness: 18µm]
+        d2:     [material: Polyimide_Kapton, thickness: 50µm]
+        bottom: [material: Copper,           thickness: 18µm]
 
 ## RF/Microwave Profiles
 
@@ -587,10 +621,13 @@ profile JLCPCB_4Layer_RF:
         ipc2221_k_internal: 0.024
     
     stackup:
-        dielectric_height: 200µm
-        dielectric_material: "FR4"
-        copper_thickness: 35µm
-        default_impedance: 50.0
+        top:    [material: Copper, thickness: 35µm]
+        d1:     [material: FR4,    thickness: 200µm]
+        inner1: [material: Copper, thickness: 35µm]
+        core:   [material: FR4,    thickness: 1.06mm]
+        inner2: [material: Copper, thickness: 35µm]
+        d2:     [material: FR4,    thickness: 200µm]
+        bottom: [material: Copper, thickness: 35µm]
 
 profile PCBWay_2Layer_Rogers:
     description: "PCBWay 2-layer Rogers 4003C (high-frequency RF)"
@@ -625,7 +662,6 @@ profile PCBWay_2Layer_Rogers:
         ipc2221_k_internal: 0.024
     
     stackup:
-        dielectric_height: 508µm
-        dielectric_material: "Rogers4003C"
-        copper_thickness: 35µm
-        default_impedance: 50.0
+        top:    [material: Copper,         thickness: 35µm]
+        core:   [material: Rogers_RO4003C, thickness: 508µm]
+        bottom: [material: Copper,         thickness: 35µm]

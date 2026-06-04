@@ -5,6 +5,68 @@
 use super::super::errors::IrError;
 use super::super::stackup_manager::StackupManager;
 use hwc_engine::{ComponentPlacer, HardwareSpace, Point3D};
+use compact_str::CompactString;
+
+fn get_prop_nm(
+    contact: &hwc_parser::ContactPlacement,
+    name: &str,
+    _symbol_table: &crate::SymbolTable,
+    eval_context: &hwc_parser::EvaluationContext,
+) -> Option<i64> {
+    contact.properties.get(name).and_then(|expr| {
+        expr.evaluate(eval_context).ok().and_then(|val| {
+            val.to_nanometers().ok()
+        })
+    })
+}
+
+fn get_prop_bool(
+    contact: &hwc_parser::ContactPlacement,
+    name: &str,
+    eval_context: &hwc_parser::EvaluationContext,
+) -> Option<bool> {
+    contact.properties.get(name).and_then(|expr| {
+        if let hwc_parser::Expression::Variable { name, .. } = expr {
+            match name.as_str() {
+                "true" => return Some(true),
+                "false" => return Some(false),
+                _ => {}
+            }
+        }
+        expr.evaluate(eval_context).ok().and_then(|val| val.as_integer().ok().map(|i| i != 0))
+    })
+}
+
+fn get_prop_string(
+    contact: &hwc_parser::ContactPlacement,
+    name: &str,
+    _eval_context: &hwc_parser::EvaluationContext,
+) -> Option<CompactString> {
+    contact.properties.get(name).and_then(|expr| {
+        match expr {
+            hwc_parser::Expression::Variable { name, .. } => Some(name.clone()),
+            _ => None,
+        }
+    })
+}
+
+fn get_prop_cap_type(
+    contact: &hwc_parser::ContactPlacement,
+    name: &str,
+    _eval_context: &hwc_parser::EvaluationContext,
+) -> Option<hwc_engine::voxel_grid::CapType> {
+    contact.properties.get(name).and_then(|expr| {
+        match expr {
+            hwc_parser::Expression::Variable { name, .. } => match name.as_str() {
+                "none" => Some(hwc_engine::voxel_grid::CapType::None),
+                "annular" => Some(hwc_engine::voxel_grid::CapType::Annular),
+                "solid" => Some(hwc_engine::voxel_grid::CapType::Solid),
+                _ => None,
+            },
+            _ => None,
+        }
+    })
+}
 
 /// Place a contact in the voxel grid.
 pub fn place_contact(
@@ -47,11 +109,10 @@ pub fn place_contact(
 
     // Calculate via diameter (use default if not specified)
     // v0.1.7: Support explicit drill_diameter vs legacy diameter
-    let diameter_nm = if let Some(drill_dia) = &contact.drill_diameter {
-        crate::ir::conversions::measurement_to_nm(drill_dia, symbol_table)
-    } else if let Some(diameter_measurement) = &contact.diameter {
-        // Use the canonical conversion method
-        crate::ir::conversions::measurement_to_nm(diameter_measurement, symbol_table)
+    let diameter_nm = if let Some(nm) = get_prop_nm(contact, "drill_diameter", symbol_table, eval_context) {
+        nm
+    } else if let Some(nm) = get_prop_nm(contact, "diameter", symbol_table, eval_context) {
+        nm
     } else {
         100_000 // Default 100um
     };
@@ -86,7 +147,7 @@ pub fn place_contact(
         stackup_manager.get_layer_name(&contact.to_elevation),
     ) {
         // Semantic mode: Use boundary rules
-        let (lower_name, lower_bottom, lower_top, upper_name, upper_bottom, upper_top) = 
+        let (_lower_name, lower_bottom, _lower_top, _upper_name, _upper_bottom, upper_top) = 
             if from_bottom_nm < to_bottom_nm {
                 (from_name, from_bottom_nm, from_top_nm, to_name, to_bottom_nm, to_top_nm)
             } else {
@@ -175,7 +236,8 @@ pub fn place_contact(
         0 // Unassigned
     };
 
-    let bridge_material_id = contact.bridge.as_ref().map(|b| space.material_registry.get_or_register(b));
+    let bridge_material_name = get_prop_string(contact, "bridge", eval_context);
+    let bridge_material_id = bridge_material_name.as_ref().map(|b| space.material_registry.get_or_register(b));
 
     // v0.1.7: Register via for Excellon drill export
     // This ensures that ALL contacts (vias, THT pins, TSVs) are registered for the drill file.
@@ -195,22 +257,23 @@ pub fn place_contact(
     space.add_vias(vec![via]);
 
     // v0.1.7: TSV (Through-Silicon Via) support
-    if let Some(liner_material_name) = &contact.liner {
+    let liner_material_name = get_prop_string(contact, "liner", eval_context);
+    if let Some(liner_material_name) = &liner_material_name {
         let liner_material_id = space.material_registry.get_or_register(liner_material_name);
-        let liner_thickness_nm = if let Some(lt) = &contact.liner_thickness {
-            crate::ir::conversions::measurement_to_nm(lt, symbol_table)
+        let liner_thickness_nm = if let Some(nm) = get_prop_nm(contact, "liner_thickness", symbol_table, eval_context) {
+            nm
         } else {
             5_000 // Default 5um liner
         };
 
-        let bridge_thickness_nm = if contact.bridge.is_some() {
+        let bridge_thickness_nm = if bridge_material_name.is_some() {
             1_000 // Default 1um bridge if specified
         } else {
             0
         };
 
-        let koz_multiplier = if let Some(k) = &contact.koz {
-            k.evaluate(eval_context).and_then(|v| v.as_number()).unwrap_or(3.0) as f32
+        let koz_multiplier = if let Some(expr) = contact.properties.get("koz") {
+            expr.evaluate(eval_context).and_then(|v| v.as_number()).unwrap_or(3.0) as f32
         } else {
             3.0 // Default 3x diameter
         };
@@ -310,8 +373,8 @@ pub fn place_contact(
             space.voxel_grid.drill_via_hole(contact_bbox, diameter_nm, net_id, clearance_nm);
 
             // 2. ACTION: Calculate Unified Via parameters (Annular Ring & Plating)
-            let min_annular_ring_nm = if let Some(ring_measurement) = &contact.annular_ring {
-                crate::ir::conversions::measurement_to_nm(ring_measurement, symbol_table)
+            let min_annular_ring_nm = if let Some(nm) = get_prop_nm(contact, "annular_ring", symbol_table, eval_context) {
+                nm
             } else {
                 space.fabrication_constraints.as_ref()
                     .map(|c| c.via.min_annular_ring_nm)
@@ -319,26 +382,23 @@ pub fn place_contact(
             };
 
             let pad_diameter_nm = diameter_nm + (2 * min_annular_ring_nm);
-            let plating_thickness_nm = if let Some(pt) = &contact.plating_thickness {
-                crate::ir::conversions::measurement_to_nm(pt, symbol_table)
+            let plating_thickness_nm = if let Some(nm) = get_prop_nm(contact, "plating_thickness", symbol_table, eval_context) {
+                nm
             } else {
                 25_000 // Standard 1-mil plating
             };
             let inner_diameter_nm = diameter_nm - (2 * plating_thickness_nm);
 
-            let bottom_diameter_nm = contact.bottom_diameter.as_ref()
-                .map(|d| crate::ir::conversions::measurement_to_nm(d, symbol_table));
+            let bottom_diameter_nm = get_prop_nm(contact, "bottom_diameter", symbol_table, eval_context);
 
             // Determine Cap Types (v0.1.7 Unified Parametric Interconnect)
             // 1. Check explicit top/bottom caps (User/Stdlib Space)
             // 2. Fallback to legacy 'caps' boolean
             // 3. Default to Annular
-            let top_cap = match contact.top_cap {
-                Some(hwc_parser::CapType::None) => hwc_engine::voxel_grid::CapType::None,
-                Some(hwc_parser::CapType::Annular) => hwc_engine::voxel_grid::CapType::Annular,
-                Some(hwc_parser::CapType::Solid) => hwc_engine::voxel_grid::CapType::Solid,
+            let top_cap = match get_prop_cap_type(contact, "top_cap", eval_context) {
+                Some(cap) => cap,
                 None => {
-                    if contact.caps.unwrap_or(true) {
+                    if get_prop_bool(contact, "caps", eval_context).unwrap_or(true) {
                         hwc_engine::voxel_grid::CapType::Annular
                     } else {
                         hwc_engine::voxel_grid::CapType::None
@@ -346,12 +406,10 @@ pub fn place_contact(
                 }
             };
 
-            let bottom_cap = match contact.bottom_cap {
-                Some(hwc_parser::CapType::None) => hwc_engine::voxel_grid::CapType::None,
-                Some(hwc_parser::CapType::Annular) => hwc_engine::voxel_grid::CapType::Annular,
-                Some(hwc_parser::CapType::Solid) => hwc_engine::voxel_grid::CapType::Solid,
+            let bottom_cap = match get_prop_cap_type(contact, "bottom_cap", eval_context) {
+                Some(cap) => cap,
                 None => {
-                    if contact.caps.unwrap_or(true) {
+                    if get_prop_bool(contact, "caps", eval_context).unwrap_or(true) {
                         hwc_engine::voxel_grid::CapType::Annular
                     } else {
                         hwc_engine::voxel_grid::CapType::None
@@ -374,19 +432,34 @@ pub fn place_contact(
             );
 
             // 5. ACTION: Handle Filled Vias (v0.1.9: VIPPO)
-            if contact.filled.unwrap_or(false) {
-                let fill_material_id = if let Some(fill_mat_name) = &contact.fill_material {
+            if get_prop_bool(contact, "filled", eval_context).unwrap_or(false) {
+                let fill_material_name = get_prop_string(contact, "fill_material", eval_context);
+                let fill_material_id = if let Some(fill_mat_name) = &fill_material_name {
                     space.material_registry.get_or_register(fill_mat_name)
                 } else {
                     // Default to non-conductive epoxy if not specified
                     space.material_registry.get_or_register("Epoxy")
                 };
 
+                let fill_net_id = if let Some(fill_mat_name) = &fill_material_name {
+                    if let Some(mat_def) = symbol_table.materials().get(fill_mat_name) {
+                        if mat_def.category.is_conductive() {
+                            net_id
+                        } else {
+                            0
+                        }
+                    } else {
+                        0
+                    }
+                } else {
+                    0
+                };
+
                 // Add a solid cylinder of fill material inside the tube
                 // The fill diameter matches the inner diameter of the tube.
                 space.voxel_grid.add_cylinder_substrate_layer(
                     fill_material_id,
-                    net_id, // Usually matches the via net, though epoxy is an insulator
+                    fill_net_id,
                     contact_bbox,
                     inner_diameter_nm,
                     16, // Simpler segments for fill
@@ -482,7 +555,7 @@ pub fn place_contact(
         z_start_nm: from_bottom_nm,
         z_end_nm: to_bottom_nm,
         net: contact.net.as_ref().map(|n| n.to_string().into()),
-        bridge: contact.bridge.clone(),
+        bridge: bridge_material_name,
         bbox: Some(hwc_engine::geometry::BoundingBox {
             min: hwc_engine::geometry::Point3D::new(
                 xy_point.x - radius_nm,

@@ -67,28 +67,21 @@ impl AutoViaInserter {
                 transition.net_name.clone(),
                 span,
             )),
-            diameter: Some(hwc_parser::Measurement {
-                value: via_type.diameter_mm,
-                unit: Unit::Millimeter,
-                span,
-            }),
-            bottom_diameter: None,
-            drill_diameter: None,
-            plating_thickness: None,
-            annular_ring: None,
-            caps: None,
-            top_cap: None,
-            bottom_cap: None,
-            bridge: if bridge_stack.interface_material == bridge_stack.fill_material {
-                None
-            } else {
-                Some(bridge_stack.interface_material.clone())
+            properties: {
+                let mut props = rustc_hash::FxHashMap::default();
+                props.insert("diameter".into(), Expression::Measurement {
+                    value: via_type.diameter_mm,
+                    unit: Unit::Millimeter,
+                    span,
+                });
+                if bridge_stack.interface_material != bridge_stack.fill_material {
+                    props.insert("bridge".into(), Expression::Variable {
+                        name: bridge_stack.interface_material.clone(),
+                        span,
+                    });
+                }
+                props
             },
-            liner: None,
-            liner_thickness: None,
-            koz: None,
-            filled: None,
-            fill_material: None,
             span,
         }
     }
@@ -119,12 +112,20 @@ impl AutoViaInserter {
         let (x_mm, y_mm) = self.placement_xy_mm(via, transition);
         let x_nm = (x_mm * 1_000_000.0) as i64;
         let y_nm = (y_mm * 1_000_000.0) as i64;
-        let diameter_nm = via
-            .diameter
-            .as_ref()
-            .map(|measurement| (measurement.value * 1_000_000.0) as i64)
+        
+        let diameter_nm = via.properties.get("diameter")
+            .and_then(|expr| expr.evaluate_const().ok())
+            .and_then(|val| val.to_nanometers().ok())
             .unwrap_or(100_000);
+            
         let radius_nm = diameter_nm / 2;
+
+        let bridge = via.properties.get("bridge").and_then(|expr| {
+            match expr {
+                Expression::Variable { name, .. } => Some(name.clone()),
+                _ => None,
+            }
+        });
 
         ContactMetadata {
             name: via
@@ -136,7 +137,7 @@ impl AutoViaInserter {
             z_start_nm: transition.from_z_nm,
             z_end_nm: transition.to_z_nm,
             net: via.net.as_ref().map(|net| net.to_string().into()),
-            bridge: via.bridge.clone(),
+            bridge,
             bbox: Some(BoundingBox::new(
                 Point3D::new(x_nm - radius_nm, y_nm - radius_nm, transition.from_z_nm),
                 Point3D::new(x_nm + radius_nm, y_nm + radius_nm, transition.to_z_nm),

@@ -4,7 +4,7 @@ use crate::geometry_union::{circle_to_path, rect_to_path};
 use crate::mesh_extrusion::extrude_polygon_mesh;
 use clipper2_rust::core::FillRule;
 use super::mesh_generation::{
-    create_box_with_holes_mesh, create_cylinder_mesh, create_tube_mesh, create_via_mesh,
+    create_box_with_holes_mesh, create_cylinder_mesh, create_via_mesh,
     CutoutParams,
 };
 use super::types::{BoxParams, FaceCulling, MaterialNode, MeshNode};
@@ -20,7 +20,7 @@ pub fn add_substrate(
     meshes: &mut Vec<MeshNode>,
     space: &HardwareSpace,
     materials: &FxHashMap<CompactString, MaterialNode>,
-    profile: Option<&ProfileDefinition>,
+    _profile: Option<&ProfileDefinition>,
 ) {
     let mut substrate_layers = space.voxel_grid.get_substrate_layers().to_vec();
 
@@ -75,6 +75,21 @@ pub fn add_substrate(
             let mut should_subtract = other_precedence < my_precedence || 
                 (other_precedence == my_precedence && j > i && layer.material == other.material);
 
+            // v0.1.9: PURE GEOMETRIC CONCENTRIC CHECK
+            // If the XY center coordinates of two layers match exactly, they are 
+            // concentric components of the same via structure. We bypass subtraction.
+            let concentric = {
+                let cx1 = (layer.bbox.min.x + layer.bbox.max.x) / 2;
+                let cy1 = (layer.bbox.min.y + layer.bbox.max.y) / 2;
+                let cx2 = (other.bbox.min.x + other.bbox.max.x) / 2;
+                let cy2 = (other.bbox.min.y + other.bbox.max.y) / 2;
+                (cx1 - cx2).abs() < 1000 && (cy1 - cy2).abs() < 1000
+            };
+
+            if concentric {
+                should_subtract = false;
+            }
+
             if layer.layer_type == hwc_engine::voxel_grid::SubstrateLayerType::Pour 
                 && layer.net != 0 
                 && layer.net == other.net 
@@ -107,6 +122,19 @@ pub fn add_substrate(
                     && layer.net != 0 
                     && layer.net == drill.net 
                 {
+                    continue;
+                }
+
+                // Skip if the FR4 substrate slice is concentric with a drill
+                let concentric = {
+                    let cx1 = (layer.bbox.min.x + layer.bbox.max.x) / 2;
+                    let cy1 = (layer.bbox.min.y + layer.bbox.max.y) / 2;
+                    let cx2 = (drill.bbox.min.x + drill.bbox.max.x) / 2;
+                    let cy2 = (drill.bbox.min.y + drill.bbox.max.y) / 2;
+                    (cx1 - cx2).abs() < 1000 && (cy1 - cy2).abs() < 1000
+                };
+
+                if concentric {
                     continue;
                 }
 
@@ -210,6 +238,20 @@ pub fn add_substrate(
                 continue;
             }
             let other_precedence = layer_precedences[other_idx];
+            
+            // v0.1.9: PURE GEOMETRIC CONCENTRIC CULLING EXEMPTION
+            let is_concentric = {
+                let cx1 = (layer.bbox.min.x + layer.bbox.max.x) / 2;
+                let cy1 = (layer.bbox.min.y + layer.bbox.max.y) / 2;
+                let cx2 = (other.bbox.min.x + other.bbox.max.x) / 2;
+                let cy2 = (other.bbox.min.y + other.bbox.max.y) / 2;
+                (cx1 - cx2).abs() < 1000 && (cy1 - cy2).abs() < 1000
+            };
+
+            if is_concentric {
+                continue;
+            }
+
             let mut should_cull_bottom = false;
             let mut should_cull_top = false;
 
@@ -287,8 +329,9 @@ pub fn add_substrate(
                 inner_diameter,
                 pad_diameter,
                 segments,
+                top_cap,
+                bottom_cap,
                 bottom_outer_diameter,
-                ..
             } => {
                 let outer_diameter_mm = outer_diameter as f64 / 1_000_000.0;
                 let inner_diameter_mm = inner_diameter as f64 / 1_000_000.0;
@@ -305,8 +348,8 @@ pub fn add_substrate(
                     (outer_diameter_mm - inner_diameter_mm) / 2.0,
                     depth,
                     segments,
-                    CapType::None,
-                    CapType::None,
+                    top_cap,
+                    bottom_cap,
                     bottom_outer_diameter_mm,
                     material_name,
                     space.view,
