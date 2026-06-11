@@ -280,6 +280,51 @@ pub fn program_to_space(
     // This locks every bounding box with final post-transform (rotation/offset) geometry baked in.
     // Pass 2 (below) places routes/traces ONLY after the BBoxTracker is frozen.
     // Result: pours and traces no longer query stale pre-bake bboxes -> eliminates wedge/stretched artifacts.
+
+    // v0.1.7: Auto-create solder mask layers at board top/bottom faces (Zero Implicit Magic)
+    // These thin layers get cutouts from drill_via_hole for exposed vias.
+    // Z-positions are based on the actual stackup thickness, not the user-specified space depth.
+    {
+        let width_nm = space.dimensions.width_nm;
+        let height_nm = space.dimensions.height_nm;
+        let stackup_height_nm = stackup_manager.board_thickness_nm();
+        let mask_thickness_nm = 20_000; // 20µm standard solder mask thickness
+
+        // Check if user already added solder mask layers
+        let has_solder_mask = space.voxel_grid.get_substrate_layers().iter().any(|l| {
+            l.layer_type == hwc_engine::voxel_grid::SubstrateLayerType::SolderMask
+        });
+
+        if !has_solder_mask {
+            // Register SolderMask material if not already registered
+            let mask_material_id = space.material_registry.get_or_register("SolderMask");
+
+            // Top solder mask: sits directly ON TOP of the top copper layer
+            let top_mask_bbox = hwc_engine::geometry::BoundingBox::new(
+                hwc_engine::geometry::Point3D::new(0, 0, stackup_height_nm),
+                hwc_engine::geometry::Point3D::new(width_nm, height_nm, stackup_height_nm + mask_thickness_nm),
+            );
+            space.voxel_grid.add_substrate_layer(
+                mask_material_id,
+                0, // No net (insulator)
+                top_mask_bbox,
+                hwc_engine::voxel_grid::SubstrateLayerType::SolderMask,
+            );
+
+            // Bottom solder mask: sits directly UNDERNEATH the bottom copper layer
+            let bottom_mask_bbox = hwc_engine::geometry::BoundingBox::new(
+                hwc_engine::geometry::Point3D::new(0, 0, -mask_thickness_nm),
+                hwc_engine::geometry::Point3D::new(width_nm, height_nm, 0),
+            );
+            space.voxel_grid.add_substrate_layer(
+                mask_material_id,
+                0, // No net (insulator)
+                bottom_mask_bbox,
+                hwc_engine::voxel_grid::SubstrateLayerType::SolderMask,
+            );
+        }
+    }
+
     let mut total_placement_time = std::time::Duration::ZERO;
     let mut component_count = 0;
 
@@ -421,13 +466,8 @@ pub fn program_to_space(
 
     // Commit all placements and routes to the visible plane
     // This makes substrate, pours, components, and routes visible to exporters
-    // eprintln!($3"[DEBUG program_to_space] Committing voxel grid to visible plane...");
     let _commit_start = std::time::Instant::now();
     let _stats_before = space.voxel_grid.memory_stats();
-    // eprintln!($3"[DEBUG program_to_space] Before commit: {} occupied voxels (took {:?})",
-    //     stats_before.occupied_voxels,
-    //     commit_start.elapsed()
-    // );
     let _commit_start2 = std::time::Instant::now();
     space.voxel_grid.commit_route();
     // eprintln!($3"[DEBUG program_to_space] commit_route() took {:?}", commit_start2.elapsed());

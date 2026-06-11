@@ -1,0 +1,12 @@
+M48
+; DRILL file {Solder_Mask_Test_Board} date 2026-06-10
+; v0.1.7 physical Z (mm) recorded per tool pass where applicable
+; FORMAT={-:-/ absolute / inch / decimal}
+FMAT,2
+INCH
+T1C0.0118
+%
+T1
+X0.1181Y0.1969
+X0.2756Y0.1969
+M30

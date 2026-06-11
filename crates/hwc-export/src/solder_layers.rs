@@ -198,7 +198,7 @@ pub fn export(space: &HardwareSpace, output_dir: &Path) -> Result<(), Box<dyn st
     Ok(())
 }
 
-/// Collect all pads from components in the netlist
+/// Collect all pads from components and exposed vias in the netlist
 fn collect_pads(space: &HardwareSpace) -> Result<Vec<PadInfo>, Box<dyn std::error::Error>> {
     let mut pads = Vec::new();
 
@@ -228,6 +228,40 @@ fn collect_pads(space: &HardwareSpace) -> Result<Vec<PadInfo>, Box<dyn std::erro
                     }
                 }
             }
+        }
+    }
+
+    // v0.1.7: Collect exposed via pads (respecting is_tented flag)
+    for contact in &space.contacts {
+        // Skip tented vias — no solder mask opening
+        if contact.is_tented {
+            continue;
+        }
+
+        if let Some(bbox) = &contact.bbox {
+            let x_nm = (bbox.min.x + bbox.max.x) / 2;
+            let y_nm = (bbox.min.y + bbox.max.y) / 2;
+            let drill_diameter_nm = bbox.max.x - bbox.min.x;
+
+            // Use explicit mask clearance if provided, otherwise drill + 2*expansion
+            let pad_diameter = contact.mask_clearance_diameter_nm
+                .unwrap_or(drill_diameter_nm + 150_000); // default: drill + 2*75um
+
+            // Add pad for top face if via reaches it
+            pads.push(PadInfo {
+                x_nm,
+                y_nm,
+                z_nm: contact.z_end_nm,
+                shape: PadShape::Circle { diameter_nm: pad_diameter },
+            });
+
+            // Add pad for bottom face if via reaches it
+            pads.push(PadInfo {
+                x_nm,
+                y_nm,
+                z_nm: contact.z_start_nm,
+                shape: PadShape::Circle { diameter_nm: pad_diameter },
+            });
         }
     }
 

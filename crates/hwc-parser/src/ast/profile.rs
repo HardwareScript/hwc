@@ -88,6 +88,7 @@ pub struct ManufacturingConstraints {
     pub ipc2221_k_external: Option<f64>,
     pub ipc2221_k_internal: Option<f64>,
     pub min_feature_size: Option<Measurement>,
+    pub solder_mask_expansion: Option<Measurement>,
     pub span: Span,
 }
 

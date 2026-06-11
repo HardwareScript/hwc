@@ -238,7 +238,8 @@ impl VoxelGrid {
                 z_end_nm,
             ),
         );
-        self.drill_via_hole(bbox, diameter_nm, net_id, clearance_nm);
+        // TSVs are internal, never tented. Pad diameter = drill + 2*annular_ring (use 0 default).
+        self.drill_via_hole(bbox, diameter_nm, net_id, clearance_nm, false, diameter_nm, 75_000);
     }
 
     /// Get the number of substrate layers.
@@ -270,6 +271,7 @@ impl VoxelGrid {
 
             let should_drill = match layer.layer_type {
                 SubstrateLayerType::Substrate => true, // Always drill dielectric (insulators)
+                SubstrateLayerType::SolderMask => true, // Drill solder mask for via openings
                 SubstrateLayerType::Pour => {
                     // v0.1.7 FIXED: Native material-aware check.
                     // Never carve through conductive materials (Copper).
@@ -293,7 +295,18 @@ impl VoxelGrid {
     /// This is the "Auto-Drill" logic that prevents short circuits.
     /// It drills through all Substrate layers and any Pour layers that have a DIFFERENT net.
     /// v0.1.7: Added clearance_nm for different-net anti-pads.
-    pub fn drill_via_hole(&mut self, hole_bbox: BoundingBox, diameter_nm: i64, via_net: NetId, clearance_nm: i64) {
+    /// v0.1.7: Added is_tented, pad_diameter_nm, and solder_mask_expansion_nm for
+    /// profile-driven solder mask openings (Zero Implicit Magic).
+    pub fn drill_via_hole(
+        &mut self,
+        hole_bbox: BoundingBox,
+        diameter_nm: i64,
+        via_net: NetId,
+        clearance_nm: i64,
+        is_tented: bool,
+        pad_diameter_nm: i64,
+        solder_mask_expansion_nm: i64,
+    ) {
         // 1. Structural clearing
         for layer in &mut self.substrate_layers {
             let xy_intersects = layer.bbox.min.x < hole_bbox.max.x
@@ -309,6 +322,30 @@ impl VoxelGrid {
                     SubstrateLayerType::Substrate => {
                         // Always drill dielectric with the actual via diameter
                         layer.add_cylinder_cutout(hole_bbox, diameter_nm);
+                    },
+                    SubstrateLayerType::SolderMask => {
+                        // v0.1.7: Profile-driven solder mask opening (Zero Implicit Magic)
+                        if !is_tented {
+                            // Exposed via: cut opening in solder mask
+                            // Formula: pad_diameter + 2 × solder_mask_expansion
+                            let opening_diameter = pad_diameter_nm + 2 * solder_mask_expansion_nm;
+                            // The cutout must span the full mask thickness so the export
+                            // slicing logic can match it. Use the layer's own Z range.
+                            let mask_cutout_bbox = crate::geometry::BoundingBox::new(
+                                crate::geometry::Point3D::new(
+                                    hole_bbox.min.x.max(layer.bbox.min.x),
+                                    hole_bbox.min.y.max(layer.bbox.min.y),
+                                    layer.bbox.min.z,
+                                ),
+                                crate::geometry::Point3D::new(
+                                    hole_bbox.max.x.min(layer.bbox.max.x),
+                                    hole_bbox.max.y.min(layer.bbox.max.y),
+                                    layer.bbox.max.z,
+                                ),
+                            );
+                            layer.add_cylinder_cutout(mask_cutout_bbox, opening_diameter);
+                        }
+                        // Tented: do nothing, mask stays intact
                     },
                     SubstrateLayerType::Pour => {
                         if layer.net == via_net {

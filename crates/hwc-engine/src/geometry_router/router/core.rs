@@ -51,11 +51,13 @@ pub struct GeometryRouter {
 #[derive(Debug, Clone)]
 pub struct CopperPour {
     pub(super) net_id: crate::netlist::NetId,
+    pub(super) material_id: crate::voxel_grid::MaterialId,
     /// Bottom Z elevation of the pour plane in nanometers.
     pub(super) z_bottom_nm: i64,
     #[allow(dead_code)] // Reserved for future use in pour boundary checking
     pub(super) bounds: (Point3D, Point3D), // Min and max corners
 }
+
 
 impl GeometryRouter {
     /// Create a new geometry router.
@@ -133,11 +135,13 @@ impl GeometryRouter {
     pub fn add_copper_pour(
         &mut self,
         net_id: crate::netlist::NetId,
+        material_id: crate::voxel_grid::MaterialId,
         z_bottom_nm: i64,
         bounds: (Point3D, Point3D),
     ) {
         self.copper_pours.push(CopperPour {
             net_id,
+            material_id,
             z_bottom_nm,
             bounds,
         });

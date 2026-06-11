@@ -217,6 +217,8 @@ pub fn unroll_internal_features(
                                 bridge: None,
                                 bbox: Some(hole_bbox),
                                 voxels: Vec::new(),
+                                is_tented: false,
+                                mask_clearance_diameter_nm: None,
                             });
                         }
                     }

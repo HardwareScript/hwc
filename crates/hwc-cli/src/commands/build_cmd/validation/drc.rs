@@ -164,6 +164,7 @@ pub fn run_drc_check(space: &HardwareSpace, config: &BuildConfig, _start_time: I
             high_voltage_clearance_nm: Some(constraints.clearance.high_voltage_nm),
             safety_factor: constraints.clearance.safety_factor,
             stackup,
+            solder_mask_expansion_nm: constraints.solder_mask_expansion_nm,
         };
 
         constraint_rulebook.set_fabrication_constraints(fab_constraints);

@@ -243,6 +243,7 @@ impl super::super::super::Parser {
         let mut ipc2221_k_external = None;
         let mut ipc2221_k_internal = None;
         let mut min_feature_size = None;
+        let mut solder_mask_expansion = None;
 
         while !self.check(&Token::Dedent) && !self.is_at_end() {
             self.skip_whitespace();
@@ -271,6 +272,10 @@ impl super::super::super::Parser {
                     min_feature_size = Some(self.parse_measurement()?);
                     self.skip_whitespace();
                 }
+                "solder_mask_expansion" => {
+                    solder_mask_expansion = Some(self.parse_measurement()?);
+                    self.skip_whitespace();
+                }
                 _ => {
                     return Err(self.error(&format!(
                         "Unknown manufacturing constraint: '{}'",
@@ -287,6 +292,7 @@ impl super::super::super::Parser {
             ipc2221_k_external,
             ipc2221_k_internal,
             min_feature_size,
+            solder_mask_expansion,
             span: Span::new(start_pos, end_pos),
         })
     }

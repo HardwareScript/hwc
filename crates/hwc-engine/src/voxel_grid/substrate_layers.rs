@@ -58,6 +58,9 @@ pub enum SubstrateLayerType {
 
     /// 3D dielectric substrate (FR4, core, prepreg)
     Substrate,
+
+    /// Solder mask coating on top/bottom board faces (v0.1.7)
+    SolderMask,
 }
 
 /// Type of cap for tube shapes (v0.1.7)

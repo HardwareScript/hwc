@@ -497,6 +497,10 @@ pub struct ContactMetadata {
     /// Voxel positions that make up this via (for DRC validation)
     /// Task 4.2: Via geometry tracking for diameter/enclosure checks
     pub voxels: Vec<crate::geometry::Point3D>,
+    /// Whether the via is tented (covered by solder mask) — v0.1.7
+    pub is_tented: bool,
+    /// Optional explicit solder mask opening diameter in nanometers — v0.1.7
+    pub mask_clearance_diameter_nm: Option<i64>,
 }
 
 impl HardwareSpace {

@@ -80,6 +80,14 @@ pub fn profile_to_constraints(
         .and_then(|m| m.ipc2221_k_internal)
         .unwrap_or(0.024); // IPC-2221 default for internal layers
 
+    // v0.1.7: Extract solder mask expansion (Zero Implicit Magic)
+    let solder_mask_expansion_nm = profile
+        .manufacturing
+        .as_ref()
+        .and_then(|m| m.solder_mask_expansion.as_ref())
+        .map(measurement_to_nm)
+        .unwrap_or(75_000); // IPC-7351 default: 75µm
+
     // Extract voltage classification thresholds
     let _low_voltage_threshold_v = profile
         .clearance
@@ -188,6 +196,7 @@ pub fn profile_to_constraints(
         thermal,
         stackup,
         bridges,
+        solder_mask_expansion_nm,
     })
 }
 

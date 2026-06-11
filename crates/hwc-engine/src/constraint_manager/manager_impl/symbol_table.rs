@@ -227,3 +227,20 @@ pub fn extract_stackup_constraints<S: SymbolTableTrait>(
     // See Phase 2 "Rip Off the Band-Aid" decision in the roadmap.
     Ok(None)
 }
+
+/// Extract solder mask expansion from profile manufacturing constraints (v0.1.7).
+///
+/// Returns the solder mask expansion in nanometers, or the IPC-7351 default
+/// of 75,000 nm (75µm) if not specified in the profile.
+pub fn extract_solder_mask_expansion<S: SymbolTableTrait>(
+    profile: &ProfileDefinition,
+    symbol_table: &S,
+) -> Result<i64, String> {
+    if let Some(ref mfg) = profile.manufacturing {
+        if let Some(ref expansion) = mfg.solder_mask_expansion {
+            return symbol_table.measurement_to_nm(expansion);
+        }
+    }
+    // IPC-7351 default: 75µm solder mask expansion per side
+    Ok(75_000)
+}

@@ -256,6 +256,9 @@ pub fn place_contact(
     );
     space.add_vias(vec![via]);
 
+    // v0.1.7: Read solder mask properties (needed by all process branches and ContactMetadata)
+    let is_tented = get_prop_bool(contact, "is_tented", eval_context).unwrap_or(false);
+
     // v0.1.7: TSV (Through-Silicon Via) support
     let liner_material_name = get_prop_string(contact, "liner", eval_context);
     if let Some(liner_material_name) = &liner_material_name {
@@ -366,13 +369,7 @@ pub fn place_contact(
             .unwrap_or(150_000); // Default 150um
 
         if process == hwc_engine::ManufacturingProcess::DrilledPlated {
-            // 1. ACTION: Auto-Drill (v0.1.7)
-            // We use drill_via_hole to ensure we carve the substrate and OTHER-NET pours
-            // while maintaining connectivity to the target net pours.
-            // v0.1.7: Added clearance_nm for different-net anti-pads.
-            space.voxel_grid.drill_via_hole(contact_bbox, diameter_nm, net_id, clearance_nm);
-
-            // 2. ACTION: Calculate Unified Via parameters (Annular Ring & Plating)
+            // 1. Pre-compute via parameters needed by drill and solder mask
             let min_annular_ring_nm = if let Some(nm) = get_prop_nm(contact, "annular_ring", symbol_table, eval_context) {
                 nm
             } else {
@@ -382,6 +379,26 @@ pub fn place_contact(
             };
 
             let pad_diameter_nm = diameter_nm + (2 * min_annular_ring_nm);
+
+            // v0.1.7: Profile-driven solder mask expansion (Zero Implicit Magic)
+            let solder_mask_expansion_nm = space.fabrication_constraints.as_ref()
+                .map(|c| c.solder_mask_expansion_nm)
+                .unwrap_or(75_000);
+
+            // 2. ACTION: Auto-Drill (v0.1.7)
+            // We use drill_via_hole to ensure we carve the substrate, OTHER-NET pours,
+            // and solder mask layers while maintaining connectivity to target net pours.
+            space.voxel_grid.drill_via_hole(
+                contact_bbox,
+                diameter_nm,
+                net_id,
+                clearance_nm,
+                is_tented,
+                pad_diameter_nm,
+                solder_mask_expansion_nm,
+            );
+
+            // 3. ACTION: Calculate remaining Unified Via parameters (Plating)
             let plating_thickness_nm = if let Some(nm) = get_prop_nm(contact, "plating_thickness", symbol_table, eval_context) {
                 nm
             } else {
@@ -469,16 +486,27 @@ pub fn place_contact(
         } else if process == hwc_engine::ManufacturingProcess::Etched {
             // v0.1.7: Mechanical/Subtractive Logic
             // 1. ACTION: Auto-Drill (NPTH logic: Net 0 always drills everything)
-            // v0.1.7: Added clearance_nm (though for NPTH it usually drills everything)
-            space.voxel_grid.drill_via_hole(contact_bbox, diameter_nm, 0, clearance_nm);
+            // Etched vias are NPTH - no solder mask opening needed (is_tented=true for NPTH)
+            space.voxel_grid.drill_via_hole(contact_bbox, diameter_nm, 0, clearance_nm, true, diameter_nm, 75_000);
 
             // NO cylinder/tube is added. The space remains empty (Void).
         } else {
             // v0.1.7: Auto-Drill for deposited vias
             // Even if not "drilled" in manufacturing, it must physically displace
             // the substrate and clear different-net pours.
-            // v0.1.7: Added clearance_nm for different-net anti-pads.
-            space.voxel_grid.drill_via_hole(contact_bbox, diameter_nm, net_id, clearance_nm);
+            // Deposited vias use drill_diameter as pad (no annular ring by default)
+            let solder_mask_expansion_nm = space.fabrication_constraints.as_ref()
+                .map(|c| c.solder_mask_expansion_nm)
+                .unwrap_or(75_000);
+            space.voxel_grid.drill_via_hole(
+                contact_bbox,
+                diameter_nm,
+                net_id,
+                clearance_nm,
+                is_tented,
+                diameter_nm,
+                solder_mask_expansion_nm,
+            );
 
             // Simple via - use cylindrical placement (deposited, not drilled)
             placer
@@ -569,6 +597,8 @@ pub fn place_contact(
             ),
         }),
         voxels: Vec::new(), // Empty - analytic geometry only
+        is_tented,
+        mask_clearance_diameter_nm: get_prop_nm(contact, "mask_clearance_diameter", symbol_table, eval_context),
     });
 
     Ok(())

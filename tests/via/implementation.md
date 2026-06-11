@@ -90,18 +90,23 @@ This document tracks the implementation and testing of 3D via modeling and their
     - **Net-Aware Filtering**: Copper pours automatically subtract via cylinders only if they belong to different nets, ensuring isolation while maintaining connectivity for same-net landings.
   - *Engine Parameters:* `antipad_diameter` (typically `drill_diameter + 2 * clearance_requirement`).
 
-- [ ] **3. Thermal Relief (Thermal Tie Connection)**
+- [x] **3. Thermal Relief (Thermal Tie Connection)**
   - *What it is:* When a via does connect to a copper plane, solid copper acts as a heat sink, making soldering difficult. A thermal relief connects the via to the plane using narrow spokes.
   - *3D Representation:*
     - An antipad (clearance ring) is cut into the copper plane, but 2 or 4 solid copper "spokes" (bridges) are left intact, connecting the via's annular ring to the surrounding plane.
   - *Engine Parameters:* `spoke_width`, `spoke_count` (usually 2 or 4), `antipad_diameter`.
 
-- [ ] **4. Solder Mask Opening (Tented vs. Exposed Vias)**
+- [x] **4. Solder Mask Opening (Tented vs. Exposed Vias)**
   - *What it is:* Solder mask is the protective outer coating (typically green) on a PCB. Vias can either be covered by it ("tented") or left open ("exposed").
   - *3D Representation:*
     - If Tented: Render the solder mask layer completely flat over the top of the via hole (effectively capping the visual hole with the solder mask color).
     - If Exposed: Subtract a cylinder from the solder mask layer, exposing the copper annular ring and the open hole beneath it.
   - *Engine Parameters:* `is_tented: boolean`, `mask_clearance_diameter`.
+  - *Engine Implementation:*
+    - **Profile-Driven Defaults (Zero Implicit Magic)**: `solder_mask_expansion` stored in profile's `manufacturing` block with IPC-7351 default of 75µm.
+    - **Formula**: `Solder Mask Opening = Pad Diameter + 2 × Profile Solder Mask Expansion`.
+    - **Auto-Created Layers**: Solder mask substrate layers auto-created at board top/bottom faces using `stackup_manager.board_thickness_nm()`.
+    - **Cutout BBox Clamping**: Cutout bbox Z-range clamped to mask layer Z-range to ensure export slicing logic can match boundary-touching cutouts.
 
 - [ ] **5. Non-Functional Pad (NFP) Removal**
   - *What it is:* On inner layers where a via does not make an electrical connection, the circular copper pad is often omitted during manufacturing to save space and reduce capacitance.

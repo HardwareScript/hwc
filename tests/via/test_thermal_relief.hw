@@ -1,0 +1,63 @@
+import * from @std/primitives/units
+import FR4 from @std/materials/insulators
+
+material ViaCopper:
+    category: conductor
+    process: drilled_plated
+    properties:
+        color: "#B87333"
+        resistivity: 1.68e-8Ω·m
+
+profile Thermal_Relief_Test_Profile:
+    stackup:
+        top:    [material: ViaCopper, thickness: 35um]
+        d1:     [material: FR4,       thickness: 200um]
+        inner1: [material: ViaCopper, thickness: 35um]
+        core:   [material: FR4,       thickness: 1060um]
+        bottom: [material: ViaCopper, thickness: 35um]
+    
+    via:
+        min_diameter: 0.1mm
+        min_annular_ring: 0.05mm
+        min_spacing: 0.15mm
+
+    trace:
+        min_width: 0.1mm
+        min_spacing: 0.1mm
+
+    manufacturing:
+        copper_thickness: 35um
+        ipc2221_k_external: 0.048
+        ipc2221_k_internal: 0.024
+    
+    clearance:
+        high_voltage: 2mm
+        safety_factor: 2.0
+        
+    layer:
+        min_thickness: 0.1mm
+
+module Thermal_Relief_Test_Module:
+    pins: [SIG]
+
+space Thermal_Relief_Test_Board implements Thermal_Relief_Test_Module:
+    dimensions: 10mm by 10mm by 1.6mm
+    grid: 100 by 100 by 32
+    origin: bl by b
+    profile: Thermal_Relief_Test_Profile
+
+    # 2. Host Ground Plane on inner1 (to receive the thermal relief)
+    add pour(ViaCopper) named InnerGndPlane on layer: inner1:
+        boundary: [x: 2.0mm, y: 2.0mm] to [x: 8.0mm, y: 8.0mm]
+        net: SIG
+        merge: true
+
+    # 3. Via with Thermal Relief parameters
+    add contact(ViaCopper) named Thermal_Via at [x: 5.0mm, y: 5.0mm] spanning layer: top to bottom:
+        net: SIG
+        drill_diameter: 0.3mm
+        plating_thickness: 25um
+        annular_ring: 0.1mm
+        thermal_relief: true
+        spoke_width: 0.2mm
+        antipad_diameter: 0.8mm

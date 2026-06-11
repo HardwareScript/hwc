@@ -4,6 +4,8 @@
 
 use crate::geometry::Point3D;
 use crate::netlist::NetId;
+use rustc_hash::FxHashMap;
+use hwc_parser::Expression;
 
 /// Net route request for automatic routing.
 ///
@@ -100,6 +102,9 @@ pub struct Via {
 
     /// Via type classification (through-hole, blind, buried, microvia)
     pub via_type: ViaType,
+
+    /// Generic via properties (e.g., thermal_relief)
+    pub properties: FxHashMap<String, Expression>,
 }
 
 impl Via {
@@ -130,6 +135,7 @@ impl Via {
             diameter_nm,
             net_id,
             via_type,
+            properties: FxHashMap::default(),
         }
     }
 
@@ -149,6 +155,7 @@ impl Via {
             diameter_nm,
             net_id,
             via_type,
+            properties: FxHashMap::default(),
         }
     }
 

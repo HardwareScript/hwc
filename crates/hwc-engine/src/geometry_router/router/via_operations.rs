@@ -69,6 +69,7 @@ impl GeometryRouter {
             diameter_nm: via_diameter,
             net_id: crate::netlist::NetId::new(0),
             via_type: super::super::types::ViaType::ThroughHole,
+            properties: rustc_hash::FxHashMap::default(),
         };
 
         for z_nm in via.z_planes(self.voxel_size_nm) {
@@ -112,8 +113,27 @@ impl GeometryRouter {
 
         for z_nm in via.z_planes(self.voxel_size_nm) {
             for pour in &self.copper_pours.clone() {
-                if pour.z_bottom_nm == z_nm && pour.net_id != via.net_id {
-                    self.remove_circular_area(via.position, antipad_radius, z_nm);
+                if pour.z_bottom_nm == z_nm {
+                    if pour.net_id != via.net_id {
+                        self.remove_circular_area(via.position, antipad_radius, z_nm);
+                    } else if let Some(expr) = via.properties.get("thermal_relief") {
+                        // Check if "true"
+                        if let hwc_parser::Expression::Variable { name, .. } = expr {
+                            if name == "true" {
+                                use crate::geometry_router::thermal_relief::{ThermalReliefGenerator, ThermalReliefConfig};
+                                let generator = ThermalReliefGenerator::new(ThermalReliefConfig::default(), self.voxel_size_nm);
+                                let center = crate::geometry_router::polygon_rasterizer::Point2D::new(via.position.0, via.position.1);
+                                generator.generate_for_circular_pad(
+                                    center,
+                                    via.diameter_nm / 2,
+                                    z_nm,
+                                    pour.material_id as crate::voxel_grid::MaterialId,
+                                    via.net_id.raw() as crate::voxel_grid::NetId,
+                                    &mut self.voxel_grid,
+                                );
+                            }
+                        }
+                    }
                 }
             }
         }

@@ -1,0 +1,68 @@
+import * from @std/primitives/units
+import FR4 from @std/materials/insulators
+
+material ViaCopper:
+    category: conductor
+    process: drilled_plated
+    properties:
+        color: "#B87333"
+        resistivity: 1.68e-8Ω·m
+
+profile Solder_Mask_Test_Profile:
+    stackup:
+        top:    [material: ViaCopper, thickness: 35um]
+        d1:     [material: FR4,       thickness: 200um]
+        inner1: [material: ViaCopper, thickness: 35um]
+        core:   [material: FR4,       thickness: 1060um]
+        bottom: [material: ViaCopper, thickness: 35um]
+    
+    via:
+        min_diameter: 0.1mm
+        min_annular_ring: 0.05mm
+        min_spacing: 0.15mm
+
+    trace:
+        min_width: 0.1mm
+        min_spacing: 0.1mm
+
+    manufacturing:
+        copper_thickness: 35um
+        solder_mask_expansion: 75um
+        ipc2221_k_external: 0.048
+        ipc2221_k_internal: 0.024
+    
+    clearance:
+        high_voltage: 2mm
+        safety_factor: 2.0
+        
+    layer:
+        min_thickness: 0.1mm
+
+module Solder_Mask_Test_Module:
+    pins: [GND]
+
+space Solder_Mask_Test_Board implements Solder_Mask_Test_Module:
+    dimensions: 10mm by 10mm by 1.6mm
+    grid: 100 by 100 by 32
+    origin: bl by b
+    profile: Solder_Mask_Test_Profile
+
+    # Ground plane on inner layer
+    add pour(ViaCopper) named GndPlane on layer: inner1:
+        boundary: [x: 1.0mm, y: 1.0mm] to [x: 9.0mm, y: 9.0mm]
+        net: GND
+        merge: true
+
+    # Exposed via (solder mask opening will be cut) — connected to GND plane
+    add contact(ViaCopper) named Exposed_Via at [x: 3.0mm, y: 5.0mm] spanning layer: top to bottom:
+        net: GND
+        drill_diameter: 0.3mm
+        annular_ring: 0.1mm
+        is_tented: false
+
+    # Tented via (solder mask stays intact) — also connected to GND plane
+    add contact(ViaCopper) named Tented_Via at [x: 7.0mm, y: 5.0mm] spanning layer: top to bottom:
+        net: GND
+        drill_diameter: 0.3mm
+        annular_ring: 0.1mm
+        is_tented: true

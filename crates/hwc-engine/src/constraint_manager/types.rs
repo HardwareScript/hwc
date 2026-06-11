@@ -139,6 +139,10 @@ pub struct FabricationConstraints {
 
     /// Stackup information for impedance calculations (optional)
     pub stackup: Option<StackupInfo>,
+
+    /// Solder mask expansion in nanometers (v0.1.7)
+    /// Default: 75_000 (75µm) per IPC-7351
+    pub solder_mask_expansion_nm: i64,
 }
 
 /// Complete constraint rulebook for the routing engine.
