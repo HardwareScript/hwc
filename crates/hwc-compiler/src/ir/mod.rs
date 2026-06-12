@@ -430,9 +430,27 @@ pub fn program_to_space(
 
     // Phase 3: Execute Auto-Routing Batch
     if !auto_routes.is_empty() {
-        let mut auto_router = routing::AutoRouter::new(&mut space, symbol_table, &stackup_manager);
-        // We'll update AutoRouter to take specific routes if needed,
-        // but for now it routes everything in the space that needs it.
+        // v0.1.7: Build escape specs map from Route ASTs so the AutoRouter
+        // uses directional pad-edge clipping instead of naive heuristics.
+        // Keyed by (start_comp.pin, goal_comp.pin) → (exit, enter)
+        let mut route_escape_specs: rustc_hash::FxHashMap<(compact_str::CompactString, compact_str::CompactString), (Option<routing::RouteEscapeSpec>, Option<routing::RouteEscapeSpec>)> = rustc_hash::FxHashMap::default();
+        for route in &auto_routes {
+            if route.exit_escape.is_some() || route.enter_escape.is_some() {
+                let start_key: compact_str::CompactString = format!("{}.{}", route.from.component, route.from.pin).into();
+                let goal_key: compact_str::CompactString = format!("{}.{}", route.to.component, route.to.pin).into();
+                let exit = route.exit_escape.as_ref().map(|e| routing::RouteEscapeSpec {
+                    port: e.port,
+                    offset: e.offset.clone(),
+                });
+                let enter = route.enter_escape.as_ref().map(|e| routing::RouteEscapeSpec {
+                    port: e.port,
+                    offset: e.offset.clone(),
+                });
+                route_escape_specs.insert((start_key, goal_key), (exit, enter));
+            }
+        }
+
+        let mut auto_router = routing::AutoRouter::new(&mut space, symbol_table, &stackup_manager, route_escape_specs);
         auto_router.route_all_nets()?;
     }
 

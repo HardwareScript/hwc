@@ -16,6 +16,13 @@ pub struct MoveCostParams<'a> {
     pub occupied_voxels: &'a FxHashSet<Point3D>,
     pub clearance_zones: &'a [ClearanceZone],
     pub layer_direction: Option<LayerDirection>,
+    /// v0.1.7: Substrate layers for reference-plane void detection.
+    /// When `is_high_speed_net` is true, crossing a void in the reference
+    /// plane incurs an extreme penalty to force deviation.
+    pub substrate_layers: Option<&'a [crate::voxel_grid::SubstrateLayer]>,
+    /// v0.1.7: Whether this net is classified as high-speed (≥1 GHz).
+    /// High-speed nets incur SI penalties when crossing reference plane voids.
+    pub is_high_speed_net: bool,
 }
 
 /// Calculate move cost for A* pathfinding with full clearance and crosstalk detection.
@@ -122,6 +129,29 @@ pub fn calculate_move_cost(params: &MoveCostParams) -> i64 {
 
     if params.constraints.impedance_ohm.is_some() {
         cost += 1;
+    }
+
+    // =========================================================================
+    // v0.1.7 Substrate & Reference-Plane Aware Routing
+    // =========================================================================
+    // When routing a high-speed signal, crossing a split or void in the
+    // ground/power reference plane causes signal reflections. Detect this
+    // and apply an extreme penalty to force the router to deviate.
+    if params.is_high_speed_net {
+        if let Some(substrate_layers) = params.substrate_layers {
+            // Look for a reference plane (Pour type) below the current routing layer
+            let ref_z = params.to.z - params.voxel_size_nm; // One layer below
+            let has_void = substrate_layers.iter().any(|layer| {
+                layer.layer_type == crate::voxel_grid::SubstrateLayerType::Pour
+                    && ref_z >= layer.bbox.min.z
+                    && ref_z <= layer.bbox.max.z
+                    && !layer.bbox.contains(params.to)
+            });
+
+            if has_void {
+                cost += 5_000_000; // Extreme penalty to force deviation around dielectric voids
+            }
+        }
     }
 
     cost

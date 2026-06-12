@@ -111,6 +111,13 @@ pub enum Token {
     #[token("bridge")]
     Bridge,
 
+    // v0.1.7: Port escape keywords
+    #[token("exit")]
+    Exit,
+
+    #[token("enter")]
+    Enter,
+
     // ========================================================================
     // BLOCK KEYS - Property names (strictly lowercase)
     // ========================================================================
@@ -563,6 +570,8 @@ impl fmt::Display for Token {
             Token::As => write!(f, "the 'as' keyword"),
             Token::Implements => write!(f, "the 'implements' keyword"),
             Token::Bridge => write!(f, "the 'bridge' keyword"),
+            Token::Exit => write!(f, "the 'exit' keyword"),
+            Token::Enter => write!(f, "the 'enter' keyword"),
             Token::Dimensions => write!(f, "the 'dimensions' keyword"),
             Token::Grid => write!(f, "the 'grid' keyword"),
             Token::Path => write!(f, "the 'path' keyword"),

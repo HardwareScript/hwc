@@ -60,6 +60,7 @@ impl super::super::Parser {
         let mut manufacturing = None;
         let mut stackup = None;
         let mut export = None; // v0.1.6: Export & visualization rules
+        let mut routing = None; // v0.1.7: Routing constraints (layer directions)
         let mut bridges = Vec::new(); // Phase 1: Bridge rules
         let mut vias_list = Vec::new(); // v0.1.7: Explicit via definitions
         let mut other = rustc_hash::FxHashMap::default(); // v0.1.6: Custom fields
@@ -291,6 +292,22 @@ impl super::super::Parser {
                         self.advance();
                     }
                 }
+                "routing" => {
+                    if let Err(e) = self.expect(&Token::Newline) {
+                        collector.report(e);
+                        self.sync_to_next_definition();
+                        continue;
+                    }
+                    if let Err(e) = self.expect(&Token::Indent) {
+                        collector.report(e);
+                        self.sync_to_next_definition();
+                        continue;
+                    }
+                    routing = self.parse_routing_constraints().ok();
+                    if self.check(&Token::Dedent) {
+                        self.advance();
+                    }
+                }
                 _ => {
                     // v0.1.6: Accept unknown fields and store in 'other' HashMap
                     if let Some(current) = self.current() {
@@ -353,6 +370,7 @@ impl super::super::Parser {
             manufacturing,
             stackup,
             export,
+            routing,
             bridges,
             vias: vias_list,
             other,

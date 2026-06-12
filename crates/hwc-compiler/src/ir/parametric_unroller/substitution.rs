@@ -235,6 +235,8 @@ pub fn unroll_route(route: &Route, variable: &str, value: usize) -> Result<Route
         path,
         signal_group: route.signal_group.clone(),
         bridge: route.bridge.clone(),
+        exit_escape: route.exit_escape.clone(),
+        enter_escape: route.enter_escape.clone(),
         span: route.span,
     })
 }

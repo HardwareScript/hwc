@@ -105,6 +105,8 @@ impl Parser {
                 Token::Rotated => Some("rotated"),
                 Token::Implements => Some("implements"),
                 Token::Bridge => Some("bridge"),
+                Token::Exit => Some("exit"),
+                Token::Enter => Some("enter"),
                 _ => None,
             };
 
@@ -151,6 +153,8 @@ impl Parser {
                     | Token::Rotated
                     | Token::Implements
                     | Token::Bridge
+                    | Token::Exit
+                    | Token::Enter
             )
         } else {
             false

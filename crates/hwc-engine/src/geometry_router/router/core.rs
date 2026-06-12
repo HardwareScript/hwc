@@ -11,8 +11,15 @@ use rustc_hash::FxHashMap;
 /// Orchestrates the automatic routing process using A* pathfinding with
 /// Manhattan routing constraints and physics-based clearance enforcement.
 ///
-/// **Documentation Reference**:
+/// Supports adaptive routing modes:
+/// - **Pass-Through** (LOD 1): Small designs (<100 nets, <1mm²) bypass G-Cell
+///   partitioning entirely. The router runs once over the whole board.
+/// - **Hierarchical** (LOD 2): Large designs are partitioned into G-Cells,
+///   routed globally, then detailed in parallel via Rayon.
+///
+/// **Documentation References**:
 /// - `Docs/v0.1.3/ROUTING-AND-PHYSICS.md` (lines 400-800, routing pipeline)
+/// - `Docs/v0.1.7/Adaptive-Heuristic.md` (adaptive mode selection)
 pub struct GeometryRouter {
     /// Grid bounds for routing
     pub(super) bounds: GridBounds,
@@ -45,6 +52,22 @@ pub struct GeometryRouter {
     /// The SDF generator uses these inflated boxes to route zero-width rays,
     /// automatically satisfying all clearance constraints.
     pub(super) bounding_box_tracker: BoundingBoxTracker,
+
+    // =========================================================================
+    // v0.1.7 Adaptive Router: Scale Detection & Mode Selection
+    // =========================================================================
+
+    /// Area threshold in nanometers² for switching to hierarchical mode.
+    /// Designs with total area below this AND net count below
+    /// `net_count_threshold` use Pass-Through mode (single G-Cell).
+    /// Default: 1mm² = 1_000_000_000_000 nm²
+    pub area_threshold_nm2: i64,
+
+    /// Net count threshold for switching to hierarchical mode.
+    /// Designs with net count below this AND area below
+    /// `area_threshold_nm2` use Pass-Through mode.
+    /// Default: 100
+    pub net_count_threshold: usize,
 }
 
 /// Copper pour definition for anti-pad generation.
@@ -110,6 +133,8 @@ impl GeometryRouter {
             vias: Vec::new(),
             copper_pours: Vec::new(),
             bounding_box_tracker: BoundingBoxTracker::new(),
+            area_threshold_nm2: 1_000_000_000_000, // 1mm²
+            net_count_threshold: 100,
         }
     }
 
@@ -231,6 +256,286 @@ impl GeometryRouter {
     // =========================================================================
     // End Minkowski Integration
     // =========================================================================
+
+    // =========================================================================
+    // v0.1.7 Adaptive Router: Scale Detection & Mode Selection
+    // =========================================================================
+
+    /// Primary entrypoint for space-level routing with adaptive mode selection.
+    ///
+    /// Evaluates net count and total board area to choose between:
+    /// - **Pass-Through Mode** (LOD 1): Small designs (<100 nets, <1mm²)
+    ///   bypass G-Cell partitioning. The router runs once over the whole board.
+    /// - **Hierarchical Mode** (LOD 2): Large designs are partitioned into
+    ///   G-Cells via `CoarseGrid`, routed globally, then detailed in parallel
+    ///   via Rayon.
+    ///
+    /// # Arguments
+    /// * `grid_bbox` - Bounding box of the entire routing area
+    /// * `nets` - Map of net IDs to their pin coordinates
+    /// * `obstacle_bboxes` - Bounding boxes of all placed component obstacles
+    /// * `substrate_layers` - Substrate layer data for reference-plane void detection
+    /// * `net_frequencies` - Map of net IDs to their signal frequencies (Hz)
+    ///
+    /// # Returns
+    /// Unified `RouteResult` containing all paths and vias, or a `RoutingError`.
+    pub fn route_space(
+        &mut self,
+        grid_bbox: &crate::geometry::BoundingBox,
+        nets: &FxHashMap<crate::netlist::NetId, Vec<crate::geometry::Point3D>>,
+        obstacle_bboxes: &[crate::geometry::BoundingBox],
+        substrate_layers: Option<&[crate::voxel_grid::SubstrateLayer]>,
+        net_frequencies: &FxHashMap<crate::netlist::NetId, f64>,
+    ) -> Result<super::super::types::RouteResult, super::super::types::RoutingError> {
+        let width = grid_bbox.max.x - grid_bbox.min.x;
+        let height = grid_bbox.max.y - grid_bbox.min.y;
+        let area_nm2 = width * height;
+        let net_count = nets.len();
+
+        if area_nm2 < self.area_threshold_nm2 && net_count < self.net_count_threshold {
+            // --- PASS-THROUGH MODE ---
+            eprintln!(
+                "[ADAPTIVE ROUTER] Pass-Through mode: {} nets, area {:.2} mm² (below thresholds)",
+                net_count,
+                area_nm2 as f64 / 1_000_000_000_000.0
+            );
+            self.route_flat(nets, obstacle_bboxes, substrate_layers, net_frequencies)
+        } else {
+            // --- HIERARCHICAL MODE ---
+            eprintln!(
+                "[ADAPTIVE ROUTER] Hierarchical mode: {} nets, area {:.2} mm² (above thresholds)",
+                net_count,
+                area_nm2 as f64 / 1_000_000_000_000.0
+            );
+            self.route_hierarchical(grid_bbox, nets, obstacle_bboxes, substrate_layers, net_frequencies)
+        }
+    }
+
+    /// Pass-Through routing: routes all nets in a single pass over the entire board.
+    ///
+    /// Used for small designs where G-Cell partitioning overhead would exceed
+    /// the routing time itself. Multi-pin nets are routed using Steiner
+    /// Minimum Tree approximation with dynamic target expansion (T-junctions).
+    fn route_flat(
+        &mut self,
+        nets: &FxHashMap<crate::netlist::NetId, Vec<crate::geometry::Point3D>>,
+        _obstacle_bboxes: &[crate::geometry::BoundingBox],
+        _substrate_layers: Option<&[crate::voxel_grid::SubstrateLayer]>,
+        _net_frequencies: &FxHashMap<crate::netlist::NetId, f64>,
+    ) -> Result<super::super::types::RouteResult, super::super::types::RoutingError> {
+        // Use Steiner routing for all nets (dynamic target expansion for multi-pin nets)
+        self.route_all_nets_steiner(nets)
+    }
+
+    /// Hierarchical routing: partition into G-Cells, global route, then parallel detailed routing.
+    ///
+    /// For large designs (SoC-scale), the board is divided into coarse G-Cells.
+    /// Each G-Cell is assigned the nets that pass through it, then routed
+    /// independently in parallel via Rayon. Results are stitched back into
+    /// a unified `RouteResult`.
+    ///
+    /// **Architecture** (from `Docs/v0.1.7/Adaptive-Heuristic.md`):
+    /// 1. Partition space into 3D G-Cell tiles
+    /// 2. Assign nets to G-Cells based on pin locations
+    /// 3. Route each G-Cell independently in parallel (Rayon)
+    /// 4. Stitch localized routes back into a unified result
+    fn route_hierarchical(
+        &mut self,
+        _grid_bbox: &crate::geometry::BoundingBox,
+        nets: &FxHashMap<crate::netlist::NetId, Vec<crate::geometry::Point3D>>,
+        _obstacle_bboxes: &[crate::geometry::BoundingBox],
+        _substrate_layers: Option<&[crate::voxel_grid::SubstrateLayer]>,
+        _net_frequencies: &FxHashMap<crate::netlist::NetId, f64>,
+    ) -> Result<super::super::types::RouteResult, super::super::types::RoutingError> {
+        use rayon::prelude::*;
+
+        // Step 1: Partition board into G-Cell regions
+        let cell_size_nm = 10_000_000; // 10um coarse tiles
+        let gcell_regions = self.partition_into_gcells(cell_size_nm);
+
+        eprintln!(
+            "[ADAPTIVE ROUTER] Partitioned into {} G-Cells ({}nm tiles)",
+            gcell_regions.len(),
+            cell_size_nm
+        );
+
+        // Step 2: Assign nets to G-Cells based on pin locations
+        let gcell_nets = self.assign_nets_to_gcells(&gcell_regions, nets);
+
+        // Step 3: Route each G-Cell in parallel via Rayon
+        // Each G-Cell gets its own GeometryRouter clone with local bounds.
+        let results: Vec<Result<super::super::types::RouteResult, super::super::types::RoutingError>> =
+            gcell_regions
+                .par_iter()
+                .enumerate()
+                .map(|(cell_idx, cell_bbox)| {
+                    let cell_nets = gcell_nets.get(&cell_idx).cloned().unwrap_or_default();
+
+                    if cell_nets.is_empty() {
+                        return Ok(super::super::types::RouteResult::new());
+                    }
+
+                    // Create a dedicated router for this G-Cell
+                    let mut cell_router = GeometryRouter {
+                        bounds: GridBounds::new(
+                            cell_bbox.max.x - cell_bbox.min.x,
+                            cell_bbox.max.y - cell_bbox.min.y,
+                            cell_bbox.max.z - cell_bbox.min.z,
+                        ),
+                        constraints: self.constraints.clone(),
+                        layer_directions: self.layer_directions.clone(),
+                        voxel_size_nm: self.voxel_size_nm,
+                        occupied_voxels: FxHashMap::default(),
+                        voxel_grid: crate::voxel_grid::VoxelGrid::new(
+                            ((cell_bbox.max.x - cell_bbox.min.x) / self.voxel_size_nm).max(1) as usize,
+                            ((cell_bbox.max.y - cell_bbox.min.y) / self.voxel_size_nm).max(1) as usize,
+                            ((cell_bbox.max.z - cell_bbox.min.z) / self.voxel_size_nm).max(1).max(1) as usize,
+                            crate::space::VoxelSize {
+                                x_nm: self.voxel_size_nm,
+                                y_nm: self.voxel_size_nm,
+                                z_nm: self.voxel_size_nm,
+                            },
+                            0,
+                        ),
+                        vias: Vec::new(),
+                        copper_pours: Vec::new(),
+                        bounding_box_tracker: BoundingBoxTracker::new(),
+                        area_threshold_nm2: self.area_threshold_nm2,
+                        net_count_threshold: self.net_count_threshold,
+                    };
+
+                    // Route all nets assigned to this G-Cell using Steiner routing
+                    let mut cell_result = super::super::types::RouteResult::new();
+
+                    // Translate all pins to local G-Cell space for routing
+                    let local_nets: FxHashMap<crate::netlist::NetId, Vec<crate::geometry::Point3D>> =
+                        cell_nets
+                            .iter()
+                            .map(|(&net_id, pins)| {
+                                let local_pins: Vec<_> = pins
+                                    .iter()
+                                    .map(|pin| crate::geometry::Point3D::new(
+                                        pin.x - cell_bbox.min.x,
+                                        pin.y - cell_bbox.min.y,
+                                        pin.z - cell_bbox.min.z,
+                                    ))
+                                    .collect();
+                                (net_id, local_pins)
+                            })
+                            .collect();
+
+                    // Use Steiner routing for multi-pin nets within this G-Cell
+                    match cell_router.route_all_nets_steiner(&local_nets) {
+                        Ok(local_result) => {
+                            // Translate paths back to global coordinates
+                            for (net_id, local_path) in &local_result.paths {
+                                let global_path: Vec<_> = local_path
+                                    .iter()
+                                    .map(|pt| crate::geometry::Point3D::new(
+                                        pt.x + cell_bbox.min.x,
+                                        pt.y + cell_bbox.min.y,
+                                        pt.z + cell_bbox.min.z,
+                                    ))
+                                    .collect();
+                                cell_result.paths.insert(*net_id, global_path);
+                            }
+                            cell_result.vias.extend(local_result.vias);
+                        }
+                        Err(e) => {
+                            eprintln!(
+                                "[ADAPTIVE ROUTER] G-Cell {} Steiner routing failed: {:?}",
+                                cell_idx, e
+                            );
+                            return Err(e);
+                        }
+                    }
+
+                    Ok(cell_result)
+                })
+                .collect();
+
+        // Step 4: Stitch all G-Cell results back into a unified result
+        let mut final_result = super::super::types::RouteResult::new();
+        for res in results {
+            final_result.merge(res?);
+        }
+
+        eprintln!(
+            "[ADAPTIVE ROUTER] Hierarchical routing complete: {} nets routed across {} G-Cells",
+            final_result.paths.len(),
+            gcell_regions.len()
+        );
+
+        Ok(final_result)
+    }
+
+    /// Partition the board into rectangular G-Cell regions.
+    ///
+    /// Each G-Cell is a `cell_size_nm × cell_size_nm` tile in XY,
+    /// spanning the full Z depth.
+    fn partition_into_gcells(
+        &self,
+        cell_size_nm: i64,
+    ) -> Vec<crate::geometry::BoundingBox> {
+        let width = self.bounds.width_nm;
+        let height = self.bounds.height_nm;
+        let depth = self.bounds.depth_nm;
+
+        let cols = ((width + cell_size_nm - 1) / cell_size_nm).max(1);
+        let rows = ((height + cell_size_nm - 1) / cell_size_nm).max(1);
+
+        let mut regions = Vec::with_capacity((cols * rows) as usize);
+
+        for row in 0..rows {
+            for col in 0..cols {
+                let x_min = col * cell_size_nm;
+                let y_min = row * cell_size_nm;
+                let x_max = ((col + 1) * cell_size_nm).min(width);
+                let y_max = ((row + 1) * cell_size_nm).min(height);
+
+                regions.push(crate::geometry::BoundingBox::new(
+                    crate::geometry::Point3D::new(x_min, y_min, 0),
+                    crate::geometry::Point3D::new(x_max, y_max, depth),
+                ));
+            }
+        }
+
+        regions
+    }
+
+    /// Assign nets to G-Cells based on pin locations.
+    ///
+    /// A net is assigned to a G-Cell if any of its pins fall within
+    /// the cell's bounding box. A net may appear in multiple G-Cells
+    /// if it spans cell boundaries.
+    fn assign_nets_to_gcells(
+        &self,
+        gcell_regions: &[crate::geometry::BoundingBox],
+        nets: &FxHashMap<crate::netlist::NetId, Vec<crate::geometry::Point3D>>,
+    ) -> FxHashMap<usize, FxHashMap<crate::netlist::NetId, Vec<crate::geometry::Point3D>>> {
+        let mut gcell_nets: FxHashMap<usize, FxHashMap<crate::netlist::NetId, Vec<crate::geometry::Point3D>>> =
+            FxHashMap::default();
+
+        for (&net_id, pins) in nets {
+            for (cell_idx, cell_bbox) in gcell_regions.iter().enumerate() {
+                // Check if any pin of this net falls within this G-Cell
+                let pins_in_cell: Vec<_> = pins
+                    .iter()
+                    .filter(|pin| cell_bbox.contains(**pin))
+                    .copied()
+                    .collect();
+
+                if !pins_in_cell.is_empty() {
+                    gcell_nets
+                        .entry(cell_idx)
+                        .or_default()
+                        .insert(net_id, pins_in_cell);
+                }
+            }
+        }
+
+        gcell_nets
+    }
 
     /// Add a component obstacle to the router's VoxelGrid (GAP3).
     ///

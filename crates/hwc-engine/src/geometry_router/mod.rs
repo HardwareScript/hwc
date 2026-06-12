@@ -25,6 +25,7 @@ mod parallel_router;
 mod path_utils;
 mod pathfinding;
 mod polygon_rasterizer;
+pub mod port_escape;
 mod priority;
 mod ripup;
 mod route_lockfile;
@@ -49,6 +50,10 @@ pub use pathfinding::{
     calculate_move_cost, heuristic, route_net_deterministic, route_net_sdf_accelerated,
     RoutingParams,
 };
+pub use port_escape::{
+    calculate_circular_escape, calculate_rect_escape, parse_port_escape, CardinalPort,
+    EdgeOffset, EscapePoint, NamedPosition,
+};
 pub use polygon_rasterizer::{Point2D, Polygon, PolygonRasterizer};
 pub use priority::NetPriority;
 pub use ripup::{RipUpRouter, RipUpStats, RouteAttempt};
@@ -59,5 +64,5 @@ pub use sdf_generator::SdfGenerator;
 pub use thermal_relief::{
     RectangularPadParams, ThermalReliefConfig, ThermalReliefGenerator, ThermalReliefType,
 };
-pub use types::{NetRoute, RoutedNet, RoutingError, Via, ViaType};
+pub use types::{NetRoute, RoutedNet, RouteResult, RoutingError, Via, ViaType};
 pub use htree::{BufferScheduler, HTreeEngine, HTreeSegment};

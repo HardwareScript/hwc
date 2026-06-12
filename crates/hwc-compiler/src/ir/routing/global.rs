@@ -14,6 +14,48 @@ use hwc_engine::{
 };
 use rustc_hash::FxHashMap;
 
+/// v0.1.7: Look up pour bbox for a pin, matching the same logic used in the direct-route path.
+/// Falls back to spatial lookup via VoxelGrid if no device-binding match is found.
+fn find_pin_pour_bbox_for_sdf(space: &HardwareSpace, comp_name: &str, pin_name: &str) -> Option<hwc_engine::geometry::BoundingBox> {
+    // 1. Device-binding match (most precise — component pours with device: binding)
+    if let Some(bbox) = space.pours.iter()
+        .filter(|p| {
+            p.device_binding.as_ref()
+                .map(|d| d.device_name.as_str() == comp_name && d.terminal.as_str() == pin_name)
+                .unwrap_or(false)
+        })
+        .filter_map(|p| p.bbox)
+        .next()
+    {
+        return Some(bbox);
+    }
+    // 2. VoxelGrid component-name lookup (substrate layers)
+    if let Some(bbox) = space.voxel_grid.get_pour_bbox_for_pin(comp_name, pin_name) {
+        return Some(bbox);
+    }
+    // 3. Spatial proximity: find any pour layer at the pin's position.
+    // Handles Pin anchors co-located with contact(Copper) vias.
+    if let Some(pin_data) = space.voxel_grid.get_component_pins().iter().find(|p| {
+        p.component_name.as_str() == comp_name && p.pin_name.as_str() == pin_name
+    }) {
+        if let Some(bbox) = space.voxel_grid.get_pour_bbox_at_position(pin_data.x_nm, pin_data.y_nm, pin_data.z_nm) {
+            return Some(bbox);
+        }
+    }
+    // 4. Component bbox fallback: contacts/vias register bboxes here
+    if let Some(bbox) = space.component_bboxes.get(comp_name) {
+        return Some(*bbox);
+    }
+    None
+}
+
+/// Escape spec for a single route (exit or enter direction + offset).
+#[derive(Debug, Clone)]
+pub struct RouteEscapeSpec {
+    pub port: hwc_parser::CardinalDirection,
+    pub offset: Option<hwc_parser::EdgeOffsetSpec>,
+}
+
 /// Global automatic router for connecting all pins in the netlist.
 pub struct AutoRouter<'a> {
     space: &'a mut HardwareSpace,
@@ -22,13 +64,15 @@ pub struct AutoRouter<'a> {
     symbol_table: &'a SymbolTable,
     /// Stackup manager for Z-axis resolution
     stackup_manager: &'a crate::ir::stackup_manager::StackupManager,
+    /// v0.1.7: Escape specs keyed by (start_comp.pin, goal_comp.pin) → (exit, enter).
+    /// When the AutoRouter routes from pin[0] to pin[i], it looks up
+    /// escape specs using (pin[0].component.pin, pin[i].component.pin).
+    route_escape_specs: FxHashMap<(CompactString, CompactString), (Option<RouteEscapeSpec>, Option<RouteEscapeSpec>)>,
 }
 
 #[derive(Debug, Clone)]
 struct PinInfo {
-    #[allow(dead_code)]
     component_name: CompactString,
-    #[allow(dead_code)]
     pin_name: CompactString,
     position: Point3D,
 }
@@ -39,11 +83,13 @@ impl<'a> AutoRouter<'a> {
         space: &'a mut HardwareSpace,
         symbol_table: &'a SymbolTable,
         stackup_manager: &'a crate::ir::stackup_manager::StackupManager,
+        route_escape_specs: FxHashMap<(CompactString, CompactString), (Option<RouteEscapeSpec>, Option<RouteEscapeSpec>)>,
     ) -> Self {
         Self {
             space,
             symbol_table,
             stackup_manager,
+            route_escape_specs,
         }
     }
 
@@ -127,36 +173,65 @@ impl<'a> AutoRouter<'a> {
                 // v0.1.7: Direct route for 2-pin nets on same layer (no router needed)
                 let same_z = (start_pos.z - goal_pos.z).abs() < self.space.voxel_size.z_nm;
                 let path = if pins.len() == 2 && same_z {
-                    // v0.1.7: Clip trace endpoints to copper pad edges, accounting for trace width
-                    // Look up the actual copper pour bbox (not the component body bbox)
-                    let find_pad_bbox = |comp_name: &str| -> Option<hwc_engine::geometry::BoundingBox> {
-                        self.space.pours.iter()
+                    // v0.1.7: Port Escape Integration
+                    // Look up the actual copper pour bbox per-pin using device binding.
+                    // This fixes the "dummy bounding box gap" where the router used
+                    // a hardcoded 0.4mm box around pin centers instead of the real pad boundary.
+                    let find_pin_pour_bbox = |comp_name: &str, pin_name: &str| -> Option<hwc_engine::geometry::BoundingBox> {
+                        // Search pours by device binding (component + terminal match)
+                        if let Some(bbox) = self.space.pours.iter()
                             .filter(|p| {
                                 p.device_binding.as_ref()
-                                    .map(|d| d.device_name.as_str() == comp_name)
+                                    .map(|d| d.device_name.as_str() == comp_name && d.terminal.as_str() == pin_name)
                                     .unwrap_or(false)
                             })
                             .filter_map(|p| p.bbox)
                             .next()
+                        {
+                            return Some(bbox);
+                        }
+                        // Fallback: VoxelGrid spatial lookup
+                        self.space.voxel_grid.get_pour_bbox_for_pin(comp_name, pin_name)
                     };
 
-                    let start_bbox = find_pad_bbox(&pins[0].component_name)
+                    let start_bbox = find_pin_pour_bbox(&pins[0].component_name, &pins[0].pin_name)
                         .or_else(|| self.space.component_bboxes.get(&pins[0].component_name).cloned());
-                    let goal_bbox = find_pad_bbox(&pins[i].component_name)
+                    let goal_bbox = find_pin_pour_bbox(&pins[i].component_name, &pins[i].pin_name)
                         .or_else(|| self.space.component_bboxes.get(&pins[i].component_name).cloned());
+
+                    // v0.1.7: Look up escape specs for this pin pair
+                    let start_key: CompactString = format!("{}.{}", pins[0].component_name, pins[0].pin_name).into();
+                    let goal_key: CompactString = format!("{}.{}", pins[i].component_name, pins[i].pin_name).into();
+                    let net_escapes = self.route_escape_specs.get(&(start_key, goal_key));
 
                     let clipped_start = if let Some(bbox) = start_bbox {
                         eprintln!("[ROUTER DEBUG]   Start pad bbox for '{}': min=({}, {}) max=({}, {})", pins[0].component_name, bbox.min.x, bbox.min.y, bbox.max.x, bbox.max.y);
-                        if goal_pos.x > start_pos.x {
-                            // Trace goes right: trace's LEFT edge = pad's RIGHT edge
-                            hwc_engine::Point3D::new(bbox.max.x + trace_half_width, start_pos.y, start_pos.z)
-                        } else if goal_pos.x < start_pos.x {
-                            // Trace goes left: trace's RIGHT edge = pad's LEFT edge
-                            hwc_engine::Point3D::new(bbox.min.x - trace_half_width, start_pos.y, start_pos.z)
-                        } else if goal_pos.y > start_pos.y {
-                            hwc_engine::Point3D::new(start_pos.x, bbox.max.y + trace_half_width, start_pos.z)
+                        // v0.1.7: Use escape spec if available for directional clipping
+                        if let Some((exit_esc, _)) = net_escapes {
+                            if let Some(exit) = exit_esc {
+                                let lateral_x = (bbox.min.x + bbox.max.x) / 2;
+                                let lateral_y = (bbox.min.y + bbox.max.y) / 2;
+                                match exit.port {
+                                    hwc_parser::CardinalDirection::North => {
+                                        hwc_engine::Point3D::new(lateral_x, bbox.max.y + trace_half_width, start_pos.z)
+                                    }
+                                    hwc_parser::CardinalDirection::South => {
+                                        hwc_engine::Point3D::new(lateral_x, bbox.min.y - trace_half_width, start_pos.z)
+                                    }
+                                    hwc_parser::CardinalDirection::East => {
+                                        hwc_engine::Point3D::new(bbox.max.x + trace_half_width, lateral_y, start_pos.z)
+                                    }
+                                    hwc_parser::CardinalDirection::West => {
+                                        hwc_engine::Point3D::new(bbox.min.x - trace_half_width, lateral_y, start_pos.z)
+                                    }
+                                }
+                            } else {
+                                // No exit escape — use old heuristic
+                                Self::clip_start_to_edge(bbox, start_pos, goal_pos, trace_half_width)
+                            }
                         } else {
-                            hwc_engine::Point3D::new(start_pos.x, bbox.min.y - trace_half_width, start_pos.z)
+                            // No escape specs for this net — use old heuristic
+                            Self::clip_start_to_edge(bbox, start_pos, goal_pos, trace_half_width)
                         }
                     } else {
                         start_pos
@@ -164,16 +239,32 @@ impl<'a> AutoRouter<'a> {
 
                     let clipped_goal = if let Some(bbox) = goal_bbox {
                         eprintln!("[ROUTER DEBUG]   Goal pad bbox for '{}': min=({}, {}) max=({}, {})", pins[i].component_name, bbox.min.x, bbox.min.y, bbox.max.x, bbox.max.y);
-                        if start_pos.x < goal_pos.x {
-                            // Trace arrives from left: trace's RIGHT edge = goal pad's LEFT edge
-                            hwc_engine::Point3D::new(bbox.min.x - trace_half_width, goal_pos.y, goal_pos.z)
-                        } else if start_pos.x > goal_pos.x {
-                            // Trace arrives from right: trace's LEFT edge = goal pad's RIGHT edge
-                            hwc_engine::Point3D::new(bbox.max.x + trace_half_width, goal_pos.y, goal_pos.z)
-                        } else if start_pos.y < goal_pos.y {
-                            hwc_engine::Point3D::new(goal_pos.x, bbox.min.y - trace_half_width, goal_pos.z)
+                        // v0.1.7: Use escape spec if available for directional clipping
+                        if let Some((_, enter_esc)) = net_escapes {
+                            if let Some(enter) = enter_esc {
+                                let lateral_x = (bbox.min.x + bbox.max.x) / 2;
+                                let lateral_y = (bbox.min.y + bbox.max.y) / 2;
+                                match enter.port {
+                                    hwc_parser::CardinalDirection::North => {
+                                        hwc_engine::Point3D::new(lateral_x, bbox.max.y + trace_half_width, goal_pos.z)
+                                    }
+                                    hwc_parser::CardinalDirection::South => {
+                                        hwc_engine::Point3D::new(lateral_x, bbox.min.y - trace_half_width, goal_pos.z)
+                                    }
+                                    hwc_parser::CardinalDirection::East => {
+                                        hwc_engine::Point3D::new(bbox.max.x + trace_half_width, lateral_y, goal_pos.z)
+                                    }
+                                    hwc_parser::CardinalDirection::West => {
+                                        hwc_engine::Point3D::new(bbox.min.x - trace_half_width, lateral_y, goal_pos.z)
+                                    }
+                                }
+                            } else {
+                                // No enter escape — use old heuristic
+                                Self::clip_goal_to_edge(bbox, start_pos, goal_pos, trace_half_width)
+                            }
                         } else {
-                            hwc_engine::Point3D::new(goal_pos.x, bbox.max.y + trace_half_width, goal_pos.z)
+                            // No escape specs for this net — use old heuristic
+                            Self::clip_goal_to_edge(bbox, start_pos, goal_pos, trace_half_width)
                         }
                     } else {
                         goal_pos
@@ -189,6 +280,43 @@ impl<'a> AutoRouter<'a> {
                         pins[i].component_name.clone(),
                     ];
 
+                    // v0.1.7: Apply escape specs to SDF routing start/goal
+                    let start_key_sdf: CompactString = format!("{}.{}", pins[0].component_name, pins[0].pin_name).into();
+                    let goal_key_sdf: CompactString = format!("{}.{}", pins[i].component_name, pins[i].pin_name).into();
+                    let sdf_escapes = self.route_escape_specs.get(&(start_key_sdf, goal_key_sdf));
+                    let sdf_start = if let Some(exit_esc) = sdf_escapes
+                        .and_then(|(exit, _)| exit.as_ref())
+                    {
+                        let bbox = find_pin_pour_bbox_for_sdf(&self.space, &pins[0].component_name, &pins[0].pin_name)
+                            .unwrap_or_else(|| hwc_engine::geometry::BoundingBox::new(start_pos, start_pos));
+                        let lateral_x = (bbox.min.x + bbox.max.x) / 2;
+                        let lateral_y = (bbox.min.y + bbox.max.y) / 2;
+                        match exit_esc.port {
+                            hwc_parser::CardinalDirection::North => Point3D::new(lateral_x, bbox.max.y + trace_half_width, start_pos.z),
+                            hwc_parser::CardinalDirection::South => Point3D::new(lateral_x, bbox.min.y - trace_half_width, start_pos.z),
+                            hwc_parser::CardinalDirection::East => Point3D::new(bbox.max.x + trace_half_width, lateral_y, start_pos.z),
+                            hwc_parser::CardinalDirection::West => Point3D::new(bbox.min.x - trace_half_width, lateral_y, start_pos.z),
+                        }
+                    } else {
+                        start_pos
+                    };
+                    let sdf_goal = if let Some(enter_esc) = sdf_escapes
+                        .and_then(|(_, enter)| enter.as_ref())
+                    {
+                        let bbox = find_pin_pour_bbox_for_sdf(&self.space, &pins[i].component_name, &pins[i].pin_name)
+                            .unwrap_or_else(|| hwc_engine::geometry::BoundingBox::new(goal_pos, goal_pos));
+                        let lateral_x = (bbox.min.x + bbox.max.x) / 2;
+                        let lateral_y = (bbox.min.y + bbox.max.y) / 2;
+                        match enter_esc.port {
+                            hwc_parser::CardinalDirection::North => Point3D::new(lateral_x, bbox.max.y + trace_half_width, goal_pos.z),
+                            hwc_parser::CardinalDirection::South => Point3D::new(lateral_x, bbox.min.y - trace_half_width, goal_pos.z),
+                            hwc_parser::CardinalDirection::East => Point3D::new(bbox.max.x + trace_half_width, lateral_y, goal_pos.z),
+                            hwc_parser::CardinalDirection::West => Point3D::new(bbox.min.x - trace_half_width, lateral_y, goal_pos.z),
+                        }
+                    } else {
+                        goal_pos
+                    };
+
                     let params = RoutingParams {
                         net_id,
                         constraints: &default_constraints,
@@ -201,9 +329,11 @@ impl<'a> AutoRouter<'a> {
                         corridor: None,
                         fixed_z_nm: Some(start_pos.z), // v0.1.7: Lock to starting Z plane
                         exempt_components: &exempt_components, // v0.1.7: Escape Exemption
+                        substrate_layers: None, // v0.1.7: No substrate context in global routing
+                        is_high_speed_net: false, // v0.1.7: Default to non-high-speed
                     };
 
-                    match route_net_sdf_accelerated(start_pos, goal_pos, &params, &sdf) {
+                    match route_net_sdf_accelerated(sdf_start, sdf_goal, &params, &sdf) {
                         Some(p) => p,
                         None => continue,
                     }
@@ -341,5 +471,43 @@ impl<'a> AutoRouter<'a> {
 
         self.space.analytic_routes.push(trace);
         Ok(())
+    }
+
+    /// v0.1.7: Fallback clipping for start pad when no escape spec is available.
+    /// Uses directional heuristic (goal vs start position).
+    fn clip_start_to_edge(
+        bbox: hwc_engine::geometry::BoundingBox,
+        start_pos: Point3D,
+        goal_pos: Point3D,
+        trace_half_width: i64,
+    ) -> Point3D {
+        if goal_pos.x > start_pos.x {
+            Point3D::new(bbox.max.x + trace_half_width, start_pos.y, start_pos.z)
+        } else if goal_pos.x < start_pos.x {
+            Point3D::new(bbox.min.x - trace_half_width, start_pos.y, start_pos.z)
+        } else if goal_pos.y > start_pos.y {
+            Point3D::new(start_pos.x, bbox.max.y + trace_half_width, start_pos.z)
+        } else {
+            Point3D::new(start_pos.x, bbox.min.y - trace_half_width, start_pos.z)
+        }
+    }
+
+    /// v0.1.7: Fallback clipping for goal pad when no escape spec is available.
+    /// Uses directional heuristic (start vs goal position).
+    fn clip_goal_to_edge(
+        bbox: hwc_engine::geometry::BoundingBox,
+        start_pos: Point3D,
+        goal_pos: Point3D,
+        trace_half_width: i64,
+    ) -> Point3D {
+        if start_pos.x < goal_pos.x {
+            Point3D::new(bbox.min.x - trace_half_width, goal_pos.y, goal_pos.z)
+        } else if start_pos.x > goal_pos.x {
+            Point3D::new(bbox.max.x + trace_half_width, goal_pos.y, goal_pos.z)
+        } else if start_pos.y < goal_pos.y {
+            Point3D::new(goal_pos.x, bbox.min.y - trace_half_width, goal_pos.z)
+        } else {
+            Point3D::new(goal_pos.x, bbox.max.y + trace_half_width, goal_pos.z)
+        }
     }
 }

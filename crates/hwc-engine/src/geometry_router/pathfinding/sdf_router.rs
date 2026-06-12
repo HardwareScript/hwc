@@ -364,6 +364,8 @@ pub fn route_net_sdf_accelerated(
                 occupied_voxels: params.occupied_voxels,
                 clearance_zones: params.clearance_zones,
                 layer_direction: Some(params.layer_direction),
+                substrate_layers: params.substrate_layers,
+                is_high_speed_net: params.is_high_speed_net,
             };
             let move_cost = calculate_move_cost(&move_cost_params);
             let new_cost = current_cost + move_cost;

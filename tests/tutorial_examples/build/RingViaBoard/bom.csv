@@ -1,0 +1,7 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,20.00x20.00x1.57mm,,,,,1
+Ring,MidWing,,,,,,1
+ViaNAnchor,Pin,,,,,,1
+ViaSAnchor,Pin,,,,,,1
+ViaEAnchor,Pin,,,,,,1
+ViaWAnchor,Pin,,,,,,1

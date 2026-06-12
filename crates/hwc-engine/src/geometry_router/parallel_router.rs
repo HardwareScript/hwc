@@ -218,6 +218,8 @@ impl ParallelRouter {
                     corridor: None, // No corridor constraint for local routing
                     fixed_z_nm: None, // v0.1.7: No fixed Z for local routing yet
                     exempt_components: &[], // v0.1.7: No exemptions for local routing yet
+                    substrate_layers: None, // v0.1.7: No substrate context in parallel routing
+                    is_high_speed_net: false, // v0.1.7: Default to non-high-speed
                 };
 
                 let path = route_net_deterministic(start_local, end_local, &routing_params);

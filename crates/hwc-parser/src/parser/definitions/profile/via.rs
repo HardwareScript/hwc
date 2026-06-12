@@ -1,6 +1,7 @@
 use crate::ast::*;
 use crate::lexer::{Span, Token};
 use super::super::super::error::{span_to_source_span, ParseError};
+use rustc_hash::FxHashMap;
 
 impl super::super::super::Parser {
     /// Parse via constraints block
@@ -12,6 +13,10 @@ impl super::super::super::Parser {
         let mut min_spacing = None;
         let mut max_aspect_ratio = None;
         let mut default_via_fill = None;
+        // v0.1.7 ASIC Extensions
+        let mut enclosures = None;
+        let mut allow_stacked_vias = None;
+        let mut min_stagger_offset = None;
 
         while !self.check(&Token::Dedent) && !self.is_at_end() {
             self.skip_whitespace();
@@ -48,6 +53,20 @@ impl super::super::super::Parser {
                     default_via_fill = Some(self.expect_identifier()?);
                     self.skip_whitespace();
                 }
+                // v0.1.7 ASIC Extensions
+                "enclosures" => {
+                    // Parse array: [m1: 30nm, m2: 40nm, m3: 50nm]
+                    enclosures = Some(self.parse_enclosure_map()?);
+                    self.skip_whitespace();
+                }
+                "allow_stacked_vias" => {
+                    allow_stacked_vias = Some(self.expect_boolean()?);
+                    self.skip_whitespace();
+                }
+                "min_stagger_offset" => {
+                    min_stagger_offset = Some(self.parse_measurement()?);
+                    self.skip_whitespace();
+                }
                 _ => {
                     return Err(self.error(&format!("Unknown via constraint: '{}'", field_name)));
                 }
@@ -74,8 +93,40 @@ impl super::super::super::Parser {
             min_spacing,
             max_aspect_ratio,
             default_via_fill,
+            enclosures,
+            allow_stacked_vias,
+            min_stagger_offset,
             span: Span::new(start_pos, end_pos),
         })
+    }
+
+    /// Parse enclosure map: [m1: 30nm, m2: 40nm, m3: 50nm]
+    fn parse_enclosure_map(&mut self) -> Result<FxHashMap<String, Measurement>, ParseError> {
+        self.expect(&Token::OpenBracket)?;
+        let mut map = FxHashMap::default();
+
+        while !self.check(&Token::CloseBracket) && !self.is_at_end() {
+            self.skip_whitespace();
+
+            if self.check(&Token::CloseBracket) {
+                break;
+            }
+
+            let layer_name = self.expect_identifier()?.to_string();
+            self.expect(&Token::Colon)?;
+            let measurement = self.parse_measurement()?;
+            map.insert(layer_name, measurement);
+
+            self.skip_whitespace();
+
+            if self.check(&Token::Comma) {
+                self.advance();
+                self.skip_whitespace();
+            }
+        }
+
+        self.expect(&Token::CloseBracket)?;
+        Ok(map)
     }
 
     /// Parse explicit via definition: `via Name: ...` (v0.1.7)

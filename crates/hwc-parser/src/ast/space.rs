@@ -263,7 +263,51 @@ pub struct Route {
     pub path: Option<Vec<Coordinate>>,
     pub signal_group: Option<CompactString>, // Optional signal group for impedance control
     pub bridge: Option<CompactString>, // Phase 1: Explicit bridge override
+    pub exit_escape: Option<RouteEscape>, // v0.1.7: Exit port specification
+    pub enter_escape: Option<RouteEscape>, // v0.1.7: Enter port specification
     pub span: Span,
+}
+
+/// Route escape specification for port-based routing (v0.1.7)
+///
+/// Examples:
+/// - `exit: East` -> Center of East edge
+/// - `exit: East at top` -> Top of East edge
+/// - `exit: East at 80%` -> 80% up the East edge
+/// - `exit: East at +150um` -> 150um offset from center
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RouteEscape {
+    pub port: CardinalDirection,
+    pub offset: Option<EdgeOffsetSpec>,
+    pub span: Span,
+}
+
+/// Cardinal direction for port escapes
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CardinalDirection {
+    North,
+    South,
+    East,
+    West,
+}
+
+/// Edge offset specification
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum EdgeOffsetSpec {
+    /// Named position: "top", "bottom", "center"
+    Named(NamedPosition),
+    /// Percentage: "80%" -> 0.8
+    Percentage(f64),
+    /// Physical measurement: "+150um" or "-50um"
+    Measurement(i64),
+}
+
+/// Named positions for edge offsets
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum NamedPosition {
+    Top,
+    Bottom,
+    Center,
 }
 
 /// Expose: `expose Pin as Alias`

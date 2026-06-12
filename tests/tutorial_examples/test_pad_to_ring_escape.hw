@@ -1,0 +1,103 @@
+# Test script for Pad-to-Ring Port Escape Routing
+# Mixed geometry: rectangular pad → circular ring pour
+# - Center rectangular pad (square copper pour)
+# - Four ring pads on cardinal sides (circular copper pours)
+# - Routes using exit/enter port specifications
+#
+# Validates that the router clips traces to rectangular pad edges
+# on one end and circular ring edges on the other.
+
+import * from @std/primitives/units
+import Copper from @std/materials/conductors
+
+profile PadRingProfile:
+    stackup:
+        top:    [material: Copper, thickness: 35um]
+        core:   [material: FR4,    thickness: 1.5mm]
+        bottom: [material: Copper, thickness: 35um]
+    trace:
+        min_width: 0.2mm
+        min_spacing: 0.2mm
+    via:
+        min_diameter: 0.3mm
+        min_annular_ring: 0.15mm
+        min_spacing: 0.25mm
+    manufacturing:
+        copper_thickness: 35um
+    clearance:
+        high_voltage: 1.0mm
+        safety_factor: 1.5
+    layer:
+        min_thickness: 35um
+
+# Center pad - square rectangular pour
+component CenterPad:
+    pins: [N, S, E, W]
+    layout:
+        shape: Rectangle(2.0mm, 2.0mm, 0.035mm)
+        pin_positions:
+            N at [1.0mm, 2.0mm, 0mm]
+            S at [1.0mm, 0.0mm, 0mm]
+            E at [2.0mm, 1.0mm, 0mm]
+            W at [0.0mm, 1.0mm, 0mm]
+        add pour(Copper) named Pad on layer: self:
+            device: N
+            boundary: [x: -1.0mm, y: -2.0mm] to [x: 1.0mm, y: 0.0mm]
+
+# Ring pad - circular copper pour (1mm radius)
+component RingPad:
+    pins: [P]
+    layout:
+        shape: Rectangle(0.7mm, 0.7mm, 0.035mm)
+        pin_positions:
+            P at [0.35mm, 0.35mm, 0mm]
+        add pour(Copper) named Ring on layer: self:
+            device: P
+            boundary: Circle([x: 0mm, y: 0mm], 0.35mm)
+
+space PadRingBoard:
+    dimensions: 20mm by 20mm by 1.57mm
+    grid: 200 by 200 by 16
+    origin: bl by b
+    profile: PadRingProfile
+
+    # Center pad - square pad in the middle
+    add CenterPad named Center at [x: 9mm, y: 9mm] on layer: top:
+        merge: true
+
+    # North ring - circular pour above center
+    add RingPad named RingN at [x: 9.65mm, y: 14.65mm] on layer: top:
+        merge: true
+
+    # South ring - circular pour below center
+    add RingPad named RingS at [x: 9.65mm, y: 3.35mm] on layer: top:
+        merge: true
+
+    # East ring - circular pour right of center
+    add RingPad named RingE at [x: 14.65mm, y: 9.65mm] on layer: top:
+        merge: true
+
+    # West ring - circular pour left of center
+    add RingPad named RingW at [x: 3.35mm, y: 9.65mm] on layer: top:
+        merge: true
+
+    # Routes using port escape syntax
+    # Center.N to RingN.P - exit North, enter South
+    route Center.N to RingN.P:
+        exit: North
+        enter: South
+
+    # Center.S to RingS.P - exit South, enter North
+    route Center.S to RingS.P:
+        exit: South
+        enter: North
+
+    # Center.E to RingE.P - exit East, enter West
+    route Center.E to RingE.P:
+        exit: East
+        enter: West
+
+    # Center.W to RingW.P - exit West, enter East
+    route Center.W to RingW.P:
+        exit: West
+        enter: East

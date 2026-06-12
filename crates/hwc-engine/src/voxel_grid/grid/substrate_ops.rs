@@ -578,4 +578,61 @@ impl VoxelGrid {
         }
         false
     }
+
+    /// Get the bounding box of the copper pour associated with a specific component pin.
+    ///
+    /// This is used by the router to calculate escape points on the actual pad boundary
+    /// instead of using a hardcoded dummy bounding box around the pin center.
+    ///
+    /// # Arguments
+    /// * `component_name` - Name of the component (e.g., "Center")
+    /// * `pin_name` - Name of the pin (e.g., "N", "S", "E", "W")
+    ///
+    /// # Returns
+    /// The bounding box of the pour that has a device binding matching this pin,
+    /// or `None` if no matching pour is found.
+    pub fn get_pour_bbox_for_pin(
+        &self,
+        component_name: &str,
+        pin_name: &str,
+    ) -> Option<BoundingBox>     {
+        // Search substrate layers for pours with device binding matching this pin
+        // PourMetadata is stored in HardwareSpace, not VoxelGrid, so we search
+        // the substrate layers that have SubstrateLayerType::Pour
+        for layer in &self.substrate_layers {
+            if layer.layer_type == SubstrateLayerType::Pour {
+                // Check if this pour's bounding box contains the pin position
+                // We find the pin in component_pins first
+                for pin in &self.component_pins {
+                    if pin.component_name.as_str() == component_name
+                        && pin.pin_name.as_str() == pin_name
+                    {
+                        let pin_point = crate::geometry::Point3D::new(pin.x_nm, pin.y_nm, pin.z_nm);
+                        if layer.bbox.contains(pin_point) {
+                            return Some(layer.bbox);
+                        }
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    /// v0.1.7: Spatial-only pour bbox lookup — finds any pour layer containing the given position.
+    /// Used when the pin's component name doesn't match the pour's registered name
+    /// (e.g., Pin anchors co-located with contact(Copper) vias).
+    pub fn get_pour_bbox_at_position(
+        &self,
+        x_nm: i64,
+        y_nm: i64,
+        z_nm: i64,
+    ) -> Option<BoundingBox> {
+        let point = crate::geometry::Point3D::new(x_nm, y_nm, z_nm);
+        for layer in &self.substrate_layers {
+            if layer.layer_type == SubstrateLayerType::Pour && layer.bbox.contains(point) {
+                return Some(layer.bbox);
+            }
+        }
+        None
+    }
 }

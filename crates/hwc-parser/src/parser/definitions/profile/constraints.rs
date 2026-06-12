@@ -245,6 +245,13 @@ impl super::super::super::Parser {
         let mut min_feature_size = None;
         let mut solder_mask_expansion = None;
         let mut solder_mask_thickness = None;
+        // v0.1.7 ASIC Extensions
+        let mut track_pitch = None;
+        let mut grid_snapping = None;
+        let mut dummy_fill = None;
+        let mut dummy_fill_density = None;
+        let mut dummy_fill_size = None;
+        let mut dummy_fill_spacing = None;
 
         while !self.check(&Token::Dedent) && !self.is_at_end() {
             self.skip_whitespace();
@@ -281,6 +288,31 @@ impl super::super::super::Parser {
                     solder_mask_thickness = Some(self.parse_measurement()?);
                     self.skip_whitespace();
                 }
+                // v0.1.7 ASIC Extensions
+                "track_pitch" => {
+                    track_pitch = Some(self.parse_measurement()?);
+                    self.skip_whitespace();
+                }
+                "grid_snapping" => {
+                    grid_snapping = Some(self.expect_boolean()?);
+                    self.skip_whitespace();
+                }
+                "dummy_fill" => {
+                    dummy_fill = Some(self.expect_boolean()?);
+                    self.skip_whitespace();
+                }
+                "dummy_fill_density" => {
+                    dummy_fill_density = Some(self.expect_number()?);
+                    self.skip_whitespace();
+                }
+                "dummy_fill_size" => {
+                    dummy_fill_size = Some(self.parse_measurement()?);
+                    self.skip_whitespace();
+                }
+                "dummy_fill_spacing" => {
+                    dummy_fill_spacing = Some(self.parse_measurement()?);
+                    self.skip_whitespace();
+                }
                 _ => {
                     return Err(self.error(&format!(
                         "Unknown manufacturing constraint: '{}'",
@@ -299,6 +331,12 @@ impl super::super::super::Parser {
             min_feature_size,
             solder_mask_expansion,
             solder_mask_thickness,
+            track_pitch,
+            grid_snapping,
+            dummy_fill,
+            dummy_fill_density,
+            dummy_fill_size,
+            dummy_fill_spacing,
             span: Span::new(start_pos, end_pos),
         })
     }
@@ -375,5 +413,53 @@ impl super::super::super::Parser {
 
         self.expect(&Token::CloseBracket)?;
         Ok(angles)
+    }
+
+    /// Parse routing constraints block (v0.1.7)
+    ///
+    /// Syntax:
+    /// ```hw
+    /// routing:
+    ///     m1: horizontal
+    ///     m2: vertical
+    ///     m3: horizontal
+    /// ```
+    pub(super) fn parse_routing_constraints(&mut self) -> Result<RoutingConstraints, ParseError> {
+        let start_pos = self.current_span().start;
+        let mut layer_directions = rustc_hash::FxHashMap::default();
+
+        while !self.check(&Token::Dedent) && !self.is_at_end() {
+            self.skip_whitespace();
+
+            if self.check(&Token::Dedent) || self.is_at_end() {
+                break;
+            }
+
+            let layer_name = self.expect_identifier()?.to_string();
+            self.expect(&Token::Colon)?;
+
+            let direction_str = self.expect_identifier()?;
+            let direction = match direction_str.as_str() {
+                "horizontal" => RoutingDirection::Horizontal,
+                "vertical" => RoutingDirection::Vertical,
+                "any" => RoutingDirection::Any,
+                _ => {
+                    return Err(self.error(&format!(
+                        "Unknown routing direction: '{}' (expected 'horizontal', 'vertical', or 'any')",
+                        direction_str
+                    )));
+                }
+            };
+
+            layer_directions.insert(layer_name, direction);
+            self.skip_whitespace();
+        }
+
+        let end_pos = self.previous_span().end;
+
+        Ok(RoutingConstraints {
+            layer_directions,
+            span: Span::new(start_pos, end_pos),
+        })
     }
 }

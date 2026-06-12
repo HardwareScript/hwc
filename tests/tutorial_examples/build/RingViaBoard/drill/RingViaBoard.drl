@@ -1,0 +1,14 @@
+M48
+; DRILL file {RingViaBoard} date 2026-06-12
+; v0.1.7 physical Z (mm) recorded per tool pass where applicable
+; FORMAT={-:-/ absolute / inch / decimal}
+FMAT,2
+INCH
+T1C0.0118
+%
+T1
+X0.3937Y0.5512
+X0.3937Y0.1575
+X0.5906Y0.3937
+X0.1575Y0.3937
+M30

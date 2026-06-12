@@ -50,6 +50,8 @@ impl Parser {
                 Token::Rotated => Some("rotated".into()),
                 Token::Implements => Some("implements".into()),
                 Token::Bridge => Some("bridge".into()),
+                Token::Exit => Some("exit".into()),
+                Token::Enter => Some("enter".into()),
                 Token::Logic => Some("logic".into()),
                 Token::Test => Some("test".into()),
                 Token::Enum => Some("enum".into()),

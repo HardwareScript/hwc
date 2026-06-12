@@ -424,6 +424,8 @@ pub fn place_module_instance(
                 path: None, // Module routes are logical, no waypoints
                 signal_group: None,
                 bridge: None,
+                exit_escape: None,
+                enter_escape: None,
                 span: module_route.span,
             };
 

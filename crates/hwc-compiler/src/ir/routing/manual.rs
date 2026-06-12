@@ -94,8 +94,22 @@ pub fn route_manual(
     // v0.1.7: Use the net ID already registered for this route
     let net_id = super::helpers::register_net_for_route(space, route, symbol_table)?;
 
-    // Get Copper material ID from registry
-    let copper_id = space.material_registry.get_or_register("Copper");
+    // v0.1.7: Resolve material dynamically from the stackup layer
+    // This ensures that manual traces merge perfectly with via rings/pours on the same layer.
+    let material_name = if let (Some(p), Some(first_wp)) = (profile, waypoints.first()) {
+        if let (Some(stackup), Some(layer_name)) = (p.stackup.as_ref(), stackup_manager.get_layer_name_at_z(first_wp.z)) {
+            stackup.layers.iter()
+                .find(|l| l.name.name == layer_name)
+                .map(|l| l.material.to_string())
+                .unwrap_or_else(|| "Copper".to_string())
+        } else {
+            "Copper".to_string()
+        }
+    } else {
+        "Copper".to_string()
+    };
+
+    let copper_id = space.material_registry.get_or_register(&material_name);
 
     // v0.1.7: Create analytic trace for substrate layer realization
     // (manual routes must use the same analytic → substrate pipeline as auto routes)

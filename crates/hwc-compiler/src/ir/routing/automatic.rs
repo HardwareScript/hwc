@@ -25,9 +25,6 @@ pub fn route_automatic(
     );
 
     // PHASE 1: CONSTRAINT MANAGER
-    let (start_pos, goal_pos) = get_pin_positions(space, route)?;
-    eprintln!("[ROUTER]   Start pos: {:?}, Goal pos: {:?}", start_pos, goal_pos);
-
     let voltage_mv = 5000;
     let current_ma = 20;
     let dielectric_strength_kv_mm = 20.0;
@@ -51,6 +48,12 @@ pub fn route_automatic(
     } else {
         min_trace_width_nm
     };
+
+    // v0.1.7: Port Escape Integration
+    // When exit/enter escape specs are present, calculate actual pad boundary points
+    // instead of routing to pin centers. This eliminates the "dummy bounding box gap".
+    let (start_pos, goal_pos) = calculate_escape_positions(space, route, trace_width_nm, min_clearance_nm)?;
+    eprintln!("[ROUTER]   Start pos: {:?}, Goal pos: {:?}", start_pos, goal_pos);
 
     let route_constraints = RouteConstraints {
         min_trace_width_nm: trace_width_nm,
@@ -106,6 +109,8 @@ pub fn route_automatic(
         corridor: None,   // No corridor constraint in compiler automatic routing
         fixed_z_nm: Some(start_pos.z), // v0.1.7: Lock to starting Z plane
         exempt_components: &exempt_components, // v0.1.7: Escape Exemption
+        substrate_layers: None, // v0.1.7: No substrate context in basic automatic routing
+        is_high_speed_net: false, // v0.1.7: Default to non-high-speed
     };
 
     eprintln!("[ROUTER] Creating SDF generator...");
@@ -380,4 +385,146 @@ pub fn route_automatic(
     }
 
     Ok(())
+}
+
+/// Calculate start/goal positions for routing using port escape specifications.
+///
+/// When exit/enter escape specs are present on the route, this function:
+/// 1. Parses the escape specifications (e.g., "exit: East", "enter: West")
+/// 2. Queries the VoxelGrid for the actual pour bounding box of each pin
+/// 3. Calculates the escape point on the pad boundary using `calculate_rect_escape`
+/// 4. Returns the escape points as the start/goal positions
+///
+/// When no escape specs are present, falls back to simple pin center positions.
+///
+/// This eliminates the "dummy bounding box gap" where the router used a hardcoded
+/// 0.4mm box around pin centers instead of the actual pad boundary.
+fn calculate_escape_positions(
+    space: &HardwareSpace,
+    route: &hwc_parser::Route,
+    trace_width_nm: i64,
+    clearance_nm: i64,
+) -> Result<(hwc_engine::Point3D, hwc_engine::Point3D), IrError> {
+    use hwc_engine::geometry_router::port_escape::{calculate_rect_escape, parse_port_escape};
+
+    // Get pin center positions as fallback
+    let (start_pin_center, goal_pin_center) = get_pin_positions(space, route)?;
+
+    // Parse exit escape spec
+    let exit_point = if let Some(exit_escape) = &route.exit_escape {
+        // Convert CardinalDirection to string for parse_port_escape
+        let dir_str = match exit_escape.port {
+            hwc_parser::CardinalDirection::North => "North",
+            hwc_parser::CardinalDirection::South => "South",
+            hwc_parser::CardinalDirection::East => "East",
+            hwc_parser::CardinalDirection::West => "West",
+        };
+        let exit_spec = if let Some(offset) = &exit_escape.offset {
+            let offset_str = match offset {
+                hwc_parser::EdgeOffsetSpec::Named(n) => format!(" at {}", match n {
+                    hwc_parser::NamedPosition::Top => "top",
+                    hwc_parser::NamedPosition::Bottom => "bottom",
+                    hwc_parser::NamedPosition::Center => "center",
+                }),
+                hwc_parser::EdgeOffsetSpec::Percentage(p) => format!(" at {}%", p * 100.0),
+                hwc_parser::EdgeOffsetSpec::Measurement(m) => format!(" at {}um", m / 1000),
+            };
+            format!("{}{}", dir_str, offset_str)
+        } else {
+            dir_str.to_string()
+        };
+        
+        if let Some((port, offset)) = parse_port_escape(&exit_spec) {
+            // Query the pour bounding box for the start pin
+            let from_comp = super::helpers::construct_component_name(&route.from)?;
+            if let Some(pour_bbox) = space.voxel_grid.get_pour_bbox_for_pin(&from_comp, &route.from.pin) {
+                let escape = calculate_rect_escape(
+                    &pour_bbox,
+                    port,
+                    offset,
+                    trace_width_nm,
+                    clearance_nm,
+                    start_pin_center.z,
+                );
+                eprintln!(
+                    "[ROUTER]   Exit escape: port={:?}, bbox=[{:.3},{:.3}]-[{:.3},{:.3}], point={:?}",
+                    port,
+                    pour_bbox.min.x as f64 / 1_000_000.0, pour_bbox.min.y as f64 / 1_000_000.0,
+                    pour_bbox.max.x as f64 / 1_000_000.0, pour_bbox.max.y as f64 / 1_000_000.0,
+                    escape.point
+                );
+                Some(escape.point)
+            } else {
+                eprintln!("[ROUTER]   Exit escape: No pour bbox found for {}.{}", from_comp, route.from.pin);
+                None
+            }
+        } else {
+            eprintln!("[ROUTER]   Exit escape: Failed to parse '{}'", exit_spec);
+            None
+        }
+    } else {
+        None
+    };
+
+    // Parse enter escape spec
+    let enter_point = if let Some(enter_escape) = &route.enter_escape {
+        // Convert CardinalDirection to string for parse_port_escape
+        let dir_str = match enter_escape.port {
+            hwc_parser::CardinalDirection::North => "North",
+            hwc_parser::CardinalDirection::South => "South",
+            hwc_parser::CardinalDirection::East => "East",
+            hwc_parser::CardinalDirection::West => "West",
+        };
+        let enter_spec = if let Some(offset) = &enter_escape.offset {
+            let offset_str = match offset {
+                hwc_parser::EdgeOffsetSpec::Named(n) => format!(" at {}", match n {
+                    hwc_parser::NamedPosition::Top => "top",
+                    hwc_parser::NamedPosition::Bottom => "bottom",
+                    hwc_parser::NamedPosition::Center => "center",
+                }),
+                hwc_parser::EdgeOffsetSpec::Percentage(p) => format!(" at {}%", p * 100.0),
+                hwc_parser::EdgeOffsetSpec::Measurement(m) => format!(" at {}um", m / 1000),
+            };
+            format!("{}{}", dir_str, offset_str)
+        } else {
+            dir_str.to_string()
+        };
+        
+        if let Some((port, offset)) = parse_port_escape(&enter_spec) {
+            // Query the pour bounding box for the end pin
+            let to_comp = super::helpers::construct_component_name(&route.to)?;
+            if let Some(pour_bbox) = space.voxel_grid.get_pour_bbox_for_pin(&to_comp, &route.to.pin) {
+                let escape = calculate_rect_escape(
+                    &pour_bbox,
+                    port,
+                    offset,
+                    trace_width_nm,
+                    clearance_nm,
+                    goal_pin_center.z,
+                );
+                eprintln!(
+                    "[ROUTER]   Enter escape: port={:?}, bbox=[{:.3},{:.3}]-[{:.3},{:.3}], point={:?}",
+                    port,
+                    pour_bbox.min.x as f64 / 1_000_000.0, pour_bbox.min.y as f64 / 1_000_000.0,
+                    pour_bbox.max.x as f64 / 1_000_000.0, pour_bbox.max.y as f64 / 1_000_000.0,
+                    escape.point
+                );
+                Some(escape.point)
+            } else {
+                eprintln!("[ROUTER]   Enter escape: No pour bbox found for {}.{}", to_comp, route.to.pin);
+                None
+            }
+        } else {
+            eprintln!("[ROUTER]   Enter escape: Failed to parse '{}'", enter_spec);
+            None
+        }
+    } else {
+        None
+    };
+
+    // Use escape points if available, otherwise fall back to pin centers
+    let start_pos = exit_point.unwrap_or(start_pin_center);
+    let goal_pos = enter_point.unwrap_or(goal_pin_center);
+
+    Ok((start_pos, goal_pos))
 }

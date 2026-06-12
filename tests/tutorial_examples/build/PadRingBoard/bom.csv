@@ -1,0 +1,7 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,20.00x20.00x1.57mm,,,,,1
+Center,CenterPad,,,,,,1
+RingN,RingPad,,,,,,1
+RingS,RingPad,,,,,,1
+RingE,RingPad,,,,,,1
+RingW,RingPad,,,,,,1

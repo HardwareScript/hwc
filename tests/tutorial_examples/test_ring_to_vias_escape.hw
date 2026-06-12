@@ -1,0 +1,113 @@
+# Test script for Ring-to-Multiple-Via Port Escape Routing
+# Fanout from a circular copper ring to multiple plated through-hole vias
+# - Center ring component with circular copper pour (1mm radius)
+# - 4 vias at cardinal positions using contact(Copper)
+# - Routes using exit/enter port specifications
+#
+# Validates circular pour fanout with proper via syntax.
+
+import * from @std/primitives/units
+import Copper from @std/materials/conductors
+
+profile RingViaProfile:
+    stackup:
+        top:    [material: Copper, thickness: 35um]
+        core:   [material: FR4,    thickness: 1.5mm]
+        bottom: [material: Copper, thickness: 35um]
+    trace:
+        min_width: 0.2mm
+        min_spacing: 0.2mm
+    via:
+        min_diameter: 0.3mm
+        min_annular_ring: 0.15mm
+        min_spacing: 0.25mm
+    manufacturing:
+        copper_thickness: 35um
+    clearance:
+        high_voltage: 1.0mm
+        safety_factor: 1.5
+    layer:
+        min_thickness: 35um
+
+# Center ring component - circular copper pour (1mm radius = 2mm diameter)
+# device: N anchors the circle center relative to pin N at [1.0mm, 2.0mm]
+# Offset [0.0mm, -1.0mm] from pin N places the circle center at [1.0mm, 1.0mm]
+component MidWing:
+    pins: [N, S, E, W]
+    layout:
+        shape: Rectangle(2.0mm, 2.0mm, 0.035mm)
+        pin_positions:
+            N at [1.0mm, 2.0mm, 0mm]
+            S at [1.0mm, 0.0mm, 0mm]
+            E at [2.0mm, 1.0mm, 0mm]
+            W at [0.0mm, 1.0mm, 0mm]
+        add pour(Copper) named Wing on layer: self:
+            device: N
+            boundary: Circle([x: 0.0mm, y: -1.0mm], 1.0mm)
+
+# Anchor Pin for vias
+component Pin:
+    pins: [P]
+    layout:
+        shape: Rectangle(0.1mm, 0.1mm, 0.035mm)
+        pin_positions:
+            P at [0.05mm, 0.05mm, 0mm]
+
+space RingViaBoard:
+    dimensions: 20mm by 20mm by 1.57mm
+    grid: 200 by 200 by 16
+    origin: bl by b
+    profile: RingViaProfile
+
+    # Center ring
+    add MidWing named Ring at [x: 9mm, y: 9mm] on layer: top:
+        merge: true
+
+    # Via N - above center
+    add contact(Copper) named ViaN at [x: 10mm, y: 14mm] spanning layer: top to bottom:
+        net: NET_VIA_N
+        drill_diameter: 0.3mm
+        annular_ring: 0.2mm
+    add Pin named ViaNAnchor at [x: 10mm, y: 14mm] on layer: top:
+        merge: true
+
+    # Via S - below center
+    add contact(Copper) named ViaS at [x: 10mm, y: 4mm] spanning layer: top to bottom:
+        net: NET_VIA_S
+        drill_diameter: 0.3mm
+        annular_ring: 0.2mm
+    add Pin named ViaSAnchor at [x: 10mm, y: 4mm] on layer: top:
+        merge: true
+
+    # Via E - right of center
+    add contact(Copper) named ViaE at [x: 15mm, y: 10mm] spanning layer: top to bottom:
+        net: NET_VIA_E
+        drill_diameter: 0.3mm
+        annular_ring: 0.2mm
+    add Pin named ViaEAnchor at [x: 15mm, y: 10mm] on layer: top:
+        merge: true
+
+    # Via W - left of center
+    add contact(Copper) named ViaW at [x: 4mm, y: 10mm] spanning layer: top to bottom:
+        net: NET_VIA_W
+        drill_diameter: 0.3mm
+        annular_ring: 0.2mm
+    add Pin named ViaWAnchor at [x: 4mm, y: 10mm] on layer: top:
+        merge: true
+
+    # Routes from ring to each via
+    route Ring.N to ViaNAnchor.P:
+        exit: North
+        enter: South
+
+    route Ring.S to ViaSAnchor.P:
+        exit: South
+        enter: North
+
+    route Ring.E to ViaEAnchor.P:
+        exit: East
+        enter: West
+
+    route Ring.W to ViaWAnchor.P:
+        exit: West
+        enter: East

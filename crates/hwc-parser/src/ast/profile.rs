@@ -7,6 +7,32 @@ use super::expression::Expression;
 use crate::lexer::Span;
 use compact_str::CompactString;
 
+/// Preferred routing direction for a metal layer (v0.1.7 ASIC extension).
+///
+/// Odd metal layers (M1, M3, M5) typically prefer horizontal routing,
+/// while even layers (M2, M4, M6) prefer vertical. This maximizes
+/// routing density and prevents wire deadlocks.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RoutingDirection {
+    /// Horizontal routing preferred (East-West)
+    Horizontal,
+    /// Vertical routing preferred (North-South)
+    Vertical,
+    /// No direction preference (power/ground planes)
+    Any,
+}
+
+/// Routing constraints from the profile's `routing:` block (v0.1.7).
+///
+/// Controls gridded routing behavior for ASIC designs.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RoutingConstraints {
+    /// Per-layer routing direction preferences.
+    /// Maps layer name (e.g., "m1", "m2") to preferred direction.
+    pub layer_directions: rustc_hash::FxHashMap<String, RoutingDirection>,
+    pub span: Span,
+}
+
 /// Profile definition: `profile Name:` (v0.1.6)
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ProfileDefinition {
@@ -23,6 +49,8 @@ pub struct ProfileDefinition {
     /// Replaces the old impedance-only StackupConstraints.
     pub stackup: Option<LayerStackup>,
     pub export: Option<ExportConstraints>, // v0.1.6: Export & visualization rules
+    /// Routing constraints (v0.1.7): layer direction preferences for ASIC gridded routing.
+    pub routing: Option<RoutingConstraints>,
     /// Bridge rules for material transitions (Phase 1 - BRIDGE-IMPLEMENTATION.md)
     /// Syntax: `bridge FromMaterial to ToMaterial: BridgeMaterial`
     pub bridges: Vec<BridgeRule>,
@@ -92,6 +120,19 @@ pub struct ManufacturingConstraints {
     /// Solder mask thickness (default: 20µm). Applied on outer surfaces.
     /// Components mounted on top/bottom sit on the mask, not on copper.
     pub solder_mask_thickness: Option<Measurement>,
+    // v0.1.7 ASIC Extensions
+    /// Track pitch for gridded routing (ASIC only). Snaps traces to manufacturing grid.
+    pub track_pitch: Option<Measurement>,
+    /// Whether to snap traces to the routing grid (ASIC only).
+    pub grid_snapping: Option<bool>,
+    /// Dummy fill toggle (thieving pass for copper density uniformity).
+    pub dummy_fill: Option<bool>,
+    /// Target copper density for dummy fill (0.0–1.0, default: 0.45).
+    pub dummy_fill_density: Option<f64>,
+    /// Dummy fill element size.
+    pub dummy_fill_size: Option<Measurement>,
+    /// Dummy fill spacing between elements.
+    pub dummy_fill_spacing: Option<Measurement>,
     pub span: Span,
 }
 
@@ -119,6 +160,14 @@ pub struct ViaConstraints {
     pub min_spacing: Option<Measurement>,
     pub max_aspect_ratio: Option<f64>,
     pub default_via_fill: Option<Identifier>,
+    // v0.1.7 ASIC Extensions
+    /// Per-layer enclosure (annular ring) constraints.
+    /// Maps layer name to minimum enclosure distance.
+    pub enclosures: Option<rustc_hash::FxHashMap<String, Measurement>>,
+    /// Whether stacked vias are permitted (ASIC: false, PCB: true).
+    pub allow_stacked_vias: Option<bool>,
+    /// Minimum stagger offset between stacked vias (if allowed).
+    pub min_stagger_offset: Option<Measurement>,
     
     pub span: Span,
 }

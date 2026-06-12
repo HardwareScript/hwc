@@ -16,10 +16,14 @@ pub fn extrude_polygon_mesh(
     let mut faces = Vec::new();
     let mut triangulator = Earcut::new();
 
-    // Helper to map 2D coordinates to 3D scene space based on active view
+    // v0.1.7: Helper to map 2D coordinates to 3D scene space based on active view
+    // For horizontal view, swap Y and Z so the board lies flat (XY plane) with Z as height
     let map_vertex = |ex: f64, ey: f64, ez: f64| -> Vertex {
         match view {
-            SpaceView::Horizontal => Vertex { x: ex, y: ez, z: ey },
+            SpaceView::Horizontal => {
+                // Board lies flat: GLTF X=board X, GLTF Y=board Z (height), GLTF Z=board Y
+                Vertex { x: ex, y: ez, z: ey }
+            }
             SpaceView::Vertical => Vertex { x: ex, y: ey, z: ez },
         }
     };

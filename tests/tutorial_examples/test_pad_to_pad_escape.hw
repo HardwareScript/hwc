@@ -1,0 +1,133 @@
+# Test script for Pad-to-Pad Port Escape Routing
+# Demonstrates the new abstracted port escape syntax with a 5-pad star topology
+# - Big center pad
+# - Four pads on each cardinal side (N, S, E, W)
+# - Routes using exit/enter port specifications
+
+import * from @std/primitives/units
+import Copper from @std/materials/conductors
+
+profile EscapeRouteProfile:
+    stackup:
+        top:    [material: Copper, thickness: 35um]
+        core:   [material: FR4,    thickness: 1.5mm]
+        bottom: [material: Copper, thickness: 35um]
+    trace:
+        min_width: 0.2mm
+        min_spacing: 0.2mm
+    via:
+        min_diameter: 0.3mm
+        min_annular_ring: 0.15mm
+        min_spacing: 0.25mm
+    manufacturing:
+        copper_thickness: 35um
+    clearance:
+        high_voltage: 1.0mm
+        safety_factor: 1.5
+    layer:
+        min_thickness: 35um
+
+# Center pad - larger square pad in the middle
+component CenterPad:
+    pins: [N, S, E, W]
+    layout:
+        shape: Rectangle(2.0mm, 2.0mm, 0.035mm)
+        pin_positions:
+            N at [1.0mm, 2.0mm, 0mm]
+            S at [1.0mm, 0.0mm, 0mm]
+            E at [2.0mm, 1.0mm, 0mm]
+            W at [0.0mm, 1.0mm, 0mm]
+        add pour(Copper) named Pad on layer: self:
+            device: N
+            boundary: [x: -1.0mm, y: -2.0mm] to [x: 1.0mm, y: 0.0mm]
+
+# North pad
+component NorthPad:
+    pins: [P]
+    layout:
+        shape: Rectangle(0.6mm, 0.6mm, 0.035mm)
+        pin_positions:
+            P at [0.3mm, 0.3mm, 0mm]
+        add pour(Copper) named Pad on layer: self:
+            device: P
+            boundary: [x: -0.3mm, y: -0.3mm] to [x: 0.3mm, y: 0.3mm]
+
+# South pad
+component SouthPad:
+    pins: [P]
+    layout:
+        shape: Rectangle(0.6mm, 0.6mm, 0.035mm)
+        pin_positions:
+            P at [0.3mm, 0.3mm, 0mm]
+        add pour(Copper) named Pad on layer: self:
+            device: P
+            boundary: [x: -0.3mm, y: -0.3mm] to [x: 0.3mm, y: 0.3mm]
+
+# East pad
+component EastPad:
+    pins: [P]
+    layout:
+        shape: Rectangle(0.6mm, 0.6mm, 0.035mm)
+        pin_positions:
+            P at [0.3mm, 0.3mm, 0mm]
+        add pour(Copper) named Pad on layer: self:
+            device: P
+            boundary: [x: -0.3mm, y: -0.3mm] to [x: 0.3mm, y: 0.3mm]
+
+# West pad
+component WestPad:
+    pins: [P]
+    layout:
+        shape: Rectangle(0.6mm, 0.6mm, 0.035mm)
+        pin_positions:
+            P at [0.3mm, 0.3mm, 0mm]
+        add pour(Copper) named Pad on layer: self:
+            device: P
+            boundary: [x: -0.3mm, y: -0.3mm] to [x: 0.3mm, y: 0.3mm]
+
+space EscapeRouteBoard:
+    dimensions: 20mm by 20mm by 1.57mm
+    grid: 200 by 200 by 16
+    origin: bl by b
+    profile: EscapeRouteProfile
+
+    # Center pad - big pad in the middle
+    add CenterPad named Center at [x: 9mm, y: 9mm] on layer: top:
+        merge: true
+
+    # North pad - above center
+    add NorthPad named North at [x: 9.7mm, y: 14mm] on layer: top:
+        merge: true
+
+    # South pad - below center
+    add SouthPad named South at [x: 9.7mm, y: 4.4mm] on layer: top:
+        merge: true
+
+    # East pad - right of center
+    add EastPad named East at [x: 14.7mm, y: 9.7mm] on layer: top:
+        merge: true
+
+    # West pad - left of center
+    add WestPad named West at [x: 4.7mm, y: 9.7mm] on layer: top:
+        merge: true
+
+    # Routes using the new port escape syntax
+    # Center.N to North.P - exit North, enter South
+    route Center.N to North.P:
+        exit: North
+        enter: South
+
+    # Center.S to South.P - exit South, enter North
+    route Center.S to South.P:
+        exit: South
+        enter: North
+
+    # Center.E to East.P - exit East, enter West
+    route Center.E to East.P:
+        exit: East
+        enter: West
+
+    # Center.W to West.P - exit West, enter East
+    route Center.W to West.P:
+        exit: West
+        enter: East

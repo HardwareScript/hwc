@@ -248,6 +248,35 @@ impl Via {
     }
 }
 
+/// Unified result container for both routing modes (Pass-Through & Hierarchical).
+///
+/// Aggregates paths and vias from all routed nets into a single result
+/// that can be consumed by the compiler pipeline.
+#[derive(Debug, Clone, Default)]
+pub struct RouteResult {
+    /// Routed paths per net. Each net maps to its ordered list of waypoints.
+    pub paths: FxHashMap<NetId, Vec<Point3D>>,
+    /// All vias placed during routing (for drill file generation).
+    pub vias: Vec<Via>,
+}
+
+impl RouteResult {
+    /// Create a new empty route result.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Merge another RouteResult into this one, appending paths and vias.
+    ///
+    /// If a net exists in both results, the paths are concatenated.
+    pub fn merge(&mut self, other: RouteResult) {
+        for (net_id, mut path) in other.paths {
+            self.paths.entry(net_id).or_default().append(&mut path);
+        }
+        self.vias.extend(other.vias);
+    }
+}
+
 /// Routing error types with miette integration for multi-error reporting.
 #[derive(Debug, Clone, thiserror::Error, miette::Diagnostic)]
 pub enum RoutingError {

@@ -191,6 +191,8 @@ impl super::Parser {
         let mut path = None;
         let mut signal_group = None;
         let mut bridge = None;
+        let mut exit_escape = None;
+        let mut enter_escape = None;
 
         // Check if this has a properties block (starts with colon)
         if self.check(&Token::Colon) {
@@ -205,8 +207,16 @@ impl super::Parser {
                     break;
                 }
 
-                // Check for keywords or identifiers
-                if self.check(&Token::Path) {
+                // v0.1.7: Check for exit/enter escape keywords
+                if self.check(&Token::Exit) {
+                    self.advance(); // consume 'exit'
+                    self.expect(&Token::Colon)?;
+                    exit_escape = Some(self.parse_route_escape()?);
+                } else if self.check(&Token::Enter) {
+                    self.advance(); // consume 'enter'
+                    self.expect(&Token::Colon)?;
+                    enter_escape = Some(self.parse_route_escape()?);
+                } else if self.check(&Token::Path) {
                     self.advance(); // consume 'path'
                     self.expect(&Token::Colon)?;
                     
@@ -278,8 +288,130 @@ impl super::Parser {
             path,
             signal_group,
             bridge,
+            exit_escape,
+            enter_escape,
             span: Span::new(start_pos, end_pos),
         })
+    }
+
+    /// Parse route escape specification: `East at top`, `East at 80%`, `East at +150um`
+    fn parse_route_escape(&mut self) -> Result<RouteEscape, ParseError> {
+        let start_pos = self.current_span().start;
+
+        // Parse cardinal direction
+        let port = if let Some(current) = self.current() {
+            let dir = match &current.token {
+                Token::TopLeft => {
+                    self.advance();
+                    CardinalDirection::North
+                }
+                Token::BottomLeft => {
+                    self.advance();
+                    CardinalDirection::South
+                }
+                Token::TopRight => {
+                    self.advance();
+                    CardinalDirection::East
+                }
+                Token::BottomRight => {
+                    self.advance();
+                    CardinalDirection::West
+                }
+                Token::Identifier(s) => {
+                    let s = s.to_lowercase();
+                    self.advance();
+                    match s.as_str() {
+                        "north" | "n" | "top" => CardinalDirection::North,
+                        "south" | "s" | "bottom" => CardinalDirection::South,
+                        "east" | "e" | "right" => CardinalDirection::East,
+                        "west" | "w" | "left" => CardinalDirection::West,
+                        _ => return Err(self.error(&format!(
+                            "Expected cardinal direction (North, South, East, West), found '{}'",
+                            s
+                        ))),
+                    }
+                }
+                _ => return Err(self.error("Expected cardinal direction (North, South, East, West)")),
+            };
+            dir
+        } else {
+            return Err(self.error("Expected cardinal direction"));
+        };
+
+        // Parse optional offset (at ...)
+        let offset = if self.check(&Token::At) {
+            self.advance(); // consume 'at'
+            Some(self.parse_edge_offset()?)
+        } else {
+            None
+        };
+
+        let end_pos = self.previous_span().end;
+
+        Ok(RouteEscape {
+            port,
+            offset,
+            span: Span::new(start_pos, end_pos),
+        })
+    }
+
+    /// Parse edge offset: "top", "bottom", "center", "80%", "+150um", "-50um"
+    fn parse_edge_offset(&mut self) -> Result<EdgeOffsetSpec, ParseError> {
+        if let Some(current) = self.current() {
+            match &current.token {
+                Token::Identifier(s) => {
+                    let s = s.to_lowercase();
+                    self.advance();
+                    match s.as_str() {
+                        "top" | "max" | "high" | "upper" => {
+                            Ok(EdgeOffsetSpec::Named(NamedPosition::Top))
+                        }
+                        "bottom" | "min" | "low" | "lower" => {
+                            Ok(EdgeOffsetSpec::Named(NamedPosition::Bottom))
+                        }
+                        "center" | "centre" | "mid" | "middle" => {
+                            Ok(EdgeOffsetSpec::Named(NamedPosition::Center))
+                        }
+                        _ => {
+                            // Check if it's a percentage like "80%"
+                            if s.ends_with('%') {
+                                let pct_str = &s[..s.len() - 1];
+                                if let Ok(val) = pct_str.parse::<f64>() {
+                                    return Ok(EdgeOffsetSpec::Percentage(val / 100.0));
+                                }
+                            }
+                            // Check if it's a measurement like "+150um" or "-50um"
+                            if s.ends_with("um") {
+                                let val_str = &s[..s.len() - 2];
+                                if let Ok(val) = val_str.parse::<f64>() {
+                                    return Ok(EdgeOffsetSpec::Measurement((val * 1000.0) as i64));
+                                }
+                            }
+                            Err(self.error(&format!(
+                                "Expected edge offset (top, bottom, center, N%, +/-Numum), found '{}'",
+                                s
+                            )))
+                        }
+                    }
+                }
+                Token::Float(n) => {
+                    let val = *n;
+                    self.advance();
+                    // Plain number as percentage
+                    if (0.0..=1.0).contains(&val) {
+                        Ok(EdgeOffsetSpec::Percentage(val))
+                    } else {
+                        Err(self.error(&format!(
+                            "Percentage must be between 0.0 and 1.0, found {}",
+                            val
+                        )))
+                    }
+                }
+                _ => Err(self.error("Expected edge offset (top, bottom, center, N%, +/-Numum)")),
+            }
+        } else {
+            Err(self.error("Expected edge offset"))
+        }
     }
 
     /// Parse pin reference: `Component.Pin`, `Component[i].Pin`, `Component.Pin[i+1]`, or `Component[i].Pin[j]`

@@ -25,6 +25,10 @@ pub struct RoutingParams<'a> {
     pub fixed_z_nm: Option<i64>,
     /// v0.1.7: Components exempt from collision (for Escape Exemption)
     pub exempt_components: &'a [CompactString],
+    /// v0.1.7: Substrate layers for reference-plane void detection in high-speed routing.
+    pub substrate_layers: Option<&'a [crate::voxel_grid::SubstrateLayer]>,
+    /// v0.1.7: Whether this net is classified as high-speed (≥1 GHz).
+    pub is_high_speed_net: bool,
 }
 
 /// A* node for priority queue.

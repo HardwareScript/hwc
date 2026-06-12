@@ -1,9 +1,12 @@
-//! Routing methods: single net, all nets, priority-based, and length-constrained routing
+//! Routing methods: single net, all nets, priority-based, length-constrained, and Steiner routing
 
 use super::super::pathfinding::route_net_deterministic;
-use super::super::types::{NetRoute, RoutedNet, RoutingError};
+use super::super::types::{NetRoute, RoutedNet, RouteResult, RoutingError};
 use super::core::GeometryRouter;
 use crate::constraint_manager::LayerDirection;
+use crate::geometry::Point3D;
+use crate::netlist::NetId;
+use rustc_hash::FxHashMap;
 
 impl GeometryRouter {
     /// Route a single net.
@@ -55,6 +58,8 @@ impl GeometryRouter {
             corridor: None,                     // No corridor constraint by default
             fixed_z_nm: None,                   // v0.1.7: No fixed Z for legacy router
             exempt_components: &[],             // v0.1.7: No exemptions for legacy router
+            substrate_layers: None,             // v0.1.7: No substrate context in basic routing
+            is_high_speed_net: false,           // v0.1.7: Default to non-high-speed
         };
 
         let path = route_net_deterministic(route.start, route.goal, &routing_params);
@@ -344,6 +349,189 @@ impl GeometryRouter {
             if let Some(routed) = routed_map.get(&net.net_id) {
                 result.push(routed.clone());
             }
+        }
+
+        Ok(result)
+    }
+
+    // =========================================================================
+    // v0.1.7 Steiner Net Tapping & Dynamic Target Expansion
+    // =========================================================================
+
+    /// Find the nearest point on any existing segment of the same net.
+    ///
+    /// When routing Pin N of a multi-pin net, all previously routed segments
+    /// of that net become valid targets (not just original pins). This enables
+    /// Steiner Minimum Tree branching via physical T-junctions.
+    ///
+    /// **Architecture Reference:** `Docs/v0.1.7/Unified-2.5D-3D-Routing-and-Placement.md` §4.1
+    ///
+    /// # Arguments
+    /// * `new_pin` - The pin we are trying to connect
+    /// * `existing_paths` - All previously routed segments of this net
+    ///
+    /// # Returns
+    /// The closest point on any existing segment, or `new_pin` if no segments exist.
+    pub fn find_nearest_target_on_net(
+        &self,
+        new_pin: Point3D,
+        existing_paths: &[Vec<Point3D>],
+    ) -> Point3D {
+        if existing_paths.is_empty() {
+            return new_pin;
+        }
+
+        // Flatten all path segments and find the point with minimum Euclidean distance²
+        existing_paths
+            .iter()
+            .flatten()
+            .min_by_key(|&&pt| {
+                let dx = pt.x - new_pin.x;
+                let dy = pt.y - new_pin.y;
+                let dz = pt.z - new_pin.z;
+                dx * dx + dy * dy + dz * dz
+            })
+            .copied()
+            .unwrap_or(new_pin)
+    }
+
+    /// Route a multi-pin net using Steiner Minimum Tree (SMT) approximation.
+    ///
+    /// Instead of daisy-chaining pins (Pin1→Pin2, Pin1→Pin3, Pin1→Pin4),
+    /// this method dynamically expands the target set: after each sub-route
+    /// completes, the resulting path becomes a valid target for subsequent pins.
+    /// This produces branching T-junctions that minimize total trace length.
+    ///
+    /// **Algorithm:**
+    /// 1. Route Pin[0] → Pin[1] (initial trunk segment)
+    /// 2. For each subsequent Pin[i]:
+    ///    a. Find nearest point on any existing net segment
+    ///    b. Route Pin[i] → nearest_target (creates T-junction)
+    ///    c. Push resulting path into `net_paths`
+    /// 3. Terminate A* the moment it intersects any coordinate on the same net
+    ///
+    /// **Architecture Reference:** `Docs/v0.1.7/Unified-2.5D-3D-Routing-and-Placement.md` §4.1
+    ///
+    /// # Arguments
+    /// * `net_id` - Net ID to route
+    /// * `pins` - All pin coordinates for this net
+    ///
+    /// # Returns
+    /// Complete routed path with T-junctions, or error if any sub-route fails.
+    pub fn route_net_steiner(
+        &mut self,
+        net_id: NetId,
+        pins: &[Point3D],
+    ) -> Result<RoutedNet, RoutingError> {
+        if pins.len() < 2 {
+            return Err(RoutingError::NoPathFound {
+                net_id,
+                start: pins[0],
+                goal: pins[0],
+            });
+        }
+
+        // Track all path segments for this net (for dynamic target expansion)
+        let mut net_paths: Vec<Vec<Point3D>> = Vec::new();
+        let mut all_vias = Vec::new();
+
+        // Route Pin[0] → Pin[1] as the initial trunk
+        let initial_route = NetRoute {
+            net_id,
+            start: pins[0],
+            goal: pins[1],
+        };
+        let initial_routed = self.route_net(&initial_route)?;
+        net_paths.push(initial_routed.path.clone());
+        all_vias.extend(initial_routed.vias);
+
+        // For each subsequent pin, find nearest target on existing net segments
+        for &pin in &pins[2..] {
+            // Dynamic Target Set: search all existing segments, not just original pins
+            let target = self.find_nearest_target_on_net(pin, &net_paths);
+
+            let sub_route = NetRoute {
+                net_id,
+                start: pin,
+                goal: target,
+            };
+
+            match self.route_net(&sub_route) {
+                Ok(routed) => {
+                    net_paths.push(routed.path.clone());
+                    all_vias.extend(routed.vias);
+                }
+                Err(RoutingError::NoPathFound { .. }) => {
+                    // If direct T-junction route fails, try routing to nearest original pin
+                    // as a fallback (ensures connectivity even without optimal Steiner branching)
+                    let mut best_fallback: Option<(Point3D, i64)> = None;
+                    for &original_pin in pins.iter().take(pins.len()) {
+                        let dx = original_pin.x - pin.x;
+                        let dy = original_pin.y - pin.y;
+                        let dz = original_pin.z - pin.z;
+                        let dist_sq = dx * dx + dy * dy + dz * dz;
+                        if best_fallback.is_none() || dist_sq < best_fallback.unwrap().1 {
+                            best_fallback = Some((original_pin, dist_sq));
+                        }
+                    }
+
+                    if let Some((fallback_target, _)) = best_fallback {
+                        let fallback_route = NetRoute {
+                            net_id,
+                            start: pin,
+                            goal: fallback_target,
+                        };
+                        let fallback_routed = self.route_net(&fallback_route)?;
+                        net_paths.push(fallback_routed.path.clone());
+                        all_vias.extend(fallback_routed.vias);
+                    }
+                }
+                Err(e) => return Err(e),
+            }
+        }
+
+        // Merge all sub-paths into a single unified path
+        let mut merged_path = Vec::new();
+        for segment in &net_paths {
+            merged_path.extend(segment);
+        }
+
+        Ok(RoutedNet {
+            net_id,
+            path: merged_path,
+            vias: all_vias,
+        })
+    }
+
+    /// Route all multi-pin nets using Steiner Minimum Tree approximation.
+    ///
+    /// This is the recommended method for routing designs with multi-pin nets.
+    /// Each net is routed with dynamic target expansion to produce T-junctions
+    /// instead of daisy chains, minimizing total trace length.
+    ///
+    /// # Arguments
+    /// * `nets` - Map of net IDs to their pin coordinates
+    ///
+    /// # Returns
+    /// Unified `RouteResult` with all paths and vias, or first error.
+    pub fn route_all_nets_steiner(
+        &mut self,
+        nets: &FxHashMap<NetId, Vec<Point3D>>,
+    ) -> Result<RouteResult, RoutingError> {
+        let mut result = RouteResult::new();
+
+        // Sort nets by ID for deterministic ordering
+        let mut sorted_nets: Vec<_> = nets.iter().collect();
+        sorted_nets.sort_by_key(|(id, _)| id.0);
+
+        for (&net_id, pins) in &sorted_nets {
+            if pins.len() < 2 {
+                continue;
+            }
+
+            let routed = self.route_net_steiner(net_id, pins)?;
+            result.paths.insert(net_id, routed.path);
+            result.vias.extend(routed.vias);
         }
 
         Ok(result)

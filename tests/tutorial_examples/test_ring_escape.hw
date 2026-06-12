@@ -1,0 +1,105 @@
+# Test script for Ring Escape Routing
+# Demonstrates port escape syntax with circular pours (rings)
+# - Center ring component with circular copper pour
+# - Four circular ring pads on cardinal sides (N, S, E, W)
+# - Routes using exit/enter port specifications
+#
+# This validates that the router correctly queries circular pour
+# bounding boxes and clips traces to the ring edges.
+
+import * from @std/primitives/units
+import Copper from @std/materials/conductors
+
+profile RingRouteProfile:
+    stackup:
+        top:    [material: Copper, thickness: 35um]
+        core:   [material: FR4,    thickness: 1.5mm]
+        bottom: [material: Copper, thickness: 35um]
+    trace:
+        min_width: 0.2mm
+        min_spacing: 0.2mm
+    via:
+        min_diameter: 0.3mm
+        min_annular_ring: 0.15mm
+        min_spacing: 0.25mm
+    manufacturing:
+        copper_thickness: 35um
+    clearance:
+        high_voltage: 1.0mm
+        safety_factor: 1.5
+    layer:
+        min_thickness: 35um
+
+# Center ring component - circular copper pour (1mm radius = 2mm diameter)
+# device: N anchors the circle center relative to pin N at [1.0mm, 2.0mm]
+# Offset [0.0mm, -1.0mm] from pin N places the circle center at [1.0mm, 1.0mm]
+component MidWing:
+    pins: [N, S, E, W]
+    layout:
+        shape: Rectangle(2.0mm, 2.0mm, 0.035mm)
+        pin_positions:
+            N at [1.0mm, 2.0mm, 0mm]
+            S at [1.0mm, 0.0mm, 0mm]
+            E at [2.0mm, 1.0mm, 0mm]
+            W at [0.0mm, 1.0mm, 0mm]
+        add pour(Copper) named Wing on layer: self:
+            device: N
+            boundary: Circle([x: 0.0mm, y: -1.0mm], 1.0mm)
+
+# Ring pad - circular copper pour
+component RingPad:
+    pins: [P]
+    layout:
+        shape: Rectangle(0.7mm, 0.7mm, 0.035mm)
+        pin_positions:
+            P at [0.35mm, 0.35mm, 0mm]
+        add pour(Copper) named Ring on layer: self:
+            device: P
+            boundary: Circle([x: 0mm, y: 0mm], 0.35mm)
+
+space RingEscapeBoard:
+    dimensions: 20mm by 20mm by 1.57mm
+    grid: 200 by 200 by 16
+    origin: bl by b
+    profile: RingRouteProfile
+
+    # Center wing - rectangular pour in the middle
+    add MidWing named Wing at [x: 9mm, y: 9mm] on layer: top:
+        merge: true
+
+    # North ring - circular pour above center
+    add RingPad named RingN at [x: 9.65mm, y: 14.65mm] on layer: top:
+        merge: true
+
+    # South ring - circular pour below center
+    add RingPad named RingS at [x: 9.65mm, y: 3.35mm] on layer: top:
+        merge: true
+
+    # East ring - circular pour right of center
+    add RingPad named RingE at [x: 14.65mm, y: 9.65mm] on layer: top:
+        merge: true
+
+    # West ring - circular pour left of center
+    add RingPad named RingW at [x: 3.35mm, y: 9.65mm] on layer: top:
+        merge: true
+
+    # Routes using port escape syntax
+    # Wing.N to RingN.P - exit North, enter South
+    route Wing.N to RingN.P:
+        exit: North
+        enter: South
+
+    # Wing.S to RingS.P - exit South, enter North
+    route Wing.S to RingS.P:
+        exit: South
+        enter: North
+
+    # Wing.E to RingE.P - exit East, enter West
+    route Wing.E to RingE.P:
+        exit: East
+        enter: West
+
+    # Wing.W to RingW.P - exit West, enter East
+    route Wing.W to RingW.P:
+        exit: West
+        enter: East
