@@ -1,0 +1,55 @@
+# Manual Routing: Ring-to-Ring (Top Layer Only)
+#
+# Two copper pads on the top copper layer, manually routed edge-to-edge.
+# No via barrel, no bottom rings — just top copper.
+
+import * from @std/primitives/units
+import Copper from @std/materials/conductors
+
+profile RoutingTestProfile:
+    stackup:
+        top:    [material: Copper, thickness: 35um]
+        core:   [material: FR4,    thickness: 1.5mm]
+        bottom: [material: Copper, thickness: 35um]
+    trace:
+        min_width: 0.2mm
+        min_spacing: 0.2mm
+    via:
+        min_diameter: 0.3mm
+        min_annular_ring: 0.15mm
+        min_spacing: 0.25mm
+    manufacturing:
+        copper_thickness: 35um
+    clearance:
+        high_voltage: 1.0mm
+        safety_factor: 1.5
+    layer:
+        min_thickness: 35um
+
+component RingPad:
+    pins: [P]
+    layout:
+        shape: Rectangle(0.7mm, 0.7mm, 0.035mm)
+        pin_positions:
+            P at [0.35mm, 0.35mm, 0mm]
+        add pour(Copper) named Ring on layer: self:
+            device: P
+            boundary: Circle([x: 0mm, y: 0mm], 0.35mm)
+
+space RingToRingBoard:
+    dimensions: 12mm by 6mm by 1.57mm
+    grid: 120 by 60 by 16
+    origin: bl by b
+    profile: RoutingTestProfile
+
+    # Ring A at (2, 3): 0.7mm pad, center at (2, 3)
+    add RingPad named Ring_A at [x: 1.65mm, y: 2.65mm] on layer: top:
+        merge: true
+
+    # Ring B at (8, 3): 0.7mm pad, center at (8, 3)
+    add RingPad named Ring_B at [x: 7.65mm, y: 2.65mm] on layer: top:
+        merge: true
+
+    # Manual route: center of Ring_A to center of Ring_B
+    route Ring_A.P to Ring_B.P:
+        path: [ [x: 2.0mm, y: 3.0mm, z: 1.535mm], [x: 8.0mm, y: 3.0mm, z: 1.535mm] ]

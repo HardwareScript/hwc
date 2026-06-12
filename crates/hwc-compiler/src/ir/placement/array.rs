@@ -271,10 +271,15 @@ fn calculate_pour_bboxes_for_array(
     use hwc_engine::geometry::{BoundingBox, Point3D};
 
     // Get pour boundary
-    let (from, to) = pour
+    let (from, to) = match pour
         .boundary
         .as_ref()
-        .ok_or_else(|| IrError::PlacementError(format!("Pour '{}' missing boundary", pour.name)))?;
+        .ok_or_else(|| IrError::PlacementError(format!("Pour '{}' missing boundary", pour.name)))? {
+        hwc_parser::PourBoundary::Rect(f, t) => (f.clone(), t.clone()),
+        hwc_parser::PourBoundary::Circle { .. } => return Err(IrError::PlacementError(
+            format!("Circle boundary not yet supported in arrays for pour '{}'", pour.name)
+        )),
+    };
 
     let mut instance_bboxes = Vec::new();
 
@@ -302,10 +307,10 @@ fn calculate_pour_bboxes_for_array(
             stackup_manager,
             profile,
         };
-        let start = spanning_coordinate_to_point(from, &ctx, false)
+        let start = spanning_coordinate_to_point(&from, &ctx, false)
             .map_err(|e| IrError::PlacementError(e))?;
 
-        let end = spanning_coordinate_to_point(to, &ctx, true)
+        let end = spanning_coordinate_to_point(&to, &ctx, true)
             .map_err(|e| IrError::PlacementError(e))?;
 
         let z_bottom_nm = stackup_manager.resolve_elevation(&pour.elevation, symbol_table)?;

@@ -337,12 +337,24 @@ pub struct PourPlacement {
     pub name: super::component::ComponentName,
     /// Z elevation (v0.1.7): either physical `z: 150um` or semantic `layer: l1`
     pub elevation: Elevation,
-    pub boundary: Option<(Coordinate, Coordinate)>, // Optional boundary (from, to)
+    pub boundary: Option<PourBoundary>, // Optional boundary (rect or circle)
     pub net: Option<NetName>, // Net name to connect to (v0.1.6: supports array syntax)
     pub device: Option<DeviceBinding>, // Phase 4: Explicit device terminal binding
     pub thermal_relief: bool,
     pub waivers: super::common::Waivers, // NEW v0.1.6 Sprint 8: Intentional overlap/connectivity waivers
     pub span: Span,
+}
+
+/// Pour boundary shape: rectangle or circle
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum PourBoundary {
+    /// Rectangular boundary: [from] to [to]
+    Rect(Coordinate, Coordinate),
+    /// Circular boundary: Circle(center, radius_expression)
+    Circle {
+        center: Box<Coordinate>,
+        radius: crate::Expression,
+    },
 }
 
 /// Device binding for explicit intent-based extraction (Phase 4: Silent Atom)

@@ -22,29 +22,10 @@ pub fn place_pour(
     let material_id = space.material_registry.get_or_register(&pour.material);
 
     // Get the boundary coordinates
-    let (from_raw, to_raw) = pour
+    let boundary = pour
         .boundary
         .as_ref()
         .ok_or_else(|| IrError::PlacementError(format!("Pour '{}' missing boundary", pour.name)))?;
-
-    // Sprint 3, Task 3.1: Resolve relative coordinates to absolute
-    let solver = crate::constraint_solver::ConstraintSolver::new(bbox_tracker, eval_context);
-    
-    let from = if from_raw.is_relative() {
-        solver.resolve_position(from_raw).map_err(|e| {
-            IrError::PlacementError(format!("Failed to resolve relative 'from' position for pour '{}': {}", pour.name, e))
-        })?
-    } else {
-        from_raw.clone()
-    };
-
-    let to = if to_raw.is_relative() {
-        solver.resolve_position(to_raw).map_err(|e| {
-            IrError::PlacementError(format!("Failed to resolve relative 'to' position for pour '{}': {}", pour.name, e))
-        })?
-    } else {
-        to_raw.clone()
-    };
 
     let z_start_nm = stackup_manager.resolve_elevation(&pour.elevation, symbol_table)?;
     let z_end_nm = stackup_manager.resolve_elevation_top(
@@ -53,7 +34,9 @@ pub fn place_pour(
         space.voxel_size.z_nm,
     )?;
 
-    // Create 3D coordinates by combining boundary x,y with elevation z
+    // Sprint 3, Task 3.1: Resolve relative coordinates to absolute
+    let solver = crate::constraint_solver::ConstraintSolver::new(bbox_tracker, eval_context);
+
     let ctx = CoordinateContext {
         voxel_size: &space.voxel_size,
         grid_size: &space.grid,
@@ -61,23 +44,71 @@ pub fn place_pour(
         space_dimensions: &space.dimensions,
         symbol_table,
         eval_context,
-        bbox_tracker: Some(bbox_tracker), // Pass bbox_tracker for anchor references in pour boundaries
+        bbox_tracker: Some(bbox_tracker),
         stackup_manager,
         profile,
     };
-    let start = spanning_coordinate_to_point(&from, &ctx, false)
-        .map_err(|e| IrError::PlacementError(e))?;
-    let end = spanning_coordinate_to_point(&to, &ctx, true)
-        .map_err(|e| IrError::PlacementError(e))?;
+
+    // Resolve boundary to start/end points (handles both Rect and Circle)
+    let mut circle_radius_nm: Option<i64> = None;
+    let (start, end, area_nm2) = match boundary {
+        hwc_parser::PourBoundary::Rect(from_raw, to_raw) => {
+            let from = if from_raw.is_relative() {
+                solver.resolve_position(from_raw).map_err(|e| {
+                    IrError::PlacementError(format!("Failed to resolve relative 'from' position for pour '{}': {}", pour.name, e))
+                })?
+            } else {
+                from_raw.clone()
+            };
+
+            let to = if to_raw.is_relative() {
+                solver.resolve_position(to_raw).map_err(|e| {
+                    IrError::PlacementError(format!("Failed to resolve relative 'to' position for pour '{}': {}", pour.name, e))
+                })?
+            } else {
+                to_raw.clone()
+            };
+
+            let s = spanning_coordinate_to_point(&from, &ctx, false)
+                .map_err(|e| IrError::PlacementError(e))?;
+            let e = spanning_coordinate_to_point(&to, &ctx, true)
+                .map_err(|e| IrError::PlacementError(e))?;
+
+            let w = (e.x - s.x).abs();
+            let h = (e.y - s.y).abs();
+            (s, e, w * h)
+        }
+        hwc_parser::PourBoundary::Circle { center: center_raw, radius } => {
+            // Evaluate radius expression
+            let radius_nm = crate::ir::conversions::evaluate_expression_to_nm(radius, symbol_table)
+                .map_err(|e| IrError::PlacementError(format!("Failed to evaluate circle radius for pour '{}': {}", pour.name, e)))?;
+            circle_radius_nm = Some(radius_nm);
+
+            // Resolve center coordinate through solver (handles anchor refs from component unrolling)
+            let center_resolved = if center_raw.is_relative() {
+                solver.resolve_position(&center_raw).map_err(|e| {
+                    IrError::PlacementError(format!("Failed to resolve circle center for pour '{}': {}", pour.name, e))
+                })?
+            } else {
+                *center_raw.clone()
+            };
+
+            let center_pt = spanning_coordinate_to_point(&center_resolved, &ctx, false)
+                .map_err(|e| IrError::PlacementError(e))?;
+
+            let radius_nm_f = radius_nm as f64;
+            let s = Point3D::new(center_pt.x - radius_nm_f as i64, center_pt.y - radius_nm_f as i64, 0);
+            let e = Point3D::new(center_pt.x + radius_nm_f as i64, center_pt.y + radius_nm_f as i64, 0);
+
+            let w = (e.x - s.x).abs();
+            let h = (e.y - s.y).abs();
+            (s, e, w * h)
+        }
+    };
 
     // Z from elevation (physical or semantic); XY from pour boundary
     let start_with_z = Point3D::new(start.x, start.y, z_start_nm);
     let end_with_z = Point3D::new(end.x, end.y, z_end_nm);
-
-    // Calculate area for BOM
-    let width_nm = (end.x - start.x).abs();
-    let height_nm = (end.y - start.y).abs();
-    let area_nm2 = width_nm * height_nm;
 
     // Create bounding box for geometric overlap detection
     let bbox = hwc_engine::geometry::BoundingBox::new(start_with_z, end_with_z);
@@ -319,12 +350,21 @@ pub fn place_pour(
     // v0.1.7 FIXED: Pours must be registered as SubstrateLayerType::Pour
     // to prevent the Auto-Drill system from carving holes through them.
     let bbox = hwc_engine::geometry::BoundingBox::new(start_with_z, end_with_z);
-    space.voxel_grid.add_substrate_layer(
-        material_id,
-        net_id,
-        bbox,
-        hwc_engine::voxel_grid::SubstrateLayerType::Pour,
-    );
+    if let Some(radius) = circle_radius_nm {
+        space.voxel_grid.add_circle_substrate_layer(
+            material_id,
+            net_id,
+            bbox,
+            radius,
+        );
+    } else {
+        space.voxel_grid.add_substrate_layer(
+            material_id,
+            net_id,
+            bbox,
+            hwc_engine::voxel_grid::SubstrateLayerType::Pour,
+        );
+    }
 
     Ok(())
 }

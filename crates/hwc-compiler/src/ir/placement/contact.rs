@@ -259,6 +259,21 @@ pub fn place_contact(
     // v0.1.7: Read solder mask properties (needed by all process branches and ContactMetadata)
     let is_tented = get_prop_bool(contact, "is_tented", eval_context).unwrap_or(false);
 
+    // Compute pad bbox (drill + annular ring) for contact metadata and substrate layers
+    let annular_ring_nm = if let Some(nm) = get_prop_nm(contact, "annular_ring", symbol_table, eval_context) {
+        nm
+    } else {
+        space.fabrication_constraints.as_ref()
+            .map(|c| c.via.min_annular_ring_nm)
+            .unwrap_or(150_000)
+    };
+    let pad_diameter_nm = diameter_nm + (2 * annular_ring_nm);
+    let pad_radius_nm = pad_diameter_nm / 2;
+    let pad_bbox = hwc_engine::geometry::BoundingBox::new(
+        Point3D::new(xy_point.x - pad_radius_nm, xy_point.y - pad_radius_nm, start_z.min(end_z)),
+        Point3D::new(xy_point.x + pad_radius_nm, xy_point.y + pad_radius_nm, start_z.max(end_z)),
+    );
+
     // v0.1.7: TSV (Through-Silicon Via) support
     let liner_material_name = get_prop_string(contact, "liner", eval_context);
     if let Some(liner_material_name) = &liner_material_name {
@@ -369,16 +384,7 @@ pub fn place_contact(
             .unwrap_or(150_000); // Default 150um
 
         if process == hwc_engine::ManufacturingProcess::DrilledPlated {
-            // 1. Pre-compute via parameters needed by drill and solder mask
-            let min_annular_ring_nm = if let Some(nm) = get_prop_nm(contact, "annular_ring", symbol_table, eval_context) {
-                nm
-            } else {
-                space.fabrication_constraints.as_ref()
-                    .map(|c| c.via.min_annular_ring_nm)
-                    .unwrap_or(150_000) // Default 150um
-            };
-
-            let pad_diameter_nm = diameter_nm + (2 * min_annular_ring_nm);
+            // 1. pad_bbox already computed above
 
             // v0.1.7: Profile-driven solder mask expansion (Zero Implicit Magic)
             let solder_mask_expansion_nm = space.fabrication_constraints.as_ref()
@@ -438,7 +444,7 @@ pub fn place_contact(
             space.voxel_grid.add_tube_substrate_layer(
                 material_id,
                 net_id,
-                contact_bbox,
+                pad_bbox,
                 diameter_nm as u32,       // Outer Plating Dia
                 inner_diameter_nm as u32, // Void Hole Dia
                 pad_diameter_nm as u32,   // Flange/Pad Dia
@@ -584,18 +590,7 @@ pub fn place_contact(
         z_end_nm: to_bottom_nm,
         net: contact.net.as_ref().map(|n| n.to_string().into()),
         bridge: bridge_material_name,
-        bbox: Some(hwc_engine::geometry::BoundingBox {
-            min: hwc_engine::geometry::Point3D::new(
-                xy_point.x - radius_nm,
-                xy_point.y - radius_nm,
-                start_z,
-            ),
-            max: hwc_engine::geometry::Point3D::new(
-                xy_point.x + radius_nm,
-                xy_point.y + radius_nm,
-                end_z,
-            ),
-        }),
+        bbox: Some(pad_bbox),
         voxels: Vec::new(), // Empty - analytic geometry only
         is_tented,
         mask_clearance_diameter_nm: get_prop_nm(contact, "mask_clearance_diameter", symbol_table, eval_context),

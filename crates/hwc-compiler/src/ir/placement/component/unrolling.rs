@@ -247,9 +247,13 @@ pub fn unroll_internal_features(
                             name.to_string().into()
                         };
 
-                        if let Some((from, to)) = &mut unrolled_pour.boundary {
+                        if let Some(hwc_parser::PourBoundary::Rect(from, to)) = &mut unrolled_pour.boundary {
                             *from = transform_declarative_to_relative(from, &anchor_name);
                             *to = transform_declarative_to_relative(to, &anchor_name);
+                        }
+
+                        if let Some(hwc_parser::PourBoundary::Circle { center, .. }) = &mut unrolled_pour.boundary {
+                            **center = transform_declarative_to_relative(center, &anchor_name);
                         }
 
                         // Update device binding to point to this specific component instance
@@ -260,8 +264,8 @@ pub fn unroll_internal_features(
                         });
 
                         // v0.1.7: Unrolled pads should inherit the Z of their anchor
-                        if let Some(anchor_bbox) = bbox_tracker.get(&anchor_name) {
-                            let surface_z_nm = anchor_bbox.min.z;
+                        if let Some(_anchor_bbox) = bbox_tracker.get(&anchor_name) {
+                            let surface_z_nm = stackup_manager.board_surface_z(mount_side);
                             let copper_thickness = stackup_manager.outer_copper_thickness_nm(mount_side);
 
                             let (p_min, p_max) = match mount_side {
@@ -288,7 +292,7 @@ pub fn unroll_internal_features(
                         world_origin.xy = OriginXY::BL;
                         world_origin.z = OriginZ::Bottom;
 
-                        let temp_manager = StackupManager::new(None, symbol_table, space.voxel_size.z_nm, world_origin.z)
+                        let temp_manager = StackupManager::new(None, symbol_table, space.voxel_size.z_nm, world_origin.z, 20_000)
                             .expect("Failed to create temp StackupManager");
                         
                         place_pour(space, &unrolled_pour, world_origin, symbol_table, bbox_tracker, eval_context, collector, &temp_manager, profile)?;

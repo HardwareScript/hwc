@@ -1,0 +1,93 @@
+# Test script for Pad-to-Pad, Via-to-Via, and Via-to-Pad routing scenarios
+
+import * from @std/primitives/units
+import Copper from @std/materials/conductors
+
+profile RoutingTestProfile:
+    stackup:
+        top:    [material: Copper, thickness: 35um]
+        core:   [material: FR4,    thickness: 1.5mm]
+        bottom: [material: Copper, thickness: 35um]
+    trace:
+        min_width: 0.2mm
+        min_spacing: 0.2mm
+    via:
+        min_diameter: 0.3mm
+        min_annular_ring: 0.15mm
+        min_spacing: 0.25mm
+    manufacturing:
+        copper_thickness: 35um
+    clearance:
+        high_voltage: 1.0mm
+        safety_factor: 1.5
+    layer:
+        min_thickness: 35um
+
+# Component with a Circular Body (using Rectangle for baking compatibility)
+component RoundPin:
+    pins: [P]
+    layout:
+        shape: Rectangle(0.6mm, 0.6mm, 0.035mm)
+        pin_positions:
+            P at [0.3mm, 0.3mm, 0mm]
+        
+        # Physical copper landing pad (Square proxy for circular pad)
+        add pour(Copper) named Pad on layer: self:
+            device: P
+            boundary: [x: 0mm, y: 0mm] to [x: 0.6mm, y: 0.6mm]
+
+# Anchor Pin for vias (Minimal)
+component Pin:
+    pins: [P]
+    layout:
+        shape: Rectangle(0.1mm, 0.1mm, 0.035mm)
+        pin_positions:
+            P at [0.05mm, 0.05mm, 0mm]
+
+space RoutingTestBoard:
+    dimensions: 20mm by 15mm by 1.57mm
+    grid: 200 by 150 by 16
+    origin: bl by b
+    profile: RoutingTestProfile
+
+    # --- Scenario 1: Pad-to-Pad (Circular Body) ---
+    add RoundPin named Pad_A at [x: 4mm, y: 3mm] on layer: top:
+        merge: true
+    
+    add RoundPin named Pad_B at [x: 16mm, y: 3mm] on layer: top:
+        merge: true
+
+    route Pad_A.P to Pad_B.P
+
+    # --- Scenario 2: Via-to-Via ---
+    add contact(Copper) named Via_A at [x: 4mm, y: 7.5mm] spanning layer: top to bottom:
+        net: NET_VIAS
+        drill_diameter: 0.3mm
+        annular_ring: 0.2mm
+
+    add Pin named Via_A_Anchor at [x: 4mm, y: 7.5mm] on layer: top:
+        merge: true
+
+    add contact(Copper) named Via_B at [x: 16mm, y: 7.5mm] spanning layer: top to bottom:
+        net: NET_VIAS
+        drill_diameter: 0.3mm
+        annular_ring: 0.2mm
+
+    add Pin named Via_B_Anchor at [x: 16mm, y: 7.5mm] on layer: top:
+        merge: true
+
+    route Via_A_Anchor.P to Via_B_Anchor.P
+
+    # --- Scenario 3: Via-to-Pad (Top Fire Connection) ---
+    add contact(Copper) named Via_C at [x: 4mm, y: 12mm] spanning layer: top to bottom:
+        net: NET_VIA_PAD
+        drill_diameter: 0.3mm
+        annular_ring: 0.2mm
+
+    add Pin named Via_C_Anchor at [x: 4mm, y: 12mm] on layer: top:
+        merge: true
+
+    add RoundPin named Pad_C at [x: 16mm, y: 12mm] on layer: top:
+        merge: true
+
+    route Via_C_Anchor.P to Pad_C.P

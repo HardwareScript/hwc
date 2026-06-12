@@ -34,7 +34,7 @@ pub fn execute(
     };
 
     // Create diagnostic collector with configured limit
-    let collector = DiagnosticCollector::new(&source, &input.to_string_lossy(), error_limit);
+    let collector = DiagnosticCollector::new_with_file(&source, &input.to_string_lossy(), error_limit);
 
     // eprintln!($3"[DEBUG] Starting lexer...");
     let lexer = Lexer::new(&source);

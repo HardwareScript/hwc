@@ -13,12 +13,15 @@
 //! The SOLID entity ensures proper rendering, and transparency is baked into the layer
 //! definitions for tools that support it (AC1018+).
 
-use crate::physical_z::board_z_extent;
+use crate::geometry_union::{circle_to_path, rect_to_path};
+use clipper2_rust::FillRule;
 use hwc_compiler::SymbolTable;
+use hwc_engine::voxel_grid::{CapType, SubstrateLayerType, SubstrateLayerShape};
 use hwc_engine::{HardwareSpace, SpaceView};
+use rustc_hash::FxHashMap;
 use std::io::Write;
 
-/// Export HardwareSpace to DXF format with True Color support and SOLID entities
+/// Export HardwareSpace to DXF format with True Color support and unioned copper contours
 pub fn export(
     space: &HardwareSpace,
     symbol_table: &SymbolTable,
@@ -38,7 +41,7 @@ pub fn export(
     // 2. TABLES (Layer Definitions with Color and Transparency)
     writeln!(w, "  0\nSECTION\n  2\nTABLES\n  0\nTABLE\n  2\nLAYER")?;
 
-    // Add global layers (v0.1.7 Segmented Viewport Export)
+    // Add global layers
     writeln!(w, "  0\nLAYER\n  2\nDRILL\n 70\n0\n 62\n0")?;
     writeln!(w, "  0\nLAYER\n  2\nTOP_COMPONENTS\n 70\n0\n 62\n7")?;
     writeln!(w, "  0\nLAYER\n  2\nBOTTOM_COMPONENTS\n 70\n0\n 62\n7")?;
@@ -46,180 +49,241 @@ pub fn export(
 
     let substrate_layers = space.voxel_grid.get_substrate_layers();
 
-    // v0.1.7: Segmented Viewport Export does not require dynamic layer definitions
-    // if we are strictly using the three category layers. 
-    // However, we still export DRILL separately.
     writeln!(w, "  0\nENDTAB\n  0\nENDSEC")?;
 
     // 3. ENTITIES (The Actual Geometry)
     writeln!(w, "  0\nSECTION\n  2\nENTITIES")?;
 
-    let (board_min_z, board_max_z) = board_z_extent(space);
+    // --- STRATEGY A: Union copper pours for clean DXF contours ---
+    // Collect copper pools keyed by (z_min, z_max, material, net)
+    let mut copper_pools: FxHashMap<(i64, i64, hwc_engine::voxel_grid::MaterialId, u32), Vec<clipper2_rust::Path64>> = FxHashMap::default();
+    let mut via_holes: FxHashMap<(i64, i64, hwc_engine::voxel_grid::MaterialId, u32), Vec<clipper2_rust::Path64>> = FxHashMap::default();
 
-    // PROFESSIONAL EDA APPROACH: Export 2D silhouettes (top-down projection)
-    for layer in substrate_layers.iter() {
-        let mat_name = space
-            .material_registry
-            .get_name(layer.material)
-            .unwrap_or("Unknown");
+    // Gather copper pours
+    for layer in substrate_layers {
+        if layer.layer_type == SubstrateLayerType::Pour && layer.net != 0 {
+            let key = (layer.bbox.min.z, layer.bbox.max.z, layer.material, layer.net);
+                let mut path = match layer.shape {
+                    SubstrateLayerShape::Rect => rect_to_path(&layer.bbox),
+                    SubstrateLayerShape::Circle { radius } => {
+                        let cx = (layer.bbox.min.x + layer.bbox.max.x) / 2;
+                        let cy = (layer.bbox.min.y + layer.bbox.max.y) / 2;
+                        circle_to_path(cx, cy, radius, 64)
+                    }
+                    _ => continue,
+                };
 
-        let color_hex = symbol_table
-            .get_material(mat_name)
-            .map(|m| m.get_color())
-            .unwrap_or_else(|_| "#808080".into());
+                // v0.1.9: Subtract cutouts from the path before adding to the pool
+                if !layer.cutouts.is_empty() {
+                    let mut hole_paths = Vec::new();
+                    for cutout in &layer.cutouts {
+                        match cutout.shape {
+                            SubstrateLayerShape::Rect => hole_paths.push(rect_to_path(&cutout.bbox)),
+                            SubstrateLayerShape::Cylinder { diameter, .. } => {
+                                let cx = (cutout.bbox.min.x + cutout.bbox.max.x) / 2;
+                                let cy = (cutout.bbox.min.y + cutout.bbox.max.y) / 2;
+                                hole_paths.push(circle_to_path(cx, cy, diameter / 2, 64));
+                            }
+                            _ => {}
+                        }
+                    }
+                    if !hole_paths.is_empty() {
+                        let diff = clipper2_rust::difference_64(&vec![path.clone()], &hole_paths, FillRule::NonZero);
+                        if !diff.is_empty() {
+                            path = diff[0].clone();
+                        }
+                    }
+                }
 
-        let r = u32::from_str_radix(&color_hex[1..3], 16)?;
-        let g = u32::from_str_radix(&color_hex[3..5], 16)?;
-        let b = u32::from_str_radix(&color_hex[5..7], 16)?;
-        let true_color: u32 = (r << 16) | (g << 8) | b;
-
-        // **ORIENTATION AWARE PROJECTION (v0.1.6)**
-        let (x1, y1, x2, y2) = match space.view {
-            SpaceView::Horizontal => (
-                layer.bbox.min.x as f64 / 1_000_000.0,
-                layer.bbox.min.y as f64 / 1_000_000.0,
-                layer.bbox.max.x as f64 / 1_000_000.0,
-                layer.bbox.max.y as f64 / 1_000_000.0,
-            ),
-            SpaceView::Vertical => (
-                layer.bbox.min.x as f64 / 1_000_000.0,
-                layer.bbox.min.z as f64 / 1_000_000.0,
-                layer.bbox.max.x as f64 / 1_000_000.0,
-                layer.bbox.max.z as f64 / 1_000_000.0,
-            ),
-        };
-
-        // v0.1.7: Segmented Viewport Export
-        let layer_name = if mat_name.to_lowercase() == "void" || mat_name.to_lowercase() == "air" {
-            "DRILL".to_string()
-        } else {
-            "PCB_LAYERS".to_string()
-        };
-
-        writeln!(w, "  0\nLWPOLYLINE")?;
-        writeln!(w, "  8\n{}", layer_name)?;
-        writeln!(w, "420\n{}", true_color)?;
-        writeln!(w, " 90\n4")?;
-        writeln!(w, " 70\n1")?;
-
-        writeln!(w, " 10\n{:.6}\n 20\n{:.6}", x1, y1)?; // Bottom-left
-        writeln!(w, " 10\n{:.6}\n 20\n{:.6}", x2, y1)?; // Bottom-right
-        writeln!(w, " 10\n{:.6}\n 20\n{:.6}", x2, y2)?; // Top-right
-        writeln!(w, " 10\n{:.6}\n 20\n{:.6}", x1, y2)?; // Top-left
+            copper_pools.entry(key).or_default().push(path);
+        }
     }
 
-    // Export component metadata
-    let component_metadata = space.voxel_grid.get_component_metadata();
+    // Gather via caps
+    for layer in substrate_layers {
+        if layer.layer_type == SubstrateLayerType::Contact && layer.net != 0 {
+            if let SubstrateLayerShape::Tube { inner_diameter, pad_diameter, top_cap, bottom_cap, .. } = layer.shape {
+                let cx = (layer.bbox.min.x + layer.bbox.max.x) / 2;
+                let cy = (layer.bbox.min.y + layer.bbox.max.y) / 2;
+                let pad_radius = pad_diameter as i64 / 2;
+                let inner_radius = inner_diameter as i64 / 2;
+                let copper_thickness = 35_000;
 
-    for component in component_metadata.iter() {
-        let mat_name = space
-            .material_registry
-            .get_name(component.material)
-            .unwrap_or("Body");
+                if top_cap != CapType::None {
+                    let target_key = (layer.bbox.max.z - copper_thickness, layer.bbox.max.z, layer.material, layer.net);
+                    copper_pools.entry(target_key.clone()).or_default().push(circle_to_path(cx, cy, pad_radius, 64));
+                    if top_cap == CapType::Annular {
+                        via_holes.entry(target_key).or_default().push(circle_to_path(cx, cy, inner_radius, 64));
+                    }
+                }
 
-        let color_hex = symbol_table
-            .get_material(mat_name)
-            .map(|m| m.get_color())
-            .unwrap_or_else(|_| "#B87333".into());
-
-        let r = u32::from_str_radix(&color_hex[1..3], 16).unwrap_or(184);
-        let g = u32::from_str_radix(&color_hex[3..5], 16).unwrap_or(115);
-        let b = u32::from_str_radix(&color_hex[5..7], 16).unwrap_or(51);
-        let true_color: u32 = (r << 16) | (g << 8) | b;
-
-        // **ORIENTATION AWARE PROJECTION (v0.1.6)**
-        let (x1, y1, x2, y2) = match space.view {
-            SpaceView::Horizontal => (
-                component.bbox.min.x as f64 / 1_000_000.0,
-                component.bbox.min.y as f64 / 1_000_000.0,
-                component.bbox.max.x as f64 / 1_000_000.0,
-                component.bbox.max.y as f64 / 1_000_000.0,
-            ),
-            SpaceView::Vertical => (
-                component.bbox.min.x as f64 / 1_000_000.0,
-                component.bbox.min.z as f64 / 1_000_000.0,
-                component.bbox.max.x as f64 / 1_000_000.0,
-                component.bbox.max.z as f64 / 1_000_000.0,
-            ),
-        };
-
-        // v0.1.7: Segmented Viewport Export
-        let layer_name = if component.bbox.min.z >= board_max_z {
-            "TOP_COMPONENTS".to_string()
-        } else if component.bbox.max.z <= board_min_z {
-            "BOTTOM_COMPONENTS".to_string()
-        } else {
-            "PCB_LAYERS".to_string()
-        };
-
-        writeln!(w, "  0\nLWPOLYLINE")?;
-        writeln!(w, "  8\n{}", layer_name)?;
-        writeln!(w, "420\n{}", true_color)?;
-        writeln!(w, " 90\n4")?;
-        writeln!(w, " 70\n1")?;
-
-        writeln!(w, " 10\n{:.6}\n 20\n{:.6}", x1, y1)?; // Bottom-left
-        writeln!(w, " 10\n{:.6}\n 20\n{:.6}", x2, y1)?; // Bottom-right
-        writeln!(w, " 10\n{:.6}\n 20\n{:.6}", x2, y2)?; // Top-right
-        writeln!(w, " 10\n{:.6}\n 20\n{:.6}", x1, y2)?; // Top-left
+                if bottom_cap != CapType::None {
+                    let target_key = (layer.bbox.min.z, layer.bbox.min.z + copper_thickness, layer.material, layer.net);
+                    copper_pools.entry(target_key.clone()).or_default().push(circle_to_path(cx, cy, pad_radius, 64));
+                    if bottom_cap == CapType::Annular {
+                        via_holes.entry(target_key).or_default().push(circle_to_path(cx, cy, inner_radius, 64));
+                    }
+                }
+            }
+        }
     }
 
-    // Export analytic routes as polylines in DXF
-    for route in &space.analytic_routes {
-        let mat_name = space
-            .material_registry
-            .get_name(route.material)
-            .unwrap_or("Copper");
+    // Export unioned copper contours
+    for ((z_min_nm, z_max_nm, material_id, net_raw), paths) in &copper_pools {
+        let mat_name = space.material_registry.get_name(*material_id).unwrap_or("Copper");
+        let color_hex = symbol_table.get_material(mat_name).map(|m| m.get_color()).unwrap_or_else(|_| "#B87333".into());
+        let true_color = parse_true_color(&color_hex);
 
-        let color_hex = symbol_table
-            .get_material(mat_name)
-            .map(|m| m.get_color())
-            .unwrap_or_else(|_| "#FF6600".into());
+        let mut clipper = clipper2_rust::Clipper64::new();
+        clipper.add_subject(paths);
+        if let Some(holes) = via_holes.get(&(*z_min_nm, *z_max_nm, *material_id, *net_raw)) {
+            clipper.add_clip(holes);
+        }
 
-        let r = u32::from_str_radix(&color_hex[1..3], 16).unwrap_or(255);
-        let g = u32::from_str_radix(&color_hex[3..5], 16).unwrap_or(102);
-        let b = u32::from_str_radix(&color_hex[5..7], 16).unwrap_or(0);
-        let true_color: u32 = (r << 16) | (g << 8) | b;
+        let mut final_paths = clipper2_rust::Paths64::new();
+        clipper.execute(clipper2_rust::ClipType::Difference, clipper2_rust::FillRule::NonZero, &mut final_paths, None);
+        if final_paths.is_empty() {
+            continue;
+        }
 
-        let width_mm = route.width_nm as f64 / 1_000_000.0;
-
-        for segment in &route.segments {
-            // **ORIENTATION AWARE PROJECTION (v0.1.6)**
-            let (x1, y1, x2, y2) = match space.view {
-                SpaceView::Horizontal => (
-                    segment.start.x as f64 / 1_000_000.0,
-                    segment.start.y as f64 / 1_000_000.0,
-                    segment.end.x as f64 / 1_000_000.0,
-                    segment.end.y as f64 / 1_000_000.0,
-                ),
-                SpaceView::Vertical => (
-                    segment.start.x as f64 / 1_000_000.0,
-                    segment.start.z as f64 / 1_000_000.0,
-                    segment.end.x as f64 / 1_000_000.0,
-                    segment.end.z as f64 / 1_000_000.0,
-                ),
-            };
-
-            // v0.1.7: Segmented Viewport Export
-            let layer_name = if mat_name.to_lowercase() == "void" || mat_name.to_lowercase() == "air" {
-                "DRILL".to_string()
-            } else {
-                "PCB_LAYERS".to_string()
-            };
+        for path in &final_paths {
+            let point_count = path.len();
+            if point_count < 3 {
+                continue;
+            }
 
             writeln!(w, "  0\nLWPOLYLINE")?;
-            writeln!(w, "  8\n{}", layer_name)?;
+            writeln!(w, "  8\nPCB_LAYERS")?;
             writeln!(w, "420\n{}", true_color)?;
-            writeln!(w, " 43\n{:.6}", width_mm)?;
-            writeln!(w, " 90\n2")?;
-            writeln!(w, " 70\n0")?;
+            writeln!(w, " 90\n{}", point_count)?;
+            writeln!(w, " 70\n1")?; // Closed polyline
 
-            writeln!(w, " 10\n{:.6}\n 20\n{:.6}", x1, y1)?;
-            writeln!(w, " 10\n{:.6}\n 20\n{:.6}", x2, y2)?;
+            for pt in path {
+                let (x, y) = match space.view {
+                    SpaceView::Horizontal => (pt.x as f64 / 1_000_000.0, pt.y as f64 / 1_000_000.0),
+                    SpaceView::Vertical => (pt.x as f64 / 1_000_000.0, *z_min_nm as f64 / 1_000_000.0),
+                };
+                writeln!(w, " 10\n{:.6}\n 20\n{:.6}", x, y)?;
+            }
+        }
+    }
+
+    // Export non-copper substrate layers (FR4, solder mask, etc.) and via drill holes
+    for layer in substrate_layers {
+        // Skip copper pours and contacts — already handled by the union pool above
+        if layer.layer_type == SubstrateLayerType::Pour && layer.net != 0 {
+            continue;
+        }
+        if layer.layer_type == SubstrateLayerType::Contact {
+            continue;
+        }
+
+        let mat_name = space.material_registry.get_name(layer.material).unwrap_or("Unknown");
+        if mat_name.to_lowercase() == "void" || mat_name.to_lowercase() == "air" {
+            continue;
+        }
+
+        let color_hex = symbol_table.get_material(mat_name).map(|m| m.get_color()).unwrap_or_else(|_| "#808080".into());
+        let true_color = parse_true_color(&color_hex);
+
+        let layer_name = "PCB_LAYERS";
+
+        match &layer.shape {
+            SubstrateLayerShape::Rect => {
+                // Export as closed LWPOLYLINE rectangle
+                let (x1, y1, x2, y2) = match space.view {
+                    SpaceView::Horizontal => (
+                        layer.bbox.min.x as f64 / 1_000_000.0,
+                        layer.bbox.min.y as f64 / 1_000_000.0,
+                        layer.bbox.max.x as f64 / 1_000_000.0,
+                        layer.bbox.max.y as f64 / 1_000_000.0,
+                    ),
+                    SpaceView::Vertical => (
+                        layer.bbox.min.x as f64 / 1_000_000.0,
+                        layer.bbox.min.z as f64 / 1_000_000.0,
+                        layer.bbox.max.x as f64 / 1_000_000.0,
+                        layer.bbox.max.z as f64 / 1_000_000.0,
+                    ),
+                };
+
+                writeln!(w, "  0\nLWPOLYLINE")?;
+                writeln!(w, "  8\n{}", layer_name)?;
+                writeln!(w, "420\n{}", true_color)?;
+                writeln!(w, " 90\n4")?;
+                writeln!(w, " 70\n1")?;
+                writeln!(w, " 10\n{:.6}\n 20\n{:.6}", x1, y1)?;
+                writeln!(w, " 10\n{:.6}\n 20\n{:.6}", x2, y1)?;
+                writeln!(w, " 10\n{:.6}\n 20\n{:.6}", x2, y2)?;
+                writeln!(w, " 10\n{:.6}\n 20\n{:.6}", x1, y2)?;
+            }
+            SubstrateLayerShape::Circle { radius } => {
+                // Export as CIRCLE entity
+                let cx = (layer.bbox.min.x + layer.bbox.max.x) as f64 / 2_000_000.0;
+                let cy = match space.view {
+                    SpaceView::Horizontal => (layer.bbox.min.y + layer.bbox.max.y) as f64 / 2_000_000.0,
+                    SpaceView::Vertical => (layer.bbox.min.z + layer.bbox.max.z) as f64 / 2_000_000.0,
+                };
+                let radius_mm = *radius as f64 / 1_000_000.0;
+
+                writeln!(w, "  0\nCIRCLE")?;
+                writeln!(w, "  8\n{}", layer_name)?;
+                writeln!(w, "420\n{}", true_color)?;
+                writeln!(w, " 10\n{:.6}\n 20\n{:.6}", cx, cy)?;
+                writeln!(w, " 40\n{:.6}", radius_mm)?;
+            }
+            SubstrateLayerShape::Cylinder { diameter, .. } => {
+                // Export as CIRCLE entity
+                let cx = (layer.bbox.min.x + layer.bbox.max.x) as f64 / 2_000_000.0;
+                let cy = match space.view {
+                    SpaceView::Horizontal => (layer.bbox.min.y + layer.bbox.max.y) as f64 / 2_000_000.0,
+                    SpaceView::Vertical => (layer.bbox.min.z + layer.bbox.max.z) as f64 / 2_000_000.0,
+                };
+                let radius = *diameter as f64 / 2_000_000.0;
+
+                writeln!(w, "  0\nCIRCLE")?;
+                writeln!(w, "  8\n{}", layer_name)?;
+                writeln!(w, "420\n{}", true_color)?;
+                writeln!(w, " 10\n{:.6}\n 20\n{:.6}", cx, cy)?;
+                writeln!(w, " 40\n{:.6}", radius)?;
+            }
+            SubstrateLayerShape::Tube { outer_diameter, inner_diameter, .. } => {
+                // Export outer circle and inner hole circle
+                let cx = (layer.bbox.min.x + layer.bbox.max.x) as f64 / 2_000_000.0;
+                let cy = match space.view {
+                    SpaceView::Horizontal => (layer.bbox.min.y + layer.bbox.max.y) as f64 / 2_000_000.0,
+                    SpaceView::Vertical => (layer.bbox.min.z + layer.bbox.max.z) as f64 / 2_000_000.0,
+                };
+                let outer_r = *outer_diameter as f64 / 2_000_000.0;
+                let inner_r = *inner_diameter as f64 / 2_000_000.0;
+
+                // Outer circle
+                writeln!(w, "  0\nCIRCLE")?;
+                writeln!(w, "  8\n{}", layer_name)?;
+                writeln!(w, "420\n{}", true_color)?;
+                writeln!(w, " 10\n{:.6}\n 20\n{:.6}", cx, cy)?;
+                writeln!(w, " 40\n{:.6}", outer_r)?;
+
+                // Inner hole circle (drill)
+                if inner_r > 0.0 {
+                    writeln!(w, "  0\nCIRCLE")?;
+                    writeln!(w, "  8\nDRILL")?;
+                    writeln!(w, "420\n0")?;
+                    writeln!(w, " 10\n{:.6}\n 20\n{:.6}", cx, cy)?;
+                    writeln!(w, " 40\n{:.6}", inner_r)?;
+                }
+            }
         }
     }
 
     writeln!(w, "  0\nENDSEC\n  0\nEOF")?;
     println!("   ✅ DXF: {}", path.display());
     Ok(())
+}
+
+/// Parse a hex color string like "#RRGGBB" into a DXF 24-bit true color integer.
+fn parse_true_color(hex: &str) -> u32 {
+    let r = u32::from_str_radix(&hex[1..3], 16).unwrap_or(128);
+    let g = u32::from_str_radix(&hex[3..5], 16).unwrap_or(128);
+    let b = u32::from_str_radix(&hex[5..7], 16).unwrap_or(128);
+    (r << 16) | (g << 8) | b
 }

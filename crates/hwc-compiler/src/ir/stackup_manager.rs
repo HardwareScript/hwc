@@ -25,6 +25,10 @@ pub struct StackupManager {
     /// Planned for future use; currently Physical always evaluates the expression directly.
     #[allow(dead_code)]
     default_z_voxel_nm: i64,
+
+    /// Solder mask thickness loaded dynamically from the active profile.
+    /// Used to offset component mounting planes so bodies sit on the mask, not on copper.
+    pub solder_mask_thickness_nm: i64,
 }
 
 impl StackupManager {
@@ -35,6 +39,7 @@ impl StackupManager {
             layer_thickness_nm: HashMap::new(),
             ordered_layers: Vec::new(),
             default_z_voxel_nm: 0,
+            solder_mask_thickness_nm: 0, // Opt-in: disabled unless profile declares solder_mask_thickness
         }
     }
 
@@ -50,6 +55,7 @@ impl StackupManager {
         symbol_table: &SymbolTable,
         default_z_voxel_nm: i64,
         origin_z: hwc_parser::OriginZ,
+        solder_mask_thickness_nm: i64,
     ) -> Result<Self, IrError> {
         let mut layer_start_z_nm = HashMap::new();
         let mut layer_thickness_nm = HashMap::new();
@@ -110,6 +116,7 @@ impl StackupManager {
             layer_thickness_nm,
             ordered_layers,
             default_z_voxel_nm,
+            solder_mask_thickness_nm,
         })
     }
 
@@ -119,15 +126,20 @@ impl StackupManager {
     }
 
     /// Get the absolute physical Z-boundary of the board for a mounting side.
+    ///
+    /// Accounts for the solder mask layer applied on outer surfaces.
+    /// The mask thickness is loaded dynamically from the active profile's
+    /// `manufacturing.solder_mask_thickness` (default: 20µm).
+    /// Components mounted on top/bottom sit on the mask, not on copper.
     pub fn board_surface_z(&self, side: MountingSide) -> i64 {
         match side {
             MountingSide::Top => {
-                // In a bottom-up stackup, the top surface is the total thickness of the board
-                self.board_thickness_nm()
+                // Top-mounted components sit on top of the top solder mask
+                self.board_thickness_nm() + self.solder_mask_thickness_nm
             }
             MountingSide::Bottom => {
-                // The bottom surface of the board is always absolute z = 0
-                0
+                // Bottom-mounted components sit underneath the bottom solder mask
+                -self.solder_mask_thickness_nm
             }
             MountingSide::Embedded => {
                 // Custom logic for cavities (defaults to middle layer)
@@ -266,6 +278,15 @@ impl StackupManager {
     pub fn get_z_start_nm_for_layer_index(&self, index: usize) -> i64 {
         if let Some(name) = self.ordered_layers.get(index) {
             self.layer_start_z_nm.get(name).copied().unwrap_or(0)
+        } else {
+            0
+        }
+    }
+
+    /// Returns the thickness in nm for a layer index.
+    pub fn get_thickness_for_layer_index(&self, index: usize) -> i64 {
+        if let Some(name) = self.ordered_layers.get(index) {
+            self.layer_thickness_nm.get(name).copied().unwrap_or(0)
         } else {
             0
         }

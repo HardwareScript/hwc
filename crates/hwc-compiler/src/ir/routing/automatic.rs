@@ -14,6 +14,7 @@ pub fn route_automatic(
     space: &mut HardwareSpace,
     route: &hwc_parser::Route,
     symbol_table: &crate::SymbolTable,
+    stackup_manager: &crate::ir::stackup_manager::StackupManager,
 ) -> Result<(), IrError> {
     use hwc_engine::constraint_manager::{ConstraintManager, LayerDirection, RouteConstraints};
     use hwc_engine::geometry_router::GridBounds;
@@ -154,40 +155,158 @@ pub fn route_automatic(
     let start_pin_name = space.netlist.get_pin(start_pin_id).unwrap().name.clone();
     let goal_pin_name = space.netlist.get_pin(goal_pin_id).unwrap().name.clone();
 
+    // v0.1.7: Grid-Agnostic Z-Resolution
+    // We transform the router's voxel-snapped path back into exact physical layer heights
+    // using the StackupManager. This eliminates the 21µm "discretization noise".
+    let mut refined_path = path.clone();
+    let mut trace_thickness_nm = space.voxel_size.z_nm; // Default to voxel size
+
+    if refined_path.len() >= 2 {
+        eprintln!("[ROUTER DEBUG] Refining {} path points via StackupManager...", refined_path.len());
+        for (i, point) in refined_path.iter_mut().enumerate() {
+            let old_z = point.z;
+            // 1. Identify which PHYSICAL layer this point is in (v0.1.7 Fix: Use StackupManager, not voxel math)
+            if let Some(layer_idx) = stackup_manager.get_layer_index_at_z(point.z) {
+                // 2. Resolve the EXACT physical starting height for that layer
+                // This bypasses the coarse voxel grid's multiplication formula.
+                let true_z = stackup_manager.get_z_start_nm_for_layer_index(layer_idx);
+
+                // v0.1.7: Extract physical thickness for this layer to prevent "wobbly" 3D meshes
+                trace_thickness_nm = stackup_manager.get_thickness_for_layer_index(layer_idx);
+                
+                // 3. Update the point's Z to the physical truth
+                point.z = true_z;
+                
+                if old_z != true_z {
+                    eprintln!("[ROUTER DEBUG]   Point {}: Z shifted from {}nm to {}nm (Layer Index: {})", i, old_z, true_z, layer_idx);
+                }
+            } else {
+                // v0.1.7 FIX: If the point is on a planar-locked route, force it to the start Z
+                // even if the layer lookup fails (e.g. at boundary conditions).
+                if let Some(fixed_z) = routing_params.fixed_z_nm {
+                    point.z = fixed_z;
+                    // Also try to find thickness at this fixed Z
+                    if let Some(layer_idx) = stackup_manager.get_layer_index_at_z(fixed_z) {
+                        trace_thickness_nm = stackup_manager.get_thickness_for_layer_index(layer_idx);
+                    }
+                } else {
+                    eprintln!("[ROUTER WARNING]   Point {}: Z={}nm could not be mapped to any physical layer!", i, point.z);
+                }
+            }
+        }
+    }
+
     // Primitives Over Pixels
     let segments = {
         let mut segs = Vec::new();
-        if path.len() >= 2 {
-            let mut start = path[0];
-            for i in 1..path.len() - 1 {
-                let p1 = path[i - 1];
-                let p2 = path[i];
-                let p3 = path[i + 1];
+        if refined_path.len() >= 2 {
+            let mut start = refined_path[0];
+            for i in 1..refined_path.len() - 1 {
+                let p1 = refined_path[i - 1];
+                let p2 = refined_path[i];
+                let p3 = refined_path[i + 1];
 
-                // Manhattan check: did the vector direction change?
-                let d1 = (p2.x - p1.x, p2.y - p1.y, p2.z - p1.z);
-                let d2 = (p3.x - p2.x, p3.y - p2.y, p3.z - p2.z);
+                // Calculate direction vectors
+                let d1x = p2.x - p1.x;
+                let d1y = p2.y - p1.y;
+                let d1z = p2.z - p1.z;
+                
+                let d2x = p3.x - p2.x;
+                let d2y = p3.y - p2.y;
+                let d2z = p3.z - p2.z;
 
-                if d1 != d2 {
+                // v0.1.7: MANHATTAN COLLINEARITY CHECK (GOD-TIER SIMPLIFICATION)
+                let is_collinear = (d1x == 0 && d2x == 0 && d1y == 0 && d2y == 0) || // Z axis
+                                   (d1x == 0 && d2x == 0 && d1z == 0 && d2z == 0) || // Y axis
+                                   (d1y == 0 && d2y == 0 && d1z == 0 && d2z == 0);   // X axis
+
+                // v0.1.7: Filter short perpendicular steps caused by voxel snap
+                let seg_len_sq = (p2.x - start.x).pow(2) + (p2.y - start.y).pow(2) + (p2.z - start.z).pow(2);
+                let min_seg_len_sq = 200_000i64.pow(2); // 0.2mm minimum segment length
+                let is_short = seg_len_sq < min_seg_len_sq;
+
+                if !is_collinear && !is_short {
                     segs.push(hwc_engine::LineSegment::new(start, p2));
                     start = p2;
                 }
             }
-            segs.push(hwc_engine::LineSegment::new(start, *path.last().unwrap()));
+            segs.push(hwc_engine::LineSegment::new(start, *refined_path.last().unwrap()));
         }
         segs
     };
 
-    // Register as analytic primitive
+    // v0.1.7 DFM: Add teardrop fillets at trace-to-pad junctions
+    // A teardrop is a short, wider segment that tapers from trace_width to pad_width
+    // over a transition length, preventing acid traps and mechanical stress points.
+    let teardrop_length_nm = 100_000; // 100µm transition zone
+    let teardrop_width_nm = trace_width_nm * 2; // 2× trace width at pad junction
+    let teardrop_segments = {
+        let mut t_segs = Vec::new();
+        if refined_path.len() >= 2 {
+            let start = refined_path[0];
+            let second = refined_path[1];
+            let last = *refined_path.last().unwrap();
+            let second_to_last = refined_path[refined_path.len() - 2];
+
+            // Start teardrop: short wider segment from pin along first direction
+            let dx_start = second.x - start.x;
+            let dy_start = second.y - start.y;
+            let len_start = ((dx_start * dx_start + dy_start * dy_start) as f64).sqrt();
+            if len_start > 0.0 {
+                let dir_x = dx_start as f64 / len_start;
+                let dir_y = dy_start as f64 / len_start;
+                let teardrop_end = hwc_engine::Point3D::new(
+                    start.x + (dir_x * teardrop_length_nm as f64) as i64,
+                    start.y + (dir_y * teardrop_length_nm as f64) as i64,
+                    start.z,
+                );
+                t_segs.push(hwc_engine::LineSegment::new(start, teardrop_end));
+            }
+
+            // Goal teardrop: short wider segment from pin along last direction
+            let dx_goal = last.x - second_to_last.x;
+            let dy_goal = last.y - second_to_last.y;
+            let len_goal = ((dx_goal * dx_goal + dy_goal * dy_goal) as f64).sqrt();
+            if len_goal > 0.0 {
+                let dir_x = dx_goal as f64 / len_goal;
+                let dir_y = dy_goal as f64 / len_goal;
+                let teardrop_start = hwc_engine::Point3D::new(
+                    last.x - (dir_x * teardrop_length_nm as f64) as i64,
+                    last.y - (dir_y * teardrop_length_nm as f64) as i64,
+                    last.z,
+                );
+                t_segs.push(hwc_engine::LineSegment::new(teardrop_start, last));
+            }
+        }
+        t_segs
+    };
+
+    // Register main trace as analytic primitive
     let analytic_trace = hwc_engine::AnalyticTrace::new(
         net_id,
         trace_width_nm,
+        trace_thickness_nm, // v0.1.7: Exact physical thickness
         segments,
         copper_id,
         net_name.clone(),
     );
 
     space.add_analytic_route(analytic_trace);
+
+    // Register teardrop fillets as wider analytic primitives
+    if !teardrop_segments.is_empty() {
+        let teardrop_trace = hwc_engine::AnalyticTrace::new(
+            net_id,
+            teardrop_width_nm,
+            trace_thickness_nm, // v0.1.7: Exact physical thickness
+            teardrop_segments,
+            copper_id,
+            net_name.clone(),
+        );
+        space.add_analytic_route(teardrop_trace);
+        eprintln!("[ROUTER] ✓ DFM teardrop fillets added at trace endpoints");
+    }
+
     eprintln!("[ROUTER] ✓ Route registered as analytic primitive");
 
     // Connect both pins to the net (already done in register_net_for_route, but ensure logical binding)

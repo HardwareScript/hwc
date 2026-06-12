@@ -1,0 +1,4 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,12.00x6.00x1.57mm,,,,,1
+Via_A_Anchor,Pin,,,,,,1
+Via_B_Anchor,Pin,,,,,,1

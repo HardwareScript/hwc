@@ -92,10 +92,19 @@ pub fn unroll_pour(
         .map(|n| substitute_in_net_name(n, variable, value));
 
     // Substitute loop variable in boundary
-    let boundary = if let Some((from, to)) = &pour.boundary {
-        let from_sub = substitute_in_coordinate(from, variable, value)?;
-        let to_sub = substitute_in_coordinate(to, variable, value)?;
-        Some((from_sub, to_sub))
+    let boundary = if let Some(b) = &pour.boundary {
+        match b {
+            hwc_parser::PourBoundary::Rect(from, to) => {
+                let from_sub = substitute_in_coordinate(from, variable, value)?;
+                let to_sub = substitute_in_coordinate(to, variable, value)?;
+                Some(hwc_parser::PourBoundary::Rect(from_sub, to_sub))
+            }
+            hwc_parser::PourBoundary::Circle { center, radius } => {
+                let center_sub = substitute_in_coordinate(center, variable, value)?;
+                let radius_sub = substitute_in_expression(radius, variable, value)?;
+                Some(hwc_parser::PourBoundary::Circle { center: Box::new(center_sub), radius: radius_sub })
+            }
+        }
     } else {
         None
     };

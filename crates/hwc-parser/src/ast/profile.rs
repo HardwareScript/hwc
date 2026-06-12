@@ -89,6 +89,9 @@ pub struct ManufacturingConstraints {
     pub ipc2221_k_internal: Option<f64>,
     pub min_feature_size: Option<Measurement>,
     pub solder_mask_expansion: Option<Measurement>,
+    /// Solder mask thickness (default: 20µm). Applied on outer surfaces.
+    /// Components mounted on top/bottom sit on the mask, not on copper.
+    pub solder_mask_thickness: Option<Measurement>,
     pub span: Span,
 }
 

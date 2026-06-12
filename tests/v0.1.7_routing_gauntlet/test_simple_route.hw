@@ -1,0 +1,70 @@
+import * from @std/primitives/units
+import FR4 from @std/materials/insulators
+
+material ViaCopper:
+    category: conductor
+    process: drilled_plated
+    properties:
+        color: "#B87333"
+        resistivity: 1.68e-8Ω·m
+
+profile SimpleRoute_Profile:
+    stackup:
+        top:    [material: ViaCopper, thickness: 35um]
+        core:   [material: FR4,       thickness: 1.5mm]
+        bottom: [material: ViaCopper, thickness: 35um]
+    
+    trace:
+        min_width: 0.15mm
+        min_spacing: 0.15mm
+
+    via:
+        min_diameter: 0.3mm
+        min_annular_ring: 0.15mm
+        min_spacing: 0.25mm
+
+    manufacturing:
+        copper_thickness: 35um
+        ipc2221_k_external: 0.048
+        ipc2221_k_internal: 0.024
+    
+    clearance:
+        high_voltage: 2mm
+        safety_factor: 2.0
+        
+    layer:
+        min_thickness: 0.1mm
+
+component Pin:
+    pins: [P]
+    layout:
+        shape: Rectangle(0.001mm, 0.001mm, 0.001mm)
+        pin_positions:
+            P at [0mm, 0mm, 0mm]
+
+space SimpleRoute_Board:
+    dimensions: 20mm by 20mm by 1.57mm
+    grid: 200 by 200 by 16
+    origin: bl by b
+    profile: SimpleRoute_Profile
+
+    # Copper landing pad at Pin A location (same net as route will use)
+    add pour(ViaCopper) named Pad_A on layer: top:
+        boundary: [x: 2.7mm, y: 9.7mm] to [x: 3.3mm, y: 10.3mm]
+        net: NET_A_P_to_B_P
+
+    # Pin A (invisible body, Pad_A is the visible copper pad)
+    add Pin named A at [x: 3mm, y: 10mm] on layer: top:
+        merge: true
+
+    # Copper landing pad at Pin B location
+    add pour(ViaCopper) named Pad_B on layer: top:
+        boundary: [x: 16.7mm, y: 9.7mm] to [x: 17.3mm, y: 10.3mm]
+        net: NET_A_P_to_B_P
+
+    # Pin B (invisible body, Pad_B is the visible copper pad)
+    add Pin named B at [x: 17mm, y: 10mm] on layer: top:
+        merge: true
+
+    # Route from A.P to B.P (line of sight, no obstacles)
+    route A.P to B.P

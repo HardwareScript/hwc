@@ -1,0 +1,55 @@
+# Test script for Via-to-Via routing
+
+import * from @std/primitives/units
+import Copper from @std/materials/conductors
+
+profile RoutingTestProfile:
+    stackup:
+        top:    [material: Copper, thickness: 35um]
+        core:   [material: FR4,    thickness: 1.5mm]
+        bottom: [material: Copper, thickness: 35um]
+    trace:
+        min_width: 0.2mm
+        min_spacing: 0.2mm
+    via:
+        min_diameter: 0.3mm
+        min_annular_ring: 0.15mm
+        min_spacing: 0.25mm
+    manufacturing:
+        copper_thickness: 35um
+    clearance:
+        high_voltage: 1.0mm
+        safety_factor: 1.5
+    layer:
+        min_thickness: 35um
+
+component Pin:
+    pins: [P]
+    layout:
+        shape: Rectangle(0.1mm, 0.1mm, 0.035mm)
+        pin_positions:
+            P at [0.05mm, 0.05mm, 0mm]
+
+space ViaToViaBoard:
+    dimensions: 12mm by 6mm by 1.57mm
+    grid: 120 by 60 by 16
+    origin: bl by b
+    profile: RoutingTestProfile
+
+    add contact(Copper) named Via_A at [x: 2mm, y: 3mm] spanning layer: top to bottom:
+        net: NET_VIAS
+        drill_diameter: 0.3mm
+        annular_ring: 0.2mm
+
+    add Pin named Via_A_Anchor at [x: 2mm, y: 3mm] on layer: top:
+        merge: true
+
+    add contact(Copper) named Via_B at [x: 8mm, y: 3mm] spanning layer: top to bottom:
+        net: NET_VIAS
+        drill_diameter: 0.3mm
+        annular_ring: 0.2mm
+
+    add Pin named Via_B_Anchor at [x: 8mm, y: 3mm] on layer: top:
+        merge: true
+
+    route Via_A_Anchor.P to Via_B_Anchor.P

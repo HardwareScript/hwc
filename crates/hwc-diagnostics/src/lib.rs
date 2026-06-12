@@ -51,23 +51,26 @@ pub struct ErrorFingerprint {
 ///
 /// # Example
 ///
-/// ```rust
-/// use hwc_diagnostics::DiagnosticCollector;
-///
-/// let source = "...";
-/// let collector = DiagnosticCollector::new(source, 20);
-///
-/// // Report errors without stopping (thread-safe)
-/// // collector.report(some_error);
-///
-/// // Print all diagnostics at the end
-/// collector.print_all();
-///
-/// if collector.has_errors() {
-///     eprintln!("{}", collector.summary());
-///     std::process::exit(1);
-/// }
-/// ```
+    /// ```rust
+    /// use hwc_diagnostics::DiagnosticCollector;
+    ///
+    /// let source = "...";
+    /// let collector = DiagnosticCollector::new(source, 20);
+    ///
+    /// // Or with a file name for better error messages:
+    /// // let collector = DiagnosticCollector::new_with_file(source, "main.hw", 20);
+    ///
+    /// // Report errors without stopping (thread-safe)
+    /// // collector.report(some_error);
+    ///
+    /// // Print all diagnostics at the end
+    /// collector.print_all();
+    ///
+    /// if collector.has_errors() {
+    ///     eprintln!("{}", collector.summary());
+    ///     std::process::exit(1);
+    /// }
+    /// ```
 #[derive(Debug, Clone)]
 pub struct DiagnosticCollector {
     /// Thread-safe container for accumulated reports
@@ -93,6 +96,19 @@ pub struct DiagnosticCollector {
 }
 
 impl DiagnosticCollector {
+    /// Create a new collector with source code and error limit.
+    ///
+    /// Uses a default file name of `"unknown"`. For production CLI commands
+    /// that have a source file path, use [`new_with_file`] instead.
+    ///
+    /// # Arguments
+    ///
+    /// * `source` - The source code being compiled (for span extraction)
+    /// * `max_errors` - Maximum number of errors before stopping (default: 20)
+    pub fn new(source: &str, max_errors: usize) -> Self {
+        Self::new_with_file(source, "unknown", max_errors)
+    }
+
     /// Create a new collector with source code, file name, and error limit.
     ///
     /// # Arguments
@@ -100,7 +116,7 @@ impl DiagnosticCollector {
     /// * `source` - The source code being compiled (for span extraction)
     /// * `file_name` - The name or path of the source file
     /// * `max_errors` - Maximum number of errors before stopping (default: 20)
-    pub fn new(source: &str, file_name: &str, max_errors: usize) -> Self {
+    pub fn new_with_file(source: &str, file_name: &str, max_errors: usize) -> Self {
         Self {
             reports: Arc::new(Mutex::new(Vec::new())),
             error_counts: Arc::new(Mutex::new(FxHashMap::default())),
@@ -348,7 +364,7 @@ impl DiagnosticCollector {
 impl Default for DiagnosticCollector {
     /// Create a collector with default settings (empty source, 20 error limit).
     fn default() -> Self {
-        Self::new("", "unknown", 20)
+        Self::new("", 20)
     }
 }
 

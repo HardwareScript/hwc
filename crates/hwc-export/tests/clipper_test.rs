@@ -53,4 +53,83 @@ mod tests {
             assert!(!(point.x == 5_000_000 && point.y == 0));
         }
     }
+
+    #[test]
+    fn test_print_substrate_layers() {
+        use hwc_compiler::SymbolTable;
+        let source = std::fs::read_to_string("tests/tutorial_examples/artist_two_pins.hw")
+            .or_else(|_| std::fs::read_to_string("../tests/tutorial_examples/artist_two_pins.hw"))
+            .or_else(|_| std::fs::read_to_string("../../tests/tutorial_examples/artist_two_pins.hw"))
+            .unwrap();
+        let collector = hwc_diagnostics::DiagnosticCollector::new_with_file(&source, "artist_two_pins.hw", 20);
+        let lexer = hwc_parser::Lexer::new(&source);
+        let tokens = lexer.tokenize().unwrap();
+        let mut parser = hwc_parser::Parser::new(tokens);
+        let program = parser.parse(&collector);
+        
+        let mut symbol_table = SymbolTable::new();
+        // Load prelude
+        let prelude = hwc_compiler::Prelude::load().unwrap();
+        for unit in &prelude.units {
+            symbol_table.register_prelude_unit(unit.clone());
+        }
+        for (name, value) in &prelude.constants {
+            symbol_table.register_prelude_constant(name.clone(), *value);
+        }
+        
+        let input_path = std::path::PathBuf::from("../tests/tutorial_examples/artist_two_pins.hw");
+        let mut resolver = hwc_compiler::ModuleResolver::new().unwrap();
+        for import in &program.imports {
+            resolver.resolve_import(import, &input_path, &mut symbol_table).unwrap();
+        }
+        for definition in &program.definitions {
+            match definition {
+                hwc_parser::Definition::Unit(unit) => {
+                    symbol_table.register_unit(&collector, unit.clone());
+                }
+                hwc_parser::Definition::Material(mat) => {
+                    symbol_table.register_material(&collector, mat.clone());
+                }
+                hwc_parser::Definition::Profile(profile) => {
+                    symbol_table.register_profile(&collector, profile.clone());
+                }
+                hwc_parser::Definition::Component(component) => {
+                    symbol_table.register_component(&collector, component.clone());
+                }
+                hwc_parser::Definition::Module(module) => {
+                    symbol_table.register_module(&collector, module.clone());
+                }
+                hwc_parser::Definition::Mechanical(mechanical) => {
+                    symbol_table.register_mechanical(&collector, mechanical.clone());
+                }
+                hwc_parser::Definition::Interface(interface) => {
+                    symbol_table.register_interface(&collector, interface.clone());
+                }
+                hwc_parser::Definition::Test(test) => {
+                    symbol_table.register_test(&collector, test.clone());
+                }
+                _ => {}
+            }
+        }
+        
+        let mut space = hwc_compiler::program_to_space(&program, &symbol_table, &collector).unwrap();
+        if !space.analytic_routes.is_empty() {
+            space.realize_analytic_routes();
+        }
+        
+        println!("SUBSTRATE LAYERS:");
+        for (i, layer) in space.voxel_grid.get_substrate_layers().iter().enumerate() {
+            println!(
+                "  Layer {}: material={}, net={}, type={:?}, shape={:?}, bbox=min:({:?}) max:({:?})",
+                i,
+                layer.material,
+                layer.net,
+                layer.layer_type,
+                layer.shape,
+                layer.bbox.min,
+                layer.bbox.max
+            );
+        }
+    }
 }
+

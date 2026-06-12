@@ -39,7 +39,7 @@ impl Prelude {
         })?;
 
         // Parse
-        let collector = crate::DiagnosticCollector::new(UNITS_HW, "@std/primitives/units", 20);
+        let collector = crate::DiagnosticCollector::new_with_file(UNITS_HW, "@std/primitives/units", 20);
         let mut parser = Parser::new(tokens);
         let program = parser.parse(&collector);
 
@@ -74,7 +74,7 @@ impl Prelude {
         })?;
 
         // Parse
-        let collector = crate::DiagnosticCollector::new(MATH_HW, "@std/primitives/math", 20);
+        let collector = crate::DiagnosticCollector::new_with_file(MATH_HW, "@std/primitives/math", 20);
         let mut parser = Parser::new(tokens);
         let program = parser.parse(&collector);
 

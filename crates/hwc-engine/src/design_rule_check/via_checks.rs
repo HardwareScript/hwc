@@ -137,6 +137,16 @@ fn calculate_annular_ring_from_substrate(
                     -1
                 }
             }
+            crate::voxel_grid::SubstrateLayerShape::Circle { radius } => {
+                let pad_center_x = (pad_min_x + pad_max_x) / 2;
+                let pad_center_y = (pad_min_y + pad_max_y) / 2;
+
+                let dx = (via_center_x - pad_center_x) as f64;
+                let dy = (via_center_y - pad_center_y) as f64;
+                let center_dist = (dx * dx + dy * dy).sqrt() as i64;
+
+                radius - center_dist
+            }
         };
 
         let enclosure = dist_to_edge - via_radius;

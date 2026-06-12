@@ -11,6 +11,7 @@ fn create_fr4_material() -> MaterialDefinition {
     MaterialDefinition {
         name: Identifier::with_dummy_span("FR4"),
         category: MaterialCategory::Insulator,
+        process: hwc_parser::ManufacturingProcess::default(),
         symbol: None,
         description: Some("Standard PCB substrate material".into()),
         properties: vec![
@@ -35,6 +36,13 @@ fn create_fr4_material() -> MaterialDefinition {
         outline_opacity: None,
         roughness: None,
         metallic: None,
+        ior: None,
+        clearcoat: None,
+        clearcoat_roughness: None,
+        subsurface: None,
+        anisotropy: None,
+        anisotropy_rotation: None,
+        texture: None,
     }
 }
 
@@ -43,6 +51,7 @@ fn create_air_material() -> MaterialDefinition {
     MaterialDefinition {
         name: Identifier::with_dummy_span("Air"),
         category: MaterialCategory::Insulator,
+        process: hwc_parser::ManufacturingProcess::default(),
         symbol: None,
         description: Some("Air dielectric".into()),
         properties: vec![
@@ -67,6 +76,13 @@ fn create_air_material() -> MaterialDefinition {
         outline_opacity: None,
         roughness: None,
         metallic: None,
+        ior: None,
+        clearcoat: None,
+        clearcoat_roughness: None,
+        subsurface: None,
+        anisotropy: None,
+        anisotropy_rotation: None,
+        texture: None,
     }
 }
 

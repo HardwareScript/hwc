@@ -17,7 +17,8 @@ use std::path::Path;
 /// 
 /// # Returns
 /// A formatted string with line numbers and code, or None if file cannot be read
-pub fn _extract_snippet(
+#[allow(dead_code)]
+pub fn extract_snippet(
     file_path: &Path,
     line_number: usize,
     context_lines: usize,
@@ -56,7 +57,8 @@ pub fn _extract_snippet(
 /// 
 /// # Returns
 /// A formatted string with all snippets, or None if file cannot be read
-pub fn _extract_multiple_snippets(
+#[allow(dead_code)]
+pub fn extract_multiple_snippets(
     file_path: &Path,
     line_numbers: &[usize],
     context_lines: usize,
@@ -96,7 +98,8 @@ pub fn _extract_multiple_snippets(
 /// 
 /// # Returns
 /// (line_number, column_number) both 1-indexed, or None if offset is invalid
-pub fn _byte_offset_to_line_col(content: &str, byte_offset: usize) -> Option<(usize, usize)> {
+#[allow(dead_code)]
+pub fn byte_offset_to_line_col(content: &str, byte_offset: usize) -> Option<(usize, usize)> {
     if byte_offset > content.len() {
         return None;
     }
@@ -128,7 +131,8 @@ pub fn _byte_offset_to_line_col(content: &str, byte_offset: usize) -> Option<(us
 /// 
 /// # Returns
 /// Formatted code with highlight markers (^^^) under highlighted ranges
-pub fn _format_with_highlights(code: &str, highlight_ranges: &[(usize, usize)]) -> String {
+#[allow(dead_code)]
+pub fn format_with_highlights(code: &str, highlight_ranges: &[(usize, usize)]) -> String {
     let mut result = String::new();
     result.push_str(code);
     result.push('\n');

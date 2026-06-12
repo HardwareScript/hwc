@@ -20,6 +20,8 @@ pub struct AutoRouter<'a> {
     /// Symbol table for component definitions and material lookups
     #[allow(dead_code)]
     symbol_table: &'a SymbolTable,
+    /// Stackup manager for Z-axis resolution
+    stackup_manager: &'a crate::ir::stackup_manager::StackupManager,
 }
 
 #[derive(Debug, Clone)]
@@ -33,10 +35,15 @@ struct PinInfo {
 
 impl<'a> AutoRouter<'a> {
     /// Create a new global automatic router.
-    pub fn new(space: &'a mut HardwareSpace, symbol_table: &'a SymbolTable) -> Self {
+    pub fn new(
+        space: &'a mut HardwareSpace,
+        symbol_table: &'a SymbolTable,
+        stackup_manager: &'a crate::ir::stackup_manager::StackupManager,
+    ) -> Self {
         Self {
             space,
             symbol_table,
+            stackup_manager,
         }
     }
 
@@ -110,45 +117,138 @@ impl<'a> AutoRouter<'a> {
             // Simple star topology: route from first pin to all others
             let start_pos = pins[0].position;
 
+            // v0.1.7: Get trace width for edge clipping
+            let trace_half_width = default_constraints.min_trace_width_nm / 2;
+            eprintln!("[ROUTER DEBUG] Trace half-width for clipping: {}nm (min_width={})", trace_half_width, default_constraints.min_trace_width_nm);
+
             for i in 1..pins.len() {
                 let goal_pos = pins[i].position;
 
-                // v0.1.7: Identify exempt components (start and goal)
-                let exempt_components = [
-                    pins[0].component_name.clone(),
-                    pins[i].component_name.clone(),
-                ];
+                // v0.1.7: Direct route for 2-pin nets on same layer (no router needed)
+                let same_z = (start_pos.z - goal_pos.z).abs() < self.space.voxel_size.z_nm;
+                let path = if pins.len() == 2 && same_z {
+                    // v0.1.7: Clip trace endpoints to copper pad edges, accounting for trace width
+                    // Look up the actual copper pour bbox (not the component body bbox)
+                    let find_pad_bbox = |comp_name: &str| -> Option<hwc_engine::geometry::BoundingBox> {
+                        self.space.pours.iter()
+                            .filter(|p| {
+                                p.device_binding.as_ref()
+                                    .map(|d| d.device_name.as_str() == comp_name)
+                                    .unwrap_or(false)
+                            })
+                            .filter_map(|p| p.bbox)
+                            .next()
+                    };
 
-                let params = RoutingParams {
-                    net_id,
-                    constraints: &default_constraints,
-                    bounds,
-                    layer_direction: hwc_engine::constraint_manager::LayerDirection::Any,
-                    voxel_size: self.space.voxel_size.clone(),
-                    clearance_zones: &[],
-                    occupied_voxels: &rustc_hash::FxHashSet::default(),
-                    voxel_grid: None,
-                    corridor: None,
-                    fixed_z_nm: Some(start_pos.z), // v0.1.7: Lock to starting Z plane
-                    exempt_components: &exempt_components, // v0.1.7: Escape Exemption
+                    let start_bbox = find_pad_bbox(&pins[0].component_name)
+                        .or_else(|| self.space.component_bboxes.get(&pins[0].component_name).cloned());
+                    let goal_bbox = find_pad_bbox(&pins[i].component_name)
+                        .or_else(|| self.space.component_bboxes.get(&pins[i].component_name).cloned());
+
+                    let clipped_start = if let Some(bbox) = start_bbox {
+                        eprintln!("[ROUTER DEBUG]   Start pad bbox for '{}': min=({}, {}) max=({}, {})", pins[0].component_name, bbox.min.x, bbox.min.y, bbox.max.x, bbox.max.y);
+                        if goal_pos.x > start_pos.x {
+                            // Trace goes right: trace's LEFT edge = pad's RIGHT edge
+                            hwc_engine::Point3D::new(bbox.max.x + trace_half_width, start_pos.y, start_pos.z)
+                        } else if goal_pos.x < start_pos.x {
+                            // Trace goes left: trace's RIGHT edge = pad's LEFT edge
+                            hwc_engine::Point3D::new(bbox.min.x - trace_half_width, start_pos.y, start_pos.z)
+                        } else if goal_pos.y > start_pos.y {
+                            hwc_engine::Point3D::new(start_pos.x, bbox.max.y + trace_half_width, start_pos.z)
+                        } else {
+                            hwc_engine::Point3D::new(start_pos.x, bbox.min.y - trace_half_width, start_pos.z)
+                        }
+                    } else {
+                        start_pos
+                    };
+
+                    let clipped_goal = if let Some(bbox) = goal_bbox {
+                        eprintln!("[ROUTER DEBUG]   Goal pad bbox for '{}': min=({}, {}) max=({}, {})", pins[i].component_name, bbox.min.x, bbox.min.y, bbox.max.x, bbox.max.y);
+                        if start_pos.x < goal_pos.x {
+                            // Trace arrives from left: trace's RIGHT edge = goal pad's LEFT edge
+                            hwc_engine::Point3D::new(bbox.min.x - trace_half_width, goal_pos.y, goal_pos.z)
+                        } else if start_pos.x > goal_pos.x {
+                            // Trace arrives from right: trace's LEFT edge = goal pad's RIGHT edge
+                            hwc_engine::Point3D::new(bbox.max.x + trace_half_width, goal_pos.y, goal_pos.z)
+                        } else if start_pos.y < goal_pos.y {
+                            hwc_engine::Point3D::new(goal_pos.x, bbox.min.y - trace_half_width, goal_pos.z)
+                        } else {
+                            hwc_engine::Point3D::new(goal_pos.x, bbox.max.y + trace_half_width, goal_pos.z)
+                        }
+                    } else {
+                        goal_pos
+                    };
+
+                    eprintln!("[ROUTER DEBUG] Direct route: clipped from ({},{}) to ({},{})", 
+                        clipped_start.x, clipped_start.y, clipped_goal.x, clipped_goal.y);
+                    vec![clipped_start, clipped_goal]
+                } else {
+                    // v0.1.7: Identify exempt components (start and goal)
+                    let exempt_components = [
+                        pins[0].component_name.clone(),
+                        pins[i].component_name.clone(),
+                    ];
+
+                    let params = RoutingParams {
+                        net_id,
+                        constraints: &default_constraints,
+                        bounds,
+                        layer_direction: hwc_engine::constraint_manager::LayerDirection::Any,
+                        voxel_size: self.space.voxel_size.clone(),
+                        clearance_zones: &[],
+                        occupied_voxels: &rustc_hash::FxHashSet::default(),
+                        voxel_grid: None,
+                        corridor: None,
+                        fixed_z_nm: Some(start_pos.z), // v0.1.7: Lock to starting Z plane
+                        exempt_components: &exempt_components, // v0.1.7: Escape Exemption
+                    };
+
+                    match route_net_sdf_accelerated(start_pos, goal_pos, &params, &sdf) {
+                        Some(p) => p,
+                        None => continue,
+                    }
                 };
 
-                if let Some(path) = route_net_sdf_accelerated(start_pos, goal_pos, &params, &sdf) {
-                    // Register the route as an analytic primitive
-                    self.register_analytic_route(net_id, &net_name, path.clone())?;
+                // v0.1.7: Grid-Agnostic Z-Resolution
+                // We transform the router's voxel-snapped path back into exact physical layer heights
+                // using the StackupManager. This eliminates the 21µm "discretization noise".
+                let mut refined_path = path.clone();
+                let mut trace_thickness_nm = self.space.voxel_size.z_nm;
 
-                    // v0.1.7: Physical Blitting
-                    let copper_id = self.space.material_registry.get_or_register("Copper");
-                    let engine_router = hwc_engine::Router::new();
-                    engine_router.place_trace(
-                        &mut self.space.voxel_grid,
-                        &self.space.voxel_size,
-                        &path,
-                        copper_id,
-                        net_id.raw(),
-                        1
-                    ).map_err(|e| IrError::RoutingError(e.to_string()))?;
+                if refined_path.len() >= 2 {
+                    eprintln!("[ROUTER DEBUG] Refining {} path points via StackupManager...", refined_path.len());
+                    for (i, point) in refined_path.iter_mut().enumerate() {
+                        let old_z = point.z;
+                        // 1. Identify which PHYSICAL layer this point is in
+                        if let Some(layer_idx) = self.stackup_manager.get_layer_index_at_z(point.z) {
+                            // 2. Resolve the EXACT physical starting height for that layer
+                            let true_z = self.stackup_manager.get_z_start_nm_for_layer_index(layer_idx);
+                            
+                            // v0.1.7: Extract physical thickness for this layer
+                            trace_thickness_nm = self.stackup_manager.get_thickness_for_layer_index(layer_idx);
+
+                            // 3. Update the point's Z to the physical truth
+                            point.z = true_z;
+                            
+                            if old_z != true_z {
+                                eprintln!("[ROUTER DEBUG]   Point {}: Z shifted from {}nm to {}nm (Layer Index: {})", i, old_z, true_z, layer_idx);
+                            }
+                        }
+                    }
+
+                    // v0.1.7: Restore exact pin positions (X/Y) to eliminate voxel snap offset
+                    // Only for router paths (3+ points), not direct routes (2 points, already clipped)
+                    if refined_path.len() > 2 {
+                        let last_idx = refined_path.len() - 1;
+                        refined_path[0].x = start_pos.x;
+                        refined_path[0].y = start_pos.y;
+                        refined_path[last_idx].x = goal_pos.x;
+                        refined_path[last_idx].y = goal_pos.y;
+                    }
                 }
+
+                // Register the route as an analytic primitive
+                self.register_analytic_route(net_id, &net_name, refined_path.clone(), trace_thickness_nm)?;
             }
         }
 
@@ -191,6 +291,7 @@ impl<'a> AutoRouter<'a> {
         net_id: NetId,
         net_name: &str,
         path: Vec<Point3D>,
+        thickness_nm: i64,
     ) -> Result<(), IrError> {
         use hwc_engine::{AnalyticTrace, LineSegment};
 
@@ -206,10 +307,22 @@ impl<'a> AutoRouter<'a> {
             let p2 = path[i];
             let p3 = path[i + 1];
 
-            let d1 = (p2.x - p1.x, p2.y - p1.y, p2.z - p1.z);
-            let d2 = (p3.x - p2.x, p3.y - p2.y, p3.z - p2.z);
+            // Calculate direction vectors
+            let d1x = p2.x - p1.x;
+            let d1y = p2.y - p1.y;
+            let d1z = p2.z - p1.z;
+            
+            let d2x = p3.x - p2.x;
+            let d2y = p3.y - p2.y;
+            let d2z = p3.z - p2.z;
 
-            if d1 != d2 {
+            // v0.1.7: MANHATTAN COLLINEARITY CHECK (GOD-TIER SIMPLIFICATION)
+            // Three points are collinear in Manhattan routing if they all lie on the same axis.
+            let is_collinear = (d1x == 0 && d2x == 0 && d1y == 0 && d2y == 0) || // Z axis
+                               (d1x == 0 && d2x == 0 && d1z == 0 && d2z == 0) || // Y axis
+                               (d1y == 0 && d2y == 0 && d1z == 0 && d2z == 0);   // X axis
+
+            if !is_collinear {
                 segments.push(LineSegment::new(start, p2));
                 start = p2;
             }
@@ -220,6 +333,7 @@ impl<'a> AutoRouter<'a> {
         let trace = AnalyticTrace::new(
             net_id,
             100_000, // Default width
+            thickness_nm,
             segments,
             copper_id,
             net_name.into(),

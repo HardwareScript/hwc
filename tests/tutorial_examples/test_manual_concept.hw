@@ -1,0 +1,67 @@
+# Manual Routing Concept: Center-of-Edge Connection
+# 
+# PROBLEM: Currently, traces connect to pin positions (pad corners).
+# DESIRED: Traces connect to the CENTER of the pad edge facing the other component.
+#
+# This script demonstrates the concept with manual waypoints.
+# The waypoints are at the pad edge centers, not the pin positions.
+
+import * from @std/primitives/units
+import Copper from @std/materials/conductors
+
+profile TestProfile:
+    stackup:
+        top:    [material: Copper, thickness: 35um]
+        core:   [material: FR4,    thickness: 1.5mm]
+        bottom: [material: Copper, thickness: 35um]
+    trace:
+        min_width: 0.2mm
+        min_spacing: 0.2mm
+    via:
+        min_diameter: 0.3mm
+        min_annular_ring: 0.15mm
+        min_spacing: 0.25mm
+    manufacturing:
+        copper_thickness: 35um
+    clearance:
+        high_voltage: 1.0mm
+        safety_factor: 1.5
+    layer:
+        min_thickness: 35um
+
+component CenterPad:
+    pins: [P]
+    layout:
+        shape: Rectangle(1.0mm, 1.0mm, 0.035mm)
+        pin_positions:
+            P at [0.5mm, 0.5mm, 0mm]
+        add pour(Copper) named Pad on layer: self:
+            device: P
+            boundary: [x: 0mm, y: 0mm] to [x: 1.0mm, y: 1.0mm]
+
+space ConceptDemo:
+    dimensions: 14mm by 4mm by 1.57mm
+    grid: 140 by 40 by 16
+    origin: bl by b
+    profile: TestProfile
+
+    # Pad A at (1, 1.5)
+    # Pin at (1.5, 2.0) — this is the CORNER of the copper pad
+    # Pad pour bbox: min=(1.5, 2.0) max=(2.5, 3.0)
+    # Center of RIGHT edge: (2.5, 2.5)
+    add CenterPad named Pad_A at [x: 1mm, y: 1.5mm] on layer: top:
+        merge: true
+
+    # Pad B at (11, 1.5)
+    # Pin at (11.5, 2.0) — this is the CORNER of the copper pad
+    # Pad pour bbox: min=(11.5, 2.0) max=(12.5, 3.0)
+    # Center of LEFT edge: (11.5, 2.5)
+    add CenterPad named Pad_B at [x: 11mm, y: 1.5mm] on layer: top:
+        merge: true
+
+    # IDEAL ROUTE (what the user wants):
+    # Start at center of Pad_A RIGHT edge: (2.5, 2.5)
+    # End at center of Pad_B LEFT edge: (11.5, 2.5)
+    # Trace goes straight across at Y=2.5
+    route Pad_A.P to Pad_B.P:
+        path: [ [x: 2.5mm, y: 2.5mm, z: 1.535mm], [x: 11.5mm, y: 2.5mm, z: 1.535mm] ]

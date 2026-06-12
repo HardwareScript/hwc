@@ -57,7 +57,7 @@ pub fn compile_source(
         config.limit.unwrap_or(50)
     };
 
-    let collector = hwc_compiler::DiagnosticCollector::new(&source, &file_name, error_limit);
+    let collector = hwc_compiler::DiagnosticCollector::new_with_file(&source, &file_name, error_limit);
     let mut parser = Parser::new(tokens);
     let ast = parser.parse(&collector);
 

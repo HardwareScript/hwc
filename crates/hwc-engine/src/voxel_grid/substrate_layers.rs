@@ -80,6 +80,12 @@ pub enum SubstrateLayerShape {
     /// Axis-aligned bounding box (default)
     Rect,
 
+    /// 2D circle shape (circular pours, annular rings)
+    Circle {
+        /// Radius in nanometers
+        radius: i64,
+    },
+
     /// Cylindrical shape (vias, pillars)
     Cylinder {
         diameter: i64,
@@ -228,8 +234,26 @@ impl SubstrateLayer {
             net,
             bbox,
             cutouts: SmallVec::new(),
-            layer_type: SubstrateLayerType::Contact,
+            layer_type: SubstrateLayerType::Pour,
             shape: SubstrateLayerShape::Cylinder { diameter, segments },
+            koz_radius_nm: 0,
+        }
+    }
+
+    /// Create a new circular substrate layer (2D circle pour).
+    pub fn new_circle(
+        material: MaterialId,
+        net: NetId,
+        bbox: BoundingBox,
+        radius: i64,
+    ) -> Self {
+        Self {
+            material,
+            net,
+            bbox,
+            cutouts: SmallVec::new(),
+            layer_type: SubstrateLayerType::Pour,
+            shape: SubstrateLayerShape::Circle { radius },
             koz_radius_nm: 0,
         }
     }
@@ -433,6 +457,15 @@ impl SubstrateLayer {
                 }
             }
             SubstrateLayerShape::Rect => {}
+            SubstrateLayerShape::Circle { radius } => {
+                let center_x = (self.bbox.min.x + self.bbox.max.x) / 2;
+                let center_y = (self.bbox.min.y + self.bbox.max.y) / 2;
+                let dx = x - center_x;
+                let dy = y - center_y;
+                if dx * dx + dy * dy > radius * radius {
+                    return false; // Outside the circle
+                }
+            }
         }
 
         // Then check if point is NOT in any cutout
@@ -477,6 +510,15 @@ impl SubstrateLayer {
                     }
                     SubstrateLayerShape::Rect => {
                         return false; // Point is in the rectangular cutout
+                    }
+                    SubstrateLayerShape::Circle { radius } => {
+                        let center_x = (bbox.min.x + bbox.max.x) / 2;
+                        let center_y = (bbox.min.y + bbox.max.y) / 2;
+                        let dx = x - center_x;
+                        let dy = y - center_y;
+                        if dx * dx + dy * dy <= radius * radius {
+                            return false; // Point is in the circular cutout
+                        }
                     }
                 }
             }
@@ -583,6 +625,17 @@ impl SubstrateLayer {
                             }
                             SubstrateLayerShape::Rect => {
                                 grid[y * width + x] = false;
+                            }
+                            SubstrateLayerShape::Circle { radius } => {
+                                let x_nm = self.bbox.min.x + (x as i64 * voxel_size_nm);
+                                let y_nm = self.bbox.min.y + (y as i64 * voxel_size_nm);
+                                let center_x = (cutout.bbox.min.x + cutout.bbox.max.x) / 2;
+                                let center_y = (cutout.bbox.min.y + cutout.bbox.max.y) / 2;
+                                let dx = x_nm - center_x;
+                                let dy = y_nm - center_y;
+                                if dx * dx + dy * dy <= radius * radius {
+                                    grid[y * width + x] = false;
+                                }
                             }
                         }
                     }

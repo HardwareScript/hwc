@@ -1,0 +1,65 @@
+# Pad-to-Via routing — copper only (no substrate, no solder mask)
+
+import * from @std/primitives/units
+import Copper from @std/materials/conductors
+
+# 1. Profile defining the stackup and via types
+profile PadToViaProfile:
+    stackup:
+        top:    [material: Copper, thickness: 35um]
+        core:   [material: FR4,    thickness: 1.5mm]
+        bottom: [material: Copper, thickness: 35um]
+    trace:
+        min_width: 0.15mm
+        min_spacing: 0.15mm
+    via:
+        min_diameter: 0.3mm
+        min_annular_ring: 0.15mm
+        min_spacing: 0.25mm
+    manufacturing:
+        copper_thickness: 35um
+        ipc2221_k_external: 0.048
+        ipc2221_k_internal: 0.024
+    clearance:
+        high_voltage: 2mm
+        safety_factor: 2.0
+    layer:
+        min_thickness: 0.1mm
+
+# Minimal pin container for route anchor points.
+component Pin:
+    pins: [P]
+    layout:
+        shape: Rectangle(0.5mm, 0.5mm, 0.035mm)
+        pin_positions:
+            P at [0.25mm, 0.25mm, 0mm]
+        
+        # v0.1.7: Physical landing pad for clean router alignment
+        add pour(Copper) named Pin_Pad on layer: self:
+            device: P
+            boundary: [x: -0.25mm, y: -0.25mm] to [x: 0.25mm, y: 0.25mm]
+
+# ── Artist Mode Space (no 'implements' clause) ───────────────────────────
+space PadToViaBoard:
+    dimensions: 20mm by 10mm by 1.57mm
+    grid: 200 by 100 by 16
+    origin: bl by b
+    profile: PadToViaProfile
+
+    add pour(Copper) named Pad_A_Copper on layer: top:
+        boundary: [x: 2.5mm, y: 4.5mm] to [x: 3.5mm, y: 5.5mm]
+        net: SIG
+
+    add Pin named A at [x: 3mm, y: 5mm] on layer: top:
+        merge: true
+
+    add contact(Copper) named Target_Via at [x: 17mm, y: 5mm] spanning layer: top to bottom:
+        net: SIG
+        drill_diameter: 0.3mm
+        annular_ring: 0.15mm
+        is_tented: false
+
+    add Pin named B at [x: 17mm, y: 5mm] on layer: top:
+        merge: true
+
+    route A.P to B.P

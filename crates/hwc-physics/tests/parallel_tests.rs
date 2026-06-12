@@ -9,6 +9,17 @@ use hwc_parser::{
 };
 use hwc_physics::PhysicsEngine;
 use std::time::Instant;
+// Phase 5: Parallel Analyzer Execution Tests
+// Tests for parallel physics validation using Rayon with Symbol Table integration
+
+use hwc_compiler::SymbolTable;
+use hwc_diagnostics::DiagnosticCollector;
+use hwc_parser::{
+    Identifier, MaterialCategory, MaterialDefinition, Measurement, Property, PropertyValue, Span,
+    Unit,
+};
+use hwc_physics::PhysicsEngine;
+use std::time::Instant;
 
 // Helper function to create a test symbol table
 fn create_test_symbol_table() -> SymbolTable {
@@ -18,6 +29,7 @@ fn create_test_symbol_table() -> SymbolTable {
     let copper = MaterialDefinition {
         name: Identifier::with_dummy_span("Copper"),
         category: MaterialCategory::Conductor,
+        process: hwc_parser::ManufacturingProcess::default(),
         symbol: Some("Cu".into()),
         description: Some("Standard PCB trace material".into()),
         properties: vec![Property {
@@ -35,12 +47,6 @@ fn create_test_symbol_table() -> SymbolTable {
         outline_opacity: None,
         roughness: None,
         metallic: None,
-    };
-
-    symbol_table.register_material(&collector, copper);
-    symbol_table
-}
-
 #[test]
 fn test_parallel_validation_returns_report() {
     let engine = PhysicsEngine::new();

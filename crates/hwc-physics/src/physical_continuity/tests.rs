@@ -35,7 +35,7 @@ fn test_simple_connected_net() {
         },
     ];
 
-    let checker = PhysicalContinuityChecker::new(100, &pours, &[], &[]);
+    let checker = PhysicalContinuityChecker::new(100, &pours, &[], &[], &[], Default::default());
     let islands = checker.build_conductive_islands(None);
     let bindings = checker.bind_nets_to_islands(&islands);
     let violations = checker.validate_continuity(&islands, &bindings, false);
@@ -79,7 +79,7 @@ fn test_disconnected_net() {
         },
     ];
 
-    let checker = PhysicalContinuityChecker::new(100, &pours, &[], &[]);
+    let checker = PhysicalContinuityChecker::new(100, &pours, &[], &[], &[], Default::default());
     let islands = checker.build_conductive_islands(None);
     let bindings = checker.bind_nets_to_islands(&islands);
     let violations = checker.validate_continuity(&islands, &bindings, false);
@@ -135,7 +135,7 @@ fn test_short_circuit() {
         },
     ];
 
-    let checker = PhysicalContinuityChecker::new(100, &pours, &[], &[]);
+    let checker = PhysicalContinuityChecker::new(100, &pours, &[], &[], &[], Default::default());
     let islands = checker.build_conductive_islands(None);
     let bindings = checker.bind_nets_to_islands(&islands);
     let violations = checker.validate_continuity(&islands, &bindings, false);
@@ -202,7 +202,7 @@ fn test_via_bridge() {
         }),
     }];
 
-    let checker = PhysicalContinuityChecker::new(100, &pours, &contacts, &[]);
+    let checker = PhysicalContinuityChecker::new(100, &pours, &contacts, &[], &[], Default::default());
     let islands = checker.build_conductive_islands(None);
     let bindings = checker.bind_nets_to_islands(&islands);
     let violations = checker.validate_continuity(&islands, &bindings, false);

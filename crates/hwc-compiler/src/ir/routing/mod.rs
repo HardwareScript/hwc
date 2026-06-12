@@ -27,7 +27,7 @@ pub fn route_trace(
     profile: Option<&hwc_parser::ProfileDefinition>,
 ) -> Result<(), IrError> {
     if needs_automatic_routing(route) {
-        route_automatic(space, route, symbol_table)
+        route_automatic(space, route, symbol_table, stackup_manager)
     } else {
         route_manual(space, route, origin, symbol_table, eval_context, stackup_manager, profile)
     }

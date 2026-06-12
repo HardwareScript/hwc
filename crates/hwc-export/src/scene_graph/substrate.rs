@@ -161,6 +161,8 @@ pub fn add_substrate(
 
     // --- STRATEGY A: NET-AWARE COPPER UNIONING POOL ---
     let mut copper_pools: FxHashMap<(i64, i64, hwc_engine::voxel_grid::MaterialId, u32), Vec<clipper2_rust::Path64>> = FxHashMap::default();
+    // v0.1.8: Via inner holes collected separately for subtraction after union
+    let mut via_holes: FxHashMap<(i64, i64, hwc_engine::voxel_grid::MaterialId, u32), Vec<clipper2_rust::Path64>> = FxHashMap::default();
 
     // 1. Gather all copper pours (Traces)
     for layer in &substrate_layers {
@@ -168,8 +170,38 @@ pub fn add_substrate(
             let key = (layer.bbox.min.z, layer.bbox.max.z, layer.material, layer.net);
             let path = match layer.shape {
                 SubstrateLayerShape::Rect => rect_to_path(&layer.bbox),
+                SubstrateLayerShape::Circle { radius } => {
+                    let cx = (layer.bbox.min.x + layer.bbox.max.x) / 2;
+                    let cy = (layer.bbox.min.y + layer.bbox.max.y) / 2;
+                    circle_to_path(cx, cy, radius, 64)
+                }
                 _ => continue,
             };
+
+            // v0.1.7: Subtract cutouts from the path before adding to the pool
+            // This ensures that via holes are subtracted even if the route overlaps them.
+            if !layer.cutouts.is_empty() {
+                let mut hole_paths = Vec::new();
+                for cutout in &layer.cutouts {
+                    match cutout.shape {
+                        SubstrateLayerShape::Rect => hole_paths.push(rect_to_path(&cutout.bbox)),
+                        SubstrateLayerShape::Cylinder { diameter, .. } => {
+                            let cx = (cutout.bbox.min.x + cutout.bbox.max.x) / 2;
+                            let cy = (cutout.bbox.min.y + cutout.bbox.max.y) / 2;
+                            hole_paths.push(circle_to_path(cx, cy, diameter / 2, 64));
+                        }
+                        _ => {}
+                    }
+                }
+                if !hole_paths.is_empty() {
+                    let diff = clipper2_rust::difference_64(&vec![path], &hole_paths, FillRule::NonZero);
+                    for p in diff {
+                        copper_pools.entry(key).or_default().push(p);
+                    }
+                    continue; // Skip the original path as we added the difference
+                }
+            }
+
             copper_pools.entry(key).or_default().push(path);
         }
     }
@@ -187,31 +219,25 @@ pub fn add_substrate(
 
                 if top_cap != CapType::None {
                     let target_key = (layer.bbox.max.z - copper_thickness, layer.bbox.max.z, layer.material, layer.net);
-                    let pool = copper_pools.entry(target_key).or_default();
                     
-                    // Add outer pad boundary
-                    pool.push(circle_to_path(cx, cy, pad_radius, 64));
+                    // Add outer pad boundary to copper pool
+                    copper_pools.entry(target_key.clone()).or_default().push(circle_to_path(cx, cy, pad_radius, 64));
                     
-                    // v0.1.8 FIXED: For annular rings, add reversed inner hole path
+                    // v0.1.8: For annular rings, collect inner hole for subtraction
                     if top_cap == CapType::Annular {
-                        let mut hole_path = circle_to_path(cx, cy, inner_radius, 64);
-                        hole_path.reverse();
-                        pool.push(hole_path);
+                        via_holes.entry(target_key).or_default().push(circle_to_path(cx, cy, inner_radius, 64));
                     }
                 }
 
                 if bottom_cap != CapType::None {
                     let target_key = (layer.bbox.min.z, layer.bbox.min.z + copper_thickness, layer.material, layer.net);
-                    let pool = copper_pools.entry(target_key).or_default();
                     
-                    // Add outer pad boundary
-                    pool.push(circle_to_path(cx, cy, pad_radius, 64));
+                    // Add outer pad boundary to copper pool
+                    copper_pools.entry(target_key.clone()).or_default().push(circle_to_path(cx, cy, pad_radius, 64));
                     
-                    // v0.1.8 FIXED: For annular rings, add reversed inner hole path
+                    // v0.1.8: For annular rings, collect inner hole for subtraction
                     if bottom_cap == CapType::Annular {
-                        let mut hole_path = circle_to_path(cx, cy, inner_radius, 64);
-                        hole_path.reverse();
-                        pool.push(hole_path);
+                        via_holes.entry(target_key).or_default().push(circle_to_path(cx, cy, inner_radius, 64));
                     }
                 }
             }
@@ -239,7 +265,7 @@ pub fn add_substrate(
             }
             let other_precedence = layer_precedences[other_idx];
             
-            // v0.1.9: PURE GEOMETRIC CONCENTRIC CULLING EXEMPTION
+            // v0.1.7: PURE GEOMETRIC CONCENTRIC CULLING EXEMPTION
             let is_concentric = {
                 let cx1 = (layer.bbox.min.x + layer.bbox.max.x) / 2;
                 let cy1 = (layer.bbox.min.y + layer.bbox.max.y) / 2;
@@ -329,8 +355,8 @@ pub fn add_substrate(
                 inner_diameter,
                 pad_diameter,
                 segments,
-                top_cap,
-                bottom_cap,
+                top_cap: _,
+                bottom_cap: _,
                 bottom_outer_diameter,
             } => {
                 let outer_diameter_mm = outer_diameter as f64 / 1_000_000.0;
@@ -340,6 +366,9 @@ pub fn add_substrate(
                 let center_x_mm = (min_x_mm + max_x_mm) / 2.0;
                 let center_y_mm = (min_y_mm + max_y_mm) / 2.0;
 
+                // v0.1.8 Split-Via Fix: The 3D via mesh only renders the vertical tube barrel. 
+                // We pass CapType::None for both caps, as the flat circular pads are already 
+                // handled by the 2D unioning pool (Strategy A), preventing duplicate geometry and Z-fighting. 
                 meshes.push(create_via_mesh(
                     &format!("Bare_Via_Tube_{}", idx),
                     (center_x_mm, center_y_mm, min_z_mm),
@@ -348,8 +377,8 @@ pub fn add_substrate(
                     (outer_diameter_mm - inner_diameter_mm) / 2.0,
                     depth,
                     segments,
-                    top_cap,
-                    bottom_cap,
+                    CapType::None,
+                    CapType::None,
                     bottom_outer_diameter_mm,
                     material_name,
                     space.view,
@@ -404,6 +433,7 @@ pub fn add_substrate(
                                         z_max: nm_to_mm_precise(cutout.bbox.max.z),
                                     });
                                 }
+                                SubstrateLayerShape::Circle { .. } => {} // Circle cutouts handled via union
                                 _ => {}
                             }
                         }
@@ -428,6 +458,22 @@ pub fn add_substrate(
                     ));
                 }
             }
+            SubstrateLayerShape::Circle { radius } => {
+                let diameter_mm = radius as f64 * 2.0 / 1_000_000.0;
+                let center_x_mm = (min_x_mm + max_x_mm) / 2.0;
+                let center_y_mm = (min_y_mm + max_y_mm) / 2.0;
+
+                meshes.push(create_cylinder_mesh(
+                    &format!("Circle_Pour_{}", idx),
+                    (center_x_mm, center_y_mm, min_z_mm),
+                    diameter_mm,
+                    depth,
+                    64, // Standard 64-segment circle
+                    material_name,
+                    space.view,
+                    base_culling,
+                ));
+            }
         }
     }
 
@@ -435,38 +481,70 @@ pub fn add_substrate(
     for ((z_min_nm, z_max_nm, material_id, net_raw), paths) in copper_pools {
         let material_name = space.material_registry.get_name(material_id).unwrap_or("Copper");
         
-        let union_result = clipper2_rust::union_64(&paths, &Vec::new(), FillRule::NonZero);
-        if !union_result.is_empty() {
-            let mut outer_contours = Vec::new();
-            let mut holes = Vec::new();
+        // v0.1.7: Using Clipper2 PolyTree to correctly associate holes with islands
+        // This solves the "wedge" artifact by ensuring earcut triangulation 
+        // receives only the holes that are physically inside each island.
+        let mut clipper = clipper2_rust::Clipper64::new();
+        clipper.add_subject(&paths);
+        
+        // v0.1.7: Add via inner holes as clips for subtraction
+        if let Some(holes) = via_holes.get(&(z_min_nm, z_max_nm, material_id, net_raw)) {
+            clipper.add_clip(holes);
+        }
 
-            for path in union_result {
-                let mut points = Vec::new();
-                for pt in &path {
-                    points.push((pt.x as f64 / 1_000_000.0, pt.y as f64 / 1_000_000.0));
+        let mut polytree = clipper2_rust::PolyTree64::new();
+        let mut dummy_open_paths = Vec::new();
+        clipper.execute_tree(clipper2_rust::ClipType::Difference, clipper2_rust::FillRule::NonZero, &mut polytree, &mut dummy_open_paths);
+
+        fn process_poly_node(
+            tree: &clipper2_rust::PolyTree64,
+            node: &clipper2_rust::PolyPath64,
+            meshes: &mut Vec<crate::scene_graph::types::MeshNode>,
+            net_raw: u32,
+            z_min_mm: f64,
+            depth_mm: f64,
+            material_name: &str,
+            view: hwc_engine::space::SpaceView,
+        ) {
+            for &island_idx in node.children() {
+                let island = &tree.nodes[island_idx];
+                let outer_path = island.polygon();
+                let mut outer_points = Vec::new();
+                for pt in outer_path {
+                    outer_points.push((pt.x as f64 / 1_000_000.0, pt.y as f64 / 1_000_000.0));
                 }
 
-                if clipper2_rust::is_positive(&path) {
-                    outer_contours.push(points);
-                } else {
-                    holes.push(points);
+                let mut holes = Vec::new();
+                for &hole_idx in island.children() {
+                    let hole_node = &tree.nodes[hole_idx];
+                    let hole_path = hole_node.polygon();
+                    let mut hole_points = Vec::new();
+                    for pt in hole_path {
+                        hole_points.push((pt.x as f64 / 1_000_000.0, pt.y as f64 / 1_000_000.0));
+                    }
+                    holes.push(hole_points);
+
+                    // Recursively process islands inside holes (if any)
+                    process_poly_node(tree, hole_node, meshes, net_raw, z_min_mm, depth_mm, material_name, view);
                 }
-            }
 
-            let z_min_mm = z_min_nm as f64 / 1_000_000.0;
-            let depth_mm = (z_max_nm - z_min_nm) as f64 / 1_000_000.0;
-
-            for (idx, outer) in outer_contours.iter().enumerate() {
-                meshes.push(extrude_polygon_mesh(
-                    &format!("Unified_Net_{}_Island_{}", net_raw, idx),
-                    outer,
-                    &holes,
-                    z_min_mm,
-                    depth_mm,
-                    material_name,
-                    space.view,
-                ));
+                if outer_points.len() >= 3 {
+                    meshes.push(extrude_polygon_mesh(
+                        &format!("Unified_Net_{}_Island_{}", net_raw, meshes.len()),
+                        &outer_points,
+                        &holes,
+                        z_min_mm,
+                        depth_mm,
+                        material_name,
+                        view,
+                    ));
+                }
             }
         }
+
+        let z_min_mm = z_min_nm as f64 / 1_000_000.0;
+        let depth_mm = (z_max_nm - z_min_nm) as f64 / 1_000_000.0;
+
+        process_poly_node(&polytree, polytree.root(), meshes, net_raw, z_min_mm, depth_mm, material_name, space.view);
     }
 }

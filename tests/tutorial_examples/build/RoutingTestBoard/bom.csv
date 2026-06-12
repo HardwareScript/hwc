@@ -1,0 +1,8 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,20.00x15.00x1.57mm,,,,,1
+Pad_A,RoundPin,,,,,,1
+Pad_B,RoundPin,,,,,,1
+Via_A_Anchor,Pin,,,,,,1
+Via_B_Anchor,Pin,,,,,,1
+Via_C_Anchor,Pin,,,,,,1
+Pad_C,RoundPin,,,,,,1

@@ -1,0 +1,48 @@
+# Test script for Pad-to-Pad routing
+
+import * from @std/primitives/units
+import Copper from @std/materials/conductors
+
+profile RoutingTestProfile:
+    stackup:
+        top:    [material: Copper, thickness: 35um]
+        core:   [material: FR4,    thickness: 1.5mm]
+        bottom: [material: Copper, thickness: 35um]
+    trace:
+        min_width: 0.2mm
+        min_spacing: 0.2mm
+    via:
+        min_diameter: 0.3mm
+        min_annular_ring: 0.15mm
+        min_spacing: 0.25mm
+    manufacturing:
+        copper_thickness: 35um
+    clearance:
+        high_voltage: 1.0mm
+        safety_factor: 1.5
+    layer:
+        min_thickness: 35um
+
+component RoundPin:
+    pins: [P]
+    layout:
+        shape: Rectangle(0.6mm, 0.6mm, 0.035mm)
+        pin_positions:
+            P at [0.3mm, 0.3mm, 0mm]
+        add pour(Copper) named Pad on layer: self:
+            device: P
+            boundary: [x: 0mm, y: 0mm] to [x: 0.6mm, y: 0.6mm]
+
+space PadToPadBoard:
+    dimensions: 12mm by 6mm by 1.57mm
+    grid: 120 by 60 by 16
+    origin: bl by b
+    profile: RoutingTestProfile
+
+    add RoundPin named Pad_A at [x: 2mm, y: 3mm] on layer: top:
+        merge: true
+
+    add RoundPin named Pad_B at [x: 8mm, y: 3mm] on layer: top:
+        merge: true
+
+    route Pad_A.P to Pad_B.P

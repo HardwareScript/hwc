@@ -78,10 +78,24 @@ impl crate::parser::Parser {
 
             match field_name.as_str() {
                 "boundary" => {
-                    let from = self.parse_coordinate_optional_z()?;
-                    self.expect(&Token::To)?;
-                    let to = self.parse_coordinate_optional_z()?;
-                    boundary = Some((from, to));
+                    // Support both: [from] to [to] (rectangle) and Circle([x:0, y:0], radius) (circle)
+                    if self.check(&Token::Identifier("Circle".into())) {
+                        self.advance(); // consume 'Circle'
+                        self.expect(&Token::OpenParen)?;
+                        let center = self.parse_coordinate_optional_z()?;
+                        self.expect(&Token::Comma)?;
+                        let radius_expr = self.parse_expression()?;
+                        self.expect(&Token::CloseParen)?;
+                        boundary = Some(crate::PourBoundary::Circle {
+                            center: Box::new(center),
+                            radius: radius_expr,
+                        });
+                    } else {
+                        let from = self.parse_coordinate_optional_z()?;
+                        self.expect(&Token::To)?;
+                        let to = self.parse_coordinate_optional_z()?;
+                        boundary = Some(crate::PourBoundary::Rect(from, to));
+                    }
                 }
                 "net" => {
                     net = Some(self.parse_net_name()?);

@@ -52,10 +52,22 @@ impl VoxelGrid {
         bbox: BoundingBox,
         diameter: i64,
         segments: u32,
-        koz_radius_nm: i64, // v0.1.7: Added KOZ support
+        koz_radius_nm: i64,
     ) {
         let mut layer = SubstrateLayer::new_cylinder(material, net, bbox, diameter, segments);
         layer.koz_radius_nm = koz_radius_nm;
+        self.substrate_layers.push(layer);
+    }
+
+    /// Add a circular 2D substrate layer (circular pours).
+    pub fn add_circle_substrate_layer(
+        &mut self,
+        material: MaterialId,
+        net: NetId,
+        bbox: BoundingBox,
+        radius: i64,
+    ) {
+        let layer = SubstrateLayer::new_circle(material, net, bbox, radius);
         self.substrate_layers.push(layer);
     }
 
@@ -273,9 +285,9 @@ impl VoxelGrid {
                 SubstrateLayerType::Substrate => true, // Always drill dielectric (insulators)
                 SubstrateLayerType::SolderMask => true, // Drill solder mask for via openings
                 SubstrateLayerType::Pour => {
-                    // v0.1.7 FIXED: Native material-aware check.
-                    // Never carve through conductive materials (Copper).
-                    false
+                    // v0.1.7: Drill into copper pours to ensure vias work.
+                    // This fixes the issue where manual routes block vias.
+                    true
                 },
                 SubstrateLayerType::Contact => false, // Don't drill other vias
             };
@@ -348,16 +360,15 @@ impl VoxelGrid {
                         // Tented: do nothing, mask stays intact
                     },
                     SubstrateLayerType::Pour => {
-                        if layer.net == via_net {
-                            // v0.1.7 FIXED: Do NOT drill a hole in the same-net pour.
-                            // The via cylinder will "fill" this space in the 3D assembly,
-                            // and the pour must remain solid at this location to ensure
-                            // the Physical Continuity Checker (IslandBuilder) sees the contact.
+                        // v0.1.7: Always drill into copper pours (same net or different net) 
+                        // to ensure the hole is clear. The unioning logic will preserve the pad
+                        // around the hole.
+                        let diameter = if layer.net == via_net {
+                            diameter_nm
                         } else {
-                            // Different net: Drill the anti-pad (hole + clearance)
-                            // This satisfies DRC clearance rules in planes.
-                            layer.add_cylinder_cutout(hole_bbox, diameter_nm + 2 * clearance_nm);
-                        }
+                            diameter_nm + 2 * clearance_nm
+                        };
+                        layer.add_cylinder_cutout(hole_bbox, diameter);
                     },
                     SubstrateLayerType::Contact => {
                         // Don't drill other vias (handled by spacing checks)
@@ -376,6 +387,11 @@ impl VoxelGrid {
     /// Slice of substrate layers
     pub fn get_substrate_layers(&self) -> &[SubstrateLayer] {
         &self.substrate_layers
+    }
+
+    /// Get a mutable reference to all substrate layers.
+    pub fn get_substrate_layers_mut(&mut self) -> &mut Vec<SubstrateLayer> {
+        &mut self.substrate_layers
     }
 
     /// Add component metadata to the grid (GOD-TIER SPARSE ARCHITECTURE).

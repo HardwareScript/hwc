@@ -14,7 +14,7 @@
 //! - `tests`: Integration tests
 //!
 //! ## Known Limitations (v0.1.7)
-//! - **Realization Lag**: Physical boundaries of pours/contacts referencing component anchors may default 
+//! - **Realization Lag**: Physical boundaries of pours/contacts referencing component anchors may default
 //!   to [0,0,0] if the anchor isn't fully realized at the time of evaluation.
 //! - **No Collision Avoidance**: Conductive pours can interpenetrate component geometry.
 //! - **Voxel Aliasing**: Fixed 1um resolution may cause blockiness at SoC scales.
@@ -169,15 +169,26 @@ pub fn program_to_space(
 
     let origin = space_def.origin.unwrap_or_default();
 
+    // Resolve profile and extract solder mask thickness (library-driven, not hardcoded)
+    let profile = space_def.profile.as_ref()
+        .and_then(|p| symbol_table.get_profile(p.as_str()).ok());
+
+    let solder_mask_thickness_nm = profile
+        .as_ref()
+        .and_then(|p| p.manufacturing.as_ref())
+        .and_then(|m| m.solder_mask_thickness.as_ref())
+        .map(|t| crate::ir::conversions::measurement_to_nm(t, symbol_table))
+        .unwrap_or(0); // Opt-in: 0 = disabled unless profile explicitly declares solder_mask_thickness
+
     let stackup_manager = crate::ir::stackup_manager::StackupManager::new(
-        space_def.profile.as_ref().and_then(|p| symbol_table.get_profile(p.as_str()).ok()).as_ref()
-            .and_then(|prof| prof.stackup.as_ref()),
+        profile.as_ref().and_then(|prof| prof.stackup.as_ref()),
         symbol_table,
         space.voxel_size.z_nm,
         origin.z,
+        solder_mask_thickness_nm,
     ).unwrap_or_else(|_| {
         // Fallback for pure Assembly mode or missing profile
-        crate::ir::stackup_manager::StackupManager::new(None, symbol_table, space.voxel_size.z_nm, origin.z)
+        crate::ir::stackup_manager::StackupManager::new(None, symbol_table, space.voxel_size.z_nm, origin.z, solder_mask_thickness_nm)
             .expect("Failed to create fallback StackupManager")
     });
     // eprintln!($3"[DEBUG program_to_space] Origin: {:?}", origin);
@@ -208,11 +219,11 @@ pub fn program_to_space(
     // Physical Reality: When element B references element A's position, A must be placed first.
     // In v0.1.5, this required strict textual order.
     // In v0.1.6 Gap 7, we build a dependency graph and sort them, allowing forward references.
-    
+
     let mut graph = spatial_dependency_graph::SpatialDependencyGraph::new();
     let mut item_map = rustc_hash::FxHashMap::default();
     let mut last_component_name: Option<compact_str::CompactString> = None;
-    
+
     // 1. Build the dependency graph and item map
     for (i, item) in placement_items.iter().enumerate() {
         let item_id = match item {
@@ -224,10 +235,10 @@ pub fn program_to_space(
             PlacementItem::Contact(c) => c.name.as_ref().map(|n| n.to_string()).unwrap_or_else(|| format!("__contact_{}", i).into()),
             PlacementItem::Route(_) => format!("__route_{}", i).into(),
         };
-        
+
         graph.add_component(item_id.clone());
         item_map.insert(item_id.clone(), item);
-        
+
         match item {
             PlacementItem::Substrate(s) => {
                 graph.extract_dependencies_from_coord(&item_id, &s.from, last_component_name.as_ref());
@@ -239,9 +250,17 @@ pub fn program_to_space(
                 last_component_name = Some(item_id.clone());
             }
             PlacementItem::Pour(p) => {
-                if let Some((from, to)) = &p.boundary {
-                    graph.extract_dependencies_from_coord(&item_id, from, last_component_name.as_ref());
-                    graph.extract_dependencies_from_coord(&item_id, to, last_component_name.as_ref());
+                if let Some(boundary) = &p.boundary {
+                    match boundary {
+                        hwc_parser::PourBoundary::Rect(from, to) => {
+                            graph.extract_dependencies_from_coord(&item_id, from, last_component_name.as_ref());
+                            graph.extract_dependencies_from_coord(&item_id, to, last_component_name.as_ref());
+                        }
+                        hwc_parser::PourBoundary::Circle { center, radius } => {
+                            graph.extract_dependencies_from_coord(&item_id, center, last_component_name.as_ref());
+                            graph.extract_dependencies_from_expr(&item_id, radius, last_component_name.as_ref());
+                        }
+                    }
                 }
             }
             PlacementItem::Contact(c) => {
@@ -251,7 +270,7 @@ pub fn program_to_space(
                 // Routes depend on the components they connect
                 graph.add_dependency(item_id.clone(), r.from.component.clone());
                 graph.add_dependency(item_id.clone(), r.to.component.clone());
-                
+
                 // Routes depend on variables used in width
                 if let Some(w) = &r.width {
                     graph.extract_dependencies_from_expr(&item_id, w, last_component_name.as_ref());
@@ -271,38 +290,38 @@ pub fn program_to_space(
             }
         }
     }
-    
+
     // 2. Perform topological sort (detects circular dependencies automatically)
     let sorted_ids = graph.topological_sort()?;
-    
+
     // 3. Two-Pass Realization Engine (v0.1.7 roadmap: fixes "Anchor Realization Lag")
     // Pass 1 places ALL non-route items (substrates, components, pours, contacts).
     // This locks every bounding box with final post-transform (rotation/offset) geometry baked in.
     // Pass 2 (below) places routes/traces ONLY after the BBoxTracker is frozen.
     // Result: pours and traces no longer query stale pre-bake bboxes -> eliminates wedge/stretched artifacts.
 
-    // v0.1.7: Auto-create solder mask layers at board top/bottom faces (Zero Implicit Magic)
-    // These thin layers get cutouts from drill_via_hole for exposed vias.
-    // Z-positions are based on the actual stackup thickness, not the user-specified space depth.
-    {
+    // v0.1.7: Opt-in solder mask generation.
+    // Layers are only created when the active profile explicitly declares
+    // `manufacturing.solder_mask_thickness`.  When the property is absent the
+    // resolved thickness is 0 and the block is skipped entirely, keeping bare-
+    // metal / silicon layouts free of implicit insulator geometry.
+    if solder_mask_thickness_nm > 0 {
         let width_nm = space.dimensions.width_nm;
         let height_nm = space.dimensions.height_nm;
         let stackup_height_nm = stackup_manager.board_thickness_nm();
-        let mask_thickness_nm = 20_000; // 20µm standard solder mask thickness
 
-        // Check if user already added solder mask layers
+        // Check if user already added solder mask layers to prevent duplicates
         let has_solder_mask = space.voxel_grid.get_substrate_layers().iter().any(|l| {
             l.layer_type == hwc_engine::voxel_grid::SubstrateLayerType::SolderMask
         });
 
         if !has_solder_mask {
-            // Register SolderMask material if not already registered
             let mask_material_id = space.material_registry.get_or_register("SolderMask");
 
             // Top solder mask: sits directly ON TOP of the top copper layer
             let top_mask_bbox = hwc_engine::geometry::BoundingBox::new(
                 hwc_engine::geometry::Point3D::new(0, 0, stackup_height_nm),
-                hwc_engine::geometry::Point3D::new(width_nm, height_nm, stackup_height_nm + mask_thickness_nm),
+                hwc_engine::geometry::Point3D::new(width_nm, height_nm, stackup_height_nm + solder_mask_thickness_nm),
             );
             space.voxel_grid.add_substrate_layer(
                 mask_material_id,
@@ -313,7 +332,7 @@ pub fn program_to_space(
 
             // Bottom solder mask: sits directly UNDERNEATH the bottom copper layer
             let bottom_mask_bbox = hwc_engine::geometry::BoundingBox::new(
-                hwc_engine::geometry::Point3D::new(0, 0, -mask_thickness_nm),
+                hwc_engine::geometry::Point3D::new(0, 0, -solder_mask_thickness_nm),
                 hwc_engine::geometry::Point3D::new(width_nm, height_nm, 0),
             );
             space.voxel_grid.add_substrate_layer(
@@ -411,11 +430,16 @@ pub fn program_to_space(
 
     // Phase 3: Execute Auto-Routing Batch
     if !auto_routes.is_empty() {
-        let mut auto_router = routing::AutoRouter::new(&mut space, symbol_table);
-        // We'll update AutoRouter to take specific routes if needed, 
+        let mut auto_router = routing::AutoRouter::new(&mut space, symbol_table, &stackup_manager);
+        // We'll update AutoRouter to take specific routes if needed,
         // but for now it routes everything in the space that needs it.
         auto_router.route_all_nets()?;
     }
+
+    // v0.1.7: Synchronize net names from pins to bound pours
+    // This ensures that internal component pours (pads/rings) inherit the nets
+    // assigned during the routing phase above.
+    space.synchronize_nets();
 
     if component_count > 0 {
         // eprintln!($3"[DEBUG program_to_space] All components placed (avg: {:.6}ms/component)",
@@ -430,7 +454,7 @@ pub fn program_to_space(
     // Run after all manual placements to detect layer transitions
     // eprintln!($3"[DEBUG program_to_space] Running automatic via insertion...");
     let _auto_via_start = std::time::Instant::now();
-    
+
     // Load fabrication constraints from profile for AutoViaInserter (v0.1.7 Limitation 7)
     let fab_constraints = space_def
         .profile
@@ -444,7 +468,7 @@ pub fn program_to_space(
         &stackup_manager,
         fab_constraints.as_ref(),
     );
-    
+
     match auto_via_inserter.insert_vias(&space, profile, &stackup_manager) {
         Ok(auto_vias) => {
             // eprintln!($3"[DEBUG program_to_space] Auto via insertion complete: {} vias inserted in {:?}",

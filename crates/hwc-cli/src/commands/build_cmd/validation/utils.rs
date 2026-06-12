@@ -80,6 +80,9 @@ pub fn convert_metadata_to_physics(
                     outer_diameter,
                     inner_diameter,
                 },
+                hwc_engine::voxel_grid::SubstrateLayerShape::Circle { .. } => {
+                    hwc_physics::connectivity::SubstrateLayerShapeMetadata::Rect
+                },
             };
 
             let cutouts = layer
@@ -110,6 +113,9 @@ pub fn convert_metadata_to_physics(
                         } => hwc_physics::connectivity::SubstrateLayerShapeMetadata::Tube {
                             outer_diameter,
                             inner_diameter,
+                        },
+                        hwc_engine::voxel_grid::SubstrateLayerShape::Circle { .. } => {
+                            hwc_physics::connectivity::SubstrateLayerShapeMetadata::Rect
                         },
                     },
                 })

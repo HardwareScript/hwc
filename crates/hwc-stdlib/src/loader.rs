@@ -44,7 +44,7 @@ impl StdlibLoader {
             .map_err(|e| StdlibError::ParseError(format!("Tokenization failed: {:?}", e)))?;
 
         // Parse with diagnostic collector
-        let collector = hwc_parser::DiagnosticCollector::new(&source, &path.to_string_lossy(), 20);
+        let collector = hwc_parser::DiagnosticCollector::new_with_file(&source, &path.to_string_lossy(), 20);
         let mut parser = Parser::new(tokens);
         let program = parser.parse(&collector);
 

@@ -60,12 +60,20 @@ pub fn route_net_sdf_accelerated(
     let start_snapped = Point3D::new(
         snap_coord(start.x, params.voxel_size.x_nm),
         snap_coord(start.y, params.voxel_size.y_nm),
-        snap_coord(start.z, params.voxel_size.z_nm),
+        if params.fixed_z_nm.is_some() {
+            start.z // v0.1.7: Lock to exact physical Z for 2.5D routing
+        } else {
+            snap_coord(start.z, params.voxel_size.z_nm)
+        },
     );
     let goal_snapped = Point3D::new(
         snap_coord(goal.x, params.voxel_size.x_nm),
         snap_coord(goal.y, params.voxel_size.y_nm),
-        snap_coord(goal.z, params.voxel_size.z_nm),
+        if params.fixed_z_nm.is_some() {
+            goal.z // v0.1.7: Lock to exact physical Z for 2.5D routing
+        } else {
+            snap_coord(goal.z, params.voxel_size.z_nm)
+        },
     );
 
     eprintln!("[ROUTER DEBUG] Starting SDF-accelerated routing");
@@ -124,16 +132,54 @@ pub fn route_net_sdf_accelerated(
             );
             let mut path = reconstruct_path(&state.came_from, start_snapped, goal_snapped);
 
-            // v0.1.7: Path Refinement - Adjust endpoints to exact nanometer coordinates
-            // This eliminates "stair-stepping" or "hooks" at the pins by ensuring the
-            // trace enters/leaves the component at the precise center of the pin.
+            // v0.1.7: Path Refinement - Adjust all points to exact nanometer coordinates
+            // This eliminates "stair-stepping" or "hooks" by ensuring the
+            // trace stays on the exact physical Z-plane of the target layer.
             if path.len() >= 2 {
-                // First point: move from voxel center to exact start coordinate
-                path[0] = start;
+                eprintln!("[ROUTER DEBUG] Reconstructed path length: {}", path.len());
+                eprintln!("[ROUTER DEBUG]   Start Voxel: {:?}", path[0]);
+                eprintln!("[ROUTER DEBUG]   Goal Voxel: {:?}", path[path.len() - 1]);
 
-                // Last point: move from voxel center to exact goal coordinate
-                let last_idx = path.len() - 1;
-                path[last_idx] = goal;
+                // v0.1.7: MANHATTAN ESCAPE (GOD-TIER FIX)
+                // Instead of just replacing the first/last points (which creates diagonals),
+                // we insert Manhattan corners to escape from the pin to the voxel grid.
+                let start_snapped = path[0];
+                let goal_snapped = *path.last().unwrap();
+
+                // 1. Start Escape: start -> (start_snapped.x, start.y, start.z) -> start_snapped
+                let mut final_path = Vec::with_capacity(path.len() + 4);
+                final_path.push(start);
+                if start.y != start_snapped.y {
+                    final_path.push(Point3D::new(start.x, start_snapped.y, start.z));
+                }
+                if start.x != start_snapped.x {
+                    final_path.push(Point3D::new(start_snapped.x, start_snapped.y, start.z));
+                }
+
+                // 2. Intermediate points
+                for i in 1..path.len() - 1 {
+                    final_path.push(path[i]);
+                }
+
+                // 3. Goal Escape: goal_snapped -> (goal_snapped.x, goal.y, goal.z) -> goal
+                if goal.x != goal_snapped.x {
+                    final_path.push(Point3D::new(goal_snapped.x, goal_snapped.y, goal.z));
+                }
+                if goal.y != goal_snapped.y {
+                    final_path.push(Point3D::new(goal.x, goal_snapped.y, goal.z));
+                }
+                final_path.push(goal);
+
+                path = final_path;
+
+                // v0.1.7 Fix: Lock ALL points to the exact physical Z-plane if requested.
+                if let Some(fixed_z) = params.fixed_z_nm {
+                    eprintln!("[ROUTER DEBUG]   Planar Lock Active: Locking {} points to Z={}nm", 
+                        path.len(), fixed_z);
+                    for point in path.iter_mut() {
+                        point.z = fixed_z;
+                    }
+                }
             }
 
             return Some(path);
@@ -148,8 +194,7 @@ pub fn route_net_sdf_accelerated(
         // v0.1.7: Planar Lock (2.5D Routing)
         // If fixed_z_nm is provided, ensure we don't move to a different Z plane.
         if let Some(fixed_z) = params.fixed_z_nm {
-            let snapped_fixed_z = snap_coord(fixed_z, params.voxel_size.z_nm);
-            if current.z != snapped_fixed_z {
+            if current.z != fixed_z {
                 // If we somehow ended up on the wrong plane, skip it.
                 continue;
             }

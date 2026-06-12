@@ -98,6 +98,16 @@ pub fn route_net_deterministic(
                 }
             }
 
+            // v0.1.7 Fix: Lock ALL intermediate points to the exact physical Z-plane.
+            // When fixed_z_nm is set (2.5D routing), every intermediate point must
+            // use the original non-snapped Z to avoid 21μm quantization noise.
+            if let Some(fixed_z) = params.fixed_z_nm {
+                let last_idx = path.len() - 1;
+                for point in path[1..last_idx].iter_mut() {
+                    point.z = fixed_z;
+                }
+            }
+
             return Some(path);
         }
 

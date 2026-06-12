@@ -184,6 +184,9 @@ pub struct AnalyticTrace {
     /// Trace width in nanometers
     pub width_nm: i64,
 
+    /// Trace thickness in nanometers (v0.1.7: Physical Layer Truth)
+    pub thickness_nm: i64,
+
     /// Manhattan segments forming the trace
     pub segments: Vec<LineSegment>,
 
@@ -198,6 +201,7 @@ impl AnalyticTrace {
     pub fn new(
         net_id: NetId,
         width_nm: i64,
+        thickness_nm: i64,
         segments: Vec<LineSegment>,
         material: MaterialId,
         net_name: CompactString,
@@ -205,6 +209,7 @@ impl AnalyticTrace {
         Self {
             net_id,
             width_nm,
+            thickness_nm,
             segments,
             material,
             net_name,
@@ -714,17 +719,28 @@ impl HardwareSpace {
         for route in &self.analytic_routes {
             let half_w = route.width_nm / 2;
 
-            for seg in &route.segments {
-                // v0.1.7: Nanometer-Exact Boundary Clipping
-                // Ensure no segment ever overshoots the board dimensions even by 1nm.
-                let x_min = (seg.start.x.min(seg.end.x) - half_w).clamp(0, self.dimensions.width_nm);
-                let x_max = (seg.start.x.max(seg.end.x) + half_w).clamp(0, self.dimensions.width_nm);
-                let y_min = (seg.start.y.min(seg.end.y) - half_w).clamp(0, self.dimensions.height_nm);
-                let y_max = (seg.start.y.max(seg.end.y) + half_w).clamp(0, self.dimensions.height_nm);
+            // v0.1.7 Strategy A: All segments on the same route share one Z-plane
+            // to enable proper 2D polygon unioning in the export phase.
+            // Use the median Z from all segment start points as the unified plane.
+            let route_z = if !route.segments.is_empty() {
+                let mut zs: Vec<i64> = route.segments.iter().map(|s| s.start.z).collect();
+                zs.sort_unstable();
+                zs[zs.len() / 2]
+            } else {
+                0
+            };
 
-                // Ensure it occupies at least one voxel thickness for visibility in GLB
-                let z_min = seg.start.z.clamp(0, self.dimensions.depth_nm);
-                let z_max = (z_min + self.voxel_size.z_nm).min(self.dimensions.depth_nm);
+            for seg in &route.segments {
+                // v0.1.7 Strategy A: Unified coordinate snapping for routing segments.
+                // Ensures all segments in a route align perfectly without tiny gaps.
+                let x_min = seg.start.x.min(seg.end.x) - half_w;
+                let x_max = seg.start.x.max(seg.end.x) + half_w;
+                let y_min = seg.start.y.min(seg.end.y) - half_w;
+                let y_max = seg.start.y.max(seg.end.y) + half_w;
+
+                // v0.1.7 Strategy A: Snap all segments to the unified route Z-plane
+                let z_min = route_z;
+                let z_max = z_min + route.thickness_nm;
                 
                 // v0.1.7: Epsilon Guard for degenerate boxes
                 if x_max - x_min < 100 || y_max - y_min < 100 || z_max - z_min < 100 {
@@ -763,6 +779,34 @@ impl HardwareSpace {
             segment_count,
             duration.as_secs_f64()
         );
+
+        // v0.1.7: POST-REALIZATION DRILL PASS
+        // Analytic routes are realized into substrate layers at the end of the build.
+        // We must re-run all via drills to ensure these new layers are properly carved,
+        // otherwise traces will block via holes.
+        eprintln!("[ANALYTIC ROUTES] Running post-realization drill pass for {} vias...", self.vias.len());
+        let vias = self.vias.clone();
+        for via in vias {
+            let z_start = via.from_z_nm.min(via.to_z_nm);
+            let z_end = via.from_z_nm.max(via.to_z_nm);
+            let hole_bbox = BoundingBox::new(
+                Point3D::new(via.position.0 - via.diameter_nm / 2, via.position.1 - via.diameter_nm / 2, z_start),
+                Point3D::new(via.position.0 + via.diameter_nm / 2, via.position.1 + via.diameter_nm / 2, z_end),
+            );
+            
+            // Re-run the drill logic which is now net-aware and structural
+            // v0.1.7: Use 0 clearance for same-net structural carving to prevent disconnects.
+            let pad_diameter = via.diameter_nm + 2 * 150_000;
+            self.voxel_grid.drill_via_hole(
+                hole_bbox,
+                via.diameter_nm,
+                via.net_id.raw(),
+                0,     // v0.1.7: 0nm clearance for same-net structural hole
+                false, // Assume not tented for manual routing tests
+                pad_diameter,
+                75_000, // Default expansion
+            );
+        }
     }
 
     /// **v0.1.7: Analytic DRC - Check clearance violations (NANOMETER-EXACT)**
@@ -775,30 +819,76 @@ impl HardwareSpace {
     /// - No false positives from voxel discretization
     ///
     /// Returns: Vec of (route_name, component_name, actual_clearance_nm) for violations
-    pub fn check_analytic_clearance(
-        &self,
-        required_clearance_nm: i64,
-    ) -> Vec<(CompactString, CompactString, i64)> {
-        let mut violations = Vec::new();
+    /// **v0.1.7: Synchronize net names from pins to bound pours**
+    ///
+    /// After routing is complete, some pins may have been assigned to nets.
+    /// This function ensures that any pours bound to those pins inherit
+    /// the net assignment for proper export and connectivity checking.
+    pub fn synchronize_nets(&mut self) {
+        let mut updates = Vec::new();
 
-        for route in &self.analytic_routes {
-            for (comp_name, comp_bbox) in &self.component_bboxes {
-                if !route.check_clearance(comp_bbox, required_clearance_nm) {
-                    // Calculate actual clearance for error reporting
-                    let half_w = route.width_nm / 2;
-                    let mut min_dist = i64::MAX;
+        // 1. Update Pours based on device bindings
+        for (pour_idx, pour) in self.pours.iter().enumerate() {
+            if let Some(binding) = &pour.device_binding {
+                let resolved_opt = (|| {
+                    let comp_id = self.netlist.get_component_by_name(binding.device_name.as_str())?;
+                    let pins = self.netlist.get_component_pins(comp_id);
 
-                    for seg in &route.segments {
-                        let dist = seg.distance_to_bbox(comp_bbox);
-                        min_dist = min_dist.min(dist);
-                    }
+                    pins.iter().find_map(|&pin_id| {
+                        let pin_data = self.netlist.get_pin(pin_id)?;
+                        if pin_data.name == binding.terminal {
+                            let net_id = pin_data.connected_net?;
+                            let net_data = self.netlist.get_net(net_id)?;
+                            Some((net_data.name.to_string(), net_id))
+                        } else {
+                            None
+                        }
+                    })
+                })();
 
-                    let actual_clearance = min_dist - half_w;
-                    violations.push((route.net_name.clone(), comp_name.clone(), actual_clearance));
+                if let Some((net_name, net_id)) = resolved_opt {
+                    updates.push((pour_idx, net_name, net_id, pour.bbox, pour.material_name.clone()));
                 }
             }
         }
 
-        violations
+        for (pour_idx, net_name, net_id, bbox, material_name) in updates {
+            // Update PourMetadata
+            self.pours[pour_idx].net = Some(net_name.into());
+
+            // Update corresponding SubstrateLayer in VoxelGrid
+            if let Some(pour_bbox) = bbox {
+                let material_id = self.material_registry.get_or_register(&material_name);
+                for layer in self.voxel_grid.get_substrate_layers_mut() {
+                    if layer.layer_type == crate::voxel_grid::SubstrateLayerType::Pour
+                        && layer.material == material_id
+                        && layer.bbox == pour_bbox
+                    {
+                        layer.net = net_id.raw();
+                    }
+                }
+            }
+        }
+
+        // 2. Update Contacts (Vias) based on net names
+        // v0.1.7: If a contact has a net name but its SubstrateLayers (caps) don't have the net ID,
+        // sync them so that structural carving (anti-pads) works correctly.
+        for contact in &self.contacts {
+            if let Some(net_name) = &contact.net {
+                if let Some(net_id) = self.netlist.get_net_by_name(net_name.as_str()) {
+                    if let Some(contact_bbox) = contact.bbox {
+                        let material_id = self.material_registry.get_or_register(&contact.material_name);
+                        for layer in self.voxel_grid.get_substrate_layers_mut() {
+                            // Sync net ID to all matching SubstrateLayers (caps/pads)
+                            if layer.material == material_id
+                                && layer.bbox == contact_bbox
+                            {
+                                layer.net = net_id.raw();
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }

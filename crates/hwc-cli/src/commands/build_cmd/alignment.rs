@@ -219,6 +219,9 @@ pub fn validate_alignment(
                                 outer_diameter,
                                 inner_diameter,
                             },
+                            hwc_engine::voxel_grid::SubstrateLayerShape::Circle { .. } => {
+                                hwc_physics::connectivity::SubstrateLayerShapeMetadata::Rect
+                            },
                         };
 
                         let cutouts = layer
@@ -250,6 +253,9 @@ pub fn validate_alignment(
                                     } => hwc_physics::connectivity::SubstrateLayerShapeMetadata::Tube {
                                         outer_diameter,
                                         inner_diameter,
+                                    },
+                                    hwc_engine::voxel_grid::SubstrateLayerShape::Circle { .. } => {
+                                        hwc_physics::connectivity::SubstrateLayerShapeMetadata::Rect
                                     },
                                 },
                             })
