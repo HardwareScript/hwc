@@ -1,0 +1,81 @@
+import * from @std/primitives/units
+
+# 8-pointed star (16 vertices) - proper radial winding order
+# Points alternate between outer spikes and inner valleys going clockwise
+shape SunVia(width: Measurement):
+    points:
+        # Top spike
+        - [x: 0,                y: -width / 2]
+        # Inner valley (top-right)
+        - [x: width / 7,        y: -width / 7]
+        # Right spike
+        - [x: width / 2,        y: 0]
+        # Inner valley (bottom-right)
+        - [x: width / 7,        y: width / 7]
+        # Bottom spike
+        - [x: 0,                y: width / 2]
+        # Inner valley (bottom-left)
+        - [x: -width / 7,       y: width / 7]
+        # Left spike
+        - [x: -width / 2,       y: 0]
+        # Inner valley (top-left)
+        - [x: -width / 7,       y: -width / 7]
+
+material DepositedCopper:
+    category: conductor
+    process: deposited
+    properties:
+        resistivity: 1.68e-8
+
+profile TEST:
+    description: "8-pointed star via test"
+    
+    trace:
+        min_width: 1um
+        min_spacing: 1um
+    
+    via:
+        min_diameter: 100um
+        min_annular_ring: 10um
+        shape: SunVia
+    
+    manufacturing:
+        grid_snapping: true
+        track_pitch: 10um
+        copper_thickness: 50um
+    
+    clearance:
+        high_voltage: 50um
+        safety_factor: 1.5
+    
+    layer:
+        min_thickness: 50um
+    
+    stackup:
+        m1: [material: DepositedCopper, thickness: 50um]
+        d1: [material: SiO2,   thickness: 100um]
+        m2: [material: DepositedCopper, thickness: 50um]
+    
+    routing:
+        m1: horizontal
+        m2: vertical
+
+component Pad:
+    pins: [p]
+    layout:
+        shape: Rectangle(100um, 100um, 50um)
+        pin_positions:
+            p at [50um, 50um]
+        pad_shapes:
+            p: Rectangle(100um, 100um)
+
+space TestSpace:
+    profile: TEST
+    dimensions: 2mm by 2mm by 500um
+    grid: 200 by 200 by 10
+    origin: bl by b
+    
+    # 8-pointed star via for custom shape test
+    add contact(DepositedCopper) named UltraComplexVia at [x: 1mm, y: 1mm] spanning layer: m1 to m2:
+        diameter: 500um
+        shape: SunVia

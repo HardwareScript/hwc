@@ -1,0 +1,48 @@
+import * from @std/primitives/units
+import HexagonV2 from hex_v2
+import StarV2 from star_v2
+
+material Copper:
+    category: conductor
+    process: deposited
+    properties:
+        resistivity: 1.68e-8
+
+profile TEST:
+    trace:
+        min_width: 10um
+        min_spacing: 10um
+    via:
+        min_diameter: 20um
+        min_annular_ring: 5um
+        shape: HexagonV2
+    manufacturing:
+        grid_snapping: true
+        track_pitch: 20um
+        copper_thickness: 50um
+    clearance:
+        high_voltage: 50um
+        safety_factor: 1.5
+    layer:
+        min_thickness: 50um
+    stackup:
+        m1: [material: Copper, thickness: 50um]
+        d1: [material: SiO2,   thickness: 100um]
+        m2: [material: Copper, thickness: 50um]
+    routing:
+        m1: horizontal
+        m2: vertical
+
+space ModeBMath:
+    profile: TEST
+    dimensions: 3mm by 1mm by 250um
+    grid: 300 by 100 by 10
+    origin: bl by b
+
+    add contact(Copper) named ViaHex at [x: 750um, y: 500um] spanning layer: m1 to m2:
+        diameter: 20um
+        shape: HexagonV2
+
+    add contact(Copper) named ViaStar at [x: 2250um, y: 500um] spanning layer: m1 to m2:
+        diameter: 20um
+        shape: StarV2

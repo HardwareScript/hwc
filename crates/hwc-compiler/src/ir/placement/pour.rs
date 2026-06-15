@@ -27,12 +27,47 @@ pub fn place_pour(
         .as_ref()
         .ok_or_else(|| IrError::PlacementError(format!("Pour '{}' missing boundary", pour.name)))?;
 
+    // 1. Resolve active layer name (v0.1.7: used for dynamic thickness lookup)
+    let layer_name = match &pour.elevation {
+        hwc_parser::Elevation::Semantic(id) => id.to_string(),
+        _ => "top_copper".to_string(), // Fallback for physical elevation
+    };
+
+    // 2. Resolve Thickness Dynamically (v0.1.7 Z-Axis Abstraction)
+    // Priority: 1. Explicit property, 2. Profile Stackup, 3. Fail (No Hardcoded Fallbacks)
+    let thickness_nm = if let Some(t_expr) = &pour.thickness {
+        crate::ir::conversions::evaluate_expression_to_nm(t_expr, symbol_table)
+            .map_err(|e| IrError::PlacementError(format!("Failed to evaluate pour thickness: {}", e)))?
+    } else {
+        // v0.1.7: Query active profile directly if available for semantic layers
+        profile
+            .and_then(|p| p.get_layer_thickness(&layer_name))
+            .and_then(|t_expr| crate::ir::conversions::evaluate_expression_to_nm(t_expr, symbol_table).ok())
+            .unwrap_or_else(|| {
+                // Fallback to stackup manager if profile lookup fails
+                stackup_manager
+                    .get_layer_thickness(&layer_name)
+                    .unwrap_or_else(|| {
+                        // v0.1.7: No more 35um fallback. 
+                        // If we can't find the layer thickness, we can't build physical geometry.
+                        0 // We'll handle the error below to be more descriptive
+                    })
+            })
+    };
+
+    if thickness_nm == 0 && pour.thickness.is_none() {
+        return Err(IrError::PlacementError(format!(
+            "Could not resolve physical thickness for pour '{}' on layer '{}'. \
+             Ensure the layer is defined in the profile stackup or provide an explicit 'thickness:' property.",
+            pour.name, layer_name
+        )));
+    }
+
     let z_start_nm = stackup_manager.resolve_elevation(&pour.elevation, symbol_table)?;
-    let z_end_nm = stackup_manager.resolve_elevation_top(
-        &pour.elevation,
-        symbol_table,
-        space.voxel_size.z_nm,
-    )?;
+    let z_end_nm = z_start_nm + thickness_nm;
+
+    eprintln!("[DEBUG pour] '{}' elevation={:?} -> z_start={}nm, thickness={}nm, z_end={}nm", 
+        pour.name, pour.elevation, z_start_nm, thickness_nm, z_end_nm);
 
     // Sprint 3, Task 3.1: Resolve relative coordinates to absolute
     let solver = crate::constraint_solver::ConstraintSolver::new(bbox_tracker, eval_context);

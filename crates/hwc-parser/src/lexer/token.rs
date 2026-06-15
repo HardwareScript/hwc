@@ -185,6 +185,9 @@ pub enum Token {
     #[token("substrate")]
     Substrate,
 
+    #[token("shape")]
+    Shape,
+
     #[token("unit")]
     Unit,
 
@@ -589,6 +592,7 @@ impl fmt::Display for Token {
             Token::Interface => write!(f, "the 'interface' keyword"),
             Token::Test => write!(f, "the 'test' keyword"),
             Token::Substrate => write!(f, "the 'substrate' keyword"),
+            Token::Shape => write!(f, "the 'shape' keyword"),
             Token::Unit => write!(f, "the 'unit' keyword"),
             Token::Device => write!(f, "the 'device' keyword"),
             Token::SignalGroup => write!(f, "the 'signal_group' keyword"),

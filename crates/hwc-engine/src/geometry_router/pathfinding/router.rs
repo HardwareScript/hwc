@@ -80,7 +80,22 @@ pub fn route_net_deterministic(
     state.cost_so_far.insert(start_snapped, 0);
     state.add_node(start_snapped, h);
 
+    // v0.1.7: Safety limit to prevent infinite loops when path is impossible
+    const MAX_ITERATIONS: usize = 100_000;
+    let mut iterations: usize = 0;
+
     while !state.is_empty() {
+        iterations += 1;
+        if iterations > MAX_ITERATIONS {
+            #[cfg(debug_assertions)]
+            eprintln!(
+                "[ROUTER] Deterministic A* exceeded {} iterations, aborting route from ({},{},{}) to ({},{},{})",
+                MAX_ITERATIONS,
+                start_snapped.x, start_snapped.y, start_snapped.z,
+                goal_snapped.x, goal_snapped.y, goal_snapped.z,
+            );
+            return None;
+        }
         let current = state.pop_node()?;
 
         // Goal reached - reconstruct path

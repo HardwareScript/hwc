@@ -1,0 +1,12 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,8.00x2.00x0.25mm,,,,,1
+C1a,Pad,,,,,,1
+C1b,Pad,,,,,,1
+D1a,Pad,,,,,,1
+D1b,Pad,,,,,,1
+T1a,Pad,,,,,,1
+T1b,Pad,,,,,,1
+O1a,Pad,,,,,,1
+O1b,Pad,,,,,,1
+S1a,Pad,,,,,,1
+S1b,Pad,,,,,,1

@@ -1,0 +1,247 @@
+## ============================================================================
+## HIERARCHICAL MODE TEST (>100 Nets)
+## ============================================================================
+##
+## Purpose: Trigger the Adaptive Router's Hierarchical mode by exceeding
+## the net_count_threshold of 100. This forces G-Cell partitioning and
+## parallel routing via Rayon.
+##
+## Trigger condition (from core.rs):
+##   Pass-Through: area < 1mm² AND net_count < 100
+##   Hierarchical: area >= 1mm² OR net_count >= 100
+##
+## This test uses 128 nets (net_count >= 100) on a 100mm x 100mm board
+## to ensure hierarchical mode activates with meaningful G-Cell partitioning.
+##
+## Success Criteria:
+##   1. Compiler prints "[ADAPTIVE ROUTER] Hierarchical mode: 128 nets"
+##   2. Compiler prints "Partitioned into N G-Cells"
+##   3. Compiler prints "Hierarchical routing complete: 128 nets routed across N G-Cells"
+##   4. All 128 routes complete without errors
+##   5. Build produces valid output files
+
+material Copper:
+    category: conductor
+    symbol: "Cu"
+    properties:
+        resistivity: 1.68e-8Ω·m
+
+profile HierarchicalTestProfile:
+    stackup:
+        top:    [material: Copper, thickness: 35um]
+        core:   [material: Copper, thickness: 1.5mm]
+        bottom: [material: Copper, thickness: 35um]
+    trace:
+        min_width: 0.15mm
+        min_spacing: 0.15mm
+    via:
+        min_diameter: 0.3mm
+        min_annular_ring: 0.15mm
+        min_spacing: 0.25mm
+    manufacturing:
+        copper_thickness: 35um
+        ipc2221_k_external: 0.048
+        ipc2221_k_internal: 0.024
+    clearance:
+        high_voltage: 2mm
+        safety_factor: 2.0
+    layer:
+        min_thickness: 0.1mm
+
+## Simple single-pin pad component
+component Pad:
+    pins: [P]
+    layout:
+        shape: Rectangle(1mm, 1mm, 0.5mm)
+        pin_positions:
+            P at [0.5mm, 0.5mm, 0mm]
+
+## 8-pin bus component for dense routing
+## Pins spread vertically (Y-axis) with 1mm spacing for routability
+component Bus8:
+    pins: [P0, P1, P2, P3, P4, P5, P6, P7]
+    layout:
+        shape: Rectangle(4mm, 10mm, 1mm)
+        pin_positions:
+            P0 at [0mm, 0.5mm, 0mm]
+            P1 at [0mm, 1.5mm, 0mm]
+            P2 at [0mm, 2.5mm, 0mm]
+            P3 at [0mm, 3.5mm, 0mm]
+            P4 at [0mm, 4.5mm, 0mm]
+            P5 at [0mm, 5.5mm, 0mm]
+            P6 at [0mm, 6.5mm, 0mm]
+            P7 at [0mm, 7.5mm, 0mm]
+
+space HierarchicalTestBoard:
+    profile: HierarchicalTestProfile
+    dimensions: 100mm by 100mm by 1.57mm
+    grid: 1000 by 1000 by 10
+    origin: bl by b
+
+    ## Place 16 Bus8 components on the left (8 pins x 16 = 128 nets)
+    ## Components spaced 12mm apart vertically (10mm tall + 2mm gap)
+    add Bus8 named TX0 at [x: 5mm, y: 0mm, z: 0mm]
+    add Bus8 named TX1 at [x: 5mm, y: 12mm, z: 0mm]
+    add Bus8 named TX2 at [x: 5mm, y: 24mm, z: 0mm]
+    add Bus8 named TX3 at [x: 5mm, y: 36mm, z: 0mm]
+    add Bus8 named TX4 at [x: 5mm, y: 48mm, z: 0mm]
+    add Bus8 named TX5 at [x: 5mm, y: 60mm, z: 0mm]
+    add Bus8 named TX6 at [x: 5mm, y: 72mm, z: 0mm]
+    add Bus8 named TX7 at [x: 5mm, y: 84mm, z: 0mm]
+    add Bus8 named TX8 at [x: 30mm, y: 0mm, z: 0mm]
+    add Bus8 named TX9 at [x: 30mm, y: 12mm, z: 0mm]
+    add Bus8 named TX10 at [x: 30mm, y: 24mm, z: 0mm]
+    add Bus8 named TX11 at [x: 30mm, y: 36mm, z: 0mm]
+    add Bus8 named TX12 at [x: 30mm, y: 48mm, z: 0mm]
+    add Bus8 named TX13 at [x: 30mm, y: 60mm, z: 0mm]
+    add Bus8 named TX14 at [x: 30mm, y: 72mm, z: 0mm]
+    add Bus8 named TX15 at [x: 30mm, y: 84mm, z: 0mm]
+
+    ## Place 16 Bus8 components on the right
+    add Bus8 named RX0 at [x: 65mm, y: 0mm, z: 0mm]
+    add Bus8 named RX1 at [x: 65mm, y: 12mm, z: 0mm]
+    add Bus8 named RX2 at [x: 65mm, y: 24mm, z: 0mm]
+    add Bus8 named RX3 at [x: 65mm, y: 36mm, z: 0mm]
+    add Bus8 named RX4 at [x: 65mm, y: 48mm, z: 0mm]
+    add Bus8 named RX5 at [x: 65mm, y: 60mm, z: 0mm]
+    add Bus8 named RX6 at [x: 65mm, y: 72mm, z: 0mm]
+    add Bus8 named RX7 at [x: 65mm, y: 84mm, z: 0mm]
+    add Bus8 named RX8 at [x: 90mm, y: 0mm, z: 0mm]
+    add Bus8 named RX9 at [x: 90mm, y: 12mm, z: 0mm]
+    add Bus8 named RX10 at [x: 90mm, y: 24mm, z: 0mm]
+    add Bus8 named RX11 at [x: 90mm, y: 36mm, z: 0mm]
+    add Bus8 named RX12 at [x: 90mm, y: 48mm, z: 0mm]
+    add Bus8 named RX13 at [x: 90mm, y: 60mm, z: 0mm]
+    add Bus8 named RX14 at [x: 90mm, y: 72mm, z: 0mm]
+    add Bus8 named RX15 at [x: 90mm, y: 84mm, z: 0mm]
+
+    ## Route all 128 data lines (16 bus pairs x 8 pins = 128 nets)
+    ## This exceeds the net_count_threshold of 100 to trigger hierarchical mode
+    route TX0.P0 to RX0.P0
+    route TX0.P1 to RX0.P1
+    route TX0.P2 to RX0.P2
+    route TX0.P3 to RX0.P3
+    route TX0.P4 to RX0.P4
+    route TX0.P5 to RX0.P5
+    route TX0.P6 to RX0.P6
+    route TX0.P7 to RX0.P7
+    route TX1.P0 to RX1.P0
+    route TX1.P1 to RX1.P1
+    route TX1.P2 to RX1.P2
+    route TX1.P3 to RX1.P3
+    route TX1.P4 to RX1.P4
+    route TX1.P5 to RX1.P5
+    route TX1.P6 to RX1.P6
+    route TX1.P7 to RX1.P7
+    route TX2.P0 to RX2.P0
+    route TX2.P1 to RX2.P1
+    route TX2.P2 to RX2.P2
+    route TX2.P3 to RX2.P3
+    route TX2.P4 to RX2.P4
+    route TX2.P5 to RX2.P5
+    route TX2.P6 to RX2.P6
+    route TX2.P7 to RX2.P7
+    route TX3.P0 to RX3.P0
+    route TX3.P1 to RX3.P1
+    route TX3.P2 to RX3.P2
+    route TX3.P3 to RX3.P3
+    route TX3.P4 to RX3.P4
+    route TX3.P5 to RX3.P5
+    route TX3.P6 to RX3.P6
+    route TX3.P7 to RX3.P7
+    route TX4.P0 to RX4.P0
+    route TX4.P1 to RX4.P1
+    route TX4.P2 to RX4.P2
+    route TX4.P3 to RX4.P3
+    route TX4.P4 to RX4.P4
+    route TX4.P5 to RX4.P5
+    route TX4.P6 to RX4.P6
+    route TX4.P7 to RX4.P7
+    route TX5.P0 to RX5.P0
+    route TX5.P1 to RX5.P1
+    route TX5.P2 to RX5.P2
+    route TX5.P3 to RX5.P3
+    route TX5.P4 to RX5.P4
+    route TX5.P5 to RX5.P5
+    route TX5.P6 to RX5.P6
+    route TX5.P7 to RX5.P7
+    route TX6.P0 to RX6.P0
+    route TX6.P1 to RX6.P1
+    route TX6.P2 to RX6.P2
+    route TX6.P3 to RX6.P3
+    route TX6.P4 to RX6.P4
+    route TX6.P5 to RX6.P5
+    route TX6.P6 to RX6.P6
+    route TX6.P7 to RX6.P7
+    route TX7.P0 to RX7.P0
+    route TX7.P1 to RX7.P1
+    route TX7.P2 to RX7.P2
+    route TX7.P3 to RX7.P3
+    route TX7.P4 to RX7.P4
+    route TX7.P5 to RX7.P5
+    route TX7.P6 to RX7.P6
+    route TX7.P7 to RX7.P7
+    route TX8.P0 to RX8.P0
+    route TX8.P1 to RX8.P1
+    route TX8.P2 to RX8.P2
+    route TX8.P3 to RX8.P3
+    route TX8.P4 to RX8.P4
+    route TX8.P5 to RX8.P5
+    route TX8.P6 to RX8.P6
+    route TX8.P7 to RX8.P7
+    route TX9.P0 to RX9.P0
+    route TX9.P1 to RX9.P1
+    route TX9.P2 to RX9.P2
+    route TX9.P3 to RX9.P3
+    route TX9.P4 to RX9.P4
+    route TX9.P5 to RX9.P5
+    route TX9.P6 to RX9.P6
+    route TX9.P7 to RX9.P7
+    route TX10.P0 to RX10.P0
+    route TX10.P1 to RX10.P1
+    route TX10.P2 to RX10.P2
+    route TX10.P3 to RX10.P3
+    route TX10.P4 to RX10.P4
+    route TX10.P5 to RX10.P5
+    route TX10.P6 to RX10.P6
+    route TX10.P7 to RX10.P7
+    route TX11.P0 to RX11.P0
+    route TX11.P1 to RX11.P1
+    route TX11.P2 to RX11.P2
+    route TX11.P3 to RX11.P3
+    route TX11.P4 to RX11.P4
+    route TX11.P5 to RX11.P5
+    route TX11.P6 to RX11.P6
+    route TX11.P7 to RX11.P7
+    route TX12.P0 to RX12.P0
+    route TX12.P1 to RX12.P1
+    route TX12.P2 to RX12.P2
+    route TX12.P3 to RX12.P3
+    route TX12.P4 to RX12.P4
+    route TX12.P5 to RX12.P5
+    route TX12.P6 to RX12.P6
+    route TX12.P7 to RX12.P7
+    route TX13.P0 to RX13.P0
+    route TX13.P1 to RX13.P1
+    route TX13.P2 to RX13.P2
+    route TX13.P3 to RX13.P3
+    route TX13.P4 to RX13.P4
+    route TX13.P5 to RX13.P5
+    route TX13.P6 to RX13.P6
+    route TX13.P7 to RX13.P7
+    route TX14.P0 to RX14.P0
+    route TX14.P1 to RX14.P1
+    route TX14.P2 to RX14.P2
+    route TX14.P3 to RX14.P3
+    route TX14.P4 to RX14.P4
+    route TX14.P5 to RX14.P5
+    route TX14.P6 to RX14.P6
+    route TX14.P7 to RX14.P7
+    route TX15.P0 to RX15.P0
+    route TX15.P1 to RX15.P1
+    route TX15.P2 to RX15.P2
+    route TX15.P3 to RX15.P3
+    route TX15.P4 to RX15.P4
+    route TX15.P5 to RX15.P5
+    route TX15.P6 to RX15.P6
+    route TX15.P7 to RX15.P7

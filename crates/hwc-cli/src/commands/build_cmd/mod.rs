@@ -47,15 +47,14 @@ pub fn execute(
     // Compile source to AST and symbol table
     let compilation_result = compilation::compile_source(&input, &config, start_time)?;
 
-    // Transform AST to HardwareSpace
-    // Attach source code to IR errors for beautiful miette diagnostics
-    let space_result = hwc_compiler::program_to_space(
+    // Transform AST to all HardwareSpaces
+    let spaces_result = hwc_compiler::program_to_spaces(
         &compilation_result.ast,
         &compilation_result.symbol_table,
         &compilation_result.collector,
     );
-    
-    // Print any diagnostics (waivers, warnings, errors) collected during IR transformation
+
+    // Print any diagnostics
     if compilation_result.collector.has_any() {
         if config.verbose {
             compilation_result.collector.print_all_with_dedup();
@@ -64,7 +63,7 @@ pub fn execute(
         }
     }
 
-    let mut space = match space_result {
+    let mut spaces = match spaces_result {
         Ok(s) => s,
         Err(e) => {
             let file_name = input.to_string_lossy();
@@ -73,119 +72,100 @@ pub fn execute(
                 &file_name,
             );
             eprintln!("{}", printer.format_diagnostic(&e));
-            // Return a "silent" error so main doesn't print a duplicate
             return Err(miette::miette!(""));
         }
     };
-    println!(
-        "[{:>8.2}ms] HardwareSpace created: {} ({}x{}x{})",
-        start_time.elapsed().as_secs_f64() * 1000.0,
-        space.name,
-        space.grid.x_cols,
-        space.grid.y_rows,
-        space.grid.z_layers
-    );
 
-    // Run alignment validation (Artist vs Professional mode)
-    let physical_netlist = alignment::validate_alignment(
-        &compilation_result.ast,
-        &mut space,
-        &compilation_result.symbol_table,
-        &config,
-        start_time,
-    )?;
-
-    // Filter by --space flag if provided
+    // Filter spaces by --space flag if provided
     if let Some(ref filter_name) = config.space {
-        if space.name != *filter_name {
-            println!(
-                "⚠️  Skipping space '{}' (filtering for '{}')",
-                space.name, filter_name
-            );
+        spaces.retain(|name, _| name.as_str() == filter_name.as_str());
+        if spaces.is_empty() {
+            println!("⚠️  No space named '{}' found in the source file", filter_name);
             return Ok(());
         }
     }
 
-    // Create space-specific output directory
-    let space_output_dir = output_dir.join(&space.name);
-    std::fs::create_dir_all(&space_output_dir)
-        .map_err(|e| miette::miette!("Failed to create space output directory: {}", e))?;
+    println!(
+        "[{:>8.2}ms] Found {} space(s) to build",
+        start_time.elapsed().as_secs_f64() * 1000.0,
+        spaces.len()
+    );
 
-    if config.verbose {
-        println!("📁 Output directory: {}", space_output_dir.display());
-    }
+    // Build each space
+    for (space_name, mut space) in spaces {
+        println!("\n── Building space: {} ──", space_name);
 
-    // Handle route lockfile
-    lockfile::handle_lockfile(&input, &space, &config, start_time)?;
+        println!(
+            "[{:>8.2}ms] HardwareSpace created: {} ({}x{}x{})",
+            start_time.elapsed().as_secs_f64() * 1000.0,
+            space.name,
+            space.grid.x_cols,
+            space.grid.y_rows,
+            space.grid.z_layers
+        );
 
-    // Run validation checks (DRC and connectivity)
-    let is_artist_mode = physical_netlist.is_none();
-    let validation_result = validation::run_validation_checks(&space, &config, is_artist_mode, start_time)?;
+        // Run alignment validation
+        let physical_netlist = alignment::validate_alignment(
+            &compilation_result.ast,
+            &mut space,
+            &compilation_result.symbol_table,
+            &config,
+            start_time,
+        )?;
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // THE COMMIT GATE (Task 5.2)
-    // ═══════════════════════════════════════════════════════════════════════
-    // Phase 1-2: Virtual build and validation complete (all in RAM)
-    // Phase 3: Decision point - proceed to export or abort?
-    //
-    // Gate Logic:
-    //   IF (violations == 0) OR (mode == Artist):
-    //     → PROCEED to Phase 4 (export)
-    //   ELSE:
-    //     → ABORT. Print error report. STOP.
-    //     → Result: NO FILES CREATED. Folder stays clean.
-    // ═══════════════════════════════════════════════════════════════════════
+        // Create space-specific output directory
+        let space_output_dir = output_dir.join(&space.name);
+        std::fs::create_dir_all(&space_output_dir)
+            .map_err(|e| miette::miette!("Failed to create space output directory: {}", e))?;
 
-    if !validation_result.passed && !is_artist_mode {
-        // COMMIT GATE CLOSED - Architecture Mode with violations
-        
-        // Task 5.3: --force-export flag overrides gate for debugging
-        if config.force_export {
-            println!("\n⚠️  --force-export: Overriding Commit Gate despite {} violation(s)", 
-                validation_result.violation_count);
-            println!("   ⚠️  WARNING: Exporting design with known physical integrity issues");
-        } else {
-            // Return error - miette will format it beautifully
-            return Err(miette::Report::new(BuildError::from_validation_failures(
-                &validation_result.violations
-            )));
+        if config.verbose {
+            println!("📁 Output directory: {}", space_output_dir.display());
         }
+
+        // Handle route lockfile
+        lockfile::handle_lockfile(&input, &space, &config, start_time)?;
+
+        // Run validation checks
+        let is_artist_mode = physical_netlist.is_none();
+        let validation_result = validation::run_validation_checks(&space, &config, is_artist_mode, start_time)?;
+
+        // Commit gate
+        if !validation_result.passed && !is_artist_mode {
+            if config.force_export {
+                println!("\n⚠️  --force-export: Overriding Commit Gate despite {} violation(s)",
+                    validation_result.violation_count);
+                println!("   ⚠️  WARNING: Exporting design with known physical integrity issues");
+            } else {
+                return Err(miette::Report::new(BuildError::from_validation_failures(
+                    &validation_result.violations
+                )));
+            }
+        }
+
+        if !validation_result.passed && is_artist_mode {
+            println!("\n⚠️  Artist Mode: Exporting despite {} validation warning(s)",
+                validation_result.violation_count);
+        }
+
+        // Realize analytic routes
+        if !space.analytic_routes.is_empty() {
+            space.realize_analytic_routes();
+        }
+
+        // Export all formats
+        export::export_all(export::ExportParams {
+            space,
+            symbol_table: compilation_result.symbol_table.clone(),
+            ast: &compilation_result.ast,
+            physical_netlist,
+            output_dir: &space_output_dir,
+            formats: &export_formats,
+            start_time,
+        })?;
     }
 
-    // COMMIT GATE OPEN - Proceed to export
-    if !validation_result.passed && is_artist_mode {
-        println!("\n⚠️  Artist Mode: Exporting despite {} validation warning(s)", 
-            validation_result.violation_count);
-    }
-
-    // Bake Electric Ghosts (v0.1.7 Tier 2): Realize analytic routes into the voxel grid
-    // right before export. This ensures GLB/DXF/ etc. contain the physical copper voxels
-    // from routes (not just "ghost" analytic primitives).
-    if !space.analytic_routes.is_empty() {
-        space.realize_analytic_routes();
-    }
-
-    // Export all formats
-    export::export_all(export::ExportParams {
-        space,
-        symbol_table: compilation_result.symbol_table,
-        ast: &compilation_result.ast,
-        physical_netlist,
-        output_dir: &space_output_dir,
-        formats: &export_formats,
-        start_time,
-    })?;
-
-    // Success message - simple and clean like Rust's own output
-    if is_artist_mode {
-        println!("    Finished build in {:.2}s (Artist Mode)", start_time.elapsed().as_secs_f64());
-    } else if !validation_result.passed && config.force_export {
-        println!("    Finished build in {:.2}s (forced export, {} violation(s) ignored)", 
-            start_time.elapsed().as_secs_f64(),
-            validation_result.violation_count);
-    } else {
-        println!("    Finished build in {:.2}s", start_time.elapsed().as_secs_f64());
-    }
+    // Success message
+    println!("    Finished build in {:.2}s", start_time.elapsed().as_secs_f64());
 
     Ok(())
 }

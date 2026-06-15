@@ -79,10 +79,8 @@ pub fn export(
                     for cutout in &layer.cutouts {
                         match cutout.shape {
                             SubstrateLayerShape::Rect => hole_paths.push(rect_to_path(&cutout.bbox)),
-                            SubstrateLayerShape::Cylinder { diameter, .. } => {
-                                let cx = (cutout.bbox.min.x + cutout.bbox.max.x) / 2;
-                                let cy = (cutout.bbox.min.y + cutout.bbox.max.y) / 2;
-                                hole_paths.push(circle_to_path(cx, cy, diameter / 2, 64));
+                            SubstrateLayerShape::Polygon { ref outer_contour, .. } => {
+                                hole_paths.push(outer_contour.clone());
                             }
                             _ => {}
                         }
@@ -231,20 +229,56 @@ pub fn export(
                 writeln!(w, " 10\n{:.6}\n 20\n{:.6}", cx, cy)?;
                 writeln!(w, " 40\n{:.6}", radius_mm)?;
             }
-            SubstrateLayerShape::Cylinder { diameter, .. } => {
-                // Export as CIRCLE entity
-                let cx = (layer.bbox.min.x + layer.bbox.max.x) as f64 / 2_000_000.0;
-                let cy = match space.view {
-                    SpaceView::Horizontal => (layer.bbox.min.y + layer.bbox.max.y) as f64 / 2_000_000.0,
-                    SpaceView::Vertical => (layer.bbox.min.z + layer.bbox.max.z) as f64 / 2_000_000.0,
-                };
-                let radius = *diameter as f64 / 2_000_000.0;
+            SubstrateLayerShape::Polygon { ref outer_contour, ref holes, .. } => {
+                let center_x_nm = (layer.bbox.min.x + layer.bbox.max.x) / 2;
+                let center_y_nm = (layer.bbox.min.y + layer.bbox.max.y) / 2;
+                let cx_mm = center_x_nm as f64 / 1_000_000.0;
+                let cy_mm = center_y_nm as f64 / 1_000_000.0;
 
-                writeln!(w, "  0\nCIRCLE")?;
-                writeln!(w, "  8\n{}", layer_name)?;
-                writeln!(w, "420\n{}", true_color)?;
-                writeln!(w, " 10\n{:.6}\n 20\n{:.6}", cx, cy)?;
-                writeln!(w, " 40\n{:.6}", radius)?;
+                let outer_points: Vec<(f64, f64)> = outer_contour.iter()
+                    .map(|p| (
+                        p.x as f64 / 1_000_000.0 + cx_mm,
+                        p.y as f64 / 1_000_000.0 + cy_mm,
+                    ))
+                    .collect();
+
+                if outer_points.len() >= 3 {
+                    writeln!(w, "  0\nLWPOLYLINE")?;
+                    writeln!(w, "  8\n{}", layer_name)?;
+                    writeln!(w, "420\n{}", true_color)?;
+                    writeln!(w, " 90\n{}", outer_points.len())?;
+                    writeln!(w, " 70\n1")?;
+                    for (x, y) in &outer_points {
+                        let (x_out, y_out) = match space.view {
+                            SpaceView::Horizontal => (*x, *y),
+                            SpaceView::Vertical => (*x, layer.bbox.min.z as f64 / 1_000_000.0),
+                        };
+                        writeln!(w, " 10\n{:.6}\n 20\n{:.6}", x_out, y_out)?;
+                    }
+                }
+
+                for hole in holes.iter() {
+                    let hole_points: Vec<(f64, f64)> = hole.iter()
+                        .map(|p| (
+                            p.x as f64 / 1_000_000.0 + cx_mm,
+                            p.y as f64 / 1_000_000.0 + cy_mm,
+                        ))
+                        .collect();
+                    if hole_points.len() >= 3 {
+                        writeln!(w, "  0\nLWPOLYLINE")?;
+                        writeln!(w, "  8\nDRILL")?;
+                        writeln!(w, "420\n0")?;
+                        writeln!(w, " 90\n{}", hole_points.len())?;
+                        writeln!(w, " 70\n1")?;
+                        for (x, y) in &hole_points {
+                            let (x_out, y_out) = match space.view {
+                                SpaceView::Horizontal => (*x, *y),
+                                SpaceView::Vertical => (*x, layer.bbox.min.z as f64 / 1_000_000.0),
+                            };
+                            writeln!(w, " 10\n{:.6}\n 20\n{:.6}", x_out, y_out)?;
+                        }
+                    }
+                }
             }
             SubstrateLayerShape::Tube { outer_diameter, inner_diameter, .. } => {
                 // Export outer circle and inner hole circle

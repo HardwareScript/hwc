@@ -1,0 +1,8 @@
+import * from @std/primitives/units
+
+shape DiamondVia(width: Measurement):
+    points:
+        - [x: 0nm, y: width / 2]
+        - [x: width / 2, y: 0nm]
+        - [x: 0nm, y: -(width / 2)]
+        - [x: -(width / 2), y: 0nm]

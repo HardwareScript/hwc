@@ -1,0 +1,7 @@
+import * from @std/primitives/units
+
+shape TriangleVia(width: Measurement):
+    points:
+        - [x: 0nm, y: -(width / 2)]
+        - [x: width * 0.433, y: width / 4]
+        - [x: -(width * 0.433), y: width / 4]

@@ -1,0 +1,17 @@
+{
+  "version": "0.1.4",
+  "board": "HexSpace",
+  "grid": {
+    "dimensions": [
+      200,
+      200,
+      10
+    ],
+    "resolution": [
+      0.01,
+      0.01,
+      0.025
+    ]
+  },
+  "routes": []
+}

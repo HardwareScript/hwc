@@ -7,6 +7,8 @@ use super::super::types::{Via, ViaType};
 
 impl GeometryRouter {
     /// Extract vias from a routed path by detecting Z changes.
+    /// Coalesces consecutive Z-changes into single layer-transition vias
+    /// instead of creating one via per Z-voxel boundary.
     pub(super) fn extract_vias_from_path(
         &self,
         path: &[Point3D],
@@ -16,11 +18,41 @@ impl GeometryRouter {
         let board_min_z_nm = 0;
         let board_max_z_nm = self.bounds.depth_nm;
 
-        for i in 0..path.len().saturating_sub(1) {
-            let current = path[i];
-            let next = path[i + 1];
+        if path.len() < 2 {
+            return vias;
+        }
 
-            if current.z != next.z {
+        let mut i = 0;
+        while i < path.len() - 1 {
+            let current = path[i];
+
+            // Find the start of a Z-change sequence
+            if current.z == path[i + 1].z {
+                i += 1;
+                continue;
+            }
+
+            // We have a Z-change at index i. Find the end of this Z-change sequence
+            // (consecutive points with the same Z after the transition).
+            let from_z = current.z;
+            let x = current.x;
+            let y = current.y;
+            let mut to_z = path[i + 1].z;
+
+            // Scan forward: skip all intermediate Z-voxel steps until Z stabilizes
+            let mut j = i + 1;
+            while j < path.len() && path[j].z != from_z {
+                to_z = path[j].z;
+                // If next point is back at from_z, this is a transient Z-spike - skip it
+                if j + 1 < path.len() && path[j + 1].z == from_z {
+                    j += 1;
+                    continue;
+                }
+                j += 1;
+            }
+
+            // Only create a via if we actually changed layers (not a transient spike)
+            if to_z != from_z {
                 let diameter_nm = self
                     .constraints
                     .fabrication
@@ -29,18 +61,23 @@ impl GeometryRouter {
                     .unwrap_or(300_000);
 
                 let via = Via::new(
-                    (current.x, current.y),
-                    current.z,
-                    next.z,
+                    (x, y),
+                    from_z.min(to_z),
+                    from_z.max(to_z),
                     diameter_nm,
                     net_id,
                     board_min_z_nm,
                     board_max_z_nm,
                     self.voxel_size_nm,
+                    self.constraints.fabrication.as_ref()
+                        .map(|f| f.min_annular_ring_nm)
+                        .unwrap_or(0),
                 );
 
                 vias.push(via);
             }
+
+            i = j;
         }
 
         vias
@@ -70,6 +107,7 @@ impl GeometryRouter {
             diameter_nm: via_diameter,
             net_id: NetId::new(0),
             via_type: ViaType::ThroughHole,
+            annular_ring_nm: annular_ring,
             properties: rustc_hash::FxHashMap::default(),
         };
 
@@ -179,7 +217,7 @@ impl GeometryRouter {
         pos: (i64, i64),
         start_layer_idx: usize,
         end_layer_idx: usize,
-        profile_layers: &[String],
+        _profile_layers: &[String],
         net_id: NetId,
         is_manhattan: bool,
     ) -> Vec<Via> {
@@ -190,6 +228,10 @@ impl GeometryRouter {
             .as_ref()
             .map(|f| f.min_via_diameter_nm)
             .unwrap_or(300_000);
+
+        let annular_ring = self.constraints.fabrication.as_ref()
+            .map(|f| f.min_annular_ring_nm)
+            .unwrap_or(0);
 
         if is_manhattan {
             // ASIC: step one layer at a time, emit a Via per adjacent layer pair
@@ -202,22 +244,20 @@ impl GeometryRouter {
 
             while current_idx != end_layer_idx as isize {
                 let next_idx = (current_idx + step) as usize;
-                let _current_layer = &profile_layers[current_idx as usize];
-                let _next_layer = &profile_layers[next_idx];
 
-                // Get Z positions for each layer
-                let from_z = self
-                    .constraints
-                    .fabrication
-                    .as_ref()
-                    .and_then(|_| {
-                        // Use layer index to derive Z position
-                        // Each layer is one voxel_size_nm thick in the grid
-                        Some(current_idx as i64 * self.voxel_size_nm)
-                    })
-                    .unwrap_or(current_idx as i64 * self.voxel_size_nm);
+                // Use actual Z positions from the stackup (layer_z_positions)
+                // instead of the incorrect `index * voxel_size_nm` calculation.
+                let from_z = if (current_idx as usize) < self.layer_z_positions.len() {
+                    self.layer_z_positions[current_idx as usize]
+                } else {
+                    current_idx as i64 * self.voxel_size_nm
+                };
 
-                let to_z = next_idx as i64 * self.voxel_size_nm;
+                let to_z = if next_idx < self.layer_z_positions.len() {
+                    self.layer_z_positions[next_idx]
+                } else {
+                    next_idx as i64 * self.voxel_size_nm
+                };
 
                 via_tower.push(Via::new_with_type(
                     pos,
@@ -226,6 +266,7 @@ impl GeometryRouter {
                     diameter_nm,
                     net_id,
                     ViaType::Buried, // Intermediate vias in ASIC towers are buried
+                    annular_ring,
                 ));
 
                 current_idx = next_idx as isize;
@@ -242,6 +283,7 @@ impl GeometryRouter {
                 diameter_nm,
                 net_id,
                 ViaType::ThroughHole,
+                annular_ring,
             ));
         }
 
@@ -290,5 +332,54 @@ impl GeometryRouter {
                 );
             }
         }
+    }
+
+    /// Find the layer index for a given Z position using the profile's layer Z positions.
+    ///
+    /// Returns the index of the layer whose Z range contains `z_nm`.
+    /// If `z_nm` is between layers, returns the index of the closest layer below.
+    pub fn find_layer_index_at_z(&self, z_nm: i64) -> Option<usize> {
+        if self.layer_z_positions.is_empty() {
+            return None;
+        }
+        // Find the last layer whose start Z is <= z_nm
+        for (i, &layer_z) in self.layer_z_positions.iter().enumerate().rev() {
+            if z_nm >= layer_z {
+                return Some(i);
+            }
+        }
+        // z_nm is below all layers, return first layer
+        Some(0)
+    }
+
+    /// Unroll a detected via into layer-by-layer vias when in ASIC (Manhattan) mode.
+    ///
+    /// When `is_manhattan` is false, returns the original via unchanged.
+    /// When `is_manhattan` is true, splits the via into individual buried vias
+    /// for each adjacent layer pair it spans.
+    pub fn unroll_detected_via(&self, via: &Via) -> Vec<Via> {
+        if !self.is_manhattan || self.profile_layers.is_empty() || self.layer_z_positions.is_empty() {
+            return vec![via.clone()];
+        }
+
+        let min_z = via.from_z_nm.min(via.to_z_nm);
+        let max_z = via.from_z_nm.max(via.to_z_nm);
+
+        let start_idx = self.find_layer_index_at_z(min_z).unwrap_or(0);
+        let end_idx = self.find_layer_index_at_z(max_z).unwrap_or(self.profile_layers.len() - 1);
+
+        // If the via only spans one layer, no unrolling needed
+        if start_idx == end_idx {
+            return vec![via.clone()];
+        }
+
+        self.unroll_via_tower(
+            via.position,
+            start_idx,
+            end_idx,
+            &self.profile_layers,
+            via.net_id,
+            self.is_manhattan,
+        )
     }
 }

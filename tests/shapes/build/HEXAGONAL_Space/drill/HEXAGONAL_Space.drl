@@ -1,0 +1,13 @@
+M48
+; DRILL file {HEXAGONAL_Space} date 2026-06-15
+; v0.1.7 physical Z (mm) recorded per tool pass where applicable
+; FORMAT={-:-/ absolute / inch / decimal}
+FMAT,2
+INCH
+T1C0.0008
+%
+T1
+X0.0787Y0.0394
+X0.0787Y0.1181
+X0.1575Y0.1181
+M30

@@ -164,6 +164,9 @@ fn build_symbol_table(
             hwc_parser::Definition::Test(test) => {
                 symbol_table.register_test(collector, test.clone());
             }
+            hwc_parser::Definition::Shape(shape) => {
+                symbol_table.register_shape(collector, shape.clone());
+            }
             _ => {}
         }
     }

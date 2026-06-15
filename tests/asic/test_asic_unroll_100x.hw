@@ -1,0 +1,71 @@
+import * from @std/primitives/units
+
+profile ASIC_TEST_100X:
+    description: "ASIC test profile 100x scaled for visual debugging"
+    
+    trace:
+        min_width: 10um
+        min_spacing: 10um
+    
+    via:
+        min_diameter: 20um
+        min_annular_ring: 5um
+        shape: square  # ASIC: square vias (GDSII/mask convention)
+    
+    manufacturing:
+        grid_snapping: true
+        track_pitch: 20um
+        copper_thickness: 50um
+    
+    clearance:
+        high_voltage: 50um
+        safety_factor: 1.5
+    
+    layer:
+        min_thickness: 50um
+    
+    stackup:
+        m1: [material: Copper, thickness: 50um]
+        d1: [material: SiO2,   thickness: 100um]
+        m2: [material: Copper, thickness: 50um]
+        d2: [material: SiO2,   thickness: 100um]
+        m3: [material: Copper, thickness: 50um]
+        d3: [material: SiO2,   thickness: 100um]
+        m4: [material: Copper, thickness: 50um]
+        si: [material: Silicon, thickness: 1000um]
+
+    routing:
+        m1: horizontal
+        m2: vertical
+        m3: horizontal
+        m4: vertical
+
+component Pad:
+    pins: [p]
+    layout:
+        shape: Rectangle(100um, 100um, 50um)
+        pin_positions:
+            p at [50um, 50um]
+        pad_shapes:
+            p: Rectangle(100um, 100um)
+
+space ASIC_Space_100X:
+    profile: ASIC_TEST_100X
+    dimensions: 10mm by 10mm by 2mm
+    grid: 100 by 100 by 20
+    origin: bl by b
+    
+    add Pad named P1 at [x: 1mm, y: 1mm, z: 0nm]
+    add Pad named P2 at [x: 5mm, y: 5mm, z: 450000nm]
+    
+    route P1.p to P2.p:
+        path:
+            - [x: 1mm, y: 1mm, z: 0nm]       # P1 on M1
+            - [x: 2mm, y: 1mm, z: 0nm]       # Horizontal on M1
+            - [x: 2mm, y: 1mm, z: 150000nm]  # Via M1 -> M2
+            - [x: 2mm, y: 3mm, z: 150000nm]  # Vertical on M2
+            - [x: 2mm, y: 3mm, z: 300000nm]  # Via M2 -> M3
+            - [x: 4mm, y: 3mm, z: 300000nm]  # Horizontal on M3
+            - [x: 4mm, y: 3mm, z: 450000nm]  # Via M3 -> M4
+            - [x: 4mm, y: 5mm, z: 450000nm]  # Vertical on M4
+            - [x: 5mm, y: 5mm, z: 450000nm]  # P2 on M4

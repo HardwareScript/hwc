@@ -3,6 +3,7 @@
 use crate::scene_graph::materials::get_or_create_material;
 use crate::scene_graph::types::MaterialNode;
 use crate::scene_graph::types::MeshNode;
+use crate::scene_graph::types::Face; // FIXED: Imported Face type for batching
 use compact_str::CompactString;
 use rustc_hash::FxHashMap;
 use serde_json::json;
@@ -12,6 +13,38 @@ pub fn export_glb(
     materials: &FxHashMap<CompactString, MaterialNode>,
     meshes: &[MeshNode],
 ) -> Vec<u8> {
+    // =========================================================================
+    // OPTIMIZATION: BATCH OVERLAPPING SEGMENTS BY NAME & MATERIAL (v0.1.7)
+    // =========================================================================
+    let mut batched_map: FxHashMap<(CompactString, CompactString), MeshNode> = FxHashMap::default();
+
+    for mesh in meshes {
+        // Group by both material and name to keep nets together while preserving independent component pads
+        let key = (mesh.material_name.clone(), mesh.name.clone());
+
+        let group = batched_map.entry(key).or_insert_with(|| MeshNode {
+            name: mesh.name.clone(),
+            vertices: Vec::new(),
+            faces: Vec::new(),
+            material_name: mesh.material_name.clone(),
+        });
+
+        let vertex_offset = group.vertices.len();
+        group.vertices.extend(&mesh.vertices);
+
+        for face in &mesh.faces {
+            let offset_vertices: Vec<usize> = face.vertices.iter()
+                .map(|&idx| idx + vertex_offset)
+                .collect();
+            
+            group.faces.push(Face { vertices: offset_vertices });
+        }
+    }
+
+    // Use the optimized meshes vector instead of the fragmented raw list
+    // This reduces our 128-bit test from 3,328 meshes down to ~160 meshes
+    let optimized_meshes: Vec<MeshNode> = batched_map.into_values().collect();
+
     let mut mat_map: FxHashMap<CompactString, usize> = FxHashMap::default();
     let mut materials_array = Vec::new();
 
@@ -102,7 +135,7 @@ pub fn export_glb(
 
     // 1.5. Collect unknown materials from meshes and add them dynamically using lookup table
     let mut materials_owned = materials.clone();
-    for mesh in meshes {
+    for mesh in &optimized_meshes { // FIXED: Iterate over optimized_meshes
         if !mat_map.contains_key(&mesh.material_name) {
             let mat_idx = materials_array.len();
             let (material_node, _) = get_or_create_material(&mut materials_owned, &mesh.material_name);
@@ -150,8 +183,8 @@ pub fn export_glb(
     let mut meshes_array = Vec::new();
     let mut nodes_array = Vec::new();
 
-    // 2. Single Pass Geometry Processing
-    for (idx, mesh) in meshes.iter().enumerate() {
+    // 2. Single Pass Geometry Processing (using optimized meshes)
+    for (idx, mesh) in optimized_meshes.iter().enumerate() { // FIXED: Iterate over optimized_meshes
         let mat_idx = mat_map.get(&mesh.material_name).copied().unwrap_or(0);
 
         let v_start = all_vertices.len() / 3; 

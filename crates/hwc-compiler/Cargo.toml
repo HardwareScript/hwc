@@ -11,6 +11,7 @@ miette = { workspace = true }
 rustc-hash = { workspace = true }
 compact_str = { workspace = true }
 smallvec = { workspace = true }
+clipper2-rust = "1.0"
 
 hwc-diagnostics = { workspace = true }
 hwc-parser = { workspace = true }

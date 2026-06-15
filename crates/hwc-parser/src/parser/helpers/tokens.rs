@@ -58,6 +58,7 @@ impl Parser {
                 Token::Struct => Some("struct".into()),
                 Token::Unit => Some("unit".into()),
                 Token::SignalGroup => Some("signal_group".into()),
+                Token::Shape => Some("shape".into()),
                 Token::Mechanical => Some("mechanical".into()),
                 Token::Substrate => Some("substrate".into()),
                 Token::For => Some("for".into()),

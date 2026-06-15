@@ -16,7 +16,7 @@
 //! This file serves as the public API entry point, re-exporting from the modular implementation.
 
 // Re-export from the modular ir implementation
-pub use crate::ir::{program_to_space, IrError};
+pub use crate::ir::{program_to_space, program_to_spaces, IrError};
 
 // Additional re-exports for convenience
 pub use crate::ir::{create_hardware_space, route_trace};

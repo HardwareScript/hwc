@@ -1,0 +1,144 @@
+import * from @std/primitives/units
+
+# 24-point starburst - alternating long/short spikes (48 vertices)
+# Tests complex radial patterns with varying spike lengths
+shape Starburst24(width: Measurement):
+    points:
+        # Long spike at 0 deg
+        - [x: 0,                y: -width / 2]
+        # Short spike at 7.5 deg
+        - [x: width / 10,       y: -width / 3]
+        # Long spike at 15 deg
+        - [x: width / 5,        y: -width / 2.2]
+        # Short spike at 22.5 deg
+        - [x: width / 4,        y: -width / 3.5]
+        # Long spike at 30 deg
+        - [x: width / 4,        y: -width / 2.3]
+        # Short spike at 37.5 deg
+        - [x: width / 3.5,      y: -width / 4]
+        # Long spike at 45 deg
+        - [x: width / 2.8,      y: -width / 2.8]
+        # Short spike at 52.5 deg
+        - [x: width / 4,        y: -width / 3.5]
+        # Long spike at 60 deg
+        - [x: width / 2.3,      y: -width / 4]
+        # Short spike at 67.5 deg
+        - [x: width / 3.5,      y: -width / 4]
+        # Long spike at 75 deg
+        - [x: width / 2.2,      y: -width / 5]
+        # Short spike at 82.5 deg
+        - [x: width / 3,        y: -width / 10]
+        # Long spike at 90 deg
+        - [x: width / 2,        y: 0]
+        # Short spike at 97.5 deg
+        - [x: width / 3,        y: width / 10]
+        # Long spike at 105 deg
+        - [x: width / 2.2,      y: width / 5]
+        # Short spike at 112.5 deg
+        - [x: width / 3.5,      y: width / 4]
+        # Long spike at 120 deg
+        - [x: width / 2.3,      y: width / 4]
+        # Short spike at 127.5 deg
+        - [x: width / 4,        y: width / 3.5]
+        # Long spike at 135 deg
+        - [x: width / 2.8,      y: width / 2.8]
+        # Short spike at 142.5 deg
+        - [x: width / 3.5,      y: width / 4]
+        # Long spike at 150 deg
+        - [x: width / 4,        y: width / 2.3]
+        # Short spike at 157.5 deg
+        - [x: width / 4,        y: width / 3.5]
+        # Long spike at 165 deg
+        - [x: width / 5,        y: width / 2.2]
+        # Short spike at 172.5 deg
+        - [x: width / 10,       y: width / 3]
+        # Long spike at 180 deg
+        - [x: 0,                y: width / 2]
+        # Short spike at 187.5 deg
+        - [x: -width / 10,      y: width / 3]
+        # Long spike at 195 deg
+        - [x: -width / 5,       y: width / 2.2]
+        # Short spike at 202.5 deg
+        - [x: -width / 4,       y: width / 3.5]
+        # Long spike at 210 deg
+        - [x: -width / 4,       y: width / 2.3]
+        # Short spike at 217.5 deg
+        - [x: -width / 3.5,     y: width / 4]
+        # Long spike at 225 deg
+        - [x: -width / 2.8,     y: width / 2.8]
+        # Short spike at 232.5 deg
+        - [x: -width / 4,       y: width / 3.5]
+        # Long spike at 240 deg
+        - [x: -width / 2.3,     y: width / 4]
+        # Short spike at 247.5 deg
+        - [x: -width / 3.5,     y: width / 4]
+        # Long spike at 255 deg
+        - [x: -width / 2.2,     y: width / 5]
+        # Short spike at 262.5 deg
+        - [x: -width / 3,       y: width / 10]
+        # Long spike at 270 deg
+        - [x: -width / 2,       y: 0]
+        # Short spike at 277.5 deg
+        - [x: -width / 3,       y: -width / 10]
+        # Long spike at 285 deg
+        - [x: -width / 2.2,     y: -width / 5]
+        # Short spike at 292.5 deg
+        - [x: -width / 3.5,     y: -width / 4]
+        # Long spike at 300 deg
+        - [x: -width / 2.3,     y: -width / 4]
+        # Short spike at 307.5 deg
+        - [x: -width / 4,       y: -width / 3.5]
+        # Long spike at 315 deg
+        - [x: -width / 2.8,     y: -width / 2.8]
+        # Short spike at 322.5 deg
+        - [x: -width / 3.5,     y: -width / 4]
+        # Long spike at 330 deg
+        - [x: -width / 4,       y: -width / 2.3]
+        # Short spike at 337.5 deg
+        - [x: -width / 4,       y: -width / 3.5]
+        # Long spike at 345 deg
+        - [x: -width / 5,       y: -width / 2.2]
+        # Short spike at 352.5 deg
+        - [x: -width / 10,      y: -width / 3]
+
+material DepositedCopper:
+    category: conductor
+    process: deposited
+    properties:
+        resistivity: 1.68e-8
+
+profile STARBURST_TEST:
+    description: "24-point starburst stress test"
+    trace:
+        min_width: 1um
+        min_spacing: 1um
+    via:
+        min_diameter: 100um
+        min_annular_ring: 10um
+        shape: Starburst24
+    manufacturing:
+        grid_snapping: true
+        track_pitch: 10um
+        copper_thickness: 50um
+    clearance:
+        high_voltage: 50um
+        safety_factor: 1.5
+    layer:
+        min_thickness: 50um
+    stackup:
+        m1: [material: DepositedCopper, thickness: 50um]
+        d1: [material: SiO2,   thickness: 100um]
+        m2: [material: DepositedCopper, thickness: 50um]
+    routing:
+        m1: horizontal
+        m2: vertical
+
+space StarburstSpace:
+    profile: STARBURST_TEST
+    dimensions: 2mm by 2mm by 500um
+    grid: 200 by 200 by 10
+    origin: bl by b
+
+    add contact(DepositedCopper) named Starburst24Via at [x: 1mm, y: 1mm] spanning layer: m1 to m2:
+        diameter: 500um
+        shape: Starburst24

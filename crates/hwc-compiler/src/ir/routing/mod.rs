@@ -7,7 +7,6 @@ mod manual;
 
 pub use automatic::route_automatic;
 pub use global::AutoRouter;
-pub use global::RouteEscapeSpec;
 pub use helpers::{collect_existing_nets, get_pin_positions, needs_automatic_routing, register_net_for_route};
 pub use manual::route_manual;
 
@@ -75,6 +74,8 @@ mod tests {
             }]),
             signal_group: None,
             bridge: None,
+            enter_escape: None,
+            exit_escape: None,
             span: hwc_parser::Span::new(0, 0),
         };
 
@@ -104,6 +105,8 @@ mod tests {
             path: None,
             signal_group: None,
             bridge: None,
+            enter_escape: None,
+            exit_escape: None,
             span: hwc_parser::Span::new(0, 0),
         };
 

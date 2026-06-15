@@ -719,28 +719,17 @@ impl HardwareSpace {
         for route in &self.analytic_routes {
             let half_w = route.width_nm / 2;
 
-            // v0.1.7 Strategy A: All segments on the same route share one Z-plane
-            // to enable proper 2D polygon unioning in the export phase.
-            // Use the median Z from all segment start points as the unified plane.
-            let route_z = if !route.segments.is_empty() {
-                let mut zs: Vec<i64> = route.segments.iter().map(|s| s.start.z).collect();
-                zs.sort_unstable();
-                zs[zs.len() / 2]
-            } else {
-                0
-            };
-
             for seg in &route.segments {
-                // v0.1.7 Strategy A: Unified coordinate snapping for routing segments.
-                // Ensures all segments in a route align perfectly without tiny gaps.
+                // v0.1.7 Strategy A: Per-segment Z placement.
+                // Each segment uses its own start Z level so multi-layer routes
+                // render at the correct height instead of collapsing to a median Z.
+                let z_min = seg.start.z.min(seg.end.z);
+                let z_max = seg.start.z.max(seg.end.z).max(z_min + route.thickness_nm);
+
                 let x_min = seg.start.x.min(seg.end.x) - half_w;
                 let x_max = seg.start.x.max(seg.end.x) + half_w;
                 let y_min = seg.start.y.min(seg.end.y) - half_w;
                 let y_max = seg.start.y.max(seg.end.y) + half_w;
-
-                // v0.1.7 Strategy A: Snap all segments to the unified route Z-plane
-                let z_min = route_z;
-                let z_max = z_min + route.thickness_nm;
                 
                 // v0.1.7: Epsilon Guard for degenerate boxes
                 if x_max - x_min < 100 || y_max - y_min < 100 || z_max - z_min < 100 {
@@ -750,12 +739,6 @@ impl HardwareSpace {
                 let bbox = BoundingBox::new(
                     Point3D::new(x_min, y_min, z_min),
                     Point3D::new(x_max, y_max, z_max),
-                );
-
-                eprintln!("[DEBUG realize-segment] Seg: ({}, {}) to ({}, {}), z: {}. BBox: min=({:.3}, {:.3}, {:.3}) max=({:.3}, {:.3}, {:.3})", 
-                    seg.start.x, seg.start.y, seg.end.x, seg.end.y, seg.start.z,
-                    bbox.min.x as f64 / 1e6, bbox.min.y as f64 / 1e6, bbox.min.z as f64 / 1e6,
-                    bbox.max.x as f64 / 1e6, bbox.max.y as f64 / 1e6, bbox.max.z as f64 / 1e6
                 );
 
                 // NATIVE FIX: Store as sparse substrate layer instead of filling voxels
@@ -796,7 +779,7 @@ impl HardwareSpace {
             
             // Re-run the drill logic which is now net-aware and structural
             // v0.1.7: Use 0 clearance for same-net structural carving to prevent disconnects.
-            let pad_diameter = via.diameter_nm + 2 * 150_000;
+            let pad_diameter = via.diameter_nm + 2 * if via.annular_ring_nm > 0 { via.annular_ring_nm } else { via.diameter_nm / 2 };
             self.voxel_grid.drill_via_hole(
                 hole_bbox,
                 via.diameter_nm,

@@ -1,0 +1,17 @@
+{
+  "version": "0.1.4",
+  "board": "ASIC_Space_100X",
+  "grid": {
+    "dimensions": [
+      100,
+      100,
+      20
+    ],
+    "resolution": [
+      0.1,
+      0.1,
+      0.1
+    ]
+  },
+  "routes": []
+}

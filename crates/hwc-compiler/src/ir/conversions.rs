@@ -32,6 +32,7 @@ pub fn evaluate_expression_to_nm(
                 Unit::Millimeter => Ok((value * 1_000_000.0) as i64),
                 Unit::Centimeter => Ok((value * 10_000_000.0) as i64),
                 Unit::Micrometer => Ok((value * 1_000.0) as i64),
+                Unit::Nanometer => Ok(*value as i64),
                 Unit::Custom(symbol) => {
                     if let Some(unit_def) = symbol_table.resolve_unit_symbol(symbol) {
                         let multiplier = unit_def.multiplier.unwrap_or(1.0);

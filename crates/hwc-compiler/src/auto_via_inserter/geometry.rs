@@ -1,7 +1,7 @@
 use compact_str::CompactString;
 use hwc_engine::{
     geometry::{BoundingBox, Point3D},
-    PourMetadata,
+    AnalyticTrace, PourMetadata,
 };
 use hwc_parser::{Coordinate, Expression};
 use rustc_hash::FxHashMap;
@@ -73,6 +73,11 @@ impl AutoViaInserter {
 
                 if let (Some(from_layer), Some(to_layer)) = (from_layer, to_layer) {
                     if from_layer != to_layer {
+                        let from_name = stackup_manager.get_layer_index_at_z(from_z_mid)
+                            .and_then(|i| stackup_manager.ordered_layers().get(i).cloned());
+                        let to_name = stackup_manager.get_layer_index_at_z(to_z_mid)
+                            .and_then(|i| stackup_manager.ordered_layers().get(i).cloned());
+
                         transitions.push(LayerTransition {
                             net_name: net_name.to_string().into(),
                             from_layer,
@@ -85,9 +90,104 @@ impl AutoViaInserter {
                             to_material: upper_material.clone(),
                             from_bbox: *lower_bbox,
                             to_bbox: *upper_bbox,
+                            from_layer_name: from_name.map(|n| n.into()),
+                            to_layer_name: to_name.map(|n| n.into()),
                         });
                     }
                 }
+            }
+        }
+
+        transitions
+    }
+
+    /// Detect Z-axis layer transitions in analytic routes (manual routes).
+    ///
+    /// Manual routes store waypoints as `LineSegment` endpoints. When a segment
+    /// has different start.z and end.z, that's a layer transition requiring a via.
+    /// This method scans all analytic routes and creates `LayerTransition` objects
+    /// for each Z change, enabling the auto via inserter to place vias at those points.
+    pub(crate) fn find_transitions_in_analytic_routes(
+        &self,
+        routes: &[AnalyticTrace],
+        stackup_manager: &crate::ir::stackup_manager::StackupManager,
+        profile: Option<&hwc_parser::ProfileDefinition>,
+    ) -> Vec<LayerTransition> {
+        let mut transitions = Vec::new();
+
+        for route in routes {
+            let net_name = route.net_name.clone();
+            let half_w = route.width_nm / 2;
+
+            for seg in &route.segments {
+                if seg.start.z == seg.end.z {
+                    continue;
+                }
+
+                let (lower_z, upper_z) = if seg.start.z < seg.end.z {
+                    (seg.start.z, seg.end.z)
+                } else {
+                    (seg.end.z, seg.start.z)
+                };
+
+                let from_layer = stackup_manager.get_layer_index_at_z(lower_z);
+                let to_layer = stackup_manager.get_layer_index_at_z(upper_z);
+
+                let (Some(from_layer), Some(to_layer)) = (from_layer, to_layer) else {
+                    continue;
+                };
+
+                if from_layer == to_layer {
+                    continue;
+                }
+
+                let from_material = resolve_material_for_z(
+                    lower_z,
+                    stackup_manager,
+                    profile,
+                );
+                let to_material = resolve_material_for_z(
+                    upper_z,
+                    stackup_manager,
+                    profile,
+                );
+
+                let transition_x = seg.start.x;
+                let transition_y = seg.start.y;
+
+                let from_bbox = BoundingBox::new(
+                    Point3D::new(transition_x - half_w, transition_y - half_w, lower_z),
+                    Point3D::new(transition_x + half_w, transition_y + half_w, lower_z),
+                );
+                let to_bbox = BoundingBox::new(
+                    Point3D::new(transition_x - half_w, transition_y - half_w, upper_z),
+                    Point3D::new(transition_x + half_w, transition_y + half_w, upper_z),
+                );
+
+                let from_layer_name = stackup_manager.get_layer_name_at_z(lower_z);
+                let to_layer_name = stackup_manager.get_layer_name_at_z(upper_z);
+
+                transitions.push(LayerTransition {
+                    net_name: net_name.clone(),
+                    from_layer,
+                    to_layer,
+                    from_z_nm: lower_z,
+                    to_z_nm: upper_z,
+                    from_pour: format!("trace_L{}", from_layer).into(),
+                    to_pour: format!("trace_L{}", to_layer).into(),
+                    from_material,
+                    to_material,
+                    from_bbox,
+                    to_bbox,
+                    from_layer_name: from_layer_name.map(|n| n.into()),
+                    to_layer_name: to_layer_name.map(|n| n.into()),
+                });
+
+                println!("   │  [TRANSITION] Route '{}' seg ({},{},{})→({},{},{}) : L{}→L{}, z {}nm→{}nm",
+                    net_name,
+                    seg.start.x, seg.start.y, seg.start.z,
+                    seg.end.x, seg.end.y, seg.end.z,
+                    from_layer, to_layer, lower_z, upper_z);
             }
         }
 
@@ -242,4 +342,24 @@ impl AutoViaInserter {
             _ => 0.0,
         }
     }
+}
+
+/// Resolve the material name for a Z position by looking up the layer in the stackup profile.
+fn resolve_material_for_z(
+    z_nm: i64,
+    stackup_manager: &crate::ir::stackup_manager::StackupManager,
+    profile: Option<&hwc_parser::ProfileDefinition>,
+) -> CompactString {
+    let layer_name = match stackup_manager.get_layer_name_at_z(z_nm) {
+        Some(name) => name,
+        None => return "Copper".into(),
+    };
+
+    if let Some(stackup) = profile.and_then(|p| p.stackup.as_ref()) {
+        if let Some(layer) = stackup.layers.iter().find(|l| l.name.name == layer_name) {
+            return layer.material.to_string().into();
+        }
+    }
+
+    "Copper".into()
 }

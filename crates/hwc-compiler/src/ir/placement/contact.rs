@@ -131,6 +131,11 @@ pub fn place_contact(
         space.voxel_size.z_nm,
     )?;
 
+    let contact_name_debug = contact.name.as_ref().map(|n| n.to_string()).unwrap_or_else(|| "<unnamed>".into());
+    println!("[PLACE_CONTACT] '{}' material='{}' dia={}nm from_z={}nm to_z={}nm from_top={}nm to_top={}nm",
+        contact_name_debug, contact.material, diameter_nm,
+        from_bottom_nm, to_bottom_nm, from_top_nm, to_top_nm);
+
     // v0.1.8 FIXED: Net-Aware Z-Span Calculation for Blind/Buried Vias
     // Vias should not cut through inner layers; they should stop at the nearest boundary.
     // 1. Top Layer: Span from Top Surface.
@@ -166,6 +171,9 @@ pub fn place_contact(
         // Physical mode: Fallback to inclusive min/max
         (from_bottom_nm.min(to_bottom_nm), from_top_nm.max(to_top_nm))
     };
+
+    println!("[PLACE_CONTACT] '{}' final span: start_z={}nm end_z={}nm ({}nm tall)",
+        contact_name_debug, start_z, end_z, end_z - start_z);
 
     // Create a cylindrical via by filling voxels within radius
     let placer = ComponentPlacer::new();
@@ -239,6 +247,32 @@ pub fn place_contact(
     let bridge_material_name = get_prop_string(contact, "bridge", eval_context);
     let bridge_material_id = bridge_material_name.as_ref().map(|b| space.material_registry.get_or_register(b));
 
+    // v0.2.0: Resolve shape from properties if not already set as a contour
+    let mut contour = contact.contour.clone();
+    if contour.is_none() {
+        if let Some(shape_name) = get_prop_string(contact, "shape", eval_context) {
+            if let Some(shape_def) = symbol_table.get_shape(shape_name.as_str()) {
+                let constants = symbol_table.get_all_constants();
+                contour = Some(crate::auto_via_inserter::library::evaluate_shape_points(
+                    &shape_def,
+                    diameter_nm,
+                    &constants,
+                ));
+                let contour_len = contour.as_ref().map_or(0, |c| c.len());
+                println!("[PLACE_CONTACT] Resolved shape '{}' to {} vertices", shape_name, contour_len);
+            }
+        }
+    }
+
+    // Compute pad bbox (drill + annular ring) for contact metadata and substrate layers
+    let annular_ring_nm = if let Some(nm) = get_prop_nm(contact, "annular_ring", symbol_table, eval_context) {
+        nm
+    } else {
+        space.fabrication_constraints.as_ref()
+            .map(|c| c.via.min_annular_ring_nm)
+            .unwrap_or(150_000)
+    };
+
     // v0.1.7: Register via for Excellon drill export
     // This ensures that ALL contacts (vias, THT pins, TSVs) are registered for the drill file.
     let board_max_z_nm = (space.grid.z_layers as i64) * space.voxel_size.z_nm;
@@ -253,20 +287,12 @@ pub fn place_contact(
         0,              // min_z
         board_max_z_nm, // max_z
         space.voxel_size.z_nm,
+        annular_ring_nm,
     );
     space.add_vias(vec![via]);
 
     // v0.1.7: Read solder mask properties (needed by all process branches and ContactMetadata)
     let is_tented = get_prop_bool(contact, "is_tented", eval_context).unwrap_or(false);
-
-    // Compute pad bbox (drill + annular ring) for contact metadata and substrate layers
-    let annular_ring_nm = if let Some(nm) = get_prop_nm(contact, "annular_ring", symbol_table, eval_context) {
-        nm
-    } else {
-        space.fabrication_constraints.as_ref()
-            .map(|c| c.via.min_annular_ring_nm)
-            .unwrap_or(150_000)
-    };
     let pad_diameter_nm = diameter_nm + (2 * annular_ring_nm);
     let pad_radius_nm = pad_diameter_nm / 2;
     let pad_bbox = hwc_engine::geometry::BoundingBox::new(
@@ -327,42 +353,80 @@ pub fn place_contact(
         let interface_end_point = Point3D::new(end_point.x, end_point.y, interface_end_z);
         let fill_start_point = Point3D::new(start_point.x, start_point.y, interface_end_z);
 
-        // Place bridge interface (e.g., Silicide) - use cylindrical placement
-        placer
-            .place_cylinder_substrate(
-                &mut space.voxel_grid,
-                bridge_mat,
-                start_point,
-                interface_end_point,
-                net_id,
-                diameter_nm,
-            )
-            .map_err(|e| {
-                IrError::PlacementError(format!(
-                    "Failed to place contact bridge '{}': {}",
-                    contact.name.as_ref().map(|n| n.to_string()).unwrap_or_else(|| "<unnamed>".into()),
-                    e
-                ))
-            })?;
-
-        // Place via fill (e.g., Tungsten) - use cylindrical placement
-        if interface_end_z < end_z {
+        // v0.2.0: Use polygon contour if available, fallback to cylinder
+        if let Some(ref contour) = contour {
+            placer
+                .place_polygon_substrate(
+                    &mut space.voxel_grid,
+                    bridge_mat,
+                    start_point,
+                    interface_end_point,
+                    net_id,
+                    contour,
+                )
+                .map_err(|e| {
+                    IrError::PlacementError(format!(
+                        "Failed to place contact bridge '{}': {}",
+                        contact.name.as_ref().map(|n| n.to_string()).unwrap_or_else(|| "<unnamed>".into()),
+                        e
+                    ))
+                })?;
+        } else {
             placer
                 .place_cylinder_substrate(
                     &mut space.voxel_grid,
-                    material_id,
-                    fill_start_point,
-                    end_point,
+                    bridge_mat,
+                    start_point,
+                    interface_end_point,
                     net_id,
                     diameter_nm,
                 )
                 .map_err(|e| {
                     IrError::PlacementError(format!(
-                        "Failed to place contact fill '{}': {}",
+                        "Failed to place contact bridge '{}': {}",
                         contact.name.as_ref().map(|n| n.to_string()).unwrap_or_else(|| "<unnamed>".into()),
                         e
                     ))
                 })?;
+        }
+
+        // Place via fill (e.g., Tungsten) - use contour-aware placement
+        if interface_end_z < end_z {
+            if let Some(ref contour) = contour {
+                placer
+                    .place_polygon_substrate(
+                        &mut space.voxel_grid,
+                        material_id,
+                        fill_start_point,
+                        end_point,
+                        net_id,
+                        contour,
+                    )
+                    .map_err(|e| {
+                        IrError::PlacementError(format!(
+                            "Failed to place contact fill '{}': {}",
+                            contact.name.as_ref().map(|n| n.to_string()).unwrap_or_else(|| "<unnamed>".into()),
+                            e
+                        ))
+                    })?;
+            } else {
+                placer
+                    .place_cylinder_substrate(
+                        &mut space.voxel_grid,
+                        material_id,
+                        fill_start_point,
+                        end_point,
+                        net_id,
+                        diameter_nm,
+                    )
+                    .map_err(|e| {
+                        IrError::PlacementError(format!(
+                            "Failed to place contact fill '{}': {}",
+                            contact.name.as_ref().map(|n| n.to_string()).unwrap_or_else(|| "<unnamed>".into()),
+                            e
+                        ))
+                    })?;
+            }
         }
     } else {
         // v0.1.7: Unified Manufacturing Process Logic
@@ -382,6 +446,9 @@ pub fn place_contact(
         let clearance_nm = space.fabrication_constraints.as_ref()
             .map(|c| c.trace.min_spacing_nm)
             .unwrap_or(150_000); // Default 150um
+
+        println!("[PLACE_CONTACT] '{}' process={:?}, net_id={}, material_id={}",
+            contact_name_debug, process, net_id, material_id);
 
         if process == hwc_engine::ManufacturingProcess::DrilledPlated {
             // 1. pad_bbox already computed above
@@ -441,6 +508,10 @@ pub fn place_contact(
             };
 
             // 4. ACTION: Add ONE Unified Via Layer (Tube + Flanges)
+            println!("[PLACE_CONTACT] '{}' Adding tube substrate: pad_bbox=({},{}-{},{}), outer_dia={}, inner_dia={}, pad_dia={}, top_cap={:?}, bottom_cap={:?}",
+                contact_name_debug,
+                contact_bbox.min.x, contact_bbox.min.y, contact_bbox.max.x, contact_bbox.max.y,
+                diameter_nm, inner_diameter_nm, pad_diameter_nm, top_cap, bottom_cap);
             space.voxel_grid.add_tube_substrate_layer(
                 material_id,
                 net_id,
@@ -504,6 +575,10 @@ pub fn place_contact(
             let solder_mask_expansion_nm = space.fabrication_constraints.as_ref()
                 .map(|c| c.solder_mask_expansion_nm)
                 .unwrap_or(75_000);
+            println!("[PLACE_CONTACT] '{}' Deposited path: drilling via hole at bbox=({},{}-{},{}) dia={}",
+                contact_name_debug,
+                contact_bbox.min.x, contact_bbox.min.y, contact_bbox.max.x, contact_bbox.max.y,
+                diameter_nm);
             space.voxel_grid.drill_via_hole(
                 contact_bbox,
                 diameter_nm,
@@ -514,23 +589,51 @@ pub fn place_contact(
                 solder_mask_expansion_nm,
             );
 
-            // Simple via - use cylindrical placement (deposited, not drilled)
-            placer
-                .place_cylinder_substrate(
-                    &mut space.voxel_grid,
-                    material_id,
-                    start_point,
-                    end_point,
-                    net_id,
-                    diameter_nm,
-                )
-                .map_err(|e| {
-                    IrError::PlacementError(format!(
-                        "Failed to place contact '{}': {}",
-                        contact.name.as_ref().map(|n| n.to_string()).unwrap_or_else(|| "<unnamed>".into()),
-                        e
-                    ))
-                })?;
+            // Simple via - use contour-aware placement (deposited, not drilled)
+            // v0.2.0: Use polygon contour if available, fallback to cylinder
+            if let Some(ref contour) = contour {
+                println!("[PLACE_CONTACT] '{}' Placing polygon via: mat={}, net={}, start=({},{},{}) end=({},{},{}) dia={}",
+                    contact_name_debug, contact.material, net_id,
+                    start_point.x, start_point.y, start_point.z,
+                    end_point.x, end_point.y, end_point.z, diameter_nm);
+                placer
+                    .place_polygon_substrate(
+                        &mut space.voxel_grid,
+                        material_id,
+                        start_point,
+                        end_point,
+                        net_id,
+                        contour,
+                    )
+                    .map_err(|e| {
+                        IrError::PlacementError(format!(
+                            "Failed to place contact '{}': {}",
+                            contact.name.as_ref().map(|n| n.to_string()).unwrap_or_else(|| "<unnamed>".into()),
+                            e
+                        ))
+                    })?;
+            } else {
+                println!("[PLACE_CONTACT] '{}' Placing cylinder via: mat={}, net={}, start=({},{},{}) end=({},{},{}) dia={}",
+                    contact_name_debug, contact.material, net_id,
+                    start_point.x, start_point.y, start_point.z,
+                    end_point.x, end_point.y, end_point.z, diameter_nm);
+                placer
+                    .place_cylinder_substrate(
+                        &mut space.voxel_grid,
+                        material_id,
+                        start_point,
+                        end_point,
+                        net_id,
+                        diameter_nm,
+                    )
+                    .map_err(|e| {
+                        IrError::PlacementError(format!(
+                            "Failed to place contact '{}': {}",
+                            contact.name.as_ref().map(|n| n.to_string()).unwrap_or_else(|| "<unnamed>".into()),
+                            e
+                        ))
+                    })?;
+            }
         }
     }
 
@@ -583,6 +686,10 @@ pub fn place_contact(
 
     // Task 4.2: Store via geometry as analytic primitive (bounding box only)
     // PRIMITIVES OVER PIXELS: No voxel collection needed - DRC uses bounding boxes directly
+    println!("[PLACE_CONTACT] '{}' Storing contact metadata: bbox=({},{}-{},{}), z={}→{}nm, net={:?}",
+        contact_name_debug,
+        pad_bbox.min.x, pad_bbox.min.y, pad_bbox.max.x, pad_bbox.max.y,
+        from_bottom_nm, to_bottom_nm, contact.net);
     space.contacts.push(hwc_engine::ContactMetadata {
         name: contact_name,
         material_name: contact.material.clone(),

@@ -42,32 +42,14 @@ use crate::SymbolTable;
 use hwc_engine::HardwareSpace;
 use hwc_parser::Program;
 
-/// Transform a parsed program into a hardware space with voxel grid.
+/// Compile a single space definition into a HardwareSpace.
 ///
-/// This is the main entry point for IR integration.
-pub fn program_to_space(
-    program: &Program,
+/// This is the shared implementation used by both `program_to_space` and `program_to_spaces`.
+fn compile_single_space(
+    space_def: &hwc_parser::SpaceDefinition,
     symbol_table: &SymbolTable,
     collector: &hwc_diagnostics::DiagnosticCollector,
 ) -> Result<HardwareSpace, IrError> {
-    // eprintln!($3"[DEBUG program_to_space] Starting...");
-
-    let space_def = program
-        .definitions
-        .iter()
-        .find_map(|def| {
-            if let hwc_parser::Definition::Space(space) = def {
-                Some(space)
-            } else {
-                None
-            }
-        })
-        .ok_or(IrError::NoSpaceDefinition)?;
-
-    // eprintln!($3"[DEBUG program_to_space] Found space definition: {:?}",
-    //      space_def.name
-    //   );
-
     // Sprint 3.8: Process statements in textual order to support anchor references
     //
     // Physical Reality: When element B references element A's position, A must be placed first.
@@ -430,27 +412,7 @@ pub fn program_to_space(
 
     // Phase 3: Execute Auto-Routing Batch
     if !auto_routes.is_empty() {
-        // v0.1.7: Build escape specs map from Route ASTs so the AutoRouter
-        // uses directional pad-edge clipping instead of naive heuristics.
-        // Keyed by (start_comp.pin, goal_comp.pin) → (exit, enter)
-        let mut route_escape_specs: rustc_hash::FxHashMap<(compact_str::CompactString, compact_str::CompactString), (Option<routing::RouteEscapeSpec>, Option<routing::RouteEscapeSpec>)> = rustc_hash::FxHashMap::default();
-        for route in &auto_routes {
-            if route.exit_escape.is_some() || route.enter_escape.is_some() {
-                let start_key: compact_str::CompactString = format!("{}.{}", route.from.component, route.from.pin).into();
-                let goal_key: compact_str::CompactString = format!("{}.{}", route.to.component, route.to.pin).into();
-                let exit = route.exit_escape.as_ref().map(|e| routing::RouteEscapeSpec {
-                    port: e.port,
-                    offset: e.offset.clone(),
-                });
-                let enter = route.enter_escape.as_ref().map(|e| routing::RouteEscapeSpec {
-                    port: e.port,
-                    offset: e.offset.clone(),
-                });
-                route_escape_specs.insert((start_key, goal_key), (exit, enter));
-            }
-        }
-
-        let mut auto_router = routing::AutoRouter::new(&mut space, symbol_table, &stackup_manager, route_escape_specs);
+        let mut auto_router = routing::AutoRouter::new(&mut space, symbol_table, &stackup_manager, profile);
         auto_router.route_all_nets()?;
     }
 
@@ -485,6 +447,7 @@ pub fn program_to_space(
         profile,
         &stackup_manager,
         fab_constraints.as_ref(),
+        Some(symbol_table),
     );
 
     match auto_via_inserter.insert_vias(&space, profile, &stackup_manager) {
@@ -534,4 +497,62 @@ pub fn program_to_space(
     }
 
     Ok(space)
+}
+
+/// Transform a parsed program into a hardware space with voxel grid.
+///
+/// This is the main entry point for IR integration.
+pub fn program_to_space(
+    program: &Program,
+    symbol_table: &SymbolTable,
+    collector: &hwc_diagnostics::DiagnosticCollector,
+) -> Result<HardwareSpace, IrError> {
+    let space_def = program
+        .definitions
+        .iter()
+        .find_map(|def| {
+            if let hwc_parser::Definition::Space(space) = def {
+                Some(space)
+            } else {
+                None
+            }
+        })
+        .ok_or(IrError::NoSpaceDefinition)?;
+
+    compile_single_space(space_def, symbol_table, collector)
+}
+
+/// Transform a parsed program into multiple hardware spaces (one per space definition).
+///
+/// Returns a HashMap keyed by space name. Each space is compiled independently.
+pub fn program_to_spaces(
+    program: &Program,
+    symbol_table: &SymbolTable,
+    collector: &hwc_diagnostics::DiagnosticCollector,
+) -> Result<rustc_hash::FxHashMap<compact_str::CompactString, HardwareSpace>, IrError> {
+    let space_defs: Vec<&hwc_parser::SpaceDefinition> = program
+        .definitions
+        .iter()
+        .filter_map(|def| {
+            if let hwc_parser::Definition::Space(space) = def {
+                Some(space)
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    if space_defs.is_empty() {
+        return Err(IrError::NoSpaceDefinition);
+    }
+
+    let mut spaces = rustc_hash::FxHashMap::default();
+
+    for space_def in space_defs {
+        let space_name: compact_str::CompactString = space_def.name.to_string().into();
+        let space = compile_single_space(space_def, symbol_table, collector)?;
+        spaces.insert(space_name, space);
+    }
+
+    Ok(spaces)
 }

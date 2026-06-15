@@ -130,6 +130,9 @@ pub struct ViaConstraints {
 
     /// Default via diameter in nanometers
     pub default_diameter_nm: i64,
+
+    /// Via shape: "square" or "cylinder" (optional, defaults to cylinder)
+    pub shape: Option<CompactString>,
 }
 
 /// Clearance constraints based on voltage
@@ -269,6 +272,7 @@ impl Default for ConstraintSet {
                 min_annular_ring_nm: 150_000, // 150µm
                 min_spacing_nm: 600_000,      // 600µm (v0.1.7)
                 default_diameter_nm: 500_000, // 500µm
+                shape: None,                  // Default: cylinder
             },
             clearance: ClearanceConstraints {
                 low_voltage_nm: 200_000,    // 200µm

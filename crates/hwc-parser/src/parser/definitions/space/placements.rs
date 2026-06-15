@@ -61,6 +61,7 @@ impl crate::parser::Parser {
 
         let mut boundary = None;
         let mut net = None;
+        let mut thickness = None;
         let mut device = None;
         let mut thermal_relief = false;
         let mut waivers = Waivers::default();
@@ -96,6 +97,9 @@ impl crate::parser::Parser {
                         let to = self.parse_coordinate_optional_z()?;
                         boundary = Some(crate::PourBoundary::Rect(from, to));
                     }
+                }
+                "thickness" => {
+                    thickness = Some(self.parse_expression()?);
                 }
                 "net" => {
                     net = Some(self.parse_net_name()?);
@@ -158,6 +162,7 @@ impl crate::parser::Parser {
             material: material.into(),
             name: name.into(),
             elevation,
+            thickness,
             boundary,
             net,
             device,
@@ -424,6 +429,7 @@ impl crate::parser::Parser {
             to_elevation,
             net: net.or(net_in_block),
             properties,
+            contour: None,
             span: Span::new(start_pos, end_pos),
         })
     }

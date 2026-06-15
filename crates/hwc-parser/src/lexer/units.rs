@@ -13,6 +13,7 @@ pub enum DistanceUnit {
     Millimeters,
     Centimeters,
     Micrometers,
+    Nanometers,
 }
 
 impl fmt::Display for DistanceUnit {
@@ -21,6 +22,7 @@ impl fmt::Display for DistanceUnit {
             Self::Millimeters => write!(f, "mm"),
             Self::Centimeters => write!(f, "cm"),
             Self::Micrometers => write!(f, "µm"),
+            Self::Nanometers => write!(f, "nm"),
         }
     }
 }

@@ -205,6 +205,7 @@ pub fn unroll_internal_features(
                                 0,
                                 board_max_z_nm,
                                 space.voxel_size.z_nm,
+                                min_annular_ring_nm,
                             );
                             space.add_vias(vec![via]);
 
@@ -263,16 +264,39 @@ pub fn unroll_internal_features(
                             span: d.span,
                         });
 
-                        // v0.1.7: Unrolled pads should inherit the Z of their anchor
-                        if let Some(_anchor_bbox) = bbox_tracker.get(&anchor_name) {
-                            let surface_z_nm = stackup_manager.board_surface_z(mount_side);
-                            let copper_thickness = stackup_manager.outer_copper_thickness_nm(mount_side);
-
-                            let (p_min, p_max) = match mount_side {
-                                hwc_parser::MountingSide::Top => (surface_z_nm - copper_thickness, surface_z_nm),
-                                hwc_parser::MountingSide::Bottom => (surface_z_nm, surface_z_nm + copper_thickness),
-                                hwc_parser::MountingSide::Embedded => (surface_z_nm - copper_thickness / 2, surface_z_nm + copper_thickness / 2),
+                        // v0.1.7: Unrolled pads should inherit the physical layer of their anchor
+                        if let Some(anchor_bbox) = bbox_tracker.get(&anchor_name) {
+                            let anchor_z = anchor_bbox.min.z;
+                            
+                            // 1. Resolve Layer Context from Anchor Z (v0.1.7 Z-Axis Abstraction)
+                            // We use the stackup manager to find exactly which layer this Z belongs to.
+                            let layer_name = stackup_manager.get_layer_name_at_z(anchor_z);
+                            
+                            // 2. Resolve Thickness Dynamically
+                            // Priority: 1. Explicit property, 2. Profile Stackup, 3. Error (No Hardcoded Defaults)
+                            let copper_thickness = if let Some(t_expr) = &pour.thickness {
+                                crate::ir::conversions::evaluate_expression_to_nm(t_expr, symbol_table)
+                                    .map_err(|e| IrError::PlacementError(format!("Failed to evaluate pad thickness: {}", e)))?
+                            } else if let Some(ref name) = layer_name {
+                                stackup_manager.get_layer_thickness(name)
+                                    .ok_or_else(|| IrError::PlacementError(format!("Layer '{}' has no thickness in stackup", name)))?
+                            } else {
+                                // v0.1.7: NO HARDCODED FALLBACKS. 
+                                // If the anchor is not in a defined layer, it's a physical design error.
+                                return Err(IrError::PlacementError(format!(
+                                    "Component pad '{}' at Z={}nm is not within any defined stackup layer. \
+                                     Check your profile stackup or component elevation.",
+                                    pour.name, anchor_z
+                                )));
                             };
+
+                            // 3. Set physical vertical boundaries strictly relative to the anchor
+                            // This ensures the pad is perfectly flush with the routing layer.
+                            let p_min = anchor_z;
+                            let p_max = anchor_z + copper_thickness;
+
+                            eprintln!("[DEBUG unroll] Pad '{}' (anchor={}) layer={:?} anchor_z={}nm -> thickness={}nm", 
+                                pour.name, anchor_name, layer_name, anchor_z, copper_thickness);
 
                             unrolled_pour.elevation = hwc_parser::Elevation::Physical {
                                 start: hwc_parser::Expression::Measurement {
@@ -286,16 +310,21 @@ pub fn unroll_internal_features(
                                     span: pour.span,
                                 }),
                             };
+
+                            // Explicitly set thickness to propagate context to place_pour
+                            unrolled_pour.thickness = Some(hwc_parser::Expression::Measurement {
+                                value: copper_thickness as f64 / 1_000_000.0,
+                                unit: hwc_parser::Unit::Millimeter,
+                                span: pour.span,
+                            });
                         }
 
                         let mut world_origin = origin;
                         world_origin.xy = OriginXY::BL;
                         world_origin.z = OriginZ::Bottom;
 
-                        let temp_manager = StackupManager::new(None, symbol_table, space.voxel_size.z_nm, world_origin.z, 20_000)
-                            .expect("Failed to create temp StackupManager");
-                        
-                        place_pour(space, &unrolled_pour, world_origin, symbol_table, bbox_tracker, eval_context, collector, &temp_manager, profile)?;
+                        // Use real stackup_manager to preserve context
+                        place_pour(space, &unrolled_pour, world_origin, symbol_table, bbox_tracker, eval_context, collector, stackup_manager, profile)?;
                     }
                 }
             }

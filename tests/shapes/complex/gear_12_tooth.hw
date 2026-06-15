@@ -1,0 +1,96 @@
+import * from @std/primitives/units
+
+# 12-tooth gear/cog via shape (24 vertices)
+# Alternates between outer tooth tips and inner tooth roots going clockwise
+shape Gear12(width: Measurement):
+    points:
+        # Tooth 1 tip (0 deg)
+        - [x: 0,                y: -width / 2]
+        # Tooth 1 root
+        - [x: width / 7,        y: -width / 3]
+        # Tooth 2 tip (30 deg)
+        - [x: width / 4,        y: -width / 2.3]
+        # Tooth 2 root
+        - [x: width / 3.5,      y: -width / 3.2]
+        # Tooth 3 tip (60 deg)
+        - [x: width / 2.3,      y: -width / 4]
+        # Tooth 3 root
+        - [x: width / 3.2,      y: -width / 3.5]
+        # Tooth 4 tip (90 deg)
+        - [x: width / 2,        y: 0]
+        # Tooth 4 root
+        - [x: width / 3.2,      y: width / 3.5]
+        # Tooth 5 tip (120 deg)
+        - [x: width / 2.3,      y: width / 4]
+        # Tooth 5 root
+        - [x: width / 3.5,      y: width / 3.2]
+        # Tooth 6 tip (150 deg)
+        - [x: width / 4,        y: width / 2.3]
+        # Tooth 6 root
+        - [x: width / 7,        y: width / 3]
+        # Tooth 7 tip (180 deg)
+        - [x: 0,                y: width / 2]
+        # Tooth 7 root
+        - [x: -width / 7,       y: width / 3]
+        # Tooth 8 tip (210 deg)
+        - [x: -width / 4,       y: width / 2.3]
+        # Tooth 8 root
+        - [x: -width / 3.5,     y: width / 3.2]
+        # Tooth 9 tip (240 deg)
+        - [x: -width / 2.3,     y: width / 4]
+        # Tooth 9 root
+        - [x: -width / 3.2,     y: width / 3.5]
+        # Tooth 10 tip (270 deg)
+        - [x: -width / 2,       y: 0]
+        # Tooth 10 root
+        - [x: -width / 3.2,     y: -width / 3.5]
+        # Tooth 11 tip (300 deg)
+        - [x: -width / 2.3,     y: -width / 4]
+        # Tooth 11 root
+        - [x: -width / 3.5,     y: -width / 3.2]
+        # Tooth 12 tip (330 deg)
+        - [x: -width / 4,       y: -width / 2.3]
+        # Tooth 12 root
+        - [x: -width / 7,       y: -width / 3]
+
+material DepositedCopper:
+    category: conductor
+    process: deposited
+    properties:
+        resistivity: 1.68e-8
+
+profile GEAR_TEST:
+    description: "12-tooth gear via stress test"
+    trace:
+        min_width: 1um
+        min_spacing: 1um
+    via:
+        min_diameter: 100um
+        min_annular_ring: 10um
+        shape: Gear12
+    manufacturing:
+        grid_snapping: true
+        track_pitch: 10um
+        copper_thickness: 50um
+    clearance:
+        high_voltage: 50um
+        safety_factor: 1.5
+    layer:
+        min_thickness: 50um
+    stackup:
+        m1: [material: DepositedCopper, thickness: 50um]
+        d1: [material: SiO2,   thickness: 100um]
+        m2: [material: DepositedCopper, thickness: 50um]
+    routing:
+        m1: horizontal
+        m2: vertical
+
+space GearSpace:
+    profile: GEAR_TEST
+    dimensions: 2mm by 2mm by 500um
+    grid: 200 by 200 by 10
+    origin: bl by b
+
+    add contact(DepositedCopper) named Gear12Via at [x: 1mm, y: 1mm] spanning layer: m1 to m2:
+        diameter: 500um
+        shape: Gear12

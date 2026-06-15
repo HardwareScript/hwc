@@ -1,0 +1,65 @@
+import * from @std/primitives/units
+import HexagonalVia, DiamondVia from ../shapes/hexagonal
+
+profile HexProfile:
+    description: "ASIC profile using parametric hexagonal vias"
+    
+    trace:
+        min_width: 100nm
+        min_spacing: 100nm
+    
+    via:
+        min_diameter: 200nm
+        min_annular_ring: 50nm
+        shape: HexagonalVia
+    
+    manufacturing:
+        grid_snapping: true
+        track_pitch: 200nm
+        copper_thickness: 500nm
+    
+    clearance:
+        high_voltage: 500nm
+        safety_factor: 1.5
+    
+    layer:
+        min_thickness: 500nm
+    
+    stackup:
+        m1: [material: Copper, thickness: 500nm]
+        d1: [material: SiO2,   thickness: 1um]
+        m2: [material: Copper, thickness: 500nm]
+        d2: [material: SiO2,   thickness: 1um]
+        m3: [material: Copper, thickness: 500nm]
+    
+    routing:
+        m1: horizontal
+        m2: vertical
+        m3: horizontal
+
+component Pad:
+    pins: [p]
+    layout:
+        shape: Rectangle(1um, 1um, 500nm)
+        pin_positions:
+            p at [0.5um, 0.5um]
+        pad_shapes:
+            p: Rectangle(1um, 1um)
+
+space HexSpace:
+    profile: HexProfile
+    dimensions: 50um by 50um by 10um
+    grid: 50 by 50 by 10
+    origin: bl by b
+    
+    add Pad named P1 at [x: 5um, y: 5um, z: 0nm]
+    add Pad named P2 at [x: 25um, y: 25um, z: 3000nm]
+    
+    route P1.p to P2.p:
+        path:
+            - [x: 5um,  y: 5um,  z: 0nm]
+            - [x: 15um, y: 5um,  z: 0nm]
+            - [x: 15um, y: 5um,  z: 1500nm]
+            - [x: 15um, y: 25um, z: 1500nm]
+            - [x: 15um, y: 25um, z: 3000nm]
+            - [x: 25um, y: 25um, z: 3000nm]

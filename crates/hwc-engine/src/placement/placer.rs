@@ -13,7 +13,8 @@ use super::component_definition::{
 use super::error::PlacementError;
 use super::geometry::{calculate_global_bounding_box, transform_pin_position};
 use super::substrate::{
-    place_cylinder_substrate, place_substrate, place_substrate_layers, place_substrate_with_cutouts,
+    place_cylinder_substrate, place_hexagon_substrate, place_square_substrate, place_substrate, place_substrate_layers, place_substrate_with_cutouts,
+    place_polygon_substrate,
 };
 use super::types::{DiagnosticReporter, PlacementParams, SymbolTableTrait};
 use crate::geometry::BoundingBox;
@@ -77,6 +78,45 @@ impl ComponentPlacer {
         diameter: i64,
     ) -> Result<(), PlacementError> {
         place_cylinder_substrate(grid, material_id, start, end, net_id, diameter)
+    }
+
+    /// Place a square via substrate layer (v0.1.7).
+    pub fn place_square_substrate(
+        &self,
+        grid: &mut VoxelGrid,
+        material_id: MaterialId,
+        start: Point3D,
+        end: Point3D,
+        net_id: u32,
+        size: i64,
+    ) -> Result<(), PlacementError> {
+        place_square_substrate(grid, material_id, start, end, net_id, size)
+    }
+
+    /// Place a hexagonal via substrate layer (v0.2.0).
+    pub fn place_hexagon_substrate(
+        &self,
+        grid: &mut VoxelGrid,
+        material_id: MaterialId,
+        start: Point3D,
+        end: Point3D,
+        net_id: u32,
+        size: i64,
+    ) -> Result<(), PlacementError> {
+        place_hexagon_substrate(grid, material_id, start, end, net_id, size)
+    }
+
+    /// Place a polygon-based via substrate layer (v0.2.0).
+    pub fn place_polygon_substrate(
+        &self,
+        grid: &mut VoxelGrid,
+        material_id: MaterialId,
+        start: Point3D,
+        end: Point3D,
+        net_id: u32,
+        contour: &clipper2_rust::Path64,
+    ) -> Result<(), PlacementError> {
+        place_polygon_substrate(grid, material_id, start, end, net_id, contour)
     }
 
     /// Place a substrate layer with cutouts (mounting holes, edge cuts, etc.).

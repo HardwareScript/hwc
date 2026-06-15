@@ -30,6 +30,7 @@ pub fn evaluate_coordinate_to_nm(
                     let pm = (value * 1_000_000.0).round() as i64;
                     pm / 1000
                 }
+                Unit::Nanometer => *value as i64,
                 Unit::Custom(symbol) => {
                     if let Some(unit_def) = symbol_table.resolve_unit_symbol(symbol) {
                         let multiplier = unit_def.multiplier.unwrap_or(1.0);

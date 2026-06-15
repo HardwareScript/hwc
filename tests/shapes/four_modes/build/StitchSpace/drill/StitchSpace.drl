@@ -1,0 +1,16 @@
+M48
+; DRILL file {StitchSpace} date 2026-06-15
+; v0.1.7 physical Z (mm) recorded per tool pass where applicable
+; FORMAT={-:-/ absolute / inch / decimal}
+FMAT,2
+INCH
+T1C0.0008
+%
+T1
+X0.0394Y0.0118
+X0.0866Y0.0118
+X0.1339Y0.0118
+X0.1811Y0.0118
+X0.2283Y0.0118
+X0.2992Y0.0118
+M30

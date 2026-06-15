@@ -76,13 +76,14 @@ impl StackupManager {
             }
 
             // Step 2: Assign absolute Z positions
-            // Rule: The first layer in the stackup (top of the file) is the PHYSICAL TOP.
+            // v0.1.7: The first layer in the stackup block is the PHYSICAL BOTTOM (Z=0).
+            // This follows the "Foundation-First" principle for both ASIC and PCB.
             match origin_z {
                 hwc_parser::OriginZ::Bottom => {
                      // Z=0 is the bottom of the board.
-                     // The last layer in the file is the physical bottom.
+                     // The first layer in the file is the physical bottom.
                      let mut current_z = 0;
-                     for (name, thickness_nm) in resolved.into_iter().rev() {
+                     for (name, thickness_nm) in resolved {
                          layer_start_z_nm.insert(name.clone(), current_z);
                          layer_thickness_nm.insert(name.clone(), thickness_nm);
                          ordered_layers.push(name.clone());
@@ -92,20 +93,17 @@ impl StackupManager {
                  }
                  hwc_parser::OriginZ::Top => {
                      // Z=0 is the top of the board.
-                     // The first layer in the file is the physical top.
-                     // To maintain Bottom-Up indexing in ordered_layers, we reverse the top-down list.
-                     let mut current_z = 0;
-                     let mut top_down_positions = Vec::new();
+                     // The first layer in the file is the physical bottom, so it's at Z = -total_thickness.
+                     // But for Top-origin, we usually want Z=0 to be the top copper.
+                     // So the first layer (bottom) starts at -total_height.
+                     let total_height: i64 = resolved.iter().map(|(_, t)| t).sum();
+                     let mut current_z = -total_height;
                      for (name, thickness_nm) in resolved {
-                         top_down_positions.push((name.clone(), current_z, thickness_nm));
-                         current_z += thickness_nm;
-                     }
-
-                     for (name, start_z, thickness) in top_down_positions.into_iter().rev() {
-                        layer_start_z_nm.insert(name.clone(), start_z);
-                        layer_thickness_nm.insert(name.clone(), thickness);
+                        layer_start_z_nm.insert(name.clone(), current_z);
+                        layer_thickness_nm.insert(name.clone(), thickness_nm);
                         ordered_layers.push(name.clone());
-                        eprintln!("[DEBUG stackup] Top-Down Mapping: {} -> z: {} nm (t: {} nm)", name, start_z, thickness);
+                        eprintln!("[DEBUG stackup] Top-Origin Mapping (First=Bottom): {} -> z: {} nm (t: {} nm)", name, current_z, thickness_nm);
+                        current_z += thickness_nm;
                      }
                  }
             }
@@ -149,18 +147,33 @@ impl StackupManager {
     }
 
     /// Get the thickness of the outermost copper layer on the specified side
-    pub fn outer_copper_thickness_nm(&self, side: MountingSide) -> i64 {
+    pub fn outer_copper_thickness_nm(&self, side: hwc_parser::MountingSide) -> i64 {
         match side {
-            MountingSide::Top => self.get_layer_thickness("top").or_else(|| self.get_layer_thickness("L1")).unwrap_or(35_000),
-            MountingSide::Bottom => {
-                // Bottom layer is the first layer in ordered_layers (bottom-up)
-                if let Some(first) = self.ordered_layers.first() {
-                    self.get_layer_thickness(first).unwrap_or(35_000)
-                } else {
-                    35_000
+            hwc_parser::MountingSide::Top => {
+                // Search for the first copper layer from the top
+                for name in self.ordered_layers.iter().rev() {
+                    if name.to_lowercase().contains('m') || name.to_lowercase().contains("copper") {
+                        if let Some(t) = self.get_layer_thickness(name) {
+                            return t;
+                        }
+                    }
                 }
+                // v0.1.7: No more hardcoded 35um. If no layer is found, return 0.
+                // Callers must handle the missing layer error.
+                self.get_layer_thickness("top").or_else(|| self.get_layer_thickness("L1")).unwrap_or(0)
             }
-            MountingSide::Embedded => 35_000,
+            hwc_parser::MountingSide::Bottom => {
+                // Search for the first copper layer from the bottom
+                for name in self.ordered_layers.iter() {
+                    if name.to_lowercase().contains('m') || name.to_lowercase().contains("copper") {
+                        if let Some(t) = self.get_layer_thickness(name) {
+                            return t;
+                        }
+                    }
+                }
+                self.get_layer_thickness("bottom").or_else(|| self.get_layer_thickness("L2")).unwrap_or(0)
+            }
+            hwc_parser::MountingSide::Embedded => 0,
         }
     }
 
@@ -272,6 +285,11 @@ impl StackupManager {
             }
         }
         None
+    }
+
+    /// Returns a reference to the ordered layer names (bottom-to-top).
+    pub fn ordered_layers(&self) -> &[String] {
+        &self.ordered_layers
     }
 
     /// Returns the absolute Z starting position (bottom) in nm for a layer index.

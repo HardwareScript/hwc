@@ -20,6 +20,7 @@ mod module;
 mod pattern;
 mod profile;
 mod signal_group;
+mod shape;
 mod space;
 mod test;
 mod unit;
@@ -139,6 +140,10 @@ impl super::Parser {
                 self.parse_signal_group_definition(collector)
                     .map(Definition::SignalGroup)
             }
+            Some(Token::Shape) => {
+                // // eprintln!("[DEBUG] Dispatching to parse_shape");
+                self.parse_shape(collector).map(Definition::Shape)
+            }
             Some(Token::Logic) => {
                 // // eprintln!("[DEBUG] Dispatching to parse_logic_definition");
                 self.advance(); // consume 'logic' token
@@ -153,7 +158,7 @@ impl super::Parser {
             _ => {
                 // // eprintln!("[DEBUG] Unexpected token in parse_definition");
                 collector.report(self.error(
-                    "Expected definition type (material.into(), profile, component, module, mechanical, interface, test, unit, device, const, signal_group, logic, pattern, strategy, or space)",
+                    "Expected definition type (material, profile, component, module, mechanical, interface, test, unit, device, const, signal_group, shape, logic, pattern, strategy, or space)",
                 ));
                 None
             }
@@ -268,6 +273,20 @@ impl super::Parser {
 
                     Ok(ModulePath::Quoted(path))
                 }
+                Token::Range => {
+                    // Parent directory path: ../shapes/hexagonal
+                    let mut path_parts = Vec::new();
+                    path_parts.push("..".to_string());
+                    self.advance(); // consume '..'
+
+                    // Continue collecting path components after slashes
+                    while self.check(&Token::Slash) {
+                        self.advance(); // consume '/'
+                        path_parts.push(self.expect_identifier_or_keyword_string()?);
+                    }
+
+                    Ok(ModulePath::Relative(path_parts.join("/")))
+                }
                 Token::Identifier(_)
                 | Token::Logic
                 | Token::Test
@@ -281,6 +300,7 @@ impl super::Parser {
                 | Token::Unit
                 | Token::Device
                 | Token::SignalGroup
+                | Token::Shape
                 | Token::Mechanical
                 | Token::Interface => {
                     // Could be:
@@ -308,7 +328,7 @@ impl super::Parser {
                 }
                 _ => Err(ParseError::UnexpectedToken {
                     span: span_to_source_span(&current.span),
-                    expected: "import path (@org/package, logic/adders, or \"quoted path\")"
+                    expected: "import path (@org/package, logic/adders, ../parent, or \"quoted path\")"
                         .to_string()
                         .into(),
                     found: format!("{}", current.token).into(),

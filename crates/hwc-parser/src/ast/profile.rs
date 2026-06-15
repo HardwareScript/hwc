@@ -60,6 +60,35 @@ pub struct ProfileDefinition {
     pub span: Span,
 }
 
+impl ProfileDefinition {
+    /// Returns the thickness expression for a named layer in the stackup.
+    /// v0.1.7: Used by the unroller to resolve dynamic pad thicknesses.
+    pub fn get_layer_thickness(&self, layer_name: &str) -> Option<&Expression> {
+        self.stackup.as_ref().and_then(|s| {
+            s.layers
+                .iter()
+                .find(|l| l.name.name == layer_name)
+                .map(|l| &l.thickness)
+        })
+    }
+
+    /// Returns true if this profile is an ASIC (Manhattan) profile.
+    ///
+    /// ASIC profiles use Manhattan (90°) routing constraints and require
+    /// layer-by-layer via tower unrolling. Detection is based on:
+    /// 1. Profile name containing "asic" (case-insensitive)
+    /// 2. Presence of a `routing:` block with layer direction preferences
+    /// 3. Grid snapping enabled in manufacturing constraints
+    pub fn is_asic(&self) -> bool {
+        self.name.name.to_lowercase().contains("asic")
+            || self.routing.is_some()
+            || self
+                .manufacturing
+                .as_ref()
+                .map_or(false, |m| m.grid_snapping.unwrap_or(false))
+    }
+}
+
 /// Bridge rule: maps a material transition to a specific bridge material.
 ///
 /// Syntax in profile: `bridge Silicon to Copper: Titanium_Silicide`
@@ -160,6 +189,8 @@ pub struct ViaConstraints {
     pub min_spacing: Option<Measurement>,
     pub max_aspect_ratio: Option<f64>,
     pub default_via_fill: Option<Identifier>,
+    /// Via shape: "square" or "cylinder"
+    pub shape: Option<Identifier>,
     // v0.1.7 ASIC Extensions
     /// Per-layer enclosure (annular ring) constraints.
     /// Maps layer name to minimum enclosure distance.

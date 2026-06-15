@@ -103,6 +103,9 @@ pub struct Via {
     /// Via type classification (through-hole, blind, buried, microvia)
     pub via_type: ViaType,
 
+    /// Annular ring size in nanometers (copper pad around drill hole)
+    pub annular_ring_nm: i64,
+
     /// Generic via properties (e.g., thermal_relief)
     pub properties: FxHashMap<String, Expression>,
 }
@@ -118,6 +121,7 @@ impl Via {
         board_min_z_nm: i64,
         board_max_z_nm: i64,
         voxel_z_nm: i64,
+        annular_ring_nm: i64,
     ) -> Self {
         let via_type = Self::classify_via_type(
             from_z_nm,
@@ -135,6 +139,7 @@ impl Via {
             diameter_nm,
             net_id,
             via_type,
+            annular_ring_nm,
             properties: FxHashMap::default(),
         }
     }
@@ -147,6 +152,7 @@ impl Via {
         diameter_nm: i64,
         net_id: NetId,
         via_type: ViaType,
+        annular_ring_nm: i64,
     ) -> Self {
         Self {
             position,
@@ -155,6 +161,7 @@ impl Via {
             diameter_nm,
             net_id,
             via_type,
+            annular_ring_nm,
             properties: FxHashMap::default(),
         }
     }

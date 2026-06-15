@@ -119,7 +119,7 @@ pub fn parse_generic_measurement(lex: &mut logos::Lexer<Token>) -> Option<Measur
             "mm" => Unit::Distance(DistanceUnit::Millimeters),
             "cm" => Unit::Distance(DistanceUnit::Centimeters),
             "µm" | "um" => Unit::Distance(DistanceUnit::Micrometers),
-            "nm" => Unit::Custom("nm".into()), // Nanometers via stdlib (too small for PCB, but common in semiconductors)
+            "nm" => Unit::Distance(DistanceUnit::Nanometers),
 
             // Voltage (needed for safety clearances)
             "kV" => Unit::Voltage(VoltageUnit::Kilovolts),

@@ -1,0 +1,76 @@
+import * from @std/primitives/units
+
+profile ASIC_TEST:
+    description: "ASIC test profile for via unrolling"
+    
+    trace:
+        min_width: 100nm
+        min_spacing: 100nm
+    
+    via:
+        min_diameter: 200nm
+        min_annular_ring: 50nm
+        shape: square  # ASIC default: square (matches GDSII/mask convention)
+    
+    manufacturing:
+        grid_snapping: true
+        track_pitch: 200nm
+        copper_thickness: 500nm
+    
+    clearance:
+        high_voltage: 500nm
+        safety_factor: 1.5
+    
+    layer:
+        min_thickness: 500nm
+    
+    stackup:
+        m1: [material: Copper, thickness: 500nm]
+        d1: [material: SiO2,   thickness: 1um]
+        m2: [material: Copper, thickness: 500nm]
+        d2: [material: SiO2,   thickness: 1um]
+        m3: [material: Copper, thickness: 500nm]
+        d3: [material: SiO2,   thickness: 1um]
+        m4: [material: Copper, thickness: 500nm]
+        si: [material: Silicon, thickness: 10um]
+
+    routing:
+        m1: horizontal
+        m2: vertical
+        m3: horizontal
+        m4: vertical
+
+component Pad:
+    pins: [p]
+    layout:
+        shape: Rectangle(1um, 1um, 500nm)
+        pin_positions:
+            p at [0.5um, 0.5um]
+        pad_shapes:
+            p: Rectangle(1um, 1um)
+
+space ASIC_Space:
+    profile: ASIC_TEST
+    dimensions: 100um by 100um by 20um
+    grid: 100 by 100 by 20
+    origin: bl by b
+    
+    # Place two pads on different layers and different XY
+    # M1 is at Z=0 (bottom of m1)
+    # M4 is at Z=4.5um (bottom of m4)
+    add Pad named P1 at [x: 10um, y: 10um, z: 0nm]
+    add Pad named P2 at [x: 50um, y: 50um, z: 4500nm]
+    
+    # Connect them with a multi-layer path to force via unrolling
+    # M1 -> M2 -> M3 -> M4
+    route P1.p to P2.p:
+        path:
+            - [x: 10um, y: 10um, z: 0nm]     # P1 on M1
+            - [x: 20um, y: 10um, z: 0nm]     # Horizontal on M1
+            - [x: 20um, y: 10um, z: 1500nm]  # Via M1 -> M2
+            - [x: 20um, y: 30um, z: 1500nm]  # Vertical on M2
+            - [x: 20um, y: 30um, z: 3000nm]  # Via M2 -> M3
+            - [x: 40um, y: 30um, z: 3000nm]  # Horizontal on M3
+            - [x: 40um, y: 30um, z: 4500nm]  # Via M3 -> M4
+            - [x: 40um, y: 50um, z: 4500nm]  # Vertical on M4
+            - [x: 50um, y: 50um, z: 4500nm]  # P2 on M4

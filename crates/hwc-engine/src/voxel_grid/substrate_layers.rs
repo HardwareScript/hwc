@@ -11,6 +11,7 @@
 
 use super::chunk::{MaterialId, NetId};
 use crate::geometry::{BoundingBox, Point3D};
+use clipper2_rust::{Path64, Point64, Paths64};
 use compact_str::CompactString;
 use rustc_hash::FxHashMap;
 use smallvec::SmallVec;
@@ -75,7 +76,7 @@ pub enum CapType {
 }
 
 /// Physical shape of the substrate layer (v0.1.6)
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum SubstrateLayerShape {
     /// Axis-aligned bounding box (default)
     Rect,
@@ -86,10 +87,13 @@ pub enum SubstrateLayerShape {
         radius: i64,
     },
 
-    /// Cylindrical shape (vias, pillars)
-    Cylinder {
-        diameter: i64,
-        /// Number of segments for 3D tessellation
+    /// Generic polygon-based shape (v0.2.0).
+    /// Can represent any 2D cross-section: square, circle, hexagon, star, etc.
+    /// The outer_contour defines the boundary; holes are subtracted from it.
+    Polygon {
+        outer_contour: Path64,
+        holes: Paths64,
+        /// Tessellation segments for 3D rendering (circles need more, squares need 4)
         segments: u32,
     },
 
@@ -202,6 +206,77 @@ pub struct SubstrateLayer {
     pub koz_radius_nm: i64,
 }
 
+impl SubstrateLayerShape {
+    /// Pre-baked generator for circular via cross-section
+    pub fn cylinder(diameter_nm: i64, segments: u32) -> Self {
+        let radius = diameter_nm / 2;
+        let mut contour = Path64::new();
+        for i in 0..segments {
+            let angle = (i as f64 / segments as f64) * 2.0 * std::f64::consts::PI;
+            let x = (radius as f64 * angle.cos()) as i64;
+            let y = (radius as f64 * angle.sin()) as i64;
+            contour.push(Point64::new(x, y));
+        }
+        SubstrateLayerShape::Polygon {
+            outer_contour: contour,
+            holes: Paths64::new(),
+            segments,
+        }
+    }
+
+    /// Pre-baked generator for square via cross-section
+    pub fn square(size_nm: i64) -> Self {
+        let half = size_nm / 2;
+        let mut contour = Path64::new();
+        contour.push(Point64::new(-half, -half));
+        contour.push(Point64::new(half, -half));
+        contour.push(Point64::new(half, half));
+        contour.push(Point64::new(-half, half));
+        SubstrateLayerShape::Polygon {
+            outer_contour: contour,
+            holes: Paths64::new(),
+            segments: 4,
+        }
+    }
+
+    /// Pre-baked generator for rectangular via cross-section (different width/height)
+    pub fn rect(width_nm: i64, height_nm: i64) -> Self {
+        let half_w = width_nm / 2;
+        let half_h = height_nm / 2;
+        let mut contour = Path64::new();
+        contour.push(Point64::new(-half_w, -half_h));
+        contour.push(Point64::new(half_w, -half_h));
+        contour.push(Point64::new(half_w, half_h));
+        contour.push(Point64::new(-half_w, half_h));
+        SubstrateLayerShape::Polygon {
+            outer_contour: contour,
+            holes: Paths64::new(),
+            segments: 4,
+        }
+    }
+
+    /// Pre-baked generator for hexagonal via cross-section
+    pub fn hexagon(size_nm: i64) -> Self {
+        let half = size_nm / 2;
+        let quarter = size_nm / 4;
+        // Regular hexagon: 6 vertices
+        // Width = size_nm, height = size_nm * sin(60°) ≈ size_nm * 0.866
+        let height_quarter = (size_nm as f64 * 0.433) as i64; // sin(60°) * 0.5 * size
+        let mut contour = Path64::new();
+        contour.push(Point64::new(-half, 0));
+        contour.push(Point64::new(-quarter, height_quarter));
+        contour.push(Point64::new(quarter, height_quarter));
+        contour.push(Point64::new(half, 0));
+        contour.push(Point64::new(quarter, -height_quarter));
+        contour.push(Point64::new(-quarter, -height_quarter));
+        SubstrateLayerShape::Polygon {
+            outer_contour: contour,
+            holes: Paths64::new(),
+            segments: 6,
+        }
+    }
+}
+
 impl SubstrateLayer {
     /// Create a new substrate layer without cutouts.
     pub fn new(
@@ -234,8 +309,8 @@ impl SubstrateLayer {
             net,
             bbox,
             cutouts: SmallVec::new(),
-            layer_type: SubstrateLayerType::Pour,
-            shape: SubstrateLayerShape::Cylinder { diameter, segments },
+            layer_type: SubstrateLayerType::Contact,
+            shape: SubstrateLayerShape::cylinder(diameter, segments),
             koz_radius_nm: 0,
         }
     }
@@ -254,6 +329,64 @@ impl SubstrateLayer {
             cutouts: SmallVec::new(),
             layer_type: SubstrateLayerType::Pour,
             shape: SubstrateLayerShape::Circle { radius },
+            koz_radius_nm: 0,
+        }
+    }
+
+    /// Create a new square via substrate layer.
+    pub fn new_square_via(
+        material: MaterialId,
+        net: NetId,
+        bbox: BoundingBox,
+        size: i64,
+    ) -> Self {
+        Self {
+            material,
+            net,
+            bbox,
+            cutouts: SmallVec::new(),
+            layer_type: SubstrateLayerType::Contact,
+            shape: SubstrateLayerShape::square(size),
+            koz_radius_nm: 0,
+        }
+    }
+
+    /// Create a new hexagonal via substrate layer.
+    pub fn new_hexagon_via(
+        material: MaterialId,
+        net: NetId,
+        bbox: BoundingBox,
+        size: i64,
+    ) -> Self {
+        Self {
+            material,
+            net,
+            bbox,
+            cutouts: SmallVec::new(),
+            layer_type: SubstrateLayerType::Contact,
+            shape: SubstrateLayerShape::hexagon(size),
+            koz_radius_nm: 0,
+        }
+    }
+
+    /// Create a new polygon-based via substrate layer from an arbitrary contour.
+    pub fn new_polygon_via(
+        material: MaterialId,
+        net: NetId,
+        bbox: BoundingBox,
+        contour: clipper2_rust::Path64,
+    ) -> Self {
+        Self {
+            material,
+            net,
+            bbox,
+            cutouts: SmallVec::new(),
+            layer_type: SubstrateLayerType::Contact,
+            shape: SubstrateLayerShape::Polygon {
+                outer_contour: contour,
+                holes: clipper2_rust::Paths64::new(),
+                segments: 16,
+            },
             koz_radius_nm: 0,
         }
     }
@@ -324,7 +457,7 @@ impl SubstrateLayer {
     pub fn add_cylinder_cutout(&mut self, cutout_bbox: BoundingBox, diameter: i64) {
         self.cutouts.push(Cutout {
             bbox: cutout_bbox,
-            shape: SubstrateLayerShape::Cylinder { diameter, segments: 16 },
+            shape: SubstrateLayerShape::cylinder(diameter, 16),
         });
     }
 
@@ -352,15 +485,25 @@ impl SubstrateLayer {
         }
 
         // v0.1.7: For non-rectangular layers, check the primary shape first
-        match self.shape {
-            SubstrateLayerShape::Cylinder { diameter, .. } => {
+        match &self.shape {
+            SubstrateLayerShape::Polygon { outer_contour, holes, .. } => {
+                // Point-in-polygon test using ray casting algorithm
+                // The contour is in shape-local coords (centered at 0,0);
+                // the bbox center maps to (0,0) in shape space.
                 let center_x = (self.bbox.min.x + self.bbox.max.x) / 2;
                 let center_y = (self.bbox.min.y + self.bbox.max.y) / 2;
-                let dx = x - center_x;
-                let dy = y - center_y;
-                let radius = diameter / 2;
-                if dx * dx + dy * dy > radius * radius {
-                    return false; // Outside the primary cylinder
+                let px = x - center_x;
+                let py = y - center_y;
+
+                if !point_in_polygon(px, py, outer_contour) {
+                    return false;
+                }
+
+                // Check that the point is NOT inside any hole
+                for hole in holes.iter() {
+                    if point_in_polygon(px, py, hole) {
+                        return false;
+                    }
                 }
             }
             SubstrateLayerShape::Tube {
@@ -378,12 +521,12 @@ impl SubstrateLayer {
                 let dy = y - center_y;
                 let dist_sq = dx * dx + dy * dy;
 
-                let top_outer_radius = outer_diameter as i64 / 2;
-                let top_inner_radius = inner_diameter as i64 / 2;
-                let pad_radius = pad_diameter as i64 / 2;
+                let top_outer_radius = *outer_diameter as i64 / 2;
+                let top_inner_radius = *inner_diameter as i64 / 2;
+                let pad_radius = *pad_diameter as i64 / 2;
 
                 // Tapered logic (v0.1.7)
-                let bottom_outer_radius = bottom_outer_diameter.unwrap_or(outer_diameter) as i64 / 2;
+                let bottom_outer_radius = (*bottom_outer_diameter).unwrap_or(*outer_diameter) as i64 / 2;
                 let plating_thickness = top_outer_radius - top_inner_radius;
 
                 let height_nm = self.bbox.max.z - self.bbox.min.z;
@@ -479,15 +622,26 @@ impl SubstrateLayer {
                 && z <= bbox.max.z
             {
                 // v0.1.7: For cylindrical cutouts, perform distance check
-                match cutout.shape {
-                    SubstrateLayerShape::Cylinder { diameter, .. } => {
+                match &cutout.shape {
+                    SubstrateLayerShape::Polygon { outer_contour, .. } => {
                         let center_x = (bbox.min.x + bbox.max.x) / 2;
                         let center_y = (bbox.min.y + bbox.max.y) / 2;
-                        let dx = x - center_x;
-                        let dy = y - center_y;
-                        let radius = diameter / 2;
-                        if dx * dx + dy * dy <= radius * radius {
-                            return false; // Point is in the circular cutout
+                        let px = x - center_x;
+                        let py = y - center_y;
+
+                        let mut min_x = i64::MAX;
+                        let mut max_x = i64::MIN;
+                        let mut min_y = i64::MAX;
+                        let mut max_y = i64::MIN;
+                        for p in outer_contour.iter() {
+                            if p.x < min_x { min_x = p.x; }
+                            if p.x > max_x { max_x = p.x; }
+                            if p.y < min_y { min_y = p.y; }
+                            if p.y > max_y { max_y = p.y; }
+                        }
+
+                        if px >= min_x && px <= max_x && py >= min_y && py <= max_y {
+                            return false;
                         }
                     }
                     SubstrateLayerShape::Tube {
@@ -499,8 +653,8 @@ impl SubstrateLayer {
                         let center_y = (bbox.min.y + bbox.max.y) / 2;
                         let dx = x - center_x;
                         let dy = y - center_y;
-                        let outer_radius = outer_diameter as i64 / 2;
-                        let inner_radius = inner_diameter as i64 / 2;
+                        let outer_radius = *outer_diameter as i64 / 2;
+                        let inner_radius = *inner_diameter as i64 / 2;
                         let dist_sq = dx * dx + dy * dy;
                         if dist_sq <= outer_radius * outer_radius
                             && dist_sq >= inner_radius * inner_radius
@@ -590,16 +744,27 @@ impl SubstrateLayer {
                 for x in cutout_min_x..cutout_max_x {
                     if y * width + x < grid.len() {
                         // v0.1.7: For cylindrical cutouts, perform distance check
-                        match cutout.shape {
-                            SubstrateLayerShape::Cylinder { diameter, .. } => {
+                        match &cutout.shape {
+                            SubstrateLayerShape::Polygon { outer_contour, .. } => {
                                 let x_nm = self.bbox.min.x + (x as i64 * voxel_size_nm);
                                 let y_nm = self.bbox.min.y + (y as i64 * voxel_size_nm);
                                 let center_x = (cutout.bbox.min.x + cutout.bbox.max.x) / 2;
                                 let center_y = (cutout.bbox.min.y + cutout.bbox.max.y) / 2;
-                                let dx = x_nm - center_x;
-                                let dy = y_nm - center_y;
-                                let radius = diameter / 2;
-                                if dx * dx + dy * dy <= radius * radius {
+                                let px = x_nm - center_x;
+                                let py = y_nm - center_y;
+
+                                let mut min_x = i64::MAX;
+                                let mut max_x = i64::MIN;
+                                let mut min_y = i64::MAX;
+                                let mut max_y = i64::MIN;
+                                for p in outer_contour.iter() {
+                                    if p.x < min_x { min_x = p.x; }
+                                    if p.x > max_x { max_x = p.x; }
+                                    if p.y < min_y { min_y = p.y; }
+                                    if p.y > max_y { max_y = p.y; }
+                                }
+
+                                if px >= min_x && px <= max_x && py >= min_y && py <= max_y {
                                     grid[y * width + x] = false;
                                 }
                             }
@@ -614,8 +779,8 @@ impl SubstrateLayer {
                                 let center_y = (cutout.bbox.min.y + cutout.bbox.max.y) / 2;
                                 let dx = x_nm - center_x;
                                 let dy = y_nm - center_y;
-                                let outer_radius = outer_diameter as i64 / 2;
-                                let inner_radius = inner_diameter as i64 / 2;
+                                let outer_radius = *outer_diameter as i64 / 2;
+                                let inner_radius = *inner_diameter as i64 / 2;
                                 let dist_sq = dx * dx + dy * dy;
                                 if dist_sq <= outer_radius * outer_radius
                                     && dist_sq >= inner_radius * inner_radius
@@ -896,6 +1061,32 @@ impl ComponentMetadata {
 
         false // Z is outside all blocked ranges — pour/trace can pass
     }
+}
+
+/// Ray-casting point-in-polygon test.
+///
+/// Returns `true` if `(px, py)` is inside the polygon defined by `contour`.
+/// Uses the even-odd rule with a horizontal ray cast to the right.
+fn point_in_polygon(px: i64, py: i64, contour: &clipper2_rust::Path64) -> bool {
+    let n = contour.len();
+    if n < 3 {
+        return false;
+    }
+    let mut inside = false;
+    let mut j = n - 1;
+    for i in 0..n {
+        let yi = contour[i].y;
+        let yj = contour[j].y;
+        let xi = contour[i].x;
+        let xj = contour[j].x;
+
+        // Check if the ray from (px, py) going right crosses this edge
+        if ((yi > py) != (yj > py)) && (px < (xj - xi) * (py - yi) / (yj - yi) + xi) {
+            inside = !inside;
+        }
+        j = i;
+    }
+    inside
 }
 
 /// Rotation for component placement

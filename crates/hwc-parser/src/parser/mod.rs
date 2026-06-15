@@ -113,6 +113,7 @@ impl Parser {
                 || self.check(&crate::lexer::Token::Device)
                 || self.check(&crate::lexer::Token::Const)
                 || self.check(&crate::lexer::Token::SignalGroup)
+                || self.check(&crate::lexer::Token::Shape)
                 || self.check(&crate::lexer::Token::Logic)
             {
                 // eprintln!("[DEBUG] Parsing definition: {:?}", self.current().map(|s| &s.token));
@@ -244,6 +245,7 @@ impl Parser {
                 | crate::lexer::Token::Device
                 | crate::lexer::Token::Const
                 | crate::lexer::Token::SignalGroup
+                | crate::lexer::Token::Shape
                 | crate::lexer::Token::Logic
                 | crate::lexer::Token::Enum
                 | crate::lexer::Token::Struct

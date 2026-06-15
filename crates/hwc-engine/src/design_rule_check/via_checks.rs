@@ -83,22 +83,54 @@ fn calculate_annular_ring_from_substrate(
         let pad_min_y = layer.bbox.min.y;
         let pad_max_y = layer.bbox.max.y;
 
-        let dist_to_edge = match layer.shape {
-            crate::voxel_grid::SubstrateLayerShape::Cylinder { diameter, .. } => {
+        let dist_to_edge = match &layer.shape {
+            crate::voxel_grid::SubstrateLayerShape::Polygon { outer_contour, .. } => {
+                // Compute bounding box of the polygon contour for conservative distance
+                let mut poly_min_x = i64::MAX;
+                let mut poly_max_x = i64::MIN;
+                let mut poly_min_y = i64::MAX;
+                let mut poly_max_y = i64::MIN;
+                for p in outer_contour.iter() {
+                    if p.x < poly_min_x { poly_min_x = p.x; }
+                    if p.x > poly_max_x { poly_max_x = p.x; }
+                    if p.y < poly_min_y { poly_min_y = p.y; }
+                    if p.y > poly_max_y { poly_max_y = p.y; }
+                }
                 let pad_center_x = (pad_min_x + pad_max_x) / 2;
                 let pad_center_y = (pad_min_y + pad_max_y) / 2;
-                let pad_radius = diameter / 2;
+                let half_w = (poly_max_x - poly_min_x) / 2;
+                let half_h = (poly_max_y - poly_min_y) / 2;
 
-                let dx = (via_center_x - pad_center_x) as f64;
-                let dy = (via_center_y - pad_center_y) as f64;
-                let center_dist = (dx * dx + dy * dy).sqrt() as i64;
+                let dx = if via_center_x < pad_center_x - half_w {
+                    (pad_center_x - half_w) - via_center_x
+                } else if via_center_x > pad_center_x + half_w {
+                    via_center_x - (pad_center_x + half_w)
+                } else {
+                    0
+                };
 
-                pad_radius - center_dist
+                let dy = if via_center_y < pad_center_y - half_h {
+                    (pad_center_y - half_h) - via_center_y
+                } else if via_center_y > pad_center_y + half_h {
+                    via_center_y - (pad_center_y + half_h)
+                } else {
+                    0
+                };
+
+                if dx == 0 && dy == 0 {
+                    let dist_left = via_center_x - (pad_center_x - half_w);
+                    let dist_right = (pad_center_x + half_w) - via_center_x;
+                    let dist_bottom = via_center_y - (pad_center_y - half_h);
+                    let dist_top = (pad_center_y + half_h) - via_center_y;
+                    dist_left.min(dist_right).min(dist_bottom).min(dist_top)
+                } else {
+                    -1
+                }
             }
             crate::voxel_grid::SubstrateLayerShape::Tube { pad_diameter, .. } => {
                 let pad_center_x = (pad_min_x + pad_max_x) / 2;
                 let pad_center_y = (pad_min_y + pad_max_y) / 2;
-                let pad_radius = pad_diameter as i64 / 2;
+                let pad_radius = *pad_diameter as i64 / 2;
 
                 let dx = (via_center_x - pad_center_x) as f64;
                 let dy = (via_center_y - pad_center_y) as f64;

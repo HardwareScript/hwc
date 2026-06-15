@@ -1,0 +1,98 @@
+import * from @std/primitives/units
+
+# Koch snowflake-inspired shape (36 vertices)
+# Each side of a triangle has an outward bump, creating a fractal-like pattern
+# Tests nested expression evaluation and complex polygon winding
+shape KochSnowflake(width: Measurement):
+    points:
+        # Main triangle vertex 1 (top)
+        - [x: 0,                y: -width / 2]
+        # Bump on edge 1 (going right-down)
+        - [x: width / 12,       y: -width / 3]
+        # Inner notch on edge 1
+        - [x: width / 6,        y: -width / 3.5]
+        # Bump on edge 1 (continued)
+        - [x: width / 4,        y: -width / 4]
+        # Main triangle vertex 2 (bottom-right)
+        - [x: width / 2,        y: width / 4]
+        # Bump on edge 2 (going left)
+        - [x: width / 3,        y: width / 3]
+        # Inner notch on edge 2
+        - [x: width / 4,        y: width / 5]
+        # Bump on edge 2 (continued)
+        - [x: width / 6,        y: width / 4]
+        # Main triangle vertex 3 (bottom-left)
+        - [x: -width / 2,       y: width / 4]
+        # Bump on edge 3 (going right-up)
+        - [x: -width / 6,       y: width / 4]
+        # Inner notch on edge 3
+        - [x: -width / 4,       y: width / 5]
+        # Bump on edge 3 (continued)
+        - [x: -width / 3,       y: width / 3]
+        # Additional detail bumps on edge 1
+        - [x: width / 8,        y: -width / 2.8]
+        - [x: width / 5,        y: -width / 3.2]
+        # Additional detail bumps on edge 2
+        - [x: width / 2.5,      y: width / 3.5]
+        - [x: width / 3.5,      y: width / 4.5]
+        # Additional detail bumps on edge 3
+        - [x: -width / 3.5,     y: width / 4.5]
+        - [x: -width / 2.5,     y: width / 3.5]
+        # Secondary fractal detail (smaller bumps)
+        - [x: width / 10,       y: -width / 3.5]
+        - [x: width / 7,        y: -width / 3.8]
+        - [x: width / 3.2,      y: width / 4.2]
+        - [x: width / 4.5,      y: width / 3.8]
+        - [x: -width / 4.5,     y: width / 3.8]
+        - [x: -width / 3.2,     y: width / 4.2]
+        - [x: -width / 7,       y: -width / 3.8]
+        - [x: -width / 10,      y: -width / 3.5]
+        # Tertiary fractal detail (micro bumps)
+        - [x: width / 9,        y: -width / 3.3]
+        - [x: width / 3.8,      y: width / 4]
+        - [x: width / 5.5,      y: width / 4.2]
+        - [x: -width / 5.5,     y: width / 4.2]
+        - [x: -width / 3.8,     y: width / 4]
+        - [x: -width / 9,       y: -width / 3.3]
+
+material DepositedCopper:
+    category: conductor
+    process: deposited
+    properties:
+        resistivity: 1.68e-8
+
+profile KOCH_TEST:
+    description: "Koch snowflake fractal stress test"
+    trace:
+        min_width: 1um
+        min_spacing: 1um
+    via:
+        min_diameter: 100um
+        min_annular_ring: 10um
+        shape: KochSnowflake
+    manufacturing:
+        grid_snapping: true
+        track_pitch: 10um
+        copper_thickness: 50um
+    clearance:
+        high_voltage: 50um
+        safety_factor: 1.5
+    layer:
+        min_thickness: 50um
+    stackup:
+        m1: [material: DepositedCopper, thickness: 50um]
+        d1: [material: SiO2,   thickness: 100um]
+        m2: [material: DepositedCopper, thickness: 50um]
+    routing:
+        m1: horizontal
+        m2: vertical
+
+space KochSpace:
+    profile: KOCH_TEST
+    dimensions: 2mm by 2mm by 500um
+    grid: 200 by 200 by 10
+    origin: bl by b
+
+    add contact(DepositedCopper) named KochSnowflakeVia at [x: 1mm, y: 1mm] spanning layer: m1 to m2:
+        diameter: 500um
+        shape: KochSnowflake

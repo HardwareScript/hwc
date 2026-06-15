@@ -98,16 +98,27 @@ impl AutoViaInserter {
         let other_center_x = (other_bbox.min.x + other_bbox.max.x) / 2;
         let other_center_y = (other_bbox.min.y + other_bbox.max.y) / 2;
 
-        // 2. Enforce Same-Net Deduplication
+        // 2. Enforce Same-Net Deduplication & Connection
         if current_net.is_some() && current_net == other_net {
             if !z_overlap {
                 return false; // Vertical stacking is permitted
             }
 
-            // Exact coordinate match on the same net (duplicate check)
+            // Exact coordinate match on the same net
             if x_nm == other_center_x && y_nm == other_center_y {
-                return true;
+                // If the other contact is also a via, it's a duplicate - skip it.
+                // If it's a Pad or other non-via contact, it's a valid connection point.
+                let other_is_via = self.via_library.find_via_by_z_span(other_z_start, other_z_end).is_some();
+                if other_is_via {
+                    return true;
+                } else {
+                    return false; // Allow via to sit on a Pad
+                }
             }
+            
+            // For the same net, we also waive the clearance check.
+            // If they overlap but aren't centered, it's still a valid connection.
+            return false;
         }
 
         if !z_overlap {

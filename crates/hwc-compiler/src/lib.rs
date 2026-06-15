@@ -19,6 +19,7 @@ pub mod module_flattener;
 pub mod module_resolver;
 pub mod optimizer;
 pub mod prelude;
+pub mod shape_generators;
 pub mod span_utils;
 pub mod symbol_table;
 pub mod unit_resolver;
@@ -43,7 +44,7 @@ pub use prelude::{Prelude, PreludeError};
 pub use unit_resolver::UnitResolver;
 pub use width_inference::{WidthError, WidthInference};
 // Re-export from modular ir_integration
-pub use ir_integration::{program_to_space, IrError};
+pub use ir_integration::{program_to_space, program_to_spaces, IrError};
 pub use logic_synthesizer::{LogicSynthesizer, SynthesisError};
 pub use alignment_layer::{AlignmentReport, AlignmentViolation}; // Sprint 4.1: Alignment Layer
 pub use module_flattener::{flatten_module, FlattenError, FlattenedModule, ModuleBoundingBox};

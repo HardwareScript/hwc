@@ -118,10 +118,17 @@ pub fn unroll_pour(
         hwc_parser::Elevation::Relative => hwc_parser::Elevation::Relative,
     };
 
+    let thickness = pour
+        .thickness
+        .as_ref()
+        .map(|t| substitute_in_expression(t, variable, value))
+        .transpose()?;
+
     Ok(PourPlacement {
         material: pour.material.clone(),
         name,
         elevation,
+        thickness,
         boundary,
         net,
         device: pour.device.clone(),
@@ -186,6 +193,7 @@ pub fn unroll_contact(
         to_elevation,
         net,
         properties,
+        contour: contact.contour.clone(),
         span: contact.span,
     })
 }

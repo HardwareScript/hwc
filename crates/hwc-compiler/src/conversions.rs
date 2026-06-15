@@ -51,6 +51,7 @@ pub fn profile_to_constraints(
                 .as_ref()
                 .map(measurement_to_nm)
                 .unwrap_or_else(|| measurement_to_nm(&via_def.min_diameter)),
+            shape: via_def.shape.as_ref().map(|s| s.name.clone().into()),
         }
     } else {
         return Err(ConversionError::MissingProfileConstraint(
@@ -93,15 +94,15 @@ pub fn profile_to_constraints(
         .clearance
         .as_ref()
         .and_then(|c| c.low_voltage_threshold.as_ref())
-        .map(|m| measurement_to_nm(m) / 1_000_000) // Convert nm to V (assuming voltage stored as mV in nm)
-        .unwrap_or(50); // Default 50V threshold
+        .map(|m| measurement_to_volts(m))
+        .unwrap_or(50.0); // Default 50V threshold
 
     let _medium_voltage_threshold_v = profile
         .clearance
         .as_ref()
         .and_then(|c| c.medium_voltage_threshold.as_ref())
-        .map(|m| measurement_to_nm(m) / 1_000_000)
-        .unwrap_or(150); // Default 150V threshold
+        .map(|m| measurement_to_volts(m))
+        .unwrap_or(150.0); // Default 150V threshold
 
     // Extract clearance constraints
     // Note: These are baseline values. Actual clearances are calculated at routing time
@@ -729,9 +730,26 @@ fn measurement_to_nm(measurement: &hwc_parser::Measurement) -> i64 {
         Unit::Millimeter => measurement.value * 1_000_000.0,
         Unit::Centimeter => measurement.value * 10_000_000.0,
         Unit::Micrometer => measurement.value * 1_000.0,
-        _ => measurement.value, // Fallback for non-distance units
+        Unit::Nanometer => measurement.value,
+        _ => panic!(
+            "measurement_to_nm: cannot convert {:?} to nanometers (not a length unit)",
+            measurement.unit
+        ),
     };
     value_nm as i64
+}
+
+/// Convert measurement to voltage (for voltage thresholds)
+fn measurement_to_volts(measurement: &hwc_parser::Measurement) -> f64 {
+    match measurement.unit {
+        Unit::Volt => measurement.value,
+        Unit::Millivolt => measurement.value / 1_000.0,
+        Unit::Kilovolt => measurement.value * 1_000.0,
+        _ => panic!(
+            "measurement_to_volts: cannot convert {:?} to volts (not a voltage unit)",
+            measurement.unit
+        ),
+    }
 }
 
 /// Convert measurement to Celsius (for temperatures)

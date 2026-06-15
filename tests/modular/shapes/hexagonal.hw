@@ -1,0 +1,21 @@
+import * from @std/primitives/units
+
+# High-level parametric hexagonal via shape
+# Uses relative expressions that the compiler evaluates at build time
+shape HexagonalVia(width: Measurement):
+    points:
+        - [x: -width / 2, y: 0]
+        - [x: -width / 4, y: width * 0.433]
+        - [x: width / 4,  y: width * 0.433]
+        - [x: width / 2,  y: 0]
+        - [x: width / 4,  y: -width * 0.433]
+        - [x: -width / 4, y: -width * 0.433]
+
+# High-level parametric diamond via shape
+# A 45-degree rotated square (diamond) — useful for honeycomb routing
+shape DiamondVia(width: Measurement):
+    points:
+        - [x: 0, y: -width / 2]
+        - [x: width / 2, y: 0]
+        - [x: 0, y: width / 2]
+        - [x: -width / 2, y: 0]

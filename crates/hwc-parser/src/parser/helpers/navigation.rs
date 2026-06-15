@@ -103,6 +103,11 @@ impl Parser {
                 Token::Route => Some("route"),
                 Token::Expose => Some("expose"),
                 Token::Rotated => Some("rotated"),
+                Token::For => Some("for"),
+                Token::In => Some("in"),
+                Token::If => Some("if"),
+                Token::Else => Some("else"),
+                Token::Mod => Some("mod"),
                 Token::Implements => Some("implements"),
                 Token::Bridge => Some("bridge"),
                 Token::Exit => Some("exit"),
@@ -201,5 +206,41 @@ impl Parser {
         } else {
             true
         }
+    }
+
+    /// Check if the current minus sign is a binary operator (not unary)
+    /// Returns true if the previous token is an atom (identifier, number, closing paren/bracket)
+    pub(crate) fn is_binary_minus(&self) -> bool {
+        if self.current == 0 {
+            return false;
+        }
+        
+        // Look at the previous non-comment token
+        let mut pos = self.current;
+        while pos > 0 {
+            pos -= 1;
+            match &self.tokens[pos].token {
+                Token::DocComment(_) | Token::BlockComment(_) | Token::DocBlock(_) => {
+                    continue;
+                }
+                _ => break,
+            }
+        }
+        
+        if pos >= self.tokens.len() {
+            return false;
+        }
+        
+        matches!(
+            &self.tokens[pos].token,
+            Token::Identifier(_)
+                | Token::Integer(_)
+                | Token::Float(_)
+                | Token::Measurement(_)
+                | Token::CloseParen
+                | Token::CloseBracket
+                | Token::Rotated
+                | Token::At
+        )
     }
 }

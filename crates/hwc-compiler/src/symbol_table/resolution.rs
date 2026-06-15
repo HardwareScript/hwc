@@ -385,6 +385,7 @@ impl SymbolTable {
             Unit::Millimeter => measurement.value * 1_000_000.0,
             Unit::Centimeter => measurement.value * 10_000_000.0,
             Unit::Micrometer => measurement.value * 1_000.0,
+            Unit::Nanometer => measurement.value,
 
             // Custom units - resolve via symbol table
             // This includes: nm, m, inch, mil, and any user-defined units

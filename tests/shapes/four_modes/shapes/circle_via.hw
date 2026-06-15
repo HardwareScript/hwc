@@ -1,0 +1,12 @@
+import * from @std/primitives/units
+
+shape CircleVia(width: Measurement):
+    points:
+        - [x: width / 2, y: 0nm]
+        - [x: width * 0.354, y: width * 0.354]
+        - [x: 0nm, y: width / 2]
+        - [x: -(width * 0.354), y: width * 0.354]
+        - [x: -(width / 2), y: 0nm]
+        - [x: -(width * 0.354), y: -(width * 0.354)]
+        - [x: 0nm, y: -(width / 2)]
+        - [x: width * 0.354, y: -(width * 0.354)]

@@ -34,6 +34,25 @@ impl AutoViaInserter {
         let y_mm = y_nm as f64 / 1_000_000.0;
         let z_mm = transition.from_z_nm as f64 / 1_000_000.0;
 
+        let from_elevation = if let Some(ref name) = transition.from_layer_name {
+            hwc_parser::ast::Elevation::Semantic(
+                hwc_parser::ast::Identifier::new(name.clone(), span)
+            )
+        } else {
+            crate::ir::stackup_manager::StackupManager::elevation_from_z_nm(
+                transition.from_z_nm, span,
+            )
+        };
+        let to_elevation = if let Some(ref name) = transition.to_layer_name {
+            hwc_parser::ast::Elevation::Semantic(
+                hwc_parser::ast::Identifier::new(name.clone(), span)
+            )
+        } else {
+            crate::ir::stackup_manager::StackupManager::elevation_from_z_nm(
+                transition.to_z_nm, span,
+            )
+        };
+
         ContactPlacement {
             material: bridge_stack.fill_material.clone(),
             name: Some(hwc_parser::ComponentName::simple(via_name.into(), span)),
@@ -55,14 +74,8 @@ impl AutoViaInserter {
                 },
                 span,
             },
-            from_elevation: crate::ir::stackup_manager::StackupManager::elevation_from_z_nm(
-                transition.from_z_nm,
-                span,
-            ),
-            to_elevation: crate::ir::stackup_manager::StackupManager::elevation_from_z_nm(
-                transition.to_z_nm,
-                span,
-            ),
+            from_elevation,
+            to_elevation,
             net: Some(hwc_parser::NetName::simple(
                 transition.net_name.clone(),
                 span,
@@ -82,6 +95,7 @@ impl AutoViaInserter {
                 }
                 props
             },
+            contour: Some(via_type.contour.clone()),
             span,
         }
     }

@@ -28,8 +28,27 @@ impl GeometryRouter {
             .cloned()
             .unwrap_or_default();
 
+        // Clamp start/goal to valid voxel range to prevent snap-to-voxel
+        // from pushing coordinates outside grid bounds.
+        // The pathfinder snaps coords to voxel centers: index = coord / voxel_size,
+        // center = index * voxel_size + voxel_size/2. If coord == bounds.max,
+        // the snapped center exceeds bounds. Clamping to bounds - voxel_size
+        // ensures the snapped center stays within the grid.
+        let max_x = self.bounds.width_nm - self.voxel_size_nm;
+        let max_y = self.bounds.height_nm - self.voxel_size_nm;
+        let max_z = self.bounds.depth_nm - self.voxel_size_nm;
+        let clamp_coord = |p: crate::geometry::Point3D| -> crate::geometry::Point3D {
+            crate::geometry::Point3D::new(
+                p.x.max(0).min(max_x),
+                p.y.max(0).min(max_y),
+                p.z.max(0).min(max_z),
+            )
+        };
+        let start = clamp_coord(route.start);
+        let goal = clamp_coord(route.goal);
+
         // Determine layer from Z coordinate
-        let layer = (route.start.z / self.voxel_size_nm) as usize;
+        let layer = (start.z / self.voxel_size_nm) as usize;
         let layer_direction = if layer < self.layer_directions.len() {
             self.layer_directions[layer]
         } else {
@@ -41,6 +60,27 @@ impl GeometryRouter {
 
         // Convert occupied voxels map to FxHashSet for pathfinding
         let occupied_set: rustc_hash::FxHashSet<_> = self.occupied_voxels.keys().copied().collect();
+
+        // v0.1.7: Identify components that own the start and goal pins,
+        // so the router can escape the source and approach the drain through their bodies.
+        let mut exempt_components_vec: smallvec::SmallVec<[compact_str::CompactString; 4]> =
+            smallvec::SmallVec::new();
+        let tolerance_nm = self.voxel_size_nm;
+        for pin in self.voxel_grid.get_component_pins() {
+            let dx_s = (pin.x_nm - start.x).abs();
+            let dy_s = (pin.y_nm - start.y).abs();
+            let dz_s = (pin.z_nm - start.z).abs();
+            let dx_g = (pin.x_nm - goal.x).abs();
+            let dy_g = (pin.y_nm - goal.y).abs();
+            let dz_g = (pin.z_nm - goal.z).abs();
+            if (dx_s <= tolerance_nm && dy_s <= tolerance_nm && dz_s <= tolerance_nm)
+                || (dx_g <= tolerance_nm && dy_g <= tolerance_nm && dz_g <= tolerance_nm)
+            {
+                if !exempt_components_vec.contains(&pin.component_name) {
+                    exempt_components_vec.push(pin.component_name.clone());
+                }
+            }
+        }
 
         let routing_params = crate::geometry_router::pathfinding::RoutingParams {
             net_id: route.net_id,
@@ -57,21 +97,27 @@ impl GeometryRouter {
             voxel_grid: Some(&self.voxel_grid), // Enable Binary Collision Skip!
             corridor: None,                     // No corridor constraint by default
             fixed_z_nm: None,                   // v0.1.7: No fixed Z for legacy router
-            exempt_components: &[],             // v0.1.7: No exemptions for legacy router
+            exempt_components: &exempt_components_vec, // v0.1.7: Exempt source/drain components
             substrate_layers: None,             // v0.1.7: No substrate context in basic routing
             is_high_speed_net: false,           // v0.1.7: Default to non-high-speed
         };
 
-        let path = route_net_deterministic(route.start, route.goal, &routing_params);
+        let path = route_net_deterministic(start, goal, &routing_params);
 
         match path {
             Some(path) => {
                 // Extract vias from path (detect layer changes)
                 let detected_vias = self.extract_vias_from_path(&path, route.net_id);
 
+                // v0.1.7: Unroll multi-layer vias into layer-by-layer vias for ASIC profiles
+                let unrolled_vias: Vec<_> = detected_vias
+                    .iter()
+                    .flat_map(|via| self.unroll_detected_via(via))
+                    .collect();
+
                 // Validate and stamp each via, collecting only successfully placed ones
                 let mut placed_vias = Vec::new();
-                for via in detected_vias {
+                for via in unrolled_vias {
                     // Validate via can be placed
                     if self.can_place_via(via.position, via.from_z_nm, via.to_z_nm) {
                         // Stamp via footprint on all layers
@@ -171,9 +217,15 @@ impl GeometryRouter {
                 // Extract vias from path
                 let detected_vias = self.extract_vias_from_path(&path, route.net_id);
 
+                // v0.1.7: Unroll multi-layer vias into layer-by-layer vias for ASIC profiles
+                let unrolled_vias: Vec<_> = detected_vias
+                    .iter()
+                    .flat_map(|via| self.unroll_detected_via(via))
+                    .collect();
+
                 // Validate and stamp each via
                 let mut placed_vias = Vec::new();
-                for via in detected_vias {
+                for via in unrolled_vias {
                     if self.can_place_via(via.position, via.from_z_nm, via.to_z_nm) {
                         self.stamp_via(&via);
                         self.vias.push(via.clone());
@@ -535,5 +587,217 @@ impl GeometryRouter {
         }
 
         Ok(result)
+    }
+
+    /// Route a single net globally (skips component obstacle checking).
+    ///
+    /// Used for cross-cell nets in hierarchical routing. These routes span
+    /// the full board and need to pass through areas occupied by components.
+    /// Only checks occupied voxels (trace-vs-trace) and bounds, not component bodies.
+    pub fn route_net_global(&mut self, route: &NetRoute) -> Result<RoutedNet, RoutingError> {
+        let net_constraints = self
+            .constraints
+            .get_net_constraints(route.net_id)
+            .cloned()
+            .unwrap_or_default();
+
+        let clearance_zones = &self.constraints.clearance_zones;
+        let occupied_set: rustc_hash::FxHashSet<_> = self.occupied_voxels.keys().copied().collect();
+
+        // Clamp start/goal Z to valid voxel range to avoid boundary snapping issues.
+        // Pins at the exact board boundary (e.g. z=depth_nm) snap outside bounds.
+        let max_valid_z = self.bounds.depth_nm - self.voxel_size_nm;
+        let clamp_z = |p: Point3D| -> Point3D {
+            let z = p.z.min(max_valid_z).max(0);
+            Point3D::new(p.x, p.y, z)
+        };
+        let start = clamp_z(route.start);
+        let goal = clamp_z(route.goal);
+
+        let layer = (start.z / self.voxel_size_nm) as usize;
+        let layer_direction = if layer < self.layer_directions.len() {
+            self.layer_directions[layer]
+        } else {
+            LayerDirection::Any
+        };
+
+        let routing_params = crate::geometry_router::pathfinding::RoutingParams {
+            net_id: route.net_id,
+            constraints: &net_constraints,
+            bounds: self.bounds,
+            layer_direction,
+            voxel_size: crate::space::VoxelSize {
+                x_nm: self.voxel_size_nm,
+                y_nm: self.voxel_size_nm,
+                z_nm: self.voxel_size_nm,
+            },
+            clearance_zones,
+            occupied_voxels: &occupied_set,
+            voxel_grid: None, // Skip component obstacle checking for global routes
+            corridor: None,
+            fixed_z_nm: None,
+            exempt_components: &[],
+            substrate_layers: None,
+            is_high_speed_net: false,
+        };
+
+        match route_net_deterministic(start, goal, &routing_params) {
+            Some(path) => {
+                let detected_vias = self.extract_vias_from_path(&path, route.net_id);
+
+                // v0.1.7: Unroll multi-layer vias into layer-by-layer vias for ASIC profiles
+                let unrolled_vias: Vec<_> = detected_vias
+                    .iter()
+                    .flat_map(|via| self.unroll_detected_via(via))
+                    .collect();
+
+                let mut placed_vias = Vec::new();
+                for via in unrolled_vias {
+                    if self.can_place_via(via.position, via.from_z_nm, via.to_z_nm) {
+                        self.stamp_via(&via);
+                        self.vias.push(via.clone());
+                        placed_vias.push(via);
+                    }
+                }
+
+                for point in &path {
+                    self.occupied_voxels.insert(*point, route.net_id);
+                    let (x, y, z) = crate::voxel_grid::VoxelGrid::nm_to_voxel(
+                        *point,
+                        &crate::space::VoxelSize {
+                            x_nm: self.voxel_size_nm,
+                            y_nm: self.voxel_size_nm,
+                            z_nm: self.voxel_size_nm,
+                        },
+                    );
+                    self.voxel_grid.set_occupied(
+                        x, y, z, 2,
+                        crate::netlist::NetHandle::new(route.net_id.0),
+                    );
+                }
+
+                // Restore original pin positions at endpoints
+                let mut final_path = path;
+                if !final_path.is_empty() {
+                    final_path[0] = route.start;
+                    *final_path.last_mut().unwrap() = route.goal;
+                }
+
+                Ok(RoutedNet {
+                    net_id: route.net_id,
+                    path: final_path,
+                    vias: placed_vias,
+                })
+            }
+            None => Err(RoutingError::NoPathFound {
+                net_id: route.net_id,
+                start: route.start,
+                goal: route.goal,
+            }),
+        }
+    }
+
+    /// Route all nets globally using Steiner routing (skips component obstacles).
+    ///
+    /// Used for cross-cell nets in hierarchical routing.
+    pub fn route_all_nets_steiner_global(
+        &mut self,
+        nets: &FxHashMap<NetId, Vec<Point3D>>,
+    ) -> Result<RouteResult, RoutingError> {
+        let mut result = RouteResult::new();
+
+        let mut sorted_nets: Vec<_> = nets.iter().collect();
+        sorted_nets.sort_by_key(|(id, _)| id.0);
+
+        for (&net_id, pins) in &sorted_nets {
+            if pins.len() < 2 {
+                continue;
+            }
+
+            let routed = self.route_net_steiner_global(net_id, pins)?;
+            result.paths.insert(net_id, routed.path);
+            result.vias.extend(routed.vias);
+        }
+
+        Ok(result)
+    }
+
+    /// Route a single multi-pin net globally using Steiner approximation.
+    pub(crate) fn route_net_steiner_global(
+        &mut self,
+        net_id: NetId,
+        pins: &[Point3D],
+    ) -> Result<RoutedNet, RoutingError> {
+        if pins.len() < 2 {
+            return Err(RoutingError::NoPathFound {
+                net_id,
+                start: pins[0],
+                goal: pins[0],
+            });
+        }
+
+        let mut net_paths: Vec<Vec<Point3D>> = Vec::new();
+        let mut all_vias = Vec::new();
+
+        let initial_route = NetRoute {
+            net_id,
+            start: pins[0],
+            goal: pins[1],
+        };
+        let initial_routed = self.route_net_global(&initial_route)?;
+        net_paths.push(initial_routed.path.clone());
+        all_vias.extend(initial_routed.vias);
+
+        for &pin in &pins[2..] {
+            let target = self.find_nearest_target_on_net(pin, &net_paths);
+
+            let sub_route = NetRoute {
+                net_id,
+                start: pin,
+                goal: target,
+            };
+
+            match self.route_net_global(&sub_route) {
+                Ok(routed) => {
+                    net_paths.push(routed.path.clone());
+                    all_vias.extend(routed.vias);
+                }
+                Err(RoutingError::NoPathFound { .. }) => {
+                    let mut best_fallback: Option<(Point3D, i64)> = None;
+                    for &original_pin in pins.iter().take(pins.len()) {
+                        let dx = original_pin.x - pin.x;
+                        let dy = original_pin.y - pin.y;
+                        let dz = original_pin.z - pin.z;
+                        let dist_sq = dx * dx + dy * dy + dz * dz;
+                        if best_fallback.is_none() || dist_sq < best_fallback.unwrap().1 {
+                            best_fallback = Some((original_pin, dist_sq));
+                        }
+                    }
+
+                    if let Some((fallback_target, _)) = best_fallback {
+                        let fallback_route = NetRoute {
+                            net_id,
+                            start: pin,
+                            goal: fallback_target,
+                        };
+                        let fallback_routed = self.route_net_global(&fallback_route)?;
+                        net_paths.push(fallback_routed.path.clone());
+                        all_vias.extend(fallback_routed.vias);
+                    }
+                }
+                Err(e) => return Err(e),
+            }
+        }
+
+        let mut merged_path = Vec::new();
+        for segment in &net_paths {
+            merged_path.extend(segment);
+        }
+
+        Ok(RoutedNet {
+            net_id,
+            path: merged_path,
+            vias: all_vias,
+        })
     }
 }

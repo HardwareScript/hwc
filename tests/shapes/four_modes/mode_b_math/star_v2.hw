@@ -1,0 +1,10 @@
+import * from @std/primitives/units
+import * from @std/primitives/math
+
+shape StarV2(width: Measurement):
+    geometry:
+        for i in 0..16:
+            let angle = i * 22.5
+            let rad = angle * DEG_TO_RAD
+            let r = if i mod 2 = 0: width / 2 else: width / 4
+            Point(x: r * cos(rad), y: r * sin(rad))

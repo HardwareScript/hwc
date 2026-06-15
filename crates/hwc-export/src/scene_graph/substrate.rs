@@ -103,8 +103,12 @@ pub fn add_substrate(
                         SubstrateLayerShape::Tube { outer_diameter, .. } => {
                             layer.add_cylinder_cutout(other.bbox, outer_diameter as i64);
                         }
-                        SubstrateLayerShape::Cylinder { diameter, .. } => {
-                            layer.add_cylinder_cutout(other.bbox, diameter);
+                        SubstrateLayerShape::Polygon { ref outer_contour, .. } => {
+                            if let Some(eff_diam) = compute_polygon_effective_diameter(outer_contour) {
+                                layer.add_cylinder_cutout(other.bbox, eff_diam);
+                            } else {
+                                layer.add_cutout(other.bbox);
+                            }
                         }
                         _ => {
                             layer.add_cutout(other.bbox);
@@ -142,8 +146,12 @@ pub fn add_substrate(
                     SubstrateLayerShape::Tube { outer_diameter, .. } => {
                         layer.add_cylinder_cutout(drill.bbox, outer_diameter as i64);
                     }
-                    SubstrateLayerShape::Cylinder { diameter, .. } => {
-                        layer.add_cylinder_cutout(drill.bbox, diameter);
+                    SubstrateLayerShape::Polygon { ref outer_contour, .. } => {
+                        if let Some(eff_diam) = compute_polygon_effective_diameter(outer_contour) {
+                            layer.add_cylinder_cutout(drill.bbox, eff_diam);
+                        } else {
+                            layer.add_cutout(drill.bbox);
+                        }
                     }
                     _ => {
                         layer.add_cutout(drill.bbox);
@@ -185,10 +193,8 @@ pub fn add_substrate(
                 for cutout in &layer.cutouts {
                     match cutout.shape {
                         SubstrateLayerShape::Rect => hole_paths.push(rect_to_path(&cutout.bbox)),
-                        SubstrateLayerShape::Cylinder { diameter, .. } => {
-                            let cx = (cutout.bbox.min.x + cutout.bbox.max.x) / 2;
-                            let cy = (cutout.bbox.min.y + cutout.bbox.max.y) / 2;
-                            hole_paths.push(circle_to_path(cx, cy, diameter / 2, 64));
+                        SubstrateLayerShape::Polygon { ref outer_contour, .. } => {
+                            hole_paths.push(outer_contour.clone());
                         }
                         _ => {}
                     }
@@ -239,6 +245,31 @@ pub fn add_substrate(
                     if bottom_cap == CapType::Annular {
                         via_holes.entry(target_key).or_default().push(circle_to_path(cx, cy, inner_radius, 64));
                     }
+                }
+            }
+        }
+
+        // Polygon-based via caps: inject the polygon contour as a copper pad
+        if layer.layer_type == hwc_engine::voxel_grid::SubstrateLayerType::Contact && layer.net != 0 {
+            if let SubstrateLayerShape::Polygon { ref outer_contour, .. } = layer.shape {
+                if outer_contour.len() >= 3 {
+                    let cx = (layer.bbox.min.x + layer.bbox.max.x) / 2;
+                    let cy = (layer.bbox.min.y + layer.bbox.max.y) / 2;
+
+                    let copper_thickness = 35_000;
+
+                    // Build pad path by offsetting contour points to absolute coordinates
+                    let pad_path: clipper2_rust::Path64 = outer_contour.iter()
+                        .map(|p| clipper2_rust::Point64::new(p.x + cx, p.y + cy))
+                        .collect();
+
+                    // Top cap: inject into copper pool at the top Z range
+                    let top_key = (layer.bbox.max.z - copper_thickness, layer.bbox.max.z, layer.material, layer.net);
+                    copper_pools.entry(top_key).or_default().push(pad_path.clone());
+
+                    // Bottom cap: inject into copper pool at the bottom Z range
+                    let bottom_key = (layer.bbox.min.z, layer.bbox.min.z + copper_thickness, layer.material, layer.net);
+                    copper_pools.entry(bottom_key).or_default().push(pad_path);
                 }
             }
         }
@@ -334,21 +365,39 @@ pub fn add_substrate(
         let depth = max_z_mm - min_z_mm;
 
         match layer.shape {
-            SubstrateLayerShape::Cylinder { diameter, segments } => {
-                let diameter_mm = diameter as f64 / 1_000_000.0;
-                let center_x_mm = (min_x_mm + max_x_mm) / 2.0;
-                let center_y_mm = (min_y_mm + max_y_mm) / 2.0;
+            SubstrateLayerShape::Polygon { ref outer_contour, ref holes, .. } => {
+                let center_x_nm = (layer.bbox.min.x + layer.bbox.max.x) / 2;
+                let center_y_nm = (layer.bbox.min.y + layer.bbox.max.y) / 2;
+                let cx_mm = center_x_nm as f64 / 1_000_000.0;
+                let cy_mm = center_y_nm as f64 / 1_000_000.0;
 
-                meshes.push(create_cylinder_mesh(
-                    &format!("Contact_{}", idx),
-                    (center_x_mm, center_y_mm, min_z_mm),
-                    diameter_mm,
-                    depth,
-                    segments,
-                    material_name,
-                    space.view,
-                    base_culling,
-                ));
+                let outer_points: Vec<(f64, f64)> = outer_contour.iter()
+                    .map(|p| (
+                        p.x as f64 / 1_000_000.0 + cx_mm,
+                        p.y as f64 / 1_000_000.0 + cy_mm,
+                    ))
+                    .collect();
+
+                let hole_polygons: Vec<Vec<(f64, f64)>> = holes.iter()
+                    .map(|hole| hole.iter()
+                        .map(|p| (
+                            p.x as f64 / 1_000_000.0 + cx_mm,
+                            p.y as f64 / 1_000_000.0 + cy_mm,
+                        ))
+                        .collect())
+                    .collect();
+
+                if outer_points.len() >= 3 {
+                    meshes.push(extrude_polygon_mesh(
+                        &format!("Via_Polygon_{}", idx),
+                        &outer_points,
+                        &hole_polygons,
+                        min_z_mm,
+                        depth,
+                        material_name,
+                        space.view,
+                    ));
+                }
             }
             SubstrateLayerShape::Tube {
                 outer_diameter,
@@ -407,17 +456,32 @@ pub fn add_substrate(
                     for cutout in &layer.cutouts {
                         if cutout.bbox.min.z < z_end && cutout.bbox.max.z > z_start {
                             match cutout.shape {
-                                SubstrateLayerShape::Cylinder { diameter, .. } => {
+                                SubstrateLayerShape::Polygon { ref outer_contour, .. } => {
                                     let cx = (nm_to_mm_precise(cutout.bbox.min.x) + nm_to_mm_precise(cutout.bbox.max.x)) / 2.0;
                                     let cy = (nm_to_mm_precise(cutout.bbox.min.y) + nm_to_mm_precise(cutout.bbox.max.y)) / 2.0;
-                                    let dia = diameter as f64 / 1_000_000.0;
-                                    slice_cutouts.push(CutoutParams::Cylinder {
-                                        cx,
-                                        cy,
-                                        dia,
-                                        z_min: nm_to_mm_precise(cutout.bbox.min.z),
-                                        z_max: nm_to_mm_precise(cutout.bbox.max.z),
-                                    });
+                                    if let Some(eff_diam) = compute_polygon_effective_diameter(outer_contour) {
+                                        let dia = eff_diam as f64 / 1_000_000.0;
+                                        slice_cutouts.push(CutoutParams::Cylinder {
+                                            cx,
+                                            cy,
+                                            dia,
+                                            z_min: nm_to_mm_precise(cutout.bbox.min.z),
+                                            z_max: nm_to_mm_precise(cutout.bbox.max.z),
+                                        });
+                                    } else {
+                                        let x1 = nm_to_mm_precise(cutout.bbox.min.x);
+                                        let y1 = nm_to_mm_precise(cutout.bbox.min.y);
+                                        let x2 = nm_to_mm_precise(cutout.bbox.max.x);
+                                        let y2 = nm_to_mm_precise(cutout.bbox.max.y);
+                                        slice_cutouts.push(CutoutParams::Rect {
+                                            x1,
+                                            y1,
+                                            x2,
+                                            y2,
+                                            z_min: nm_to_mm_precise(cutout.bbox.min.z),
+                                            z_max: nm_to_mm_precise(cutout.bbox.max.z),
+                                        });
+                                    }
                                 }
                                 SubstrateLayerShape::Rect => {
                                     let x1 = nm_to_mm_precise(cutout.bbox.min.x);
@@ -447,7 +511,6 @@ pub fn add_substrate(
                         slice_culling.top = base_culling.top;
                     }
 
-                    eprintln!("[DEBUG substrate-slice] Slice {}-{} depth: {} mm at z: {} mm. Cutouts: {}", idx, i, slice_depth, z_min_mm, slice_cutouts.len());
                     meshes.push(create_box_with_holes_mesh(
                         &format!("Substrate_Layer_{}_Z{}", idx, i),
                         BoxParams::new(min_x_mm, min_y_mm, z_min_mm, width, height, slice_depth),
@@ -547,4 +610,21 @@ pub fn add_substrate(
 
         process_poly_node(&polytree, polytree.root(), meshes, net_raw, z_min_mm, depth_mm, material_name, space.view);
     }
+}
+
+fn compute_polygon_effective_diameter(contour: &clipper2_rust::Path64) -> Option<i64> {
+    if contour.is_empty() {
+        return None;
+    }
+    let mut min_x = i64::MAX;
+    let mut max_x = i64::MIN;
+    let mut min_y = i64::MAX;
+    let mut max_y = i64::MIN;
+    for p in contour.iter() {
+        min_x = min_x.min(p.x);
+        max_x = max_x.max(p.x);
+        min_y = min_y.min(p.y);
+        max_y = max_y.max(p.y);
+    }
+    Some((max_x - min_x).max(max_y - min_y))
 }

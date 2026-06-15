@@ -1,0 +1,88 @@
+import * from @std/primitives/units
+import HexagonA from shapes/hex_mode_a
+import HexagonB from shapes/hex_mode_b
+import HexagonC from shapes/hex_mode_c
+import HexagonD from shapes/hex_mode_d
+
+material Copper:
+    category: conductor
+    process: deposited
+    properties:
+        resistivity: 1.68e-8
+
+profile HEX_TEST:
+    trace:
+        min_width: 10um
+        min_spacing: 10um
+    via:
+        min_diameter: 20um
+        min_annular_ring: 5um
+        shape: HexagonA
+    manufacturing:
+        grid_snapping: true
+        track_pitch: 20um
+        copper_thickness: 50um
+    clearance:
+        high_voltage: 50um
+        safety_factor: 1.5
+    layer:
+        min_thickness: 50um
+    stackup:
+        m1: [material: Copper, thickness: 50um]
+        d1: [material: SiO2,   thickness: 100um]
+        m2: [material: Copper, thickness: 50um]
+    routing:
+        m1: horizontal
+        m2: vertical
+
+component Pad:
+    pins: [p]
+    layout:
+        shape: Rectangle(100um, 100um, 50um)
+        pin_positions:
+            p at [50um, 50um]
+        pad_shapes:
+            p: Rectangle(100um, 100um)
+
+space HexVerifySpace:
+    profile: HEX_TEST
+    dimensions: 5mm by 2mm by 250um
+    grid: 500 by 200 by 10
+    origin: bl by b
+
+    add Pad named Start at [x: 100um, y: 300um, z: 0nm]
+    add Pad named End   at [x: 4800um, y: 300um, z: 0nm]
+
+    # Mode A: Manual points
+    add contact(Copper) named V_HexA at [x: 1000um, y: 300um] spanning layer: m1 to m2:
+        diameter: 20um
+        shape: HexagonA
+
+    # Mode B: Parametric for-loop
+    add contact(Copper) named V_HexB at [x: 2000um, y: 300um] spanning layer: m1 to m2:
+        diameter: 20um
+        shape: HexagonB
+
+    # Mode C: CSG polygon
+    add contact(Copper) named V_HexC at [x: 3000um, y: 300um] spanning layer: m1 to m2:
+        diameter: 20um
+        shape: HexagonC
+
+    # Mode D: Gear generator
+    add contact(Copper) named V_HexD at [x: 4000um, y: 300um] spanning layer: m1 to m2:
+        diameter: 20um
+        shape: HexagonD
+
+    # Stitched chain: Start → A(up) → M2 → B(down) → M1 → C(up) → M2 → D(down) → M1 → End
+    route Start.p to End.p:
+        path:
+            - [x: 200um, y: 300um, z: 0nm]
+            - [x: 1000um, y: 300um, z: 0nm]
+            - [x: 1000um, y: 300um, z: 150000nm]
+            - [x: 2000um, y: 300um, z: 150000nm]
+            - [x: 2000um, y: 300um, z: 0nm]
+            - [x: 3000um, y: 300um, z: 0nm]
+            - [x: 3000um, y: 300um, z: 150000nm]
+            - [x: 4000um, y: 300um, z: 150000nm]
+            - [x: 4000um, y: 300um, z: 0nm]
+            - [x: 4600um, y: 300um, z: 0nm]

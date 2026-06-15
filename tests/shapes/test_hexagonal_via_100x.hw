@@ -1,0 +1,63 @@
+import * from @std/primitives/units
+
+shape HexagonalVia(width: Measurement):
+    points:
+        - [x: width / 2, y: 0nm]
+        - [x: width / 4, y: width * 0.433]
+        - [x: -(width / 4), y: width * 0.433]
+        - [x: -(width / 2), y: 0nm]
+        - [x: -(width / 4), y: -(width * 0.433)]
+        - [x: width / 4, y: -(width * 0.433)]
+
+profile HEXAGONAL_TEST:
+    description: "Single connection hexagonal via test"
+    trace:
+        min_width: 10um
+        min_spacing: 10um
+    via:
+        min_diameter: 20um
+        min_annular_ring: 5um
+        shape: HexagonalVia
+    manufacturing:
+        grid_snapping: true
+        track_pitch: 20um
+        copper_thickness: 50um
+    clearance:
+        high_voltage: 50um
+        safety_factor: 1.5
+    layer:
+        min_thickness: 50um
+    stackup:
+        m1: [material: Copper, thickness: 50um]
+        d1: [material: SiO2,   thickness: 100um]
+        m2: [material: Copper, thickness: 50um]
+    routing:
+        m1: horizontal
+        m2: vertical
+
+component Pad:
+    pins: [p]
+    layout:
+        shape: Rectangle(100um, 100um, 50um)
+        pin_positions:
+            p at [50um, 50um]
+        pad_shapes:
+            p: Rectangle(100um, 100um)
+
+space HexSpace:
+    profile: HEXAGONAL_TEST
+    dimensions: 2mm by 2mm by 250um
+    grid: 200 by 200 by 10
+    origin: bl by b
+
+    add Pad named P1 at [x: 300um, y: 1000um, z: 0nm]
+    add Pad named P2 at [x: 1700um, y: 1000um, z: 0nm]
+
+    route P1.p to P2.p:
+        path:
+            - [x: 400um, y: 1000um, z: 0nm]
+            - [x: 700um, y: 1000um, z: 0nm]
+            - [x: 700um, y: 1000um, z: 150000nm]
+            - [x: 1300um, y: 1000um, z: 150000nm]
+            - [x: 1300um, y: 1000um, z: 0nm]
+            - [x: 1600um, y: 1000um, z: 0nm]

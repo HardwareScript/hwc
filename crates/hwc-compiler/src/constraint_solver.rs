@@ -354,9 +354,10 @@ impl<'a> ConstraintSolver<'a> {
             Unit::Millimeter => (value * 1_000_000.0) as i64,
             Unit::Centimeter => (value * 10_000_000.0) as i64,
             Unit::Micrometer => (value * 1_000.0) as i64,
+            Unit::Nanometer => value as i64,
             _ => {
                 return Err(format!(
-                    "Invalid unit for position offset: {:?}. Expected distance unit (mm, cm, µm)",
+                    "Invalid unit for position offset: {:?}. Expected distance unit (mm, cm, µm, nm)",
                     measurement.unit
                 ))
             }
@@ -384,7 +385,7 @@ impl<'a> ConstraintSolver<'a> {
                     Unit::Millimeter => (value * 1_000_000.0) as i64,
                     Unit::Centimeter => (value * 10_000_000.0) as i64,
                     Unit::Micrometer => (value * 1_000.0) as i64,
-                    Unit::Custom(ref s) if s == "nm" => value as i64,
+                    Unit::Nanometer => value as i64,
                     _ => {
                         return Err(format!(
                         "Invalid unit for position: {:?}. Expected distance unit (mm, cm, µm, nm)",

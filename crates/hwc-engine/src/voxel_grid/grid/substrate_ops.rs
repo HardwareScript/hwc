@@ -71,6 +71,42 @@ impl VoxelGrid {
         self.substrate_layers.push(layer);
     }
 
+    /// Add a square via substrate layer (v0.1.7).
+    pub fn add_square_via_substrate_layer(
+        &mut self,
+        material: MaterialId,
+        net: NetId,
+        bbox: BoundingBox,
+        size: i64,
+    ) {
+        let layer = SubstrateLayer::new_square_via(material, net, bbox, size);
+        self.substrate_layers.push(layer);
+    }
+
+    /// Add a hexagonal via substrate layer (v0.2.0).
+    pub fn add_hexagon_via_substrate_layer(
+        &mut self,
+        material: MaterialId,
+        net: NetId,
+        bbox: BoundingBox,
+        size: i64,
+    ) {
+        let layer = SubstrateLayer::new_hexagon_via(material, net, bbox, size);
+        self.substrate_layers.push(layer);
+    }
+
+    /// Add a polygon-based via substrate layer (v0.2.0).
+    pub fn add_polygon_via_substrate_layer(
+        &mut self,
+        material: MaterialId,
+        net: NetId,
+        bbox: BoundingBox,
+        contour: clipper2_rust::Path64,
+    ) {
+        let layer = SubstrateLayer::new_polygon_via(material, net, bbox, contour);
+        self.substrate_layers.push(layer);
+    }
+
     /// Add a tube (plated hole) substrate layer (v0.1.7).
     pub fn add_tube_substrate_layer(
         &mut self,

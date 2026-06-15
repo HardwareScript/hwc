@@ -36,11 +36,29 @@ pub struct SubstrateLayerMetadata {
     pub cutouts: Vec<CutoutMetadata>,        // v0.1.7: Added cutouts for short-circuit avoidance
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SubstrateLayerShapeMetadata {
     Rect,
-    Cylinder { diameter: i64 },
     Tube { outer_diameter: u32, inner_diameter: u32 },
+    Polygon { outer_contour: Vec<(i64, i64)> },
+}
+
+fn point_in_polygon(x: i64, y: i64, polygon: &[(i64, i64)]) -> bool {
+    let n = polygon.len();
+    if n < 3 {
+        return false;
+    }
+    let mut inside = false;
+    let mut j = n - 1;
+    for i in 0..n {
+        let (xi, yi) = polygon[i];
+        let (xj, yj) = polygon[j];
+        if ((yi > y) != (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi) {
+            inside = !inside;
+        }
+        j = i;
+    }
+    inside
 }
 
 #[derive(Debug, Clone)]
@@ -65,27 +83,20 @@ impl SubstrateLayerMetadata {
         }
 
         // Check primary shape
-        match self.shape {
-            SubstrateLayerShapeMetadata::Cylinder { diameter } => {
-                let center_x = (self.bbox.min_x + self.bbox.max_x) / 2;
-                let center_y = (self.bbox.min_y + self.bbox.max_y) / 2;
-                let dx = x - center_x;
-                let dy = y - center_y;
-                let radius = diameter / 2;
-                if dx * dx + dy * dy > radius * radius {
-                    return false;
-                }
-            }
+        match &self.shape {
             SubstrateLayerShapeMetadata::Tube { outer_diameter, .. } => {
                 let center_x = (self.bbox.min_x + self.bbox.max_x) / 2;
                 let center_y = (self.bbox.min_y + self.bbox.max_y) / 2;
                 let dx = x - center_x;
                 let dy = y - center_y;
-                let outer_radius = outer_diameter as i64 / 2;
+                let outer_radius = *outer_diameter as i64 / 2;
                 let dist_sq = dx * dx + dy * dy;
-                // v0.1.7: For connectivity, we treat the entire outer diameter as "connected"
-                // (even if the center is a hollow drill hole, the plating touches the pads).
                 if dist_sq > outer_radius * outer_radius {
+                    return false;
+                }
+            }
+            SubstrateLayerShapeMetadata::Polygon { outer_contour } => {
+                if !point_in_polygon(x, y, outer_contour) {
                     return false;
                 }
             }
@@ -102,26 +113,21 @@ impl SubstrateLayerMetadata {
                 && z >= bbox.min_z
                 && z <= bbox.max_z
             {
-                match cutout.shape {
-                    SubstrateLayerShapeMetadata::Cylinder { diameter } => {
-                        let center_x = (bbox.min_x + bbox.max_x) / 2;
-                        let center_y = (bbox.min_y + bbox.max_y) / 2;
-                        let dx = x - center_x;
-                        let dy = y - center_y;
-                        let radius = diameter / 2;
-                        if dx * dx + dy * dy <= radius * radius {
-                            return false;
-                        }
-                    }
+                match &cutout.shape {
                     SubstrateLayerShapeMetadata::Tube { outer_diameter, inner_diameter } => {
                         let center_x = (bbox.min_x + bbox.max_x) / 2;
                         let center_y = (bbox.min_y + bbox.max_y) / 2;
                         let dx = x - center_x;
                         let dy = y - center_y;
-                        let outer_radius = outer_diameter as i64 / 2;
-                        let inner_radius = inner_diameter as i64 / 2;
+                let outer_radius = *outer_diameter as i64 / 2;
+                        let inner_radius = *inner_diameter as i64 / 2;
                         let dist_sq = dx * dx + dy * dy;
                         if dist_sq <= outer_radius * outer_radius && dist_sq >= inner_radius * inner_radius {
+                            return false;
+                        }
+                    }
+                    SubstrateLayerShapeMetadata::Polygon { outer_contour } => {
+                        if point_in_polygon(x, y, outer_contour) {
                             return false;
                         }
                     }

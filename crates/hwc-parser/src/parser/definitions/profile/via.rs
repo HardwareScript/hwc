@@ -13,6 +13,7 @@ impl super::super::super::Parser {
         let mut min_spacing = None;
         let mut max_aspect_ratio = None;
         let mut default_via_fill = None;
+        let mut shape = None;
         // v0.1.7 ASIC Extensions
         let mut enclosures = None;
         let mut allow_stacked_vias = None;
@@ -51,6 +52,10 @@ impl super::super::super::Parser {
                 }
                 "default_via_fill" => {
                     default_via_fill = Some(self.expect_identifier()?);
+                    self.skip_whitespace();
+                }
+                "shape" => {
+                    shape = Some(self.expect_identifier()?);
                     self.skip_whitespace();
                 }
                 // v0.1.7 ASIC Extensions
@@ -93,6 +98,7 @@ impl super::super::super::Parser {
             min_spacing,
             max_aspect_ratio,
             default_via_fill,
+            shape,
             enclosures,
             allow_stacked_vias,
             min_stagger_offset,

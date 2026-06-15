@@ -307,3 +307,112 @@ component Resistor:
         _ => panic!("Expected Relative path"),
     }
 }
+
+#[test]
+fn test_parent_directory_path_single() {
+    let source = r#"
+import HexagonalVia from ..
+"#;
+
+    let lexer = Lexer::new(source);
+    let tokens = lexer.tokenize().expect("Tokenization failed");
+    let mut parser = Parser::new(tokens);
+    let program = parser.parse(&DiagnosticCollector::new("", 100));
+
+    assert_eq!(program.imports.len(), 1);
+    let import = &program.imports[0];
+
+    match &import.targets {
+        hwc_parser::ImportTargets::List(names) => {
+            assert_eq!(names.len(), 1);
+            assert_eq!(names[0].name.as_str(), "HexagonalVia");
+        }
+        _ => panic!("Expected List targets"),
+    }
+
+    match &import.path {
+        ModulePath::Relative(path) => assert_eq!(path, ".."),
+        _ => panic!("Expected Relative path, got {:?}", import.path),
+    }
+}
+
+#[test]
+fn test_parent_directory_path_with_slashes() {
+    let source = r#"
+import HexagonalVia from ../shapes/hexagonal
+"#;
+
+    let lexer = Lexer::new(source);
+    let tokens = lexer.tokenize().expect("Tokenization failed");
+    let mut parser = Parser::new(tokens);
+    let program = parser.parse(&DiagnosticCollector::new("", 100));
+
+    assert_eq!(program.imports.len(), 1);
+    let import = &program.imports[0];
+
+    match &import.targets {
+        hwc_parser::ImportTargets::List(names) => {
+            assert_eq!(names.len(), 1);
+            assert_eq!(names[0].name.as_str(), "HexagonalVia");
+        }
+        _ => panic!("Expected List targets"),
+    }
+
+    match &import.path {
+        ModulePath::Relative(path) => assert_eq!(path, "../shapes/hexagonal"),
+        _ => panic!("Expected Relative path, got {:?}", import.path),
+    }
+}
+
+#[test]
+fn test_parent_directory_path_nested() {
+    let source = r#"
+import Utils from ../lib/utils/deep
+"#;
+
+    let lexer = Lexer::new(source);
+    let tokens = lexer.tokenize().expect("Tokenization failed");
+    let mut parser = Parser::new(tokens);
+    let program = parser.parse(&DiagnosticCollector::new("", 100));
+
+    assert_eq!(program.imports.len(), 1);
+    let import = &program.imports[0];
+
+    match &import.targets {
+        hwc_parser::ImportTargets::List(names) => {
+            assert_eq!(names.len(), 1);
+            assert_eq!(names[0].name.as_str(), "Utils");
+        }
+        _ => panic!("Expected List targets"),
+    }
+
+    match &import.path {
+        ModulePath::Relative(path) => assert_eq!(path, "../lib/utils/deep"),
+        _ => panic!("Expected Relative path, got {:?}", import.path),
+    }
+}
+
+#[test]
+fn test_parent_directory_wildcard_import() {
+    let source = r#"
+import * from ../shapes/hexagonal
+"#;
+
+    let lexer = Lexer::new(source);
+    let tokens = lexer.tokenize().expect("Tokenization failed");
+    let mut parser = Parser::new(tokens);
+    let program = parser.parse(&DiagnosticCollector::new("", 100));
+
+    assert_eq!(program.imports.len(), 1);
+    let import = &program.imports[0];
+
+    match &import.targets {
+        hwc_parser::ImportTargets::Star => {}
+        _ => panic!("Expected Star targets"),
+    }
+
+    match &import.path {
+        ModulePath::Relative(path) => assert_eq!(path, "../shapes/hexagonal"),
+        _ => panic!("Expected Relative path, got {:?}", import.path),
+    }
+}

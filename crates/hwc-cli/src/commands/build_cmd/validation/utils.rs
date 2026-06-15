@@ -69,8 +69,10 @@ pub fn convert_metadata_to_physics(
                 hwc_engine::voxel_grid::SubstrateLayerShape::Rect => {
                     hwc_physics::connectivity::SubstrateLayerShapeMetadata::Rect
                 }
-                hwc_engine::voxel_grid::SubstrateLayerShape::Cylinder { diameter, .. } => {
-                    hwc_physics::connectivity::SubstrateLayerShapeMetadata::Cylinder { diameter }
+                hwc_engine::voxel_grid::SubstrateLayerShape::Polygon { ref outer_contour, .. } => {
+                    hwc_physics::connectivity::SubstrateLayerShapeMetadata::Polygon {
+                        outer_contour: outer_contour.iter().map(|p| (p.x, p.y)).collect(),
+                    }
                 }
                 hwc_engine::voxel_grid::SubstrateLayerShape::Tube {
                     outer_diameter,
@@ -101,9 +103,9 @@ pub fn convert_metadata_to_physics(
                         hwc_engine::voxel_grid::SubstrateLayerShape::Rect => {
                             hwc_physics::connectivity::SubstrateLayerShapeMetadata::Rect
                         }
-                        hwc_engine::voxel_grid::SubstrateLayerShape::Cylinder { diameter, .. } => {
-                            hwc_physics::connectivity::SubstrateLayerShapeMetadata::Cylinder {
-                                diameter,
+                        hwc_engine::voxel_grid::SubstrateLayerShape::Polygon { ref outer_contour, .. } => {
+                            hwc_physics::connectivity::SubstrateLayerShapeMetadata::Polygon {
+                                outer_contour: outer_contour.iter().map(|p| (p.x, p.y)).collect(),
                             }
                         }
                         hwc_engine::voxel_grid::SubstrateLayerShape::Tube {
@@ -116,7 +118,7 @@ pub fn convert_metadata_to_physics(
                         },
                         hwc_engine::voxel_grid::SubstrateLayerShape::Circle { .. } => {
                             hwc_physics::connectivity::SubstrateLayerShapeMetadata::Rect
-                        },
+                        }
                     },
                 })
                 .collect();

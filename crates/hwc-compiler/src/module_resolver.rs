@@ -180,6 +180,7 @@ impl ModuleResolver {
                         Definition::Unit(u) => u.symbol.as_str() == name_str,
                         Definition::Device(d) => d.name.as_str() == name_str,
                         Definition::Const(c) => c.name.as_str() == name_str,
+                        Definition::Shape(s) => s.name.as_str() == name_str,
                         _ => false,
                     });
 
@@ -451,6 +452,11 @@ impl ModuleResolver {
             Definition::Const(const_def) => {
                 // Register imported constants in the HPM layer
                 symbol_table.register_import_constant(const_def.clone());
+                Ok(())
+            }
+            Definition::Shape(shape_def) => {
+                // Register imported shapes in the HPM layer
+                symbol_table.register_import_shape(shape_def.clone());
                 Ok(())
             }
             Definition::MaterialAlias(alias) => {

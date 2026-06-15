@@ -1,0 +1,70 @@
+import * from @std/primitives/units
+
+profile ASIC_TEST_10X:
+    description: "ASIC test profile 10x scaled for visual debugging"
+    
+    trace:
+        min_width: 1um
+        min_spacing: 1um
+    
+    via:
+        min_diameter: 2um
+        min_annular_ring: 500nm
+    
+    manufacturing:
+        grid_snapping: true
+        track_pitch: 2um
+        copper_thickness: 5um
+    
+    clearance:
+        high_voltage: 5um
+        safety_factor: 1.5
+    
+    layer:
+        min_thickness: 5um
+    
+    stackup:
+        m1: [material: Copper, thickness: 5um]
+        d1: [material: SiO2,   thickness: 10um]
+        m2: [material: Copper, thickness: 5um]
+        d2: [material: SiO2,   thickness: 10um]
+        m3: [material: Copper, thickness: 5um]
+        d3: [material: SiO2,   thickness: 10um]
+        m4: [material: Copper, thickness: 5um]
+        si: [material: Silicon, thickness: 100um]
+
+    routing:
+        m1: horizontal
+        m2: vertical
+        m3: horizontal
+        m4: vertical
+
+component Pad:
+    pins: [p]
+    layout:
+        shape: Rectangle(10um, 10um, 5um)
+        pin_positions:
+            p at [5um, 5um]
+        pad_shapes:
+            p: Rectangle(10um, 10um)
+
+space ASIC_Space_10X:
+    profile: ASIC_TEST_10X
+    dimensions: 1mm by 1mm by 200um
+    grid: 100 by 100 by 20
+    origin: bl by b
+    
+    add Pad named P1 at [x: 100um, y: 100um, z: 0nm]
+    add Pad named P2 at [x: 500um, y: 500um, z: 45000nm]
+    
+    route P1.p to P2.p:
+        path:
+            - [x: 100um, y: 100um, z: 0nm]     # P1 on M1
+            - [x: 200um, y: 100um, z: 0nm]     # Horizontal on M1
+            - [x: 200um, y: 100um, z: 15000nm]  # Via M1 -> M2
+            - [x: 200um, y: 300um, z: 15000nm]  # Vertical on M2
+            - [x: 200um, y: 300um, z: 30000nm]  # Via M2 -> M3
+            - [x: 400um, y: 300um, z: 30000nm]  # Horizontal on M3
+            - [x: 400um, y: 300um, z: 45000nm]  # Via M3 -> M4
+            - [x: 400um, y: 500um, z: 45000nm]  # Vertical on M4
+            - [x: 500um, y: 500um, z: 45000nm]  # P2 on M4

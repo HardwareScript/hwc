@@ -1,0 +1,9 @@
+import * from @std/primitives/units
+import * from @std/primitives/math
+
+shape HexagonV2(width: Measurement):
+    geometry:
+        for i in 0..6:
+            let angle = i * 60
+            let rad = angle * DEG_TO_RAD
+            Point(x: width / 2 * cos(rad), y: width / 2 * sin(rad))

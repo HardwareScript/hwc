@@ -1,0 +1,32 @@
+import * from @std/primitives/units
+
+# Low-level octagonal via shape
+# Uses concrete nanometer coordinates — no parameters, pure geometry
+# This is the "bare metal" approach for foundry-level precision
+shape OctagonalVia:
+    points:
+        - [x: -100nm, y: -41nm]
+        - [x: -41nm, y: -100nm]
+        - [x: 41nm,  y: -100nm]
+        - [x: 100nm, y: -41nm]
+        - [x: 100nm, y: 41nm]
+        - [x: 41nm,  y: 100nm]
+        - [x: -41nm, y: 100nm]
+        - [x: -100nm, y: 41nm]
+
+# Low-level cross-shaped via for thermal relief
+# Concrete coordinates define a + shaped cross-section
+shape ThermalCrossVia:
+    points:
+        - [x: -20nm, y: -100nm]
+        - [x: 20nm,  y: -100nm]
+        - [x: 20nm,  y: -20nm]
+        - [x: 100nm, y: -20nm]
+        - [x: 100nm, y: 20nm]
+        - [x: 20nm,  y: 20nm]
+        - [x: 20nm,  y: 100nm]
+        - [x: -20nm, y: 100nm]
+        - [x: -20nm, y: 20nm]
+        - [x: -100nm, y: 20nm]
+        - [x: -100nm, y: -20nm]
+        - [x: -20nm, y: -20nm]

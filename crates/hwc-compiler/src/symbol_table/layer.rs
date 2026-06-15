@@ -8,8 +8,8 @@ use hwc_parser::{
     logic::{EnumDefinition, LogicDefinition, StructDefinition},
     ComponentDefinition, ConstDefinition, DeviceDefinition, InterfaceDefinition,
     MaterialAliasDefinition, MaterialDefinition, MechanicalDefinition, ModuleDefinition,
-    PatternDefinition, ProfileDefinition, SignalGroupDefinition, StrategyDefinition,
-    TestDefinition, UnitDefinition,
+    PatternDefinition, ProfileDefinition, ShapeDefinition, SignalGroupDefinition,
+    StrategyDefinition, TestDefinition, UnitDefinition,
 };
 use rustc_hash::FxHashMap;
 
@@ -33,6 +33,7 @@ pub struct SymbolLayer {
     pub(super) units: FxHashMap<CompactString, UnitDefinition>,
     pub(super) devices: FxHashMap<CompactString, DeviceDefinition>,
     pub(super) constants: FxHashMap<CompactString, ConstDefinition>,
+    pub(super) shapes: FxHashMap<CompactString, ShapeDefinition>,
 }
 
 impl SymbolLayer {
@@ -55,6 +56,7 @@ impl SymbolLayer {
             units: FxHashMap::default(),
             devices: FxHashMap::default(),
             constants: FxHashMap::default(),
+            shapes: FxHashMap::default(),
         }
     }
 }
@@ -340,6 +342,25 @@ impl SymbolTable {
             || self.core.structs.contains_key(name)
     }
 
+    /// Check if a shape exists in any layer
+    pub fn has_shape(&self, name: &str) -> bool {
+        self.local.shapes.contains_key(name)
+            || self.hpm.iter().any(|layer| layer.shapes.contains_key(name))
+            || self.prelude.shapes.contains_key(name)
+            || self.core.shapes.contains_key(name)
+    }
+
+    /// Look up a shape definition by name across all layers
+    /// Returns the first match found in priority order: local > hpm > prelude > core
+    pub fn get_shape(&self, name: &str) -> Option<&ShapeDefinition> {
+        self.local
+            .shapes
+            .get(name)
+            .or_else(|| self.hpm.iter().find_map(|layer| layer.shapes.get(name)))
+            .or_else(|| self.prelude.shapes.get(name))
+            .or_else(|| self.core.shapes.get(name))
+    }
+
     /// Count total definitions across all layers
     pub fn definition_count(&self) -> usize {
         let count_layer = |layer: &SymbolLayer| {
@@ -358,6 +379,7 @@ impl SymbolTable {
                 + layer.structs.len()
                 + layer.units.len()
                 + layer.constants.len()
+                + layer.shapes.len()
         };
 
         count_layer(&self.local)

@@ -1,0 +1,12 @@
+import * from @std/primitives/units
+
+shape OctagonVia(width: Measurement):
+    points:
+        - [x: width * 0.541, y: 0nm]
+        - [x: width * 0.383, y: width * 0.383]
+        - [x: 0nm, y: width * 0.541]
+        - [x: -(width * 0.383), y: width * 0.383]
+        - [x: -(width * 0.541), y: 0nm]
+        - [x: -(width * 0.383), y: -(width * 0.383)]
+        - [x: 0nm, y: -(width * 0.541)]
+        - [x: width * 0.383, y: -(width * 0.383)]

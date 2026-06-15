@@ -1,0 +1,10 @@
+import * from @std/primitives/units
+
+shape HexagonalVia(width: Measurement):
+    points:
+        - [x: width / 2, y: 0nm]
+        - [x: width / 4, y: width * 0.433]
+        - [x: -(width / 4), y: width * 0.433]
+        - [x: -(width / 2), y: 0nm]
+        - [x: -(width / 4), y: -(width * 0.433)]
+        - [x: width / 4, y: -(width * 0.433)]

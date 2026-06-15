@@ -8,6 +8,7 @@ mod component;
 mod const_def;
 mod device;
 mod device_contract;
+pub mod expr;
 mod expression;
 mod import;
 mod interface;
@@ -19,6 +20,7 @@ mod pattern;
 mod polymorphic_interface;
 pub mod profile;
 mod signal_group;
+mod shape;
 mod space;
 mod test;
 mod unit;
@@ -40,6 +42,7 @@ pub use pattern::*;
 pub use polymorphic_interface::*;
 pub use profile::*;
 pub use signal_group::*;
+pub use shape::*;
 pub use space::*;
 pub use test::*;
 pub use unit::*;
@@ -79,6 +82,7 @@ pub enum Definition {
     Enum(logic::EnumDefinition),        // NEW: Enum definitions for v0.4.0
     Struct(logic::StructDefinition),    // NEW: Struct definitions for v0.4.0
     Logic(logic::LogicDefinition),      // NEW: Logic block definitions for v0.4.0
+    Shape(ShapeDefinition),             // NEW: Custom 2D polygon shape definitions
 }
 
 // REMOVED (pre-release cleanup): Legacy AST struct (the old non-Program wrapper).

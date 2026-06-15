@@ -54,6 +54,70 @@ pub(super) fn place_cylinder_substrate(
     Ok(())
 }
 
+/// Place a square via substrate layer in the voxel grid (v0.1.7).
+pub(super) fn place_square_substrate(
+    grid: &mut VoxelGrid,
+    material_id: MaterialId,
+    start: Point3D,
+    end: Point3D,
+    net_id: u32,
+    size: i64,
+) -> Result<(), PlacementError> {
+    let bbox = BoundingBox::from_points(start, end);
+
+    if (bbox.max.x - bbox.min.x).abs() <= 0
+        || (bbox.max.y - bbox.min.y).abs() <= 0
+        || (bbox.max.z - bbox.min.z).abs() <= 0
+    {
+        return Err(PlacementError::InvalidSubstrateRegion { start, end });
+    }
+
+    grid.add_square_via_substrate_layer(material_id, net_id, bbox, size);
+
+    Ok(())
+}
+
+/// Place a polygon-based via substrate layer (v0.2.0).
+/// Takes an arbitrary 2D polygon contour (Path64) and extrudes it.
+pub(super) fn place_polygon_substrate(
+    grid: &mut VoxelGrid,
+    material_id: MaterialId,
+    start: Point3D,
+    end: Point3D,
+    net_id: u32,
+    contour: &clipper2_rust::Path64,
+) -> Result<(), PlacementError> {
+    let bbox = BoundingBox::from_points(start, end);
+    if (bbox.max.x - bbox.min.x).abs() <= 0
+        || (bbox.max.y - bbox.min.y).abs() <= 0
+        || (bbox.max.z - bbox.min.z).abs() <= 0
+    {
+        return Err(PlacementError::InvalidSubstrateRegion { start, end });
+    }
+    grid.add_polygon_via_substrate_layer(material_id, net_id, bbox, contour.clone());
+    Ok(())
+}
+
+/// Place a hexagonal via substrate layer in the voxel grid.
+pub(super) fn place_hexagon_substrate(
+    grid: &mut VoxelGrid,
+    material_id: MaterialId,
+    start: Point3D,
+    end: Point3D,
+    net_id: u32,
+    size: i64,
+) -> Result<(), PlacementError> {
+    let bbox = BoundingBox::from_points(start, end);
+    if (bbox.max.x - bbox.min.x).abs() <= 0
+        || (bbox.max.y - bbox.min.y).abs() <= 0
+        || (bbox.max.z - bbox.min.z).abs() <= 0
+    {
+        return Err(PlacementError::InvalidSubstrateRegion { start, end });
+    }
+    grid.add_hexagon_via_substrate_layer(material_id, net_id, bbox, size);
+    Ok(())
+}
+
 /// Place a substrate layer with cutouts (mounting holes, edge cuts, etc.).
 ///
 /// # Arguments

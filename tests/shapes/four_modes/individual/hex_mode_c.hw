@@ -1,0 +1,5 @@
+import * from @std/primitives/units
+
+shape HexagonC(width: Measurement):
+    geometry:
+        Circle(diameter: width)

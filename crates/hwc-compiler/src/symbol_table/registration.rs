@@ -6,7 +6,7 @@ use hwc_diagnostics::DiagnosticCollector;
 use hwc_parser::{
     logic::{EnumDefinition, LogicDefinition, StructDefinition},
     ComponentDefinition, InterfaceDefinition, MaterialDefinition, MechanicalDefinition, ModuleDefinition, PatternDefinition,
-    ProfileDefinition, SignalGroupDefinition, StrategyDefinition, TestDefinition, UnitDefinition,
+    ProfileDefinition, ShapeDefinition, SignalGroupDefinition, StrategyDefinition, TestDefinition, UnitDefinition,
     MaterialAliasDefinition,
 };
 
@@ -114,6 +114,19 @@ impl SymbolTable {
             self.hpm.push(super::layer::SymbolLayer::new());
         }
         self.hpm.last_mut().unwrap().constants.insert(name, def);
+    }
+
+    /// Register an imported shape definition (in HPM layer)
+    pub fn register_import_shape(&mut self, def: ShapeDefinition) {
+        let name_str = def.name.as_str().to_string();
+        if self.hpm.is_empty() {
+            self.hpm.push(super::layer::SymbolLayer::new());
+        }
+        self.hpm
+            .last_mut()
+            .unwrap()
+            .shapes
+            .insert(name_str.into(), def);
     }
 
     /// Register an imported material definition (in HPM layer)
@@ -762,6 +775,21 @@ impl SymbolTable {
             return;
         }
         self.local.structs.insert(name_str.into(), def);
+    }
+
+    /// Register a shape definition (in local layer)
+    pub fn register_shape(&mut self, collector: &DiagnosticCollector, def: ShapeDefinition) {
+        let name_str = def.name.as_str();
+        if let Some(existing) = self.local.shapes.get(name_str) {
+            collector.report(SymbolError::DuplicateDefinition {
+                name: def.name.to_string().into(),
+                kind: "shape",
+                span: (def.span.start, def.span.end),
+                first_span: Some((existing.span.start, existing.span.end)),
+            });
+            return;
+        }
+        self.local.shapes.insert(name_str.into(), def);
     }
 
     /// Register a unit definition in the local layer (user-defined units in current file)

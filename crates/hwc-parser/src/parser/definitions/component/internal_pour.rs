@@ -65,6 +65,7 @@ impl super::super::super::Parser {
 
         let mut boundary = None;
         let mut net = None;
+        let mut thickness = None;
         let mut device = None;
         let mut thermal_relief = false;
 
@@ -98,6 +99,9 @@ impl super::super::super::Parser {
                         let to = self.parse_coordinate_optional_z()?;
                         boundary = Some(crate::PourBoundary::Rect(from, to));
                     }
+                }
+                "thickness" => {
+                    thickness = Some(self.parse_expression()?);
                 }
                 "net" => {
                     net = Some(self.parse_net_name()?);
@@ -135,6 +139,7 @@ impl super::super::super::Parser {
             material: material.into(),
             name,
             elevation,
+            thickness,
             boundary,
             net,
             device,

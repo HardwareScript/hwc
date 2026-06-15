@@ -1,0 +1,20 @@
+M48
+; DRILL file {MultiShapeSpace} date 2026-06-15
+; v0.1.7 physical Z (mm) recorded per tool pass where applicable
+; FORMAT={-:-/ absolute / inch / decimal}
+FMAT,2
+INCH
+T1C0.0008
+%
+T1
+X0.0197Y0.0118
+X0.0354Y0.0118
+X0.0827Y0.0118
+X0.0984Y0.0118
+X0.1457Y0.0118
+X0.1614Y0.0118
+X0.2087Y0.0118
+X0.2244Y0.0118
+X0.2717Y0.0118
+X0.2874Y0.0118
+M30

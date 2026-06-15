@@ -381,6 +381,7 @@ pub struct PourPlacement {
     pub name: super::component::ComponentName,
     /// Z elevation (v0.1.7): either physical `z: 150um` or semantic `layer: l1`
     pub elevation: Elevation,
+    pub thickness: Option<super::Expression>, // NEW v0.1.7: Explicit thickness override
     pub boundary: Option<PourBoundary>, // Optional boundary (rect or circle)
     pub net: Option<NetName>, // Net name to connect to (v0.1.6: supports array syntax)
     pub device: Option<DeviceBinding>, // Phase 4: Explicit device terminal binding
@@ -451,6 +452,10 @@ pub struct ContactPlacement {
     pub to_elevation: Elevation,
     pub net: Option<NetName>,    // Optional net name to connect to (v0.1.6: supports array syntax)
     pub properties: rustc_hash::FxHashMap<CompactString, Expression>, // Generic properties (v0.1.9)
+    /// Polygon contour for via shape (v0.2.0).
+    /// The compiler only understands polygons, not named shapes.
+    #[serde(skip)]
+    pub contour: Option<clipper2_rust::Path64>,
     pub span: Span,
 }
 

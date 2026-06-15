@@ -1,0 +1,17 @@
+{
+  "version": "0.1.4",
+  "board": "ModeBMath",
+  "grid": {
+    "dimensions": [
+      300,
+      100,
+      10
+    ],
+    "resolution": [
+      0.01,
+      0.01,
+      0.025
+    ]
+  },
+  "routes": []
+}

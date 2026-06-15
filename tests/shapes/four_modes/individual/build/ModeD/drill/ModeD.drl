@@ -1,0 +1,11 @@
+M48
+; DRILL file {ModeD} date 2026-06-15
+; v0.1.7 physical Z (mm) recorded per tool pass where applicable
+; FORMAT={-:-/ absolute / inch / decimal}
+FMAT,2
+INCH
+T1C0.0008
+%
+T1
+X0.0197Y0.0197
+M30

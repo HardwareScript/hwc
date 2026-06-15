@@ -13,7 +13,7 @@
 mod collision;
 mod geometry;
 mod inserter;
-mod library;
+pub mod library;
 mod placement;
 #[cfg(test)]
 mod tests;
