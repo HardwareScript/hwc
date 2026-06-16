@@ -94,17 +94,25 @@ pub fn get_pin_positions(
     route: &hwc_parser::Route,
 ) -> Result<(Point3D, Point3D), IrError> {
     let (start_id, goal_id) = get_pin_ids(space, route)?;
-    
-    let start_pos_tuple = space.netlist.get_pin_position(start_id).ok_or_else(|| IrError::PinNotFound {
-        component: route.from.component.clone(),
-        pin: route.from.pin.to_string(),
-    })?;
+
+    let start_pos_tuple =
+        space
+            .netlist
+            .get_pin_position(start_id)
+            .ok_or_else(|| IrError::PinNotFound {
+                component: route.from.component.clone(),
+                pin: route.from.pin.to_string(),
+            })?;
     let start_pos = Point3D::new(start_pos_tuple.0, start_pos_tuple.1, start_pos_tuple.2);
 
-    let goal_pos_tuple = space.netlist.get_pin_position(goal_id).ok_or_else(|| IrError::PinNotFound {
-        component: route.to.component.clone(),
-        pin: route.to.pin.to_string(),
-    })?;
+    let goal_pos_tuple =
+        space
+            .netlist
+            .get_pin_position(goal_id)
+            .ok_or_else(|| IrError::PinNotFound {
+                component: route.to.component.clone(),
+                pin: route.to.pin.to_string(),
+            })?;
     let goal_pos = Point3D::new(goal_pos_tuple.0, goal_pos_tuple.1, goal_pos_tuple.2);
 
     Ok((start_pos, goal_pos))
@@ -234,7 +242,11 @@ pub fn register_net_for_route(
     space.netlist.connect_pin(goal_pin_id, net_id);
 
     // Get the actual net name (may be different from the generated one if it already existed)
-    let actual_net_name = space.netlist.get_net(net_id).map(|n| n.name.clone()).unwrap_or(net_name);
+    let actual_net_name = space
+        .netlist
+        .get_net(net_id)
+        .map(|n| n.name.clone())
+        .unwrap_or(net_name);
 
     // v0.1.7: Handshake B - Synchronize VoxelGrid metadata
     // This ensures the AutoRouter can find these pins when analyzing nets.
@@ -243,8 +255,12 @@ pub fn register_net_for_route(
     let start_comp_name = construct_component_name(&route.from)?;
     let goal_comp_name = construct_component_name(&route.to)?;
 
-    space.voxel_grid.set_pin_net(&start_comp_name, &start_pin_name, actual_net_name.as_str());
-    space.voxel_grid.set_pin_net(&goal_comp_name, &goal_pin_name, actual_net_name.as_str());
+    space
+        .voxel_grid
+        .set_pin_net(&start_comp_name, &start_pin_name, actual_net_name.as_str());
+    space
+        .voxel_grid
+        .set_pin_net(&goal_comp_name, &goal_pin_name, actual_net_name.as_str());
 
     Ok(net_id)
 }

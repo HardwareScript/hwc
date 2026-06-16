@@ -9,17 +9,6 @@ use hwc_parser::{
 };
 use hwc_physics::PhysicsEngine;
 use std::time::Instant;
-// Phase 5: Parallel Analyzer Execution Tests
-// Tests for parallel physics validation using Rayon with Symbol Table integration
-
-use hwc_compiler::SymbolTable;
-use hwc_diagnostics::DiagnosticCollector;
-use hwc_parser::{
-    Identifier, MaterialCategory, MaterialDefinition, Measurement, Property, PropertyValue, Span,
-    Unit,
-};
-use hwc_physics::PhysicsEngine;
-use std::time::Instant;
 
 // Helper function to create a test symbol table
 fn create_test_symbol_table() -> SymbolTable {
@@ -47,6 +36,18 @@ fn create_test_symbol_table() -> SymbolTable {
         outline_opacity: None,
         roughness: None,
         metallic: None,
+        ior: None,
+        clearcoat: None,
+        clearcoat_roughness: None,
+        subsurface: None,
+        anisotropy: None,
+        anisotropy_rotation: None,
+        texture: None,
+    };
+    symbol_table.register_material(&collector, copper);
+    symbol_table
+}
+
 #[test]
 fn test_parallel_validation_returns_report() {
     let engine = PhysicsEngine::new();

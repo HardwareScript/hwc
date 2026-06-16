@@ -9,7 +9,9 @@ impl crate::parser::Parser {
     }
 
     /// Parse coordinate with optional z (for mechanical features that span all layers)
-    pub(in crate::parser) fn parse_coordinate_optional_z(&mut self) -> Result<Coordinate, ParseError> {
+    pub(in crate::parser) fn parse_coordinate_optional_z(
+        &mut self,
+    ) -> Result<Coordinate, ParseError> {
         self.parse_coordinate_with_optional_z(true)
     }
 

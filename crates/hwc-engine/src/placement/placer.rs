@@ -13,8 +13,8 @@ use super::component_definition::{
 use super::error::PlacementError;
 use super::geometry::{calculate_global_bounding_box, transform_pin_position};
 use super::substrate::{
-    place_cylinder_substrate, place_hexagon_substrate, place_square_substrate, place_substrate, place_substrate_layers, place_substrate_with_cutouts,
-    place_polygon_substrate,
+    place_cylinder_substrate, place_hexagon_substrate, place_polygon_substrate,
+    place_square_substrate, place_substrate, place_substrate_layers, place_substrate_with_cutouts,
 };
 use super::types::{DiagnosticReporter, PlacementParams, SymbolTableTrait};
 use crate::geometry::BoundingBox;
@@ -208,7 +208,9 @@ impl ComponentPlacer {
         // v0.1.7: Unified Merge Waiver (Silicon Law)
         // - merge: true (All) -> Waives everything
         // - merge: [pins] (Specific) -> Waives only if collision is in a listed pin region
-        if merge_waiver != hwc_parser::MergeWaiver::None && merge_waiver != hwc_parser::MergeWaiver::All {
+        if merge_waiver != hwc_parser::MergeWaiver::None
+            && merge_waiver != hwc_parser::MergeWaiver::All
+        {
             if let Some((voxel_x, voxel_y, voxel_z)) =
                 check_collision(grid, voxel_size, &global_bbox)?
             {
@@ -216,8 +218,9 @@ impl ComponentPlacer {
                 let mut waived = false;
                 if let hwc_parser::MergeWaiver::Specific(waived_pins) = &merge_waiver {
                     // Convert voxel back to nanometers for geometric check
-                    let collision_pt = VoxelGrid::voxel_to_nm(voxel_x, voxel_y, voxel_z, voxel_size);
-                    
+                    let collision_pt =
+                        VoxelGrid::voxel_to_nm(voxel_x, voxel_y, voxel_z, voxel_size);
+
                     // Check if collision point is inside any of the waived pin footprints
                     for pin_def in &definition.pins {
                         if waived_pins.contains(&pin_def.name) {
@@ -227,14 +230,15 @@ impl ComponentPlacer {
                                 (width, height, depth),
                                 rotation_deg,
                             );
-                            
+
                             // Estimate pin bounding box (PadShape)
                             // Simple approximation: check if collision point is near pin center
                             // Future: use exact PadShape footprint
-                            let dist_sq = (collision_pt.x - global_pin_pos.x).pow(2) 
-                                        + (collision_pt.y - global_pin_pos.y).pow(2);
-                            
-                            if dist_sq < 500_000 * 500_000 { // 500nm radius (generous for transistor pins)
+                            let dist_sq = (collision_pt.x - global_pin_pos.x).pow(2)
+                                + (collision_pt.y - global_pin_pos.y).pow(2);
+
+                            if dist_sq < 500_000 * 500_000 {
+                                // 500nm radius (generous for transistor pins)
                                 waived = true;
                                 break;
                             }
@@ -243,10 +247,11 @@ impl ComponentPlacer {
                 }
 
                 if waived {
-                    let collision_nm = VoxelGrid::voxel_to_nm(voxel_x, voxel_y, voxel_z, voxel_size);
+                    let collision_nm =
+                        VoxelGrid::voxel_to_nm(voxel_x, voxel_y, voxel_z, voxel_size);
                     let msg = format!(
-                        "Component '{}' allowed to overlap at ({:.3}, {:.3}, {:.3})mm", 
-                        name, 
+                        "Component '{}' allowed to overlap at ({:.3}, {:.3}, {:.3})mm",
+                        name,
                         collision_nm.x as f64 / 1_000_000.0,
                         collision_nm.y as f64 / 1_000_000.0,
                         collision_nm.z as f64 / 1_000_000.0
@@ -258,7 +263,8 @@ impl ComponentPlacer {
                     }
                 } else {
                     // Convert voxel coordinates back to physical coordinates for error message
-                    let collision_nm = VoxelGrid::voxel_to_nm(voxel_x, voxel_y, voxel_z, voxel_size);
+                    let collision_nm =
+                        VoxelGrid::voxel_to_nm(voxel_x, voxel_y, voxel_z, voxel_size);
                     let collision_mm = Point3D::new(
                         collision_nm.x / 1_000_000,
                         collision_nm.y / 1_000_000,

@@ -128,24 +128,48 @@ impl Parser {
                     if name.as_str() == "layout" {
                         // v0.1.7: Parse intrinsic module layout (Physical Pile Paradox / Physical Macros)
                         self.advance(); // 'layout'
-                        if let Err(e) = self.expect(&Token::Colon) { collector.report(e); self.sync_to_next_definition(); break; }
-                        if let Err(e) = self.expect(&Token::Newline) { collector.report(e); self.sync_to_next_definition(); break; }
-                        if let Err(e) = self.expect(&Token::Indent) { collector.report(e); self.sync_to_next_definition(); break; }
+                        if let Err(e) = self.expect(&Token::Colon) {
+                            collector.report(e);
+                            self.sync_to_next_definition();
+                            break;
+                        }
+                        if let Err(e) = self.expect(&Token::Newline) {
+                            collector.report(e);
+                            self.sync_to_next_definition();
+                            break;
+                        }
+                        if let Err(e) = self.expect(&Token::Indent) {
+                            collector.report(e);
+                            self.sync_to_next_definition();
+                            break;
+                        }
 
                         let mut layout_stmts: Vec<crate::LayoutStatement> = Vec::new();
                         while !self.check(&Token::Dedent) && !self.is_at_end() {
                             self.skip_whitespace();
                             if self.check(&Token::For) {
-                                if let Ok(s) = self.parse_layout_for_loop() { layout_stmts.push(s); } else { break; }
+                                if let Ok(s) = self.parse_layout_for_loop() {
+                                    layout_stmts.push(s);
+                                } else {
+                                    break;
+                                }
                             } else if self.check(&Token::If) {
-                                if let Ok(s) = self.parse_layout_if_conditional() { layout_stmts.push(s); } else { break; }
+                                if let Ok(s) = self.parse_layout_if_conditional() {
+                                    layout_stmts.push(s);
+                                } else {
+                                    break;
+                                }
                             } else if !self.check(&Token::Dedent) {
                                 if let Ok(p) = self.parse_layout_placement() {
                                     layout_stmts.push(crate::LayoutStatement::Placement(p));
-                                } else { break; }
+                                } else {
+                                    break;
+                                }
                             }
                         }
-                        if let Err(e) = self.expect(&Token::Dedent) { collector.report(e); }
+                        if let Err(e) = self.expect(&Token::Dedent) {
+                            collector.report(e);
+                        }
                         intrinsic_layout = Some(layout_stmts);
                     } else {
                         // Unknown identifier in module body

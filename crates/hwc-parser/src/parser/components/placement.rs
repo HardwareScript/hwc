@@ -31,7 +31,9 @@ impl crate::parser::Parser {
 
     /// Parse component placement: `add Type (params) named Instance at [Z,X,Y] rotated angle`
     /// v0.1.6 Sprint 3.2: Supports array syntax: `add Type[count] named ArrayName`
-    pub(in crate::parser) fn parse_component_placement(&mut self) -> Result<ComponentPlacement, ParseError> {
+    pub(in crate::parser) fn parse_component_placement(
+        &mut self,
+    ) -> Result<ComponentPlacement, ParseError> {
         let start_pos = self.current_span().start;
         self.expect(&Token::Add)?;
 
@@ -93,19 +95,19 @@ impl crate::parser::Parser {
             } else if self.check_identifier("z") {
                 self.advance(); // consume 'z'
                 self.expect(&Token::Colon)?;
-                
+
                 if self.check_identifier("relative") {
                     self.advance();
                     Some(Elevation::Relative)
                 } else {
                     let start = self.parse_expression()?;
-                    
+
                     let mut end = None;
                     if self.check(&Token::To) {
                         self.advance(); // consume "to"
                         end = Some(self.parse_expression()?);
                     }
-                    
+
                     Some(Elevation::Physical { start, end })
                 }
             } else {
@@ -155,7 +157,8 @@ impl crate::parser::Parser {
                         return Err(self.error("Duplicate array configuration"));
                     }
                     // Parse the entire array config block
-                    array_config = Some(self.parse_array_config(array_count.unwrap(), &mut waivers)?);
+                    array_config =
+                        Some(self.parse_array_config(array_count.unwrap(), &mut waivers)?);
                     break; // Array config consumes until dedent
                 } else if self.check_identifier("mount") {
                     self.advance();
@@ -190,7 +193,9 @@ impl crate::parser::Parser {
                         let terminals = self.parse_array_terminal_list()?;
                         waivers.merge = MergeWaiver::Specific(terminals);
                     } else {
-                        return Err(self.error("Expected 'true', 'false', or '[list]' for merge property"));
+                        return Err(
+                            self.error("Expected 'true', 'false', or '[list]' for merge property")
+                        );
                     }
                     self.skip_whitespace();
                 } else if self.check_identifier("floating") {
@@ -233,9 +238,12 @@ impl crate::parser::Parser {
                     }
                     self.skip_whitespace();
                 } else {
-                    return Err(self.error(
-                        &format!("Unknown property in component configuration: '{}'", self.current().map(|t| t.token.to_string()).unwrap_or_default()),
-                    ));
+                    return Err(self.error(&format!(
+                        "Unknown property in component configuration: '{}'",
+                        self.current()
+                            .map(|t| t.token.to_string())
+                            .unwrap_or_default()
+                    )));
                 }
             }
 
@@ -277,7 +285,11 @@ impl crate::parser::Parser {
     /// Parse array configuration block (indented)
     /// Expected to be called after consuming colon, newline, and indent tokens
     /// v0.1.6 Sprint 3.2: Parse array configuration with explicit merge intent
-    fn parse_array_config(&mut self, count: usize, waivers: &mut Waivers) -> Result<crate::ast::ArrayConfig, ParseError> {
+    fn parse_array_config(
+        &mut self,
+        count: usize,
+        waivers: &mut Waivers,
+    ) -> Result<crate::ast::ArrayConfig, ParseError> {
         let start_pos = self.current_span().start;
 
         let mut layout = crate::ast::ArrayLayout::HorizontalStack; // default
@@ -327,7 +339,9 @@ impl crate::parser::Parser {
                     merge_terminals = self.parse_array_terminal_list()?;
                     waivers.merge = MergeWaiver::Specific(merge_terminals.clone());
                 } else {
-                    return Err(self.error("Expected 'true', 'false', or '[list]' for merge property"));
+                    return Err(
+                        self.error("Expected 'true', 'false', or '[list]' for merge property")
+                    );
                 }
                 self.skip_whitespace();
             } else {
@@ -353,7 +367,9 @@ impl crate::parser::Parser {
     }
 
     /// Parse terminal list for array configuration: [terminal1, terminal2, ...]
-    pub(in crate::parser) fn parse_array_terminal_list(&mut self) -> Result<SmallVec<[compact_str::CompactString; 2]>, ParseError> {
+    pub(in crate::parser) fn parse_array_terminal_list(
+        &mut self,
+    ) -> Result<SmallVec<[compact_str::CompactString; 2]>, ParseError> {
         self.expect(&Token::OpenBracket)?;
 
         let mut terminals = SmallVec::new();

@@ -154,7 +154,7 @@ impl crate::parser::Parser {
                         },
                         _ => match self.parse_component_placement() {
                             Ok(comp) => {
-                                statements.push(SpaceTopLevelStatement::Component(comp));
+                                statements.push(SpaceTopLevelStatement::Component(Box::new(comp)));
                             }
                             Err(err) => {
                                 collector.report(err);
@@ -163,18 +163,18 @@ impl crate::parser::Parser {
                             }
                         },
                     }
-                    } else {
-                        match self.parse_component_placement() {
-                            Ok(comp) => {
-                                statements.push(SpaceTopLevelStatement::Component(comp));
-                            }
-                            Err(err) => {
-                                collector.report(err);
-                                self.sync_to_next_definition();
-                                continue;
-                            }
+                } else {
+                    match self.parse_component_placement() {
+                        Ok(comp) => {
+                            statements.push(SpaceTopLevelStatement::Component(Box::new(comp)));
+                        }
+                        Err(err) => {
+                            collector.report(err);
+                            self.sync_to_next_definition();
+                            continue;
                         }
                     }
+                }
             } else if self.check(&Token::For) {
                 // Sprint 3.4: Parse for loops in space blocks
                 match self.parse_space_for_loop() {

@@ -3,8 +3,8 @@ use hwc_engine::geometry::BoundingBox;
 use hwc_engine::space::PourMetadata;
 use rustc_hash::FxHashMap;
 
-use super::DeviceExtractor;
 use super::error::DeviceExtractionError;
+use super::DeviceExtractor;
 
 impl<'a> DeviceExtractor<'a> {
     /// Group all pours by their device binding

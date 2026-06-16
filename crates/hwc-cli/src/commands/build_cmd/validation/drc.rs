@@ -4,7 +4,11 @@ use miette::Result;
 use std::time::Instant;
 
 /// Run Design Rule Check (DRC)
-pub fn run_drc_check(space: &HardwareSpace, config: &BuildConfig, _start_time: Instant) -> Result<()> {
+pub fn run_drc_check(
+    space: &HardwareSpace,
+    config: &BuildConfig,
+    _start_time: Instant,
+) -> Result<()> {
     // Skip DRC if no fabrication constraints are defined
     // DRC requires a profile with min_trace_width, min_spacing, etc.
     if space.fabrication_constraints.is_none() {
@@ -118,7 +122,9 @@ pub fn run_drc_check(space: &HardwareSpace, config: &BuildConfig, _start_time: I
                 .copied()
                 .unwrap_or(GeometryType::Trace);
 
-            let classification = space.net_classifications.get(&net_name)
+            let classification = space
+                .net_classifications
+                .get(&net_name)
                 .copied()
                 .unwrap_or(hwc_engine::space::NetClassification::Unclassified);
 
@@ -277,14 +283,14 @@ pub fn run_drc_check(space: &HardwareSpace, config: &BuildConfig, _start_time: I
 
     if !drc_report.is_valid() {
         println!("\n❌ DRC VIOLATIONS DETECTED:");
-        
+
         // Group violations by type for cleaner output
         use rustc_hash::FxHashMap;
         let mut grouped: FxHashMap<String, Vec<String>> = FxHashMap::default();
-        
+
         for violation in &drc_report.violations {
             let violation_str = violation.to_string();
-            
+
             // Extract generic violation type for grouping (v0.1.7: Improved grouping)
             let violation_type = if violation_str.starts_with("Drill clearance:") {
                 "Drill clearance violation".to_string()
@@ -295,10 +301,13 @@ pub fn run_drc_check(space: &HardwareSpace, config: &BuildConfig, _start_time: I
             } else {
                 violation_str.clone()
             };
-            
-            grouped.entry(violation_type).or_insert_with(Vec::new).push(violation_str);
+
+            grouped
+                .entry(violation_type)
+                .or_default()
+                .push(violation_str);
         }
-        
+
         // Print grouped violations
         for (_violation_type, instances) in grouped.iter() {
             if instances.len() == 1 {
@@ -313,10 +322,13 @@ pub fn run_drc_check(space: &HardwareSpace, config: &BuildConfig, _start_time: I
                 // Many violations: print first 2 and summarize
                 println!("  • {}", instances[0]);
                 println!("  • {}", instances[1]);
-                println!("  • ... and {} more similar violations", instances.len() - 2);
+                println!(
+                    "  • ... and {} more similar violations",
+                    instances.len() - 2
+                );
             }
         }
-        
+
         return Err(miette::miette!(
             "Design rule check failed with {} violation(s)",
             drc_report.violations.len()

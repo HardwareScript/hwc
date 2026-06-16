@@ -1,14 +1,14 @@
-use hwc_engine::geometry::BoundingBox;
 use clipper2_rust::{Path64, Point64};
+use hwc_engine::geometry::BoundingBox;
 
 /// Convert an axis-aligned bounding box to a closed Clipper path (in nanometers)
 pub fn rect_to_path(bbox: &BoundingBox) -> Path64 {
-    let mut path = Path64::new();
-    path.push(Point64::new(bbox.min.x, bbox.min.y));
-    path.push(Point64::new(bbox.max.x, bbox.min.y));
-    path.push(Point64::new(bbox.max.x, bbox.max.y));
-    path.push(Point64::new(bbox.min.x, bbox.max.y));
-    path
+    vec![
+        Point64::new(bbox.min.x, bbox.min.y),
+        Point64::new(bbox.max.x, bbox.min.y),
+        Point64::new(bbox.max.x, bbox.max.y),
+        Point64::new(bbox.min.x, bbox.max.y),
+    ]
 }
 
 /// Convert a circular via landing pad into a 64-sided regular polygon (in nanometers)

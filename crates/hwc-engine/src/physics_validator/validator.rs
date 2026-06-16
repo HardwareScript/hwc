@@ -273,7 +273,7 @@ impl PhysicsValidator {
 
         // v0.1.7: TSV Substrate Short Circuit Detection (P47)
         // Check for shorts between conductive nets and silicon substrate
-        for (&net_id, _net_plane) in &bit_chunk.net_planes {
+        for &net_id in bit_chunk.net_planes.keys() {
             if net_id == 0 {
                 continue;
             } // Skip substrate net
@@ -320,8 +320,10 @@ impl PhysicsValidator {
                             if layer.koz_radius_nm > 0 && layer.is_in_koz(x_nm, y_nm, z_nm) {
                                 // If it's a contact layer (TSV), we need to check if the net
                                 // is the same as the TSV net. If so, it's allowed.
-                                if layer.layer_type == crate::voxel_grid::SubstrateLayerType::Contact &&
-                                   layer.net == net_id {
+                                if layer.layer_type
+                                    == crate::voxel_grid::SubstrateLayerType::Contact
+                                    && layer.net == net_id
+                                {
                                     continue;
                                 }
 

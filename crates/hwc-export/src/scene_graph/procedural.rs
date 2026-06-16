@@ -1,11 +1,11 @@
 //! Procedural component geometry generation (Limitation 6)
 
-use super::types::{MeshNode, BoxParams, FaceCulling};
 use super::mesh_generation::create_box_mesh;
+use super::types::{BoxParams, FaceCulling, MeshNode};
 use hwc_engine::SpaceView;
 
 /// Generate procedural meshes for a TO-220 package.
-/// 
+///
 /// Returns a list of meshes with different materials (Plastic, Metal).
 pub fn create_to220_meshes(
     name: &str,
@@ -19,12 +19,12 @@ pub fn create_to220_meshes(
     // TO-220 Dimensions (Standard approximate in mm)
     // Vertical Orientation (Z-up in engine)
     let body_w = 10.0;
-    let body_h = 4.5;  // Thickness (Engine Y)
-    let body_z = 9.0;  // Height (Engine Z)
-    let tab_z = 15.0;  // Total height including tab (Engine Z)
+    let body_h = 4.5; // Thickness (Engine Y)
+    let body_z = 9.0; // Height (Engine Z)
+    let tab_z = 15.0; // Total height including tab (Engine Z)
     let tab_thick = 1.3;
     let pin_z_len = 10.0; // Length of pins (Engine Z)
-    
+
     // ADJUSTMENT: The 'cz' passed from SceneGraph is the center of the component bbox.
     // For procedural meshes to sit correctly, we need to offset from this center.
     // Total component height = pin_z_len + tab_z
@@ -41,7 +41,13 @@ pub fn create_to220_meshes(
         height: body_h,
         depth: body_z,
     };
-    meshes.push(create_box_mesh(&format!("{}_body", name), body_params, "Component", view, FaceCulling::none()));
+    meshes.push(create_box_mesh(
+        &format!("{}_body", name),
+        body_params,
+        "Component",
+        view,
+        FaceCulling::none(),
+    ));
 
     // 2. Metal Tab (Silver)
     // Overlap slightly with the body to prevent the "slit" while avoiding Z-fighting
@@ -54,7 +60,13 @@ pub fn create_to220_meshes(
         height: tab_thick,
         depth: tab_z,
     };
-    meshes.push(create_box_mesh(&format!("{}_tab", name), tab_params, "Silver", view, FaceCulling::none()));
+    meshes.push(create_box_mesh(
+        &format!("{}_tab", name),
+        tab_params,
+        "Silver",
+        view,
+        FaceCulling::none(),
+    ));
 
     // 3. Pins (Silver)
     let pin_w = 0.8;
@@ -71,7 +83,13 @@ pub fn create_to220_meshes(
             height: pin_h,
             depth: pin_z_len,
         };
-        meshes.push(create_box_mesh(&format!("{}_pin_{}", name, i), pin_params, "Silver", view, FaceCulling::none()));
+        meshes.push(create_box_mesh(
+            &format!("{}_pin_{}", name, i),
+            pin_params,
+            "Silver",
+            view,
+            FaceCulling::none(),
+        ));
     }
 
     meshes

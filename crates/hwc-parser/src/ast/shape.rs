@@ -19,8 +19,8 @@ pub enum CsgExpression {
     /// Transformed shape: rotated, translated
     Transformed {
         expr: Box<CsgExpression>,
-        rotation: Option<f64>,  // degrees
-        translation: Option<(f64, f64)>,  // x, y in nm
+        rotation: Option<f64>,           // degrees
+        translation: Option<(f64, f64)>, // x, y in nm
     },
     /// Let binding: let name = expr in body
     LetBinding {
@@ -33,8 +33,13 @@ pub enum CsgExpression {
 /// A primitive shape for CSG
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum CsgPrimitive {
-    Rectangle { width: String, height: String },
-    Circle { diameter: String },
+    Rectangle {
+        width: String,
+        height: String,
+    },
+    Circle {
+        diameter: String,
+    },
     /// Reference to a named shape definition
     ShapeRef(String),
 }
@@ -64,15 +69,9 @@ pub struct ShapeGenerator {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum GeometryStatement {
     /// A variable declaration: let name = expr
-    Variable {
-        name: String,
-        value: Expr,
-    },
+    Variable { name: String, value: Expr },
     /// A point expression: Point(x: expr, y: expr)
-    Point {
-        x: Expr,
-        y: Expr,
-    },
+    Point { x: Expr, y: Expr },
 }
 
 /// A geometry block in a shape definition (Mode B: Parametric Loop & Trigonometry)
@@ -86,10 +85,7 @@ pub enum GeometryBlock {
         body: Vec<GeometryStatement>,
     },
     /// A variable declaration at geometry block scope: let x = expr
-    Variable {
-        name: String,
-        value: Expr,
-    },
+    Variable { name: String, value: Expr },
 }
 
 /// A shape definition — defines a 2D polygon cross-section for vias
@@ -100,6 +96,6 @@ pub struct ShapeDefinition {
     pub points: Vec<ShapePoint>,
     pub generator: Option<ShapeGenerator>,
     pub geometry: Option<Vec<GeometryBlock>>,
-    pub csg: Option<CsgExpression>,  // NEW: CSG expression
+    pub csg: Option<CsgExpression>, // NEW: CSG expression
     pub span: Span,
 }

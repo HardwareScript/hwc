@@ -167,17 +167,12 @@ pub enum Edge {
 /// Supports two modes:
 /// 1. Boolean: `merge: true` (Waives all overlap/buried errors)
 /// 2. List: `merge: [source, drain]` (Waives only specific sub-regions)
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum MergeWaiver {
+    #[default]
     None,
     All,
     Specific(smallvec::SmallVec<[compact_str::CompactString; 2]>),
-}
-
-impl Default for MergeWaiver {
-    fn default() -> Self {
-        MergeWaiver::None
-    }
 }
 
 /// Intentional design waivers (v0.1.7)

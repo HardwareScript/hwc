@@ -85,7 +85,7 @@ impl ProfileDefinition {
             || self
                 .manufacturing
                 .as_ref()
-                .map_or(false, |m| m.grid_snapping.unwrap_or(false))
+                .is_some_and(|m| m.grid_snapping.unwrap_or(false))
     }
 }
 
@@ -180,10 +180,10 @@ pub struct TraceConstraints {
 pub struct ViaConstraints {
     pub min_diameter: Measurement,
     pub min_annular_ring: Measurement,
-    
+
     /// Default diameter to use when placing vias (if not specified)
     pub default_diameter: Option<Measurement>,
-    
+
     /// Minimum spacing between via centers (e.g., 600µm)
     /// Used for via array generation on power/ground nets
     pub min_spacing: Option<Measurement>,
@@ -199,7 +199,7 @@ pub struct ViaConstraints {
     pub allow_stacked_vias: Option<bool>,
     /// Minimum stagger offset between stacked vias (if allowed).
     pub min_stagger_offset: Option<Measurement>,
-    
+
     pub span: Span,
 }
 

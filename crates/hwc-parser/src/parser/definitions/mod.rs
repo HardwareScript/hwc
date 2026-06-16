@@ -19,8 +19,8 @@ mod mechanical;
 mod module;
 mod pattern;
 mod profile;
+pub mod shape; // Modular subfolder: parameters, points, generator, geometry, csg, helpers
 mod signal_group;
-mod shape;
 mod space;
 mod test;
 mod unit;
@@ -96,7 +96,8 @@ impl super::Parser {
             }
             Some(Token::Profile) => {
                 // // eprintln!("[DEBUG] Dispatching to parse_profile");
-                self.parse_profile(collector).map(Definition::Profile)
+                self.parse_profile(collector)
+                    .map(|p| Definition::Profile(Box::new(p)))
             }
             Some(Token::Component) => {
                 // // eprintln!("[DEBUG] Dispatching to parse_component_def");
@@ -328,9 +329,10 @@ impl super::Parser {
                 }
                 _ => Err(ParseError::UnexpectedToken {
                     span: span_to_source_span(&current.span),
-                    expected: "import path (@org/package, logic/adders, ../parent, or \"quoted path\")"
-                        .to_string()
-                        .into(),
+                    expected:
+                        "import path (@org/package, logic/adders, ../parent, or \"quoted path\")"
+                            .to_string()
+                            .into(),
                     found: format!("{}", current.token).into(),
                 }),
             }

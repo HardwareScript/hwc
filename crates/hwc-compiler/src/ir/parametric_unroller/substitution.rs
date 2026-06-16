@@ -9,7 +9,9 @@
 use super::expression::{build_simple_expression_ast, evaluate_anchor_index_expression};
 use crate::ir::errors::IrError;
 use compact_str::CompactString;
-use hwc_parser::{ComponentName, ComponentPlacement, ContactPlacement, Expression, PourPlacement, Route};
+use hwc_parser::{
+    ComponentName, ComponentPlacement, ContactPlacement, Expression, PourPlacement, Route,
+};
 
 pub use super::collision::format_net_name;
 
@@ -28,9 +30,10 @@ pub fn unroll_component(
     value: usize,
 ) -> Result<ComponentPlacement, IrError> {
     // Substitute loop variable in component name
-    let name = component.name.as_ref().map(|n| {
-        substitute_in_component_name(n, variable, value)
-    });
+    let name = component
+        .name
+        .as_ref()
+        .map(|n| substitute_in_component_name(n, variable, value));
 
     // Substitute loop variable in position
     // Note: 'last' keyword is preserved and will be resolved during constraint solving
@@ -49,11 +52,18 @@ pub fn unroll_component(
     // Substitute loop variable in elevation (v0.1.7)
     let elevation = if let Some(elevation) = &component.elevation {
         match elevation {
-            hwc_parser::Elevation::Physical { start, end } => Some(hwc_parser::Elevation::Physical {
-                start: substitute_in_expression(start, variable, value)?,
-                end: end.as_ref().map(|e| substitute_in_expression(e, variable, value)).transpose()?,
-            }),
-            hwc_parser::Elevation::Semantic(id) => Some(hwc_parser::Elevation::Semantic(id.clone())),
+            hwc_parser::Elevation::Physical { start, end } => {
+                Some(hwc_parser::Elevation::Physical {
+                    start: substitute_in_expression(start, variable, value)?,
+                    end: end
+                        .as_ref()
+                        .map(|e| substitute_in_expression(e, variable, value))
+                        .transpose()?,
+                })
+            }
+            hwc_parser::Elevation::Semantic(id) => {
+                Some(hwc_parser::Elevation::Semantic(id.clone()))
+            }
             hwc_parser::Elevation::Relative => Some(hwc_parser::Elevation::Relative),
         }
     } else {
@@ -97,12 +107,18 @@ pub fn unroll_pour(
             hwc_parser::PourBoundary::Rect(from, to) => {
                 let from_sub = substitute_in_coordinate(from, variable, value)?;
                 let to_sub = substitute_in_coordinate(to, variable, value)?;
-                Some(hwc_parser::PourBoundary::Rect(from_sub, to_sub))
+                Some(hwc_parser::PourBoundary::Rect(
+                    Box::new(from_sub),
+                    Box::new(to_sub),
+                ))
             }
             hwc_parser::PourBoundary::Circle { center, radius } => {
                 let center_sub = substitute_in_coordinate(center, variable, value)?;
                 let radius_sub = substitute_in_expression(radius, variable, value)?;
-                Some(hwc_parser::PourBoundary::Circle { center: Box::new(center_sub), radius: radius_sub })
+                Some(hwc_parser::PourBoundary::Circle {
+                    center: Box::new(center_sub),
+                    radius: radius_sub,
+                })
             }
         }
     } else {
@@ -112,7 +128,10 @@ pub fn unroll_pour(
     let elevation = match &pour.elevation {
         hwc_parser::Elevation::Physical { start, end } => hwc_parser::Elevation::Physical {
             start: substitute_in_expression(start, variable, value)?,
-            end: end.as_ref().map(|e| substitute_in_expression(e, variable, value)).transpose()?,
+            end: end
+                .as_ref()
+                .map(|e| substitute_in_expression(e, variable, value))
+                .transpose()?,
         },
         hwc_parser::Elevation::Semantic(id) => hwc_parser::Elevation::Semantic(id.clone()),
         hwc_parser::Elevation::Relative => hwc_parser::Elevation::Relative,
@@ -162,7 +181,10 @@ pub fn unroll_contact(
     let from_elevation = match &contact.from_elevation {
         hwc_parser::Elevation::Physical { start, end } => hwc_parser::Elevation::Physical {
             start: substitute_in_expression(start, variable, value)?,
-            end: end.as_ref().map(|e| substitute_in_expression(e, variable, value)).transpose()?,
+            end: end
+                .as_ref()
+                .map(|e| substitute_in_expression(e, variable, value))
+                .transpose()?,
         },
         hwc_parser::Elevation::Semantic(id) => hwc_parser::Elevation::Semantic(id.clone()),
         hwc_parser::Elevation::Relative => hwc_parser::Elevation::Relative,
@@ -170,7 +192,10 @@ pub fn unroll_contact(
     let to_elevation = match &contact.to_elevation {
         hwc_parser::Elevation::Physical { start, end } => hwc_parser::Elevation::Physical {
             start: substitute_in_expression(start, variable, value)?,
-            end: end.as_ref().map(|e| substitute_in_expression(e, variable, value)).transpose()?,
+            end: end
+                .as_ref()
+                .map(|e| substitute_in_expression(e, variable, value))
+                .transpose()?,
         },
         hwc_parser::Elevation::Semantic(id) => hwc_parser::Elevation::Semantic(id.clone()),
         hwc_parser::Elevation::Relative => hwc_parser::Elevation::Relative,
@@ -220,7 +245,10 @@ pub fn unroll_route(route: &Route, variable: &str, value: usize) -> Result<Route
     // Substitute loop variable in strategy params
     let mut strategy_params = Vec::new();
     for (name, expr) in &route.strategy_params {
-        strategy_params.push((name.clone(), substitute_in_expression(expr, variable, value)?));
+        strategy_params.push((
+            name.clone(),
+            substitute_in_expression(expr, variable, value)?,
+        ));
     }
 
     // Substitute loop variable in path

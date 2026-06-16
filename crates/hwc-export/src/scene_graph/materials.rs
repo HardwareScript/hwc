@@ -37,56 +37,64 @@ pub fn parse_hex_color(hex: &str) -> Result<Color, SceneGraphError> {
 /// This provides scalable fallback for user-defined materials without hardcoded names.
 pub fn infer_material_from_name(name: &str) -> MaterialNode {
     let name_lower = name.to_lowercase();
-    
+
     // Pattern-based inference for precedence and visual properties
-    let (color, precedence, metallic, roughness) = if name_lower.contains("copper") || name_lower.contains("cu") {
-        (Color::new(184, 115, 51), 1, 1.0, 0.2)
-    } else if name_lower.contains("gold") || name_lower.contains("au") {
-        (Color::new(255, 215, 0), 1, 1.0, 0.1)
-    } else if name_lower.contains("silver") || name_lower.contains("ag") {
-        (Color::new(192, 192, 192), 1, 1.0, 0.1)
-    } else if name_lower.contains("aluminum") || name_lower.contains("al") || name_lower.contains("alu") {
-        (Color::new(200, 200, 200), 1, 0.9, 0.3)
-    } else if name_lower.contains("pour") || name_lower.contains("fill") || name_lower.contains("thief") {
-        // Dummy metal fill (thieving) - typically copper-like
-        (Color::new(184, 115, 51), 4, 1.0, 0.2)
-    } else if name_lower.contains("silicon") || name_lower.contains("si") {
-        (Color::new(100, 150, 100), 2, 0.1, 0.7)
-    } else if name_lower.contains("soldermask") || name_lower.contains("mask") {
-        let shade = if name_lower.contains("green") {
-            Color::new(0, 150, 0)
-        } else if name_lower.contains("red") {
-            Color::new(200, 0, 0)
-        } else if name_lower.contains("blue") {
-            Color::new(0, 0, 200)
+    let (color, precedence, metallic, roughness) =
+        if name_lower.contains("copper") || name_lower.contains("cu") {
+            (Color::new(184, 115, 51), 1, 1.0, 0.2)
+        } else if name_lower.contains("gold") || name_lower.contains("au") {
+            (Color::new(255, 215, 0), 1, 1.0, 0.1)
+        } else if name_lower.contains("silver") || name_lower.contains("ag") {
+            (Color::new(192, 192, 192), 1, 1.0, 0.1)
+        } else if name_lower.contains("aluminum")
+            || name_lower.contains("al")
+            || name_lower.contains("alu")
+        {
+            (Color::new(200, 200, 200), 1, 0.9, 0.3)
+        } else if name_lower.contains("pour")
+            || name_lower.contains("fill")
+            || name_lower.contains("thief")
+        {
+            // Dummy metal fill (thieving) - typically copper-like
+            (Color::new(184, 115, 51), 4, 1.0, 0.2)
+        } else if name_lower.contains("silicon") || name_lower.contains("si") {
+            (Color::new(100, 150, 100), 2, 0.1, 0.7)
+        } else if name_lower.contains("soldermask") || name_lower.contains("mask") {
+            let shade = if name_lower.contains("green") {
+                Color::new(0, 150, 0)
+            } else if name_lower.contains("red") {
+                Color::new(200, 0, 0)
+            } else if name_lower.contains("blue") {
+                Color::new(0, 0, 200)
+            } else {
+                Color::new(0, 100, 0)
+            };
+            (shade, 3, 0.0, 0.5)
+        } else if name_lower.contains("solder") {
+            (Color::new(200, 200, 200), 1, 0.2, 0.8)
+        } else if name_lower.contains("substrate")
+            || name_lower.contains("fr4")
+            || name_lower.contains("pcb")
+        {
+            (Color::new(26, 77, 26), 4, 0.0, 0.8)
+        } else if name_lower.contains("via") || name_lower.contains("trace") {
+            (Color::new(184, 115, 51), 1, 1.0, 0.2)
+        } else if name_lower.contains("component") {
+            (Color::new(40, 40, 40), 2, 0.1, 0.5)
+        } else if name_lower.contains("dielectric") || name_lower.contains("prepreg") {
+            (Color::new(100, 100, 150), 4, 0.0, 0.6)
         } else {
-            Color::new(0, 100, 0)
+            // Default fallback: assume conductor-like for unknown materials
+            (Color::new(184, 115, 51), 4, 1.0, 0.2)
         };
-        (shade, 3, 0.0, 0.5)
-    } else if name_lower.contains("solder") {
-        (Color::new(200, 200, 200), 1, 0.2, 0.8)
-    } else if name_lower.contains("substrate") || name_lower.contains("fr4") || name_lower.contains("pcb") {
-        (Color::new(26, 77, 26), 4, 0.0, 0.8)
-    } else if name_lower.contains("via") {
-        (Color::new(184, 115, 51), 1, 1.0, 0.2)
-    } else if name_lower.contains("trace") {
-        (Color::new(184, 115, 51), 1, 1.0, 0.2)
-    } else if name_lower.contains("component") {
-        (Color::new(40, 40, 40), 2, 0.1, 0.5)
-    } else if name_lower.contains("dielectric") || name_lower.contains("prepreg") {
-        (Color::new(100, 100, 150), 4, 0.0, 0.6)
-    } else {
-        // Default fallback: assume conductor-like for unknown materials
-        (Color::new(184, 115, 51), 4, 1.0, 0.2)
-    };
 
     MaterialNode {
         name: name.into(),
         color,
         opacity: 1.0,
         outline_opacity: 1.0,
-        metallic: metallic,
-        roughness: roughness,
+        metallic,
+        roughness,
         ior: 1.5,
         clearcoat: 0.0,
         clearcoat_roughness: 0.0,
@@ -125,11 +133,12 @@ pub fn add_materials_from_symbol_table(
 
         // Extract visual properties with defaults (v0.1.6 God-Tier Visual API)
         let mut opacity = material_def.get_opacity() as f32;
-        
+
         // v0.1.7: Force components and semiconductor bodies to be Opaque
-        if material_def.category == hwc_parser::MaterialCategory::Semiconductor || 
-           name.to_lowercase().contains("body") || 
-           name.to_lowercase().contains("component") {
+        if material_def.category == hwc_parser::MaterialCategory::Semiconductor
+            || name.to_lowercase().contains("body")
+            || name.to_lowercase().contains("component")
+        {
             opacity = 1.0;
         }
 
@@ -190,22 +199,24 @@ pub fn add_materials_from_symbol_table(
 
     // Add special "Void" material for substrate cutouts
     // This represents negative space (mounting holes, edge cuts, etc.)
-    materials.entry("Void".into()).or_insert_with(|| MaterialNode {
-        name: "Void".into(),
-        color: Color::new(0, 0, 0), // Black (will be rendered as transparent)
-        opacity: 0.0,
-        outline_opacity: 0.0,
-        metallic: 0.0,
-        roughness: 1.0,
-        ior: 1.5,
-        clearcoat: 0.0,
-        clearcoat_roughness: 0.0,
-        subsurface: 0.0,
-        anisotropy: 0.0,
-        anisotropy_rotation: 0.0,
-        texture: None,
-        precedence: 0, // Void has absolute highest precedence (it overrides everything)
-    });
+    materials
+        .entry("Void".into())
+        .or_insert_with(|| MaterialNode {
+            name: "Void".into(),
+            color: Color::new(0, 0, 0), // Black (will be rendered as transparent)
+            opacity: 0.0,
+            outline_opacity: 0.0,
+            metallic: 0.0,
+            roughness: 1.0,
+            ior: 1.5,
+            clearcoat: 0.0,
+            clearcoat_roughness: 0.0,
+            subsurface: 0.0,
+            anisotropy: 0.0,
+            anisotropy_rotation: 0.0,
+            texture: None,
+            precedence: 0, // Void has absolute highest precedence (it overrides everything)
+        });
 
     // Standard Procedural Materials (Limitation 6)
     let default_materials = [
@@ -219,27 +230,29 @@ pub fn add_materials_from_symbol_table(
     ];
 
     for (name, color, opacity, outline_opacity, metallic, roughness) in default_materials {
-        materials.entry(CompactString::from(name)).or_insert_with(|| MaterialNode {
-            name: name.into(),
-            color,
-            opacity,
-            outline_opacity,
-            metallic,
-            roughness,
-            ior: 1.5,
-            clearcoat: 0.0,
-            clearcoat_roughness: 0.0,
-            subsurface: 0.0,
-            anisotropy: 0.0,
-            anisotropy_rotation: 0.0,
-            texture: None,
-            precedence: match name {
-                "Copper" | "Gold" | "Silver" => 1,
-                "Component" => 2,
-                "SolderMask" | "SilkScreen" => 3,
-                _ => 4,
-            },
-        });
+        materials
+            .entry(CompactString::from(name))
+            .or_insert_with(|| MaterialNode {
+                name: name.into(),
+                color,
+                opacity,
+                outline_opacity,
+                metallic,
+                roughness,
+                ior: 1.5,
+                clearcoat: 0.0,
+                clearcoat_roughness: 0.0,
+                subsurface: 0.0,
+                anisotropy: 0.0,
+                anisotropy_rotation: 0.0,
+                texture: None,
+                precedence: match name {
+                    "Copper" | "Gold" | "Silver" => 1,
+                    "Component" => 2,
+                    "SolderMask" | "SilkScreen" => 3,
+                    _ => 4,
+                },
+            });
     }
 
     Ok(())

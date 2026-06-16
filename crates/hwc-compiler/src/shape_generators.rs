@@ -2,12 +2,12 @@ use clipper2_rust::{Path64, Point64};
 
 pub fn square_contour(size_nm: i64) -> Path64 {
     let half = size_nm / 2;
-    let mut contour = Path64::new();
-    contour.push(Point64::new(-half, -half));
-    contour.push(Point64::new(half, -half));
-    contour.push(Point64::new(half, half));
-    contour.push(Point64::new(-half, half));
-    contour
+    vec![
+        Point64::new(-half, -half),
+        Point64::new(half, -half),
+        Point64::new(half, half),
+        Point64::new(-half, half),
+    ]
 }
 
 pub fn circle_contour(diameter_nm: i64, segments: u32) -> Path64 {
@@ -26,14 +26,14 @@ pub fn hexagon_contour(diameter_nm: i64) -> Path64 {
     let half = diameter_nm / 2;
     let quarter = diameter_nm / 4;
     let height_quarter = (diameter_nm as f64 * 0.433) as i64;
-    let mut contour = Path64::new();
-    contour.push(Point64::new(-half, 0));
-    contour.push(Point64::new(-quarter, height_quarter));
-    contour.push(Point64::new(quarter, height_quarter));
-    contour.push(Point64::new(half, 0));
-    contour.push(Point64::new(quarter, -height_quarter));
-    contour.push(Point64::new(-quarter, -height_quarter));
-    contour
+    vec![
+        Point64::new(-half, 0),
+        Point64::new(-quarter, height_quarter),
+        Point64::new(quarter, height_quarter),
+        Point64::new(half, 0),
+        Point64::new(quarter, -height_quarter),
+        Point64::new(-quarter, -height_quarter),
+    ]
 }
 
 /// Mathematically generates a non-intersecting star polygon.
@@ -49,7 +49,11 @@ pub fn star_generator_contour(
     let total_vertices = points_count * 2;
     for i in 0..total_vertices {
         let angle = (i as f64 / total_vertices as f64) * 2.0 * std::f64::consts::PI;
-        let r = if i % 2 == 0 { outer_radius_nm } else { inner_radius_nm };
+        let r = if i % 2 == 0 {
+            outer_radius_nm
+        } else {
+            inner_radius_nm
+        };
         let x = (r as f64 * angle.cos()) as i64;
         let y = (r as f64 * angle.sin()) as i64;
         contour.push(Point64::new(x, y));

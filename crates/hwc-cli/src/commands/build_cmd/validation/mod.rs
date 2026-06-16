@@ -4,9 +4,9 @@ use hwc_physics::error_mapping::PhysicsError;
 use miette::Result;
 use std::time::Instant;
 
-pub mod drc;
 pub mod connectivity;
 pub mod continuity;
+pub mod drc;
 pub mod utils;
 
 /// Validation result (Task 5.1: Phantom Buffer)
@@ -49,10 +49,7 @@ pub fn run_validation_checks(
     if !config.skip_drc && !is_artist_mode {
         if let Err(e) = drc::run_drc_check(space, config, start_time) {
             // DRC errors are already formatted, wrap them as PhysicsError
-            all_violations.push(PhysicsError::new(
-                "DRC",
-                format!("DRC: {}", e).into(),
-            ));
+            all_violations.push(PhysicsError::new("DRC", format!("DRC: {}", e).into()));
         }
     }
 

@@ -19,6 +19,7 @@
 //! - **No Collision Avoidance**: Conductive pours can interpenetrate component geometry.
 //! - **Voxel Aliasing**: Fixed 1um resolution may cause blockiness at SoC scales.
 
+pub mod bridge_validator;
 pub mod conversions;
 pub mod errors;
 pub mod logic;
@@ -26,10 +27,9 @@ pub mod parametric_unroller; // Sprint 3.4: Parametric unrolling
 pub mod placement;
 pub mod routing;
 pub mod space_builder;
-pub mod stackup_manager;
 pub mod spatial_dependency_graph; // Gap 7: Spatial dependency graph
-pub mod units;
-pub mod bridge_validator; // Phase 2: P45 Forbidden Junction detection
+pub mod stackup_manager;
+pub mod units; // Phase 2: P45 Forbidden Junction detection
 
 // Re-export commonly used items
 pub use errors::IrError;
@@ -62,7 +62,7 @@ fn compile_single_space(
     #[derive(Debug, Clone)]
     enum PlacementItem {
         Substrate(hwc_parser::SubstratePlacement),
-        Component(hwc_parser::ComponentPlacement),
+        Component(Box<hwc_parser::ComponentPlacement>),
         Pour(hwc_parser::PourPlacement),
         Contact(hwc_parser::ContactPlacement),
         Route(hwc_parser::Route),
@@ -79,7 +79,7 @@ fn compile_single_space(
                 // eprintln!($3"[DEBUG program_to_space]   Statement {}/{}: Component '{}'",
                 // i + 1, space_def.statements.len(),
                 // comp.name.as_ref().map(|n| n.to_string()).unwrap_or_else(|| comp.component_type.to_string().into()));
-                placement_items.push(PlacementItem::Component(comp.clone()));
+                placement_items.push(PlacementItem::Component(Box::new((**comp).clone())));
             }
             hwc_parser::SpaceTopLevelStatement::Pour(pour) => {
                 // eprintln!($3"[DEBUG program_to_space]   Statement {}/{}: Pour '{}'",
@@ -100,7 +100,7 @@ fn compile_single_space(
 
                 // Add unrolled items in order
                 for comp in unrolled.components {
-                    placement_items.push(PlacementItem::Component(comp));
+                    placement_items.push(PlacementItem::Component(Box::new(comp)));
                 }
                 for pour in unrolled.pours {
                     placement_items.push(PlacementItem::Pour(pour));
@@ -152,7 +152,9 @@ fn compile_single_space(
     let origin = space_def.origin.unwrap_or_default();
 
     // Resolve profile and extract solder mask thickness (library-driven, not hardcoded)
-    let profile = space_def.profile.as_ref()
+    let profile = space_def
+        .profile
+        .as_ref()
         .and_then(|p| symbol_table.get_profile(p.as_str()).ok());
 
     let solder_mask_thickness_nm = profile
@@ -168,10 +170,17 @@ fn compile_single_space(
         space.voxel_size.z_nm,
         origin.z,
         solder_mask_thickness_nm,
-    ).unwrap_or_else(|_| {
+    )
+    .unwrap_or_else(|_| {
         // Fallback for pure Assembly mode or missing profile
-        crate::ir::stackup_manager::StackupManager::new(None, symbol_table, space.voxel_size.z_nm, origin.z, solder_mask_thickness_nm)
-            .expect("Failed to create fallback StackupManager")
+        crate::ir::stackup_manager::StackupManager::new(
+            None,
+            symbol_table,
+            space.voxel_size.z_nm,
+            origin.z,
+            solder_mask_thickness_nm,
+        )
+        .expect("Failed to create fallback StackupManager")
     });
     // eprintln!($3"[DEBUG program_to_space] Origin: {:?}", origin);
 
@@ -210,11 +219,17 @@ fn compile_single_space(
     for (i, item) in placement_items.iter().enumerate() {
         let item_id = match item {
             PlacementItem::Substrate(_) => format!("__substrate_{}", i).into(),
-            PlacementItem::Component(c) => {
-                c.name.as_ref().map(|n| n.to_string()).unwrap_or_else(|| format!("__comp_{}", i).into())
-            }
+            PlacementItem::Component(c) => c
+                .name
+                .as_ref()
+                .map(|n| n.to_string())
+                .unwrap_or_else(|| format!("__comp_{}", i).into()),
             PlacementItem::Pour(p) => p.name.to_string(),
-            PlacementItem::Contact(c) => c.name.as_ref().map(|n| n.to_string()).unwrap_or_else(|| format!("__contact_{}", i).into()),
+            PlacementItem::Contact(c) => c
+                .name
+                .as_ref()
+                .map(|n| n.to_string())
+                .unwrap_or_else(|| format!("__contact_{}", i).into()),
             PlacementItem::Route(_) => format!("__route_{}", i).into(),
         };
 
@@ -223,11 +238,23 @@ fn compile_single_space(
 
         match item {
             PlacementItem::Substrate(s) => {
-                graph.extract_dependencies_from_coord(&item_id, &s.from, last_component_name.as_ref());
-                graph.extract_dependencies_from_coord(&item_id, &s.to, last_component_name.as_ref());
+                graph.extract_dependencies_from_coord(
+                    &item_id,
+                    &s.from,
+                    last_component_name.as_ref(),
+                );
+                graph.extract_dependencies_from_coord(
+                    &item_id,
+                    &s.to,
+                    last_component_name.as_ref(),
+                );
             }
             PlacementItem::Component(c) => {
-                graph.extract_dependencies_from_coord(&item_id, &c.position, last_component_name.as_ref());
+                graph.extract_dependencies_from_coord(
+                    &item_id,
+                    &c.position,
+                    last_component_name.as_ref(),
+                );
                 // Update 'last' pointer ONLY for components (as per spec)
                 last_component_name = Some(item_id.clone());
             }
@@ -235,18 +262,38 @@ fn compile_single_space(
                 if let Some(boundary) = &p.boundary {
                     match boundary {
                         hwc_parser::PourBoundary::Rect(from, to) => {
-                            graph.extract_dependencies_from_coord(&item_id, from, last_component_name.as_ref());
-                            graph.extract_dependencies_from_coord(&item_id, to, last_component_name.as_ref());
+                            graph.extract_dependencies_from_coord(
+                                &item_id,
+                                from,
+                                last_component_name.as_ref(),
+                            );
+                            graph.extract_dependencies_from_coord(
+                                &item_id,
+                                to,
+                                last_component_name.as_ref(),
+                            );
                         }
                         hwc_parser::PourBoundary::Circle { center, radius } => {
-                            graph.extract_dependencies_from_coord(&item_id, center, last_component_name.as_ref());
-                            graph.extract_dependencies_from_expr(&item_id, radius, last_component_name.as_ref());
+                            graph.extract_dependencies_from_coord(
+                                &item_id,
+                                center,
+                                last_component_name.as_ref(),
+                            );
+                            graph.extract_dependencies_from_expr(
+                                &item_id,
+                                radius,
+                                last_component_name.as_ref(),
+                            );
                         }
                     }
                 }
             }
             PlacementItem::Contact(c) => {
-                graph.extract_dependencies_from_coord(&item_id, &c.position, last_component_name.as_ref());
+                graph.extract_dependencies_from_coord(
+                    &item_id,
+                    &c.position,
+                    last_component_name.as_ref(),
+                );
             }
             PlacementItem::Route(r) => {
                 // Routes depend on the components they connect
@@ -260,13 +307,21 @@ fn compile_single_space(
 
                 // Routes depend on variables used in strategy parameters
                 for (_, expr) in &r.strategy_params {
-                    graph.extract_dependencies_from_expr(&item_id, expr, last_component_name.as_ref());
+                    graph.extract_dependencies_from_expr(
+                        &item_id,
+                        expr,
+                        last_component_name.as_ref(),
+                    );
                 }
 
                 // Routes depend on variables used in path coordinates
                 if let Some(path) = &r.path {
                     for wp in path {
-                        graph.extract_dependencies_from_coord(&item_id, wp, last_component_name.as_ref());
+                        graph.extract_dependencies_from_coord(
+                            &item_id,
+                            wp,
+                            last_component_name.as_ref(),
+                        );
                     }
                 }
             }
@@ -293,9 +348,11 @@ fn compile_single_space(
         let stackup_height_nm = stackup_manager.board_thickness_nm();
 
         // Check if user already added solder mask layers to prevent duplicates
-        let has_solder_mask = space.voxel_grid.get_substrate_layers().iter().any(|l| {
-            l.layer_type == hwc_engine::voxel_grid::SubstrateLayerType::SolderMask
-        });
+        let has_solder_mask = space
+            .voxel_grid
+            .get_substrate_layers()
+            .iter()
+            .any(|l| l.layer_type == hwc_engine::voxel_grid::SubstrateLayerType::SolderMask);
 
         if !has_solder_mask {
             let mask_material_id = space.material_registry.get_or_register("SolderMask");
@@ -303,7 +360,11 @@ fn compile_single_space(
             // Top solder mask: sits directly ON TOP of the top copper layer
             let top_mask_bbox = hwc_engine::geometry::BoundingBox::new(
                 hwc_engine::geometry::Point3D::new(0, 0, stackup_height_nm),
-                hwc_engine::geometry::Point3D::new(width_nm, height_nm, stackup_height_nm + solder_mask_thickness_nm),
+                hwc_engine::geometry::Point3D::new(
+                    width_nm,
+                    height_nm,
+                    stackup_height_nm + solder_mask_thickness_nm,
+                ),
             );
             space.voxel_grid.add_substrate_layer(
                 mask_material_id,
@@ -333,46 +394,47 @@ fn compile_single_space(
         let item = item_map.get(id).unwrap();
         let item_start = std::time::Instant::now();
 
+        let place_ctx = placement::context::PlacementContext {
+            symbol_table,
+            eval_context: &eval_context,
+            stackup_manager: &stackup_manager,
+            collector,
+            profile,
+            origin,
+        };
+
         match item {
             PlacementItem::Substrate(sub) => {
-                placement::place_substrate(
+                placement::place_substrate(&mut space, sub, &mut bbox_tracker, &place_ctx)?;
+            }
+            PlacementItem::Pour(pour) => {
+                placement::place_pour(&mut space, pour, &mut bbox_tracker, &place_ctx)?;
+            }
+            PlacementItem::Contact(contact) => {
+                placement::place_contact(
                     &mut space,
-                    sub,
+                    contact,
                     origin,
                     symbol_table,
-                    &mut bbox_tracker,
                     &eval_context,
                     &stackup_manager,
                     profile,
                 )?;
             }
-            PlacementItem::Pour(pour) => {
-                // v0.1.7: Pass StackupManager for proper Elevation resolution
-                placement::place_pour(&mut space, &pour, origin, symbol_table, &mut bbox_tracker, &eval_context, collector, &stackup_manager, profile)?;
-            }
-            PlacementItem::Contact(contact) => {
-                placement::place_contact(&mut space, &contact, origin, symbol_table, &eval_context, &stackup_manager, profile)?;
-            }
             PlacementItem::Component(component) => {
                 component_count += 1;
                 placement::place_component(
                     &mut space,
-                    &component,
-                    origin,
-                    symbol_table,
+                    component,
                     &space_def.layouts,
                     &mut bbox_tracker,
-                    &eval_context,
-                    collector,
-                    &stackup_manager,
-                    profile,
+                    &place_ctx,
                 )?;
 
                 let elapsed = item_start.elapsed();
                 total_placement_time += elapsed;
             }
             PlacementItem::Route(_) => {
-                // Deferred to Pass 2: do not evaluate any trace geometry until all component bboxes/transforms are locked.
                 continue;
             }
         }
@@ -386,7 +448,11 @@ fn compile_single_space(
     // Phase 2: Obstacle Blitting (Implicit - registered components + manual traces)
     // Phase 3: Auto-Routing (Deferred batch process)
     let mut auto_routes = Vec::new();
-    let routing_mode = space_def.routing_config.as_ref().map(|c| c.mode).unwrap_or(hwc_parser::RoutingMode::Mixed);
+    let routing_mode = space_def
+        .routing_config
+        .as_ref()
+        .map(|c| c.mode)
+        .unwrap_or(hwc_parser::RoutingMode::Mixed);
 
     for id in sorted_ids.iter() {
         if let Some(PlacementItem::Route(route)) = item_map.get(id) {
@@ -396,7 +462,15 @@ fn compile_single_space(
 
             if !routing::needs_automatic_routing(route) {
                 // Phase 1: Manual Route (Absolute Control)
-                routing::route_trace(&mut space, route, origin, symbol_table, &eval_context, &stackup_manager, profile)?;
+                routing::route_trace(
+                    &mut space,
+                    route,
+                    origin,
+                    symbol_table,
+                    &eval_context,
+                    &stackup_manager,
+                    profile,
+                )?;
             } else {
                 // Phase 3 Candidate: Automatic or Patterned Route
                 if routing_mode == hwc_parser::RoutingMode::ManualOnly {
@@ -412,7 +486,8 @@ fn compile_single_space(
 
     // Phase 3: Execute Auto-Routing Batch
     if !auto_routes.is_empty() {
-        let mut auto_router = routing::AutoRouter::new(&mut space, symbol_table, &stackup_manager, profile);
+        let mut auto_router =
+            routing::AutoRouter::new(&mut space, symbol_table, &stackup_manager, profile);
         auto_router.route_all_nets()?;
     }
 
@@ -436,12 +511,13 @@ fn compile_single_space(
     let _auto_via_start = std::time::Instant::now();
 
     // Load fabrication constraints from profile for AutoViaInserter (v0.1.7 Limitation 7)
-    let fab_constraints = space_def
-        .profile
-        .as_ref()
-        .and_then(|profile_name| {
-            hwc_engine::constraint_manager::load_fabrication_constraints(profile_name.as_str(), symbol_table).ok()
-        });
+    let fab_constraints = space_def.profile.as_ref().and_then(|profile_name| {
+        hwc_engine::constraint_manager::load_fabrication_constraints(
+            profile_name.as_str(),
+            symbol_table,
+        )
+        .ok()
+    });
 
     let auto_via_inserter = crate::auto_via_inserter::AutoViaInserter::from_profile(
         profile,
@@ -458,7 +534,15 @@ fn compile_single_space(
             // );
             // Place the auto-inserted vias
             for via in &auto_vias {
-                placement::place_contact(&mut space, via, origin, symbol_table, &eval_context, &stackup_manager, profile)?;
+                placement::place_contact(
+                    &mut space,
+                    via,
+                    origin,
+                    symbol_table,
+                    &eval_context,
+                    &stackup_manager,
+                    profile,
+                )?;
             }
         }
         Err(_e) => {

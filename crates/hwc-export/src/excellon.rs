@@ -187,7 +187,10 @@ impl ExcellonExporter {
             self.board_name,
             chrono::Local::now().format("%Y-%m-%d")
         )?;
-        writeln!(writer, "; v0.1.7 physical Z (mm) recorded per tool pass where applicable")?;
+        writeln!(
+            writer,
+            "; v0.1.7 physical Z (mm) recorded per tool pass where applicable"
+        )?;
         writeln!(writer, "; FORMAT={{-:-/ absolute / inch / decimal}}")?;
         writeln!(writer, "FMAT,2")?;
         writeln!(writer, "INCH")?;

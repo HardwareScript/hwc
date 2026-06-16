@@ -4,8 +4,8 @@
 
 use super::super::errors::IrError;
 use super::super::stackup_manager::StackupManager;
-use hwc_engine::{ComponentPlacer, HardwareSpace, Point3D};
 use compact_str::CompactString;
+use hwc_engine::{ComponentPlacer, HardwareSpace, Point3D};
 
 fn get_prop_nm(
     contact: &hwc_parser::ContactPlacement,
@@ -14,9 +14,9 @@ fn get_prop_nm(
     eval_context: &hwc_parser::EvaluationContext,
 ) -> Option<i64> {
     contact.properties.get(name).and_then(|expr| {
-        expr.evaluate(eval_context).ok().and_then(|val| {
-            val.to_nanometers().ok()
-        })
+        expr.evaluate(eval_context)
+            .ok()
+            .and_then(|val| val.to_nanometers().ok())
     })
 }
 
@@ -33,7 +33,9 @@ fn get_prop_bool(
                 _ => {}
             }
         }
-        expr.evaluate(eval_context).ok().and_then(|val| val.as_integer().ok().map(|i| i != 0))
+        expr.evaluate(eval_context)
+            .ok()
+            .and_then(|val| val.as_integer().ok().map(|i| i != 0))
     })
 }
 
@@ -42,11 +44,9 @@ fn get_prop_string(
     name: &str,
     _eval_context: &hwc_parser::EvaluationContext,
 ) -> Option<CompactString> {
-    contact.properties.get(name).and_then(|expr| {
-        match expr {
-            hwc_parser::Expression::Variable { name, .. } => Some(name.clone()),
-            _ => None,
-        }
+    contact.properties.get(name).and_then(|expr| match expr {
+        hwc_parser::Expression::Variable { name, .. } => Some(name.clone()),
+        _ => None,
     })
 }
 
@@ -55,16 +55,14 @@ fn get_prop_cap_type(
     name: &str,
     _eval_context: &hwc_parser::EvaluationContext,
 ) -> Option<hwc_engine::voxel_grid::CapType> {
-    contact.properties.get(name).and_then(|expr| {
-        match expr {
-            hwc_parser::Expression::Variable { name, .. } => match name.as_str() {
-                "none" => Some(hwc_engine::voxel_grid::CapType::None),
-                "annular" => Some(hwc_engine::voxel_grid::CapType::Annular),
-                "solid" => Some(hwc_engine::voxel_grid::CapType::Solid),
-                _ => None,
-            },
+    contact.properties.get(name).and_then(|expr| match expr {
+        hwc_parser::Expression::Variable { name, .. } => match name.as_str() {
+            "none" => Some(hwc_engine::voxel_grid::CapType::None),
+            "annular" => Some(hwc_engine::voxel_grid::CapType::Annular),
+            "solid" => Some(hwc_engine::voxel_grid::CapType::Solid),
             _ => None,
-        }
+        },
+        _ => None,
     })
 }
 
@@ -109,16 +107,13 @@ pub fn place_contact(
 
     // Calculate via diameter (use default if not specified)
     // v0.1.7: Support explicit drill_diameter vs legacy diameter
-    let diameter_nm = if let Some(nm) = get_prop_nm(contact, "drill_diameter", symbol_table, eval_context) {
-        nm
-    } else if let Some(nm) = get_prop_nm(contact, "diameter", symbol_table, eval_context) {
-        nm
-    } else {
-        100_000 // Default 100um
-    };
+    let diameter_nm = get_prop_nm(contact, "drill_diameter", symbol_table, eval_context)
+        .or_else(|| get_prop_nm(contact, "diameter", symbol_table, eval_context))
+        .unwrap_or(100_000);
     let radius_nm = diameter_nm / 2;
 
-    let from_bottom_nm = stackup_manager.resolve_elevation(&contact.from_elevation, symbol_table)?;
+    let from_bottom_nm =
+        stackup_manager.resolve_elevation(&contact.from_elevation, symbol_table)?;
     let to_bottom_nm = stackup_manager.resolve_elevation(&contact.to_elevation, symbol_table)?;
     let from_top_nm = stackup_manager.resolve_elevation_top(
         &contact.from_elevation,
@@ -131,7 +126,11 @@ pub fn place_contact(
         space.voxel_size.z_nm,
     )?;
 
-    let contact_name_debug = contact.name.as_ref().map(|n| n.to_string()).unwrap_or_else(|| "<unnamed>".into());
+    let contact_name_debug = contact
+        .name
+        .as_ref()
+        .map(|n| n.to_string())
+        .unwrap_or_else(|| "<unnamed>".into());
     println!("[PLACE_CONTACT] '{}' material='{}' dia={}nm from_z={}nm to_z={}nm from_top={}nm to_top={}nm",
         contact_name_debug, contact.material, diameter_nm,
         from_bottom_nm, to_bottom_nm, from_top_nm, to_top_nm);
@@ -143,20 +142,34 @@ pub fn place_contact(
     // 3. Inner Layer (Upper): Span from Bottom Surface (contact from below).
     // 4. Inner Layer (Lower): Span from Top Surface (contact from above).
     //
-    // **MICRO-SINKING (v0.1.8)**: To prevent coplanar Z-fighting at the interface, 
-    // we sink the via 500nm into the target copper layer. This ensures volumetric 
-    // overlap, which will eventually be unified into a single manifold mesh 
+    // **MICRO-SINKING (v0.1.8)**: To prevent coplanar Z-fighting at the interface,
+    // we sink the via 500nm into the target copper layer. This ensures volumetric
+    // overlap, which will eventually be unified into a single manifold mesh
     // via Strategy A (2D Co-Union).
     let (start_z, end_z) = if let (Some(from_name), Some(to_name)) = (
         stackup_manager.get_layer_name(&contact.from_elevation),
         stackup_manager.get_layer_name(&contact.to_elevation),
     ) {
         // Semantic mode: Use boundary rules
-        let (_lower_name, lower_bottom, _lower_top, _upper_name, _upper_bottom, upper_top) = 
+        let (_lower_name, lower_bottom, _lower_top, _upper_name, _upper_bottom, upper_top) =
             if from_bottom_nm < to_bottom_nm {
-                (from_name, from_bottom_nm, from_top_nm, to_name, to_bottom_nm, to_top_nm)
+                (
+                    from_name,
+                    from_bottom_nm,
+                    from_top_nm,
+                    to_name,
+                    to_bottom_nm,
+                    to_top_nm,
+                )
             } else {
-                (to_name, to_bottom_nm, to_top_nm, from_name, from_bottom_nm, from_top_nm)
+                (
+                    to_name,
+                    to_bottom_nm,
+                    to_top_nm,
+                    from_name,
+                    from_bottom_nm,
+                    from_top_nm,
+                )
             };
 
         // v0.1.9: FULL-THICKNESS PENETRATION
@@ -165,15 +178,20 @@ pub fn place_contact(
         // of their start and end layers to ensure physical continuity for stacked vias.
         let via_bottom = lower_bottom;
         let via_top = upper_top;
-        
+
         (via_bottom, via_top)
     } else {
         // Physical mode: Fallback to inclusive min/max
         (from_bottom_nm.min(to_bottom_nm), from_top_nm.max(to_top_nm))
     };
 
-    println!("[PLACE_CONTACT] '{}' final span: start_z={}nm end_z={}nm ({}nm tall)",
-        contact_name_debug, start_z, end_z, end_z - start_z);
+    println!(
+        "[PLACE_CONTACT] '{}' final span: start_z={}nm end_z={}nm ({}nm tall)",
+        contact_name_debug,
+        start_z,
+        end_z,
+        end_z - start_z
+    );
 
     // Create a cylindrical via by filling voxels within radius
     let placer = ComponentPlacer::new();
@@ -185,8 +203,16 @@ pub fn place_contact(
 
     // v0.1.7 FIXED: The drill bbox must have XY area to intersect substrate layers.
     let contact_bbox = hwc_engine::geometry::BoundingBox::new(
-        Point3D::new(xy_point.x - radius_nm, xy_point.y - radius_nm, start_z.min(end_z)),
-        Point3D::new(xy_point.x + radius_nm, xy_point.y + radius_nm, start_z.max(end_z)),
+        Point3D::new(
+            xy_point.x - radius_nm,
+            xy_point.y - radius_nm,
+            start_z.min(end_z),
+        ),
+        Point3D::new(
+            xy_point.x + radius_nm,
+            xy_point.y + radius_nm,
+            start_z.max(end_z),
+        ),
     );
 
     // --- P43: MATERIAL INTEGRITY CHECK FOR CONTACTS ---
@@ -208,9 +234,13 @@ pub fn place_contact(
             if contact_bbox.intersects(existing_bbox) {
                 // If they have different materials, this is interpenetration
                 if existing_contact.material_name != contact.material {
-                    let contact_name: compact_str::CompactString = contact.name.as_ref().map(|n| n.to_string().into()).unwrap_or_else(|| {
-                        format!("Via_{}_{}", from_bottom_nm, to_bottom_nm).into()
-                    });
+                    let contact_name: compact_str::CompactString = contact
+                        .name
+                        .as_ref()
+                        .map(|n| n.to_string())
+                        .unwrap_or_else(|| {
+                            format!("Via_{}_{}", from_bottom_nm, to_bottom_nm).into()
+                        });
 
                     return Err(IrError::PlacementError(format!(
                         "Material interpenetration detected: Contact '{}' ({}) overlaps with contact '{}' ({}) in 3D space. \
@@ -245,7 +275,9 @@ pub fn place_contact(
     };
 
     let bridge_material_name = get_prop_string(contact, "bridge", eval_context);
-    let bridge_material_id = bridge_material_name.as_ref().map(|b| space.material_registry.get_or_register(b));
+    let bridge_material_id = bridge_material_name
+        .as_ref()
+        .map(|b| space.material_registry.get_or_register(b));
 
     // v0.2.0: Resolve shape from properties if not already set as a contour
     let mut contour = contact.contour.clone();
@@ -254,24 +286,30 @@ pub fn place_contact(
             if let Some(shape_def) = symbol_table.get_shape(shape_name.as_str()) {
                 let constants = symbol_table.get_all_constants();
                 contour = Some(crate::auto_via_inserter::library::evaluate_shape_points(
-                    &shape_def,
+                    shape_def,
                     diameter_nm,
                     &constants,
                 ));
                 let contour_len = contour.as_ref().map_or(0, |c| c.len());
-                println!("[PLACE_CONTACT] Resolved shape '{}' to {} vertices", shape_name, contour_len);
+                println!(
+                    "[PLACE_CONTACT] Resolved shape '{}' to {} vertices",
+                    shape_name, contour_len
+                );
             }
         }
     }
 
     // Compute pad bbox (drill + annular ring) for contact metadata and substrate layers
-    let annular_ring_nm = if let Some(nm) = get_prop_nm(contact, "annular_ring", symbol_table, eval_context) {
-        nm
-    } else {
-        space.fabrication_constraints.as_ref()
-            .map(|c| c.via.min_annular_ring_nm)
-            .unwrap_or(150_000)
-    };
+    let annular_ring_nm =
+        if let Some(nm) = get_prop_nm(contact, "annular_ring", symbol_table, eval_context) {
+            nm
+        } else {
+            space
+                .fabrication_constraints
+                .as_ref()
+                .map(|c| c.via.min_annular_ring_nm)
+                .unwrap_or(150_000)
+        };
 
     // v0.1.7: Register via for Excellon drill export
     // This ensures that ALL contacts (vias, THT pins, TSVs) are registered for the drill file.
@@ -296,19 +334,24 @@ pub fn place_contact(
     let pad_diameter_nm = diameter_nm + (2 * annular_ring_nm);
     let pad_radius_nm = pad_diameter_nm / 2;
     let pad_bbox = hwc_engine::geometry::BoundingBox::new(
-        Point3D::new(xy_point.x - pad_radius_nm, xy_point.y - pad_radius_nm, start_z.min(end_z)),
-        Point3D::new(xy_point.x + pad_radius_nm, xy_point.y + pad_radius_nm, start_z.max(end_z)),
+        Point3D::new(
+            xy_point.x - pad_radius_nm,
+            xy_point.y - pad_radius_nm,
+            start_z.min(end_z),
+        ),
+        Point3D::new(
+            xy_point.x + pad_radius_nm,
+            xy_point.y + pad_radius_nm,
+            start_z.max(end_z),
+        ),
     );
 
     // v0.1.7: TSV (Through-Silicon Via) support
     let liner_material_name = get_prop_string(contact, "liner", eval_context);
     if let Some(liner_material_name) = &liner_material_name {
         let liner_material_id = space.material_registry.get_or_register(liner_material_name);
-        let liner_thickness_nm = if let Some(nm) = get_prop_nm(contact, "liner_thickness", symbol_table, eval_context) {
-            nm
-        } else {
-            5_000 // Default 5um liner
-        };
+        let liner_thickness_nm =
+            get_prop_nm(contact, "liner_thickness", symbol_table, eval_context).unwrap_or(5_000);
 
         let bridge_thickness_nm = if bridge_material_name.is_some() {
             1_000 // Default 1um bridge if specified
@@ -317,7 +360,9 @@ pub fn place_contact(
         };
 
         let koz_multiplier = if let Some(expr) = contact.properties.get("koz") {
-            expr.evaluate(eval_context).and_then(|v| v.as_number()).unwrap_or(3.0) as f32
+            expr.evaluate(eval_context)
+                .and_then(|v| v.as_number())
+                .unwrap_or(3.0) as f32
         } else {
             3.0 // Default 3x diameter
         };
@@ -349,7 +394,7 @@ pub fn place_contact(
         // Compound via (Phase 1/2)
         // Interface layer is the bottom layer
         let interface_end_z = start_z + space.voxel_size.z_nm;
-        
+
         let interface_end_point = Point3D::new(end_point.x, end_point.y, interface_end_z);
         let fill_start_point = Point3D::new(start_point.x, start_point.y, interface_end_z);
 
@@ -367,7 +412,11 @@ pub fn place_contact(
                 .map_err(|e| {
                     IrError::PlacementError(format!(
                         "Failed to place contact bridge '{}': {}",
-                        contact.name.as_ref().map(|n| n.to_string()).unwrap_or_else(|| "<unnamed>".into()),
+                        contact
+                            .name
+                            .as_ref()
+                            .map(|n| n.to_string())
+                            .unwrap_or_else(|| "<unnamed>".into()),
                         e
                     ))
                 })?;
@@ -384,7 +433,11 @@ pub fn place_contact(
                 .map_err(|e| {
                     IrError::PlacementError(format!(
                         "Failed to place contact bridge '{}': {}",
-                        contact.name.as_ref().map(|n| n.to_string()).unwrap_or_else(|| "<unnamed>".into()),
+                        contact
+                            .name
+                            .as_ref()
+                            .map(|n| n.to_string())
+                            .unwrap_or_else(|| "<unnamed>".into()),
                         e
                     ))
                 })?;
@@ -405,7 +458,11 @@ pub fn place_contact(
                     .map_err(|e| {
                         IrError::PlacementError(format!(
                             "Failed to place contact fill '{}': {}",
-                            contact.name.as_ref().map(|n| n.to_string()).unwrap_or_else(|| "<unnamed>".into()),
+                            contact
+                                .name
+                                .as_ref()
+                                .map(|n| n.to_string())
+                                .unwrap_or_else(|| "<unnamed>".into()),
                             e
                         ))
                     })?;
@@ -422,7 +479,11 @@ pub fn place_contact(
                     .map_err(|e| {
                         IrError::PlacementError(format!(
                             "Failed to place contact fill '{}': {}",
-                            contact.name.as_ref().map(|n| n.to_string()).unwrap_or_else(|| "<unnamed>".into()),
+                            contact
+                                .name
+                                .as_ref()
+                                .map(|n| n.to_string())
+                                .unwrap_or_else(|| "<unnamed>".into()),
                             e
                         ))
                     })?;
@@ -434,27 +495,39 @@ pub fn place_contact(
         let mut process = hwc_engine::ManufacturingProcess::Deposited;
         if let Some(material_def) = symbol_table.materials().get(&contact.material) {
             process = match material_def.process {
-                hwc_parser::ManufacturingProcess::DrilledPlated => hwc_engine::ManufacturingProcess::DrilledPlated,
-                hwc_parser::ManufacturingProcess::Etched => hwc_engine::ManufacturingProcess::Etched,
-                hwc_parser::ManufacturingProcess::Deposited => hwc_engine::ManufacturingProcess::Deposited,
+                hwc_parser::ManufacturingProcess::DrilledPlated => {
+                    hwc_engine::ManufacturingProcess::DrilledPlated
+                }
+                hwc_parser::ManufacturingProcess::Etched => {
+                    hwc_engine::ManufacturingProcess::Etched
+                }
+                hwc_parser::ManufacturingProcess::Deposited => {
+                    hwc_engine::ManufacturingProcess::Deposited
+                }
             };
         }
-        
+
         // Also ensure the engine's registry knows about this process for downstream checks
         space.material_registry.set_process(material_id, process);
-        
-        let clearance_nm = space.fabrication_constraints.as_ref()
+
+        let clearance_nm = space
+            .fabrication_constraints
+            .as_ref()
             .map(|c| c.trace.min_spacing_nm)
             .unwrap_or(150_000); // Default 150um
 
-        println!("[PLACE_CONTACT] '{}' process={:?}, net_id={}, material_id={}",
-            contact_name_debug, process, net_id, material_id);
+        println!(
+            "[PLACE_CONTACT] '{}' process={:?}, net_id={}, material_id={}",
+            contact_name_debug, process, net_id, material_id
+        );
 
         if process == hwc_engine::ManufacturingProcess::DrilledPlated {
             // 1. pad_bbox already computed above
 
             // v0.1.7: Profile-driven solder mask expansion (Zero Implicit Magic)
-            let solder_mask_expansion_nm = space.fabrication_constraints.as_ref()
+            let solder_mask_expansion_nm = space
+                .fabrication_constraints
+                .as_ref()
                 .map(|c| c.solder_mask_expansion_nm)
                 .unwrap_or(75_000);
 
@@ -472,14 +545,13 @@ pub fn place_contact(
             );
 
             // 3. ACTION: Calculate remaining Unified Via parameters (Plating)
-            let plating_thickness_nm = if let Some(nm) = get_prop_nm(contact, "plating_thickness", symbol_table, eval_context) {
-                nm
-            } else {
-                25_000 // Standard 1-mil plating
-            };
+            let plating_thickness_nm =
+                get_prop_nm(contact, "plating_thickness", symbol_table, eval_context)
+                    .unwrap_or(25_000);
             let inner_diameter_nm = diameter_nm - (2 * plating_thickness_nm);
 
-            let bottom_diameter_nm = get_prop_nm(contact, "bottom_diameter", symbol_table, eval_context);
+            let bottom_diameter_nm =
+                get_prop_nm(contact, "bottom_diameter", symbol_table, eval_context);
 
             // Determine Cap Types (v0.1.7 Unified Parametric Interconnect)
             // 1. Check explicit top/bottom caps (User/Stdlib Space)
@@ -564,7 +636,15 @@ pub fn place_contact(
             // v0.1.7: Mechanical/Subtractive Logic
             // 1. ACTION: Auto-Drill (NPTH logic: Net 0 always drills everything)
             // Etched vias are NPTH - no solder mask opening needed (is_tented=true for NPTH)
-            space.voxel_grid.drill_via_hole(contact_bbox, diameter_nm, 0, clearance_nm, true, diameter_nm, 75_000);
+            space.voxel_grid.drill_via_hole(
+                contact_bbox,
+                diameter_nm,
+                0,
+                clearance_nm,
+                true,
+                diameter_nm,
+                75_000,
+            );
 
             // NO cylinder/tube is added. The space remains empty (Void).
         } else {
@@ -572,7 +652,9 @@ pub fn place_contact(
             // Even if not "drilled" in manufacturing, it must physically displace
             // the substrate and clear different-net pours.
             // Deposited vias use drill_diameter as pad (no annular ring by default)
-            let solder_mask_expansion_nm = space.fabrication_constraints.as_ref()
+            let solder_mask_expansion_nm = space
+                .fabrication_constraints
+                .as_ref()
                 .map(|c| c.solder_mask_expansion_nm)
                 .unwrap_or(75_000);
             println!("[PLACE_CONTACT] '{}' Deposited path: drilling via hole at bbox=({},{}-{},{}) dia={}",
@@ -608,7 +690,11 @@ pub fn place_contact(
                     .map_err(|e| {
                         IrError::PlacementError(format!(
                             "Failed to place contact '{}': {}",
-                            contact.name.as_ref().map(|n| n.to_string()).unwrap_or_else(|| "<unnamed>".into()),
+                            contact
+                                .name
+                                .as_ref()
+                                .map(|n| n.to_string())
+                                .unwrap_or_else(|| "<unnamed>".into()),
                             e
                         ))
                     })?;
@@ -629,7 +715,11 @@ pub fn place_contact(
                     .map_err(|e| {
                         IrError::PlacementError(format!(
                             "Failed to place contact '{}': {}",
-                            contact.name.as_ref().map(|n| n.to_string()).unwrap_or_else(|| "<unnamed>".into()),
+                            contact
+                                .name
+                                .as_ref()
+                                .map(|n| n.to_string())
+                                .unwrap_or_else(|| "<unnamed>".into()),
                             e
                         ))
                     })?;
@@ -642,7 +732,7 @@ pub fn place_contact(
         let contact_name: compact_str::CompactString = contact
             .name
             .as_ref()
-            .map(|n| n.to_string().into())
+            .map(|n| n.to_string())
             .unwrap_or_else(|| format!("Via_{}_{}", from_bottom_nm, to_bottom_nm).into());
 
         // Register contact as a virtual component
@@ -681,26 +771,38 @@ pub fn place_contact(
     let contact_name: compact_str::CompactString = contact
         .name
         .as_ref()
-        .map(|n| n.to_string().into())
+        .map(|n| n.to_string())
         .unwrap_or_else(|| format!("Via_{}_{}", from_bottom_nm, to_bottom_nm).into());
 
     // Task 4.2: Store via geometry as analytic primitive (bounding box only)
     // PRIMITIVES OVER PIXELS: No voxel collection needed - DRC uses bounding boxes directly
-    println!("[PLACE_CONTACT] '{}' Storing contact metadata: bbox=({},{}-{},{}), z={}→{}nm, net={:?}",
+    println!(
+        "[PLACE_CONTACT] '{}' Storing contact metadata: bbox=({},{}-{},{}), z={}→{}nm, net={:?}",
         contact_name_debug,
-        pad_bbox.min.x, pad_bbox.min.y, pad_bbox.max.x, pad_bbox.max.y,
-        from_bottom_nm, to_bottom_nm, contact.net);
+        pad_bbox.min.x,
+        pad_bbox.min.y,
+        pad_bbox.max.x,
+        pad_bbox.max.y,
+        from_bottom_nm,
+        to_bottom_nm,
+        contact.net
+    );
     space.contacts.push(hwc_engine::ContactMetadata {
         name: contact_name,
         material_name: contact.material.clone(),
         z_start_nm: from_bottom_nm,
         z_end_nm: to_bottom_nm,
-        net: contact.net.as_ref().map(|n| n.to_string().into()),
+        net: contact.net.as_ref().map(|n| n.to_string()),
         bridge: bridge_material_name,
         bbox: Some(pad_bbox),
         voxels: Vec::new(), // Empty - analytic geometry only
         is_tented,
-        mask_clearance_diameter_nm: get_prop_nm(contact, "mask_clearance_diameter", symbol_table, eval_context),
+        mask_clearance_diameter_nm: get_prop_nm(
+            contact,
+            "mask_clearance_diameter",
+            symbol_table,
+            eval_context,
+        ),
     });
 
     Ok(())

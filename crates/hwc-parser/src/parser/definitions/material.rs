@@ -354,8 +354,11 @@ impl super::super::Parser {
                         } else {
                             collector.report(ParseError::General {
                                 span: span_to_source_span(&prop.span),
-                                message: format!("clearcoat must be between 0.0 and 1.0, got {}", n)
-                                    .into(),
+                                message: format!(
+                                    "clearcoat must be between 0.0 and 1.0, got {}",
+                                    n
+                                )
+                                .into(),
                             });
                         }
                     }
@@ -383,8 +386,11 @@ impl super::super::Parser {
                         } else {
                             collector.report(ParseError::General {
                                 span: span_to_source_span(&prop.span),
-                                message: format!("subsurface must be between 0.0 and 1.0, got {}", n)
-                                    .into(),
+                                message: format!(
+                                    "subsurface must be between 0.0 and 1.0, got {}",
+                                    n
+                                )
+                                .into(),
                             });
                         }
                     }
@@ -396,8 +402,11 @@ impl super::super::Parser {
                         } else {
                             collector.report(ParseError::General {
                                 span: span_to_source_span(&prop.span),
-                                message: format!("anisotropy must be between 0.0 and 1.0, got {}", n)
-                                    .into(),
+                                message: format!(
+                                    "anisotropy must be between 0.0 and 1.0, got {}",
+                                    n
+                                )
+                                .into(),
                             });
                         }
                     }
@@ -460,7 +469,7 @@ impl super::super::Parser {
         let name = self.expect_identifier()?;
         self.expect(&Token::Colon)?;
         let target = self.expect_identifier()?;
-        
+
         self.skip_whitespace();
 
         Ok(MaterialAliasDefinition {
@@ -563,7 +572,10 @@ impl super::super::Parser {
                     n *= sign;
                     Ok(PropertyValue::Number(n))
                 }
-                _ => Err(self.error("Expected property value (measurement, string, number, or boolean)")),
+                _ => {
+                    Err(self
+                        .error("Expected property value (measurement, string, number, or boolean)"))
+                }
             }
         } else {
             Err(ParseError::UnexpectedEof {

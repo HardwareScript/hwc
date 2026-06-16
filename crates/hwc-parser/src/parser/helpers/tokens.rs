@@ -91,7 +91,10 @@ impl Parser {
     }
 
     /// Expect and consume an identifier with a specific name
-    pub(crate) fn expect_identifier_named(&mut self, expected_name: &str) -> Result<(), ParseError> {
+    pub(crate) fn expect_identifier_named(
+        &mut self,
+        expected_name: &str,
+    ) -> Result<(), ParseError> {
         let span = self.current_span();
         let identifier = self.expect_identifier()?;
         if identifier.name.as_str() != expected_name {

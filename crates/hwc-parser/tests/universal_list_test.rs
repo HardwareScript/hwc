@@ -150,7 +150,10 @@ fn test_legacy_inline_format_now_rejected() {
     let ast = parser.parse(&DiagnosticCollector::new("", 100));
 
     // With legacy syntax, list parser now errors and syncs; expect no definitions parsed.
-    assert!(ast.definitions.is_empty(), "Legacy inline list syntax must be rejected post-cleanup");
+    assert!(
+        ast.definitions.is_empty(),
+        "Legacy inline list syntax must be rejected post-cleanup"
+    );
 }
 
 #[test]
@@ -168,7 +171,10 @@ fn test_legacy_block_format_now_rejected() {
     let mut parser = Parser::new(tokens);
     let ast = parser.parse(&DiagnosticCollector::new("", 100));
 
-    assert!(ast.definitions.is_empty(), "Legacy block list syntax must be rejected post-cleanup");
+    assert!(
+        ast.definitions.is_empty(),
+        "Legacy block list syntax must be rejected post-cleanup"
+    );
 }
 
 #[test]

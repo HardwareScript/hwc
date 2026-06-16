@@ -1,6 +1,7 @@
 use compact_str::CompactString;
 
 pub mod alignment;
+pub mod alignment_layer; // Sprint 4.1: Alignment Layer (replaces traditional LVS)
 pub mod auto_via_inserter;
 pub mod bounding_box_tracker;
 pub mod bridge_resolver;
@@ -14,7 +15,6 @@ pub mod interface_validator;
 pub mod ir;
 pub mod ir_integration;
 pub mod logic_synthesizer;
-pub mod alignment_layer; // Sprint 4.1: Alignment Layer (replaces traditional LVS)
 pub mod module_flattener;
 pub mod module_resolver;
 pub mod optimizer;
@@ -44,15 +44,15 @@ pub use prelude::{Prelude, PreludeError};
 pub use unit_resolver::UnitResolver;
 pub use width_inference::{WidthError, WidthInference};
 // Re-export from modular ir_integration
+pub use alignment_layer::{AlignmentReport, AlignmentViolation}; // Sprint 4.1: Alignment Layer
+pub use ir::routing::AutoRouter;
 pub use ir_integration::{program_to_space, program_to_spaces, IrError};
 pub use logic_synthesizer::{LogicSynthesizer, SynthesisError};
-pub use alignment_layer::{AlignmentReport, AlignmentViolation}; // Sprint 4.1: Alignment Layer
 pub use module_flattener::{flatten_module, FlattenError, FlattenedModule, ModuleBoundingBox};
 pub use module_resolver::{ModuleResolver, ResolverError};
 pub use optimizer::{
     OptimizationReport, Optimizer, PlacementSuggestion, TraceWidthAdjustment, ViaOptimization,
 };
-pub use ir::routing::AutoRouter;
 pub use symbol_table::{SymbolError, SymbolTable};
 pub use validator::Validator;
 
@@ -60,7 +60,7 @@ pub use validator::Validator;
 pub use hwc_engine::placement::BakedComponent;
 
 // v0.1.7: Implement DiagnosticReporter to bridge engine logs to native printer.
-// Using an adapter struct to satisfy orphan rules (DiagnosticCollector and DiagnosticReporter 
+// Using an adapter struct to satisfy orphan rules (DiagnosticCollector and DiagnosticReporter
 // are both defined in other crates).
 pub struct DiagnosticReporterAdapter<'a>(pub &'a hwc_diagnostics::DiagnosticCollector);
 

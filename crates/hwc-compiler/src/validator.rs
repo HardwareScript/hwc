@@ -428,8 +428,7 @@ impl Validator {
         let z_nm = if matches!(coord, Coordinate::Relative(_)) {
             0
         } else {
-            crate::ir::conversions::evaluate_expression_to_nm(coord.z(), symbol_table)
-                .unwrap_or(0)
+            crate::ir::conversions::evaluate_expression_to_nm(coord.z(), symbol_table).unwrap_or(0)
         };
 
         (x_nm, y_nm, z_nm)

@@ -84,7 +84,7 @@ mod tests {
     fn test_source_map_lf() {
         let source = "line 1\nline 2\nline 3";
         let map = SourceMap::new(source);
-        
+
         let loc1 = map.get_location(0);
         assert_eq!(loc1.line, 1);
         assert_eq!(loc1.column, 1);
@@ -98,7 +98,7 @@ mod tests {
     fn test_source_map_crlf() {
         let source = "line 1\r\nline 2\r\nline 3";
         let map = SourceMap::new(source);
-        
+
         let loc1 = map.get_location(0);
         assert_eq!(loc1.line, 1);
         assert_eq!(loc1.column, 1);

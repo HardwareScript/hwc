@@ -51,7 +51,8 @@ pub fn execute(input: PathBuf, _build_dir: PathBuf, verbose: bool, parallel: boo
     if verbose {
         println!("🌳 Parsing...");
     }
-    let collector = hwc_compiler::DiagnosticCollector::new_with_file(&source, &input.to_string_lossy(), 20);
+    let collector =
+        hwc_compiler::DiagnosticCollector::new_with_file(&source, &input.to_string_lossy(), 20);
     let mut parser = Parser::new(tokens);
     let ast = parser.parse(&collector);
 

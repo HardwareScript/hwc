@@ -22,7 +22,7 @@ pub fn compile_source(
     // Read source
     let source = std::fs::read_to_string(input)
         .map_err(|e| miette::miette!("Failed to read file: {}", e))?;
-    
+
     println!(
         "[{:>8.2}ms] Source file read successfully ({} bytes)",
         start_time.elapsed().as_secs_f64() * 1000.0,
@@ -57,7 +57,8 @@ pub fn compile_source(
         config.limit.unwrap_or(50)
     };
 
-    let collector = hwc_compiler::DiagnosticCollector::new_with_file(&source, &file_name, error_limit);
+    let collector =
+        hwc_compiler::DiagnosticCollector::new_with_file(&source, &file_name, error_limit);
     let mut parser = Parser::new(tokens);
     let ast = parser.parse(&collector);
 
@@ -102,7 +103,12 @@ pub fn compile_source(
         eprintln!("{}\n", collector.summary());
     }
 
-    Ok(CompilationResult { ast, symbol_table, source, collector })
+    Ok(CompilationResult {
+        ast,
+        symbol_table,
+        source,
+        collector,
+    })
 }
 
 /// Build symbol table with imports and definitions
@@ -147,7 +153,7 @@ fn build_symbol_table(
                 symbol_table.register_material(collector, mat.clone());
             }
             hwc_parser::Definition::Profile(profile) => {
-                symbol_table.register_profile(collector, profile.clone());
+                symbol_table.register_profile(collector, (**profile).clone());
             }
             hwc_parser::Definition::Component(component) => {
                 symbol_table.register_component(collector, component.clone());

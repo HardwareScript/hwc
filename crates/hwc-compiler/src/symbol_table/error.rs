@@ -57,10 +57,7 @@ pub enum SymbolError {
 
     #[error("Material alias depth exceeded for '{name}': {depth} hops")]
     #[diagnostic(help("Material aliases are limited to 10 hops to prevent infinite recursion."))]
-    AliasDepthExceeded {
-        name: CompactString,
-        depth: usize,
-    },
+    AliasDepthExceeded { name: CompactString, depth: usize },
 }
 
 impl From<SynthesisError> for SymbolError {

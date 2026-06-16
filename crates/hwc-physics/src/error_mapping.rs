@@ -131,7 +131,7 @@ impl PhysicsError {
         self.suggestion = Some(suggestion);
         self
     }
-    
+
     pub fn with_source_location(mut self, file_path: &str, line_number: usize) -> Self {
         self.source_location = Some(format!("{}:{}", file_path, line_number).into());
         self

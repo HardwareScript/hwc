@@ -24,8 +24,8 @@
 //! Applied during trace-to-voxel conversion after pathfinding completes.
 
 use crate::geometry::Point3D;
-use crate::voxel_grid::VoxelGrid;
 use crate::netlist::NetHandle;
+use crate::voxel_grid::VoxelGrid;
 
 /// IPC reliability class for teardrop generation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -63,8 +63,8 @@ impl Default for TeardropConfig {
         Self {
             enabled: false,
             ipc_class: IpcClass::Class2,
-            length_nm: 100_000,   // 100µm
-            max_width_nm: 400_000, // 400µm
+            length_nm: 100_000,           // 100µm
+            max_width_nm: 400_000,        // 400µm
             transition_length_nm: 50_000, // 50µm
         }
     }
@@ -115,6 +115,7 @@ impl TeardropEngine {
     /// * `config` - Teardrop configuration.
     /// * `voxel_size_nm` - Voxel size for coordinate conversion.
     /// * `net_handle` - Net handle for the trace.
+    #[allow(clippy::too_many_arguments)]
     pub fn apply_teardrops(
         voxel_grid: &VoxelGrid,
         path: &[Point3D],
@@ -132,7 +133,8 @@ impl TeardropEngine {
         // Use max_width from config
         let max_width_voxels = (config.max_width_nm / voxel_size_nm.max(1)).max(1) as usize;
         let half_width = (trace_width_nm / voxel_size_nm.max(1)).max(1) as usize / 2;
-        let transition_voxels = (config.transition_length_nm / voxel_size_nm.max(1)).max(1) as usize;
+        let transition_voxels =
+            (config.transition_length_nm / voxel_size_nm.max(1)).max(1) as usize;
 
         // Apply teardrop at start point
         Self::apply_single_teardrop(
@@ -168,6 +170,7 @@ impl TeardropEngine {
     ///
     /// Creates a smooth width transition from the pin/pad junction
     /// along the trace direction.
+    #[allow(clippy::too_many_arguments)]
     fn apply_single_teardrop(
         voxel_grid: &VoxelGrid,
         endpoint: Point3D,
@@ -188,14 +191,23 @@ impl TeardropEngine {
         }
 
         // Normalize to unit steps
-        let step_x = if dx > 0 { 1 } else if dx < 0 { -1 } else { 0 };
-        let step_y = if dy > 0 { 1 } else if dy < 0 { -1 } else { 0 };
+        let step_x = if dx > 0 {
+            1
+        } else if dx < 0 {
+            -1
+        } else {
+            0
+        };
+        let step_y = if dy > 0 {
+            1
+        } else if dy < 0 {
+            -1
+        } else {
+            0
+        };
 
         // Convert endpoint to voxel coordinates
-        let (ex, ey, ez) = VoxelGrid::nm_to_voxel(
-            endpoint,
-            &voxel_grid.voxel_size,
-        );
+        let (ex, ey, ez) = VoxelGrid::nm_to_voxel(endpoint, &voxel_grid.voxel_size);
 
         // Apply a widening fillet: at distance t from the pad, width = half_width + (max_width_voxels - half_width) * (1 - t/transition)
         for t in 0..transition_voxels {
@@ -203,7 +215,8 @@ impl TeardropEngine {
                 max_width_voxels
             } else {
                 let progress = t as f64 / transition_voxels as f64;
-                let width = max_width_voxels as f64 - ((max_width_voxels - half_width) as f64 * progress);
+                let width =
+                    max_width_voxels as f64 - ((max_width_voxels - half_width) as f64 * progress);
                 width.round() as usize
             };
 
@@ -226,8 +239,7 @@ impl TeardropEngine {
                         let (sx, sy, _sz) = voxel_grid.size();
                         if px < sx && py < sy {
                             voxel_grid.set_occupied(
-                                px, py, ez,
-                                2, // Copper
+                                px, py, ez, 2, // Copper
                                 net_handle,
                             );
                         }
@@ -244,7 +256,11 @@ mod tests {
     use crate::VoxelSize;
 
     fn test_voxel_size() -> VoxelSize {
-        VoxelSize { x_nm: 100_000, y_nm: 100_000, z_nm: 1_000_000 }
+        VoxelSize {
+            x_nm: 100_000,
+            y_nm: 100_000,
+            z_nm: 1_000_000,
+        }
     }
 
     /// Test that teardrops are applied at path endpoints.
@@ -285,10 +301,7 @@ mod tests {
             ..TeardropConfig::default()
         };
 
-        let path = vec![
-            Point3D::new(0, 0, 0),
-            Point3D::new(1_000_000, 0, 0),
-        ];
+        let path = vec![Point3D::new(0, 0, 0), Point3D::new(1_000_000, 0, 0)];
 
         TeardropEngine::apply_teardrops(
             &grid,

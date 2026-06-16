@@ -56,7 +56,6 @@ pub struct GeometryRouter {
     // =========================================================================
     // v0.1.7 Adaptive Router: Scale Detection & Mode Selection
     // =========================================================================
-
     /// Area threshold in nanometers² for switching to hierarchical mode.
     /// Designs with total area below this AND net count below
     /// `net_count_threshold` use Pass-Through mode (single G-Cell).
@@ -72,7 +71,6 @@ pub struct GeometryRouter {
     // =========================================================================
     // v0.1.7 ASIC Via Tower Unrolling
     // =========================================================================
-
     /// True for ASIC (Manhattan angle restriction), false for PCB (Octilinear).
     /// When true, multi-layer via transitions are unrolled into layer-by-layer
     /// buried vias with intermediate landing pads.
@@ -97,7 +95,6 @@ pub struct CopperPour {
     #[allow(dead_code)] // Reserved for future use in pour boundary checking
     pub(super) bounds: (Point3D, Point3D), // Min and max corners
 }
-
 
 impl GeometryRouter {
     /// Create a new geometry router.
@@ -152,9 +149,9 @@ impl GeometryRouter {
             bounding_box_tracker: BoundingBoxTracker::new(),
             area_threshold_nm2: 1_000_000_000_000, // 1mm²
             net_count_threshold: 100,
-            is_manhattan: false,            // Default: PCB (Octilinear) mode
-            profile_layers: Vec::new(),     // Empty: no stackup info
-            layer_z_positions: Vec::new(),  // Empty: no stackup info
+            is_manhattan: false,           // Default: PCB (Octilinear) mode
+            profile_layers: Vec::new(),    // Empty: no stackup info
+            layer_z_positions: Vec::new(), // Empty: no stackup info
         }
     }
 
@@ -347,7 +344,13 @@ impl GeometryRouter {
                 net_count,
                 area_nm2 as f64 / 1_000_000_000_000.0
             );
-            self.route_hierarchical(grid_bbox, nets, obstacle_bboxes, substrate_layers, net_frequencies)
+            self.route_hierarchical(
+                grid_bbox,
+                nets,
+                obstacle_bboxes,
+                substrate_layers,
+                net_frequencies,
+            )
         }
     }
 
@@ -402,8 +405,10 @@ impl GeometryRouter {
         );
 
         // Step 2: Classify nets as intra-cell or cross-cell
-        let mut intra_cell_nets: FxHashMap<usize, FxHashMap<crate::netlist::NetId, Vec<crate::geometry::Point3D>>> =
-            FxHashMap::default();
+        let mut intra_cell_nets: FxHashMap<
+            usize,
+            FxHashMap<crate::netlist::NetId, Vec<crate::geometry::Point3D>>,
+        > = FxHashMap::default();
         let mut cross_cell_nets: FxHashMap<crate::netlist::NetId, Vec<crate::geometry::Point3D>> =
             FxHashMap::default();
 
@@ -446,55 +451,63 @@ impl GeometryRouter {
             sorted_cross.sort_by_key(|(id, _)| id.0);
 
             // Phase 3a: Route each cross-cell net in parallel (isolated routers)
-            let cross_results: Vec<(crate::netlist::NetId, Result<super::super::types::RoutedNet, super::super::types::RoutingError>)> =
-                sorted_cross
-                    .par_iter()
-                    .map(|(&net_id, pins)| {
-                        if pins.len() < 2 {
-                            return (net_id, Err(super::super::types::RoutingError::NoPathFound {
+            let cross_results: Vec<(
+                crate::netlist::NetId,
+                Result<super::super::types::RoutedNet, super::super::types::RoutingError>,
+            )> = sorted_cross
+                .par_iter()
+                .map(|(&net_id, pins)| {
+                    if pins.len() < 2 {
+                        return (
+                            net_id,
+                            Err(super::super::types::RoutingError::NoPathFound {
                                 net_id,
                                 start: pins[0],
                                 goal: pins[0],
-                            }));
-                        }
+                            }),
+                        );
+                    }
 
-                        // Create an isolated router clone for this net (no shared occupied_voxels)
-                        let mut isolated = GeometryRouter {
-                            bounds: self.bounds,
-                            constraints: self.constraints.clone(),
-                            layer_directions: self.layer_directions.clone(),
-                            voxel_size_nm: self.voxel_size_nm,
-                            occupied_voxels: FxHashMap::default(),
-                            voxel_grid: crate::voxel_grid::VoxelGrid::new(
-                                ((self.bounds.width_nm) / self.voxel_size_nm).max(1) as usize,
-                                ((self.bounds.height_nm) / self.voxel_size_nm).max(1) as usize,
-                                ((self.bounds.depth_nm) / self.voxel_size_nm).max(1).max(1) as usize,
-                                crate::space::VoxelSize {
-                                    x_nm: self.voxel_size_nm,
-                                    y_nm: self.voxel_size_nm,
-                                    z_nm: self.voxel_size_nm,
-                                },
-                                0,
-                            ),
-                            vias: Vec::new(),
-                            copper_pours: Vec::new(),
-                            bounding_box_tracker: BoundingBoxTracker::new(),
-                            area_threshold_nm2: self.area_threshold_nm2,
-                            net_count_threshold: self.net_count_threshold,
-                            is_manhattan: self.is_manhattan,
-                            profile_layers: self.profile_layers.clone(),
-                            layer_z_positions: self.layer_z_positions.clone(),
-                        };
+                    // Create an isolated router clone for this net (no shared occupied_voxels)
+                    let mut isolated = GeometryRouter {
+                        bounds: self.bounds,
+                        constraints: self.constraints.clone(),
+                        layer_directions: self.layer_directions.clone(),
+                        voxel_size_nm: self.voxel_size_nm,
+                        occupied_voxels: FxHashMap::default(),
+                        voxel_grid: crate::voxel_grid::VoxelGrid::new(
+                            ((self.bounds.width_nm) / self.voxel_size_nm).max(1) as usize,
+                            ((self.bounds.height_nm) / self.voxel_size_nm).max(1) as usize,
+                            ((self.bounds.depth_nm) / self.voxel_size_nm).max(1).max(1) as usize,
+                            crate::space::VoxelSize {
+                                x_nm: self.voxel_size_nm,
+                                y_nm: self.voxel_size_nm,
+                                z_nm: self.voxel_size_nm,
+                            },
+                            0,
+                        ),
+                        vias: Vec::new(),
+                        copper_pours: Vec::new(),
+                        bounding_box_tracker: BoundingBoxTracker::new(),
+                        area_threshold_nm2: self.area_threshold_nm2,
+                        net_count_threshold: self.net_count_threshold,
+                        is_manhattan: self.is_manhattan,
+                        profile_layers: self.profile_layers.clone(),
+                        layer_z_positions: self.layer_z_positions.clone(),
+                    };
 
-                        let result = isolated.route_net_steiner_global(net_id, pins);
-                        (net_id, result)
-                    })
-                    .collect();
+                    let result = isolated.route_net_steiner_global(net_id, pins);
+                    (net_id, result)
+                })
+                .collect();
 
             // Phase 3b: Merge results sequentially into final_result + build occupied_voxels
             for (net_id, result) in cross_results {
                 let routed = result.map_err(|e| {
-                    eprintln!("[ADAPTIVE ROUTER] Cross-cell net {:?} routing failed: {:?}", net_id, e);
+                    eprintln!(
+                        "[ADAPTIVE ROUTER] Cross-cell net {:?} routing failed: {:?}",
+                        net_id, e
+                    );
                     e
                 })?;
 
@@ -522,92 +535,103 @@ impl GeometryRouter {
         // Step 4: Route intra-cell nets in parallel across G-Cells
         let t_intra = std::time::Instant::now();
         if !intra_cell_nets.is_empty() {
-            let intra_results: Vec<Result<super::super::types::RouteResult, super::super::types::RoutingError>> =
-                gcell_grid
-                    .cells
-                    .par_iter()
-                    .map(|cell| {
-                        let cell_nets = match intra_cell_nets.get(&cell.id) {
-                            Some(nets) => nets,
-                            None => return Ok(super::super::types::RouteResult::new()),
-                        };
+            let intra_results: Vec<
+                Result<super::super::types::RouteResult, super::super::types::RoutingError>,
+            > = gcell_grid
+                .cells
+                .par_iter()
+                .map(|cell| {
+                    let cell_nets = match intra_cell_nets.get(&cell.id) {
+                        Some(nets) => nets,
+                        None => return Ok(super::super::types::RouteResult::new()),
+                    };
 
-                        let cell_bbox = &cell.bbox;
-                        let mut cell_router = GeometryRouter {
-                            bounds: GridBounds::new(
-                                cell_bbox.max.x - cell_bbox.min.x,
-                                cell_bbox.max.y - cell_bbox.min.y,
-                                cell_bbox.max.z - cell_bbox.min.z,
-                            ),
-                            constraints: self.constraints.clone(),
-                            layer_directions: self.layer_directions.clone(),
-                            voxel_size_nm: self.voxel_size_nm,
-                            occupied_voxels: FxHashMap::default(),
-                            voxel_grid: crate::voxel_grid::VoxelGrid::new(
-                                ((cell_bbox.max.x - cell_bbox.min.x) / self.voxel_size_nm).max(1) as usize,
-                                ((cell_bbox.max.y - cell_bbox.min.y) / self.voxel_size_nm).max(1) as usize,
-                                ((cell_bbox.max.z - cell_bbox.min.z) / self.voxel_size_nm).max(1).max(1) as usize,
-                                crate::space::VoxelSize {
-                                    x_nm: self.voxel_size_nm,
-                                    y_nm: self.voxel_size_nm,
-                                    z_nm: self.voxel_size_nm,
-                                },
-                                0,
-                            ),
-                            vias: Vec::new(),
-                            copper_pours: Vec::new(),
-                            bounding_box_tracker: BoundingBoxTracker::new(),
-                            area_threshold_nm2: self.area_threshold_nm2,
-                            net_count_threshold: self.net_count_threshold,
-                            is_manhattan: self.is_manhattan,
-                            profile_layers: self.profile_layers.clone(),
-                            layer_z_positions: self.layer_z_positions.clone(),
-                        };
+                    let cell_bbox = &cell.bbox;
+                    let mut cell_router = GeometryRouter {
+                        bounds: GridBounds::new(
+                            cell_bbox.max.x - cell_bbox.min.x,
+                            cell_bbox.max.y - cell_bbox.min.y,
+                            cell_bbox.max.z - cell_bbox.min.z,
+                        ),
+                        constraints: self.constraints.clone(),
+                        layer_directions: self.layer_directions.clone(),
+                        voxel_size_nm: self.voxel_size_nm,
+                        occupied_voxels: FxHashMap::default(),
+                        voxel_grid: crate::voxel_grid::VoxelGrid::new(
+                            ((cell_bbox.max.x - cell_bbox.min.x) / self.voxel_size_nm).max(1)
+                                as usize,
+                            ((cell_bbox.max.y - cell_bbox.min.y) / self.voxel_size_nm).max(1)
+                                as usize,
+                            ((cell_bbox.max.z - cell_bbox.min.z) / self.voxel_size_nm)
+                                .max(1)
+                                .max(1) as usize,
+                            crate::space::VoxelSize {
+                                x_nm: self.voxel_size_nm,
+                                y_nm: self.voxel_size_nm,
+                                z_nm: self.voxel_size_nm,
+                            },
+                            0,
+                        ),
+                        vias: Vec::new(),
+                        copper_pours: Vec::new(),
+                        bounding_box_tracker: BoundingBoxTracker::new(),
+                        area_threshold_nm2: self.area_threshold_nm2,
+                        net_count_threshold: self.net_count_threshold,
+                        is_manhattan: self.is_manhattan,
+                        profile_layers: self.profile_layers.clone(),
+                        layer_z_positions: self.layer_z_positions.clone(),
+                    };
 
-                        let local_nets: FxHashMap<crate::netlist::NetId, Vec<crate::geometry::Point3D>> =
-                            cell_nets
+                    let local_nets: FxHashMap<
+                        crate::netlist::NetId,
+                        Vec<crate::geometry::Point3D>,
+                    > = cell_nets
+                        .iter()
+                        .map(|(&net_id, pins)| {
+                            let local_pins: Vec<_> = pins
                                 .iter()
-                                .map(|(&net_id, pins)| {
-                                    let local_pins: Vec<_> = pins
-                                        .iter()
-                                        .map(|pin| crate::geometry::Point3D::new(
-                                            pin.x - cell_bbox.min.x,
-                                            pin.y - cell_bbox.min.y,
-                                            pin.z - cell_bbox.min.z,
-                                        ))
-                                        .collect();
-                                    (net_id, local_pins)
+                                .map(|pin| {
+                                    crate::geometry::Point3D::new(
+                                        pin.x - cell_bbox.min.x,
+                                        pin.y - cell_bbox.min.y,
+                                        pin.z - cell_bbox.min.z,
+                                    )
                                 })
                                 .collect();
+                            (net_id, local_pins)
+                        })
+                        .collect();
 
-                        let mut cell_result = super::super::types::RouteResult::new();
-                        match cell_router.route_all_nets_steiner(&local_nets) {
-                            Ok(local_result) => {
-                                for (net_id, local_path) in &local_result.paths {
-                                    let global_path: Vec<_> = local_path
-                                        .iter()
-                                        .map(|pt| crate::geometry::Point3D::new(
+                    let mut cell_result = super::super::types::RouteResult::new();
+                    match cell_router.route_all_nets_steiner(&local_nets) {
+                        Ok(local_result) => {
+                            for (net_id, local_path) in &local_result.paths {
+                                let global_path: Vec<_> = local_path
+                                    .iter()
+                                    .map(|pt| {
+                                        crate::geometry::Point3D::new(
                                             pt.x + cell_bbox.min.x,
                                             pt.y + cell_bbox.min.y,
                                             pt.z + cell_bbox.min.z,
-                                        ))
-                                        .collect();
-                                    cell_result.paths.insert(*net_id, global_path);
-                                }
-                                cell_result.vias.extend(local_result.vias);
+                                        )
+                                    })
+                                    .collect();
+                                cell_result.paths.insert(*net_id, global_path);
                             }
-                            Err(e) => {
-                                eprintln!(
-                                    "[ADAPTIVE ROUTER] G-Cell {} intra-cell routing failed: {:?}",
-                                    cell.id, e
-                                );
-                                return Err(e);
-                            }
+                            cell_result.vias.extend(local_result.vias);
                         }
+                        Err(e) => {
+                            eprintln!(
+                                "[ADAPTIVE ROUTER] G-Cell {} intra-cell routing failed: {:?}",
+                                cell.id, e
+                            );
+                            return Err(e);
+                        }
+                    }
 
-                        Ok(cell_result)
-                    })
-                    .collect();
+                    Ok(cell_result)
+                })
+                .collect();
 
             for res in intra_results {
                 final_result.merge(res?);

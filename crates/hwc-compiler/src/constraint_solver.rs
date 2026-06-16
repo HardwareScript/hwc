@@ -357,9 +357,9 @@ impl<'a> ConstraintSolver<'a> {
             Unit::Nanometer => value as i64,
             _ => {
                 return Err(format!(
-                    "Invalid unit for position offset: {:?}. Expected distance unit (mm, cm, µm, nm)",
-                    measurement.unit
-                ))
+                "Invalid unit for position offset: {:?}. Expected distance unit (mm, cm, µm, nm)",
+                measurement.unit
+            ))
             }
         };
         Ok(nm)

@@ -51,26 +51,26 @@ pub struct ErrorFingerprint {
 ///
 /// # Example
 ///
-    /// ```rust
-    /// use hwc_diagnostics::DiagnosticCollector;
-    ///
-    /// let source = "...";
-    /// let collector = DiagnosticCollector::new(source, 20);
-    ///
-    /// // Or with a file name for better error messages:
-    /// // let collector = DiagnosticCollector::new_with_file(source, "main.hw", 20);
-    ///
-    /// // Report errors without stopping (thread-safe)
-    /// // collector.report(some_error);
-    ///
-    /// // Print all diagnostics at the end
-    /// collector.print_all();
-    ///
-    /// if collector.has_errors() {
-    ///     eprintln!("{}", collector.summary());
-    ///     std::process::exit(1);
-    /// }
-    /// ```
+/// ```rust
+/// use hwc_diagnostics::DiagnosticCollector;
+///
+/// let source = "...";
+/// let collector = DiagnosticCollector::new(source, 20);
+///
+/// // Or with a file name for better error messages:
+/// // let collector = DiagnosticCollector::new_with_file(source, "main.hw", 20);
+///
+/// // Report errors without stopping (thread-safe)
+/// // collector.report(some_error);
+///
+/// // Print all diagnostics at the end
+/// collector.print_all();
+///
+/// if collector.has_errors() {
+///     eprintln!("{}", collector.summary());
+///     std::process::exit(1);
+/// }
+/// ```
 #[derive(Debug, Clone)]
 pub struct DiagnosticCollector {
     /// Thread-safe container for accumulated reports
@@ -87,7 +87,7 @@ pub struct DiagnosticCollector {
 
     /// Source code (for span extraction and error context)
     pub source: CompactString,
-    
+
     /// File name/path of the source code
     pub file_name: CompactString,
 
@@ -255,7 +255,7 @@ impl DiagnosticCollector {
     pub fn print_all(&self) {
         let reports = self.reports.lock().unwrap();
         let printer = DiagnosticPrinter::new(&self.source, &self.file_name);
-        
+
         for report in reports.iter() {
             eprintln!("{}", printer.format_diagnostic(report.as_ref()));
         }
@@ -276,7 +276,7 @@ impl DiagnosticCollector {
         for v in violations.iter() {
             vc.push(&v.code, &v.message, &v.source_context);
         }
-        
+
         // Print the beautiful summary (Pattern Analysis, Stats, etc.)
         vc.print_report();
     }
@@ -376,7 +376,7 @@ impl Default for DiagnosticCollector {
 #[diagnostic(code("W001"), severity(Advice))]
 pub struct WaiverApplied {
     pub message: CompactString,
-    
+
     #[label("this intentional deviation was permitted")]
     pub span: Option<SourceSpan>,
 }
@@ -388,7 +388,7 @@ impl WaiverApplied {
             span: None,
         }
     }
-    
+
     pub fn with_span(message: &str, start: usize, len: usize) -> Self {
         Self {
             message: message.into(),
@@ -471,7 +471,9 @@ pub struct ViolationCollector {
 impl ViolationCollector {
     /// Create an empty collector.
     pub fn new() -> Self {
-        Self { violations: Vec::new() }
+        Self {
+            violations: Vec::new(),
+        }
     }
 
     /// Push a new violation. Never aborts — always accumulates.
@@ -511,8 +513,7 @@ impl ViolationCollector {
         use rustc_hash::FxHashMap;
 
         // Group violations by (code, source_context)
-        let mut groups: FxHashMap<(CompactString, CompactString), usize> =
-            FxHashMap::default();
+        let mut groups: FxHashMap<(CompactString, CompactString), usize> = FxHashMap::default();
 
         for v in &self.violations {
             let key = (v.code.clone(), v.source_context.clone());
@@ -526,7 +527,9 @@ impl ViolationCollector {
         for ((code, ctx), count) in groups {
             if count > 1 {
                 // Find the first violation in this group to get its message
-                let message = self.violations.iter()
+                let message = self
+                    .violations
+                    .iter()
                     .find(|v| v.code == code && v.source_context == ctx)
                     .map(|v| v.message.as_str())
                     .unwrap_or("repeated violation");
@@ -577,14 +580,14 @@ impl ViolationCollector {
     /// - Shows the first `MAX_SHOWN_VIOLATIONS` violations in detail.
     /// - Summarises the remainder.
     /// - Prints pattern-level fix suggestions when loops are detected.
-    /// Sprint 9: Print pattern analysis as Rust-style notes (Task 9.3)
+    /// - Sprint 9: Print pattern analysis as Rust-style notes (Task 9.3)
     pub fn print_report(&self) {
         if self.violations.is_empty() {
             return;
         }
 
         let patterns = self.detect_patterns();
-        
+
         // Print patterns as Rust-style notes (like rustc)
         for p in patterns {
             if p.count > 1 {

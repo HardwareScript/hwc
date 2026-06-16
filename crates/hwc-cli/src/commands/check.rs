@@ -34,7 +34,8 @@ pub fn execute(
     };
 
     // Create diagnostic collector with configured limit
-    let collector = DiagnosticCollector::new_with_file(&source, &input.to_string_lossy(), error_limit);
+    let collector =
+        DiagnosticCollector::new_with_file(&source, &input.to_string_lossy(), error_limit);
 
     // eprintln!($3"[DEBUG] Starting lexer...");
     let lexer = Lexer::new(&source);
@@ -105,7 +106,7 @@ pub fn execute(
                 symbol_table.register_material(&collector, mat.clone());
             }
             hwc_parser::Definition::Profile(profile) => {
-                symbol_table.register_profile(&collector, profile.clone());
+                symbol_table.register_profile(&collector, (**profile).clone());
             }
             hwc_parser::Definition::Component(component) => {
                 symbol_table.register_component(&collector, component.clone());

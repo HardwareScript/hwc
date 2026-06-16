@@ -20,22 +20,21 @@ pub fn run_physical_continuity_check(
     }
 
     // Get bridge rules from profile
-    let bridge_rules: Vec<hwc_physics::BridgeRule> = if let Some(ref constraints) =
-        space.fabrication_constraints
-    {
-        constraints
-            .bridges
-            .iter()
-            .map(|b| hwc_physics::BridgeRule {
-                from_material: b.from_material.clone(),
-                to_material: b.to_material.clone(),
-                interface_material: b.interface_material.clone(),
-                fill_material: b.fill_material.clone(),
-            })
-            .collect()
-    } else {
-        Vec::new()
-    };
+    let bridge_rules: Vec<hwc_physics::BridgeRule> =
+        if let Some(ref constraints) = space.fabrication_constraints {
+            constraints
+                .bridges
+                .iter()
+                .map(|b| hwc_physics::BridgeRule {
+                    from_material: b.from_material.clone(),
+                    to_material: b.to_material.clone(),
+                    interface_material: b.interface_material.clone(),
+                    fill_material: b.fill_material.clone(),
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
 
     // Get material name -> ID mapping for physics (v0.1.7)
     let mut material_mapping = rustc_hash::FxHashMap::default();
@@ -93,7 +92,9 @@ pub fn run_physical_continuity_check(
         print_continuity_violations(&continuity_violations);
         // Convert to PhysicsError
         for violation in &continuity_violations {
-            errors.push(hwc_physics::error_mapping::physical_continuity_to_error(violation));
+            errors.push(hwc_physics::error_mapping::physical_continuity_to_error(
+                violation,
+            ));
         }
     }
 

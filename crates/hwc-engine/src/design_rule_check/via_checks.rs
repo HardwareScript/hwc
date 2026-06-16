@@ -91,10 +91,18 @@ fn calculate_annular_ring_from_substrate(
                 let mut poly_min_y = i64::MAX;
                 let mut poly_max_y = i64::MIN;
                 for p in outer_contour.iter() {
-                    if p.x < poly_min_x { poly_min_x = p.x; }
-                    if p.x > poly_max_x { poly_max_x = p.x; }
-                    if p.y < poly_min_y { poly_min_y = p.y; }
-                    if p.y > poly_max_y { poly_max_y = p.y; }
+                    if p.x < poly_min_x {
+                        poly_min_x = p.x;
+                    }
+                    if p.x > poly_max_x {
+                        poly_max_x = p.x;
+                    }
+                    if p.y < poly_min_y {
+                        poly_min_y = p.y;
+                    }
+                    if p.y > poly_max_y {
+                        poly_max_y = p.y;
+                    }
                 }
                 let pad_center_x = (pad_min_x + pad_max_x) / 2;
                 let pad_center_y = (pad_min_y + pad_max_y) / 2;

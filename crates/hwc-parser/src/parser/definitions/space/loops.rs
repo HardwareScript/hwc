@@ -56,13 +56,13 @@ impl crate::parser::Parser {
                         _ => {
                             // Component placement
                             let component = self.parse_component_placement()?;
-                            body.push(SpaceStatement::Component(component));
+                            body.push(SpaceStatement::Component(Box::new(component)));
                         }
                     }
                 } else {
                     // Default to component placement
                     let component = self.parse_component_placement()?;
-                    body.push(SpaceStatement::Component(component));
+                    body.push(SpaceStatement::Component(Box::new(component)));
                 }
             } else if self.check(&Token::Route) {
                 let route = self.parse_route()?;

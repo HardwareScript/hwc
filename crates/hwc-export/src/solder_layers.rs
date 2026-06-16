@@ -244,7 +244,8 @@ fn collect_pads(space: &HardwareSpace) -> Result<Vec<PadInfo>, Box<dyn std::erro
             let drill_diameter_nm = bbox.max.x - bbox.min.x;
 
             // Use explicit mask clearance if provided, otherwise drill + 2*expansion
-            let pad_diameter = contact.mask_clearance_diameter_nm
+            let pad_diameter = contact
+                .mask_clearance_diameter_nm
                 .unwrap_or(drill_diameter_nm + 150_000); // default: drill + 2*75um
 
             // Add pad for top face if via reaches it
@@ -252,7 +253,9 @@ fn collect_pads(space: &HardwareSpace) -> Result<Vec<PadInfo>, Box<dyn std::erro
                 x_nm,
                 y_nm,
                 z_nm: contact.z_end_nm,
-                shape: PadShape::Circle { diameter_nm: pad_diameter },
+                shape: PadShape::Circle {
+                    diameter_nm: pad_diameter,
+                },
             });
 
             // Add pad for bottom face if via reaches it
@@ -260,7 +263,9 @@ fn collect_pads(space: &HardwareSpace) -> Result<Vec<PadInfo>, Box<dyn std::erro
                 x_nm,
                 y_nm,
                 z_nm: contact.z_start_nm,
-                shape: PadShape::Circle { diameter_nm: pad_diameter },
+                shape: PadShape::Circle {
+                    diameter_nm: pad_diameter,
+                },
             });
         }
     }

@@ -1,6 +1,6 @@
 use crate::scene_graph::types::{Face, MeshNode, Vertex};
-use hwc_engine::space::SpaceView;
 use earcut::Earcut;
+use hwc_engine::space::SpaceView;
 
 /// Extrudes flat 2D contours (with potential holes) into a solid 3D mesh
 pub fn extrude_polygon_mesh(
@@ -22,9 +22,17 @@ pub fn extrude_polygon_mesh(
         match view {
             SpaceView::Horizontal => {
                 // Board lies flat: GLTF X=board X, GLTF Y=board Z (height), GLTF Z=board Y
-                Vertex { x: ex, y: ez, z: ey }
+                Vertex {
+                    x: ex,
+                    y: ez,
+                    z: ey,
+                }
             }
-            SpaceView::Vertical => Vertex { x: ex, y: ey, z: ez },
+            SpaceView::Vertical => Vertex {
+                x: ex,
+                y: ey,
+                z: ez,
+            },
         }
     };
 
@@ -61,7 +69,7 @@ pub fn extrude_polygon_mesh(
     let mut triangles = Vec::new();
     let data = flat_coords.chunks_exact(2).map(|c| [c[0], c[1]]);
     triangulator.earcut(data, &hole_indices, &mut triangles);
-    
+
     for chunk in triangles.chunks_exact(3) {
         let (v0, v1, v2) = (chunk[0], chunk[1], chunk[2]);
 

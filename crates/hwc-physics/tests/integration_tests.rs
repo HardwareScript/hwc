@@ -18,26 +18,6 @@ use hwc_physics::{
 
 // ============================================================================
 // Test Helper Functions
-/// Physics engine integration tests for Phase 5.
-///
-/// These tests validate the unified physics validation with Symbol Table integration.
-use hwc_compiler::SymbolTable;
-use hwc_diagnostics::DiagnosticCollector;
-use hwc_engine::constraint_manager::calculate_trace_width_nm;
-use hwc_parser::{
-    Identifier, MaterialCategory, MaterialDefinition, Measurement, Property, PropertyValue, Span,
-    Unit,
-};
-use hwc_physics::{
-    clearance::{ClearanceAnalyzer, ClearanceViolation},
-    electrical::{ElectricalAnalyzer, ElectricalViolation},
-    electromagnetic::EMAnalyzer,
-    thermal::ThermalAnalyzer,
-    PhysicsEngine, PhysicsReport,
-};
-
-// ============================================================================
-// Test Helper Functions
 // ============================================================================
 
 fn create_test_symbol_table() -> SymbolTable {
@@ -65,6 +45,18 @@ fn create_test_symbol_table() -> SymbolTable {
         outline_opacity: None,
         roughness: None,
         metallic: None,
+        ior: None,
+        clearcoat: None,
+        clearcoat_roughness: None,
+        subsurface: None,
+        anisotropy: None,
+        anisotropy_rotation: None,
+        texture: None,
+    };
+    symbol_table.register_material(&collector, copper);
+    symbol_table
+}
+
 // ============================================================================
 // Phase 5: PhysicsEngine with Symbol Table Tests
 // ============================================================================

@@ -11,10 +11,7 @@ pub enum Expr {
     /// A variable or parameter reference: width, i, angle
     Identifier(String),
     /// Unary operation: -expr, +expr
-    UnaryOp {
-        op: UnaryOp,
-        expr: Box<Expr>,
-    },
+    UnaryOp { op: UnaryOp, expr: Box<Expr> },
     /// Binary operation: expr + expr, expr * expr, etc.
     BinOp {
         op: BinOp,
@@ -22,10 +19,7 @@ pub enum Expr {
         right: Box<Expr>,
     },
     /// Function call: sin(expr), cos(expr), tan(expr)
-    Call {
-        name: String,
-        args: Vec<Expr>,
-    },
+    Call { name: String, args: Vec<Expr> },
     /// Conditional: if cond: then_expr else: else_expr
     If {
         cond: Box<Expr>,

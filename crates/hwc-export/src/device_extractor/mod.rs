@@ -183,11 +183,17 @@ impl<'a> DeviceExtractor<'a> {
 
         let mut parameters = FxHashMap::default();
 
-        let is_ic_package = device_type.starts_with('U') || device_type.contains("SOIC") || device_type.contains("QFN");
-        
+        let is_ic_package = device_type.starts_with('U')
+            || device_type.contains("SOIC")
+            || device_type.contains("QFN");
+
         let mut has_active_region = false;
         for pour in terminal_pours.values() {
-            if self.material_database.get_semiconductor(&pour.material_name.to_lowercase()).is_ok() {
+            if self
+                .material_database
+                .get_semiconductor(&pour.material_name.to_lowercase())
+                .is_ok()
+            {
                 has_active_region = true;
                 break;
             }
@@ -195,15 +201,25 @@ impl<'a> DeviceExtractor<'a> {
 
         if let Some(gate_pour) = terminal_pours.get("gate") {
             if is_ic_package || !has_active_region {
-                println!("      ⚠️  Skipping MOSFET extraction for {}: Not a silicon-level transistor", device_name);
+                println!(
+                    "      ⚠️  Skipping MOSFET extraction for {}: Not a silicon-level transistor",
+                    device_name
+                );
             } else {
                 let drain_net = terminals.get("drain").map(|s| s.as_str()).unwrap_or("nc");
                 let gate_net = terminals.get("gate").map(|s| s.as_str()).unwrap_or("nc");
                 let source_net = terminals.get("source").map(|s| s.as_str()).unwrap_or("nc");
                 let bulk_net = terminals.get("bulk").map(|s| s.as_str()).unwrap_or("nc");
 
-                if drain_net == gate_net && gate_net == source_net && source_net == bulk_net && drain_net != "nc" {
-                    println!("      ⚠️  Skipping MOSFET extraction for {}: Terminals are shorted", device_name);
+                if drain_net == gate_net
+                    && gate_net == source_net
+                    && source_net == bulk_net
+                    && drain_net != "nc"
+                {
+                    println!(
+                        "      ⚠️  Skipping MOSFET extraction for {}: Terminals are shorted",
+                        device_name
+                    );
                     return Ok(());
                 }
 

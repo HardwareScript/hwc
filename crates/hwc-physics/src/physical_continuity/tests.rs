@@ -202,7 +202,8 @@ fn test_via_bridge() {
         }),
     }];
 
-    let checker = PhysicalContinuityChecker::new(100, &pours, &contacts, &[], &[], Default::default());
+    let checker =
+        PhysicalContinuityChecker::new(100, &pours, &contacts, &[], &[], Default::default());
     let islands = checker.build_conductive_islands(None);
     let bindings = checker.bind_nets_to_islands(&islands);
     let violations = checker.validate_continuity(&islands, &bindings, false);

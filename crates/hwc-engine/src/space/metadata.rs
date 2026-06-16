@@ -1,0 +1,71 @@
+use crate::geometry::BoundingBox;
+use crate::netlist::NetId;
+use compact_str::CompactString;
+
+/// **v0.1.7: Keep-Out Zone (DRC & Auto-Placement Level)**
+///
+/// Defines a region where certain layout features (vias, traces, components)
+/// are forbidden to ensure mechanical and electrical integrity.
+#[derive(Debug, Clone)]
+pub struct KeepOutZone {
+    pub bbox: BoundingBox,
+    /// If Some, this net is exempt from this keep-out zone (allows its own traces/vias)
+    pub net_id: Option<NetId>,
+    /// If false, automatic via insertion is forbidden in this zone
+    pub allow_vias: bool,
+    /// If false, signal routing is forbidden in this zone
+    pub allow_routing: bool,
+    /// List of net names that are exempt from this keep-out zone (v0.1.7)
+    pub exempted_nets: Vec<CompactString>,
+}
+
+/// Metadata about a material pour for engineering artifacts
+///
+/// Phase 4 (Silent Atom): Added device_binding field for explicit intent-based extraction
+#[derive(Debug, Clone)]
+pub struct PourMetadata {
+    pub name: CompactString,
+    pub material_name: CompactString,
+    /// Bottom Z elevation of the pour in nanometers (v0.1.7 physical truth).
+    pub z_bottom_nm: i64,
+    pub net: Option<CompactString>,
+    pub area_nm2: i64,
+    /// Bounding box in nanometers (for geometric overlap detection)
+    pub bbox: Option<crate::geometry::BoundingBox>,
+    /// Phase 4: Explicit device terminal binding (e.g., "M1.gate")
+    pub device_binding: Option<DeviceBinding>,
+    /// Sprint 3.2: Merged region tracking for parasitic extraction
+    pub merged_region_id: Option<CompactString>,
+    /// v0.1.7: Intentional design waivers (Silicon Law)
+    pub waivers: hwc_parser::Waivers,
+}
+
+/// Device binding for explicit intent-based extraction (Phase 4: Silent Atom)
+///
+/// Binds a pour to a specific device terminal, eliminating geometric guessing.
+#[derive(Debug, Clone)]
+pub struct DeviceBinding {
+    pub device_name: CompactString, // e.g., "M1"
+    pub terminal: CompactString,    // e.g., "gate", "source", "drain", "bulk"
+}
+
+/// Metadata about a contact/via for connectivity checking
+#[derive(Debug, Clone)]
+pub struct ContactMetadata {
+    pub name: CompactString,
+    pub material_name: CompactString,
+    /// Bottom Z of the lower connected pour plane in nanometers.
+    pub z_start_nm: i64,
+    /// Bottom Z of the upper connected pour plane in nanometers.
+    pub z_end_nm: i64,
+    pub net: Option<CompactString>,
+    pub bridge: Option<CompactString>,
+    pub bbox: Option<crate::geometry::BoundingBox>,
+    /// Voxel positions that make up this via (for DRC validation)
+    /// Task 4.2: Via geometry tracking for diameter/enclosure checks
+    pub voxels: Vec<crate::geometry::Point3D>,
+    /// Whether the via is tented (covered by solder mask) — v0.1.7
+    pub is_tented: bool,
+    /// Optional explicit solder mask opening diameter in nanometers — v0.1.7
+    pub mask_clearance_diameter_nm: Option<i64>,
+}

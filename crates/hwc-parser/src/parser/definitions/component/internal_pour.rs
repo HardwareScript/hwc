@@ -42,19 +42,19 @@ impl super::super::super::Parser {
                 return Err(self.error("Expected 'z' or 'layer' for pour elevation"));
             }
             self.expect(&Token::Colon)?;
-            
+
             if self.check(&Token::Identifier("relative".into())) {
                 self.advance();
                 crate::ast::Elevation::Relative
             } else {
                 let start = self.parse_expression()?;
-                
+
                 let mut end = None;
                 if self.check(&Token::To) {
                     self.advance(); // consume "to"
                     end = Some(self.parse_expression()?);
                 }
-                
+
                 crate::ast::Elevation::Physical { start, end }
             }
         };
@@ -97,7 +97,7 @@ impl super::super::super::Parser {
                         let from = self.parse_coordinate_optional_z()?;
                         self.expect(&Token::To)?;
                         let to = self.parse_coordinate_optional_z()?;
-                        boundary = Some(crate::PourBoundary::Rect(from, to));
+                        boundary = Some(crate::PourBoundary::Rect(Box::new(from), Box::new(to)));
                     }
                 }
                 "thickness" => {

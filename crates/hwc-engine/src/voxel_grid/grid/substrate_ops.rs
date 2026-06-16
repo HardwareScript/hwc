@@ -3,7 +3,9 @@
 use super::core::VoxelGrid;
 use crate::geometry::BoundingBox;
 use crate::voxel_grid::chunk::{MaterialId, NetId};
-use crate::voxel_grid::substrate_layers::{SubstrateLayer, SubstrateLayerType, Cutout, SubstrateLayerShape, TSVParams};
+use crate::voxel_grid::substrate_layers::{
+    Cutout, SubstrateLayer, SubstrateLayerShape, SubstrateLayerType, TSVParams,
+};
 use compact_str::CompactString;
 use smallvec::SmallVec;
 
@@ -108,6 +110,7 @@ impl VoxelGrid {
     }
 
     /// Add a tube (plated hole) substrate layer (v0.1.7).
+    #[allow(clippy::too_many_arguments)]
     pub fn add_tube_substrate_layer(
         &mut self,
         material: MaterialId,
@@ -176,13 +179,8 @@ impl VoxelGrid {
                 shape: SubstrateLayerShape::Rect,
             })
             .collect();
-        let layer = SubstrateLayer::new_with_cutouts(
-            material,
-            net,
-            bbox,
-            cutouts_with_shape,
-            layer_type,
-        );
+        let layer =
+            SubstrateLayer::new_with_cutouts(material, net, bbox, cutouts_with_shape, layer_type);
         self.substrate_layers.push(layer);
     }
 
@@ -261,6 +259,7 @@ impl VoxelGrid {
     }
 
     /// Drill a hole for a TSV through all intersecting substrate layers (v0.1.7).
+    #[allow(clippy::too_many_arguments)]
     pub fn drill_tsv(
         &mut self,
         center_x_nm: i64,
@@ -268,7 +267,7 @@ impl VoxelGrid {
         z_start_nm: i64,
         z_end_nm: i64,
         diameter_nm: i64,
-        net_id: NetId, // v0.1.7: Added net awareness
+        net_id: NetId,     // v0.1.7: Added net awareness
         clearance_nm: i64, // v0.1.7: Added clearance awareness
     ) {
         // v0.1.7 FIXED: Calculate bbox based on total clearance diameter
@@ -287,7 +286,15 @@ impl VoxelGrid {
             ),
         );
         // TSVs are internal, never tented. Pad diameter = drill + 2*annular_ring (use 0 default).
-        self.drill_via_hole(bbox, diameter_nm, net_id, clearance_nm, false, diameter_nm, 75_000);
+        self.drill_via_hole(
+            bbox,
+            diameter_nm,
+            net_id,
+            clearance_nm,
+            false,
+            diameter_nm,
+            75_000,
+        );
     }
 
     /// Get the number of substrate layers.
@@ -299,7 +306,12 @@ impl VoxelGrid {
     ///
     /// This is used for through-hole pins and mounting holes.
     /// Memory usage: O(N) where N is the number of substrate layers.
-    pub fn drill_hole(&mut self, hole_bbox: BoundingBox, diameter_nm: Option<i64>, _drill_net: NetId) {
+    pub fn drill_hole(
+        &mut self,
+        hole_bbox: BoundingBox,
+        diameter_nm: Option<i64>,
+        _drill_net: NetId,
+    ) {
         // 1. Bit-level clearing (for router/collision)
         self.clear_voxels_in_bbox(&hole_bbox);
 
@@ -307,15 +319,15 @@ impl VoxelGrid {
         for layer in &mut self.substrate_layers {
             // v0.1.7 FIXED: Drill into both Pours (Copper) AND Substrates (FR4/Core)
             // Skip Contact layers (Vias/Tubes) to avoid self-drilling artifacts
-            
+
             // v0.1.7 FIXED: Use inclusive Z-intersection to handle perfect adjacency.
             let xy_intersects = layer.bbox.min.x < hole_bbox.max.x
                 && layer.bbox.max.x > hole_bbox.min.x
                 && layer.bbox.min.y < hole_bbox.max.y
                 && layer.bbox.max.y > hole_bbox.min.y;
 
-            let z_intersects = layer.bbox.min.z <= hole_bbox.max.z
-                && layer.bbox.max.z >= hole_bbox.min.z;
+            let z_intersects =
+                layer.bbox.min.z <= hole_bbox.max.z && layer.bbox.max.z >= hole_bbox.min.z;
 
             let should_drill = match layer.layer_type {
                 SubstrateLayerType::Substrate => true, // Always drill dielectric (insulators)
@@ -324,7 +336,7 @@ impl VoxelGrid {
                     // v0.1.7: Drill into copper pours to ensure vias work.
                     // This fixes the issue where manual routes block vias.
                     true
-                },
+                }
                 SubstrateLayerType::Contact => false, // Don't drill other vias
             };
 
@@ -345,6 +357,7 @@ impl VoxelGrid {
     /// v0.1.7: Added clearance_nm for different-net anti-pads.
     /// v0.1.7: Added is_tented, pad_diameter_nm, and solder_mask_expansion_nm for
     /// profile-driven solder mask openings (Zero Implicit Magic).
+    #[allow(clippy::too_many_arguments)]
     pub fn drill_via_hole(
         &mut self,
         hole_bbox: BoundingBox,
@@ -362,15 +375,15 @@ impl VoxelGrid {
                 && layer.bbox.min.y < hole_bbox.max.y
                 && layer.bbox.max.y > hole_bbox.min.y;
 
-            let z_intersects = layer.bbox.min.z <= hole_bbox.max.z
-                && layer.bbox.max.z >= hole_bbox.min.z;
+            let z_intersects =
+                layer.bbox.min.z <= hole_bbox.max.z && layer.bbox.max.z >= hole_bbox.min.z;
 
             if xy_intersects && z_intersects {
                 match layer.layer_type {
                     SubstrateLayerType::Substrate => {
                         // Always drill dielectric with the actual via diameter
                         layer.add_cylinder_cutout(hole_bbox, diameter_nm);
-                    },
+                    }
                     SubstrateLayerType::SolderMask => {
                         // v0.1.7: Profile-driven solder mask opening (Zero Implicit Magic)
                         if !is_tented {
@@ -394,9 +407,9 @@ impl VoxelGrid {
                             layer.add_cylinder_cutout(mask_cutout_bbox, opening_diameter);
                         }
                         // Tented: do nothing, mask stays intact
-                    },
+                    }
                     SubstrateLayerType::Pour => {
-                        // v0.1.7: Always drill into copper pours (same net or different net) 
+                        // v0.1.7: Always drill into copper pours (same net or different net)
                         // to ensure the hole is clear. The unioning logic will preserve the pad
                         // around the hole.
                         let diameter = if layer.net == via_net {
@@ -405,10 +418,10 @@ impl VoxelGrid {
                             diameter_nm + 2 * clearance_nm
                         };
                         layer.add_cylinder_cutout(hole_bbox, diameter);
-                    },
+                    }
                     SubstrateLayerType::Contact => {
                         // Don't drill other vias (handled by spacing checks)
-                    },
+                    }
                 }
             }
         }
@@ -631,7 +644,7 @@ impl VoxelGrid {
         &self,
         component_name: &str,
         pin_name: &str,
-    ) -> Option<BoundingBox>     {
+    ) -> Option<BoundingBox> {
         // Search substrate layers for pours with device binding matching this pin
         // PourMetadata is stored in HardwareSpace, not VoxelGrid, so we search
         // the substrate layers that have SubstrateLayerType::Pour

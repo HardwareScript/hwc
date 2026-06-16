@@ -57,7 +57,7 @@ pub use space::{
     PourMetadata, SpaceView, VoxelSize,
 };
 pub use voxel::{
-    MaterialConductivity, MaterialId, MaterialRegistry, ManufacturingProcess, AIR_MATERIAL_ID,
+    ManufacturingProcess, MaterialConductivity, MaterialId, MaterialRegistry, AIR_MATERIAL_ID,
 };
 pub use voxel_grid::{CompactionStats, MemoryStats, NetId as VoxelNetId, VoxelGrid};
 pub use voxel_stamps::{GateType, ProcessNode, VoxelLibrary, VoxelStamp};

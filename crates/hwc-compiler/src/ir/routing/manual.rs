@@ -30,7 +30,11 @@ pub fn route_manual(
     let waypoints: Vec<Point3D> = route
         .path
         .as_ref()
-        .map(|p| p.iter().map(|coord| coordinate_to_point(coord, &ctx)).collect())
+        .map(|p| {
+            p.iter()
+                .map(|coord| coordinate_to_point(coord, &ctx))
+                .collect()
+        })
         .unwrap_or_default();
 
     if waypoints.is_empty() {
@@ -45,9 +49,12 @@ pub fn route_manual(
     // Look up pad bboxes for the start and end components (pours and contacts)
     let find_pad_bbox = |comp_name: &str| -> Option<hwc_engine::geometry::BoundingBox> {
         // First check pours (component pads)
-        if let Some(bbox) = space.pours.iter()
+        if let Some(bbox) = space
+            .pours
+            .iter()
             .filter(|p| {
-                p.device_binding.as_ref()
+                p.device_binding
+                    .as_ref()
                     .map(|d| d.device_name.as_str() == comp_name)
                     .unwrap_or(false)
             })
@@ -57,7 +64,9 @@ pub fn route_manual(
             return Some(bbox);
         }
         // Then check contacts (vias)
-        space.contacts.iter()
+        space
+            .contacts
+            .iter()
             .filter(|c| c.name.as_str() == comp_name)
             .filter_map(|c| c.bbox)
             .next()
@@ -97,8 +106,13 @@ pub fn route_manual(
     // v0.1.7: Resolve material dynamically from the stackup layer
     // This ensures that manual traces merge perfectly with via rings/pours on the same layer.
     let material_name = if let (Some(p), Some(first_wp)) = (profile, waypoints.first()) {
-        if let (Some(stackup), Some(layer_name)) = (p.stackup.as_ref(), stackup_manager.get_layer_name_at_z(first_wp.z)) {
-            stackup.layers.iter()
+        if let (Some(stackup), Some(layer_name)) = (
+            p.stackup.as_ref(),
+            stackup_manager.get_layer_name_at_z(first_wp.z),
+        ) {
+            stackup
+                .layers
+                .iter()
                 .find(|l| l.name.name == layer_name)
                 .map(|l| l.material.to_string())
                 .unwrap_or_else(|| "Copper".to_string())
@@ -137,14 +151,18 @@ pub fn route_manual(
         segments.push(hwc_engine::LineSegment::new(window[0], window[1]));
     }
 
-    let net_name = space.netlist.get_net(net_id).map(|n| n.name.clone()).unwrap_or_default();
+    let net_name = space
+        .netlist
+        .get_net(net_id)
+        .map(|n| n.name.clone())
+        .unwrap_or_default();
     let analytic_trace = hwc_engine::AnalyticTrace::new(
         net_id,
         trace_width_nm,
         thickness_nm,
         segments,
         copper_id,
-        net_name.into(),
+        net_name,
     );
 
     space.add_analytic_route(analytic_trace);
@@ -156,7 +174,11 @@ pub fn route_manual(
 /// or inside a circular pour bbox. A waypoint is valid if:
 /// 1. It's on the perimeter of the pad bbox (rectangular pads), OR
 /// 2. It's inside the pad bbox (circular or irregular pours — being inside means connected)
-fn waypoint_on_pad_edge(wp: Point3D, bbox: &hwc_engine::geometry::BoundingBox, tolerance_nm: i64) -> bool {
+fn waypoint_on_pad_edge(
+    wp: Point3D,
+    bbox: &hwc_engine::geometry::BoundingBox,
+    tolerance_nm: i64,
+) -> bool {
     // Check Z is within the pad's Z range
     if wp.z < bbox.min.z - tolerance_nm || wp.z > bbox.max.z + tolerance_nm {
         return false;
@@ -170,10 +192,18 @@ fn waypoint_on_pad_edge(wp: Point3D, bbox: &hwc_engine::geometry::BoundingBox, t
     }
 
     // Also check perimeter for rectangular pads
-    let on_left   = (wp.x - bbox.min.x).abs() <= tolerance_nm && wp.y >= bbox.min.y - tolerance_nm && wp.y <= bbox.max.y + tolerance_nm;
-    let on_right  = (wp.x - bbox.max.x).abs() <= tolerance_nm && wp.y >= bbox.min.y - tolerance_nm && wp.y <= bbox.max.y + tolerance_nm;
-    let on_bottom = (wp.y - bbox.min.y).abs() <= tolerance_nm && wp.x >= bbox.min.x - tolerance_nm && wp.x <= bbox.max.x + tolerance_nm;
-    let on_top    = (wp.y - bbox.max.y).abs() <= tolerance_nm && wp.x >= bbox.min.x - tolerance_nm && wp.x <= bbox.max.x + tolerance_nm;
+    let on_left = (wp.x - bbox.min.x).abs() <= tolerance_nm
+        && wp.y >= bbox.min.y - tolerance_nm
+        && wp.y <= bbox.max.y + tolerance_nm;
+    let on_right = (wp.x - bbox.max.x).abs() <= tolerance_nm
+        && wp.y >= bbox.min.y - tolerance_nm
+        && wp.y <= bbox.max.y + tolerance_nm;
+    let on_bottom = (wp.y - bbox.min.y).abs() <= tolerance_nm
+        && wp.x >= bbox.min.x - tolerance_nm
+        && wp.x <= bbox.max.x + tolerance_nm;
+    let on_top = (wp.y - bbox.max.y).abs() <= tolerance_nm
+        && wp.x >= bbox.min.x - tolerance_nm
+        && wp.x <= bbox.max.x + tolerance_nm;
 
     on_left || on_right || on_bottom || on_top
 }

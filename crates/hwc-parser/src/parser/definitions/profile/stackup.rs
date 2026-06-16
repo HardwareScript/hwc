@@ -1,6 +1,6 @@
+use super::super::super::error::ParseError;
 use crate::ast::*;
 use crate::lexer::Token;
-use super::super::super::error::ParseError;
 
 impl super::super::super::Parser {
     /// Parse physical layer stackup block (v0.1.7 Z-Axis Abstraction)
@@ -71,12 +71,10 @@ impl super::super::super::Parser {
             self.expect(&Token::CloseBracket)?;
             self.skip_whitespace();
 
-            let material = material.ok_or_else(|| {
-                self.error("Stackup layer definition must include 'material'")
-            })?;
-            let thickness = thickness.ok_or_else(|| {
-                self.error("Stackup layer definition must include 'thickness'")
-            })?;
+            let material = material
+                .ok_or_else(|| self.error("Stackup layer definition must include 'material'"))?;
+            let thickness = thickness
+                .ok_or_else(|| self.error("Stackup layer definition must include 'thickness'"))?;
 
             layers.push(StackupLayer {
                 name,

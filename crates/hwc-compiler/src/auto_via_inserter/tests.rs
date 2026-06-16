@@ -5,8 +5,17 @@ use super::{AutoViaInserter, OverlapRegion, ViaLibrary, ViaType};
 #[test]
 fn finds_exact_via_match() {
     let library = ViaLibrary {
-        vias: vec![ViaType::new("Via1_2".into(), "Copper".into(), 1, 2, 0.3, 0.15, 0, 0,
-            crate::shape_generators::circle_contour(300_000, 16))],
+        vias: vec![ViaType::new(
+            "Via1_2".into(),
+            "Copper".into(),
+            1,
+            2,
+            0.3,
+            0.15,
+            0,
+            0,
+            crate::shape_generators::circle_contour(300_000, 16),
+        )],
     };
 
     let via = library.find_via_for_layers(1, 2, false).unwrap();
@@ -17,10 +26,28 @@ fn finds_exact_via_match() {
 fn prefers_larger_spanning_via_for_power_nets() {
     let library = ViaLibrary {
         vias: vec![
-            ViaType::new("ThroughHoleSmall".into(), "Copper".into(), 0, 6, 0.2, 0.1, 0, 0,
-                crate::shape_generators::circle_contour(200_000, 16)),
-            ViaType::new("ThroughHoleLarge".into(), "Copper".into(), 0, 6, 0.4, 0.2, 0, 0,
-                crate::shape_generators::circle_contour(400_000, 16)),
+            ViaType::new(
+                "ThroughHoleSmall".into(),
+                "Copper".into(),
+                0,
+                6,
+                0.2,
+                0.1,
+                0,
+                0,
+                crate::shape_generators::circle_contour(200_000, 16),
+            ),
+            ViaType::new(
+                "ThroughHoleLarge".into(),
+                "Copper".into(),
+                0,
+                6,
+                0.4,
+                0.2,
+                0,
+                0,
+                crate::shape_generators::circle_contour(400_000, 16),
+            ),
         ],
     };
 
@@ -58,8 +85,17 @@ fn rejects_insufficient_enclosure() {
         center_x_nm: 200_000,
         center_y_nm: 200_000,
     };
-    let via_type = ViaType::new("TestVia".into(), "Copper".into(), 1, 2, 0.3, 0.15, 0, 0,
-        crate::shape_generators::circle_contour(300_000, 16));
+    let via_type = ViaType::new(
+        "TestVia".into(),
+        "Copper".into(),
+        1,
+        2,
+        0.3,
+        0.15,
+        0,
+        0,
+        crate::shape_generators::circle_contour(300_000, 16),
+    );
 
     assert!(inserter.verify_enclosure(&overlap, &via_type).is_err());
 }

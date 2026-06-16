@@ -1,8 +1,6 @@
 use super::spatial_grid::SpatialGrid;
 use super::types::*;
-use crate::connectivity::{
-    BoundingBox, ContactMetadata, PourMetadata, SubstrateLayerMetadata,
-};
+use crate::connectivity::{BoundingBox, ContactMetadata, PourMetadata, SubstrateLayerMetadata};
 use rustc_hash::FxHashSet;
 
 /// Island builder - constructs conductive islands using flood-fill.
@@ -193,7 +191,8 @@ impl<'a> IslandBuilder<'a> {
                 continue;
             }
 
-            if self.nodes_touch_precise(curr_node_ref, curr_bbox, neighbor_node_ref, neighbor_bbox) {
+            if self.nodes_touch_precise(curr_node_ref, curr_bbox, neighbor_node_ref, neighbor_bbox)
+            {
                 neighbors.push(neighbor_idx);
             }
         }
@@ -265,8 +264,8 @@ impl<'a> IslandBuilder<'a> {
                 let layer_b = &self.substrate_layers[*idx_b];
 
                 // Precise check (v0.1.7):
-                // If they only touch at a face (adjacent layers), bbox check is sufficient 
-                // because cutouts are 3D volumes and face-only contact is always conductive 
+                // If they only touch at a face (adjacent layers), bbox check is sufficient
+                // because cutouts are 3D volumes and face-only contact is always conductive
                 // if the bboxes touch.
                 let z_volume_overlap = a_bbox.min_z < b_bbox.max_z && a_bbox.max_z > b_bbox.min_z;
                 if !z_volume_overlap {
@@ -285,13 +284,13 @@ impl<'a> IslandBuilder<'a> {
                 // v0.1.7: Sample 5 points (center + 4 mid-radius points) to handle Tube/Hollow shapes
                 let test_x = (intersect_min_x + intersect_max_x) / 2;
                 let test_y = (intersect_min_y + intersect_max_y) / 2;
-                
+
                 let dx = (intersect_max_x - intersect_min_x) / 3;
                 let dy = (intersect_max_y - intersect_min_y) / 3;
 
                 let x_points = [test_x, test_x - dx, test_x + dx];
                 let y_points = [test_y, test_y - dy, test_y + dy];
-                
+
                 let z_mid = (intersect_min_z + intersect_max_z) / 2;
                 let z_points = [intersect_min_z, z_mid, intersect_max_z];
 
@@ -300,17 +299,23 @@ impl<'a> IslandBuilder<'a> {
                 for &tx in &x_points {
                     for &ty in &y_points {
                         // Skip corners (redundant with center/mid checks for circles)
-                        if tx != test_x && ty != test_y { continue; }
-                        
+                        if tx != test_x && ty != test_y {
+                            continue;
+                        }
+
                         for &tz in &z_points {
                             if layer_a.contains_nm(tx, ty, tz) && layer_b.contains_nm(tx, ty, tz) {
                                 any_contact = true;
                                 break;
                             }
                         }
-                        if any_contact { break; }
+                        if any_contact {
+                            break;
+                        }
                     }
-                    if any_contact { break; }
+                    if any_contact {
+                        break;
+                    }
                 }
 
                 if !any_contact {
@@ -318,12 +323,24 @@ impl<'a> IslandBuilder<'a> {
                     // v0.1.7: Added 1nm inner offset to guarantee we hit solid copper and avoid edge precision issues.
                     let inner_offset = 1; // 1nm
                     let corners = [
-                        (intersect_min_x + inner_offset, intersect_min_y + inner_offset),
-                        (intersect_max_x - inner_offset, intersect_min_y + inner_offset),
-                        (intersect_min_x + inner_offset, intersect_max_y - inner_offset),
-                        (intersect_max_x - inner_offset, intersect_max_y - inner_offset),
+                        (
+                            intersect_min_x + inner_offset,
+                            intersect_min_y + inner_offset,
+                        ),
+                        (
+                            intersect_max_x - inner_offset,
+                            intersect_min_y + inner_offset,
+                        ),
+                        (
+                            intersect_min_x + inner_offset,
+                            intersect_max_y - inner_offset,
+                        ),
+                        (
+                            intersect_max_x - inner_offset,
+                            intersect_max_y - inner_offset,
+                        ),
                     ];
-                    
+
                     for (cx, cy) in corners {
                         for &cz in &z_points {
                             if layer_a.contains_nm(cx, cy, cz) && layer_b.contains_nm(cx, cy, cz) {

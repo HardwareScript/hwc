@@ -67,10 +67,12 @@ impl StackupManager {
 
             for layer in &stackup.layers {
                 let thickness_nm = evaluate_expression_to_nm(&layer.thickness, symbol_table)
-                    .map_err(|e| IrError::PlacementError(format!(
-                        "Failed to evaluate thickness for layer '{}': {}",
-                        layer.name.name, e
-                    )))?;
+                    .map_err(|e| {
+                        IrError::PlacementError(format!(
+                            "Failed to evaluate thickness for layer '{}': {}",
+                            layer.name.name, e
+                        ))
+                    })?;
 
                 resolved.push((layer.name.name.to_string(), thickness_nm));
             }
@@ -80,32 +82,35 @@ impl StackupManager {
             // This follows the "Foundation-First" principle for both ASIC and PCB.
             match origin_z {
                 hwc_parser::OriginZ::Bottom => {
-                     // Z=0 is the bottom of the board.
-                     // The first layer in the file is the physical bottom.
-                     let mut current_z = 0;
-                     for (name, thickness_nm) in resolved {
-                         layer_start_z_nm.insert(name.clone(), current_z);
-                         layer_thickness_nm.insert(name.clone(), thickness_nm);
-                         ordered_layers.push(name.clone());
-                         eprintln!("[DEBUG stackup] Bottom-Up Mapping: {} -> z: {} nm (t: {} nm)", name, current_z, thickness_nm);
-                         current_z += thickness_nm;
-                     }
-                 }
-                 hwc_parser::OriginZ::Top => {
-                     // Z=0 is the top of the board.
-                     // The first layer in the file is the physical bottom, so it's at Z = -total_thickness.
-                     // But for Top-origin, we usually want Z=0 to be the top copper.
-                     // So the first layer (bottom) starts at -total_height.
-                     let total_height: i64 = resolved.iter().map(|(_, t)| t).sum();
-                     let mut current_z = -total_height;
-                     for (name, thickness_nm) in resolved {
+                    // Z=0 is the bottom of the board.
+                    // The first layer in the file is the physical bottom.
+                    let mut current_z = 0;
+                    for (name, thickness_nm) in resolved {
+                        layer_start_z_nm.insert(name.clone(), current_z);
+                        layer_thickness_nm.insert(name.clone(), thickness_nm);
+                        ordered_layers.push(name.clone());
+                        eprintln!(
+                            "[DEBUG stackup] Bottom-Up Mapping: {} -> z: {} nm (t: {} nm)",
+                            name, current_z, thickness_nm
+                        );
+                        current_z += thickness_nm;
+                    }
+                }
+                hwc_parser::OriginZ::Top => {
+                    // Z=0 is the top of the board.
+                    // The first layer in the file is the physical bottom, so it's at Z = -total_thickness.
+                    // But for Top-origin, we usually want Z=0 to be the top copper.
+                    // So the first layer (bottom) starts at -total_height.
+                    let total_height: i64 = resolved.iter().map(|(_, t)| t).sum();
+                    let mut current_z = -total_height;
+                    for (name, thickness_nm) in resolved {
                         layer_start_z_nm.insert(name.clone(), current_z);
                         layer_thickness_nm.insert(name.clone(), thickness_nm);
                         ordered_layers.push(name.clone());
                         eprintln!("[DEBUG stackup] Top-Origin Mapping (First=Bottom): {} -> z: {} nm (t: {} nm)", name, current_z, thickness_nm);
                         current_z += thickness_nm;
-                     }
-                 }
+                    }
+                }
             }
         }
 
@@ -160,7 +165,9 @@ impl StackupManager {
                 }
                 // v0.1.7: No more hardcoded 35um. If no layer is found, return 0.
                 // Callers must handle the missing layer error.
-                self.get_layer_thickness("top").or_else(|| self.get_layer_thickness("L1")).unwrap_or(0)
+                self.get_layer_thickness("top")
+                    .or_else(|| self.get_layer_thickness("L1"))
+                    .unwrap_or(0)
             }
             hwc_parser::MountingSide::Bottom => {
                 // Search for the first copper layer from the bottom
@@ -171,7 +178,9 @@ impl StackupManager {
                         }
                     }
                 }
-                self.get_layer_thickness("bottom").or_else(|| self.get_layer_thickness("L2")).unwrap_or(0)
+                self.get_layer_thickness("bottom")
+                    .or_else(|| self.get_layer_thickness("L2"))
+                    .unwrap_or(0)
             }
             hwc_parser::MountingSide::Embedded => 0,
         }
@@ -190,20 +199,20 @@ impl StackupManager {
         match elevation {
             Elevation::Physical { start, .. } => {
                 // Assembly paradigm — direct physical measurement/expression
-                evaluate_expression_to_nm(start, symbol_table)
-                    .map_err(|e| IrError::PlacementError(format!("Failed to evaluate physical Z: {}", e)))
+                evaluate_expression_to_nm(start, symbol_table).map_err(|e| {
+                    IrError::PlacementError(format!("Failed to evaluate physical Z: {}", e))
+                })
             }
-            Elevation::Semantic(ident) => {
-                self.layer_start_z_nm
-                    .get(&ident.name.to_string())
-                    .copied()
-                    .ok_or_else(|| {
-                        IrError::PlacementError(format!(
-                            "Unknown semantic layer '{}' in profile stackup",
-                            ident.name
-                        ))
-                    })
-            }
+            Elevation::Semantic(ident) => self
+                .layer_start_z_nm
+                .get(&ident.name.to_string())
+                .copied()
+                .ok_or_else(|| {
+                    IrError::PlacementError(format!(
+                        "Unknown semantic layer '{}' in profile stackup",
+                        ident.name
+                    ))
+                }),
             Elevation::Relative => Ok(0),
         }
     }
@@ -231,7 +240,7 @@ impl StackupManager {
         let bottom = self.resolve_elevation(elevation, symbol_table)?;
         let thickness = match elevation {
             Elevation::Semantic(ident) => self
-                .get_layer_thickness(&ident.name.to_string())
+                .get_layer_thickness(ident.name.as_ref())
                 .unwrap_or(default_layer_height_nm),
             Elevation::Physical { end, .. } => {
                 if let Some(end_expr) = end {
@@ -312,12 +321,18 @@ impl StackupManager {
 
     /// Returns true if the layer name is the topmost physical layer.
     pub fn is_top_layer(&self, name: &str) -> bool {
-        self.ordered_layers.last().map(|n| n == name).unwrap_or(false)
+        self.ordered_layers
+            .last()
+            .map(|n| n == name)
+            .unwrap_or(false)
     }
 
     /// Returns true if the layer name is the bottommost physical layer.
     pub fn is_bottom_layer(&self, name: &str) -> bool {
-        self.ordered_layers.first().map(|n| n == name).unwrap_or(false)
+        self.ordered_layers
+            .first()
+            .map(|n| n == name)
+            .unwrap_or(false)
     }
 
     /// Returns the name of the layer at the given elevation.
@@ -327,8 +342,6 @@ impl StackupManager {
             _ => None,
         }
     }
-
-    /// Get the semantic name of a layer by its index.
 
     /// Returns the number of semantic layers in the stackup.
     pub fn layer_count(&self) -> usize {
@@ -359,11 +372,16 @@ impl StackupManager {
                     return Ok(z);
                 }
                 // Not a known semantic layer — treat as physical expression
-                evaluate_expression_to_nm(z_expr, symbol_table)
-                    .map_err(|e| IrError::PlacementError(format!("Failed to evaluate Z variable '{}': {}", name, e)))
+                evaluate_expression_to_nm(z_expr, symbol_table).map_err(|e| {
+                    IrError::PlacementError(format!(
+                        "Failed to evaluate Z variable '{}': {}",
+                        name, e
+                    ))
+                })
             }
-            _ => evaluate_expression_to_nm(z_expr, symbol_table)
-                .map_err(|e| IrError::PlacementError(format!("Failed to evaluate Z expression: {}", e))),
+            _ => evaluate_expression_to_nm(z_expr, symbol_table).map_err(|e| {
+                IrError::PlacementError(format!("Failed to evaluate Z expression: {}", e))
+            }),
         }
     }
 }

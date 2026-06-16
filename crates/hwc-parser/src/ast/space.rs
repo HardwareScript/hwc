@@ -4,8 +4,8 @@ use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 
 use super::common::{Coordinate, Dimensions, Grid, Identifier, OriginPoint, PinReference};
-use super::expression::Expression;
 use super::component::ComponentPlacement;
+use super::expression::Expression;
 use crate::lexer::Span;
 use compact_str::CompactString;
 
@@ -97,8 +97,8 @@ pub struct SpaceDefinition {
     pub mechanical: Option<Identifier>, // NEW v0.1.4: Reference to mechanical name
     pub substrate: Option<SubstratePlacement>,
     pub render: Option<super::component::RenderBlock>, // NEW v0.1.6: View/Visualization configuration
-    pub routing_config: Option<RoutingConfig>, // NEW v0.1.7: Global policy control
-    
+    pub routing_config: Option<RoutingConfig>,         // NEW v0.1.7: Global policy control
+
     /// **v0.1.7 CRITICAL FIX**: Unified statement stream that preserves textual order
 
     /// **v0.1.7 CRITICAL FIX**: Unified statement stream that preserves textual order
@@ -119,7 +119,6 @@ pub struct SpaceDefinition {
     // Never maintain parallel representations of the same data "temporarily for migration" — either migrate all consumers
     // atomically or keep only the new canonical form and update call sites immediately. See also removal of legacy AST, LayoutMapping, etc.
     // Consumers must now filter from `statements` or use helper iterators if added later.
-
     pub layouts: Vec<ModuleLayoutBlock>, // NEW: Module layout mappings
     pub routes: Vec<Route>,
     pub exposes: Vec<Expose>,
@@ -136,7 +135,7 @@ pub enum SpaceTopLevelStatement {
     /// Substrate placement: `add substrate(Material) ...`
     Substrate(SubstratePlacement),
     /// Component placement: `add ComponentType ...`
-    Component(ComponentPlacement),
+    Component(Box<ComponentPlacement>),
     /// Pour placement: `add pour(Material) ...`
     Pour(PourPlacement),
     /// Polygon placement: `add polygon(Material) ...`
@@ -173,7 +172,7 @@ pub struct SpaceForLoop {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum SpaceStatement {
     /// Component placement
-    Component(ComponentPlacement),
+    Component(Box<ComponentPlacement>),
     /// Pour placement
     Pour(PourPlacement),
     /// Contact placement
@@ -262,9 +261,9 @@ pub struct Route {
     pub strategy_params: Vec<(Identifier, Expression)>, // e.g. target_length: 50mm
     pub path: Option<Vec<Coordinate>>,
     pub signal_group: Option<CompactString>, // Optional signal group for impedance control
-    pub bridge: Option<CompactString>, // Phase 1: Explicit bridge override
-    pub exit_escape: Option<RouteEscape>, // v0.1.7: Exit port specification
-    pub enter_escape: Option<RouteEscape>, // v0.1.7: Enter port specification
+    pub bridge: Option<CompactString>,       // Phase 1: Explicit bridge override
+    pub exit_escape: Option<RouteEscape>,    // v0.1.7: Exit port specification
+    pub enter_escape: Option<RouteEscape>,   // v0.1.7: Enter port specification
     pub span: Span,
 }
 
@@ -382,7 +381,7 @@ pub struct PourPlacement {
     /// Z elevation (v0.1.7): either physical `z: 150um` or semantic `layer: l1`
     pub elevation: Elevation,
     pub thickness: Option<super::Expression>, // NEW v0.1.7: Explicit thickness override
-    pub boundary: Option<PourBoundary>, // Optional boundary (rect or circle)
+    pub boundary: Option<PourBoundary>,       // Optional boundary (rect or circle)
     pub net: Option<NetName>, // Net name to connect to (v0.1.6: supports array syntax)
     pub device: Option<DeviceBinding>, // Phase 4: Explicit device terminal binding
     pub thermal_relief: bool,
@@ -394,7 +393,7 @@ pub struct PourPlacement {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum PourBoundary {
     /// Rectangular boundary: [from] to [to]
-    Rect(Coordinate, Coordinate),
+    Rect(Box<Coordinate>, Box<Coordinate>),
     /// Circular boundary: Circle(center, radius_expression)
     Circle {
         center: Box<Coordinate>,
@@ -430,6 +429,7 @@ pub struct PolygonPlacement {
 /// Examples:
 /// - `add contact(Tungsten) at [x:500um, y:325um] spanning layer: l1 to l2`
 /// - `add contact(Copper) named Via1 net: VDD at [x:1mm, y:2mm] spanning z: 0um to 200um` (v0.1.7 dual paradigm)
+///
 /// Type of cap for tube shapes (v0.1.7)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CapType {
@@ -450,7 +450,7 @@ pub struct ContactPlacement {
     pub from_elevation: Elevation,
     /// Ending elevation (v0.1.7)
     pub to_elevation: Elevation,
-    pub net: Option<NetName>,    // Optional net name to connect to (v0.1.6: supports array syntax)
+    pub net: Option<NetName>, // Optional net name to connect to (v0.1.6: supports array syntax)
     pub properties: rustc_hash::FxHashMap<CompactString, Expression>, // Generic properties (v0.1.9)
     /// Polygon contour for via shape (v0.2.0).
     /// The compiler only understands polygons, not named shapes.
@@ -500,18 +500,63 @@ pub struct ModuleInternalPlacement {
 
 impl SpaceDefinition {
     pub fn components(&self) -> Vec<ComponentPlacement> {
-        self.statements.iter().filter_map(|s| if let SpaceTopLevelStatement::Component(c) = s { Some(c.clone()) } else { None }).collect()
+        self.statements
+            .iter()
+            .filter_map(|s| {
+                if let SpaceTopLevelStatement::Component(c) = s {
+                    Some((**c).clone())
+                } else {
+                    None
+                }
+            })
+            .collect()
     }
     pub fn pours(&self) -> Vec<PourPlacement> {
-        self.statements.iter().filter_map(|s| if let SpaceTopLevelStatement::Pour(p) = s { Some(p.clone()) } else { None }).collect()
+        self.statements
+            .iter()
+            .filter_map(|s| {
+                if let SpaceTopLevelStatement::Pour(p) = s {
+                    Some(p.clone())
+                } else {
+                    None
+                }
+            })
+            .collect()
     }
     pub fn polygons(&self) -> Vec<PolygonPlacement> {
-        self.statements.iter().filter_map(|s| if let SpaceTopLevelStatement::Polygon(p) = s { Some(p.clone()) } else { None }).collect()
+        self.statements
+            .iter()
+            .filter_map(|s| {
+                if let SpaceTopLevelStatement::Polygon(p) = s {
+                    Some(p.clone())
+                } else {
+                    None
+                }
+            })
+            .collect()
     }
     pub fn contacts(&self) -> Vec<ContactPlacement> {
-        self.statements.iter().filter_map(|s| if let SpaceTopLevelStatement::Contact(c) = s { Some(c.clone()) } else { None }).collect()
+        self.statements
+            .iter()
+            .filter_map(|s| {
+                if let SpaceTopLevelStatement::Contact(c) = s {
+                    Some(c.clone())
+                } else {
+                    None
+                }
+            })
+            .collect()
     }
     pub fn for_loops(&self) -> Vec<SpaceForLoop> {
-        self.statements.iter().filter_map(|s| if let SpaceTopLevelStatement::ForLoop(f) = s { Some(f.clone()) } else { None }).collect()
+        self.statements
+            .iter()
+            .filter_map(|s| {
+                if let SpaceTopLevelStatement::ForLoop(f) = s {
+                    Some(f.clone())
+                } else {
+                    None
+                }
+            })
+            .collect()
     }
 }

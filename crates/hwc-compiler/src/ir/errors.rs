@@ -88,9 +88,7 @@ pub enum IrError {
         url("https://docs.hw-script.org/errors/C34"),
         help("The profile must specify '{field}'. Add it to the profile definition.")
     )]
-    MissingProfileConstraint {
-        field: String,
-    },
+    MissingProfileConstraint { field: String },
 
     #[error("Material interpenetration detected at z = {z_nm} nm")]
     #[diagnostic(
@@ -114,77 +112,46 @@ pub enum IrError {
     )]
     InvalidExpression(String),
 
-    #[error("Component '{component}' overlaps with substrate material")]
+    #[error("Component '{component}' overlaps with substrate material", component = .0.component)]
     #[diagnostic(
         code(P44),
         url("https://docs.hw-script.org/errors/P44"),
-        help("Place component at z:{suggested_z_layer} or higher (above substrate surface). Computed position: ({x_mm:.3}mm, {y_mm:.3}mm, {z_mm:.3}mm)")
+        help("Place component at z:{suggested_z_layer} or higher (above substrate surface). Computed position: ({x_mm:.3}mm, {y_mm:.3}mm, {z_mm:.3}mm)",
+            suggested_z_layer = .0.suggested_z_layer,
+            x_mm = .0.x_mm,
+            y_mm = .0.y_mm,
+            z_mm = .0.z_mm)
     )]
-    SubstrateOverlap {
-        component: CompactString,
-        component_z_layer: usize,
-        component_z_mm: f64,
-        substrate_min_layer: usize,
-        substrate_max_layer: usize,
-        substrate_min_mm: f64,
-        substrate_max_mm: f64,
-        suggested_z_layer: usize,
-        /// IR-computed physical position in millimeters (from compiled ComponentInstance, not AST)
-        x_mm: f64,
-        y_mm: f64,
-        z_mm: f64,
-        #[label("component overlaps substrate here")]
-        span: miette::SourceSpan,
-        suggestion: String,
-    },
+    #[label("component overlaps substrate here", .0.span)]
+    SubstrateOverlap(Box<SubstrateOverlapDetails>),
 
     /// Sprint 5.5: Component floating above substrate
-    #[error("Component '{component}' is floating in air above substrate")]
+    #[error("Component '{component}' is floating in air above substrate", component = .0.component)]
     #[diagnostic(
         code(P44),
         url("https://docs.hw-script.org/errors/P44"),
-        help("Place component at z:{substrate_max_layer} (substrate surface). Computed position: ({x_mm:.3}mm, {y_mm:.3}mm, {z_mm:.3}mm)")
+        help("Place component at z:{substrate_max_layer} (substrate surface). Computed position: ({x_mm:.3}mm, {y_mm:.3}mm, {z_mm:.3}mm)",
+            substrate_max_layer = .0.substrate_max_layer,
+            x_mm = .0.x_mm,
+            y_mm = .0.y_mm,
+            z_mm = .0.z_mm)
     )]
-    ComponentFloatingInAir {
-        component: CompactString,
-        component_z_layer: usize,
-        component_z_mm: f64,
-        substrate_max_layer: usize,
-        substrate_max_mm: f64,
-        gap_mm: f64,
-        /// IR-computed physical position in millimeters (from compiled ComponentInstance, not AST)
-        x_mm: f64,
-        y_mm: f64,
-        z_mm: f64,
-        #[label("component floats {gap_mm:.3}mm above substrate here")]
-        span: miette::SourceSpan,
-        suggestion: String,
-    },
+    #[label("component floats {gap_mm:.3}mm above substrate here", .0.span)]
+    ComponentFloatingInAir(Box<ComponentFloatingInAirDetails>),
 
     /// Sprint 5.5: Component buried below substrate
-    #[error("Component '{component}' is buried below substrate")]
+    #[error("Component '{component}' is buried below substrate", component = .0.component)]
     #[diagnostic(
         code(P44),
         url("https://docs.hw-script.org/errors/P44"),
-        help("Place component at z:{substrate_max_layer} or higher (on or above substrate surface). Computed position: ({x_mm:.3}mm, {y_mm:.3}mm, {z_mm:.3}mm)")
+        help("Place component at z:{substrate_max_layer} or higher (on or above substrate surface). Computed position: ({x_mm:.3}mm, {y_mm:.3}mm, {z_mm:.3}mm)",
+            substrate_max_layer = .0.substrate_max_layer,
+            x_mm = .0.x_mm,
+            y_mm = .0.y_mm,
+            z_mm = .0.z_mm)
     )]
-    ComponentBuriedInSubstrate {
-        component: CompactString,
-        component_z_layer: usize,
-        component_z_mm: f64,
-        substrate_min_layer: usize,
-        substrate_min_mm: f64,
-        substrate_max_layer: usize,
-        substrate_max_mm: f64,
-        gap_mm: f64,
-        /// IR-computed physical position in millimeters (from compiled ComponentInstance, not AST)
-        x_mm: f64,
-        y_mm: f64,
-        z_mm: f64,
-        #[label("component buried {gap_mm:.3}mm below substrate here")]
-        span: miette::SourceSpan,
-        suggestion: String,
-    },
+    #[label("component buried {gap_mm:.3}mm below substrate here", .0.span)]
+    ComponentBuriedInSubstrate(Box<ComponentBuriedInSubstrateDetails>),
 
     #[error("Invalid Z elevation: {value} nm")]
     #[diagnostic(
@@ -218,12 +185,61 @@ pub enum IrError {
     #[diagnostic(
         code(C35),
         url("https://docs.hw-script.org/errors/C35"),
-        help("Component positioning forms a cycle (e.g., A depends on B, and B depends on A). \
-              Hardware Script requires a directed acyclic graph (DAG) for spatial placement.")
+        help(
+            "Component positioning forms a cycle (e.g., A depends on B, and B depends on A). \
+              Hardware Script requires a directed acyclic graph (DAG) for spatial placement."
+        )
     )]
-    CircularReference {
-        path: String,
-    },
+    CircularReference { path: String },
+}
+
+#[derive(Debug, Clone)]
+pub struct SubstrateOverlapDetails {
+    pub component: CompactString,
+    pub component_z_layer: usize,
+    pub component_z_mm: f64,
+    pub substrate_min_layer: usize,
+    pub substrate_max_layer: usize,
+    pub substrate_min_mm: f64,
+    pub substrate_max_mm: f64,
+    pub suggested_z_layer: usize,
+    pub x_mm: f64,
+    pub y_mm: f64,
+    pub z_mm: f64,
+    pub span: miette::SourceSpan,
+    pub suggestion: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct ComponentFloatingInAirDetails {
+    pub component: CompactString,
+    pub component_z_layer: usize,
+    pub component_z_mm: f64,
+    pub substrate_max_layer: usize,
+    pub substrate_max_mm: f64,
+    pub gap_mm: f64,
+    pub x_mm: f64,
+    pub y_mm: f64,
+    pub z_mm: f64,
+    pub span: miette::SourceSpan,
+    pub suggestion: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct ComponentBuriedInSubstrateDetails {
+    pub component: CompactString,
+    pub component_z_layer: usize,
+    pub component_z_mm: f64,
+    pub substrate_min_layer: usize,
+    pub substrate_min_mm: f64,
+    pub substrate_max_layer: usize,
+    pub substrate_max_mm: f64,
+    pub gap_mm: f64,
+    pub x_mm: f64,
+    pub y_mm: f64,
+    pub z_mm: f64,
+    pub span: miette::SourceSpan,
+    pub suggestion: String,
 }
 
 /// Details for geometric collision errors (boxed to reduce enum size)

@@ -24,5 +24,5 @@ pub use shared_buffer::{DirtyPageTracker, SharedBufferHeader, SharedVoxelBuffer,
 pub use stats::MemoryStats;
 pub use substrate_layers::{
     CapType, ComponentMetadata, ComponentPin, Cutout, LinerStack, Rotation, SubstrateLayer,
-    SubstrateLayerShape, SubstrateLayerType, Terminal, TSVParams,
+    SubstrateLayerShape, SubstrateLayerType, TSVParams, Terminal,
 };

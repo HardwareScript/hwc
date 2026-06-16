@@ -1,7 +1,7 @@
 //! Parser helper methods for token manipulation and common operations
 
 mod navigation;
-mod whitespace;
-mod tokens;
 mod parsing;
+mod tokens;
 mod utils;
+mod whitespace;

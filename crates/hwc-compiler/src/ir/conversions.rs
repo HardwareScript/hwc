@@ -1,9 +1,9 @@
 //! Unit conversions and coordinate transformations.
 
-use hwc_engine::{GridCells, Point3D, VoxelSize};
-use hwc_parser::{Coordinate, Expression, Measurement, Unit, Value};
 use crate::ir::placement::coordinate_evaluation::CoordinateAxis;
 use crate::ir::stackup_manager::StackupManager;
+use hwc_engine::{GridCells, Point3D, VoxelSize};
+use hwc_parser::{Coordinate, Expression, Measurement, Unit, Value};
 
 /// Context for coordinate-to-point conversion operations.
 /// Groups related parameters to avoid exceeding Clippy's argument limit.
@@ -27,23 +27,21 @@ pub fn evaluate_expression_to_nm(
     match expr {
         Expression::Literal { value, .. } => Ok(*value),
         Expression::FloatLiteral { value, .. } => Ok(*value as i64),
-        Expression::Measurement { value, unit, .. } => {
-            match unit {
-                Unit::Millimeter => Ok((value * 1_000_000.0) as i64),
-                Unit::Centimeter => Ok((value * 10_000_000.0) as i64),
-                Unit::Micrometer => Ok((value * 1_000.0) as i64),
-                Unit::Nanometer => Ok(*value as i64),
-                Unit::Custom(symbol) => {
-                    if let Some(unit_def) = symbol_table.resolve_unit_symbol(symbol) {
-                        let multiplier = unit_def.multiplier.unwrap_or(1.0);
-                        Ok((value * multiplier * 1_000_000_000.0) as i64)
-                    } else {
-                        Err(format!("Unknown unit symbol: '{}'", symbol))
-                    }
+        Expression::Measurement { value, unit, .. } => match unit {
+            Unit::Millimeter => Ok((value * 1_000_000.0) as i64),
+            Unit::Centimeter => Ok((value * 10_000_000.0) as i64),
+            Unit::Micrometer => Ok((value * 1_000.0) as i64),
+            Unit::Nanometer => Ok(*value as i64),
+            Unit::Custom(symbol) => {
+                if let Some(unit_def) = symbol_table.resolve_unit_symbol(symbol) {
+                    let multiplier = unit_def.multiplier.unwrap_or(1.0);
+                    Ok((value * multiplier * 1_000_000_000.0) as i64)
+                } else {
+                    Err(format!("Unknown unit symbol: '{}'", symbol))
                 }
-                _ => Err(format!("Cannot convert {:?} to nanometers", unit)),
             }
-        }
+            _ => Err(format!("Cannot convert {:?} to nanometers", unit)),
+        },
         Expression::Variable { name, .. } => {
             if let Some(const_value) = symbol_table.get_all_constants().get(name) {
                 Ok(*const_value as i64)
@@ -51,7 +49,12 @@ pub fn evaluate_expression_to_nm(
                 Err(format!("Unknown constant: '{}'", name))
             }
         }
-        Expression::Binary { left, operator, right, .. } => {
+        Expression::Binary {
+            left,
+            operator,
+            right,
+            ..
+        } => {
             let left_nm = evaluate_expression_to_nm(left, symbol_table)?;
             let right_nm = evaluate_expression_to_nm(right, symbol_table)?;
             use hwc_parser::BinaryOperator;
@@ -60,12 +63,18 @@ pub fn evaluate_expression_to_nm(
                 BinaryOperator::Subtract => Ok(left_nm - right_nm),
                 BinaryOperator::Multiply => Ok(left_nm * right_nm),
                 BinaryOperator::Divide => {
-                    if right_nm == 0 { Err("Division by zero".into()) } else { Ok(left_nm / right_nm) }
+                    if right_nm == 0 {
+                        Err("Division by zero".into())
+                    } else {
+                        Ok(left_nm / right_nm)
+                    }
                 }
                 BinaryOperator::Modulo => Ok(left_nm % right_nm),
             }
         }
-        Expression::Unary { operator, operand, .. } => {
+        Expression::Unary {
+            operator, operand, ..
+        } => {
             let operand_nm = evaluate_expression_to_nm(operand, symbol_table)?;
             use hwc_parser::UnaryOperator;
             match operator {
@@ -73,9 +82,15 @@ pub fn evaluate_expression_to_nm(
                 UnaryOperator::Plus => Ok(operand_nm),
             }
         }
-        Expression::Grouped { expression, .. } => evaluate_expression_to_nm(expression, symbol_table),
-        Expression::Percentage { .. } => Err("Percentages cannot be evaluated without reference dimension".into()),
-        Expression::AnchorReference { .. } => Err("Anchor references cannot be evaluated without bounding box tracker.".into()),
+        Expression::Grouped { expression, .. } => {
+            evaluate_expression_to_nm(expression, symbol_table)
+        }
+        Expression::Percentage { .. } => {
+            Err("Percentages cannot be evaluated without reference dimension".into())
+        }
+        Expression::AnchorReference { .. } => {
+            Err("Anchor references cannot be evaluated without bounding box tracker.".into())
+        }
     }
 }
 
@@ -91,7 +106,9 @@ pub fn measurement_to_nm(measurement: &Measurement, symbol_table: &crate::Symbol
 pub(crate) fn z_expr_is_physical(z_expr: &Expression) -> bool {
     match z_expr {
         Expression::Measurement { .. } => true,
-        Expression::Binary { left, right, .. } => z_expr_is_physical(left) || z_expr_is_physical(right),
+        Expression::Binary { left, right, .. } => {
+            z_expr_is_physical(left) || z_expr_is_physical(right)
+        }
         Expression::Unary { operand, .. } => z_expr_is_physical(operand),
         Expression::Grouped { expression, .. } => z_expr_is_physical(expression),
         Expression::Literal { .. } | Expression::FloatLiteral { .. } => false,
@@ -112,7 +129,7 @@ pub(crate) const DIMENSIONLESS_Z_ERROR: &str =
     "Z coordinates require physical units (e.g. z: 1.5mm). Dimensionless values like z: 1 are not supported.";
 
 thread_local! {
-    static LAST_Z_LOG: std::cell::RefCell<Option<(String, usize)>> = std::cell::RefCell::new(None);
+    static LAST_Z_LOG: std::cell::RefCell<Option<(String, usize)>> = const { std::cell::RefCell::new(None) };
 }
 
 fn log_resolve_z(msg: String) {
@@ -122,10 +139,8 @@ fn log_resolve_z(msg: String) {
             if prev_msg == &msg {
                 *count += 1;
                 return;
-            } else {
-                if *count > 1 {
-                    eprintln!("  (repeated {} times)", count);
-                }
+            } else if *count > 1 {
+                eprintln!("  (repeated {} times)", count);
             }
         }
         eprintln!("{}", msg);
@@ -173,17 +188,28 @@ pub fn resolve_coordinate_z_nm(
 
 pub fn coordinate_to_point(coord: &Coordinate, ctx: &CoordinateContext) -> Point3D {
     let (x_expr, y_expr, z_expr) = match coord {
-        Coordinate::Positional { x, y, z, .. } | Coordinate::Declarative { x, y, z, .. } => (x, y, z),
+        Coordinate::Positional { x, y, z, .. } | Coordinate::Declarative { x, y, z, .. } => {
+            (x, y, z)
+        }
         Coordinate::Relative(_) => panic!("Relative coordinates must be resolved"),
     };
 
-    let has_anchor_refs = x_expr.contains_anchor_reference() || y_expr.contains_anchor_reference() || z_expr.contains_anchor_reference();
+    let has_anchor_refs = x_expr.contains_anchor_reference()
+        || y_expr.contains_anchor_reference()
+        || z_expr.contains_anchor_reference();
 
     let x_nm = if let Ok(Value::Percentage(pct)) = x_expr.evaluate(ctx.eval_context) {
         ((pct / 100.0) * ctx.space_dimensions.width_nm as f64) as i64
     } else if has_anchor_refs && x_expr.contains_anchor_reference() {
         let tracker = ctx.bbox_tracker.expect("Tracker required");
-        super::placement::coordinate_evaluation::evaluate_coordinate_with_anchors(x_expr, ctx.symbol_table, tracker, CoordinateAxis::X, ctx.origin.z).unwrap()
+        super::placement::coordinate_evaluation::evaluate_coordinate_with_anchors(
+            x_expr,
+            ctx.symbol_table,
+            tracker,
+            CoordinateAxis::X,
+            ctx.origin.z,
+        )
+        .unwrap()
     } else {
         evaluate_expression_to_nm(x_expr, ctx.symbol_table).unwrap()
     };
@@ -192,7 +218,14 @@ pub fn coordinate_to_point(coord: &Coordinate, ctx: &CoordinateContext) -> Point
         ((pct / 100.0) * ctx.space_dimensions.height_nm as f64) as i64
     } else if has_anchor_refs && y_expr.contains_anchor_reference() {
         let tracker = ctx.bbox_tracker.expect("Tracker required");
-        super::placement::coordinate_evaluation::evaluate_coordinate_with_anchors(y_expr, ctx.symbol_table, tracker, CoordinateAxis::Y, ctx.origin.z).unwrap()
+        super::placement::coordinate_evaluation::evaluate_coordinate_with_anchors(
+            y_expr,
+            ctx.symbol_table,
+            tracker,
+            CoordinateAxis::Y,
+            ctx.origin.z,
+        )
+        .unwrap()
     } else {
         evaluate_expression_to_nm(y_expr, ctx.symbol_table).unwrap()
     };
@@ -218,11 +251,15 @@ pub fn spanning_coordinate_to_point(
     _is_end: bool,
 ) -> Result<Point3D, String> {
     let (x_expr, y_expr, z_expr) = match coord {
-        Coordinate::Positional { x, y, z, .. } | Coordinate::Declarative { x, y, z, .. } => (x, y, z),
+        Coordinate::Positional { x, y, z, .. } | Coordinate::Declarative { x, y, z, .. } => {
+            (x, y, z)
+        }
         Coordinate::Relative(_) => panic!("Relative coordinates must be resolved"),
     };
 
-    let has_anchor_refs = x_expr.contains_anchor_reference() || y_expr.contains_anchor_reference() || z_expr.contains_anchor_reference();
+    let has_anchor_refs = x_expr.contains_anchor_reference()
+        || y_expr.contains_anchor_reference()
+        || z_expr.contains_anchor_reference();
 
     let x_nm = evaluate_expression_to_nm(x_expr, ctx.symbol_table)?;
     let y_nm = evaluate_expression_to_nm(y_expr, ctx.symbol_table)?;

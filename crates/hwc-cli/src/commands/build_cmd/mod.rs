@@ -19,7 +19,6 @@ use miette::Result;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-
 /// Main build execution entry point
 pub fn execute(
     input: PathBuf,
@@ -80,7 +79,10 @@ pub fn execute(
     if let Some(ref filter_name) = config.space {
         spaces.retain(|name, _| name.as_str() == filter_name.as_str());
         if spaces.is_empty() {
-            println!("⚠️  No space named '{}' found in the source file", filter_name);
+            println!(
+                "⚠️  No space named '{}' found in the source file",
+                filter_name
+            );
             return Ok(());
         }
     }
@@ -127,24 +129,29 @@ pub fn execute(
 
         // Run validation checks
         let is_artist_mode = physical_netlist.is_none();
-        let validation_result = validation::run_validation_checks(&space, &config, is_artist_mode, start_time)?;
+        let validation_result =
+            validation::run_validation_checks(&space, &config, is_artist_mode, start_time)?;
 
         // Commit gate
         if !validation_result.passed && !is_artist_mode {
             if config.force_export {
-                println!("\n⚠️  --force-export: Overriding Commit Gate despite {} violation(s)",
-                    validation_result.violation_count);
+                println!(
+                    "\n⚠️  --force-export: Overriding Commit Gate despite {} violation(s)",
+                    validation_result.violation_count
+                );
                 println!("   ⚠️  WARNING: Exporting design with known physical integrity issues");
             } else {
                 return Err(miette::Report::new(BuildError::from_validation_failures(
-                    &validation_result.violations
+                    &validation_result.violations,
                 )));
             }
         }
 
         if !validation_result.passed && is_artist_mode {
-            println!("\n⚠️  Artist Mode: Exporting despite {} validation warning(s)",
-                validation_result.violation_count);
+            println!(
+                "\n⚠️  Artist Mode: Exporting despite {} validation warning(s)",
+                validation_result.violation_count
+            );
         }
 
         // Realize analytic routes
@@ -165,7 +172,10 @@ pub fn execute(
     }
 
     // Success message
-    println!("    Finished build in {:.2}s", start_time.elapsed().as_secs_f64());
+    println!(
+        "    Finished build in {:.2}s",
+        start_time.elapsed().as_secs_f64()
+    );
 
     Ok(())
 }

@@ -19,8 +19,8 @@ mod module;
 mod pattern;
 mod polymorphic_interface;
 pub mod profile;
-mod signal_group;
 mod shape;
+mod signal_group;
 mod space;
 mod test;
 mod unit;
@@ -41,8 +41,8 @@ pub use module::*;
 pub use pattern::*;
 pub use polymorphic_interface::*;
 pub use profile::*;
-pub use signal_group::*;
 pub use shape::*;
+pub use signal_group::*;
 pub use space::*;
 pub use test::*;
 pub use unit::*;
@@ -64,7 +64,7 @@ pub struct Program {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Definition {
     Material(MaterialDefinition),
-    Profile(ProfileDefinition),
+    Profile(Box<ProfileDefinition>),
     Component(ComponentDefinition),
     Module(ModuleDefinition), // NEW: Module support for v0.1.4
     Mechanical(MechanicalDefinition),
@@ -72,17 +72,17 @@ pub enum Definition {
     PolymorphicInterface(PolymorphicInterfaceDefinition), // NEW: Duck-typed interfaces for v0.1.5
     Test(TestDefinition),
     Space(SpaceDefinition),
-    Unit(UnitDefinition),               // Standard library unit definitions
-    Device(DeviceDefinition),           // NEW: Device definitions for v0.1.6 (foundry primitives)
-    Const(ConstDefinition),             // NEW: Constant definitions for v0.1.6 (math.hw primitives)
+    Unit(UnitDefinition),                   // Standard library unit definitions
+    Device(DeviceDefinition), // NEW: Device definitions for v0.1.6 (foundry primitives)
+    Const(ConstDefinition),   // NEW: Constant definitions for v0.1.6 (math.hw primitives)
     SignalGroup(SignalGroupDefinition), // Signal grouping for impedance control
-    Pattern(PatternDefinition),         // Routing pattern definitions
-    Strategy(StrategyDefinition),       // Routing strategy definitions
+    Pattern(PatternDefinition), // Routing pattern definitions
+    Strategy(StrategyDefinition), // Routing strategy definitions
     MaterialAlias(MaterialAliasDefinition), // NEW: Material alias for stdlib
-    Enum(logic::EnumDefinition),        // NEW: Enum definitions for v0.4.0
-    Struct(logic::StructDefinition),    // NEW: Struct definitions for v0.4.0
-    Logic(logic::LogicDefinition),      // NEW: Logic block definitions for v0.4.0
-    Shape(ShapeDefinition),             // NEW: Custom 2D polygon shape definitions
+    Enum(logic::EnumDefinition), // NEW: Enum definitions for v0.4.0
+    Struct(logic::StructDefinition), // NEW: Struct definitions for v0.4.0
+    Logic(logic::LogicDefinition), // NEW: Logic block definitions for v0.4.0
+    Shape(ShapeDefinition),   // NEW: Custom 2D polygon shape definitions
 }
 
 // REMOVED (pre-release cleanup): Legacy AST struct (the old non-Program wrapper).

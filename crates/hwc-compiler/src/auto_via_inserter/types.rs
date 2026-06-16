@@ -1,6 +1,15 @@
 use compact_str::CompactString;
 use hwc_engine::geometry::BoundingBox;
 
+#[derive(Debug, Clone)]
+pub(crate) struct ViaLocation {
+    pub(crate) x_nm: i64,
+    pub(crate) y_nm: i64,
+    pub(crate) from_z_nm: i64,
+    pub(crate) to_z_nm: i64,
+    pub(crate) diameter_nm: i64,
+}
+
 /// Layer transition information for a net.
 #[derive(Debug, Clone)]
 pub(crate) struct LayerTransition {

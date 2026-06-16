@@ -233,7 +233,10 @@ import FR4 from standard.materials
     let program = parser.parse(&DiagnosticCollector::new("", 100));
 
     // Should not parse any imports due to unrecognized path syntax (dot handling deleted).
-    assert!(program.imports.is_empty(), "Legacy dot syntax for imports must be rejected");
+    assert!(
+        program.imports.is_empty(),
+        "Legacy dot syntax for imports must be rejected"
+    );
 }
 
 #[test]

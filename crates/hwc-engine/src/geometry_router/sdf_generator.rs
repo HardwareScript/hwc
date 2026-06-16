@@ -218,15 +218,13 @@ impl SdfGenerator {
     /// * `inflated_aabbs` - Vector of (inflated_bbox, name) tuples from the tracker.
     ///   These AABBs are already expanded by Minkowski sum (trace_width/2 + clearance),
     ///   so the SDF's distance-to-obstacle calculations automatically enforce clearance.
-    pub fn register_minkowski_aabbs(&mut self, inflated_aabbs: Vec<(BoundingBox, compact_str::CompactString)>) {
+    pub fn register_minkowski_aabbs(
+        &mut self,
+        inflated_aabbs: Vec<(BoundingBox, compact_str::CompactString)>,
+    ) {
         use smallvec::SmallVec;
         for (bbox, name) in inflated_aabbs {
-            let mut metadata = ComponentMetadata::new(
-                0,
-                bbox,
-                name,
-                "MinkowskiInflated".into(),
-            );
+            let mut metadata = ComponentMetadata::new(0, bbox, name, "MinkowskiInflated".into());
             metadata.blocked_z_ranges = SmallVec::new();
             self.component_boxes.push(ComponentBox::new(metadata));
         }
@@ -314,13 +312,13 @@ impl SdfGenerator {
         );
 
         // Distance to substrate boundary (Z-axis constraint)
-        // v0.1.7 FIX: Substrate is BELOW substrate_height_nm. 
+        // v0.1.7 FIX: Substrate is BELOW substrate_height_nm.
         // If we are below it, we are in a collision (distance 0).
         // If we are at or above it, we are safe (distance is height difference).
         let d_substrate = if point.z < self.substrate_height_nm {
             0 // INSIDE substrate = collision
         } else {
-            // ABOVE substrate = distance to it. 
+            // ABOVE substrate = distance to it.
             // We use a large value here if we don't want the substrate to limit leaping,
             // or the actual distance if we want to stay close to the surface.
             // For now, let's treat above-substrate as safe space.
@@ -358,12 +356,12 @@ impl SdfGenerator {
         // Clamp to 255
         // v0.1.7: If we are exactly at the surface (min_nm == 0) but not inside (point.z >= substrate_height_nm),
         // we should return 1 to allow routing on the surface.
-        if min_nm == 0 && point.z >= self.substrate_height_nm && d_components > 0 {
-            1 // Safe surface routing
-        } else if min_nm > 0 && d_voxels == 0 {
-            1 // Inside the 1-voxel buffer
+        if (min_nm == 0 && point.z >= self.substrate_height_nm && d_components > 0)
+            || (min_nm > 0 && d_voxels == 0)
+        {
+            1
         } else {
-            d_voxels.min(MAX_DISTANCE)
+            d_voxels
         }
     }
 

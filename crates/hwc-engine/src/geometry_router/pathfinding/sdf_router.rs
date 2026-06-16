@@ -77,11 +77,19 @@ pub fn route_net_sdf_accelerated(
     );
 
     eprintln!("[ROUTER DEBUG] Starting SDF-accelerated routing");
-    eprintln!("[ROUTER DEBUG]   Start: {:?} nm -> Snapped: {:?}", start, start_snapped);
-    eprintln!("[ROUTER DEBUG]   Goal: {:?} nm -> Snapped: {:?}", goal, goal_snapped);
+    eprintln!(
+        "[ROUTER DEBUG]   Start: {:?} nm -> Snapped: {:?}",
+        start, start_snapped
+    );
+    eprintln!(
+        "[ROUTER DEBUG]   Goal: {:?} nm -> Snapped: {:?}",
+        goal, goal_snapped
+    );
     eprintln!("[ROUTER DEBUG]   Voxel size: {:?} nm", params.voxel_size);
-    eprintln!("[ROUTER DEBUG]   Manhattan distance: {} voxels",
-        start_snapped.manhattan_distance(&goal_snapped) / params.voxel_size.x_nm);
+    eprintln!(
+        "[ROUTER DEBUG]   Manhattan distance: {} voxels",
+        start_snapped.manhattan_distance(&goal_snapped) / params.voxel_size.x_nm
+    );
 
     let mut state = PathfindingState::new();
 
@@ -157,8 +165,8 @@ pub fn route_net_sdf_accelerated(
                 }
 
                 // 2. Intermediate points
-                for i in 1..path.len() - 1 {
-                    final_path.push(path[i]);
+                for item in path.iter().take(path.len() - 1).skip(1) {
+                    final_path.push(*item);
                 }
 
                 // 3. Goal Escape: goal_snapped -> (goal_snapped.x, goal.y, goal.z) -> goal
@@ -174,8 +182,11 @@ pub fn route_net_sdf_accelerated(
 
                 // v0.1.7 Fix: Lock ALL points to the exact physical Z-plane if requested.
                 if let Some(fixed_z) = params.fixed_z_nm {
-                    eprintln!("[ROUTER DEBUG]   Planar Lock Active: Locking {} points to Z={}nm", 
-                        path.len(), fixed_z);
+                    eprintln!(
+                        "[ROUTER DEBUG]   Planar Lock Active: Locking {} points to Z={}nm",
+                        path.len(),
+                        fixed_z
+                    );
                     for point in path.iter_mut() {
                         point.z = fixed_z;
                     }

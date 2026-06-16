@@ -1,8 +1,8 @@
 //! Core types for physics validation
 
 use crate::geometry::Point3D;
-use crate::voxel_grid::NetId;
 use crate::voxel_grid::MaterialId;
+use crate::voxel_grid::NetId;
 use compact_str::CompactString;
 use std::fmt;
 
@@ -67,7 +67,11 @@ impl fmt::Display for PhysicsViolation {
                 net_b,
                 location,
             } => {
-                write!(f, "Short circuit between net {} and {} at {}", net_a, net_b, location)
+                write!(
+                    f,
+                    "Short circuit between net {} and {} at {}",
+                    net_a, net_b, location
+                )
             }
             PhysicsViolation::ClearanceViolation {
                 net_a,

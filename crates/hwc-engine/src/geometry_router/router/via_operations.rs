@@ -1,19 +1,15 @@
 //! Via-related operations: extraction, validation, stamping, clearing, and tower unrolling
 
+use super::super::types::{Via, ViaType};
 use super::core::GeometryRouter;
 use crate::geometry::Point3D;
 use crate::netlist::NetId;
-use super::super::types::{Via, ViaType};
 
 impl GeometryRouter {
     /// Extract vias from a routed path by detecting Z changes.
     /// Coalesces consecutive Z-changes into single layer-transition vias
     /// instead of creating one via per Z-voxel boundary.
-    pub(super) fn extract_vias_from_path(
-        &self,
-        path: &[Point3D],
-        net_id: NetId,
-    ) -> Vec<Via> {
+    pub(super) fn extract_vias_from_path(&self, path: &[Point3D], net_id: NetId) -> Vec<Via> {
         let mut vias = Vec::new();
         let board_min_z_nm = 0;
         let board_max_z_nm = self.bounds.depth_nm;
@@ -69,7 +65,9 @@ impl GeometryRouter {
                     board_min_z_nm,
                     board_max_z_nm,
                     self.voxel_size_nm,
-                    self.constraints.fabrication.as_ref()
+                    self.constraints
+                        .fabrication
+                        .as_ref()
                         .map(|f| f.min_annular_ring_nm)
                         .unwrap_or(0),
                 );
@@ -84,12 +82,7 @@ impl GeometryRouter {
     }
 
     /// Check if a via can be placed at the given position and Z span.
-    pub(super) fn can_place_via(
-        &self,
-        position: (i64, i64),
-        from_z_nm: i64,
-        to_z_nm: i64,
-    ) -> bool {
+    pub(super) fn can_place_via(&self, position: (i64, i64), from_z_nm: i64, to_z_nm: i64) -> bool {
         let fabrication = match &self.constraints.fabrication {
             Some(f) => f,
             None => return true,
@@ -152,21 +145,29 @@ impl GeometryRouter {
                 if pour.z_bottom_nm == z_nm {
                     if pour.net_id != via.net_id {
                         self.remove_circular_area(via.position, antipad_radius, z_nm);
-                    } else if let Some(expr) = via.properties.get("thermal_relief") {
-                        if let hwc_parser::Expression::Variable { name, .. } = expr {
-                            if name == "true" {
-                                use crate::geometry_router::thermal_relief::{ThermalReliefGenerator, ThermalReliefConfig};
-                                let generator = ThermalReliefGenerator::new(ThermalReliefConfig::default(), self.voxel_size_nm);
-                                let center = crate::geometry_router::polygon_rasterizer::Point2D::new(via.position.0, via.position.1);
-                                generator.generate_for_circular_pad(
-                                    center,
-                                    via.diameter_nm / 2,
-                                    z_nm,
-                                    pour.material_id as crate::voxel_grid::MaterialId,
-                                    via.net_id.raw() as crate::voxel_grid::NetId,
-                                    &mut self.voxel_grid,
-                                );
-                            }
+                    } else if let Some(hwc_parser::Expression::Variable { name, .. }) =
+                        via.properties.get("thermal_relief")
+                    {
+                        if name == "true" {
+                            use crate::geometry_router::thermal_relief::{
+                                ThermalReliefConfig, ThermalReliefGenerator,
+                            };
+                            let generator = ThermalReliefGenerator::new(
+                                ThermalReliefConfig::default(),
+                                self.voxel_size_nm,
+                            );
+                            let center = crate::geometry_router::polygon_rasterizer::Point2D::new(
+                                via.position.0,
+                                via.position.1,
+                            );
+                            generator.generate_for_circular_pad(
+                                center,
+                                via.diameter_nm / 2,
+                                z_nm,
+                                pour.material_id as crate::voxel_grid::MaterialId,
+                                via.net_id.raw() as crate::voxel_grid::NetId,
+                                &mut self.voxel_grid,
+                            );
                         }
                     }
                 }
@@ -177,9 +178,7 @@ impl GeometryRouter {
     /// Clear a via (for rip-up and reroute).
     pub fn clear_via(&mut self, via: &Via) {
         self.vias.retain(|v| {
-            v.position != via.position
-                || v.from_z_nm != via.from_z_nm
-                || v.to_z_nm != via.to_z_nm
+            v.position != via.position || v.from_z_nm != via.from_z_nm || v.to_z_nm != via.to_z_nm
         });
 
         for z_nm in via.z_planes(self.voxel_size_nm) {
@@ -229,7 +228,10 @@ impl GeometryRouter {
             .map(|f| f.min_via_diameter_nm)
             .unwrap_or(300_000);
 
-        let annular_ring = self.constraints.fabrication.as_ref()
+        let annular_ring = self
+            .constraints
+            .fabrication
+            .as_ref()
             .map(|f| f.min_annular_ring_nm)
             .unwrap_or(0);
 
@@ -324,12 +326,7 @@ impl GeometryRouter {
                 let pad_radius = (via.diameter_nm / 2) + enclosure;
 
                 // Stamp the landing pad
-                self.mark_circular_area_occupied(
-                    via.position,
-                    pad_radius,
-                    z_nm,
-                    via.net_id,
-                );
+                self.mark_circular_area_occupied(via.position, pad_radius, z_nm, via.net_id);
             }
         }
     }
@@ -358,7 +355,8 @@ impl GeometryRouter {
     /// When `is_manhattan` is true, splits the via into individual buried vias
     /// for each adjacent layer pair it spans.
     pub fn unroll_detected_via(&self, via: &Via) -> Vec<Via> {
-        if !self.is_manhattan || self.profile_layers.is_empty() || self.layer_z_positions.is_empty() {
+        if !self.is_manhattan || self.profile_layers.is_empty() || self.layer_z_positions.is_empty()
+        {
             return vec![via.clone()];
         }
 
@@ -366,7 +364,9 @@ impl GeometryRouter {
         let max_z = via.from_z_nm.max(via.to_z_nm);
 
         let start_idx = self.find_layer_index_at_z(min_z).unwrap_or(0);
-        let end_idx = self.find_layer_index_at_z(max_z).unwrap_or(self.profile_layers.len() - 1);
+        let end_idx = self
+            .find_layer_index_at_z(max_z)
+            .unwrap_or(self.profile_layers.len() - 1);
 
         // If the via only spans one layer, no unrolling needed
         if start_idx == end_idx {

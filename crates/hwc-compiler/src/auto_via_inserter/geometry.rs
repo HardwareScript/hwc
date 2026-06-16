@@ -45,26 +45,32 @@ impl AutoViaInserter {
                     continue;
                 };
 
-                let (lower_bbox, upper_bbox, lower_pour, upper_pour, lower_material, upper_material) =
-                    if pour1.z_bottom_nm < pour2.z_bottom_nm {
-                        (
-                            bbox1,
-                            bbox2,
-                            &pour1.name,
-                            &pour2.name,
-                            &pour1.material_name,
-                            &pour2.material_name,
-                        )
-                    } else {
-                        (
-                            bbox2,
-                            bbox1,
-                            &pour2.name,
-                            &pour1.name,
-                            &pour2.material_name,
-                            &pour1.material_name,
-                        )
-                    };
+                let (
+                    lower_bbox,
+                    upper_bbox,
+                    lower_pour,
+                    upper_pour,
+                    lower_material,
+                    upper_material,
+                ) = if pour1.z_bottom_nm < pour2.z_bottom_nm {
+                    (
+                        bbox1,
+                        bbox2,
+                        &pour1.name,
+                        &pour2.name,
+                        &pour1.material_name,
+                        &pour2.material_name,
+                    )
+                } else {
+                    (
+                        bbox2,
+                        bbox1,
+                        &pour2.name,
+                        &pour1.name,
+                        &pour2.material_name,
+                        &pour1.material_name,
+                    )
+                };
 
                 let from_z_mid = (lower_bbox.min.z + lower_bbox.max.z) / 2;
                 let to_z_mid = (upper_bbox.min.z + upper_bbox.max.z) / 2;
@@ -73,9 +79,11 @@ impl AutoViaInserter {
 
                 if let (Some(from_layer), Some(to_layer)) = (from_layer, to_layer) {
                     if from_layer != to_layer {
-                        let from_name = stackup_manager.get_layer_index_at_z(from_z_mid)
+                        let from_name = stackup_manager
+                            .get_layer_index_at_z(from_z_mid)
                             .and_then(|i| stackup_manager.ordered_layers().get(i).cloned());
-                        let to_name = stackup_manager.get_layer_index_at_z(to_z_mid)
+                        let to_name = stackup_manager
+                            .get_layer_index_at_z(to_z_mid)
                             .and_then(|i| stackup_manager.ordered_layers().get(i).cloned());
 
                         transitions.push(LayerTransition {
@@ -141,16 +149,8 @@ impl AutoViaInserter {
                     continue;
                 }
 
-                let from_material = resolve_material_for_z(
-                    lower_z,
-                    stackup_manager,
-                    profile,
-                );
-                let to_material = resolve_material_for_z(
-                    upper_z,
-                    stackup_manager,
-                    profile,
-                );
+                let from_material = resolve_material_for_z(lower_z, stackup_manager, profile);
+                let to_material = resolve_material_for_z(upper_z, stackup_manager, profile);
 
                 let transition_x = seg.start.x;
                 let transition_y = seg.start.y;
@@ -253,7 +253,12 @@ impl AutoViaInserter {
                 })?;
 
             self.verify_enclosure(overlap, via_type).map_err(|error| {
-                format!("Via stack enclosure error at L{}->L{}: {}", layer, layer + 1, error)
+                format!(
+                    "Via stack enclosure error at L{}->L{}: {}",
+                    layer,
+                    layer + 1,
+                    error
+                )
             })?;
         }
 

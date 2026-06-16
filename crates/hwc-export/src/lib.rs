@@ -13,8 +13,8 @@ pub mod scene_graph;
 pub mod solder_layers;
 
 pub use excellon::{export_hdi_vias, DrillVia, ExcellonExporter, ViaTypeCategory};
-pub use physical_z::{board_z_extent, dxf_layer_name, grid_index_from_z, z_mm};
 pub use exporter::{CompiledOutput, ExportFormat, Exporter};
+pub use physical_z::{board_z_extent, dxf_layer_name, grid_index_from_z, z_mm};
 pub use scene_graph::{SceneGraph, SceneGraphError};
 pub use solder_layers::{export as export_solder_layers, LayerType};
 

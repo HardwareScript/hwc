@@ -38,19 +38,19 @@ impl crate::parser::Parser {
                 return Err(self.error("Expected 'z' or 'layer' for pour elevation"));
             }
             self.expect(&Token::Colon)?;
-            
+
             if self.check(&Token::Identifier("relative".into())) {
                 self.advance();
                 Elevation::Relative
             } else {
                 let start = self.parse_expression()?;
-                
+
                 let mut end = None;
                 if self.check(&Token::To) {
                     self.advance(); // consume "to"
                     end = Some(self.parse_expression()?);
                 }
-                
+
                 Elevation::Physical { start, end }
             }
         };
@@ -95,7 +95,7 @@ impl crate::parser::Parser {
                         let from = self.parse_coordinate_optional_z()?;
                         self.expect(&Token::To)?;
                         let to = self.parse_coordinate_optional_z()?;
-                        boundary = Some(crate::PourBoundary::Rect(from, to));
+                        boundary = Some(crate::PourBoundary::Rect(Box::new(from), Box::new(to)));
                     }
                 }
                 "thickness" => {
@@ -123,7 +123,9 @@ impl crate::parser::Parser {
                         let terminals = self.parse_array_terminal_list()?;
                         waivers.merge = MergeWaiver::Specific(terminals);
                     } else {
-                        return Err(self.error("Expected 'true', 'false', or '[list]' for merge property"));
+                        return Err(
+                            self.error("Expected 'true', 'false', or '[list]' for merge property")
+                        );
                     }
                 }
                 "floating" => {
@@ -160,7 +162,7 @@ impl crate::parser::Parser {
 
         Ok(PourPlacement {
             material: material.into(),
-            name: name.into(),
+            name,
             elevation,
             thickness,
             boundary,
@@ -275,7 +277,7 @@ impl crate::parser::Parser {
 
         Ok(PolygonPlacement {
             material: material.into(),
-            name: name.into(),
+            name,
             position,
             points: points.into(),
             span: Span::new(start_pos, end_pos),
@@ -325,18 +327,26 @@ impl crate::parser::Parser {
             self.advance(); // consume "layer"
             self.expect(&Token::Colon)?;
             let from_name = self.expect_identifier()?;
-            let from_elev = if from_name.as_str() == "self" { Elevation::Relative } else { Elevation::Semantic(from_name) };
-            
+            let from_elev = if from_name.as_str() == "self" {
+                Elevation::Relative
+            } else {
+                Elevation::Semantic(from_name)
+            };
+
             self.expect(&Token::To)?;
-            
+
             // Consume optional second "layer" keyword
             if self.check(&Token::Identifier("layer".into())) {
                 self.advance();
                 self.expect(&Token::Colon)?;
             }
             let to_name = self.expect_identifier()?;
-            let to_elev = if to_name.as_str() == "self" { Elevation::Relative } else { Elevation::Semantic(to_name) };
-            
+            let to_elev = if to_name.as_str() == "self" {
+                Elevation::Relative
+            } else {
+                Elevation::Semantic(to_name)
+            };
+
             (from_elev, to_elev)
         } else {
             // Physical / legacy
@@ -345,12 +355,15 @@ impl crate::parser::Parser {
                 return Err(self.error("Expected 'z' or 'layer' for contact elevation"));
             }
             self.expect(&Token::Colon)?;
-            
+
             let from_elev = if self.check(&Token::Identifier("relative".into())) {
                 self.advance();
                 Elevation::Relative
             } else {
-                Elevation::Physical { start: self.parse_expression()?, end: None }
+                Elevation::Physical {
+                    start: self.parse_expression()?,
+                    end: None,
+                }
             };
 
             self.expect(&Token::To)?;
@@ -360,12 +373,15 @@ impl crate::parser::Parser {
                 return Err(self.error("Expected 'z' or 'layer' for contact elevation"));
             }
             self.expect(&Token::Colon)?;
-            
+
             let to_elev = if self.check(&Token::Identifier("relative".into())) {
                 self.advance();
                 Elevation::Relative
             } else {
-                Elevation::Physical { start: self.parse_expression()?, end: None }
+                Elevation::Physical {
+                    start: self.parse_expression()?,
+                    end: None,
+                }
             };
 
             (from_elev, to_elev)
@@ -395,13 +411,22 @@ impl crate::parser::Parser {
                     // v0.1.9: Generic property parsing
                     let expr = if self.check(&Token::True) {
                         self.advance();
-                        Expression::Variable { name: "true".into(), span: self.previous_span() }
+                        Expression::Variable {
+                            name: "true".into(),
+                            span: self.previous_span(),
+                        }
                     } else if self.check(&Token::False) {
                         self.advance();
-                        Expression::Variable { name: "false".into(), span: self.previous_span() }
+                        Expression::Variable {
+                            name: "false".into(),
+                            span: self.previous_span(),
+                        }
                     } else if self.is_identifier_or_keyword() {
                         let name = self.expect_namespaced_identifier_string()?;
-                        Expression::Variable { name: name.into(), span: self.previous_span() }
+                        Expression::Variable {
+                            name: name.into(),
+                            span: self.previous_span(),
+                        }
                     } else {
                         self.parse_expression()?
                     };

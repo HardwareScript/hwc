@@ -1,88 +1,76 @@
-//! Module instance placement functionality.
-//!
-//! v0.1.7: Modules can now carry intrinsic physical layout (Physical Macros) to prevent pile-up at [0,0,0].
-//! Intrinsic layout on the ModuleDefinition takes precedence over external space layout blocks.
-
 use super::super::conversions::{coordinate_to_point, CoordinateContext};
 use super::super::errors::IrError;
+use super::context::PlacementContext;
 use super::helpers::extract_placements_from_layout_statements;
-use crate::SymbolTable;
 use compact_str::CompactString;
 use hwc_engine::{ComponentPlacer, HardwareSpace, PlacementParams, Point3D};
 use rustc_hash::FxHashMap;
 
-/// Place a module instance by flattening it and placing all internal components.
-/// v0.1.7: Now receives stackup_manager so sub-components inherit parent's Z elevations (Z-Context Inheritance).
 pub fn place_module_instance(
     space: &mut HardwareSpace,
     module_placement: &hwc_parser::ComponentPlacement,
-    origin: hwc_parser::OriginPoint,
-    symbol_table: &SymbolTable,
     layouts: &[hwc_parser::ModuleLayoutBlock],
     bbox_tracker: &mut crate::bounding_box_tracker::BoundingBoxTracker,
-    eval_context: &hwc_parser::EvaluationContext,
-    collector: &hwc_diagnostics::DiagnosticCollector,
-    stackup_manager: &super::super::stackup_manager::StackupManager, // Z-Context Inheritance wired: parent's StackupManager now available for resolving semantic Z in module sub-components and intrinsic layouts
-    profile: Option<&hwc_parser::ProfileDefinition>,
+    ctx: &PlacementContext,
 ) -> Result<(), IrError> {
     use crate::module_flattener::flatten_module;
 
-    // Get the module definition
-    let module_def = symbol_table
+    let module_def = ctx
+        .symbol_table
         .get_module(module_placement.component_type.as_str())
         .map_err(|e| IrError::PlacementError(format!("Module not found: {}", e)))?;
 
     println!("🔧 Flattening module: {}", module_placement.component_type);
 
-    // Flatten the module (evaluate for loops, if conditionals)
     let flattened = flatten_module(module_def)
         .map_err(|e| IrError::PlacementError(format!("Module flattening failed: {}", e)))?;
 
     println!("   ├─ Flattened {} components", flattened.components.len());
     println!("   └─ Flattened {} routes", flattened.routes.len());
 
-    // Z-Context Inheritance (wired): resolve using parent's stackup so module internals
-    // get correct z_nm from the using space's profile (not a default or child's).
-    // This makes modules reusable across different stackups/profiles.
-    let _inherited_z_test = stackup_manager.resolve_elevation_top(
-        &hwc_parser::Elevation::Physical {
-            start: hwc_parser::Expression::Measurement {
-                value: 0.0,
-                unit: hwc_parser::Unit::Millimeter,
-                span: hwc_parser::Span::new(0, 0),
+    let _inherited_z_test = ctx
+        .stackup_manager
+        .resolve_elevation_top(
+            &hwc_parser::Elevation::Physical {
+                start: hwc_parser::Expression::Measurement {
+                    value: 0.0,
+                    unit: hwc_parser::Unit::Millimeter,
+                    span: hwc_parser::Span::new(0, 0),
+                },
+                end: None,
             },
-            end: None,
-        },
-        symbol_table,
-        space.voxel_size.z_nm,
-    ).unwrap_or(0);
+            ctx.symbol_table,
+            space.voxel_size.z_nm,
+        )
+        .unwrap_or(0);
 
-    // Get the module instance name
     let instance_name = module_placement
         .name
         .as_ref()
         .ok_or_else(|| IrError::PlacementError("Module instantiation requires a name".into()))?;
 
-    // v0.1.7 Physical Pile fix: Prefer intrinsic layout defined inside the module (self-contained Physical Macro)
-    // over external layout block in the using space. This allows reusable modules with relative physical structure.
     let intrinsic_layout = &module_def.intrinsic_layout;
     let layout_block = layouts
         .iter()
         .find(|layout| layout.module_instance.as_str() == instance_name.as_str());
 
-    // Determine placements source (always extracted to flat Vec<ModuleInternalPlacement>)
     let placements_source: Option<Vec<_>> = if let Some(intr) = intrinsic_layout {
-        println!("   ├─ Using intrinsic layout ({} statements) from module definition", intr.len());
+        println!(
+            "   ├─ Using intrinsic layout ({} statements) from module definition",
+            intr.len()
+        );
         Some(extract_placements_from_layout_statements(intr))
     } else if let Some(ext) = layout_block {
-        println!("   ├─ Found external layout block with {} mappings", ext.statements.len());
+        println!(
+            "   ├─ Found external layout block with {} mappings",
+            ext.statements.len()
+        );
         Some(extract_placements_from_layout_statements(&ext.statements))
     } else {
         None
     };
 
     if let Some(placements) = placements_source {
-        // Use the chosen layout (intrinsic or external) to place sub-components
         for module_comp in &flattened.components {
             let comp_internal_name = module_comp.name.as_ref().ok_or_else(|| {
                 IrError::PlacementError(
@@ -100,27 +88,31 @@ pub fn place_module_instance(
                     ))
                 })?;
 
-            let ctx = CoordinateContext {
+            let coord_ctx = CoordinateContext {
                 voxel_size: &space.voxel_size,
                 grid_size: &space.grid,
-                origin,
+                origin: ctx.origin,
                 space_dimensions: &space.dimensions,
-                symbol_table,
-                eval_context,
+                symbol_table: ctx.symbol_table,
+                eval_context: ctx.eval_context,
                 bbox_tracker: Some(bbox_tracker),
-                stackup_manager,
-                profile,
+                stackup_manager: ctx.stackup_manager,
+                profile: ctx.profile,
             };
-            // Z-Context Inheritance (properly wired via stackup_manager.rs helper):
-            // Resolve Z using parent's StackupManager so semantic layers (e.g. "l1") in module
-            // intrinsic layouts or external module layouts inherit the correct physical z_nm.
             let z_expr = match &mapping.position {
-                hwc_parser::Coordinate::Positional { z, .. } | hwc_parser::Coordinate::Declarative { z, .. } => z,
-                hwc_parser::Coordinate::Relative(_) => &hwc_parser::Expression::Literal { value: 0, span: hwc_parser::Span::new(0, 0) },
+                hwc_parser::Coordinate::Positional { z, .. }
+                | hwc_parser::Coordinate::Declarative { z, .. } => z,
+                hwc_parser::Coordinate::Relative(_) => &hwc_parser::Expression::Literal {
+                    value: 0,
+                    span: hwc_parser::Span::new(0, 0),
+                },
             };
-            let resolved_z = stackup_manager.resolve_z_expression(z_expr, symbol_table).unwrap_or(0);
-            let mut position = coordinate_to_point(&mapping.position, &ctx);
-            position.z = resolved_z;  // inherit from parent's stackup for semantic layers
+            let resolved_z = ctx
+                .stackup_manager
+                .resolve_z_expression(z_expr, ctx.symbol_table)
+                .unwrap_or(0);
+            let mut position = coordinate_to_point(&mapping.position, &coord_ctx);
+            position.z = resolved_z;
 
             let comp_name = format!("{}.{}", instance_name, comp_internal_name);
             println!("   ├─ Placing {} at position", comp_name);
@@ -131,14 +123,14 @@ pub fn place_module_instance(
                     grid: &mut space.voxel_grid,
                     voxel_size: &space.voxel_size,
                     arena: &mut space.netlist,
-                    symbol_table,
+                    symbol_table: ctx.symbol_table,
                     material_registry: &mut space.material_registry,
                     name: comp_name.into(),
                     component_type: module_comp.component_type.clone(),
                     position,
                     rotation_deg: 0.0,
                     merge_waiver: hwc_parser::MergeWaiver::None,
-                    collector: Some(&crate::DiagnosticReporterAdapter(collector)),
+                    collector: Some(&crate::DiagnosticReporterAdapter(ctx.collector)),
                 })
                 .map_err(|e| {
                     IrError::PlacementError(format!("Failed to place module component: {}", e))
@@ -147,18 +139,18 @@ pub fn place_module_instance(
     } else {
         println!("   ⚠️  No layout (intrinsic or external) - using automatic offset placement (may cause collisions)");
 
-        let ctx = CoordinateContext {
-                voxel_size: &space.voxel_size,
-                grid_size: &space.grid,
-                origin,
-                space_dimensions: &space.dimensions,
-                symbol_table,
-                eval_context,
-                bbox_tracker: Some(bbox_tracker),
-                stackup_manager,
-                profile,
-            };
-        let base_position = coordinate_to_point(&module_placement.position, &ctx);
+        let coord_ctx = CoordinateContext {
+            voxel_size: &space.voxel_size,
+            grid_size: &space.grid,
+            origin: ctx.origin,
+            space_dimensions: &space.dimensions,
+            symbol_table: ctx.symbol_table,
+            eval_context: ctx.eval_context,
+            bbox_tracker: Some(bbox_tracker),
+            stackup_manager: ctx.stackup_manager,
+            profile: ctx.profile,
+        };
+        let base_position = coordinate_to_point(&module_placement.position, &coord_ctx);
 
         for (idx, module_comp) in flattened.components.iter().enumerate() {
             let comp_name = if let Some(ref name) = module_comp.name {
@@ -169,8 +161,9 @@ pub fn place_module_instance(
 
             println!("   ├─ Placing component: {}", comp_name);
 
-            let offset_x = (idx as i64) * 1_000_000; // 1mm offset
-            let position = Point3D::new(base_position.x + offset_x, base_position.y, base_position.z);
+            let offset_x = (idx as i64) * 1_000_000;
+            let position =
+                Point3D::new(base_position.x + offset_x, base_position.y, base_position.z);
 
             let placer = ComponentPlacer::new();
             placer
@@ -178,14 +171,14 @@ pub fn place_module_instance(
                     grid: &mut space.voxel_grid,
                     voxel_size: &space.voxel_size,
                     arena: &mut space.netlist,
-                    symbol_table,
+                    symbol_table: ctx.symbol_table,
                     material_registry: &mut space.material_registry,
                     name: comp_name.into(),
                     component_type: module_comp.component_type.clone(),
                     position,
                     rotation_deg: 0.0,
                     merge_waiver: hwc_parser::MergeWaiver::None,
-                    collector: Some(&crate::DiagnosticReporterAdapter(collector)),
+                    collector: Some(&crate::DiagnosticReporterAdapter(ctx.collector)),
                 })
                 .map_err(|e| {
                     IrError::PlacementError(format!("Failed to place module component: {}", e))
@@ -198,12 +191,8 @@ pub fn place_module_instance(
         instance_name
     );
 
-    // === Macro Pin Promotion (v0.1.7 roadmap) ===
-    // After placing internal components with their real physical positions (from intrinsic or external layout),
-    // trace the module's logical routes to find which internal pin each interface pin is wired to.
-    // Promote the virtual module pin to that physical anchor location so the parent space/router
-    // can see the true macro pin positions (instead of always (0,0,0)).
-    let mut promoted_pin_positions: FxHashMap<CompactString, (i64, i64, i64)> = FxHashMap::default();
+    let mut promoted_pin_positions: FxHashMap<CompactString, (i64, i64, i64)> =
+        FxHashMap::default();
 
     let module_pin_names: Vec<CompactString> =
         module_def.pins.iter().map(|p| p.name.clone()).collect();
@@ -264,52 +253,38 @@ pub fn place_module_instance(
         );
     }
 
-    // Register the module instance as a virtual component in the netlist.
-    //
-    // This allows space-level routes like `route MainDSP.Bus_Out[0] to Amp.RF_IN`
-    // to resolve `MainDSP` as a component and `Bus_Out[0]` as one of its pins.
-    //
-    // Array interface pins (e.g., `Bus_Out[64]`) are expanded into individual
-    // pin entries: `Bus_Out[0]`, `Bus_Out[1]`, ..., `Bus_Out[63]`.
     {
         use crate::symbol_table::expand_pin_declarations;
 
-        // Determine a nominal position for the virtual module component.
-        // Use the module placement position if available, otherwise (0, 0, 0).
-        let ctx = CoordinateContext {
+        let coord_ctx = CoordinateContext {
             voxel_size: &space.voxel_size,
             grid_size: &space.grid,
-            origin,
+            origin: ctx.origin,
             space_dimensions: &space.dimensions,
-            symbol_table,
-            eval_context,
+            symbol_table: ctx.symbol_table,
+            eval_context: ctx.eval_context,
             bbox_tracker: Some(bbox_tracker),
-            stackup_manager,
-            profile,
+            stackup_manager: ctx.stackup_manager,
+            profile: ctx.profile,
         };
-        let virtual_position = coordinate_to_point(&module_placement.position, &ctx);
+        let virtual_position = coordinate_to_point(&module_placement.position, &coord_ctx);
 
-        // Register the module instance as a virtual component.
         let module_component_id = space.netlist.add_component(
             instance_name.to_string(),
             module_placement.component_type.to_string().into(),
             (virtual_position.x, virtual_position.y, virtual_position.z),
         );
 
-        // Expand and register all interface pins.
-        // Use promoted physical positions from Macro Pin Promotion (if a connection was traced).
         let expanded_pins = expand_pin_declarations(&module_def.pins);
         for pin_name in &expanded_pins {
-            let pin_pos = promoted_pin_positions
-                .get(pin_name)
-                .copied()
-                .unwrap_or((virtual_position.x, virtual_position.y, virtual_position.z));
-            space.netlist.add_pin(
-                module_component_id,
-                pin_name.clone(),
-                pin_pos,
-                None, // Module interface pins don't have physical pads (pads come from internal)
-            );
+            let pin_pos = promoted_pin_positions.get(pin_name).copied().unwrap_or((
+                virtual_position.x,
+                virtual_position.y,
+                virtual_position.z,
+            ));
+            space
+                .netlist
+                .add_pin(module_component_id, pin_name.clone(), pin_pos, None);
         }
 
         println!(
@@ -320,19 +295,13 @@ pub fn place_module_instance(
         );
     }
 
-    // Process module routes and convert them to space routes
     if !flattened.routes.is_empty() {
         println!("   ├─ Processing {} module routes", flattened.routes.len());
 
-        // Get the list of module interface pins
         let module_pins: Vec<CompactString> =
             module_def.pins.iter().map(|p| p.name.clone()).collect();
 
         for module_route in &flattened.routes {
-            // Check if this route references module pins (interface pins)
-            // Module pins can appear as:
-            // 1. Component name (when used alone): component='In', pin=''
-            // 2. Pin name with empty component: component='', pin='In'
             let from_is_module_pin = module_pins.contains(&module_route.from.component)
                 || (module_route.from.component.is_empty()
                     && module_pins.contains(&module_route.from.pin));
@@ -340,8 +309,6 @@ pub fn place_module_instance(
                 || (module_route.to.component.is_empty()
                     && module_pins.contains(&module_route.to.pin));
 
-            // Skip routes that connect to module interface pins
-            // These would need to be connected from outside the module
             if from_is_module_pin || to_is_module_pin {
                 println!(
                     "   ├─ Skipping interface route: {}.{} → {}.{} (connects to module pins)",
@@ -353,7 +320,6 @@ pub fn place_module_instance(
                 continue;
             }
 
-            // Resolve module pin references to full component.pin paths
             let from_component = format!("{}.{}", instance_name, module_route.from.component);
             let to_component = format!("{}.{}", instance_name, module_route.to.component);
 
@@ -362,7 +328,6 @@ pub fn place_module_instance(
                 from_component, module_route.from.pin, to_component, module_route.to.pin
             );
 
-            // Create a space route from the module route
             let space_route = hwc_parser::Route {
                 from: hwc_parser::PinReference {
                     component: from_component.into(),
@@ -421,7 +386,7 @@ pub fn place_module_instance(
                 width: None,
                 strategy: None,
                 strategy_params: vec![],
-                path: None, // Module routes are logical, no waypoints
+                path: None,
                 signal_group: None,
                 bridge: None,
                 exit_escape: None,
@@ -429,15 +394,14 @@ pub fn place_module_instance(
                 span: module_route.span,
             };
 
-            // Route the trace in the space
             super::super::routing::route_trace(
                 space,
                 &space_route,
-                origin,
-                symbol_table,
-                eval_context,
-                stackup_manager,
-                profile,
+                ctx.origin,
+                ctx.symbol_table,
+                ctx.eval_context,
+                ctx.stackup_manager,
+                ctx.profile,
             )
             .map_err(|e| {
                 IrError::RoutingError(format!("Failed to route module connection: {}", e))

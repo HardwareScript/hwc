@@ -309,7 +309,10 @@ pub struct RouteSegment {
 impl RoutedTrace {
     /// Calculate the total length of this trace.
     pub fn calculate_length(&self) -> i64 {
-        self.segments.iter().map(|s| s.start.manhattan_distance(&s.end)).sum()
+        self.segments
+            .iter()
+            .map(|s| s.start.manhattan_distance(&s.end))
+            .sum()
     }
 }
 
@@ -333,7 +336,8 @@ impl LengthMatchingEngine {
     /// # Returns
     /// LengthMatchingEngine with target length set to the longest trace.
     pub fn new(traces: Vec<RoutedTrace>) -> Self {
-        let target_length_nm = traces.iter()
+        let target_length_nm = traces
+            .iter()
             .map(|t| t.calculate_length())
             .max()
             .unwrap_or(0);
@@ -349,7 +353,8 @@ impl LengthMatchingEngine {
     /// Returns a vector of (net_name, deficit_nm) tuples where deficit is
     /// how much shorter the trace is than the target.
     pub fn calculate_deficits(&self) -> Vec<(CompactString, i64)> {
-        self.traces.iter()
+        self.traces
+            .iter()
             .map(|t| {
                 let length = t.calculate_length();
                 let deficit = self.target_length_nm.saturating_sub(length);
@@ -368,7 +373,13 @@ impl LengthMatchingEngine {
     ///
     /// # Returns
     /// A RoutingPattern that adds the required length.
-    pub fn generate_meander(&self, deficit_nm: i64, trace_width_nm: i64, preferred_pattern: &str, amplitude_multiplier: i64) -> Option<RoutingPattern> {
+    pub fn generate_meander(
+        &self,
+        deficit_nm: i64,
+        trace_width_nm: i64,
+        _preferred_pattern: &str,
+        amplitude_multiplier: i64,
+    ) -> Option<RoutingPattern> {
         if deficit_nm <= 0 {
             return None;
         }
@@ -379,9 +390,7 @@ impl LengthMatchingEngine {
         let amp_nm = trace_width_nm * amplitude_multiplier;
         let gap_nm = (deficit_nm / 3).max(trace_width_nm);
 
-        match preferred_pattern {
-            "trombone" | _ => Some(StandardPatterns::trombone(gap_nm, amp_nm)),
-        }
+        Some(StandardPatterns::trombone(gap_nm, amp_nm))
     }
 
     /// Generate a serpentine pattern for a given deficit.
@@ -392,7 +401,11 @@ impl LengthMatchingEngine {
     ///
     /// # Returns
     /// A RoutingPattern that adds the required length.
-    pub fn generate_serpentine(&self, deficit_nm: i64, trace_width_nm: i64) -> Option<RoutingPattern> {
+    pub fn generate_serpentine(
+        &self,
+        deficit_nm: i64,
+        trace_width_nm: i64,
+    ) -> Option<RoutingPattern> {
         if deficit_nm <= 0 {
             return None;
         }
@@ -407,9 +420,7 @@ impl LengthMatchingEngine {
 
     /// Get the total additional length needed across all traces.
     pub fn total_deficit_nm(&self) -> i64 {
-        self.calculate_deficits().iter()
-            .map(|(_, d)| *d)
-            .sum()
+        self.calculate_deficits().iter().map(|(_, d)| *d).sum()
     }
 }
 
@@ -598,16 +609,14 @@ mod tests {
 
     #[test]
     fn test_trombone_pattern_generation() {
-        let traces = vec![
-            RoutedTrace {
-                net_name: "NET1".into(),
-                length_nm: 0,
-                segments: vec![RouteSegment {
-                    start: Point3D::new(0, 0, 0),
-                    end: Point3D::new(1000, 0, 0),
-                }],
-            },
-        ];
+        let traces = vec![RoutedTrace {
+            net_name: "NET1".into(),
+            length_nm: 0,
+            segments: vec![RouteSegment {
+                start: Point3D::new(0, 0, 0),
+                end: Point3D::new(1000, 0, 0),
+            }],
+        }];
 
         let engine = LengthMatchingEngine::new(traces);
         let pattern = engine.generate_meander(2000, 200, "trombone", 2);
@@ -620,16 +629,14 @@ mod tests {
 
     #[test]
     fn test_serpentine_pattern_generation() {
-        let traces = vec![
-            RoutedTrace {
-                net_name: "NET1".into(),
-                length_nm: 0,
-                segments: vec![RouteSegment {
-                    start: Point3D::new(0, 0, 0),
-                    end: Point3D::new(1000, 0, 0),
-                }],
-            },
-        ];
+        let traces = vec![RoutedTrace {
+            net_name: "NET1".into(),
+            length_nm: 0,
+            segments: vec![RouteSegment {
+                start: Point3D::new(0, 0, 0),
+                end: Point3D::new(1000, 0, 0),
+            }],
+        }];
 
         let engine = LengthMatchingEngine::new(traces);
         let pattern = engine.generate_serpentine(2000, 200);
@@ -641,16 +648,14 @@ mod tests {
 
     #[test]
     fn test_no_meander_for_zero_deficit() {
-        let traces = vec![
-            RoutedTrace {
-                net_name: "NET1".into(),
-                length_nm: 0,
-                segments: vec![RouteSegment {
-                    start: Point3D::new(0, 0, 0),
-                    end: Point3D::new(5000, 0, 0),
-                }],
-            },
-        ];
+        let traces = vec![RoutedTrace {
+            net_name: "NET1".into(),
+            length_nm: 0,
+            segments: vec![RouteSegment {
+                start: Point3D::new(0, 0, 0),
+                end: Point3D::new(5000, 0, 0),
+            }],
+        }];
 
         let engine = LengthMatchingEngine::new(traces);
         let pattern = engine.generate_meander(0, 200, "trombone", 2);

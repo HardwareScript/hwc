@@ -50,7 +50,12 @@ impl HTreeEngine {
     ///
     /// # Returns
     /// A vector of H-Tree segments.
-    pub fn generate(&self, root: Point3D, bbox: &BoundingBox, current_depth: usize) -> Vec<HTreeSegment> {
+    pub fn generate(
+        &self,
+        root: Point3D,
+        bbox: &BoundingBox,
+        current_depth: usize,
+    ) -> Vec<HTreeSegment> {
         if current_depth >= self.depth {
             return Vec::new();
         }
@@ -157,16 +162,9 @@ impl HTreeEngine {
             max_y = max_y.max(target.y);
         }
 
-        let bbox = BoundingBox::new(
-            Point3D::new(min_x, min_y, 0),
-            Point3D::new(max_x, max_y, 0),
-        );
+        let bbox = BoundingBox::new(Point3D::new(min_x, min_y, 0), Point3D::new(max_x, max_y, 0));
 
-        let center = Point3D::new(
-            (min_x + max_x) / 2,
-            (min_y + max_y) / 2,
-            0,
-        );
+        let center = Point3D::new((min_x + max_x) / 2, (min_y + max_y) / 2, 0);
 
         self.generate(center, &bbox, 0)
     }
@@ -224,7 +222,11 @@ impl BufferScheduler {
     ///
     /// # Returns
     /// Vector of buffer locations.
-    pub fn identify_split_nodes(&mut self, segments: &[HTreeSegment], target_frequency_hz: f64) -> Vec<Point3D> {
+    pub fn identify_split_nodes(
+        &mut self,
+        segments: &[HTreeSegment],
+        target_frequency_hz: f64,
+    ) -> Vec<Point3D> {
         self.buffer_locations.clear();
 
         let mut split_nodes: FxHashMap<Point3D, Vec<HTreeSegment>> = FxHashMap::default();
@@ -236,15 +238,19 @@ impl BufferScheduler {
                 segment.start.z,
             );
 
-            split_nodes.entry(mid_point).or_default().push(segment.clone());
+            split_nodes
+                .entry(mid_point)
+                .or_default()
+                .push(segment.clone());
         }
 
-        let wavelength_nm = (300_000_000_i64 / target_frequency_hz as i64) as i64;
+        let wavelength_nm = 300_000_000_i64 / target_frequency_hz as i64;
         let max_wire_length_nm = wavelength_nm / 10;
 
         for (point, node_segments) in &split_nodes {
             if node_segments.len() >= 3 && node_segments[0].depth > 0 {
-                let total_length: i64 = node_segments.iter()
+                let total_length: i64 = node_segments
+                    .iter()
                     .map(|s| s.start.manhattan_distance(&s.end))
                     .sum();
 
@@ -282,16 +288,16 @@ mod tests {
         ];
 
         let segments = engine.generate_for_targets(&targets);
-        assert!(!segments.is_empty(), "Should generate segments for 4 targets");
+        assert!(
+            !segments.is_empty(),
+            "Should generate segments for 4 targets"
+        );
     }
 
     #[test]
     fn test_htree_depth() {
         let engine = HTreeEngine::new(3, 4, 3);
-        let bbox = BoundingBox::new(
-            Point3D::new(0, 0, 0),
-            Point3D::new(1000, 1000, 0),
-        );
+        let bbox = BoundingBox::new(Point3D::new(0, 0, 0), Point3D::new(1000, 1000, 0));
 
         let root = Point3D::new(500, 500, 0);
         let segments = engine.generate(root, &bbox, 0);

@@ -6,18 +6,22 @@ use hwc_parser::{ContactPlacement, Coordinate, Expression, Span, Unit};
 
 use super::{AutoViaInserter, LayerTransition, OverlapRegion, ViaType};
 
+pub(crate) struct ViaPlacementParams<'a> {
+    pub(crate) x_nm: i64,
+    pub(crate) y_nm: i64,
+    pub(crate) row: usize,
+    pub(crate) col: usize,
+    pub(crate) bridge_stack: &'a crate::bridge_resolver::BridgeStack,
+}
+
 impl AutoViaInserter {
     pub(crate) fn create_via_placement_at(
         &self,
         transition: &LayerTransition,
         via_type: &ViaType,
-        x_nm: i64,
-        y_nm: i64,
-        row: usize,
-        col: usize,
-        bridge_stack: &crate::bridge_resolver::BridgeStack,
+        params: &ViaPlacementParams<'_>,
     ) -> ContactPlacement {
-        let via_name = if row == 0 && col == 0 {
+        let via_name = if params.row == 0 && params.col == 0 {
             format!(
                 "AutoVia_{}_{}_{}",
                 transition.net_name, transition.from_layer, transition.to_layer
@@ -25,36 +29,44 @@ impl AutoViaInserter {
         } else {
             format!(
                 "AutoVia_{}_{}_{}_r{}c{}",
-                transition.net_name, transition.from_layer, transition.to_layer, row, col
+                transition.net_name,
+                transition.from_layer,
+                transition.to_layer,
+                params.row,
+                params.col
             )
         };
 
         let span = Span::new(0, 0);
-        let x_mm = x_nm as f64 / 1_000_000.0;
-        let y_mm = y_nm as f64 / 1_000_000.0;
+        let x_mm = params.x_nm as f64 / 1_000_000.0;
+        let y_mm = params.y_nm as f64 / 1_000_000.0;
         let z_mm = transition.from_z_nm as f64 / 1_000_000.0;
 
         let from_elevation = if let Some(ref name) = transition.from_layer_name {
-            hwc_parser::ast::Elevation::Semantic(
-                hwc_parser::ast::Identifier::new(name.clone(), span)
-            )
+            hwc_parser::ast::Elevation::Semantic(hwc_parser::ast::Identifier::new(
+                name.clone(),
+                span,
+            ))
         } else {
             crate::ir::stackup_manager::StackupManager::elevation_from_z_nm(
-                transition.from_z_nm, span,
+                transition.from_z_nm,
+                span,
             )
         };
         let to_elevation = if let Some(ref name) = transition.to_layer_name {
-            hwc_parser::ast::Elevation::Semantic(
-                hwc_parser::ast::Identifier::new(name.clone(), span)
-            )
+            hwc_parser::ast::Elevation::Semantic(hwc_parser::ast::Identifier::new(
+                name.clone(),
+                span,
+            ))
         } else {
             crate::ir::stackup_manager::StackupManager::elevation_from_z_nm(
-                transition.to_z_nm, span,
+                transition.to_z_nm,
+                span,
             )
         };
 
         ContactPlacement {
-            material: bridge_stack.fill_material.clone(),
+            material: params.bridge_stack.fill_material.clone(),
             name: Some(hwc_parser::ComponentName::simple(via_name.into(), span)),
             position: Coordinate::Declarative {
                 x: Expression::Measurement {
@@ -82,16 +94,22 @@ impl AutoViaInserter {
             )),
             properties: {
                 let mut props = rustc_hash::FxHashMap::default();
-                props.insert("diameter".into(), Expression::Measurement {
-                    value: via_type.diameter_mm,
-                    unit: Unit::Millimeter,
-                    span,
-                });
-                if bridge_stack.interface_material != bridge_stack.fill_material {
-                    props.insert("bridge".into(), Expression::Variable {
-                        name: bridge_stack.interface_material.clone(),
+                props.insert(
+                    "diameter".into(),
+                    Expression::Measurement {
+                        value: via_type.diameter_mm,
+                        unit: Unit::Millimeter,
                         span,
-                    });
+                    },
+                );
+                if params.bridge_stack.interface_material != params.bridge_stack.fill_material {
+                    props.insert(
+                        "bridge".into(),
+                        Expression::Variable {
+                            name: params.bridge_stack.interface_material.clone(),
+                            span,
+                        },
+                    );
                 }
                 props
             },
@@ -110,11 +128,13 @@ impl AutoViaInserter {
         self.create_via_placement_at(
             transition,
             via_type,
-            overlap.center_x_nm,
-            overlap.center_y_nm,
-            0,
-            0,
-            bridge_stack,
+            &ViaPlacementParams {
+                x_nm: overlap.center_x_nm,
+                y_nm: overlap.center_y_nm,
+                row: 0,
+                col: 0,
+                bridge_stack,
+            },
         )
     }
 
@@ -126,31 +146,31 @@ impl AutoViaInserter {
         let (x_mm, y_mm) = self.placement_xy_mm(via, transition);
         let x_nm = (x_mm * 1_000_000.0) as i64;
         let y_nm = (y_mm * 1_000_000.0) as i64;
-        
-        let diameter_nm = via.properties.get("diameter")
+
+        let diameter_nm = via
+            .properties
+            .get("diameter")
             .and_then(|expr| expr.evaluate_const().ok())
             .and_then(|val| val.to_nanometers().ok())
             .unwrap_or(100_000);
-            
+
         let radius_nm = diameter_nm / 2;
 
-        let bridge = via.properties.get("bridge").and_then(|expr| {
-            match expr {
-                Expression::Variable { name, .. } => Some(name.clone()),
-                _ => None,
-            }
+        let bridge = via.properties.get("bridge").and_then(|expr| match expr {
+            Expression::Variable { name, .. } => Some(name.clone()),
+            _ => None,
         });
 
         ContactMetadata {
             name: via
                 .name
                 .as_ref()
-                .map(|name| name.to_string().into())
+                .map(|name| name.to_string())
                 .unwrap_or_else(|| "AutoVia".into()),
             material_name: via.material.clone(),
             z_start_nm: transition.from_z_nm,
             z_end_nm: transition.to_z_nm,
-            net: via.net.as_ref().map(|net| net.to_string().into()),
+            net: via.net.as_ref().map(|net| net.to_string()),
             bridge,
             bbox: Some(BoundingBox::new(
                 Point3D::new(x_nm - radius_nm, y_nm - radius_nm, transition.from_z_nm),

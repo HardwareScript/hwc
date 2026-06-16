@@ -44,7 +44,7 @@ pub fn route_automatic(
     // v0.1.7: Resolve explicit width if provided, otherwise use calculated minimum
     let trace_width_nm = if let Some(width_expr) = &route.width {
         crate::ir::conversions::evaluate_expression_to_nm(width_expr, symbol_table)
-            .map_err(|e| IrError::InvalidExpression(e))?
+            .map_err(IrError::InvalidExpression)?
     } else {
         min_trace_width_nm
     };
@@ -52,8 +52,12 @@ pub fn route_automatic(
     // v0.1.7: Port Escape Integration
     // When exit/enter escape specs are present, calculate actual pad boundary points
     // instead of routing to pin centers. This eliminates the "dummy bounding box gap".
-    let (start_pos, goal_pos) = calculate_escape_positions(space, route, trace_width_nm, min_clearance_nm)?;
-    eprintln!("[ROUTER]   Start pos: {:?}, Goal pos: {:?}", start_pos, goal_pos);
+    let (start_pos, goal_pos) =
+        calculate_escape_positions(space, route, trace_width_nm, min_clearance_nm)?;
+    eprintln!(
+        "[ROUTER]   Start pos: {:?}, Goal pos: {:?}",
+        start_pos, goal_pos
+    );
 
     let route_constraints = RouteConstraints {
         min_trace_width_nm: trace_width_nm,
@@ -92,17 +96,14 @@ pub fn route_automatic(
     let from_component_name = super::helpers::construct_component_name(&route.from)?;
     let to_component_name = super::helpers::construct_component_name(&route.to)?;
 
-    let exempt_components = [
-        from_component_name.clone(),
-        to_component_name.clone(),
-    ];
+    let exempt_components = [from_component_name.clone(), to_component_name.clone()];
 
     let routing_params = hwc_engine::geometry_router::RoutingParams {
         net_id,
         constraints: &route_constraints,
         bounds,
         layer_direction,
-        voxel_size: space.voxel_size.clone(),
+        voxel_size: space.voxel_size,
         clearance_zones: &clearance_zones,
         occupied_voxels: &occupied_voxels,
         voxel_grid: None, // Binary Collision Skip disabled - SDF provides 11× speedup already
@@ -120,7 +121,7 @@ pub fn route_automatic(
         space.grid.x_cols,
         space.grid.y_rows,
         space.grid.z_layers,
-        space.voxel_size.clone(), // v0.1.7: Pass full VoxelSize (X, Y, Z)
+        space.voxel_size,
         0, // v0.1.7: Substrate height = 0 (allow routing anywhere within bounds)
     );
 
@@ -167,7 +168,10 @@ pub fn route_automatic(
     let mut trace_thickness_nm = space.voxel_size.z_nm; // Default to voxel size
 
     if refined_path.len() >= 2 {
-        eprintln!("[ROUTER DEBUG] Refining {} path points via StackupManager...", refined_path.len());
+        eprintln!(
+            "[ROUTER DEBUG] Refining {} path points via StackupManager...",
+            refined_path.len()
+        );
         for (i, point) in refined_path.iter_mut().enumerate() {
             let old_z = point.z;
             // 1. Identify which PHYSICAL layer this point is in (v0.1.7 Fix: Use StackupManager, not voxel math)
@@ -178,12 +182,15 @@ pub fn route_automatic(
 
                 // v0.1.7: Extract physical thickness for this layer to prevent "wobbly" 3D meshes
                 trace_thickness_nm = stackup_manager.get_thickness_for_layer_index(layer_idx);
-                
+
                 // 3. Update the point's Z to the physical truth
                 point.z = true_z;
-                
+
                 if old_z != true_z {
-                    eprintln!("[ROUTER DEBUG]   Point {}: Z shifted from {}nm to {}nm (Layer Index: {})", i, old_z, true_z, layer_idx);
+                    eprintln!(
+                        "[ROUTER DEBUG]   Point {}: Z shifted from {}nm to {}nm (Layer Index: {})",
+                        i, old_z, true_z, layer_idx
+                    );
                 }
             } else {
                 // v0.1.7 FIX: If the point is on a planar-locked route, force it to the start Z
@@ -192,7 +199,8 @@ pub fn route_automatic(
                     point.z = fixed_z;
                     // Also try to find thickness at this fixed Z
                     if let Some(layer_idx) = stackup_manager.get_layer_index_at_z(fixed_z) {
-                        trace_thickness_nm = stackup_manager.get_thickness_for_layer_index(layer_idx);
+                        trace_thickness_nm =
+                            stackup_manager.get_thickness_for_layer_index(layer_idx);
                     }
                 } else {
                     eprintln!("[ROUTER WARNING]   Point {}: Z={}nm could not be mapped to any physical layer!", i, point.z);
@@ -215,7 +223,7 @@ pub fn route_automatic(
                 let d1x = p2.x - p1.x;
                 let d1y = p2.y - p1.y;
                 let d1z = p2.z - p1.z;
-                
+
                 let d2x = p3.x - p2.x;
                 let d2y = p3.y - p2.y;
                 let d2z = p3.z - p2.z;
@@ -223,10 +231,11 @@ pub fn route_automatic(
                 // v0.1.7: MANHATTAN COLLINEARITY CHECK (GOD-TIER SIMPLIFICATION)
                 let is_collinear = (d1x == 0 && d2x == 0 && d1y == 0 && d2y == 0) || // Z axis
                                    (d1x == 0 && d2x == 0 && d1z == 0 && d2z == 0) || // Y axis
-                                   (d1y == 0 && d2y == 0 && d1z == 0 && d2z == 0);   // X axis
+                                   (d1y == 0 && d2y == 0 && d1z == 0 && d2z == 0); // X axis
 
                 // v0.1.7: Filter short perpendicular steps caused by voxel snap
-                let seg_len_sq = (p2.x - start.x).pow(2) + (p2.y - start.y).pow(2) + (p2.z - start.z).pow(2);
+                let seg_len_sq =
+                    (p2.x - start.x).pow(2) + (p2.y - start.y).pow(2) + (p2.z - start.z).pow(2);
                 let min_seg_len_sq = 200_000i64.pow(2); // 0.2mm minimum segment length
                 let is_short = seg_len_sq < min_seg_len_sq;
 
@@ -235,7 +244,10 @@ pub fn route_automatic(
                     start = p2;
                 }
             }
-            segs.push(hwc_engine::LineSegment::new(start, *refined_path.last().unwrap()));
+            segs.push(hwc_engine::LineSegment::new(
+                start,
+                *refined_path.last().unwrap(),
+            ));
         }
         segs
     };
@@ -421,11 +433,14 @@ fn calculate_escape_positions(
         };
         let exit_spec = if let Some(offset) = &exit_escape.offset {
             let offset_str = match offset {
-                hwc_parser::EdgeOffsetSpec::Named(n) => format!(" at {}", match n {
-                    hwc_parser::NamedPosition::Top => "top",
-                    hwc_parser::NamedPosition::Bottom => "bottom",
-                    hwc_parser::NamedPosition::Center => "center",
-                }),
+                hwc_parser::EdgeOffsetSpec::Named(n) => format!(
+                    " at {}",
+                    match n {
+                        hwc_parser::NamedPosition::Top => "top",
+                        hwc_parser::NamedPosition::Bottom => "bottom",
+                        hwc_parser::NamedPosition::Center => "center",
+                    }
+                ),
                 hwc_parser::EdgeOffsetSpec::Percentage(p) => format!(" at {}%", p * 100.0),
                 hwc_parser::EdgeOffsetSpec::Measurement(m) => format!(" at {}um", m / 1000),
             };
@@ -433,11 +448,14 @@ fn calculate_escape_positions(
         } else {
             dir_str.to_string()
         };
-        
+
         if let Some((port, offset)) = parse_port_escape(&exit_spec) {
             // Query the pour bounding box for the start pin
             let from_comp = super::helpers::construct_component_name(&route.from)?;
-            if let Some(pour_bbox) = space.voxel_grid.get_pour_bbox_for_pin(&from_comp, &route.from.pin) {
+            if let Some(pour_bbox) = space
+                .voxel_grid
+                .get_pour_bbox_for_pin(&from_comp, &route.from.pin)
+            {
                 let escape = calculate_rect_escape(
                     &pour_bbox,
                     port,
@@ -455,7 +473,10 @@ fn calculate_escape_positions(
                 );
                 Some(escape.point)
             } else {
-                eprintln!("[ROUTER]   Exit escape: No pour bbox found for {}.{}", from_comp, route.from.pin);
+                eprintln!(
+                    "[ROUTER]   Exit escape: No pour bbox found for {}.{}",
+                    from_comp, route.from.pin
+                );
                 None
             }
         } else {
@@ -477,11 +498,14 @@ fn calculate_escape_positions(
         };
         let enter_spec = if let Some(offset) = &enter_escape.offset {
             let offset_str = match offset {
-                hwc_parser::EdgeOffsetSpec::Named(n) => format!(" at {}", match n {
-                    hwc_parser::NamedPosition::Top => "top",
-                    hwc_parser::NamedPosition::Bottom => "bottom",
-                    hwc_parser::NamedPosition::Center => "center",
-                }),
+                hwc_parser::EdgeOffsetSpec::Named(n) => format!(
+                    " at {}",
+                    match n {
+                        hwc_parser::NamedPosition::Top => "top",
+                        hwc_parser::NamedPosition::Bottom => "bottom",
+                        hwc_parser::NamedPosition::Center => "center",
+                    }
+                ),
                 hwc_parser::EdgeOffsetSpec::Percentage(p) => format!(" at {}%", p * 100.0),
                 hwc_parser::EdgeOffsetSpec::Measurement(m) => format!(" at {}um", m / 1000),
             };
@@ -489,11 +513,14 @@ fn calculate_escape_positions(
         } else {
             dir_str.to_string()
         };
-        
+
         if let Some((port, offset)) = parse_port_escape(&enter_spec) {
             // Query the pour bounding box for the end pin
             let to_comp = super::helpers::construct_component_name(&route.to)?;
-            if let Some(pour_bbox) = space.voxel_grid.get_pour_bbox_for_pin(&to_comp, &route.to.pin) {
+            if let Some(pour_bbox) = space
+                .voxel_grid
+                .get_pour_bbox_for_pin(&to_comp, &route.to.pin)
+            {
                 let escape = calculate_rect_escape(
                     &pour_bbox,
                     port,
@@ -511,7 +538,10 @@ fn calculate_escape_positions(
                 );
                 Some(escape.point)
             } else {
-                eprintln!("[ROUTER]   Enter escape: No pour bbox found for {}.{}", to_comp, route.to.pin);
+                eprintln!(
+                    "[ROUTER]   Enter escape: No pour bbox found for {}.{}",
+                    to_comp, route.to.pin
+                );
                 None
             }
         } else {

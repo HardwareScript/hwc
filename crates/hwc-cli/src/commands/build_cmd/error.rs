@@ -2,7 +2,6 @@
 ///
 /// Task 5.1: Phantom Buffer - Commit Gate Architecture
 /// Restored to use proper miette formatting instead of custom box-drawing
-
 use hwc_physics::error_mapping::PhysicsError;
 use miette::Diagnostic;
 use thiserror::Error;
@@ -11,7 +10,9 @@ use thiserror::Error;
 #[derive(Debug, Error, Diagnostic)]
 pub enum BuildError {
     /// Commit Gate closed - validation failed in Architecture Mode
-    #[error("Physical integrity validation failed: {violation_count} violation(s) in Architecture Mode")]
+    #[error(
+        "Physical integrity validation failed: {violation_count} violation(s) in Architecture Mode"
+    )]
     #[diagnostic(
         code(hwc::build::commit_gate_closed),
         help("{violations}\n\nOptions:\n  • Fix the violations listed above\n  • Use --skip-physical-continuity to bypass validation (debugging only)\n  • Use --force-export to override the gate (debugging only)\n  • Remove 'implements' keyword to switch to Artist Mode")
@@ -20,8 +21,6 @@ pub enum BuildError {
         violation_count: usize,
         violations: String,
     },
-
-
 }
 
 impl BuildError {
@@ -38,7 +37,7 @@ impl BuildError {
             })
             .collect::<Vec<_>>()
             .join("\n");
-        
+
         Self::CommitGateClosed {
             violation_count: violations.len(),
             violations: violations_text,

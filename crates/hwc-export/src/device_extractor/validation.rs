@@ -2,8 +2,8 @@ use compact_str::CompactString;
 use hwc_engine::space::PourMetadata;
 use rustc_hash::FxHashMap;
 
-use super::DeviceExtractor;
 use super::error::DeviceExtractionError;
+use super::DeviceExtractor;
 
 impl<'a> DeviceExtractor<'a> {
     /// Validate bulk biasing based on material properties (GAP 5)

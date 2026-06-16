@@ -171,12 +171,9 @@ impl SymbolTable {
         // Regular lookup across all layers
         self.local.materials.contains_key(name)
             || self.local.material_aliases.contains_key(name)
-            || self
-                .hpm
-                .iter()
-                .any(|layer| {
-                    layer.materials.contains_key(name) || layer.material_aliases.contains_key(name)
-                })
+            || self.hpm.iter().any(|layer| {
+                layer.materials.contains_key(name) || layer.material_aliases.contains_key(name)
+            })
             || self.prelude.materials.contains_key(name)
             || self.prelude.material_aliases.contains_key(name)
             || self.core.materials.contains_key(name)

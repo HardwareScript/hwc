@@ -113,7 +113,7 @@ fn clamp_ratio(ratio: f64, trace_width_nm: i64, edge_length_nm: i64) -> f64 {
 fn resolve_offset_to_ratio(offset: EdgeOffset) -> f64 {
     match offset {
         EdgeOffset::Center => 0.5,
-        EdgeOffset::Percentage(r) => r.max(0.0).min(1.0),
+        EdgeOffset::Percentage(r) => r.clamp(0.0, 1.0),
         EdgeOffset::Measurement(_offset_nm) => {
             // Measurement is relative to center, normalized by edge length
             // This is handled at the coordinate level, not ratio level

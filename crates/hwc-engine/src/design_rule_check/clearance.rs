@@ -141,7 +141,8 @@ pub fn validate_clearances(
                 // v0.1.7 HV ISOLATION LOGIC:
                 // Use high_voltage_clearance_nm if either net is HighVoltage.
                 // Otherwise use standard min_trace_spacing_nm.
-                let pair_required_nm = if net_a.classification == crate::space::NetClassification::HighVoltage
+                let pair_required_nm = if net_a.classification
+                    == crate::space::NetClassification::HighVoltage
                     || net_b.classification == crate::space::NetClassification::HighVoltage
                 {
                     constraints

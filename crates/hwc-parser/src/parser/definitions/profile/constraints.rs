@@ -1,6 +1,6 @@
+use super::super::super::error::{span_to_source_span, ParseError};
 use crate::ast::*;
 use crate::lexer::{Span, Token};
-use super::super::super::error::{span_to_source_span, ParseError};
 
 impl super::super::super::Parser {
     /// Parse trace constraints block
@@ -107,7 +107,9 @@ impl super::super::super::Parser {
     }
 
     /// Parse clearance constraints block
-    pub(super) fn parse_clearance_constraints(&mut self) -> Result<ClearanceConstraints, ParseError> {
+    pub(super) fn parse_clearance_constraints(
+        &mut self,
+    ) -> Result<ClearanceConstraints, ParseError> {
         let start_pos = self.current_span().start;
         let mut high_voltage = None;
         let mut safety_factor = None;
@@ -237,7 +239,9 @@ impl super::super::super::Parser {
     }
 
     /// Parse manufacturing constraints block
-    pub(super) fn parse_manufacturing_constraints(&mut self) -> Result<ManufacturingConstraints, ParseError> {
+    pub(super) fn parse_manufacturing_constraints(
+        &mut self,
+    ) -> Result<ManufacturingConstraints, ParseError> {
         let start_pos = self.current_span().start;
         let mut copper_thickness = None;
         let mut ipc2221_k_external = None;

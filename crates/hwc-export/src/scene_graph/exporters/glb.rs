@@ -1,9 +1,9 @@
 //! GLB (glTF binary) export functionality
 
 use crate::scene_graph::materials::get_or_create_material;
+use crate::scene_graph::types::Face; // FIXED: Imported Face type for batching
 use crate::scene_graph::types::MaterialNode;
 use crate::scene_graph::types::MeshNode;
-use crate::scene_graph::types::Face; // FIXED: Imported Face type for batching
 use compact_str::CompactString;
 use rustc_hash::FxHashMap;
 use serde_json::json;
@@ -33,11 +33,15 @@ pub fn export_glb(
         group.vertices.extend(&mesh.vertices);
 
         for face in &mesh.faces {
-            let offset_vertices: Vec<usize> = face.vertices.iter()
+            let offset_vertices: Vec<usize> = face
+                .vertices
+                .iter()
                 .map(|&idx| idx + vertex_offset)
                 .collect();
-            
-            group.faces.push(Face { vertices: offset_vertices });
+
+            group.faces.push(Face {
+                vertices: offset_vertices,
+            });
         }
     }
 
@@ -52,7 +56,7 @@ pub fn export_glb(
     for (i, (name, mat)) in materials.iter().enumerate() {
         mat_map.insert(name.clone(), i);
         let (r, g, b) = mat.color.to_normalized();
-        
+
         let is_transparent = mat.opacity < 1.0;
         let has_jelly_effect = mat.subsurface > 0.0;
 
@@ -97,7 +101,11 @@ pub fn export_glb(
 
         // 2. KHR_materials_clearcoat (The glossy surface shine)
         if mat.clearcoat > 0.0 || has_jelly_effect {
-            let clearcoat_factor = if has_jelly_effect && mat.clearcoat == 0.0 { 0.5 } else { mat.clearcoat };
+            let clearcoat_factor = if has_jelly_effect && mat.clearcoat == 0.0 {
+                0.5
+            } else {
+                mat.clearcoat
+            };
             extensions["KHR_materials_clearcoat"] = json!({
                 "clearcoatFactor": clearcoat_factor,
                 "clearcoatRoughnessFactor": mat.clearcoat_roughness
@@ -107,7 +115,7 @@ pub fn export_glb(
         // 3. KHR_materials_transmission (Internal light pass-through)
         if has_jelly_effect {
             extensions["KHR_materials_transmission"] = json!({
-                "transmissionFactor": mat.subsurface 
+                "transmissionFactor": mat.subsurface
             });
 
             // 4. KHR_materials_volume (The "Jelly" depth effect)
@@ -135,10 +143,12 @@ pub fn export_glb(
 
     // 1.5. Collect unknown materials from meshes and add them dynamically using lookup table
     let mut materials_owned = materials.clone();
-    for mesh in &optimized_meshes { // FIXED: Iterate over optimized_meshes
+    for mesh in &optimized_meshes {
+        // FIXED: Iterate over optimized_meshes
         if !mat_map.contains_key(&mesh.material_name) {
             let mat_idx = materials_array.len();
-            let (material_node, _) = get_or_create_material(&mut materials_owned, &mesh.material_name);
+            let (material_node, _) =
+                get_or_create_material(&mut materials_owned, &mesh.material_name);
             mat_map.insert(mesh.material_name.clone(), mat_idx);
 
             // Add fallback material with inferred properties
@@ -184,11 +194,12 @@ pub fn export_glb(
     let mut nodes_array = Vec::new();
 
     // 2. Single Pass Geometry Processing (using optimized meshes)
-    for (idx, mesh) in optimized_meshes.iter().enumerate() { // FIXED: Iterate over optimized_meshes
+    for (idx, mesh) in optimized_meshes.iter().enumerate() {
+        // FIXED: Iterate over optimized_meshes
         let mat_idx = mat_map.get(&mesh.material_name).copied().unwrap_or(0);
 
-        let v_start = all_vertices.len() / 3; 
-        let i_start = all_indices.len(); 
+        let v_start = all_vertices.len() / 3;
+        let i_start = all_indices.len();
 
         let mut min_x = f32::MAX;
         let mut max_x = f32::MIN;
@@ -256,14 +267,14 @@ pub fn export_glb(
                     all_vertices.extend_from_slice(&[vx, vy, vz]);
                     all_normals.extend_from_slice(&[nx, ny, nz]);
                     all_tangents.extend_from_slice(&[tx, ty, tz, 1.0]); // VEC4
-                    
+
                     min_x = min_x.min(vx);
                     max_x = max_x.max(vx);
                     min_y = min_y.min(vy);
                     max_y = max_y.max(vy);
                     min_z = min_z.min(vz);
                     max_z = max_z.max(vz);
-                    
+
                     all_indices.push(local_vertex_count as u32);
                     local_vertex_count += 1;
                 }

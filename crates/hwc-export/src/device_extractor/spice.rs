@@ -18,7 +18,10 @@ pub fn format_spice(
         // ✅ NATIVE v0.1.7 FIX: Only extract active transistors.
         // Do not attempt to extract MOSFET models for raw IC packages or generic components.
         if device_type == "IC_Package" || device_type == "Component" {
-            println!("      ⚠️  Skipping SPICE formatting for {}: Not a transistor", device.name);
+            println!(
+                "      ⚠️  Skipping SPICE formatting for {}: Not a transistor",
+                device.name
+            );
             continue;
         }
 

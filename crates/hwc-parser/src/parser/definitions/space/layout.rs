@@ -44,7 +44,9 @@ impl crate::parser::Parser {
     }
 
     /// Parse a single component placement in a layout block
-    pub(in crate::parser) fn parse_layout_placement(&mut self) -> Result<ModuleInternalPlacement, ParseError> {
+    pub(in crate::parser) fn parse_layout_placement(
+        &mut self,
+    ) -> Result<ModuleInternalPlacement, ParseError> {
         let start_pos = self.current_span().start;
 
         // Parse component name
@@ -73,7 +75,9 @@ impl crate::parser::Parser {
     }
 
     /// Parse for loop in layout block
-    pub(in crate::parser) fn parse_layout_for_loop(&mut self) -> Result<LayoutStatement, ParseError> {
+    pub(in crate::parser) fn parse_layout_for_loop(
+        &mut self,
+    ) -> Result<LayoutStatement, ParseError> {
         let start_pos = self.current_span().start;
 
         self.expect(&Token::For)?;
@@ -112,7 +116,9 @@ impl crate::parser::Parser {
     }
 
     /// Parse if conditional in layout block
-    pub(in crate::parser) fn parse_layout_if_conditional(&mut self) -> Result<LayoutStatement, ParseError> {
+    pub(in crate::parser) fn parse_layout_if_conditional(
+        &mut self,
+    ) -> Result<LayoutStatement, ParseError> {
         let start_pos = self.current_span().start;
 
         self.expect(&Token::If)?;

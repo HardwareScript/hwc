@@ -37,10 +37,18 @@ pub fn evaluate_coordinate_to_nm(
                         let pm = (value * multiplier * 1_000_000_000_000.0).round() as i64;
                         pm / 1000
                     } else {
-                        return Err(IrError::PlacementError(format!("Unknown unit symbol: '{}'", symbol)));
+                        return Err(IrError::PlacementError(format!(
+                            "Unknown unit symbol: '{}'",
+                            symbol
+                        )));
                     }
                 }
-                _ => return Err(IrError::PlacementError(format!("Cannot convert {:?} to nanometers", unit))),
+                _ => {
+                    return Err(IrError::PlacementError(format!(
+                        "Cannot convert {:?} to nanometers",
+                        unit
+                    )))
+                }
             };
             Ok(nm)
         }
@@ -48,10 +56,18 @@ pub fn evaluate_coordinate_to_nm(
             if let Some(const_value) = symbol_table.get_all_constants().get(name) {
                 Ok(*const_value as i64)
             } else {
-                Err(IrError::PlacementError(format!("Unknown constant: '{}'", name)))
+                Err(IrError::PlacementError(format!(
+                    "Unknown constant: '{}'",
+                    name
+                )))
             }
         }
-        Expression::Binary { left, operator, right, .. } => {
+        Expression::Binary {
+            left,
+            operator,
+            right,
+            ..
+        } => {
             let left_nm = evaluate_coordinate_to_nm(left, symbol_table)?;
             let right_nm = evaluate_coordinate_to_nm(right, symbol_table)?;
             let result = match operator {
@@ -59,14 +75,18 @@ pub fn evaluate_coordinate_to_nm(
                 BinaryOperator::Subtract => left_nm - right_nm,
                 BinaryOperator::Multiply => left_nm * right_nm,
                 BinaryOperator::Divide => {
-                    if right_nm == 0 { return Err(IrError::PlacementError("Division by zero".into())); }
+                    if right_nm == 0 {
+                        return Err(IrError::PlacementError("Division by zero".into()));
+                    }
                     left_nm / right_nm
                 }
                 BinaryOperator::Modulo => left_nm % right_nm,
             };
             Ok(result)
         }
-        Expression::Unary { operator, operand, .. } => {
+        Expression::Unary {
+            operator, operand, ..
+        } => {
             let operand_nm = evaluate_coordinate_to_nm(operand, symbol_table)?;
             let result = match operator {
                 UnaryOperator::Negate => -operand_nm,
@@ -74,9 +94,15 @@ pub fn evaluate_coordinate_to_nm(
             };
             Ok(result)
         }
-        Expression::Grouped { expression, .. } => evaluate_coordinate_to_nm(expression, symbol_table),
-        Expression::Percentage { .. } => Err(IrError::PlacementError("Percentages not supported here".into())),
-        Expression::AnchorReference { .. } => Err(IrError::PlacementError("Anchor references require evaluate_coordinate_with_anchors".into())),
+        Expression::Grouped { expression, .. } => {
+            evaluate_coordinate_to_nm(expression, symbol_table)
+        }
+        Expression::Percentage { .. } => Err(IrError::PlacementError(
+            "Percentages not supported here".into(),
+        )),
+        Expression::AnchorReference { .. } => Err(IrError::PlacementError(
+            "Anchor references require evaluate_coordinate_with_anchors".into(),
+        )),
     }
 }
 
@@ -114,7 +140,10 @@ pub fn evaluate_coordinate_with_anchors(
     match expr {
         Expression::AnchorReference { anchor, edge, .. } => {
             let resolved_anchor_name = if anchor.name == "last" {
-                bbox_tracker.last_registered().ok_or_else(|| IrError::PlacementError("No 'last' component found".into()))?.clone()
+                bbox_tracker
+                    .last_registered()
+                    .ok_or_else(|| IrError::PlacementError("No 'last' component found".into()))?
+                    .clone()
             } else {
                 anchor.name.clone()
             };
@@ -147,33 +176,63 @@ pub fn evaluate_coordinate_with_anchors(
                                 hwc_parser::OriginZ::Bottom => {
                                     // Layer indices increase with height (1=Ground, 10=Sky)
                                     // Top is max, Bottom is min
-                                    if *edge == hwc_parser::Edge::Top { anchor_bbox.max.z } else { anchor_bbox.min.z }
+                                    if *edge == hwc_parser::Edge::Top {
+                                        anchor_bbox.max.z
+                                    } else {
+                                        anchor_bbox.min.z
+                                    }
                                 }
                                 hwc_parser::OriginZ::Top => {
                                     // Layer indices increase with depth (1=Sky, 10=Ground)
                                     // Top is min, Bottom is max
-                                    if *edge == hwc_parser::Edge::Top { anchor_bbox.min.z } else { anchor_bbox.max.z }
+                                    if *edge == hwc_parser::Edge::Top {
+                                        anchor_bbox.min.z
+                                    } else {
+                                        anchor_bbox.max.z
+                                    }
                                 }
                             }
                         }
                         _ => edge_point.y,
                     }
                 }
-                hwc_parser::Edge::Front | hwc_parser::Edge::Back | hwc_parser::Edge::MinZ | hwc_parser::Edge::MaxZ => edge_point.z,
+                hwc_parser::Edge::Front
+                | hwc_parser::Edge::Back
+                | hwc_parser::Edge::MinZ
+                | hwc_parser::Edge::MaxZ => edge_point.z,
             };
 
             Ok(coord_nm)
         }
 
-        Expression::Binary { left, operator, right, .. } => {
-            let left_nm = evaluate_coordinate_with_anchors(left, symbol_table, bbox_tracker, context_axis, origin_z)?;
-            let right_nm = evaluate_coordinate_with_anchors(right, symbol_table, bbox_tracker, context_axis, origin_z)?;
+        Expression::Binary {
+            left,
+            operator,
+            right,
+            ..
+        } => {
+            let left_nm = evaluate_coordinate_with_anchors(
+                left,
+                symbol_table,
+                bbox_tracker,
+                context_axis,
+                origin_z,
+            )?;
+            let right_nm = evaluate_coordinate_with_anchors(
+                right,
+                symbol_table,
+                bbox_tracker,
+                context_axis,
+                origin_z,
+            )?;
             let result = match operator {
                 BinaryOperator::Add => left_nm + right_nm,
                 BinaryOperator::Subtract => left_nm - right_nm,
                 BinaryOperator::Multiply => left_nm * right_nm,
                 BinaryOperator::Divide => {
-                    if right_nm == 0 { return Err(IrError::PlacementError("Division by zero".into())); }
+                    if right_nm == 0 {
+                        return Err(IrError::PlacementError("Division by zero".into()));
+                    }
                     left_nm / right_nm
                 }
                 BinaryOperator::Modulo => left_nm % right_nm,
@@ -181,8 +240,16 @@ pub fn evaluate_coordinate_with_anchors(
             Ok(result)
         }
 
-        Expression::Unary { operator, operand, .. } => {
-            let operand_nm = evaluate_coordinate_with_anchors(operand, symbol_table, bbox_tracker, context_axis, origin_z)?;
+        Expression::Unary {
+            operator, operand, ..
+        } => {
+            let operand_nm = evaluate_coordinate_with_anchors(
+                operand,
+                symbol_table,
+                bbox_tracker,
+                context_axis,
+                origin_z,
+            )?;
             let result = match operator {
                 UnaryOperator::Negate => -operand_nm,
                 UnaryOperator::Plus => operand_nm,
@@ -190,15 +257,13 @@ pub fn evaluate_coordinate_with_anchors(
             Ok(result)
         }
 
-        Expression::Grouped { expression, .. } => {
-            evaluate_coordinate_with_anchors(
-                expression,
-                symbol_table,
-                bbox_tracker,
-                context_axis,
-                origin_z,
-            )
-        }
+        Expression::Grouped { expression, .. } => evaluate_coordinate_with_anchors(
+            expression,
+            symbol_table,
+            bbox_tracker,
+            context_axis,
+            origin_z,
+        ),
 
         _ => evaluate_coordinate_to_nm(expr, symbol_table),
     }

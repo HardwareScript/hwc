@@ -2,8 +2,8 @@
 //!
 //! Shared physical-Z helpers for export pipelines. All internal logic uses nanometers.
 
-use hwc_engine::HardwareSpace;
 use hwc_compiler::ir::stackup_manager::StackupManager;
+use hwc_engine::HardwareSpace;
 
 /// Convert nanometers to millimeters for human-readable labels.
 pub fn z_mm(z_nm: i64) -> f64 {
@@ -120,6 +120,9 @@ mod tests {
 
     #[test]
     fn dxf_layer_name_uses_mm() {
-        assert_eq!(dxf_layer_name(350_000_000, "Copper", 0, 1_000_000_000, None), "INNER4_COPPER");
+        assert_eq!(
+            dxf_layer_name(350_000_000, "Copper", 0, 1_000_000_000, None),
+            "INNER4_COPPER"
+        );
     }
 }

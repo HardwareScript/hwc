@@ -131,7 +131,9 @@ pub fn check_unassigned_conductors(space: &HardwareSpace) -> Result<()> {
 }
 
 /// Print connectivity violations
-pub fn print_connectivity_violations(violations: &[hwc_physics::connectivity::ConnectivityViolation]) {
+pub fn print_connectivity_violations(
+    violations: &[hwc_physics::connectivity::ConnectivityViolation],
+) {
     println!("\n❌ CONNECTIVITY VIOLATIONS DETECTED:");
     for violation in violations {
         match violation {

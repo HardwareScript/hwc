@@ -7,11 +7,12 @@ mod tests {
     fn test_coreldraw_boolean_handshake() {
         // 1. Define Shape A: A 10mm x 10mm square (coordinates in nanometers)
         // Millimeters to nanometers: 10mm = 10,000,000 nm
-        let mut square = Path64::new();
-        square.push(Point64::new(-5_000_000, -5_000_000));
-        square.push(Point64::new(5_000_000, -5_000_000));
-        square.push(Point64::new(5_000_000, 5_000_000));
-        square.push(Point64::new(-5_000_000, 5_000_000));
+        let square = vec![
+            Point64::new(-5_000_000, -5_000_000),
+            Point64::new(5_000_000, -5_000_000),
+            Point64::new(5_000_000, 5_000_000),
+            Point64::new(-5_000_000, 5_000_000),
+        ];
 
         // 2. Define Shape B: A 5mm radius circle, offset to the right at X = 5mm
         let cx = 5_000_000;
@@ -35,7 +36,10 @@ mod tests {
         let weld_result = clipper2_rust::union_64(&subjects, &clips, FillRule::NonZero);
         assert!(!weld_result.is_empty());
         assert_eq!(weld_result.len(), 1);
-        println!("Weld Success: Unified shape has {} vertices", weld_result[0].len());
+        println!(
+            "Weld Success: Unified shape has {} vertices",
+            weld_result[0].len()
+        );
 
         // --- OPERATION 2: DIFFERENCE (Trim) ---
         // Difference still works correctly with NonZero subjects/clips
@@ -44,7 +48,10 @@ mod tests {
 
         // The result should be a single chopped polygon
         assert_eq!(trim_result.len(), 1);
-        println!("Trim Success: Chopped shape has {} vertices", trim_result[0].len());
+        println!(
+            "Trim Success: Chopped shape has {} vertices",
+            trim_result[0].len()
+        );
 
         // Verify the bite mark: The point (5mm, 0) is inside the circle,
         // so it must have been removed from the square.
@@ -59,14 +66,17 @@ mod tests {
         use hwc_compiler::SymbolTable;
         let source = std::fs::read_to_string("tests/tutorial_examples/artist_two_pins.hw")
             .or_else(|_| std::fs::read_to_string("../tests/tutorial_examples/artist_two_pins.hw"))
-            .or_else(|_| std::fs::read_to_string("../../tests/tutorial_examples/artist_two_pins.hw"))
+            .or_else(|_| {
+                std::fs::read_to_string("../../tests/tutorial_examples/artist_two_pins.hw")
+            })
             .unwrap();
-        let collector = hwc_diagnostics::DiagnosticCollector::new_with_file(&source, "artist_two_pins.hw", 20);
+        let collector =
+            hwc_diagnostics::DiagnosticCollector::new_with_file(&source, "artist_two_pins.hw", 20);
         let lexer = hwc_parser::Lexer::new(&source);
         let tokens = lexer.tokenize().unwrap();
         let mut parser = hwc_parser::Parser::new(tokens);
         let program = parser.parse(&collector);
-        
+
         let mut symbol_table = SymbolTable::new();
         // Load prelude
         let prelude = hwc_compiler::Prelude::load().unwrap();
@@ -76,11 +86,13 @@ mod tests {
         for (name, value) in &prelude.constants {
             symbol_table.register_prelude_constant(name.clone(), *value);
         }
-        
+
         let input_path = std::path::PathBuf::from("../tests/tutorial_examples/artist_two_pins.hw");
         let mut resolver = hwc_compiler::ModuleResolver::new().unwrap();
         for import in &program.imports {
-            resolver.resolve_import(import, &input_path, &mut symbol_table).unwrap();
+            resolver
+                .resolve_import(import, &input_path, &mut symbol_table)
+                .unwrap();
         }
         for definition in &program.definitions {
             match definition {
@@ -91,7 +103,7 @@ mod tests {
                     symbol_table.register_material(&collector, mat.clone());
                 }
                 hwc_parser::Definition::Profile(profile) => {
-                    symbol_table.register_profile(&collector, profile.clone());
+                    symbol_table.register_profile(&collector, *profile.clone());
                 }
                 hwc_parser::Definition::Component(component) => {
                     symbol_table.register_component(&collector, component.clone());
@@ -111,12 +123,13 @@ mod tests {
                 _ => {}
             }
         }
-        
-        let mut space = hwc_compiler::program_to_space(&program, &symbol_table, &collector).unwrap();
+
+        let mut space =
+            hwc_compiler::program_to_space(&program, &symbol_table, &collector).unwrap();
         if !space.analytic_routes.is_empty() {
             space.realize_analytic_routes();
         }
-        
+
         println!("SUBSTRATE LAYERS:");
         for (i, layer) in space.voxel_grid.get_substrate_layers().iter().enumerate() {
             println!(
@@ -132,4 +145,3 @@ mod tests {
         }
     }
 }
-

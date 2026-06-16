@@ -44,7 +44,12 @@ pub fn validate_trace_widths(
     // Rayon parallelism for the slow path (small voxels)
     nets.par_iter()
         .filter(|net| net.net_name != "net_0") // v0.1.7: Ignore substrate net (net_0) for trace width checks
-        .filter(|net| matches!(net.geometry_type, crate::design_rule_check::GeometryType::Trace)) // ✅ NATIVE v0.1.7 FIX: Only run trace-width checks on actual traces.
+        .filter(|net| {
+            matches!(
+                net.geometry_type,
+                crate::design_rule_check::GeometryType::Trace
+            )
+        }) // ✅ NATIVE v0.1.7 FIX: Only run trace-width checks on actual traces.
         .filter_map(|net| {
             let actual_width_nm = measure_trace_width(&net.voxels, voxel_size_nm);
 

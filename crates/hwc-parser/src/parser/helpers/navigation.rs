@@ -214,7 +214,7 @@ impl Parser {
         if self.current == 0 {
             return false;
         }
-        
+
         // Look at the previous non-comment token
         let mut pos = self.current;
         while pos > 0 {
@@ -226,11 +226,11 @@ impl Parser {
                 _ => break,
             }
         }
-        
+
         if pos >= self.tokens.len() {
             return false;
         }
-        
+
         matches!(
             &self.tokens[pos].token,
             Token::Identifier(_)

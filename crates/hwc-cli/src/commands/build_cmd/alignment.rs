@@ -277,22 +277,21 @@ pub fn validate_alignment(
                     .collect();
 
             // Get bridge rules from profile (v0.1.7)
-            let bridge_rules: Vec<hwc_physics::BridgeRule> = if let Some(ref constraints) =
-                space.fabrication_constraints
-            {
-                constraints
-                    .bridges
-                    .iter()
-                    .map(|b| hwc_physics::BridgeRule {
-                        from_material: b.from_material.clone(),
-                        to_material: b.to_material.clone(),
-                        interface_material: b.interface_material.clone(),
-                        fill_material: b.fill_material.clone(),
-                    })
-                    .collect()
-            } else {
-                Vec::new()
-            };
+            let bridge_rules: Vec<hwc_physics::BridgeRule> =
+                if let Some(ref constraints) = space.fabrication_constraints {
+                    constraints
+                        .bridges
+                        .iter()
+                        .map(|b| hwc_physics::BridgeRule {
+                            from_material: b.from_material.clone(),
+                            to_material: b.to_material.clone(),
+                            interface_material: b.interface_material.clone(),
+                            fill_material: b.fill_material.clone(),
+                        })
+                        .collect()
+                } else {
+                    Vec::new()
+                };
 
             // Get material name -> ID mapping for physics (v0.1.7)
             let mut material_mapping = rustc_hash::FxHashMap::default();
@@ -350,7 +349,9 @@ pub fn validate_alignment(
             );
 
             if !continuity_violations.is_empty() {
-                println!("\n❌ PHYSICAL CONTINUITY VIOLATIONS - Cannot proceed to parameter validation:");
+                println!(
+                    "\n❌ PHYSICAL CONTINUITY VIOLATIONS - Cannot proceed to parameter validation:"
+                );
                 for violation in &continuity_violations {
                     match violation {
                         hwc_physics::PhysicalContinuityViolation::DisconnectedNet {
@@ -400,7 +401,7 @@ pub fn validate_alignment(
                         }
                     }
                 }
-                
+
                 // Task 5.3: Respect --force-export flag
                 if config.force_export {
                     println!("\n   ⚠️  --force-export: Continuing despite {} physical continuity violation(s)", 
@@ -424,7 +425,7 @@ pub fn validate_alignment(
         // Layer 1: Symbolic Alignment (device names, types)
         // Layer 2: Physical Continuity (already validated above)
         // Layer 3: Device Extraction (parameter validation)
-        
+
         // TODO: Re-enable when AlignmentValidator is available in hwc_compiler
         /*
         if !config.skip_alignment {

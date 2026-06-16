@@ -154,7 +154,12 @@ impl super::Parser {
                     match val.as_str() {
                         "mixed" => mode = RoutingMode::Mixed,
                         "manual_only" => mode = RoutingMode::ManualOnly,
-                        _ => return Err(self.error(&format!("Unknown routing mode: '{}'. Expected 'mixed' or 'manual_only'", val))),
+                        _ => {
+                            return Err(self.error(&format!(
+                                "Unknown routing mode: '{}'. Expected 'mixed' or 'manual_only'",
+                                val
+                            )))
+                        }
                     }
                 }
                 _ => return Err(self.error(&format!("Unknown routing property: '{}'", key))),
@@ -219,7 +224,7 @@ impl super::Parser {
                 } else if self.check(&Token::Path) {
                     self.advance(); // consume 'path'
                     self.expect(&Token::Colon)?;
-                    
+
                     // v0.1.7: Support bracketed path: [ [x,y,z], [x,y,z] ]
                     if self.check(&Token::OpenBracket) {
                         self.advance(); // consume '['
@@ -325,13 +330,17 @@ impl super::Parser {
                         "south" | "s" | "bottom" => CardinalDirection::South,
                         "east" | "e" | "right" => CardinalDirection::East,
                         "west" | "w" | "left" => CardinalDirection::West,
-                        _ => return Err(self.error(&format!(
+                        _ => {
+                            return Err(self.error(&format!(
                             "Expected cardinal direction (North, South, East, West), found '{}'",
                             s
-                        ))),
+                        )))
+                        }
                     }
                 }
-                _ => return Err(self.error("Expected cardinal direction (North, South, East, West)")),
+                _ => {
+                    return Err(self.error("Expected cardinal direction (North, South, East, West)"))
+                }
             };
             dir
         } else {

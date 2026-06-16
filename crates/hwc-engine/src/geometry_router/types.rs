@@ -4,8 +4,8 @@
 
 use crate::geometry::Point3D;
 use crate::netlist::NetId;
-use rustc_hash::FxHashMap;
 use hwc_parser::Expression;
+use rustc_hash::FxHashMap;
 
 /// Net route request for automatic routing.
 ///
@@ -112,6 +112,7 @@ pub struct Via {
 
 impl Via {
     /// Create a new via with automatic type classification from physical Z extents.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         position: (i64, i64),
         from_z_nm: i64,
@@ -204,12 +205,16 @@ impl Via {
     }
 
     /// Check if this is a through-hole via (spans the full board Z extent).
-    pub fn is_through_hole(&self, board_min_z_nm: i64, board_max_z_nm: i64, voxel_z_nm: i64) -> bool {
+    pub fn is_through_hole(
+        &self,
+        board_min_z_nm: i64,
+        board_max_z_nm: i64,
+        voxel_z_nm: i64,
+    ) -> bool {
         let voxel_z_nm = voxel_z_nm.max(1);
         let min_z = self.from_z_nm.min(self.to_z_nm);
         let max_z = self.from_z_nm.max(self.to_z_nm);
-        min_z <= board_min_z_nm + voxel_z_nm / 2
-            && max_z >= board_max_z_nm - voxel_z_nm / 2
+        min_z <= board_min_z_nm + voxel_z_nm / 2 && max_z >= board_max_z_nm - voxel_z_nm / 2
     }
 
     /// Check if this is a blind via (touches one outer Z face but not both).
@@ -236,7 +241,11 @@ impl Via {
         let min_z = self.from_z_nm.min(self.to_z_nm);
         let max_z = self.from_z_nm.max(self.to_z_nm);
         let first = (min_z / voxel_z_nm) * voxel_z_nm;
-        let mut z = if first < min_z { first + voxel_z_nm } else { first };
+        let mut z = if first < min_z {
+            first + voxel_z_nm
+        } else {
+            first
+        };
         let mut planes = Vec::new();
         while z <= max_z {
             planes.push(z);

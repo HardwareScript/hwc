@@ -527,11 +527,9 @@ impl super::super::super::Parser {
         expr: &Expression,
         context: &EvaluationContext,
     ) -> Result<f64, ParseError> {
-        let value = expr.evaluate(context).map_err(|e| {
-            ParseError::General {
-                message: format!("Failed to evaluate pin position expression: {}", e).into(),
-                span: span_to_source_span(&expr.span()),
-            }
+        let value = expr.evaluate(context).map_err(|e| ParseError::General {
+            message: format!("Failed to evaluate pin position expression: {}", e).into(),
+            span: span_to_source_span(&expr.span()),
         })?;
 
         match value {
@@ -548,8 +546,7 @@ impl super::super::super::Parser {
             Value::Number(n) => Ok(n as f64),
             Value::Float(f) => Ok(f),
             _ => Err(ParseError::General {
-                message: "Pin position expression must evaluate to a number or measurement"
-                    .into(),
+                message: "Pin position expression must evaluate to a number or measurement".into(),
                 span: span_to_source_span(&expr.span()),
             }),
         }

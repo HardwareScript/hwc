@@ -6,12 +6,7 @@
 
 use crate::ir::errors::IrError;
 use compact_str::CompactString;
-use hwc_engine::{
-    geometry::Point3D,
-    geometry_router::GridBounds,
-    netlist::NetId,
-    HardwareSpace,
-};
+use hwc_engine::{geometry::Point3D, geometry_router::GridBounds, netlist::NetId, HardwareSpace};
 use rustc_hash::FxHashMap;
 
 /// Global automatic router for connecting all pins in the netlist.
@@ -74,7 +69,12 @@ impl<'a> AutoRouter<'a> {
             let net_id = self.find_net_id_for_name(net_name)?;
 
             // Skip nets that already have manual analytic routes
-            if self.space.analytic_routes.iter().any(|r| r.net_id == net_id) {
+            if self
+                .space
+                .analytic_routes
+                .iter()
+                .any(|r| r.net_id == net_id)
+            {
                 continue;
             }
 
@@ -124,11 +124,7 @@ impl<'a> AutoRouter<'a> {
         // This enables layer-by-layer via tower unrolling instead of single through-hole vias.
         if let Some(profile) = self.profile {
             if profile.is_asic() {
-                let profile_layers: Vec<String> = self.stackup_manager
-                    .ordered_layers()
-                    .iter()
-                    .cloned()
-                    .collect();
+                let profile_layers: Vec<String> = self.stackup_manager.ordered_layers().to_vec();
                 let layer_z_positions: Vec<i64> = profile_layers
                     .iter()
                     .map(|name| self.stackup_manager.get_layer_start_z(name).unwrap_or(0))
@@ -181,13 +177,15 @@ impl<'a> AutoRouter<'a> {
                 );
 
                 // Convert RouteResult paths back to AnalyticTrace primitives
-                let default_constraints =
-                    hwc_engine::constraint_manager::ConstraintRulebook::new(self.space.voxel_size.x_nm)
-                        .get_default_constraints();
+                let default_constraints = hwc_engine::constraint_manager::ConstraintRulebook::new(
+                    self.space.voxel_size.x_nm,
+                )
+                .get_default_constraints();
                 let trace_thickness_nm = default_constraints.min_trace_width_nm;
 
                 for (net_id, path) in &result.paths {
-                    let net_name = net_id_to_name.get(net_id)
+                    let net_name = net_id_to_name
+                        .get(net_id)
                         .cloned()
                         .unwrap_or_else(|| CompactString::from(format!("net_{}", net_id.raw())));
 
@@ -198,12 +196,20 @@ impl<'a> AutoRouter<'a> {
                     // v0.1.7: Grid-Agnostic Z-Resolution via StackupManager
                     let mut refined_path = path.clone();
                     for point in refined_path.iter_mut() {
-                        if let Some(layer_idx) = self.stackup_manager.get_layer_index_at_z(point.z) {
-                            point.z = self.stackup_manager.get_z_start_nm_for_layer_index(layer_idx);
+                        if let Some(layer_idx) = self.stackup_manager.get_layer_index_at_z(point.z)
+                        {
+                            point.z = self
+                                .stackup_manager
+                                .get_z_start_nm_for_layer_index(layer_idx);
                         }
                     }
 
-                    self.register_analytic_route(*net_id, &net_name, refined_path, trace_thickness_nm)?;
+                    self.register_analytic_route(
+                        *net_id,
+                        &net_name,
+                        refined_path,
+                        trace_thickness_nm,
+                    )?;
                 }
             }
             Err(e) => {
@@ -260,7 +266,7 @@ impl<'a> AutoRouter<'a> {
 
         let mut segments = Vec::new();
         let mut start = path[0];
-        
+
         for i in 1..path.len() - 1 {
             let p1 = path[i - 1];
             let p2 = path[i];
@@ -269,14 +275,14 @@ impl<'a> AutoRouter<'a> {
             let d1x = p2.x - p1.x;
             let d1y = p2.y - p1.y;
             let d1z = p2.z - p1.z;
-            
+
             let d2x = p3.x - p2.x;
             let d2y = p3.y - p2.y;
             let d2z = p3.z - p2.z;
 
-            let is_collinear = (d1x == 0 && d2x == 0 && d1y == 0 && d2y == 0) ||
-                               (d1x == 0 && d2x == 0 && d1z == 0 && d2z == 0) ||
-                               (d1y == 0 && d2y == 0 && d1z == 0 && d2z == 0);
+            let is_collinear = (d1x == 0 && d2x == 0 && d1y == 0 && d2y == 0)
+                || (d1x == 0 && d2x == 0 && d1z == 0 && d2z == 0)
+                || (d1y == 0 && d2y == 0 && d1z == 0 && d2z == 0);
 
             if !is_collinear {
                 segments.push(LineSegment::new(start, p2));

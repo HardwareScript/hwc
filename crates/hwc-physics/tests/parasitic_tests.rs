@@ -24,6 +24,7 @@ impl MockSymbolTable {
             MaterialDefinition {
                 name: Identifier::with_dummy_span("Copper"),
                 category: MaterialCategory::Conductor,
+                process: hwc_parser::ManufacturingProcess::default(),
                 symbol: Some("Cu".into()),
                 description: Some("Pure copper conductor".into()),
                 properties: vec![Property {
@@ -41,6 +42,13 @@ impl MockSymbolTable {
                 outline_opacity: None,
                 roughness: None,
                 metallic: None,
+                ior: None,
+                clearcoat: None,
+                clearcoat_roughness: None,
+                subsurface: None,
+                anisotropy: None,
+                anisotropy_rotation: None,
+                texture: None,
             },
         );
 
@@ -50,6 +58,7 @@ impl MockSymbolTable {
             MaterialDefinition {
                 name: Identifier::with_dummy_span("FR4"),
                 category: MaterialCategory::Insulator,
+                process: hwc_parser::ManufacturingProcess::default(),
                 symbol: None,
                 description: Some("Standard PCB substrate".into()),
                 properties: vec![Property {
@@ -63,6 +72,13 @@ impl MockSymbolTable {
                 outline_opacity: None,
                 roughness: None,
                 metallic: None,
+                ior: None,
+                clearcoat: None,
+                clearcoat_roughness: None,
+                subsurface: None,
+                anisotropy: None,
+                anisotropy_rotation: None,
+                texture: None,
             },
         );
 

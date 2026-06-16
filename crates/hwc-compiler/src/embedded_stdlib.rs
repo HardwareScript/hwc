@@ -58,7 +58,11 @@ fn parse_stdlib_module(module_path: &str) -> Result<Vec<Definition>, String> {
         .map_err(|e| format!("Lexer error in stdlib: {:?}", e))?;
 
     // Parse
-    let collector = hwc_diagnostics::DiagnosticCollector::new_with_file(&source, &file_path.to_string_lossy(), 20);
+    let collector = hwc_diagnostics::DiagnosticCollector::new_with_file(
+        &source,
+        &file_path.to_string_lossy(),
+        20,
+    );
     let mut parser = Parser::new(tokens);
     let program = parser.parse(&collector);
 

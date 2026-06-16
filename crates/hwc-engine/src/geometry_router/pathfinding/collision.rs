@@ -91,7 +91,10 @@ pub(super) fn try_binary_collision_skip(
 
 /// Convert Point3D to voxel coordinates
 #[inline]
-pub(super) fn voxel_to_coords(point: Point3D, voxel_size: crate::VoxelSize) -> (usize, usize, usize) {
+pub(super) fn voxel_to_coords(
+    point: Point3D,
+    voxel_size: crate::VoxelSize,
+) -> (usize, usize, usize) {
     let x = (point.x / voxel_size.x_nm.max(1)).max(0) as usize;
     let y = (point.y / voxel_size.y_nm.max(1)).max(0) as usize;
     let z = (point.z / voxel_size.z_nm.max(1)).max(0) as usize;

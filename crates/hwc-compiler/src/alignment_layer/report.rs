@@ -1,7 +1,7 @@
 //! Alignment Layer Report Generation
 //!
 //! This module defines the Alignment Report structure and violation types.
-//! 
+//!
 //! The Alignment Layer replaces traditional LVS by integrating three validation checks:
 //! - Layer 1: Symbolic Alignment (device names and types match)
 //! - Layer 2: Physical Continuity (nets form single conductive islands)
@@ -95,7 +95,7 @@ impl fmt::Display for AlignmentReport {
 }
 
 /// Alignment Layer violation types
-/// 
+///
 /// These violations represent failures in the Triple-Check Architecture:
 /// - Symbolic mismatches (Layer 1)
 /// - Parameter mismatches (Layer 3)

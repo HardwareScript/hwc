@@ -32,7 +32,7 @@ pub fn export(
     // v0.1.7: Filter out internal routing anchors and pours from the BOM.
     // Physically orderable components are discrete parts like Resistors, ICs, etc.
     // Pours (Copper, Silicon) are fabrication steps, not orderable items.
-    
+
     // Add discrete components from netlist arena
     let mut discrete_count = 0;
     let component_count = space.netlist.component_count();
@@ -40,9 +40,9 @@ pub fn export(
         let comp_id = hwc_engine::netlist::ComponentId::new(i as u32);
         if let Some(component) = space.netlist.get_component(comp_id) {
             // v0.1.7: Filter out internal routing anchors
-            if component.component_type.starts_with("Pour(") 
+            if component.component_type.starts_with("Pour(")
                 || component.component_type.starts_with("Contact(")
-                || component.component_type == "Via" 
+                || component.component_type == "Via"
                 || component.component_type == "Anchor"
             {
                 continue;

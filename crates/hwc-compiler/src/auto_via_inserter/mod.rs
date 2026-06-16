@@ -22,4 +22,4 @@ mod types;
 pub use inserter::AutoViaInserter;
 pub use library::{ViaLibrary, ViaType};
 
-pub(crate) use types::{LayerTransition, OverlapRegion, ViaArrayConfig};
+pub(crate) use types::{LayerTransition, OverlapRegion, ViaArrayConfig, ViaLocation};

@@ -35,18 +35,18 @@ impl Color {
 pub struct MaterialNode {
     pub name: CompactString,
     pub color: Color,
-    pub opacity: f32,         // 0.0-1.0 (v0.1.6)
-    pub outline_opacity: f32, // 0.0-1.0 (v0.1.6)
-    pub metallic: f32,        // 0.0-1.0
-    pub roughness: f32,       // 0.0-1.0
-    pub ior: f32,             // Index of Refraction (v0.1.7)
-    pub clearcoat: f32,       // 0.0-1.0 (v0.1.7)
-    pub clearcoat_roughness: f32, // 0.0-1.0 (v0.1.7)
-    pub subsurface: f32,      // 0.0-1.0 (v0.1.7)
-    pub anisotropy: f32,      // 0.0-1.0 (v0.1.7)
-    pub anisotropy_rotation: f32, // 0.0-2PI (v0.1.7)
+    pub opacity: f32,                   // 0.0-1.0 (v0.1.6)
+    pub outline_opacity: f32,           // 0.0-1.0 (v0.1.6)
+    pub metallic: f32,                  // 0.0-1.0
+    pub roughness: f32,                 // 0.0-1.0
+    pub ior: f32,                       // Index of Refraction (v0.1.7)
+    pub clearcoat: f32,                 // 0.0-1.0 (v0.1.7)
+    pub clearcoat_roughness: f32,       // 0.0-1.0 (v0.1.7)
+    pub subsurface: f32,                // 0.0-1.0 (v0.1.7)
+    pub anisotropy: f32,                // 0.0-1.0 (v0.1.7)
+    pub anisotropy_rotation: f32,       // 0.0-2PI (v0.1.7)
     pub texture: Option<CompactString>, // Procedural texture name (v0.1.7)
-    pub precedence: u8,       // v0.1.7 Manifold Export (1=High, 4=Low)
+    pub precedence: u8,                 // v0.1.7 Manifold Export (1=High, 4=Low)
 }
 
 /// Face culling bitmask for manifold export (v0.1.7)

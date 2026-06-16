@@ -10,9 +10,9 @@
 //!
 //! ## Implementation Status
 //! - [x] **Density Analyzer**: Scans the VoxelGrid using the CoarseGrid infrastructure
-//!       to compute metal density per zone post-routing.
+//!   to compute metal density per zone post-routing.
 //! - [x] **Dummy Stamper**: For zones below target density, stamps isolated metal squares
-//!       into empty regions while respecting minimum clearance from routed nets.
+//!   into empty regions while respecting minimum clearance from routed nets.
 //!
 //! ## Integration
 //! Runs as a post-routing pass (Pass 4 in the 5-Stage Pipeline):
@@ -28,8 +28,8 @@
 //!     dummy_fill_pattern: DotGrid(size: 2um, spacing: 4um)
 //! ```
 
-use crate::voxel_grid::VoxelGrid;
 use crate::netlist::NetHandle;
+use crate::voxel_grid::VoxelGrid;
 
 /// Configuration for dummy metal fill (thieving).
 ///
@@ -65,8 +65,8 @@ impl Default for DummyFillConfig {
             enabled: false,
             target_density_pct: 45,
             dummy_size_nm: 2_000,    // 2µm
-            dummy_spacing_nm: 4_000,  // 4µm
-            clearance_nm: 500_000,    // 0.5mm
+            dummy_spacing_nm: 4_000, // 4µm
+            clearance_nm: 500_000,   // 0.5mm
             target_z_nm: None,
         }
     }
@@ -164,7 +164,11 @@ impl DummyFillEngine {
         let z_layers: Vec<usize> = if let Some(target_z) = config.target_z_nm {
             // Convert nm to voxel layer index
             let z_layer = (target_z / config.dummy_size_nm.max(1)) as usize;
-            if z_layer < size_z { vec![z_layer] } else { vec![] }
+            if z_layer < size_z {
+                vec![z_layer]
+            } else {
+                vec![]
+            }
         } else {
             // Process all layers except substrate (z=0)
             (1..size_z).collect()
@@ -183,7 +187,8 @@ impl DummyFillEngine {
             for cy in 0..coarse_y_count {
                 for cx in 0..coarse_x_count {
                     // Sample this coarse zone
-                    let (occupied, total) = self.sample_zone(voxel_grid, cx, cy, z, coarse_cell_size);
+                    let (occupied, total) =
+                        self.sample_zone(voxel_grid, cx, cy, z, coarse_cell_size);
                     total_occupied_before += occupied;
                     total_sampled += total;
 
@@ -211,7 +216,9 @@ impl DummyFillEngine {
                     if needs_fill {
                         let dummies = self.stamp_dummies_in_zone(
                             voxel_grid,
-                            cx, cy, z,
+                            cx,
+                            cy,
+                            z,
                             coarse_cell_size,
                             config,
                         );
@@ -325,8 +332,10 @@ impl DummyFillEngine {
                             let py = y + dy;
                             if px < size_x && py < size_y {
                                 voxel_grid.set_occupied(
-                                    px, py, z,
-                                    2, // Material 2 = Copper
+                                    px,
+                                    py,
+                                    z,
+                                    2,                 // Material 2 = Copper
                                     NetHandle::none(), // No net (dummy fill is unconnected)
                                 );
                             }
@@ -410,21 +419,24 @@ pub struct DummyFillStats {
 mod tests {
     use super::*;
     use crate::voxel_grid::VoxelGrid;
-    use crate::VoxelSize;
 
-fn test_voxel_size() -> crate::VoxelSize {
-    crate::VoxelSize { x_nm: 100_000, y_nm: 100_000, z_nm: 1_000_000 }
-}
+    fn test_voxel_size() -> crate::VoxelSize {
+        crate::VoxelSize {
+            x_nm: 100_000,
+            y_nm: 100_000,
+            z_nm: 1_000_000,
+        }
+    }
 
-/// Test that an empty grid gets dummy fill.
-#[test]
-fn test_dummy_fill_empty_board() {
-    let voxel_size = test_voxel_size();
-    let grid = VoxelGrid::new(64, 64, 2, voxel_size, 0);
+    /// Test that an empty grid gets dummy fill.
+    #[test]
+    fn test_dummy_fill_empty_board() {
+        let voxel_size = test_voxel_size();
+        let grid = VoxelGrid::new(64, 64, 2, voxel_size, 0);
         let config = DummyFillConfig {
             enabled: true,
             target_density_pct: 50,
-            dummy_size_nm: 200_000,   // 2 voxels at 100µm
+            dummy_size_nm: 200_000,    // 2 voxels at 100µm
             dummy_spacing_nm: 400_000, // 4 voxels
             clearance_nm: 100_000,     // 1 voxel
             target_z_nm: None,
@@ -434,7 +446,10 @@ fn test_dummy_fill_empty_board() {
         let stats = engine.run(&grid, &config);
 
         assert!(stats.zones_analyzed > 0, "Should analyze at least one zone");
-        assert!(stats.zones_filled > 0, "Empty board should need fill in all zones");
+        assert!(
+            stats.zones_filled > 0,
+            "Empty board should need fill in all zones"
+        );
         assert!(stats.total_dummies_placed > 0, "Should place some dummies");
     }
 
@@ -462,8 +477,10 @@ fn test_dummy_fill_empty_board() {
 
         // The grid is fully occupied so density is 100% - no fill needed
         // but first check the density was computed correctly
-        assert_eq!(stats.total_dummies_placed, 0,
-            "Fully occupied board should need 0 dummies (density >= target)");
+        assert_eq!(
+            stats.total_dummies_placed, 0,
+            "Fully occupied board should need 0 dummies (density >= target)"
+        );
     }
 
     /// Test that disabled config skips analysis.
@@ -479,9 +496,15 @@ fn test_dummy_fill_empty_board() {
         let mut engine = DummyFillEngine::new();
         let stats = engine.run(&grid, &config);
 
-        assert_eq!(stats.zones_analyzed, 0, "Disabled config should skip analysis");
+        assert_eq!(
+            stats.zones_analyzed, 0,
+            "Disabled config should skip analysis"
+        );
         assert_eq!(stats.zones_filled, 0, "Disabled config should skip fill");
-        assert_eq!(stats.total_dummies_placed, 0, "Disabled config should place 0 dummies");
+        assert_eq!(
+            stats.total_dummies_placed, 0,
+            "Disabled config should place 0 dummies"
+        );
     }
 
     /// Test density analysis on a partially filled board.

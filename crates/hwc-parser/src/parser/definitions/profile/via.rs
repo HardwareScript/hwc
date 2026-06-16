@@ -1,6 +1,6 @@
+use super::super::super::error::{span_to_source_span, ParseError};
 use crate::ast::*;
 use crate::lexer::{Span, Token};
-use super::super::super::error::{span_to_source_span, ParseError};
 use rustc_hash::FxHashMap;
 
 impl super::super::super::Parser {
@@ -185,7 +185,9 @@ impl super::super::super::Parser {
                     self.skip_whitespace();
                 }
                 _ => {
-                    return Err(self.error(&format!("Unknown via definition field: '{}'", field_name)));
+                    return Err(
+                        self.error(&format!("Unknown via definition field: '{}'", field_name))
+                    );
                 }
             }
         }
@@ -194,10 +196,14 @@ impl super::super::super::Parser {
 
         let end_pos = self.previous_span().end;
 
-        let diameter = diameter.ok_or_else(|| self.error("Via definition must include 'diameter'"))?;
-        let annular_ring = annular_ring.ok_or_else(|| self.error("Via definition must include 'annular_ring'"))?;
-        let from_layer = from_layer.ok_or_else(|| self.error("Via definition must include 'spanning'"))?;
-        let to_layer = to_layer.ok_or_else(|| self.error("Via definition must include 'spanning'"))?;
+        let diameter =
+            diameter.ok_or_else(|| self.error("Via definition must include 'diameter'"))?;
+        let annular_ring =
+            annular_ring.ok_or_else(|| self.error("Via definition must include 'annular_ring'"))?;
+        let from_layer =
+            from_layer.ok_or_else(|| self.error("Via definition must include 'spanning'"))?;
+        let to_layer =
+            to_layer.ok_or_else(|| self.error("Via definition must include 'spanning'"))?;
 
         Ok(ViaDefinition {
             name,

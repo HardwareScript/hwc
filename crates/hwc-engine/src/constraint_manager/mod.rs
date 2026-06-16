@@ -19,9 +19,9 @@ mod types;
 pub use clearance::{calculate_clearance_nm, expand_clearance_zone};
 pub use crosstalk::{calculate_crosstalk_penalty, calculate_parallel_length};
 pub use manager::{ConstraintManager, SymbolTableTrait};
-pub use manager_impl::fabrication::load_fabrication_constraints;
 pub use manager_impl::constraint_generation::NetConstraintParams;
 pub use manager_impl::domain::{Route, RoutedDomain, RoutingDomain};
+pub use manager_impl::fabrication::load_fabrication_constraints;
 pub use manager_impl::net_classification::{
     classify_nets, NetClassification, NetClassificationResult,
 };

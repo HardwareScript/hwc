@@ -33,14 +33,19 @@ pub struct SubstrateLayerMetadata {
     pub net_name: Option<CompactString>, // Resolved net name for easier lookup
     pub bbox: BoundingBox,
     pub shape: SubstrateLayerShapeMetadata, // v0.1.7: Added shape for precise collision
-    pub cutouts: Vec<CutoutMetadata>,        // v0.1.7: Added cutouts for short-circuit avoidance
+    pub cutouts: Vec<CutoutMetadata>,       // v0.1.7: Added cutouts for short-circuit avoidance
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SubstrateLayerShapeMetadata {
     Rect,
-    Tube { outer_diameter: u32, inner_diameter: u32 },
-    Polygon { outer_contour: Vec<(i64, i64)> },
+    Tube {
+        outer_diameter: u32,
+        inner_diameter: u32,
+    },
+    Polygon {
+        outer_contour: Vec<(i64, i64)>,
+    },
 }
 
 fn point_in_polygon(x: i64, y: i64, polygon: &[(i64, i64)]) -> bool {
@@ -114,15 +119,20 @@ impl SubstrateLayerMetadata {
                 && z <= bbox.max_z
             {
                 match &cutout.shape {
-                    SubstrateLayerShapeMetadata::Tube { outer_diameter, inner_diameter } => {
+                    SubstrateLayerShapeMetadata::Tube {
+                        outer_diameter,
+                        inner_diameter,
+                    } => {
                         let center_x = (bbox.min_x + bbox.max_x) / 2;
                         let center_y = (bbox.min_y + bbox.max_y) / 2;
                         let dx = x - center_x;
                         let dy = y - center_y;
-                let outer_radius = *outer_diameter as i64 / 2;
+                        let outer_radius = *outer_diameter as i64 / 2;
                         let inner_radius = *inner_diameter as i64 / 2;
                         let dist_sq = dx * dx + dy * dy;
-                        if dist_sq <= outer_radius * outer_radius && dist_sq >= inner_radius * inner_radius {
+                        if dist_sq <= outer_radius * outer_radius
+                            && dist_sq >= inner_radius * inner_radius
+                        {
                             return false;
                         }
                     }

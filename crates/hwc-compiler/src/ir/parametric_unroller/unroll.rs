@@ -113,10 +113,10 @@ pub fn unroll_for_loop(
                 SpaceStatement::ForLoop(nested_loop) => {
                     // Recursively unroll nested loops
                     let nested_unrolled = unroll_for_loop(nested_loop, _symbol_table)?;
-                    
-                    // CRITICAL FIX (v0.1.7): After unrolling a nested loop, we MUST substitute 
+
+                    // CRITICAL FIX (v0.1.7): After unrolling a nested loop, we MUST substitute
                     // the current loop variable into ALL statements returned from the inner loop.
-                    // Otherwise, nested loops like 'for i ... for j ... [x: i + j]' will fail 
+                    // Otherwise, nested loops like 'for i ... for j ... [x: i + j]' will fail
                     // because 'i' remains unresolved in the final output.
                     for comp in nested_unrolled.components {
                         components.push(unroll_component(&comp, &for_loop.variable, i)?);

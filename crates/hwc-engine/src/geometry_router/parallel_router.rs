@@ -215,8 +215,8 @@ impl ParallelRouter {
                     clearance_zones: &[], // No clearance zones within domain (simplified for v0.1.4.2)
                     occupied_voxels: &occupied_voxels,
                     voxel_grid: Some(&domain.local_grid), // Pass VoxelGrid for collision detection
-                    corridor: None, // No corridor constraint for local routing
-                    fixed_z_nm: None, // v0.1.7: No fixed Z for local routing yet
+                    corridor: None,         // No corridor constraint for local routing
+                    fixed_z_nm: None,       // v0.1.7: No fixed Z for local routing yet
                     exempt_components: &[], // v0.1.7: No exemptions for local routing yet
                     substrate_layers: None, // v0.1.7: No substrate context in parallel routing
                     is_high_speed_net: false, // v0.1.7: Default to non-high-speed

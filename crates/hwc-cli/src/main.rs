@@ -231,7 +231,6 @@ fn main() {
 }
 
 fn run() -> Result<()> {
-
     let cli = Cli::parse();
 
     match cli.command {
@@ -254,30 +253,28 @@ fn run() -> Result<()> {
             all,
             deny_warnings,
             tolerance,
-        } => {
-            commands::build::execute(
-                input,
-                output,
-                formats,
-                commands::build::BuildConfig {
-                    skip_drc,
-                    skip_physics,
-                    skip_connectivity_check,
-                    skip_alignment,
-                    skip_physical_continuity,
-                    skip_bulk_validation,
-                    no_lockfile,
-                    force_reroute,
-                    force_export,
-                    verbose,
-                    limit,
-                    all,
-                    deny_warnings,
-                    space,
-                    tolerance,
-                },
-            )
-        }
+        } => commands::build::execute(
+            input,
+            output,
+            formats,
+            commands::build::BuildConfig {
+                skip_drc,
+                skip_physics,
+                skip_connectivity_check,
+                skip_alignment,
+                skip_physical_continuity,
+                skip_bulk_validation,
+                no_lockfile,
+                force_reroute,
+                force_export,
+                verbose,
+                limit,
+                all,
+                deny_warnings,
+                space,
+                tolerance,
+            },
+        ),
         Commands::Drc { input, build_dir } => commands::drc::execute(input, build_dir),
         Commands::Physics {
             input,

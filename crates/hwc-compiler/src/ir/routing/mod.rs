@@ -7,7 +7,9 @@ mod manual;
 
 pub use automatic::route_automatic;
 pub use global::AutoRouter;
-pub use helpers::{collect_existing_nets, get_pin_positions, needs_automatic_routing, register_net_for_route};
+pub use helpers::{
+    collect_existing_nets, get_pin_positions, needs_automatic_routing, register_net_for_route,
+};
 pub use manual::route_manual;
 
 use super::errors::IrError;
@@ -29,7 +31,15 @@ pub fn route_trace(
     if needs_automatic_routing(route) {
         route_automatic(space, route, symbol_table, stackup_manager)
     } else {
-        route_manual(space, route, origin, symbol_table, eval_context, stackup_manager, profile)
+        route_manual(
+            space,
+            route,
+            origin,
+            symbol_table,
+            eval_context,
+            stackup_manager,
+            profile,
+        )
     }
 }
 

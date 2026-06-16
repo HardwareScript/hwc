@@ -3,8 +3,8 @@
 use super::exporters::export_glb;
 use super::materials::{add_materials_from_symbol_table, SceneGraphError};
 use super::mesh_generation::create_box_mesh;
-// 
-// 
+//
+//
 use super::substrate::add_substrate;
 use super::types::{BoxParams, FaceCulling, MaterialNode, MeshNode};
 use compact_str::CompactString;
@@ -40,9 +40,20 @@ impl SceneGraph {
     }
 
     /// Helper: Add a box mesh to the scene
-    pub fn add_box_mesh(&mut self, name: &str, params: BoxParams, material_name: &str, view: SpaceView) {
-        self.meshes
-            .push(create_box_mesh(name, params, material_name, view, FaceCulling::none()));
+    pub fn add_box_mesh(
+        &mut self,
+        name: &str,
+        params: BoxParams,
+        material_name: &str,
+        view: SpaceView,
+    ) {
+        self.meshes.push(create_box_mesh(
+            name,
+            params,
+            material_name,
+            view,
+            FaceCulling::none(),
+        ));
     }
 
     /// Add copper traces from analytic routes (v0.1.7)

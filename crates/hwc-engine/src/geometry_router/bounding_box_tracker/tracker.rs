@@ -1,62 +1,8 @@
-//! # BoundingBoxTracker: Minkowski Obstacle Inflation (v0.1.7)
-//!
-//! **Architectural Reference:**
-//! - `Docs/v0.1.7/ROUTING-AND-MANUFACTURING-ARCHITECTURE.md` (Section 4.2)
-//! - `ROADMAP/v0.1.7/BASE-IMPLEMENTATION-ROADMAP.md` (Section 1.2)
-//!
-//! ## Purpose
-//! Instead of allocating billions of voxels to enforce clearances, the router
-//! utilizes **Minkowski Sum / Obstacle Inflation**:
-//!
-//! 1. Queries the `BoundingBoxTracker` for all obstacle AABBs on the active layer.
-//! 2. Inflates each obstacle's bounding box by: $Inflation = \frac{Width}{2} + Clearance$.
-//! 3. The pathfinder routes an infinitesimally thin mathematical ray around these
-//!    inflated boundaries, guaranteeing exact clearance with O(1) collision overhead.
-//!
-//! ## The Math
-//! Given a trace of width W and a minimum clearance C:
-//! - The Minkowski sum of the trace (a segment of width W) with an obstacle AABB
-//!   is equivalent to expanding the AABB by (W/2 + C) in XY directions while
-//!   keeping full Z extent.
-//! - Since we route a "zero-width" ray, the inflated AABB automatically enforces
-//!   both trace width clearance AND inter-net clearance in one operation.
-//!
-//! ## Integration
-//! - **Pass 2 (Obstacle Blitting)**: Components and previously routed traces are
-//!   registered as obstacles with their inflation parameters.
-//! - **Pass 3 (Parallel 2.5D Auto-Routing)**: The SDF generator uses inflated
-//!   AABBs for analytic distance calculation - obstacles are already "fat".
-//! - **No voxel-level clearance checking needed** - clearance is baked into the
-//!   obstacle geometry itself.
-
 use crate::geometry::{BoundingBox, Point3D};
 use compact_str::CompactString;
 use rustc_hash::FxHashMap;
 
-/// A tracked obstacle with its metadata and pre-computed XY inflation.
-#[derive(Debug, Clone)]
-pub struct TrackedObstacle {
-    /// The original (uninflated) bounding box of the obstacle in nanometers.
-    pub original_bbox: BoundingBox,
-
-    /// The Minkowski-inflated bounding box used for collision queries.
-    /// Expands original_bbox by `inflation_nm` in X and Y directions.
-    pub inflated_bbox: BoundingBox,
-
-    /// The inflation margin applied in nanometers.
-    /// Computed as: trace_width_nm / 2 + clearance_nm
-    pub inflation_nm: i64,
-
-    /// The Z-layer / plane this obstacle lives on (derived from bbox min.z).
-    /// Used for layer-specific queries.
-    pub layer_z_nm: i64,
-
-    /// Name of the obstacle (component name, net name, etc.)
-    pub name: CompactString,
-
-    /// Type descriptor (e.g., "Component", "Trace", "Via", "Keepout")
-    pub obstacle_type: CompactString,
-}
+use super::types::TrackedObstacle;
 
 /// BoundingBoxTracker: The spatial index for Minkowski-inflated obstacle queries.
 ///
@@ -143,18 +89,9 @@ impl BoundingBoxTracker {
         name: CompactString,
         obstacle_type: CompactString,
     ) -> i64 {
-        // Minkowski inflation formula:
-        // inflation = trace_width / 2 + clearance
-        // This ensures the inflated AABB guarantees both:
-        // 1. Trace width clearance (trace won't overlap with obstacle)
-        // 2. Inter-net clearance (trace won't violate minimum spacing)
         let half_width = trace_width_nm / 2;
         let inflation_nm = half_width + clearance_nm;
 
-        // Apply inflation only in XY (Z remains un-inflated for planar routing)
-        // The Minkowski sum of a segment with width W and an AABB:
-        // - In XY: Expand by half-width in all directions
-        // - In Z: Obstacles block the full Z height of their layer
         let inflated_bbox = BoundingBox {
             min: Point3D::new(
                 bbox.min.x - inflation_nm,
@@ -168,7 +105,6 @@ impl BoundingBoxTracker {
             ),
         };
 
-        // Determine the Z-plane for this obstacle (use mid-Z of the bbox)
         let layer_z_nm = bbox.min.z;
 
         let obstacle = TrackedObstacle {
@@ -180,13 +116,11 @@ impl BoundingBoxTracker {
             obstacle_type,
         };
 
-        // Insert into layer index
         self.by_layer
             .entry(layer_z_nm)
             .or_default()
             .push(obstacle.clone());
 
-        // Maintain flat list
         self.all_obstacles.push(obstacle);
         self.count += 1;
 
@@ -236,7 +170,6 @@ impl BoundingBoxTracker {
         clearance_nm: i64,
         net_name: CompactString,
     ) -> i64 {
-        // Build bounding box from trace segment (including its own half-width)
         let half_existing = existing_trace_width_nm / 2;
         let bbox = BoundingBox {
             min: Point3D::new(
@@ -251,8 +184,6 @@ impl BoundingBoxTracker {
             ),
         };
 
-        // The inflation for new traces: use the NEW trace's half-width + clearance
-        // This ensures the NEW trace routed alongside maintains proper spacing
         self.register_obstacle(
             bbox,
             new_trace_width_nm,
@@ -274,6 +205,7 @@ impl BoundingBoxTracker {
     /// * `trace_width_nm` - Width of trace being routed (for inflation).
     /// * `clearance_nm` - Clearance for inflation.
     /// * `net_name` - Net name.
+    #[allow(clippy::too_many_arguments)]
     pub fn register_via(
         &mut self,
         x_nm: i64,
@@ -380,12 +312,10 @@ impl BoundingBoxTracker {
     /// # Returns
     /// Reference to the first containing obstacle, or None.
     pub fn point_collides(&self, point: Point3D, z_nm: i64) -> Option<&TrackedObstacle> {
-        for obstacle in self.query_layer(z_nm) {
-            if obstacle.inflated_bbox.contains(point) {
-                return Some(obstacle);
-            }
-        }
-        None
+        self.query_layer(z_nm)
+            .iter()
+            .find(|&obstacle| obstacle.inflated_bbox.contains(point))
+            .map(|v| v as _)
     }
 
     /// Check if a bounding box intersects any inflated obstacle on a given layer.
@@ -399,12 +329,10 @@ impl BoundingBoxTracker {
     /// # Returns
     /// Reference to the first intersecting obstacle, or None.
     pub fn bbox_collides(&self, bbox: &BoundingBox, z_nm: i64) -> Option<&TrackedObstacle> {
-        for obstacle in self.query_layer(z_nm) {
-            if obstacle.inflated_bbox.intersects(bbox) {
-                return Some(obstacle);
-            }
-        }
-        None
+        self.query_layer(z_nm)
+            .iter()
+            .find(|&obstacle| obstacle.inflated_bbox.intersects(bbox))
+            .map(|v| v as _)
     }
 
     /// Get all Minkowski-inflated AABBs on a given layer (for SDF registration).
@@ -456,27 +384,10 @@ impl Default for BoundingBoxTracker {
     }
 }
 
-// ============================================================================
-// TESTS
-// ============================================================================
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    /// Test basic Minkowski inflation calculation.
-    ///
-    /// Given a component at (10mm, 10mm) with size (2mm x 4mm),
-    /// trace width 0.2mm, clearance 0.15mm:
-    ///
-    /// Inflation = 0.2mm/2 + 0.15mm = 0.25mm
-    ///
-    /// Expected inflated bbox:
-    /// - min.x = 10mm - 0.25mm = 9.75mm → 9_750_000nm
-    /// - max.x = 12mm + 0.25mm = 12.25mm → 12_250_000nm
-    /// - min.y = 10mm - 0.25mm = 9.75mm → 9_750_000nm
-    /// - max.y = 14mm + 0.25mm = 14.25mm → 14_250_000nm
-    /// - Z is unchanged (planar routing)
     #[test]
     fn test_minkowski_inflation_basic() {
         let mut tracker = BoundingBoxTracker::new();
@@ -486,49 +397,36 @@ mod tests {
             Point3D::new(12_000_000, 14_000_000, 500_000),
         );
 
-        let inflation = tracker.register_obstacle(
-            bbox,
-            200_000, // trace_width_nm = 0.2mm
-            150_000, // clearance_nm = 0.15mm
-            "U1".into(),
-            "Component".into(),
-        );
+        let inflation =
+            tracker.register_obstacle(bbox, 200_000, 150_000, "U1".into(), "Component".into());
 
-        // Inflation = 200_000/2 + 150_000 = 250_000
         assert_eq!(inflation, 250_000);
 
         let obstacles = tracker.query_layer(500_000);
         assert_eq!(obstacles.len(), 1);
 
         let inflated = &obstacles[0].inflated_bbox;
-        assert_eq!(inflated.min.x, 9_750_000);  // 10mm - 0.25mm
-        assert_eq!(inflated.max.x, 12_250_000);  // 12mm + 0.25mm
-        assert_eq!(inflated.min.y, 9_750_000);   // 10mm - 0.25mm
-        assert_eq!(inflated.max.y, 14_250_000);  // 14mm + 0.25mm
+        assert_eq!(inflated.min.x, 9_750_000);
+        assert_eq!(inflated.max.x, 12_250_000);
+        assert_eq!(inflated.min.y, 9_750_000);
+        assert_eq!(inflated.max.y, 14_250_000);
 
-        // Z should be unchanged (planar routing)
         assert_eq!(inflated.min.z, 500_000);
         assert_eq!(inflated.max.z, 500_000);
     }
 
-    /// Test that multiple layers are tracked independently.
     #[test]
     fn test_multi_layer_obstacles() {
         let mut tracker = BoundingBoxTracker::new();
 
-        // Top layer obstacle
         tracker.register_obstacle(
-            BoundingBox::new(
-                Point3D::new(0, 0, 0),
-                Point3D::new(1_000_000, 1_000_000, 0),
-            ),
+            BoundingBox::new(Point3D::new(0, 0, 0), Point3D::new(1_000_000, 1_000_000, 0)),
             200_000,
             150_000,
             "TOP_OBSTACLE".into(),
             "Component".into(),
         );
 
-        // Bottom layer obstacle
         tracker.register_obstacle(
             BoundingBox::new(
                 Point3D::new(0, 0, 2_000_000),
@@ -540,70 +438,49 @@ mod tests {
             "Component".into(),
         );
 
-        // Query top layer should only return top obstacle
         let top_obstacles = tracker.query_layer(0);
         assert_eq!(top_obstacles.len(), 1);
         assert_eq!(top_obstacles[0].name.as_str(), "TOP_OBSTACLE");
 
-        // Query bottom layer should only return bottom obstacle
         let bottom_obstacles = tracker.query_layer(2_000_000);
         assert_eq!(bottom_obstacles.len(), 1);
         assert_eq!(bottom_obstacles[0].name.as_str(), "BOTTOM_OBSTACLE");
 
-        // Query non-existent layer should return empty
         let empty = tracker.query_layer(1_000_000);
         assert!(empty.is_empty());
 
-        // Total count should be 2
         assert_eq!(tracker.len(), 2);
         assert_eq!(tracker.layer_count(), 2);
     }
 
-    /// Test point collision detection with inflated AABBs.
     #[test]
     fn test_point_collision() {
         let mut tracker = BoundingBoxTracker::new();
 
-        // Obstacle at (5mm, 5mm) size (1mm x 1mm)
         let bbox = BoundingBox::new(
             Point3D::new(5_000_000, 5_000_000, 0),
             Point3D::new(6_000_000, 6_000_000, 0),
         );
 
-        tracker.register_obstacle(
-            bbox,
-            200_000, // trace_width_nm
-            100_000, // clearance_nm
-            "R1".into(),
-            "Resistor".into(),
-        );
+        tracker.register_obstacle(bbox, 200_000, 100_000, "R1".into(), "Resistor".into());
 
-        // Inflation = 200_000/2 + 100_000 = 200_000nm
-        // Inflated bbox: min=(4_800_000, 4_800_000), max=(6_200_000, 6_200_000)
-
-        // Point inside inflated bbox (should collide)
         let inside = Point3D::new(5_500_000, 5_500_000, 0);
         assert!(tracker.point_collides(inside, 0).is_some());
 
-        // Point at edge of inflated bbox (should collide)
         let edge = Point3D::new(6_200_000, 5_500_000, 0);
         assert!(tracker.point_collides(edge, 0).is_some());
 
-        // Point outside inflated bbox (should NOT collide)
         let outside = Point3D::new(6_300_000, 5_500_000, 0);
         assert!(tracker.point_collides(outside, 0).is_none());
 
-        // Point on different layer (should NOT collide)
         let different_layer = Point3D::new(5_500_000, 5_500_000, 1_000_000);
         assert!(tracker.point_collides(different_layer, 1_000_000).is_none());
     }
 
-    /// Test bounding box collision detection.
     #[test]
     fn test_bbox_collision() {
         let mut tracker = BoundingBoxTracker::new();
 
-        // Obstacle spanning a Z-range (e.g., a component with thickness)
         let bbox = BoundingBox::new(
             Point3D::new(0, 0, 0),
             Point3D::new(1_000_000, 1_000_000, 100_000),
@@ -611,10 +488,6 @@ mod tests {
 
         tracker.register_obstacle(bbox, 200_000, 100_000, "C1".into(), "Capacitor".into());
 
-        // Inflation = 200_000/2 + 100_000 = 200_000nm
-        // Inflated bbox: min=(-200_000, -200_000, 0), max=(1_200_000, 1_200_000, 100_000)
-
-        // Query bbox that overlaps inflated obstacle (min corner inside inflated region in XY)
         let overlapping = BoundingBox::new(
             Point3D::new(1_100_000, 1_100_000, 0),
             Point3D::new(2_000_000, 2_000_000, 50_000),
@@ -624,7 +497,6 @@ mod tests {
             "Overlapping bbox should collide (min corner inside inflated region in XY)"
         );
 
-        // Query bbox that does NOT overlap (min is beyond inflated max in XY)
         let far = BoundingBox::new(
             Point3D::new(1_300_000, 1_300_000, 0),
             Point3D::new(2_000_000, 2_000_000, 50_000),
@@ -634,7 +506,6 @@ mod tests {
             "Far bbox should not collide"
         );
 
-        // Query bbox on a different Z layer should NOT collide
         let different_z = BoundingBox::new(
             Point3D::new(500_000, 500_000, 200_000),
             Point3D::new(600_000, 600_000, 300_000),
@@ -645,21 +516,19 @@ mod tests {
         );
     }
 
-    /// Test trace registration as obstacle.
     #[test]
     fn test_trace_registration() {
         let mut tracker = BoundingBoxTracker::new();
 
-        // Register a trace from (0,0) to (10mm, 0) with width 0.2mm
         let trace_start = Point3D::new(0, 0, 0);
         let trace_end = Point3D::new(10_000_000, 0, 0);
 
         tracker.register_trace(
             trace_start,
             trace_end,
-            200_000, // existing trace width
-            200_000, // new trace width
-            150_000, // clearance
+            200_000,
+            200_000,
+            150_000,
             "NET_VCC".into(),
         );
 
@@ -670,53 +539,38 @@ mod tests {
         assert_eq!(obs.name.as_str(), "NET_VCC");
         assert_eq!(obs.obstacle_type.as_str(), "Trace");
 
-        // The original bbox should include the trace's own half-width
-        // half_existing = 200_000/2 = 100_000
-        // original min.x = min(0, 10_000_000) - 100_000 = -100_000
         assert_eq!(obs.original_bbox.min.x, -100_000);
         assert_eq!(obs.original_bbox.max.x, 10_100_000);
 
-        // Inflation = 200_000/2 + 150_000 = 250_000
-        // inflated min.x = -100_000 - 250_000 = -350_000
         assert_eq!(obs.inflated_bbox.min.x, -350_000);
         assert_eq!(obs.inflated_bbox.max.x, 10_350_000);
     }
 
-    /// Test via registration as obstacle.
     #[test]
     fn test_via_registration() {
         let mut tracker = BoundingBoxTracker::new();
 
-        // Register a via at (5mm, 5mm) spanning z=0 to z=1mm
-        // diameter = 0.3mm, annular ring = 0.1mm
         tracker.register_via(
-            5_000_000,   // x_nm
-            5_000_000,   // y_nm
-            0,           // from_z_nm
-            1_000_000,   // to_z_nm
-            300_000,     // diameter_nm
-            100_000,     // annular_ring_nm
-            200_000,     // trace_width_nm
-            150_000,     // clearance_nm
+            5_000_000,
+            5_000_000,
+            0,
+            1_000_000,
+            300_000,
+            100_000,
+            200_000,
+            150_000,
             "NET_VIA".into(),
         );
-
-        // Via radius = 300_000/2 + 100_000 = 250_000
-        // So via sits at x: 4_750_000 to 5_250_000 (before inflation)
-        // Then inflation = 200_000/2 + 150_000 = 250_000
-        // So inflated goes to x: 4_750_000 - 250_000 = 4_500_000
 
         let obstacles = tracker.query_layer(0);
         assert_eq!(obstacles.len(), 1);
         assert_eq!(obstacles[0].name.as_str(), "NET_VIA");
         assert_eq!(obstacles[0].obstacle_type.as_str(), "Via");
 
-        // Via spans multiple layers - should be findable on multiple Z queries
         let z_range_obs = tracker.query_z_range(0, 1_000_000);
         assert_eq!(z_range_obs.len(), 1);
     }
 
-    /// Test inflated AABBs retrieval for SDF registration.
     #[test]
     fn test_inflated_aabbs_for_sdf() {
         let mut tracker = BoundingBoxTracker::new();
@@ -745,14 +599,8 @@ mod tests {
 
         let aabbs = tracker.get_inflated_aabbs_for_sdf(0);
         assert_eq!(aabbs.len(), 2);
-
-        // These AABBs can be directly passed to SdfGenerator::register_obstacle_bbox
-        // The SDF will then calculate distances to the INFLATED boundaries
-        // So a "zero-width" ray that stays outside these AABBs automatically
-        // satisfies all clearance constraints.
     }
 
-    /// Test that `compute_inflated_bbox` works correctly without registration.
     #[test]
     fn test_compute_inflated_bbox() {
         let tracker = BoundingBoxTracker::new();
@@ -764,26 +612,20 @@ mod tests {
 
         let inflated = tracker.compute_inflated_bbox(&original, 400_000, 200_000);
 
-        // Inflation = 400_000/2 + 200_000 = 400_000
-        assert_eq!(inflated.min.x, 9_600_000);  // 10mm - 0.4mm
-        assert_eq!(inflated.max.x, 20_400_000); // 20mm + 0.4mm
+        assert_eq!(inflated.min.x, 9_600_000);
+        assert_eq!(inflated.max.x, 20_400_000);
         assert_eq!(inflated.min.y, 9_600_000);
         assert_eq!(inflated.max.y, 20_400_000);
-        // Z unchanged
         assert_eq!(inflated.min.z, 500_000);
         assert_eq!(inflated.max.z, 500_000);
     }
 
-    /// Test that clear() resets the tracker.
     #[test]
     fn test_clear() {
         let mut tracker = BoundingBoxTracker::new();
 
         tracker.register_obstacle(
-            BoundingBox::new(
-                Point3D::new(0, 0, 0),
-                Point3D::new(1_000_000, 1_000_000, 0),
-            ),
+            BoundingBox::new(Point3D::new(0, 0, 0), Point3D::new(1_000_000, 1_000_000, 0)),
             200_000,
             100_000,
             "D1".into(),
@@ -800,35 +642,42 @@ mod tests {
         assert_eq!(tracker.layer_count(), 0);
     }
 
-    /// Test that Z-range query works for vertical obstacles like vias.
     #[test]
     fn test_z_range_query() {
         let mut tracker = BoundingBoxTracker::new();
 
-        // Short via on top layers (z=0 to z=100um)
         tracker.register_via(
-            1_000_000, 1_000_000,
-            0, 100_000,
-            200_000, 50_000,
-            200_000, 100_000,
+            1_000_000,
+            1_000_000,
+            0,
+            100_000,
+            200_000,
+            50_000,
+            200_000,
+            100_000,
             "VIA_TOP".into(),
         );
 
-        // Tall via through whole board (z=0 to z=1mm)
         tracker.register_via(
-            2_000_000, 2_000_000,
-            0, 1_000_000,
-            300_000, 100_000,
-            200_000, 100_000,
+            2_000_000,
+            2_000_000,
+            0,
+            1_000_000,
+            300_000,
+            100_000,
+            200_000,
+            100_000,
             "VIA_THROUGH".into(),
         );
 
-        // Query only middle layers (z=200um to z=800um)
         let middle = tracker.query_z_range(200_000, 800_000);
-        assert_eq!(middle.len(), 1, "Only the through-hole via should intersect");
+        assert_eq!(
+            middle.len(),
+            1,
+            "Only the through-hole via should intersect"
+        );
         assert_eq!(middle[0].name.as_str(), "VIA_THROUGH");
 
-        // Query all layers
         let all = tracker.query_z_range(0, 1_000_000);
         assert_eq!(all.len(), 2, "Both vias should intersect full range");
     }

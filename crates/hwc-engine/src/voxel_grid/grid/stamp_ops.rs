@@ -73,12 +73,7 @@ impl VoxelGrid {
     ///
     /// This is used to synchronize the physical voxel metadata with the logical netlist
     /// when a route is registered.
-    pub fn set_pin_net(
-        &mut self,
-        component_name: &str,
-        pin_name: &str,
-        net_name: &str,
-    ) {
+    pub fn set_pin_net(&mut self, component_name: &str, pin_name: &str, net_name: &str) {
         // Update physical continuity pins (v0.1.6)
         // These are used by the netlist extractor and physics validator.
         for pin in &mut self.component_pins {
@@ -137,13 +132,13 @@ impl VoxelGrid {
             // Check against existing components
             for existing in &self.component_metadata {
                 // Simple AABB collision check
-                if metadata.bbox.min.x < existing.bbox.max.x &&
-                   metadata.bbox.max.x > existing.bbox.min.x &&
-                   metadata.bbox.min.y < existing.bbox.max.y &&
-                   metadata.bbox.max.y > existing.bbox.min.y &&
-                   metadata.bbox.min.z < existing.bbox.max.z &&
-                   metadata.bbox.max.z > existing.bbox.min.z {
-                    
+                if metadata.bbox.min.x < existing.bbox.max.x
+                    && metadata.bbox.max.x > existing.bbox.min.x
+                    && metadata.bbox.min.y < existing.bbox.max.y
+                    && metadata.bbox.max.y > existing.bbox.min.y
+                    && metadata.bbox.min.z < existing.bbox.max.z
+                    && metadata.bbox.max.z > existing.bbox.min.z
+                {
                     return Err(PlacementError::Collision {
                         component: metadata.name.clone(),
                         position: metadata.bbox.min,
@@ -195,7 +190,7 @@ impl VoxelGrid {
                 if dx * dx + dy * dy <= r_sq {
                     let px = cx + dx;
                     let py = cy + dy;
-                    
+
                     if px >= 0 && py >= 0 {
                         let ux = px as usize;
                         let uy = py as usize;
@@ -249,15 +244,15 @@ impl VoxelGrid {
 
         for z in vz_start..=vz_end {
             // 1. Stamp the outer liner (insulator)
-             // Insulator has no net handle (handle 0)
-             self.stamp_cylinder(
-                 vx,
-                 vy,
-                 z,
-                 total_radius_voxels,
-                 params.stack.liner_material,
-                 crate::netlist::NetHandle::none(),
-             );
+            // Insulator has no net handle (handle 0)
+            self.stamp_cylinder(
+                vx,
+                vy,
+                z,
+                total_radius_voxels,
+                params.stack.liner_material,
+                crate::netlist::NetHandle::none(),
+            );
 
             // 2. Stamp the bridge (if present)
             if let Some(bridge_mat) = params.stack.bridge_material {
@@ -265,7 +260,14 @@ impl VoxelGrid {
             }
 
             // 3. Stamp the conductive fill core
-            self.stamp_cylinder(vx, vy, z, fill_radius_voxels, params.stack.fill_material, handle);
+            self.stamp_cylinder(
+                vx,
+                vy,
+                z,
+                fill_radius_voxels,
+                params.stack.fill_material,
+                handle,
+            );
         }
     }
 }

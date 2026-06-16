@@ -1,8 +1,8 @@
 use hwc_compiler::SymbolTable;
 use hwc_diagnostics::DiagnosticCollector;
 use hwc_parser::{
-    Identifier, MaterialCategory, MaterialDefinition, Measurement, Property, PropertyValue, Span,
-    Unit,
+    Identifier, ManufacturingProcess, MaterialCategory, MaterialDefinition, Measurement, Property,
+    PropertyValue, Span, Unit,
 };
 use hwc_physics::thermal::ThermalAnalysisParams;
 use hwc_physics::ThermalAnalyzer;
@@ -12,6 +12,7 @@ fn create_copper_material() -> MaterialDefinition {
     MaterialDefinition {
         name: Identifier::with_dummy_span("Copper"),
         category: MaterialCategory::Conductor,
+        process: ManufacturingProcess::default(),
         symbol: Some("Cu".into()),
         description: Some("Standard PCB trace material".into()),
         properties: vec![Property {
@@ -29,6 +30,13 @@ fn create_copper_material() -> MaterialDefinition {
         outline_opacity: None,
         roughness: None,
         metallic: None,
+        ior: None,
+        clearcoat: None,
+        clearcoat_roughness: None,
+        subsurface: None,
+        anisotropy: None,
+        anisotropy_rotation: None,
+        texture: None,
     }
 }
 
@@ -37,6 +45,7 @@ fn create_aluminum_material() -> MaterialDefinition {
     MaterialDefinition {
         name: Identifier::with_dummy_span("Aluminum"),
         category: MaterialCategory::Conductor,
+        process: ManufacturingProcess::default(),
         symbol: Some("Al".into()),
         description: Some("Alternative conductor material".into()),
         properties: vec![Property {
@@ -54,6 +63,13 @@ fn create_aluminum_material() -> MaterialDefinition {
         outline_opacity: None,
         roughness: None,
         metallic: None,
+        ior: None,
+        clearcoat: None,
+        clearcoat_roughness: None,
+        subsurface: None,
+        anisotropy: None,
+        anisotropy_rotation: None,
+        texture: None,
     }
 }
 

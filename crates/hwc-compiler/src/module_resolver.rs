@@ -346,7 +346,8 @@ impl ModuleResolver {
             error: format!("{:?}", e),
         })?;
 
-        let collector = crate::DiagnosticCollector::new_with_file(&source, &path.to_string_lossy(), 20);
+        let collector =
+            crate::DiagnosticCollector::new_with_file(&source, &path.to_string_lossy(), 20);
         let mut parser = Parser::new(tokens);
         let program = parser.parse(&collector);
 
@@ -387,7 +388,7 @@ impl ModuleResolver {
                 Ok(())
             }
             Definition::Profile(profile) => {
-                symbol_table.register_import_profile(profile.clone());
+                symbol_table.register_import_profile(*profile.clone());
                 Ok(())
             }
             Definition::Component(component) => {

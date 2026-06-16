@@ -91,16 +91,16 @@ impl MaterialRegistry {
             name_to_id: FxHashMap::default(),
             id_to_name: vec!["Air".into()],
             id_to_conductivity: vec![MaterialConductivity::Insulator], // Air is an insulator
-            id_to_process: vec![ManufacturingProcess::Deposited],     // Air is deposited
+            id_to_process: vec![ManufacturingProcess::Deposited],      // Air is deposited
         };
 
         registry.name_to_id.insert("Air".into(), AIR_MATERIAL_ID);
-        
+
         // v0.1.7: Default "Reality as Code" materials
         registry.register_with_conductivity("Copper", MaterialConductivity::Conductor);
         registry.register_with_conductivity("FR4", MaterialConductivity::Insulator);
         registry.register_with_conductivity("Component", MaterialConductivity::Insulator);
-        
+
         registry
     }
 
@@ -200,7 +200,9 @@ impl MaterialRegistry {
     ) {
         // Map hwc_materials process to engine process
         let map_process = |p: hwc_materials::ManufacturingProcess| match p {
-            hwc_materials::ManufacturingProcess::DrilledPlated => ManufacturingProcess::DrilledPlated,
+            hwc_materials::ManufacturingProcess::DrilledPlated => {
+                ManufacturingProcess::DrilledPlated
+            }
             hwc_materials::ManufacturingProcess::Deposited => ManufacturingProcess::Deposited,
             hwc_materials::ManufacturingProcess::Etched => ManufacturingProcess::Etched,
         };
