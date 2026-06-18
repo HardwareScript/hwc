@@ -201,6 +201,9 @@ pub struct NetDeclaration {
     pub name: CompactString,
     pub classification: NetClassification,
     pub potential_mv: Option<i64>, // Optional voltage in millivolts
+    /// v0.1.7: Optional signal frequency in Hz (e.g., 5_000_000_000.0 for 5 GHz).
+    /// Used to classify high-speed nets that must avoid reference-plane voids.
+    pub frequency_hz: Option<f64>,
     pub span: Span,
 }
 

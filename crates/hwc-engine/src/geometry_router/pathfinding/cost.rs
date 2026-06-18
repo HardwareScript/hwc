@@ -139,13 +139,14 @@ pub fn calculate_move_cost(params: &MoveCostParams) -> i64 {
     // and apply an extreme penalty to force the router to deviate.
     if params.is_high_speed_net {
         if let Some(substrate_layers) = params.substrate_layers {
-            // Look for a reference plane (Pour type) below the current routing layer
-            let ref_z = params.to.z - params.voxel_size_nm; // One layer below
+            // Look for a reference plane (Pour type) at the same Z as the target.
+            // A point is "over a void" if it is within the pour's bounding box
+            // but NOT contained by `contains_nm` (which excludes cutouts).
             let has_void = substrate_layers.iter().any(|layer| {
                 layer.layer_type == crate::voxel_grid::SubstrateLayerType::Pour
-                    && ref_z >= layer.bbox.min.z
-                    && ref_z <= layer.bbox.max.z
-                    && !layer.bbox.contains(params.to)
+                    && params.to.z >= layer.bbox.min.z
+                    && params.to.z <= layer.bbox.max.z
+                    && !layer.contains_nm(params.to.x, params.to.y, params.to.z)
             });
 
             if has_void {

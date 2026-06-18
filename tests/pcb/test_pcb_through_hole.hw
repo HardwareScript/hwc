@@ -1,0 +1,65 @@
+## PCB Through-Hole Via Test
+##
+## Verifies that the compiler emits a single through-hole via when a trace
+## transitions across multiple layers in an octilinear PCB profile.
+## The router must NOT break down the transition into adjacent-layer vias.
+##
+## Verification criteria:
+## - Compile passes with zero auto-via insertion warnings
+## - Single via created (Total vias inserted: 1)
+## - Single Excellon drill hit at (5.000mm, 2.000mm) spanning top to bottom
+
+import * from @std/primitives/units
+import FR4 from @std/materials/insulators
+import Copper from @std/materials/conductors
+
+profile PCB_4_LAYER:
+    description: "Standard 4-layer PCB with mechanical through-holes"
+    stackup:
+        top:    [material: Copper, thickness: 35um]
+        d1:     [material: FR4,    thickness: 200um]
+        inner1: [material: Copper, thickness: 35um]
+        d2:     [material: FR4,    thickness: 965um]
+        bottom: [material: Copper, thickness: 35um]
+
+    via:
+        min_diameter: 0.3mm
+        min_annular_ring: 0.15mm
+        min_spacing: 0.2mm
+
+    trace:
+        min_width: 0.2mm
+        min_spacing: 0.2mm
+
+    bridge Copper to Copper: Copper
+
+    manufacturing:
+        copper_thickness: 35um
+
+    clearance:
+        high_voltage: 2mm
+        safety_factor: 2.0
+
+    layer:
+        min_thickness: 0.1mm
+
+space PCB_ThroughHole_Board:
+    dimensions: 20mm by 20mm by 1.27mm
+    grid: 200 by 200 by 16
+    origin: bl by b
+    profile: PCB_4_LAYER
+
+    nets:
+        NET1: signal
+
+    ## Pour on top copper layer (z=0nm, 35um thick)
+    add pour(Copper) named Top_Pour on z:0um:
+        boundary: [x: 1mm, y: 1mm] to [x: 6mm, y: 3mm]
+        net: NET1
+        thickness: 35um
+
+    ## Pour on bottom copper layer (z=1235000nm = 1.235mm, 35um thick)
+    add pour(Copper) named Bottom_Pour on z:1235um:
+        boundary: [x: 4mm, y: 1mm] to [x: 11mm, y: 11mm]
+        net: NET1
+        thickness: 35um

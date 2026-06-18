@@ -48,7 +48,10 @@ impl GeometryRouter {
             }
 
             // Only create a via if we actually changed layers (not a transient spike)
-            if to_z != from_z {
+            // v0.1.7: Added Z-Threshold to prevent phantom vias from sub-voxel quantization noise.
+            // A via is only real if it spans more than 50% of a voxel height.
+            let z_delta = (to_z - from_z).abs();
+            if to_z != from_z && z_delta > (self.voxel_size_nm / 2) {
                 let diameter_nm = self
                     .constraints
                     .fabrication
@@ -275,8 +278,16 @@ impl GeometryRouter {
             }
         } else {
             // PCB: emit a single through-hole via spanning the full depth
-            let from_z = start_layer_idx as i64 * self.voxel_size_nm;
-            let to_z = end_layer_idx as i64 * self.voxel_size_nm;
+            let from_z = if start_layer_idx < self.layer_z_positions.len() {
+                self.layer_z_positions[start_layer_idx]
+            } else {
+                start_layer_idx as i64 * self.voxel_size_nm
+            };
+            let to_z = if end_layer_idx < self.layer_z_positions.len() {
+                self.layer_z_positions[end_layer_idx]
+            } else {
+                end_layer_idx as i64 * self.voxel_size_nm
+            };
 
             via_tower.push(Via::new_with_type(
                 pos,
@@ -349,14 +360,17 @@ impl GeometryRouter {
         Some(0)
     }
 
-    /// Unroll a detected via into layer-by-layer vias when in ASIC (Manhattan) mode.
+    /// Unroll a detected via into layer-by-layer vias (ASIC) or emit a single
+    /// through-hole via (PCB).
     ///
-    /// When `is_manhattan` is false, returns the original via unchanged.
-    /// When `is_manhattan` is true, splits the via into individual buried vias
-    /// for each adjacent layer pair it spans.
+    /// For ASIC (Manhattan) profiles, splits the via into individual buried vias
+    /// for each adjacent layer pair it spans, with intermediate landing pads.
+    /// For PCB (Octilinear) profiles, emits a single through-hole via spanning
+    /// the full transition depth.
+    ///
+    /// If profile layer info is not available, returns the original via unchanged.
     pub fn unroll_detected_via(&self, via: &Via) -> Vec<Via> {
-        if !self.is_manhattan || self.profile_layers.is_empty() || self.layer_z_positions.is_empty()
-        {
+        if self.profile_layers.is_empty() || self.layer_z_positions.is_empty() {
             return vec![via.clone()];
         }
 

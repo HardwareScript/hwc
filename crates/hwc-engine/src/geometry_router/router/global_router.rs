@@ -57,4 +57,14 @@ impl GCellGrid {
 
         Self { cells }
     }
+
+    /// v0.1.7: Get cell index at absolute coordinate
+    pub fn get_cell_index_at(&self, x: i64, y: i64) -> Option<usize> {
+        for (i, cell) in self.cells.iter().enumerate() {
+            if x >= cell.bbox.min.x && x < cell.bbox.max.x && y >= cell.bbox.min.y && y < cell.bbox.max.y {
+                return Some(i);
+            }
+        }
+        None
+    }
 }

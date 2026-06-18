@@ -1,0 +1,95 @@
+## PCB High-Speed Void Avoidance Test
+##
+## Verifies that high-speed nets (≥1 GHz) avoid reference-plane voids
+## while low-speed nets route straight through.
+##
+## A substrate with a cutout (void) in the center forces the high-speed
+## CLK net (5 GHz) to deviate, while the low-speed DATA net routes straight.
+##
+## Verification criteria:
+## - Compile passes
+## - Both nets are routed
+## - High-speed net path deviates around the void region
+
+import * from @std/primitives/units
+import FR4 from @std/materials/insulators
+import Copper from @std/materials/conductors
+
+profile PCB_4_LAYER_SI:
+    description: "4-layer PCB for SI-aware routing test"
+    stackup:
+        top:    [material: Copper, thickness: 35um]
+        d1:     [material: FR4,    thickness: 200um]
+        inner1: [material: Copper, thickness: 35um]
+        d2:     [material: FR4,    thickness: 965um]
+        bottom: [material: Copper, thickness: 35um]
+
+    via:
+        min_diameter: 0.3mm
+        min_annular_ring: 0.15mm
+        min_spacing: 0.2mm
+
+    trace:
+        min_width: 0.2mm
+        min_spacing: 0.2mm
+
+    bridge Copper to Copper: Copper
+
+    manufacturing:
+        copper_thickness: 35um
+
+    clearance:
+        high_voltage: 2mm
+        safety_factor: 2.0
+
+    layer:
+        min_thickness: 0.1mm
+
+component Pad:
+    pins: [p]
+    layout:
+        shape: Rectangle(1mm, 1mm, 35um)
+        pin_positions:
+            p at [0.5mm, 0.5mm]
+
+space SI_Void_Avoidance_Board:
+    dimensions: 20mm by 20mm by 1.27mm
+    grid: 200 by 200 by 16
+    origin: bl by b
+    profile: PCB_4_LAYER_SI
+
+    nets:
+        GND: ground
+        CLK: signal, frequency: 5GHz
+        DATA: signal
+
+    ## Ground plane on inner copper layer with a cutout (void) in the center
+    add substrate(Copper) spanning [x:1mm, y:1mm, z:270um] to [x:19mm, y:19mm, z:305um]:
+        cutouts:
+            - [x:8mm, y:8mm, z:270um] to [x:12mm, y:12mm, z:305um]
+
+    ## Component placements for CLK net (high-speed, should avoid void)
+    add Pad named R1 at [x: 3mm, y: 10mm, z: 0nm]:
+        net: [p: CLK]
+        floating: true
+
+    add Pad named R2 at [x: 17mm, y: 10mm, z: 0nm]:
+        net: [p: CLK]
+        floating: true
+
+    ## Component placements for DATA net (low-speed, can route through void)
+    add Pad named R3 at [x: 3mm, y: 15mm, z: 0nm]:
+        net: [p: DATA]
+        floating: true
+
+    add Pad named R4 at [x: 17mm, y: 15mm, z: 0nm]:
+        net: [p: DATA]
+        floating: true
+
+    ## Route CLK net (high-speed - should avoid the void)
+    route R1.p to R2.p:
+        net: CLK
+
+    ## Route DATA net (low-speed - can route straight through)
+    route R3.p to R4.p:
+        net: DATA

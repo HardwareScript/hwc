@@ -11,9 +11,9 @@ impl GeometryRouter {
             .cloned()
             .unwrap_or_default();
 
-        let max_x = self.bounds.width_nm - self.voxel_size_nm;
-        let max_y = self.bounds.height_nm - self.voxel_size_nm;
-        let max_z = self.bounds.depth_nm - self.voxel_size_nm;
+        let max_x = self.bounds.width_nm.saturating_sub(1);
+        let max_y = self.bounds.height_nm.saturating_sub(1);
+        let max_z = self.bounds.depth_nm.saturating_sub(1);
         let clamp_coord = |p: crate::geometry::Point3D| -> crate::geometry::Point3D {
             crate::geometry::Point3D::new(
                 p.x.max(0).min(max_x),
@@ -53,6 +53,14 @@ impl GeometryRouter {
             }
         }
 
+        let fixed_z = if !self.is_manhattan {
+            // v0.1.7: Use clamped Z for fixed-plane routing to ensure the trace
+            // stays within the board's routing grid.
+            Some(start.z)
+        } else {
+            None
+        };
+
         let routing_params = crate::geometry_router::pathfinding::RoutingParams {
             net_id: route.net_id,
             constraints: &net_constraints,
@@ -67,10 +75,10 @@ impl GeometryRouter {
             occupied_voxels: &occupied_set,
             voxel_grid: Some(&self.voxel_grid),
             corridor: None,
-            fixed_z_nm: None,
+            fixed_z_nm: fixed_z,
             exempt_components: &exempt_components_vec,
-            substrate_layers: None,
-            is_high_speed_net: false,
+            substrate_layers: self.substrate_layers.as_deref(),
+            is_high_speed_net: self.is_high_speed_net(route.net_id),
         };
 
         let path = route_net_deterministic(start, goal, &routing_params);
@@ -116,7 +124,7 @@ impl GeometryRouter {
 
                 Ok(RoutedNet {
                     net_id: route.net_id,
-                    path,
+                    paths: vec![path],
                     vias: placed_vias,
                 })
             }
@@ -196,7 +204,7 @@ impl GeometryRouter {
 
                 Ok(RoutedNet {
                     net_id: route.net_id,
-                    path,
+                    paths: vec![path],
                     vias: placed_vias,
                 })
             }

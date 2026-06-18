@@ -248,6 +248,23 @@ impl crate::parser::Parser {
             }
 
             self.expect(&Token::Dedent)?;
+
+            // If array_count was provided but no layout/pitch block was found
+            // (e.g. the config block only had 'net:', 'mount:', etc.), create
+            // a default array_config so the array is still properly expanded.
+            if array_count.is_some() && array_config.is_none() {
+                array_config = Some(crate::ast::ArrayConfig {
+                    count: array_count.unwrap(),
+                    layout: crate::ast::ArrayLayout::HorizontalStack,
+                    pitch: crate::ast::Measurement {
+                        value: 1.0,
+                        unit: crate::ast::Unit::Millimeter,
+                        span: Span::new(0, 0),
+                    },
+                    merge_terminals: SmallVec::new(),
+                    span: Span::new(start_pos, self.previous_span().end),
+                });
+            }
         } else if array_count.is_some() {
             // Array syntax without config block - use defaults
             array_config = Some(crate::ast::ArrayConfig {

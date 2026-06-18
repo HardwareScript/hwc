@@ -49,6 +49,9 @@ fn compile_single_space(
     space_def: &hwc_parser::SpaceDefinition,
     symbol_table: &SymbolTable,
     collector: &hwc_diagnostics::DiagnosticCollector,
+    lockfile_path: Option<&std::path::Path>,
+    source_content: Option<&str>,
+    force_reroute: bool,
 ) -> Result<HardwareSpace, IrError> {
     // Sprint 3.8: Process statements in textual order to support anchor references
     //
@@ -215,7 +218,7 @@ fn compile_single_space(
     let mut item_map = rustc_hash::FxHashMap::default();
     let mut last_component_name: Option<compact_str::CompactString> = None;
 
-    // 1. Build the dependency graph and item map
+    // 1. Build the dependency graph and item map (Pass 1: Register all items)
     for (i, item) in placement_items.iter().enumerate() {
         let item_id = match item {
             PlacementItem::Substrate(_) => format!("__substrate_{}", i).into(),
@@ -234,7 +237,26 @@ fn compile_single_space(
         };
 
         graph.add_component(item_id.clone());
-        item_map.insert(item_id.clone(), item);
+        item_map.insert(item_id, item);
+    }
+
+    // Pass 2: Extract dependencies now that all components are registered in the graph
+    for (i, item) in placement_items.iter().enumerate() {
+        let item_id = match item {
+            PlacementItem::Substrate(_) => format!("__substrate_{}", i).into(),
+            PlacementItem::Component(c) => c
+                .name
+                .as_ref()
+                .map(|n| n.to_string())
+                .unwrap_or_else(|| format!("__comp_{}", i).into()),
+            PlacementItem::Pour(p) => p.name.to_string(),
+            PlacementItem::Contact(c) => c
+                .name
+                .as_ref()
+                .map(|n| n.to_string())
+                .unwrap_or_else(|| format!("__contact_{}", i).into()),
+            PlacementItem::Route(_) => format!("__route_{}", i).into(),
+        };
 
         match item {
             PlacementItem::Substrate(s) => {
@@ -256,7 +278,7 @@ fn compile_single_space(
                     last_component_name.as_ref(),
                 );
                 // Update 'last' pointer ONLY for components (as per spec)
-                last_component_name = Some(item_id.clone());
+                last_component_name = Some(item_id);
             }
             PlacementItem::Pour(p) => {
                 if let Some(boundary) = &p.boundary {
@@ -297,8 +319,23 @@ fn compile_single_space(
             }
             PlacementItem::Route(r) => {
                 // Routes depend on the components they connect
-                graph.add_dependency(item_id.clone(), r.from.component.clone());
-                graph.add_dependency(item_id.clone(), r.to.component.clone());
+                // Must resolve component_index (e.g. J0[0]) to match item_map keys
+                let resolve_name = |pr: &hwc_parser::PinReference| -> compact_str::CompactString {
+                    match &pr.component_index {
+                        Some(idx) => {
+                            if let Ok(val) = crate::ir::routing::evaluate_index_expression(idx) {
+                                format!("{}[{}]", pr.component, val).into()
+                            } else {
+                                pr.component.clone()
+                            }
+                        }
+                        None => pr.component.clone(),
+                    }
+                };
+                let from_name = resolve_name(&r.from);
+                let to_name = resolve_name(&r.to);
+                graph.add_dependency(item_id.clone(), from_name);
+                graph.add_dependency(item_id.clone(), to_name);
 
                 // Routes depend on variables used in width
                 if let Some(w) = &r.width {
@@ -485,10 +522,87 @@ fn compile_single_space(
     }
 
     // Phase 3: Execute Auto-Routing Batch
-    if !auto_routes.is_empty() {
-        let mut auto_router =
-            routing::AutoRouter::new(&mut space, symbol_table, &stackup_manager, profile);
+    // v0.1.7: AVS Lock-File Determinism - Load cached routes before routing
+    let mut routes_loaded_from_lock = false;
+    if let Some(path) = lockfile_path {
+        if force_reroute {
+            eprintln!(
+                "[LOCK] --force-reroute: Skipping lockfile load, will re-run A* solver"
+            );
+        } else {
+            match hwc_engine::geometry_router::CompactLockfile::load(path) {
+                Ok(lockfile) => {
+                    // Compute current placement hash
+                    let current_hash = hwc_engine::geometry_router::compute_placement_hash(&space);
+
+                    if lockfile.validate_placement(&current_hash) && !lockfile.instances.is_empty() {
+                        let copper_id = space.material_registry.get_or_register("Copper");
+                        let cached_traces = lockfile.to_analytic_traces(copper_id, &space.netlist);
+                        let route_count = cached_traces.len();
+                        for trace in cached_traces {
+                            space.add_analytic_route(trace);
+                        }
+                        eprintln!(
+                            "[LOCK] Match found for '{}'. Bypassing A* solver. Loading routes directly from project.routes.lock",
+                            space.name
+                        );
+                        eprintln!(
+                            "[LOCK]   Loaded {} cached routes",
+                            route_count
+                        );
+                        routes_loaded_from_lock = true;
+                    } else if !lockfile.validate_placement(&current_hash) {
+                        eprintln!(
+                            "[LOCK] Invalidation detected for '{}'. Discarding lock file and re-running A* pathfinder",
+                            space.name
+                        );
+                    }
+                }
+                Err(hwc_engine::geometry_router::LockfileError::ObsoleteVersion(ver)) => {
+                    eprintln!(
+                        "[LOCK] Obsolete lockfile detected (version {}). Delete the .routes.lock file and rebuild.",
+                        ver
+                    );
+                }
+                Err(hwc_engine::geometry_router::LockfileError::ParseError(e)) => {
+                    eprintln!(
+                        "[LOCK] Failed to parse lockfile: {}. Delete the .routes.lock file and rebuild.",
+                        e
+                    );
+                }
+                Err(hwc_engine::geometry_router::LockfileError::IoError(_)) => {
+                    // File doesn't exist yet — first-time compilation, proceed normally
+                }
+            }
+        }
+    }
+
+    if !auto_routes.is_empty() && !routes_loaded_from_lock {
+        // v0.1.7: Build net frequencies HashMap from space definition's net declarations
+        let mut net_frequencies: rustc_hash::FxHashMap<hwc_engine::netlist::NetId, f64> =
+            rustc_hash::FxHashMap::default();
+        for net_decl in &space_def.nets {
+            if let Some(freq_hz) = net_decl.frequency_hz {
+                if let Some(net_id) = space.netlist.get_net_by_name(&net_decl.name) {
+                    net_frequencies.insert(net_id, freq_hz);
+                }
+            }
+        }
+
+        let mut auto_router = routing::AutoRouter::new(
+            &mut space,
+            symbol_table,
+            &stackup_manager,
+            profile,
+            net_frequencies,
+        );
         auto_router.route_all_nets()?;
+    }
+
+    // v0.1.7: Lock-File Determinism - Save routes to lockfile after routing
+    // This runs whether routes were loaded from cache or freshly computed
+    if let (Some(path), Some(content)) = (lockfile_path, source_content) {
+        save_routes_to_lockfile(path, &space, content);
     }
 
     // v0.1.7: Synchronize net names from pins to bound pours
@@ -603,7 +717,7 @@ pub fn program_to_space(
         })
         .ok_or(IrError::NoSpaceDefinition)?;
 
-    compile_single_space(space_def, symbol_table, collector)
+    compile_single_space(space_def, symbol_table, collector, None, None, false)
 }
 
 /// Transform a parsed program into multiple hardware spaces (one per space definition).
@@ -613,6 +727,20 @@ pub fn program_to_spaces(
     program: &Program,
     symbol_table: &SymbolTable,
     collector: &hwc_diagnostics::DiagnosticCollector,
+) -> Result<rustc_hash::FxHashMap<compact_str::CompactString, HardwareSpace>, IrError> {
+    program_to_spaces_with_lockfile(program, symbol_table, collector, None, None, false)
+}
+
+/// Compile all space definitions into HardwareSpaces with lockfile support.
+///
+/// This is the extended version that supports route lockfiles for deterministic builds.
+pub fn program_to_spaces_with_lockfile(
+    program: &Program,
+    symbol_table: &SymbolTable,
+    collector: &hwc_diagnostics::DiagnosticCollector,
+    lockfile_path: Option<&std::path::Path>,
+    source_content: Option<&str>,
+    force_reroute: bool,
 ) -> Result<rustc_hash::FxHashMap<compact_str::CompactString, HardwareSpace>, IrError> {
     let space_defs: Vec<&hwc_parser::SpaceDefinition> = program
         .definitions
@@ -634,9 +762,50 @@ pub fn program_to_spaces(
 
     for space_def in space_defs {
         let space_name: compact_str::CompactString = space_def.name.to_string().into();
-        let space = compile_single_space(space_def, symbol_table, collector)?;
+        let space = compile_single_space(
+            space_def,
+            symbol_table,
+            collector,
+            lockfile_path,
+            source_content,
+            force_reroute,
+        )?;
         spaces.insert(space_name, space);
     }
 
     Ok(spaces)
 }
+
+/// Save routes from a HardwareSpace to an AVS lockfile (v0.1.7).
+fn save_routes_to_lockfile(
+    path: &std::path::Path,
+    space: &HardwareSpace,
+    _source_content: &str,
+) {
+    use hwc_engine::geometry_router::{CompactLockfile, encode_instances, compute_placement_hash};
+
+    let placement_hash = compute_placement_hash(space);
+    let (arcs, instances) = encode_instances(&space.analytic_routes);
+
+    let lockfile = CompactLockfile {
+        version: "0.1.7".into(),
+        board: space.name.clone(),
+        placement_hash,
+        arcs,
+        instances,
+    };
+
+    let route_count = lockfile.instances.len() / 5;
+
+    if let Err(e) = lockfile.save(path) {
+        eprintln!("[LOCK] Failed to save lockfile: {}", e);
+    } else {
+        eprintln!(
+            "[LOCK] Saved {} routes to {}",
+            route_count,
+            path.display()
+        );
+    }
+}
+
+

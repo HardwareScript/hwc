@@ -1,0 +1,15 @@
+{
+  "version": "0.1.7",
+  "board": "PCB_Lockfile_16Pad",
+  "placement_hash": "45a19a5390420a50",
+  "arcs": [
+    "L12kw"
+  ],
+  "instances": [
+    1,
+    0,
+    28500000,
+    25000000,
+    1287500
+  ]
+}

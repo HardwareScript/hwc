@@ -46,7 +46,7 @@ pub use width_inference::{WidthError, WidthInference};
 // Re-export from modular ir_integration
 pub use alignment_layer::{AlignmentReport, AlignmentViolation}; // Sprint 4.1: Alignment Layer
 pub use ir::routing::AutoRouter;
-pub use ir_integration::{program_to_space, program_to_spaces, IrError};
+pub use ir_integration::{program_to_space, program_to_spaces, program_to_spaces_with_lockfile, IrError};
 pub use logic_synthesizer::{LogicSynthesizer, SynthesisError};
 pub use module_flattener::{flatten_module, FlattenError, FlattenedModule, ModuleBoundingBox};
 pub use module_resolver::{ModuleResolver, ResolverError};

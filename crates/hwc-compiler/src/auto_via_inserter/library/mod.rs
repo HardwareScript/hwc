@@ -136,7 +136,7 @@ impl ViaLibrary {
                 }
             }
 
-            if vias.is_empty() && profile.is_asic() {
+            if vias.is_empty() {
                 if let Some(stackup) = &profile.stackup {
                     let min_diameter_mm = profile
                         .via
@@ -158,32 +158,88 @@ impl ViaLibrary {
                         .map(|(i, _)| i)
                         .collect();
 
-                    for window in conductive_indices.windows(2) {
-                        let from_idx = window[0];
-                        let to_idx = window[1];
-                        let from_layer = &stackup.layers[from_idx];
-                        let to_layer = &stackup.layers[to_idx];
+                    if profile.is_asic() {
+                        // ASIC: auto-generate adjacent-layer vias (m1→m2, m2→m3, etc.)
+                        for window in conductive_indices.windows(2) {
+                            let from_idx = window[0];
+                            let to_idx = window[1];
+                            let from_layer = &stackup.layers[from_idx];
+                            let to_layer = &stackup.layers[to_idx];
 
-                        let from_stackup_idx =
-                            stackup_manager.get_index_for_layer(&from_layer.name.name);
-                        let to_stackup_idx =
-                            stackup_manager.get_index_for_layer(&to_layer.name.name);
+                            let from_stackup_idx =
+                                stackup_manager.get_index_for_layer(&from_layer.name.name);
+                            let to_stackup_idx =
+                                stackup_manager.get_index_for_layer(&to_layer.name.name);
 
-                        if let (Some(from), Some(to)) = (from_stackup_idx, to_stackup_idx) {
-                            let z_start = stackup_manager.get_z_start_nm_for_layer_index(from);
-                            let z_end = stackup_manager.get_z_start_nm_for_layer_index(to);
+                            if let (Some(from), Some(to)) = (from_stackup_idx, to_stackup_idx) {
+                                let z_start =
+                                    stackup_manager.get_z_start_nm_for_layer_index(from);
+                                let z_end = stackup_manager.get_z_start_nm_for_layer_index(to);
 
-                            let via_name =
-                                format!("via_{}_{}", from_layer.name.name, to_layer.name.name);
+                                let via_name = format!(
+                                    "via_{}_{}",
+                                    from_layer.name.name, to_layer.name.name
+                                );
 
-                            println!("   │  [LIB] Auto-gen via '{}': L{}→L{}, z {}nm→{}nm, dia {:.3}mm, ring {:.3}mm",
-                                via_name, from, to, z_start, z_end, min_diameter_mm, min_annular_ring_mm);
+                                println!(
+                                    "   │  [LIB] Auto-gen via '{}': L{}→L{}, z {}nm→{}nm, \
+                                     dia {:.3}mm, ring {:.3}mm",
+                                    via_name, from, to, z_start, z_end, min_diameter_mm,
+                                    min_annular_ring_mm
+                                );
+
+                                vias.push(ViaType::new(
+                                    via_name.into(),
+                                    from_layer.material.clone(),
+                                    from,
+                                    to,
+                                    min_diameter_mm,
+                                    min_annular_ring_mm,
+                                    z_start,
+                                    z_end,
+                                    default_contour.clone(),
+                                ));
+                            }
+                        }
+                    } else if conductive_indices.len() >= 2 {
+                        // PCB: auto-generate a single through-hole via spanning
+                        // from the bottom conductive layer to the top conductive layer.
+                        // This reflects the physical reality that PCB through-holes are
+                        // drilled through the entire board, not layer-by-layer.
+                        let bottom_idx = conductive_indices[0];
+                        let top_idx = *conductive_indices.last().unwrap();
+                        let bottom_layer = &stackup.layers[bottom_idx];
+                        let top_layer = &stackup.layers[top_idx];
+
+                        let bottom_stackup_idx =
+                            stackup_manager.get_index_for_layer(&bottom_layer.name.name);
+                        let top_stackup_idx =
+                            stackup_manager.get_index_for_layer(&top_layer.name.name);
+
+                        if let (Some(bottom), Some(top)) =
+                            (bottom_stackup_idx, top_stackup_idx)
+                        {
+                            let z_start =
+                                stackup_manager.get_z_start_nm_for_layer_index(bottom);
+                            let z_end = stackup_manager.get_z_start_nm_for_layer_index(top);
+
+                            let via_name = format!(
+                                "via_through_hole_{}_{}",
+                                bottom_layer.name.name, top_layer.name.name
+                            );
+
+                            println!(
+                                "   │  [LIB] Auto-gen through-hole via '{}': L{}→L{}, \
+                                 z {}nm→{}nm, dia {:.3}mm, ring {:.3}mm",
+                                via_name, bottom, top, z_start, z_end, min_diameter_mm,
+                                min_annular_ring_mm
+                            );
 
                             vias.push(ViaType::new(
                                 via_name.into(),
-                                from_layer.material.clone(),
-                                from,
-                                to,
+                                bottom_layer.material.clone(),
+                                bottom,
+                                top,
                                 min_diameter_mm,
                                 min_annular_ring_mm,
                                 z_start,

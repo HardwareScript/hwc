@@ -57,7 +57,11 @@ pub use port_escape::{
 };
 pub use priority::NetPriority;
 pub use ripup::{RipUpRouter, RipUpStats, RouteAttempt};
-pub use route_lockfile::{GridMetadata, LockedRoute, LockfileManager, RouteLockfile};
+pub use route_lockfile::{
+    compute_placement_hash, CompactLockfile, LockfileError, LockfileManager, RouteLockfile,
+    LOCKFILE_VERSION,
+};
+pub use route_lockfile::{encode_arc, decode_arc, encode_instances, decode_instances};
 pub use router::GeometryRouter;
 pub use routing_patterns::{
     LengthMatchingEngine, PatternStep, RoutedTrace, RoutingPattern, StandardPatterns,

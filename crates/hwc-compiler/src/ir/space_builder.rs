@@ -89,6 +89,13 @@ pub fn create_hardware_space(
             }
         };
         space.set_net_classification(net_decl.name.clone(), classification);
+
+        // v0.1.7: Set net frequency on the netlist (for SI-aware routing)
+        if let Some(freq_hz) = net_decl.frequency_hz {
+            if let Some(net_id) = space.netlist.get_net_by_name(&net_decl.name) {
+                space.netlist.set_net_frequency(net_id, freq_hz);
+            }
+        }
     }
 
     Ok(space)

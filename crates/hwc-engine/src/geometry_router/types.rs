@@ -23,7 +23,9 @@ pub struct NetRoute {
 #[derive(Debug, Clone)]
 pub struct RoutedNet {
     pub net_id: NetId,
-    pub path: Vec<Point3D>,
+    /// List of segments (each segment is a list of points).
+    /// v0.1.7: Changed from Vec<Point3D> to Vec<Vec<Point3D>> to support trees.
+    pub paths: Vec<Vec<Point3D>>,
     pub vias: Vec<Via>, // Track vias for drill file generation
 }
 
@@ -270,8 +272,10 @@ impl Via {
 /// that can be consumed by the compiler pipeline.
 #[derive(Debug, Clone, Default)]
 pub struct RouteResult {
-    /// Routed paths per net. Each net maps to its ordered list of waypoints.
-    pub paths: FxHashMap<NetId, Vec<Point3D>>,
+    /// Routed paths per net. Each net maps to a list of segments (each segment is an ordered list of waypoints).
+    /// v0.1.7: Changed from Vec<Point3D> to Vec<Vec<Point3D>> to support Steiner Trees and multi-pin nets
+    /// without drawing "ghost lines" between disconnected segments.
+    pub paths: FxHashMap<NetId, Vec<Vec<Point3D>>>,
     /// All vias placed during routing (for drill file generation).
     pub vias: Vec<Via>,
 }
@@ -283,11 +287,9 @@ impl RouteResult {
     }
 
     /// Merge another RouteResult into this one, appending paths and vias.
-    ///
-    /// If a net exists in both results, the paths are concatenated.
     pub fn merge(&mut self, other: RouteResult) {
-        for (net_id, mut path) in other.paths {
-            self.paths.entry(net_id).or_default().append(&mut path);
+        for (net_id, mut paths) in other.paths {
+            self.paths.entry(net_id).or_default().append(&mut paths);
         }
         self.vias.extend(other.vias);
     }

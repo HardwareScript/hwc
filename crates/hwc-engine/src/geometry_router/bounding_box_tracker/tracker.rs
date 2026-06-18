@@ -47,6 +47,7 @@ use super::types::TrackedObstacle;
 /// assert_eq!(inflated.min.x, 10_000_000 - 250_000);  // 9_750_000
 /// assert_eq!(inflated.max.x, 12_000_000 + 250_000);  // 12_250_000
 /// ```
+#[derive(Debug, Clone)]
 pub struct BoundingBoxTracker {
     /// All registered obstacles indexed by Z-plane.
     /// Key: Z-height in nanometers (layer_z_nm)

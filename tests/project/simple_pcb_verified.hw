@@ -1,0 +1,103 @@
+import * from @std/primitives/units
+import Copper from @std/materials/conductors
+
+material FR4:
+    category: insulator
+    properties:
+        color: "#2E7D32"
+        opacity: 1.0
+        roughness: 0.9
+        metallic: 0.0
+        subsurface: 0.5
+
+profile PCB_4_LAYER:
+    description: "4-layer PCB"
+    stackup:
+        top:    [material: Copper, thickness: 35um]
+        d1:     [material: FR4,    thickness: 200um]
+        inner1: [material: Copper, thickness: 35um]
+        d2:     [material: FR4,    thickness: 965um]
+        bottom: [material: Copper, thickness: 35um]
+
+    via:
+        min_diameter: 0.3mm
+        min_annular_ring: 0.15mm
+        min_spacing: 0.2mm
+
+    trace:
+        min_width: 0.2mm
+        min_spacing: 0.2mm
+
+    bridge Copper to Copper: Copper
+
+    manufacturing:
+        copper_thickness: 35um
+
+    clearance:
+        high_voltage: 2mm
+        safety_factor: 2.0
+
+    layer:
+        min_thickness: 0.1mm
+
+space PCB_Voltage_Divider:
+    dimensions: 20mm by 20mm by 1.27mm
+    grid: 200 by 200 by 16
+    origin: bl by b
+    profile: PCB_4_LAYER
+
+    nets:
+        VIN: signal
+        VOUT: signal
+        GND: ground
+
+    # FR4 board substrate (copper sits ON TOP of this)
+    add substrate(FR4) spanning [x: 0mm, y: 0mm, z: 0mm] to [x: 20mm, y: 20mm, z: 1.235mm]
+
+    # R1 pad A (VIN) on top copper
+    add pour(Copper) named R1_A on z:1235um:
+        net: VIN
+        boundary: [x: 3.55mm, y: 9.4mm] to [x: 4.45mm, y: 10.6mm]
+        thickness: 35um
+
+    # R1 pad B (VOUT) on top copper
+    add pour(Copper) named R1_B on z:1235um:
+        net: VOUT
+        boundary: [x: 5.55mm, y: 9.4mm] to [x: 6.45mm, y: 10.6mm]
+        thickness: 35um
+
+    # R2 pad A (VOUT) on top copper
+    add pour(Copper) named R2_A on z:1235um:
+        net: VOUT
+        boundary: [x: 13.55mm, y: 9.4mm] to [x: 14.45mm, y: 10.6mm]
+        thickness: 35um
+
+    # R2 pad B (GND) on top copper
+    add pour(Copper) named R2_B on z:1235um:
+        net: GND
+        boundary: [x: 15.55mm, y: 9.4mm] to [x: 16.45mm, y: 10.6mm]
+        thickness: 35um
+
+    # VIN power rail on top copper
+    add pour(Copper) named VIN_Rail on z:1235um:
+        net: VIN
+        boundary: [x: 1mm, y: 17mm] to [x: 4mm, y: 19mm]
+        thickness: 35um
+
+    # GND power rail on top copper
+    add pour(Copper) named GND_Rail on z:1235um:
+        net: GND
+        boundary: [x: 16mm, y: 17mm] to [x: 19mm, y: 19mm]
+        thickness: 35um
+
+    # Route R1.B to R2.A (VOUT connection)
+    route R1_B to R2_A:
+        net: VOUT
+
+    # Route R1.A to VIN rail
+    route R1_A to VIN_Rail:
+        net: VIN
+
+    # Route R2.B to GND rail
+    route R2_B to GND_Rail:
+        net: GND

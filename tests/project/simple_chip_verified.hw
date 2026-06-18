@@ -1,0 +1,130 @@
+import * from @std/primitives/units
+
+profile TSMC_ASIC_180nm:
+    description: "3-metal 180nm CMOS process"
+
+    trace:
+        min_width: 0.5um
+        min_spacing: 0.5um
+
+    via:
+        min_diameter: 0.5um
+        min_annular_ring: 0.2um
+
+    manufacturing:
+        grid_snapping: true
+        track_pitch: 1um
+        copper_thickness: 0.5um
+
+    clearance:
+        high_voltage: 5um
+        safety_factor: 1.5
+
+    layer:
+        min_thickness: 0.5um
+
+    stackup:
+        m1: [material: Copper, thickness: 0.5um]
+        d1: [material: SiO2,   thickness: 0.6um]
+        m2: [material: Copper, thickness: 0.6um]
+        d2: [material: SiO2,   thickness: 0.7um]
+        m3: [material: Copper, thickness: 0.8um]
+        si: [material: Silicon, thickness: 10um]
+
+    routing:
+        m1: horizontal
+        m2: vertical
+        m3: horizontal
+
+component Pad:
+    pins: [p]
+    layout:
+        shape: Rectangle(4um, 4um, 0.5um)
+        pin_positions:
+            p at [2um, 2um]
+        pad_shapes:
+            p: Rectangle(4um, 4um)
+
+space Silicon_Die_Block:
+    profile: TSMC_ASIC_180nm
+    dimensions: 20um by 20um by 20um
+    grid: 40 by 40 by 20
+    origin: bl by b
+
+    # M1 terminals (z=0)
+    add Pad named G1 at [x: 2um, y: 2um] on z: 0nm
+    add Pad named S1 at [x: 2um, y: 14um] on z: 0nm
+    add Pad named D1 at [x: 14um, y: 14um] on z: 0nm
+    add Pad named B1 at [x: 14um, y: 2um] on z: 0nm
+
+    # M2 junctions (z=1100nm)
+    add Pad named G2 at [x: 2um, y: 8um] on z: 1100nm
+    add Pad named S2 at [x: 8um, y: 14um] on z: 1100nm
+    add Pad named D2 at [x: 14um, y: 8um] on z: 1100nm
+    add Pad named B2 at [x: 8um, y: 2um] on z: 1100nm
+
+    # M3 pads (z=2400nm)
+    add Pad named G3 at [x: 2um, y: 8um] on z: 2400nm
+    add Pad named S3 at [x: 8um, y: 14um] on z: 2400nm
+    add Pad named D3 at [x: 14um, y: 8um] on z: 2400nm
+    add Pad named B3 at [x: 8um, y: 2um] on z: 2400nm
+
+    # Gate: M1 -> M2
+    route G1.p to G2.p:
+        net: GATE
+        path:
+            - [x: 2um, y: 2um, z: 0nm]
+            - [x: 2um, y: 8um, z: 0nm]
+            - [x: 2um, y: 8um, z: 1100nm]
+
+    # Source: M1 -> M2
+    route S1.p to S2.p:
+        net: SOURCE
+        path:
+            - [x: 2um, y: 14um, z: 0nm]
+            - [x: 8um, y: 14um, z: 0nm]
+            - [x: 8um, y: 14um, z: 1100nm]
+
+    # Drain: M1 -> M2
+    route D1.p to D2.p:
+        net: DRAIN
+        path:
+            - [x: 14um, y: 14um, z: 0nm]
+            - [x: 14um, y: 8um, z: 0nm]
+            - [x: 14um, y: 8um, z: 1100nm]
+
+    # Bulk: M1 -> M2
+    route B1.p to B2.p:
+        net: BULK
+        path:
+            - [x: 14um, y: 2um, z: 0nm]
+            - [x: 8um, y: 2um, z: 0nm]
+            - [x: 8um, y: 2um, z: 1100nm]
+
+    # Gate: M2 -> M3
+    route G2.p to G3.p:
+        net: GATE
+        path:
+            - [x: 2um, y: 8um, z: 1100nm]
+            - [x: 2um, y: 8um, z: 2400nm]
+
+    # Source: M2 -> M3
+    route S2.p to S3.p:
+        net: SOURCE
+        path:
+            - [x: 8um, y: 14um, z: 1100nm]
+            - [x: 8um, y: 14um, z: 2400nm]
+
+    # Drain: M2 -> M3
+    route D2.p to D3.p:
+        net: DRAIN
+        path:
+            - [x: 14um, y: 8um, z: 1100nm]
+            - [x: 14um, y: 8um, z: 2400nm]
+
+    # Bulk: M2 -> M3
+    route B2.p to B3.p:
+        net: BULK
+        path:
+            - [x: 8um, y: 2um, z: 1100nm]
+            - [x: 8um, y: 2um, z: 2400nm]

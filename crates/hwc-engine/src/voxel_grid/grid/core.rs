@@ -435,4 +435,13 @@ impl VoxelGrid {
     pub fn get_default_insulator(&self) -> MaterialId {
         self.default_insulator
     }
+
+    /// v0.1.7: Copy component metadata and pins from another grid.
+    /// This is used by the hierarchical router to propagate obstacle info
+    /// into parallel router tiles.
+    pub fn copy_metadata_from(&mut self, other: &VoxelGrid) {
+        self.component_metadata = other.component_metadata.clone();
+        self.component_pins = other.component_pins.clone();
+        self.substrate_layers = other.substrate_layers.clone();
+    }
 }

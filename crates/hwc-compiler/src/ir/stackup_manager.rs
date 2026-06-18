@@ -274,10 +274,22 @@ impl StackupManager {
     ///
     /// The index corresponds to the `ordered_layers` vector (bottom-to-top).
     pub fn get_layer_index_at_z(&self, z_nm: i64) -> Option<usize> {
+        let count = self.ordered_layers.len();
         for (idx, name) in self.ordered_layers.iter().enumerate() {
             let start = *self.layer_start_z_nm.get(name)?;
             let thickness = *self.layer_thickness_nm.get(name)?;
-            if z_nm >= start && z_nm < start + thickness {
+            let is_top = idx == count - 1;
+            
+            // v0.1.7: Inclusive top boundary for the topmost layer.
+            // This prevents coordinates exactly at the board surface (e.g. 1.27mm)
+            // from being identified as "outside the board".
+            let contains = if is_top {
+                z_nm >= start && z_nm <= start + thickness
+            } else {
+                z_nm >= start && z_nm < start + thickness
+            };
+
+            if contains {
                 return Some(idx);
             }
         }
@@ -286,10 +298,19 @@ impl StackupManager {
 
     /// Returns the semantic layer name for a physical Z position.
     pub fn get_layer_name_at_z(&self, z_nm: i64) -> Option<String> {
-        for name in self.ordered_layers.iter() {
+        let count = self.ordered_layers.len();
+        for (idx, name) in self.ordered_layers.iter().enumerate() {
             let start = *self.layer_start_z_nm.get(name)?;
             let thickness = *self.layer_thickness_nm.get(name)?;
-            if z_nm >= start && z_nm < start + thickness {
+            let is_top = idx == count - 1;
+
+            let contains = if is_top {
+                z_nm >= start && z_nm <= start + thickness
+            } else {
+                z_nm >= start && z_nm < start + thickness
+            };
+
+            if contains {
                 return Some(name.clone());
             }
         }

@@ -153,45 +153,52 @@ pub fn validate_and_register(
                         }
 
                         if component_max_z < substrate_min_z {
-                            let gap_nm = substrate_min_z - component_max_z;
-                            let gap_mm = gap_nm as f64 / 1_000_000.0;
+                            if !pd.component.waivers.floating {
+                                let gap_nm = substrate_min_z - component_max_z;
+                                let gap_mm = gap_nm as f64 / 1_000_000.0;
 
-                            let suggestion = format!(
-                                "To fix:\n- Place component at z:{substrate_max_layer} or higher (above substrate base)\n- Corrected: {}",
-                                original_line.replace(&format!("z: {}", component_z_layer), &format!("z: {}", substrate_max_layer))
-                            );
+                                let suggestion = format!(
+                                    "To fix:\n- Place component at z:{substrate_max_layer} or higher (above substrate base)\n- Corrected: {}",
+                                    original_line.replace(&format!("z: {}", component_z_layer), &format!("z: {}", substrate_max_layer))
+                                );
 
-                            let ir_x_mm = vp.untransformed_origin.x as f64 / 1_000_000.0;
-                            let ir_y_mm = vp.untransformed_origin.y as f64 / 1_000_000.0;
-                            let ir_z_mm = vp.untransformed_origin.z as f64 / 1_000_000.0;
-                            ctx.collector
-                                .report(IrError::ComponentBuriedInSubstrate(Box::new(
-                                    ComponentBuriedInSubstrateDetails {
-                                        component: pd.name.clone().into(),
-                                        component_z_layer,
-                                        component_z_mm: component_min_z as f64 / 1_000_000.0,
-                                        substrate_min_layer,
-                                        substrate_min_mm: substrate_min_z as f64 / 1_000_000.0,
-                                        substrate_max_layer,
-                                        substrate_max_mm: substrate_max_z as f64 / 1_000_000.0,
-                                        gap_mm,
-                                        x_mm: ir_x_mm,
-                                        y_mm: ir_y_mm,
-                                        z_mm: ir_z_mm,
-                                        span: (
-                                            pd.component.span.start,
-                                            pd.component.span.end - pd.component.span.start,
-                                        )
-                                            .into(),
-                                        suggestion,
-                                    },
+                                let ir_x_mm = vp.untransformed_origin.x as f64 / 1_000_000.0;
+                                let ir_y_mm = vp.untransformed_origin.y as f64 / 1_000_000.0;
+                                let ir_z_mm = vp.untransformed_origin.z as f64 / 1_000_000.0;
+                                ctx.collector
+                                    .report(IrError::ComponentBuriedInSubstrate(Box::new(
+                                        ComponentBuriedInSubstrateDetails {
+                                            component: pd.name.clone().into(),
+                                            component_z_layer,
+                                            component_z_mm: component_min_z as f64 / 1_000_000.0,
+                                            substrate_min_layer,
+                                            substrate_min_mm: substrate_min_z as f64 / 1_000_000.0,
+                                            substrate_max_layer,
+                                            substrate_max_mm: substrate_max_z as f64 / 1_000_000.0,
+                                            gap_mm,
+                                            x_mm: ir_x_mm,
+                                            y_mm: ir_y_mm,
+                                            z_mm: ir_z_mm,
+                                            span: (
+                                                pd.component.span.start,
+                                                pd.component.span.end - pd.component.span.start,
+                                            )
+                                                .into(),
+                                            suggestion,
+                                        },
+                                    )));
+                                ctx.collector.report_violation(
+                                    "P44",
+                                    "buried below substrate base",
+                                    group_context,
+                                );
+                                return Ok(());
+                            } else {
+                                ctx.collector.report(WaiverApplied::new(&format!(
+                                    "Component '{}' allowed to be below substrate",
+                                    pd.name
                                 )));
-                            ctx.collector.report_violation(
-                                "P44",
-                                "buried below substrate base",
-                                group_context,
-                            );
-                            return Ok(());
+                            }
                         }
 
                         if component_min_z < substrate_max_z && component_max_z > substrate_min_z {

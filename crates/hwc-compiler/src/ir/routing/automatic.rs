@@ -49,15 +49,38 @@ pub fn route_automatic(
         min_trace_width_nm
     };
 
-    // v0.1.7: Port Escape Integration
-    // When exit/enter escape specs are present, calculate actual pad boundary points
-    // instead of routing to pin centers. This eliminates the "dummy bounding box gap".
-    let (start_pos, goal_pos) =
-        calculate_escape_positions(space, route, trace_width_nm, min_clearance_nm)?;
-    eprintln!(
-        "[ROUTER]   Start pos: {:?}, Goal pos: {:?}",
-        start_pos, goal_pos
+    // v0.1.7: Unified Boundary-Docking Model
+    // Instead of routing to pin centers, we calculate exact boundary points.
+    let (start_boundary, goal_boundary, start_dir, goal_dir) =
+        calculate_boundary_points(space, route, trace_width_nm)?;
+
+    // v0.1.7: External A* Seeding
+    // To prevent "hooks" inside pads, the A* solver starts one voxel OUTSIDE the pad.
+    let voxel_size = space.voxel_size.x_nm;
+    let start_pos = hwc_engine::Point3D::new(
+        start_boundary.x + (start_dir.0 * voxel_size),
+        start_boundary.y + (start_dir.1 * voxel_size),
+        start_boundary.z,
     );
+    let goal_pos = hwc_engine::Point3D::new(
+        goal_boundary.x + (goal_dir.0 * voxel_size),
+        goal_boundary.y + (goal_dir.1 * voxel_size),
+        goal_boundary.z,
+    );
+
+    // PHASE 2: GEOMETRY ROUTER
+    // v0.1.7: Register net connectivity in the netlist
+    // This ensures both pins share the same logical net ID.
+    let net_id = super::helpers::register_net_for_route(space, route, symbol_table)?;
+    let net_name = space.netlist.get_net(net_id).unwrap().name.clone();
+
+    println!("[BOX-MODEL-DEBUG] Net: {}", net_name);
+    println!("[BOX-MODEL-DEBUG]   Start Boundary: ({}, {}, {})", start_boundary.x, start_boundary.y, start_boundary.z);
+    println!("[BOX-MODEL-DEBUG]   Start Dir: {:?}", start_dir);
+    println!("[BOX-MODEL-DEBUG]   Start Seed (A* Start): ({}, {}, {})", start_pos.x, start_pos.y, start_pos.z);
+    println!("[BOX-MODEL-DEBUG]   Goal Boundary: ({}, {}, {})", goal_boundary.x, goal_boundary.y, goal_boundary.z);
+    println!("[BOX-MODEL-DEBUG]   Goal Dir: {:?}", goal_dir);
+    println!("[BOX-MODEL-DEBUG]   Goal Seed (A* Goal): ({}, {}, {})", goal_pos.x, goal_pos.y, goal_pos.z);
 
     let route_constraints = RouteConstraints {
         min_trace_width_nm: trace_width_nm,
@@ -67,12 +90,6 @@ pub fn route_automatic(
         max_current_ma: current_ma,
         impedance_ohm: None,
     };
-
-    // PHASE 2: GEOMETRY ROUTER
-    // v0.1.7: Register net connectivity in the netlist
-    // This ensures both pins share the same logical net ID.
-    let net_id = super::helpers::register_net_for_route(space, route, symbol_table)?;
-    let net_name = space.netlist.get_net(net_id).unwrap().name.clone();
 
     let bounds = GridBounds::new(
         space.dimensions.width_nm,
@@ -106,7 +123,7 @@ pub fn route_automatic(
         voxel_size: space.voxel_size,
         clearance_zones: &clearance_zones,
         occupied_voxels: &occupied_voxels,
-        voxel_grid: None, // Binary Collision Skip disabled - SDF provides 11× speedup already
+        voxel_grid: Some(&space.voxel_grid), // v0.1.7: Enable Strict Interior Lockout
         corridor: None,   // No corridor constraint in compiler automatic routing
         fixed_z_nm: Some(start_pos.z), // v0.1.7: Lock to starting Z plane
         exempt_components: &exempt_components, // v0.1.7: Escape Exemption
@@ -133,7 +150,7 @@ pub fn route_automatic(
     }
 
     eprintln!("[ROUTER] Starting A* pathfinding...");
-    let path = hwc_engine::geometry_router::route_net_sdf_accelerated(
+    let mut path = hwc_engine::geometry_router::route_net_sdf_accelerated(
         start_pos,
         goal_pos,
         &routing_params,
@@ -141,7 +158,7 @@ pub fn route_automatic(
     )
     .ok_or_else(|| {
         IrError::RoutingError(format!(
-            "No path found from {}.{} to {}.{} (start: {:?}, goal: {:?})",
+            "No path found from {}.{} to {}.{} (seed_start: {:?}, seed_goal: {:?})",
             route.from.component,
             route.from.pin,
             route.to.component,
@@ -150,6 +167,12 @@ pub fn route_automatic(
             goal_pos
         ))
     })?;
+
+    // v0.1.7: Boundary Stitching
+    // We prepend/append the actual boundary points to the A* path.
+    // This ensures the trace connects perfectly to the pad edge.
+    path.insert(0, start_boundary);
+    path.push(goal_boundary);
 
     if path.is_empty() {
         return Err(IrError::RoutingError("Empty path generated".into()));
@@ -168,39 +191,46 @@ pub fn route_automatic(
     let mut trace_thickness_nm = space.voxel_size.z_nm; // Default to voxel size
 
     if refined_path.len() >= 2 {
-        eprintln!(
-            "[ROUTER DEBUG] Refining {} path points via StackupManager...",
-            refined_path.len()
-        );
-        for (i, point) in refined_path.iter_mut().enumerate() {
-            let old_z = point.z;
-            // 1. Identify which PHYSICAL layer this point is in (v0.1.7 Fix: Use StackupManager, not voxel math)
-            if let Some(layer_idx) = stackup_manager.get_layer_index_at_z(point.z) {
-                // 2. Resolve the EXACT physical starting height for that layer
-                // This bypasses the coarse voxel grid's multiplication formula.
-                let true_z = stackup_manager.get_z_start_nm_for_layer_index(layer_idx);
-
-                // v0.1.7: Extract physical thickness for this layer to prevent "wobbly" 3D meshes
+        // v0.1.7: When fixed_z_nm is set (planar-locked 2.5D routing), the SDF router
+        // already locks all path points to the exact physical Z. Skip Z-refinement entirely
+        // to avoid the StackupManager incorrectly remapping Z to a different layer
+        // (e.g. z=0 copper → z=35000 FR4 boundary), which creates fake L0→L1 transitions
+        // and inflates trace_thickness_nm to the dielectric thickness.
+        if let Some(fixed_z) = routing_params.fixed_z_nm {
+            // Resolve thickness once from the fixed Z plane
+            if let Some(layer_idx) = stackup_manager.get_layer_index_at_z(fixed_z) {
                 trace_thickness_nm = stackup_manager.get_thickness_for_layer_index(layer_idx);
+            }
+            eprintln!(
+                "[ROUTER DEBUG] Planar lock: {} points locked to Z={}nm, thickness={}nm",
+                refined_path.len(),
+                fixed_z,
+                trace_thickness_nm
+            );
+        } else {
+            eprintln!(
+                "[ROUTER DEBUG] Refining {} path points via StackupManager...",
+                refined_path.len()
+            );
+            for (i, point) in refined_path.iter_mut().enumerate() {
+                let old_z = point.z;
+                // 1. Identify which PHYSICAL layer this point is in (v0.1.7 Fix: Use StackupManager, not voxel math)
+                if let Some(layer_idx) = stackup_manager.get_layer_index_at_z(point.z) {
+                    // 2. Resolve the EXACT physical starting height for that layer
+                    // This bypasses the coarse voxel grid's multiplication formula.
+                    let true_z = stackup_manager.get_z_start_nm_for_layer_index(layer_idx);
 
-                // 3. Update the point's Z to the physical truth
-                point.z = true_z;
+                    // v0.1.7: Extract physical thickness for this layer to prevent "wobbly" 3D meshes
+                    trace_thickness_nm = stackup_manager.get_thickness_for_layer_index(layer_idx);
 
-                if old_z != true_z {
-                    eprintln!(
-                        "[ROUTER DEBUG]   Point {}: Z shifted from {}nm to {}nm (Layer Index: {})",
-                        i, old_z, true_z, layer_idx
-                    );
-                }
-            } else {
-                // v0.1.7 FIX: If the point is on a planar-locked route, force it to the start Z
-                // even if the layer lookup fails (e.g. at boundary conditions).
-                if let Some(fixed_z) = routing_params.fixed_z_nm {
-                    point.z = fixed_z;
-                    // Also try to find thickness at this fixed Z
-                    if let Some(layer_idx) = stackup_manager.get_layer_index_at_z(fixed_z) {
-                        trace_thickness_nm =
-                            stackup_manager.get_thickness_for_layer_index(layer_idx);
+                    // 3. Update the point's Z to the physical truth
+                    point.z = true_z;
+
+                    if old_z != true_z {
+                        eprintln!(
+                            "[ROUTER DEBUG]   Point {}: Z shifted from {}nm to {}nm (Layer Index: {})",
+                            i, old_z, true_z, layer_idx
+                        );
                     }
                 } else {
                     eprintln!("[ROUTER WARNING]   Point {}: Z={}nm could not be mapped to any physical layer!", i, point.z);
@@ -287,6 +317,8 @@ pub fn route_automatic(
             if len_goal > 0.0 {
                 let dir_x = dx_goal as f64 / len_goal;
                 let dir_y = dy_goal as f64 / len_goal;
+                // v0.1.7: Outward-Only Teardrops
+                // We ensure the teardrop starts at the boundary and goes INTO the trace.
                 let teardrop_start = hwc_engine::Point3D::new(
                     last.x - (dir_x * teardrop_length_nm as f64) as i64,
                     last.y - (dir_y * teardrop_length_nm as f64) as i64,
@@ -399,162 +431,72 @@ pub fn route_automatic(
     Ok(())
 }
 
-/// Calculate start/goal positions for routing using port escape specifications.
-///
-/// When exit/enter escape specs are present on the route, this function:
-/// 1. Parses the escape specifications (e.g., "exit: East", "enter: West")
-/// 2. Queries the VoxelGrid for the actual pour bounding box of each pin
-/// 3. Calculates the escape point on the pad boundary using `calculate_rect_escape`
-/// 4. Returns the escape points as the start/goal positions
-///
-/// When no escape specs are present, falls back to simple pin center positions.
-///
-/// This eliminates the "dummy bounding box gap" where the router used a hardcoded
-/// 0.4mm box around pin centers instead of the actual pad boundary.
-fn calculate_escape_positions(
+/// Calculate boundary points and exit directions for routing.
+fn calculate_boundary_points(
     space: &HardwareSpace,
     route: &hwc_parser::Route,
     trace_width_nm: i64,
-    clearance_nm: i64,
-) -> Result<(hwc_engine::Point3D, hwc_engine::Point3D), IrError> {
-    use hwc_engine::geometry_router::port_escape::{calculate_rect_escape, parse_port_escape};
+) -> Result<(hwc_engine::Point3D, hwc_engine::Point3D, (i64, i64), (i64, i64)), IrError> {
+    use hwc_engine::geometry_router::port_escape::{
+        calculate_rect_escape, CardinalPort, EdgeOffset,
+    };
 
-    // Get pin center positions as fallback
+    // Get pin center positions for heuristic direction
     let (start_pin_center, goal_pin_center) = get_pin_positions(space, route)?;
 
-    // Parse exit escape spec
-    let exit_point = if let Some(exit_escape) = &route.exit_escape {
-        // Convert CardinalDirection to string for parse_port_escape
-        let dir_str = match exit_escape.port {
-            hwc_parser::CardinalDirection::North => "North",
-            hwc_parser::CardinalDirection::South => "South",
-            hwc_parser::CardinalDirection::East => "East",
-            hwc_parser::CardinalDirection::West => "West",
-        };
-        let exit_spec = if let Some(offset) = &exit_escape.offset {
-            let offset_str = match offset {
-                hwc_parser::EdgeOffsetSpec::Named(n) => format!(
-                    " at {}",
-                    match n {
-                        hwc_parser::NamedPosition::Top => "top",
-                        hwc_parser::NamedPosition::Bottom => "bottom",
-                        hwc_parser::NamedPosition::Center => "center",
-                    }
-                ),
-                hwc_parser::EdgeOffsetSpec::Percentage(p) => format!(" at {}%", p * 100.0),
-                hwc_parser::EdgeOffsetSpec::Measurement(m) => format!(" at {}um", m / 1000),
-            };
-            format!("{}{}", dir_str, offset_str)
-        } else {
-            dir_str.to_string()
-        };
+    // v0.1.7: Auto-Port Heuristic (Shortest Path Edge Selection)
+    let dx = goal_pin_center.x - start_pin_center.x;
+    let dy = goal_pin_center.y - start_pin_center.y;
 
-        if let Some((port, offset)) = parse_port_escape(&exit_spec) {
-            // Query the pour bounding box for the start pin
-            let from_comp = super::helpers::construct_component_name(&route.from)?;
-            if let Some(pour_bbox) = space
-                .voxel_grid
-                .get_pour_bbox_for_pin(&from_comp, &route.from.pin)
-            {
-                let escape = calculate_rect_escape(
-                    &pour_bbox,
-                    port,
-                    offset,
-                    trace_width_nm,
-                    clearance_nm,
-                    start_pin_center.z,
-                );
-                eprintln!(
-                    "[ROUTER]   Exit escape: port={:?}, bbox=[{:.3},{:.3}]-[{:.3},{:.3}], point={:?}",
-                    port,
-                    pour_bbox.min.x as f64 / 1_000_000.0, pour_bbox.min.y as f64 / 1_000_000.0,
-                    pour_bbox.max.x as f64 / 1_000_000.0, pour_bbox.max.y as f64 / 1_000_000.0,
-                    escape.point
-                );
-                Some(escape.point)
-            } else {
-                eprintln!(
-                    "[ROUTER]   Exit escape: No pour bbox found for {}.{}",
-                    from_comp, route.from.pin
-                );
-                None
-            }
-        } else {
-            eprintln!("[ROUTER]   Exit escape: Failed to parse '{}'", exit_spec);
-            None
-        }
+    let auto_exit_port = if dx.abs() > dy.abs() {
+        if dx > 0 { CardinalPort::East } else { CardinalPort::West }
     } else {
-        None
+        if dy > 0 { CardinalPort::North } else { CardinalPort::South }
     };
 
-    // Parse enter escape spec
-    let enter_point = if let Some(enter_escape) = &route.enter_escape {
-        // Convert CardinalDirection to string for parse_port_escape
-        let dir_str = match enter_escape.port {
-            hwc_parser::CardinalDirection::North => "North",
-            hwc_parser::CardinalDirection::South => "South",
-            hwc_parser::CardinalDirection::East => "East",
-            hwc_parser::CardinalDirection::West => "West",
-        };
-        let enter_spec = if let Some(offset) = &enter_escape.offset {
-            let offset_str = match offset {
-                hwc_parser::EdgeOffsetSpec::Named(n) => format!(
-                    " at {}",
-                    match n {
-                        hwc_parser::NamedPosition::Top => "top",
-                        hwc_parser::NamedPosition::Bottom => "bottom",
-                        hwc_parser::NamedPosition::Center => "center",
-                    }
-                ),
-                hwc_parser::EdgeOffsetSpec::Percentage(p) => format!(" at {}%", p * 100.0),
-                hwc_parser::EdgeOffsetSpec::Measurement(m) => format!(" at {}um", m / 1000),
-            };
-            format!("{}{}", dir_str, offset_str)
-        } else {
-            dir_str.to_string()
-        };
-
-        if let Some((port, offset)) = parse_port_escape(&enter_spec) {
-            // Query the pour bounding box for the end pin
-            let to_comp = super::helpers::construct_component_name(&route.to)?;
-            if let Some(pour_bbox) = space
-                .voxel_grid
-                .get_pour_bbox_for_pin(&to_comp, &route.to.pin)
-            {
-                let escape = calculate_rect_escape(
-                    &pour_bbox,
-                    port,
-                    offset,
-                    trace_width_nm,
-                    clearance_nm,
-                    goal_pin_center.z,
-                );
-                eprintln!(
-                    "[ROUTER]   Enter escape: port={:?}, bbox=[{:.3},{:.3}]-[{:.3},{:.3}], point={:?}",
-                    port,
-                    pour_bbox.min.x as f64 / 1_000_000.0, pour_bbox.min.y as f64 / 1_000_000.0,
-                    pour_bbox.max.x as f64 / 1_000_000.0, pour_bbox.max.y as f64 / 1_000_000.0,
-                    escape.point
-                );
-                Some(escape.point)
-            } else {
-                eprintln!(
-                    "[ROUTER]   Enter escape: No pour bbox found for {}.{}",
-                    to_comp, route.to.pin
-                );
-                None
-            }
-        } else {
-            eprintln!("[ROUTER]   Enter escape: Failed to parse '{}'", enter_spec);
-            None
-        }
-    } else {
-        None
+    let auto_enter_port = match auto_exit_port {
+        CardinalPort::North => CardinalPort::South,
+        CardinalPort::South => CardinalPort::North,
+        CardinalPort::East => CardinalPort::West,
+        CardinalPort::West => CardinalPort::East,
     };
 
-    // Use escape points if available, otherwise fall back to pin centers
-    let start_pos = exit_point.unwrap_or(start_pin_center);
-    let goal_pos = enter_point.unwrap_or(goal_pin_center);
+    // Helper to resolve a port+offset spec to an EscapePoint
+    let resolve_point = |from_comp: &str, pin: &str, port: CardinalPort, offset: EdgeOffset, z: i64| {
+        space.voxel_grid.get_pour_bbox_for_pin(from_comp, pin).map(|bbox| {
+            calculate_rect_escape(&bbox, port, offset, trace_width_nm, 0, z)
+        })
+    };
 
-    Ok((start_pos, goal_pos))
+    let from_comp = super::helpers::construct_component_name(&route.from)?;
+    let to_comp = super::helpers::construct_component_name(&route.to)?;
+
+    // Start Escape
+    let start_esc = if let Some(exit_escape) = &route.exit_escape {
+        let port = match exit_escape.port {
+            hwc_parser::CardinalDirection::North => CardinalPort::North,
+            hwc_parser::CardinalDirection::South => CardinalPort::South,
+            hwc_parser::CardinalDirection::East => CardinalPort::East,
+            hwc_parser::CardinalDirection::West => CardinalPort::West,
+        };
+        // TODO: Handle explicit offset parsing from exit_escape.offset
+        resolve_point(&from_comp, &route.from.pin, port, EdgeOffset::Center, start_pin_center.z)
+    } else {
+        resolve_point(&from_comp, &route.from.pin, auto_exit_port, EdgeOffset::Center, start_pin_center.z)
+    }.ok_or_else(|| IrError::RoutingError(format!("Could not resolve boundary for {}.{}", from_comp, route.from.pin)))?;
+
+    // Goal Escape
+    let goal_esc = if let Some(enter_escape) = &route.enter_escape {
+        let port = match enter_escape.port {
+            hwc_parser::CardinalDirection::North => CardinalPort::North,
+            hwc_parser::CardinalDirection::South => CardinalPort::South,
+            hwc_parser::CardinalDirection::East => CardinalPort::East,
+            hwc_parser::CardinalDirection::West => CardinalPort::West,
+        };
+        resolve_point(&to_comp, &route.to.pin, port, EdgeOffset::Center, goal_pin_center.z)
+    } else {
+        resolve_point(&to_comp, &route.to.pin, auto_enter_port, EdgeOffset::Center, goal_pin_center.z)
+    }.ok_or_else(|| IrError::RoutingError(format!("Could not resolve boundary for {}.{}", to_comp, route.to.pin)))?;
+
+    Ok((start_esc.point, goal_esc.point, start_esc.direction, goal_esc.direction))
 }

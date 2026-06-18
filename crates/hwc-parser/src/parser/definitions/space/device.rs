@@ -48,6 +48,7 @@ impl crate::parser::Parser {
     ///     GND: ground
     ///     VDD: power
     ///     CLK: signal
+    ///     DATA: signal, frequency: 5GHz
     /// ```
     pub(in crate::parser) fn parse_nets_block(
         &mut self,
@@ -86,12 +87,50 @@ impl crate::parser::Parser {
                 }
             };
 
+            // v0.1.7: Parse optional frequency: e.g., `signal, frequency: 5GHz`
+            let mut frequency_hz: Option<f64> = None;
+            if self.check(&Token::Comma) {
+                self.advance(); // consume comma
+                self.skip_whitespace();
+                if self.check_identifier("frequency") {
+                    self.advance(); // consume 'frequency'
+                    self.expect(&Token::Colon)?;
+                    self.skip_whitespace();
+                    if let Some(token) = self.current() {
+                        if let Token::Measurement(m) = &token.token {
+                            let value = m.value;
+                            let unit_str = m.unit.to_string();
+                            frequency_hz = Some(match unit_str.as_str() {
+                                "Hz" => value,
+                                "kHz" => value * 1_000.0,
+                                "MHz" => value * 1_000_000.0,
+                                "GHz" => value * 1_000_000_000.0,
+                                _ => {
+                                    return Err(self.error(&format!(
+                                        "Invalid frequency unit '{}'. Expected Hz, kHz, MHz, or GHz",
+                                        unit_str
+                                    )));
+                                }
+                            });
+                            self.advance(); // consume measurement token
+                        } else {
+                            return Err(
+                                self.error("Expected frequency value with unit (e.g., 5GHz)")
+                            );
+                        }
+                    } else {
+                        return Err(self.error("Expected frequency value with unit (e.g., 5GHz)"));
+                    }
+                }
+            }
+
             self.skip_whitespace();
 
             net_declarations.push(NetDeclaration {
                 name: net_name.into(),
                 classification,
-                potential_mv: None, // TODO: Parse optional voltage in future
+                potential_mv: None,
+                frequency_hz,
                 span: Span::new(start_pos, self.previous_span().end),
             });
         }

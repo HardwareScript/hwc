@@ -293,7 +293,17 @@ pub fn route_net_sdf_accelerated(
                     let (lx, ly, lz) = voxel_to_coords(leap_target, params.voxel_size);
 
                     // Only leap if target is also empty (obeying exemptions)
-                    if sdf.get_distance_with_exemptions(lx, ly, lz, params.exempt_components) > 0 {
+                    // Check both SDF distance AND component interior lockout
+                    let leap_blocked_by_component = if let Some(voxel_grid) = params.voxel_grid {
+                        voxel_grid.point_in_component(leap_target.x, leap_target.y, leap_target.z).map(|name| {
+                            // Block if inside a component that is NOT exempt
+                            params.exempt_components.is_empty()
+                                || !params.exempt_components.contains(&name)
+                        }).unwrap_or(false)
+                    } else {
+                        false
+                    };
+                    if !leap_blocked_by_component && sdf.get_distance_with_exemptions(lx, ly, lz, params.exempt_components) > 0 {
                         let move_cost = leap_dist; // Cost is proportional to distance
                         let new_cost = current_cost + move_cost;
 
@@ -354,6 +364,24 @@ pub fn route_net_sdf_accelerated(
             // Hard block occupied voxels
             if neighbor != goal_snapped && params.occupied_voxels.contains(&neighbor) {
                 continue;
+            }
+
+            // v0.1.7 (Strict Box Model): Block the entire interior volume of all components.
+            // Exempt components containing the start or goal pins (boundary-docking).
+            // This is the primary guard against routing through pad interiors — the SDF
+            // alone cannot catch pads that are not registered as component_metadata.
+            if let Some(voxel_grid) = params.voxel_grid {
+                if let Some(component_name) =
+                    voxel_grid.point_in_component(neighbor.x, neighbor.y, neighbor.z)
+                {
+                    if !params.exempt_components.is_empty()
+                        && params.exempt_components.contains(&component_name)
+                    {
+                        // Exempt: this is the start or goal component
+                    } else {
+                        continue; // Block routing through component interior
+                    }
+                }
             }
 
             // SDF OBSTACLE DETECTION (v0.1.7): Hard block if inside a component or substrate

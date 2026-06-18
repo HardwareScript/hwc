@@ -16,6 +16,8 @@ pub struct AutoRouter<'a> {
     stackup_manager: &'a crate::ir::stackup_manager::StackupManager,
     /// Active profile definition (for ASIC detection and layer info)
     profile: Option<&'a hwc_parser::ProfileDefinition>,
+    /// v0.1.7: Net frequencies in Hz for SI-aware routing (high-speed void avoidance).
+    net_frequencies: FxHashMap<NetId, f64>,
 }
 
 #[derive(Debug, Clone)]
@@ -30,11 +32,13 @@ impl<'a> AutoRouter<'a> {
         _symbol_table: &'a crate::SymbolTable,
         stackup_manager: &'a crate::ir::stackup_manager::StackupManager,
         profile: Option<&'a hwc_parser::ProfileDefinition>,
+        net_frequencies: FxHashMap<NetId, f64>,
     ) -> Self {
         Self {
             space,
             stackup_manager,
             profile,
+            net_frequencies,
         }
     }
 
@@ -120,21 +124,25 @@ impl<'a> AutoRouter<'a> {
 
         let mut geo_router = hwc_engine::GeometryRouter::new(grid_bounds, constraints);
 
-        // v0.1.7: Configure ASIC (Manhattan) mode if the profile is an ASIC profile.
-        // This enables layer-by-layer via tower unrolling instead of single through-hole vias.
+        // v0.1.7: Configure profile mode for the router.
+        // ASIC profiles use Manhattan angle restriction (layer-by-layer via unrolling).
+        // PCB profiles use Octilinear (single through-hole via for multi-layer transitions).
+        // In both cases, layer info is needed for via tower unrolling.
         if let Some(profile) = self.profile {
-            if profile.is_asic() {
-                let profile_layers: Vec<String> = self.stackup_manager.ordered_layers().to_vec();
+            let is_manhattan = profile.is_asic();
+            let profile_layers: Vec<String> = self.stackup_manager.ordered_layers().to_vec();
+            if !profile_layers.is_empty() {
                 let layer_z_positions: Vec<i64> = profile_layers
                     .iter()
                     .map(|name| self.stackup_manager.get_layer_start_z(name).unwrap_or(0))
                     .collect();
                 eprintln!(
-                    "[ROUTER] ASIC mode enabled: {} layers, {} layer Z positions",
+                    "[ROUTER] {} mode enabled: {} layers, {} layer Z positions",
+                    if is_manhattan { "ASIC" } else { "PCB" },
                     profile_layers.len(),
                     layer_z_positions.len()
                 );
-                geo_router.set_profile_mode(true, profile_layers, layer_z_positions);
+                geo_router.set_profile_mode(is_manhattan, profile_layers, layer_z_positions);
             }
         }
 
@@ -146,6 +154,21 @@ impl<'a> AutoRouter<'a> {
                 metadata.name.clone(),
                 metadata.component_type.clone(),
             );
+        }
+        // v0.1.7 Boundary-Docking: Also register pour bboxes as obstacles.
+        // Many pads (especially connectors) have pour substrate layers but no
+        // component_metadata, so the A* lockout was invisible to them.
+        for (idx, layer) in self.space.voxel_grid.get_substrate_layers().iter().enumerate() {
+            if layer.layer_type == hwc_engine::voxel_grid::SubstrateLayerType::Pour {
+                let name: compact_str::CompactString =
+                    format!("pour_{}", idx).into();
+                geo_router.add_component_obstacle(
+                    layer.bbox,
+                    1, // Copper material
+                    name,
+                    "Pour".into(),
+                );
+            }
         }
         for pin in self.space.voxel_grid.get_component_pins() {
             geo_router.add_component_pin(
@@ -160,13 +183,15 @@ impl<'a> AutoRouter<'a> {
 
         // Phase 5: Route all nets via GeometryRouter (adaptive mode selection)
         let t_route = std::time::Instant::now();
-        let net_frequencies: FxHashMap<NetId, f64> = FxHashMap::default();
+        let substrate_layers = self.space.voxel_grid.get_substrate_layers();
+        let has_substrate = !substrate_layers.is_empty();
         match geo_router.route_space(
             &grid_bbox,
             &geo_nets,
             &obstacle_bboxes,
-            None, // No substrate layers in global routing
-            &net_frequencies,
+            if has_substrate { Some(substrate_layers) } else { None },
+            &self.net_frequencies,
+            Some(&self.space.voxel_grid), // v0.1.7: Enable Strict Interior Lockout
         ) {
             Ok(result) => {
                 eprintln!(
@@ -177,39 +202,83 @@ impl<'a> AutoRouter<'a> {
                 );
 
                 // Convert RouteResult paths back to AnalyticTrace primitives
-                let default_constraints = hwc_engine::constraint_manager::ConstraintRulebook::new(
-                    self.space.voxel_size.x_nm,
-                )
-                .get_default_constraints();
-                let trace_thickness_nm = default_constraints.min_trace_width_nm;
+                // v0.1.7: Resolve copper thickness from the stackup for the routing layer.
+                let trace_thickness_nm = {
+                    let default_thickness = self.space.voxel_size.z_nm;
+                    let sample_z = result
+                        .paths
+                        .values()
+                        .next()
+                        .and_then(|segments| segments.first())
+                        .and_then(|p| p.first())
+                        .map(|p| p.z)
+                        .unwrap_or(0);
+                    self.stackup_manager
+                        .get_layer_index_at_z(sample_z)
+                        .map(|idx| self.stackup_manager.get_thickness_for_layer_index(idx))
+                        .unwrap_or(default_thickness)
+                };
 
-                for (net_id, path) in &result.paths {
+                for (net_id, segments) in &result.paths {
                     let net_name = net_id_to_name
                         .get(net_id)
                         .cloned()
                         .unwrap_or_else(|| CompactString::from(format!("net_{}", net_id.raw())));
 
-                    if path.len() < 2 {
-                        continue;
-                    }
-
-                    // v0.1.7: Grid-Agnostic Z-Resolution via StackupManager
-                    let mut refined_path = path.clone();
-                    for point in refined_path.iter_mut() {
-                        if let Some(layer_idx) = self.stackup_manager.get_layer_index_at_z(point.z)
-                        {
-                            point.z = self
-                                .stackup_manager
-                                .get_z_start_nm_for_layer_index(layer_idx);
+                    for path in segments {
+                        if path.len() < 2 {
+                            continue;
                         }
-                    }
 
-                    self.register_analytic_route(
-                        *net_id,
-                        &net_name,
-                        refined_path,
-                        trace_thickness_nm,
-                    )?;
+                        // v0.1.7: Grid-Agnostic Z-Resolution via StackupManager
+                        let mut refined_path = path.clone();
+
+                        let target_z = {
+                            let first_z = refined_path.first().map(|p| p.z).unwrap_or(0);
+                            let last_z = refined_path.last().map(|p| p.z).unwrap_or(0);
+                            let first_layer = self.stackup_manager.get_layer_index_at_z(first_z);
+                            let last_layer = self.stackup_manager.get_layer_index_at_z(last_z);
+
+                            match (first_layer, last_layer) {
+                                (Some(a), Some(b)) if a == b => {
+                                    // Both endpoints on same layer — lock entire path to the endpoints' Z plane.
+                                    // This preserves surface mounting Z (e.g. 1.27mm) instead of dropping to 
+                                    // the layer's bottom boundary (e.g. 1.235mm), avoiding "roof" artifacts.
+                                    Some((first_z + last_z) / 2)
+                                }
+                                (Some(a), _) => {
+                                    // Fallback: lock to first point's layer Z
+                                    let _unused_a = a;
+                                    Some(first_z)
+                                }
+                                _ => None,
+                            }
+                        };
+
+                        if let Some(z) = target_z {
+                            for point in refined_path.iter_mut() {
+                                point.z = z;
+                            }
+                        } else {
+                            // Fallback: per-point refinement
+                            for point in refined_path.iter_mut() {
+                                if let Some(layer_idx) =
+                                    self.stackup_manager.get_layer_index_at_z(point.z)
+                                {
+                                    point.z = self
+                                        .stackup_manager
+                                        .get_z_start_nm_for_layer_index(layer_idx);
+                                }
+                            }
+                        }
+
+                        self.register_analytic_route(
+                            *net_id,
+                            &net_name,
+                            refined_path,
+                            trace_thickness_nm,
+                        )?;
+                    }
                 }
             }
             Err(e) => {
@@ -264,6 +333,10 @@ impl<'a> AutoRouter<'a> {
             return Ok(());
         }
 
+        // v0.1.7: Strict Boundary-Docking Model
+        // The router now handles "docking" perfectly by starting/ending at the boundary.
+        // We no longer need to trim traces inside pads because the pathfinder is
+        // physically forbidden from entering them.
         let mut segments = Vec::new();
         let mut start = path[0];
 

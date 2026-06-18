@@ -201,12 +201,14 @@ impl<'a> RipUpRouter<'a> {
             }
 
             // Check if this net's path is near our start or goal
-            for point in &routed_net.path {
-                if self.is_near(point, &net.start, search_radius)
-                    || self.is_near(point, &net.goal, search_radius)
-                {
-                    blocking_nets.push(routed_net.net_id);
-                    break;
+            for segment in &routed_net.paths {
+                for point in segment {
+                    if self.is_near(point, &net.start, search_radius)
+                        || self.is_near(point, &net.goal, search_radius)
+                    {
+                        blocking_nets.push(routed_net.net_id);
+                        break;
+                    }
                 }
             }
         }
@@ -240,8 +242,10 @@ impl<'a> RipUpRouter<'a> {
 
             // Clear all voxels occupied by this net
             // This is the "dynamic trace deletion from BitChunks" requirement
-            for point in &routed_net.path {
-                self.router.clear_voxel(*point);
+            for segment in &routed_net.paths {
+                for point in segment {
+                    self.router.clear_voxel(*point);
+                }
             }
 
             // Clear vias
@@ -296,12 +300,14 @@ impl<'a> RipUpRouter<'a> {
             }
 
             // Check if this net's path is near our start or goal
-            for point in &routed_net.path {
-                if self.is_near(point, &net.start, search_radius)
-                    || self.is_near(point, &net.goal, search_radius)
-                {
-                    blocking_nets.push(routed_net.net_id);
-                    break;
+            for segment in &routed_net.paths {
+                for point in segment {
+                    if self.is_near(point, &net.start, search_radius)
+                        || self.is_near(point, &net.goal, search_radius)
+                    {
+                        blocking_nets.push(routed_net.net_id);
+                        break;
+                    }
                 }
             }
         }

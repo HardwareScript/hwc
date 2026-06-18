@@ -6,7 +6,6 @@ mod compilation;
 mod config;
 mod error;
 mod export;
-mod lockfile;
 mod parsing;
 mod source_context;
 mod validation;
@@ -46,11 +45,24 @@ pub fn execute(
     // Compile source to AST and symbol table
     let compilation_result = compilation::compile_source(&input, &config, start_time)?;
 
-    // Transform AST to all HardwareSpaces
-    let spaces_result = hwc_compiler::program_to_spaces(
+    // Read source content for lockfile hash computation
+    let source_content = std::fs::read_to_string(&input).unwrap_or_default();
+
+    // Compute lockfile path for this input
+    let lockfile_path = if !config.no_lockfile {
+        Some(input.with_extension("hw.routes.lock"))
+    } else {
+        None
+    };
+
+    // Transform AST to all HardwareSpaces (with lockfile support)
+    let spaces_result = hwc_compiler::program_to_spaces_with_lockfile(
         &compilation_result.ast,
         &compilation_result.symbol_table,
         &compilation_result.collector,
+        lockfile_path.as_deref(),
+        Some(&source_content),
+        config.force_reroute,
     );
 
     // Print any diagnostics
@@ -123,9 +135,6 @@ pub fn execute(
         if config.verbose {
             println!("📁 Output directory: {}", space_output_dir.display());
         }
-
-        // Handle route lockfile
-        lockfile::handle_lockfile(&input, &space, &config, start_time)?;
 
         // Run validation checks
         let is_artist_mode = physical_netlist.is_none();

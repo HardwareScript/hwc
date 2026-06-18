@@ -124,6 +124,11 @@ pub struct NetData {
 
     /// Pins connected to this net
     pub pins: SmallVec<[PinId; 8]>,
+
+    /// v0.1.7: Signal frequency in Hz (e.g., 5_000_000_000.0 for 5 GHz).
+    /// None if frequency is unspecified. Used to classify high-speed nets
+    /// that must avoid reference-plane voids.
+    pub frequency_hz: Option<f64>,
 }
 
 /// ECS-style arena for netlist storage.
@@ -228,12 +233,20 @@ impl NetlistArena {
             width_nm,
             material,
             pins: SmallVec::new(),
+            frequency_hz: None,
         };
 
         self.nets.push(net);
         self.net_names.insert(name, id);
 
         id
+    }
+
+    /// v0.1.7: Set the signal frequency (in Hz) for a net.
+    pub fn set_net_frequency(&mut self, net: NetId, frequency_hz: f64) {
+        if let Some(net_data) = self.nets.get_mut(net.0 as usize) {
+            net_data.frequency_hz = Some(frequency_hz);
+        }
     }
 
     /// Connect a pin to a net.

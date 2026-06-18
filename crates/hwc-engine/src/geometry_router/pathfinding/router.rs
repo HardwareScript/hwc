@@ -46,16 +46,23 @@ pub fn route_net_deterministic(
     params: &RoutingParams,
 ) -> Option<Vec<Point3D>> {
     // Snap start and goal to voxel centers
-    let snap_coord = |coord: i64, voxel_size: i64| -> i64 {
+    let snap_coord = |coord: i64, voxel_size: i64, max_nm: i64| -> i64 {
         if voxel_size > 0 {
             // Snap to the center of the voxel that contains this coordinate
             // index = floor(coord / voxel_size)
             // center = (index * voxel_size) + (voxel_size / 2)
-            let index = if coord >= 0 {
+            let mut index = if coord >= 0 {
                 coord / voxel_size
             } else {
                 (coord - voxel_size + 1) / voxel_size
             };
+
+            // v0.1.7: Boundary-Aware Snapping
+            // Prevents coordinates at the very edge (e.g., z=1.27mm) from snapping
+            // to a non-existent voxel index (e.g., index 2 in a 2-voxel grid).
+            let max_idx = (max_nm / voxel_size).saturating_sub(1);
+            index = index.min(max_idx).max(0);
+
             (index * voxel_size) + (voxel_size / 2)
         } else {
             coord
@@ -63,14 +70,14 @@ pub fn route_net_deterministic(
     };
 
     let start_snapped = Point3D::new(
-        snap_coord(start.x, params.voxel_size.x_nm),
-        snap_coord(start.y, params.voxel_size.y_nm),
-        snap_coord(start.z, params.voxel_size.z_nm),
+        snap_coord(start.x, params.voxel_size.x_nm, params.bounds.width_nm),
+        snap_coord(start.y, params.voxel_size.y_nm, params.bounds.height_nm),
+        snap_coord(start.z, params.voxel_size.z_nm, params.bounds.depth_nm),
     );
     let goal_snapped = Point3D::new(
-        snap_coord(goal.x, params.voxel_size.x_nm),
-        snap_coord(goal.y, params.voxel_size.y_nm),
-        snap_coord(goal.z, params.voxel_size.z_nm),
+        snap_coord(goal.x, params.voxel_size.x_nm, params.bounds.width_nm),
+        snap_coord(goal.y, params.voxel_size.y_nm, params.bounds.height_nm),
+        snap_coord(goal.z, params.voxel_size.z_nm, params.bounds.depth_nm),
     );
 
     let mut state = PathfindingState::new();
@@ -116,10 +123,14 @@ pub fn route_net_deterministic(
             // v0.1.7 Fix: Lock ALL intermediate points to the exact physical Z-plane.
             // When fixed_z_nm is set (2.5D routing), every intermediate point must
             // use the original non-snapped Z to avoid 21μm quantization noise.
+            // Guard: path needs at least 3 points to have any intermediate points.
+            // A path of length 0 or 1 means start==goal (same voxel), nothing to fix up.
             if let Some(fixed_z) = params.fixed_z_nm {
-                let last_idx = path.len() - 1;
-                for point in path[1..last_idx].iter_mut() {
-                    point.z = fixed_z;
+                if path.len() >= 3 {
+                    let last_idx = path.len() - 1;
+                    for point in path[1..last_idx].iter_mut() {
+                        point.z = fixed_z;
+                    }
                 }
             }
 
@@ -134,7 +145,7 @@ pub fn route_net_deterministic(
 
         // v0.1.7: Planar Lock (2.5D Routing)
         if let Some(fixed_z) = params.fixed_z_nm {
-            let snapped_fixed_z = snap_coord(fixed_z, params.voxel_size.z_nm);
+            let snapped_fixed_z = snap_coord(fixed_z, params.voxel_size.z_nm, params.bounds.depth_nm);
             if current.z != snapped_fixed_z {
                 continue;
             }
@@ -184,38 +195,19 @@ pub fn route_net_deterministic(
                 continue;
             }
 
-            // COMPONENT BBOX OBSTACLE DETECTION (GAP3): Check if neighbor is inside a component
-            // Components are stored as sparse metadata (bounding boxes only), so we check them explicitly
-            // Exception: Allow routing TO component pins (endpoints), block everything else
-            if neighbor != goal_snapped && neighbor != start_snapped {
-                if let Some(voxel_grid) = params.voxel_grid {
-                    // Check if point is inside any component bounding box
-                    if let Some(component_name) =
-                        voxel_grid.point_in_component(neighbor.x, neighbor.y, neighbor.z)
+            // v0.1.7 (Strict Box Model): Block the entire interior volume of all components.
+            // Exempt components containing the start or goal pins (boundary-docking).
+            if let Some(voxel_grid) = params.voxel_grid {
+                if let Some(component_name) =
+                    voxel_grid.point_in_component(neighbor.x, neighbor.y, neighbor.z)
+                {
+                    // Allow routing to/from the start and goal pin's component
+                    if !params.exempt_components.is_empty()
+                        && params.exempt_components.contains(&component_name)
                     {
-                        // v0.1.7: Escape Exemption
-                        if params.exempt_components.contains(&component_name) {
-                            // Allow routing inside exempt components
-                        } else {
-                            // Check if this point is at a component pin (allow routing to pins)
-                            let tolerance_nm = params.voxel_size.x_nm; // 1 voxel tolerance
-                            if !voxel_grid.is_at_component_pin(
-                                neighbor.x,
-                                neighbor.y,
-                                neighbor.z,
-                                tolerance_nm,
-                            ) {
-                                #[cfg(debug_assertions)]
-                                eprintln!(
-                                    "[COMPONENT OBSTACLE] Blocked path through component '{}' at ({:.3}mm, {:.3}mm, {:.3}mm)",
-                                    component_name,
-                                    neighbor.x as f64 / 1_000_000.0,
-                                    neighbor.y as f64 / 1_000_000.0,
-                                    neighbor.z as f64 / 1_000_000.0
-                                );
-                                continue; // Block routing through component
-                            }
-                        }
+                        // Exempt: this is the start or goal component
+                    } else {
+                        continue; // Block routing through component interior
                     }
                 }
             }

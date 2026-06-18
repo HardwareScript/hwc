@@ -28,7 +28,7 @@ pub fn construct_component_name(
 /// Handles:
 /// - Literals: `0`, `1`, `5`
 /// - Binary operations: `0 + 1` → `1`, `2 * 3` → `6`
-fn evaluate_index_expression(expr: &hwc_parser::Expression) -> Result<i64, IrError> {
+pub fn evaluate_index_expression(expr: &hwc_parser::Expression) -> Result<i64, IrError> {
     match expr {
         hwc_parser::Expression::Literal { value, .. } => Ok(*value),
         hwc_parser::Expression::FloatLiteral { value, .. } => Ok(*value as i64),

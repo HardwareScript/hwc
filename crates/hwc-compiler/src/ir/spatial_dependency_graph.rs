@@ -40,15 +40,29 @@ impl SpatialDependencyGraph {
     }
 
     /// Add a dependency: `dependent` depends on `dependency`.
-    pub fn add_dependency(&mut self, dependent: CompactString, dependency: CompactString) {
+    pub fn add_dependency(&mut self, dependent: CompactString, mut dependency: CompactString) {
         self.add_component(dependent.clone());
-        // We allow dependency to be added even if not yet in textual_order
-        // (it will be added when its own statement is processed).
+
+        // Resolve dependency to a registered component if it has array syntax (e.g. J0[0] -> J0)
+        if !self.dependencies.contains_key(&dependency) {
+            if let Some(open_bracket) = dependency.find('[') {
+                let base_name: CompactString = dependency[..open_bracket].into();
+                if self.dependencies.contains_key(&base_name) {
+                    dependency = base_name;
+                }
+            }
+        }
+
         if dependent != dependency {
-            self.dependencies
-                .entry(dependent)
-                .or_default()
-                .insert(dependency);
+            // Only add the dependency if it is a known component in the graph.
+            // (Standard materials or non-existent references are skipped; 
+            // invalid references are validated/reported in separate compiler passes).
+            if self.dependencies.contains_key(&dependency) {
+                self.dependencies
+                    .entry(dependent)
+                    .or_default()
+                    .insert(dependency);
+            }
         }
     }
 
