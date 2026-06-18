@@ -18,7 +18,7 @@ pub struct RoutingParams<'a> {
     pub layer_direction: LayerDirection,
     pub voxel_size: crate::VoxelSize,
     pub clearance_zones: &'a [ClearanceZone],
-    pub occupied_voxels: &'a FxHashSet<Point3D>,
+    pub occupied_voxels: &'a rustc_hash::FxHashMap<Point3D, NetId>,
     pub voxel_grid: Option<&'a VoxelGrid>, // Optional: for Binary Collision Skip
     pub corridor: Option<&'a FxHashSet<CoarseNode>>, // Optional: for Hierarchical Corridor Search
     /// v0.1.7: Fixed Z-height for Planar Lock (2.5D Routing)

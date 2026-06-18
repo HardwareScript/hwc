@@ -192,42 +192,57 @@ pub fn add_substrate(
                 layer.material,
                 layer.net,
             );
-            let path = match layer.shape {
-                SubstrateLayerShape::Rect => rect_to_path(&layer.bbox),
-                SubstrateLayerShape::Circle { radius } => {
-                    let cx = (layer.bbox.min.x + layer.bbox.max.x) / 2;
-                    let cy = (layer.bbox.min.y + layer.bbox.max.y) / 2;
-                    circle_to_path(cx, cy, radius, 64)
-                }
-                _ => continue,
+
+            // v0.1.8: If layer has child regions, emit one path per region.
+            // Otherwise emit a single path from the layer bbox (legacy behavior).
+            let region_bboxes: Vec<_> = if layer.regions.is_empty() {
+                vec![layer.bbox]
+            } else {
+                layer.regions.to_vec()
             };
 
-            // v0.1.7: Subtract cutouts from the path before adding to the pool
-            // This ensures that via holes are subtracted even if the route overlaps them.
-            if !layer.cutouts.is_empty() {
-                let mut hole_paths = Vec::new();
-                for cutout in &layer.cutouts {
-                    match cutout.shape {
-                        SubstrateLayerShape::Rect => hole_paths.push(rect_to_path(&cutout.bbox)),
-                        SubstrateLayerShape::Polygon {
-                            ref outer_contour, ..
-                        } => {
-                            hole_paths.push(outer_contour.clone());
-                        }
-                        _ => {}
+            for region_bbox in &region_bboxes {
+                let path = match layer.shape {
+                    SubstrateLayerShape::Rect => rect_to_path(region_bbox),
+                    SubstrateLayerShape::Circle { radius } => {
+                        let cx = (region_bbox.min.x + region_bbox.max.x) / 2;
+                        let cy = (region_bbox.min.y + region_bbox.max.y) / 2;
+                        circle_to_path(cx, cy, radius, 64)
                     }
-                }
-                if !hole_paths.is_empty() {
-                    let diff =
-                        clipper2_rust::difference_64(&vec![path], &hole_paths, FillRule::NonZero);
-                    for p in diff {
-                        copper_pools.entry(key).or_default().push(p);
-                    }
-                    continue; // Skip the original path as we added the difference
-                }
-            }
+                    _ => continue,
+                };
 
-            copper_pools.entry(key).or_default().push(path);
+                // v0.1.7: Subtract cutouts from the path before adding to the pool
+                if !layer.cutouts.is_empty() {
+                    let mut hole_paths = Vec::new();
+                    for cutout in &layer.cutouts {
+                        match cutout.shape {
+                            SubstrateLayerShape::Rect => {
+                                hole_paths.push(rect_to_path(&cutout.bbox))
+                            }
+                            SubstrateLayerShape::Polygon {
+                                ref outer_contour, ..
+                            } => {
+                                hole_paths.push(outer_contour.clone());
+                            }
+                            _ => {}
+                        }
+                    }
+                    if !hole_paths.is_empty() {
+                        let diff = clipper2_rust::difference_64(
+                            &vec![path],
+                            &hole_paths,
+                            FillRule::NonZero,
+                        );
+                        for p in diff {
+                            copper_pools.entry(key).or_default().push(p);
+                        }
+                        continue;
+                    }
+                }
+
+                copper_pools.entry(key).or_default().push(path);
+            }
         }
     }
 

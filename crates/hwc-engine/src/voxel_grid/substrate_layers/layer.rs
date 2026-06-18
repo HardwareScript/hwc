@@ -48,6 +48,17 @@ pub struct SubstrateLayer {
     /// Keep-out zone radius in nanometers (v0.1.7: TSV Stress Management)
     /// If non-zero, this region around the substrate layer is forbidden for other components.
     pub koz_radius_nm: i64,
+
+    /// v0.1.8: Child regions for merged trace segments.
+    ///
+    /// When multiple trace segments on the same physical layer (same Z, material, net)
+    /// are realized, they are stored as child regions inside a single SubstrateLayer
+    /// instead of creating separate layer objects. This preserves the O(1) memory
+    /// architecture while supporting arbitrary trace geometry.
+    ///
+    /// If empty, the layer uses `bbox` as its sole region (legacy behavior).
+    /// If non-empty, each entry is an independent bounding box belonging to this layer.
+    pub regions: SmallVec<[BoundingBox; 4]>,
 }
 
 impl SubstrateLayer {
@@ -66,6 +77,7 @@ impl SubstrateLayer {
             layer_type,
             shape: SubstrateLayerShape::Rect,
             koz_radius_nm: 0,
+            regions: SmallVec::new(),
         }
     }
 
@@ -85,6 +97,7 @@ impl SubstrateLayer {
             layer_type: SubstrateLayerType::Contact,
             shape: SubstrateLayerShape::cylinder(diameter, segments),
             koz_radius_nm: 0,
+            regions: SmallVec::new(),
         }
     }
 
@@ -98,6 +111,7 @@ impl SubstrateLayer {
             layer_type: SubstrateLayerType::Pour,
             shape: SubstrateLayerShape::Circle { radius },
             koz_radius_nm: 0,
+            regions: SmallVec::new(),
         }
     }
 
@@ -111,6 +125,7 @@ impl SubstrateLayer {
             layer_type: SubstrateLayerType::Contact,
             shape: SubstrateLayerShape::square(size),
             koz_radius_nm: 0,
+            regions: SmallVec::new(),
         }
     }
 
@@ -124,6 +139,7 @@ impl SubstrateLayer {
             layer_type: SubstrateLayerType::Contact,
             shape: SubstrateLayerShape::hexagon(size),
             koz_radius_nm: 0,
+            regions: SmallVec::new(),
         }
     }
 
@@ -146,6 +162,7 @@ impl SubstrateLayer {
                 segments: 16,
             },
             koz_radius_nm: 0,
+            regions: SmallVec::new(),
         }
     }
 
@@ -179,6 +196,7 @@ impl SubstrateLayer {
                 bottom_outer_diameter,
             },
             koz_radius_nm: 0,
+            regions: SmallVec::new(),
         }
     }
 
@@ -198,7 +216,17 @@ impl SubstrateLayer {
             layer_type,
             shape: SubstrateLayerShape::Rect,
             koz_radius_nm: 0,
+            regions: SmallVec::new(),
         }
+    }
+
+    /// v0.1.8: Append a child region (bounding box) to this layer.
+    ///
+    /// Used during trace realization to merge multiple segments into a single
+    /// physical layer instead of creating separate SubstrateLayer objects.
+    /// Each region is an independent bounding box belonging to this layer.
+    pub fn append_region(&mut self, bbox: BoundingBox) {
+        self.regions.push(bbox);
     }
 
     /// Add a cutout (hole) to this substrate layer.
@@ -232,14 +260,27 @@ impl SubstrateLayer {
     /// `true` if the point is within the substrate layer and not in a cutout
     #[inline]
     pub fn contains_nm(&self, x: i64, y: i64, z: i64) -> bool {
-        if !(x >= self.bbox.min.x
-            && x <= self.bbox.max.x
-            && y >= self.bbox.min.y
-            && y <= self.bbox.max.y
-            && z >= self.bbox.min.z
-            && z <= self.bbox.max.z)
-        {
-            return false;
+        // v0.1.8: If regions are present, check against child regions instead of bbox.
+        // This ensures points in empty space between trace segments return false.
+        if !self.regions.is_empty() {
+            let in_any_region = self.regions.iter().any(|r| {
+                x >= r.min.x && x <= r.max.x
+                    && y >= r.min.y && y <= r.max.y
+                    && z >= r.min.z && z <= r.max.z
+            });
+            if !in_any_region {
+                return false;
+            }
+        } else {
+            if !(x >= self.bbox.min.x
+                && x <= self.bbox.max.x
+                && y >= self.bbox.min.y
+                && y <= self.bbox.max.y
+                && z >= self.bbox.min.z
+                && z <= self.bbox.max.z)
+            {
+                return false;
+            }
         }
 
         match &self.shape {

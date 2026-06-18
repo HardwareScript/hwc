@@ -163,6 +163,33 @@ pub fn execute(
             );
         }
 
+        // v0.1.7: Debug net identity trace
+        if config.debug_identity {
+            let stats = space.netlist.stats();
+            let route_count = space.analytic_routes.len();
+            let segment_count: usize = space.analytic_routes.iter().map(|r| r.segments.len()).sum();
+            let physical_regions = space.voxel_grid.get_substrate_layers().len();
+            println!(
+                "\n[DEBUG identity] Logical Nets: {} | Route Requests: {} | Route Segments: {} | Physical Regions: {} | Netlist Components: {}",
+                stats.net_count, route_count, segment_count, physical_regions, stats.component_count
+            );
+        }
+
+        // v0.1.7: Verify-only mode — run verification without export
+        if config.verify_only {
+            println!(
+                "\n✅ --verify-only: Verification {} ({} violations)",
+                if validation_result.passed { "PASSED" } else { "FAILED" },
+                validation_result.violation_count
+            );
+            if !validation_result.passed {
+                for v in &validation_result.violations {
+                    println!("   ⚠️  [{}] {}", v.code, v.message);
+                }
+            }
+            continue;
+        }
+
         // Realize analytic routes
         if !space.analytic_routes.is_empty() {
             space.realize_analytic_routes();

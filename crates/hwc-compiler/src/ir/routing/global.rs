@@ -18,6 +18,8 @@ pub struct AutoRouter<'a> {
     profile: Option<&'a hwc_parser::ProfileDefinition>,
     /// v0.1.7: Net frequencies in Hz for SI-aware routing (high-speed void avoidance).
     net_frequencies: FxHashMap<NetId, f64>,
+    /// v0.1.7: Individual route requests (from Hardware Script 'route' statements)
+    auto_routes: Vec<hwc_parser::Route>,
 }
 
 #[derive(Debug, Clone)]
@@ -33,12 +35,14 @@ impl<'a> AutoRouter<'a> {
         stackup_manager: &'a crate::ir::stackup_manager::StackupManager,
         profile: Option<&'a hwc_parser::ProfileDefinition>,
         net_frequencies: FxHashMap<NetId, f64>,
+        auto_routes: Vec<hwc_parser::Route>,
     ) -> Self {
         Self {
             space,
             stackup_manager,
             profile,
             net_frequencies,
+            auto_routes,
         }
     }
 
@@ -52,42 +56,197 @@ impl<'a> AutoRouter<'a> {
     pub fn route_all_nets(&mut self) -> Result<(), IrError> {
         use hwc_engine::geometry::BoundingBox;
 
-        // Phase 1: Analyze component pins and group by net
-        let net_pins = self.analyze_nets()?;
-
-        if net_pins.is_empty() {
-            return Ok(());
-        }
-
-        // Phase 2: Build the nets HashMap required by GeometryRouter::route_space()
-        // GeometryRouter expects FxHashMap<NetId, Vec<Point3D>> (all pin coords per net).
+        // Phase 1: Build the nets HashMap required by GeometryRouter::route_space()
+        // v0.1.7 Chain-Link Logic: If explicit 'route' statements exist, we route them
+        // as individual segments to preserve the user's intended topology.
         let mut geo_nets: FxHashMap<NetId, Vec<Point3D>> = FxHashMap::default();
+        let mut explicit_segments: Vec<(NetId, Vec<Point3D>)> = Vec::new();
         let mut net_id_to_name: FxHashMap<NetId, CompactString> = FxHashMap::default();
+        let mut route_segments: Vec<(NetId, Vec<Point3D>)> = Vec::new();
 
-        for (net_name, pins) in &net_pins {
-            if pins.len() < 2 {
-                continue;
+        if !self.auto_routes.is_empty() {
+            eprintln!("[ROUTER] Using Chain-Link mode ({} explicit routes)", self.auto_routes.len());
+            let auto_routes = self.auto_routes.clone();
+
+            // v0.1.7: Port Occupancy Tracking
+            // Tracks which ports are already used on each pad to ensure chain connections
+            // use different ports for entry and exit.
+            // Key: (Component, Pin) -> Vec<CardinalPort>
+            let mut used_ports: FxHashMap<(CompactString, CompactString), Vec<hwc_engine::geometry_router::port_escape::CardinalPort>> = FxHashMap::default();
+
+            for route in &auto_routes {
+                // Get or create net ID for this route
+                let net_id = self.find_net_id_for_name("TEMP_NET")?; // Dummy for resolution
+                let actual_net_id = crate::ir::routing::register_net_for_route(self.space, route, &crate::SymbolTable::new())
+                    .unwrap_or(net_id);
+                let net_name = self.space.netlist.get_net(actual_net_id).map(|n| n.name.clone()).unwrap_or_else(|| "unnamed".into());
+
+                // Resolve pin positions to boundary points (GOD-TIER ALIGNMENT)
+                let min_width = self.space.fabrication_constraints.as_ref().map(|c| c.trace.min_width_nm).unwrap_or(100_000);
+                
+                // v0.1.7: Smart Chain-Link Port Selection
+                // We manually resolve ports here if they haven't been specified,
+                // checking for collisions with already-used ports on the same net.
+                let mut modified_route = route.clone();
+                let from_key = (CompactString::from(route.from.component.clone()), CompactString::from(route.from.pin.clone()));
+                let to_key = (CompactString::from(route.to.component.clone()), CompactString::from(route.to.pin.clone()));
+
+                if modified_route.exit_escape.is_none() {
+                    // Try to find a free port
+                    if let Ok((start, goal, _, _)) = crate::ir::routing::calculate_boundary_points(self.space, route, min_width) {
+                        // Check if the default port is already used
+                        let dx = goal.x - start.x;
+                        let dy = goal.y - start.y;
+                        
+                        // Re-run heuristic locally to see what was picked
+                        let mut port = if dy.abs() >= 1_000_000 && dy.abs() > dx.abs() / 4 {
+                            if dy > 0 { hwc_engine::geometry_router::port_escape::CardinalPort::North } else { hwc_engine::geometry_router::port_escape::CardinalPort::South }
+                        } else {
+                            if dx > 0 { hwc_engine::geometry_router::port_escape::CardinalPort::East } else { hwc_engine::geometry_router::port_escape::CardinalPort::West }
+                        };
+
+                        // v0.1.7: Flow-Through Preference
+                        // If this pad already has an entry port, prefer the OPPOSITE port
+                        // for the exit to create a clean "flow-through" chain.
+                        if let Some(used) = used_ports.get(&from_key) {
+                            if !used.is_empty() {
+                                let last_port = used[0];
+                                let opposite = match last_port {
+                                    hwc_engine::geometry_router::port_escape::CardinalPort::North => hwc_engine::geometry_router::port_escape::CardinalPort::South,
+                                    hwc_engine::geometry_router::port_escape::CardinalPort::South => hwc_engine::geometry_router::port_escape::CardinalPort::North,
+                                    hwc_engine::geometry_router::port_escape::CardinalPort::East => hwc_engine::geometry_router::port_escape::CardinalPort::West,
+                                    hwc_engine::geometry_router::port_escape::CardinalPort::West => hwc_engine::geometry_router::port_escape::CardinalPort::East,
+                                };
+                                if !used.contains(&opposite) {
+                                    port = opposite;
+                                }
+                            }
+
+                            // Still collision? Cycle through remaining
+                            if used.contains(&port) {
+                                let ports = [
+                                    hwc_engine::geometry_router::port_escape::CardinalPort::East,
+                                    hwc_engine::geometry_router::port_escape::CardinalPort::West,
+                                    hwc_engine::geometry_router::port_escape::CardinalPort::North,
+                                    hwc_engine::geometry_router::port_escape::CardinalPort::South,
+                                ];
+                                for p in ports {
+                                    if !used.contains(&p) {
+                                        port = p;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        
+                        used_ports.entry(from_key).or_default().push(port);
+                        modified_route.exit_escape = Some(hwc_parser::RouteEscape {
+                            port: match port {
+                                hwc_engine::geometry_router::port_escape::CardinalPort::North => hwc_parser::CardinalDirection::North,
+                                hwc_engine::geometry_router::port_escape::CardinalPort::South => hwc_parser::CardinalDirection::South,
+                                hwc_engine::geometry_router::port_escape::CardinalPort::East => hwc_parser::CardinalDirection::East,
+                                hwc_engine::geometry_router::port_escape::CardinalPort::West => hwc_parser::CardinalDirection::West,
+                            },
+                            offset: None,
+                            span: route.span,
+                        });
+                    }
+                }
+
+                if modified_route.enter_escape.is_none() {
+                    // Try to find a free port for the target
+                    if let Ok((start, goal, _, _)) = crate::ir::routing::calculate_boundary_points(self.space, route, min_width) {
+                        let dx = goal.x - start.x;
+                        let dy = goal.y - start.y;
+                        
+                        let mut port = if dy.abs() >= 1_000_000 && dy.abs() > dx.abs() / 4 {
+                            if dy > 0 { hwc_engine::geometry_router::port_escape::CardinalPort::South } else { hwc_engine::geometry_router::port_escape::CardinalPort::North }
+                        } else {
+                            if dx > 0 { hwc_engine::geometry_router::port_escape::CardinalPort::West } else { hwc_engine::geometry_router::port_escape::CardinalPort::East }
+                        };
+
+                        if let Some(used) = used_ports.get(&to_key) {
+                            // v0.1.7: Flow-Through Preference for destination
+                            if !used.is_empty() {
+                                let last_port = used[0];
+                                let opposite = match last_port {
+                                    hwc_engine::geometry_router::port_escape::CardinalPort::North => hwc_engine::geometry_router::port_escape::CardinalPort::South,
+                                    hwc_engine::geometry_router::port_escape::CardinalPort::South => hwc_engine::geometry_router::port_escape::CardinalPort::North,
+                                    hwc_engine::geometry_router::port_escape::CardinalPort::East => hwc_engine::geometry_router::port_escape::CardinalPort::West,
+                                    hwc_engine::geometry_router::port_escape::CardinalPort::West => hwc_engine::geometry_router::port_escape::CardinalPort::East,
+                                };
+                                if !used.contains(&opposite) {
+                                    port = opposite;
+                                }
+                            }
+
+                            if used.contains(&port) {
+                                let ports = [
+                                    hwc_engine::geometry_router::port_escape::CardinalPort::West,
+                                    hwc_engine::geometry_router::port_escape::CardinalPort::East,
+                                    hwc_engine::geometry_router::port_escape::CardinalPort::South,
+                                    hwc_engine::geometry_router::port_escape::CardinalPort::North,
+                                ];
+                                for p in ports {
+                                    if !used.contains(&p) {
+                                        port = p;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        
+                        used_ports.entry(to_key).or_default().push(port);
+                        modified_route.enter_escape = Some(hwc_parser::RouteEscape {
+                            port: match port {
+                                hwc_engine::geometry_router::port_escape::CardinalPort::North => hwc_parser::CardinalDirection::North,
+                                hwc_engine::geometry_router::port_escape::CardinalPort::South => hwc_parser::CardinalDirection::South,
+                                hwc_engine::geometry_router::port_escape::CardinalPort::East => hwc_parser::CardinalDirection::East,
+                                hwc_engine::geometry_router::port_escape::CardinalPort::West => hwc_parser::CardinalDirection::West,
+                            },
+                            offset: None,
+                            span: route.span,
+                        });
+                    }
+                }
+
+                if let Ok((start, goal, _, _)) = crate::ir::routing::calculate_boundary_points(self.space, &modified_route, min_width) {
+                    route_segments.push((actual_net_id, vec![start, goal]));
+                    net_id_to_name.insert(actual_net_id, net_name);
+                }
             }
-
-            // Get or create net ID
-            let net_id = self.find_net_id_for_name(net_name)?;
-
-            // Skip nets that already have manual analytic routes
-            if self
-                .space
-                .analytic_routes
-                .iter()
-                .any(|r| r.net_id == net_id)
-            {
-                continue;
-            }
-
-            let coords: Vec<Point3D> = pins.iter().map(|p| p.position).collect();
-            geo_nets.insert(net_id, coords);
-            net_id_to_name.insert(net_id, net_name.clone());
         }
 
-        if geo_nets.is_empty() {
+        // If no explicit routes, fallback to netlist pin grouping (Legacy mode)
+        if route_segments.is_empty() {
+            let net_pins = self.analyze_nets()?;
+            for (net_name, pins) in &net_pins {
+                if pins.len() < 2 { continue; }
+                let net_id = self.find_net_id_for_name(net_name)?;
+                let coords: Vec<Point3D> = pins.iter().map(|p| p.position).collect();
+                geo_nets.insert(net_id, coords);
+                net_id_to_name.insert(net_id, net_name.clone());
+            }
+        } else {
+            // v0.1.7: Unified Net IDs for Chain-Link mode.
+            // By using the same logical NetId for all segments, the engine's
+            // same-net collision bypass and crosstalk-exemption logic kicks in.
+            // This ensures traces from the same pad don't "bump" away from each other.
+            explicit_segments = route_segments.clone();
+
+            // v0.1.8: Also populate geo_nets so the adaptive router's hierarchical
+            // mode sees the nets for classification and partitioning. Without this,
+            // the planner processes 0 nets while the explicit path handles routing
+            // in isolation, producing misleading "0 nets routed" log output.
+            for (net_id, points) in &route_segments {
+                geo_nets.insert(*net_id, points.clone());
+                net_id_to_name.entry(*net_id).or_insert_with(|| {
+                    compact_str::CompactString::from(format!("chain_net_{}", net_id.raw()))
+                });
+            }
+        }
+
+        if geo_nets.is_empty() && explicit_segments.is_empty() {
             return Ok(());
         }
 
@@ -188,6 +347,7 @@ impl<'a> AutoRouter<'a> {
         match geo_router.route_space(
             &grid_bbox,
             &geo_nets,
+            if explicit_segments.is_empty() { None } else { Some(&explicit_segments) },
             &obstacle_bboxes,
             if has_substrate { Some(substrate_layers) } else { None },
             &self.net_frequencies,
@@ -219,11 +379,18 @@ impl<'a> AutoRouter<'a> {
                         .unwrap_or(default_thickness)
                 };
 
-                for (net_id, segments) in &result.paths {
+                for (net_id_raw, segments) in &result.paths {
+                    // v0.1.7: Resolve original NetId from temp Chain-Link ID
+                    let actual_net_id = if !self.auto_routes.is_empty() {
+                        NetId::new(net_id_raw.raw() % 10000)
+                    } else {
+                        *net_id_raw
+                    };
+
                     let net_name = net_id_to_name
-                        .get(net_id)
+                        .get(net_id_raw)
                         .cloned()
-                        .unwrap_or_else(|| CompactString::from(format!("net_{}", net_id.raw())));
+                        .unwrap_or_else(|| CompactString::from(format!("net_{}", actual_net_id.raw())));
 
                     for path in segments {
                         if path.len() < 2 {
@@ -232,6 +399,7 @@ impl<'a> AutoRouter<'a> {
 
                         // v0.1.7: Grid-Agnostic Z-Resolution via StackupManager
                         let mut refined_path = path.clone();
+                        let mut actual_thickness = trace_thickness_nm;
 
                         let target_z = {
                             let first_z = refined_path.first().map(|p| p.z).unwrap_or(0);
@@ -241,14 +409,12 @@ impl<'a> AutoRouter<'a> {
 
                             match (first_layer, last_layer) {
                                 (Some(a), Some(b)) if a == b => {
-                                    // Both endpoints on same layer — lock entire path to the endpoints' Z plane.
-                                    // This preserves surface mounting Z (e.g. 1.27mm) instead of dropping to 
-                                    // the layer's bottom boundary (e.g. 1.235mm), avoiding "roof" artifacts.
+                                    // Resolve physical thickness for this specific layer
+                                    actual_thickness = self.stackup_manager.get_thickness_for_layer_index(a);
                                     Some((first_z + last_z) / 2)
                                 }
                                 (Some(a), _) => {
-                                    // Fallback: lock to first point's layer Z
-                                    let _unused_a = a;
+                                    actual_thickness = self.stackup_manager.get_thickness_for_layer_index(a);
                                     Some(first_z)
                                 }
                                 _ => None,
@@ -273,10 +439,10 @@ impl<'a> AutoRouter<'a> {
                         }
 
                         self.register_analytic_route(
-                            *net_id,
+                            actual_net_id,
                             &net_name,
                             refined_path,
-                            trace_thickness_nm,
+                            actual_thickness,
                         )?;
                     }
                 }
@@ -312,11 +478,17 @@ impl<'a> AutoRouter<'a> {
     }
 
     fn find_net_id_for_name(&mut self, name: &str) -> Result<NetId, IrError> {
+        let min_width = self
+            .space
+            .fabrication_constraints
+            .as_ref()
+            .map(|c| c.trace.min_width_nm)
+            .unwrap_or(100_000);
         if let Some(id) = self.space.netlist.get_net_by_name(name) {
             Ok(id)
         } else {
             let copper_id = self.space.material_registry.get_or_register("Copper");
-            Ok(self.space.netlist.add_net(name.into(), 100_000, copper_id))
+            Ok(self.space.netlist.add_net(name.into(), min_width, copper_id))
         }
     }
 
@@ -333,10 +505,15 @@ impl<'a> AutoRouter<'a> {
             return Ok(());
         }
 
+        let trace_width_nm = self
+            .space
+            .fabrication_constraints
+            .as_ref()
+            .map(|c| c.trace.min_width_nm)
+            .unwrap_or(100_000);
+
         // v0.1.7: Strict Boundary-Docking Model
-        // The router now handles "docking" perfectly by starting/ending at the boundary.
-        // We no longer need to trim traces inside pads because the pathfinder is
-        // physically forbidden from entering them.
+        // ...
         let mut segments = Vec::new();
         let mut start = path[0];
 
@@ -358,16 +535,22 @@ impl<'a> AutoRouter<'a> {
                 || (d1y == 0 && d2y == 0 && d1z == 0 && d2z == 0);
 
             if !is_collinear {
-                segments.push(LineSegment::new(start, p2));
-                start = p2;
+                // v0.1.7: Prevent zero-length segments which cause "box" artifacts in DXF
+                if start != p2 {
+                    segments.push(LineSegment::new(start, p2));
+                    start = p2;
+                }
             }
         }
-        segments.push(LineSegment::new(start, *path.last().unwrap()));
+        let last = *path.last().unwrap();
+        if start != last {
+            segments.push(LineSegment::new(start, last));
+        }
 
         let copper_id = self.space.material_registry.get_or_register("Copper");
         let trace = AnalyticTrace::new(
             net_id,
-            100_000,
+            trace_width_nm,
             thickness_nm,
             segments,
             copper_id,

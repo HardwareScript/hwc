@@ -320,27 +320,34 @@ impl VoxelGrid {
             // v0.1.7 FIXED: Drill into both Pours (Copper) AND Substrates (FR4/Core)
             // Skip Contact layers (Vias/Tubes) to avoid self-drilling artifacts
 
-            // v0.1.7 FIXED: Use inclusive Z-intersection to handle perfect adjacency.
-            let xy_intersects = layer.bbox.min.x < hole_bbox.max.x
-                && layer.bbox.max.x > hole_bbox.min.x
-                && layer.bbox.min.y < hole_bbox.max.y
-                && layer.bbox.max.y > hole_bbox.min.y;
-
-            let z_intersects =
-                layer.bbox.min.z <= hole_bbox.max.z && layer.bbox.max.z >= hole_bbox.min.z;
-
-            let should_drill = match layer.layer_type {
-                SubstrateLayerType::Substrate => true, // Always drill dielectric (insulators)
-                SubstrateLayerType::SolderMask => true, // Drill solder mask for via openings
-                SubstrateLayerType::Pour => {
-                    // v0.1.7: Drill into copper pours to ensure vias work.
-                    // This fixes the issue where manual routes block vias.
-                    true
+            // v0.1.8: If layer has regions, check intersection against each region.
+            // Otherwise fall back to bbox intersection (legacy behavior).
+            let z_intersects_in_regions = |hole_bbox: &BoundingBox, layer: &SubstrateLayer| -> bool {
+                if layer.regions.is_empty() {
+                    layer.bbox.min.z <= hole_bbox.max.z && layer.bbox.max.z >= hole_bbox.min.z
+                        && layer.bbox.min.x < hole_bbox.max.x
+                        && layer.bbox.max.x > hole_bbox.min.x
+                        && layer.bbox.min.y < hole_bbox.max.y
+                        && layer.bbox.max.y > hole_bbox.min.y
+                } else {
+                    layer.regions.iter().any(|r| {
+                        r.min.z <= hole_bbox.max.z && r.max.z >= hole_bbox.min.z
+                            && r.min.x < hole_bbox.max.x
+                            && r.max.x > hole_bbox.min.x
+                            && r.min.y < hole_bbox.max.y
+                            && r.max.y > hole_bbox.min.y
+                    })
                 }
-                SubstrateLayerType::Contact => false, // Don't drill other vias
             };
 
-            if should_drill && xy_intersects && z_intersects {
+            let should_drill = match layer.layer_type {
+                SubstrateLayerType::Substrate => true,
+                SubstrateLayerType::SolderMask => true,
+                SubstrateLayerType::Pour => true,
+                SubstrateLayerType::Contact => false,
+            };
+
+            if should_drill && z_intersects_in_regions(&hole_bbox, layer) {
                 if let Some(diameter) = diameter_nm {
                     layer.add_cylinder_cutout(hole_bbox, diameter);
                 } else {
@@ -370,28 +377,33 @@ impl VoxelGrid {
     ) {
         // 1. Structural clearing
         for layer in &mut self.substrate_layers {
-            let xy_intersects = layer.bbox.min.x < hole_bbox.max.x
-                && layer.bbox.max.x > hole_bbox.min.x
-                && layer.bbox.min.y < hole_bbox.max.y
-                && layer.bbox.max.y > hole_bbox.min.y;
+            // v0.1.8: If layer has regions, check intersection against each region.
+            let intersects = if layer.regions.is_empty() {
+                let xy = layer.bbox.min.x < hole_bbox.max.x
+                    && layer.bbox.max.x > hole_bbox.min.x
+                    && layer.bbox.min.y < hole_bbox.max.y
+                    && layer.bbox.max.y > hole_bbox.min.y;
+                let z = layer.bbox.min.z <= hole_bbox.max.z && layer.bbox.max.z >= hole_bbox.min.z;
+                xy && z
+            } else {
+                layer.regions.iter().any(|r| {
+                    let xy = r.min.x < hole_bbox.max.x
+                        && r.max.x > hole_bbox.min.x
+                        && r.min.y < hole_bbox.max.y
+                        && r.max.y > hole_bbox.min.y;
+                    let z = r.min.z <= hole_bbox.max.z && r.max.z >= hole_bbox.min.z;
+                    xy && z
+                })
+            };
 
-            let z_intersects =
-                layer.bbox.min.z <= hole_bbox.max.z && layer.bbox.max.z >= hole_bbox.min.z;
-
-            if xy_intersects && z_intersects {
+            if intersects {
                 match layer.layer_type {
                     SubstrateLayerType::Substrate => {
-                        // Always drill dielectric with the actual via diameter
                         layer.add_cylinder_cutout(hole_bbox, diameter_nm);
                     }
                     SubstrateLayerType::SolderMask => {
-                        // v0.1.7: Profile-driven solder mask opening (Zero Implicit Magic)
                         if !is_tented {
-                            // Exposed via: cut opening in solder mask
-                            // Formula: pad_diameter + 2 × solder_mask_expansion
                             let opening_diameter = pad_diameter_nm + 2 * solder_mask_expansion_nm;
-                            // The cutout must span the full mask thickness so the export
-                            // slicing logic can match it. Use the layer's own Z range.
                             let mask_cutout_bbox = crate::geometry::BoundingBox::new(
                                 crate::geometry::Point3D::new(
                                     hole_bbox.min.x.max(layer.bbox.min.x),
@@ -406,12 +418,8 @@ impl VoxelGrid {
                             );
                             layer.add_cylinder_cutout(mask_cutout_bbox, opening_diameter);
                         }
-                        // Tented: do nothing, mask stays intact
                     }
                     SubstrateLayerType::Pour => {
-                        // v0.1.7: Always drill into copper pours (same net or different net)
-                        // to ensure the hole is clear. The unioning logic will preserve the pad
-                        // around the hole.
                         let diameter = if layer.net == via_net {
                             diameter_nm
                         } else {
@@ -419,9 +427,7 @@ impl VoxelGrid {
                         };
                         layer.add_cylinder_cutout(hole_bbox, diameter);
                     }
-                    SubstrateLayerType::Contact => {
-                        // Don't drill other vias (handled by spacing checks)
-                    }
+                    SubstrateLayerType::Contact => {}
                 }
             }
         }

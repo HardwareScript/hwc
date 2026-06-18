@@ -1,0 +1,57 @@
+# Test: Via Rule Violation (Manufacturing Rule Enforcement)
+#
+# Expected: DRC failure — via diameter 0.1mm < profile min_diameter 0.5mm
+# This proves that verification enforces via manufacturing rules.
+
+import * from @std/primitives/units
+import Copper from @std/materials/conductors
+import FR4 from @std/materials/insulators
+
+profile ViaTestProfile:
+    description: "Profile requiring minimum via diameter of 0.5mm"
+    stackup:
+        top:    [material: Copper, thickness: 35um]
+        d1:     [material: FR4,    thickness: 1.2mm]
+        bottom: [material: Copper, thickness: 35um]
+    trace:
+        min_width: 0.2mm
+        min_spacing: 0.2mm
+    via:
+        min_diameter: 0.5mm
+        min_annular_ring: 0.15mm
+    manufacturing:
+        copper_thickness: 35um
+    clearance:
+        high_voltage: 2mm
+        safety_factor: 2.0
+    layer:
+        min_thickness: 0.1mm
+
+module ViaTestModule:
+    pins: []
+
+space ViaTestSpace implements ViaTestModule:
+    dimensions: 20mm by 20mm by 1.27mm
+    grid: 200 by 200 by 2
+    origin: bl by b
+    profile: ViaTestProfile
+
+    nets:
+        SIG: signal
+
+    # Top layer pour
+    add pour(Copper) named TopPour on layer: top:
+        net: SIG
+        boundary: [x: 2mm, y: 2mm] to [x: 8mm, y: 8mm]
+        thickness: 35um
+
+    # Bottom layer pour
+    add pour(Copper) named BottomPour on layer: bottom:
+        net: SIG
+        boundary: [x: 12mm, y: 12mm] to [x: 18mm, y: 18mm]
+        thickness: 35um
+
+    # Via connecting top and bottom — diameter 0.1mm is far below min_diameter 0.5mm
+    add contact(Copper) named IllegalVia at [x: 10mm, y: 10mm] spanning layer: top to bottom:
+        diameter: 0.1mm
+        net: SIG

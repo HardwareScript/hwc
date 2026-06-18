@@ -5,7 +5,7 @@ mod global;
 mod helpers;
 mod manual;
 
-pub use automatic::route_automatic;
+pub use automatic::{calculate_boundary_points, route_automatic};
 pub use global::AutoRouter;
 pub use helpers::{
     collect_existing_nets, evaluate_index_expression, get_pin_positions, needs_automatic_routing,

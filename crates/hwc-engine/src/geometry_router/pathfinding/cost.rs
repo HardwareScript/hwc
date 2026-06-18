@@ -4,7 +4,6 @@ use crate::constraint_manager::{ClearanceZone, LayerDirection, RouteConstraints}
 use crate::geometry::Point3D;
 use crate::geometry_router::collision_detection::check_clearance_violation;
 use crate::netlist::NetId;
-use rustc_hash::FxHashSet;
 
 /// Parameters for move cost calculation.
 pub struct MoveCostParams<'a> {
@@ -13,7 +12,7 @@ pub struct MoveCostParams<'a> {
     pub net_id: NetId,
     pub constraints: &'a RouteConstraints,
     pub voxel_size_nm: i64,
-    pub occupied_voxels: &'a FxHashSet<Point3D>,
+    pub occupied_voxels: &'a rustc_hash::FxHashMap<Point3D, NetId>,
     pub clearance_zones: &'a [ClearanceZone],
     pub layer_direction: Option<LayerDirection>,
     /// v0.1.7: Substrate layers for reference-plane void detection.
@@ -114,6 +113,7 @@ pub fn calculate_move_cost(params: &MoveCostParams) -> i64 {
     let crosstalk_penalty = calculate_crosstalk_penalty(
         params.from,
         params.to,
+        params.net_id,
         params.voxel_size_nm,
         params.occupied_voxels,
     );
@@ -164,8 +164,9 @@ pub fn calculate_move_cost(params: &MoveCostParams) -> i64 {
 pub fn calculate_crosstalk_penalty(
     from: Point3D,
     to: Point3D,
+    net_id: NetId,
     voxel_size_nm: i64,
-    occupied_voxels: &FxHashSet<Point3D>,
+    occupied_voxels: &rustc_hash::FxHashMap<Point3D, NetId>,
 ) -> i64 {
     let dx = to.x - from.x;
     let dy = to.y - from.y;
@@ -181,6 +182,33 @@ pub fn calculate_crosstalk_penalty(
     // Probe up to 2mm away. Use max(1) to avoid division by zero
     let check_radius = (2_000_000_i64 / voxel_size_nm.max(1)).clamp(1, 10);
 
+    let check_point = |p: Point3D| -> i64 {
+        if let Some(&other_net_id) = occupied_voxels.get(&p) {
+            // v0.1.7: Same-Net Repulsion (Node-to-Node Integrity)
+            //
+            // If the other net is the SAME as the current net, we apply a
+            // moderate penalty (30) to discourage branching off existing traces.
+            // This forces the router to prioritize reaching the PAD boundary
+            // instead of taking a shortcut through a nearby segment of the same net.
+            if other_net_id == net_id {
+                return 30; // Discourage same-net branching
+            }
+
+            let dist_nm = ((p.x - to.x).pow(2) + (p.y - to.y).pow(2)) as f64;
+            let offset = dist_nm.sqrt() as i64;
+
+            if offset < 500_000 {
+                50
+            } else if offset < 1_000_000 {
+                30
+            } else {
+                10
+            }
+        } else {
+            0
+        }
+    };
+
     if dx != 0 {
         // Moving Horizontally: Probe the Y coordinates above and below us
         for i in 1..=check_radius {
@@ -188,18 +216,9 @@ pub fn calculate_crosstalk_penalty(
             let p1 = Point3D::new(to.x, to.y + offset, to.z);
             let p2 = Point3D::new(to.x, to.y - offset, to.z);
 
-            if occupied_voxels.contains(&p1) || occupied_voxels.contains(&p2) {
-                let penalty = if offset < 500_000 {
-                    50
-                } else if offset < 1_000_000 {
-                    30
-                } else {
-                    10
-                };
-                max_penalty = max_penalty.max(penalty);
-                if max_penalty >= 50 {
-                    break;
-                }
+            max_penalty = max_penalty.max(check_point(p1)).max(check_point(p2));
+            if max_penalty >= 50 {
+                break;
             }
         }
     } else {
@@ -209,18 +228,9 @@ pub fn calculate_crosstalk_penalty(
             let p1 = Point3D::new(to.x + offset, to.y, to.z);
             let p2 = Point3D::new(to.x - offset, to.y, to.z);
 
-            if occupied_voxels.contains(&p1) || occupied_voxels.contains(&p2) {
-                let penalty = if offset < 500_000 {
-                    50
-                } else if offset < 1_000_000 {
-                    30
-                } else {
-                    10
-                };
-                max_penalty = max_penalty.max(penalty);
-                if max_penalty >= 50 {
-                    break;
-                }
+            max_penalty = max_penalty.max(check_point(p1)).max(check_point(p2));
+            if max_penalty >= 50 {
+                break;
             }
         }
     }

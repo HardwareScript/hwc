@@ -1,0 +1,63 @@
+# Test: Trace Width Violation (DRC Clearance Check)
+#
+# Expected: DRC failure — trace width 0.1mm < profile min_width 0.2mm
+# This proves that verification catches traces narrower than allowed.
+
+import * from @std/primitives/units
+import Copper from @std/materials/conductors
+import FR4 from @std/materials/insulators
+
+profile ClearanceTestProfile:
+    description: "Profile requiring minimum trace width of 0.2mm"
+    stackup:
+        top:    [material: Copper, thickness: 35um]
+        d1:     [material: FR4,    thickness: 1.2mm]
+        bottom: [material: Copper, thickness: 35um]
+    trace:
+        min_width: 0.2mm
+        min_spacing: 0.2mm
+    via:
+        min_diameter: 0.5mm
+        min_annular_ring: 0.15mm
+    manufacturing:
+        copper_thickness: 35um
+    clearance:
+        high_voltage: 2mm
+        safety_factor: 2.0
+    layer:
+        min_thickness: 0.1mm
+
+component Pad:
+    pins: [p]
+    layout:
+        shape: Rectangle(1mm, 1mm, 35um)
+        pin_positions:
+            p at [0mm, 0mm]
+        add pour(Copper) named Pad_Copper on layer: self:
+            device: p
+            boundary: [x: 0mm, y: 0mm] to [x: 1mm, y: 1mm]
+            thickness: 35um
+
+module ClearanceTestModule:
+    pins: []
+
+space ClearanceTestSpace implements ClearanceTestModule:
+    dimensions: 20mm by 20mm by 1.27mm
+    grid: 200 by 200 by 2
+    origin: bl by b
+    profile: ClearanceTestProfile
+
+    nets:
+        SIG: signal
+
+    add Pad named P1 at [x: 2mm, y: 2mm, z: 0nm]:
+        net: [p: SIG]
+
+    add Pad named P2 at [x: 18mm, y: 18mm, z: 0nm]:
+        net: [p: SIG]
+
+    # Narrow trace between P1 and P2 — width is 0.1mm, below min_width 0.2mm
+    add pour(Copper) named NarrowTrace on layer: top:
+        net: SIG
+        boundary: [x: 2mm, y: 2mm] to [x: 2.1mm, y: 18mm]
+        thickness: 35um

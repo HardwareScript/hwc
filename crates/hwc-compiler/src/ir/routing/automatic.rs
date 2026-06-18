@@ -2,7 +2,7 @@
 
 use super::super::errors::IrError;
 use super::helpers::get_pin_positions;
-use hwc_engine::HardwareSpace;
+use hwc_engine::{HardwareSpace, Point3D};
 
 /// Route a trace automatically using A* pathfinding.
 ///
@@ -57,16 +57,42 @@ pub fn route_automatic(
     // v0.1.7: External A* Seeding
     // To prevent "hooks" inside pads, the A* solver starts one voxel OUTSIDE the pad.
     let voxel_size = space.voxel_size.x_nm;
-    let start_pos = hwc_engine::Point3D::new(
+
+    // Helper to snap a coordinate to the nearest voxel center
+    let _snap_to_center = |coord: i64, v_size: i64| {
+        (coord / v_size) * v_size + (v_size / 2)
+    };
+
+    let mut start_pos = hwc_engine::Point3D::new(
         start_boundary.x + (start_dir.0 * voxel_size),
         start_boundary.y + (start_dir.1 * voxel_size),
         start_boundary.z,
     );
-    let goal_pos = hwc_engine::Point3D::new(
+
+    let mut goal_pos = hwc_engine::Point3D::new(
         goal_boundary.x + (goal_dir.0 * voxel_size),
         goal_boundary.y + (goal_dir.1 * voxel_size),
         goal_boundary.z,
     );
+
+    // v0.1.7: Seed Alignment (Orthogonal Snapping)
+    // To prevent the initial diagonal "bump" from the pin to the grid, we snap
+    // the non-escape axis of the seed to the grid center.
+    if start_dir.0 != 0 {
+        // East/West escape: Lock Y to boundary coordinate
+        start_pos.y = start_boundary.y;
+    } else if start_dir.1 != 0 {
+        // North/South escape: Lock X to boundary coordinate
+        start_pos.x = start_boundary.x;
+    }
+
+    if goal_dir.0 != 0 {
+        // East/West escape: Lock Y to boundary coordinate
+        goal_pos.y = goal_boundary.y;
+    } else if goal_dir.1 != 0 {
+        // North/South escape: Lock X to boundary coordinate
+        goal_pos.x = goal_boundary.x;
+    }
 
     // PHASE 2: GEOMETRY ROUTER
     // v0.1.7: Register net connectivity in the netlist
@@ -74,6 +100,7 @@ pub fn route_automatic(
     let net_id = super::helpers::register_net_for_route(space, route, symbol_table)?;
     let net_name = space.netlist.get_net(net_id).unwrap().name.clone();
 
+    /*
     println!("[BOX-MODEL-DEBUG] Net: {}", net_name);
     println!("[BOX-MODEL-DEBUG]   Start Boundary: ({}, {}, {})", start_boundary.x, start_boundary.y, start_boundary.z);
     println!("[BOX-MODEL-DEBUG]   Start Dir: {:?}", start_dir);
@@ -81,6 +108,7 @@ pub fn route_automatic(
     println!("[BOX-MODEL-DEBUG]   Goal Boundary: ({}, {}, {})", goal_boundary.x, goal_boundary.y, goal_boundary.z);
     println!("[BOX-MODEL-DEBUG]   Goal Dir: {:?}", goal_dir);
     println!("[BOX-MODEL-DEBUG]   Goal Seed (A* Goal): ({}, {}, {})", goal_pos.x, goal_pos.y, goal_pos.z);
+    */
 
     let route_constraints = RouteConstraints {
         min_trace_width_nm: trace_width_nm,
@@ -101,9 +129,9 @@ pub fn route_automatic(
 
     // Collect clearance zones and occupied voxels for pathfinding
     use hwc_engine::constraint_manager::ClearanceZone;
-    use rustc_hash::FxHashSet;
+    use rustc_hash::FxHashMap;
 
-    let occupied_voxels: FxHashSet<hwc_engine::Point3D> = FxHashSet::default();
+    let occupied_voxels: FxHashMap<hwc_engine::Point3D, hwc_engine::netlist::NetId> = FxHashMap::default();
     let clearance_zones: Vec<ClearanceZone> = Vec::new();
 
     // Get Copper material ID from registry
@@ -174,6 +202,19 @@ pub fn route_automatic(
     path.insert(0, start_boundary);
     path.push(goal_boundary);
 
+    // v0.1.7: Global Axis Alignment (Neat Routing)
+    // If the start and goal share an axis (straight route), lock all intermediate
+    // points to that axis to eliminate quantization noise and "bumps".
+    if start_boundary.x == goal_boundary.x {
+        for point in path.iter_mut() {
+            point.x = start_boundary.x;
+        }
+    } else if start_boundary.y == goal_boundary.y {
+        for point in path.iter_mut() {
+            point.y = start_boundary.y;
+        }
+    }
+
     if path.is_empty() {
         return Err(IrError::RoutingError("Empty path generated".into()));
     }
@@ -201,19 +242,23 @@ pub fn route_automatic(
             if let Some(layer_idx) = stackup_manager.get_layer_index_at_z(fixed_z) {
                 trace_thickness_nm = stackup_manager.get_thickness_for_layer_index(layer_idx);
             }
+            /*
             eprintln!(
                 "[ROUTER DEBUG] Planar lock: {} points locked to Z={}nm, thickness={}nm",
                 refined_path.len(),
                 fixed_z,
                 trace_thickness_nm
             );
+            */
         } else {
+            /*
             eprintln!(
                 "[ROUTER DEBUG] Refining {} path points via StackupManager...",
                 refined_path.len()
             );
-            for (i, point) in refined_path.iter_mut().enumerate() {
-                let old_z = point.z;
+            */
+            for (_i, point) in refined_path.iter_mut().enumerate() {
+                let _old_z = point.z;
                 // 1. Identify which PHYSICAL layer this point is in (v0.1.7 Fix: Use StackupManager, not voxel math)
                 if let Some(layer_idx) = stackup_manager.get_layer_index_at_z(point.z) {
                     // 2. Resolve the EXACT physical starting height for that layer
@@ -226,14 +271,16 @@ pub fn route_automatic(
                     // 3. Update the point's Z to the physical truth
                     point.z = true_z;
 
+                    /*
                     if old_z != true_z {
                         eprintln!(
                             "[ROUTER DEBUG]   Point {}: Z shifted from {}nm to {}nm (Layer Index: {})",
                             i, old_z, true_z, layer_idx
                         );
                     }
+                    */
                 } else {
-                    eprintln!("[ROUTER WARNING]   Point {}: Z={}nm could not be mapped to any physical layer!", i, point.z);
+                    // eprintln!("[ROUTER WARNING]   Point {}: Z={}nm could not be mapped to any physical layer!", i, point.z);
                 }
             }
         }
@@ -270,65 +317,26 @@ pub fn route_automatic(
                 let is_short = seg_len_sq < min_seg_len_sq;
 
                 if !is_collinear && !is_short {
-                    segs.push(hwc_engine::LineSegment::new(start, p2));
-                    start = p2;
+                    if start != p2 {
+                        segs.push(hwc_engine::LineSegment::new(start, p2));
+                        start = p2;
+                    }
                 }
             }
-            segs.push(hwc_engine::LineSegment::new(
-                start,
-                *refined_path.last().unwrap(),
-            ));
+            let last = *refined_path.last().unwrap();
+            if start != last {
+                segs.push(hwc_engine::LineSegment::new(start, last));
+            }
         }
         segs
     };
 
-    // v0.1.7 DFM: Add teardrop fillets at trace-to-pad junctions
-    // A teardrop is a short, wider segment that tapers from trace_width to pad_width
-    // over a transition length, preventing acid traps and mechanical stress points.
+    // v0.1.7 DFM: Teardrops disabled for "neat" routing
+    /*
     let teardrop_length_nm = 100_000; // 100µm transition zone
-    let teardrop_width_nm = trace_width_nm * 2; // 2× trace width at pad junction
-    let teardrop_segments = {
-        let mut t_segs = Vec::new();
-        if refined_path.len() >= 2 {
-            let start = refined_path[0];
-            let second = refined_path[1];
-            let last = *refined_path.last().unwrap();
-            let second_to_last = refined_path[refined_path.len() - 2];
-
-            // Start teardrop: short wider segment from pin along first direction
-            let dx_start = second.x - start.x;
-            let dy_start = second.y - start.y;
-            let len_start = ((dx_start * dx_start + dy_start * dy_start) as f64).sqrt();
-            if len_start > 0.0 {
-                let dir_x = dx_start as f64 / len_start;
-                let dir_y = dy_start as f64 / len_start;
-                let teardrop_end = hwc_engine::Point3D::new(
-                    start.x + (dir_x * teardrop_length_nm as f64) as i64,
-                    start.y + (dir_y * teardrop_length_nm as f64) as i64,
-                    start.z,
-                );
-                t_segs.push(hwc_engine::LineSegment::new(start, teardrop_end));
-            }
-
-            // Goal teardrop: short wider segment from pin along last direction
-            let dx_goal = last.x - second_to_last.x;
-            let dy_goal = last.y - second_to_last.y;
-            let len_goal = ((dx_goal * dx_goal + dy_goal * dy_goal) as f64).sqrt();
-            if len_goal > 0.0 {
-                let dir_x = dx_goal as f64 / len_goal;
-                let dir_y = dy_goal as f64 / len_goal;
-                // v0.1.7: Outward-Only Teardrops
-                // We ensure the teardrop starts at the boundary and goes INTO the trace.
-                let teardrop_start = hwc_engine::Point3D::new(
-                    last.x - (dir_x * teardrop_length_nm as f64) as i64,
-                    last.y - (dir_y * teardrop_length_nm as f64) as i64,
-                    last.z,
-                );
-                t_segs.push(hwc_engine::LineSegment::new(teardrop_start, last));
-            }
-        }
-        t_segs
-    };
+    ...
+    */
+    let teardrop_segments: Vec<hwc_engine::LineSegment> = Vec::new();
 
     // Register main trace as analytic primitive
     let analytic_trace = hwc_engine::AnalyticTrace::new(
@@ -344,6 +352,7 @@ pub fn route_automatic(
 
     // Register teardrop fillets as wider analytic primitives
     if !teardrop_segments.is_empty() {
+        /*
         let teardrop_trace = hwc_engine::AnalyticTrace::new(
             net_id,
             teardrop_width_nm,
@@ -354,6 +363,7 @@ pub fn route_automatic(
         );
         space.add_analytic_route(teardrop_trace);
         eprintln!("[ROUTER] ✓ DFM teardrop fillets added at trace endpoints");
+        */
     }
 
     eprintln!("[ROUTER] ✓ Route registered as analytic primitive");
@@ -432,39 +442,93 @@ pub fn route_automatic(
 }
 
 /// Calculate boundary points and exit directions for routing.
-fn calculate_boundary_points(
+pub fn calculate_boundary_points(
     space: &HardwareSpace,
     route: &hwc_parser::Route,
     trace_width_nm: i64,
-) -> Result<(hwc_engine::Point3D, hwc_engine::Point3D, (i64, i64), (i64, i64)), IrError> {
+) -> Result<(Point3D, Point3D, (i64, i64), (i64, i64)), IrError> {
     use hwc_engine::geometry_router::port_escape::{
-        calculate_rect_escape, CardinalPort, EdgeOffset,
+        calculate_rect_escape, CardinalPort, EdgeOffset, NamedPosition,
+    };
+
+    // Helper to resolve parser EdgeOffsetSpec to engine EdgeOffset
+    let resolve_offset = |spec: &Option<hwc_parser::EdgeOffsetSpec>| -> EdgeOffset {
+        match spec {
+            Some(hwc_parser::EdgeOffsetSpec::Named(pos)) => match pos {
+                hwc_parser::NamedPosition::Top => EdgeOffset::Named(NamedPosition::Top),
+                hwc_parser::NamedPosition::Bottom => EdgeOffset::Named(NamedPosition::Bottom),
+                hwc_parser::NamedPosition::Center => EdgeOffset::Center,
+            },
+            Some(hwc_parser::EdgeOffsetSpec::Percentage(p)) => EdgeOffset::Percentage(*p),
+            Some(hwc_parser::EdgeOffsetSpec::Measurement(m)) => EdgeOffset::Measurement(*m),
+            None => EdgeOffset::Center,
+        }
     };
 
     // Get pin center positions for heuristic direction
     let (start_pin_center, goal_pin_center) = get_pin_positions(space, route)?;
 
-    // v0.1.7: Auto-Port Heuristic (Shortest Path Edge Selection)
+    // v0.1.7: Smart Auto-Port Heuristic (Multi-Segment Awareness)
+    //
+    // Instead of a naive dx > dy check, we prioritize row/column transitions
+    // if the secondary axis displacement is significant (> 2mm). This prevents
+    // the "box" artifacts where linking routes (e.g. Row 0 -> Row 1) exit
+    // from the East/West ports instead of the North/South ports.
     let dx = goal_pin_center.x - start_pin_center.x;
     let dy = goal_pin_center.y - start_pin_center.y;
 
-    let auto_exit_port = if dx.abs() > dy.abs() {
-        if dx > 0 { CardinalPort::East } else { CardinalPort::West }
+    let auto_exit_port = if dy.abs() >= 1_000_000 && dy.abs() > dx.abs() / 4 {
+        // Significant vertical move: prefer North/South to exit the row
+        if dy > 0 {
+            CardinalPort::North
+        } else {
+            CardinalPort::South
+        }
+    } else if dx.abs() > 0 {
+        // Primarily horizontal or small vertical move: prefer East/West
+        if dx > 0 {
+            CardinalPort::East
+        } else {
+            CardinalPort::West
+        }
     } else {
-        if dy > 0 { CardinalPort::North } else { CardinalPort::South }
+        // Pure vertical or zero move
+        if dy > 0 {
+            CardinalPort::North
+        } else {
+            CardinalPort::South
+        }
     };
 
-    let auto_enter_port = match auto_exit_port {
-        CardinalPort::North => CardinalPort::South,
-        CardinalPort::South => CardinalPort::North,
-        CardinalPort::East => CardinalPort::West,
-        CardinalPort::West => CardinalPort::East,
+    let auto_enter_port = if dy.abs() >= 1_000_000 && dy.abs() > dx.abs() / 4 {
+        // Significant vertical move: enter from North/South
+        if dy > 0 {
+            CardinalPort::South
+        } else {
+            CardinalPort::North
+        }
+    } else if dx.abs() > 0 {
+        // Primarily horizontal: enter from East/West
+        if dx > 0 {
+            CardinalPort::West
+        } else {
+            CardinalPort::East
+        }
+    } else {
+        if dy > 0 {
+            CardinalPort::South
+        } else {
+            CardinalPort::North
+        }
     };
 
     // Helper to resolve a port+offset spec to an EscapePoint
     let resolve_point = |from_comp: &str, pin: &str, port: CardinalPort, offset: EdgeOffset, z: i64| {
         space.voxel_grid.get_pour_bbox_for_pin(from_comp, pin).map(|bbox| {
-            calculate_rect_escape(&bbox, port, offset, trace_width_nm, 0, z)
+            // v0.1.7: Use half trace width as clearance to ensure trace touches pad edge
+            // but does not penetrate the interior ("physically touching" model)
+            let boundary_clearance = trace_width_nm / 2;
+            calculate_rect_escape(&bbox, port, offset, trace_width_nm, boundary_clearance, z)
         })
     };
 
@@ -479,8 +543,8 @@ fn calculate_boundary_points(
             hwc_parser::CardinalDirection::East => CardinalPort::East,
             hwc_parser::CardinalDirection::West => CardinalPort::West,
         };
-        // TODO: Handle explicit offset parsing from exit_escape.offset
-        resolve_point(&from_comp, &route.from.pin, port, EdgeOffset::Center, start_pin_center.z)
+        let offset = resolve_offset(&exit_escape.offset);
+        resolve_point(&from_comp, &route.from.pin, port, offset, start_pin_center.z)
     } else {
         resolve_point(&from_comp, &route.from.pin, auto_exit_port, EdgeOffset::Center, start_pin_center.z)
     }.ok_or_else(|| IrError::RoutingError(format!("Could not resolve boundary for {}.{}", from_comp, route.from.pin)))?;
@@ -493,7 +557,8 @@ fn calculate_boundary_points(
             hwc_parser::CardinalDirection::East => CardinalPort::East,
             hwc_parser::CardinalDirection::West => CardinalPort::West,
         };
-        resolve_point(&to_comp, &route.to.pin, port, EdgeOffset::Center, goal_pin_center.z)
+        let offset = resolve_offset(&enter_escape.offset);
+        resolve_point(&to_comp, &route.to.pin, port, offset, goal_pin_center.z)
     } else {
         resolve_point(&to_comp, &route.to.pin, auto_enter_port, EdgeOffset::Center, goal_pin_center.z)
     }.ok_or_else(|| IrError::RoutingError(format!("Could not resolve boundary for {}.{}", to_comp, route.to.pin)))?;

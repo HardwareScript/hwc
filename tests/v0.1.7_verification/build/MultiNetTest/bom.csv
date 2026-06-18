@@ -1,0 +1,14 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,30.00x30.00x1.27mm,,,,,1
+DATA1,Pad,,,,,,1
+DATA2,Pad,,,,,,1
+CLK1,Pad,,,,,,1
+CLK2,Pad,,,,,,1
+GND1,Pad,,,,,,1
+GND2,Pad,,,,,,1
+VCC1,Pad,,,,,,1
+VCC2,Pad,,,,,,1
+UDP1,Pad,,,,,,1
+UDP2,Pad,,,,,,1
+UDM1,Pad,,,,,,1
+UDM2,Pad,,,,,,1

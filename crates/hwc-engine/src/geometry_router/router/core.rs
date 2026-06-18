@@ -353,6 +353,7 @@ impl GeometryRouter {
         &mut self,
         grid_bbox: &crate::geometry::BoundingBox,
         nets: &FxHashMap<crate::netlist::NetId, Vec<crate::geometry::Point3D>>,
+        explicit_segments: Option<&[(crate::netlist::NetId, Vec<Point3D>)]>,
         obstacle_bboxes: &[crate::geometry::BoundingBox],
         substrate_layers: Option<&[crate::voxel_grid::SubstrateLayer]>,
         net_frequencies: &FxHashMap<crate::netlist::NetId, f64>,
@@ -369,6 +370,14 @@ impl GeometryRouter {
             self.voxel_grid.copy_metadata_from(vg);
         }
 
+        // v0.1.7: If explicit segments are provided (Chain-Link mode), route them first
+        // and bypass Steiner logic for these specific paths.
+        let mut result = if let Some(segments) = explicit_segments {
+            self.route_all_nets_explicit_global(segments)?
+        } else {
+            super::super::types::RouteResult::new()
+        };
+
         let width = grid_bbox.max.x - grid_bbox.min.x;
         let height = grid_bbox.max.y - grid_bbox.min.y;
         let area_nm2 = width * height;
@@ -381,7 +390,9 @@ impl GeometryRouter {
                 net_count,
                 area_nm2 as f64 / 1_000_000_000_000.0
             );
-            self.route_all_nets_steiner(nets, obstacle_bboxes, substrate_layers, net_frequencies)
+            let steiner_result = self.route_all_nets_steiner(nets, obstacle_bboxes, substrate_layers, net_frequencies)?;
+            result.merge(steiner_result);
+            Ok(result)
         } else {
             // --- HIERARCHICAL MODE ---
             eprintln!(
@@ -389,13 +400,15 @@ impl GeometryRouter {
                 net_count,
                 area_nm2 as f64 / 1_000_000_000_000.0
             );
-            self.route_hierarchical(
+            let hierarchical_result = self.route_hierarchical(
                 grid_bbox,
                 nets,
                 obstacle_bboxes,
                 substrate_layers,
                 net_frequencies,
-            )
+            )?;
+            result.merge(hierarchical_result);
+            Ok(result)
         }
     }
 

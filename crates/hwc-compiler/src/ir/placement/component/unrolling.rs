@@ -357,8 +357,10 @@ pub fn unroll_internal_features(
                             let p_min = anchor_z;
                             let p_max = anchor_z + copper_thickness;
 
+                            /*
                             eprintln!("[DEBUG unroll] Pad '{}' (anchor={}) layer={:?} anchor_z={}nm -> thickness={}nm", 
                                 pour.name, anchor_name, layer_name, anchor_z, copper_thickness);
+                            */
 
                             unrolled_pour.elevation = hwc_parser::Elevation::Physical {
                                 start: hwc_parser::Expression::Measurement {

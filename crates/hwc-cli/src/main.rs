@@ -92,6 +92,14 @@ enum Commands {
         /// Alignment validation tolerance for device parameters (default: 0.01 = 1%)
         #[arg(long)]
         tolerance: Option<f64>,
+
+        /// Debug net identity: trace LogicalNet → RouteSegments → PhysicalRegions decomposition
+        #[arg(long)]
+        debug_identity: bool,
+
+        /// Run verification only (DRC, connectivity, stackup) without exporting
+        #[arg(long)]
+        verify_only: bool,
     },
 
     /// Run design rule check on existing build
@@ -253,6 +261,8 @@ fn run() -> Result<()> {
             all,
             deny_warnings,
             tolerance,
+            debug_identity,
+            verify_only,
         } => commands::build::execute(
             input,
             output,
@@ -273,6 +283,8 @@ fn run() -> Result<()> {
                 deny_warnings,
                 space,
                 tolerance,
+                debug_identity,
+                verify_only,
             },
         ),
         Commands::Drc { input, build_dir } => commands::drc::execute(input, build_dir),

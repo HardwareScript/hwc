@@ -190,24 +190,26 @@ pub fn route_net_deterministic(
                 }
             }
 
-            // HARD BLOCK: Stop A* from entering occupied voxels (unless it's the target pin)
-            if neighbor != goal_snapped && params.occupied_voxels.contains(&neighbor) {
-                continue;
+            // HARD BLOCK: Stop A* from entering occupied voxels (unless it's the target pin
+            // or another segment of the SAME net).
+            if neighbor != goal_snapped {
+                if let Some(&occupying_net) = params.occupied_voxels.get(&neighbor) {
+                    if occupying_net != params.net_id {
+                        continue;
+                    }
+                }
             }
 
             // v0.1.7 (Strict Box Model): Block the entire interior volume of all components.
-            // Exempt components containing the start or goal pins (boundary-docking).
+            // The only allowed coordinate inside a component's bounding box is the GOAL itself.
+            // This prevents the router from "diving" into the pad to reuse same-net traces,
+            // which causes the "elevate" and branching artifacts reported in v0.1.7.
             if let Some(voxel_grid) = params.voxel_grid {
-                if let Some(component_name) =
+                if let Some(_component_name) =
                     voxel_grid.point_in_component(neighbor.x, neighbor.y, neighbor.z)
                 {
-                    // Allow routing to/from the start and goal pin's component
-                    if !params.exempt_components.is_empty()
-                        && params.exempt_components.contains(&component_name)
-                    {
-                        // Exempt: this is the start or goal component
-                    } else {
-                        continue; // Block routing through component interior
+                    if neighbor != goal_snapped {
+                        continue;
                     }
                 }
             }

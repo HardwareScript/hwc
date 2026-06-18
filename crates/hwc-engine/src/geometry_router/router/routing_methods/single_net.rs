@@ -33,7 +33,7 @@ impl GeometryRouter {
 
         let clearance_zones = &self.constraints.clearance_zones;
 
-        let occupied_set: rustc_hash::FxHashSet<_> = self.occupied_voxels.keys().copied().collect();
+        let occupied_map = &self.occupied_voxels;
 
         let mut exempt_components_vec: smallvec::SmallVec<[compact_str::CompactString; 4]> =
             smallvec::SmallVec::new();
@@ -72,7 +72,7 @@ impl GeometryRouter {
                 z_nm: self.voxel_size_nm,
             },
             clearance_zones,
-            occupied_voxels: &occupied_set,
+            occupied_voxels: occupied_map,
             voxel_grid: Some(&self.voxel_grid),
             corridor: None,
             fixed_z_nm: fixed_z,

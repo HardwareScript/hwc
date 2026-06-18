@@ -36,16 +36,49 @@ impl GeometryRouter {
             },
         };
 
+        // v0.1.7: Boundary Persistence
+        // If the pin is already exactly on the boundary of the bbox, do NOT re-resolve it.
+        // This preserves user-specified percentages/offsets from the compiler.
+        let on_x_boundary = (pin.x - bbox.min.x).abs() < 1000 || (pin.x - bbox.max.x).abs() < 1000;
+        let on_y_boundary = (pin.y - bbox.min.y).abs() < 1000 || (pin.y - bbox.max.y).abs() < 1000;
+        
+        if on_x_boundary || on_y_boundary {
+            // Already on a boundary, check if it's the CORRECT boundary based on target
+            let dx = target.x - pin.x;
+            let dy = target.y - pin.y;
+            
+            let is_correct_side = if dx.abs() >= dy.abs() {
+                if dx >= 0 { (pin.x - bbox.max.x).abs() < 1000 } else { (pin.x - bbox.min.x).abs() < 1000 }
+            } else {
+                if dy >= 0 { (pin.y - bbox.max.y).abs() < 1000 } else { (pin.y - bbox.min.y).abs() < 1000 }
+            };
+
+            if is_correct_side {
+                return pin;
+            }
+        }
+
         // Auto-select best port based on direction from pin to target
+        // v0.1.7: Smart Auto-Port Heuristic (Multi-Segment Awareness)
         let dx = target.x - pin.x;
         let dy = target.y - pin.y;
-        let port = if dx.abs() >= dy.abs() {
+
+        let port = if dy.abs() >= 1_000_000 && dy.abs() > dx.abs() / 4 {
+            // Significant vertical move: prefer North/South
+            if dy >= 0 {
+                crate::geometry_router::port_escape::CardinalPort::North
+            } else {
+                crate::geometry_router::port_escape::CardinalPort::South
+            }
+        } else if dx.abs() > 0 {
+            // Primarily horizontal or small vertical move: prefer East/West
             if dx >= 0 {
                 crate::geometry_router::port_escape::CardinalPort::East
             } else {
                 crate::geometry_router::port_escape::CardinalPort::West
             }
         } else {
+            // Pure vertical or zero move
             if dy >= 0 {
                 crate::geometry_router::port_escape::CardinalPort::North
             } else {
@@ -63,6 +96,7 @@ impl GeometryRouter {
             pin.z,
         );
 
+        /*
         eprintln!(
             "[BOUNDARY DOCK] pin ({:.3},{:.3},{:.3}) -> port {:?} at ({:.3},{:.3},{:.3})",
             pin.x as f64 / 1_000_000.0,
@@ -73,6 +107,7 @@ impl GeometryRouter {
             escape.point.y as f64 / 1_000_000.0,
             escape.point.z as f64 / 1_000_000.0,
         );
+        */
 
         escape.point
     }
@@ -85,7 +120,7 @@ impl GeometryRouter {
             .unwrap_or_default();
 
         let clearance_zones = &self.constraints.clearance_zones;
-        let occupied_set: rustc_hash::FxHashSet<_> = self.occupied_voxels.keys().copied().collect();
+        let occupied_map = &self.occupied_voxels;
 
         let max_valid_x = self.bounds.width_nm.saturating_sub(1);
         let max_valid_y = self.bounds.height_nm.saturating_sub(1);
@@ -139,7 +174,7 @@ impl GeometryRouter {
                 z_nm: self.voxel_size_nm,
             },
             clearance_zones,
-            occupied_voxels: &occupied_set,
+            occupied_voxels: occupied_map,
             voxel_grid: Some(&self.voxel_grid),
             corridor: None,
             fixed_z_nm: fixed_z,
@@ -222,6 +257,51 @@ impl GeometryRouter {
             let routed = self.route_net_steiner_global(net_id, pins)?;
             result.paths.insert(net_id, routed.paths);
             result.vias.extend(routed.vias);
+        }
+
+        Ok(result)
+    }
+
+    /// Route all nets as explicit point-to-point segments.
+    ///
+    /// Unlike Steiner routing, this method treats each Vec<Point3D> as an
+    /// independent path from path[0] to path[1]... to path[N].
+    /// Segments sharing the same NetId are allowed to touch/overlap.
+    pub fn route_all_nets_explicit_global(
+        &mut self,
+        segments: &[(NetId, Vec<Point3D>)],
+    ) -> Result<RouteResult, RoutingError> {
+        let mut result = RouteResult::new();
+
+        for (net_id, points) in segments {
+            if points.len() < 2 {
+                continue;
+            }
+
+            let mut net_path = Vec::new();
+            let mut net_vias = Vec::new();
+
+            for i in 0..points.len() - 1 {
+                let route = NetRoute {
+                    net_id: *net_id,
+                    start: points[i],
+                    goal: points[i + 1],
+                };
+
+                let routed = self.route_net_global(&route)?;
+                if let Some(path) = routed.paths.into_iter().next() {
+                    if i > 0 && !net_path.is_empty() {
+                        // Avoid duplicating the joint point
+                        net_path.extend(path.into_iter().skip(1));
+                    } else {
+                        net_path.extend(path);
+                    }
+                }
+                net_vias.extend(routed.vias);
+            }
+
+            result.paths.entry(*net_id).or_default().push(net_path);
+            result.vias.extend(net_vias);
         }
 
         Ok(result)

@@ -21,6 +21,7 @@
 * Net: ALL_PADS (pour: J3[1]_Pad_Copper, material: Copper, z: 1.2700mm)
 * Net: ALL_PADS (pour: J3[2]_Pad_Copper, material: Copper, z: 1.2700mm)
 * Net: ALL_PADS (pour: J3[3]_Pad_Copper, material: Copper, z: 1.2700mm)
+* Net: ALL_PADS (width=200000nm, material=FR4)
 
 * ========================================
 * COMPONENTS

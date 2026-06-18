@@ -132,7 +132,8 @@ thread_local! {
     static LAST_Z_LOG: std::cell::RefCell<Option<(String, usize)>> = const { std::cell::RefCell::new(None) };
 }
 
-fn log_resolve_z(msg: String) {
+fn log_resolve_z(_msg: String) {
+    /*
     LAST_Z_LOG.with(|last| {
         let mut last = last.borrow_mut();
         if let Some((prev_msg, count)) = last.as_mut() {
@@ -146,6 +147,7 @@ fn log_resolve_z(msg: String) {
         eprintln!("{}", msg);
         *last = Some((msg, 1));
     });
+    */
 }
 
 pub fn resolve_coordinate_z_nm(

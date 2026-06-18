@@ -595,6 +595,7 @@ fn compile_single_space(
             &stackup_manager,
             profile,
             net_frequencies,
+            auto_routes,
         );
         auto_router.route_all_nets()?;
     }

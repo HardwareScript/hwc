@@ -52,10 +52,12 @@ pub fn place_pour(
         .resolve_elevation(&pour.elevation, ctx.symbol_table)?;
     let z_end_nm = z_start_nm + thickness_nm;
 
+    /*
     eprintln!(
         "[DEBUG pour] '{}' elevation={:?} -> z_start={}nm, thickness={}nm, z_end={}nm",
         pour.name, pour.elevation, z_start_nm, thickness_nm, z_end_nm
     );
+    */
 
     let solver = crate::constraint_solver::ConstraintSolver::new(bbox_tracker, ctx.eval_context);
 

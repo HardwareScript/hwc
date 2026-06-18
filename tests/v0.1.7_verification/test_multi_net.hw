@@ -1,0 +1,99 @@
+## Multi-Net Sanity Test — 6 Independent Nets
+##
+## Tests that the compiler correctly handles multiple independent nets
+## and provides proper traceability via --debug-identity.
+
+import * from @std/primitives/units
+import FR4 from @std/materials/insulators
+import Copper from @std/materials/conductors
+
+profile MultiNetProfile:
+    description: "2-layer PCB for multi-net test"
+    stackup:
+        top:    [material: Copper, thickness: 35um]
+        d1:     [material: FR4,    thickness: 1200um]
+        bottom: [material: Copper, thickness: 35um]
+    via:
+        min_diameter: 0.3mm
+        min_annular_ring: 0.15mm
+        min_spacing: 0.2mm
+    trace:
+        min_width: 0.2mm
+        min_spacing: 0.2mm
+    bridge Copper to Copper: Copper
+    manufacturing:
+        copper_thickness: 35um
+    clearance:
+        high_voltage: 2mm
+        safety_factor: 2.0
+    layer:
+        min_thickness: 0.1mm
+
+component Pad:
+    pins: [p]
+    layout:
+        shape: Rectangle(1mm, 1mm, 35um)
+        pin_positions:
+            p at [0mm, 0mm]
+        add pour(Copper) named Pad_Copper on layer: self:
+            device: p
+            boundary: [x: 0mm, y: 0mm] to [x: 1mm, y: 1mm]
+            thickness: 35um
+
+space MultiNetTest:
+    dimensions: 30mm by 30mm by 1.27mm
+    grid: 300 by 300 by 2
+    origin: bl by b
+    profile: MultiNetProfile
+
+    nets:
+        DATA: signal
+        CLK: signal
+        GND: power
+        VCC: power
+        USB_DP: signal
+        USB_DM: signal
+
+    ## DATA net: 2 pads
+    add Pad named DATA1 at [x: 2mm, y: 2mm, z: 0nm]:
+        net: [p: DATA]
+    add Pad named DATA2 at [x: 8mm, y: 2mm, z: 0nm]:
+        net: [p: DATA]
+
+    ## CLK net: 2 pads
+    add Pad named CLK1 at [x: 2mm, y: 8mm, z: 0nm]:
+        net: [p: CLK]
+    add Pad named CLK2 at [x: 8mm, y: 8mm, z: 0nm]:
+        net: [p: CLK]
+
+    ## GND net: 2 pads
+    add Pad named GND1 at [x: 14mm, y: 2mm, z: 0nm]:
+        net: [p: GND]
+    add Pad named GND2 at [x: 14mm, y: 8mm, z: 0nm]:
+        net: [p: GND]
+
+    ## VCC net: 2 pads
+    add Pad named VCC1 at [x: 20mm, y: 2mm, z: 0nm]:
+        net: [p: VCC]
+    add Pad named VCC2 at [x: 20mm, y: 8mm, z: 0nm]:
+        net: [p: VCC]
+
+    ## USB_DP net: 2 pads
+    add Pad named UDP1 at [x: 2mm, y: 14mm, z: 0nm]:
+        net: [p: USB_DP]
+    add Pad named UDP2 at [x: 8mm, y: 14mm, z: 0nm]:
+        net: [p: USB_DP]
+
+    ## USB_DM net: 2 pads
+    add Pad named UDM1 at [x: 2mm, y: 20mm, z: 0nm]:
+        net: [p: USB_DM]
+    add Pad named UDM2 at [x: 8mm, y: 20mm, z: 0nm]:
+        net: [p: USB_DM]
+
+    ## Routes for each net
+    route DATA1.p to DATA2.p
+    route CLK1.p to CLK2.p
+    route GND1.p to GND2.p
+    route VCC1.p to VCC2.p
+    route UDP1.p to UDP2.p
+    route UDM1.p to UDM2.p

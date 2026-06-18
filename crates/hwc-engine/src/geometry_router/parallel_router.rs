@@ -18,7 +18,6 @@ use crate::geometry_router::pathfinding::route_net_deterministic;
 use crate::netlist::NetlistArena;
 use crate::voxel_grid::VoxelGrid;
 use rayon::prelude::*;
-use rustc_hash::FxHashSet;
 
 /// Parallel router for domain-based multi-threaded routing.
 ///
@@ -155,7 +154,7 @@ impl ParallelRouter {
         let local_bounds = super::neighbor_generation::GridBounds::new(width, height, depth);
 
         // Track occupied voxels in local space
-        let mut occupied_voxels = FxHashSet::default();
+        let mut occupied_voxels = rustc_hash::FxHashMap::default();
 
         // Route all internal nets
         for &net_id in &domain.internal_nets {
@@ -227,7 +226,7 @@ impl ParallelRouter {
                 if let Some(waypoints) = path {
                     // Mark voxels as occupied for next route
                     for point in &waypoints {
-                        occupied_voxels.insert(*point);
+                        occupied_voxels.insert(*point, net_id);
                     }
 
                     routes.push(Route { net_id, waypoints });

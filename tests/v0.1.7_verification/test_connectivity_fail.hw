@@ -1,0 +1,89 @@
+# Test: Connectivity Failure (Unconnected Pin)
+#
+# Expected: Connectivity check failure — IC1 pin B is not routed
+# This proves that verification catches broken nets and unconnected pins.
+
+import * from @std/primitives/units
+import Copper from @std/materials/conductors
+import FR4 from @std/materials/insulators
+
+profile ConnectivityTestProfile:
+    description: "Profile for connectivity violation test"
+    stackup:
+        top:    [material: Copper, thickness: 35um]
+        d1:     [material: FR4,    thickness: 1.2mm]
+        bottom: [material: Copper, thickness: 35um]
+    trace:
+        min_width: 0.2mm
+        min_spacing: 0.2mm
+    via:
+        min_diameter: 0.5mm
+        min_annular_ring: 0.15mm
+    manufacturing:
+        copper_thickness: 35um
+    clearance:
+        high_voltage: 2mm
+        safety_factor: 2.0
+    layer:
+        min_thickness: 0.1mm
+
+component IC:
+    pins: [A, B, C]
+    layout:
+        shape: Rectangle(3mm, 3mm, 1mm)
+        pin_positions:
+            A at [0mm, 1.5mm]
+            B at [1.5mm, 3mm]
+            C at [3mm, 1.5mm]
+        add pour(Copper) named IC_Pad_A on layer: self:
+            device: A
+            boundary: [x: -0.3mm, y: 1mm] to [x: 0.3mm, y: 2mm]
+            thickness: 35um
+        add pour(Copper) named IC_Pad_B on layer: self:
+            device: B
+            boundary: [x: 1mm, y: 2.7mm] to [x: 2mm, y: 3.3mm]
+            thickness: 35um
+        add pour(Copper) named IC_Pad_C on layer: self:
+            device: C
+            boundary: [x: 2.7mm, y: 1mm] to [x: 3.3mm, y: 2mm]
+            thickness: 35um
+
+component Resistor:
+    pins: [p1, p2]
+    layout:
+        shape: Rectangle(2mm, 1mm, 0.5mm)
+        pin_positions:
+            p1 at [0mm, 0.5mm]
+            p2 at [2mm, 0.5mm]
+        add pour(Copper) named Res_Pad1 on layer: self:
+            device: p1
+            boundary: [x: -0.3mm, y: 0mm] to [x: 0.3mm, y: 1mm]
+            thickness: 35um
+        add pour(Copper) named Res_Pad2 on layer: self:
+            device: p2
+            boundary: [x: 1.7mm, y: 0mm] to [x: 2.3mm, y: 1mm]
+            thickness: 35um
+
+module ConnectivityTestModule:
+    pins: []
+
+space ConnectivityTestSpace implements ConnectivityTestModule:
+    dimensions: 30mm by 20mm by 1.27mm
+    grid: 300 by 200 by 2
+    origin: bl by b
+    profile: ConnectivityTestProfile
+
+    nets:
+        VCC: power
+        GND: power
+
+    add IC named IC1 at [x: 5mm, y: 8mm, z: 0nm]:
+        net: [A: VCC, B: GND, C: VCC]
+
+    add Resistor named R1 at [x: 18mm, y: 8mm, z: 0nm]:
+        net: [p1: VCC, p2: GND]
+
+    # Only route IC1.A -> R1.p1 (VCC)
+    route IC1.A to R1.p1
+
+    # IC1.B (GND) and IC1.C (VCC) are left unconnected — should fail connectivity check

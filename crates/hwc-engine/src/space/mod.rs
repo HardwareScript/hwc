@@ -11,6 +11,7 @@ pub use traces::*;
 use crate::geometry::{BoundingBox, Point3D};
 use crate::netlist::{NetId, NetlistArena};
 use crate::voxel::{MaterialId, MaterialRegistry};
+use crate::voxel_grid::SubstrateLayer;
 use crate::voxel_grid::VoxelGrid;
 use compact_str::CompactString;
 use rustc_hash::FxHashMap;
@@ -341,13 +342,17 @@ impl HardwareSpace {
 
         let mut segment_count = 0;
 
+        // v0.1.8: Group segments by (z_min, z_max, material, net) to create
+        // one SubstrateLayer per physical layer instead of one per segment.
+        // Key: (z_min, z_max, material_id, net_id) -> Vec<BoundingBox>
+        use rustc_hash::FxHashMap;
+        let mut groups: FxHashMap<(i64, i64, MaterialId, u32), Vec<BoundingBox>> =
+            FxHashMap::default();
+
         for route in &self.analytic_routes {
             let half_w = route.width_nm / 2;
 
             for seg in &route.segments {
-                // v0.1.7 Strategy A: Per-segment Z placement.
-                // Each segment uses its own start Z level so multi-layer routes
-                // render at the correct height instead of collapsing to a median Z.
                 let z_min = seg.start.z.min(seg.end.z);
                 let z_max = seg.start.z.max(seg.end.z).max(z_min + route.thickness_nm);
 
@@ -366,26 +371,44 @@ impl HardwareSpace {
                     Point3D::new(x_max, y_max, z_max),
                 );
 
-                // NATIVE FIX: Store as sparse substrate layer instead of filling voxels
-                // This is O(1) memory per segment, not O(voxels)
-                use crate::voxel_grid::SubstrateLayerType;
-                self.voxel_grid.add_substrate_layer(
-                    route.material,
-                    route.net_id.0,
-                    bbox,
-                    SubstrateLayerType::Pour,
-                );
+                let key = (z_min, z_max, route.material, route.net_id.0);
+                groups.entry(key).or_default().push(bbox);
 
                 segment_count += 1;
             }
         }
 
+        // v0.1.8: Create one SubstrateLayer per group, storing segments as child regions.
+        use crate::voxel_grid::SubstrateLayerType;
+        let mut layer_count = 0;
+        for ((z_min, z_max, material, net), bboxes) in groups {
+            let group_bbox = BoundingBox::new(
+                Point3D::new(
+                    bboxes.iter().map(|b| b.min.x).min().unwrap_or(0),
+                    bboxes.iter().map(|b| b.min.y).min().unwrap_or(0),
+                    z_min,
+                ),
+                Point3D::new(
+                    bboxes.iter().map(|b| b.max.x).max().unwrap_or(0),
+                    bboxes.iter().map(|b| b.max.y).max().unwrap_or(0),
+                    z_max,
+                ),
+            );
+
+            let mut layer = SubstrateLayer::new(material, net, group_bbox, SubstrateLayerType::Pour);
+            for bbox in bboxes {
+                layer.append_region(bbox);
+            }
+            self.voxel_grid.get_substrate_layers_mut().push(layer);
+            layer_count += 1;
+        }
+
         let duration = start.elapsed();
         eprintln!(
-            "[ANALYTIC ROUTES] Realization complete: {} segments → {} sparse layers in {:.6}s",
+            "[ANALYTIC ROUTES] Realization complete: {} segments → {} sparse layers ({}ms)",
             segment_count,
-            segment_count,
-            duration.as_secs_f64()
+            layer_count,
+            duration.as_millis()
         );
 
         // v0.1.7: POST-REALIZATION DRILL PASS

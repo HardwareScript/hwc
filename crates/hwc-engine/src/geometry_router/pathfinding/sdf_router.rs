@@ -76,6 +76,7 @@ pub fn route_net_sdf_accelerated(
         },
     );
 
+    /*
     eprintln!("[ROUTER DEBUG] Starting SDF-accelerated routing");
     eprintln!(
         "[ROUTER DEBUG]   Start: {:?} nm -> Snapped: {:?}",
@@ -90,6 +91,7 @@ pub fn route_net_sdf_accelerated(
         "[ROUTER DEBUG]   Manhattan distance: {} voxels",
         start_snapped.manhattan_distance(&goal_snapped) / params.voxel_size.x_nm
     );
+    */
 
     let mut state = PathfindingState::new();
 
@@ -361,9 +363,13 @@ pub fn route_net_sdf_accelerated(
                 }
             }
 
-            // Hard block occupied voxels
-            if neighbor != goal_snapped && params.occupied_voxels.contains(&neighbor) {
-                continue;
+            // Hard block occupied voxels (unless it's the target pin or another segment of the SAME net)
+            if neighbor != goal_snapped {
+                if let Some(&occupying_net) = params.occupied_voxels.get(&neighbor) {
+                    if occupying_net != params.net_id {
+                        continue;
+                    }
+                }
             }
 
             // v0.1.7 (Strict Box Model): Block the entire interior volume of all components.
