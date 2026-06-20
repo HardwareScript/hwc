@@ -305,6 +305,7 @@ impl super::super::super::Parser {
             Unit::Micrometer => m.value / 1000.0,
             Unit::Centimeter => m.value * 10.0,
             Unit::Nanometer => m.value / 1_000_000.0,
+            Unit::Picometer => m.value / 1_000_000_000.0,
             _ => panic!(
                 "measurement_to_mm: cannot convert {:?} to millimeters (not a length unit)",
                 m.unit
@@ -539,6 +540,8 @@ impl super::super::super::Parser {
                     Unit::Millimeter => value,
                     Unit::Micrometer => value / 1000.0,
                     Unit::Centimeter => value * 10.0,
+                    Unit::Nanometer => value / 1_000_000.0,
+                    Unit::Picometer => value / 1_000_000_000.0,
                     _ => value,
                 };
                 Ok(mm)

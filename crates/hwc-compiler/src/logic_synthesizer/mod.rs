@@ -214,7 +214,7 @@ impl<'a> LogicSynthesizer<'a> {
         let placer = ComponentPlacer::new();
         placer
             .place_component(PlacementParams {
-                grid: &mut self.space.voxel_grid,
+                entity_graph: &mut self.space.entity_graph,
                 voxel_size: &self.space.voxel_size,
                 arena: &mut self.space.netlist,
                 symbol_table: self.symbol_table,

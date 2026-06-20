@@ -29,6 +29,10 @@ rustc-hash = "2.1"
 compact_str = { version = "0.9", features = ["serde"] }
 smallvec = { version = "1.13", features = ["serde"] }
 
+# v0.1.8 spatial indexing & cryptographic hashing
+rstar = "0.12"
+sha2 = "0.10"
+
 # CLI-only dependencies
 clap = { version = "4.5", features = ["derive"] }
 anyhow = "1.0"

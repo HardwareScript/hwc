@@ -52,7 +52,7 @@ pub fn convert_metadata_to_physics(
         .collect();
 
     let physics_substrate_layers: Vec<hwc_physics::connectivity::SubstrateLayerMetadata> = space
-        .voxel_grid
+        .entity_graph
         .get_substrate_layers()
         .iter()
         .map(|layer| {

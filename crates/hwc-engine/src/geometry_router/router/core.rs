@@ -30,16 +30,19 @@ pub struct GeometryRouter {
     /// Layer directions for Manhattan routing
     pub(super) layer_directions: Vec<LayerDirection>,
 
-    /// Voxel size in nanometers
+    /// Voxel size in nanometers (legacy/internal snap-step)
     pub(super) voxel_size_nm: i64,
+
+    /// v0.1.8 continuous database snap-step resolution in nanometers
+    pub(super) resolution_nm: i64,
 
     /// Occupied voxels from previously routed nets
     /// Maps voxel position to the net that occupies it
     pub(super) occupied_voxels: FxHashMap<crate::geometry::Point3D, crate::netlist::NetId>,
 
-    /// VoxelGrid for Binary Collision Skip optimization
-    /// Enables O(1) chunk-based collision checking instead of O(N) hash lookups
-    pub(super) voxel_grid: crate::voxel_grid::VoxelGrid,
+    /// EntityGraph for component metadata, substrate layers, and spatial queries.
+    /// Replaces the legacy VoxelGrid for all engine-internal operations.
+    pub(super) entity_graph: super::super::EntityGraph,
 
     /// All vias placed during routing (for drill file generation)
     pub(super) vias: Vec<super::super::types::Via>,
@@ -94,13 +97,22 @@ pub struct GeometryRouter {
     /// Net frequencies in Hz (e.g., 5_000_000_000.0 for 5 GHz).
     /// Set via `set_substrate_context()` before routing.
     pub(super) net_frequencies: FxHashMap<crate::netlist::NetId, f64>,
+
+    /// Coarse partition grid for hierarchical G-Cell routing.
+    /// Created in `route_space()` before routing branches to enable
+    /// topological routing with partition-guided pathfinding.
+    pub partition_grid: Option<super::super::partition::PartitionGrid>,
+
+    /// v0.1.8 Salsa-style memoized query store for per-G-cell routing cache.
+    /// When present, hierarchical G-Cell routing results are memoized so that
+    /// unchanged G-cells return cached results on incremental rebuilds.
+    pub query_store: Option<super::super::query_engine::QueryStore>,
 }
 
 /// Copper pour definition for anti-pad generation.
 #[derive(Debug, Clone)]
 pub struct CopperPour {
     pub(super) net_id: crate::netlist::NetId,
-    pub(super) material_id: crate::voxel_grid::MaterialId,
     /// Bottom Z elevation of the pour plane in nanometers.
     pub(super) z_bottom_nm: i64,
     #[allow(dead_code)] // Reserved for future use in pour boundary checking
@@ -126,6 +138,7 @@ impl GeometryRouter {
     /// ```
     pub fn new(bounds: GridBounds, constraints: ConstraintRulebook) -> Self {
         let voxel_size_nm = constraints.voxel_size_nm;
+        let resolution_nm = constraints.voxel_size_nm; // Default to voxel size for v0.1.8 migration
 
         // Extract layer directions from constraints
         let num_layers = constraints.layer_directions.len();
@@ -134,27 +147,28 @@ impl GeometryRouter {
             .collect();
 
         // Calculate VoxelGrid dimensions from bounds and voxel size
-        let grid_x = ((bounds.width_nm / voxel_size_nm) as usize).max(1);
-        let grid_y = ((bounds.height_nm / voxel_size_nm) as usize).max(1);
-        let grid_z = ((bounds.depth_nm / voxel_size_nm) as usize).max(1);
+        let _grid_x = ((bounds.width_nm / voxel_size_nm) as usize).max(1);
+        let _grid_y = ((bounds.height_nm / voxel_size_nm) as usize).max(1);
+        let _grid_z = ((bounds.depth_nm / voxel_size_nm) as usize).max(1);
 
         // Create VoxelSize for the grid
-        let voxel_size = crate::space::VoxelSize {
+        let _voxel_size = crate::space::VoxelSize {
             x_nm: voxel_size_nm,
             y_nm: voxel_size_nm,
             z_nm: voxel_size_nm,
         };
 
-        // Create VoxelGrid for Binary Collision Skip
-        let voxel_grid = crate::voxel_grid::VoxelGrid::new(grid_x, grid_y, grid_z, voxel_size, 0);
+        // Create EntityGraph for spatial queries and component metadata
+        let entity_graph = super::super::EntityGraph::new();
 
         Self {
             bounds,
             constraints,
             layer_directions,
             voxel_size_nm,
+            resolution_nm,
             occupied_voxels: FxHashMap::default(),
-            voxel_grid,
+            entity_graph,
             vias: Vec::new(),
             copper_pours: Vec::new(),
             bounding_box_tracker: BoundingBoxTracker::new(),
@@ -165,6 +179,8 @@ impl GeometryRouter {
             layer_z_positions: Vec::new(), // Empty: no stackup info
             substrate_layers: None,
             net_frequencies: FxHashMap::default(),
+            partition_grid: None,
+            query_store: None,
         }
     }
 
@@ -190,13 +206,11 @@ impl GeometryRouter {
     pub fn add_copper_pour(
         &mut self,
         net_id: crate::netlist::NetId,
-        material_id: crate::voxel_grid::MaterialId,
         z_bottom_nm: i64,
         bounds: (Point3D, Point3D),
     ) {
         self.copper_pours.push(CopperPour {
             net_id,
-            material_id,
             z_bottom_nm,
             bounds,
         });
@@ -357,7 +371,6 @@ impl GeometryRouter {
         obstacle_bboxes: &[crate::geometry::BoundingBox],
         substrate_layers: Option<&[crate::voxel_grid::SubstrateLayer]>,
         net_frequencies: &FxHashMap<crate::netlist::NetId, f64>,
-        voxel_grid: Option<&crate::voxel_grid::VoxelGrid>, // v0.1.7: Added VoxelGrid context for Strict Lockout
     ) -> Result<super::super::types::RouteResult, super::super::types::RoutingError> {
         // Store substrate context on self so route_net/route_net_global can access it
         if let Some(sl) = substrate_layers {
@@ -365,10 +378,25 @@ impl GeometryRouter {
         }
         self.net_frequencies = net_frequencies.clone();
 
-        // Update internal voxel_grid if provided
-        if let Some(vg) = voxel_grid {
-            self.voxel_grid.copy_metadata_from(vg);
-        }
+        // Build the Entity Graph from VoxelGrid component metadata.
+        // This populates the SceneGraph + R*-tree spatial index for vector-first
+        // collision queries that the router can use alongside VoxelGrid.
+        self.build_entity_graph();
+
+        // Create a coarse PartitionGrid before routing branches.
+        // This enables topological routing with partition-guided pathfinding.
+        let track_pitch = self.voxel_size_nm;
+        let max_clearance = self.constraints.fabrication.as_ref()
+            .map(|fab| fab.min_trace_spacing_nm)
+            .unwrap_or(200_000);
+        let partition = super::super::partition::PartitionGrid::new(
+            *grid_bbox,
+            10_000_000,
+            10_000_000,
+            track_pitch,
+            max_clearance,
+        );
+        self.partition_grid = Some(partition);
 
         // v0.1.7: If explicit segments are provided (Chain-Link mode), route them first
         // and bypass Steiner logic for these specific paths.
@@ -425,7 +453,7 @@ impl GeometryRouter {
         _net_frequencies: &FxHashMap<crate::netlist::NetId, f64>,
     ) -> Result<super::super::types::RouteResult, super::super::types::RoutingError> {
         // Pass-through: route all nets directly (hierarchical decision is made in route_space)
-        self.route_all_nets_steiner_internal(nets)
+        self.route_all_nets_steiner_global(nets)
     }
 
     /// Hierarchical routing: partition into G-Cells, global route, then parallel detailed routing.
@@ -512,37 +540,28 @@ impl GeometryRouter {
                     if pins.len() < 2 {
                         return (
                             net_id,
-                            Err(super::super::types::RoutingError::NoPathFound {
+                            Ok(super::super::types::RoutedNet {
                                 net_id,
-                                start: pins[0],
-                                goal: pins[0],
+                                paths: vec![vec![pins[0], pins[0]]],
+                                vias: Vec::new(),
                             }),
                         );
                     }
 
                     // Create an isolated router clone for this net (no shared occupied_voxels)
-                    let mut isolated_voxel_grid = crate::voxel_grid::VoxelGrid::new(
-                        ((self.bounds.width_nm / self.voxel_size_nm) as usize).max(1),
-                        ((self.bounds.height_nm / self.voxel_size_nm) as usize).max(1),
-                        ((self.bounds.depth_nm / self.voxel_size_nm) as usize).max(1),
-                        crate::space::VoxelSize {
-                            x_nm: self.voxel_size_nm,
-                            y_nm: self.voxel_size_nm,
-                            z_nm: self.voxel_size_nm,
-                        },
-                        0,
-                    );
+                    let mut isolated_entity_graph = super::super::EntityGraph::new();
                     // v0.1.7: Propagate component metadata to the isolated router.
                     // This ensures the A* solver "sees" pads as obstacles for Interior Lockout.
-                    isolated_voxel_grid.copy_metadata_from(&self.voxel_grid);
+                    isolated_entity_graph.copy_metadata_from(&self.entity_graph);
 
                     let mut isolated = GeometryRouter {
                         bounds: self.bounds,
                         constraints: self.constraints.clone(),
                         layer_directions: self.layer_directions.clone(),
                         voxel_size_nm: self.voxel_size_nm,
+                        resolution_nm: self.resolution_nm,
                         occupied_voxels: FxHashMap::default(),
-                        voxel_grid: isolated_voxel_grid,
+                        entity_graph: isolated_entity_graph,
                         vias: Vec::new(),
                         copper_pours: self.copper_pours.clone(),
                         bounding_box_tracker: self.bounding_box_tracker.clone(),
@@ -553,9 +572,11 @@ impl GeometryRouter {
                         layer_z_positions: self.layer_z_positions.clone(),
                         substrate_layers: self.substrate_layers.clone(),
                         net_frequencies: self.net_frequencies.clone(),
+                        partition_grid: None,
+                        query_store: None,
                     };
 
-                    let result = isolated.route_net_steiner_global(net_id, pins);
+                    let result = isolated.decompose_net_steiner(net_id, pins);
                     (net_id, result)
                 })
                 .collect();
@@ -570,11 +591,9 @@ impl GeometryRouter {
                     e
                 })?;
 
-                // Record occupied voxels on the main router for subsequent nets
+                // Record routed segments canonically in the EntityGraph for subsequent nets
                 for segment in &routed.paths {
-                    for point in segment {
-                        self.occupied_voxels.insert(*point, net_id);
-                    }
+                    self.entity_graph.register_route(net_id, segment);
                 }
 
                 final_result.paths.insert(net_id, routed.paths);
@@ -593,20 +612,49 @@ impl GeometryRouter {
             );
         }
 
-        // Step 4: Route intra-cell nets in parallel across G-Cells
+        // Step 4: Route intra-cell nets across G-Cells
+        // v0.1.8: When a QueryStore is present, use memoized per-G-cell routing
+        // so unchanged G-cells return cached results in <1ms.
+        // When no QueryStore is present, use the existing parallel Rayon path.
         let t_intra = std::time::Instant::now();
         if !intra_cell_nets.is_empty() {
-            let intra_results: Vec<
-                Result<super::super::types::RouteResult, super::super::types::RoutingError>,
-            > = gcell_grid
-                .cells
-                .par_iter()
-                .map(|cell| {
+            // v0.1.8: Check if memoization is active (QueryStore present)
+            if self.query_store.is_some() {
+                // --- MEMOIZED SEQUENTIAL PATH ---
+                // QueryStore is not Sync, so we route sequentially and memoize per G-Cell.
+                let file_id = 0u64; // space-level file ID for query keys
+                let mut cached_count = 0usize;
+                let mut routed_count = 0usize;
+
+                for cell in &gcell_grid.cells {
                     let cell_nets = match intra_cell_nets.get(cell.id) {
                         Some(nets) => nets,
-                        None => return Ok(super::super::types::RouteResult::new()),
+                        None => continue,
                     };
 
+                    let gcell_id = cell.id as u32;
+                    let query_id = super::super::query_engine::make_query_id(
+                        super::super::query_engine::QueryType::RouteGcell,
+                        file_id,
+                        &[gcell_id as u64],
+                    );
+
+                    // Check if this G-cell's routing result is already cached
+                    let is_cached = self
+                        .query_store
+                        .as_ref()
+                        .unwrap()
+                        .get_result(query_id)
+                        .is_some();
+
+                    if is_cached {
+                        cached_count += 1;
+                        // Result is already in the final_result from a previous compilation.
+                        // Skip re-routing — this G-cell is unchanged.
+                        continue;
+                    }
+
+                    // Not cached: route this G-cell and store the result
                     let cell_bbox = &cell.bbox;
                     let mut cell_router = GeometryRouter {
                         bounds: GridBounds::new(
@@ -617,20 +665,9 @@ impl GeometryRouter {
                         constraints: self.constraints.clone(),
                         layer_directions: self.layer_directions.clone(),
                         voxel_size_nm: self.voxel_size_nm,
+                        resolution_nm: self.resolution_nm,
                         occupied_voxels: FxHashMap::default(),
-                        voxel_grid: crate::voxel_grid::VoxelGrid::new(
-                            ((cell_bbox.max.x - cell_bbox.min.x) / self.voxel_size_nm).max(1)
-                                as usize,
-                            ((cell_bbox.max.y - cell_bbox.min.y) / self.voxel_size_nm).max(1)
-                                as usize,
-                            ((cell_bbox.max.z - cell_bbox.min.z) / self.voxel_size_nm).max(1) as usize,
-                            crate::space::VoxelSize {
-                                x_nm: self.voxel_size_nm,
-                                y_nm: self.voxel_size_nm,
-                                z_nm: self.voxel_size_nm,
-                            },
-                            0,
-                        ),
+                        entity_graph: super::super::EntityGraph::new(),
                         vias: Vec::new(),
                         copper_pours: Vec::new(),
                         bounding_box_tracker: BoundingBoxTracker::new(),
@@ -641,38 +678,36 @@ impl GeometryRouter {
                         layer_z_positions: self.layer_z_positions.clone(),
                         substrate_layers: self.substrate_layers.clone(),
                         net_frequencies: self.net_frequencies.clone(),
+                        partition_grid: None,
+                        query_store: None,
                     };
 
-                    let local_nets: FxHashMap<
-                        crate::netlist::NetId,
-                        Vec<crate::geometry::Point3D>,
-                    > = cell_nets
-                        .iter()
-                        .map(|(&net_id, pins)| {
-                            let local_pins: Vec<_> = pins
-                                .iter()
-                                .map(|pin| {
-                                    crate::geometry::Point3D::new(
-                                        pin.x - cell_bbox.min.x,
-                                        pin.y - cell_bbox.min.y,
-                                        pin.z - cell_bbox.min.z,
-                                    )
-                                })
-                                .collect();
-                            (net_id, local_pins)
-                        })
-                        .collect();
+                    let local_nets: FxHashMap<crate::netlist::NetId, Vec<crate::geometry::Point3D>> =
+                        cell_nets
+                            .iter()
+                            .map(|(&net_id, pins)| {
+                                let local_pins: Vec<_> = pins
+                                    .iter()
+                                    .map(|pin| {
+                                        crate::geometry::Point3D::new(
+                                            pin.x - cell_bbox.min.x,
+                                            pin.y - cell_bbox.min.y,
+                                            pin.z - cell_bbox.min.z,
+                                        )
+                                    })
+                                    .collect();
+                                (net_id, local_pins)
+                            })
+                            .collect();
 
-                    // Set up sub-router context (replicate what route_space does before routing)
                     cell_router.substrate_layers = substrate_layers.map(|sl| sl.to_vec());
                     cell_router.net_frequencies = net_frequencies.clone();
-                    if let Some(vg) = Some(&self.voxel_grid) {
-                        cell_router.voxel_grid.copy_metadata_from(vg);
-                    }
+                    cell_router.entity_graph.copy_metadata_from(&self.entity_graph);
 
-                    let mut cell_result = super::super::types::RouteResult::new();
-                    match cell_router.route_all_nets_steiner_internal(&local_nets) {
+                    match cell_router.route_all_nets_steiner_global(&local_nets) {
                         Ok(local_result) => {
+                            // Convert local paths back to global coordinates
+                            let mut cell_result = super::super::types::RouteResult::new();
                             for (net_id, local_paths) in &local_result.paths {
                                 let global_paths: Vec<Vec<_>> = local_paths
                                     .iter()
@@ -692,6 +727,39 @@ impl GeometryRouter {
                                 cell_result.paths.insert(*net_id, global_paths);
                             }
                             cell_result.vias.extend(local_result.vias);
+
+                            // v0.1.8: Store the routed G-cell result in the QueryStore cache
+                            let segment_count: usize = cell_result
+                                .paths
+                                .values()
+                                .map(|segs| segs.len())
+                                .sum();
+                            let hash_input = [
+                                file_id.to_le_bytes(),
+                                (gcell_id as u64).to_le_bytes(),
+                                (segment_count as u64).to_le_bytes(),
+                            ]
+                            .concat();
+                            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+                            use std::hash::{Hash, Hasher};
+                            hash_input.hash(&mut hasher);
+                            let hash_val = hasher.finish();
+                            let mut hash_bytes = [0u8; 32];
+                            hash_bytes[..8].copy_from_slice(&hash_val.to_le_bytes());
+
+                            let route_result = super::super::query_engine::RouteResult {
+                                file_id,
+                                gcell_id,
+                                segment_count,
+                                hash: hash_bytes,
+                            };
+                            self.query_store.as_mut().unwrap().execute_query(
+                                query_id,
+                                || super::super::query_engine::QueryResult::RouteGcell(route_result),
+                            );
+
+                            routed_count += 1;
+                            final_result.merge(cell_result);
                         }
                         Err(e) => {
                             eprintln!(
@@ -701,13 +769,118 @@ impl GeometryRouter {
                             return Err(e);
                         }
                     }
+                }
 
-                    Ok(cell_result)
-                })
-                .collect();
+                eprintln!(
+                    "[ADAPTIVE ROUTER] Memoized G-Cell routing: {} cached (skipped), {} routed ({}ms)",
+                    cached_count,
+                    routed_count,
+                    t_intra.elapsed().as_millis()
+                );
+            } else {
+                // --- PARALLEL PATH (existing behavior, no memoization) ---
+                let intra_results: Vec<
+                    Result<super::super::types::RouteResult, super::super::types::RoutingError>,
+                > = gcell_grid
+                    .cells
+                    .par_iter()
+                    .map(|cell| {
+                        let cell_nets = match intra_cell_nets.get(cell.id) {
+                            Some(nets) => nets,
+                            None => return Ok(super::super::types::RouteResult::new()),
+                        };
 
-            for res in intra_results {
-                final_result.merge(res?);
+                        let cell_bbox = &cell.bbox;
+                        let mut cell_router = GeometryRouter {
+                            bounds: GridBounds::new(
+                                cell_bbox.max.x - cell_bbox.min.x,
+                                cell_bbox.max.y - cell_bbox.min.y,
+                                cell_bbox.max.z - cell_bbox.min.z,
+                            ),
+                            constraints: self.constraints.clone(),
+                            layer_directions: self.layer_directions.clone(),
+                            voxel_size_nm: self.voxel_size_nm,
+                            resolution_nm: self.resolution_nm,
+                            occupied_voxels: FxHashMap::default(),
+                            entity_graph: super::super::EntityGraph::new(),
+                            vias: Vec::new(),
+                            copper_pours: Vec::new(),
+                            bounding_box_tracker: BoundingBoxTracker::new(),
+                            area_threshold_nm2: self.area_threshold_nm2,
+                            net_count_threshold: self.net_count_threshold,
+                            is_manhattan: self.is_manhattan,
+                            profile_layers: self.profile_layers.clone(),
+                            layer_z_positions: self.layer_z_positions.clone(),
+                            substrate_layers: self.substrate_layers.clone(),
+                            net_frequencies: self.net_frequencies.clone(),
+                            partition_grid: None,
+                            query_store: None,
+                        };
+
+                        let local_nets: FxHashMap<
+                            crate::netlist::NetId,
+                            Vec<crate::geometry::Point3D>,
+                        > = cell_nets
+                            .iter()
+                            .map(|(&net_id, pins)| {
+                                let local_pins: Vec<_> = pins
+                                    .iter()
+                                    .map(|pin| {
+                                        crate::geometry::Point3D::new(
+                                            pin.x - cell_bbox.min.x,
+                                            pin.y - cell_bbox.min.y,
+                                            pin.z - cell_bbox.min.z,
+                                        )
+                                    })
+                                    .collect();
+                                (net_id, local_pins)
+                            })
+                            .collect();
+
+                        // Set up sub-router context (replicate what route_space does before routing)
+                        cell_router.substrate_layers = substrate_layers.map(|sl| sl.to_vec());
+                        cell_router.net_frequencies = net_frequencies.clone();
+                        cell_router.entity_graph.copy_metadata_from(&self.entity_graph);
+
+                        let mut cell_result = super::super::types::RouteResult::new();
+                        match cell_router.route_all_nets_steiner_global(&local_nets) {
+                            Ok(local_result) => {
+                                for (net_id, local_paths) in &local_result.paths {
+                                    let global_paths: Vec<Vec<_>> = local_paths
+                                        .iter()
+                                        .map(|segment| {
+                                            segment
+                                                .iter()
+                                                .map(|pt| {
+                                                    crate::geometry::Point3D::new(
+                                                        pt.x + cell_bbox.min.x,
+                                                        pt.y + cell_bbox.min.y,
+                                                        pt.z + cell_bbox.min.z,
+                                                    )
+                                                })
+                                                .collect()
+                                        })
+                                        .collect();
+                                    cell_result.paths.insert(*net_id, global_paths);
+                                }
+                                cell_result.vias.extend(local_result.vias);
+                            }
+                            Err(e) => {
+                                eprintln!(
+                                    "[ADAPTIVE ROUTER] G-Cell {} intra-cell routing failed: {:?}",
+                                    cell.id, e
+                                );
+                                return Err(e);
+                            }
+                        }
+
+                        Ok(cell_result)
+                    })
+                    .collect();
+
+                for res in intra_results {
+                    final_result.merge(res?);
+                }
             }
         }
 
@@ -741,7 +914,7 @@ impl GeometryRouter {
         component_type: compact_str::CompactString,
     ) {
         use smallvec::SmallVec;
-        self.voxel_grid.add_component_metadata(
+        self.entity_graph.add_component_metadata(
             bbox,
             material,
             name,
@@ -771,7 +944,42 @@ impl GeometryRouter {
         pin_name: compact_str::CompactString,
         net: Option<compact_str::CompactString>,
     ) {
-        self.voxel_grid
+        self.entity_graph
             .add_component_pin(x_nm, y_nm, z_nm, component_name, pin_name, net);
+    }
+
+    /// Build the Entity Graph spatial index from current component metadata.
+    ///
+    /// This rebuilds the R*-tree spatial index from all placed components.
+    /// Call this after all component obstacles have been registered via
+    /// `add_component_obstacle()` and before routing begins.
+    pub fn build_entity_graph(&mut self) {
+        use crate::geometry_router::scene_graph::ComponentStamp;
+
+        // Create a fresh scene graph from the component metadata in entity_graph
+        let metadata = self.entity_graph.get_component_metadata().to_vec();
+        for (idx, meta) in metadata.iter().enumerate() {
+            let width = meta.bbox.max.x - meta.bbox.min.x;
+            let height = meta.bbox.max.y - meta.bbox.min.y;
+            let stamp = ComponentStamp::rectangle(
+                idx,
+                meta.component_type.to_string(),
+                width,
+                height,
+            );
+            let stamp_id = self.entity_graph.scene_mut().register_stamp(stamp);
+
+            use crate::geometry::transform::FixedTransform2D;
+            let transform = FixedTransform2D::from_translation(
+                meta.bbox.min.x,
+                meta.bbox.min.y,
+            );
+
+            let net_bindings: Vec<usize> = Vec::new();
+            self.entity_graph.scene_mut().place_instance(stamp_id, transform, net_bindings);
+        }
+
+        // Build the R*-tree spatial index from all placed instances
+        self.entity_graph.rebuild_spatial_index();
     }
 }

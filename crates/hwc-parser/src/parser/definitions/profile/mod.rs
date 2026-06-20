@@ -63,6 +63,7 @@ impl super::super::Parser {
         let mut routing = None; // v0.1.7: Routing constraints (layer directions)
         let mut bridges = Vec::new(); // Phase 1: Bridge rules
         let mut vias_list = Vec::new(); // v0.1.7: Explicit via definitions
+        let mut technology = None;
         let mut other = rustc_hash::FxHashMap::default(); // v0.1.6: Custom fields
 
         let mut loop_iterations = 0;
@@ -96,7 +97,7 @@ impl super::super::Parser {
             }
 
             // v0.1.7: Via definitions or constraints
-            if self.check(&Token::Via) {
+            if self.check_identifier("via") {
                 self.advance(); // consume 'via'
 
                 // Check if it's a constraint block: `via:`
@@ -308,6 +309,10 @@ impl super::super::Parser {
                         self.advance();
                     }
                 }
+                "technology" => {
+                    technology = self.expect_string().ok();
+                    self.skip_whitespace();
+                }
                 _ => {
                     // v0.1.6: Accept unknown fields and store in 'other' HashMap
                     if let Some(current) = self.current() {
@@ -373,6 +378,7 @@ impl super::super::Parser {
             routing,
             bridges,
             vias: vias_list,
+            technology,
             other,
             span: Span::new(start_pos, end_pos),
         })

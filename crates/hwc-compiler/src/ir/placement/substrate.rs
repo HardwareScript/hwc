@@ -80,7 +80,7 @@ pub fn place_substrate(
     if !cutout_bboxes.is_empty() {
         placer
             .place_substrate(
-                &mut space.voxel_grid,
+                &mut space.entity_graph,
                 &space.voxel_size,
                 material_id,
                 start,
@@ -92,7 +92,7 @@ pub fn place_substrate(
         for cutout_bbox in cutout_bboxes {
             placer
                 .place_substrate(
-                    &mut space.voxel_grid,
+                    &mut space.entity_graph,
                     &space.voxel_size,
                     0,
                     cutout_bbox.min,
@@ -104,7 +104,7 @@ pub fn place_substrate(
     } else {
         placer
             .place_substrate(
-                &mut space.voxel_grid,
+                &mut space.entity_graph,
                 &space.voxel_size,
                 material_id,
                 start,

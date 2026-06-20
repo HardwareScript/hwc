@@ -188,7 +188,7 @@ pub fn validate_alignment(
 
             let physics_substrate_layers: Vec<hwc_physics::connectivity::SubstrateLayerMetadata> =
                 space
-                    .voxel_grid
+                    .entity_graph
                     .get_substrate_layers()
                     .iter()
                     .map(|layer| {
@@ -311,7 +311,7 @@ pub fn validate_alignment(
             // Extract pin positions
             let pin_positions: Vec<hwc_physics::PinPosition> =
                 {
-                    let component_pins = space.voxel_grid.get_component_pins();
+                    let component_pins = space.entity_graph.get_component_pins();
                     component_pins
                         .iter()
                         .map(|pin| {

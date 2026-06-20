@@ -56,6 +56,7 @@ pub struct ProfileDefinition {
     pub bridges: Vec<BridgeRule>,
     /// Explicit via definitions (v0.1.7)
     pub vias: Vec<ViaDefinition>,
+    pub technology: Option<String>,
     pub other: rustc_hash::FxHashMap<CompactString, String>, // v0.1.6: Custom constraint blocks
     pub span: Span,
 }

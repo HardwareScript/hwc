@@ -118,8 +118,8 @@ pub fn extract_pin_positions(
 ) -> Vec<hwc_physics::PinPosition> {
     let mut pin_positions = Vec::new();
 
-    // v0.1.6: Get component pins directly from voxel grid
-    let component_pins = space.voxel_grid.get_component_pins();
+    // v0.1.8: Get component pins from entity graph
+    let component_pins = space.entity_graph.get_component_pins();
 
     if config.verbose {
         println!(

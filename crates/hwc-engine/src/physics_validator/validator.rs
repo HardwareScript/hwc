@@ -2,7 +2,8 @@
 
 use crate::bit_chunk::BitChunk;
 use crate::geometry::Point3D;
-use crate::voxel_grid::{NetId, VoxelGrid};
+use crate::voxel_grid::NetId;
+use crate::geometry_router::EntityGraph;
 use rayon::prelude::*;
 use std::time::Instant;
 
@@ -77,7 +78,7 @@ impl PhysicsValidator {
     /// Expected: 100M voxels/sec on 4-core system
     pub fn validate_parallel(
         &self,
-        grid: &VoxelGrid,
+        grid: &EntityGraph,
         silicon_material_id: Option<crate::voxel_grid::MaterialId>,
     ) -> PhysicsValidationReport {
         let start = Instant::now();
@@ -144,7 +145,7 @@ impl PhysicsValidator {
     /// the dirty tracking for the next incremental validation cycle.
     pub fn validate_incremental(
         &self,
-        grid: &VoxelGrid,
+        grid: &EntityGraph,
         silicon_material_id: Option<crate::voxel_grid::MaterialId>,
     ) -> PhysicsValidationReport {
         let start = Instant::now();
@@ -215,7 +216,7 @@ impl PhysicsValidator {
     /// Vector of violations found in this chunk
     fn validate_chunk(
         &self,
-        grid: &VoxelGrid,
+        grid: &EntityGraph,
         chunk_x: usize,
         chunk_y: usize,
         chunk_z: usize,
@@ -321,7 +322,7 @@ impl PhysicsValidator {
                                 // If it's a contact layer (TSV), we need to check if the net
                                 // is the same as the TSV net. If so, it's allowed.
                                 if layer.layer_type
-                                    == crate::voxel_grid::SubstrateLayerType::Contact
+                                    == crate::geometry_router::entity_graph::SubstrateLayerType::Contact
                                     && layer.net == net_id
                                 {
                                     continue;

@@ -99,9 +99,6 @@ pub enum Token {
     #[token("spanning")]
     Spanning,
 
-    #[token("via")]
-    Via,
-
     #[token("as")]
     As,
 
@@ -126,6 +123,9 @@ pub enum Token {
 
     #[token("grid")]
     Grid,
+
+    #[token("resolution")]
+    Resolution,
 
     #[token("path")]
     Path,
@@ -267,6 +267,9 @@ pub enum Token {
     // ========================================================================
     #[token("pour")]
     Pour,
+
+    #[token("plane")]
+    Plane,
 
     #[token("polygon")]
     Polygon,
@@ -569,7 +572,6 @@ impl fmt::Display for Token {
             Token::To => write!(f, "the 'to' keyword"),
             Token::By => write!(f, "the 'by' keyword"),
             Token::Spanning => write!(f, "the 'spanning' keyword"),
-            Token::Via => write!(f, "the 'via' keyword"),
             Token::As => write!(f, "the 'as' keyword"),
             Token::Implements => write!(f, "the 'implements' keyword"),
             Token::Bridge => write!(f, "the 'bridge' keyword"),
@@ -577,6 +579,7 @@ impl fmt::Display for Token {
             Token::Enter => write!(f, "the 'enter' keyword"),
             Token::Dimensions => write!(f, "the 'dimensions' keyword"),
             Token::Grid => write!(f, "the 'grid' keyword"),
+            Token::Resolution => write!(f, "the 'resolution' keyword"),
             Token::Path => write!(f, "the 'path' keyword"),
             Token::Origin => write!(f, "the 'origin' keyword"),
             Token::TopLeft => write!(f, "'tl' (top-left origin)"),
@@ -612,6 +615,7 @@ impl fmt::Display for Token {
             Token::Xor => write!(f, "the 'xor' keyword"),
             Token::Mod => write!(f, "the 'mod' keyword"),
             Token::Pour => write!(f, "the 'pour' keyword"),
+            Token::Plane => write!(f, "the 'plane' keyword"),
             Token::Polygon => write!(f, "the 'polygon' keyword"),
             Token::Contact => write!(f, "the 'contact' keyword"),
             Token::For => write!(f, "the 'for' keyword"),

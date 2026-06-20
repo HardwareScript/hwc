@@ -6,7 +6,7 @@
 
 use crate::geometry::{BoundingBox, Point3D};
 use crate::netlist::{NetId, PinId};
-use crate::voxel_grid::VoxelGrid;
+use crate::geometry_router::EntityGraph;
 use compact_str::CompactString;
 
 /// A routing domain represents an isolated "Glass Box" for parallel routing.
@@ -23,7 +23,7 @@ use compact_str::CompactString;
 /// # Example
 /// A routing domain represents a module instance with its bounding box,
 /// internal nets, interface pins, and local voxel grid for routing.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct RoutingDomain {
     /// Unique identifier for this domain (e.g., "MainDSP.ALU_Core")
     pub domain_id: CompactString,
@@ -37,9 +37,9 @@ pub struct RoutingDomain {
     /// Pins on the edge connecting to the outside world
     pub interface_pins: Vec<PinId>,
 
-    /// Local voxel grid for collision-free parallel routing
-    /// Uses VoxelGrid with flat array indexing (no HashMap collisions)
-    pub local_grid: VoxelGrid,
+    /// Local entity graph for collision-free parallel routing
+    /// Uses EntityGraph with sparse metadata instead of voxel grid
+    pub local_grid: EntityGraph,
 }
 
 /// A routed domain contains the results of parallel routing within a domain.
@@ -56,7 +56,7 @@ pub struct RoutingDomain {
 /// # Example
 /// A routed domain contains the successfully placed routes and occupied voxels
 /// for a module instance after parallel routing.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct RoutedDomain {
     /// Domain identifier
     pub id: CompactString,
@@ -67,9 +67,9 @@ pub struct RoutedDomain {
     /// All internal routes successfully placed in this domain
     pub routes: Vec<Route>,
 
-    /// Occupied voxels using VoxelGrid (flat array indexing)
-    /// No Morton encoding collisions, deterministic routing
-    pub grid_chunk: VoxelGrid,
+    /// Entity graph chunk for routed domain
+    /// Stores component metadata and substrate layers
+    pub grid_chunk: EntityGraph,
 }
 
 /// A route within a domain.
@@ -101,26 +101,8 @@ impl RoutingDomain {
         internal_nets: Vec<NetId>,
         interface_pins: Vec<PinId>,
     ) -> Self {
-        // Calculate domain dimensions in nanometers
-        let width = (bounding_box.max.x - bounding_box.min.x).max(0) as usize;
-        let height = (bounding_box.max.y - bounding_box.min.y).max(0) as usize;
-        let depth = (bounding_box.max.z - bounding_box.min.z).max(0) as usize;
-
-        // Convert to voxel dimensions (assuming 100µm voxels = 100,000 nm)
-        let voxel_size_nm = 100_000;
-        let voxels_x = width.div_ceil(voxel_size_nm);
-        let voxels_y = height.div_ceil(voxel_size_nm);
-        let voxels_z = depth.div_ceil(1_000_000); // 1mm layers
-
-        // Create VoxelSize for this domain
-        let voxel_size = crate::space::VoxelSize {
-            x_nm: voxel_size_nm as i64,
-            y_nm: voxel_size_nm as i64,
-            z_nm: 1_000_000, // 1mm layers
-        };
-
-        // Create VoxelGrid for this domain
-        let local_grid = VoxelGrid::new(voxels_x, voxels_y, voxels_z, voxel_size, 0);
+        // Create EntityGraph for this domain
+        let local_grid = EntityGraph::new();
 
         Self {
             domain_id,
@@ -161,18 +143,13 @@ impl RoutingDomain {
 impl RoutedDomain {
     /// Create a new routed domain from a routing domain and its routes.
     pub fn new(domain: &RoutingDomain, routes: Vec<Route>) -> Self {
+        let mut grid_chunk = EntityGraph::new();
+        grid_chunk.copy_metadata_from(&domain.local_grid);
         Self {
             id: domain.domain_id.clone(),
             box_offset: domain.bounding_box.min,
             routes,
-            // Clone the VoxelGrid (this is efficient due to null-page optimization)
-            grid_chunk: VoxelGrid::new(
-                domain.local_grid.size().0,
-                domain.local_grid.size().1,
-                domain.local_grid.size().2,
-                domain.local_grid.voxel_size,
-                0, // Default insulator (Air)
-            ),
+            grid_chunk,
         }
     }
 }

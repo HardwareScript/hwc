@@ -6,8 +6,9 @@
 //
 // GOD-TIER: All operations write directly to VoxelGrid. No intermediate HashMaps.
 
+use crate::geometry_router::EntityGraph;
 use crate::geometry_router::polygon_rasterizer::{Point2D, Polygon, PolygonRasterizer};
-use crate::voxel_grid::{MaterialId, NetId, VoxelGrid};
+use crate::voxel_grid::{MaterialId, NetId};
 use std::f64::consts::PI;
 
 /// Thermal relief pattern type
@@ -98,34 +99,22 @@ impl ThermalReliefGenerator {
         z_layer: i64,
         material: MaterialId,
         net: NetId,
-        grid: &mut VoxelGrid,
+        grid: &mut EntityGraph,
     ) {
         match self.config.relief_type {
             ThermalReliefType::Direct => {
                 // No relief - pad directly connects to pour (no modifications)
             }
             ThermalReliefType::Isolated => {
-                // Complete isolation - clear clearance gap
+                // Complete isolation - drill clearance gap through substrate layers
                 let clearance_radius = pad_radius_nm + self.config.gap_width_nm;
-
-                // GOD-TIER: Clear directly in VoxelGrid
-                let center_x_voxel = (center.x / self.voxel_size_nm).max(0) as usize;
-                let center_y_voxel = (center.y / self.voxel_size_nm).max(0) as usize;
-                let radius_voxels = ((clearance_radius / self.voxel_size_nm) + 1).max(0) as usize;
-                let z_voxel = (z_layer / 1_000_000).max(0) as usize;
-
-                for dy in -(radius_voxels as i64)..=(radius_voxels as i64) {
-                    for dx in -(radius_voxels as i64)..=(radius_voxels as i64) {
-                        let dist_squared = dx * dx + dy * dy;
-                        let radius_voxels_squared = (radius_voxels as i64) * (radius_voxels as i64);
-
-                        if dist_squared <= radius_voxels_squared {
-                            let x = (center_x_voxel as i64 + dx).max(0) as usize;
-                            let y = (center_y_voxel as i64 + dy).max(0) as usize;
-                            grid.clear(x, y, z_voxel);
-                        }
-                    }
-                }
+                let half = clearance_radius;
+                let z_half = self.voxel_size_nm * 2;
+                let cutout = crate::geometry::BoundingBox::new(
+                    crate::geometry::Point3D::new(center.x - half, center.y - half, z_layer - z_half),
+                    crate::geometry::Point3D::new(center.x + half, center.y + half, z_layer + z_half),
+                );
+                grid.drill_hole(cutout, Some(clearance_radius * 2), net);
             }
             ThermalReliefType::Spokes => {
                 self.generate_spoke_pattern(center, pad_radius_nm, z_layer, material, net, grid)
@@ -143,28 +132,19 @@ impl ThermalReliefGenerator {
         z_layer: i64,
         material: MaterialId,
         net: NetId,
-        grid: &mut VoxelGrid,
+        grid: &mut EntityGraph,
     ) {
         // Clear clearance gap around pad
         let clearance_radius = pad_radius_nm + self.config.gap_width_nm;
-        let center_x_voxel = (center.x / self.voxel_size_nm).max(0) as usize;
-        let center_y_voxel = (center.y / self.voxel_size_nm).max(0) as usize;
-        let radius_voxels = ((clearance_radius / self.voxel_size_nm) + 1).max(0) as usize;
-        let z_voxel = (z_layer / 1_000_000).max(0) as usize;
 
-        // GOD-TIER: Clear directly in VoxelGrid
-        for dy in -(radius_voxels as i64)..=(radius_voxels as i64) {
-            for dx in -(radius_voxels as i64)..=(radius_voxels as i64) {
-                let dist_squared = dx * dx + dy * dy;
-                let radius_voxels_squared = (radius_voxels as i64) * (radius_voxels as i64);
-
-                if dist_squared <= radius_voxels_squared {
-                    let x = (center_x_voxel as i64 + dx).max(0) as usize;
-                    let y = (center_y_voxel as i64 + dy).max(0) as usize;
-                    grid.clear(x, y, z_voxel);
-                }
-            }
-        }
+        // Clear clearance gap via substrate drill_hole
+        let half = clearance_radius;
+        let z_half = self.voxel_size_nm * 2;
+        let cutout = crate::geometry::BoundingBox::new(
+            crate::geometry::Point3D::new(center.x - half, center.y - half, z_layer - z_half),
+            crate::geometry::Point3D::new(center.x + half, center.y + half, z_layer + z_half),
+        );
+        grid.drill_hole(cutout, Some(clearance_radius * 2), net);
 
         // Add spokes
         let spoke_length = self.config.gap_width_nm + self.voxel_size_nm * 2;
@@ -191,7 +171,7 @@ impl ThermalReliefGenerator {
     /// Generate a single spoke at given angle - GOD-TIER NATIVE
     ///
     /// Writes directly to VoxelGrid. No intermediate HashMap allocations.
-    fn generate_spoke(&self, params: SpokeParams, grid: &mut VoxelGrid) {
+    fn generate_spoke(&self, params: SpokeParams, grid: &mut EntityGraph) {
         let cos_angle = params.angle_rad.cos();
         let sin_angle = params.angle_rad.sin();
 
@@ -235,35 +215,22 @@ impl ThermalReliefGenerator {
     /// Generate thermal relief for a rectangular pad - GOD-TIER NATIVE
     ///
     /// Writes directly to VoxelGrid. No intermediate HashMap allocations.
-    pub fn generate_for_rectangular_pad(&self, params: RectangularPadParams, grid: &mut VoxelGrid) {
+    pub fn generate_for_rectangular_pad(&self, params: RectangularPadParams, grid: &mut EntityGraph) {
         match self.config.relief_type {
             ThermalReliefType::Direct => {
                 // No relief - pad directly connects to pour (no modifications)
             }
             ThermalReliefType::Isolated => {
-                // Clear clearance around pad
+                // Clear clearance around pad using drill_hole
                 let gap = self.config.gap_width_nm;
-                let min = Point2D::new(
-                    params.center.x - params.width_nm / 2 - gap,
-                    params.center.y - params.height_nm / 2 - gap,
+                let half_w = params.width_nm / 2 + gap;
+                let half_h = params.height_nm / 2 + gap;
+                let z_half = self.voxel_size_nm * 2;
+                let cutout = crate::geometry::BoundingBox::new(
+                    crate::geometry::Point3D::new(params.center.x - half_w, params.center.y - half_h, params.z_layer - z_half),
+                    crate::geometry::Point3D::new(params.center.x + half_w, params.center.y + half_h, params.z_layer + z_half),
                 );
-                let max = Point2D::new(
-                    params.center.x + params.width_nm / 2 + gap,
-                    params.center.y + params.height_nm / 2 + gap,
-                );
-
-                // GOD-TIER: Clear directly in VoxelGrid
-                let x_min_voxel = (min.x / self.voxel_size_nm).max(0) as usize;
-                let y_min_voxel = (min.y / self.voxel_size_nm).max(0) as usize;
-                let x_max_voxel = (max.x / self.voxel_size_nm).max(0) as usize;
-                let y_max_voxel = (max.y / self.voxel_size_nm).max(0) as usize;
-                let z_voxel = (params.z_layer / 1_000_000).max(0) as usize;
-
-                for y in y_min_voxel..=y_max_voxel {
-                    for x in x_min_voxel..=x_max_voxel {
-                        grid.clear(x, y, z_voxel);
-                    }
-                }
+                grid.drill_hole(cutout, None, params.net);
             }
             ThermalReliefType::Spokes => {
                 // Use approximate radius for spoke generation

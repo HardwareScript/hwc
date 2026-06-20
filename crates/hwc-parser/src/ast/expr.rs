@@ -26,6 +26,8 @@ pub enum Expr {
         then_branch: Box<Expr>,
         else_branch: Box<Expr>,
     },
+    /// Named constant: PI, DEG_TO_RAD
+    Constant(String),
     /// Modulo comparison used in conditions: a mod b = c
     /// Stored as a special node because it's common in geometry blocks.
     ModEquals {

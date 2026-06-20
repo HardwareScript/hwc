@@ -1,4 +1,4 @@
-//! Dimensions, grid, and origin parsing
+//! Dimensions and origin parsing
 
 use crate::ast::*;
 use crate::lexer::{Span, Token};
@@ -24,29 +24,6 @@ impl crate::parser::Parser {
             width,
             height,
             depth,
-            span: Span::new(start_pos, end_pos),
-        })
-    }
-
-    /// Parse grid: `grid: 500 by 500 by 4`
-    pub(in crate::parser) fn parse_grid(&mut self) -> Result<Grid, ParseError> {
-        let start_pos = self.current_span().start;
-        self.expect(&Token::Grid)?;
-        self.expect(&Token::Colon)?;
-
-        let x = self.expect_integer()?;
-        self.expect(&Token::By)?;
-        let y = self.expect_integer()?;
-        self.expect(&Token::By)?;
-        let z = self.expect_integer()?;
-
-        self.skip_whitespace();
-        let end_pos = self.previous_span().end;
-
-        Ok(Grid {
-            x,
-            y,
-            z,
             span: Span::new(start_pos, end_pos),
         })
     }
@@ -104,5 +81,57 @@ impl crate::parser::Parser {
         self.skip_whitespace();
 
         Ok(OriginPoint { xy, z })
+    }
+
+    /// Parse resolution: `resolution: 1nm`
+    ///
+    /// Specifies the minimum feature size for the space.
+    pub(in crate::parser) fn parse_resolution(&mut self) -> Result<Measurement, ParseError> {
+        let start_pos = self.current_span().start;
+        self.expect(&Token::Resolution)?;
+        self.expect(&Token::Colon)?;
+
+        let resolution = self.parse_measurement()?;
+
+        self.skip_whitespace();
+        let end_pos = self.previous_span().end;
+
+        // Ensure the span covers the full parsed expression
+        let _ = (start_pos, end_pos);
+
+        Ok(resolution)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::lexer::Lexer;
+    use crate::parser::Parser;
+    use crate::DiagnosticCollector;
+
+    fn parse_space_dimensions(source: &str) -> crate::ast::SpaceDefinition {
+        let lexer = Lexer::new(source);
+        let tokens = lexer.tokenize().expect("Lexer should succeed");
+        let mut parser = Parser::new(tokens);
+        let collector = DiagnosticCollector::new(source, 100);
+        let program = parser.parse(&collector);
+        assert!(!collector.has_errors(), "Parse errors: {}", collector.summary());
+        assert_eq!(program.definitions.len(), 1, "Expected exactly one definition");
+        match program.definitions.into_iter().next().expect("Expected definition") {
+            crate::ast::Definition::Space(s) => s,
+            other => panic!("Expected space definition, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_resolution_parses() {
+        let source = r#"space Test:
+    resolution: 1nm
+"#;
+        let space = parse_space_dimensions(source);
+        assert!(space.resolution.is_some(), "resolution should be parsed");
+        let res = space.resolution.expect("resolution present");
+        assert_eq!(res.value, 1.0);
+        assert_eq!(res.unit, crate::ast::Unit::Nanometer);
     }
 }

@@ -4,8 +4,8 @@
 //! for God-Tier O(chunks) performance instead of O(voxels).
 
 use crate::geometry::BoundingBox;
+use crate::geometry_router::EntityGraph;
 use crate::space::VoxelSize;
-use crate::voxel_grid::VoxelGrid;
 
 use super::error::PlacementError;
 
@@ -24,7 +24,7 @@ use super::error::PlacementError;
 /// - Appropriate method: ~8 chunk checks (125× faster)
 ///
 /// # Arguments
-/// * `grid` - Voxel grid to check against
+/// * `entity_graph` - Entity graph to check against
 /// * `voxel_size` - Size of each voxel in nanometers
 /// * `bbox` - Bounding box of component in nanometers
 ///
@@ -33,10 +33,10 @@ use super::error::PlacementError;
 /// * `Ok(Some((x, y, z)))` - Collision at voxel coordinates
 /// * `Err(PlacementError)` - Error during collision check
 pub(super) fn check_collision(
-    grid: &VoxelGrid,
+    entity_graph: &EntityGraph,
     voxel_size: &VoxelSize,
     bbox: &BoundingBox,
 ) -> Result<Option<(usize, usize, usize)>, PlacementError> {
     // Use the Appropriate Method: Bit-Parallel chunk-based collision detection
-    Ok(grid.check_bbox_collision(bbox, voxel_size))
+    Ok(entity_graph.check_bbox_collision(bbox, voxel_size))
 }

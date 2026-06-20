@@ -26,7 +26,19 @@ pub fn route_automatic(
 
     // PHASE 1: CONSTRAINT MANAGER
     let voltage_mv = 5000;
-    let current_ma = 20;
+
+    // v0.1.8: Read current limit from route declaration instead of hardcoding
+    let current_ma: f64 = if let Some(ref ac) = route.current_limit_ac {
+        let rms = crate::ir::conversions::evaluate_expression_to_ma(&ac.rms, symbol_table)
+            .unwrap_or(20.0);
+        let peak = crate::ir::conversions::evaluate_expression_to_ma(&ac.peak, symbol_table)
+            .unwrap_or(rms);
+        // For constraint calculations, use the peak value (worst case)
+        peak
+    } else {
+        20.0 // safe default
+    };
+
     let dielectric_strength_kv_mm = 20.0;
     let is_external = true;
 
@@ -39,7 +51,7 @@ pub fn route_automatic(
     );
 
     let min_trace_width_nm =
-        hwc_engine::constraint_manager::calculate_trace_width_nm(current_ma, 10, is_external);
+        hwc_engine::constraint_manager::calculate_trace_width_nm(current_ma as i64, 10, is_external);
 
     // v0.1.7: Resolve explicit width if provided, otherwise use calculated minimum
     let trace_width_nm = if let Some(width_expr) = &route.width {
@@ -115,7 +127,7 @@ pub fn route_automatic(
         min_clearance_nm,
         max_parallel_length_nm: 10_000_000,
         max_resistance_ohm: 100.0,
-        max_current_ma: current_ma,
+        max_current_ma: current_ma as i64,
         impedance_ohm: None,
     };
 
@@ -151,7 +163,7 @@ pub fn route_automatic(
         voxel_size: space.voxel_size,
         clearance_zones: &clearance_zones,
         occupied_voxels: &occupied_voxels,
-        voxel_grid: Some(&space.voxel_grid), // v0.1.7: Enable Strict Interior Lockout
+        entity_graph: Some(&space.entity_graph), // v0.1.7: Enable Strict Interior Lockout
         corridor: None,   // No corridor constraint in compiler automatic routing
         fixed_z_nm: Some(start_pos.z), // v0.1.7: Lock to starting Z plane
         exempt_components: &exempt_components, // v0.1.7: Escape Exemption
@@ -159,30 +171,11 @@ pub fn route_automatic(
         is_high_speed_net: false, // v0.1.7: Default to non-high-speed
     };
 
-    eprintln!("[ROUTER] Creating SDF generator...");
-    // Create ANALYTIC SDF generator for leap-frog routing
-    // This replaces the 10-second BFS with 1-microsecond geometry queries
-    let mut sdf = hwc_engine::geometry_router::SdfGenerator::new(
-        space.grid.x_cols,
-        space.grid.y_rows,
-        space.grid.z_layers,
-        space.voxel_size,
-        0, // v0.1.7: Substrate height = 0 (allow routing anywhere within bounds)
-    );
-
-    // Register all placed components for analytic distance calculation
-    // NATIVE ARCHITECTURE: component_metadata lives in VoxelGrid where it belongs
-    // v0.1.7: Registering full metadata ensures Layer-Aware Keepouts (KOZ) work
-    for metadata in space.voxel_grid.get_component_metadata() {
-        sdf.register_component(metadata.clone());
-    }
-
-    eprintln!("[ROUTER] Starting A* pathfinding...");
-    let mut path = hwc_engine::geometry_router::route_net_sdf_accelerated(
+    eprintln!("[ROUTER] Starting topological line-search routing...");
+    let mut path = hwc_engine::geometry_router::route_net_deterministic(
         start_pos,
         goal_pos,
         &routing_params,
-        &sdf,
     )
     .ok_or_else(|| {
         IrError::RoutingError(format!(
@@ -331,12 +324,20 @@ pub fn route_automatic(
         segs
     };
 
-    // v0.1.7 DFM: Teardrops disabled for "neat" routing
-    /*
-    let teardrop_length_nm = 100_000; // 100µm transition zone
-    ...
-    */
-    let teardrop_segments: Vec<hwc_engine::LineSegment> = Vec::new();
+    // v0.1.7 DFM: Teardrops strengthen pad/trace junctions for manufacturing reliability
+    {
+        let teardrop_config = hwc_engine::TeardropConfig::class2(trace_width_nm);
+        hwc_engine::TeardropEngine::apply_teardrops(
+            &space.entity_graph,
+            &refined_path,
+            start_boundary,
+            goal_boundary,
+            trace_width_nm,
+            &teardrop_config,
+            space.voxel_size.x_nm,
+            hwc_engine::netlist::NetHandle::new(net_id.raw() as u32),
+        );
+    }
 
     // Register main trace as analytic primitive
     let analytic_trace = hwc_engine::AnalyticTrace::new(
@@ -348,23 +349,79 @@ pub fn route_automatic(
         net_name.clone(),
     );
 
-    space.add_analytic_route(analytic_trace);
+    // v0.1.8: EM/Thermal verification using parsed current_limit_ac
+    {
+        let current_decl = if let Some(ref ac) = route.current_limit_ac {
+            let rms_ma = crate::ir::conversions::evaluate_expression_to_ma(&ac.rms, symbol_table)
+                .unwrap_or(20.0);
+            let peak_ma = crate::ir::conversions::evaluate_expression_to_ma(&ac.peak, symbol_table)
+                .unwrap_or(rms_ma);
+            hwc_engine::CurrentDeclaration::Ac(hwc_engine::AcCurrent {
+                rms: rms_ma / 1000.0, // convert mA to Amps
+                peak: peak_ma / 1000.0,
+            })
+        } else {
+            hwc_engine::CurrentDeclaration::Dc(current_ma / 1000.0) // convert mA to Amps
+        };
 
-    // Register teardrop fillets as wider analytic primitives
-    if !teardrop_segments.is_empty() {
-        /*
-        let teardrop_trace = hwc_engine::AnalyticTrace::new(
-            net_id,
-            teardrop_width_nm,
-            trace_thickness_nm, // v0.1.7: Exact physical thickness
-            teardrop_segments,
-            copper_id,
-            net_name.clone(),
+        // Build IndexedSegments from the analytic route for verification
+        let em_segments: Vec<hwc_engine::IndexedSegment> = analytic_trace
+            .segments
+            .iter()
+            .enumerate()
+            .map(|(i, seg)| hwc_engine::IndexedSegment {
+                segment_id: i,
+                net_id: net_id.raw() as usize,
+                width_nm: analytic_trace.width_nm,
+                start: seg.start,
+                end: seg.end,
+                layer: 0,
+            })
+            .collect();
+
+        let em_params = hwc_engine::EmParams {
+            j_limit: 1e6,  // 1 MA/m² default (silicon EM limit)
+            i_peak: current_decl.peak(),
+        };
+
+        let thermal_params = hwc_engine::ThermalParams {
+            ambient_temp_c: 25.0,
+            max_temp_rise_c: 20.0,
+            copper_thickness_m: 35e-6, // 1 oz copper
+            substrate_er: 4.2,
+        };
+
+        let violations = hwc_engine::verify_em_thermal(
+            &em_segments,
+            &current_decl,
+            &em_params,
+            &thermal_params,
         );
-        space.add_analytic_route(teardrop_trace);
-        eprintln!("[ROUTER] ✓ DFM teardrop fillets added at trace endpoints");
-        */
+
+        if !violations.is_empty() {
+            let msg = violations
+                .iter()
+                .map(|v| match v {
+                    hwc_engine::EmThermalViolation::Em(em) => {
+                        format!(
+                            "EM violation: current density {:.2} A/m² exceeds limit {:.2} A/m² at ({}, {}), width {}nm, min {}nm",
+                            em.current_density, em.limit, em.location.0, em.location.1, em.width_nm, em.min_width_nm
+                        )
+                    }
+                    hwc_engine::EmThermalViolation::Thermal(th) => {
+                        format!(
+                            "Thermal violation: {:.1}°C rise exceeds {:.1}°C limit at ({}, {})",
+                            th.temp_rise_c, th.max_allowed_c, th.location.0, th.location.1
+                        )
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("\n  ");
+            eprintln!("[ROUTER] ⚠ EM/Thermal violations for route {}:\n  {}", net_name, msg);
+        }
     }
+
+    space.add_analytic_route(analytic_trace);
 
     eprintln!("[ROUTER] ✓ Route registered as analytic primitive");
 
@@ -524,7 +581,7 @@ pub fn calculate_boundary_points(
 
     // Helper to resolve a port+offset spec to an EscapePoint
     let resolve_point = |from_comp: &str, pin: &str, port: CardinalPort, offset: EdgeOffset, z: i64| {
-        space.voxel_grid.get_pour_bbox_for_pin(from_comp, pin).map(|bbox| {
+        space.entity_graph.get_pour_bbox_for_pin(from_comp, pin).map(|bbox| {
             // v0.1.7: Use half trace width as clearance to ensure trace touches pad edge
             // but does not penetrate the interior ("physically touching" model)
             let boundary_clearance = trace_width_nm / 2;

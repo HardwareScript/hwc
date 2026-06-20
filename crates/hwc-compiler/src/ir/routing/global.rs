@@ -20,6 +20,10 @@ pub struct AutoRouter<'a> {
     net_frequencies: FxHashMap<NetId, f64>,
     /// v0.1.7: Individual route requests (from Hardware Script 'route' statements)
     auto_routes: Vec<hwc_parser::Route>,
+    /// v0.1.8: Salsa-style memoized query store for per-G-cell routing cache.
+    /// When present, hierarchical G-Cell routing results are memoized so that
+    /// unchanged G-cells return cached results on incremental rebuilds.
+    query_store: Option<hwc_engine::geometry_router::query_engine::QueryStore>,
 }
 
 #[derive(Debug, Clone)]
@@ -43,6 +47,64 @@ impl<'a> AutoRouter<'a> {
             profile,
             net_frequencies,
             auto_routes,
+            query_store: None,
+        }
+    }
+
+    /// v0.1.8: Set the memoized query store for per-G-cell routing cache.
+    ///
+    /// When a QueryStore is provided, hierarchical G-Cell routing results
+    /// are memoized so that unchanged G-cells return cached results on
+    /// incremental rebuilds. Call this before `route_all_nets()`.
+    pub fn set_query_store(
+        &mut self,
+        query_store: hwc_engine::geometry_router::query_engine::QueryStore,
+    ) {
+        self.query_store = Some(query_store);
+    }
+
+    /// v0.1.8: Retrieve the memoized query store after routing completes.
+    ///
+    /// The caller should hold onto this store and pass it back via
+    /// `set_query_store()` on the next compilation to enable incremental
+    /// rebuilds where unchanged G-cells return cached results.
+    pub fn take_query_store(
+        &mut self,
+    ) -> Option<hwc_engine::geometry_router::query_engine::QueryStore> {
+        self.query_store.take()
+    }
+
+    /// v0.1.8: Invalidate memoized routing results for specific G-cells.
+    ///
+    /// When a route is edited, call this to invalidate only the affected
+    /// G-cells. All other G-cells remain cached for the next compilation.
+    ///
+    /// # Arguments
+    /// * `file_id` - The file/space identifier
+    /// * `affected_gcell_ids` - G-cell indices whose routing results are stale
+    pub fn invalidate_gcells(
+        &mut self,
+        file_id: u64,
+        affected_gcell_ids: &[u32],
+    ) {
+        if let Some(ref mut qs) = self.query_store {
+            for &gcell_id in affected_gcell_ids {
+                qs.invalidate_gcell(file_id, gcell_id);
+            }
+        }
+    }
+
+    /// v0.1.8: Invalidate memoized routing results for boundary port relocations.
+    ///
+    /// When a boundary port moves, only the two adjacent G-cells are affected.
+    /// All other G-cells remain cached.
+    pub fn invalidate_boundary_port(
+        &mut self,
+        file_id: u64,
+        adjacent_cell_ids: (u32, u32),
+    ) {
+        if let Some(ref mut qs) = self.query_store {
+            qs.invalidate_boundary_port(file_id, adjacent_cell_ids);
         }
     }
 
@@ -234,12 +296,12 @@ impl<'a> AutoRouter<'a> {
             // This ensures traces from the same pad don't "bump" away from each other.
             explicit_segments = route_segments.clone();
 
-            // v0.1.8: Also populate geo_nets so the adaptive router's hierarchical
-            // mode sees the nets for classification and partitioning. Without this,
-            // the planner processes 0 nets while the explicit path handles routing
-            // in isolation, producing misleading "0 nets routed" log output.
-            for (net_id, points) in &route_segments {
-                geo_nets.insert(*net_id, points.clone());
+            // v0.1.8: We no longer populate geo_nets with explicit segments here.
+            // Doing so causes the Adaptive Router to route them a second time
+            // (once via Chain-Link and once via Steiner/Hierarchical), creating
+            // redundant parallel traces. The "0 nets routed" log is preferred
+            // over physically incorrect redundant copper.
+            for (net_id, _points) in &route_segments {
                 net_id_to_name.entry(*net_id).or_insert_with(|| {
                     compact_str::CompactString::from(format!("chain_net_{}", net_id.raw()))
                 });
@@ -252,7 +314,7 @@ impl<'a> AutoRouter<'a> {
 
         // Phase 3: Collect obstacle bounding boxes from placed components
         let mut obstacle_bboxes: Vec<BoundingBox> = Vec::new();
-        for metadata in self.space.voxel_grid.get_component_metadata() {
+        for metadata in self.space.entity_graph.get_component_metadata() {
             obstacle_bboxes.push(metadata.bbox);
         }
         // Also register manual analytic traces as obstacles
@@ -283,6 +345,12 @@ impl<'a> AutoRouter<'a> {
 
         let mut geo_router = hwc_engine::GeometryRouter::new(grid_bounds, constraints);
 
+        // v0.1.8: Wire the memoized query store into the GeometryRouter.
+        // This enables per-G-cell routing memoization in hierarchical mode.
+        if let Some(qs) = self.query_store.take() {
+            geo_router.query_store = Some(qs);
+        }
+
         // v0.1.7: Configure profile mode for the router.
         // ASIC profiles use Manhattan angle restriction (layer-by-layer via unrolling).
         // PCB profiles use Octilinear (single through-hole via for multi-layer transitions).
@@ -306,7 +374,7 @@ impl<'a> AutoRouter<'a> {
         }
 
         // Register component obstacles and pins with the GeometryRouter
-        for metadata in self.space.voxel_grid.get_component_metadata() {
+        for metadata in self.space.entity_graph.get_component_metadata() {
             geo_router.add_component_obstacle(
                 metadata.bbox,
                 metadata.material,
@@ -317,8 +385,8 @@ impl<'a> AutoRouter<'a> {
         // v0.1.7 Boundary-Docking: Also register pour bboxes as obstacles.
         // Many pads (especially connectors) have pour substrate layers but no
         // component_metadata, so the A* lockout was invisible to them.
-        for (idx, layer) in self.space.voxel_grid.get_substrate_layers().iter().enumerate() {
-            if layer.layer_type == hwc_engine::voxel_grid::SubstrateLayerType::Pour {
+        for (idx, layer) in self.space.entity_graph.get_substrate_layers().iter().enumerate() {
+            if layer.layer_type == hwc_engine::geometry_router::entity_graph::SubstrateLayerType::Pour {
                 let name: compact_str::CompactString =
                     format!("pour_{}", idx).into();
                 geo_router.add_component_obstacle(
@@ -329,20 +397,26 @@ impl<'a> AutoRouter<'a> {
                 );
             }
         }
-        for pin in self.space.voxel_grid.get_component_pins() {
-            geo_router.add_component_pin(
-                pin.x_nm,
-                pin.y_nm,
-                pin.z_nm,
-                pin.component_name.clone(),
-                pin.pin_name.clone(),
-                pin.net.clone(),
-            );
+        for pin in self.space.entity_graph.get_component_pins() {
+            // v0.1.8: We no longer add component pins explicitly here if they are already 
+            // part of the geo_nets/explicit_segments map, as the GeometryRouter handles 
+            // docking automatically during route_space(). Adding them twice can cause
+            // the global planner to create zero-length segments that confuse the local router.
+            if !geo_nets.values().any(|pts| pts.contains(&Point3D::new(pin.x_nm, pin.y_nm, pin.z_nm))) {
+                geo_router.add_component_pin(
+                    pin.x_nm,
+                    pin.y_nm,
+                    pin.z_nm,
+                    pin.component_name.clone(),
+                    pin.pin_name.clone(),
+                    pin.net.clone(),
+                );
+            }
         }
 
         // Phase 5: Route all nets via GeometryRouter (adaptive mode selection)
         let t_route = std::time::Instant::now();
-        let substrate_layers = self.space.voxel_grid.get_substrate_layers();
+        let substrate_layers = self.space.entity_graph.get_substrate_layers();
         let has_substrate = !substrate_layers.is_empty();
         match geo_router.route_space(
             &grid_bbox,
@@ -351,7 +425,6 @@ impl<'a> AutoRouter<'a> {
             &obstacle_bboxes,
             if has_substrate { Some(substrate_layers) } else { None },
             &self.net_frequencies,
-            Some(&self.space.voxel_grid), // v0.1.7: Enable Strict Interior Lockout
         ) {
             Ok(result) => {
                 eprintln!(
@@ -456,21 +529,50 @@ impl<'a> AutoRouter<'a> {
         }
 
         // Commit all batch routes
-        self.space.voxel_grid.commit_route();
+        self.space.entity_graph.commit_route();
+
+        // v0.1.8: Retrieve the QueryStore back from the GeometryRouter so it
+        // can be reused for subsequent compilations (incremental rebuilds).
+        self.query_store = geo_router.query_store.take();
 
         Ok(())
     }
 
     fn analyze_nets(&self) -> Result<FxHashMap<CompactString, Vec<PinInfo>>, IrError> {
         let mut net_pins: FxHashMap<CompactString, Vec<PinInfo>> = FxHashMap::default();
-        let component_pins = self.space.voxel_grid.get_component_pins();
 
+        // v0.1.8: In v0.1.8, physical connectivity is driven by the EntityGraph's
+        // component pins. To prevent "Pad Pouches" and redundant routing to logical
+        // origins (corners), we deduplicate pins per component.
+        // If a component has both an "anchor" pin (physical) and a logical pin,
+        // we strictly prefer the anchor.
+        let component_pins = self.space.entity_graph.get_component_pins();
+        
+        // Group pins by (component_name, net_name)
+        let mut grouped_pins: FxHashMap<(CompactString, CompactString), Vec<&hwc_engine::ComponentPin>> = FxHashMap::default();
         for pin in component_pins {
             if let Some(net_name) = &pin.net {
-                let pin_info = PinInfo {
-                    position: Point3D::new(pin.x_nm, pin.y_nm, pin.z_nm),
-                };
-                net_pins.entry(net_name.clone()).or_default().push(pin_info);
+                grouped_pins.entry((pin.component_name.clone(), net_name.clone())).or_default().push(pin);
+            }
+        }
+
+        for ((_comp_name, net_name), pins) in grouped_pins {
+            let entry = net_pins.entry(net_name).or_default();
+            
+            // Prefer "anchor" pins if they exist
+            if let Some(anchor) = pins.iter().find(|p| p.pin_name == "anchor") {
+                let pos = Point3D::new(anchor.x_nm, anchor.y_nm, anchor.z_nm);
+                if !entry.iter().any(|p| p.position == pos) {
+                    entry.push(PinInfo { position: pos });
+                }
+            } else {
+                // Otherwise, use all unique positions (fallback)
+                for pin in pins {
+                    let pos = Point3D::new(pin.x_nm, pin.y_nm, pin.z_nm);
+                    if !entry.iter().any(|p| p.position == pos) {
+                        entry.push(PinInfo { position: pos });
+                    }
+                }
             }
         }
 

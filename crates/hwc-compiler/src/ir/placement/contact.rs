@@ -54,12 +54,12 @@ fn get_prop_cap_type(
     contact: &hwc_parser::ContactPlacement,
     name: &str,
     _eval_context: &hwc_parser::EvaluationContext,
-) -> Option<hwc_engine::voxel_grid::CapType> {
+) -> Option<hwc_engine::geometry_router::entity_graph::CapType> {
     contact.properties.get(name).and_then(|expr| match expr {
         hwc_parser::Expression::Variable { name, .. } => match name.as_str() {
-            "none" => Some(hwc_engine::voxel_grid::CapType::None),
-            "annular" => Some(hwc_engine::voxel_grid::CapType::Annular),
-            "solid" => Some(hwc_engine::voxel_grid::CapType::Solid),
+            "none" => Some(hwc_engine::geometry_router::entity_graph::CapType::None),
+            "annular" => Some(hwc_engine::geometry_router::entity_graph::CapType::Annular),
+            "solid" => Some(hwc_engine::geometry_router::entity_graph::CapType::Solid),
             _ => None,
         },
         _ => None,
@@ -313,7 +313,7 @@ pub fn place_contact(
 
     // v0.1.7: Register via for Excellon drill export
     // This ensures that ALL contacts (vias, THT pins, TSVs) are registered for the drill file.
-    let board_max_z_nm = (space.grid.z_layers as i64) * space.voxel_size.z_nm;
+    let board_max_z_nm = (space.grid_cells().z_layers as i64) * space.voxel_size.z_nm;
     let via_net_id = hwc_engine::netlist::NetId::new(net_id);
 
     let via = hwc_engine::geometry_router::Via::new(
@@ -367,7 +367,7 @@ pub fn place_contact(
             3.0 // Default 3x diameter
         };
 
-        let stack = hwc_engine::voxel_grid::LinerStack::new(
+        let stack = hwc_engine::geometry_router::entity_graph::LinerStack::new(
             liner_material_id,
             liner_thickness_nm,
             bridge_material_id,
@@ -375,14 +375,14 @@ pub fn place_contact(
             material_id,
         );
 
-        let params = hwc_engine::voxel_grid::TSVParams {
+        let params = hwc_engine::geometry_router::entity_graph::TSVParams {
             diameter_nm,
             stack,
             koz_multiplier,
         };
 
         // Coordination: Drill, Stamp, and Register TSV
-        space.voxel_grid.add_tsv_stack(
+        space.entity_graph.add_tsv_stack(
             xy_point.x,
             xy_point.y,
             start_z,
@@ -402,7 +402,7 @@ pub fn place_contact(
         if let Some(ref contour) = contour {
             placer
                 .place_polygon_substrate(
-                    &mut space.voxel_grid,
+                    &mut space.entity_graph,
                     bridge_mat,
                     start_point,
                     interface_end_point,
@@ -423,7 +423,7 @@ pub fn place_contact(
         } else {
             placer
                 .place_cylinder_substrate(
-                    &mut space.voxel_grid,
+                    &mut space.entity_graph,
                     bridge_mat,
                     start_point,
                     interface_end_point,
@@ -448,7 +448,7 @@ pub fn place_contact(
             if let Some(ref contour) = contour {
                 placer
                     .place_polygon_substrate(
-                        &mut space.voxel_grid,
+                        &mut space.entity_graph,
                         material_id,
                         fill_start_point,
                         end_point,
@@ -469,7 +469,7 @@ pub fn place_contact(
             } else {
                 placer
                     .place_cylinder_substrate(
-                        &mut space.voxel_grid,
+                        &mut space.entity_graph,
                         material_id,
                         fill_start_point,
                         end_point,
@@ -534,7 +534,7 @@ pub fn place_contact(
             // 2. ACTION: Auto-Drill (v0.1.7)
             // We use drill_via_hole to ensure we carve the substrate, OTHER-NET pours,
             // and solder mask layers while maintaining connectivity to target net pours.
-            space.voxel_grid.drill_via_hole(
+            space.entity_graph.drill_via_hole(
                 contact_bbox,
                 diameter_nm,
                 net_id,
@@ -561,9 +561,9 @@ pub fn place_contact(
                 Some(cap) => cap,
                 None => {
                     if get_prop_bool(contact, "caps", eval_context).unwrap_or(true) {
-                        hwc_engine::voxel_grid::CapType::Annular
+                        hwc_engine::geometry_router::entity_graph::CapType::Annular
                     } else {
-                        hwc_engine::voxel_grid::CapType::None
+                        hwc_engine::geometry_router::entity_graph::CapType::None
                     }
                 }
             };
@@ -572,9 +572,9 @@ pub fn place_contact(
                 Some(cap) => cap,
                 None => {
                     if get_prop_bool(contact, "caps", eval_context).unwrap_or(true) {
-                        hwc_engine::voxel_grid::CapType::Annular
+                        hwc_engine::geometry_router::entity_graph::CapType::Annular
                     } else {
-                        hwc_engine::voxel_grid::CapType::None
+                        hwc_engine::geometry_router::entity_graph::CapType::None
                     }
                 }
             };
@@ -584,7 +584,7 @@ pub fn place_contact(
                 contact_name_debug,
                 contact_bbox.min.x, contact_bbox.min.y, contact_bbox.max.x, contact_bbox.max.y,
                 diameter_nm, inner_diameter_nm, pad_diameter_nm, top_cap, bottom_cap);
-            space.voxel_grid.add_tube_substrate_layer(
+            space.entity_graph.add_tube_substrate_layer(
                 material_id,
                 net_id,
                 pad_bbox,
@@ -623,7 +623,7 @@ pub fn place_contact(
 
                 // Add a solid cylinder of fill material inside the tube
                 // The fill diameter matches the inner diameter of the tube.
-                space.voxel_grid.add_cylinder_substrate_layer(
+                space.entity_graph.add_cylinder_substrate_layer(
                     fill_material_id,
                     fill_net_id,
                     contact_bbox,
@@ -636,7 +636,7 @@ pub fn place_contact(
             // v0.1.7: Mechanical/Subtractive Logic
             // 1. ACTION: Auto-Drill (NPTH logic: Net 0 always drills everything)
             // Etched vias are NPTH - no solder mask opening needed (is_tented=true for NPTH)
-            space.voxel_grid.drill_via_hole(
+            space.entity_graph.drill_via_hole(
                 contact_bbox,
                 diameter_nm,
                 0,
@@ -661,7 +661,7 @@ pub fn place_contact(
                 contact_name_debug,
                 contact_bbox.min.x, contact_bbox.min.y, contact_bbox.max.x, contact_bbox.max.y,
                 diameter_nm);
-            space.voxel_grid.drill_via_hole(
+            space.entity_graph.drill_via_hole(
                 contact_bbox,
                 diameter_nm,
                 net_id,
@@ -680,7 +680,7 @@ pub fn place_contact(
                     end_point.x, end_point.y, end_point.z, diameter_nm);
                 placer
                     .place_polygon_substrate(
-                        &mut space.voxel_grid,
+                        &mut space.entity_graph,
                         material_id,
                         start_point,
                         end_point,
@@ -705,7 +705,7 @@ pub fn place_contact(
                     end_point.x, end_point.y, end_point.z, diameter_nm);
                 placer
                     .place_cylinder_substrate(
-                        &mut space.voxel_grid,
+                        &mut space.entity_graph,
                         material_id,
                         start_point,
                         end_point,

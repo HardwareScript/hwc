@@ -386,7 +386,7 @@ fn merge_pour_across_instances(
         let placer = ComponentPlacer::new();
         placer
             .place_substrate(
-                &mut space.voxel_grid,
+                &mut space.entity_graph,
                 &space.voxel_size,
                 material_id,
                 bbox.min,

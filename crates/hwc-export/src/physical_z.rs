@@ -110,7 +110,7 @@ mod tests {
         let space = test_space(4, 1);
         let (min, max) = board_z_extent(&space);
         assert_eq!(min, 0);
-        assert_eq!(max, 3_000_000);
+        assert_eq!(max, 4_000_000); // z_layers(4) * voxel_z_nm(1mm=1_000_000nm) = 4_000_000nm
     }
 
     #[test]

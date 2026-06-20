@@ -94,6 +94,75 @@ pub fn evaluate_expression_to_nm(
     }
 }
 
+/// Evaluate an expression to milliamps (mA).
+///
+/// Handles current units: Ampere (×1000), Milliampere (as-is), Microampere (÷1000).
+/// Dimensionless literals are treated as mA.
+pub fn evaluate_expression_to_ma(
+    expr: &Expression,
+    symbol_table: &crate::SymbolTable,
+) -> Result<f64, String> {
+    match expr {
+        Expression::Literal { value, .. } => Ok(*value as f64),
+        Expression::FloatLiteral { value, .. } => Ok(*value),
+        Expression::Measurement { value, unit, .. } => match unit {
+            Unit::Ampere => Ok(value * 1_000.0),
+            Unit::Milliampere => Ok(*value),
+            Unit::Microampere => Ok(value / 1_000.0),
+            _ => Err(format!("Cannot convert {:?} to milliamps", unit)),
+        },
+        Expression::Variable { name, .. } => {
+            if let Some(const_value) = symbol_table.get_all_constants().get(name) {
+                Ok(*const_value)
+            } else {
+                Err(format!("Unknown constant: '{}'", name))
+            }
+        }
+        Expression::Binary {
+            left,
+            operator,
+            right,
+            ..
+        } => {
+            let left_ma = evaluate_expression_to_ma(left, symbol_table)?;
+            let right_ma = evaluate_expression_to_ma(right, symbol_table)?;
+            use hwc_parser::BinaryOperator;
+            match operator {
+                BinaryOperator::Add => Ok(left_ma + right_ma),
+                BinaryOperator::Subtract => Ok(left_ma - right_ma),
+                BinaryOperator::Multiply => Ok(left_ma * right_ma),
+                BinaryOperator::Divide => {
+                    if right_ma == 0.0 {
+                        Err("Division by zero".into())
+                    } else {
+                        Ok(left_ma / right_ma)
+                    }
+                }
+                BinaryOperator::Modulo => Ok(left_ma % right_ma),
+            }
+        }
+        Expression::Unary {
+            operator, operand, ..
+        } => {
+            let operand_ma = evaluate_expression_to_ma(operand, symbol_table)?;
+            use hwc_parser::UnaryOperator;
+            match operator {
+                UnaryOperator::Negate => Ok(-operand_ma),
+                UnaryOperator::Plus => Ok(operand_ma),
+            }
+        }
+        Expression::Grouped { expression, .. } => {
+            evaluate_expression_to_ma(expression, symbol_table)
+        }
+        Expression::Percentage { .. } => {
+            Err("Percentages cannot be evaluated as current".into())
+        }
+        Expression::AnchorReference { .. } => {
+            Err("Anchor references cannot be evaluated as current".into())
+        }
+    }
+}
+
 pub fn measurement_to_nm(measurement: &Measurement, symbol_table: &crate::SymbolTable) -> i64 {
     let expr = Expression::Measurement {
         value: measurement.value,

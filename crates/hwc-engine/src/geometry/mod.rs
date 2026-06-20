@@ -364,3 +364,12 @@ impl TraceSegment {
         self.start.x == self.end.x && self.start.y == self.end.y
     }
 }
+
+pub mod entity_ids;
+pub mod transform;
+
+pub use entity_ids::{
+    ComponentGraphId, EntityId, GeometryGraphId, JunctionGraphId, NetGraphId, PinGraphId,
+    RouteGraphId,
+};
+pub use transform::{BoundingBox2D, FixedTransform2D};

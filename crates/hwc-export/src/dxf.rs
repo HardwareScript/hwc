@@ -16,7 +16,8 @@
 use crate::geometry_union::{circle_to_path, rect_to_path};
 use clipper2_rust::FillRule;
 use hwc_compiler::SymbolTable;
-use hwc_engine::voxel_grid::{CapType, SubstrateLayerShape, SubstrateLayerType};
+use hwc_engine::geometry_router::entity_graph::{CapType, SubstrateLayerType};
+use hwc_engine::voxel_grid::SubstrateLayerShape;
 use hwc_engine::{HardwareSpace, SpaceView};
 use rustc_hash::FxHashMap;
 use std::io::Write;
@@ -47,7 +48,7 @@ pub fn export(
     writeln!(w, "  0\nLAYER\n  2\nBOTTOM_COMPONENTS\n 70\n0\n 62\n7")?;
     writeln!(w, "  0\nLAYER\n  2\nPCB_LAYERS\n 70\n0\n 62\n7")?;
 
-    let substrate_layers = space.voxel_grid.get_substrate_layers();
+    let substrate_layers = space.entity_graph.get_substrate_layers();
 
     writeln!(w, "  0\nENDTAB\n  0\nENDSEC")?;
 
@@ -184,8 +185,12 @@ pub fn export(
         }
     }
 
-    // Export unioned copper contours
-    for ((z_min_nm, z_max_nm, material_id, net_raw), paths) in &copper_pools {
+    // Export unioned copper contours — sort keys for deterministic output order
+    let mut sorted_keys: Vec<_> = copper_pools.keys().cloned().collect();
+    sorted_keys.sort();
+    for key in &sorted_keys {
+        let (z_min_nm, z_max_nm, material_id, net_raw) = key;
+        let paths = &copper_pools[key];
         let mat_name = space
             .material_registry
             .get_name(*material_id)
@@ -196,19 +201,14 @@ pub fn export(
             .unwrap_or_else(|_| "#B87333".into());
         let true_color = parse_true_color(&color_hex);
 
-        let mut clipper = clipper2_rust::Clipper64::new();
-        clipper.add_subject(paths);
-        if let Some(holes) = via_holes.get(&(*z_min_nm, *z_max_nm, *material_id, *net_raw)) {
-            clipper.add_clip(holes);
-        }
-
-        let mut final_paths = clipper2_rust::Paths64::new();
-        clipper.execute(
-            clipper2_rust::ClipType::Difference,
-            clipper2_rust::FillRule::NonZero,
-            &mut final_paths,
-            None,
-        );
+        let unioned = clipper2_rust::union_64(paths, &vec![], FillRule::NonZero);
+        let final_paths = if let Some(holes) =
+            via_holes.get(&(*z_min_nm, *z_max_nm, *material_id, *net_raw))
+        {
+            clipper2_rust::difference_64(&unioned, holes, FillRule::NonZero)
+        } else {
+            unioned
+        };
         if final_paths.is_empty() {
             continue;
         }

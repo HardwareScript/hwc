@@ -45,6 +45,10 @@ use hwc_parser::Program;
 /// Compile a single space definition into a HardwareSpace.
 ///
 /// This is the shared implementation used by both `program_to_space` and `program_to_spaces`.
+///
+/// v0.1.8: Accepts an optional `QueryStore` for memoized per-G-cell routing.
+/// Returns the space and the query store (which may have been populated with
+/// cached results for incremental rebuilds).
 fn compile_single_space(
     space_def: &hwc_parser::SpaceDefinition,
     symbol_table: &SymbolTable,
@@ -52,7 +56,8 @@ fn compile_single_space(
     lockfile_path: Option<&std::path::Path>,
     source_content: Option<&str>,
     force_reroute: bool,
-) -> Result<HardwareSpace, IrError> {
+    query_store: Option<hwc_engine::geometry_router::query_engine::QueryStore>,
+) -> Result<(HardwareSpace, Option<hwc_engine::geometry_router::query_engine::QueryStore>), IrError> {
     // Sprint 3.8: Process statements in textual order to support anchor references
     //
     // Physical Reality: When element B references element A's position, A must be placed first.
@@ -67,6 +72,7 @@ fn compile_single_space(
         Substrate(hwc_parser::SubstratePlacement),
         Component(Box<hwc_parser::ComponentPlacement>),
         Pour(hwc_parser::PourPlacement),
+        Plane(hwc_parser::PlanePlacement),
         Contact(hwc_parser::ContactPlacement),
         Route(hwc_parser::Route),
     }
@@ -89,6 +95,9 @@ fn compile_single_space(
                 // i + 1, space_def.statements.len(), pour.name);
                 placement_items.push(PlacementItem::Pour(pour.clone()));
             }
+            hwc_parser::SpaceTopLevelStatement::Plane(plane) => {
+                placement_items.push(PlacementItem::Plane(plane.clone()));
+            }
             hwc_parser::SpaceTopLevelStatement::Contact(contact) => {
                 // eprintln!($3"[DEBUG program_to_space]   Statement {}/{}: Contact",
                 // i + 1, space_def.statements.len());
@@ -107,6 +116,9 @@ fn compile_single_space(
                 }
                 for pour in unrolled.pours {
                     placement_items.push(PlacementItem::Pour(pour));
+                }
+                for plane in unrolled.planes {
+                    placement_items.push(PlacementItem::Plane(plane));
                 }
                 for contact in unrolled.contacts {
                     placement_items.push(PlacementItem::Contact(contact));
@@ -228,6 +240,7 @@ fn compile_single_space(
                 .map(|n| n.to_string())
                 .unwrap_or_else(|| format!("__comp_{}", i).into()),
             PlacementItem::Pour(p) => p.name.to_string(),
+            PlacementItem::Plane(p) => p.name.to_string(),
             PlacementItem::Contact(c) => c
                 .name
                 .as_ref()
@@ -250,6 +263,7 @@ fn compile_single_space(
                 .map(|n| n.to_string())
                 .unwrap_or_else(|| format!("__comp_{}", i).into()),
             PlacementItem::Pour(p) => p.name.to_string(),
+            PlacementItem::Plane(p) => p.name.to_string(),
             PlacementItem::Contact(c) => c
                 .name
                 .as_ref()
@@ -308,6 +322,22 @@ fn compile_single_space(
                             );
                         }
                     }
+                }
+            }
+            PlacementItem::Plane(p) => {
+                if let Some(from) = &p.from {
+                    graph.extract_dependencies_from_coord(
+                        &item_id,
+                        from,
+                        last_component_name.as_ref(),
+                    );
+                }
+                if let Some(to) = &p.to {
+                    graph.extract_dependencies_from_coord(
+                        &item_id,
+                        to,
+                        last_component_name.as_ref(),
+                    );
                 }
             }
             PlacementItem::Contact(c) => {
@@ -386,7 +416,7 @@ fn compile_single_space(
 
         // Check if user already added solder mask layers to prevent duplicates
         let has_solder_mask = space
-            .voxel_grid
+            .entity_graph
             .get_substrate_layers()
             .iter()
             .any(|l| l.layer_type == hwc_engine::voxel_grid::SubstrateLayerType::SolderMask);
@@ -403,7 +433,7 @@ fn compile_single_space(
                     stackup_height_nm + solder_mask_thickness_nm,
                 ),
             );
-            space.voxel_grid.add_substrate_layer(
+            space.entity_graph.add_substrate_layer(
                 mask_material_id,
                 0, // No net (insulator)
                 top_mask_bbox,
@@ -415,7 +445,7 @@ fn compile_single_space(
                 hwc_engine::geometry::Point3D::new(0, 0, -solder_mask_thickness_nm),
                 hwc_engine::geometry::Point3D::new(width_nm, height_nm, 0),
             );
-            space.voxel_grid.add_substrate_layer(
+            space.entity_graph.add_substrate_layer(
                 mask_material_id,
                 0, // No net (insulator)
                 bottom_mask_bbox,
@@ -446,6 +476,9 @@ fn compile_single_space(
             }
             PlacementItem::Pour(pour) => {
                 placement::place_pour(&mut space, pour, &mut bbox_tracker, &place_ctx)?;
+            }
+            PlacementItem::Plane(plane) => {
+                placement::place_plane(&mut space, plane, &mut bbox_tracker, &place_ctx)?;
             }
             PlacementItem::Contact(contact) => {
                 placement::place_contact(
@@ -523,6 +556,7 @@ fn compile_single_space(
 
     // Phase 3: Execute Auto-Routing Batch
     // v0.1.7: AVS Lock-File Determinism - Load cached routes before routing
+    // Priority: try new rkyv binary lockfile first, then fall back to old JSON lockfile
     let mut routes_loaded_from_lock = false;
     if let Some(path) = lockfile_path {
         if force_reroute {
@@ -530,54 +564,95 @@ fn compile_single_space(
                 "[LOCK] --force-reroute: Skipping lockfile load, will re-run A* solver"
             );
         } else {
-            match hwc_engine::geometry_router::CompactLockfile::load(path) {
-                Ok(lockfile) => {
-                    // Compute current placement hash
-                    let current_hash = hwc_engine::geometry_router::compute_placement_hash(&space);
+            let current_fingerprint = hwc_engine::geometry_router::compute_fingerprint_from_space(&space);
 
-                    if lockfile.validate_placement(&current_hash) && !lockfile.instances.is_empty() {
+            // Try new rkyv binary lockfile first
+            match hwc_engine::geometry_router::load_lockfile(path) {
+                Ok(loaded) => {
+                    if hwc_engine::geometry_router::is_valid(&loaded, &current_fingerprint) {
                         let copper_id = space.material_registry.get_or_register("Copper");
-                        let cached_traces = lockfile.to_analytic_traces(copper_id, &space.netlist);
+                        let cached_traces = hwc_engine::geometry_router::lockfile_to_traces(
+                            &loaded,
+                            copper_id,
+                            &space.netlist,
+                        );
                         let route_count = cached_traces.len();
                         for trace in cached_traces {
                             space.add_analytic_route(trace);
                         }
                         eprintln!(
-                            "[LOCK] Match found for '{}'. Bypassing A* solver. Loading routes directly from project.routes.lock",
+                            "[LOCK] Binary match found for '{}'. Bypassing A* solver.",
                             space.name
                         );
                         eprintln!(
-                            "[LOCK]   Loaded {} cached routes",
+                            "[LOCK]   Loaded {} cached routes (rkyv binary)",
                             route_count
                         );
                         routes_loaded_from_lock = true;
-                    } else if !lockfile.validate_placement(&current_hash) {
+                    } else {
                         eprintln!(
-                            "[LOCK] Invalidation detected for '{}'. Discarding lock file and re-running A* pathfinder",
+                            "[LOCK] Binary lockfile fingerprint mismatch for '{}'. Re-routing.",
                             space.name
                         );
                     }
                 }
-                Err(hwc_engine::geometry_router::LockfileError::ObsoleteVersion(ver)) => {
-                    eprintln!(
-                        "[LOCK] Obsolete lockfile detected (version {}). Delete the .routes.lock file and rebuild.",
-                        ver
-                    );
-                }
-                Err(hwc_engine::geometry_router::LockfileError::ParseError(e)) => {
-                    eprintln!(
-                        "[LOCK] Failed to parse lockfile: {}. Delete the .routes.lock file and rebuild.",
-                        e
-                    );
-                }
-                Err(hwc_engine::geometry_router::LockfileError::IoError(_)) => {
-                    // File doesn't exist yet — first-time compilation, proceed normally
+                Err(_) => {
+                    // Binary lockfile doesn't exist or is corrupt — try legacy JSON
+                    match hwc_engine::geometry_router::CompactLockfile::load(path) {
+                        Ok(lockfile) => {
+                            let current_hash = hwc_engine::geometry_router::compute_placement_hash(&space);
+                            if lockfile.validate_placement(&current_hash) && !lockfile.instances.is_empty() {
+                                let copper_id = space.material_registry.get_or_register("Copper");
+                                let cached_traces = lockfile.to_analytic_traces(copper_id, &space.netlist);
+                                let route_count = cached_traces.len();
+                                for trace in cached_traces {
+                                    space.add_analytic_route(trace);
+                                }
+                                eprintln!(
+                                    "[LOCK] Legacy match for '{}'. Bypassing A* solver. Loading routes from JSON lockfile.",
+                                    space.name
+                                );
+                                eprintln!(
+                                    "[LOCK]   Loaded {} cached routes (legacy JSON)",
+                                    route_count
+                                );
+                                routes_loaded_from_lock = true;
+                            } else if !lockfile.validate_placement(&current_hash) {
+                                eprintln!(
+                                    "[LOCK] Invalidation detected for '{}'. Discarding lock file and re-running A* pathfinder",
+                                    space.name
+                                );
+                            }
+                        }
+                        Err(hwc_engine::geometry_router::LockfileError::ObsoleteVersion(ver)) => {
+                            eprintln!(
+                                "[LOCK] Obsolete lockfile detected (version {}). Delete the .routes.lock file and rebuild.",
+                                ver
+                            );
+                        }
+                        Err(hwc_engine::geometry_router::LockfileError::ParseError(e)) => {
+                            eprintln!(
+                                "[LOCK] Failed to parse lockfile: {}. Delete the .routes.lock file and rebuild.",
+                                e
+                            );
+                        }
+                        Err(hwc_engine::geometry_router::LockfileError::IoError(_)) => {
+                            // No lockfile exists — first-time compilation
+                        }
+                    }
                 }
             }
         }
     }
 
-    if !auto_routes.is_empty() && !routes_loaded_from_lock {
+    // v0.1.8: Initialize the memoized query store for per-G-cell routing cache.
+    let mut qs = query_store.unwrap_or_else(|| {
+        hwc_engine::geometry_router::query_engine::QueryStore::new()
+    });
+
+    let has_unrouted_nets = space.netlist.num_nets() > 0;
+
+    if (!auto_routes.is_empty() || has_unrouted_nets) && !routes_loaded_from_lock {
         // v0.1.7: Build net frequencies HashMap from space definition's net declarations
         let mut net_frequencies: rustc_hash::FxHashMap<hwc_engine::netlist::NetId, f64> =
             rustc_hash::FxHashMap::default();
@@ -597,7 +672,16 @@ fn compile_single_space(
             net_frequencies,
             auto_routes,
         );
+
+        // v0.1.8: Wire the memoized query store into the AutoRouter.
+        auto_router.set_query_store(qs);
+
         auto_router.route_all_nets()?;
+
+        // v0.1.8: Retrieve the query store back for the caller to persist.
+        qs = auto_router.take_query_store().unwrap_or_else(|| {
+            hwc_engine::geometry_router::query_engine::QueryStore::new()
+        });
     }
 
     // v0.1.7: Lock-File Determinism - Save routes to lockfile after routing
@@ -671,14 +755,34 @@ fn compile_single_space(
     // Commit all placements and routes to the visible plane
     // This makes substrate, pours, components, and routes visible to exporters
     let _commit_start = std::time::Instant::now();
-    let _stats_before = space.voxel_grid.memory_stats();
+    let _stats_before = space.entity_graph.memory_stats();
     let _commit_start2 = std::time::Instant::now();
-    space.voxel_grid.commit_route();
+    space.entity_graph.commit_route();
     // eprintln!($3"[DEBUG program_to_space] commit_route() took {:?}", commit_start2.elapsed());
-    let _stats_after = space.voxel_grid.memory_stats();
+    let _stats_after = space.entity_graph.memory_stats();
     // eprintln!($3"[DEBUG program_to_space] After commit: {} occupied voxels",
     //     stats_after.occupied_voxels
     // );
+
+    // v0.1.7 DFM: Dummy metal fill (thieving) for manufacturing density balance
+    {
+        let dummy_fill_config = hwc_engine::DummyFillConfig {
+            enabled: true,
+            target_density_pct: 45,
+            ..hwc_engine::DummyFillConfig::default()
+        };
+        let mut dummy_fill_engine = hwc_engine::DummyFillEngine::new();
+        let fill_stats = dummy_fill_engine.run(&space.entity_graph, &dummy_fill_config);
+        if fill_stats.zones_filled > 0 {
+            eprintln!(
+                "[DFM] Dummy fill: {} zones analyzed, {} zones filled, {} dummies placed (avg density before: {:.1}%)",
+                fill_stats.zones_analyzed,
+                fill_stats.zones_filled,
+                fill_stats.total_dummies_placed,
+                fill_stats.average_density_before,
+            );
+        }
+    }
 
     // SPARSE-VOXEL HANDSHAKE: The three-step lookup in get_material() handles
     // substrate layers efficiently without syncing to voxels. No validation needed.
@@ -695,7 +799,7 @@ fn compile_single_space(
         )));
     }
 
-    Ok(space)
+    Ok((space, Some(qs)))
 }
 
 /// Transform a parsed program into a hardware space with voxel grid.
@@ -718,7 +822,8 @@ pub fn program_to_space(
         })
         .ok_or(IrError::NoSpaceDefinition)?;
 
-    compile_single_space(space_def, symbol_table, collector, None, None, false)
+    let (space, _qs) = compile_single_space(space_def, symbol_table, collector, None, None, false, None)?;
+    Ok(space)
 }
 
 /// Transform a parsed program into multiple hardware spaces (one per space definition).
@@ -760,49 +865,44 @@ pub fn program_to_spaces_with_lockfile(
     }
 
     let mut spaces = rustc_hash::FxHashMap::default();
+    // v0.1.8: Share a single QueryStore across all space compilations for
+    // cross-space memoization (e.g., shared G-cells between adjacent spaces).
+    let mut shared_qs: Option<hwc_engine::geometry_router::query_engine::QueryStore> = None;
 
     for space_def in space_defs {
         let space_name: compact_str::CompactString = space_def.name.to_string().into();
-        let space = compile_single_space(
+        let (space, qs) = compile_single_space(
             space_def,
             symbol_table,
             collector,
             lockfile_path,
             source_content,
             force_reroute,
+            shared_qs.take(),
         )?;
+        shared_qs = qs;
         spaces.insert(space_name, space);
     }
 
     Ok(spaces)
 }
 
-/// Save routes from a HardwareSpace to an AVS lockfile (v0.1.7).
+/// Save routes from a HardwareSpace to a rkyv binary lockfile (v0.1.7).
 fn save_routes_to_lockfile(
     path: &std::path::Path,
     space: &HardwareSpace,
     _source_content: &str,
 ) {
-    use hwc_engine::geometry_router::{CompactLockfile, encode_instances, compute_placement_hash};
+    let fingerprint = hwc_engine::geometry_router::compute_fingerprint_from_space(space);
+    let binary_lockfile = hwc_engine::geometry_router::traces_to_lockfile(space, fingerprint);
 
-    let placement_hash = compute_placement_hash(space);
-    let (arcs, instances) = encode_instances(&space.analytic_routes);
+    let route_count = binary_lockfile.arcs.len();
 
-    let lockfile = CompactLockfile {
-        version: "0.1.7".into(),
-        board: space.name.clone(),
-        placement_hash,
-        arcs,
-        instances,
-    };
-
-    let route_count = lockfile.instances.len() / 5;
-
-    if let Err(e) = lockfile.save(path) {
-        eprintln!("[LOCK] Failed to save lockfile: {}", e);
+    if let Err(e) = hwc_engine::geometry_router::write_lockfile(&binary_lockfile, path) {
+        eprintln!("[LOCK] Failed to save binary lockfile: {}", e);
     } else {
         eprintln!(
-            "[LOCK] Saved {} routes to {}",
+            "[LOCK] Saved {} arc segments to {} (rkyv binary)",
             route_count,
             path.display()
         );

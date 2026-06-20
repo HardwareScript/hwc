@@ -120,7 +120,7 @@ pub fn place_module_instance(
             let placer = ComponentPlacer::new();
             placer
                 .place_component(PlacementParams {
-                    grid: &mut space.voxel_grid,
+                    entity_graph: &mut space.entity_graph,
                     voxel_size: &space.voxel_size,
                     arena: &mut space.netlist,
                     symbol_table: ctx.symbol_table,
@@ -168,7 +168,7 @@ pub fn place_module_instance(
             let placer = ComponentPlacer::new();
             placer
                 .place_component(PlacementParams {
-                    grid: &mut space.voxel_grid,
+                    entity_graph: &mut space.entity_graph,
                     voxel_size: &space.voxel_size,
                     arena: &mut space.netlist,
                     symbol_table: ctx.symbol_table,
@@ -391,6 +391,7 @@ pub fn place_module_instance(
                 bridge: None,
                 exit_escape: None,
                 enter_escape: None,
+                current_limit_ac: None,
                 span: module_route.span,
             };
 

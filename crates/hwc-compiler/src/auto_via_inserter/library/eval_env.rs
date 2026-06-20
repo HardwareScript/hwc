@@ -111,5 +111,8 @@ pub fn evaluate_expr(expr: &Expr, env: &EvalEnv) -> f64 {
                 0.0
             }
         }
+        Expr::Constant(name) => {
+            env.get(name).unwrap_or(0.0)
+        }
     }
 }

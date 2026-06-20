@@ -1,5 +1,6 @@
 use crate::scene_graph::types::{Face, MeshNode, Vertex};
-use hwc_engine::{voxel_grid::CapType, SpaceView};
+use hwc_engine::geometry_router::entity_graph::CapType;
+use hwc_engine::SpaceView;
 
 /// Create a unified plated-through-hole mesh (Limitation 7 Fix)
 /// This creates a single mesh containing the inner tube and the top/bottom pads.

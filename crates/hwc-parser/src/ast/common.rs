@@ -103,6 +103,49 @@ pub struct Measurement {
     pub span: Span,
 }
 
+impl Measurement {
+    /// Convert this measurement to picometers (i64).
+    /// The engine always works in picometers internally.
+    /// Returns `None` if the unit is not a distance unit.
+    pub fn to_picometers_i64(&self) -> Option<i64> {
+        match &self.unit {
+            Unit::Millimeter => Some((self.value * 1_000_000.0) as i64),
+            Unit::Centimeter => Some((self.value * 10_000_000.0) as i64),
+            Unit::Micrometer => Some((self.value * 1_000.0) as i64),
+            Unit::Nanometer => Some((self.value * 1_000.0) as i64),
+            Unit::Picometer => Some(self.value as i64),
+            _ => None,
+        }
+    }
+}
+
+/// Resolution: user-facing snapping constraint for coordinate evaluation.
+///
+/// The engine always works in picometers internally. `resolution:` is a
+/// snapping constraint that rounds coordinates to the nearest grid step,
+/// NOT the internal representation. Maximum addressable range: +/-9,220 km.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Resolution {
+    /// Picometer snap step — coordinates are rounded to multiples of this value.
+    pub snap_step_pm: i64,
+}
+
+impl Resolution {
+    /// Round `value_pm` to the nearest multiple of `snap_step_pm`.
+    pub fn snap(&self, value_pm: i64) -> i64 {
+        if self.snap_step_pm == 0 {
+            return value_pm;
+        }
+        (value_pm / self.snap_step_pm) * self.snap_step_pm
+    }
+
+    /// Create a `Resolution` from any distance `Measurement`.
+    /// Returns `None` if the measurement is not a distance unit.
+    pub fn from_measurement(m: &Measurement) -> Option<Self> {
+        m.to_picometers_i64().map(|pm| Resolution { snap_step_pm: pm })
+    }
+}
+
 /// Core units for Hardware Script compiler
 /// Only includes units needed for geometry and safety calculations.
 /// All other units are defined in stdlib/units.hw and stored as Custom(String).
@@ -115,6 +158,7 @@ pub enum Unit {
     Centimeter,
     Micrometer,
     Nanometer,
+    Picometer,
 
     // Voltage - for safety clearances
     Volt,
@@ -498,5 +542,215 @@ impl Coordinate {
         String,
     > {
         self.evaluate(&rustc_hash::FxHashMap::default())
+    }
+
+    /// Evaluate coordinate expressions to picometer values (i64).
+    ///
+    /// X and Y are converted to picometers using `to_picometers()`.
+    /// Z remains as an integer layer index (not affected by pm change).
+    pub fn evaluate_picometers(
+        &self,
+        context: &EvaluationContext,
+    ) -> Result<(i64, i64, i32), String> {
+        let (x_val, y_val, z_val) = self.evaluate(context)?;
+
+        let x_pm = x_val.to_picometers()?;
+        let y_pm = y_val.to_picometers()?;
+        let z_idx = z_val.as_integer()? as i32;
+
+        Ok((x_pm, y_pm, z_idx))
+    }
+
+    /// Evaluate coordinate expressions to picometer values with resolution snapping.
+    ///
+    /// X and Y are converted to picometers, then snapped to the resolution's
+    /// `snap_step_pm` grid. Z remains as an integer layer index.
+    pub fn evaluate_with_resolution(
+        &self,
+        context: &EvaluationContext,
+        resolution: &Resolution,
+    ) -> Result<(i64, i64, i32), String> {
+        let (x_pm, y_pm, z_idx) = self.evaluate_picometers(context)?;
+
+        Ok((resolution.snap(x_pm), resolution.snap(y_pm), z_idx))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_to_picometers_i64_mm() {
+        let m = Measurement {
+            value: 1.0,
+            unit: Unit::Millimeter,
+            span: Span::new(0, 0),
+        };
+        assert_eq!(m.to_picometers_i64(), Some(1_000_000));
+    }
+
+    #[test]
+    fn test_to_picometers_i64_cm() {
+        let m = Measurement {
+            value: 1.0,
+            unit: Unit::Centimeter,
+            span: Span::new(0, 0),
+        };
+        assert_eq!(m.to_picometers_i64(), Some(10_000_000));
+    }
+
+    #[test]
+    fn test_to_picometers_i64_um() {
+        let m = Measurement {
+            value: 1.0,
+            unit: Unit::Micrometer,
+            span: Span::new(0, 0),
+        };
+        assert_eq!(m.to_picometers_i64(), Some(1_000));
+    }
+
+    #[test]
+    fn test_to_picometers_i64_nm() {
+        let m = Measurement {
+            value: 1.0,
+            unit: Unit::Nanometer,
+            span: Span::new(0, 0),
+        };
+        assert_eq!(m.to_picometers_i64(), Some(1_000));
+    }
+
+    #[test]
+    fn test_to_picometers_i64_pm() {
+        let m = Measurement {
+            value: 42.0,
+            unit: Unit::Picometer,
+            span: Span::new(0, 0),
+        };
+        assert_eq!(m.to_picometers_i64(), Some(42));
+    }
+
+    #[test]
+    fn test_to_picometers_i64_non_distance() {
+        let m = Measurement {
+            value: 1.0,
+            unit: Unit::Volt,
+            span: Span::new(0, 0),
+        };
+        assert_eq!(m.to_picometers_i64(), None);
+    }
+
+    #[test]
+    fn test_resolution_snap() {
+        let r = Resolution { snap_step_pm: 1000 };
+        assert_eq!(r.snap(1500), 1000);
+        assert_eq!(r.snap(2500), 2000);
+        assert_eq!(r.snap(500), 0);
+        assert_eq!(r.snap(1000), 1000);
+        assert_eq!(r.snap(0), 0);
+    }
+
+    #[test]
+    fn test_resolution_from_measurement() {
+        let m = Measurement {
+            value: 100.0,
+            unit: Unit::Nanometer,
+            span: Span::new(0, 0),
+        };
+        let r = Resolution::from_measurement(&m);
+        assert!(r.is_some());
+        assert_eq!(r.unwrap().snap_step_pm, 100_000); // 100nm = 100,000pm
+    }
+
+    #[test]
+    fn test_evaluate_picometers() {
+        use crate::ast::expression::Expression;
+        use rustc_hash::FxHashMap;
+
+        let coord = Coordinate::Declarative {
+            x: Expression::Measurement {
+                value: 5.0,
+                unit: Unit::Millimeter,
+                span: Span::new(0, 0),
+            },
+            y: Expression::Measurement {
+                value: 10.0,
+                unit: Unit::Millimeter,
+                span: Span::new(0, 0),
+            },
+            z: Expression::Literal {
+                value: 1,
+                span: Span::new(0, 0),
+            },
+            span: Span::new(0, 0),
+        };
+
+        let ctx = FxHashMap::default();
+        let (x_pm, y_pm, z_idx) = coord.evaluate_picometers(&ctx).unwrap();
+        assert_eq!(x_pm, 5_000_000); // 5mm = 5,000,000 pm
+        assert_eq!(y_pm, 10_000_000); // 10mm = 10,000,000 pm
+        assert_eq!(z_idx, 1);
+    }
+
+    #[test]
+    fn test_evaluate_with_resolution() {
+        use crate::ast::expression::Expression;
+        use rustc_hash::FxHashMap;
+
+        let coord = Coordinate::Declarative {
+            x: Expression::Measurement {
+                value: 1.5,
+                unit: Unit::Millimeter,
+                span: Span::new(0, 0),
+            },
+            y: Expression::Measurement {
+                value: 2.5,
+                unit: Unit::Millimeter,
+                span: Span::new(0, 0),
+            },
+            z: Expression::Literal {
+                value: 1,
+                span: Span::new(0, 0),
+            },
+            span: Span::new(0, 0),
+        };
+
+        // Snap to 1mm = 1,000,000 pm
+        let resolution = Resolution { snap_step_pm: 1_000_000 };
+        let ctx = FxHashMap::default();
+        let (x_pm, y_pm, z_idx) = coord.evaluate_with_resolution(&ctx, &resolution).unwrap();
+        assert_eq!(x_pm, 1_000_000); // 1,500,000 snapped to 1,000,000
+        assert_eq!(y_pm, 2_000_000); // 2,500,000 snapped to 2,000,000
+        assert_eq!(z_idx, 1);
+    }
+
+    #[test]
+    fn test_evaluate_picometers_nm() {
+        use crate::ast::expression::Expression;
+        use rustc_hash::FxHashMap;
+
+        let coord = Coordinate::Declarative {
+            x: Expression::Measurement {
+                value: 500.0,
+                unit: Unit::Nanometer,
+                span: Span::new(0, 0),
+            },
+            y: Expression::Measurement {
+                value: 250.0,
+                unit: Unit::Picometer,
+                span: Span::new(0, 0),
+            },
+            z: Expression::Literal {
+                value: 2,
+                span: Span::new(0, 0),
+            },
+            span: Span::new(0, 0),
+        };
+
+        let ctx = FxHashMap::default();
+        let (x_pm, y_pm, z_idx) = coord.evaluate_picometers(&ctx).unwrap();
+        assert_eq!(x_pm, 500_000); // 500nm = 500,000 pm
+        assert_eq!(y_pm, 250);     // 250pm = 250 pm
+        assert_eq!(z_idx, 2);
     }
 }

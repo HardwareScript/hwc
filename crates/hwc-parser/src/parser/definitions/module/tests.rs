@@ -35,9 +35,7 @@ mod tests {
     #[test]
     fn test_parse_simple_module() {
         let source = r#"module LED_Driver:
-    pins:
-        VCC
-        GND
+    pins: [VCC, GND]
     add Resistor_0805 (val: 100Ω, tol: 5%) named R1
     route VCC to R1.In
 "#;
@@ -51,10 +49,7 @@ mod tests {
     #[test]
     fn test_parse_module_with_array_pins() {
         let source = r#"module ALU_64Bit:
-    pins:
-        Bus_A[64]
-        Bus_B[64]
-        CarryIn
+    pins: [Bus_A[64], Bus_B[64], CarryIn]
 "#;
 
         let module = parse_module(source).unwrap();
@@ -67,8 +62,7 @@ mod tests {
     #[test]
     fn test_parse_module_with_for_loop() {
         let source = r#"module ALU:
-    pins:
-        Bus[8]
+    pins: [Bus[8]]
     for i in 0..7:
         add Bit named B[i]
         route Bus[i] to B[i].In
@@ -90,10 +84,9 @@ mod tests {
     #[test]
     fn test_parse_module_with_if_conditional() {
         let source = r#"module ALU:
-    pins:
-        CarryIn
+    pins: [CarryIn]
     for i in 0..7:
-        if i == 0:
+        if i = 0:
             route CarryIn to Bit[i].CarryIn
         else:
             route Bit[i - 1].CarryOut to Bit[i].CarryIn
@@ -117,8 +110,7 @@ mod tests {
     #[test]
     fn test_parse_module_rejects_negative_array_index() {
         let source = r#"module Test:
-    pins:
-        Bus[64]
+    pins: [Bus[64]]
     route Bus[-1] to GND
 "#;
 
@@ -137,8 +129,7 @@ mod tests {
     #[test]
     fn test_parse_module_rejects_negative_component_index() {
         let source = r#"module Test:
-    pins:
-        Out
+    pins: [Out]
     route Comp[-5].Pin to Out
 "#;
 
@@ -157,8 +148,7 @@ mod tests {
     #[test]
     fn test_parse_module_accepts_arithmetic_subtraction() {
         let source = r#"module Test:
-    pins:
-        Bus[64]
+    pins: [Bus[64]]
     for i in 0..64:
         if i > 0:
             route Bus[i-1] to Bus[i]

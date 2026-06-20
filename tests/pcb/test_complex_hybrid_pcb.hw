@@ -1,0 +1,147 @@
+## PCB Lock-File Determinism Test — 16 Pads (v0.1.8)
+##
+## 4×4 grid of copper pads with routes connecting all pads into one chain.
+## Tests lockfile cache hit, placement_hash, and geometric invalidation.
+##
+## v0.1.8 Syntax (parser-supported):
+##   - grid: replaced with resolution: (continuous vector database)
+##   - z: 0nm replaced with on layer: top (semantic layer abstraction)
+##   - Routes use exit:/enter: for port-aware bounding box edge docking
+##   - current_limit uses [rms: ..., peak: ...] AC-aware declarations
+##
+## v0.1.8 Syntax (pending parser update):
+##   - technology: PCB in profile (parser only accepts string values)
+##   - plane(Copper) in component layout (parser only supports pour)
+##   - net: on route statements (net inherited from placement bindings)
+
+import * from @std/primitives/units
+import FR4 from @std/materials/insulators
+import Copper from @std/materials/conductors
+
+profile PCB_2_LAYER:
+    description: "2-layer PCB for 16-pad lock-file test"
+
+    stackup:
+        top:    [material: Copper, thickness: 35um]
+        d1:     [material: FR4,    thickness: 1200um]
+        bottom: [material: Copper, thickness: 35um]
+
+    via:
+        min_diameter: 0.3mm
+        min_annular_ring: 0.15mm
+        min_spacing: 0.2mm
+
+    trace:
+        min_width: 0.2mm
+        min_spacing: 0.2mm
+
+    bridge Copper to Copper: Copper
+
+    manufacturing:
+        copper_thickness: 35um
+
+    clearance:
+        high_voltage: 2mm
+        safety_factor: 2.0
+
+    layer:
+        min_thickness: 0.1mm
+
+component Pad:
+    pins: [p]
+    layout:
+        shape: Rectangle(1mm, 1mm, 35um)
+        pin_positions:
+            p at [0mm, 0mm]
+        add pour(Copper) named Pad_Copper on layer: self:
+            device: p
+            boundary: [x: 0mm, y: 0mm] to [x: 1mm, y: 1mm]
+            net: p
+            thickness: 35um
+
+space PCB_Lockfile_16Pad:
+    dimensions: 30mm by 30mm by 1.27mm
+    resolution: 1nm
+    origin: bl by b
+    profile: PCB_2_LAYER
+
+    nets:
+        ALL_PADS: signal
+
+    ## ====================================================================
+    ## ROW 0: 4 pads at y=4mm
+    ## ====================================================================
+    for i in 0..3:
+        add Pad named J0[i] at [x: i * 8mm + 4mm, y: 4mm] on layer: top:
+            net: [p: ALL_PADS]
+
+    ## ====================================================================
+    ## ROW 1: 4 pads at y=11mm
+    ## ====================================================================
+    for i in 0..3:
+        add Pad named J1[i] at [x: i * 8mm + 4mm, y: 11mm] on layer: top:
+            net: [p: ALL_PADS]
+
+    ## ====================================================================
+    ## ROW 2: 4 pads at y=18mm
+    ## ====================================================================
+    for i in 0..3:
+        add Pad named J2[i] at [x: i * 8mm + 4mm, y: 18mm] on layer: top:
+            net: [p: ALL_PADS]
+
+    ## ====================================================================
+    ## ROW 3: 4 pads at y=25mm
+    ## ====================================================================
+    for i in 0..3:
+        add Pad named J3[i] at [x: i * 8mm + 4mm, y: 25mm] on layer: top:
+            net: [p: ALL_PADS]
+
+    ## ====================================================================
+    ## ROUTING: Connect all 16 pads into one continuous chain
+    ## ====================================================================
+    ## Row 0: J0[0] -> J0[1] -> J0[2] -> J0[3]
+    for i in 0..2:
+        route J0[i].p to J0[i+1].p:
+            exit: East
+            enter: West
+
+    ## Row 1: J1[3] -> J1[2] -> J1[1] -> J1[0]
+    route J1[3].p to J1[2].p:
+        exit: West
+        enter: East
+    route J1[2].p to J1[1].p:
+        exit: West
+        enter: East
+    route J1[1].p to J1[0].p:
+        exit: West
+        enter: East
+
+    ## Row 2: J2[0] -> J2[1] -> J2[2] -> J2[3]
+    for i in 0..2:
+        route J2[i].p to J2[i+1].p:
+            exit: East
+            enter: West
+
+    ## Row 3: J3[3] -> J3[2] -> J3[1] -> J3[0]
+    route J3[3].p to J3[2].p:
+        exit: West
+        enter: East
+    route J3[2].p to J3[1].p:
+        exit: West
+        enter: East
+    route J3[1].p to J3[0].p:
+        exit: West
+        enter: East
+
+    ## Link rows together: Row 0 -> Row 1 -> Row 2 -> Row 3
+    route J0[3].p to J1[3].p:
+        exit: North
+        enter: South
+
+    route J1[0].p to J2[0].p:
+        exit: North
+        enter: South
+
+    route J2[3].p to J3[3].p:
+        exit: North
+        enter: South

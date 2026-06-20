@@ -3,7 +3,7 @@
 use super::grid::VoxelGrid;
 
 /// Memory usage statistics for a voxel grid.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct MemoryStats {
     pub total_voxels: usize,
     pub occupied_voxels: usize,

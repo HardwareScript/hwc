@@ -3,7 +3,8 @@
 use super::types::{NetProperties, PhysicsViolation};
 use crate::bit_chunk::BitChunk;
 use crate::geometry::Point3D;
-use crate::voxel_grid::{NetId, VoxelGrid};
+use crate::voxel_grid::NetId;
+use crate::geometry_router::EntityGraph;
 
 /// Validate thermal gradients in a chunk (detect thermal bottlenecks)
 ///
@@ -25,7 +26,7 @@ use crate::voxel_grid::{NetId, VoxelGrid};
 /// # Returns
 /// Vector of thermal hotspot violations
 pub fn validate_thermal_gradients<F>(
-    grid: &VoxelGrid,
+    grid: &EntityGraph,
     _bit_chunk: &BitChunk,
     base_x: usize,
     base_y: usize,

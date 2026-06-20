@@ -86,7 +86,7 @@ pub fn place_component(
     let placer = ComponentPlacer::new();
     placer
         .place_component(PlacementParams {
-            grid: &mut space.voxel_grid,
+            entity_graph: &mut space.entity_graph,
             voxel_size: &space.voxel_size,
             arena: &mut space.netlist,
             symbol_table: ctx.symbol_table,

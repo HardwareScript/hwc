@@ -458,4 +458,174 @@ impl crate::parser::Parser {
             span: Span::new(start_pos, end_pos),
         })
     }
+
+    /// Parse plane placement: `add plane(Copper) named GND_Plane on layer: l1:`
+    ///
+    /// New syntax for conductive sheets (replaces generic `pour` for planes).
+    /// Supports: `spanning layer: X to Y`, `net:`, `cutouts:` block with shape definitions.
+    pub(in crate::parser) fn parse_plane(&mut self) -> Result<PlanePlacement, ParseError> {
+        let start_pos = self.current_span().start;
+
+        self.expect(&Token::Add)?;
+        self.expect(&Token::Plane)?;
+        self.expect(&Token::OpenParen)?;
+        let material = self.expect_namespaced_identifier_string()?;
+        self.expect(&Token::CloseParen)?;
+
+        self.expect(&Token::Named)?;
+        let name = self.parse_component_name()?;
+
+        self.expect(&Token::On)?;
+
+        // Z-Axis Abstraction: support both physical (z:) and semantic (layer:)
+        let elevation = if self.check(&Token::Identifier("layer".into())) {
+            self.advance(); // consume "layer"
+            self.expect(&Token::Colon)?;
+            let layer_name = self.expect_identifier()?;
+            if layer_name.as_str() == "self" {
+                Elevation::Relative
+            } else {
+                Elevation::Semantic(layer_name)
+            }
+        } else {
+            // Physical: `on z: <expr>` or `on z: <expr> to <expr>`
+            let coord_name = self.expect_identifier()?;
+            if coord_name.as_str() != "z" {
+                return Err(self.error("Expected 'z' or 'layer' for plane elevation"));
+            }
+            self.expect(&Token::Colon)?;
+
+            if self.check(&Token::Identifier("relative".into())) {
+                self.advance();
+                Elevation::Relative
+            } else {
+                let start = self.parse_expression()?;
+
+                let mut end = None;
+                if self.check(&Token::To) {
+                    self.advance(); // consume "to"
+                    end = Some(self.parse_expression()?);
+                }
+
+                Elevation::Physical { start, end }
+            }
+        };
+
+        self.expect(&Token::Colon)?;
+        self.expect(&Token::Newline)?;
+        self.expect(&Token::Indent)?;
+
+        let mut from = None;
+        let mut to = None;
+        let mut net = None;
+        let mut thickness = None;
+        let mut cutouts = Vec::new();
+
+        while !self.is_at_end() && !self.check(&Token::Dedent) {
+            if self.check(&Token::Newline) {
+                self.advance();
+                continue;
+            }
+
+            let field_name = self.expect_identifier_or_keyword_string()?;
+            self.expect(&Token::Colon)?;
+
+            match field_name.as_str() {
+                "spanning" => {
+                    // spanning layer: X to Y  OR  spanning [from] to [to]
+                    if self.check(&Token::Identifier("layer".into())) {
+                        self.advance(); // consume "layer"
+                        self.expect(&Token::Colon)?;
+                        let _layer_from = self.expect_identifier()?;
+                        self.expect(&Token::To)?;
+                        if self.check(&Token::Identifier("layer".into())) {
+                            self.advance();
+                            self.expect(&Token::Colon)?;
+                        }
+                        let _layer_to = self.expect_identifier()?;
+                        // For now, store spanning info as optional coordinates
+                        // The semantic layer resolution happens at a later stage
+                        from = Some(self.parse_coordinate_optional_z()?);
+                        self.expect(&Token::To)?;
+                        to = Some(self.parse_coordinate_optional_z()?);
+                    } else {
+                        from = Some(self.parse_coordinate_optional_z()?);
+                        self.expect(&Token::To)?;
+                        to = Some(self.parse_coordinate_optional_z()?);
+                    }
+                }
+                "thickness" => {
+                    thickness = Some(self.parse_expression()?);
+                }
+                "net" => {
+                    net = Some(self.parse_net_name()?);
+                }
+                "cutouts" => {
+                    self.expect(&Token::Newline)?;
+                    self.expect(&Token::Indent)?;
+
+                    while !self.is_at_end() && !self.check(&Token::Dedent) {
+                        if self.check(&Token::Newline) {
+                            self.advance();
+                            continue;
+                        }
+
+                        // Parse cutout shape: Rectangle(w, h) at [pos]  OR  Circle(r) at [pos]
+                        let shape = if self.check(&Token::Identifier("Rectangle".into())) {
+                            self.advance(); // consume 'Rectangle'
+                            self.expect(&Token::OpenParen)?;
+                            let width = self.parse_expression()?;
+                            self.expect(&Token::Comma)?;
+                            let height = self.parse_expression()?;
+                            self.expect(&Token::CloseParen)?;
+                            self.expect(&Token::At)?;
+                            let at = self.parse_coordinate_optional_z()?;
+                            CutoutShape::Rectangle { width, height, at }
+                        } else if self.check(&Token::Identifier("Circle".into())) {
+                            self.advance(); // consume 'Circle'
+                            self.expect(&Token::OpenParen)?;
+                            let radius = self.parse_expression()?;
+                            self.expect(&Token::CloseParen)?;
+                            self.expect(&Token::At)?;
+                            let at = self.parse_coordinate_optional_z()?;
+                            CutoutShape::Circle { radius, at }
+                        } else {
+                            return Err(self.error(
+                                "Expected 'Rectangle' or 'Circle' for cutout shape",
+                            ));
+                        };
+
+                        cutouts.push(shape);
+                        self.skip_whitespace();
+                    }
+
+                    self.expect(&Token::Dedent)?;
+                }
+                _ => {
+                    return Err(self.error(&format!(
+                        "Unknown plane property: '{}'",
+                        field_name
+                    )));
+                }
+            }
+
+            self.expect(&Token::Newline)?;
+        }
+
+        self.expect(&Token::Dedent)?;
+
+        let end_pos = self.previous_span().end;
+
+        Ok(PlanePlacement {
+            material: material.into(),
+            name,
+            elevation,
+            thickness,
+            from,
+            to,
+            net,
+            cutouts,
+            span: Span::new(start_pos, end_pos),
+        })
+    }
 }

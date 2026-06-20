@@ -1,10 +1,10 @@
 //! Main component placer implementation.
 
 use crate::geometry::Point3D;
+use crate::geometry_router::EntityGraph;
 use crate::netlist::ComponentId;
 use crate::space::VoxelSize;
 use crate::voxel::MaterialId;
-use crate::voxel_grid::VoxelGrid;
 
 use super::collision::check_collision;
 use super::component_definition::{
@@ -21,7 +21,7 @@ use crate::geometry::BoundingBox;
 
 /// Parameters for substrate placement with cutouts
 pub struct SubstratePlacementParams<'a> {
-    pub grid: &'a mut VoxelGrid,
+    pub entity_graph: &'a mut EntityGraph,
     pub voxel_size: &'a VoxelSize,
     pub material_id: MaterialId,
     pub start: Point3D,
@@ -44,10 +44,10 @@ impl ComponentPlacer {
         Self {}
     }
 
-    /// Place a substrate layer in the voxel grid.
+    /// Place a substrate layer in the entity graph.
     ///
     /// # Arguments
-    /// * `grid` - Voxel grid to place substrate in
+    /// * `entity_graph` - Entity graph to place substrate in
     /// * `voxel_size` - Size of each voxel in nanometers
     /// * `material_id` - Substrate material ID from MaterialRegistry
     /// * `start` - Starting position in nanometers
@@ -57,72 +57,72 @@ impl ComponentPlacer {
     /// Ok if successful, error if invalid region
     pub fn place_substrate(
         &self,
-        grid: &mut VoxelGrid,
+        entity_graph: &mut EntityGraph,
         voxel_size: &VoxelSize,
         material_id: MaterialId,
         start: Point3D,
         end: Point3D,
         net_id: u32,
     ) -> Result<(), PlacementError> {
-        place_substrate(grid, voxel_size, material_id, start, end, net_id)
+        place_substrate(entity_graph, voxel_size, material_id, start, end, net_id)
     }
 
     /// Place a cylindrical substrate layer (v0.1.6).
     pub fn place_cylinder_substrate(
         &self,
-        grid: &mut VoxelGrid,
+        entity_graph: &mut EntityGraph,
         material_id: MaterialId,
         start: Point3D,
         end: Point3D,
         net_id: u32,
         diameter: i64,
     ) -> Result<(), PlacementError> {
-        place_cylinder_substrate(grid, material_id, start, end, net_id, diameter)
+        place_cylinder_substrate(entity_graph, material_id, start, end, net_id, diameter)
     }
 
     /// Place a square via substrate layer (v0.1.7).
     pub fn place_square_substrate(
         &self,
-        grid: &mut VoxelGrid,
+        entity_graph: &mut EntityGraph,
         material_id: MaterialId,
         start: Point3D,
         end: Point3D,
         net_id: u32,
         size: i64,
     ) -> Result<(), PlacementError> {
-        place_square_substrate(grid, material_id, start, end, net_id, size)
+        place_square_substrate(entity_graph, material_id, start, end, net_id, size)
     }
 
     /// Place a hexagonal via substrate layer (v0.2.0).
     pub fn place_hexagon_substrate(
         &self,
-        grid: &mut VoxelGrid,
+        entity_graph: &mut EntityGraph,
         material_id: MaterialId,
         start: Point3D,
         end: Point3D,
         net_id: u32,
         size: i64,
     ) -> Result<(), PlacementError> {
-        place_hexagon_substrate(grid, material_id, start, end, net_id, size)
+        place_hexagon_substrate(entity_graph, material_id, start, end, net_id, size)
     }
 
     /// Place a polygon-based via substrate layer (v0.2.0).
     pub fn place_polygon_substrate(
         &self,
-        grid: &mut VoxelGrid,
+        entity_graph: &mut EntityGraph,
         material_id: MaterialId,
         start: Point3D,
         end: Point3D,
         net_id: u32,
         contour: &clipper2_rust::Path64,
     ) -> Result<(), PlacementError> {
-        place_polygon_substrate(grid, material_id, start, end, net_id, contour)
+        place_polygon_substrate(entity_graph, material_id, start, end, net_id, contour)
     }
 
     /// Place a substrate layer with cutouts (mounting holes, edge cuts, etc.).
     ///
     /// # Arguments
-    /// * `params` - Substrate placement parameters including grid, voxel_size, material_id,
+    /// * `params` - Substrate placement parameters including entity_graph, voxel_size, material_id,
     ///   start, end, net_id, and cutouts
     ///
     /// # Returns
@@ -132,7 +132,7 @@ impl ComponentPlacer {
         params: SubstratePlacementParams,
     ) -> Result<(), PlacementError> {
         place_substrate_with_cutouts(
-            params.grid,
+            params.entity_graph,
             params.voxel_size,
             params.material_id,
             params.start,
@@ -147,11 +147,11 @@ impl ComponentPlacer {
     /// Useful for multi-layer PCBs or silicon chips with multiple dielectric layers.
     pub fn place_substrate_layers(
         &self,
-        grid: &mut VoxelGrid,
+        entity_graph: &mut EntityGraph,
         voxel_size: &VoxelSize,
         layers: &[(MaterialId, Point3D, Point3D)],
     ) -> Result<(), PlacementError> {
-        place_substrate_layers(grid, voxel_size, layers)
+        place_substrate_layers(entity_graph, voxel_size, layers)
     }
 
     /// Place a component in the voxel grid.
@@ -170,7 +170,7 @@ impl ComponentPlacer {
         params: PlacementParams<S, R>,
     ) -> Result<ComponentId, PlacementError> {
         let PlacementParams {
-            grid,
+            entity_graph,
             voxel_size,
             arena,
             symbol_table,
@@ -212,14 +212,14 @@ impl ComponentPlacer {
             && merge_waiver != hwc_parser::MergeWaiver::All
         {
             if let Some((voxel_x, voxel_y, voxel_z)) =
-                check_collision(grid, voxel_size, &global_bbox)?
+                check_collision(entity_graph, voxel_size, &global_bbox)?
             {
                 // SURGICAL WAIVER: Check if the collision point is inside a waived pin region
                 let mut waived = false;
                 if let hwc_parser::MergeWaiver::Specific(waived_pins) = &merge_waiver {
                     // Convert voxel back to nanometers for geometric check
                     let collision_pt =
-                        VoxelGrid::voxel_to_nm(voxel_x, voxel_y, voxel_z, voxel_size);
+                        EntityGraph::voxel_to_nm(voxel_x, voxel_y, voxel_z, voxel_size);
 
                     // Check if collision point is inside any of the waived pin footprints
                     for pin_def in &definition.pins {
@@ -248,7 +248,7 @@ impl ComponentPlacer {
 
                 if waived {
                     let collision_nm =
-                        VoxelGrid::voxel_to_nm(voxel_x, voxel_y, voxel_z, voxel_size);
+                        EntityGraph::voxel_to_nm(voxel_x, voxel_y, voxel_z, voxel_size);
                     let msg = format!(
                         "Component '{}' allowed to overlap at ({:.3}, {:.3}, {:.3})mm",
                         name,
@@ -264,7 +264,7 @@ impl ComponentPlacer {
                 } else {
                     // Convert voxel coordinates back to physical coordinates for error message
                     let collision_nm =
-                        VoxelGrid::voxel_to_nm(voxel_x, voxel_y, voxel_z, voxel_size);
+                        EntityGraph::voxel_to_nm(voxel_x, voxel_y, voxel_z, voxel_size);
                     let collision_mm = Point3D::new(
                         collision_nm.x / 1_000_000,
                         collision_nm.y / 1_000_000,
@@ -280,9 +280,9 @@ impl ComponentPlacer {
         } else if merge_waiver == hwc_parser::MergeWaiver::None {
             // Default behavior: Check all collisions
             if let Some((voxel_x, voxel_y, voxel_z)) =
-                check_collision(grid, voxel_size, &global_bbox)?
+                check_collision(entity_graph, voxel_size, &global_bbox)?
             {
-                let collision_nm = VoxelGrid::voxel_to_nm(voxel_x, voxel_y, voxel_z, voxel_size);
+                let collision_nm = EntityGraph::voxel_to_nm(voxel_x, voxel_y, voxel_z, voxel_size);
                 let collision_mm = Point3D::new(
                     collision_nm.x / 1_000_000,
                     collision_nm.y / 1_000_000,
@@ -332,7 +332,7 @@ impl ComponentPlacer {
         // Instead of filling voxels (Density Bomb), register component as sparse metadata
         // The router/DRC will check this metadata when needed via get_material()
         register_component_metadata(
-            grid,
+            entity_graph,
             &definition,
             position,
             rotation_deg,
@@ -378,7 +378,7 @@ fn convert_baked_to_definition(baked: &BakedComponent) -> ComponentDefinition {
 /// For PCBs: This registers the component body (plastic/ceramic housing)
 /// For Silicon: This registers the transistor structure (Polysilicon, N-doped, etc.)
 fn register_component_metadata(
-    grid: &mut VoxelGrid,
+    entity_graph: &mut EntityGraph,
     definition: &ComponentDefinition,
     position: Point3D,
     rotation_deg: f64,
@@ -389,7 +389,7 @@ fn register_component_metadata(
 
     // Register component as sparse metadata (no voxel filling!)
     use smallvec::SmallVec;
-    grid.add_component_metadata(
+    entity_graph.add_component_metadata(
         bbox,
         material_id,
         name.into(),

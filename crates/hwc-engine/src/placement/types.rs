@@ -3,10 +3,10 @@
 use compact_str::CompactString;
 
 use crate::geometry::Point3D;
+use crate::geometry_router::EntityGraph;
 use crate::netlist::NetlistArena;
 use crate::space::VoxelSize;
 use crate::voxel::MaterialRegistry;
-use crate::voxel_grid::VoxelGrid;
 
 /// Trait for accessing component and material definitions.
 ///
@@ -63,7 +63,7 @@ pub trait DiagnosticReporter {
 
 /// Component placement parameters.
 pub struct PlacementParams<'a, S, R> {
-    pub grid: &'a mut VoxelGrid,
+    pub entity_graph: &'a mut EntityGraph,
     pub voxel_size: &'a VoxelSize,
     pub arena: &'a mut NetlistArena,
     pub symbol_table: &'a S,

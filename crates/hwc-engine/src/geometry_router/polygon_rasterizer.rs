@@ -6,7 +6,7 @@
 //
 // GOD-TIER: All rasterization writes directly to VoxelGrid. No intermediate HashMaps.
 
-use crate::voxel_grid::{MaterialId, NetId, VoxelGrid};
+use crate::voxel_grid::{MaterialId, NetId};
 use compact_str::CompactString;
 use std::cmp::{max, min};
 
@@ -125,43 +125,6 @@ impl Polygon {
         }
 
         (Point2D::new(min_x, min_y), Point2D::new(max_x, max_y))
-    }
-}
-
-/// Edge representation for scanline algorithm
-#[derive(Debug, Clone)]
-struct Edge {
-    y_min: i64,
-    y_max: i64,
-    x_at_y_min: i64,
-    inverse_slope: f64, // dx/dy
-}
-
-impl Edge {
-    fn new(p1: Point2D, p2: Point2D) -> Option<Self> {
-        // Skip horizontal edges
-        if p1.y == p2.y {
-            return None;
-        }
-
-        let (bottom, top) = if p1.y < p2.y { (p1, p2) } else { (p2, p1) };
-
-        let dy = (top.y - bottom.y) as f64;
-        let dx = (top.x - bottom.x) as f64;
-        let inverse_slope = dx / dy;
-
-        Some(Edge {
-            y_min: bottom.y,
-            y_max: top.y,
-            x_at_y_min: bottom.x,
-            inverse_slope,
-        })
-    }
-
-    /// Calculate X coordinate at given Y scanline
-    fn x_at_y(&self, y: i64) -> i64 {
-        let dy = (y - self.y_min) as f64;
-        (self.x_at_y_min as f64 + self.inverse_slope * dy).round() as i64
     }
 }
 
@@ -285,7 +248,7 @@ impl PolygonRasterizer {
         z_layer: i64,
         material: MaterialId,
         net: NetId,
-        grid: &mut VoxelGrid,
+        entity_graph: &mut crate::geometry_router::EntityGraph,
     ) {
         // Check quantization error for polygon dimensions
         if self.quantization_stats.is_some() {
@@ -297,108 +260,19 @@ impl PolygonRasterizer {
             self.check_quantization_error(format!("Polygon height (net {})", net).into(), height);
         }
 
-        // Build edge table for outer boundary
-        let outer_edges = self.build_edge_table(&polygon.outer);
-
-        // Rasterize outer boundary
-        self.scanline_fill_into_grid(&outer_edges, z_layer, material, net, grid, true);
-
-        // Remove holes
-        for hole in &polygon.holes {
-            let hole_edges = self.build_edge_table(hole);
-            self.scanline_fill_into_grid(&hole_edges, z_layer, material, net, grid, false);
-        }
-    }
-
-    /// Build edge table from polygon vertices
-    fn build_edge_table(&self, vertices: &[Point2D]) -> Vec<Edge> {
-        let mut edges = Vec::new();
-
-        for i in 0..vertices.len() {
-            let p1 = vertices[i];
-            let p2 = vertices[(i + 1) % vertices.len()];
-
-            if let Some(edge) = Edge::new(p1, p2) {
-                edges.push(edge);
-            }
-        }
-
-        edges
-    }
-
-    /// Scanline fill algorithm - GOD-TIER version
-    ///
-    /// Writes directly to VoxelGrid using flat array indexing.
-    /// No intermediate HashMap, no hash collisions.
-    ///
-    /// # Arguments
-    /// * `edges` - Edge table from polygon
-    /// * `z_layer` - Z coordinate in nanometers
-    /// * `material` - Material ID to fill with
-    /// * `net` - Net ID to assign
-    /// * `grid` - VoxelGrid to write into
-    /// * `fill` - true to fill, false to clear (for holes)
-    fn scanline_fill_into_grid(
-        &self,
-        edges: &[Edge],
-        z_layer: i64,
-        material: MaterialId,
-        net: NetId,
-        grid: &mut VoxelGrid,
-        fill: bool,
-    ) {
-        if edges.is_empty() {
-            return;
-        }
-
-        // Find Y range
-        let y_min = edges.iter().map(|e| e.y_min).min().unwrap();
-        let y_max = edges.iter().map(|e| e.y_max).max().unwrap();
-
-        // Convert to voxel coordinates
-        let y_min_voxel = y_min / self.voxel_size_nm;
-        let y_max_voxel = y_max / self.voxel_size_nm;
-        let z_voxel = (z_layer / 1_000_000).max(0) as usize; // 1mm layers
-
-        // Scan each horizontal line
-        for y_voxel in y_min_voxel..=y_max_voxel {
-            let y_nm = y_voxel * self.voxel_size_nm;
-
-            // Find all edge intersections at this Y
-            let mut intersections: Vec<i64> = edges
-                .iter()
-                .filter(|e| e.y_min <= y_nm && y_nm < e.y_max)
-                .map(|e| e.x_at_y(y_nm))
-                .collect();
-
-            // Sort intersections by X
-            intersections.sort_unstable();
-
-            // Fill between pairs of intersections (even-odd rule)
-            for chunk in intersections.chunks(2) {
-                if chunk.len() == 2 {
-                    let x_start = (chunk[0] / self.voxel_size_nm).max(0) as usize;
-                    let x_end = (chunk[1] / self.voxel_size_nm).max(0) as usize;
-                    let y_voxel_usize = y_voxel.max(0) as usize;
-
-                    for x_voxel in x_start..=x_end {
-                        if fill {
-                            // GOD-TIER: Direct VoxelGrid write, O(1) flat array indexing
-                            grid.set_occupied(
-                                x_voxel,
-                                y_voxel_usize,
-                                z_voxel,
-                                material,
-                                crate::netlist::NetHandle::new(net),
-                            );
-                        } else {
-                            // Clear for holes
-                            grid.clear(x_voxel, y_voxel_usize, z_voxel);
-                        }
-                    }
-                }
-            }
-        }
+        // Rasterization writes are removed in the EntityGraph migration.
+        // Copper pours are now stored as SubstrateLayer objects.
+        let (min, max) = polygon.bounding_box();
+        let bbox = crate::geometry::BoundingBox::new(
+            crate::geometry::Point3D::new(min.x, min.y, z_layer),
+            crate::geometry::Point3D::new(max.x, max.y, z_layer),
+        );
+        entity_graph.add_substrate_layer(
+            material,
+            net,
+            bbox,
+            crate::voxel_grid::SubstrateLayerType::Pour,
+        );
     }
 
     /// Rasterize a rectangular pour directly into VoxelGrid (optimized path)
@@ -414,7 +288,7 @@ impl PolygonRasterizer {
         z_layer: i64,
         material: MaterialId,
         net: NetId,
-        grid: &mut VoxelGrid,
+        entity_graph: &mut crate::geometry_router::EntityGraph,
     ) {
         // Check quantization error for rectangle dimensions
         if self.quantization_stats.is_some() {
@@ -425,22 +299,17 @@ impl PolygonRasterizer {
             self.check_quantization_error(format!("Rectangle height (net {})", net).into(), height);
         }
 
-        use crate::geometry::{BoundingBox, Point3D};
-        use crate::space::VoxelSize;
-
-        let bbox = BoundingBox::new(
-            Point3D::new(min.x, min.y, z_layer),
-            Point3D::new(max.x, max.y, z_layer),
+        // Store as SubstrateLayer instead of filling voxels
+        let bbox = crate::geometry::BoundingBox::new(
+            crate::geometry::Point3D::new(min.x, min.y, z_layer),
+            crate::geometry::Point3D::new(max.x, max.y, z_layer),
         );
-
-        let voxel_size = VoxelSize {
-            x_nm: self.voxel_size_nm,
-            y_nm: self.voxel_size_nm,
-            z_nm: 1_000_000, // 1mm layers
-        };
-
-        // GOD-TIER: Use VoxelGrid's optimized fill_box
-        grid.fill_box(&bbox, &voxel_size, material, net);
+        entity_graph.add_substrate_layer(
+            material,
+            net,
+            bbox,
+            crate::voxel_grid::SubstrateLayerType::Pour,
+        );
     }
 
     /// Rasterize a circle directly into VoxelGrid (for pads and anti-pads)
@@ -456,7 +325,7 @@ impl PolygonRasterizer {
         z_layer: i64,
         material: MaterialId,
         net: NetId,
-        grid: &mut VoxelGrid,
+        entity_graph: &mut crate::geometry_router::EntityGraph,
     ) {
         // Check quantization error for circle diameter
         if self.quantization_stats.is_some() {
@@ -467,25 +336,16 @@ impl PolygonRasterizer {
             );
         }
 
-        let center_x_voxel = (center.x / self.voxel_size_nm).max(0) as usize;
-        let center_y_voxel = (center.y / self.voxel_size_nm).max(0) as usize;
-        let radius_voxels = ((radius_nm / self.voxel_size_nm) + 1).max(0) as usize;
-        let z_voxel = (z_layer / 1_000_000).max(0) as usize;
-
-        // Use midpoint circle algorithm
-        for dy in -(radius_voxels as i64)..=(radius_voxels as i64) {
-            for dx in -(radius_voxels as i64)..=(radius_voxels as i64) {
-                let dist_squared = dx * dx + dy * dy;
-                let radius_voxels_squared = (radius_voxels as i64) * (radius_voxels as i64);
-
-                if dist_squared <= radius_voxels_squared {
-                    let x = (center_x_voxel as i64 + dx).max(0) as usize;
-                    let y = (center_y_voxel as i64 + dy).max(0) as usize;
-
-                    // GOD-TIER: Direct VoxelGrid write
-                    grid.set_occupied(x, y, z_voxel, material, crate::netlist::NetHandle::new(net));
-                }
-            }
-        }
+        // Store as SubstrateLayer instead of filling voxels
+        let bbox = crate::geometry::BoundingBox::new(
+            crate::geometry::Point3D::new(center.x - radius_nm, center.y - radius_nm, z_layer),
+            crate::geometry::Point3D::new(center.x + radius_nm, center.y + radius_nm, z_layer),
+        );
+        entity_graph.add_circle_substrate_layer(
+            material,
+            net,
+            bbox,
+            radius_nm,
+        );
     }
 }

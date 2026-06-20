@@ -167,6 +167,8 @@ impl VoxelGrid {
     /// * `radius_voxels` - Radius of the cylinder in voxels
     /// * `material` - The material to stamp
     /// * `handle` - The net handle
+    #[deprecated(note = "v0.1.8: Use ComponentStamp and SceneGraph instead")]
+    #[allow(deprecated)]
     pub fn stamp_cylinder(
         &self,
         center_x: usize,
@@ -216,6 +218,7 @@ impl VoxelGrid {
     /// * `z_start_nm`, `z_end_nm` - Vertical span in nanometers
     /// * `params` - TSV parameters (diameter, materials)
     /// * `handle` - The net handle for the conductive parts
+    #[allow(deprecated)]
     pub fn stamp_tsv(
         &self,
         center_x_nm: i64,

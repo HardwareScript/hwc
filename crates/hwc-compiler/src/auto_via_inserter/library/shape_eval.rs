@@ -132,12 +132,14 @@ pub fn evaluate_geometry_blocks(
                 end,
                 body,
             } => {
-                for i in *start..*end {
+                let start_val = evaluate_expr(start, &env) as i64;
+                let end_val = evaluate_expr(end, &env) as i64;
+                for i in start_val..end_val {
                     env.vars.insert(variable.clone(), i as f64);
                     evaluate_geometry_statements(body, &mut env, &mut points);
                 }
             }
-            hwc_parser::GeometryBlock::Variable { name, value } => {
+            hwc_parser::GeometryBlock::LetBinding { name, value } => {
                 let val = evaluate_expr(value, &env);
                 env.vars.insert(name.clone(), val);
             }
@@ -153,7 +155,7 @@ fn evaluate_geometry_statements(
 ) {
     for stmt in stmts {
         match stmt {
-            hwc_parser::GeometryStatement::Variable { name, value } => {
+            hwc_parser::GeometryStatement::LetBinding { name, value } => {
                 let val = evaluate_expr(value, env);
                 env.vars.insert(name.clone(), val);
             }
@@ -161,6 +163,9 @@ fn evaluate_geometry_statements(
                 let x_val = evaluate_expr(x, env);
                 let y_val = evaluate_expr(y, env);
                 points.push(Point64::new(x_val.round() as i64, y_val.round() as i64));
+            }
+            hwc_parser::GeometryStatement::GeneratorCall { .. } => {
+                // Generator calls are evaluated during shape construction, not here
             }
         }
     }

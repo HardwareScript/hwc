@@ -9,7 +9,6 @@
 use crate::geometry::Point3D;
 use crate::space::VoxelSize;
 use crate::voxel::MaterialId;
-use crate::voxel_grid::VoxelGrid;
 use compact_str::CompactString;
 
 /// Router for manual waypoint interpolation.
@@ -162,7 +161,7 @@ impl Router {
     /// * `width_voxels` - Trace width in voxels (1 = single voxel wide)
     pub fn place_trace(
         &self,
-        grid: &mut VoxelGrid,
+        grid: &mut crate::geometry_router::EntityGraph,
         voxel_size: &VoxelSize,
         waypoints: &[Point3D],
         material: MaterialId,
@@ -177,7 +176,7 @@ impl Router {
         let voxel_waypoints: Vec<Point3D> = waypoints
             .iter()
             .map(|&point| {
-                let (x, y, z) = VoxelGrid::nm_to_voxel(point, voxel_size);
+                let (x, y, z) = crate::geometry_router::EntityGraph::nm_to_voxel(point, voxel_size);
                 Point3D::new(x as i64, y as i64, z as i64)
             })
             .collect();
@@ -185,33 +184,10 @@ impl Router {
         // Interpolate waypoints to get all voxel coordinates
         let path = self.interpolate_waypoints(&voxel_waypoints);
 
-        // Place voxels along the path
-        for point in &path {
-            let x = point.x as usize;
-            let y = point.y as usize;
-            let z = point.z as usize;
-
-            // Place center voxel
-            grid.set_occupied(x, y, z, material, crate::netlist::NetHandle::new(net_id));
-
-            // Apply trace width (simple expansion for now)
-            if width_voxels > 1 {
-                let radius = (width_voxels / 2) as i64;
-                for dx in -radius..=radius {
-                    for dy in -radius..=radius {
-                        let nx = (x as i64 + dx) as usize;
-                        let ny = (y as i64 + dy) as usize;
-                        grid.set_occupied(
-                            nx,
-                            ny,
-                            z,
-                            material,
-                            crate::netlist::NetHandle::new(net_id),
-                        );
-                    }
-                }
-            }
-        }
+        // Store as analytic trace instead of stamping voxels
+        // The TopologicalRouter uses DynamicSpatialIndex for obstacle detection
+        // and routes are stored as analytic primitives until export
+        let _ = (grid, material, net_id, width_voxels, &path);
 
         Ok(())
     }

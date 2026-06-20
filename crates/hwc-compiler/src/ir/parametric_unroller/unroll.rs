@@ -7,13 +7,14 @@ use super::collision::{
     print_identity_collision_warning, print_same_iteration_collision_warnings, CollisionWarning,
 };
 use super::substitution::{
-    format_net_name, unroll_component, unroll_contact, unroll_pour, unroll_route,
+    format_net_name, unroll_component, unroll_contact, unroll_plane, unroll_pour, unroll_route,
 };
 use crate::ir::errors::IrError;
 use crate::SymbolTable;
 use compact_str::CompactString;
 use hwc_parser::{
-    ComponentPlacement, ContactPlacement, PourPlacement, Route, SpaceForLoop, SpaceStatement,
+    ComponentPlacement, ContactPlacement, PlanePlacement, PourPlacement, Route, SpaceForLoop,
+    SpaceStatement,
 };
 use rustc_hash::{FxHashMap, FxHashSet};
 
@@ -21,6 +22,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 pub struct UnrolledStatements {
     pub components: Vec<ComponentPlacement>,
     pub pours: Vec<PourPlacement>,
+    pub planes: Vec<PlanePlacement>,
     pub contacts: Vec<ContactPlacement>,
     pub routes: Vec<Route>,
 }
@@ -41,6 +43,7 @@ pub fn unroll_for_loop(
 ) -> Result<UnrolledStatements, IrError> {
     let mut components = Vec::new();
     let mut pours = Vec::new();
+    let mut planes = Vec::new();
     let mut contacts = Vec::new();
     let mut routes = Vec::new();
 
@@ -83,6 +86,10 @@ pub fn unroll_for_loop(
 
                     pours.push(unrolled_pour);
                 }
+                SpaceStatement::Plane(plane) => {
+                    let unrolled_plane = unroll_plane(plane, &for_loop.variable, i)?;
+                    planes.push(unrolled_plane);
+                }
                 SpaceStatement::Contact(contact) => {
                     let unrolled_contact = unroll_contact(contact, &for_loop.variable, i)?;
 
@@ -123,6 +130,9 @@ pub fn unroll_for_loop(
                     }
                     for pour in nested_unrolled.pours {
                         pours.push(unroll_pour(&pour, &for_loop.variable, i)?);
+                    }
+                    for plane in nested_unrolled.planes {
+                        planes.push(unroll_plane(&plane, &for_loop.variable, i)?);
                     }
                     for contact in nested_unrolled.contacts {
                         contacts.push(unroll_contact(&contact, &for_loop.variable, i)?);
@@ -165,6 +175,7 @@ pub fn unroll_for_loop(
     Ok(UnrolledStatements {
         components,
         pours,
+        planes,
         contacts,
         routes,
     })

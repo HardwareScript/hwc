@@ -81,6 +81,7 @@ impl VoxelGrid {
     /// grid.set_occupied(5, 5, 5, 2, handle);  // Copper, handle 1
     /// // Note: Not visible until commit_route() is called
     /// ```
+    #[deprecated(note = "v0.1.8: Use Entity Graph and spatial index instead")]
     #[inline]
     pub fn set_occupied(
         &self,

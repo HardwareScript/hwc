@@ -11,11 +11,13 @@ pub mod context;
 pub mod coordinate_evaluation; // Made public for anchor reference evaluation
 mod helpers;
 mod module;
+mod plane;
 mod pour;
 mod substrate;
 
 // Re-export public functions
 pub use component::place_component;
 pub use contact::place_contact;
+pub use plane::place_plane;
 pub use pour::place_pour;
 pub use substrate::place_substrate;

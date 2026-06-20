@@ -56,7 +56,7 @@ fn calculate_annular_ring_from_substrate(
     for layer in substrate_layers {
         // ✅ NATIVE v0.1.7 FIX: Only enforce annular rings on POUR layers (pads, planes).
         // A 'Contact' layer (via barrel) should not be used to satisfy another via's enclosure.
-        if layer.layer_type != crate::voxel_grid::SubstrateLayerType::Pour {
+        if layer.layer_type != crate::geometry_router::entity_graph::SubstrateLayerType::Pour {
             continue;
         }
 

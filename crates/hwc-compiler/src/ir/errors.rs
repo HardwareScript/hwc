@@ -27,7 +27,7 @@ pub enum IrError {
     #[diagnostic(
         code(C33),
         url("https://docs.hw-script.org/errors/C33"),
-        help("Add 'grid: <x> by <y> by <z>' to the space definition")
+        help("Add 'grid: <x> by <y> by <z>' or 'resolution: <step>' to the space definition")
     )]
     MissingGrid,
 

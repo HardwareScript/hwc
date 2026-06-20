@@ -1,16 +1,16 @@
 //! Substrate layer placement.
 
 use crate::geometry::{BoundingBox, Point3D};
+use crate::geometry_router::EntityGraph;
 use crate::space::VoxelSize;
 use crate::voxel::MaterialId;
-use crate::voxel_grid::VoxelGrid;
 
 use super::error::PlacementError;
 
-/// Place a substrate layer in the voxel grid.
+/// Place a substrate layer in the entity graph.
 ///
 /// # Arguments
-/// * `grid` - Voxel grid to place substrate in
+/// * `entity_graph` - Entity graph to place substrate in
 /// * `voxel_size` - Size of each voxel in nanometers
 /// * `material_id` - Substrate material ID from MaterialRegistry
 /// * `start` - Starting position in nanometers
@@ -20,19 +20,19 @@ use super::error::PlacementError;
 /// # Returns
 /// Ok if successful, error if invalid region
 pub(super) fn place_substrate(
-    grid: &mut VoxelGrid,
+    entity_graph: &mut EntityGraph,
     voxel_size: &VoxelSize,
     material_id: MaterialId,
     start: Point3D,
     end: Point3D,
     net_id: u32,
 ) -> Result<(), PlacementError> {
-    place_substrate_with_cutouts(grid, voxel_size, material_id, start, end, net_id, &[])
+    place_substrate_with_cutouts(entity_graph, voxel_size, material_id, start, end, net_id, &[])
 }
 
-/// Place a cylindrical substrate layer in the voxel grid (v0.1.6).
+/// Place a cylindrical substrate layer in the entity graph (v0.1.6).
 pub(super) fn place_cylinder_substrate(
-    grid: &mut VoxelGrid,
+    entity_graph: &mut EntityGraph,
     material_id: MaterialId,
     start: Point3D,
     end: Point3D,
@@ -49,14 +49,14 @@ pub(super) fn place_cylinder_substrate(
     }
 
     // Default to 16 segments for 3D visualization
-    grid.add_cylinder_substrate_layer(material_id, net_id, bbox, diameter, 16, 0);
+    entity_graph.add_cylinder_substrate_layer(material_id, net_id, bbox, diameter, 16, 0);
 
     Ok(())
 }
 
-/// Place a square via substrate layer in the voxel grid (v0.1.7).
+/// Place a square via substrate layer in the entity graph (v0.1.7).
 pub(super) fn place_square_substrate(
-    grid: &mut VoxelGrid,
+    entity_graph: &mut EntityGraph,
     material_id: MaterialId,
     start: Point3D,
     end: Point3D,
@@ -72,7 +72,7 @@ pub(super) fn place_square_substrate(
         return Err(PlacementError::InvalidSubstrateRegion { start, end });
     }
 
-    grid.add_square_via_substrate_layer(material_id, net_id, bbox, size);
+    entity_graph.add_square_via_substrate_layer(material_id, net_id, bbox, size);
 
     Ok(())
 }
@@ -80,7 +80,7 @@ pub(super) fn place_square_substrate(
 /// Place a polygon-based via substrate layer (v0.2.0).
 /// Takes an arbitrary 2D polygon contour (Path64) and extrudes it.
 pub(super) fn place_polygon_substrate(
-    grid: &mut VoxelGrid,
+    entity_graph: &mut EntityGraph,
     material_id: MaterialId,
     start: Point3D,
     end: Point3D,
@@ -94,13 +94,13 @@ pub(super) fn place_polygon_substrate(
     {
         return Err(PlacementError::InvalidSubstrateRegion { start, end });
     }
-    grid.add_polygon_via_substrate_layer(material_id, net_id, bbox, contour.clone());
+    entity_graph.add_polygon_via_substrate_layer(material_id, net_id, bbox, contour.clone());
     Ok(())
 }
 
-/// Place a hexagonal via substrate layer in the voxel grid.
+/// Place a hexagonal via substrate layer in the entity graph.
 pub(super) fn place_hexagon_substrate(
-    grid: &mut VoxelGrid,
+    entity_graph: &mut EntityGraph,
     material_id: MaterialId,
     start: Point3D,
     end: Point3D,
@@ -114,14 +114,14 @@ pub(super) fn place_hexagon_substrate(
     {
         return Err(PlacementError::InvalidSubstrateRegion { start, end });
     }
-    grid.add_hexagon_via_substrate_layer(material_id, net_id, bbox, size);
+    entity_graph.add_hexagon_via_substrate_layer(material_id, net_id, bbox, size);
     Ok(())
 }
 
 /// Place a substrate layer with cutouts (mounting holes, edge cuts, etc.).
 ///
 /// # Arguments
-/// * `grid` - Voxel grid to place substrate in
+/// * `entity_graph` - Entity graph to place substrate in
 /// * `voxel_size` - Size of each voxel in nanometers
 /// * `material_id` - Substrate material ID from MaterialRegistry
 /// * `start` - Starting position in nanometers
@@ -132,8 +132,8 @@ pub(super) fn place_hexagon_substrate(
 /// # Returns
 /// Ok if successful, error if invalid region
 pub(super) fn place_substrate_with_cutouts(
-    grid: &mut VoxelGrid,
-    voxel_size: &VoxelSize,
+    entity_graph: &mut EntityGraph,
+    _voxel_size: &VoxelSize,
     material_id: MaterialId,
     start: Point3D,
     end: Point3D,
@@ -155,7 +155,22 @@ pub(super) fn place_substrate_with_cutouts(
 
     // Fill the region with substrate material (with cutouts)
     // Pass through the net ID for connectivity checking
-    grid.fill_substrate_with_cutouts(&bbox, voxel_size, material_id, net_id, cutouts);
+    if cutouts.is_empty() {
+        entity_graph.add_substrate_layer(
+            material_id,
+            net_id,
+            bbox,
+            crate::voxel_grid::SubstrateLayerType::Pour,
+        );
+    } else {
+        entity_graph.add_substrate_layer_with_cutouts(
+            material_id,
+            net_id,
+            bbox,
+            cutouts.to_vec(),
+            crate::voxel_grid::SubstrateLayerType::Pour,
+        );
+    }
 
     Ok(())
 }
@@ -164,12 +179,12 @@ pub(super) fn place_substrate_with_cutouts(
 ///
 /// Useful for multi-layer PCBs or silicon chips with multiple dielectric layers.
 pub(super) fn place_substrate_layers(
-    grid: &mut VoxelGrid,
+    entity_graph: &mut EntityGraph,
     voxel_size: &VoxelSize,
     layers: &[(MaterialId, Point3D, Point3D)],
 ) -> Result<(), PlacementError> {
     for (material_id, start, end) in layers {
-        place_substrate(grid, voxel_size, *material_id, *start, *end, 0)?;
+        place_substrate(entity_graph, voxel_size, *material_id, *start, *end, 0)?;
     }
     Ok(())
 }

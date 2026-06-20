@@ -80,7 +80,6 @@ impl Parser {
                 Token::Space => Some("space"),
                 Token::Profile => Some("profile"),
                 Token::Material => Some("material"),
-                Token::Via => Some("via"),
                 Token::Spanning => Some("spanning"),
                 Token::Interface => Some("interface"),
                 Token::Device => Some("device"),
@@ -133,7 +132,6 @@ impl Parser {
                     | Token::Space
                     | Token::Profile
                     | Token::Material
-                    | Token::Via
                     | Token::Spanning
                     | Token::Interface
                     | Token::Device

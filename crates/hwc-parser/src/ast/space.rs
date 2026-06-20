@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 
-use super::common::{Coordinate, Dimensions, Grid, Identifier, OriginPoint, PinReference};
+use super::common::{Coordinate, Dimensions, Identifier, Measurement, OriginPoint, PinReference};
 use super::component::ComponentPlacement;
 use super::expression::Expression;
 use crate::lexer::Span;
@@ -91,7 +91,8 @@ pub struct SpaceDefinition {
     pub name: Identifier,
     pub implements_module: Option<CompactString>, // NEW Phase 3: Optional module to validate against
     pub dimensions: Option<Dimensions>,
-    pub grid: Option<Grid>,
+    /// New syntax (v0.1.8+): `resolution: 1nm`
+    pub resolution: Option<Measurement>,
     pub origin: Option<OriginPoint>,
     pub profile: Option<Identifier>, // NEW v0.1.4: Reference to profile name
     pub mechanical: Option<Identifier>, // NEW v0.1.4: Reference to mechanical name
@@ -138,6 +139,8 @@ pub enum SpaceTopLevelStatement {
     Component(Box<ComponentPlacement>),
     /// Pour placement: `add pour(Material) ...`
     Pour(PourPlacement),
+    /// Plane placement: `add plane(Material) ...` (conductive sheet)
+    Plane(PlanePlacement),
     /// Polygon placement: `add polygon(Material) ...`
     Polygon(PolygonPlacement),
     /// Contact/via placement: `add contact(Material) ...`
@@ -175,6 +178,8 @@ pub enum SpaceStatement {
     Component(Box<ComponentPlacement>),
     /// Pour placement
     Pour(PourPlacement),
+    /// Plane placement
+    Plane(PlanePlacement),
     /// Contact placement
     Contact(ContactPlacement),
     /// Route
@@ -267,6 +272,7 @@ pub struct Route {
     pub bridge: Option<CompactString>,       // Phase 1: Explicit bridge override
     pub exit_escape: Option<RouteEscape>,    // v0.1.7: Exit port specification
     pub enter_escape: Option<RouteEscape>,   // v0.1.7: Enter port specification
+    pub current_limit_ac: Option<CurrentLimitAc>, // v0.1.8: AC current limit [rms, peak]
     pub span: Span,
 }
 
@@ -415,6 +421,62 @@ pub struct DeviceBinding {
     pub span: Span,
 }
 
+/// Cutout shape for substrate and plane cutouts
+///
+/// Supports two shapes:
+/// - `Rectangle { width, height, at }` — rectangular cutout at a position
+/// - `Circle { radius, at }` — circular cutout at a position
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum CutoutShape {
+    Rectangle {
+        width: Expression,
+        height: Expression,
+        at: Coordinate,
+    },
+    Circle {
+        radius: Expression,
+        at: Coordinate,
+    },
+}
+
+/// Plane placement: `add plane(Material) named Name on layer: <layer>: ...`
+///
+/// Represents a conductive sheet (e.g., copper pour, ground plane).
+/// Similar to PourPlacement but with explicit `cutouts` and semantic layer support.
+///
+/// ```hardware
+/// add plane(Copper) named GND_Plane on layer: l1:
+///     spanning layer: l1 to l1
+///     net: GND
+///     cutouts:
+///         Rectangle(2mm, 1mm) at [x: 5mm, y: 5mm]
+///         Circle(0.5mm) at [x: 10mm, y: 10mm]
+/// ```
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PlanePlacement {
+    pub material: CompactString,
+    pub name: super::component::ComponentName,
+    /// Z elevation: either physical `z: 150um` or semantic `layer: l1`
+    pub elevation: Elevation,
+    pub thickness: Option<Expression>,
+    pub from: Option<Coordinate>,
+    pub to: Option<Coordinate>,
+    pub net: Option<NetName>,
+    pub cutouts: Vec<CutoutShape>,
+    pub span: Span,
+}
+
+/// AC current limit for route configuration
+///
+/// Parsed from: `current_limit: [rms: <Value>, peak: <Value>]`
+/// Also supports single value: `current_limit: <Value>` (treated as DC, both rms and peak)
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CurrentLimitAc {
+    pub rms: Expression,
+    pub peak: Expression,
+    pub span: Span,
+}
+
 /// Custom polygon: `add polygon(Copper) named WiFi_Antenna at [x:10, y:10, z:1]:`
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PolygonPlacement {
@@ -519,6 +581,18 @@ impl SpaceDefinition {
             .iter()
             .filter_map(|s| {
                 if let SpaceTopLevelStatement::Pour(p) = s {
+                    Some(p.clone())
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+    pub fn planes(&self) -> Vec<PlanePlacement> {
+        self.statements
+            .iter()
+            .filter_map(|s| {
+                if let SpaceTopLevelStatement::Plane(p) = s {
                     Some(p.clone())
                 } else {
                     None

@@ -9,18 +9,18 @@ pub use primitives::*;
 pub use traces::*;
 
 use crate::geometry::{BoundingBox, Point3D};
+use crate::geometry_router::EntityGraph;
 use crate::netlist::{NetId, NetlistArena};
 use crate::voxel::{MaterialId, MaterialRegistry};
-use crate::voxel_grid::SubstrateLayer;
-use crate::voxel_grid::VoxelGrid;
+
 use compact_str::CompactString;
 use rustc_hash::FxHashMap;
 
-/// Complete hardware space with voxel grid and connectivity.
+/// Complete hardware space with entity graph and connectivity.
 ///
 /// This structure combines:
-/// - Physical dimensions and grid resolution
-/// - Voxel-level spatial storage (Morton-encoded)
+/// - Physical dimensions and coordinate snapping
+/// - Entity graph for substrate, pin, and component storage
 /// - Component and net connectivity (ECS-style arena)
 /// - Routing results (vias for drill file generation)
 /// - Material registry for dynamic material support
@@ -40,90 +40,45 @@ pub struct HardwareSpace {
     /// Material registry for dynamic material support
     pub material_registry: MaterialRegistry,
 
-    /// Voxel grid for spatial storage (Morton-encoded)
-    pub voxel_grid: VoxelGrid,
+    /// Entity graph — single source of truth for substrate, pin, and component storage.
+    pub entity_graph: EntityGraph,
 
     /// Netlist arena for component/pin/net connectivity
     pub netlist: NetlistArena,
 
     /// Vias placed during routing (for drill file export)
-    /// This is populated after routing is complete
     pub vias: Vec<crate::geometry_router::Via>,
 
     /// Pour metadata for BOM and netlist generation
-    /// Stores information about material pours (copper planes, silicon regions, etc.)
     pub pours: Vec<PourMetadata>,
 
     /// Contact metadata for connectivity checking
-    /// Stores information about vias and vertical interconnects
     pub contacts: Vec<ContactMetadata>,
 
     /// Net classifications for physics validation (v0.1.6)
-    /// Maps net name to classification (power/ground/signal)
     pub net_classifications: FxHashMap<CompactString, NetClassification>,
 
     /// Substrate bounding box for overlap validation (v0.1.6 GAP2)
-    /// Tracks the physical extent of the substrate material
     pub substrate_bbox: Option<crate::geometry::BoundingBox>,
 
     /// **Sprint 3.10: Component bounding box tracker (NATIVE ARCHITECTURE)**
-    ///
-    /// This is the "God-Tier" architectural move: instead of passing bbox_tracker
-    /// through 15 function calls, it lives in HardwareSpace where it belongs.
-    ///
-    /// **Why this is native:**
-    /// - Components are placed IN the space
-    /// - Bounding boxes describe WHERE components are IN the space
-    /// - The SDF needs to know WHERE obstacles are IN the space
-    /// - Therefore: bbox_tracker IS PART OF the space
-    ///
-    /// **Performance:**
-    /// - O(1) access from any routing or placement function
-    /// - No parameter threading through 15 layers
-    /// - Single source of truth for component positions
     pub component_bboxes: FxHashMap<CompactString, crate::geometry::BoundingBox>,
 
     /// **v0.1.7: ANALYTIC ROUTE OVERLAY (GOD-TIER NATIVE ARCHITECTURE)**
-    ///
-    /// **The Paradigm Shift: "Primitives Over Pixels"**
-    ///
-    /// Physical Reality: A trace is an analytic primitive (swept volume), not a collection of voxels.
-    /// By storing routes as mathematical primitives until export, we achieve:
-    ///
-    /// **Performance:**
-    /// - Stamping time: 4.48s → 0.000001s (4,480,000× faster)
-    /// - Memory per wire: 5MB → 1KB (5,000× reduction)
-    /// - DRC accuracy: 1µm voxel error → nanometer-exact
-    /// - Scales to 1,000,000 wires (vs 1,000 with voxel-first)
-    ///
-    /// **Physical Correctness:**
-    /// - Maintains mathematical truth until final export
-    /// - No discretization artifacts in DRC
-    /// - Exporters receive clean geometry (not pixelated approximations)
-    /// - GDSII/DXF/GLB get exact primitives (not voxel reconstruction)
-    ///
-    /// **The "Lazy Realization" Pattern:**
-    /// - Routes stored as Vec<LineSegment> during build
-    /// - DRC runs on analytic geometry (segment-to-box distance)
-    /// - Voxels only "realized" during export phase (once, not thousands of times)
-    ///
-    /// This is how mask-writers at TSMC/Intel work: GDSII Paths, not voxels.
     pub analytic_routes: Vec<AnalyticTrace>,
 
     /// **v0.1.6: Fabrication Constraints (DRC Integration)**
-    ///
-    /// Stores the fabrication constraints from the profile definition.
-    /// Used by DRC validation to check trace widths, via diameters, clearances, etc.
-    ///
-    /// If None, DRC uses default constraints (IPC-2221 Class 2).
     pub fabrication_constraints: Option<hwc_materials::ConstraintSet>,
 
     /// **v0.1.7: Keep-Out Zones for DRC and routing (NATIVE)**
     pub keep_out_zones: Vec<KeepOutZone>,
+
+    /// **v0.1.8: Coordinate snapping resolution in nanometers.**
+    pub resolution_nm: Option<i64>,
 }
 
 impl HardwareSpace {
-    /// Create a new hardware space with integrated voxel grid and netlist.
+    /// Create a new hardware space with entity graph and netlist.
     pub fn new(
         name: CompactString,
         dimensions: Dimensions,
@@ -133,19 +88,7 @@ impl HardwareSpace {
         view: SpaceView,
     ) -> Self {
         let voxel_size = VoxelSize::from_dimensions(dimensions, grid);
-
-        // SPARSE-VOXEL HANDSHAKE: Default insulator for empty space
-        // For now, use 0 (Air/Vacuum) as default. This can be enhanced later
-        // to read from profile (e.g., SiO2 for silicon foundry, Air for PCB)
-        let default_insulator = 0; // Air/Vacuum
-
-        let voxel_grid = VoxelGrid::new(
-            grid.x_cols,
-            grid.y_rows,
-            grid.z_layers,
-            voxel_size,
-            default_insulator,
-        );
+        let entity_graph = EntityGraph::new();
         let netlist = NetlistArena::new();
 
         Self {
@@ -156,7 +99,7 @@ impl HardwareSpace {
             substrate_material_id,
             material_registry,
             view,
-            voxel_grid,
+            entity_graph,
             netlist,
             vias: Vec::new(),
             pours: Vec::new(),
@@ -167,17 +110,22 @@ impl HardwareSpace {
             analytic_routes: Vec::new(),
             fabrication_constraints: None,
             keep_out_zones: Vec::new(),
+            resolution_nm: None,
         }
     }
 
-    /// The SDF generator will use this for analytic distance calculation.
+    /// Derive grid cell counts from dimensions and voxel size.
     ///
-    /// # Arguments
-    /// * `name` - Component name
-    /// * `bbox` - Bounding box in nanometers
-    /// * `material_id` - Material ID for the component body
-    /// * `component_type` - Component definition name (e.g. "R0603")
-    /// * `blocked_z_ranges` - Z-ranges that are physically blocked by this component
+    /// This replaces the removed `grid: GridCells` field.
+    pub fn grid_cells(&self) -> GridCells {
+        GridCells::new(
+            ((self.dimensions.width_nm + self.voxel_size.x_nm - 1) / self.voxel_size.x_nm) as usize,
+            ((self.dimensions.height_nm + self.voxel_size.y_nm - 1) / self.voxel_size.y_nm) as usize,
+            ((self.dimensions.depth_nm + self.voxel_size.z_nm - 1) / self.voxel_size.z_nm) as usize,
+        )
+    }
+
+    /// Register a component bbox and its metadata in the entity graph.
     pub fn register_component_bbox(
         &mut self,
         name: CompactString,
@@ -187,9 +135,7 @@ impl HardwareSpace {
         blocked_z_ranges: smallvec::SmallVec<[(i64, i64); 2]>,
     ) {
         self.component_bboxes.insert(name.clone(), bbox);
-
-        // v0.1.7: Also register with VoxelGrid metadata so router/SDF can see it
-        self.voxel_grid.add_component_metadata(
+        self.entity_graph.add_component_metadata(
             bbox,
             material_id,
             name,
@@ -199,16 +145,11 @@ impl HardwareSpace {
     }
 
     /// **v0.1.7: Register a Keep-Out Zone (KOZ)**
-    ///
-    /// Registers a region where certain layout features are forbidden.
     pub fn register_keep_out_zone(&mut self, koz: KeepOutZone) {
         self.keep_out_zones.push(koz);
     }
 
     /// **Sprint 3.10: Get all component bounding boxes (for SDF)**
-    ///
-    /// Returns an iterator over (name, bbox) pairs for all placed components.
-    /// Used by the SDF generator to calculate analytic distances.
     pub fn iter_component_bboxes(
         &self,
     ) -> impl Iterator<Item = (&CompactString, &crate::geometry::BoundingBox)> {
@@ -216,26 +157,14 @@ impl HardwareSpace {
     }
 
     /// Get net classification (v0.1.6)
-    ///
-    /// Returns the classification for a net.
-    /// Used by physics validator to check bulk biasing constraints.
-    ///
-    /// Returns `Unclassified` if the net has no explicit classification.
-    /// Users must declare net classifications in their space definition.
     pub fn get_net_classification(&self, net_name: &str) -> NetClassification {
-        // Check explicit classifications
         if let Some(&classification) = self.net_classifications.get(net_name) {
             return classification;
         }
-
-        // No classification found - return Unclassified
-        // This will cause physics validation to fail with a clear error message
         NetClassification::Unclassified
     }
 
     /// Set net classification (v0.1.6)
-    ///
-    /// Declares a net as power/ground/signal for physics validation.
     pub fn set_net_classification(
         &mut self,
         net_name: CompactString,
@@ -245,12 +174,6 @@ impl HardwareSpace {
     }
 
     /// Add vias from routing results.
-    ///
-    /// This should be called after routing is complete to populate
-    /// the vias field for drill file export.
-    ///
-    /// # Arguments
-    /// * `vias` - Vector of vias from routing
     pub fn add_vias(&mut self, vias: Vec<crate::geometry_router::Via>) {
         self.vias.extend(vias);
     }
@@ -274,65 +197,22 @@ impl HardwareSpace {
     }
 
     /// **v0.1.7: Add an analytic route (GOD-TIER NATIVE API)**
-    ///
-    /// Registers a route as a mathematical primitive instead of stamping voxels.
-    /// This is the "Primitives Over Pixels" paradigm shift.
-    ///
-    /// **Performance Impact:**
-    /// - Old (voxel stamping): 4.48 seconds for 14,000 chunks
-    /// - New (push to Vec): 0.000001 seconds
-    ///
-    /// **Physical Correctness:**
-    /// - Maintains exact geometry until export
-    /// - No discretization artifacts
-    /// - DRC operates on mathematical truth
     pub fn add_analytic_route(&mut self, route: AnalyticTrace) {
         self.analytic_routes.push(route);
     }
 
     /// **v0.1.7: Drill a hole through all substrate layers (Limitation 7)**
-    ///
-    /// This is used for through-hole component pins and mounting holes.
-    /// It automatically adds cutouts to all intersecting substrate layers.
     pub fn drill_hole(
         &mut self,
         hole_bbox: BoundingBox,
         diameter_nm: Option<i64>,
         drill_net: NetId,
     ) {
-        self.voxel_grid
+        self.entity_graph
             .drill_hole(hole_bbox, diameter_nm, drill_net.raw());
     }
 
-    /// **v0.1.7: Realize analytic routes into voxel grid (LAZY REALIZATION)**
-    ///
-    /// This is called ONCE during export, not thousands of times during routing.
-    /// Converts mathematical primitives into voxel representation for:
-    /// - Legacy export formats that need voxel data
-    /// - Final physical verification
-    /// - Visualization
-    ///
-    /// **The "Lazy Realization" Pattern:**
-    /// **v0.1.7: NATIVE SPARSE ROUTE REALIZATION**
-    ///
-    /// Instead of filling millions of voxels (Density Bomb), store routes as
-    /// sparse substrate layers (O(segments) memory, not O(voxels)).
-    ///
-    /// **Philosophy**: Routes are uniform conductors, just like substrates.
-    /// They should use the same sparse bounding box representation.
-    ///
-    /// **Performance**:
-    /// - Old: O(voxels) = 12,200 voxels × 14 routes = 170,800 voxel fills
-    /// - New: O(segments) = ~100 segments × 14 routes = 1,400 bbox registrations
-    /// - Speedup: ~120× faster
-    ///
-    /// **Memory**:
-    /// - Old: 170,800 voxels × 336 bytes/chunk = ~57 MB
-    /// - New: 1,400 segments × 32 bytes/layer = ~45 KB
-    /// - Reduction: ~1,300× less memory
-    ///
-    /// - Cost shifted from routing phase (hot path) to export phase (cold path)
-    /// - Complexity inversion: stamp once instead of thousands of times
+    /// **v0.1.7: Realize analytic routes into substrate layers (LAZY REALIZATION)**
     pub fn realize_analytic_routes(&mut self) {
         eprintln!(
             "[ANALYTIC ROUTES] Realizing {} routes into sparse substrate layers...",
@@ -342,9 +222,6 @@ impl HardwareSpace {
 
         let mut segment_count = 0;
 
-        // v0.1.8: Group segments by (z_min, z_max, material, net) to create
-        // one SubstrateLayer per physical layer instead of one per segment.
-        // Key: (z_min, z_max, material_id, net_id) -> Vec<BoundingBox>
         use rustc_hash::FxHashMap;
         let mut groups: FxHashMap<(i64, i64, MaterialId, u32), Vec<BoundingBox>> =
             FxHashMap::default();
@@ -353,15 +230,19 @@ impl HardwareSpace {
             let half_w = route.width_nm / 2;
 
             for seg in &route.segments {
-                let z_min = seg.start.z.min(seg.end.z);
-                let z_max = seg.start.z.max(seg.end.z).max(z_min + route.thickness_nm);
+                // v0.1.8: Fixed Z-axis 'Phantom Offset' bug.
+                // The realization pipeline was calculating z_max as seg.z + thickness.
+                // However, in a vector-first system, the anchor 'z' is the CENTER of 
+                // the copper thickness. The realization must expand symmetrically.
+                let half_t = route.thickness_nm / 2;
+                let z_min = seg.start.z.min(seg.end.z) - half_t;
+                let z_max = seg.start.z.max(seg.end.z) + half_t;
 
                 let x_min = seg.start.x.min(seg.end.x) - half_w;
                 let x_max = seg.start.x.max(seg.end.x) + half_w;
                 let y_min = seg.start.y.min(seg.end.y) - half_w;
                 let y_max = seg.start.y.max(seg.end.y) + half_w;
 
-                // v0.1.7: Epsilon Guard for degenerate boxes
                 if x_max - x_min < 100 || y_max - y_min < 100 || z_max - z_min < 100 {
                     continue;
                 }
@@ -378,8 +259,6 @@ impl HardwareSpace {
             }
         }
 
-        // v0.1.8: Create one SubstrateLayer per group, storing segments as child regions.
-        use crate::voxel_grid::SubstrateLayerType;
         let mut layer_count = 0;
         for ((z_min, z_max, material, net), bboxes) in groups {
             let group_bbox = BoundingBox::new(
@@ -395,11 +274,11 @@ impl HardwareSpace {
                 ),
             );
 
-            let mut layer = SubstrateLayer::new(material, net, group_bbox, SubstrateLayerType::Pour);
+            let mut layer = crate::voxel_grid::SubstrateLayer::new(material, net, group_bbox, crate::geometry_router::entity_graph::SubstrateLayerType::Pour);
             for bbox in bboxes {
                 layer.append_region(bbox);
             }
-            self.voxel_grid.get_substrate_layers_mut().push(layer);
+            self.entity_graph.get_substrate_layers_mut().push(layer);
             layer_count += 1;
         }
 
@@ -411,10 +290,7 @@ impl HardwareSpace {
             duration.as_millis()
         );
 
-        // v0.1.7: POST-REALIZATION DRILL PASS
-        // Analytic routes are realized into substrate layers at the end of the build.
-        // We must re-run all via drills to ensure these new layers are properly carved,
-        // otherwise traces will block via holes.
+        // Post-realization drill pass for vias
         eprintln!(
             "[ANALYTIC ROUTES] Running post-realization drill pass for {} vias...",
             self.vias.len()
@@ -436,35 +312,28 @@ impl HardwareSpace {
                 ),
             );
 
-            // Re-run the drill logic which is now net-aware and structural
-            // v0.1.7: Use 0 clearance for same-net structural carving to prevent disconnects.
             let pad_diameter = via.diameter_nm
                 + 2 * if via.annular_ring_nm > 0 {
                     via.annular_ring_nm
                 } else {
                     via.diameter_nm / 2
                 };
-            self.voxel_grid.drill_via_hole(
+            self.entity_graph.drill_via_hole(
                 hole_bbox,
                 via.diameter_nm,
                 via.net_id.raw(),
-                0,     // v0.1.7: 0nm clearance for same-net structural hole
-                false, // Assume not tented for manual routing tests
+                0,
+                false,
                 pad_diameter,
-                75_000, // Default expansion
+                75_000,
             );
         }
     }
 
     /// **v0.1.7: Synchronize net names from pins to bound pours**
-    ///
-    /// After routing is complete, some pins may have been assigned to nets.
-    /// This function ensures that any pours bound to those pins inherit
-    /// the net assignment for proper export and connectivity checking.
     pub fn synchronize_nets(&mut self) {
         let mut updates = Vec::new();
 
-        // 1. Update Pours based on device bindings
         for (pour_idx, pour) in self.pours.iter().enumerate() {
             if let Some(binding) = &pour.device_binding {
                 let resolved_opt = (|| {
@@ -498,14 +367,12 @@ impl HardwareSpace {
         }
 
         for (pour_idx, net_name, net_id, bbox, material_name) in updates {
-            // Update PourMetadata
             self.pours[pour_idx].net = Some(net_name.into());
 
-            // Update corresponding SubstrateLayer in VoxelGrid
             if let Some(pour_bbox) = bbox {
                 let material_id = self.material_registry.get_or_register(&material_name);
-                for layer in self.voxel_grid.get_substrate_layers_mut() {
-                    if layer.layer_type == crate::voxel_grid::SubstrateLayerType::Pour
+                for layer in self.entity_graph.get_substrate_layers_mut() {
+                    if layer.layer_type == crate::geometry_router::entity_graph::SubstrateLayerType::Pour
                         && layer.material == material_id
                         && layer.bbox == pour_bbox
                     {
@@ -515,9 +382,6 @@ impl HardwareSpace {
             }
         }
 
-        // 2. Update Contacts (Vias) based on net names
-        // v0.1.7: If a contact has a net name but its SubstrateLayers (caps) don't have the net ID,
-        // sync them so that structural carving (anti-pads) works correctly.
         for contact in &self.contacts {
             if let Some(net_name) = &contact.net {
                 if let Some(net_id) = self.netlist.get_net_by_name(net_name.as_str()) {
@@ -525,8 +389,7 @@ impl HardwareSpace {
                         let material_id = self
                             .material_registry
                             .get_or_register(&contact.material_name);
-                        for layer in self.voxel_grid.get_substrate_layers_mut() {
-                            // Sync net ID to all matching SubstrateLayers (caps/pads)
+                        for layer in self.entity_graph.get_substrate_layers_mut() {
                             if layer.material == material_id && layer.bbox == contact_bbox {
                                 layer.net = net_id.raw();
                             }

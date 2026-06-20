@@ -69,9 +69,11 @@ pub struct ShapeGenerator {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum GeometryStatement {
     /// A variable declaration: let name = expr
-    Variable { name: String, value: Expr },
+    LetBinding { name: String, value: Expr },
     /// A point expression: Point(x: expr, y: expr)
     Point { x: Expr, y: Expr },
+    /// A generator call: GeneratorName(points: 16, outer: width / 2, inner: width / 4)
+    GeneratorCall { name: String, args: Vec<(String, Expr)> },
 }
 
 /// A geometry block in a shape definition (Mode B: Parametric Loop & Trigonometry)
@@ -80,12 +82,12 @@ pub enum GeometryBlock {
     /// A for loop: for i in start..end: ...
     ForLoop {
         variable: String,
-        start: i64,
-        end: i64,
+        start: Expr,
+        end: Expr,
         body: Vec<GeometryStatement>,
     },
-    /// A variable declaration at geometry block scope: let x = expr
-    Variable { name: String, value: Expr },
+    /// A let binding at geometry block scope: let x = expr
+    LetBinding { name: String, value: Expr },
 }
 
 /// A shape definition — defines a 2D polygon cross-section for vias

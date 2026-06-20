@@ -3,7 +3,8 @@
 use super::types::{NetProperties, PhysicsViolation};
 use crate::bit_chunk::BitChunk;
 use crate::geometry::Point3D;
-use crate::voxel_grid::{NetId, VoxelGrid};
+use crate::voxel_grid::NetId;
+use crate::geometry_router::EntityGraph;
 
 /// Validate voltage boundaries in a chunk
 ///
@@ -26,7 +27,7 @@ use crate::voxel_grid::{NetId, VoxelGrid};
 /// # Returns
 /// Vector of voltage boundary violations
 pub fn validate_voltage_boundaries<F>(
-    grid: &VoxelGrid,
+    grid: &EntityGraph,
     _bit_chunk: &BitChunk,
     base_x: usize,
     base_y: usize,

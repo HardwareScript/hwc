@@ -168,7 +168,7 @@ pub fn execute(
             let stats = space.netlist.stats();
             let route_count = space.analytic_routes.len();
             let segment_count: usize = space.analytic_routes.iter().map(|r| r.segments.len()).sum();
-            let physical_regions = space.voxel_grid.get_substrate_layers().len();
+            let physical_regions = space.entity_graph.get_substrate_layers().len();
             println!(
                 "\n[DEBUG identity] Logical Nets: {} | Route Requests: {} | Route Segments: {} | Physical Regions: {} | Netlist Components: {}",
                 stats.net_count, route_count, segment_count, physical_regions, stats.component_count

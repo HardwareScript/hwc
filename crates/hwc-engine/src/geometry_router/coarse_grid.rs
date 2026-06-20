@@ -16,7 +16,7 @@
 //! - Maintains sub-millisecond performance at scale
 
 use crate::geometry::Point3D;
-use crate::voxel_grid::VoxelGrid;
+use crate::geometry_router::EntityGraph;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::collections::BinaryHeap;
 
@@ -106,9 +106,9 @@ pub struct CoarseGrid {
 }
 
 impl CoarseGrid {
-    /// Create a new coarse grid from a voxel grid
-    pub fn from_voxel_grid(voxel_grid: &VoxelGrid, _voxel_size_nm: i64) -> Self {
-        let (size_x, size_y, size_z) = voxel_grid.size();
+    /// Create a new coarse grid from an entity graph
+    pub fn from_entity_graph(entity_graph: &EntityGraph, _voxel_size_nm: i64) -> Self {
+        let (size_x, size_y, size_z) = entity_graph.size();
 
         // Calculate coarse grid bounds
         let max_coarse_x = size_x.div_ceil(COARSE_CELL_SIZE) as i32;
@@ -124,7 +124,7 @@ impl CoarseGrid {
             for coarse_y in 0..max_coarse_y {
                 for coarse_x in 0..max_coarse_x {
                     let node = CoarseNode::new(coarse_x, coarse_y, coarse_z);
-                    let occ = Self::calculate_occupancy(voxel_grid, coarse_x, coarse_y, coarse_z);
+                    let occ = Self::calculate_occupancy(entity_graph, coarse_x, coarse_y, coarse_z);
 
                     if occ > 0 {
                         occupancy.insert(node, occ);
@@ -138,12 +138,12 @@ impl CoarseGrid {
 
     /// Calculate occupancy percentage for a coarse cell
     fn calculate_occupancy(
-        voxel_grid: &VoxelGrid,
+        entity_graph: &EntityGraph,
         coarse_x: i32,
         coarse_y: i32,
         coarse_z: i32,
     ) -> u8 {
-        let (size_x, size_y, size_z) = voxel_grid.size();
+        let (size_x, size_y, size_z) = entity_graph.size();
 
         let start_x = (coarse_x as usize) * COARSE_CELL_SIZE;
         let start_y = (coarse_y as usize) * COARSE_CELL_SIZE;
@@ -161,7 +161,7 @@ impl CoarseGrid {
             for y in (start_y..end_y).step_by(4) {
                 for x in (start_x..end_x).step_by(4) {
                     total_count += 1;
-                    if !voxel_grid.is_empty(x, y, z) {
+                    if !entity_graph.is_empty(x, y, z) {
                         occupied_count += 1;
                     }
                 }

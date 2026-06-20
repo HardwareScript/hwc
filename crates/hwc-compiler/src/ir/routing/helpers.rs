@@ -256,10 +256,10 @@ pub fn register_net_for_route(
     let goal_comp_name = construct_component_name(&route.to)?;
 
     space
-        .voxel_grid
+        .entity_graph
         .set_pin_net(&start_comp_name, &start_pin_name, actual_net_name.as_str());
     space
-        .voxel_grid
+        .entity_graph
         .set_pin_net(&goal_comp_name, &goal_pin_name, actual_net_name.as_str());
 
     Ok(net_id)
@@ -279,8 +279,8 @@ pub fn collect_existing_nets(
 
     // CRITICAL FIX: Use sparse iteration instead of dense O(N³) loop
     // This iterates only over occupied chunks, not all 4 billion voxel coordinates!
-    for (x, y, z, _material, net_handle) in space.voxel_grid.iter_occupied() {
-        let net_id = net_handle.0;
+    for (x, y, z, _material, net_handle) in space.entity_graph.iter_occupied() {
+        let net_id = net_handle;
         if net_id > 0 {
             let position = space.voxel_to_position(x, y, z);
             nets_map.entry(net_id).or_default().push(position);

@@ -171,5 +171,6 @@ pub fn profile_to_constraints(
         stackup,
         bridges,
         solder_mask_expansion_nm,
+        technology: profile.technology.clone(),
     })
 }

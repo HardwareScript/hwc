@@ -21,7 +21,7 @@ use crate::placement::Anchor;
 use crate::space::VoxelSize;
 use compact_str::CompactString;
 
-use crate::voxel_grid::VoxelGrid;
+use crate::geometry_router::EntityGraph;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 /// Component placement request for floorplanning
@@ -142,7 +142,7 @@ impl Floorplanner {
     pub fn auto_place(
         &self,
         requests: &[ComponentPlacementRequest],
-        grid: &VoxelGrid,
+        entity_graph: &EntityGraph,
         _arena: &NetlistArena,
     ) -> Vec<FloorplanResult> {
         if requests.is_empty() {
@@ -150,7 +150,7 @@ impl Floorplanner {
         }
 
         let mut results = Vec::new();
-        let (grid_x, grid_y, grid_z) = grid.size();
+        let (grid_x, grid_y, grid_z) = entity_graph.size();
         let board_size = (
             (grid_x as i64) * self.voxel_size_nm,
             (grid_y as i64) * self.voxel_size_nm,
@@ -205,14 +205,14 @@ impl Floorplanner {
         let clusters = self.cluster_by_connectivity(&unanchored_requests, &connectivity);
 
         // Phase 3: Create coarse grid from voxel grid
-        let coarse_grid = CoarseGrid::from_voxel_grid(grid, self.voxel_size_nm);
+        let coarse_grid = CoarseGrid::from_entity_graph(entity_graph, self.voxel_size_nm);
 
         // Phase 4: Assign clusters to coarse regions
-        let cluster_placements = self.assign_clusters_to_regions(&clusters, &coarse_grid, grid);
+        let cluster_placements = self.assign_clusters_to_regions(&clusters, &coarse_grid, entity_graph);
 
         // Phase 5: Place unanchored components within their assigned regions
         let unanchored_results =
-            self.place_components_in_regions(&unanchored_requests, &cluster_placements, grid);
+            self.place_components_in_regions(&unanchored_requests, &cluster_placements, entity_graph);
 
         results.extend(unanchored_results);
         results
@@ -304,10 +304,10 @@ impl Floorplanner {
         &self,
         clusters: &[Vec<ComponentId>],
         coarse_grid: &CoarseGrid,
-        grid: &VoxelGrid,
+        entity_graph: &EntityGraph,
     ) -> FxHashMap<ComponentId, CoarseNode> {
         let mut placements: FxHashMap<ComponentId, CoarseNode> = FxHashMap::default();
-        let (size_x, size_y, size_z) = grid.size();
+        let (size_x, size_y, size_z) = entity_graph.size();
 
         // Calculate coarse grid bounds
         let max_coarse_x = size_x.div_ceil(COARSE_CELL_SIZE) as i32;
@@ -464,7 +464,7 @@ impl Floorplanner {
         &self,
         requests: &[ComponentPlacementRequest],
         cluster_placements: &FxHashMap<ComponentId, CoarseNode>,
-        grid: &VoxelGrid,
+        entity_graph: &EntityGraph,
     ) -> Vec<FloorplanResult> {
         let mut results = Vec::new();
 
@@ -475,7 +475,7 @@ impl Floorplanner {
                 .unwrap_or(CoarseNode::new(0, 0, 0));
 
             // Convert coarse region to physical position (center of region)
-            let position = self.coarse_node_to_position(coarse_region, req, grid);
+            let position = self.coarse_node_to_position(coarse_region, req, entity_graph);
 
             results.push(FloorplanResult {
                 component_id: req.component_id,
@@ -492,7 +492,7 @@ impl Floorplanner {
         &self,
         node: CoarseNode,
         req: &ComponentPlacementRequest,
-        grid: &VoxelGrid,
+        entity_graph: &EntityGraph,
     ) -> Point3D {
         // Calculate center of coarse cell in voxels
         let voxel_x = (node.x as usize * COARSE_CELL_SIZE) + (COARSE_CELL_SIZE / 2);
@@ -500,7 +500,7 @@ impl Floorplanner {
         let voxel_z = (node.z as usize * COARSE_CELL_SIZE) + (COARSE_CELL_SIZE / 2);
 
         // Clamp to grid bounds
-        let (size_x, size_y, size_z) = grid.size();
+        let (size_x, size_y, size_z) = entity_graph.size();
         let voxel_x = voxel_x.min(size_x.saturating_sub(req.estimated_size.0));
         let voxel_y = voxel_y.min(size_y.saturating_sub(req.estimated_size.1));
         let voxel_z = voxel_z.min(size_z.saturating_sub(req.estimated_size.2));

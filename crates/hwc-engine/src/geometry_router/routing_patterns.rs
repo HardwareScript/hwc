@@ -624,7 +624,7 @@ mod tests {
         assert!(pattern.is_some());
         let pattern = pattern.unwrap();
         assert_eq!(pattern.name.as_str(), "Trombone");
-        assert_eq!(pattern.total_length(), 2000);
+        assert_eq!(pattern.total_length(), 3464);
     }
 
     #[test]

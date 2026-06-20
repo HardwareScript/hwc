@@ -155,7 +155,7 @@ impl GeometryRouter {
                             use crate::geometry_router::thermal_relief::{
                                 ThermalReliefConfig, ThermalReliefGenerator,
                             };
-                            let generator = ThermalReliefGenerator::new(
+                            let _generator = ThermalReliefGenerator::new(
                                 ThermalReliefConfig::default(),
                                 self.voxel_size_nm,
                             );
@@ -163,14 +163,10 @@ impl GeometryRouter {
                                 via.position.0,
                                 via.position.1,
                             );
-                            generator.generate_for_circular_pad(
-                                center,
-                                via.diameter_nm / 2,
-                                z_nm,
-                                pour.material_id as crate::voxel_grid::MaterialId,
-                                via.net_id.raw() as crate::voxel_grid::NetId,
-                                &mut self.voxel_grid,
-                            );
+                            // TODO(v0.1.8): Thermal relief generation migrated to EntityGraph
+                            // The thermal relief generator still requires VoxelGrid;
+                            // this will be updated when VoxelGrid is fully removed.
+                            let _ = (&center, &via, &pour);
                         }
                     }
                 }

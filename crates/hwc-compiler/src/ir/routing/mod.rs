@@ -87,6 +87,7 @@ mod tests {
             bridge: None,
             enter_escape: None,
             exit_escape: None,
+            current_limit_ac: None,
             span: hwc_parser::Span::new(0, 0),
         };
 
@@ -118,6 +119,7 @@ mod tests {
             bridge: None,
             enter_escape: None,
             exit_escape: None,
+            current_limit_ac: None,
             span: hwc_parser::Span::new(0, 0),
         };
 

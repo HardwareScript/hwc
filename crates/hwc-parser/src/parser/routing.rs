@@ -198,6 +198,7 @@ impl super::Parser {
         let mut bridge = None;
         let mut exit_escape = None;
         let mut enter_escape = None;
+        let mut current_limit_ac = None;
 
         // Check if this has a properties block (starts with colon)
         if self.check(&Token::Colon) {
@@ -255,7 +256,7 @@ impl super::Parser {
                     self.expect(&Token::Colon)?;
                     bridge = Some(self.expect_identifier_string()?.into());
                 } else {
-                    // It's an identifier (width, strategy, or pattern parameter)
+                    // It's an identifier (width, strategy, current_limit, or pattern parameter)
                     let key_span = self.current_span();
                     let key = self.expect_identifier_string()?;
                     self.expect(&Token::Colon)?;
@@ -266,6 +267,62 @@ impl super::Parser {
                         }
                         "strategy" => {
                             strategy = Some(self.expect_identifier()?);
+                        }
+                        "current_limit" => {
+                            // Parse: current_limit: [rms: <Value>, peak: <Value>]
+                            // Or backward compat: current_limit: <Value>
+                            if self.check(&Token::OpenBracket) {
+                                self.advance(); // consume '['
+                                let mut rms = None;
+                                let mut peak = None;
+
+                                while !self.check(&Token::CloseBracket) && !self.is_at_end() {
+                                    if self.check(&Token::Newline) {
+                                        self.advance();
+                                        continue;
+                                    }
+                                    let key_name = self.expect_identifier_string()?;
+                                    self.expect(&Token::Colon)?;
+                                    let val = self.parse_expression()?;
+
+                                    match key_name.as_str() {
+                                        "rms" => rms = Some(val),
+                                        "peak" => peak = Some(val),
+                                        _ => {
+                                            return Err(self.error(&format!(
+                                                "Unknown current_limit field: '{}'. Expected 'rms' or 'peak'",
+                                                key_name
+                                            )));
+                                        }
+                                    }
+
+                                    if self.check(&Token::Comma) {
+                                        self.advance();
+                                    }
+                                }
+                                self.expect(&Token::CloseBracket)?;
+
+                                let rms_expr =
+                                    rms.ok_or_else(|| self.error("current_limit missing 'rms' field"))?;
+                                let peak_expr =
+                                    peak.ok_or_else(|| self.error("current_limit missing 'peak' field"))?;
+
+                                let cl_span = Span::new(key_span.start, self.previous_span().end);
+                                current_limit_ac = Some(CurrentLimitAc {
+                                    rms: rms_expr,
+                                    peak: peak_expr,
+                                    span: cl_span,
+                                });
+                            } else {
+                                // Backward compat: single value treated as DC (both rms and peak)
+                                let val = self.parse_expression()?;
+                                let cl_span = Span::new(key_span.start, self.previous_span().end);
+                                current_limit_ac = Some(CurrentLimitAc {
+                                    rms: val.clone(),
+                                    peak: val,
+                                    span: cl_span,
+                                });
+                            }
                         }
                         _ => {
                             // Pattern parameter
@@ -295,6 +352,7 @@ impl super::Parser {
             bridge,
             exit_escape,
             enter_escape,
+            current_limit_ac,
             span: Span::new(start_pos, end_pos),
         })
     }

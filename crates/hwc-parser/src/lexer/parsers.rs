@@ -120,6 +120,7 @@ pub fn parse_generic_measurement(lex: &mut logos::Lexer<Token>) -> Option<Measur
             "cm" => Unit::Distance(DistanceUnit::Centimeters),
             "µm" | "um" => Unit::Distance(DistanceUnit::Micrometers),
             "nm" => Unit::Distance(DistanceUnit::Nanometers),
+            "pm" => Unit::Distance(DistanceUnit::Picometers),
 
             // Voltage (needed for safety clearances)
             "kV" => Unit::Voltage(VoltageUnit::Kilovolts),

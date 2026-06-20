@@ -8,12 +8,17 @@ use compact_str::CompactString;
 use std::fmt;
 
 /// Distance units - REQUIRED for voxel placement and routing
+///
+/// All distance units can be converted to picometers (pm), which is the
+/// engine's internal coordinate representation. Maximum addressable range:
+/// +/-9,220 km (i64 pm range).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum DistanceUnit {
     Millimeters,
     Centimeters,
     Micrometers,
     Nanometers,
+    Picometers,
 }
 
 impl fmt::Display for DistanceUnit {
@@ -23,6 +28,7 @@ impl fmt::Display for DistanceUnit {
             Self::Centimeters => write!(f, "cm"),
             Self::Micrometers => write!(f, "µm"),
             Self::Nanometers => write!(f, "nm"),
+            Self::Picometers => write!(f, "pm"),
         }
     }
 }
@@ -115,6 +121,31 @@ impl fmt::Display for Unit {
     }
 }
 
+impl DistanceUnit {
+    /// Convert a value in this unit to nanometers (f64).
+    pub fn to_nanometers(&self, value: f64) -> f64 {
+        match self {
+            Self::Millimeters => value * 1_000_000.0,
+            Self::Centimeters => value * 10_000_000.0,
+            Self::Micrometers => value * 1_000.0,
+            Self::Nanometers => value,
+            Self::Picometers => value * 0.001,
+        }
+    }
+
+    /// Convert a value in this unit to picometers (i64).
+    /// This is the engine's internal coordinate representation.
+    pub fn to_picometers(&self, value: f64) -> i64 {
+        match self {
+            Self::Millimeters => (value * 1_000_000.0) as i64,
+            Self::Centimeters => (value * 10_000_000.0) as i64,
+            Self::Micrometers => (value * 1_000.0) as i64,
+            Self::Nanometers => value as i64,
+            Self::Picometers => value as i64,
+        }
+    }
+}
+
 /// A measurement with value and unit (for Logos compatibility)
 #[derive(Debug, Clone, PartialEq)]
 pub struct Measurement {
@@ -166,5 +197,46 @@ impl Measurement {
 impl fmt::Display for Measurement {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}{}", self.value, self.unit)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_pm_to_nanometers() {
+        assert_eq!(DistanceUnit::Picometers.to_nanometers(1000.0), 1.0);
+        assert_eq!(DistanceUnit::Picometers.to_nanometers(1_000_000.0), 1000.0);
+    }
+
+    #[test]
+    fn test_pm_to_picometers() {
+        assert_eq!(DistanceUnit::Picometers.to_picometers(42.0), 42);
+    }
+
+    #[test]
+    fn test_mm_to_picometers() {
+        assert_eq!(DistanceUnit::Millimeters.to_picometers(1.0), 1_000_000);
+    }
+
+    #[test]
+    fn test_cm_to_picometers() {
+        assert_eq!(DistanceUnit::Centimeters.to_picometers(1.0), 10_000_000);
+    }
+
+    #[test]
+    fn test_um_to_picometers() {
+        assert_eq!(DistanceUnit::Micrometers.to_picometers(1.0), 1_000);
+    }
+
+    #[test]
+    fn test_nm_to_picometers() {
+        assert_eq!(DistanceUnit::Nanometers.to_picometers(1.0), 1);
+    }
+
+    #[test]
+    fn test_display_pm() {
+        assert_eq!(format!("{}", DistanceUnit::Picometers), "pm");
     }
 }

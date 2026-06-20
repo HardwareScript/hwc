@@ -98,7 +98,7 @@ pub fn route_net_sdf_accelerated(
     // Initialize with snapped start node
     let h = heuristic(start_snapped, goal_snapped);
     state.cost_so_far.insert(start_snapped, 0);
-    state.add_node(start_snapped, h);
+    state.add_node(start_snapped, h, 0);
 
     let mut iterations = 0;
     const MAX_ITERATIONS: usize = 100_000;
@@ -296,8 +296,8 @@ pub fn route_net_sdf_accelerated(
 
                     // Only leap if target is also empty (obeying exemptions)
                     // Check both SDF distance AND component interior lockout
-                    let leap_blocked_by_component = if let Some(voxel_grid) = params.voxel_grid {
-                        voxel_grid.point_in_component(leap_target.x, leap_target.y, leap_target.z).map(|name| {
+                    let leap_blocked_by_component = if let Some(entity_graph) = params.entity_graph {
+                        entity_graph.point_in_component(leap_target.x, leap_target.y, leap_target.z).map(|name| {
                             // Block if inside a component that is NOT exempt
                             params.exempt_components.is_empty()
                                 || !params.exempt_components.contains(&name)
@@ -320,7 +320,7 @@ pub fn route_net_sdf_accelerated(
 
                             let h = heuristic(leap_target, goal_snapped);
                             let f_score = new_cost + h;
-                            state.add_node(leap_target, f_score);
+                            state.add_node(leap_target, f_score, new_cost);
                         }
 
                         // Continue to next iteration (skip normal neighbor expansion)
@@ -339,8 +339,8 @@ pub fn route_net_sdf_accelerated(
         );
 
         // BINARY COLLISION SKIP: Try to validate all neighbors at once
-        let valid_neighbors = if let Some(grid) = params.voxel_grid {
-            try_binary_collision_skip(current, &neighbors, grid, params.voxel_size)
+        let valid_neighbors = if let Some(entity_graph) = params.entity_graph {
+            try_binary_collision_skip(current, &neighbors, entity_graph, params.voxel_size)
         } else {
             None
         };
@@ -376,9 +376,9 @@ pub fn route_net_sdf_accelerated(
             // Exempt components containing the start or goal pins (boundary-docking).
             // This is the primary guard against routing through pad interiors — the SDF
             // alone cannot catch pads that are not registered as component_metadata.
-            if let Some(voxel_grid) = params.voxel_grid {
+            if let Some(entity_graph) = params.entity_graph {
                 if let Some(component_name) =
-                    voxel_grid.point_in_component(neighbor.x, neighbor.y, neighbor.z)
+                    entity_graph.point_in_component(neighbor.x, neighbor.y, neighbor.z)
                 {
                     if !params.exempt_components.is_empty()
                         && params.exempt_components.contains(&component_name)
@@ -426,7 +426,7 @@ pub fn route_net_sdf_accelerated(
 
                 let h = heuristic(neighbor, goal_snapped);
                 let f_score = new_cost + h;
-                state.add_node(neighbor, f_score);
+                state.add_node(neighbor, f_score, new_cost);
             }
         }
     }

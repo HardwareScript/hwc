@@ -32,14 +32,8 @@ pub fn run_drc_check(
         Vec<hwc_engine::Point3D>,
     > = FxHashMap::default();
 
-    // Collect voxels from main grid
-    for (x, y, z, _material, net_id) in space.voxel_grid.iter_occupied() {
-        let pos = space.voxel_to_position(x, y, z);
-        current_net_voxels.entry(net_id).or_default().push(pos);
-    }
-
-    // PRIMITIVES OVER PIXELS: Use substrate layer bounding boxes directly (analytic geometry)
-    let substrate_layers = space.voxel_grid.get_substrate_layers();
+    // v0.1.8: Use entity graph substrate layers (analytic geometry, no voxels)
+    let substrate_layers = space.entity_graph.get_substrate_layers();
 
     // Track geometry types for each net (for proper thermal analysis)
     use hwc_engine::design_rule_check::GeometryType;
@@ -201,7 +195,7 @@ pub fn run_drc_check(
     }
 
     // Run analytic via enclosure check
-    let substrate_layers = space.voxel_grid.get_substrate_layers();
+    let substrate_layers = space.entity_graph.get_substrate_layers();
     let via_enclosure_report = hwc_engine::design_rule_check::validate_via_enclosure_analytic(
         &space.contacts,
         substrate_layers,
@@ -229,7 +223,7 @@ pub fn run_drc_check(
     // v0.1.7: Run God-Tier Physics Validator (Bit-Parallel)
     let silicon_id = space.material_registry.get_id("Silicon");
     let physics_validator = hwc_engine::physics_validator::PhysicsValidator::new();
-    let physics_report = physics_validator.validate_parallel(&space.voxel_grid, silicon_id);
+    let physics_report = physics_validator.validate_parallel(&space.entity_graph, silicon_id);
 
     // Merge physics violations into DRC report
     for violation in physics_report.violations {

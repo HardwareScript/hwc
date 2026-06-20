@@ -101,12 +101,12 @@ fn collect_nets_from_space(space: &hwc_engine::HardwareSpace) -> Vec<NetVoxels> 
     let mut net_map: FxHashMap<u32, Vec<hwc_engine::Point3D>> = FxHashMap::default();
 
     // Scan voxel grid for occupied voxels
-    let (x_size, y_size, z_size) = space.voxel_grid.size();
+    let (x_size, y_size, z_size) = space.entity_graph.size();
 
     for x in 0..x_size {
         for y in 0..y_size {
             for z in 0..z_size {
-                let net_id = space.voxel_grid.get_net(x, y, z);
+                let net_id = space.entity_graph.get_net(x, y, z);
 
                 // Skip empty voxels (net_id == 0)
                 if net_id > 0 {

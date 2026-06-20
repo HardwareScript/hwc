@@ -26,7 +26,7 @@ pub fn export(
     writeln!(w, "<?xml version=\"1.0\" encoding=\"utf-8\"?>")?;
     writeln!(w, "<layer-properties>")?;
 
-    let substrate_layers = space.voxel_grid.get_substrate_layers();
+    let substrate_layers = space.entity_graph.get_substrate_layers();
     
     for layer in substrate_layers.iter() {
         let mat_name = space

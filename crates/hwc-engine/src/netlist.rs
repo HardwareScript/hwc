@@ -420,7 +420,7 @@ impl NetlistArena {
     ///
     /// Returns an iterator over all valid NetIds.
     pub fn all_net_ids(&self) -> impl Iterator<Item = NetId> + '_ {
-        (0..self.nets.len()).map(|i| NetId::new(i as u32))
+        (1..=self.nets.len()).map(|i| NetId::new(i as u32))
     }
 }
 

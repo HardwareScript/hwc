@@ -185,7 +185,7 @@ pub fn unroll_internal_features(
 
                             let pad_diameter_nm = drill_diameter_nm + (2 * min_annular_ring_nm);
 
-                            space.voxel_grid.add_tube_substrate_layer(
+                            space.entity_graph.add_tube_substrate_layer(
                                 copper_material_id,
                                 via_net_id.raw(),
                                 hole_bbox,
@@ -193,8 +193,8 @@ pub fn unroll_internal_features(
                                 inner_diameter_nm as u32,
                                 pad_diameter_nm as u32,
                                 16,
-                                hwc_engine::voxel_grid::CapType::Annular,
-                                hwc_engine::voxel_grid::CapType::Annular,
+                                hwc_engine::geometry_router::entity_graph::CapType::Annular,
+                                hwc_engine::geometry_router::entity_graph::CapType::Annular,
                                 None,
                             );
 
@@ -213,7 +213,7 @@ pub fn unroll_internal_features(
                                     start_z_nm + space.voxel_size.z_nm,
                                 ),
                             );
-                            space.voxel_grid.add_cylinder_substrate_layer(
+                            space.entity_graph.add_cylinder_substrate_layer(
                                 copper_material_id,
                                 via_net_id.raw(),
                                 pad_bbox_start,
@@ -236,7 +236,7 @@ pub fn unroll_internal_features(
                                     end_z_nm + space.voxel_size.z_nm,
                                 ),
                             );
-                            space.voxel_grid.add_cylinder_substrate_layer(
+                            space.entity_graph.add_cylinder_substrate_layer(
                                 copper_material_id,
                                 via_net_id.raw(),
                                 pad_bbox_end,
@@ -245,7 +245,7 @@ pub fn unroll_internal_features(
                                 0,
                             );
 
-                            let board_max_z_nm = (space.grid.z_layers as i64).saturating_sub(1)
+                            let board_max_z_nm = (space.grid_cells().z_layers as i64).saturating_sub(1)
                                 * space.voxel_size.z_nm;
                             let via = Via::new(
                                 (absolute_x_nm, absolute_y_nm),
@@ -275,7 +275,7 @@ pub fn unroll_internal_features(
                         }
                     }
 
-                    space.voxel_grid.add_component_pin(
+                    space.entity_graph.add_component_pin(
                         absolute_x_nm,
                         absolute_y_nm,
                         absolute_z_nm,

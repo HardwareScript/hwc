@@ -3,7 +3,7 @@ use super::super::super::errors::IrError;
 use super::super::super::stackup_manager::StackupManager;
 use super::super::helpers::parse_rectangle_dimensions;
 use crate::SymbolTable;
-use hwc_engine::{geometry::Point3D, HardwareSpace, VoxelGrid};
+use hwc_engine::{geometry::Point3D, HardwareSpace};
 
 pub struct MountingResult {
     pub position: Point3D,
@@ -105,11 +105,11 @@ pub fn resolve_mounting_and_elevation(
 pub fn handle_snap_to_surface(space: &HardwareSpace, position: &mut Point3D) {
     // Find the highest substrate/pour at this location
     // We use the specified (x, y) as the probe point
-    let (vx, vy, _) = VoxelGrid::nm_to_voxel(*position, &space.voxel_size);
+    let (vx, vy, _) = hwc_engine::geometry_router::EntityGraph::nm_to_voxel(*position, &space.voxel_size);
 
     // Safety: Clamp vx, vy to grid bounds
-    let vx = vx.min(space.grid.x_cols - 1);
-    let vy = vy.min(space.grid.y_rows - 1);
+    let vx = vx.min(space.grid_cells().x_cols - 1);
+    let vy = vy.min(space.grid_cells().y_rows - 1);
 
     let mut highest_z_nm = 0;
 
@@ -125,8 +125,8 @@ pub fn handle_snap_to_surface(space: &HardwareSpace, position: &mut Point3D) {
     }
 
     // Check voxel grid for pours and other filled voxels
-    for vz in (0..space.grid.z_layers).rev() {
-        if !space.voxel_grid.is_empty(vx, vy, vz) {
+    for vz in (0..space.grid_cells().z_layers).rev() {
+        if !space.entity_graph.is_empty(vx, vy, vz) {
             // The surface is the TOP of the highest occupied voxel
             let surface_z_nm = (vz as i64 + 1) * space.voxel_size.z_nm;
             highest_z_nm = highest_z_nm.max(surface_z_nm);

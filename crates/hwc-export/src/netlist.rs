@@ -155,7 +155,7 @@ pub fn export(
                         // First, try to get net assignment from VoxelGrid component pins
                         // (these come from the net: block in component placement)
                         let voxel_grid_net = space
-                            .voxel_grid
+                            .entity_graph
                             .get_component_pins()
                             .iter()
                             .find(|vp| {

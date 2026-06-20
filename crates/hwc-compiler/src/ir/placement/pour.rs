@@ -195,7 +195,7 @@ pub fn place_pour(
                 } else {
                     hwc_engine::netlist::NetId::new(0)
                 };
-                space.voxel_grid.drill_hole(bbox, None, pour_net_id.raw());
+                space.entity_graph.drill_hole(bbox, None, pour_net_id.raw());
                 println!(
                     "   ├─ Auto-carved substrate for pour '{}' ({})",
                     pour.name, pour.material
@@ -332,7 +332,7 @@ pub fn place_pour(
                         binding.device_name, binding.terminal, net_name
                     );
 
-                    space.voxel_grid.set_pin_net(
+                    space.entity_graph.set_pin_net(
                         &binding.device_name,
                         &binding.terminal,
                         net_name.as_str(),
@@ -341,11 +341,17 @@ pub fn place_pour(
             }
         }
 
-        space.voxel_grid.add_component_pin(
+        let comp_name_for_pin = if let Some(binding) = &pour.device {
+            binding.device_name.clone()
+        } else {
+            pour.name.to_string().into()
+        };
+
+        space.entity_graph.add_component_pin(
             center_x,
             center_y,
             center_z,
-            pour.name.to_string(),
+            comp_name_for_pin,
             "anchor".into(),
             Some(net_name.clone()),
         );
@@ -367,14 +373,14 @@ pub fn place_pour(
     let bbox = hwc_engine::geometry::BoundingBox::new(start_with_z, end_with_z);
     if let Some(radius) = circle_radius_nm {
         space
-            .voxel_grid
+            .entity_graph
             .add_circle_substrate_layer(material_id, net_id, bbox, radius);
     } else {
-        space.voxel_grid.add_substrate_layer(
+        space.entity_graph.add_substrate_layer(
             material_id,
             net_id,
             bbox,
-            hwc_engine::voxel_grid::SubstrateLayerType::Pour,
+            hwc_engine::geometry_router::entity_graph::SubstrateLayerType::Pour,
         );
     }
 

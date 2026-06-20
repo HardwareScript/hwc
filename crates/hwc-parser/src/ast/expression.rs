@@ -198,7 +198,7 @@ impl Value {
         }
     }
 
-    /// Convert to measurement in nanometers
+    /// Convert to nanometers
     /// For percentages, requires the reference dimension
     pub fn to_nanometers(&self) -> Result<i64, String> {
         match self {
@@ -208,6 +208,8 @@ impl Value {
                 super::Unit::Millimeter => Ok((value * 1_000_000.0) as i64),
                 super::Unit::Centimeter => Ok((value * 10_000_000.0) as i64),
                 super::Unit::Micrometer => Ok((value * 1_000.0) as i64),
+                super::Unit::Nanometer => Ok(*value as i64),
+                super::Unit::Picometer => Ok((*value * 0.001) as i64),
                 _ => Err(format!("Cannot convert {:?} to nanometers", unit)),
             },
             Value::Percentage(_) => {
@@ -225,11 +227,52 @@ impl Value {
                 super::Unit::Millimeter => Ok((value * 1_000_000.0) as i64),
                 super::Unit::Centimeter => Ok((value * 10_000_000.0) as i64),
                 super::Unit::Micrometer => Ok((value * 1_000.0) as i64),
+                super::Unit::Nanometer => Ok(*value as i64),
+                super::Unit::Picometer => Ok((*value * 0.001) as i64),
                 _ => Err(format!("Cannot convert {:?} to nanometers", unit)),
             },
             Value::Percentage(pct) => {
                 // Convert percentage to nanometers: 50% of 100mm = 50mm
                 Ok(((pct / 100.0) * reference_nm as f64) as i64)
+            }
+        }
+    }
+
+    /// Convert to picometers (i64) — the engine's internal coordinate representation.
+    /// Maximum addressable range: +/-9,220 km.
+    pub fn to_picometers(&self) -> Result<i64, String> {
+        match self {
+            Value::Number(n) => Ok(*n), // Already a number, assume pm if used as distance
+            Value::Float(f) => Ok(*f as i64),
+            Value::Measurement { value, unit } => match unit {
+                super::Unit::Millimeter => Ok((value * 1_000_000.0) as i64),
+                super::Unit::Centimeter => Ok((value * 10_000_000.0) as i64),
+                super::Unit::Micrometer => Ok((value * 1_000.0) as i64),
+                super::Unit::Nanometer => Ok((*value * 1_000.0) as i64),
+                super::Unit::Picometer => Ok(*value as i64),
+                _ => Err(format!("Cannot convert {:?} to picometers", unit)),
+            },
+            Value::Percentage(_) => {
+                Err("Cannot convert percentage to picometers without reference dimension".into())
+            }
+        }
+    }
+
+    /// Convert to picometers with a reference dimension (for percentages)
+    pub fn to_picometers_with_ref(&self, reference_pm: i64) -> Result<i64, String> {
+        match self {
+            Value::Number(n) => Ok(*n),
+            Value::Float(f) => Ok(*f as i64),
+            Value::Measurement { value, unit } => match unit {
+                super::Unit::Millimeter => Ok((value * 1_000_000.0) as i64),
+                super::Unit::Centimeter => Ok((value * 10_000_000.0) as i64),
+                super::Unit::Micrometer => Ok((value * 1_000.0) as i64),
+                super::Unit::Nanometer => Ok((*value * 1_000.0) as i64),
+                super::Unit::Picometer => Ok(*value as i64),
+                _ => Err(format!("Cannot convert {:?} to picometers", unit)),
+            },
+            Value::Percentage(pct) => {
+                Ok(((pct / 100.0) * reference_pm as f64) as i64)
             }
         }
     }

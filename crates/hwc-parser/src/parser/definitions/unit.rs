@@ -62,6 +62,7 @@ impl super::super::Parser {
                 DistanceUnit::Centimeters => Unit::Centimeter,
                 DistanceUnit::Micrometers => Unit::Micrometer,
                 DistanceUnit::Nanometers => Unit::Nanometer,
+                DistanceUnit::Picometers => Unit::Picometer,
             },
             crate::lexer::units::Unit::Voltage(u) => match u {
                 VoltageUnit::Volts => Unit::Volt,

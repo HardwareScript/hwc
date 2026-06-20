@@ -58,7 +58,7 @@ impl crate::parser::Parser {
         }
 
         let mut dimensions: Option<Dimensions> = None;
-        let mut grid: Option<Grid> = None;
+        let mut resolution: Option<crate::ast::Measurement> = None;
         let mut origin: Option<OriginPoint> = None;
         let mut profile: Option<Identifier> = None;
         let mut mechanical: Option<Identifier> = None;
@@ -103,8 +103,8 @@ impl crate::parser::Parser {
             // Unified control flow - single if-else chain
             if self.check(&Token::Dimensions) {
                 dimensions = self.parse_dimensions().ok();
-            } else if self.check(&Token::Grid) {
-                grid = self.parse_grid().ok();
+            } else if self.check(&Token::Resolution) {
+                resolution = self.parse_resolution().ok();
             } else if self.check(&Token::Origin) {
                 origin = self.parse_origin().ok();
             } else if self.check(&Token::Add) {
@@ -130,6 +130,16 @@ impl crate::parser::Parser {
                         Token::Pour => match self.parse_pour() {
                             Ok(pour) => {
                                 statements.push(SpaceTopLevelStatement::Pour(pour));
+                            }
+                            Err(err) => {
+                                collector.report(err);
+                                self.sync_to_next_definition();
+                                continue;
+                            }
+                        },
+                        Token::Plane => match self.parse_plane() {
+                            Ok(plane) => {
+                                statements.push(SpaceTopLevelStatement::Plane(plane));
                             }
                             Err(err) => {
                                 collector.report(err);
@@ -251,7 +261,7 @@ impl crate::parser::Parser {
                     } else {
                         // Unknown identifier
                         let err = self.error(&format!(
-                            "Unknown space field: '{}'. Expected 'dimensions', 'grid', 'origin', 'profile', 'mechanical', 'add', 'route', or 'expose'",
+                            "Unknown space field: '{}'. Expected 'dimensions', 'resolution', 'origin', 'profile', 'mechanical', 'add', 'route', or 'expose'",
                             name
                         ));
                         collector.report(err);
@@ -289,7 +299,7 @@ impl crate::parser::Parser {
             name,
             implements_module: implements_module.map(|s: String| s.into()),
             dimensions,
-            grid,
+            resolution,
             origin,
             profile,
             mechanical,
@@ -303,5 +313,88 @@ impl crate::parser::Parser {
             nets,
             span: Span::new(start_pos, end_pos),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::lexer::Lexer;
+    use crate::parser::Parser;
+    use crate::DiagnosticCollector;
+
+    fn parse_space(source: &str) -> crate::ast::SpaceDefinition {
+        let lexer = Lexer::new(source);
+        let tokens = lexer.tokenize().expect("Lexer should succeed");
+        let mut parser = Parser::new(tokens);
+        let collector = DiagnosticCollector::new(source, 100);
+        let program = parser.parse(&collector);
+        assert!(!collector.has_errors(), "Parse errors: {}", collector.summary());
+        assert_eq!(program.definitions.len(), 1, "Expected exactly one definition");
+        match program.definitions.into_iter().next().expect("Expected definition") {
+            crate::ast::Definition::Space(s) => s,
+            other => panic!("Expected space definition, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_resolution_parses() {
+        let source = r#"space Test:
+    resolution: 1nm
+"#;
+        let space = parse_space(source);
+        assert!(space.resolution.is_some(), "resolution should be parsed");
+        let res = space.resolution.expect("resolution present");
+        assert_eq!(res.value, 1.0);
+        assert_eq!(res.unit, crate::ast::Unit::Nanometer);
+    }
+
+    #[test]
+    fn test_substrate_parses() {
+        let source = r#"space Test:
+    add substrate(FR4) spanning [0,0,0] to [10mm,10mm,1mm]
+"#;
+        let space = parse_space(source);
+        assert!(space.substrate.is_some(), "substrate should be parsed");
+        let sub = space.substrate.expect("substrate present");
+        assert_eq!(sub.material.as_str(), "FR4");
+    }
+
+    #[test]
+    fn test_plane_parses() {
+        let source = r#"space Test:
+    add plane(Copper) named GND_Plane on layer: l1:
+        net: GND
+"#;
+        let space = parse_space(source);
+        let planes = space.planes();
+        assert_eq!(planes.len(), 1, "Should have one plane");
+        let plane = planes.into_iter().next().expect("plane present");
+        assert_eq!(plane.material.as_str(), "Copper");
+        assert!(plane.net.is_some(), "plane should have net");
+    }
+
+    #[test]
+    fn test_current_limit_ac_parses() {
+        let source = r#"space Test:
+    route A.pin to B.pin:
+        current_limit: [rms: 1A, peak: 2A]
+"#;
+        let space = parse_space(source);
+        assert_eq!(space.routes.len(), 1, "Should have one route");
+        let route = space.routes.into_iter().next().expect("route present");
+        assert!(route.current_limit_ac.is_some(), "current_limit_ac should be parsed");
+        // Verify route parsed without error — exact expression values depend on parser internals
+    }
+
+    #[test]
+    fn test_current_limit_single_value_parses() {
+        let source = r#"space Test:
+    route A.pin to B.pin:
+        current_limit: 500mA
+"#;
+        let space = parse_space(source);
+        assert_eq!(space.routes.len(), 1, "Should have one route");
+        let route = space.routes.into_iter().next().expect("route present");
+        assert!(route.current_limit_ac.is_some(), "current_limit_ac should parse single value");
     }
 }

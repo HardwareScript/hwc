@@ -10,7 +10,8 @@ use super::expression::{build_simple_expression_ast, evaluate_anchor_index_expre
 use crate::ir::errors::IrError;
 use compact_str::CompactString;
 use hwc_parser::{
-    ComponentName, ComponentPlacement, ContactPlacement, Expression, PourPlacement, Route,
+    ComponentName, ComponentPlacement, ContactPlacement, Expression, PlanePlacement, PourPlacement,
+    Route,
 };
 
 pub use super::collision::format_net_name;
@@ -157,6 +158,87 @@ pub fn unroll_pour(
     })
 }
 
+/// Unroll a plane placement by substituting the loop variable
+pub fn unroll_plane(
+    plane: &PlanePlacement,
+    variable: &str,
+    value: usize,
+) -> Result<PlanePlacement, IrError> {
+    let name = substitute_in_component_name(&plane.name, variable, value);
+
+    let net = plane
+        .net
+        .as_ref()
+        .map(|n| substitute_in_net_name(n, variable, value));
+
+    let from = plane
+        .from
+        .as_ref()
+        .map(|c| substitute_in_coordinate(c, variable, value))
+        .transpose()?;
+
+    let to = plane
+        .to
+        .as_ref()
+        .map(|c| substitute_in_coordinate(c, variable, value))
+        .transpose()?;
+
+    let elevation = match &plane.elevation {
+        hwc_parser::Elevation::Physical { start, end } => hwc_parser::Elevation::Physical {
+            start: substitute_in_expression(start, variable, value)?,
+            end: end
+                .as_ref()
+                .map(|e| substitute_in_expression(e, variable, value))
+                .transpose()?,
+        },
+        hwc_parser::Elevation::Semantic(id) => hwc_parser::Elevation::Semantic(id.clone()),
+        hwc_parser::Elevation::Relative => hwc_parser::Elevation::Relative,
+    };
+
+    let thickness = plane
+        .thickness
+        .as_ref()
+        .map(|t| substitute_in_expression(t, variable, value))
+        .transpose()?;
+
+    let cutouts = plane
+        .cutouts
+        .iter()
+        .map(|cutout| match cutout {
+            hwc_parser::CutoutShape::Rectangle { width, height, at } => {
+                let width_sub = substitute_in_expression(width, variable, value)?;
+                let height_sub = substitute_in_expression(height, variable, value)?;
+                let at_sub = substitute_in_coordinate(at, variable, value)?;
+                Ok(hwc_parser::CutoutShape::Rectangle {
+                    width: width_sub,
+                    height: height_sub,
+                    at: at_sub,
+                })
+            }
+            hwc_parser::CutoutShape::Circle { radius, at } => {
+                let radius_sub = substitute_in_expression(radius, variable, value)?;
+                let at_sub = substitute_in_coordinate(at, variable, value)?;
+                Ok(hwc_parser::CutoutShape::Circle {
+                    radius: radius_sub,
+                    at: at_sub,
+                })
+            }
+        })
+        .collect::<Result<Vec<_>, IrError>>()?;
+
+    Ok(PlanePlacement {
+        material: plane.material.clone(),
+        name,
+        elevation,
+        thickness,
+        from,
+        to,
+        net,
+        cutouts,
+        span: plane.span,
+    })
+}
+
 /// Unroll a contact placement by substituting the loop variable
 pub fn unroll_contact(
     contact: &ContactPlacement,
@@ -273,6 +355,7 @@ pub fn unroll_route(route: &Route, variable: &str, value: usize) -> Result<Route
         bridge: route.bridge.clone(),
         exit_escape: route.exit_escape.clone(),
         enter_escape: route.enter_escape.clone(),
+        current_limit_ac: route.current_limit_ac.clone(),
         span: route.span,
     })
 }

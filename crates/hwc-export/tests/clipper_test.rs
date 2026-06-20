@@ -131,7 +131,7 @@ mod tests {
         }
 
         println!("SUBSTRATE LAYERS:");
-        for (i, layer) in space.voxel_grid.get_substrate_layers().iter().enumerate() {
+        for (i, layer) in space.entity_graph.get_substrate_layers().iter().enumerate() {
             println!(
                 "  Layer {}: material={}, net={}, type={:?}, shape={:?}, bbox=min:({:?}) max:({:?})",
                 i,

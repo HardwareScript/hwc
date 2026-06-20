@@ -16,8 +16,6 @@ pub fn create_hardware_space(
         .as_ref()
         .ok_or(IrError::MissingDimensions)?;
 
-    let grid = space_def.grid.as_ref().ok_or(IrError::MissingGrid)?;
-
     // Convert dimensions to nanometers using the symbol table (supports custom units!)
     let dims = Dimensions {
         width_nm: measurement_to_nm(&dimensions.width, symbol_table),
@@ -25,8 +23,28 @@ pub fn create_hardware_space(
         depth_nm: measurement_to_nm(&dimensions.depth, symbol_table),
     };
 
-    // Create grid cells
-    let grid_cells = GridCells::new(grid.x, grid.y, grid.z);
+    // Derive grid from resolution + dimensions, or error.
+    let grid_cells = if let Some(res_measurement) = &space_def.resolution {
+        let resolution_nm = measurement_to_nm(res_measurement, symbol_table);
+        if resolution_nm <= 0 {
+            return Err(IrError::CompilationError(
+                "Resolution must be a positive value".into(),
+            ));
+        }
+
+        // v0.1.8: resolution is a coordinate snapping step, NOT a grid cell count.
+        // The engine should use continuous vector coordinates (i64 picometers), not a voxel grid.
+        // TODO: Remove VoxelGrid dependency entirely. For now, derive a coarse grid from
+        // dimensions to keep the legacy engine running, but this should be eliminated
+        // once EntityGraph + TopologicalRouter fully replace the voxel pathfinder.
+        let x_cols = ((dims.width_nm / 200_000).max(1)).min(500) as usize;  // ~200um cells
+        let y_rows = ((dims.height_nm / 200_000).max(1)).min(500) as usize;
+        let z_layers = ((dims.depth_nm / 200_000).max(1)).min(4) as usize;
+
+        GridCells::new(x_cols, y_rows, z_layers)
+    } else {
+        return Err(IrError::MissingGrid);
+    };
 
     // Create material registry
     let material_registry = MaterialRegistry::new();
@@ -73,6 +91,11 @@ pub fn create_hardware_space(
         })?;
 
         space.fabrication_constraints = Some(constraints);
+    }
+
+    // Store resolution for coordinate snapping
+    if let Some(res_measurement) = &space_def.resolution {
+        space.resolution_nm = Some(measurement_to_nm(res_measurement, symbol_table));
     }
 
     // Process net classifications (v0.1.6)
@@ -151,7 +174,7 @@ mod tests {
         let space = create_hardware_space(space_def, &symbol_table).unwrap();
         assert_eq!(space.name, "Test");
         assert_eq!(space.dimensions.width_nm, 50_000_000);
-        assert_eq!(space.grid.x_cols, 500);
+        assert_eq!(space.grid_cells().x_cols, 500);
         assert_eq!(space.voxel_size.x_nm, 100_000);
     }
 }

@@ -2,6 +2,14 @@ use crate::ast::expr::{BinOp, Expr, UnaryOp};
 use crate::ast::*;
 use crate::lexer::Token;
 
+/// Known constants that can appear in geometry expressions
+const KNOWN_CONSTANTS: &[&str] = &["PI", "DEG_TO_RAD"];
+
+// STRICT SEMANTIC SEPARATION (Boundary Law):
+// Inside geometry blocks (logic blocks): '=' is used for behavioral actions (e.g., `let x = 5`).
+// Inside property blocks: ':' is used for declarative facts (e.g., `net: GND`).
+// The geometry parser enforces '=' for assignments; property parsers enforce ':' for declarations.
+
 impl crate::parser::Parser {
     pub(in crate::parser::definitions::shape) fn parse_geometry_blocks(
         &mut self,
@@ -45,31 +53,11 @@ impl crate::parser::Parser {
         let variable = self.expect_identifier()?.name.to_string();
         self.expect_identifier_named("in")?;
 
-        let start = if let Some(current) = self.current() {
-            if let Token::Integer(n) = &current.token {
-                let val = *n;
-                self.advance();
-                val
-            } else {
-                return Err(self.error("Expected integer for loop start"));
-            }
-        } else {
-            return Err(self.error("Expected integer for loop start"));
-        };
+        let start = self.parse_geometry_expr()?;
 
         self.expect(&Token::Range)?;
 
-        let end = if let Some(current) = self.current() {
-            if let Token::Integer(n) = &current.token {
-                let val = *n;
-                self.advance();
-                val
-            } else {
-                return Err(self.error("Expected integer for loop end"));
-            }
-        } else {
-            return Err(self.error("Expected integer for loop end"));
-        };
+        let end = self.parse_geometry_expr()?;
 
         self.expect(&Token::Colon)?;
         self.expect(&Token::Newline)?;
@@ -87,11 +75,28 @@ impl crate::parser::Parser {
 
             if self.check_identifier("let") {
                 let (name, value) = self.parse_geometry_let_statement()?;
-                body.push(GeometryStatement::Variable { name, value });
+                body.push(GeometryStatement::LetBinding { name, value });
             } else if self.check_identifier("Point") {
                 body.push(self.parse_geometry_point_statement()?);
+            } else if let Some(current) = self.current() {
+                if let Token::Identifier(name) = &current.token {
+                    let name = name.clone();
+                    // Check if this is a generator call (identifier followed by '(')
+                    let pos = self.current;
+                    if pos + 1 < self.tokens.len() {
+                        if let Token::OpenParen = &self.tokens[pos + 1].token {
+                            self.advance(); // consume identifier
+                            let args = self.parse_generator_call_args()?;
+                            body.push(GeometryStatement::GeneratorCall { name, args });
+                            continue;
+                        }
+                    }
+                    return Err(self.error("Expected 'let', 'Point', or generator call in for loop body"));
+                } else {
+                    return Err(self.error("Expected 'let', 'Point', or generator call in for loop body"));
+                }
             } else {
-                return Err(self.error("Expected 'let' or 'Point' in for loop body"));
+                return Err(self.error("Expected 'let', 'Point', or generator call in for loop body"));
             }
         }
 
@@ -115,7 +120,7 @@ impl crate::parser::Parser {
         &mut self,
     ) -> Result<GeometryBlock, crate::parser::error::ParseError> {
         let (name, value) = self.parse_geometry_let_statement()?;
-        Ok(GeometryBlock::Variable { name, value })
+        Ok(GeometryBlock::LetBinding { name, value })
     }
 
     pub(in crate::parser::definitions::shape) fn parse_geometry_let_statement(
@@ -149,6 +154,36 @@ impl crate::parser::Parser {
         self.expect(&Token::CloseParen)?;
 
         Ok(GeometryStatement::Point { x, y })
+    }
+
+    /// Parse generator call arguments: (name: expr, name: expr, ...)
+    pub(in crate::parser::definitions::shape) fn parse_generator_call_args(
+        &mut self,
+    ) -> Result<Vec<(String, Expr)>, crate::parser::error::ParseError> {
+        self.expect(&Token::OpenParen)?;
+        let mut args = Vec::new();
+
+        while !self.check(&Token::CloseParen) && !self.is_at_end() {
+            self.skip_whitespace();
+            if self.check(&Token::CloseParen) {
+                break;
+            }
+
+            let name = self.expect_identifier()?.name.to_string();
+            self.expect(&Token::Colon)?;
+            let value = self.parse_geometry_expr()?;
+            args.push((name, value));
+
+            self.skip_whitespace();
+            if self.check(&Token::Comma) {
+                self.advance();
+            } else if !self.check(&Token::CloseParen) {
+                return Err(self.error("Expected ',' or ')' in generator call arguments"));
+            }
+        }
+
+        self.expect(&Token::CloseParen)?;
+        Ok(args)
     }
 
     pub(super) fn parse_geometry_expr(&mut self) -> Result<Expr, crate::parser::error::ParseError> {
@@ -326,6 +361,12 @@ impl crate::parser::Parser {
                     Ok(Expr::Literal(val))
                 }
                 Token::Identifier(name) => {
+                    // Check for known constants (PI, DEG_TO_RAD)
+                    if KNOWN_CONSTANTS.contains(&name.as_str()) {
+                        let name = name.clone();
+                        self.advance();
+                        return Ok(Expr::Constant(name));
+                    }
                     let name = name.clone();
                     self.advance();
                     Ok(Expr::Identifier(name))
@@ -348,6 +389,240 @@ impl crate::parser::Parser {
             }
         } else {
             Err(self.error("Expected expression"))
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::ast::expr::Expr;
+    use crate::ast::{GeometryBlock, GeometryStatement};
+    use crate::lexer::Lexer;
+    use crate::parser::Parser;
+    use crate::DiagnosticCollector;
+
+    fn parse_shape(source: &str) -> crate::ast::ShapeDefinition {
+        let lexer = Lexer::new(source);
+        let tokens = lexer.tokenize().expect("Lexer should succeed");
+        let mut parser = Parser::new(tokens);
+        let collector = DiagnosticCollector::new(source, 100);
+        let program = parser.parse(&collector);
+        assert!(
+            !collector.has_errors(),
+            "Parse errors: {}",
+            collector.summary()
+        );
+        assert_eq!(program.definitions.len(), 1);
+        if let crate::ast::Definition::Shape(shape) =
+            program.definitions.into_iter().next().unwrap()
+        {
+            shape
+        } else {
+            panic!("Expected shape definition");
+        }
+    }
+
+    #[test]
+    fn test_geometry_point_parses() {
+        let source = r#"shape S:
+    geometry:
+        for i in 0..1:
+            Point(x: 1mm, y: 2mm)
+"#;
+        let shape = parse_shape(source);
+        let geometry = shape.geometry.expect("Expected geometry block");
+        assert_eq!(geometry.len(), 1);
+        if let GeometryBlock::ForLoop {
+            variable,
+            start,
+            end,
+            body,
+        } = &geometry[0]
+        {
+            assert_eq!(variable, "i");
+            assert_eq!(*start, Expr::Literal(0.0));
+            assert_eq!(*end, Expr::Literal(1.0));
+            assert_eq!(body.len(), 1);
+            if let GeometryStatement::Point { x, y } = &body[0] {
+                assert_eq!(*x, Expr::Literal(1.0));
+                assert_eq!(*y, Expr::Literal(2.0));
+            } else {
+                panic!("Expected Point statement");
+            }
+        } else {
+            panic!("Expected ForLoop");
+        }
+    }
+
+    #[test]
+    fn test_geometry_for_loop_with_let_and_point() {
+        let source = r#"shape S:
+    geometry:
+        for i in 0..5:
+            let angle = i * 11.25
+            Point(x: cos(angle), y: sin(angle))
+"#;
+        let shape = parse_shape(source);
+        let geometry = shape.geometry.expect("Expected geometry block");
+        assert_eq!(geometry.len(), 1);
+        if let GeometryBlock::ForLoop {
+            variable,
+            start,
+            end,
+            body,
+        } = &geometry[0]
+        {
+            assert_eq!(variable, "i");
+            assert_eq!(*start, Expr::Literal(0.0));
+            assert_eq!(*end, Expr::Literal(5.0));
+            assert_eq!(body.len(), 2);
+        } else {
+            panic!("Expected ForLoop");
+        }
+    }
+
+    #[test]
+    fn test_geometry_let_binding_at_block_scope() {
+        let source = r#"shape S:
+    geometry:
+        let angle = 45
+"#;
+        let shape = parse_shape(source);
+        let geometry = shape.geometry.expect("Expected geometry block");
+        assert_eq!(geometry.len(), 1);
+        if let GeometryBlock::LetBinding { name, .. } = &geometry[0] {
+            assert_eq!(name, "angle");
+        } else {
+            panic!("Expected LetBinding");
+        }
+    }
+
+    #[test]
+    fn test_trig_functions_parse_as_call() {
+        let source = r#"shape S:
+    geometry:
+        for i in 0..1:
+            let x = sin(rad)
+            let y = cos(rad)
+            let z = tan(rad)
+"#;
+        let shape = parse_shape(source);
+        let geometry = shape.geometry.expect("Expected geometry block");
+        if let GeometryBlock::ForLoop { body, .. } = &geometry[0] {
+            assert_eq!(body.len(), 3);
+            if let GeometryStatement::LetBinding { value, .. } = &body[0] {
+                assert!(
+                    matches!(value, Expr::Call { name, .. } if name == "sin"),
+                    "Expected sin() call, got {:?}",
+                    value
+                );
+            } else {
+                panic!("Expected LetBinding");
+            }
+            if let GeometryStatement::LetBinding { value, .. } = &body[1] {
+                assert!(
+                    matches!(value, Expr::Call { name, .. } if name == "cos"),
+                    "Expected cos() call, got {:?}",
+                    value
+                );
+            } else {
+                panic!("Expected LetBinding");
+            }
+            if let GeometryStatement::LetBinding { value, .. } = &body[2] {
+                assert!(
+                    matches!(value, Expr::Call { name, .. } if name == "tan"),
+                    "Expected tan() call, got {:?}",
+                    value
+                );
+            } else {
+                panic!("Expected LetBinding");
+            }
+        } else {
+            panic!("Expected ForLoop");
+        }
+    }
+
+    #[test]
+    fn test_constants_pi_and_deg_to_rad() {
+        let source = r#"shape S:
+    geometry:
+        for i in 0..1:
+            let x = PI
+            let y = DEG_TO_RAD
+"#;
+        let shape = parse_shape(source);
+        let geometry = shape.geometry.expect("Expected geometry block");
+        if let GeometryBlock::ForLoop { body, .. } = &geometry[0] {
+            assert_eq!(body.len(), 2);
+            if let GeometryStatement::LetBinding { value, .. } = &body[0] {
+                assert!(
+                    matches!(value, Expr::Constant(name) if name == "PI"),
+                    "Expected PI constant, got {:?}",
+                    value
+                );
+            } else {
+                panic!("Expected LetBinding");
+            }
+            if let GeometryStatement::LetBinding { value, .. } = &body[1] {
+                assert!(
+                    matches!(value, Expr::Constant(name) if name == "DEG_TO_RAD"),
+                    "Expected DEG_TO_RAD constant, got {:?}",
+                    value
+                );
+            } else {
+                panic!("Expected LetBinding");
+            }
+        } else {
+            panic!("Expected ForLoop");
+        }
+    }
+
+    #[test]
+    fn test_generator_call_in_geometry_body() {
+        let source = r#"shape S:
+    geometry:
+        for i in 0..1:
+            StarGenerator(points: 24, outer: 5mm, inner: 2mm)
+"#;
+        let shape = parse_shape(source);
+        let geometry = shape.geometry.expect("Expected geometry block");
+        if let GeometryBlock::ForLoop { body, .. } = &geometry[0] {
+            assert_eq!(body.len(), 1);
+            if let GeometryStatement::GeneratorCall { name, args } = &body[0] {
+                assert_eq!(name, "StarGenerator");
+                assert_eq!(args.len(), 3);
+                assert_eq!(args[0].0, "points");
+                assert_eq!(args[1].0, "outer");
+                assert_eq!(args[2].0, "inner");
+            } else {
+                panic!("Expected GeneratorCall, got {:?}", body[0]);
+            }
+        } else {
+            panic!("Expected ForLoop");
+        }
+    }
+
+    #[test]
+    fn test_for_loop_with_expr_bounds() {
+        let source = r#"shape S:
+    geometry:
+        let n = 8
+        for i in 0..n:
+            let angle = i * (PI / n)
+            Point(x: cos(angle) * 5mm, y: sin(angle) * 5mm)
+"#;
+        let shape = parse_shape(source);
+        let geometry = shape.geometry.expect("Expected geometry block");
+        assert_eq!(geometry.len(), 2);
+        if let GeometryBlock::ForLoop { start, end, .. } = &geometry[1] {
+            assert_eq!(*start, Expr::Literal(0.0));
+            assert!(
+                matches!(end, Expr::Identifier(name) if name == "n"),
+                "Expected identifier 'n' for loop end, got {:?}",
+                end
+            );
+        } else {
+            panic!("Expected ForLoop at index 1");
         }
     }
 }
