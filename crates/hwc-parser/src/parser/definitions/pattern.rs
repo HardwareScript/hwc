@@ -9,68 +9,68 @@ impl super::super::Parser {
     // Pattern Definition Parsing
     // ========================================================================
 
-    /// Parse pattern definition: `define pattern "Zigzag" (gap: Measurement):`
+    /// Parse pattern definition (v0.1.8 syntax):
+    /// ```hardware
+    /// pattern Zigzag (gap: Measurement):
+    ///     strategy_goal = delay_line
+    ///     steps: [
+    ///         [length = gap, angle = 45],
+    ///         [length = gap, angle = -45],
+    ///     ]
+    /// ```
     pub(in super::super) fn parse_pattern(&mut self) -> Result<PatternDefinition, ParseError> {
         let start_pos = self.current_span().start;
-        // Note: 'pattern' identifier already consumed by parse_definition
         let name = self.expect_identifier()?;
 
-        // Parse parameter list
         let params = self.parse_pattern_parameters()?;
 
         self.expect(&Token::Colon)?;
         self.expect(&Token::Newline)?;
         self.expect(&Token::Indent)?;
 
-        // v0.1.6: Expect 'steps' identifier
-        let steps_ident = self.expect_identifier()?;
-        if steps_ident.as_str() != "steps" {
-            return Err(self.error(&format!("Expected 'steps', found '{}'", steps_ident)));
-        }
-        self.expect(&Token::Colon)?;
-        self.expect(&Token::Newline)?;
-        self.expect(&Token::Indent)?;
-
-        // Parse steps
+        let mut strategy_goal = None;
         let mut steps = Vec::new();
+
         while !self.check(&Token::Dedent) && !self.is_at_end() {
             self.skip_whitespace();
-
             if self.check(&Token::Dedent) || self.is_at_end() {
                 break;
             }
 
-            // Expect dash for list item
-            self.expect(&Token::Hyphen)?;
+            if let Some(current) = self.current() {
+                if let Token::Identifier(ident) = &current.token {
+                    match ident.as_str() {
+                        "strategy_goal" => {
+                            self.advance();
+                            self.expect(&Token::Equals)?;
+                            let goal = self.expect_identifier_string()?;
+                            strategy_goal = Some(goal.into());
+                            self.skip_whitespace();
+                            continue;
+                        }
+                        "steps" => {
+                            self.advance();
+                            self.expect(&Token::Colon)?;
+                            self.expect(&Token::OpenBracket)?;
+                            steps = self.parse_pattern_steps_array()?;
+                            self.skip_whitespace();
+                            continue;
+                        }
+                        other => {
+                            return Err(self.error(&format!(
+                                "Unknown pattern field: '{}'. Expected: strategy_goal, steps",
+                                other
+                            )));
+                        }
+                    }
+                }
+            }
 
-            let step_start = self.current_span().start;
-
-            // Parse distance expression
-            let distance = self.parse_expression()?;
-
-            // Expect 'r' (rotate operator) as identifier
-            self.expect_identifier_value("r")?;
-
-            // Parse angle expression
-            let angle = self.parse_expression()?;
-
-            let step_end = self.previous_span().end;
-
-            steps.push(PatternStep {
-                distance,
-                angle,
-                span: Span::new(step_start, step_end),
-            });
-
-            self.skip_whitespace();
+            break;
         }
 
         if self.check(&Token::Dedent) {
-            self.advance(); // steps dedent
-        }
-
-        if self.check(&Token::Dedent) {
-            self.advance(); // pattern dedent
+            self.advance();
         }
 
         let end_pos = self.previous_span().end;
@@ -78,7 +78,82 @@ impl super::super::Parser {
         Ok(PatternDefinition {
             name,
             params,
+            strategy_goal,
             steps,
+            span: Span::new(start_pos, end_pos),
+        })
+    }
+
+    /// Parse pattern steps array: `[ [length = gap, angle = 45], ... ]`
+    fn parse_pattern_steps_array(&mut self) -> Result<Vec<PatternStep>, ParseError> {
+        let mut steps = Vec::new();
+
+        while !self.check(&Token::CloseBracket) && !self.is_at_end() {
+            self.skip_whitespace();
+            if self.check(&Token::CloseBracket) || self.is_at_end() {
+                break;
+            }
+
+            let step = self.parse_pattern_step()?;
+            steps.push(step);
+
+            if self.check(&Token::Comma) {
+                self.advance();
+            }
+        }
+
+        self.expect(&Token::CloseBracket)?;
+
+        Ok(steps)
+    }
+
+    /// Parse a single pattern step: `[length = gap, angle = 45]`
+    fn parse_pattern_step(&mut self) -> Result<PatternStep, ParseError> {
+        let start_pos = self.current_span().start;
+        self.expect(&Token::OpenBracket)?;
+
+        let mut distance = None;
+        let mut angle = None;
+
+        while !self.check(&Token::CloseBracket) && !self.is_at_end() {
+            self.skip_whitespace();
+            if self.check(&Token::CloseBracket) || self.is_at_end() {
+                break;
+            }
+
+            let field_name = self.expect_identifier_string()?;
+            self.expect(&Token::Equals)?;
+
+            match field_name.as_str() {
+                "length" => {
+                    distance = Some(self.parse_expression()?);
+                }
+                "angle" => {
+                    angle = Some(self.parse_expression()?);
+                }
+                other => {
+                    return Err(self.error(&format!(
+                        "Unknown step field: '{}'. Expected: length, angle",
+                        other
+                    )));
+                }
+            }
+
+            if self.check(&Token::Comma) {
+                self.advance();
+            }
+        }
+
+        self.expect(&Token::CloseBracket)?;
+
+        let end_pos = self.previous_span().end;
+
+        let distance = distance.ok_or_else(|| self.error("Pattern step missing 'length' field"))?;
+        let angle = angle.ok_or_else(|| self.error("Pattern step missing 'angle' field"))?;
+
+        Ok(PatternStep {
+            distance,
+            angle,
             span: Span::new(start_pos, end_pos),
         })
     }
@@ -89,7 +164,6 @@ impl super::super::Parser {
 
         let mut params = Vec::new();
 
-        // Handle empty parameter list
         if self.check(&Token::CloseParen) {
             self.advance();
             return Ok(params);
@@ -137,10 +211,15 @@ impl super::super::Parser {
     // Strategy Definition Parsing
     // ========================================================================
 
-    /// Parse strategy definition: `define strategy "DDR5_Match":`
+    /// Parse strategy definition (v0.1.8 syntax):
+    /// ```hardware
+    /// strategy DDR5_Match:
+    ///     target = match_longest
+    ///     tolerance = 0.1mm
+    ///     pattern = Trombone(gap: 0.3mm, amp: 2.5mm)
+    /// ```
     pub(in super::super) fn parse_strategy(&mut self) -> Result<StrategyDefinition, ParseError> {
         let start_pos = self.current_span().start;
-        // Note: 'strategy' identifier already consumed by parse_definition
         let name = self.expect_identifier()?;
         self.expect(&Token::Colon)?;
         self.expect(&Token::Newline)?;
@@ -157,43 +236,40 @@ impl super::super::Parser {
                 break;
             }
 
-            // v0.1.6: Check for strategy block identifiers
             if let Some(current) = self.current() {
-                if let Token::Identifier(name) = &current.token {
-                    match name.as_str() {
+                if let Token::Identifier(field_name) = &current.token {
+                    match field_name.as_str() {
                         "target" => {
                             self.advance();
-                            self.expect(&Token::Colon)?;
+                            self.expect(&Token::Equals)?;
                             target = Some(self.parse_strategy_target()?);
                             self.skip_whitespace();
                             continue;
                         }
                         "tolerance" => {
                             self.advance();
-                            self.expect(&Token::Colon)?;
+                            self.expect(&Token::Equals)?;
                             tolerance = Some(self.parse_measurement()?);
                             self.skip_whitespace();
                             continue;
                         }
                         "pattern" => {
                             self.advance();
-                            self.expect(&Token::Colon)?;
+                            self.expect(&Token::Equals)?;
                             pattern = Some(self.parse_pattern_instantiation()?);
                             self.skip_whitespace();
                             continue;
                         }
-                        _ => {
-                            let field_name = name.clone();
+                        other => {
                             return Err(self.error(&format!(
-                                "Unknown strategy field: '{}'. Expected: target, tolerance, or pattern",
-                                field_name
+                                "Unknown strategy field: '{}'. Expected: target, tolerance, pattern",
+                                other
                             )));
                         }
                     }
                 }
             }
 
-            // If we get here, it's not an identifier - break
             break;
         }
 
@@ -254,7 +330,6 @@ impl super::super::Parser {
 
         let mut arguments = Vec::new();
 
-        // Handle empty argument list
         if self.check(&Token::CloseParen) {
             self.advance();
             let end_pos = self.previous_span().end;

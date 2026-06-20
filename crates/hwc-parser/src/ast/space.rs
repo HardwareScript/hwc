@@ -6,6 +6,7 @@ use smallvec::SmallVec;
 use super::common::{Coordinate, Dimensions, Identifier, Measurement, OriginPoint, PinReference};
 use super::component::ComponentPlacement;
 use super::expression::Expression;
+use super::pattern::PatternInstantiation;
 use crate::lexer::Span;
 use compact_str::CompactString;
 
@@ -151,6 +152,30 @@ pub enum SpaceTopLevelStatement {
     Route(Route),
     /// Expose: `expose Pin as Alias`
     Expose(Expose),
+    /// v0.1.8: Prescriptive net-scoped route policy: `route net: NetName:`
+    RouteNetPolicy(RouteNetPolicy),
+}
+
+/// v0.1.8: Prescriptive net-scoped route policy
+///
+/// Binds a pattern or strategy to an entire net globally, so the auto router
+/// applies it to all Steiner tree segments for that net.
+///
+/// Example:
+/// ```hardware
+/// route net: ALL_PADS:
+///     pattern: Zigzag(gap: 0.5mm)
+///
+/// route net: DDR5_BUS on layer: top:
+///     pattern: Trombone(gap: 0.3mm, amp: 2.5mm)
+/// ```
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RouteNetPolicy {
+    pub net_id: Identifier,
+    pub target_layer: Option<Identifier>,
+    pub pattern: Option<PatternInstantiation>,
+    pub strategy: Option<Identifier>,
+    pub span: Span,
 }
 
 /// For loop in space block (Sprint 3.4: Parametric Unrolling)
@@ -265,7 +290,8 @@ pub struct Route {
     pub from: PinReference,
     pub to: PinReference,
     pub width: Option<Expression>,
-    pub strategy: Option<Identifier>, // e.g. Trombone
+    pub strategy: Option<Identifier>, // e.g. DDR5_Match (references a strategy definition)
+    pub pattern: Option<PatternInstantiation>, // v0.1.8: Direct pattern reference e.g. Trombone(gap: 0.3mm, amp: 2.5mm)
     pub strategy_params: Vec<(Identifier, Expression)>, // e.g. target_length: 50mm
     pub path: Option<Vec<Coordinate>>,
     pub signal_group: Option<CompactString>, // Optional signal group for impedance control
@@ -630,6 +656,18 @@ impl SpaceDefinition {
             .filter_map(|s| {
                 if let SpaceTopLevelStatement::ForLoop(f) = s {
                     Some(f.clone())
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+    pub fn route_net_policies(&self) -> Vec<RouteNetPolicy> {
+        self.statements
+            .iter()
+            .filter_map(|s| {
+                if let SpaceTopLevelStatement::RouteNetPolicy(p) = s {
+                    Some(p.clone())
                 } else {
                     None
                 }

@@ -385,6 +385,7 @@ pub fn place_module_instance(
                 },
                 width: None,
                 strategy: None,
+                pattern: None,
                 strategy_params: vec![],
                 path: None,
                 signal_group: None,

@@ -64,6 +64,7 @@ pub mod incremental_dag;
 pub mod deterministic_sort;
 pub mod stable_hash_map;
 pub mod lockfile;
+pub mod miter_pass;
 pub mod route_persistence;
 pub mod i128_transforms;
 pub mod deterministic_pathfinder;

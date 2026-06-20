@@ -192,6 +192,7 @@ impl super::Parser {
 
         let mut width = None;
         let mut strategy = None;
+        let mut pattern = None;
         let mut strategy_params = Vec::new();
         let mut path = None;
         let mut signal_group = None;
@@ -267,6 +268,9 @@ impl super::Parser {
                         }
                         "strategy" => {
                             strategy = Some(self.expect_identifier()?);
+                        }
+                        "pattern" => {
+                            pattern = Some(self.parse_pattern_instantiation()?);
                         }
                         "current_limit" => {
                             // Parse: current_limit: [rms: <Value>, peak: <Value>]
@@ -346,6 +350,7 @@ impl super::Parser {
             to,
             width,
             strategy,
+            pattern,
             strategy_params,
             path,
             signal_group,
@@ -353,6 +358,93 @@ impl super::Parser {
             exit_escape,
             enter_escape,
             current_limit_ac,
+            span: Span::new(start_pos, end_pos),
+        })
+    }
+
+    /// Parse route net policy: `route net: NetName:` with optional `on layer:` clause
+    ///
+    /// v0.1.8: Prescriptive net-scoped route policy for auto routing.
+    /// Example:
+    /// ```hardware
+    /// route net: ALL_PADS:
+    ///     pattern: Zigzag(gap: 0.5mm)
+    ///
+    /// route net: DDR5_BUS on layer: top:
+    ///     pattern: Trombone(gap: 0.3mm, amp: 2.5mm)
+    /// ```
+    pub(super) fn parse_route_net_policy(&mut self) -> Result<RouteNetPolicy, ParseError> {
+        let start_pos = self.current_span().start;
+        self.expect(&Token::Route)?;
+        self.expect_identifier_named("net")?;
+        self.expect(&Token::Colon)?;
+
+        let net_id = self.expect_identifier()?;
+
+        // Check for optional `on layer: <Layer>` clause
+        let target_layer = if self.check(&Token::On) {
+            self.advance(); // consume 'on'
+            self.expect_identifier_named("layer")?;
+            self.expect(&Token::Colon)?;
+            Some(self.expect_identifier()?)
+        } else {
+            None
+        };
+
+        self.expect(&Token::Colon)?;
+        self.expect(&Token::Newline)?;
+        self.expect(&Token::Indent)?;
+
+        let mut pattern = None;
+        let mut strategy = None;
+
+        while !self.check(&Token::Dedent) && !self.is_at_end() {
+            self.skip_whitespace();
+            if self.check(&Token::Dedent) || self.is_at_end() {
+                break;
+            }
+
+            if let Some(current) = self.current() {
+                if let Token::Identifier(name) = &current.token {
+                    match name.as_str() {
+                        "pattern" => {
+                            self.advance();
+                            self.expect(&Token::Colon)?;
+                            pattern = Some(self.parse_pattern_instantiation()?);
+                            self.skip_whitespace();
+                            continue;
+                        }
+                        "strategy" => {
+                            self.advance();
+                            self.expect(&Token::Colon)?;
+                            strategy = Some(self.expect_identifier()?);
+                            self.skip_whitespace();
+                            continue;
+                        }
+                        other => {
+                            return Err(self.error(&format!(
+                                "Unknown route net policy field: '{}'. Expected: pattern, strategy",
+                                other
+                            )));
+                        }
+                    }
+                }
+            }
+
+            break;
+        }
+
+        if self.check(&Token::Dedent) {
+            self.advance();
+        }
+
+        let end_pos = self.previous_span().end;
+
+        Ok(RouteNetPolicy {
+            net_id,
+            target_layer,
+            pattern,
+            strategy,
             span: Span::new(start_pos, end_pos),
         })
     }

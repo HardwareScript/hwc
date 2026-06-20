@@ -349,6 +349,7 @@ pub fn unroll_route(route: &Route, variable: &str, value: usize) -> Result<Route
         to,
         width,
         strategy: route.strategy.clone(),
+        pattern: route.pattern.clone(),
         strategy_params,
         path,
         signal_group: route.signal_group.clone(),

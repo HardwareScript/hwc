@@ -12,6 +12,7 @@ use compact_str::CompactString;
 pub struct PatternDefinition {
     pub name: Identifier,
     pub params: Vec<PatternParameter>,
+    pub strategy_goal: Option<CompactString>,
     pub steps: Vec<PatternStep>,
     pub span: Span,
 }

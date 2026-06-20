@@ -23,6 +23,7 @@ pub mod bridge_validator;
 pub mod conversions;
 pub mod errors;
 pub mod logic;
+pub mod meander_injection; // v0.1.8: Post-route meander injection (two-phase physical synthesis)
 pub mod parametric_unroller; // Sprint 3.4: Parametric unrolling
 pub mod placement;
 pub mod routing;
@@ -133,7 +134,9 @@ fn compile_single_space(
                 placement_items.push(PlacementItem::Route(route.clone()));
             }
             hwc_parser::SpaceTopLevelStatement::Polygon(_)
-            | hwc_parser::SpaceTopLevelStatement::Expose(_) => {
+            | hwc_parser::SpaceTopLevelStatement::Expose(_)
+            | hwc_parser::SpaceTopLevelStatement::RouteNetPolicy(_) => {
+                // RouteNetPolicy: stored but not yet wired to engine (v0.1.8)
                 // These don't affect placement order
             }
         }
@@ -518,6 +521,38 @@ fn compile_single_space(
     // Phase 2: Obstacle Blitting (Implicit - registered components + manual traces)
     // Phase 3: Auto-Routing (Deferred batch process)
     let mut auto_routes = Vec::new();
+
+    // v0.1.8: Collect route net policies from `route net:` statements.
+    // These map net names -> RoutingPattern for pattern-guided auto routing.
+    let mut route_net_policies: rustc_hash::FxHashMap<hwc_engine::netlist::NetId, hwc_engine::RoutingPattern> =
+        rustc_hash::FxHashMap::default();
+    for policy in &space_def.route_net_policies() {
+        if let Some(ref pattern_inst) = policy.pattern {
+            match routing::instantiate_pattern(pattern_inst, symbol_table) {
+                Ok(pattern) => {
+                    // Resolve net name to NetId
+                    if let Some(net_id) = space.netlist.get_net_by_name(policy.net_id.as_str()) {
+                        eprintln!(
+                            "[ROUTER] Route net policy: '{}' -> pattern '{}' ({} steps)",
+                            policy.net_id, pattern.name, pattern.steps.len()
+                        );
+                        route_net_policies.insert(net_id, pattern);
+                    } else {
+                        eprintln!(
+                            "[ROUTER] WARNING: Route net policy for unknown net '{}', skipping",
+                            policy.net_id
+                        );
+                    }
+                }
+                Err(e) => {
+                    eprintln!(
+                        "[ROUTER] WARNING: Failed to instantiate pattern for net '{}': {}",
+                        policy.net_id, e
+                    );
+                }
+            }
+        }
+    }
     let routing_mode = space_def
         .routing_config
         .as_ref()
@@ -671,6 +706,7 @@ fn compile_single_space(
             profile,
             net_frequencies,
             auto_routes,
+            route_net_policies,
         );
 
         // v0.1.8: Wire the memoized query store into the AutoRouter.

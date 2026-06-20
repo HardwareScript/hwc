@@ -46,6 +46,8 @@ pub use geometry_router::{
     EntityGraph, GeometryRouter, GridBounds, NetRoute, RoutedNet,
     RoutingError, SdfGenerator,
 };
+pub use geometry_router::{RoutingPattern, PatternStep};
+pub use geometry_router::miter_pass::MiterEngine;
 pub use geometry_router::{
     BoundaryPort, GCell, GCellId, PartitionGrid, SoftCorridor, corridor_cost,
     generate_corridors, partition_nets,

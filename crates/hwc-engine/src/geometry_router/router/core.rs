@@ -107,6 +107,12 @@ pub struct GeometryRouter {
     /// When present, hierarchical G-Cell routing results are memoized so that
     /// unchanged G-cells return cached results on incremental rebuilds.
     pub query_store: Option<super::super::query_engine::QueryStore>,
+
+    /// v0.1.8: Per-net routing pattern policies from `route net:` statements.
+    /// Maps NetId -> RoutingPattern. When a net has a policy, the Steiner
+    /// decomposition uses `route_net_with_length_constraint` instead of
+    /// `route_net_global` to inject pattern macro-moves during routing.
+    pub route_net_policies: FxHashMap<crate::netlist::NetId, super::super::routing_patterns::RoutingPattern>,
 }
 
 /// Copper pour definition for anti-pad generation.
@@ -181,7 +187,21 @@ impl GeometryRouter {
             net_frequencies: FxHashMap::default(),
             partition_grid: None,
             query_store: None,
+            route_net_policies: FxHashMap::default(),
         }
+    }
+
+    /// v0.1.8: Set per-net routing pattern policies.
+    ///
+    /// Policies are sourced from `route net: NetName: pattern: ...` statements
+    /// in the space definition. When a net has a policy with a pattern, the
+    /// Steiner decomposition uses `route_net_with_length_constraint` to inject
+    /// pattern macro-moves during routing.
+    pub fn set_route_net_policies(
+        &mut self,
+        policies: FxHashMap<crate::netlist::NetId, super::super::routing_patterns::RoutingPattern>,
+    ) {
+        self.route_net_policies = policies;
     }
 
     /// Get all vias placed during routing (for drill file export).
@@ -574,6 +594,7 @@ impl GeometryRouter {
                         net_frequencies: self.net_frequencies.clone(),
                         partition_grid: None,
                         query_store: None,
+                        route_net_policies: self.route_net_policies.clone(),
                     };
 
                     let result = isolated.decompose_net_steiner(net_id, pins);
@@ -680,6 +701,7 @@ impl GeometryRouter {
                         net_frequencies: self.net_frequencies.clone(),
                         partition_grid: None,
                         query_store: None,
+                        route_net_policies: self.route_net_policies.clone(),
                     };
 
                     let local_nets: FxHashMap<crate::netlist::NetId, Vec<crate::geometry::Point3D>> =
@@ -815,6 +837,7 @@ impl GeometryRouter {
                             net_frequencies: self.net_frequencies.clone(),
                             partition_grid: None,
                             query_store: None,
+                            route_net_policies: self.route_net_policies.clone(),
                         };
 
                         let local_nets: FxHashMap<

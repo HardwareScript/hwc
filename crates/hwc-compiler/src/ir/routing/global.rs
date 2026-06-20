@@ -24,6 +24,8 @@ pub struct AutoRouter<'a> {
     /// When present, hierarchical G-Cell routing results are memoized so that
     /// unchanged G-cells return cached results on incremental rebuilds.
     query_store: Option<hwc_engine::geometry_router::query_engine::QueryStore>,
+    /// v0.1.8: Per-net routing pattern policies from `route net:` statements.
+    route_net_policies: FxHashMap<NetId, hwc_engine::RoutingPattern>,
 }
 
 #[derive(Debug, Clone)]
@@ -40,6 +42,7 @@ impl<'a> AutoRouter<'a> {
         profile: Option<&'a hwc_parser::ProfileDefinition>,
         net_frequencies: FxHashMap<NetId, f64>,
         auto_routes: Vec<hwc_parser::Route>,
+        route_net_policies: FxHashMap<NetId, hwc_engine::RoutingPattern>,
     ) -> Self {
         Self {
             space,
@@ -48,6 +51,7 @@ impl<'a> AutoRouter<'a> {
             net_frequencies,
             auto_routes,
             query_store: None,
+            route_net_policies,
         }
     }
 
@@ -345,6 +349,15 @@ impl<'a> AutoRouter<'a> {
 
         let mut geo_router = hwc_engine::GeometryRouter::new(grid_bounds, constraints);
 
+        // v0.1.8: Wire per-net routing pattern policies into the GeometryRouter.
+        if !self.route_net_policies.is_empty() {
+            eprintln!(
+                "[ROUTER] Wiring {} net routing policies (patterns)",
+                self.route_net_policies.len()
+            );
+            geo_router.set_route_net_policies(self.route_net_policies.clone());
+        }
+
         // v0.1.8: Wire the memoized query store into the GeometryRouter.
         // This enables per-G-cell routing memoization in hierarchical mode.
         if let Some(qs) = self.query_store.take() {
@@ -434,6 +447,49 @@ impl<'a> AutoRouter<'a> {
                     t_route.elapsed().as_millis()
                 );
 
+                // v0.1.8: Phase 2 - Post-Route Meander Injection
+                // Only processes nets with `route net:` pattern policies (<5% of nets).
+                // Injects meander patterns analytically in O(1) per net, then resolves
+                // local collisions via O(V) DAG compaction (no full re-route).
+                let result = if !self.route_net_policies.is_empty() {
+                    let t_meander = std::time::Instant::now();
+                    let trace_width = self.space.fabrication_constraints.as_ref()
+                        .map(|c| c.trace.min_width_nm)
+                        .unwrap_or(100_000);
+                    let min_clearance = self.space.fabrication_constraints.as_ref()
+                        .map(|c| c.trace.min_spacing_nm)
+                        .unwrap_or(200_000);
+                    let injector = crate::ir::meander_injection::MeanderInjector::new(
+                        &self.route_net_policies,
+                        &obstacle_bboxes,
+                        trace_width,
+                        min_clearance,
+                    );
+                    let result = injector.inject(result);
+
+                    // v0.1.8: CRITICAL STATE-SYNC
+                    // The meander injector mutated paths in the RouteResult, but the
+                    // EntityGraph still holds the original, stale straight segments.
+                    // Sync the expanded meander paths back so exporters see the real geometry.
+                    let mut total_meander_segments = 0usize;
+                    for (&net_id, mutated_paths) in &result.paths {
+                        self.space.entity_graph.clear_routes_for_net(net_id);
+                        for path in mutated_paths {
+                            self.space.entity_graph.register_route(net_id, path);
+                            total_meander_segments += path.len().saturating_sub(1);
+                        }
+                    }
+                    eprintln!(
+                        "[ROUTER] Meander injection: {} policy nets processed, {} expanded segments synced to EntityGraph ({}ms)",
+                        self.route_net_policies.len(),
+                        total_meander_segments,
+                        t_meander.elapsed().as_millis()
+                    );
+                    result
+                } else {
+                    result
+                };
+
                 // Convert RouteResult paths back to AnalyticTrace primitives
                 // v0.1.7: Resolve copper thickness from the stackup for the routing layer.
                 let trace_thickness_nm = {
@@ -470,8 +526,17 @@ impl<'a> AutoRouter<'a> {
                             continue;
                         }
 
+                        // v0.1.8: Apply 45° miter chamfers to 90° corners.
+                        // This maintains constant impedance (Z₀) across bends,
+                        // preventing signal reflection and EMI on high-speed lines.
+                        let trace_width = self.space.fabrication_constraints.as_ref()
+                            .map(|c| c.trace.min_width_nm)
+                            .unwrap_or(100_000);
+                        let miter_engine = hwc_engine::MiterEngine::new(trace_width);
+                        let mitered_path = miter_engine.apply_miter_pass(path);
+
                         // v0.1.7: Grid-Agnostic Z-Resolution via StackupManager
-                        let mut refined_path = path.clone();
+                        let mut refined_path = mitered_path;
                         let mut actual_thickness = trace_thickness_nm;
 
                         let target_z = {

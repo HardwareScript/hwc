@@ -1,0 +1,101 @@
+## Pattern Auto-Routing Test — 32 Pads, Single Net (v0.1.8)
+##
+## 8x4 grid of pads (32 total) ALL on the same net (ALL_PADS).
+## No explicit routes. The Steiner Minimum Tree connects all 32 pads,
+## and the Zigzag pattern policy guides the router to meander between rows.
+##
+## This matches the original test_full_auto_routing.hw structure (all pads
+## on one net) but with 32 pads and a pattern policy to see if the router
+## applies the pattern when routing between distant rows.
+
+import * from @std/primitives/units
+import * from @std/routing/patterns
+import FR4 from @std/materials/insulators
+import Copper from @std/materials/conductors
+
+profile PCB_2_LAYER:
+    description: "2-layer PCB for 32-pad single-net pattern routing test"
+
+    stackup:
+        top:    [material: Copper, thickness: 35um]
+        d1:     [material: FR4,    thickness: 1200um]
+        bottom: [material: Copper, thickness: 35um]
+
+    via:
+        min_diameter: 0.3mm
+        min_annular_ring: 0.15mm
+        min_spacing: 0.2mm
+
+    trace:
+        min_width: 0.2mm
+        min_spacing: 0.2mm
+
+    bridge Copper to Copper: Copper
+
+    manufacturing:
+        copper_thickness: 35um
+
+    clearance:
+        high_voltage: 2mm
+        safety_factor: 2.0
+
+    layer:
+        min_thickness: 0.1mm
+
+component Pad:
+    pins: [p]
+    layout:
+        shape: Rectangle(1mm, 1mm, 35um)
+        pin_positions:
+            p at [0mm, 0mm]
+        add pour(Copper) named Pad_Copper on layer: self:
+            device: p
+            boundary: [x: 0mm, y: 0mm] to [x: 1mm, y: 1mm]
+            net: p
+            thickness: 35um
+
+space Pattern_Router_Test_32Pad:
+    dimensions: 50mm by 50mm by 1.27mm
+    resolution: 1nm
+    origin: bl by b
+    profile: PCB_2_LAYER
+
+    nets:
+        ALL_PADS: signal
+
+    ## ====================================================================
+    ## ROW 0: 8 pads at y=5mm
+    ## ====================================================================
+    for i in 0..7:
+        add Pad named R0[i] at [x: i * 5mm + 5mm, y: 5mm] on layer: top:
+            net: [p: ALL_PADS]
+
+    ## ====================================================================
+    ## ROW 1: 8 pads at y=17mm
+    ## ====================================================================
+    for i in 0..7:
+        add Pad named R1[i] at [x: i * 5mm + 5mm, y: 17mm] on layer: top:
+            net: [p: ALL_PADS]
+
+    ## ====================================================================
+    ## ROW 2: 8 pads at y=29mm
+    ## ====================================================================
+    for i in 0..7:
+        add Pad named R2[i] at [x: i * 5mm + 5mm, y: 29mm] on layer: top:
+            net: [p: ALL_PADS]
+
+    ## ====================================================================
+    ## ROW 3: 8 pads at y=41mm
+    ## ====================================================================
+    for i in 0..7:
+        add Pad named R3[i] at [x: i * 5mm + 5mm, y: 41mm] on layer: top:
+            net: [p: ALL_PADS]
+
+    ## ====================================================================
+    ## PRESCRIPTIVE ROUTE POLICY
+    ## ====================================================================
+    ## All 32 pads are on ALL_PADS. The Steiner tree decomposes this into
+    ## 31 pairwise segments. The Zigzag pattern guides the router to meander
+    ## when connecting pads across different rows.
+    route net: ALL_PADS:
+        pattern: Zigzag(gap: 0.5mm)

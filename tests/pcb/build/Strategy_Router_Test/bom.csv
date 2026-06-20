@@ -1,0 +1,14 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,50.00x50.00x1.27mm,,,,,1
+D0[0],Pad,,,,,,1
+D0[1],Pad,,,,,,1
+D0[2],Pad,,,,,,1
+P0[0],Pad,,,,,,1
+P0[1],Pad,,,,,,1
+P0[2],Pad,,,,,,1
+U0[0],Pad,,,,,,1
+U0[1],Pad,,,,,,1
+U0[2],Pad,,,,,,1
+R0[0],Pad,,,,,,1
+R0[1],Pad,,,,,,1
+R0[2],Pad,,,,,,1

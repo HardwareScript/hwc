@@ -882,6 +882,14 @@ impl EntityGraph {
         &self.routed_segments
     }
 
+    /// v0.1.8: Clear registered route segments for a specific net.
+    ///
+    /// Used by the post-route meander injector to replace stale, straight
+    /// segments with the expanded, meandered paths before export.
+    pub fn clear_routes_for_net(&mut self, net_id: NetId) {
+        self.routed_segments.retain(|(id, _)| *id != net_id);
+    }
+
     /// Helper: get default trace width from fabrication constraints.
     fn constraints_trace_width_nm(&self) -> i64 {
         200_000

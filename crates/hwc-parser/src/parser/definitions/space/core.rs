@@ -198,9 +198,40 @@ impl crate::parser::Parser {
                     }
                 }
             } else if self.check(&Token::Route) {
-                if let Ok(route) = self.parse_route() {
-                    statements.push(SpaceTopLevelStatement::Route(route.clone()));
-                    routes.push(route); // Note: routes still duplicated in top-level vec (not yet cleaned)
+                // v0.1.8: Check if this is a `route net:` policy or a standard point-to-point route
+                let next_pos = self.current + 1;
+                if let Some(next_token) = self.tokens.get(next_pos) {
+                    if let Token::Identifier(name) = &next_token.token {
+                        if name == "net" {
+                            // Parse as RouteNetPolicy: `route net: NetName:`
+                            match self.parse_route_net_policy() {
+                                Ok(policy) => {
+                                    statements.push(SpaceTopLevelStatement::RouteNetPolicy(policy));
+                                }
+                                Err(err) => {
+                                    collector.report(err);
+                                    self.sync_to_next_definition();
+                                    continue;
+                                }
+                            }
+                        } else {
+                            // Standard point-to-point route
+                            if let Ok(route) = self.parse_route() {
+                                statements.push(SpaceTopLevelStatement::Route(route.clone()));
+                                routes.push(route);
+                            }
+                        }
+                    } else {
+                        if let Ok(route) = self.parse_route() {
+                            statements.push(SpaceTopLevelStatement::Route(route.clone()));
+                            routes.push(route);
+                        }
+                    }
+                } else {
+                    if let Ok(route) = self.parse_route() {
+                        statements.push(SpaceTopLevelStatement::Route(route.clone()));
+                        routes.push(route);
+                    }
                 }
             } else if self.check(&Token::Expose) {
                 if let Ok(expose) = self.parse_expose() {
