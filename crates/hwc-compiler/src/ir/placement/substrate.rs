@@ -9,7 +9,9 @@ pub fn place_substrate(
     bbox_tracker: &mut crate::bounding_box_tracker::BoundingBoxTracker,
     ctx: &PlacementContext,
 ) -> Result<(), IrError> {
-    let material_id = space.material_registry.get_or_register(&substrate.material);
+    let material_id = space.material_registry.get_id(&substrate.material).ok_or_else(|| {
+        IrError::UndeclaredMaterial { material: substrate.material.clone() }
+    })?;
 
     space.substrate_material_id = material_id;
 

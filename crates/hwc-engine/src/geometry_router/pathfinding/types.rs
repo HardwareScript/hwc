@@ -23,6 +23,6 @@ pub struct RoutingParams<'a> {
     pub corridor: Option<&'a FxHashSet<CoarseNode>>,
     pub fixed_z_nm: Option<i64>,
     pub exempt_components: &'a [CompactString],
-    pub substrate_layers: Option<&'a [crate::voxel_grid::SubstrateLayer]>,
+    pub substrate_layers: Option<&'a [crate::geometry_router::substrate_types::SubstrateLayer]>,
     pub is_high_speed_net: bool,
 }

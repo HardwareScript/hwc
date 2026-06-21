@@ -181,12 +181,12 @@ impl ViaLibrary {
                                     from_layer.name.name, to_layer.name.name
                                 );
 
-                                println!(
-                                    "   │  [LIB] Auto-gen via '{}': L{}→L{}, z {}nm→{}nm, \
-                                     dia {:.3}mm, ring {:.3}mm",
-                                    via_name, from, to, z_start, z_end, min_diameter_mm,
-                                    min_annular_ring_mm
-                                );
+                                // println!(
+                                //     "   │  [LIB] Auto-gen via '{}': L{}→L{}, z {}nm→{}nm, \
+                                //      dia {:.3}mm, ring {:.3}mm",
+                                //     via_name, from, to, z_start, z_end, min_diameter_mm,
+                                //     min_annular_ring_mm
+                                // );
 
                                 vias.push(ViaType::new(
                                     via_name.into(),
@@ -228,12 +228,12 @@ impl ViaLibrary {
                                 bottom_layer.name.name, top_layer.name.name
                             );
 
-                            println!(
-                                "   │  [LIB] Auto-gen through-hole via '{}': L{}→L{}, \
-                                 z {}nm→{}nm, dia {:.3}mm, ring {:.3}mm",
-                                via_name, bottom, top, z_start, z_end, min_diameter_mm,
-                                min_annular_ring_mm
-                            );
+                            // println!(
+                            //     "   │  [LIB] Auto-gen through-hole via '{}': L{}→L{}, \
+                            //      z {}nm→{}nm, dia {:.3}mm, ring {:.3}mm",
+                            //     via_name, bottom, top, z_start, z_end, min_diameter_mm,
+                            //     min_annular_ring_mm
+                            // );
 
                             vias.push(ViaType::new(
                                 via_name.into(),

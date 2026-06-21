@@ -25,21 +25,14 @@ pub struct DeviceExtractor<'a> {
     pub(super) space: &'a HardwareSpace,
     pub(super) symbol_table: &'a hwc_compiler::SymbolTable,
     pub(super) device_registry: DeviceTypeRegistry,
-    pub(super) material_database: hwc_materials::MaterialDatabase,
 }
 
 impl<'a> DeviceExtractor<'a> {
-    /// Create a new device extractor
     pub fn new(space: &'a HardwareSpace, symbol_table: &'a hwc_compiler::SymbolTable) -> Self {
-        // Populate material database from symbol table for physics validation
-        let material_database = hwc_compiler::populate_material_database(symbol_table)
-            .unwrap_or_else(|_| hwc_materials::MaterialDatabase::empty());
-
         Self {
             space,
             symbol_table,
             device_registry: DeviceTypeRegistry::new(),
-            material_database,
         }
     }
 
@@ -189,11 +182,12 @@ impl<'a> DeviceExtractor<'a> {
 
         let mut has_active_region = false;
         for pour in terminal_pours.values() {
-            if self
-                .material_database
-                .get_semiconductor(&pour.material_name.to_lowercase())
-                .is_ok()
-            {
+            if matches!(
+                self.space
+                    .material_registry
+                    .get_conductivity_by_name(&pour.material_name),
+                Some(hwc_engine::MaterialConductivity::Semiconductor)
+            ) {
                 has_active_region = true;
                 break;
             }
@@ -202,7 +196,7 @@ impl<'a> DeviceExtractor<'a> {
         if let Some(gate_pour) = terminal_pours.get("gate") {
             if is_ic_package || !has_active_region {
                 println!(
-                    "      ⚠️  Skipping MOSFET extraction for {}: Not a silicon-level transistor",
+                    "      ├─ Skipping MOSFET extraction for {}: Not a silicon-level transistor",
                     device_name
                 );
             } else {

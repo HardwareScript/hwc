@@ -404,7 +404,7 @@ impl CompactLockfile {
     /// Convert decoded waypoints into `AnalyticTrace` objects.
     pub fn to_analytic_traces(
         &self,
-        material_id: crate::voxel::MaterialId,
+        material_id: crate::material::MaterialId,
         netlist: &crate::netlist::NetlistArena,
     ) -> Vec<crate::space::AnalyticTrace> {
         let per_net = decode_instances(self);

@@ -9,7 +9,7 @@ use crate::mesh_extrusion::extrude_polygon_mesh;
 use clipper2_rust::core::FillRule;
 use compact_str::CompactString;
 use hwc_engine::geometry_router::entity_graph::CapType;
-use hwc_engine::voxel_grid::SubstrateLayerShape;
+use hwc_engine::geometry_router::substrate_types::SubstrateLayerShape;
 use hwc_engine::HardwareSpace;
 use hwc_parser::ProfileDefinition;
 use rustc_hash::FxHashMap;
@@ -41,7 +41,7 @@ pub fn add_substrate(
             hwc_engine::geometry::Point3D::new(width_nm, height_nm, depth_nm),
         );
 
-        let base_layer = hwc_engine::voxel_grid::SubstrateLayer::new(
+        let base_layer = hwc_engine::geometry_router::substrate_types::SubstrateLayer::new(
             space.substrate_material_id,
             0,
             base_bbox,
@@ -176,12 +176,12 @@ pub fn add_substrate(
 
     // --- STRATEGY A: NET-AWARE COPPER UNIONING POOL ---
     let mut copper_pools: FxHashMap<
-        (i64, i64, hwc_engine::voxel_grid::MaterialId, u32),
+        (i64, i64, hwc_engine::geometry_router::substrate_types::MaterialId, u32),
         Vec<clipper2_rust::Path64>,
     > = FxHashMap::default();
     // v0.1.8: Via inner holes collected separately for subtraction after union
     let mut via_holes: FxHashMap<
-        (i64, i64, hwc_engine::voxel_grid::MaterialId, u32),
+        (i64, i64, hwc_engine::geometry_router::substrate_types::MaterialId, u32),
         Vec<clipper2_rust::Path64>,
     > = FxHashMap::default();
 

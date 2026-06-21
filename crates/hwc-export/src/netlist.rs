@@ -135,10 +135,13 @@ pub fn export(
     }
 
     // Emit components as SPICE devices
+    // If a physical netlist is present, skip schematic-level components to avoid
+    // conflicting with extracted M devices (prevents LTspice subcircuit conflicts)
+    let is_physical_mode = physical_netlist.is_some();
     let component_count = space.netlist.component_count();
-    if component_count > 0 {
+    if component_count > 0 && !is_physical_mode {
         netlist_str.push_str("* ========================================\n");
-        netlist_str.push_str("* COMPONENTS\n");
+        netlist_str.push_str("* COMPONENTS (Schematic-Level Subcircuits)\n");
         netlist_str.push_str("* ========================================\n");
 
         for i in 0..component_count {
@@ -257,16 +260,16 @@ pub fn export(
                     .cloned()
                     .unwrap_or_else(|| "0".into());
 
-                // Extract parameters (convert from nm to um for SPICE)
+                // Extract parameters (already in micrometers from device extractor)
                 let w_um = device
                     .parameters
                     .get("W")
-                    .map(|w| w / 1000.0)
+                    .copied()
                     .unwrap_or(1.0);
                 let l_um = device
                     .parameters
                     .get("L")
-                    .map(|l| l / 1000.0)
+                    .copied()
                     .unwrap_or(1.0);
 
                 // Write MOSFET line: M<name> <drain> <gate> <source> <bulk> <model> W=<w>u L=<l>u
@@ -301,6 +304,14 @@ pub fn export(
         netlist_str.push_str("* DEVICE EXTRACTION REQUIRES EXPLICIT BINDINGS\n");
         netlist_str.push_str("* Use 'device: DeviceName.terminal' property\n");
         netlist_str.push_str("* ========================================\n\n");
+    }
+
+    // Automatic ground bridge for physical mode (prevents floating GND errors in LTspice)
+    if is_physical_mode {
+        netlist_str.push_str("* ========================================\n");
+        netlist_str.push_str("* AUTOMATIC STIMULUS & MODELS\n");
+        netlist_str.push_str("* ========================================\n");
+        netlist_str.push_str("Vgnd GND 0 0\n");
     }
 
     // Footer

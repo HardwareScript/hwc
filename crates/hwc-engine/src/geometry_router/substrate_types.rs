@@ -1,63 +1,255 @@
-use super::super::chunk::{MaterialId, NetId};
-use super::types::{CapType, Cutout, SubstrateLayerShape, SubstrateLayerType};
-use crate::geometry::BoundingBox;
-use clipper2_rust::Path64;
+//! Substrate and component types — gridless, vector-first representations.
+//!
+//! These types define the physical substrate layers, component metadata,
+//! and pin positions used throughout the engine. They are independent of
+//! any voxel grid and represent pure continuous geometry.
+
+use crate::geometry::{BoundingBox, Point3D};
+use clipper2_rust::{Path64, Paths64};
+use compact_str::CompactString;
+use rustc_hash::FxHashMap;
 use smallvec::SmallVec;
+
+// Re-export MaterialId from the material module
+pub use crate::material::MaterialId;
+
+/// Net ID type — u32 for up to 4 billion nets.
+pub type NetId = u32;
+
+/// Terminal (pin) position in a component
+#[derive(Debug, Clone, PartialEq)]
+pub struct Terminal {
+    /// Terminal name (e.g., "gate", "source", "drain")
+    pub name: CompactString,
+    /// Position in nanometers (absolute world coordinates)
+    pub position: Point3D,
+    /// Material at this terminal
+    pub material_id: MaterialId,
+    /// Net binding
+    pub net_id: Option<NetId>,
+}
+
+/// Type of substrate layer for proper physics validation
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SubstrateLayerType {
+    /// 2D copper pour (pad, plane, filled region)
+    Pour,
+    /// 3D vertical contact (via, through-hole)
+    Contact,
+    /// 3D dielectric substrate (FR4, core, prepreg)
+    Substrate,
+    /// Solder mask coating on top/bottom board faces
+    SolderMask,
+}
+
+/// Type of cap for tube shapes
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CapType {
+    /// No cap (open end)
+    None,
+    /// Annular ring (disk with a hole)
+    Annular,
+    /// Solid disk (no hole)
+    Solid,
+}
+
+/// Physical shape of the substrate layer
+#[derive(Debug, Clone, PartialEq)]
+pub enum SubstrateLayerShape {
+    /// Axis-aligned bounding box (default)
+    Rect,
+    /// 2D circle shape (circular pours, annular rings)
+    Circle {
+        /// Radius in nanometers
+        radius: i64,
+    },
+    /// Generic polygon-based shape.
+    /// The outer_contour defines the boundary; holes are subtracted from it.
+    Polygon {
+        outer_contour: Path64,
+        holes: Paths64,
+        /// Tessellation segments for 3D rendering
+        segments: u32,
+    },
+    /// Tube shape (Plated through-hole walls)
+    Tube {
+        outer_diameter: u32,
+        inner_diameter: u32,
+        pad_diameter: u32,
+        segments: u32,
+        top_cap: CapType,
+        bottom_cap: CapType,
+        /// Bottom outer diameter for tapered vias
+        bottom_outer_diameter: Option<u32>,
+    },
+}
+
+/// A multi-material stack for TSVs (Through-Silicon Vias).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LinerStack {
+    /// Material for the insulator sleeve (e.g. SiO2, Si3N4)
+    pub liner_material: MaterialId,
+    /// Thickness of the liner in nanometers
+    pub liner_thickness_nm: i64,
+    /// Optional bridge material for the interface
+    pub bridge_material: Option<MaterialId>,
+    /// Thickness of the bridge in nanometers
+    pub bridge_thickness_nm: i64,
+    /// Material for the conductive core (e.g. Copper, Tungsten)
+    pub fill_material: MaterialId,
+}
+
+impl LinerStack {
+    /// Create a new TSV liner stack.
+    pub fn new(
+        liner_material: MaterialId,
+        liner_thickness_nm: i64,
+        bridge_material: Option<MaterialId>,
+        bridge_thickness_nm: i64,
+        fill_material: MaterialId,
+    ) -> Self {
+        Self {
+            liner_material,
+            liner_thickness_nm,
+            bridge_material,
+            bridge_thickness_nm,
+            fill_material,
+        }
+    }
+}
+
+/// Parameters for a TSV (Through-Silicon Via).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TSVParams {
+    /// Total diameter of the TSV (including liner) in nanometers
+    pub diameter_nm: i64,
+    /// The material stack for this TSV
+    pub stack: LinerStack,
+    /// Keep-out zone radius multiplier (typically 3.0x diameter)
+    pub koz_multiplier: f32,
+}
+
+impl TSVParams {
+    /// Create new TSV parameters.
+    pub fn new(diameter_nm: i64, stack: LinerStack) -> Self {
+        Self {
+            diameter_nm,
+            stack,
+            koz_multiplier: 3.0,
+        }
+    }
+}
+
+/// A cutout (hole) in a substrate layer.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Cutout {
+    pub bbox: BoundingBox,
+    pub shape: SubstrateLayerShape,
+}
+
+/// Rotation for component placement
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Rotation {
+    None,
+    Rotate90,
+    Rotate180,
+    Rotate270,
+}
+
+impl SubstrateLayerShape {
+    /// Pre-baked generator for circular via cross-section
+    pub fn cylinder(diameter_nm: i64, segments: u32) -> Self {
+        let radius = diameter_nm / 2;
+        let mut contour = Path64::new();
+        for i in 0..segments {
+            let angle = (i as f64 / segments as f64) * 2.0 * std::f64::consts::PI;
+            let x = (radius as f64 * angle.cos()) as i64;
+            let y = (radius as f64 * angle.sin()) as i64;
+            contour.push(clipper2_rust::Point64::new(x, y));
+        }
+        SubstrateLayerShape::Polygon {
+            outer_contour: contour,
+            holes: Paths64::new(),
+            segments,
+        }
+    }
+
+    /// Pre-baked generator for square via cross-section
+    pub fn square(size_nm: i64) -> Self {
+        let half = size_nm / 2;
+        let contour = vec![
+            clipper2_rust::Point64::new(-half, -half),
+            clipper2_rust::Point64::new(half, -half),
+            clipper2_rust::Point64::new(half, half),
+            clipper2_rust::Point64::new(-half, half),
+        ];
+        SubstrateLayerShape::Polygon {
+            outer_contour: contour,
+            holes: Paths64::new(),
+            segments: 4,
+        }
+    }
+
+    /// Pre-baked generator for rectangular via cross-section
+    pub fn rect(width_nm: i64, height_nm: i64) -> Self {
+        let half_w = width_nm / 2;
+        let half_h = height_nm / 2;
+        let contour = vec![
+            clipper2_rust::Point64::new(-half_w, -half_h),
+            clipper2_rust::Point64::new(half_w, -half_h),
+            clipper2_rust::Point64::new(half_w, half_h),
+            clipper2_rust::Point64::new(-half_w, half_h),
+        ];
+        SubstrateLayerShape::Polygon {
+            outer_contour: contour,
+            holes: Paths64::new(),
+            segments: 4,
+        }
+    }
+
+    /// Pre-baked generator for hexagonal via cross-section
+    pub fn hexagon(size_nm: i64) -> Self {
+        let half = size_nm / 2;
+        let quarter = size_nm / 4;
+        let height_quarter = (size_nm as f64 * 0.433) as i64;
+        let contour = vec![
+            clipper2_rust::Point64::new(-half, 0),
+            clipper2_rust::Point64::new(-quarter, height_quarter),
+            clipper2_rust::Point64::new(quarter, height_quarter),
+            clipper2_rust::Point64::new(half, 0),
+            clipper2_rust::Point64::new(quarter, -height_quarter),
+            clipper2_rust::Point64::new(-quarter, -height_quarter),
+        ];
+        SubstrateLayerShape::Polygon {
+            outer_contour: contour,
+            holes: Paths64::new(),
+            segments: 6,
+        }
+    }
+}
 
 /// A substrate layer represented as a bounding box with uniform material.
 ///
 /// This is the core of the sparse substrate architecture. Instead of allocating
 /// millions of chunks for a uniform substrate layer, we store just the bounding
 /// box and material ID.
-///
-/// Total size: 32 bytes base + Vec overhead for cutouts
-///
-/// # Example
-/// ```
-/// # use hwc_engine::geometry::{BoundingBox, Point3D};
-/// # use hwc_engine::voxel_grid::SubstrateLayer;
-/// let bbox = BoundingBox::new(
-///     Point3D::new(0, 0, 0),
-///     Point3D::new(20_000_000, 20_000_000, 2_000_000)
-/// );
-/// let layer = SubstrateLayer::new(1, 0, bbox, SubstrateLayerType::Pour); // FR4, no net, pour
-/// assert_eq!(layer.material, 1);
-/// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct SubstrateLayer {
     /// Material ID (e.g., 1 = FR4, 5 = Silicon)
     pub material: MaterialId,
-
-    /// Net ID (typically 0 for substrate, as it's not part of any net)
+    /// Net ID (typically 0 for substrate)
     pub net: NetId,
-
     /// Bounding box in nanometers defining the substrate region
     pub bbox: BoundingBox,
-
-    /// Cutouts (holes) in the substrate for mounting holes, edge cuts, etc.
-    /// Points inside these bounding boxes are NOT part of the substrate.
+    /// Cutouts (holes) in the substrate
     pub cutouts: SmallVec<[Cutout; 4]>,
-
-    /// Type of substrate layer (pour vs contact) for proper physics validation
-    /// Added in v0.1.6 for accurate thermal analysis
+    /// Type of substrate layer
     pub layer_type: SubstrateLayerType,
-
-    /// Geometric shape for 3D export (v0.1.6)
+    /// Geometric shape for 3D export
     pub shape: SubstrateLayerShape,
-
-    /// Keep-out zone radius in nanometers (v0.1.7: TSV Stress Management)
-    /// If non-zero, this region around the substrate layer is forbidden for other components.
+    /// Keep-out zone radius in nanometers
     pub koz_radius_nm: i64,
-
-    /// v0.1.8: Child regions for merged trace segments.
-    ///
-    /// When multiple trace segments on the same physical layer (same Z, material, net)
-    /// are realized, they are stored as child regions inside a single SubstrateLayer
-    /// instead of creating separate layer objects. This preserves the O(1) memory
-    /// architecture while supporting arbitrary trace geometry.
-    ///
-    /// If empty, the layer uses `bbox` as its sole region (legacy behavior).
-    /// If non-empty, each entry is an independent bounding box belonging to this layer.
+    /// Child regions for merged trace segments
     pub regions: SmallVec<[BoundingBox; 4]>,
 }
 
@@ -220,19 +412,12 @@ impl SubstrateLayer {
         }
     }
 
-    /// v0.1.8: Append a child region (bounding box) to this layer.
-    ///
-    /// Used during trace realization to merge multiple segments into a single
-    /// physical layer instead of creating separate SubstrateLayer objects.
-    /// Each region is an independent bounding box belonging to this layer.
+    /// Append a child region (bounding box) to this layer.
     pub fn append_region(&mut self, bbox: BoundingBox) {
         self.regions.push(bbox);
     }
 
     /// Add a cutout (hole) to this substrate layer.
-    ///
-    /// # Arguments
-    /// * `cutout_bbox` - Bounding box defining the hole
     pub fn add_cutout(&mut self, cutout_bbox: BoundingBox) {
         self.cutouts.push(Cutout {
             bbox: cutout_bbox,
@@ -249,19 +434,8 @@ impl SubstrateLayer {
     }
 
     /// Check if a point (in nanometers) is within this substrate layer.
-    ///
-    /// This is the O(1) lookup operation that replaces chunk scanning.
-    /// Returns true if the point is inside the substrate bbox AND not inside any cutout.
-    ///
-    /// # Arguments
-    /// * `x`, `y`, `z` - Coordinates in nanometers
-    ///
-    /// # Returns
-    /// `true` if the point is within the substrate layer and not in a cutout
     #[inline]
     pub fn contains_nm(&self, x: i64, y: i64, z: i64) -> bool {
-        // v0.1.8: If regions are present, check against child regions instead of bbox.
-        // This ensures points in empty space between trace segments return false.
         if !self.regions.is_empty() {
             let in_any_region = self.regions.iter().any(|r| {
                 x >= r.min.x && x <= r.max.x
@@ -481,47 +655,26 @@ impl SubstrateLayer {
     }
 
     /// Check if a point (in nanometers) is within the Keep-Out Zone of this layer.
-    ///
-    /// Specifically for TSVs, this checks if the point is within the forbidden
-    /// stress-field radius (v0.1.7).
     pub fn is_in_koz(&self, x: i64, y: i64, z: i64) -> bool {
         if self.koz_radius_nm == 0 {
             return false;
         }
-
         if z < self.bbox.min.z || z > self.bbox.max.z {
             return false;
         }
-
         let center_x = (self.bbox.min.x + self.bbox.max.x) / 2;
         let center_y = (self.bbox.min.y + self.bbox.max.y) / 2;
         let dx = x - center_x;
         let dy = y - center_y;
-
         dx * dx + dy * dy <= self.koz_radius_nm * self.koz_radius_nm
     }
 
     /// Check if this layer is a simple axis-aligned rectangle.
-    ///
-    /// Returns false if the layer has cutouts or non-rectangular geometry.
-    /// This is used by the export pipeline to determine if contour tracing is needed.
-    ///
-    /// # Returns
-    /// `true` if the layer is a simple rectangle with no cutouts
     pub fn is_axis_aligned_rectangle(&self) -> bool {
         self.cutouts.is_empty()
     }
 
     /// Convert substrate layer to 2D boolean grid for contour tracing.
-    ///
-    /// This is used when exporting diagonal or complex geometry that requires
-    /// voxel-to-vector conversion with anti-aliasing.
-    ///
-    /// # Arguments
-    /// * `voxel_size_nm` - Size of each voxel in nanometers
-    ///
-    /// # Returns
-    /// Tuple of (grid, width, height) where grid is a flat boolean array
     pub fn to_2d_boolean_grid(&self, voxel_size_nm: i64) -> (Vec<bool>, usize, usize) {
         let width = ((self.bbox.max.x - self.bbox.min.x) / voxel_size_nm) as usize;
         let height = ((self.bbox.max.y - self.bbox.min.y) / voxel_size_nm) as usize;
@@ -618,9 +771,6 @@ impl SubstrateLayer {
 }
 
 /// Ray-casting point-in-polygon test.
-///
-/// Returns `true` if `(px, py)` is inside the polygon defined by `contour`.
-/// Uses the even-odd rule with a horizontal ray cast to the right.
 pub(super) fn point_in_polygon(px: i64, py: i64, contour: &Path64) -> bool {
     let n = contour.len();
     if n < 3 {
@@ -640,4 +790,163 @@ pub(super) fn point_in_polygon(px: i64, py: i64, contour: &Path64) -> bool {
         j = i;
     }
     inside
+}
+
+/// Component pin for physical continuity validation.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ComponentPin {
+    /// X coordinate in nanometers (absolute position)
+    pub x_nm: i64,
+    /// Y coordinate in nanometers (absolute position)
+    pub y_nm: i64,
+    /// Z coordinate in nanometers (absolute position)
+    pub z_nm: i64,
+    /// Component instance name (e.g., "M1", "R1")
+    pub component_name: CompactString,
+    /// Pin name within the component (e.g., "gate", "drain", "source", "A", "K")
+    pub pin_name: CompactString,
+    /// Net assignment (e.g., "VIN", "GND", "VDD")
+    pub net: Option<CompactString>,
+}
+
+impl ComponentPin {
+    /// Create a new component pin.
+    pub fn new(
+        x_nm: i64,
+        y_nm: i64,
+        z_nm: i64,
+        component_name: CompactString,
+        pin_name: CompactString,
+        net: Option<CompactString>,
+    ) -> Self {
+        Self {
+            x_nm,
+            y_nm,
+            z_nm,
+            component_name,
+            pin_name,
+            net,
+        }
+    }
+
+    /// Get the position as a tuple (x, y, z) in nanometers.
+    pub fn position(&self) -> (i64, i64, i64) {
+        (self.x_nm, self.y_nm, self.z_nm)
+    }
+
+    /// Get a display name for this pin (e.g., "M1.gate").
+    pub fn display_name(&self) -> CompactString {
+        format!("{}.{}", self.component_name, self.pin_name).into()
+    }
+}
+
+/// Component metadata for sparse component architecture.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ComponentMetadata {
+    /// Material ID (e.g., 5 = Ceramic, 10 = Polysilicon)
+    pub material: MaterialId,
+    /// Bounding box in nanometers defining the component region
+    pub bbox: BoundingBox,
+    /// Component name for debugging and error messages
+    pub name: CompactString,
+    /// Component type (e.g., "Resistor", "Transistor", "MCU")
+    pub component_type: CompactString,
+    /// Terminal positions (absolute world coordinates)
+    pub terminals: Vec<Terminal>,
+    /// Net bindings
+    pub net_bindings: FxHashMap<CompactString, NetId>,
+    /// Layer-Aware Keepout Zones (KOZ)
+    pub blocked_z_ranges: SmallVec<[(i64, i64); 2]>,
+}
+
+impl ComponentMetadata {
+    /// Create a new component metadata entry.
+    pub fn new(
+        material: MaterialId,
+        bbox: BoundingBox,
+        name: CompactString,
+        component_type: CompactString,
+    ) -> Self {
+        Self {
+            material,
+            bbox,
+            name,
+            component_type,
+            terminals: Vec::new(),
+            net_bindings: FxHashMap::default(),
+            blocked_z_ranges: SmallVec::new(),
+        }
+    }
+
+    /// Add a terminal to the component
+    pub fn add_terminal(&mut self, terminal: Terminal) {
+        self.terminals.push(terminal);
+    }
+
+    /// Bind a pin to a net
+    pub fn bind_net(&mut self, pin_name: CompactString, net_id: NetId) {
+        self.net_bindings.insert(pin_name, net_id);
+    }
+
+    /// Check if a point (in nanometers) is within this component.
+    #[inline]
+    pub fn contains_nm(&self, x: i64, y: i64, z: i64) -> bool {
+        x >= self.bbox.min.x
+            && x <= self.bbox.max.x
+            && y >= self.bbox.min.y
+            && y <= self.bbox.max.y
+            && z >= self.bbox.min.z
+            && z <= self.bbox.max.z
+    }
+
+    /// Check if a point (in nanometers) is inside this component's keepout zone.
+    #[inline]
+    pub fn is_in_koz(&self, x: i64, y: i64, z: i64) -> bool {
+        if !(x >= self.bbox.min.x
+            && x <= self.bbox.max.x
+            && y >= self.bbox.min.y
+            && y <= self.bbox.max.y)
+        {
+            return false;
+        }
+
+        if self.blocked_z_ranges.is_empty() {
+            return z >= self.bbox.min.z && z <= self.bbox.max.z;
+        }
+
+        for &(z_start, z_end) in &self.blocked_z_ranges {
+            if z >= z_start && z <= z_end {
+                return true;
+            }
+        }
+
+        false
+    }
+}
+
+/// Memory usage statistics for the substrate/entity system.
+#[derive(Debug, Clone, Default)]
+pub struct MemoryStats {
+    pub total_voxels: usize,
+    pub occupied_voxels: usize,
+    pub occupancy_percent: f64,
+    pub materials_bytes: usize,
+    pub net_ids_bytes: usize,
+    pub collision_bytes: usize,
+    pub total_bytes: usize,
+}
+
+/// Compaction statistics for monitoring memory health.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CompactionStats {
+    /// Total number of slots in the page directory
+    pub total_slots: usize,
+    /// Number of allocated slots
+    pub allocated_chunks: usize,
+    /// Number of empty slots (zombie)
+    pub zombie_chunks: usize,
+    /// Number of active slots (occupied)
+    pub active_chunks: usize,
+    /// Zombie ratio (zombie / allocated)
+    pub zombie_ratio: f64,
 }

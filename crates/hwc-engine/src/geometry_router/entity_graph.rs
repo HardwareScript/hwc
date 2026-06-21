@@ -2,16 +2,16 @@ use crate::geometry::BoundingBox;
 use crate::geometry::entity_ids::*;
 use crate::geometry_router::scene_graph::SceneGraph;
 use crate::geometry_router::spatial_index::{DynamicSpatialIndex, IndexedSegment};
+use crate::geometry_router::substrate_types::{
+    ComponentMetadata, ComponentPin, MaterialId,
+    SubstrateLayer,
+};
 use crate::netlist::{ComponentId, NetId, NetlistArena};
 use crate::space::VoxelSize;
-use crate::voxel_grid::{ComponentMetadata, ComponentPin, MaterialId, SubstrateLayer};
 use rustc_hash::FxHashMap;
 
-// Re-export substrate types so callers don't need to reference voxel_grid module
-pub use crate::voxel_grid::CapType;
-pub use crate::voxel_grid::LinerStack;
-pub use crate::voxel_grid::TSVParams;
-pub use crate::voxel_grid::SubstrateLayerType;
+// Re-export substrate types so callers don't need to reference substrate_types module
+pub use crate::geometry_router::substrate_types::{CapType, LinerStack, TSVParams, SubstrateLayerType};
 
 /// VoxelGrid NetId (u32) - distinguished from netlist::NetId
 type VoxelNetId = u32;
@@ -420,7 +420,7 @@ impl EntityGraph {
         cutouts: Vec<BoundingBox>,
         layer_type: SubstrateLayerType,
     ) {
-        use crate::voxel_grid::{Cutout, SubstrateLayerShape};
+        use crate::geometry_router::substrate_types::{Cutout, SubstrateLayerShape};
         let cutouts_with_shape: Vec<Cutout> = cutouts
             .into_iter()
             .map(|b| Cutout {
@@ -438,7 +438,7 @@ impl EntityGraph {
         material: MaterialId,
         net: VoxelNetId,
         bbox: BoundingBox,
-        cutouts: Vec<crate::voxel_grid::Cutout>,
+        cutouts: Vec<crate::geometry_router::substrate_types::Cutout>,
         layer_type: SubstrateLayerType,
     ) {
         let layer = SubstrateLayer::new_with_cutouts(material, net, bbox, cutouts, layer_type);
@@ -519,8 +519,8 @@ impl EntityGraph {
         inner_diameter: u32,
         pad_diameter: u32,
         segments: u32,
-        top_cap: crate::voxel_grid::CapType,
-        bottom_cap: crate::voxel_grid::CapType,
+        top_cap: crate::geometry_router::substrate_types::CapType,
+        bottom_cap: crate::geometry_router::substrate_types::CapType,
         bottom_outer_diameter: Option<u32>,
     ) {
         let layer = SubstrateLayer::new_tube(
@@ -735,7 +735,7 @@ impl EntityGraph {
         center_y_nm: i64,
         z_start_nm: i64,
         z_end_nm: i64,
-        params: crate::voxel_grid::TSVParams,
+        params: crate::geometry_router::substrate_types::TSVParams,
         handle: crate::netlist::NetHandle,
     ) {
         let clearance_nm = ((params.koz_multiplier - 1.0) * params.diameter_nm as f32 / 2.0) as i64;
@@ -965,12 +965,12 @@ impl EntityGraph {
     }
 
     /// Memory stats stub (VoxelGrid-compatible API).
-    pub fn memory_stats(&self) -> crate::voxel_grid::MemoryStats {
-        crate::voxel_grid::MemoryStats::default()
+    pub fn memory_stats(&self) -> crate::geometry_router::substrate_types::MemoryStats {
+        crate::geometry_router::substrate_types::MemoryStats::default()
     }
 
     /// Get material at a position (VoxelGrid-compatible API stub).
-    pub fn get_material(&self, _x: usize, _y: usize, _z: usize) -> crate::voxel_grid::MaterialId {
+    pub fn get_material(&self, _x: usize, _y: usize, _z: usize) -> crate::geometry_router::substrate_types::MaterialId {
         0
     }
 

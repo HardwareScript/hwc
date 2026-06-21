@@ -19,10 +19,10 @@ pub fn route_automatic(
     use hwc_engine::constraint_manager::{ConstraintManager, LayerDirection, RouteConstraints};
     use hwc_engine::geometry_router::GridBounds;
 
-    eprintln!(
-        "[ROUTER] Route automatic: {}.{} → {}.{}",
-        route.from.component, route.from.pin, route.to.component, route.to.pin
-    );
+    // eprintln!(
+    //     "[ROUTER] Route automatic: {}.{} → {}.{}",
+    //     route.from.component, route.from.pin, route.to.component, route.to.pin
+    // );
 
     // PHASE 1: CONSTRAINT MANAGER
     let voltage_mv = 5000;
@@ -147,7 +147,9 @@ pub fn route_automatic(
     let clearance_zones: Vec<ClearanceZone> = Vec::new();
 
     // Get Copper material ID from registry
-    let copper_id = space.material_registry.get_or_register("Copper");
+    let copper_id = space.material_registry.get_id("Copper").ok_or_else(|| {
+        IrError::UndeclaredMaterial { material: "Copper".into() }
+    })?;
 
     // v0.1.7: Identify exempt components (start and goal)
     let from_component_name = super::helpers::construct_component_name(&route.from)?;
@@ -171,7 +173,7 @@ pub fn route_automatic(
         is_high_speed_net: false, // v0.1.7: Default to non-high-speed
     };
 
-    eprintln!("[ROUTER] Starting topological line-search routing...");
+    // eprintln!("[ROUTER] Starting topological line-search routing...");
     let mut path = hwc_engine::geometry_router::route_net_deterministic(
         start_pos,
         goal_pos,
@@ -215,8 +217,8 @@ pub fn route_automatic(
     // **v0.1.7: ANALYTIC ROUTE REGISTRATION (GOD-TIER PARADIGM SHIFT)**
     let (start_pin_id, goal_pin_id) = super::helpers::get_pin_ids(space, route)?;
 
-    let start_pin_name = space.netlist.get_pin(start_pin_id).unwrap().name.clone();
-    let goal_pin_name = space.netlist.get_pin(goal_pin_id).unwrap().name.clone();
+    let _start_pin_name = space.netlist.get_pin(start_pin_id).unwrap().name.clone();
+    let _goal_pin_name = space.netlist.get_pin(goal_pin_id).unwrap().name.clone();
 
     // v0.1.7: Grid-Agnostic Z-Resolution
     // We transform the router's voxel-snapped path back into exact physical layer heights
@@ -423,16 +425,16 @@ pub fn route_automatic(
 
     space.add_analytic_route(analytic_trace);
 
-    eprintln!("[ROUTER] ✓ Route registered as analytic primitive");
+    // eprintln!("[ROUTER] ✓ Route registered as analytic primitive");
 
     // Connect both pins to the net (already done in register_net_for_route, but ensure logical binding)
     space.netlist.connect_pin(start_pin_id, net_id);
     space.netlist.connect_pin(goal_pin_id, net_id);
 
-    eprintln!(
-        "[ROUTER] ✓ Pins connected: {}.{} ← {} → {}.{}\n",
-        from_component_name, start_pin_name, net_name, to_component_name, goal_pin_name
-    );
+    // eprintln!(
+    //     "[ROUTER] ✓ Pins connected: {}.{} ← {} → {}.{}\n",
+    //     from_component_name, start_pin_name, net_name, to_component_name, goal_pin_name
+    // );
 
     // PHASE 3: ANALYTIC DESIGN RULE CHECK (v0.1.7 - GOD-TIER)
     //

@@ -1,0 +1,4 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,0.01x0.02x0.30mm,,,,,1
+M1,NMOS_Transistor,,,,,,1
+M2,PMOS_Transistor,,,,,,1

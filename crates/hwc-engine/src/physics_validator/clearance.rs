@@ -4,7 +4,7 @@ use super::dilation::dilate_mask_3d;
 use super::types::{NetProperties, PhysicsViolation};
 use crate::bit_chunk::BitChunk;
 use crate::geometry::Point3D;
-use crate::voxel_grid::NetId;
+use crate::geometry_router::substrate_types::NetId;
 
 /// Validate clearance between nets using bitwise dilation (THE KILLER FEATURE)
 ///

@@ -89,10 +89,10 @@ impl StackupManager {
                         layer_start_z_nm.insert(name.clone(), current_z);
                         layer_thickness_nm.insert(name.clone(), thickness_nm);
                         ordered_layers.push(name.clone());
-                        eprintln!(
-                            "[DEBUG stackup] Bottom-Up Mapping: {} -> z: {} nm (t: {} nm)",
-                            name, current_z, thickness_nm
-                        );
+                        // eprintln!(
+                        //     "[DEBUG stackup] Bottom-Up Mapping: {} -> z: {} nm (t: {} nm)",
+                        //     name, current_z, thickness_nm
+                        // );
                         current_z += thickness_nm;
                     }
                 }
@@ -107,7 +107,7 @@ impl StackupManager {
                         layer_start_z_nm.insert(name.clone(), current_z);
                         layer_thickness_nm.insert(name.clone(), thickness_nm);
                         ordered_layers.push(name.clone());
-                        eprintln!("[DEBUG stackup] Top-Origin Mapping (First=Bottom): {} -> z: {} nm (t: {} nm)", name, current_z, thickness_nm);
+                        // eprintln!("[DEBUG stackup] Top-Origin Mapping (First=Bottom): {} -> z: {} nm (t: {} nm)", name, current_z, thickness_nm);
                         current_z += thickness_nm;
                     }
                 }

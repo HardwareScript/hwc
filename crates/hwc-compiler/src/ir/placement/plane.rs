@@ -17,7 +17,9 @@ pub fn place_plane(
     bbox_tracker: &mut crate::bounding_box_tracker::BoundingBoxTracker,
     ctx: &PlacementContext,
 ) -> Result<(), IrError> {
-    let material_id = space.material_registry.get_or_register(&plane.material);
+    let material_id = space.material_registry.get_id(&plane.material).ok_or_else(|| {
+        IrError::UndeclaredMaterial { material: plane.material.clone() }
+    })?;
 
     let layer_name = match &plane.elevation {
         hwc_parser::Elevation::Semantic(id) => id.to_string(),
@@ -310,14 +312,14 @@ pub fn place_plane(
             Some(net_name.clone()),
         );
 
-        println!(
-            "   ├─ Registered anchor point for plane '{}' at ({:.3}mm, {:.3}mm, {:.3}mm) on net '{}'",
-            plane.name,
-            center_x as f64 / 1_000_000.0,
-            center_y as f64 / 1_000_000.0,
-            center_z as f64 / 1_000_000.0,
-            net_name
-        );
+        // println!(
+        //     "   ├─ Registered anchor point for plane '{}' at ({:.3}mm, {:.3}mm, {:.3}mm) on net '{}'",
+        //     plane.name,
+        //     center_x as f64 / 1_000_000.0,
+        //     center_y as f64 / 1_000_000.0,
+        //     center_z as f64 / 1_000_000.0,
+        //     net_name
+        // );
 
         net_id_handle.raw()
     } else {

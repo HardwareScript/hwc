@@ -95,14 +95,14 @@ impl TopologicalRouter {
         let start_rays = self.project_all_rays(start, obstacles, board_bounds);
         let target_rays = self.project_all_rays(target, obstacles, board_bounds);
 
-        eprintln!(
-            "[DEBUG TOPO] Routing {:?} -> {:?}. Start rays: {}, Target rays: {}",
-            start, target, start_rays.len(), target_rays.len()
-        );
+        // eprintln!(
+        //     "[DEBUG TOPO] Routing {:?} -> {:?}. Start rays: {}, Target rays: {}",
+        //     start, target, start_rays.len(), target_rays.len()
+        // );
 
         // Try direct orthogonal connection first (L-shape or straight)
         if let Some(path) = self.try_direct_path(start, target, obstacles, board_bounds) {
-            eprintln!("[DEBUG TOPO] Found direct path with length {}", path.total_length);
+            // eprintln!("[DEBUG TOPO] Found direct path with length {}", path.total_length);
             return Some(path);
         }
 
@@ -115,14 +115,14 @@ impl TopologicalRouter {
                 if let Some(meeting) = Self::find_ray_intersection(s_ray, t_ray) {
                     // Verify the meeting point is not inside an obstacle
                     if self.point_in_obstacle(meeting, obstacles) {
-                        eprintln!("[DEBUG TOPO] Meeting point {:?} is in obstacle", meeting);
+                        // eprintln!("[DEBUG TOPO] Meeting point {:?} is in obstacle", meeting);
                         continue;
                     }
                     // Build path: start -> bend_point_start -> meeting -> bend_point_target -> target
                     if let Some(path) = self.build_path_from_rays(
                         start, target, s_ray, t_ray, meeting, obstacles, board_bounds,
                     ) {
-                        eprintln!("[DEBUG TOPO] Found intersection path with length {}", path.total_length);
+                        // eprintln!("[DEBUG TOPO] Found intersection path with length {}", path.total_length);
                         if path.total_length < best_length {
                             best_length = path.total_length;
                             best_path = Some(path);

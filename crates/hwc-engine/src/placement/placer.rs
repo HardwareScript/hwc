@@ -4,7 +4,7 @@ use crate::geometry::Point3D;
 use crate::geometry_router::EntityGraph;
 use crate::netlist::ComponentId;
 use crate::space::VoxelSize;
-use crate::voxel::MaterialId;
+use crate::material::MaterialId;
 
 use super::collision::check_collision;
 use super::component_definition::{
@@ -327,7 +327,11 @@ impl ComponentPlacer {
 
         // Phase 4.6: Register component as sparse metadata (GOD-TIER ARCHITECTURE)
         // Get or register the component's material dynamically
-        let material_id = material_registry.get_or_register(&definition.material_name);
+        let material_id = material_registry.get_id(&definition.material_name)
+            .unwrap_or_else(|| panic!(
+                "Internal error: material '{}' should have been registered before component placement",
+                definition.material_name
+            ));
 
         // Instead of filling voxels (Density Bomb), register component as sparse metadata
         // The router/DRC will check this metadata when needed via get_material()
@@ -382,7 +386,7 @@ fn register_component_metadata(
     definition: &ComponentDefinition,
     position: Point3D,
     rotation_deg: f64,
-    material_id: crate::voxel::MaterialId,
+    material_id: crate::material::MaterialId,
     name: &str,
 ) -> Result<(), PlacementError> {
     let bbox = calculate_global_bounding_box(definition, position, rotation_deg);

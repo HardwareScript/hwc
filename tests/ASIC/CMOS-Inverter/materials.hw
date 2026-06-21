@@ -1,0 +1,59 @@
+# Material definitions for CMOS Inverter
+# All materials must be declared before use (Hermetic Architecture)
+
+# ============================================================================
+# Conductors
+# ============================================================================
+
+material Copper:
+    category: conductor
+    description: "Standard PCB trace material"
+
+material Aluminum:
+    category: conductor
+    description: "Metal 1 layer material"
+
+material Polysilicon:
+    category: conductor
+    description: "Gate electrode material for CMOS transistors"
+
+# ============================================================================
+# Semiconductors (Doped)
+# ============================================================================
+
+material Silicon_P:
+    category: semiconductor
+    description: "P-type silicon (boron-doped) - NMOS bulk/substrate"
+
+material Silicon_N:
+    category: semiconductor
+    description: "N-type silicon (phosphorus-doped) - NMOS source/drain, PMOS bulk"
+
+# ============================================================================
+# Insulators
+# ============================================================================
+
+material SiO2:
+    category: insulator
+    description: "Silicon dioxide - gate oxide and passivation layer"
+
+material FR4:
+    category: insulator
+    description: "Standard PCB substrate"
+
+# ============================================================================
+# Compiler Internal Materials
+# Used by the compiler for component bodies, solder mask, and via filling
+# ============================================================================
+
+material Component:
+    category: insulator
+    description: "Internal material for component body bounding boxes"
+
+material SolderMask:
+    category: insulator
+    description: "Solder mask layer - green protective coating"
+
+material Epoxy:
+    category: insulator
+    description: "Non-conductive epoxy fill for filled vias"

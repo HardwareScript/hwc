@@ -165,6 +165,7 @@ pub fn run_drc_check(
             safety_factor: constraints.clearance.safety_factor,
             stackup,
             solder_mask_expansion_nm: constraints.solder_mask_expansion_nm,
+            technology: constraints.technology.clone(),
         };
 
         constraint_rulebook.set_fabrication_constraints(fab_constraints);

@@ -123,7 +123,9 @@ pub fn route_manual(
         "Copper".to_string()
     };
 
-    let copper_id = space.material_registry.get_or_register(&material_name);
+    let copper_id = space.material_registry.get_id(&material_name).ok_or_else(|| {
+        IrError::UndeclaredMaterial { material: material_name.clone().into() }
+    })?;
 
     // v0.1.7: Create analytic trace for substrate layer realization
     // (manual routes must use the same analytic → substrate pipeline as auto routes)

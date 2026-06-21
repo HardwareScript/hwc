@@ -1,6 +1,6 @@
 use crate::geometry::{BoundingBox, Point3D};
 use crate::netlist::NetId;
-use crate::voxel::MaterialId;
+use crate::material::MaterialId;
 use compact_str::CompactString;
 
 /// **v0.1.7: ANALYTIC TRACE PRIMITIVES (GOD-TIER ARCHITECTURE)**

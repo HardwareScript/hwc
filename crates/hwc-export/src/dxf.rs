@@ -17,7 +17,7 @@ use crate::geometry_union::{circle_to_path, rect_to_path};
 use clipper2_rust::FillRule;
 use hwc_compiler::SymbolTable;
 use hwc_engine::geometry_router::entity_graph::{CapType, SubstrateLayerType};
-use hwc_engine::voxel_grid::SubstrateLayerShape;
+use hwc_engine::geometry_router::substrate_types::SubstrateLayerShape;
 use hwc_engine::{HardwareSpace, SpaceView};
 use rustc_hash::FxHashMap;
 use std::io::Write;
@@ -42,11 +42,32 @@ pub fn export(
     // 2. TABLES (Layer Definitions with Color and Transparency)
     writeln!(w, "  0\nSECTION\n  2\nTABLES\n  0\nTABLE\n  2\nLAYER")?;
 
-    // Add global layers
-    writeln!(w, "  0\nLAYER\n  2\nDRILL\n 70\n0\n 62\n0")?;
-    writeln!(w, "  0\nLAYER\n  2\nTOP_COMPONENTS\n 70\n0\n 62\n7")?;
-    writeln!(w, "  0\nLAYER\n  2\nBOTTOM_COMPONENTS\n 70\n0\n 62\n7")?;
-    writeln!(w, "  0\nLAYER\n  2\nPCB_LAYERS\n 70\n0\n 62\n7")?;
+    let is_asic = space.fabrication_constraints.as_ref().map_or(false, |c| {
+        c.technology
+            .as_ref()
+            .map_or(false, |t| t.to_lowercase() == "asic")
+    });
+
+    if is_asic {
+        // ASIC Mode: Write only the physical semiconductor mask layers from the stackup
+        let substrate_layers = space.entity_graph.get_substrate_layers();
+        let mut seen_materials = rustc_hash::FxHashSet::default();
+        for layer in substrate_layers {
+            if seen_materials.insert(layer.material) {
+                let mat_name = space
+                    .material_registry
+                    .get_name(layer.material)
+                    .unwrap_or("Unknown");
+                writeln!(w, "  0\nLAYER\n  2\n{}\n 70\n0\n 62\n7", mat_name)?;
+            }
+        }
+    } else {
+        // PCB Mode: Add global layers
+        writeln!(w, "  0\nLAYER\n  2\nDRILL\n 70\n0\n 62\n0")?;
+        writeln!(w, "  0\nLAYER\n  2\nTOP_COMPONENTS\n 70\n0\n 62\n7")?;
+        writeln!(w, "  0\nLAYER\n  2\nBOTTOM_COMPONENTS\n 70\n0\n 62\n7")?;
+        writeln!(w, "  0\nLAYER\n  2\nPCB_LAYERS\n 70\n0\n 62\n7")?;
+    }
 
     let substrate_layers = space.entity_graph.get_substrate_layers();
 
@@ -58,11 +79,11 @@ pub fn export(
     // --- STRATEGY A: Union copper pours for clean DXF contours ---
     // Collect copper pools keyed by (z_min, z_max, material, net)
     let mut copper_pools: FxHashMap<
-        (i64, i64, hwc_engine::voxel_grid::MaterialId, u32),
+        (i64, i64, hwc_engine::geometry_router::substrate_types::MaterialId, u32),
         Vec<clipper2_rust::Path64>,
     > = FxHashMap::default();
     let mut via_holes: FxHashMap<
-        (i64, i64, hwc_engine::voxel_grid::MaterialId, u32),
+        (i64, i64, hwc_engine::geometry_router::substrate_types::MaterialId, u32),
         Vec<clipper2_rust::Path64>,
     > = FxHashMap::default();
 
@@ -219,8 +240,10 @@ pub fn export(
                 continue;
             }
 
+            let layer_name = if is_asic { mat_name } else { "PCB_LAYERS" };
+
             writeln!(w, "  0\nLWPOLYLINE")?;
-            writeln!(w, "  8\nPCB_LAYERS")?;
+            writeln!(w, "  8\n{}", layer_name)?;
             writeln!(w, "420\n{}", true_color)?;
             writeln!(w, " 90\n{}", point_count)?;
             writeln!(w, " 70\n1")?; // Closed polyline
@@ -261,7 +284,7 @@ pub fn export(
             .unwrap_or_else(|_| "#808080".into());
         let true_color = parse_true_color(&color_hex);
 
-        let layer_name = "PCB_LAYERS";
+        let layer_name = if is_asic { mat_name } else { "PCB_LAYERS" };
 
         match &layer.shape {
             SubstrateLayerShape::Rect => {
@@ -357,7 +380,8 @@ pub fn export(
                         .collect();
                     if hole_points.len() >= 3 {
                         writeln!(w, "  0\nLWPOLYLINE")?;
-                        writeln!(w, "  8\nDRILL")?;
+                        let drill_layer = if is_asic { mat_name } else { "DRILL" };
+                        writeln!(w, "  8\n{}", drill_layer)?;
                         writeln!(w, "420\n0")?;
                         writeln!(w, " 90\n{}", hole_points.len())?;
                         writeln!(w, " 70\n1")?;
@@ -399,7 +423,8 @@ pub fn export(
                 // Inner hole circle (drill)
                 if inner_r > 0.0 {
                     writeln!(w, "  0\nCIRCLE")?;
-                    writeln!(w, "  8\nDRILL")?;
+                    let drill_layer = if is_asic { mat_name } else { "DRILL" };
+                    writeln!(w, "  8\n{}", drill_layer)?;
                     writeln!(w, "420\n0")?;
                     writeln!(w, " 10\n{:.6}\n 20\n{:.6}", cx, cy)?;
                     writeln!(w, " 40\n{:.6}", inner_r)?;

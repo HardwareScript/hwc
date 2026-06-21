@@ -6,102 +6,92 @@ use super::error::DeviceExtractionError;
 use super::DeviceExtractor;
 
 impl<'a> DeviceExtractor<'a> {
-    /// Validate bulk biasing based on material properties (GAP 5)
+    /// Validate bulk biasing based on material properties.
+    ///
+    /// Uses the unified material registry for conductivity checks.
+    /// Full bias validation requires material properties from the symbol table;
+    /// gracefully skips when properties are unavailable.
     pub(super) fn validate_bulk_biasing_from_material(
         &self,
         bulk_net: &str,
-        device_type_name: &str,
-        bulk_pour: Option<&PourMetadata>,
-        transistor_name: &str,
+        _device_type_name: &str,
+        _bulk_pour: Option<&PourMetadata>,
+        _transistor_name: &str,
     ) -> Result<(), DeviceExtractionError> {
-        // Get the bulk material from the pour
-        let bulk_material = match bulk_pour {
-            Some(pour) => &pour.material_name,
-            None => {
-                // No bulk pour - skip validation (will be caught by missing terminal check)
-                return Ok(());
-            }
-        };
-
-        // Look up material in database (case-insensitive)
-        let semiconductor = match self
-            .material_database
-            .get_semiconductor(&bulk_material.to_lowercase())
-        {
-            Ok(semi) => semi,
-            Err(_) => {
-                // Material not in database - skip validation
-                println!(
-                    "   ⚠️  Warning: Material '{}' not found in database, skipping bias validation",
-                    bulk_material
-                );
-                return Ok(());
-            }
-        };
-
-        // Get bias requirement from material properties
-        let bias_req = match &semiconductor.bias_requirement {
-            Some(req) => req,
-            None => {
-                // No bias requirement - material doesn't need biasing (e.g., intrinsic)
-                return Ok(());
-            }
-        };
-
-        // Get net classification from space
         let net_classification = self.space.get_net_classification(bulk_net);
 
-        // Check if net is classified
         if matches!(
             net_classification,
             hwc_engine::space::NetClassification::Unclassified
         ) {
             return Err(DeviceExtractionError::BiasViolation {
-                transistor: transistor_name.to_string().into(),
-                device_type_name: device_type_name.to_string().into(),
+                transistor: _transistor_name.to_string().into(),
+                device_type_name: _device_type_name.to_string().into(),
                 bulk_net: bulk_net.to_string().into(),
                 expected_net: format!(
-                    "{:?} classification required by material {} (net '{}' is unclassified - add net_classifications to space)",
-                    bias_req, bulk_material, bulk_net
-                ).into(),
+                    "Net '{}' is unclassified — add net_classifications to space",
+                    bulk_net
+                )
+                .into(),
             });
         }
 
-        // Convert hwc_engine::NetClassification to hwc_materials::NetClassification
-        let materials_net_class = match net_classification {
-            hwc_engine::space::NetClassification::Power => hwc_materials::NetClassification::Power,
-            hwc_engine::space::NetClassification::Ground => {
-                hwc_materials::NetClassification::Ground
-            }
-            hwc_engine::space::NetClassification::Signal => {
-                hwc_materials::NetClassification::Signal
-            }
-            hwc_engine::space::NetClassification::HighVoltage => {
-                hwc_materials::NetClassification::HighVoltage
-            }
-            hwc_engine::space::NetClassification::Unclassified => {
-                hwc_materials::NetClassification::Unclassified
-            }
-        };
+        // Full bias validation requires material properties (bias_requirement, doping_type)
+        // from the symbol table. If available, validate against net classification.
+        if let Some(pour) = _bulk_pour {
+            if let Ok(mat_def) = self.symbol_table.get_material(&pour.material_name) {
+                // Look up bias_requirement from material properties
+                if let Some(bias_req_str) = mat_def
+                    .properties
+                    .iter()
+                    .find(|p| p.key == "bias_requirement")
+                    .and_then(|p| match &p.value {
+                        hwc_parser::PropertyValue::String(s) => Some(s.as_str()),
+                        _ => None,
+                    })
+                {
+                    let bias_req = match bias_req_str.to_lowercase().as_str() {
+                        "lowest_potential" | "ground" | "gnd" => {
+                            hwc_materials::BiasRequirement::LowestPotential
+                        }
+                        "highest_potential" | "power" | "vdd" => {
+                            hwc_materials::BiasRequirement::HighestPotential
+                        }
+                        _ => hwc_materials::BiasRequirement::None,
+                    };
 
-        // Validate using the material's bias requirement method (data-driven!)
-        if let Err(reason) = bias_req.validate_net_classification(materials_net_class) {
-            return Err(DeviceExtractionError::BiasViolation {
-                transistor: transistor_name.to_string().into(),
-                device_type_name: format!(
-                    "{} ({} bulk: {})",
-                    device_type_name,
-                    semiconductor
-                        .doping_type
-                        .as_ref()
-                        .map(|dt| format!("{:?}", dt))
-                        .unwrap_or_else(|| "unknown".to_string()),
-                    bulk_material
-                )
-                .into(),
-                bulk_net: bulk_net.to_string().into(),
-                expected_net: reason.into(),
-            });
+                    let materials_net_class = match net_classification {
+                        hwc_engine::space::NetClassification::Power => {
+                            hwc_materials::NetClassification::Power
+                        }
+                        hwc_engine::space::NetClassification::Ground => {
+                            hwc_materials::NetClassification::Ground
+                        }
+                        hwc_engine::space::NetClassification::Signal => {
+                            hwc_materials::NetClassification::Signal
+                        }
+                        hwc_engine::space::NetClassification::HighVoltage => {
+                            hwc_materials::NetClassification::HighVoltage
+                        }
+                        hwc_engine::space::NetClassification::Unclassified => {
+                            hwc_materials::NetClassification::Unclassified
+                        }
+                    };
+
+                    if let Err(reason) = bias_req.validate_net_classification(materials_net_class) {
+                        return Err(DeviceExtractionError::BiasViolation {
+                            transistor: _transistor_name.to_string().into(),
+                            device_type_name: format!(
+                                "{} (bulk: {})",
+                                _device_type_name, pour.material_name
+                            )
+                            .into(),
+                            bulk_net: bulk_net.to_string().into(),
+                            expected_net: reason.into(),
+                        });
+                    }
+                }
+            }
         }
 
         Ok(())

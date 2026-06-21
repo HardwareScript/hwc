@@ -99,26 +99,3 @@ pub fn calculate_untransformed_origin(
     Ok(Point3D::new(x_nm, y_nm, z_nm))
 }
 
-pub fn transform_declarative_to_relative(
-    coord: &hwc_parser::Coordinate,
-    pin_name: &str,
-) -> hwc_parser::Coordinate {
-    match coord {
-        hwc_parser::Coordinate::Declarative { x, y, z, span } => {
-            hwc_parser::Coordinate::Relative(hwc_parser::RelativePosition {
-                anchor: hwc_parser::AnchorReference {
-                    name: pin_name.into(),
-                    span: *span,
-                },
-                edge: hwc_parser::Edge::Left,
-                offset: hwc_parser::RelativeOffset::Vector {
-                    x: x.clone(),
-                    y: y.clone(),
-                    z: z.clone(),
-                },
-                span: *span,
-            })
-        }
-        _ => coord.clone(),
-    }
-}

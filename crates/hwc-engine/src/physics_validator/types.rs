@@ -1,8 +1,8 @@
 //! Core types for physics validation
 
 use crate::geometry::Point3D;
-use crate::voxel_grid::MaterialId;
-use crate::voxel_grid::NetId;
+use crate::geometry_router::substrate_types::MaterialId;
+use crate::geometry_router::substrate_types::NetId;
 use compact_str::CompactString;
 use std::fmt;
 

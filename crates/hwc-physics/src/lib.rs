@@ -24,7 +24,7 @@ pub use metadata_tracker::{MetadataChangeFlags, MetadataTracker};
 pub use parasitic::{ParasiticExtractionParams, ParasiticExtractor, ParasiticValues};
 pub use physical_continuity::{
     ConductiveIsland, GeometryNodeRef, NetIslandBinding, PhysicalContinuityChecker,
-    PhysicalContinuityViolation, PinPosition, PinRef,
+    PhysicalContinuityViolation, PinPosition, PinRef, RouteSegmentMetadata,
 };
 pub use property_extraction::{
     extract_dielectric_strength, extract_relative_permittivity, extract_resistivity,

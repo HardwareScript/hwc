@@ -18,7 +18,7 @@ pub struct MoveCostParams<'a> {
     /// v0.1.7: Substrate layers for reference-plane void detection.
     /// When `is_high_speed_net` is true, crossing a void in the reference
     /// plane incurs an extreme penalty to force deviation.
-    pub substrate_layers: Option<&'a [crate::voxel_grid::SubstrateLayer]>,
+    pub substrate_layers: Option<&'a [crate::geometry_router::substrate_types::SubstrateLayer]>,
     /// v0.1.7: Whether this net is classified as high-speed (≥1 GHz).
     /// High-speed nets incur SI penalties when crossing reference plane voids.
     pub is_high_speed_net: bool,
@@ -143,7 +143,7 @@ pub fn calculate_move_cost(params: &MoveCostParams) -> i64 {
             // A point is "over a void" if it is within the pour's bounding box
             // but NOT contained by `contains_nm` (which excludes cutouts).
             let has_void = substrate_layers.iter().any(|layer| {
-                layer.layer_type == crate::voxel_grid::SubstrateLayerType::Pour
+                layer.layer_type == crate::geometry_router::substrate_types::SubstrateLayerType::Pour
                     && params.to.z >= layer.bbox.min.z
                     && params.to.z <= layer.bbox.max.z
                     && !layer.contains_nm(params.to.x, params.to.y, params.to.z)

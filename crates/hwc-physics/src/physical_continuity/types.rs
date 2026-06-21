@@ -25,7 +25,7 @@ pub struct ConductiveIsland {
     pub pins: Vec<PinRef>,
 }
 
-/// Reference to a geometry node (pour, contact, or substrate layer).
+/// Reference to a geometry node (pour, contact, substrate layer, or route segment).
 ///
 /// This is a lightweight reference that can be used to look up the
 /// actual geometry data in the original arrays.
@@ -39,6 +39,14 @@ pub enum GeometryNodeRef {
 
     /// Index into substrate_layers array
     SubstrateLayer(usize),
+
+    /// Index into route_segments array
+    RouteSegment(usize),
+
+    /// A child region of a SubstrateLayer (parent_idx, region_idx).
+    /// SubstrateLayers with `regions` have each region expanded as a separate node
+    /// for per-segment adjacency detection.
+    SubstrateLayerRegion(usize, usize),
 }
 
 /// Reference to a pin.
@@ -63,6 +71,23 @@ pub struct PinPosition {
     pub z_nm: i64,
 }
 
+/// Vector-first route segment metadata for continuity checking.
+///
+/// Each segment represents a physical copper trace with a start point,
+/// end point, and width. The bounding box is pre-computed and inflated
+/// by half the trace width to represent the actual copper volume.
+#[derive(Debug, Clone)]
+pub struct RouteSegmentMetadata {
+    /// Net ID this segment belongs to
+    pub net: u32,
+    /// Resolved net name (for binding)
+    pub net_name: Option<CompactString>,
+    /// Material ID
+    pub material: u8,
+    /// Pre-computed bounding box (inflated by half width)
+    pub bbox: BoundingBox,
+}
+
 /// Binding between a logical net and physical islands.
 ///
 /// This maps what the code says (net names) to what the physics says
@@ -81,7 +106,7 @@ pub struct NetIslandBinding {
 
 /// Physical continuity violation types.
 ///
-/// These are the three critical errors that indicate the voxel model
+/// These are the three critical errors that indicate the physical model
 /// doesn't match the logical netlist.
 #[derive(Debug, Clone)]
 pub enum PhysicalContinuityViolation {

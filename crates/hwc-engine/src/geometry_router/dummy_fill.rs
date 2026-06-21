@@ -374,7 +374,7 @@ mod tests {
     use super::*;
     use crate::geometry::{BoundingBox, Point3D};
     use crate::netlist::NetHandle;
-    use crate::voxel_grid::SubstrateLayerType;
+    use crate::geometry_router::substrate_types::SubstrateLayerType;
 
     /// Test that an empty board with substrate layers gets dummy fill.
     #[test]

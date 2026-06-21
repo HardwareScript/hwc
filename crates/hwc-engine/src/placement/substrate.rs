@@ -3,7 +3,7 @@
 use crate::geometry::{BoundingBox, Point3D};
 use crate::geometry_router::EntityGraph;
 use crate::space::VoxelSize;
-use crate::voxel::MaterialId;
+use crate::material::MaterialId;
 
 use super::error::PlacementError;
 
@@ -160,7 +160,7 @@ pub(super) fn place_substrate_with_cutouts(
             material_id,
             net_id,
             bbox,
-            crate::voxel_grid::SubstrateLayerType::Pour,
+            crate::geometry_router::substrate_types::SubstrateLayerType::Pour,
         );
     } else {
         entity_graph.add_substrate_layer_with_cutouts(
@@ -168,7 +168,7 @@ pub(super) fn place_substrate_with_cutouts(
             net_id,
             bbox,
             cutouts.to_vec(),
-            crate::voxel_grid::SubstrateLayerType::Pour,
+            crate::geometry_router::substrate_types::SubstrateLayerType::Pour,
         );
     }
 

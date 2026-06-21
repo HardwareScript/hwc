@@ -29,7 +29,7 @@
 //! - Only stores component bounding boxes (typically 10-100 boxes)
 
 use crate::geometry::{BoundingBox, Point3D};
-use crate::voxel_grid::ComponentMetadata;
+use crate::geometry_router::substrate_types::ComponentMetadata;
 
 /// Maximum distance value (255 voxels = ~25mm at 100μm resolution)
 const MAX_DISTANCE: u8 = 255;
@@ -397,14 +397,14 @@ impl SdfGenerator {
     }
 
     /// Compute full SDF (NO-OP in analytic mode)
-    pub fn compute_full(&mut self, _voxel_grid: &crate::voxel_grid::VoxelGrid) {
+    pub fn compute_full(&mut self, _entity_graph: &crate::geometry_router::entity_graph::EntityGraph) {
         // Analytic mode doesn't pre-compute anything - distances are calculated on-demand
     }
 
     /// Update SDF in a region (NO-OP in analytic mode)
     pub fn update_region(
         &mut self,
-        _voxel_grid: &crate::voxel_grid::VoxelGrid,
+        _entity_graph: &crate::geometry_router::entity_graph::EntityGraph,
         _min: Point3D,
         _max: Point3D,
         _voxel_size_nm: i64,

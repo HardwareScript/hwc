@@ -92,10 +92,10 @@ impl GeometryRouter {
             escape_z,
         );
 
-        eprintln!(
-            "[DEBUG PORT] Resolved port for pin {:?} targeting {:?}: port={:?}, escape={:?}",
-            pin, target, port, escape.point
-        );
+        // eprintln!(
+        //     "[DEBUG PORT] Resolved port for pin {:?} targeting {:?}: port={:?}, escape={:?}",
+        //     pin, target, port, escape.point
+        // );
 
         escape.point
     }

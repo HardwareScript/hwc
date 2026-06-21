@@ -87,20 +87,20 @@ impl<'a> MeanderInjector<'a> {
             }
         }
 
-        eprintln!(
-            "[MEANDER] Net has {} paths, longest segment: {}nm (path {}, seg {})",
-            paths.len(), best_seg_len, best_path_idx, best_seg_idx
-        );
+        // eprintln!(
+        //     "[MEANDER] Net has {} paths, longest segment: {}nm (path {}, seg {})",
+        //     paths.len(), best_seg_len, best_path_idx, best_seg_idx
+        // );
 
         if best_seg_len == 0 {
-            eprintln!("[MEANDER] Skipping: no segments found");
+            // eprintln!("[MEANDER] Skipping: no segments found");
             return;
         }
 
         // Calculate the pattern's total added length
         let pattern_len: i64 = pattern.steps.iter().map(|s| s.distance_nm).sum();
         if pattern_len == 0 {
-            eprintln!("[MEANDER] Skipping: pattern has zero length");
+            // eprintln!("[MEANDER] Skipping: pattern has zero length");
             return;
         }
 
@@ -109,17 +109,17 @@ impl<'a> MeanderInjector<'a> {
         let usable_len = (best_seg_len * 8) / 10;
         let repetitions = (usable_len / pattern_len).max(1);
 
-        eprintln!(
-            "[MEANDER] Pattern '{}' total step length: {}nm, repetitions: {}",
-            pattern.name, pattern_len, repetitions
-        );
+        // eprintln!(
+        //     "[MEANDER] Pattern '{}' total step length: {}nm, repetitions: {}",
+        //     pattern.name, pattern_len, repetitions
+        // );
 
         // If the segment is too short for even one pattern repetition, skip
         if best_seg_len < pattern_len * 2 {
-            eprintln!(
-                "[MEANDER] Skipping: segment {}nm too short for pattern {}nm (need 2x)",
-                best_seg_len, pattern_len
-            );
+            // eprintln!(
+            //     "[MEANDER] Skipping: segment {}nm too short for pattern {}nm (need 2x)",
+            //     best_seg_len, pattern_len
+            // );
             return;
         }
 
@@ -149,14 +149,14 @@ impl<'a> MeanderInjector<'a> {
         // Check for collisions with obstacles and other traces
         let meander_bbox = self.compute_meander_bbox(&meander_points);
         if self.check_collision(&meander_bbox) {
-            eprintln!("[MEANDER] Skipping: collision detected with obstacles");
+            // eprintln!("[MEANDER] Skipping: collision detected with obstacles");
             return;
         }
 
-        eprintln!(
-            "[MEANDER] Injecting {} meander points at midpoint ({}, {}) of segment {}nm",
-            meander_points.len(), mid_x, mid_y, best_seg_len
-        );
+        // eprintln!(
+        //     "[MEANDER] Injecting {} meander points at midpoint ({}, {}) of segment {}nm",
+        //     meander_points.len(), mid_x, mid_y, best_seg_len
+        // );
 
         // Build the replacement segment list:
         // [seg_start ... meander_points ... seg_end]
@@ -171,11 +171,11 @@ impl<'a> MeanderInjector<'a> {
             new_path.push(path[i]);
         }
 
-        eprintln!(
-            "[MEANDER] Path expanded: {} -> {} points",
-            paths[best_path_idx].len(),
-            new_path.len()
-        );
+        // eprintln!(
+        //     "[MEANDER] Path expanded: {} -> {} points",
+        //     paths[best_path_idx].len(),
+        //     new_path.len()
+        // );
         paths[best_path_idx] = new_path;
     }
 

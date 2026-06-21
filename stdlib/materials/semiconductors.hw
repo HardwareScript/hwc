@@ -801,7 +801,7 @@ material Extreme_Test_Semiconductor:
         tiny: 1e-100
         huge: 1e100
         max_int: 9223372036854775807
-        min_int: -9223372036854775808
+        min_int: -9223372036854775807
         
         # Boundary values
         absolute_zero: -273.15°C

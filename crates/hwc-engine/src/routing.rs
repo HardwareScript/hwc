@@ -8,7 +8,7 @@
 
 use crate::geometry::Point3D;
 use crate::space::VoxelSize;
-use crate::voxel::MaterialId;
+use crate::material::MaterialId;
 use compact_str::CompactString;
 
 /// Router for manual waypoint interpolation.

@@ -422,10 +422,12 @@ fn compile_single_space(
             .entity_graph
             .get_substrate_layers()
             .iter()
-            .any(|l| l.layer_type == hwc_engine::voxel_grid::SubstrateLayerType::SolderMask);
+            .any(|l| l.layer_type == hwc_engine::geometry_router::substrate_types::SubstrateLayerType::SolderMask);
 
         if !has_solder_mask {
-            let mask_material_id = space.material_registry.get_or_register("SolderMask");
+            let mask_material_id = space.material_registry.get_id("SolderMask").ok_or_else(|| {
+                IrError::UndeclaredMaterial { material: "SolderMask".into() }
+            })?;
 
             // Top solder mask: sits directly ON TOP of the top copper layer
             let top_mask_bbox = hwc_engine::geometry::BoundingBox::new(
@@ -440,7 +442,7 @@ fn compile_single_space(
                 mask_material_id,
                 0, // No net (insulator)
                 top_mask_bbox,
-                hwc_engine::voxel_grid::SubstrateLayerType::SolderMask,
+                hwc_engine::geometry_router::substrate_types::SubstrateLayerType::SolderMask,
             );
 
             // Bottom solder mask: sits directly UNDERNEATH the bottom copper layer
@@ -452,7 +454,7 @@ fn compile_single_space(
                 mask_material_id,
                 0, // No net (insulator)
                 bottom_mask_bbox,
-                hwc_engine::voxel_grid::SubstrateLayerType::SolderMask,
+                hwc_engine::geometry_router::substrate_types::SubstrateLayerType::SolderMask,
             );
         }
     }
@@ -532,10 +534,10 @@ fn compile_single_space(
                 Ok(pattern) => {
                     // Resolve net name to NetId
                     if let Some(net_id) = space.netlist.get_net_by_name(policy.net_id.as_str()) {
-                        eprintln!(
-                            "[ROUTER] Route net policy: '{}' -> pattern '{}' ({} steps)",
-                            policy.net_id, pattern.name, pattern.steps.len()
-                        );
+                        // eprintln!(
+                        //     "[ROUTER] Route net policy: '{}' -> pattern '{}' ({} steps)",
+                        //     policy.net_id, pattern.name, pattern.steps.len()
+                        // );
                         route_net_policies.insert(net_id, pattern);
                     } else {
                         eprintln!(
@@ -605,11 +607,17 @@ fn compile_single_space(
             match hwc_engine::geometry_router::load_lockfile(path) {
                 Ok(loaded) => {
                     if hwc_engine::geometry_router::is_valid(&loaded, &current_fingerprint) {
-                        let copper_id = space.material_registry.get_or_register("Copper");
+                        let copper_id = space.material_registry.get_id("Copper").ok_or_else(|| {
+                            IrError::UndeclaredMaterial { material: "Copper".into() }
+                        })?;
+                        let layer_z_map = hwc_engine::geometry_router::build_layer_z_map(
+                            &space.entity_graph,
+                        );
                         let cached_traces = hwc_engine::geometry_router::lockfile_to_traces(
                             &loaded,
                             copper_id,
                             &space.netlist,
+                            &layer_z_map,
                         );
                         let route_count = cached_traces.len();
                         for trace in cached_traces {
@@ -637,7 +645,9 @@ fn compile_single_space(
                         Ok(lockfile) => {
                             let current_hash = hwc_engine::geometry_router::compute_placement_hash(&space);
                             if lockfile.validate_placement(&current_hash) && !lockfile.instances.is_empty() {
-                                let copper_id = space.material_registry.get_or_register("Copper");
+                                let copper_id = space.material_registry.get_id("Copper").ok_or_else(|| {
+                                    IrError::UndeclaredMaterial { material: "Copper".into() }
+                                })?;
                                 let cached_traces = lockfile.to_analytic_traces(copper_id, &space.netlist);
                                 let route_count = cached_traces.len();
                                 for trace in cached_traces {

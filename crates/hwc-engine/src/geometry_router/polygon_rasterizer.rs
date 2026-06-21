@@ -6,7 +6,7 @@
 //
 // GOD-TIER: All rasterization writes directly to VoxelGrid. No intermediate HashMaps.
 
-use crate::voxel_grid::{MaterialId, NetId};
+use crate::geometry_router::substrate_types::{MaterialId, NetId};
 use compact_str::CompactString;
 use std::cmp::{max, min};
 
@@ -271,7 +271,7 @@ impl PolygonRasterizer {
             material,
             net,
             bbox,
-            crate::voxel_grid::SubstrateLayerType::Pour,
+            crate::geometry_router::substrate_types::SubstrateLayerType::Pour,
         );
     }
 
@@ -308,7 +308,7 @@ impl PolygonRasterizer {
             material,
             net,
             bbox,
-            crate::voxel_grid::SubstrateLayerType::Pour,
+            crate::geometry_router::substrate_types::SubstrateLayerType::Pour,
         );
     }
 

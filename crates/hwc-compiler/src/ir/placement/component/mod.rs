@@ -5,8 +5,10 @@ pub mod validation;
 
 use super::super::conversions::{coordinate_to_point, CoordinateContext};
 use super::super::errors::IrError;
+use super::helpers::parse_rectangle_dimensions;
 use super::context::PlacementContext;
 use super::module::place_module_instance;
+use hwc_engine::geometry::{BoundingBox, Point3D};
 use hwc_engine::{ComponentPlacer, HardwareSpace, PlacementParams};
 
 pub fn place_component(
@@ -99,6 +101,64 @@ pub fn place_component(
             collector: Some(&crate::DiagnosticReporterAdapter(ctx.collector)),
         })
         .map_err(|e| IrError::PlacementError(e.to_string()))?;
+
+    if let Ok(component_def) = ctx
+        .symbol_table
+        .get_component(component.component_type.as_str())
+    {
+        if let Some(layout) = &component_def.layout {
+            if let Some(shape_str) = &layout.shape {
+                if let Some(dims) = parse_rectangle_dimensions(shape_str) {
+                    let (width_nm, height_nm, depth_nm) = dims;
+                    let bbox = if rotation_deg.abs() < 0.001 {
+                        BoundingBox::new(
+                            Point3D::new(
+                                untransformed_origin.x,
+                                untransformed_origin.y,
+                                untransformed_origin.z,
+                            ),
+                            Point3D::new(
+                                untransformed_origin.x + width_nm,
+                                untransformed_origin.y + height_nm,
+                                untransformed_origin.z + depth_nm,
+                            ),
+                        )
+                    } else {
+                        let center_x = untransformed_origin.x + width_nm / 2;
+                        let center_y = untransformed_origin.y + height_nm / 2;
+                        let half_w = width_nm / 2;
+                        let half_h = height_nm / 2;
+                        let corners = [
+                            (-half_w, -half_h),
+                            (half_w, -half_h),
+                            (half_w, half_h),
+                            (-half_w, half_h),
+                        ];
+                        let angle_rad = rotation_deg.to_radians();
+                        let cos_theta = angle_rad.cos();
+                        let sin_theta = angle_rad.sin();
+                        let mut min_x = i64::MAX;
+                        let mut max_x = i64::MIN;
+                        let mut min_y = i64::MAX;
+                        let mut max_y = i64::MIN;
+                        for (cx, cy) in corners.iter() {
+                            let rx = (*cx as f64 * cos_theta - *cy as f64 * sin_theta) as i64;
+                            let ry = (*cx as f64 * sin_theta + *cy as f64 * cos_theta) as i64;
+                            min_x = min_x.min(center_x + rx);
+                            max_x = max_x.max(center_x + rx);
+                            min_y = min_y.min(center_y + ry);
+                            max_y = max_y.max(center_y + ry);
+                        }
+                        BoundingBox::new(
+                            Point3D::new(min_x, min_y, untransformed_origin.z),
+                            Point3D::new(max_x, max_y, untransformed_origin.z + depth_nm),
+                        )
+                    };
+                    bbox_tracker.register(name.clone().into(), bbox, untransformed_origin);
+                }
+            }
+        }
+    }
 
     unrolling::unroll_internal_features(
         space,

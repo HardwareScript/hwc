@@ -6,7 +6,7 @@ use crate::geometry::Point3D;
 use crate::geometry_router::EntityGraph;
 use crate::netlist::NetlistArena;
 use crate::space::VoxelSize;
-use crate::voxel::MaterialRegistry;
+use crate::material::MaterialRegistry;
 
 /// Trait for accessing component and material definitions.
 ///

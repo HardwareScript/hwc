@@ -39,6 +39,7 @@ mod sdf_generator;
 pub mod spatial_index;
 mod teardrops;
 mod thermal_relief;
+pub mod substrate_types;
 mod types;
 pub mod route_decomposition;
 pub mod negotiated_congestion;
@@ -101,7 +102,7 @@ pub use lockfile::{
     CompactLockfileBinary, ArchivedArcSegment, ArchivedComponentInstance,
     compute_fingerprint, compute_fingerprint_from_space,
     write_lockfile, load_lockfile, is_valid, LockfileData,
-    traces_to_lockfile, lockfile_to_traces,
+    traces_to_lockfile, lockfile_to_traces, build_layer_z_map,
 };
 pub use router::GeometryRouter;
 pub use routing_patterns::{

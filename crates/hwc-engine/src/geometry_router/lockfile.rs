@@ -86,6 +86,67 @@ pub fn compute_fingerprint(
 }
 
 // ---------------------------------------------------------------------------
+// Semantic Layer Resolution
+// ---------------------------------------------------------------------------
+
+/// Resolve a physical Z-coordinate to a semantic layer index.
+///
+/// Scans the entity graph's substrate layers to find which layer owns the
+/// given Z-position. Returns a stable u8 layer index for lockfile storage.
+fn resolve_z_to_layer_index(z_nm: i64, entity_graph: &crate::geometry_router::entity_graph::EntityGraph) -> u8 {
+    use rustc_hash::FxHashMap;
+    let mut z_to_layer: FxHashMap<i64, u8> = FxHashMap::default();
+    let mut next_idx: u8 = 0;
+
+    for layer in entity_graph.get_substrate_layers() {
+        let z_min = layer.bbox.min.z;
+        let z_max = layer.bbox.max.z;
+        let z_mid = (z_min + z_max) / 2;
+
+        if !z_to_layer.contains_key(&z_mid) {
+            z_to_layer.insert(z_mid, next_idx);
+            next_idx = next_idx.wrapping_add(1);
+        }
+    }
+
+    // Find the closest Z-layer
+    let mut best_layer: u8 = 0;
+    let mut best_dist: i64 = i64::MAX;
+    for (layer_z, layer_idx) in &z_to_layer {
+        let dist = (z_nm - layer_z).abs();
+        if dist < best_dist {
+            best_dist = dist;
+            best_layer = *layer_idx;
+        }
+    }
+    best_layer
+}
+
+/// Build a layer-index → Z-position mapping from substrate layers.
+///
+/// Returns a `Vec<(u8, i64)>` suitable for passing to `lockfile_to_traces`.
+pub fn build_layer_z_map(
+    entity_graph: &crate::geometry_router::entity_graph::EntityGraph,
+) -> Vec<(u8, i64)> {
+    use rustc_hash::FxHashMap;
+    let mut z_to_layer: FxHashMap<i64, u8> = FxHashMap::default();
+    let mut next_idx: u8 = 0;
+
+    for layer in entity_graph.get_substrate_layers() {
+        let z_min = layer.bbox.min.z;
+        let z_max = layer.bbox.max.z;
+        let z_mid = (z_min + z_max) / 2;
+
+        if !z_to_layer.contains_key(&z_mid) {
+            z_to_layer.insert(z_mid, next_idx);
+            next_idx = next_idx.wrapping_add(1);
+        }
+    }
+
+    z_to_layer.into_iter().map(|(z, idx)| (idx, z)).collect()
+}
+
+// ---------------------------------------------------------------------------
 // Write lockfile
 // ---------------------------------------------------------------------------
 
@@ -255,9 +316,12 @@ pub fn traces_to_lockfile(
 
     for trace in &space.analytic_routes {
         for seg in &trace.segments {
+            let z_center = seg.start.z.min(seg.end.z)
+                + ((seg.start.z.max(seg.end.z) - seg.start.z.min(seg.end.z)) / 2);
+            let layer_idx = resolve_z_to_layer_index(z_center, &space.entity_graph);
             arcs.push(ArchivedArcSegment {
                 net_id: trace.net_id.raw(),
-                layer: 0,
+                layer: layer_idx,
                 width_nm: trace.width_nm,
                 x1: seg.start.x,
                 y1: seg.start.y,
@@ -281,10 +345,14 @@ pub fn traces_to_lockfile(
 /// Convert a loaded binary lockfile into `AnalyticTrace` objects.
 ///
 /// Groups arc segments by `net_id` and builds one `AnalyticTrace` per net.
+/// Uses semantic layer resolution: the stored `layer` index is mapped to a
+/// physical Z-coordinate via `layer_z_positions`, making the lockfile
+/// resilient to stackup thickness changes.
 pub fn lockfile_to_traces(
     data: &LockfileData,
-    material_id: crate::voxel::MaterialId,
+    material_id: crate::material::MaterialId,
     netlist: &crate::netlist::NetlistArena,
+    layer_z_positions: &[(u8, i64)],
 ) -> Vec<crate::space::AnalyticTrace> {
     use rustc_hash::FxHashMap;
 
@@ -292,13 +360,16 @@ pub fn lockfile_to_traces(
     let mut per_net: FxHashMap<u32, Vec<crate::space::LineSegment>> = FxHashMap::default();
     let mut net_widths: FxHashMap<u32, i64> = FxHashMap::default();
 
+    let layer_to_z: FxHashMap<u8, i64> = layer_z_positions.iter().copied().collect();
+
     for arc in d.arcs.iter() {
+        let z = layer_to_z.get(&arc.layer).copied().unwrap_or(0);
         per_net
             .entry(arc.net_id)
             .or_default()
             .push(crate::space::LineSegment::new(
-                crate::geometry::Point3D::new(arc.x1, arc.y1, 0),
-                crate::geometry::Point3D::new(arc.x2, arc.y2, 0),
+                crate::geometry::Point3D::new(arc.x1, arc.y1, z),
+                crate::geometry::Point3D::new(arc.x2, arc.y2, z),
             ));
         net_widths.entry(arc.net_id).or_insert(arc.width_nm);
     }

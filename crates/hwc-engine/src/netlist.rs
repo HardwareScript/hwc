@@ -353,6 +353,28 @@ impl NetlistArena {
         }
     }
 
+    /// Get or create a net, automatically adjusting the default width based on technology
+    pub fn get_or_create_net_with_technology(
+        &mut self,
+        name: &str,
+        is_asic: bool,
+        profile_min_width_nm: i64,
+    ) -> NetId {
+        if let Some(id) = self.get_net_by_name(name) {
+            id
+        } else {
+            // If ASIC, use the microscopic trace width (e.g. 180nm)
+            // If PCB, fall back to the standard board trace width (e.g. 200um)
+            let default_width = if is_asic {
+                profile_min_width_nm
+            } else {
+                200_000 // 0.2mm PCB default
+            };
+
+            self.add_net(name.into(), default_width, 2)
+        }
+    }
+
     /// Get the global position of a pin (component position + local offset).
     ///
     /// Pure integer math - no floating point.

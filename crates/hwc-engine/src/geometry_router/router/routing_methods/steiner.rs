@@ -36,12 +36,12 @@ impl GeometryRouter {
             &mut next_junc_id,
         );
 
-        eprintln!("[DEBUG STEINER] Decomposed net {:?} into {} segments", net_id, decomposed.segments.len());
+        // eprintln!("[DEBUG STEINER] Decomposed net {:?} into {} segments", net_id, decomposed.segments.len());
 
         let mut net_paths = Vec::new();
         let mut all_vias = Vec::new();
 
-        for (i, segment) in decomposed.segments.iter().enumerate() {
+        for (_i, segment) in decomposed.segments.iter().enumerate() {
             // v0.1.8: Use the exact anchor point positions from the pin metadata
             // for Steiner decomposition. These are the physical connection points.
             let start_coord = segment.from_pin.position;
@@ -57,16 +57,16 @@ impl GeometryRouter {
             let mut final_goal = goal_port;
             
             if final_start.z != final_goal.z {
-                eprintln!("[DEBUG STEINER] Port Z mismatch: start.z={} goal.z={}. Forcing goal to start.z", final_start.z, final_goal.z);
+                // eprintln!("[DEBUG STEINER] Port Z mismatch: start.z={} goal.z={}. Forcing goal to start.z", final_start.z, final_goal.z);
                 final_goal.z = final_start.z;
             }
             // Removed the unconditional forcing to 0 (top copper) to support multi-layer
             // and correct alignment with pad anchor points.
 
-            eprintln!(
-                "[DEBUG STEINER] Routing segment {}: {:?} -> {:?}",
-                i, final_start, final_goal
-            );
+            // eprintln!(
+            //     "[DEBUG STEINER] Routing segment {}: {:?} -> {:?}",
+            //     i, final_start, final_goal
+            // );
 
             let route = NetRoute {
                 net_id,

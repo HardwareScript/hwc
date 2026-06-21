@@ -37,9 +37,9 @@ fn calculate_via_diameter_from_bbox(bbox: &BoundingBox) -> i64 {
 fn calculate_annular_ring_from_substrate(
     via_bbox: &BoundingBox,
     via_diameter_nm: i64,
-    substrate_layers: &[crate::voxel_grid::SubstrateLayer],
+    substrate_layers: &[crate::geometry_router::substrate_types::SubstrateLayer],
     via_net_id: u32,
-    material_registry: &crate::voxel::MaterialRegistry,
+    material_registry: &crate::material::MaterialRegistry,
 ) -> i64 {
     let via_center_x = (via_bbox.min.x + via_bbox.max.x) / 2;
     let via_center_y = (via_bbox.min.y + via_bbox.max.y) / 2;
@@ -56,7 +56,7 @@ fn calculate_annular_ring_from_substrate(
     for layer in substrate_layers {
         // ✅ NATIVE v0.1.7 FIX: Only enforce annular rings on POUR layers (pads, planes).
         // A 'Contact' layer (via barrel) should not be used to satisfy another via's enclosure.
-        if layer.layer_type != crate::geometry_router::entity_graph::SubstrateLayerType::Pour {
+        if layer.layer_type != crate::geometry_router::substrate_types::SubstrateLayerType::Pour {
             continue;
         }
 
@@ -84,7 +84,7 @@ fn calculate_annular_ring_from_substrate(
         let pad_max_y = layer.bbox.max.y;
 
         let dist_to_edge = match &layer.shape {
-            crate::voxel_grid::SubstrateLayerShape::Polygon { outer_contour, .. } => {
+            crate::geometry_router::substrate_types::SubstrateLayerShape::Polygon { outer_contour, .. } => {
                 // Compute bounding box of the polygon contour for conservative distance
                 let mut poly_min_x = i64::MAX;
                 let mut poly_max_x = i64::MIN;
@@ -135,7 +135,7 @@ fn calculate_annular_ring_from_substrate(
                     -1
                 }
             }
-            crate::voxel_grid::SubstrateLayerShape::Tube { pad_diameter, .. } => {
+            crate::geometry_router::substrate_types::SubstrateLayerShape::Tube { pad_diameter, .. } => {
                 let pad_center_x = (pad_min_x + pad_max_x) / 2;
                 let pad_center_y = (pad_min_y + pad_max_y) / 2;
                 let pad_radius = *pad_diameter as i64 / 2;
@@ -146,7 +146,7 @@ fn calculate_annular_ring_from_substrate(
 
                 pad_radius - center_dist
             }
-            crate::voxel_grid::SubstrateLayerShape::Rect => {
+            crate::geometry_router::substrate_types::SubstrateLayerShape::Rect => {
                 let dx = if via_center_x < pad_min_x {
                     pad_min_x - via_center_x
                 } else if via_center_x > pad_max_x {
@@ -177,7 +177,7 @@ fn calculate_annular_ring_from_substrate(
                     -1
                 }
             }
-            crate::voxel_grid::SubstrateLayerShape::Circle { radius } => {
+            crate::geometry_router::substrate_types::SubstrateLayerShape::Circle { radius } => {
                 let pad_center_x = (pad_min_x + pad_max_x) / 2;
                 let pad_center_y = (pad_min_y + pad_max_y) / 2;
 
@@ -370,10 +370,10 @@ pub fn validate_drill_to_drill_clearance(
 /// DRC report with enclosure violations
 pub fn validate_via_enclosure_analytic(
     contacts: &[ContactMetadata],
-    substrate_layers: &[crate::voxel_grid::SubstrateLayer],
+    substrate_layers: &[crate::geometry_router::substrate_types::SubstrateLayer],
     constraints: &ConstraintRulebook,
     netlist: &crate::netlist::NetlistArena,
-    material_registry: &crate::voxel::MaterialRegistry,
+    material_registry: &crate::material::MaterialRegistry,
 ) -> DrcReport {
     let mut report = DrcReport::new();
 

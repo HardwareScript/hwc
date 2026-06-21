@@ -66,5 +66,6 @@ pub fn load_fabrication_constraints<S: SymbolTableTrait>(
         safety_factor: clearance.map(|(_, sf)| sf).unwrap_or(2.0),
         stackup,
         solder_mask_expansion_nm,
+        technology: profile_def.technology.clone(),
     })
 }

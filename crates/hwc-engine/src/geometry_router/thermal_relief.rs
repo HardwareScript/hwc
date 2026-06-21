@@ -8,7 +8,7 @@
 
 use crate::geometry_router::EntityGraph;
 use crate::geometry_router::polygon_rasterizer::{Point2D, Polygon, PolygonRasterizer};
-use crate::voxel_grid::{MaterialId, NetId};
+use crate::geometry_router::substrate_types::{MaterialId, NetId};
 use std::f64::consts::PI;
 
 /// Thermal relief pattern type

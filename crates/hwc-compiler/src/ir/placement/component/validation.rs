@@ -340,7 +340,9 @@ pub fn validate_and_register(
                         )
                     };
 
-                    let material_id = space.material_registry.get_or_register("Component");
+                    let material_id = space.material_registry.get_id("Component").ok_or_else(|| {
+                        IrError::UndeclaredMaterial { material: "Component".into() }
+                    })?;
                     space.register_component_bbox(
                         pd.name.clone().into(),
                         engine_bbox,

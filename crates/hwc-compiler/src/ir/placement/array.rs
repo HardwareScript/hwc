@@ -336,7 +336,9 @@ fn merge_pour_across_instances(
         merged_regions.push((merged_group, current_bbox));
     }
 
-    let material_id = space.material_registry.get_or_register(&pour.material);
+    let material_id = space.material_registry.get_id(&pour.material).ok_or_else(|| {
+        IrError::UndeclaredMaterial { material: pour.material.clone() }
+    })?;
     let net_id = if let Some(net_name) = &pour.net {
         if let Some(net) = space.netlist.get_net_by_name(net_name.base.as_str()) {
             net.raw()

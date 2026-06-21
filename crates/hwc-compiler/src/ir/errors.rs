@@ -90,6 +90,14 @@ pub enum IrError {
     )]
     MissingProfileConstraint { field: String },
 
+    #[error("Undeclared material: '{material}'")]
+    #[diagnostic(
+        code(M01),
+        url("https://docs.hw-script.org/errors/M01"),
+        help("Material '{material}' is used but never declared or imported. Add a 'material {material}: category: conductor|semiconductor|insulator' declaration, or import it from a standard library: 'import * from @std/materials/conductors'")
+    )]
+    UndeclaredMaterial { material: CompactString },
+
     #[error("Material interpenetration detected at z = {z_nm} nm")]
     #[diagnostic(
         code(P43),

@@ -30,7 +30,7 @@
 
 use rustc_hash::FxHashMap;
 
-use crate::voxel_grid::{MaterialId, NetId};
+use crate::geometry_router::substrate_types::{MaterialId, NetId};
 
 /// A 4×4×4 Voxel Chunk with bit-plane storage (exactly 64 voxels).
 ///

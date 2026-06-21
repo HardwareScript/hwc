@@ -32,124 +32,6 @@ pub struct SubstrateLayerMetadata {
     pub net: u32,
     pub net_name: Option<CompactString>, // Resolved net name for easier lookup
     pub bbox: BoundingBox,
-    pub shape: SubstrateLayerShapeMetadata, // v0.1.7: Added shape for precise collision
-    pub cutouts: Vec<CutoutMetadata>,       // v0.1.7: Added cutouts for short-circuit avoidance
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum SubstrateLayerShapeMetadata {
-    Rect,
-    Tube {
-        outer_diameter: u32,
-        inner_diameter: u32,
-    },
-    Polygon {
-        outer_contour: Vec<(i64, i64)>,
-    },
-}
-
-fn point_in_polygon(x: i64, y: i64, polygon: &[(i64, i64)]) -> bool {
-    let n = polygon.len();
-    if n < 3 {
-        return false;
-    }
-    let mut inside = false;
-    let mut j = n - 1;
-    for i in 0..n {
-        let (xi, yi) = polygon[i];
-        let (xj, yj) = polygon[j];
-        if ((yi > y) != (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi) {
-            inside = !inside;
-        }
-        j = i;
-    }
-    inside
-}
-
-#[derive(Debug, Clone)]
-pub struct CutoutMetadata {
-    pub bbox: BoundingBox,
-    pub shape: SubstrateLayerShapeMetadata,
-}
-
-impl SubstrateLayerMetadata {
-    /// Check if a point (in nanometers) is within this substrate layer.
-    /// This is a copy of the engine's contains_nm logic.
-    pub fn contains_nm(&self, x: i64, y: i64, z: i64) -> bool {
-        // First check if point is in the substrate bbox
-        if !(x >= self.bbox.min_x
-            && x <= self.bbox.max_x
-            && y >= self.bbox.min_y
-            && y <= self.bbox.max_y
-            && z >= self.bbox.min_z
-            && z <= self.bbox.max_z)
-        {
-            return false;
-        }
-
-        // Check primary shape
-        match &self.shape {
-            SubstrateLayerShapeMetadata::Tube { outer_diameter, .. } => {
-                let center_x = (self.bbox.min_x + self.bbox.max_x) / 2;
-                let center_y = (self.bbox.min_y + self.bbox.max_y) / 2;
-                let dx = x - center_x;
-                let dy = y - center_y;
-                let outer_radius = *outer_diameter as i64 / 2;
-                let dist_sq = dx * dx + dy * dy;
-                if dist_sq > outer_radius * outer_radius {
-                    return false;
-                }
-            }
-            SubstrateLayerShapeMetadata::Polygon { outer_contour } => {
-                if !point_in_polygon(x, y, outer_contour) {
-                    return false;
-                }
-            }
-            SubstrateLayerShapeMetadata::Rect => {}
-        }
-
-        // Check cutouts
-        for cutout in &self.cutouts {
-            let bbox = &cutout.bbox;
-            if x >= bbox.min_x
-                && x <= bbox.max_x
-                && y >= bbox.min_y
-                && y <= bbox.max_y
-                && z >= bbox.min_z
-                && z <= bbox.max_z
-            {
-                match &cutout.shape {
-                    SubstrateLayerShapeMetadata::Tube {
-                        outer_diameter,
-                        inner_diameter,
-                    } => {
-                        let center_x = (bbox.min_x + bbox.max_x) / 2;
-                        let center_y = (bbox.min_y + bbox.max_y) / 2;
-                        let dx = x - center_x;
-                        let dy = y - center_y;
-                        let outer_radius = *outer_diameter as i64 / 2;
-                        let inner_radius = *inner_diameter as i64 / 2;
-                        let dist_sq = dx * dx + dy * dy;
-                        if dist_sq <= outer_radius * outer_radius
-                            && dist_sq >= inner_radius * inner_radius
-                        {
-                            return false;
-                        }
-                    }
-                    SubstrateLayerShapeMetadata::Polygon { outer_contour } => {
-                        if point_in_polygon(x, y, outer_contour) {
-                            return false;
-                        }
-                    }
-                    SubstrateLayerShapeMetadata::Rect => {
-                        return false;
-                    }
-                }
-            }
-        }
-
-        true
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -268,18 +150,11 @@ impl<'a> ConnectivityChecker<'a> {
                 continue;
             }
 
-            // println!($3"[DEBUG CONNECTIVITY] Checking net '{}' with {} nodes", net_name, nodes.len());
-            for _node in nodes.iter() {
-                // println!($3"[DEBUG CONNECTIVITY]   Node {}: '{}' at z:{}-{}",
-                //     idx, node.name, node.min_z / 1_000_000, node.max_z / 1_000_000);
-            }
-
             // Build adjacency list
             let mut adj: Vec<Vec<usize>> = vec![Vec::new(); nodes.len()];
             for i in 0..nodes.len() {
                 for j in (i + 1)..nodes.len() {
                     if self.boxes_intersect(&nodes[i], &nodes[j]) {
-                        // println!($3"[DEBUG CONNECTIVITY]   Nodes {} and {} intersect", i, j);
                         adj[i].push(j);
                         adj[j].push(i);
                     }

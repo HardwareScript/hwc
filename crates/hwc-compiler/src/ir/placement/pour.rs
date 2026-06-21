@@ -10,7 +10,9 @@ pub fn place_pour(
     bbox_tracker: &mut crate::bounding_box_tracker::BoundingBoxTracker,
     ctx: &PlacementContext,
 ) -> Result<(), IrError> {
-    let material_id = space.material_registry.get_or_register(&pour.material);
+    let material_id = space.material_registry.get_id(&pour.material).ok_or_else(|| {
+        IrError::UndeclaredMaterial { material: pour.material.clone() }
+    })?;
 
     let boundary = pour
         .boundary
@@ -160,16 +162,16 @@ pub fn place_pour(
 
     bbox_tracker.register(pour.name.to_string(), bbox, start_with_z);
 
-    println!(
-        "   ├─ Registered pour '{}' bbox: min=({:.3}, {:.3}, {:.3}) max=({:.3}, {:.3}, {:.3})",
-        pour.name,
-        start_with_z.x as f64 / 1_000_000.0,
-        start_with_z.y as f64 / 1_000_000.0,
-        start_with_z.z as f64 / 1_000_000.0,
-        end_with_z.x as f64 / 1_000_000.0,
-        end_with_z.y as f64 / 1_000_000.0,
-        end_with_z.z as f64 / 1_000_000.0,
-    );
+    // println!(
+    //     "   ├─ Registered pour '{}' bbox: min=({:.3}, {:.3}, {:.3}) max=({:.3}, {:.3}, {:.3})",
+    //     pour.name,
+    //     start_with_z.x as f64 / 1_000_000.0,
+    //     start_with_z.y as f64 / 1_000_000.0,
+    //     start_with_z.z as f64 / 1_000_000.0,
+    //     end_with_z.x as f64 / 1_000_000.0,
+    //     end_with_z.y as f64 / 1_000_000.0,
+    //     end_with_z.z as f64 / 1_000_000.0,
+    // );
 
     let skip_substrate_check = pour.waivers.merge == hwc_parser::MergeWaiver::All;
 
@@ -292,6 +294,12 @@ pub fn place_pour(
         waivers: pour.waivers.clone(),
     });
 
+    eprintln!("[DEBUG place_pour] '{}' bbox: min=({}, {}, {}) max=({}, {}, {}) net={:?}",
+        pour.name,
+        bbox.min.x, bbox.min.y, bbox.min.z,
+        bbox.max.x, bbox.max.y, bbox.max.z,
+        resolved_net_name);
+
     let net_id = if let Some(net_name) = resolved_net_name.as_ref() {
         let center_x = (start_with_z.x + end_with_z.x) / 2;
         let center_y = (start_with_z.y + end_with_z.y) / 2;
@@ -327,10 +335,10 @@ pub fn place_pour(
                     .get_pin_by_name(target_comp_id, &binding.terminal)
                 {
                     space.netlist.connect_pin(target_pin_id, net_id_handle);
-                    println!(
-                        "   ├─ Bound logical pin '{}.{}' to net '{}'",
-                        binding.device_name, binding.terminal, net_name
-                    );
+                    // println!(
+                    //     "   ├─ Bound logical pin '{}.{}' to net '{}'",
+                    //     binding.device_name, binding.terminal, net_name
+                    // );
 
                     space.entity_graph.set_pin_net(
                         &binding.device_name,
@@ -356,14 +364,14 @@ pub fn place_pour(
             Some(net_name.clone()),
         );
 
-        println!(
-            "   ├─ Registered anchor point for pour '{}' at ({:.3}mm, {:.3}mm, {:.3}mm) on net '{}'",
-            pour.name,
-            center_x as f64 / 1_000_000.0,
-            center_y as f64 / 1_000_000.0,
-            center_z as f64 / 1_000_000.0,
-            net_name
-        );
+        // println!(
+        //     "   ├─ Registered anchor point for pour '{}' at ({:.3}mm, {:.3}mm, {:.3}mm) on net '{}'",
+        //     pour.name,
+        //     center_x as f64 / 1_000_000.0,
+        //     center_y as f64 / 1_000_000.0,
+        //     center_z as f64 / 1_000_000.0,
+        //     net_name
+        // );
 
         net_id_handle.raw()
     } else {

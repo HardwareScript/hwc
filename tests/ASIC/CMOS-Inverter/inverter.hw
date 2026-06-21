@@ -1,0 +1,152 @@
+# HardwareScript v0.1.8 Hello World Silicon Inverter
+import * from @std/primitives/units
+import * from @std/primitives/math
+import * from materials
+
+# ============================================================================
+# 1. Silicon Foundry Stackup Profile (TSMC 180nm)
+# ============================================================================
+profile Silicon_180nm:
+    technology: "ASIC"
+    
+    stackup:
+        substrate: [material: Silicon_P, thickness: 300um]
+        active:    [material: Silicon_N, thickness: 200nm]
+        poly:      [material: Polysilicon, thickness: 150nm]
+        d1:        [material: SiO2,      thickness: 500nm]
+        metal1:    [material: Aluminum,  thickness: 400nm]
+
+    trace:
+        min_width: 180nm
+        min_spacing: 180nm
+
+    via:
+        min_diameter: 220nm
+        min_annular_ring: 100nm
+
+    manufacturing:
+        copper_thickness: 400nm
+
+    clearance:
+        high_voltage: 500nm
+        safety_factor: 2.0
+
+    layer:
+        min_thickness: 100nm
+
+# ============================================================================
+# 2. Logical Schematic (The Module)
+# ============================================================================
+module Inverter_Schematic:
+    pins: [
+        input VIN,
+        output VOUT,
+        power VDD,
+        ground GND
+    ]
+    
+    # Declare our two devices logically
+    add NMOS named M1
+    add PMOS named M2
+    
+    # Establish the logical connections (Netlist)
+    route M1.gate to VIN
+    route M2.gate to VIN
+    
+    route M1.drain to VOUT
+    route M2.drain to VOUT
+    
+    route M1.source to GND
+    route M1.bulk to GND
+    
+    route M2.source to VDD
+    route M2.bulk to VDD
+
+# ============================================================================
+# 3. Transistor Components (The Footprints)
+# ============================================================================
+component NMOS_Transistor:
+    pins: [gate, source, drain, bulk]
+    layout:
+        shape: Rectangle(1.2um, 1.2um, 200nm)
+        pin_positions:
+            gate at [600nm, 600nm]
+            source at [200nm, 600nm]
+            drain at [1000nm, 600nm]
+            bulk at [600nm, 1100nm]
+        
+        # Physical gate (Polysilicon crossing the active channel)
+        add pour(Polysilicon) named Gate_Poly on layer: poly:
+            device: gate
+            boundary: [x: 500nm, y: 0nm] to [x: 700nm, y: 1.0um]
+            
+        # Physical source and drain diffusion regions
+        add pour(Silicon_N) named Source_Diff on layer: active:
+            device: source
+            boundary: [x: 0nm, y: 100nm] to [x: 500nm, y: 1.0um]
+            
+        add pour(Silicon_N) named Drain_Diff on layer: active:
+            device: drain
+            boundary: [x: 700nm, y: 100nm] to [x: 1.2um, y: 1.0um]
+            
+        # Bulk substrate connection
+        add pour(Silicon_P) named Bulk_Contact on layer: substrate:
+            device: bulk
+            boundary: [x: 400nm, y: 1.0um] to [x: 800nm, y: 1.2um]
+
+component PMOS_Transistor:
+    pins: [gate, source, drain, bulk]
+    layout:
+        shape: Rectangle(1.2um, 1.2um, 200nm)
+        pin_positions:
+            gate at [600nm, 600nm]
+            source at [200nm, 600nm]
+            drain at [1000nm, 600nm]
+            bulk at [600nm, 1100nm]
+        
+        add pour(Polysilicon) named Gate_Poly on layer: poly:
+            device: gate
+            boundary: [x: 500nm, y: 0nm] to [x: 700nm, y: 1.0um]
+            
+        add pour(Silicon_P) named Source_Diff on layer: active:
+            device: source
+            boundary: [x: 0nm, y: 100nm] to [x: 500nm, y: 1.0um]
+            
+        add pour(Silicon_P) named Drain_Diff on layer: active:
+            device: drain
+            boundary: [x: 700nm, y: 100nm] to [x: 1.2um, y: 1.0um]
+            
+        # Bulk contact for PMOS lives in an N-Well
+        add pour(Silicon_N) named Bulk_Contact on layer: substrate:
+            device: bulk
+            boundary: [x: 400nm, y: 1.0um] to [x: 800nm, y: 1.2um]
+
+# ============================================================================
+# 4. Physical Layout (The Space)
+# ============================================================================
+space CMOS_Inverter implements Inverter_Schematic:
+    dimensions: 10um by 20um by 300um
+    resolution: 1nm
+    origin: bl by b
+    profile: Silicon_180nm
+
+    # Map logical nets to physical signal classes
+    nets:
+        VIN: signal
+        VOUT: signal
+        VDD: power
+        GND: ground
+
+    # Place our physical transistors in space
+    add NMOS_Transistor named M1 at [x: 4.4um, y: 4um] on layer: active
+    add PMOS_Transistor named M2 at [x: 4.4um, y: 12um] on layer: active
+
+    # Router automatically connects the terminals using our logical netlist
+    # The exit and enter rules tell the router where to dock on the component bounding boxes
+    route M1.gate to M2.gate:
+        exit: North
+        enter: South
+        
+    route M1.drain to M2.drain:
+        exit: North
+        enter: South

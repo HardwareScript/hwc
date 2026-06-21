@@ -2,7 +2,6 @@ use super::super::super::errors::IrError;
 use super::super::context::{ComponentPlacementData, PlacementContext};
 use super::super::helpers::parse_rectangle_dimensions;
 use super::super::pour::place_pour;
-use super::coordinates::transform_declarative_to_relative;
 use crate::bounding_box_tracker::BoundingBoxTracker;
 use hwc_engine::{
     geometry::{BoundingBox, Point3D},
@@ -12,6 +11,45 @@ use hwc_engine::{
     HardwareSpace,
 };
 use hwc_parser::{OriginXY, OriginZ};
+
+fn offset_declarative_coord(
+    coord: &hwc_parser::Coordinate,
+    position: &Point3D,
+    ctx: &PlacementContext,
+) -> hwc_parser::Coordinate {
+    match coord {
+        hwc_parser::Coordinate::Declarative { x, y, z, span } => {
+            let x_nm = crate::ir::conversions::evaluate_expression_to_nm(x, ctx.symbol_table)
+                .unwrap_or(0);
+            let y_nm = crate::ir::conversions::evaluate_expression_to_nm(y, ctx.symbol_table)
+                .unwrap_or(0);
+            let z_nm = crate::ir::conversions::evaluate_expression_to_nm(z, ctx.symbol_table)
+                .unwrap_or(0);
+            eprintln!("[DEBUG offset] position=({}, {}, {}) local=({}, {}, {}) -> abs=({}, {}, {})",
+                position.x, position.y, position.z, x_nm, y_nm, z_nm,
+                position.x + x_nm, position.y + y_nm, position.z + z_nm);
+            hwc_parser::Coordinate::Positional {
+                x: hwc_parser::Expression::Measurement {
+                    value: (position.x + x_nm) as f64 / 1_000_000.0,
+                    unit: hwc_parser::Unit::Millimeter,
+                    span: *span,
+                },
+                y: hwc_parser::Expression::Measurement {
+                    value: (position.y + y_nm) as f64 / 1_000_000.0,
+                    unit: hwc_parser::Unit::Millimeter,
+                    span: *span,
+                },
+                z: hwc_parser::Expression::Measurement {
+                    value: (position.z + z_nm) as f64 / 1_000_000.0,
+                    unit: hwc_parser::Unit::Millimeter,
+                    span: *span,
+                },
+                span: *span,
+            }
+        }
+        _ => coord.clone(),
+    }
+}
 
 pub fn unroll_internal_features(
     space: &mut HardwareSpace,
@@ -295,23 +333,23 @@ pub fn unroll_internal_features(
                             pour.span,
                         );
 
-                        let anchor_name = if let Some(binding) = &pour.device {
-                            format!("{}.{}", pd.name, binding.terminal)
-                        } else {
-                            pd.name.clone()
-                        };
-
                         if let Some(hwc_parser::PourBoundary::Rect(from, to)) =
                             &mut unrolled_pour.boundary
                         {
-                            **from = transform_declarative_to_relative(from, &anchor_name);
-                            **to = transform_declarative_to_relative(to, &anchor_name);
+                            let orig = pour.boundary.as_ref().unwrap();
+                            if let hwc_parser::PourBoundary::Rect(orig_from, orig_to) = orig {
+                                **from = offset_declarative_coord(orig_from, &pd.position, ctx);
+                                **to = offset_declarative_coord(orig_to, &pd.position, ctx);
+                            }
                         }
 
                         if let Some(hwc_parser::PourBoundary::Circle { center, .. }) =
                             &mut unrolled_pour.boundary
                         {
-                            **center = transform_declarative_to_relative(center, &anchor_name);
+                            let orig = pour.boundary.as_ref().unwrap();
+                            if let hwc_parser::PourBoundary::Circle { center: orig_center, .. } = orig {
+                                **center = offset_declarative_coord(orig_center, &pd.position, ctx);
+                            }
                         }
 
                         unrolled_pour.device =
@@ -321,7 +359,7 @@ pub fn unroll_internal_features(
                                 span: d.span,
                             });
 
-                        if let Some(anchor_bbox) = bbox_tracker.get(&anchor_name) {
+                        if let Some(anchor_bbox) = bbox_tracker.get(&pd.name) {
                             let anchor_z = anchor_bbox.min.z;
 
                             let layer_name = ctx.stackup_manager.get_layer_name_at_z(anchor_z);

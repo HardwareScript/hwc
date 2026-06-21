@@ -11,7 +11,7 @@ pub use traces::*;
 use crate::geometry::{BoundingBox, Point3D};
 use crate::geometry_router::EntityGraph;
 use crate::netlist::{NetId, NetlistArena};
-use crate::voxel::{MaterialId, MaterialRegistry};
+use crate::material::{MaterialId, MaterialRegistry};
 
 use compact_str::CompactString;
 use rustc_hash::FxHashMap;
@@ -214,13 +214,13 @@ impl HardwareSpace {
 
     /// **v0.1.7: Realize analytic routes into substrate layers (LAZY REALIZATION)**
     pub fn realize_analytic_routes(&mut self) {
-        eprintln!(
-            "[ANALYTIC ROUTES] Realizing {} routes into sparse substrate layers...",
-            self.analytic_routes.len()
-        );
+        // eprintln!(
+        //     "[ANALYTIC ROUTES] Realizing {} routes into sparse substrate layers...",
+        //     self.analytic_routes.len()
+        // );
         let start = std::time::Instant::now();
 
-        let mut segment_count = 0;
+        let mut _segment_count = 0;
 
         use rustc_hash::FxHashMap;
         let mut groups: FxHashMap<(i64, i64, MaterialId, u32), Vec<BoundingBox>> =
@@ -255,11 +255,11 @@ impl HardwareSpace {
                 let key = (z_min, z_max, route.material, route.net_id.0);
                 groups.entry(key).or_default().push(bbox);
 
-                segment_count += 1;
+                _segment_count += 1;
             }
         }
 
-        let mut layer_count = 0;
+        let mut _layer_count = 0;
         for ((z_min, z_max, material, net), bboxes) in groups {
             let group_bbox = BoundingBox::new(
                 Point3D::new(
@@ -274,27 +274,27 @@ impl HardwareSpace {
                 ),
             );
 
-            let mut layer = crate::voxel_grid::SubstrateLayer::new(material, net, group_bbox, crate::geometry_router::entity_graph::SubstrateLayerType::Pour);
+            let mut layer = crate::geometry_router::substrate_types::SubstrateLayer::new(material, net, group_bbox, crate::geometry_router::substrate_types::SubstrateLayerType::Pour);
             for bbox in bboxes {
                 layer.append_region(bbox);
             }
             self.entity_graph.get_substrate_layers_mut().push(layer);
-            layer_count += 1;
+            _layer_count += 1;
         }
 
-        let duration = start.elapsed();
-        eprintln!(
-            "[ANALYTIC ROUTES] Realization complete: {} segments → {} sparse layers ({}ms)",
-            segment_count,
-            layer_count,
-            duration.as_millis()
-        );
+        let _duration = start.elapsed();
+        // eprintln!(
+        //     "[ANALYTIC ROUTES] Realization complete: {} segments → {} sparse layers ({}ms)",
+        //     segment_count,
+        //     layer_count,
+        //     duration.as_millis()
+        // );
 
         // Post-realization drill pass for vias
-        eprintln!(
-            "[ANALYTIC ROUTES] Running post-realization drill pass for {} vias...",
-            self.vias.len()
-        );
+        // eprintln!(
+        //     "[ANALYTIC ROUTES] Running post-realization drill pass for {} vias...",
+        //     self.vias.len()
+        // );
         let vias = self.vias.clone();
         for via in vias {
             let z_start = via.from_z_nm.min(via.to_z_nm);
@@ -370,9 +370,13 @@ impl HardwareSpace {
             self.pours[pour_idx].net = Some(net_name.into());
 
             if let Some(pour_bbox) = bbox {
-                let material_id = self.material_registry.get_or_register(&material_name);
+                let material_id = self.material_registry.get_id(&material_name)
+                    .unwrap_or_else(|| panic!(
+                        "Internal error: material '{}' should have been registered during pour placement",
+                        material_name
+                    ));
                 for layer in self.entity_graph.get_substrate_layers_mut() {
-                    if layer.layer_type == crate::geometry_router::entity_graph::SubstrateLayerType::Pour
+                    if layer.layer_type == crate::geometry_router::substrate_types::SubstrateLayerType::Pour
                         && layer.material == material_id
                         && layer.bbox == pour_bbox
                     {
@@ -388,7 +392,11 @@ impl HardwareSpace {
                     if let Some(contact_bbox) = contact.bbox {
                         let material_id = self
                             .material_registry
-                            .get_or_register(&contact.material_name);
+                            .get_id(&contact.material_name)
+                            .unwrap_or_else(|| panic!(
+                                "Internal error: material '{}' should have been registered during contact placement",
+                                contact.material_name
+                            ));
                         for layer in self.entity_graph.get_substrate_layers_mut() {
                             if layer.material == material_id && layer.bbox == contact_bbox {
                                 layer.net = net_id.raw();

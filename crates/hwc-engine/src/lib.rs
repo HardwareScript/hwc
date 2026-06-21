@@ -5,14 +5,13 @@ pub mod design_rule_check;
 pub mod error_codes;
 pub mod geometry;
 pub mod geometry_router; // Now modularized into submodules
+pub mod material;
 pub mod morton;
 pub mod netlist;
 pub mod physics_validator;
 pub mod placement;
 pub mod routing;
 pub mod space;
-pub mod voxel;
-pub mod voxel_grid;
 
 // Test utilities - available for doc tests and unit tests
 pub mod test_utils;
@@ -22,7 +21,7 @@ pub use bit_chunk::BitChunk;
 // Re-export bulk_validator public API (Task 4.3: Bulk Connection Validation)
 pub use bulk_validator::{BulkValidationError, BulkValidator};
 // Re-export component_stamp public API (Sprint 2: Hierarchical Components)
-pub use voxel_grid::{ComponentMetadata, ComponentPin, Rotation, Terminal};
+pub use geometry_router::substrate_types::{ComponentMetadata, ComponentPin, Rotation, Terminal};
 // Re-export constraint_manager public API (now modularized)
 pub use constraint_manager::{
     calculate_clearance_nm, calculate_crosstalk_penalty, calculate_parallel_length,
@@ -76,6 +75,7 @@ pub use geometry_router::{
     NegotiatedCongestionEngine,
 };
 pub use geometry_router::geometry_refinement::{RefinedContour, refine_layer, refine_geometry, canonicalize_contours};
+pub use geometry_router::substrate_types::{CompactionStats, MemoryStats};
 pub use morton::{morton_decode, morton_encode, morton_neighbor};
 pub use netlist::{
     ArenaStats, ComponentData, ComponentId, NetData, NetId, NetlistArena, PinData, PinId,
@@ -90,7 +90,6 @@ pub use space::{
     AnalyticTrace, ContactMetadata, Dimensions, GridCells, HardwareSpace, KeepOutZone, LineSegment,
     PourMetadata, SpaceView, VoxelSize,
 };
-pub use voxel::{
+pub use material::{
     ManufacturingProcess, MaterialConductivity, MaterialId, MaterialRegistry, AIR_MATERIAL_ID,
 };
-pub use voxel_grid::{CompactionStats, MemoryStats, NetId as VoxelNetId};

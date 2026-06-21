@@ -1039,3 +1039,24 @@ material SiO2:
         ## Color & Rendering
         color: "#E0E0FF"                      # Light blue tint
         transparency: 0.8                     # Semi-transparent for visualization
+
+## ============================================================================
+## COMPILER INTERNAL MATERIALS
+## These materials are used by the compiler's internal passes
+## (component placement, solder mask generation, via filling).
+## ============================================================================
+
+material Component:
+    category: insulator
+    symbol: "Comp"
+    description: "Internal material for component body bounding boxes"
+
+material SolderMask:
+    category: insulator
+    symbol: "SM"
+    description: "Solder mask layer - green protective coating over copper traces"
+
+material Epoxy:
+    category: insulator
+    symbol: "Ep"
+    description: "Non-conductive epoxy fill for filled vias (VIPPO)"

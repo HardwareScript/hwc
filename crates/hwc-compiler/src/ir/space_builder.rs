@@ -47,7 +47,41 @@ pub fn create_hardware_space(
     };
 
     // Create material registry
-    let material_registry = MaterialRegistry::new();
+    let mut material_registry = MaterialRegistry::new();
+
+    // Populate registry from symbol table material definitions.
+    // This ensures every declared/imported material has correct conductivity
+    // BEFORE any pours or contacts call get_or_register().
+    for (name, mat_def) in symbol_table.materials() {
+        let conductivity = match mat_def.category {
+            hwc_parser::MaterialCategory::Conductor
+            | hwc_parser::MaterialCategory::OhmicContact
+            | hwc_parser::MaterialCategory::DieInterconnect
+            | hwc_parser::MaterialCategory::PcbSolder
+            | hwc_parser::MaterialCategory::BarrierLayer
+            | hwc_parser::MaterialCategory::Adhesive => {
+                hwc_engine::MaterialConductivity::Conductor
+            }
+            hwc_parser::MaterialCategory::Semiconductor => {
+                hwc_engine::MaterialConductivity::Semiconductor
+            }
+            hwc_parser::MaterialCategory::Insulator => {
+                hwc_engine::MaterialConductivity::Insulator
+            }
+        };
+        let process = match mat_def.process {
+            hwc_parser::ManufacturingProcess::DrilledPlated => {
+                hwc_engine::ManufacturingProcess::DrilledPlated
+            }
+            hwc_parser::ManufacturingProcess::Deposited => {
+                hwc_engine::ManufacturingProcess::Deposited
+            }
+            hwc_parser::ManufacturingProcess::Etched => {
+                hwc_engine::ManufacturingProcess::Etched
+            }
+        };
+        material_registry.register_with_properties(&name, conductivity, process);
+    }
 
     // Determine space view orientation (v0.1.6)
     let space_view = if let Some(render) = &space_def.render {

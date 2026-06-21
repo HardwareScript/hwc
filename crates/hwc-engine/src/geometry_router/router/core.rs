@@ -92,7 +92,7 @@ pub struct GeometryRouter {
     // =========================================================================
     /// Substrate layers for reference-plane void detection.
     /// Set via `set_substrate_context()` before routing.
-    pub(super) substrate_layers: Option<Vec<crate::voxel_grid::SubstrateLayer>>,
+    pub(super) substrate_layers: Option<Vec<crate::geometry_router::substrate_types::SubstrateLayer>>,
 
     /// Net frequencies in Hz (e.g., 5_000_000_000.0 for 5 GHz).
     /// Set via `set_substrate_context()` before routing.
@@ -262,7 +262,7 @@ impl GeometryRouter {
     /// reference-plane voids.
     pub fn set_substrate_context(
         &mut self,
-        substrate_layers: Vec<crate::voxel_grid::SubstrateLayer>,
+        substrate_layers: Vec<crate::geometry_router::substrate_types::SubstrateLayer>,
         net_frequencies: FxHashMap<crate::netlist::NetId, f64>,
     ) {
         self.substrate_layers = Some(substrate_layers);
@@ -389,7 +389,7 @@ impl GeometryRouter {
         nets: &FxHashMap<crate::netlist::NetId, Vec<crate::geometry::Point3D>>,
         explicit_segments: Option<&[(crate::netlist::NetId, Vec<Point3D>)]>,
         obstacle_bboxes: &[crate::geometry::BoundingBox],
-        substrate_layers: Option<&[crate::voxel_grid::SubstrateLayer]>,
+        substrate_layers: Option<&[crate::geometry_router::substrate_types::SubstrateLayer]>,
         net_frequencies: &FxHashMap<crate::netlist::NetId, f64>,
     ) -> Result<super::super::types::RouteResult, super::super::types::RoutingError> {
         // Store substrate context on self so route_net/route_net_global can access it
@@ -433,21 +433,21 @@ impl GeometryRouter {
 
         if area_nm2 < self.area_threshold_nm2 && net_count < self.net_count_threshold {
             // --- PASS-THROUGH MODE ---
-            eprintln!(
-                "[ADAPTIVE ROUTER] Pass-Through mode: {} nets, area {:.2} mm² (below thresholds)",
-                net_count,
-                area_nm2 as f64 / 1_000_000_000_000.0
-            );
+            // eprintln!(
+            //     "[ADAPTIVE ROUTER] Pass-Through mode: {} nets, area {:.2} mm² (below thresholds)",
+            //     net_count,
+            //     area_nm2 as f64 / 1_000_000_000_000.0
+            // );
             let steiner_result = self.route_all_nets_steiner(nets, obstacle_bboxes, substrate_layers, net_frequencies)?;
             result.merge(steiner_result);
             Ok(result)
         } else {
             // --- HIERARCHICAL MODE ---
-            eprintln!(
-                "[ADAPTIVE ROUTER] Hierarchical mode: {} nets, area {:.2} mm² (above thresholds)",
-                net_count,
-                area_nm2 as f64 / 1_000_000_000_000.0
-            );
+            // eprintln!(
+            //     "[ADAPTIVE ROUTER] Hierarchical mode: {} nets, area {:.2} mm² (above thresholds)",
+            //     net_count,
+            //     area_nm2 as f64 / 1_000_000_000_000.0
+            // );
             let hierarchical_result = self.route_hierarchical(
                 grid_bbox,
                 nets,
@@ -469,7 +469,7 @@ impl GeometryRouter {
         &mut self,
         nets: &FxHashMap<crate::netlist::NetId, Vec<Point3D>>,
         _obstacle_bboxes: &[crate::geometry::BoundingBox],
-        _substrate_layers: Option<&[crate::voxel_grid::SubstrateLayer]>,
+        _substrate_layers: Option<&[crate::geometry_router::substrate_types::SubstrateLayer]>,
         _net_frequencies: &FxHashMap<crate::netlist::NetId, f64>,
     ) -> Result<super::super::types::RouteResult, super::super::types::RoutingError> {
         // Pass-through: route all nets directly (hierarchical decision is made in route_space)
@@ -495,7 +495,7 @@ impl GeometryRouter {
         grid_bbox: &crate::geometry::BoundingBox,
         nets: &FxHashMap<crate::netlist::NetId, Vec<Point3D>>,
         _obstacle_bboxes: &[crate::geometry::BoundingBox],
-        substrate_layers: Option<&[crate::voxel_grid::SubstrateLayer]>,
+        substrate_layers: Option<&[crate::geometry_router::substrate_types::SubstrateLayer]>,
         net_frequencies: &FxHashMap<crate::netlist::NetId, f64>,
     ) -> Result<super::super::types::RouteResult, super::super::types::RoutingError> {
         use rayon::prelude::*;
@@ -506,11 +506,11 @@ impl GeometryRouter {
         let cell_size_nm = 10_000_000; // 10mm coarse tiles
         let gcell_grid = super::global_router::GCellGrid::partition(grid_bbox, cell_size_nm);
 
-        eprintln!(
-            "[ADAPTIVE ROUTER] Partitioned into {} G-Cells ({}nm tiles)",
-            gcell_grid.cells.len(),
-            cell_size_nm
-        );
+        // eprintln!(
+        //     "[ADAPTIVE ROUTER] Partitioned into {} G-Cells ({}nm tiles)",
+        //     gcell_grid.cells.len(),
+        //     cell_size_nm
+        // );
 
         let mut cross_cell_nets = FxHashMap::default();
         let mut intra_cell_nets: Vec<FxHashMap<crate::netlist::NetId, Vec<Point3D>>> =
@@ -532,12 +532,12 @@ impl GeometryRouter {
             }
         }
 
-        let intra_count: usize = intra_cell_nets.iter().map(|m| m.len()).sum();
-        let cross_count = cross_cell_nets.len();
-        eprintln!(
-            "[ADAPTIVE ROUTER] Net classification: {} intra-cell, {} cross-cell",
-            intra_count, cross_count
-        );
+        let _intra_count: usize = intra_cell_nets.iter().map(|m| m.len()).sum();
+        let _cross_count = cross_cell_nets.len();
+        // eprintln!(
+        //     "[ADAPTIVE ROUTER] Net classification: {} intra-cell, {} cross-cell",
+        //     intra_count, cross_count
+        // );
 
         let mut final_result = super::super::types::RouteResult::new();
 
@@ -605,10 +605,10 @@ impl GeometryRouter {
             // Phase 3b: Merge results sequentially into final_result + build occupied_voxels
             for (net_id, result) in cross_results {
                 let routed = result.map_err(|e| {
-                    eprintln!(
-                        "[ADAPTIVE ROUTER] Cross-cell net {:?} routing failed: {:?}",
-                        net_id, e
-                    );
+                    // eprintln!(
+                    //     "[ADAPTIVE ROUTER] Cross-cell net {:?} routing failed: {:?}",
+                    //     net_id, e
+                    // );
                     e
                 })?;
 
@@ -621,16 +621,16 @@ impl GeometryRouter {
                 final_result.vias.extend(routed.vias);
             }
 
-            eprintln!(
-                "[ADAPTIVE ROUTER] Cross-cell routing: {} nets routed in parallel ({}ms)",
-                cross_count,
-                t_cross.elapsed().as_millis()
-            );
+            // eprintln!(
+            //     "[ADAPTIVE ROUTER] Cross-cell routing: {} nets routed in parallel ({}ms)",
+            //     cross_count,
+            //     t_cross.elapsed().as_millis()
+            // );
         } else {
-            eprintln!(
-                "[ADAPTIVE ROUTER] Cross-cell routing: 0 nets ({}ms)",
-                t_cross.elapsed().as_millis()
-            );
+            // eprintln!(
+            //     "[ADAPTIVE ROUTER] Cross-cell routing: 0 nets ({}ms)",
+            //     t_cross.elapsed().as_millis()
+            // );
         }
 
         // Step 4: Route intra-cell nets across G-Cells
@@ -644,8 +644,8 @@ impl GeometryRouter {
                 // --- MEMOIZED SEQUENTIAL PATH ---
                 // QueryStore is not Sync, so we route sequentially and memoize per G-Cell.
                 let file_id = 0u64; // space-level file ID for query keys
-                let mut cached_count = 0usize;
-                let mut routed_count = 0usize;
+                let mut _cached_count = 0usize;
+                let mut _routed_count = 0usize;
 
                 for cell in &gcell_grid.cells {
                     let cell_nets = match intra_cell_nets.get(cell.id) {
@@ -669,7 +669,7 @@ impl GeometryRouter {
                         .is_some();
 
                     if is_cached {
-                        cached_count += 1;
+                        _cached_count += 1;
                         // Result is already in the final_result from a previous compilation.
                         // Skip re-routing — this G-cell is unchanged.
                         continue;
@@ -780,25 +780,25 @@ impl GeometryRouter {
                                 || super::super::query_engine::QueryResult::RouteGcell(route_result),
                             );
 
-                            routed_count += 1;
+                            _routed_count += 1;
                             final_result.merge(cell_result);
                         }
                         Err(e) => {
-                            eprintln!(
-                                "[ADAPTIVE ROUTER] G-Cell {} intra-cell routing failed: {:?}",
-                                cell.id, e
-                            );
+                            // eprintln!(
+                            //     "[ADAPTIVE ROUTER] G-Cell {} intra-cell routing failed: {:?}",
+                            //     cell.id, e
+                            // );
                             return Err(e);
                         }
                     }
                 }
 
-                eprintln!(
-                    "[ADAPTIVE ROUTER] Memoized G-Cell routing: {} cached (skipped), {} routed ({}ms)",
-                    cached_count,
-                    routed_count,
-                    t_intra.elapsed().as_millis()
-                );
+                // eprintln!(
+                //     "[ADAPTIVE ROUTER] Memoized G-Cell routing: {} cached (skipped), {} routed ({}ms)",
+                //     cached_count,
+                //     routed_count,
+                //     t_intra.elapsed().as_millis()
+                // );
             } else {
                 // --- PARALLEL PATH (existing behavior, no memoization) ---
                 let intra_results: Vec<
@@ -889,10 +889,10 @@ impl GeometryRouter {
                                 cell_result.vias.extend(local_result.vias);
                             }
                             Err(e) => {
-                                eprintln!(
-                                    "[ADAPTIVE ROUTER] G-Cell {} intra-cell routing failed: {:?}",
-                                    cell.id, e
-                                );
+                                // eprintln!(
+                                //     "[ADAPTIVE ROUTER] G-Cell {} intra-cell routing failed: {:?}",
+                                //     cell.id, e
+                                // );
                                 return Err(e);
                             }
                         }
@@ -907,14 +907,14 @@ impl GeometryRouter {
             }
         }
 
-        let total_ms = t_cross.elapsed().as_millis() + t_intra.elapsed().as_millis();
-        eprintln!(
-            "[ADAPTIVE ROUTER] Hierarchical routing complete: {} nets routed ({}ms cross-cell + {}ms intra-cell = {}ms total)",
-            final_result.paths.len(),
-            t_cross.elapsed().as_millis(),
-            t_intra.elapsed().as_millis(),
-            total_ms
-        );
+        let _total_ms = t_cross.elapsed().as_millis() + t_intra.elapsed().as_millis();
+        // eprintln!(
+        //     "[ADAPTIVE ROUTER] Hierarchical routing complete: {} nets routed ({}ms cross-cell + {}ms intra-cell = {}ms total)",
+        //     final_result.paths.len(),
+        //     t_cross.elapsed().as_millis(),
+        //     t_intra.elapsed().as_millis(),
+        //     total_ms
+        // );
 
         Ok(final_result)
     }

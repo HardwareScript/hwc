@@ -77,7 +77,9 @@ pub fn place_contact(
     profile: Option<&hwc_parser::ProfileDefinition>,
 ) -> Result<(), IrError> {
     // Get or register the contact material in the material registry
-    let material_id = space.material_registry.get_or_register(&contact.material);
+    let material_id = space.material_registry.get_id(&contact.material).ok_or_else(|| {
+        IrError::UndeclaredMaterial { material: contact.material.clone() }
+    })?;
 
     // XY from coordinate; Z span from elevations via StackupManager
     // Extract x and y expressions from the coordinate
@@ -258,26 +260,34 @@ pub fn place_contact(
 
     // Resolve net name to net ID for connectivity checking
     let net_id = if let Some(net_name) = &contact.net {
-        // Get or create the net in the netlist
-        if let Some(existing_net) = space.netlist.get_net_by_name(net_name.base.as_str()) {
-            existing_net.raw()
-        } else {
-            // Create the net if it doesn't exist yet
-            let new_net = space.netlist.add_net(
-                net_name.to_string(),
-                100_000, // Default 0.1mm trace width
-                material_id,
-            );
-            new_net.raw()
-        }
+        // v0.1.8: Use technology-aware net creation to prevent "Giant Pillar" scaling bugs
+        let is_asic = space.fabrication_constraints.as_ref().map_or(false, |c| {
+            c.technology
+                .as_ref()
+                .map_or(false, |t| t.to_lowercase() == "asic")
+        });
+        let min_width = space
+            .fabrication_constraints
+            .as_ref()
+            .map(|c| c.trace.min_width_nm)
+            .unwrap_or(180_000); // 180nm ASIC default
+
+        space
+            .netlist
+            .get_or_create_net_with_technology(net_name.base.as_str(), is_asic, min_width)
+            .raw()
     } else {
         0 // Unassigned
     };
 
     let bridge_material_name = get_prop_string(contact, "bridge", eval_context);
-    let bridge_material_id = bridge_material_name
-        .as_ref()
-        .map(|b| space.material_registry.get_or_register(b));
+    let bridge_material_id = if let Some(b) = &bridge_material_name {
+        Some(space.material_registry.get_id(b).ok_or_else(|| {
+            IrError::UndeclaredMaterial { material: b.clone() }
+        })?)
+    } else {
+        None
+    };
 
     // v0.2.0: Resolve shape from properties if not already set as a contour
     let mut contour = contact.contour.clone();
@@ -349,7 +359,9 @@ pub fn place_contact(
     // v0.1.7: TSV (Through-Silicon Via) support
     let liner_material_name = get_prop_string(contact, "liner", eval_context);
     if let Some(liner_material_name) = &liner_material_name {
-        let liner_material_id = space.material_registry.get_or_register(liner_material_name);
+        let liner_material_id = space.material_registry.get_id(liner_material_name).ok_or_else(|| {
+            IrError::UndeclaredMaterial { material: liner_material_name.clone() }
+        })?;
         let liner_thickness_nm =
             get_prop_nm(contact, "liner_thickness", symbol_table, eval_context).unwrap_or(5_000);
 
@@ -600,12 +612,10 @@ pub fn place_contact(
             // 5. ACTION: Handle Filled Vias (v0.1.9: VIPPO)
             if get_prop_bool(contact, "filled", eval_context).unwrap_or(false) {
                 let fill_material_name = get_prop_string(contact, "fill_material", eval_context);
-                let fill_material_id = if let Some(fill_mat_name) = &fill_material_name {
-                    space.material_registry.get_or_register(fill_mat_name)
-                } else {
-                    // Default to non-conductive epoxy if not specified
-                    space.material_registry.get_or_register("Epoxy")
-                };
+                let fill_mat_str = fill_material_name.as_deref().unwrap_or("Epoxy");
+                let fill_material_id = space.material_registry.get_id(fill_mat_str).ok_or_else(|| {
+                    IrError::UndeclaredMaterial { material: fill_mat_str.into() }
+                })?;
 
                 let fill_net_id = if let Some(fill_mat_name) = &fill_material_name {
                     if let Some(mat_def) = symbol_table.materials().get(fill_mat_name) {

@@ -3,7 +3,7 @@
 use super::types::{NetProperties, PhysicsViolation};
 use crate::bit_chunk::BitChunk;
 use crate::geometry::Point3D;
-use crate::voxel_grid::NetId;
+use crate::geometry_router::substrate_types::NetId;
 use crate::geometry_router::EntityGraph;
 
 /// Validate voltage boundaries in a chunk

@@ -222,7 +222,9 @@ pub fn register_net_for_route(
         100_000 // Default 100um
     };
 
-    let copper_id = space.material_registry.get_or_register("Copper");
+    let copper_id = space.material_registry.get_id("Copper").ok_or_else(|| {
+        IrError::UndeclaredMaterial { material: "Copper".into() }
+    })?;
 
     // Check if start pin already has a net
     let existing_net = if let Some(pin_data) = space.netlist.get_pin(start_pin_id) {

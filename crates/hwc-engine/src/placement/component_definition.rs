@@ -142,13 +142,13 @@ pub(super) fn load_component_definition<S: SymbolTableTrait>(
     let pins = convert_pin_positions(&component_ast.pins, layout, &footprint, symbol_table)?;
 
     // Extract material name from component definition
-    // For Stage 1 Silicon: NMOS component -> "NMOS" material
-    // For PCB: Use metadata value or component name
+    // For Stage 1 Silicon: NMOS component -> "Component" (internal material)
+    // For PCB: Use metadata value if specified, otherwise "Component"
     let material_name = component_ast
         .metadata
         .as_ref()
         .and_then(|meta| meta.value.clone())
-        .unwrap_or_else(|| component_ast.name.name.clone());
+        .unwrap_or_else(|| "Component".into());
 
     Ok(ComponentDefinition {
         name: component_ast.name.to_string().into(),

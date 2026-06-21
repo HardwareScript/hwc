@@ -131,7 +131,7 @@ impl<'a> AutoRouter<'a> {
         let mut route_segments: Vec<(NetId, Vec<Point3D>)> = Vec::new();
 
         if !self.auto_routes.is_empty() {
-            eprintln!("[ROUTER] Using Chain-Link mode ({} explicit routes)", self.auto_routes.len());
+            // eprintln!("[ROUTER] Using Chain-Link mode ({} explicit routes)", self.auto_routes.len());
             let auto_routes = self.auto_routes.clone();
 
             // v0.1.7: Port Occupancy Tracking
@@ -351,10 +351,10 @@ impl<'a> AutoRouter<'a> {
 
         // v0.1.8: Wire per-net routing pattern policies into the GeometryRouter.
         if !self.route_net_policies.is_empty() {
-            eprintln!(
-                "[ROUTER] Wiring {} net routing policies (patterns)",
-                self.route_net_policies.len()
-            );
+            // eprintln!(
+            //     "[ROUTER] Wiring {} net routing policies (patterns)",
+            //     self.route_net_policies.len()
+            // );
             geo_router.set_route_net_policies(self.route_net_policies.clone());
         }
 
@@ -376,12 +376,12 @@ impl<'a> AutoRouter<'a> {
                     .iter()
                     .map(|name| self.stackup_manager.get_layer_start_z(name).unwrap_or(0))
                     .collect();
-                eprintln!(
-                    "[ROUTER] {} mode enabled: {} layers, {} layer Z positions",
-                    if is_manhattan { "ASIC" } else { "PCB" },
-                    profile_layers.len(),
-                    layer_z_positions.len()
-                );
+                // eprintln!(
+                //     "[ROUTER] {} mode enabled: {} layers, {} layer Z positions",
+                //     if is_manhattan { "ASIC" } else { "PCB" },
+                //     profile_layers.len(),
+                //     layer_z_positions.len()
+                // );
                 geo_router.set_profile_mode(is_manhattan, profile_layers, layer_z_positions);
             }
         }
@@ -428,7 +428,7 @@ impl<'a> AutoRouter<'a> {
         }
 
         // Phase 5: Route all nets via GeometryRouter (adaptive mode selection)
-        let t_route = std::time::Instant::now();
+        let _t_route = std::time::Instant::now();
         let substrate_layers = self.space.entity_graph.get_substrate_layers();
         let has_substrate = !substrate_layers.is_empty();
         match geo_router.route_space(
@@ -440,19 +440,19 @@ impl<'a> AutoRouter<'a> {
             &self.net_frequencies,
         ) {
             Ok(result) => {
-                eprintln!(
-                    "[ROUTER] GeometryRouter complete: {} nets routed, {} vias placed ({}ms)",
-                    result.paths.len(),
-                    result.vias.len(),
-                    t_route.elapsed().as_millis()
-                );
+                // eprintln!(
+                //     "[ROUTER] GeometryRouter complete: {} nets routed, {} vias placed ({}ms)",
+                //     result.paths.len(),
+                //     result.vias.len(),
+                //     t_route.elapsed().as_millis()
+                // );
 
                 // v0.1.8: Phase 2 - Post-Route Meander Injection
                 // Only processes nets with `route net:` pattern policies (<5% of nets).
                 // Injects meander patterns analytically in O(1) per net, then resolves
                 // local collisions via O(V) DAG compaction (no full re-route).
                 let result = if !self.route_net_policies.is_empty() {
-                    let t_meander = std::time::Instant::now();
+                    let _t_meander = std::time::Instant::now();
                     let trace_width = self.space.fabrication_constraints.as_ref()
                         .map(|c| c.trace.min_width_nm)
                         .unwrap_or(100_000);
@@ -471,20 +471,20 @@ impl<'a> AutoRouter<'a> {
                     // The meander injector mutated paths in the RouteResult, but the
                     // EntityGraph still holds the original, stale straight segments.
                     // Sync the expanded meander paths back so exporters see the real geometry.
-                    let mut total_meander_segments = 0usize;
+                    let mut _total_meander_segments = 0usize;
                     for (&net_id, mutated_paths) in &result.paths {
                         self.space.entity_graph.clear_routes_for_net(net_id);
                         for path in mutated_paths {
                             self.space.entity_graph.register_route(net_id, path);
-                            total_meander_segments += path.len().saturating_sub(1);
+                            _total_meander_segments += path.len().saturating_sub(1);
                         }
                     }
-                    eprintln!(
-                        "[ROUTER] Meander injection: {} policy nets processed, {} expanded segments synced to EntityGraph ({}ms)",
-                        self.route_net_policies.len(),
-                        total_meander_segments,
-                        t_meander.elapsed().as_millis()
-                    );
+                    // eprintln!(
+                    //     "[ROUTER] Meander injection: {} policy nets processed, {} expanded segments synced to EntityGraph ({}ms)",
+                    //     self.route_net_policies.len(),
+                    //     total_meander_segments,
+                    //     t_meander.elapsed().as_millis()
+                    // );
                     result
                 } else {
                     result
@@ -645,18 +645,22 @@ impl<'a> AutoRouter<'a> {
     }
 
     fn find_net_id_for_name(&mut self, name: &str) -> Result<NetId, IrError> {
+        let is_asic = self.space.fabrication_constraints.as_ref().map_or(false, |c| {
+            c.technology
+                .as_ref()
+                .map_or(false, |t| t.to_lowercase() == "asic")
+        });
         let min_width = self
             .space
             .fabrication_constraints
             .as_ref()
             .map(|c| c.trace.min_width_nm)
-            .unwrap_or(100_000);
-        if let Some(id) = self.space.netlist.get_net_by_name(name) {
-            Ok(id)
-        } else {
-            let copper_id = self.space.material_registry.get_or_register("Copper");
-            Ok(self.space.netlist.add_net(name.into(), min_width, copper_id))
-        }
+            .unwrap_or(180_000);
+
+        Ok(self
+            .space
+            .netlist
+            .get_or_create_net_with_technology(name, is_asic, min_width))
     }
 
     fn register_analytic_route(
@@ -714,7 +718,9 @@ impl<'a> AutoRouter<'a> {
             segments.push(LineSegment::new(start, last));
         }
 
-        let copper_id = self.space.material_registry.get_or_register("Copper");
+        let copper_id = self.space.material_registry.get_id("Copper").ok_or_else(|| {
+            IrError::UndeclaredMaterial { material: "Copper".into() }
+        })?;
         let trace = AnalyticTrace::new(
             net_id,
             trace_width_nm,
