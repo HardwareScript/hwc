@@ -8,7 +8,10 @@ use super::super::errors::IrError;
 /// - "Box(w, h, d)" -> (w, h, d)
 /// - "Circle(dia)" -> (dia, dia, 0)
 /// - "Circle(dia, d)" -> (dia, dia, d)
-pub fn parse_rectangle_dimensions(shape_str: &str) -> Option<(i64, i64, i64)> {
+pub fn parse_rectangle_dimensions(
+    shape_str: &str,
+    symbol_table: &crate::SymbolTable,
+) -> Option<(i64, i64, i64)> {
     // Simple regex-free parsing
     if shape_str.starts_with("Rectangle(") && shape_str.ends_with(')') {
         let params = &shape_str[10..shape_str.len() - 1]; // Extract "w, h, d"
@@ -16,9 +19,9 @@ pub fn parse_rectangle_dimensions(shape_str: &str) -> Option<(i64, i64, i64)> {
         if parts.len() != 3 {
             return None;
         }
-        let width_nm = parse_measurement_to_nm(parts[0])?;
-        let height_nm = parse_measurement_to_nm(parts[1])?;
-        let depth_nm = parse_measurement_to_nm(parts[2])?;
+        let width_nm = parse_measurement_to_nm(parts[0], symbol_table)?;
+        let height_nm = parse_measurement_to_nm(parts[1], symbol_table)?;
+        let depth_nm = parse_measurement_to_nm(parts[2], symbol_table)?;
         return Some((width_nm, height_nm, depth_nm));
     }
 
@@ -28,9 +31,9 @@ pub fn parse_rectangle_dimensions(shape_str: &str) -> Option<(i64, i64, i64)> {
         if parts.len() != 3 {
             return None;
         }
-        let width_nm = parse_measurement_to_nm(parts[0])?;
-        let height_nm = parse_measurement_to_nm(parts[1])?;
-        let depth_nm = parse_measurement_to_nm(parts[2])?;
+        let width_nm = parse_measurement_to_nm(parts[0], symbol_table)?;
+        let height_nm = parse_measurement_to_nm(parts[1], symbol_table)?;
+        let depth_nm = parse_measurement_to_nm(parts[2], symbol_table)?;
         return Some((width_nm, height_nm, depth_nm));
     }
 
@@ -38,11 +41,11 @@ pub fn parse_rectangle_dimensions(shape_str: &str) -> Option<(i64, i64, i64)> {
         let params = &shape_str[7..shape_str.len() - 1]; // Extract "dia" or "dia, d"
         let parts: Vec<&str> = params.split(',').map(|s| s.trim()).collect();
         if parts.len() == 1 {
-            let dia_nm = parse_measurement_to_nm(parts[0])?;
+            let dia_nm = parse_measurement_to_nm(parts[0], symbol_table)?;
             return Some((dia_nm, dia_nm, 0));
         } else if parts.len() == 2 {
-            let dia_nm = parse_measurement_to_nm(parts[0])?;
-            let depth_nm = parse_measurement_to_nm(parts[1])?;
+            let dia_nm = parse_measurement_to_nm(parts[0], symbol_table)?;
+            let depth_nm = parse_measurement_to_nm(parts[1], symbol_table)?;
             return Some((dia_nm, dia_nm, depth_nm));
         }
     }
@@ -50,9 +53,10 @@ pub fn parse_rectangle_dimensions(shape_str: &str) -> Option<(i64, i64, i64)> {
     None
 }
 
-/// Parse a measurement string to nanometers
-/// Examples: "4mm" -> 4_000_000, "500um" -> 500_000
-pub fn parse_measurement_to_nm(s: &str) -> Option<i64> {
+/// Parse a measurement string to nanometers via the SymbolTable.
+/// Delegates to the canonical `SymbolTable::measurement_to_nm()` for unit resolution,
+/// supporting both built-in units and custom/user-defined units.
+pub fn parse_measurement_to_nm(s: &str, symbol_table: &crate::SymbolTable) -> Option<i64> {
     let s = s.trim();
 
     // Find where the number ends and unit begins
@@ -70,15 +74,21 @@ pub fn parse_measurement_to_nm(s: &str) -> Option<i64> {
 
     let value: f64 = num_str.parse().ok()?;
 
-    let nm = match unit_str {
-        "mm" => (value * 1_000_000.0) as i64,
-        "um" | "µm" => (value * 1_000.0) as i64,
-        "cm" => (value * 10_000_000.0) as i64,
-        "nm" => value as i64,
-        _ => return None,
+    // Build a Measurement and delegate to symbol table for canonical conversion
+    let unit = match unit_str {
+        "mm" => hwc_parser::Unit::Millimeter,
+        "um" | "µm" => hwc_parser::Unit::Micrometer,
+        "cm" => hwc_parser::Unit::Centimeter,
+        "nm" => hwc_parser::Unit::Nanometer,
+        _ => hwc_parser::Unit::Custom(unit_str.into()),
     };
 
-    Some(nm)
+    let measurement = hwc_parser::Measurement {
+        value,
+        unit,
+        span: hwc_parser::Span { start: 0, end: 0 },
+    };
+    symbol_table.measurement_to_nm(&measurement).ok()
 }
 
 /// Add an offset to a coordinate (for array unrolling)
@@ -100,12 +110,14 @@ pub fn offset_coordinate(
                 span: *span,
             })
         }
-        hwc_parser::Coordinate::Positional { .. } => Err(IrError::PlacementError(
-            "Positional coordinates not supported for arrays (use declarative syntax)".into(),
-        )),
-        hwc_parser::Coordinate::Relative(_) => Err(IrError::PlacementError(
-            "Relative coordinates not yet supported for arrays".into(),
-        )),
+        hwc_parser::Coordinate::Positional { .. } => Err(IrError::PlacementConstraint {
+            message: "Positional coordinates not supported for arrays (use declarative syntax)".into(),
+            component: "array".into(),
+        }),
+        hwc_parser::Coordinate::Relative(_) => Err(IrError::PlacementConstraint {
+            message: "Relative coordinates not yet supported for arrays".into(),
+            component: "array".into(),
+        }),
     }
 }
 

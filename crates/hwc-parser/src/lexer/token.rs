@@ -473,7 +473,7 @@ pub enum Token {
     /// - [+-]?\d+\.?\d*([eE][+-]?\d+)? = Number with optional scientific notation
     /// - [\p{L}\p{S}\p{M}µΩ°%·/²³] = First char: ANY Unicode letter, symbol, or mark
     /// - [\p{L}\p{S}\p{M}0-9µΩ°%·/²³/]* = Rest: letters, symbols, digits, slash (NO PARENS)
-    /// - (?:\([\p{L}\p{S}\p{M}0-9µΩ°%·/²³]+\))* = Optional balanced parens for complex units
+    /// - (?:\([\p{L}\p{S}\p{M}0-9µΩ°%·/²³/]+\))* = Optional balanced parens for complex units
     ///
     /// \p{L} = Unicode letters (Latin, Greek, Cyrillic, etc.)
     /// \p{S} = Unicode symbols (⊙, ℓ, ∞, etc.)
@@ -485,7 +485,7 @@ pub enum Token {
     ///
     /// **CRITICAL FIX (Sprint 3.9)**: Removed [+-]? prefix - signs are now separate tokens
     /// Priority 16 ensures Measurement matches before Integer (priority 15)
-    #[regex(r"\d+\.?\d*([eE][+-]?\d+)?[\p{L}\p{S}\p{M}µΩ°%·/²³][\p{L}\p{S}\p{M}0-9µΩ°%·/²³/]*(?:\([\p{L}\p{S}\p{M}0-9µΩ°%·/²³/]+\))*", priority = 16, callback = parse_generic_measurement)]
+    #[regex(r"\d+\.?\d*([eE][+-]?\d+)?[\p{L}\p{S}\p{M}_µΩ°%·/²³][\p{L}\p{S}\p{M}0-9_µΩ°%·/²³/]*(?:\([\p{L}\p{S}\p{M}0-9µΩ°%·/²³/]+\))*", priority = 16, callback = parse_generic_measurement)]
     Measurement(Measurement),
 
     // ========================================================================

@@ -71,7 +71,7 @@ pub fn unroll_internal_features(
                 let (width_nm, height_nm, _depth_nm) = layout
                     .shape
                     .as_ref()
-                    .and_then(|s| parse_rectangle_dimensions(s))
+                    .and_then(|s| parse_rectangle_dimensions(s, ctx.symbol_table))
                     .unwrap_or((1_000_000, 1_000_000, 1_000_000));
 
                 for (pin_name, pin_pos) in &layout.pin_positions {

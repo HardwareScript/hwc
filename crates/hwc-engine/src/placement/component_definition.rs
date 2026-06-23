@@ -148,7 +148,12 @@ pub(super) fn load_component_definition<S: SymbolTableTrait>(
         .metadata
         .as_ref()
         .and_then(|meta| meta.value.clone())
-        .unwrap_or_else(|| "Component".into());
+        .ok_or_else(|| PlacementError::InvalidShape {
+            shape: format!(
+                "Component '{}' has no metadata.material declared",
+                component_type
+            ),
+        })?;
 
     Ok(ComponentDefinition {
         name: component_ast.name.to_string().into(),
@@ -328,10 +333,12 @@ fn convert_pin_positions<S: SymbolTableTrait>(
             let pad_shape = if let Some(shape_str) = layout.pad_shapes.get(pin_name.as_str()) {
                 parse_pad_shape(shape_str, symbol_table)?
             } else {
-                // Default: 0.5mm diameter circular pad
-                PadShape::Circle {
-                    diameter_nm: 500_000,
-                }
+                return Err(PlacementError::InvalidShape {
+                    shape: format!(
+                        "Pin '{}' has no pad_shape declared in layout",
+                        pin_name
+                    ),
+                });
             };
 
             // No adjustment needed - pins are already top-left relative
@@ -342,13 +349,11 @@ fn convert_pin_positions<S: SymbolTableTrait>(
                 pad_shape,
             });
         } else {
-            // Pin declared but no position - use top-left corner as default
-            pins.push(PinDefinition {
-                name: pin_name.clone(),
-                local_offset: Point3D::new(0, 0, 0),
-                pad_shape: PadShape::Circle {
-                    diameter_nm: 500_000,
-                },
+            return Err(PlacementError::InvalidShape {
+                shape: format!(
+                    "Pin '{}' is declared but has no position in layout",
+                    pin_name
+                ),
             });
         }
     }

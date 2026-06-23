@@ -50,7 +50,10 @@ pub fn place_component(
         stackup_manager: ctx.stackup_manager,
         profile: ctx.profile,
     };
-    let mut position = coordinate_to_point(&resolved_position, &coord_ctx);
+    let mut position = coordinate_to_point(&resolved_position, &coord_ctx).map_err(|e| IrError::CoordinateResolutionFailed {
+        coordinate_str: "component position".into(),
+        reason: e,
+    })?;
 
     let mut mounting_res = mounting::resolve_mounting_and_elevation(
         space,
@@ -100,7 +103,10 @@ pub fn place_component(
             merge_waiver: component.waivers.merge.clone(),
             collector: Some(&crate::DiagnosticReporterAdapter(ctx.collector)),
         })
-        .map_err(|e| IrError::PlacementError(e.to_string()))?;
+        .map_err(|e| IrError::PlacementConstraint {
+            message: format!("Failed to place component: {}", e),
+            component: name.to_string(),
+        })?;
 
     if let Ok(component_def) = ctx
         .symbol_table
@@ -108,7 +114,7 @@ pub fn place_component(
     {
         if let Some(layout) = &component_def.layout {
             if let Some(shape_str) = &layout.shape {
-                if let Some(dims) = parse_rectangle_dimensions(shape_str) {
+                if let Some(dims) = parse_rectangle_dimensions(shape_str, ctx.symbol_table) {
                     let (width_nm, height_nm, depth_nm) = dims;
                     let bbox = if rotation_deg.abs() < 0.001 {
                         BoundingBox::new(

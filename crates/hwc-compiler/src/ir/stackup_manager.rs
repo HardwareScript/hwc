@@ -68,10 +68,10 @@ impl StackupManager {
             for layer in &stackup.layers {
                 let thickness_nm = evaluate_expression_to_nm(&layer.thickness, symbol_table)
                     .map_err(|e| {
-                        IrError::PlacementError(format!(
-                            "Failed to evaluate thickness for layer '{}': {}",
-                            layer.name.name, e
-                        ))
+                        IrError::StackupResolutionFailed {
+                            layer_name: layer.name.name.clone().into(),
+                            reason: format!("Failed to evaluate thickness: {}", e),
+                        }
                     })?;
 
                 resolved.push((layer.name.name.to_string(), thickness_nm));
@@ -200,7 +200,10 @@ impl StackupManager {
             Elevation::Physical { start, .. } => {
                 // Assembly paradigm — direct physical measurement/expression
                 evaluate_expression_to_nm(start, symbol_table).map_err(|e| {
-                    IrError::PlacementError(format!("Failed to evaluate physical Z: {}", e))
+                    IrError::CoordinateResolutionFailed {
+                        coordinate_str: "physical Z expression".into(),
+                        reason: e.to_string(),
+                    }
                 })
             }
             Elevation::Semantic(ident) => self
@@ -208,10 +211,10 @@ impl StackupManager {
                 .get(&ident.name.to_string())
                 .copied()
                 .ok_or_else(|| {
-                    IrError::PlacementError(format!(
-                        "Unknown semantic layer '{}' in profile stackup",
-                        ident.name
-                    ))
+                    IrError::StackupResolutionFailed {
+                        layer_name: ident.name.clone(),
+                        reason: format!("Unknown semantic layer '{}' in profile stackup", ident.name),
+                    }
                 }),
             Elevation::Relative => Ok(0),
         }
@@ -245,7 +248,10 @@ impl StackupManager {
             Elevation::Physical { end, .. } => {
                 if let Some(end_expr) = end {
                     let top = evaluate_expression_to_nm(end_expr, symbol_table).map_err(|e| {
-                        IrError::PlacementError(format!("Failed to evaluate physical Z-end: {}", e))
+                        IrError::CoordinateResolutionFailed {
+                            coordinate_str: "physical Z-end expression".into(),
+                            reason: e.to_string(),
+                        }
                     })?;
                     top - bottom
                 } else {
@@ -394,14 +400,17 @@ impl StackupManager {
                 }
                 // Not a known semantic layer — treat as physical expression
                 evaluate_expression_to_nm(z_expr, symbol_table).map_err(|e| {
-                    IrError::PlacementError(format!(
-                        "Failed to evaluate Z variable '{}': {}",
-                        name, e
-                    ))
+                    IrError::CoordinateResolutionFailed {
+                        coordinate_str: format!("Z variable '{}'", name),
+                        reason: e.to_string(),
+                    }
                 })
             }
             _ => evaluate_expression_to_nm(z_expr, symbol_table).map_err(|e| {
-                IrError::PlacementError(format!("Failed to evaluate Z expression: {}", e))
+                IrError::CoordinateResolutionFailed {
+                    coordinate_str: "Z expression".into(),
+                    reason: e.to_string(),
+                }
             }),
         }
     }

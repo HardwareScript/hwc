@@ -100,7 +100,8 @@ pub fn unroll_pour(
     let net = pour
         .net
         .as_ref()
-        .map(|n| substitute_in_net_name(n, variable, value));
+        .map(|n| substitute_in_net_name(n, variable, value))
+        .transpose()?;
 
     // Substitute loop variable in boundary
     let boundary = if let Some(b) = &pour.boundary {
@@ -169,7 +170,8 @@ pub fn unroll_plane(
     let net = plane
         .net
         .as_ref()
-        .map(|n| substitute_in_net_name(n, variable, value));
+        .map(|n| substitute_in_net_name(n, variable, value))
+        .transpose()?;
 
     let from = plane
         .from
@@ -255,7 +257,8 @@ pub fn unroll_contact(
     let net = contact
         .net
         .as_ref()
-        .map(|n| substitute_in_net_name(n, variable, value));
+        .map(|n| substitute_in_net_name(n, variable, value))
+        .transpose()?;
 
     // Substitute loop variable in position
     let position = substitute_in_coordinate(&contact.position, variable, value)?;
@@ -417,7 +420,7 @@ pub fn substitute_in_net_name(
     net_name: &hwc_parser::NetName,
     variable: &str,
     value: usize,
-) -> hwc_parser::NetName {
+) -> Result<hwc_parser::NetName, IrError> {
     // If the net name has an index expression, substitute the variable in it
     if let Some(ref index_expr) = net_name.index {
         let substituted_index = substitute_in_expression(index_expr, variable, value)
@@ -427,57 +430,30 @@ pub fn substitute_in_net_name(
         // This handles cases like D[i+1] → D[1] (not D[0+1])
         let evaluated_index = match substituted_index.evaluate_const() {
             Ok(hwc_parser::Value::Number(n)) => {
-                // SAFETY GUARD: Check for negative indices (P44: Physical Impossibility)
                 if n < 0 {
-                    eprintln!("\n❌ PHYSICAL REALITY ERROR (P44): Negative Array Index");
-                    eprintln!("   Net: {}[{}]", net_name.base, n);
-                    eprintln!("   Expression: {}", index_expr);
-                    eprintln!("   Loop variable: {} = {}", variable, value);
-                    eprintln!("\n   Physical Reality Rule:");
-                    eprintln!(
-                        "   Hardware indices cannot be negative. In software, Array[-1] might"
-                    );
-                    eprintln!(
-                        "   mean 'last element.' In hardware, Bus[-1] is a physical impossibility"
-                    );
-                    eprintln!("   —an atom that doesn't exist.");
-                    eprintln!(
-                        "\n   Fix: Ensure your expression always produces non-negative values."
-                    );
-                    eprintln!("   Example: Use 'i + 1' instead of 'i - 5' if i starts at 0.\n");
-                    panic!("P44: Negative array index in net name");
+                    return Err(IrError::InvalidExpression(format!(
+                        "Negative array index in net name: {}[{}]",
+                        net_name.base, n
+                    )));
                 }
 
-                // Create a literal expression with the evaluated value
                 Expression::Literal {
                     value: n,
                     span: substituted_index.span(),
                 }
             }
             Err(eval_error) => {
-                // SAFETY GUARD: Division by zero or other evaluation errors
-                eprintln!("\n❌ EXPRESSION EVALUATION ERROR");
-                eprintln!("   Net: {}[...]", net_name.base);
-                eprintln!("   Expression: {}", index_expr);
-                eprintln!("   Loop variable: {} = {}", variable, value);
-                eprintln!("   Error: {}", eval_error);
-                eprintln!("\n   Common causes:");
-                eprintln!("   - Division by zero: 10 / i (where i=0)");
-                eprintln!("   - Undefined variable in expression");
-                eprintln!("\n   Fix: Check your math expression for edge cases.\n");
-                panic!("Expression evaluation failed in net name");
+                return Err(IrError::InvalidExpression(format!(
+                    "Expression evaluation failed in net name: {}",
+                    eval_error
+                )));
             }
-            _ => {
-                // If evaluation returns non-number, keep the substituted expression
-                // This allows for non-constant expressions (future feature)
-                substituted_index
-            }
+            _ => substituted_index,
         };
 
-        hwc_parser::NetName::indexed(net_name.base.clone(), evaluated_index, net_name.span)
+        Ok(hwc_parser::NetName::indexed(net_name.base.clone(), evaluated_index, net_name.span))
     } else {
-        // Simple name without index - keep as is
-        hwc_parser::NetName::simple(net_name.base.clone(), net_name.span)
+        Ok(hwc_parser::NetName::simple(net_name.base.clone(), net_name.span))
     }
 }
 

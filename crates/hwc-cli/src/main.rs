@@ -230,10 +230,7 @@ enum MaterialsCommand {
 
 fn main() {
     if let Err(e) = run() {
-        let msg = e.to_string();
-        if !msg.is_empty() {
-            eprintln!("Error: {}", msg);
-        }
+        eprintln!("{:?}", miette::Report::from(e));
         std::process::exit(1);
     }
 }

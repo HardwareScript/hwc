@@ -28,7 +28,10 @@ pub fn place_plane(
 
     let thickness_nm = if let Some(t_expr) = &plane.thickness {
         crate::ir::conversions::evaluate_expression_to_nm(t_expr, ctx.symbol_table).map_err(
-            |e| IrError::PlacementError(format!("Failed to evaluate plane thickness: {}", e)),
+            |e| IrError::CoordinateResolutionFailed {
+                coordinate_str: format!("plane '{}' thickness", plane.name),
+                reason: e.to_string(),
+            },
         )?
     } else {
         ctx.profile
@@ -44,11 +47,14 @@ pub fn place_plane(
     };
 
     if thickness_nm == 0 && plane.thickness.is_none() {
-        return Err(IrError::PlacementError(format!(
-            "Could not resolve physical thickness for plane '{}' on layer '{}'. \
-             Ensure the layer is defined in the profile stackup or provide an explicit 'thickness:' property.",
-            plane.name, layer_name
-        )));
+        return Err(IrError::PlacementConstraint {
+            message: format!(
+                "Could not resolve physical thickness for plane '{}' on layer '{}'. \
+                 Ensure the layer is defined in the profile stackup or provide an explicit 'thickness:' property.",
+                plane.name, layer_name
+            ),
+            component: plane.name.to_string().into(),
+        });
     }
 
     let z_start_nm = ctx
@@ -74,10 +80,10 @@ pub fn place_plane(
         (Some(from_raw), Some(to_raw)) => {
             let from = if from_raw.is_relative() {
                 solver.resolve_position(from_raw).map_err(|e| {
-                    IrError::PlacementError(format!(
-                        "Failed to resolve relative 'from' position for plane '{}': {}",
-                        plane.name, e
-                    ))
+                    IrError::CoordinateResolutionFailed {
+                        coordinate_str: format!("plane '{}' from position", plane.name),
+                        reason: e.to_string(),
+                    }
                 })?
             } else {
                 from_raw.clone()
@@ -85,29 +91,38 @@ pub fn place_plane(
 
             let to = if to_raw.is_relative() {
                 solver.resolve_position(to_raw).map_err(|e| {
-                    IrError::PlacementError(format!(
-                        "Failed to resolve relative 'to' position for plane '{}': {}",
-                        plane.name, e
-                    ))
+                    IrError::CoordinateResolutionFailed {
+                        coordinate_str: format!("plane '{}' to position", plane.name),
+                        reason: e.to_string(),
+                    }
                 })?
             } else {
                 to_raw.clone()
             };
 
             let s = spanning_coordinate_to_point(&from, &coord_ctx, false)
-                .map_err(IrError::PlacementError)?;
+                .map_err(|e| IrError::CoordinateResolutionFailed {
+                    coordinate_str: format!("plane '{}' from", plane.name),
+                    reason: e,
+                })?;
             let e = spanning_coordinate_to_point(&to, &coord_ctx, true)
-                .map_err(IrError::PlacementError)?;
+                .map_err(|e| IrError::CoordinateResolutionFailed {
+                    coordinate_str: format!("plane '{}' to", plane.name),
+                    reason: e,
+                })?;
 
             let w = (e.x - s.x).abs();
             let h = (e.y - s.y).abs();
             (s, e, w * h)
         }
         _ => {
-            return Err(IrError::PlacementError(format!(
-                "Plane '{}' requires 'from' and 'to' coordinates",
-                plane.name
-            )));
+            return Err(IrError::PlacementConstraint {
+                message: format!(
+                    "Plane '{}' requires 'from' and 'to' coordinates",
+                    plane.name
+                ),
+                component: plane.name.to_string().into(),
+            });
         }
     };
 
@@ -124,26 +139,29 @@ pub fn place_plane(
 
         let at_resolved = if at_raw.is_relative() {
             solver.resolve_position(at_raw).map_err(|e| {
-                IrError::PlacementError(format!(
-                    "Failed to resolve cutout position for plane '{}': {}",
-                    plane.name, e
-                ))
+                IrError::CoordinateResolutionFailed {
+                    coordinate_str: format!("cutout position for plane '{}'", plane.name),
+                    reason: e.to_string(),
+                }
             })?
         } else {
             at_raw.clone()
         };
 
         let at_pt = spanning_coordinate_to_point(&at_resolved, &coord_ctx, false)
-            .map_err(IrError::PlacementError)?;
+            .map_err(|e| IrError::CoordinateResolutionFailed {
+                coordinate_str: format!("cutout position for plane '{}'", plane.name),
+                reason: e,
+            })?;
 
         let width_nm = w_expr
             .map(|e| {
                 crate::ir::conversions::evaluate_expression_to_nm(e, ctx.symbol_table).map_err(
                     |err| {
-                        IrError::PlacementError(format!(
-                            "Failed to evaluate cutout width for plane '{}': {}",
-                            plane.name, err
-                        ))
+                        IrError::CoordinateResolutionFailed {
+                            coordinate_str: format!("cutout width for plane '{}'", plane.name),
+                            reason: err.to_string(),
+                        }
                     },
                 )
             })
@@ -153,10 +171,10 @@ pub fn place_plane(
             .map(|e| {
                 crate::ir::conversions::evaluate_expression_to_nm(e, ctx.symbol_table).map_err(
                     |err| {
-                        IrError::PlacementError(format!(
-                            "Failed to evaluate cutout height for plane '{}': {}",
-                            plane.name, err
-                        ))
+                        IrError::CoordinateResolutionFailed {
+                            coordinate_str: format!("cutout height for plane '{}'", plane.name),
+                            reason: err.to_string(),
+                        }
                     },
                 )
             })
@@ -166,10 +184,10 @@ pub fn place_plane(
             .map(|e| {
                 crate::ir::conversions::evaluate_expression_to_nm(e, ctx.symbol_table).map_err(
                     |err| {
-                        IrError::PlacementError(format!(
-                            "Failed to evaluate cutout radius for plane '{}': {}",
-                            plane.name, err
-                        ))
+                        IrError::CoordinateResolutionFailed {
+                            coordinate_str: format!("cutout radius for plane '{}'", plane.name),
+                            reason: err.to_string(),
+                        }
                     },
                 )
             })
@@ -233,13 +251,16 @@ pub fn place_plane(
                     .get_name(space.substrate_material_id)
                     .unwrap_or("Unknown");
 
-                return Err(IrError::PlacementError(format!(
-                    "Substrate interpenetration detected: Plane '{}' ({}) overlaps with the base substrate ({}). \
-                     Use the same material as the substrate, or place the plane outside the substrate bounds.",
-                    plane.name,
-                    plane.material,
-                    substrate_material_name
-                )));
+                return Err(IrError::PlacementConstraint {
+                    message: format!(
+                        "Substrate interpenetration detected: Plane '{}' ({}) overlaps with the base substrate ({}). \
+                         Use the same material as the substrate, or place the plane outside the substrate bounds.",
+                        plane.name,
+                        plane.material,
+                        substrate_material_name
+                    ),
+                    component: plane.name.to_string().into(),
+                });
             }
         }
     }

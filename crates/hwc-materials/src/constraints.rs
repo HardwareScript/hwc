@@ -74,7 +74,7 @@ pub struct ConstraintSet {
     pub stackup: Option<StackupConstraints>,
     pub bridges: Vec<BridgeRule>, // v0.1.7: Multi-material bridges
     /// Solder mask expansion in nanometers (v0.1.7)
-    pub solder_mask_expansion_nm: i64,
+    pub solder_mask_expansion_nm: Option<i64>,
     /// Technology node string (e.g. "PCB", "ASIC") for manufacturing checks.
     pub technology: Option<String>,
 }
@@ -291,7 +291,7 @@ impl Default for ConstraintSet {
             thermal: None, // No thermal constraints by default
             stackup: None, // No stackup constraints by default
             bridges: vec![],
-            solder_mask_expansion_nm: 75_000, // IPC-7351 default: 75µm
+            solder_mask_expansion_nm: None, // No solder mask expansion by default
             technology: None,
         }
     }

@@ -51,10 +51,11 @@ pub fn validate_bridges(
                 // If the bridge resolver fails, it means no valid bridge was found
                 // OR the user omitted a required bridge for this transition.
                 if let Err(e) = bridge_stack {
-                    return Err(IrError::PlacementError(format!(
-                        "Bridge validation failed for contact '{}': {}",
-                        contact.name, e
-                    )));
+                    return Err(IrError::BridgeValidationFailed {
+                        from_material: p1.material_name.clone(),
+                        to_material: p2.material_name.clone(),
+                        reason: e.to_string(),
+                    });
                 }
             }
         }

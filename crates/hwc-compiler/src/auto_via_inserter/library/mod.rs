@@ -95,19 +95,17 @@ impl ViaLibrary {
                         "square" => crate::shape_generators::square_contour(size_nm),
                         "hexagon" => crate::shape_generators::hexagon_contour(size_nm),
                         "cylinder" => crate::shape_generators::circle_contour(size_nm, 16),
-                        _ => {
-                            if profile.is_asic() {
-                                crate::shape_generators::square_contour(size_nm)
-                            } else {
-                                crate::shape_generators::circle_contour(size_nm, 16)
-                            }
-                        }
+                        _ => panic!(
+                            "Via shape '{}' is not defined. Declare it in the profile or stdlib.",
+                            shape_def.name
+                        ),
                     }
                 }
-            } else if profile.is_asic() {
-                crate::shape_generators::square_contour(size_nm)
             } else {
-                crate::shape_generators::circle_contour(size_nm, 16)
+                panic!(
+                    "Profile '{}': via.shape must be explicitly declared. No implicit shape defaults permitted.",
+                    profile.name
+                )
             };
 
             for via_def in &profile.vias {

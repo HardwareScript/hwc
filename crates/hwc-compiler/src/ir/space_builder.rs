@@ -18,18 +18,20 @@ pub fn create_hardware_space(
 
     // Convert dimensions to nanometers using the symbol table (supports custom units!)
     let dims = Dimensions {
-        width_nm: measurement_to_nm(&dimensions.width, symbol_table),
-        height_nm: measurement_to_nm(&dimensions.height, symbol_table),
-        depth_nm: measurement_to_nm(&dimensions.depth, symbol_table),
+        width_nm: measurement_to_nm(&dimensions.width, symbol_table)
+            .map_err(|e| IrError::InvalidExpression(e))?,
+        height_nm: measurement_to_nm(&dimensions.height, symbol_table)
+            .map_err(|e| IrError::InvalidExpression(e))?,
+        depth_nm: measurement_to_nm(&dimensions.depth, symbol_table)
+            .map_err(|e| IrError::InvalidExpression(e))?,
     };
 
     // Derive grid from resolution + dimensions, or error.
     let grid_cells = if let Some(res_measurement) = &space_def.resolution {
-        let resolution_nm = measurement_to_nm(res_measurement, symbol_table);
+        let resolution_nm = measurement_to_nm(res_measurement, symbol_table)
+            .map_err(|e| IrError::InvalidExpression(e))?;
         if resolution_nm <= 0 {
-            return Err(IrError::CompilationError(
-                "Resolution must be a positive value".into(),
-            ));
+            return Err(IrError::InvalidResolution { value: resolution_nm });
         }
 
         // v0.1.8: resolution is a coordinate snapping step, NOT a grid cell count.
@@ -110,18 +112,12 @@ pub fn create_hardware_space(
     // Load fabrication constraints from profile (v0.1.6: DRC Integration)
     if let Some(profile_name) = &space_def.profile {
         // Look up profile in symbol table
-        let profile_def = symbol_table.get_profile(&profile_name.name).map_err(|e| {
-            IrError::CompilationError(format!(
-                "Profile '{}' not found: {:?}",
-                profile_name.name, e
-            ))
+        let profile_def = symbol_table.get_profile(&profile_name.name).map_err(|_e| {
+            IrError::ProfileNotFound { name: profile_name.name.clone().into() }
         })?;
 
-        let constraints = profile_to_constraints(profile_def, symbol_table).map_err(|e| {
-            IrError::CompilationError(format!(
-                "Failed to convert profile '{}' to constraints: {:?}",
-                profile_name.name, e
-            ))
+        let constraints = profile_to_constraints(profile_def, symbol_table).map_err(|_e| {
+            IrError::ProfileNotFound { name: profile_name.name.clone().into() }
         })?;
 
         space.fabrication_constraints = Some(constraints);
@@ -129,7 +125,8 @@ pub fn create_hardware_space(
 
     // Store resolution for coordinate snapping
     if let Some(res_measurement) = &space_def.resolution {
-        space.resolution_nm = Some(measurement_to_nm(res_measurement, symbol_table));
+        space.resolution_nm = Some(measurement_to_nm(res_measurement, symbol_table)
+            .map_err(|e| IrError::InvalidExpression(e))?);
     }
 
     // Process net classifications (v0.1.6)
@@ -156,6 +153,90 @@ pub fn create_hardware_space(
     }
 
     Ok(space)
+}
+
+/// Validate ASIC-specific constraints (No Implicit Defaults rule).
+///
+/// When technology is "ASIC", the compiler must NEVER silently fall back to
+/// PCB-scale defaults. Every route width, material property, and physical
+/// constraint must be explicitly declared. If missing, the build halts
+/// with a clear error instead of generating a physically incorrect layout.
+pub fn validate_asic_constraints(
+    space_def: &SpaceDefinition,
+    symbol_table: &crate::SymbolTable,
+) -> Result<(), IrError> {
+    // Check if this is an ASIC build
+    let profile = space_def
+        .profile
+        .as_ref()
+        .and_then(|p| symbol_table.get_profile(p.as_str()).ok());
+
+    let is_asic = profile.as_ref().is_some_and(|p| p.is_asic())
+        || space_def.profile.as_ref().map_or(false, |p| {
+            p.name.to_lowercase().contains("asic")
+        });
+
+    if !is_asic {
+        return Ok(()); // PCB builds allow implicit defaults
+    }
+
+    // Rule 1: Profile MUST declare trace constraints with min_width
+    let has_trace_constraints = profile
+        .as_ref()
+        .and_then(|p| p.trace.as_ref())
+        .is_some();
+
+    if !has_trace_constraints {
+        return Err(IrError::MissingAsicConstraint {
+            message: "ASIC profile missing required 'trace:' constraints".into(),
+            hint: "Add a 'trace:' block to your profile with explicit min_width and min_spacing.\n\nExample:\n  trace:\n    min_width: 180nm\n    min_spacing: 200nm".into(),
+        });
+    }
+
+    // Rule 2: Every route must have an explicit width
+    for statement in &space_def.statements {
+        if let hwc_parser::SpaceTopLevelStatement::Route(route) = statement {
+            if route.width.is_none() {
+                let net_hint = format!(
+                    "Route {:?} -> {:?} has no explicit width. Add 'width: <value>' to the route definition.",
+                    route.from, route.to
+                );
+                return Err(IrError::MissingAsicConstraint {
+                    message: format!(
+                        "ASIC route {:?} -> {:?} lacks an explicit width constraint.",
+                        route.from, route.to
+                    ),
+                    hint: net_hint,
+                });
+            }
+        }
+    }
+
+    // Rule 3: Every material used in pours must have physical properties declared
+    let declared_materials: Vec<String> = symbol_table
+        .materials()
+        .iter()
+        .map(|(name, _)| name.to_string())
+        .collect();
+
+    for statement in &space_def.statements {
+        if let hwc_parser::SpaceTopLevelStatement::Pour(pour) = statement {
+            if !declared_materials.iter().any(|m| m == &pour.material) {
+                return Err(IrError::MissingAsicConstraint {
+                    message: format!(
+                        "ASIC pour '{}' references undeclared material '{}'.",
+                        pour.name, pour.material
+                    ),
+                    hint: format!(
+                        "Material '{}' must be declared with full physical properties (resistivity, thermal_conductivity, density) before use in ASIC designs.\n\nExample:\n  material {}:\n      category: conductor\n      properties:\n          resistivity: 1.68e-8ohm_m\n          thermal_conductivity: 401.0W_mK\n          density: 8960.0kg_m3",
+                        pour.material, pour.material
+                    ),
+                });
+            }
+        }
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -198,7 +279,7 @@ mod tests {
     fn test_create_hardware_space() {
         let source = r#"space Test:
     dimensions: 50mm by 50mm by 4mm
-    grid: 500 by 500 by 4
+    resolution: 100um
 "#;
 
         let program = parse(source).expect("Failed to parse");
@@ -208,7 +289,10 @@ mod tests {
         let space = create_hardware_space(space_def, &symbol_table).unwrap();
         assert_eq!(space.name, "Test");
         assert_eq!(space.dimensions.width_nm, 50_000_000);
-        assert_eq!(space.grid_cells().x_cols, 500);
-        assert_eq!(space.voxel_size.x_nm, 100_000);
+        // Grid is derived from resolution: ~200um cells, capped at 500
+        // 50mm / 200um = 250 columns
+        assert_eq!(space.grid_cells().x_cols, 250);
+        // Voxel size = width / columns = 50_000_000 / 250 = 200_000
+        assert_eq!(space.voxel_size.x_nm, 200_000);
     }
 }

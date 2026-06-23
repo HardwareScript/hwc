@@ -148,7 +148,11 @@ impl<'a> AutoRouter<'a> {
                 let net_name = self.space.netlist.get_net(actual_net_id).map(|n| n.name.clone()).unwrap_or_else(|| "unnamed".into());
 
                 // Resolve pin positions to boundary points (GOD-TIER ALIGNMENT)
-                let min_width = self.space.fabrication_constraints.as_ref().map(|c| c.trace.min_width_nm).unwrap_or(100_000);
+                let min_width = self.space.fabrication_constraints.as_ref().map(|c| c.trace.min_width_nm)
+                    .ok_or_else(|| IrError::MissingAsicConstraint {
+                        message: format!("Route requires trace width constraint but none are loaded."),
+                        hint: "Ensure a profile with 'trace:' constraints is declared in the space definition.".into(),
+                    })?;
                 
                 // v0.1.7: Smart Chain-Link Port Selection
                 // We manually resolve ports here if they haven't been specified,
@@ -455,10 +459,16 @@ impl<'a> AutoRouter<'a> {
                     let _t_meander = std::time::Instant::now();
                     let trace_width = self.space.fabrication_constraints.as_ref()
                         .map(|c| c.trace.min_width_nm)
-                        .unwrap_or(100_000);
+                        .ok_or_else(|| IrError::MissingAsicConstraint {
+                            message: "Meander injection requires trace constraints but none are loaded.".into(),
+                            hint: "Ensure a profile with 'trace:' constraints is declared in the space definition.".into(),
+                        })?;
                     let min_clearance = self.space.fabrication_constraints.as_ref()
                         .map(|c| c.trace.min_spacing_nm)
-                        .unwrap_or(200_000);
+                        .ok_or_else(|| IrError::MissingAsicConstraint {
+                            message: "Meander injection requires trace spacing constraints but none are loaded.".into(),
+                            hint: "Ensure a profile with 'trace:' constraints is declared in the space definition.".into(),
+                        })?;
                     let injector = crate::ir::meander_injection::MeanderInjector::new(
                         &self.route_net_policies,
                         &obstacle_bboxes,
@@ -531,7 +541,10 @@ impl<'a> AutoRouter<'a> {
                         // preventing signal reflection and EMI on high-speed lines.
                         let trace_width = self.space.fabrication_constraints.as_ref()
                             .map(|c| c.trace.min_width_nm)
-                            .unwrap_or(100_000);
+                            .ok_or_else(|| IrError::MissingAsicConstraint {
+                                message: "Miter chamfer requires trace width constraint but none is loaded.".into(),
+                                hint: "Ensure a profile with 'trace:' constraints is declared in the space definition.".into(),
+                            })?;
                         let miter_engine = hwc_engine::MiterEngine::new(trace_width);
                         let mitered_path = miter_engine.apply_miter_pass(path);
 
@@ -585,11 +598,12 @@ impl<'a> AutoRouter<'a> {
                     }
                 }
             }
-            Err(e) => {
-                return Err(IrError::RoutingError(format!(
-                    "GeometryRouter failed: {}",
-                    e
-                )));
+            Err(_e) => {
+                return Err(IrError::NoPathFound {
+                    net: "batch".into(),
+                    from_pin: "batch".into(),
+                    to_pin: "batch".into(),
+                });
             }
         }
 
@@ -655,7 +669,10 @@ impl<'a> AutoRouter<'a> {
             .fabrication_constraints
             .as_ref()
             .map(|c| c.trace.min_width_nm)
-            .unwrap_or(180_000);
+            .ok_or_else(|| IrError::MissingAsicConstraint {
+                message: format!("Net '{}' requires fabrication constraints but none are loaded.", name),
+                hint: "Ensure a profile with 'trace:' constraints is declared in the space definition.".into(),
+            })?;
 
         Ok(self
             .space
@@ -681,7 +698,10 @@ impl<'a> AutoRouter<'a> {
             .fabrication_constraints
             .as_ref()
             .map(|c| c.trace.min_width_nm)
-            .unwrap_or(100_000);
+            .ok_or_else(|| IrError::MissingAsicConstraint {
+                message: "Analytic route requires trace width constraint but none is loaded.".into(),
+                hint: "Ensure a profile with 'trace:' constraints is declared in the space definition.".into(),
+            })?;
 
         // v0.1.7: Strict Boundary-Docking Model
         // ...
@@ -713,7 +733,10 @@ impl<'a> AutoRouter<'a> {
                 }
             }
         }
-        let last = *path.last().unwrap();
+        let last = *path.last()
+            .ok_or_else(|| IrError::EmptyRoute {
+                net: net_name.into(),
+            })?;
         if start != last {
             segments.push(LineSegment::new(start, last));
         }

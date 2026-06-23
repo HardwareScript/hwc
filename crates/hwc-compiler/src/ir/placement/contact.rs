@@ -87,9 +87,10 @@ pub fn place_contact(
         hwc_parser::Coordinate::Positional { x, y, .. }
         | hwc_parser::Coordinate::Declarative { x, y, .. } => (x, y),
         hwc_parser::Coordinate::Relative(_) => {
-            return Err(IrError::PlacementError(
-                "Relative coordinates are not supported for contact placement".to_string(),
-            ));
+            return Err(IrError::PlacementConstraint {
+                message: "Relative coordinates are not supported for contact placement".into(),
+                component: contact.name.as_ref().map(|n| n.as_str().to_string()).unwrap_or_else(|| "unnamed".to_string()),
+            });
         }
     };
 
@@ -105,13 +106,29 @@ pub fn place_contact(
         stackup_manager,
         profile,
     };
-    let xy_point = crate::ir::conversions::coordinate_to_point(&contact.position, &ctx);
+    let xy_point = crate::ir::conversions::coordinate_to_point(&contact.position, &ctx).map_err(|e| IrError::CoordinateResolutionFailed {
+        coordinate_str: "contact position".into(),
+        reason: e,
+    })?;
 
     // Calculate via diameter (use default if not specified)
     // v0.1.7: Support explicit drill_diameter vs legacy diameter
     let diameter_nm = get_prop_nm(contact, "drill_diameter", symbol_table, eval_context)
         .or_else(|| get_prop_nm(contact, "diameter", symbol_table, eval_context))
-        .unwrap_or(100_000);
+        .or_else(|| {
+            // Fall back to profile's default via diameter
+            profile
+                .and_then(|p| p.via.as_ref())
+                .and_then(|v| v.default_diameter.as_ref())
+                .and_then(|d| crate::ir::conversions::measurement_to_nm(d, symbol_table).ok())
+        })
+        .ok_or_else(|| IrError::MissingAsicConstraint {
+            message: format!(
+                "Contact '{}' has no explicit diameter and no profile default via diameter.",
+                contact.name.as_ref().map(|n| n.to_string()).unwrap_or_else(|| "unnamed".into())
+            ),
+            hint: "Add 'diameter: <value>' to the contact, or declare 'via: default_diameter: <value>' in the profile.".into(),
+        })?;
     let radius_nm = diameter_nm / 2;
 
     let from_bottom_nm =
@@ -244,14 +261,17 @@ pub fn place_contact(
                             format!("Via_{}_{}", from_bottom_nm, to_bottom_nm).into()
                         });
 
-                    return Err(IrError::PlacementError(format!(
-                        "Material interpenetration detected: Contact '{}' ({}) overlaps with contact '{}' ({}) in 3D space. \
-                         Different materials cannot occupy the same volume.",
-                        contact_name,
-                        contact.material,
-                        existing_contact.name,
-                        existing_contact.material_name
-                    )));
+                    return Err(IrError::PlacementConstraint {
+                        message: format!(
+                            "Material interpenetration detected: Contact '{}' ({}) overlaps with contact '{}' ({}) in 3D space. \
+                             Different materials cannot occupy the same volume.",
+                            contact_name,
+                            contact.material,
+                            existing_contact.name,
+                            existing_contact.material_name
+                        ),
+                        component: contact_name.to_string(),
+                    });
                 }
             }
         }
@@ -270,7 +290,10 @@ pub fn place_contact(
             .fabrication_constraints
             .as_ref()
             .map(|c| c.trace.min_width_nm)
-            .unwrap_or(180_000); // 180nm ASIC default
+            .ok_or_else(|| IrError::MissingAsicConstraint {
+                message: format!("Net '{}' requires fabrication constraints but none are loaded.", net_name),
+                hint: "Ensure a profile with 'trace:' constraints is declared in the space definition.".into(),
+            })?;
 
         space
             .netlist
@@ -313,12 +336,20 @@ pub fn place_contact(
     let annular_ring_nm =
         if let Some(nm) = get_prop_nm(contact, "annular_ring", symbol_table, eval_context) {
             nm
+        } else if let Some(profile_ring) = space
+            .fabrication_constraints
+            .as_ref()
+            .map(|c| c.via.min_annular_ring_nm)
+        {
+            profile_ring
         } else {
-            space
-                .fabrication_constraints
-                .as_ref()
-                .map(|c| c.via.min_annular_ring_nm)
-                .unwrap_or(150_000)
+            return Err(IrError::MissingAsicConstraint {
+                message: format!(
+                    "Contact '{}' has no explicit annular_ring and no profile via.min_annular_ring.",
+                    contact.name.as_ref().map(|n| n.to_string()).unwrap_or_else(|| "unnamed".into())
+                ),
+                hint: "Add 'annular_ring: <value>' to the contact, or declare 'via: min_annular_ring: <value>' in the profile.".into(),
+            })?;
         };
 
     // v0.1.7: Register via for Excellon drill export
@@ -422,15 +453,17 @@ pub fn place_contact(
                     contour,
                 )
                 .map_err(|e| {
-                    IrError::PlacementError(format!(
-                        "Failed to place contact bridge '{}': {}",
-                        contact
+                    IrError::PlacementConstraint {
+                        message: format!(
+                            "Failed to place contact bridge: {}",
+                            e
+                        ),
+                        component: contact
                             .name
                             .as_ref()
                             .map(|n| n.to_string())
-                            .unwrap_or_else(|| "<unnamed>".into()),
-                        e
-                    ))
+                            .unwrap_or_else(|| "unnamed".into()).into(),
+                    }
                 })?;
         } else {
             placer
@@ -443,15 +476,17 @@ pub fn place_contact(
                     diameter_nm,
                 )
                 .map_err(|e| {
-                    IrError::PlacementError(format!(
-                        "Failed to place contact bridge '{}': {}",
-                        contact
+                    IrError::PlacementConstraint {
+                        message: format!(
+                            "Failed to place contact bridge: {}",
+                            e
+                        ),
+                        component: contact
                             .name
                             .as_ref()
                             .map(|n| n.to_string())
-                            .unwrap_or_else(|| "<unnamed>".into()),
-                        e
-                    ))
+                            .unwrap_or_else(|| "unnamed".into()).into(),
+                    }
                 })?;
         }
 
@@ -468,15 +503,17 @@ pub fn place_contact(
                         contour,
                     )
                     .map_err(|e| {
-                        IrError::PlacementError(format!(
-                            "Failed to place contact fill '{}': {}",
-                            contact
+                        IrError::PlacementConstraint {
+                            message: format!(
+                                "Failed to place contact fill: {}",
+                                e
+                            ),
+                            component: contact
                                 .name
                                 .as_ref()
                                 .map(|n| n.to_string())
-                                .unwrap_or_else(|| "<unnamed>".into()),
-                            e
-                        ))
+                                .unwrap_or_else(|| "unnamed".into()).into(),
+                        }
                     })?;
             } else {
                 placer
@@ -489,15 +526,17 @@ pub fn place_contact(
                         diameter_nm,
                     )
                     .map_err(|e| {
-                        IrError::PlacementError(format!(
-                            "Failed to place contact fill '{}': {}",
-                            contact
+                        IrError::PlacementConstraint {
+                            message: format!(
+                                "Failed to place contact fill: {}",
+                                e
+                            ),
+                            component: contact
                                 .name
                                 .as_ref()
                                 .map(|n| n.to_string())
-                                .unwrap_or_else(|| "<unnamed>".into()),
-                            e
-                        ))
+                                .unwrap_or_else(|| "unnamed".into()).into(),
+                        }
                     })?;
             }
         }
@@ -540,7 +579,7 @@ pub fn place_contact(
             let solder_mask_expansion_nm = space
                 .fabrication_constraints
                 .as_ref()
-                .map(|c| c.solder_mask_expansion_nm)
+                .and_then(|c| c.solder_mask_expansion_nm)
                 .unwrap_or(75_000);
 
             // 2. ACTION: Auto-Drill (v0.1.7)
@@ -665,7 +704,7 @@ pub fn place_contact(
             let solder_mask_expansion_nm = space
                 .fabrication_constraints
                 .as_ref()
-                .map(|c| c.solder_mask_expansion_nm)
+                .and_then(|c| c.solder_mask_expansion_nm)
                 .unwrap_or(75_000);
             println!("[PLACE_CONTACT] '{}' Deposited path: drilling via hole at bbox=({},{}-{},{}) dia={}",
                 contact_name_debug,
@@ -698,15 +737,17 @@ pub fn place_contact(
                         contour,
                     )
                     .map_err(|e| {
-                        IrError::PlacementError(format!(
-                            "Failed to place contact '{}': {}",
-                            contact
+                        IrError::PlacementConstraint {
+                            message: format!(
+                                "Failed to place contact: {}",
+                                e
+                            ),
+                            component: contact
                                 .name
                                 .as_ref()
                                 .map(|n| n.to_string())
-                                .unwrap_or_else(|| "<unnamed>".into()),
-                            e
-                        ))
+                                .unwrap_or_else(|| "unnamed".into()).into(),
+                        }
                     })?;
             } else {
                 println!("[PLACE_CONTACT] '{}' Placing cylinder via: mat={}, net={}, start=({},{},{}) end=({},{},{}) dia={}",
@@ -723,15 +764,17 @@ pub fn place_contact(
                         diameter_nm,
                     )
                     .map_err(|e| {
-                        IrError::PlacementError(format!(
-                            "Failed to place contact '{}': {}",
-                            contact
+                        IrError::PlacementConstraint {
+                            message: format!(
+                                "Failed to place contact: {}",
+                                e
+                            ),
+                            component: contact
                                 .name
                                 .as_ref()
                                 .map(|n| n.to_string())
-                                .unwrap_or_else(|| "<unnamed>".into()),
-                            e
-                        ))
+                                .unwrap_or_else(|| "unnamed".into()).into(),
+                        }
                     })?;
             }
         }

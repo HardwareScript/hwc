@@ -73,12 +73,12 @@ impl SymbolTableV016 {
         // Check for duplicate
         if let Some(existing) = self.materials.get(&name) {
             // Report the error (don't return Err)
-            collector.report(SymbolError::DuplicateDefinition {
-                name: name.clone(),
-                kind: "material",
+            collector.report(SymbolError::duplicate(
+                name.clone(),
+                "material",
                 span,
-                first_span: Some(existing.span),
-            });
+                Some(existing.span),
+            ));
 
             // Strategy: Skip this definition to avoid overwriting valid definitions
             // Alternative: Replace old with new (depends on use case)
@@ -105,12 +105,12 @@ impl SymbolTableV016 {
         // Check for duplicate
         if let Some(existing) = self.components.get(&name) {
             // Report the error (don't return Err)
-            collector.report(SymbolError::DuplicateDefinition {
-                name: name.clone(),
-                kind: "component",
+            collector.report(SymbolError::duplicate(
+                name.clone(),
+                "component",
                 span,
-                first_span: Some(existing.span),
-            });
+                Some(existing.span),
+            ));
 
             // Skip this definition
             return;
@@ -168,11 +168,11 @@ impl SymbolTableV016 {
             // Extract the first error
             // Note: This is a simplified conversion; real implementation
             // would need to convert miette::Report back to SymbolError
-            Err(SymbolError::UndefinedSymbol {
-                name: "conversion error".into(),
-                kind: "material",
-                span: Some(span),
-            })
+            Err(SymbolError::undefined(
+                "conversion error".into(),
+                "material",
+                Some(span),
+            ))
         } else {
             Ok(())
         }

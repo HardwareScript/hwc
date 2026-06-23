@@ -1,0 +1,29 @@
+# pmos_transistor.hw
+import * from @std/primitives/units
+import Silicon_N, Silicon_P, Polysilicon from materials
+
+component PMOS_Transistor:
+    pins: [gate, source, drain, bulk]
+    layout:
+        shape: Rectangle(1.2um, 1.2um, 200nm)
+        pin_positions:
+            gate at [600nm, 600nm]
+            source at [200nm, 600nm]
+            drain at [1000nm, 600nm]
+            bulk at [600nm, 1100nm]
+            
+        add pour(Polysilicon) named Gate_Poly on layer: poly:
+            device: gate
+            boundary: [x: 500nm, y: 0nm] to [x: 700nm, y: 1.0um]
+            
+        add pour(Silicon_P) named Source_Diff on layer: active:
+            device: source
+            boundary: [x: 0nm, y: 100nm] to [x: 500nm, y: 1.0um]
+            
+        add pour(Silicon_P) named Drain_Diff on layer: active:
+            device: drain
+            boundary: [x: 700nm, y: 100nm] to [x: 1.2um, y: 1.0um]
+            
+        add pour(Silicon_N) named Bulk_Contact on layer: substrate:
+            device: bulk
+            boundary: [x: 400nm, y: 1.0um] to [x: 800nm, y: 1.2um]

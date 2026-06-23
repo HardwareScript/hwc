@@ -24,7 +24,7 @@ pub fn validate_and_register(
     {
         if let Some(layout) = &component_def.layout {
             if let Some(shape_str) = &layout.shape {
-                if let Some(dims) = parse_rectangle_dimensions(shape_str) {
+                if let Some(dims) = parse_rectangle_dimensions(shape_str, ctx.symbol_table) {
                     let (width_nm, height_nm, depth_nm) = dims;
 
                     let bbox = if vp.rotation_deg.abs() < 0.001 {

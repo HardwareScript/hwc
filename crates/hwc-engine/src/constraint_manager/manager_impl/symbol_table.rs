@@ -164,8 +164,10 @@ pub fn extract_via_constraints<S: SymbolTableTrait>(
     let min_spacing_nm = if let Some(spacing) = &via.min_spacing {
         symbol_table.measurement_to_nm(spacing)?
     } else {
-        // Default to 2x the minimum via diameter (industry safety standard)
-        min_diameter_nm * 2
+        return Err(format!(
+            "Profile '{}': via.min_spacing must be explicitly declared. No implicit defaults permitted.",
+            profile.name
+        ));
     };
 
     Ok((
@@ -230,17 +232,17 @@ pub fn extract_stackup_constraints<S: SymbolTableTrait>(
 
 /// Extract solder mask expansion from profile manufacturing constraints (v0.1.7).
 ///
-/// Returns the solder mask expansion in nanometers, or the IPC-7351 default
-/// of 75,000 nm (75µm) if not specified in the profile.
+/// Returns the solder mask expansion in nanometers, or `None` if not specified
+/// in the profile (no implicit default).
 pub fn extract_solder_mask_expansion<S: SymbolTableTrait>(
     profile: &ProfileDefinition,
     symbol_table: &S,
-) -> Result<i64, String> {
+) -> Result<Option<i64>, String> {
     if let Some(ref mfg) = profile.manufacturing {
         if let Some(ref expansion) = mfg.solder_mask_expansion {
-            return symbol_table.measurement_to_nm(expansion);
+            return Ok(Some(symbol_table.measurement_to_nm(expansion)?));
         }
     }
-    // IPC-7351 default: 75µm solder mask expansion per side
-    Ok(75_000)
+    // No solder mask expansion declared — no solder mask
+    Ok(None)
 }

@@ -110,7 +110,12 @@ pub fn route_automatic(
     // v0.1.7: Register net connectivity in the netlist
     // This ensures both pins share the same logical net ID.
     let net_id = super::helpers::register_net_for_route(space, route, symbol_table)?;
-    let net_name = space.netlist.get_net(net_id).unwrap().name.clone();
+    let net_name = space.netlist.get_net(net_id)
+        .ok_or_else(|| IrError::InvalidRouteExpression {
+            expression: format!("net ID {}", net_id.raw()),
+            reason: "Net not found after registration".into(),
+        })?
+        .name.clone();
 
     /*
     println!("[BOX-MODEL-DEBUG] Net: {}", net_name);
@@ -180,15 +185,11 @@ pub fn route_automatic(
         &routing_params,
     )
     .ok_or_else(|| {
-        IrError::RoutingError(format!(
-            "No path found from {}.{} to {}.{} (seed_start: {:?}, seed_goal: {:?})",
-            route.from.component,
-            route.from.pin,
-            route.to.component,
-            route.to.pin,
-            start_pos,
-            goal_pos
-        ))
+        IrError::NoPathFound {
+            net: format!("{}.{} -> {}.{}", route.from.component, route.from.pin, route.to.component, route.to.pin).into(),
+            from_pin: format!("{}.{}", route.from.component, route.from.pin).into(),
+            to_pin: format!("{}.{}", route.to.component, route.to.pin).into(),
+        }
     })?;
 
     // v0.1.7: Boundary Stitching
@@ -211,14 +212,26 @@ pub fn route_automatic(
     }
 
     if path.is_empty() {
-        return Err(IrError::RoutingError("Empty path generated".into()));
+        return Err(IrError::EmptyRoute {
+            net: format!("{}.{} -> {}.{}", route.from.component, route.from.pin, route.to.component, route.to.pin).into(),
+        });
     }
 
     // **v0.1.7: ANALYTIC ROUTE REGISTRATION (GOD-TIER PARADIGM SHIFT)**
     let (start_pin_id, goal_pin_id) = super::helpers::get_pin_ids(space, route)?;
 
-    let _start_pin_name = space.netlist.get_pin(start_pin_id).unwrap().name.clone();
-    let _goal_pin_name = space.netlist.get_pin(goal_pin_id).unwrap().name.clone();
+    let _start_pin_name = space.netlist.get_pin(start_pin_id)
+        .ok_or_else(|| IrError::InvalidRouteExpression {
+            expression: format!("pin ID {}", start_pin_id.raw()),
+            reason: "Start pin not found".into(),
+        })?
+        .name.clone();
+    let _goal_pin_name = space.netlist.get_pin(goal_pin_id)
+        .ok_or_else(|| IrError::InvalidRouteExpression {
+            expression: format!("pin ID {}", goal_pin_id.raw()),
+            reason: "Goal pin not found".into(),
+        })?
+        .name.clone();
 
     // v0.1.7: Grid-Agnostic Z-Resolution
     // We transform the router's voxel-snapped path back into exact physical layer heights
@@ -318,7 +331,10 @@ pub fn route_automatic(
                     }
                 }
             }
-            let last = *refined_path.last().unwrap();
+            let last = *refined_path.last()
+                .ok_or_else(|| IrError::EmptyRoute {
+                    net: net_name.clone(),
+                })?;
             if start != last {
                 segs.push(hwc_engine::LineSegment::new(start, last));
             }
@@ -448,7 +464,10 @@ pub fn route_automatic(
 
     // Check only the CURRENT route (the last one added) against all components
     // This avoids false positives from previous routes
-    let current_route = space.analytic_routes.last().unwrap();
+    let current_route = space.analytic_routes.last()
+        .ok_or_else(|| IrError::EmptyRoute {
+            net: net_name.clone(),
+        })?;
 
     let mut violations = Vec::new();
     for (comp_name, comp_bbox) in &space.component_bboxes {
@@ -491,10 +510,11 @@ pub fn route_automatic(
             .collect::<Vec<_>>()
             .join("\n");
 
-        return Err(IrError::RoutingError(format!(
-            "Analytic DRC violations detected for route {}:\n{}",
-            net_name, violation_summary
-        )));
+        return Err(IrError::NoPathFound {
+            net: net_name.clone(),
+            from_pin: format!("{}.{}", route.from.component, route.from.pin).into(),
+            to_pin: format!("{}.{}", route.to.component, route.to.pin).into(),
+        });
     }
 
     Ok(())
@@ -606,7 +626,11 @@ pub fn calculate_boundary_points(
         resolve_point(&from_comp, &route.from.pin, port, offset, start_pin_center.z)
     } else {
         resolve_point(&from_comp, &route.from.pin, auto_exit_port, EdgeOffset::Center, start_pin_center.z)
-    }.ok_or_else(|| IrError::RoutingError(format!("Could not resolve boundary for {}.{}", from_comp, route.from.pin)))?;
+    }.ok_or_else(|| IrError::NoPathFound {
+        net: format!("{}.{} -> {}.{}", route.from.component, route.from.pin, route.to.component, route.to.pin).into(),
+        from_pin: format!("{}.{}", from_comp, route.from.pin).into(),
+        to_pin: format!("{}.{}", to_comp, route.to.pin).into(),
+    })?;
 
     // Goal Escape
     let goal_esc = if let Some(enter_escape) = &route.enter_escape {
@@ -620,7 +644,11 @@ pub fn calculate_boundary_points(
         resolve_point(&to_comp, &route.to.pin, port, offset, goal_pin_center.z)
     } else {
         resolve_point(&to_comp, &route.to.pin, auto_enter_port, EdgeOffset::Center, goal_pin_center.z)
-    }.ok_or_else(|| IrError::RoutingError(format!("Could not resolve boundary for {}.{}", to_comp, route.to.pin)))?;
+    }.ok_or_else(|| IrError::NoPathFound {
+        net: format!("{}.{} -> {}.{}", route.from.component, route.from.pin, route.to.component, route.to.pin).into(),
+        from_pin: format!("{}.{}", from_comp, route.from.pin).into(),
+        to_pin: format!("{}.{}", to_comp, route.to.pin).into(),
+    })?;
 
     Ok((start_esc.point, goal_esc.point, start_esc.direction, goal_esc.direction))
 }

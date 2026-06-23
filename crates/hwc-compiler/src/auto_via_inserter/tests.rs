@@ -57,7 +57,10 @@ fn prefers_larger_spanning_via_for_power_nets() {
 
 #[test]
 fn finds_overlap_region() {
-    let inserter = AutoViaInserter::new();
+    let inserter = AutoViaInserter {
+        via_library: ViaLibrary { vias: Vec::new() },
+        min_spacing_nm: 250_000,
+    };
     let bbox1 = BoundingBox::new(
         Point3D::new(0, 0, 0),
         Point3D::new(5_000_000, 5_000_000, 1_000_000),
@@ -79,7 +82,10 @@ fn finds_overlap_region() {
 
 #[test]
 fn rejects_insufficient_enclosure() {
-    let inserter = AutoViaInserter::new();
+    let inserter = AutoViaInserter {
+        via_library: ViaLibrary { vias: Vec::new() },
+        min_spacing_nm: 250_000,
+    };
     let overlap = OverlapRegion {
         bbox: BoundingBox::new(Point3D::new(0, 0, 0), Point3D::new(400_000, 400_000, 0)),
         center_x_nm: 200_000,

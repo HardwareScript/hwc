@@ -5,6 +5,7 @@ use hwc_engine::{
 use hwc_parser::{ContactPlacement, Coordinate, Expression, Span, Unit};
 
 use super::{AutoViaInserter, LayerTransition, OverlapRegion, ViaType};
+use crate::ir::errors::IrError;
 
 pub(crate) struct ViaPlacementParams<'a> {
     pub(crate) x_nm: i64,
@@ -142,7 +143,7 @@ impl AutoViaInserter {
         &self,
         via: &ContactPlacement,
         transition: &LayerTransition,
-    ) -> ContactMetadata {
+    ) -> Result<ContactMetadata, IrError> {
         let (x_mm, y_mm) = self.placement_xy_mm(via, transition);
         let x_nm = (x_mm * 1_000_000.0) as i64;
         let y_nm = (y_mm * 1_000_000.0) as i64;
@@ -152,7 +153,13 @@ impl AutoViaInserter {
             .get("diameter")
             .and_then(|expr| expr.evaluate_const().ok())
             .and_then(|val| val.to_nanometers().ok())
-            .unwrap_or(100_000);
+            .ok_or_else(|| IrError::MissingAsicConstraint {
+                message: format!(
+                    "Via '{}' has no explicit diameter — the via definition is malformed.",
+                    via.name.as_ref().map(|n| n.to_string()).unwrap_or_else(|| "unnamed".into())
+                ),
+                hint: "Ensure all via definitions include a valid 'diameter' property with a numeric value.".into(),
+            })?;
 
         let radius_nm = diameter_nm / 2;
 
@@ -161,7 +168,7 @@ impl AutoViaInserter {
             _ => None,
         });
 
-        ContactMetadata {
+        Ok(ContactMetadata {
             name: via
                 .name
                 .as_ref()
@@ -179,7 +186,7 @@ impl AutoViaInserter {
             voxels: Vec::new(),
             is_tented: false,
             mask_clearance_diameter_nm: None,
-        }
+        })
     }
 
     fn placement_xy_mm(&self, via: &ContactPlacement, transition: &LayerTransition) -> (f64, f64) {

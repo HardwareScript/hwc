@@ -10,12 +10,12 @@ impl SymbolTable {
     ) -> Result<(), SymbolError> {
         let name_str = def.name.as_str();
         if let Some(existing) = self.prelude.material_aliases.get(name_str) {
-            return Err(SymbolError::DuplicateDefinition {
-                name: def.name.to_string().into(),
-                kind: "material_alias",
-                span: (def.span.start, def.span.end),
-                first_span: Some((existing.span.start, existing.span.end)),
-            });
+            return Err(SymbolError::duplicate(
+                def.name.to_string().into(),
+                "material_alias",
+                (def.span.start, def.span.end),
+                Some((existing.span.start, existing.span.end)),
+            ));
         }
         self.prelude.material_aliases.insert(name_str.into(), def);
         Ok(())
@@ -45,12 +45,12 @@ impl SymbolTable {
     ) -> Result<(), SymbolError> {
         let name_str = def.name.as_str();
         if let Some(existing) = self.prelude.materials.get(name_str) {
-            return Err(SymbolError::DuplicateDefinition {
-                name: def.name.to_string().into(),
-                kind: "material",
-                span: (def.span.start, def.span.end),
-                first_span: Some((existing.span.start, existing.span.end)),
-            });
+            return Err(SymbolError::duplicate(
+                def.name.to_string().into(),
+                "material",
+                (def.span.start, def.span.end),
+                Some((existing.span.start, existing.span.end)),
+            ));
         }
         self.prelude.materials.insert(name_str.into(), def);
         Ok(())

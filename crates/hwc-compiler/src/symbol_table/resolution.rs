@@ -93,11 +93,11 @@ impl SymbolTable {
 
                 // Detect circular aliases
                 if visited.contains(next_name) {
-                    return Err(SymbolError::CircularAlias {
-                        name: current_name.to_string().into(),
-                        target: next_name.to_string().into(),
-                        span: (alias.span.start, alias.span.end),
-                    });
+                return Err(SymbolError::circular(
+                    current_name.to_string().into(),
+                    next_name.to_string().into(),
+                    (alias.span.start, alias.span.end),
+                ));
                 }
 
                 // Check depth limit (e.g. 10) to prevent infinite loops even without exact cycles
@@ -114,11 +114,11 @@ impl SymbolTable {
             }
 
             // Neither material nor alias found
-            return Err(SymbolError::UndefinedSymbol {
-                name: name.to_string().into(),
-                kind: "material",
-                span: None,
-            });
+            return Err(SymbolError::undefined(
+                name.to_string().into(),
+                "material",
+                None,
+            ));
         }
     }
 
@@ -126,132 +126,84 @@ impl SymbolTable {
     /// Supports namespaced lookups: "Foundry.TSMC_180nm"
     pub fn get_profile(&self, name: &str) -> Result<&ProfileDefinition, SymbolError> {
         self.resolve_namespaced_symbol(name, |layer, n| layer.profiles.get(n))
-            .ok_or_else(|| SymbolError::UndefinedSymbol {
-                name: name.to_string().into(),
-                kind: "profile",
-                span: None,
-            })
+            .ok_or_else(|| SymbolError::undefined(name.to_string().into(), "profile", None))
     }
 
     /// Get a component definition by name (searches all layers: Local > HPM > Prelude > Core)
     /// Supports namespaced lookups: "Parts.MCU"
     pub fn get_component(&self, name: &str) -> Result<&ComponentDefinition, SymbolError> {
         self.resolve_namespaced_symbol(name, |layer, n| layer.components.get(n))
-            .ok_or_else(|| SymbolError::UndefinedSymbol {
-                name: name.to_string().into(),
-                kind: "component",
-                span: None,
-            })
+            .ok_or_else(|| SymbolError::undefined(name.to_string().into(), "component", None))
     }
 
     /// Get a module definition by name (searches all layers: Local > HPM > Prelude > Core)
     /// Supports namespaced lookups: "Logic.Adder64"
     pub fn get_module(&self, name: &str) -> Result<&ModuleDefinition, SymbolError> {
         self.resolve_namespaced_symbol(name, |layer, n| layer.modules.get(n))
-            .ok_or_else(|| SymbolError::UndefinedSymbol {
-                name: name.to_string().into(),
-                kind: "module",
-                span: None,
-            })
+            .ok_or_else(|| SymbolError::undefined(name.to_string().into(), "module", None))
     }
 
     /// Get a mechanical definition by name (searches all layers: Local > HPM > Prelude > Core)
     /// Supports namespaced lookups: "Enclosures.StandardCase"
     pub fn get_mechanical(&self, name: &str) -> Result<&MechanicalDefinition, SymbolError> {
         self.resolve_namespaced_symbol(name, |layer, n| layer.mechanicals.get(n))
-            .ok_or_else(|| SymbolError::UndefinedSymbol {
-                name: name.to_string().into(),
-                kind: "mechanical",
-                span: None,
-            })
+            .ok_or_else(|| SymbolError::undefined(name.to_string().into(), "mechanical", None))
     }
 
     /// Get an interface definition by name (searches all layers: Local > HPM > Prelude > Core)
     /// Supports namespaced lookups: "Protocols.SPI"
     pub fn get_interface(&self, name: &str) -> Result<&InterfaceDefinition, SymbolError> {
         self.resolve_namespaced_symbol(name, |layer, n| layer.interfaces.get(n))
-            .ok_or_else(|| SymbolError::UndefinedSymbol {
-                name: name.to_string().into(),
-                kind: "interface",
-                span: None,
-            })
+            .ok_or_else(|| SymbolError::undefined(name.to_string().into(), "interface", None))
     }
 
     /// Get a test definition by name (searches all layers: Local > HPM > Prelude > Core)
     /// Supports namespaced lookups: "TestSuites.UnitTests"
     pub fn get_test(&self, name: &str) -> Result<&TestDefinition, SymbolError> {
         self.resolve_namespaced_symbol(name, |layer, n| layer.tests.get(n))
-            .ok_or_else(|| SymbolError::UndefinedSymbol {
-                name: name.to_string().into(),
-                kind: "test",
-                span: None,
-            })
+            .ok_or_else(|| SymbolError::undefined(name.to_string().into(), "test", None))
     }
 
     /// Get a signal group definition by name (searches all layers: Local > HPM > Prelude > Core)
     /// Supports namespaced lookups: "Buses.DataBus"
     pub fn get_signal_group(&self, name: &str) -> Result<&SignalGroupDefinition, SymbolError> {
         self.resolve_namespaced_symbol(name, |layer, n| layer.signal_groups.get(n))
-            .ok_or_else(|| SymbolError::UndefinedSymbol {
-                name: name.to_string().into(),
-                kind: "signal_group",
-                span: None,
-            })
+            .ok_or_else(|| SymbolError::undefined(name.to_string().into(), "signal_group", None))
     }
 
     /// Get a pattern definition by name (searches all layers: Local > HPM > Prelude > Core)
     /// Supports namespaced lookups: "Layouts.GridPattern"
     pub fn get_pattern(&self, name: &str) -> Result<&PatternDefinition, SymbolError> {
         self.resolve_namespaced_symbol(name, |layer, n| layer.patterns.get(n))
-            .ok_or_else(|| SymbolError::UndefinedSymbol {
-                name: name.to_string().into(),
-                kind: "pattern",
-                span: None,
-            })
+            .ok_or_else(|| SymbolError::undefined(name.to_string().into(), "pattern", None))
     }
 
     /// Get a strategy definition by name (searches all layers: Local > HPM > Prelude > Core)
     /// Supports namespaced lookups: "Routing.ManhattanStrategy"
     pub fn get_strategy(&self, name: &str) -> Result<&StrategyDefinition, SymbolError> {
         self.resolve_namespaced_symbol(name, |layer, n| layer.strategies.get(n))
-            .ok_or_else(|| SymbolError::UndefinedSymbol {
-                name: name.to_string().into(),
-                kind: "strategy",
-                span: None,
-            })
+            .ok_or_else(|| SymbolError::undefined(name.to_string().into(), "strategy", None))
     }
 
     /// Get a logic block definition by name (searches all layers: Local > HPM > Prelude > Core)
     /// Supports namespaced lookups: "CPU.ALU"
     pub fn get_logic(&self, name: &str) -> Result<&LogicDefinition, SymbolError> {
         self.resolve_namespaced_symbol(name, |layer, n| layer.logic_blocks.get(n))
-            .ok_or_else(|| SymbolError::UndefinedSymbol {
-                name: name.to_string().into(),
-                kind: "logic",
-                span: None,
-            })
+            .ok_or_else(|| SymbolError::undefined(name.to_string().into(), "logic", None))
     }
 
     /// Get an enum definition by name (searches all layers: Local > HPM > Prelude > Core)
     /// Supports namespaced lookups: "Types.State"
     pub fn get_enum(&self, name: &str) -> Result<&EnumDefinition, SymbolError> {
         self.resolve_namespaced_symbol(name, |layer, n| layer.enums.get(n))
-            .ok_or_else(|| SymbolError::UndefinedSymbol {
-                name: name.to_string().into(),
-                kind: "enum",
-                span: None,
-            })
+            .ok_or_else(|| SymbolError::undefined(name.to_string().into(), "enum", None))
     }
 
     /// Get a struct definition by name (searches all layers: Local > HPM > Prelude > Core)
     /// Supports namespaced lookups: "CPU.Instruction"
     pub fn get_struct(&self, name: &str) -> Result<&StructDefinition, SymbolError> {
         self.resolve_namespaced_symbol(name, |layer, n| layer.structs.get(n))
-            .ok_or_else(|| SymbolError::UndefinedSymbol {
-                name: name.to_string().into(),
-                kind: "struct",
-                span: None,
-            })
+            .ok_or_else(|| SymbolError::undefined(name.to_string().into(), "struct", None))
     }
 
     /// Get a device definition by name (searches all layers: Local > HPM > Prelude > Core)
@@ -261,11 +213,7 @@ impl SymbolTable {
     /// including required terminals and expected materials for each terminal.
     pub fn get_device(&self, name: &str) -> Result<&DeviceDefinition, SymbolError> {
         self.resolve_namespaced_symbol(name, |layer, n| layer.devices.get(n))
-            .ok_or_else(|| SymbolError::UndefinedSymbol {
-                name: name.to_string().into(),
-                kind: "device",
-                span: None,
-            })
+            .ok_or_else(|| SymbolError::undefined(name.to_string().into(), "device", None))
     }
 
     /// Native v0.1.6 Unit Resolution

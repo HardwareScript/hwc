@@ -32,13 +32,19 @@ pub fn route_manual(
         .as_ref()
         .map(|p| {
             p.iter()
-                .map(|coord| coordinate_to_point(coord, &ctx))
-                .collect()
+                .map(|coord| coordinate_to_point(coord, &ctx).map_err(|e| IrError::CoordinateResolutionFailed {
+                    coordinate_str: "manual route waypoint".into(),
+                    reason: e,
+                }))
+                .collect::<Result<Vec<_>, _>>()
         })
+        .transpose()?
         .unwrap_or_default();
 
     if waypoints.is_empty() {
-        return Err(IrError::RoutingError("No waypoints specified".into()));
+        return Err(IrError::EmptyRoute {
+            net: format!("{}.{} -> {}.{}", route.from.component, route.from.pin, route.to.component, route.to.pin).into(),
+        });
     }
 
     // PHASE 1: NET CONNECTIVITY CHECK
@@ -78,24 +84,22 @@ pub fn route_manual(
     // Check that first waypoint is on the start pad's edge
     if let Some(bbox) = &start_bbox {
         if !waypoint_on_pad_edge(first_waypoint, bbox, space.voxel_size.x_nm) {
-            return Err(IrError::RoutingError(format!(
-                "First waypoint ({}, {}, {}) is not on the pad edge of {}. Pour bbox: min=({}, {}) max=({}, {})",
-                first_waypoint.x, first_waypoint.y, first_waypoint.z,
-                route.from.component,
-                bbox.min.x, bbox.min.y, bbox.max.x, bbox.max.y,
-            )));
+            return Err(IrError::NoPathFound {
+                net: format!("{}.{} -> {}.{}", route.from.component, route.from.pin, route.to.component, route.to.pin).into(),
+                from_pin: format!("{}.{}", route.from.component, route.from.pin).into(),
+                to_pin: format!("{}.{}", route.to.component, route.to.pin).into(),
+            });
         }
     }
 
     // Check that last waypoint is on the end pad's edge
     if let Some(bbox) = &end_bbox {
         if !waypoint_on_pad_edge(last_waypoint, bbox, space.voxel_size.x_nm) {
-            return Err(IrError::RoutingError(format!(
-                "Last waypoint ({}, {}, {}) is not on the pad edge of {}. Pour bbox: min=({}, {}) max=({}, {})",
-                last_waypoint.x, last_waypoint.y, last_waypoint.z,
-                route.to.component,
-                bbox.min.x, bbox.min.y, bbox.max.x, bbox.max.y,
-            )));
+            return Err(IrError::NoPathFound {
+                net: format!("{}.{} -> {}.{}", route.from.component, route.from.pin, route.to.component, route.to.pin).into(),
+                from_pin: format!("{}.{}", route.from.component, route.from.pin).into(),
+                to_pin: format!("{}.{}", route.to.component, route.to.pin).into(),
+            });
         }
     }
 
@@ -131,11 +135,21 @@ pub fn route_manual(
     // (manual routes must use the same analytic → substrate pipeline as auto routes)
     let trace_width_nm = if let Some(width_expr) = &route.width {
         super::super::conversions::evaluate_expression_to_nm(width_expr, symbol_table)
-            .unwrap_or(200_000)
+            .map_err(|e| IrError::InvalidRouteExpression {
+                expression: "route width".into(),
+                reason: e.to_string(),
+            })?
     } else if let Some(trace) = profile.and_then(|p| p.trace.as_ref()) {
         super::super::conversions::measurement_to_nm(&trace.min_width, symbol_table)
+            .map_err(|e| IrError::InvalidRouteExpression {
+                expression: "route width from profile".into(),
+                reason: e.to_string(),
+            })?
     } else {
-        200_000
+        return Err(IrError::MissingAsicConstraint {
+            message: "Manual route has no explicit width and no profile trace constraints.".into(),
+            hint: "Add 'width: <value>' to the route, or declare 'trace: min_width: <value>' in the profile.".into(),
+        });
     };
 
     let thickness_nm = if let Some(first_wp) = waypoints.first() {

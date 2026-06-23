@@ -217,7 +217,10 @@ pub fn register_net_for_route(
     // Get trace width and material
     let width_nm = if let Some(w_expr) = &route.width {
         crate::ir::conversions::evaluate_expression_to_nm(w_expr, symbol_table)
-            .map_err(IrError::RoutingError)?
+            .map_err(|e| IrError::InvalidRouteExpression {
+                expression: "trace width".into(),
+                reason: e.to_string(),
+            })?
     } else {
         100_000 // Default 100um
     };
@@ -252,8 +255,18 @@ pub fn register_net_for_route(
 
     // v0.1.7: Handshake B - Synchronize VoxelGrid metadata
     // This ensures the AutoRouter can find these pins when analyzing nets.
-    let start_pin_name = space.netlist.get_pin(start_pin_id).unwrap().name.clone();
-    let goal_pin_name = space.netlist.get_pin(goal_pin_id).unwrap().name.clone();
+    let start_pin_name = space.netlist.get_pin(start_pin_id)
+        .ok_or_else(|| IrError::PinNotFound {
+            component: route.from.component.clone(),
+            pin: route.from.pin.to_string(),
+        })?
+        .name.clone();
+    let goal_pin_name = space.netlist.get_pin(goal_pin_id)
+        .ok_or_else(|| IrError::PinNotFound {
+            component: route.to.component.clone(),
+            pin: route.to.pin.to_string(),
+        })?
+        .name.clone();
     let start_comp_name = construct_component_name(&route.from)?;
     let goal_comp_name = construct_component_name(&route.to)?;
 

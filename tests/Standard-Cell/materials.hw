@@ -1,4 +1,4 @@
-# Material definitions for CMOS Inverter
+# materials.hw
 # Physically verified materials library for CMOS and PCB physical synthesis
 
 # ============================================================================
@@ -51,7 +51,7 @@ material Polysilicon:
         melting_point: 1414.0C
 
 # ============================================================================
-# Semiconductors (Doped)
+# Semiconductors
 # ============================================================================
 
 material Silicon_P:
@@ -120,35 +120,3 @@ material FR4:
         thermal_conductivity: 0.3W_mK
         density: 1850.0kg_m3
         glass_transition_temp: 130.0C
-
-# ============================================================================
-# Compiler Internal Materials
-# Used by the compiler for component bodies, solder mask, and via filling
-# ============================================================================
-
-material Component:
-    category: insulator
-    description: "Internal material for component body bounding boxes"
-    properties:
-        color: "#1A1A1A"
-        metallic: 0.0
-        roughness: 0.5
-        opacity: 1.0
-
-material SolderMask:
-    category: insulator
-    description: "Solder mask layer - green protective coating"
-    properties:
-        color: "#006400"
-        metallic: 0.0
-        roughness: 0.5
-        opacity: 0.8
-
-material Epoxy:
-    category: insulator
-    description: "Non-conductive epoxy fill for filled vias"
-    properties:
-        color: "#808080"
-        metallic: 0.0
-        roughness: 0.6
-        opacity: 1.0

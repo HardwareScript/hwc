@@ -89,6 +89,22 @@ pub fn execute(
     // Build symbol table for semantic validation
     use hwc_compiler::{ModuleResolver, SymbolTable};
     let mut symbol_table = SymbolTable::new();
+
+    // Load prelude (units.hw, math.hw) for unit resolution and constant folding
+    match hwc_compiler::Prelude::load() {
+        Ok(prelude) => {
+            for unit in &prelude.units {
+                symbol_table.register_prelude_unit(unit.clone());
+            }
+            for (name, value) in &prelude.constants {
+                symbol_table.register_prelude_constant(name.clone(), *value);
+            }
+        }
+        Err(e) => {
+            eprintln!("Warning: Failed to load prelude: {}", e);
+        }
+    }
+
     let mut resolver = ModuleResolver::new()
         .map_err(|e| miette::miette!("Failed to initialize module resolver: {}", e))?;
 
@@ -199,6 +215,22 @@ fn run_foundry_validation(
 
     // Build symbol table with imports resolved (so property merging happens)
     let mut symbol_table = SymbolTable::new();
+
+    // Load prelude (units.hw, math.hw) for unit resolution and constant folding
+    match hwc_compiler::Prelude::load() {
+        Ok(prelude) => {
+            for unit in &prelude.units {
+                symbol_table.register_prelude_unit(unit.clone());
+            }
+            for (name, value) in &prelude.constants {
+                symbol_table.register_prelude_constant(name.clone(), *value);
+            }
+        }
+        Err(e) => {
+            eprintln!("Warning: Failed to load prelude: {}", e);
+        }
+    }
+
     let mut resolver = ModuleResolver::new()
         .map_err(|e| miette::miette!("Failed to initialize module resolver: {}", e))?;
 

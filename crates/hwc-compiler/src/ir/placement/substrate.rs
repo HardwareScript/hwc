@@ -27,16 +27,28 @@ pub fn place_substrate(
         profile: ctx.profile,
     };
     let start = spanning_coordinate_to_point(&substrate.from, &coord_ctx, false)
-        .map_err(IrError::PlacementError)?;
+        .map_err(|e| IrError::CoordinateResolutionFailed {
+            coordinate_str: "substrate from".into(),
+            reason: e,
+        })?;
     let end = spanning_coordinate_to_point(&substrate.to, &coord_ctx, true)
-        .map_err(IrError::PlacementError)?;
+        .map_err(|e| IrError::CoordinateResolutionFailed {
+            coordinate_str: "substrate to".into(),
+            reason: e,
+        })?;
 
     let mut cutout_bboxes = Vec::new();
     for cutout in &substrate.cutouts {
         let cutout_start = spanning_coordinate_to_point(&cutout.from, &coord_ctx, false)
-            .map_err(IrError::PlacementError)?;
+            .map_err(|e| IrError::CoordinateResolutionFailed {
+                coordinate_str: "cutout from".into(),
+                reason: e,
+            })?;
         let cutout_end = spanning_coordinate_to_point(&cutout.to, &coord_ctx, true)
-            .map_err(IrError::PlacementError)?;
+            .map_err(|e| IrError::CoordinateResolutionFailed {
+                coordinate_str: "cutout to".into(),
+                reason: e,
+            })?;
         let cutout_bbox = hwc_engine::geometry::BoundingBox::new(cutout_start, cutout_end);
         cutout_bboxes.push(cutout_bbox);
     }
@@ -65,7 +77,10 @@ pub fn place_substrate(
     );
     let user_end_z =
         crate::ir::conversions::spanning_coordinate_to_point(&substrate.to, &z_ctx, true)
-            .map_err(IrError::PlacementError)?
+            .map_err(|e| IrError::CoordinateResolutionFailed {
+                coordinate_str: "substrate Z end".into(),
+                reason: e,
+            })?
             .z;
     let user_end = hwc_engine::geometry::Point3D::new(
         crate::ir::conversions::evaluate_expression_to_nm(substrate.to.x(), ctx.symbol_table)
@@ -89,7 +104,10 @@ pub fn place_substrate(
                 end,
                 0,
             )
-            .map_err(|e| IrError::PlacementError(e.to_string()))?;
+            .map_err(|e| IrError::PlacementConstraint {
+                message: format!("Failed to place substrate: {}", e),
+                component: "substrate".into(),
+            })?;
 
         for cutout_bbox in cutout_bboxes {
             placer
@@ -101,7 +119,10 @@ pub fn place_substrate(
                     cutout_bbox.max,
                     0,
                 )
-                .map_err(|e| IrError::PlacementError(e.to_string()))?;
+                .map_err(|e| IrError::PlacementConstraint {
+                    message: format!("Failed to place substrate cutout: {}", e),
+                    component: "substrate".into(),
+                })?;
         }
     } else {
         placer
@@ -113,7 +134,10 @@ pub fn place_substrate(
                 end,
                 0,
             )
-            .map_err(|e| IrError::PlacementError(e.to_string()))?;
+            .map_err(|e| IrError::PlacementConstraint {
+                message: format!("Failed to place substrate: {}", e),
+                component: "substrate".into(),
+            })?;
     }
 
     Ok(())

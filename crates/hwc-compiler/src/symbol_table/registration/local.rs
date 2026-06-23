@@ -19,12 +19,12 @@ impl SymbolTable {
 
         // Check for duplicate in local layer
         if let Some(existing) = self.local.material_aliases.get(name_str.as_str()) {
-            collector.report(SymbolError::DuplicateDefinition {
-                name: def.name.to_string().into(),
-                kind: "material_alias",
-                span: (def.span.start, def.span.end),
-                first_span: Some((existing.span.start, existing.span.end)),
-            });
+            collector.report(SymbolError::duplicate(
+                def.name.to_string().into(),
+                "material_alias",
+                (def.span.start, def.span.end),
+                Some((existing.span.start, existing.span.end)),
+            ));
             return;
         }
 
@@ -44,23 +44,23 @@ impl SymbolTable {
 
         // Check for duplicate in local layer (same layer = error)
         if let Some(existing) = self.local.materials.get(name_str.as_str()) {
-            collector.report(SymbolError::DuplicateDefinition {
-                name: def.name.to_string().into(),
-                kind: "material",
-                span: (def.span.start, def.span.end),
-                first_span: Some((existing.span.start, existing.span.end)),
-            });
+            collector.report(SymbolError::duplicate(
+                def.name.to_string().into(),
+                "material",
+                (def.span.start, def.span.end),
+                Some((existing.span.start, existing.span.end)),
+            ));
             return;
         }
 
         // Rule 1: Check if this local definition shadows an import (GAP3)
         if let Some(import_source) = self.check_material_shadowing(&name_str) {
-            collector.report(SymbolError::ImportShadowing {
-                name: def.name.to_string().into(),
-                kind: "material",
-                span: (def.span.start, def.span.end),
+            collector.report(SymbolError::shadowing(
+                def.name.to_string().into(),
+                "material",
+                (def.span.start, def.span.end),
                 import_source,
-            });
+            ));
         }
 
         // Check if material exists in lower layers (HPM/Prelude/Core)
@@ -179,23 +179,23 @@ impl SymbolTable {
     pub fn register_profile(&mut self, collector: &DiagnosticCollector, def: ProfileDefinition) {
         let name_str = def.name.as_str();
         if let Some(existing) = self.local.profiles.get(name_str) {
-            collector.report(SymbolError::DuplicateDefinition {
-                name: def.name.to_string().into(),
-                kind: "profile",
-                span: (def.span.start, def.span.end),
-                first_span: Some((existing.span.start, existing.span.end)),
-            });
+            collector.report(SymbolError::duplicate(
+                def.name.to_string().into(),
+                "profile",
+                (def.span.start, def.span.end),
+                Some((existing.span.start, existing.span.end)),
+            ));
             return;
         }
 
         // Rule 1: Check if this local definition shadows an import (GAP3)
         if let Some(import_source) = self.check_profile_shadowing(name_str) {
-            collector.report(SymbolError::ImportShadowing {
-                name: def.name.to_string().into(),
-                kind: "profile",
-                span: (def.span.start, def.span.end),
+            collector.report(SymbolError::shadowing(
+                def.name.to_string().into(),
+                "profile",
+                (def.span.start, def.span.end),
                 import_source,
-            });
+            ));
         }
 
         self.local.profiles.insert(name_str.into(), def);
@@ -215,23 +215,23 @@ impl SymbolTable {
     ) {
         let name_str = def.name.as_str().to_string();
         if let Some(existing) = self.local.components.get(name_str.as_str()) {
-            collector.report(SymbolError::DuplicateDefinition {
-                name: def.name.to_string().into(),
-                kind: "component",
-                span: (def.span.start, def.span.end),
-                first_span: Some((existing.span.start, existing.span.end)),
-            });
+            collector.report(SymbolError::duplicate(
+                def.name.to_string().into(),
+                "component",
+                (def.span.start, def.span.end),
+                Some((existing.span.start, existing.span.end)),
+            ));
             return;
         }
 
         // Rule 1: Check if this local definition shadows an import (GAP3)
         if let Some(import_source) = self.check_component_shadowing(&name_str) {
-            collector.report(SymbolError::ImportShadowing {
-                name: def.name.to_string().into(),
-                kind: "component",
-                span: (def.span.start, def.span.end),
+            collector.report(SymbolError::shadowing(
+                def.name.to_string().into(),
+                "component",
+                (def.span.start, def.span.end),
                 import_source,
-            });
+            ));
         }
 
         // Register the AST definition
@@ -258,23 +258,23 @@ impl SymbolTable {
     pub fn register_module(&mut self, collector: &DiagnosticCollector, def: ModuleDefinition) {
         let name_str = def.name.as_str();
         if let Some(existing) = self.local.modules.get(name_str) {
-            collector.report(SymbolError::DuplicateDefinition {
-                name: def.name.to_string().into(),
-                kind: "module",
-                span: (def.span.start, def.span.end),
-                first_span: Some((existing.span.start, existing.span.end)),
-            });
+            collector.report(SymbolError::duplicate(
+                def.name.to_string().into(),
+                "module",
+                (def.span.start, def.span.end),
+                Some((existing.span.start, existing.span.end)),
+            ));
             return;
         }
 
         // Rule 1: Check if this local definition shadows an import (GAP3)
         if let Some(import_source) = self.check_module_shadowing(name_str) {
-            collector.report(SymbolError::ImportShadowing {
-                name: def.name.to_string().into(),
-                kind: "module",
-                span: (def.span.start, def.span.end),
+            collector.report(SymbolError::shadowing(
+                def.name.to_string().into(),
+                "module",
+                (def.span.start, def.span.end),
                 import_source,
-            });
+            ));
         }
 
         // Validate logic block if present (Gap 5.8: Combinational Loop Detection)
@@ -322,12 +322,12 @@ impl SymbolTable {
     ) {
         let name_str = def.name.as_str();
         if let Some(existing) = self.local.mechanicals.get(name_str) {
-            collector.report(SymbolError::DuplicateDefinition {
-                name: def.name.to_string().into(),
-                kind: "mechanical",
-                span: (def.span.start, def.span.end),
-                first_span: Some((existing.span.start, existing.span.end)),
-            });
+            collector.report(SymbolError::duplicate(
+                def.name.to_string().into(),
+                "mechanical",
+                (def.span.start, def.span.end),
+                Some((existing.span.start, existing.span.end)),
+            ));
             return;
         }
         self.local.mechanicals.insert(name_str.into(), def);
@@ -341,12 +341,12 @@ impl SymbolTable {
     ) {
         let name_str = def.name.as_str();
         if let Some(existing) = self.local.interfaces.get(name_str) {
-            collector.report(SymbolError::DuplicateDefinition {
-                name: def.name.to_string().into(),
-                kind: "interface",
-                span: (def.span.start, def.span.end),
-                first_span: Some((existing.span.start, existing.span.end)),
-            });
+            collector.report(SymbolError::duplicate(
+                def.name.to_string().into(),
+                "interface",
+                (def.span.start, def.span.end),
+                Some((existing.span.start, existing.span.end)),
+            ));
             return;
         }
         self.local.interfaces.insert(name_str.into(), def);
@@ -356,12 +356,12 @@ impl SymbolTable {
     pub fn register_test(&mut self, collector: &DiagnosticCollector, def: TestDefinition) {
         let name_str = def.name.as_str();
         if let Some(existing) = self.local.tests.get(name_str) {
-            collector.report(SymbolError::DuplicateDefinition {
-                name: def.name.to_string().into(),
-                kind: "test",
-                span: (def.span.start, def.span.end),
-                first_span: Some((existing.span.start, existing.span.end)),
-            });
+            collector.report(SymbolError::duplicate(
+                def.name.to_string().into(),
+                "test",
+                (def.span.start, def.span.end),
+                Some((existing.span.start, existing.span.end)),
+            ));
             return;
         }
         self.local.tests.insert(name_str.into(), def);
@@ -375,12 +375,12 @@ impl SymbolTable {
     ) {
         let name_str = def.name.as_str();
         if let Some(existing) = self.local.signal_groups.get(name_str) {
-            collector.report(SymbolError::DuplicateDefinition {
-                name: def.name.to_string().into(),
-                kind: "signal_group",
-                span: (def.span.start, def.span.end),
-                first_span: Some((existing.span.start, existing.span.end)),
-            });
+            collector.report(SymbolError::duplicate(
+                def.name.to_string().into(),
+                "signal_group",
+                (def.span.start, def.span.end),
+                Some((existing.span.start, existing.span.end)),
+            ));
             return;
         }
         self.local.signal_groups.insert(name_str.into(), def);
@@ -390,12 +390,12 @@ impl SymbolTable {
     pub fn register_pattern(&mut self, collector: &DiagnosticCollector, def: PatternDefinition) {
         let name_str = def.name.as_str();
         if let Some(existing) = self.local.patterns.get(name_str) {
-            collector.report(SymbolError::DuplicateDefinition {
-                name: def.name.to_string().into(),
-                kind: "pattern",
-                span: (def.span.start, def.span.end),
-                first_span: Some((existing.span.start, existing.span.end)),
-            });
+            collector.report(SymbolError::duplicate(
+                def.name.to_string().into(),
+                "pattern",
+                (def.span.start, def.span.end),
+                Some((existing.span.start, existing.span.end)),
+            ));
             return;
         }
         self.local.patterns.insert(name_str.into(), def);
@@ -405,12 +405,12 @@ impl SymbolTable {
     pub fn register_strategy(&mut self, collector: &DiagnosticCollector, def: StrategyDefinition) {
         let name_str = def.name.as_str();
         if let Some(existing) = self.local.strategies.get(name_str) {
-            collector.report(SymbolError::DuplicateDefinition {
-                name: def.name.to_string().into(),
-                kind: "strategy",
-                span: (def.span.start, def.span.end),
-                first_span: Some((existing.span.start, existing.span.end)),
-            });
+            collector.report(SymbolError::duplicate(
+                def.name.to_string().into(),
+                "strategy",
+                (def.span.start, def.span.end),
+                Some((existing.span.start, existing.span.end)),
+            ));
             return;
         }
         self.local.strategies.insert(name_str.into(), def);
@@ -420,12 +420,12 @@ impl SymbolTable {
     pub fn register_logic(&mut self, collector: &DiagnosticCollector, def: LogicDefinition) {
         let name_str = def.name.as_str();
         if let Some(existing) = self.local.logic_blocks.get(name_str) {
-            collector.report(SymbolError::DuplicateDefinition {
-                name: def.name.to_string().into(),
-                kind: "logic",
-                span: (def.span.start, def.span.end),
-                first_span: Some((existing.span.start, existing.span.end)),
-            });
+            collector.report(SymbolError::duplicate(
+                def.name.to_string().into(),
+                "logic",
+                (def.span.start, def.span.end),
+                Some((existing.span.start, existing.span.end)),
+            ));
             return;
         }
         self.local.logic_blocks.insert(name_str.into(), def);
@@ -435,12 +435,12 @@ impl SymbolTable {
     pub fn register_enum(&mut self, collector: &DiagnosticCollector, def: EnumDefinition) {
         let name_str = def.name.as_str();
         if let Some(existing) = self.local.enums.get(name_str) {
-            collector.report(SymbolError::DuplicateDefinition {
-                name: def.name.to_string().into(),
-                kind: "enum",
-                span: (def.span.start, def.span.end),
-                first_span: Some((existing.span.start, existing.span.end)),
-            });
+            collector.report(SymbolError::duplicate(
+                def.name.to_string().into(),
+                "enum",
+                (def.span.start, def.span.end),
+                Some((existing.span.start, existing.span.end)),
+            ));
             return;
         }
         self.local.enums.insert(name_str.into(), def);
@@ -450,12 +450,12 @@ impl SymbolTable {
     pub fn register_struct(&mut self, collector: &DiagnosticCollector, def: StructDefinition) {
         let name_str = def.name.as_str();
         if let Some(existing) = self.local.structs.get(name_str) {
-            collector.report(SymbolError::DuplicateDefinition {
-                name: def.name.to_string().into(),
-                kind: "struct",
-                span: (def.span.start, def.span.end),
-                first_span: Some((existing.span.start, existing.span.end)),
-            });
+            collector.report(SymbolError::duplicate(
+                def.name.to_string().into(),
+                "struct",
+                (def.span.start, def.span.end),
+                Some((existing.span.start, existing.span.end)),
+            ));
             return;
         }
         self.local.structs.insert(name_str.into(), def);
@@ -465,12 +465,12 @@ impl SymbolTable {
     pub fn register_shape(&mut self, collector: &DiagnosticCollector, def: ShapeDefinition) {
         let name_str = def.name.as_str();
         if let Some(existing) = self.local.shapes.get(name_str) {
-            collector.report(SymbolError::DuplicateDefinition {
-                name: def.name.to_string().into(),
-                kind: "shape",
-                span: (def.span.start, def.span.end),
-                first_span: Some((existing.span.start, existing.span.end)),
-            });
+            collector.report(SymbolError::duplicate(
+                def.name.to_string().into(),
+                "shape",
+                (def.span.start, def.span.end),
+                Some((existing.span.start, existing.span.end)),
+            ));
             return;
         }
         self.local.shapes.insert(name_str.into(), def);
@@ -485,23 +485,23 @@ impl SymbolTable {
 
         // Check for duplicate in local layer
         if let Some(existing) = self.local.units.values().find(|u| u.symbol == symbol) {
-            collector.report(SymbolError::DuplicateDefinition {
-                name: symbol.clone(),
-                kind: "unit",
-                span: (def.span.start, def.span.end),
-                first_span: Some((existing.span.start, existing.span.end)),
-            });
+            collector.report(SymbolError::duplicate(
+                symbol.clone(),
+                "unit",
+                (def.span.start, def.span.end),
+                Some((existing.span.start, existing.span.end)),
+            ));
             return;
         }
 
         // Check if this shadows an imported or prelude unit
         if self.resolve_unit_symbol(&symbol).is_some() {
-            collector.report(SymbolError::ImportShadowing {
-                name: symbol.clone(),
-                kind: "unit",
-                span: (def.span.start, def.span.end),
-                import_source: "stdlib or imported library".into(),
-            });
+            collector.report(SymbolError::shadowing(
+                symbol.clone(),
+                "unit",
+                (def.span.start, def.span.end),
+                "stdlib or imported library".into(),
+            ));
         }
 
         self.local.units.insert(symbol, def);

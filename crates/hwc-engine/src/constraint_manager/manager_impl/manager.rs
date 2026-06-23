@@ -181,7 +181,7 @@ impl ConstraintManager {
 
             // Perform electrical analysis for this net
             let (voltage_mv, current_ma) =
-                electrical_analysis::analyze_net_electrical(net, netlist)?;
+                electrical_analysis::analyze_net_electrical(net, netlist, None)?;
 
             // Generate routing constraints for this net
             let params = NetConstraintParams {

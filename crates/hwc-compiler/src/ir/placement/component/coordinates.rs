@@ -16,7 +16,10 @@ pub fn resolve_position(
     if component.position.is_relative() {
         let solver = crate::constraint_solver::ConstraintSolver::new(bbox_tracker, eval_context);
         solver.resolve_position(&component.position).map_err(|e| {
-            IrError::PlacementError(format!("Failed to resolve relative position: {}", e))
+            IrError::CoordinateResolutionFailed {
+                coordinate_str: "relative position".into(),
+                reason: e.to_string(),
+            }
         })
     } else {
         Ok(component.position.clone())
@@ -34,7 +37,10 @@ pub fn calculate_untransformed_origin(
             (x, y, z)
         }
         Coordinate::Relative(_) => {
-            panic!("Relative coordinates should be resolved before this point");
+            return Err(IrError::PlacementConstraint {
+                message: "Relative coordinates should be resolved before this point".into(),
+                component: "component".into(),
+            });
         }
     };
 
@@ -52,10 +58,16 @@ pub fn calculate_untransformed_origin(
             CoordinateAxis::X,
             ctx.origin.z,
         )
-        .expect("Failed to evaluate X coordinate with anchor references")
+        .map_err(|e| IrError::CoordinateResolutionFailed {
+            coordinate_str: "X coordinate with anchor references".into(),
+            reason: e.to_string(),
+        })?
     } else {
         evaluate_expression_to_nm(x_expr, ctx.symbol_table)
-            .expect("Failed to evaluate X coordinate")
+            .map_err(|e| IrError::CoordinateResolutionFailed {
+                coordinate_str: "X coordinate".into(),
+                reason: e.to_string(),
+            })?
     };
 
     let y_nm = if let Ok(hwc_parser::Value::Percentage(pct)) = y_expr.evaluate(ctx.eval_context) {
@@ -68,10 +80,16 @@ pub fn calculate_untransformed_origin(
             CoordinateAxis::Y,
             ctx.origin.z,
         )
-        .expect("Failed to evaluate Y coordinate with anchor references")
+        .map_err(|e| IrError::CoordinateResolutionFailed {
+            coordinate_str: "Y coordinate with anchor references".into(),
+            reason: e.to_string(),
+        })?
     } else {
         evaluate_expression_to_nm(y_expr, ctx.symbol_table)
-            .expect("Failed to evaluate Y coordinate")
+            .map_err(|e| IrError::CoordinateResolutionFailed {
+                coordinate_str: "Y coordinate".into(),
+                reason: e.to_string(),
+            })?
     };
 
     let z_ctx = CoordinateContext {
@@ -86,7 +104,10 @@ pub fn calculate_untransformed_origin(
         profile: ctx.profile,
     };
     let z_nm = resolve_coordinate_z_nm(z_expr, &z_ctx, has_anchor_refs)
-        .map_err(IrError::PlacementError)?;
+        .map_err(|e| IrError::CoordinateResolutionFailed {
+            coordinate_str: "Z coordinate".into(),
+            reason: e.to_string(),
+        })?;
 
     if z_nm < 0 {
         let z_span = z_expr.span();

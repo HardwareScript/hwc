@@ -167,6 +167,12 @@ fn compile_single_space(
     let mut space = create_hardware_space(space_def, symbol_table)?;
     // eprintln!($3"[DEBUG program_to_space] Hardware space created");
 
+    // v0.1.8: No Implicit Defaults rule for ASIC builds.
+    // Under ASIC technology, every route width, material property, and physical
+    // constraint must be explicitly declared. If missing, halt with a clear error
+    // instead of silently falling back to PCB-scale defaults.
+    space_builder::validate_asic_constraints(space_def, symbol_table)?;
+
     let origin = space_def.origin.unwrap_or_default();
 
     // Resolve profile and extract solder mask thickness (library-driven, not hardcoded)
@@ -179,7 +185,7 @@ fn compile_single_space(
         .as_ref()
         .and_then(|p| p.manufacturing.as_ref())
         .and_then(|m| m.solder_mask_thickness.as_ref())
-        .map(|t| crate::ir::conversions::measurement_to_nm(t, symbol_table))
+        .and_then(|t| crate::ir::conversions::measurement_to_nm(t, symbol_table).ok())
         .unwrap_or(0); // Opt-in: 0 = disabled unless profile explicitly declares solder_mask_thickness
 
     let stackup_manager = crate::ir::stackup_manager::StackupManager::new(
@@ -756,20 +762,27 @@ fn compile_single_space(
     let _auto_via_start = std::time::Instant::now();
 
     // Load fabrication constraints from profile for AutoViaInserter (v0.1.7 Limitation 7)
-    let fab_constraints = space_def.profile.as_ref().and_then(|profile_name| {
-        hwc_engine::constraint_manager::load_fabrication_constraints(
-            profile_name.as_str(),
-            symbol_table,
-        )
-        .ok()
-    });
+    let fab_constraints = space_def
+        .profile
+        .as_ref()
+        .and_then(|profile_name| {
+            hwc_engine::constraint_manager::load_fabrication_constraints(
+                profile_name.as_str(),
+                symbol_table,
+            )
+            .ok()
+        })
+        .ok_or_else(|| IrError::MissingAsicConstraint {
+            message: "Auto via insertion requires fabrication constraints but none were loaded.".into(),
+            hint: "Ensure a profile with 'via:' constraints is declared in the space definition.".into(),
+        })?;
 
     let auto_via_inserter = crate::auto_via_inserter::AutoViaInserter::from_profile(
         profile,
         &stackup_manager,
-        fab_constraints.as_ref(),
+        &fab_constraints,
         Some(symbol_table),
-    );
+    )?;
 
     match auto_via_inserter.insert_vias(&space, profile, &stackup_manager) {
         Ok(auto_vias) => {
@@ -838,11 +851,7 @@ fn compile_single_space(
     // This is the "rustc model": collect up to N errors, then stop.
     if collector.has_errors() {
         let n = collector.error_count();
-        return Err(IrError::CompilationError(format!(
-            "aborting due to {} previous error{}",
-            n,
-            if n == 1 { "" } else { "s" }
-        )));
+        return Err(IrError::CompilationAborted { error_count: n });
     }
 
     Ok((space, Some(qs)))

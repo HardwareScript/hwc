@@ -1,0 +1,48 @@
+# foundry_pdk.hw
+# Official TSMC 180nm Process Design Kit (PDK)
+import * from @std/primitives/units
+import Silicon_P, Silicon_N, Polysilicon, Aluminum, SiO2, Titanium_Silicide from materials
+
+profile Silicon_180nm:
+    technology: "ASIC"
+    
+    stackup:
+        substrate: [material: Silicon_P, thickness: 300um]
+        active:    [material: Silicon_N, thickness: 200nm]
+        poly:      [material: Polysilicon, thickness: 150nm]
+        d1:        [material: SiO2,      thickness: 500nm]
+        metal1:    [material: Aluminum,  thickness: 400nm]
+
+    # Explicitly declare physical transition bridges inside the PDK profile
+    bridge Silicon_N to Aluminum:
+        interface: Titanium_Silicide
+        thickness: 50nm
+        fill: Tungsten
+
+    bridge Silicon_P to Aluminum:
+        interface: Titanium_Silicide
+        thickness: 50nm
+        fill: Tungsten
+
+    bridge Polysilicon to Aluminum:
+        interface: Titanium_Silicide
+        thickness: 50nm
+        fill: Tungsten
+
+    trace:
+        min_width: 180nm
+        min_spacing: 180nm
+
+    via:
+        min_diameter: 220nm
+        min_annular_ring: 100nm
+
+    manufacturing:
+        copper_thickness: 400nm
+
+    clearance:
+        high_voltage: 500nm
+        safety_factor: 2.0
+
+    layer:
+        min_thickness: 100nm

@@ -6,6 +6,7 @@ use hwc_parser::ContactPlacement;
 
 use super::placement::ViaPlacementParams;
 use super::{LayerTransition, OverlapRegion, ViaLibrary, ViaLocation};
+use crate::ir::errors::IrError;
 
 pub(crate) struct ViaInsertionContext<'a> {
     pub(crate) transition: &'a LayerTransition,
@@ -23,51 +24,25 @@ pub struct AutoViaInserter {
 }
 
 impl AutoViaInserter {
-    /// Create a new automatic via inserter with an empty via library.
-    pub fn new() -> Self {
-        Self {
-            via_library: ViaLibrary { vias: Vec::new() },
-            min_spacing_nm: 250_000,
-        }
-    }
-
-    /// Create a new automatic via inserter with fabrication constraints.
-    pub fn new_with_constraints(
-        fabrication: Option<&hwc_engine::constraint_manager::FabricationConstraints>,
-    ) -> Self {
-        let min_spacing_nm = fabrication
-            .map(|constraints| constraints.min_spacing_nm)
-            .unwrap_or(250_000);
-        Self {
-            via_library: ViaLibrary::from_profile(
-                None,
-                &crate::ir::stackup_manager::StackupManager::new_empty(),
-                fabrication,
-                None,
-            ),
-            min_spacing_nm,
-        }
-    }
-
     /// Create a new auto via inserter from a profile definition.
+    ///
+    /// Returns an error if fabrication constraints are not provided, since the
+    /// via inserter requires explicit spacing rules to place vias correctly.
     pub fn from_profile(
         profile: Option<&hwc_parser::ProfileDefinition>,
         stackup_manager: &crate::ir::stackup_manager::StackupManager,
-        fabrication: Option<&hwc_engine::constraint_manager::FabricationConstraints>,
+        fabrication: &hwc_engine::constraint_manager::FabricationConstraints,
         symbol_table: Option<&crate::SymbolTable>,
-    ) -> Self {
-        let min_spacing_nm = fabrication
-            .map(|constraints| constraints.min_spacing_nm)
-            .unwrap_or(250_000);
-        Self {
+    ) -> Result<Self, IrError> {
+        Ok(Self {
             via_library: ViaLibrary::from_profile(
                 profile,
                 stackup_manager,
-                fabrication,
+                Some(fabrication),
                 symbol_table,
             ),
-            min_spacing_nm,
-        }
+            min_spacing_nm: fabrication.min_spacing_nm,
+        })
     }
 
     /// Insert vias automatically for all nets that transition between layers.
@@ -155,7 +130,8 @@ impl AutoViaInserter {
 
                         for via in &vias {
                             auto_via_metadata
-                                .push(self.create_contact_metadata_for_via(via, &transition));
+                                .push(self.create_contact_metadata_for_via(via, &transition)
+                                    .map_err(|e| e.to_string())?);
                         }
 
                         inserted_vias.extend(vias);
@@ -235,7 +211,8 @@ impl AutoViaInserter {
 
                         for via in &vias {
                             auto_via_metadata
-                                .push(self.create_contact_metadata_for_via(via, &transition));
+                                .push(self.create_contact_metadata_for_via(via, &transition)
+                                    .map_err(|e| e.to_string())?);
                         }
 
                         inserted_vias.extend(vias);
@@ -610,11 +587,5 @@ impl AutoViaInserter {
         }
 
         Ok(all_vias)
-    }
-}
-
-impl Default for AutoViaInserter {
-    fn default() -> Self {
-        Self::new()
     }
 }

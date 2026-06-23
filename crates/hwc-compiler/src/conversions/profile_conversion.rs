@@ -76,8 +76,7 @@ pub fn profile_to_constraints(
         .manufacturing
         .as_ref()
         .and_then(|m| m.solder_mask_expansion.as_ref())
-        .map(measurement_to_nm)
-        .unwrap_or(75_000);
+        .map(|m| measurement_to_nm(m));
 
     let _low_voltage_threshold_v = profile
         .clearance

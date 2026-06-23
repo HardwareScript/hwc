@@ -72,11 +72,44 @@ pub fn populate_material_database(
                     }
                 }
 
-                let resistivity_ohm_m = resistivity_ohm_m.unwrap_or(1.68e-8);
-                let thermal_conductivity_w_mk = thermal_conductivity_w_mk.unwrap_or(400.0);
-                let density_kg_m3 = density_kg_m3.unwrap_or(8960.0);
-                let max_current_density_a_mm2 = max_current_density_a_mm2.unwrap_or(1e6);
-                let melting_point_c = melting_point_c.unwrap_or(1085.0);
+                let resistivity_ohm_m =
+                    resistivity_ohm_m.ok_or_else(|| ConversionError::MissingProperty {
+                        material: name.clone(),
+                        property: "resistivity".to_string(),
+                    })?;
+                let thermal_conductivity_w_mk =
+                    thermal_conductivity_w_mk.ok_or_else(|| ConversionError::MissingProperty {
+                        material: name.clone(),
+                        property: "thermal_conductivity".to_string(),
+                    })?;
+                let density_kg_m3 =
+                    density_kg_m3.ok_or_else(|| ConversionError::MissingProperty {
+                        material: name.clone(),
+                        property: "density".to_string(),
+                    })?;
+                let max_current_density_a_mm2 =
+                    max_current_density_a_mm2.ok_or_else(|| ConversionError::MissingProperty {
+                        material: name.clone(),
+                        property: "max_current_density".to_string(),
+                    })?;
+                let melting_point_c =
+                    melting_point_c.ok_or_else(|| ConversionError::MissingProperty {
+                        material: name.clone(),
+                        property: "melting_point".to_string(),
+                    })?;
+
+                let color_hex = material_def
+                    .properties
+                    .iter()
+                    .find(|prop| prop.key == "color")
+                    .and_then(|prop| match &prop.value {
+                        hwc_parser::PropertyValue::String(s) => Some(s.clone()),
+                        _ => None,
+                    })
+                    .ok_or_else(|| ConversionError::MissingProperty {
+                        material: name.clone(),
+                        property: "color".to_string(),
+                    })?;
 
                 let conductor = ConductorProperties {
                     name: name.clone(),
@@ -95,7 +128,7 @@ pub fn populate_material_database(
                     },
                     density_kg_m3,
                     thermal_conductivity_w_mk,
-                    color_hex: "#B87333".into(),
+                    color_hex: color_hex.into(),
                     resistivity_ohm_m,
                     max_current_density_a_mm2,
                     resistivity_temp_coeff_per_c,
@@ -165,10 +198,39 @@ pub fn populate_material_database(
                     }
                 }
 
-                let dielectric_strength_kv_mm = dielectric_strength_kv_mm.unwrap_or(20.0);
-                let relative_permittivity = relative_permittivity.unwrap_or(4.0);
-                let thermal_conductivity_w_mk = thermal_conductivity_w_mk.unwrap_or(0.3);
-                let density_kg_m3 = density_kg_m3.unwrap_or(2200.0);
+                let dielectric_strength_kv_mm =
+                    dielectric_strength_kv_mm.ok_or_else(|| ConversionError::MissingProperty {
+                        material: name.clone(),
+                        property: "dielectric_strength".to_string(),
+                    })?;
+                let relative_permittivity =
+                    relative_permittivity.ok_or_else(|| ConversionError::MissingProperty {
+                        material: name.clone(),
+                        property: "relative_permittivity".to_string(),
+                    })?;
+                let thermal_conductivity_w_mk =
+                    thermal_conductivity_w_mk.ok_or_else(|| ConversionError::MissingProperty {
+                        material: name.clone(),
+                        property: "thermal_conductivity".to_string(),
+                    })?;
+                let density_kg_m3 =
+                    density_kg_m3.ok_or_else(|| ConversionError::MissingProperty {
+                        material: name.clone(),
+                        property: "density".to_string(),
+                    })?;
+
+                let color_hex = material_def
+                    .properties
+                    .iter()
+                    .find(|prop| prop.key == "color")
+                    .and_then(|prop| match &prop.value {
+                        hwc_parser::PropertyValue::String(s) => Some(s.clone()),
+                        _ => None,
+                    })
+                    .ok_or_else(|| ConversionError::MissingProperty {
+                        material: name.clone(),
+                        property: "color".to_string(),
+                    })?;
 
                 let insulator = InsulatorProperties {
                     name: name.clone(),
@@ -187,7 +249,7 @@ pub fn populate_material_database(
                     },
                     density_kg_m3,
                     thermal_conductivity_w_mk,
-                    color_hex: "#4CAF50".into(),
+                    color_hex: color_hex.into(),
                     relative_permittivity,
                     dielectric_strength_kv_mm,
                     thermal_conductivity_temp_coeff_per_c,
@@ -279,11 +341,43 @@ pub fn populate_material_database(
                     }
                 }
 
-                let band_gap_ev = band_gap_ev.unwrap_or(1.12);
-                let electron_mobility_cm2_vs = electron_mobility_cm2_vs.unwrap_or(1400.0);
-                let hole_mobility_cm2_vs = hole_mobility_cm2_vs.unwrap_or(450.0);
-                let thermal_conductivity_w_mk = thermal_conductivity_w_mk.unwrap_or(148.0);
-                let density_kg_m3 = density_kg_m3.unwrap_or(2329.0);
+                let band_gap_ev = band_gap_ev.ok_or_else(|| ConversionError::MissingProperty {
+                    material: name.clone(),
+                    property: "band_gap".to_string(),
+                })?;
+                let electron_mobility_cm2_vs =
+                    electron_mobility_cm2_vs.ok_or_else(|| ConversionError::MissingProperty {
+                        material: name.clone(),
+                        property: "electron_mobility".to_string(),
+                    })?;
+                let hole_mobility_cm2_vs =
+                    hole_mobility_cm2_vs.ok_or_else(|| ConversionError::MissingProperty {
+                        material: name.clone(),
+                        property: "hole_mobility".to_string(),
+                    })?;
+                let thermal_conductivity_w_mk =
+                    thermal_conductivity_w_mk.ok_or_else(|| ConversionError::MissingProperty {
+                        material: name.clone(),
+                        property: "thermal_conductivity".to_string(),
+                    })?;
+                let density_kg_m3 =
+                    density_kg_m3.ok_or_else(|| ConversionError::MissingProperty {
+                        material: name.clone(),
+                        property: "density".to_string(),
+                    })?;
+
+                let color_hex = material_def
+                    .properties
+                    .iter()
+                    .find(|prop| prop.key == "color")
+                    .and_then(|prop| match &prop.value {
+                        hwc_parser::PropertyValue::String(s) => Some(s.clone()),
+                        _ => None,
+                    })
+                    .ok_or_else(|| ConversionError::MissingProperty {
+                        material: name.clone(),
+                        property: "color".to_string(),
+                    })?;
 
                 let semiconductor = SemiconductorProperties {
                     name: name.clone(),
@@ -302,16 +396,7 @@ pub fn populate_material_database(
                     },
                     density_kg_m3,
                     thermal_conductivity_w_mk,
-                    color_hex: material_def
-                        .properties
-                        .iter()
-                        .find(|prop| prop.key == "color")
-                        .and_then(|prop| match &prop.value {
-                            hwc_parser::PropertyValue::String(s) => Some(s.clone()),
-                            _ => None,
-                        })
-                        .unwrap_or_else(|| "#708090".into())
-                        .into(),
+                    color_hex: color_hex.into(),
                     band_gap_ev,
                     electron_mobility_cm2_vs,
                     hole_mobility_cm2_vs,
@@ -390,8 +475,31 @@ pub fn populate_material_database(
                     }
                 }
 
-                let resistivity_ohm_m = resistivity_ohm_m.unwrap_or(1.68e-8);
-                let density_kg_m3 = density_kg_m3.unwrap_or(8960.0);
+                let resistivity_ohm_m =
+                    resistivity_ohm_m.ok_or_else(|| ConversionError::MissingProperty {
+                        material: name.clone(),
+                        property: "resistivity".to_string(),
+                    })?;
+                let density_kg_m3 =
+                    density_kg_m3.ok_or_else(|| ConversionError::MissingProperty {
+                        material: name.clone(),
+                        property: "density".to_string(),
+                    })?;
+                let thermal_conductivity_w_mk =
+                    thermal_conductivity_w_mk.ok_or_else(|| ConversionError::MissingProperty {
+                        material: name.clone(),
+                        property: "thermal_conductivity".to_string(),
+                    })?;
+                let max_current_density_a_mm2 =
+                    max_current_density_a_mm2.ok_or_else(|| ConversionError::MissingProperty {
+                        material: name.clone(),
+                        property: "max_current_density".to_string(),
+                    })?;
+                let melting_point_c =
+                    melting_point_c.ok_or_else(|| ConversionError::MissingProperty {
+                        material: name.clone(),
+                        property: "melting_point".to_string(),
+                    })?;
 
                 let color_hex = material_def
                     .properties
@@ -401,7 +509,10 @@ pub fn populate_material_database(
                         hwc_parser::PropertyValue::String(s) => Some(s.clone()),
                         _ => None,
                     })
-                    .unwrap_or_else(|| "#808080".into());
+                    .ok_or_else(|| ConversionError::MissingProperty {
+                        material: name.clone(),
+                        property: "color".to_string(),
+                    })?;
 
                 let conductor = ConductorProperties {
                     name: name.clone(),
@@ -419,14 +530,14 @@ pub fn populate_material_database(
                         }
                     },
                     density_kg_m3,
-                    thermal_conductivity_w_mk: thermal_conductivity_w_mk.unwrap_or(20.0),
+                    thermal_conductivity_w_mk,
                     color_hex: color_hex.into(),
                     resistivity_ohm_m,
-                    max_current_density_a_mm2: max_current_density_a_mm2.unwrap_or(1e6),
+                    max_current_density_a_mm2,
                     resistivity_temp_coeff_per_c,
                     thermal_conductivity_temp_coeff_per_c,
                     reference_temp_c,
-                    melting_point_c: melting_point_c.unwrap_or(1000.0),
+                    melting_point_c,
                     is_metal: !matches!(material_def.category, MaterialCategory::Adhesive),
                 };
 

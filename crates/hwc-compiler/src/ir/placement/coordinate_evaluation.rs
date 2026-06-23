@@ -37,17 +37,17 @@ pub fn evaluate_coordinate_to_nm(
                         let pm = (value * multiplier * 1_000_000_000_000.0).round() as i64;
                         pm / 1000
                     } else {
-                        return Err(IrError::PlacementError(format!(
-                            "Unknown unit symbol: '{}'",
-                            symbol
-                        )));
+                        return Err(IrError::CoordinateResolutionFailed {
+                            coordinate_str: format!("unit symbol '{}'", symbol),
+                            reason: format!("Unknown unit symbol: '{}'", symbol),
+                        });
                     }
                 }
                 _ => {
-                    return Err(IrError::PlacementError(format!(
-                        "Cannot convert {:?} to nanometers",
-                        unit
-                    )))
+                    return Err(IrError::CoordinateResolutionFailed {
+                        coordinate_str: format!("{:?}", unit),
+                        reason: format!("Cannot convert {:?} to nanometers", unit),
+                    })
                 }
             };
             Ok(nm)
@@ -56,10 +56,10 @@ pub fn evaluate_coordinate_to_nm(
             if let Some(const_value) = symbol_table.get_all_constants().get(name) {
                 Ok(*const_value as i64)
             } else {
-                Err(IrError::PlacementError(format!(
-                    "Unknown constant: '{}'",
-                    name
-                )))
+                Err(IrError::CoordinateResolutionFailed {
+                    coordinate_str: format!("constant '{}'", name),
+                    reason: format!("Unknown constant: '{}'", name),
+                })
             }
         }
         Expression::Binary {
@@ -76,7 +76,10 @@ pub fn evaluate_coordinate_to_nm(
                 BinaryOperator::Multiply => left_nm * right_nm,
                 BinaryOperator::Divide => {
                     if right_nm == 0 {
-                        return Err(IrError::PlacementError("Division by zero".into()));
+                        return Err(IrError::CoordinateResolutionFailed {
+                            coordinate_str: "division".into(),
+                            reason: "Division by zero".into(),
+                        });
                     }
                     left_nm / right_nm
                 }
@@ -97,12 +100,14 @@ pub fn evaluate_coordinate_to_nm(
         Expression::Grouped { expression, .. } => {
             evaluate_coordinate_to_nm(expression, symbol_table)
         }
-        Expression::Percentage { .. } => Err(IrError::PlacementError(
-            "Percentages not supported here".into(),
-        )),
-        Expression::AnchorReference { .. } => Err(IrError::PlacementError(
-            "Anchor references require evaluate_coordinate_with_anchors".into(),
-        )),
+        Expression::Percentage { .. } => Err(IrError::CoordinateResolutionFailed {
+            coordinate_str: "percentage expression".into(),
+            reason: "Percentages not supported here".into(),
+        }),
+        Expression::AnchorReference { .. } => Err(IrError::CoordinateResolutionFailed {
+            coordinate_str: "anchor reference".into(),
+            reason: "Anchor references require evaluate_coordinate_with_anchors".into(),
+        }),
     }
 }
 
@@ -142,14 +147,20 @@ pub fn evaluate_coordinate_with_anchors(
             let resolved_anchor_name = if anchor.name == "last" {
                 bbox_tracker
                     .last_registered()
-                    .ok_or_else(|| IrError::PlacementError("No 'last' component found".into()))?
+                    .ok_or_else(|| IrError::CoordinateResolutionFailed {
+                        coordinate_str: "anchor 'last'".into(),
+                        reason: "No 'last' component found".into(),
+                    })?
                     .clone()
             } else {
                 anchor.name.clone()
             };
 
             let anchor_bbox = bbox_tracker.get(&resolved_anchor_name).ok_or_else(|| {
-                IrError::PlacementError(format!("Anchor '{}' not found", resolved_anchor_name))
+                IrError::CoordinateResolutionFailed {
+                    coordinate_str: format!("anchor '{}'", resolved_anchor_name),
+                    reason: format!("Anchor '{}' not found", resolved_anchor_name),
+                }
             })?;
 
             let engine_edge = match edge {
@@ -231,7 +242,10 @@ pub fn evaluate_coordinate_with_anchors(
                 BinaryOperator::Multiply => left_nm * right_nm,
                 BinaryOperator::Divide => {
                     if right_nm == 0 {
-                        return Err(IrError::PlacementError("Division by zero".into()));
+                        return Err(IrError::CoordinateResolutionFailed {
+                            coordinate_str: "division".into(),
+                            reason: "Division by zero".into(),
+                        });
                     }
                     left_nm / right_nm
                 }

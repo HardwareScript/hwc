@@ -21,9 +21,10 @@ pub fn place_component_array(
             hwc_parser::ArrayLayout::HorizontalStack => (i as i64 * pitch_nm, 0),
             hwc_parser::ArrayLayout::VerticalStack => (0, i as i64 * pitch_nm),
             hwc_parser::ArrayLayout::Grid { rows: _, cols: _ } => {
-                return Err(IrError::PlacementError(
-                    "Grid layout not yet implemented for arrays".into(),
-                ));
+                return Err(IrError::PlacementConstraint {
+                    message: "Grid layout not yet implemented for arrays".into(),
+                    component: component.component_type.name.to_string(),
+                });
             }
         };
 
@@ -89,7 +90,10 @@ fn validate_array_collisions(
         .symbol_table
         .get_component(&component.component_type.name)?;
     let layout = comp_def.layout.as_ref().ok_or_else(|| {
-        IrError::PlacementError(format!("Component '{}' missing layout", comp_def.name))
+        IrError::PlacementConstraint {
+            message: format!("Component '{}' missing layout", comp_def.name),
+            component: comp_def.name.to_string(),
+        }
     })?;
 
     for pour in &layout.internal_pours {
@@ -160,7 +164,7 @@ fn validate_array_collisions(
 
 fn calculate_pour_bboxes_for_array(
     space: &HardwareSpace,
-    _component: &hwc_parser::ComponentPlacement,
+    component: &hwc_parser::ComponentPlacement,
     array_config: &hwc_parser::ArrayConfig,
     pour: &hwc_parser::PourPlacement,
     pitch_nm: i64,
@@ -172,14 +176,20 @@ fn calculate_pour_bboxes_for_array(
 
     let (from, to) =
         match pour.boundary.as_ref().ok_or_else(|| {
-            IrError::PlacementError(format!("Pour '{}' missing boundary", pour.name))
+            IrError::PlacementConstraint {
+                message: format!("Pour '{}' missing boundary", pour.name),
+                component: pour.name.to_string().into(),
+            }
         })? {
             hwc_parser::PourBoundary::Rect(f, t) => ((**f).clone(), (**t).clone()),
             hwc_parser::PourBoundary::Circle { .. } => {
-                return Err(IrError::PlacementError(format!(
-                    "Circle boundary not yet supported in arrays for pour '{}'",
-                    pour.name
-                )))
+                return Err(IrError::PlacementConstraint {
+                    message: format!(
+                        "Circle boundary not yet supported in arrays for pour '{}'",
+                        pour.name
+                    ),
+                    component: pour.name.to_string().into(),
+                })
             }
         };
 
@@ -190,9 +200,10 @@ fn calculate_pour_bboxes_for_array(
             hwc_parser::ArrayLayout::HorizontalStack => (i as i64 * pitch_nm, 0),
             hwc_parser::ArrayLayout::VerticalStack => (0, i as i64 * pitch_nm),
             hwc_parser::ArrayLayout::Grid { .. } => {
-                return Err(IrError::PlacementError(
-                    "Grid layout not yet implemented for collision detection".into(),
-                ));
+                return Err(IrError::PlacementConstraint {
+                    message: "Grid layout not yet implemented for collision detection".into(),
+                    component: component.component_type.name.to_string(),
+                });
             }
         };
 
@@ -208,10 +219,16 @@ fn calculate_pour_bboxes_for_array(
             profile: ctx.profile,
         };
         let start = spanning_coordinate_to_point(&from, &coord_ctx, false)
-            .map_err(IrError::PlacementError)?;
+            .map_err(|e| IrError::CoordinateResolutionFailed {
+                coordinate_str: "pour boundary start".into(),
+                reason: e,
+            })?;
 
         let end =
-            spanning_coordinate_to_point(&to, &coord_ctx, true).map_err(IrError::PlacementError)?;
+            spanning_coordinate_to_point(&to, &coord_ctx, true).map_err(|e| IrError::CoordinateResolutionFailed {
+                coordinate_str: "pour boundary end".into(),
+                reason: e,
+            })?;
 
         let z_bottom_nm = ctx
             .stackup_manager
@@ -246,10 +263,13 @@ fn merge_explicit_terminals(
         .get_component(&component.component_type.name)?;
 
     let layout = component_def.layout.as_ref().ok_or_else(|| {
-        IrError::PlacementError(format!(
-            "Component '{}' has no layout block",
-            component.component_type.name
-        ))
+        IrError::PlacementConstraint {
+            message: format!(
+                "Component '{}' has no layout block",
+                component.component_type.name
+            ),
+            component: component.component_type.name.to_string(),
+        }
     })?;
 
     let pitch_nm = evaluate_measurement_to_nm(&array_config.pitch, ctx.symbol_table)?;
@@ -396,10 +416,13 @@ fn merge_pour_across_instances(
                 net_id,
             )
             .map_err(|e| {
-                IrError::PlacementError(format!(
-                    "Failed to place merged pour '{}': {}",
-                    merged_name, e
-                ))
+                IrError::PlacementConstraint {
+                    message: format!(
+                        "Failed to place merged pour '{}': {}",
+                        merged_name, e
+                    ),
+                    component: merged_name.clone(),
+                }
             })?;
 
         let area_nm2 = (bbox.max.x - bbox.min.x) * (bbox.max.y - bbox.min.y);

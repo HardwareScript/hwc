@@ -1,0 +1,72 @@
+# ring_oscillator.hw
+import * from @std/primitives/units
+import * from @std/primitives/math
+import CMOS_Inverter from inverter
+import Silicon_P, Silicon_N, Polysilicon, Aluminum, SiO2 from materials
+
+profile Silicon_180nm:
+    technology: "ASIC"
+    stackup:
+        substrate: [material: Silicon_P, thickness: 300um]
+        active:    [material: Silicon_N, thickness: 200nm]
+        poly:      [material: Polysilicon, thickness: 150nm]
+        d1:        [material: SiO2,      thickness: 500nm]
+        metal1:    [material: Aluminum,  thickness: 400nm]
+    trace:
+        min_width: 180nm
+        min_spacing: 180nm
+    via:
+        min_diameter: 220nm
+        min_annular_ring: 100nm
+    manufacturing:
+        copper_thickness: 400nm
+    clearance:
+        high_voltage: 500nm
+        safety_factor: 2.0
+    layer:
+        min_thickness: 100nm
+
+module Ring_Oscillator_Schematic:
+    pins: [
+        output OSC_OUT,
+        power VDD,
+        ground GND
+    ]
+    add CMOS_Inverter named Inv1
+    add CMOS_Inverter named Inv2
+    add CMOS_Inverter named Inv3
+
+    route Inv1.VOUT to Inv2.VIN
+    route Inv2.VOUT to Inv3.VIN
+    route Inv3.VOUT to Inv1.VIN
+    
+    route Inv1.VDD to Inv2.VDD to Inv3.VDD to VDD
+    route Inv1.GND to Inv2.GND to Inv3.GND to GND
+    route Inv3.VOUT to OSC_OUT
+
+space Ring_Oscillator implements Ring_Oscillator_Schematic:
+    dimensions: 20um by 10um by 300um
+    resolution: 1nm
+    origin: bl by b
+    profile: Silicon_180nm
+
+    nets:
+        OSC_OUT: signal
+        VDD: power
+        GND: ground
+
+    # Place our three standard cells horizontally on the board
+    add CMOS_Inverter named Inv1 at [x: 2.0um, y: 3.8um] on layer: active
+    add CMOS_Inverter named Inv2 at [x: 8.0um, y: 3.8um] on layer: active
+    add CMOS_Inverter named Inv3 at [x: 14.0um, y: 3.8um] on layer: active
+
+    # The auto-router connects the blocks automatically
+    route Inv1.VOUT to Inv2.VIN:
+        exit: East
+        enter: West
+    route Inv2.VOUT to Inv3.VIN:
+        exit: East
+        enter: West
+    route Inv3.VOUT to Inv1.VIN:
+        exit: West
+        enter: East

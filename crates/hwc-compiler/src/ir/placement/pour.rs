@@ -17,7 +17,10 @@ pub fn place_pour(
     let boundary = pour
         .boundary
         .as_ref()
-        .ok_or_else(|| IrError::PlacementError(format!("Pour '{}' missing boundary", pour.name)))?;
+        .ok_or_else(|| IrError::PlacementConstraint {
+            message: format!("Pour '{}' missing boundary", pour.name),
+            component: pour.name.to_string().into(),
+        })?;
 
     let layer_name = match &pour.elevation {
         hwc_parser::Elevation::Semantic(id) => id.to_string(),
@@ -26,7 +29,10 @@ pub fn place_pour(
 
     let thickness_nm = if let Some(t_expr) = &pour.thickness {
         crate::ir::conversions::evaluate_expression_to_nm(t_expr, ctx.symbol_table).map_err(
-            |e| IrError::PlacementError(format!("Failed to evaluate pour thickness: {}", e)),
+            |e| IrError::CoordinateResolutionFailed {
+                coordinate_str: format!("pour '{}' thickness", pour.name),
+                reason: e.to_string(),
+            },
         )?
     } else {
         ctx.profile
@@ -42,11 +48,14 @@ pub fn place_pour(
     };
 
     if thickness_nm == 0 && pour.thickness.is_none() {
-        return Err(IrError::PlacementError(format!(
-            "Could not resolve physical thickness for pour '{}' on layer '{}'. \
-             Ensure the layer is defined in the profile stackup or provide an explicit 'thickness:' property.",
-            pour.name, layer_name
-        )));
+        return Err(IrError::PlacementConstraint {
+            message: format!(
+                "Could not resolve physical thickness for pour '{}' on layer '{}'. \
+                 Ensure the layer is defined in the profile stackup or provide an explicit 'thickness:' property.",
+                pour.name, layer_name
+            ),
+            component: pour.name.to_string().into(),
+        });
     }
 
     let z_start_nm = ctx
@@ -80,10 +89,10 @@ pub fn place_pour(
         hwc_parser::PourBoundary::Rect(from_raw, to_raw) => {
             let from = if from_raw.is_relative() {
                 solver.resolve_position(from_raw).map_err(|e| {
-                    IrError::PlacementError(format!(
-                        "Failed to resolve relative 'from' position for pour '{}': {}",
-                        pour.name, e
-                    ))
+                    IrError::CoordinateResolutionFailed {
+                        coordinate_str: format!("pour '{}' from position", pour.name),
+                        reason: e.to_string(),
+                    }
                 })?
             } else {
                 (**from_raw).clone()
@@ -91,19 +100,25 @@ pub fn place_pour(
 
             let to = if to_raw.is_relative() {
                 solver.resolve_position(to_raw).map_err(|e| {
-                    IrError::PlacementError(format!(
-                        "Failed to resolve relative 'to' position for pour '{}': {}",
-                        pour.name, e
-                    ))
+                    IrError::CoordinateResolutionFailed {
+                        coordinate_str: format!("pour '{}' to position", pour.name),
+                        reason: e.to_string(),
+                    }
                 })?
             } else {
                 (**to_raw).clone()
             };
 
             let s = spanning_coordinate_to_point(&from, &coord_ctx, false)
-                .map_err(IrError::PlacementError)?;
+                .map_err(|e| IrError::CoordinateResolutionFailed {
+                    coordinate_str: format!("pour '{}' from", pour.name),
+                    reason: e,
+                })?;
             let e = spanning_coordinate_to_point(&to, &coord_ctx, true)
-                .map_err(IrError::PlacementError)?;
+                .map_err(|e| IrError::CoordinateResolutionFailed {
+                    coordinate_str: format!("pour '{}' to", pour.name),
+                    reason: e,
+                })?;
 
             let w = (e.x - s.x).abs();
             let h = (e.y - s.y).abs();
@@ -116,26 +131,29 @@ pub fn place_pour(
             let radius_nm =
                 crate::ir::conversions::evaluate_expression_to_nm(radius, ctx.symbol_table)
                     .map_err(|e| {
-                        IrError::PlacementError(format!(
-                            "Failed to evaluate circle radius for pour '{}': {}",
-                            pour.name, e
-                        ))
+                        IrError::CoordinateResolutionFailed {
+                            coordinate_str: format!("pour '{}' circle radius", pour.name),
+                            reason: e.to_string(),
+                        }
                     })?;
             circle_radius_nm = Some(radius_nm);
 
             let center_resolved = if center_raw.is_relative() {
                 solver.resolve_position(center_raw).map_err(|e| {
-                    IrError::PlacementError(format!(
-                        "Failed to resolve circle center for pour '{}': {}",
-                        pour.name, e
-                    ))
+                    IrError::CoordinateResolutionFailed {
+                        coordinate_str: format!("pour '{}' circle center", pour.name),
+                        reason: e.to_string(),
+                    }
                 })?
             } else {
                 *center_raw.clone()
             };
 
             let center_pt = spanning_coordinate_to_point(&center_resolved, &coord_ctx, false)
-                .map_err(IrError::PlacementError)?;
+                .map_err(|e| IrError::CoordinateResolutionFailed {
+                    coordinate_str: format!("pour '{}' circle center", pour.name),
+                    reason: e,
+                })?;
 
             let radius_nm_f = radius_nm as f64;
             let s = Point3D::new(
@@ -208,13 +226,16 @@ pub fn place_pour(
                     .get_name(space.substrate_material_id)
                     .unwrap_or("Unknown");
 
-                return Err(IrError::PlacementError(format!(
-                    "Substrate interpenetration detected: Pour '{}' ({}) overlaps with the base substrate ({}). \
-                     Use the same material as the substrate, or place the pour outside the substrate bounds.",
-                    pour.name,
-                    pour.material,
-                    substrate_material_name
-                )));
+                return Err(IrError::PlacementConstraint {
+                    message: format!(
+                        "Substrate interpenetration detected: Pour '{}' ({}) overlaps with the base substrate ({}). \
+                         Use the same material as the substrate, or place the pour outside the substrate bounds.",
+                        pour.name,
+                        pour.material,
+                        substrate_material_name
+                    ),
+                    component: pour.name.to_string().into(),
+                });
             }
         }
     }

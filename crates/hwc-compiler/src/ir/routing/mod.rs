@@ -57,18 +57,20 @@ pub fn instantiate_pattern(
 
     let definition = symbol_table
         .get_pattern(&instantiation.name)
-        .map_err(|e| IrError::RoutingError(format!(
-            "Unknown pattern '{}': {}", instantiation.name, e
-        )))?;
+        .map_err(|e| IrError::InvalidRouteExpression {
+            expression: format!("pattern '{}'", instantiation.name),
+            reason: format!("Unknown pattern '{}': {}", instantiation.name, e),
+        })?;
 
     // Build evaluation context: bind instantiation args to definition param names
     let mut eval_ctx: rustc_hash::FxHashMap<compact_str::CompactString, f64> =
         rustc_hash::FxHashMap::default();
     for arg in &instantiation.arguments {
         let val_nm = crate::ir::conversions::evaluate_expression_to_nm(&arg.value, symbol_table)
-            .map_err(|e| IrError::RoutingError(format!(
-                "Failed to evaluate pattern argument '{}': {}", arg.name, e
-            )))?;
+            .map_err(|e| IrError::InvalidRouteExpression {
+                expression: format!("pattern argument '{}'", arg.name),
+                reason: format!("Failed to evaluate pattern argument '{}': {}", arg.name, e),
+            })?;
         eval_ctx.insert(arg.name.clone(), val_nm as f64);
     }
 
@@ -101,7 +103,10 @@ fn evaluate_with_ctx(
             hwc_parser::Unit::Centimeter => Ok((value * 10_000_000.0) as i64),
             hwc_parser::Unit::Micrometer => Ok((value * 1_000.0) as i64),
             hwc_parser::Unit::Nanometer => Ok(*value as i64),
-            _ => Err(IrError::RoutingError(format!("Cannot convert {:?} to nanometers", unit))),
+            _ => Err(IrError::InvalidRouteExpression {
+                expression: format!("{:?}", unit),
+                reason: format!("Cannot convert {:?} to nanometers", unit),
+            }),
         },
         hwc_parser::Expression::Variable { name, .. } => {
             // First check local context (pattern arguments), then symbol table
@@ -110,7 +115,10 @@ fn evaluate_with_ctx(
             } else if let Some(val) = symbol_table.get_all_constants().get(name) {
                 Ok(*val as i64)
             } else {
-                Err(IrError::RoutingError(format!("Unknown variable: '{}'", name)))
+                Err(IrError::InvalidRouteExpression {
+                    expression: format!("variable '{}'", name),
+                    reason: format!("Unknown variable: '{}'", name),
+                })
             }
         }
         hwc_parser::Expression::Binary { left, operator, right, .. } => {
@@ -121,7 +129,10 @@ fn evaluate_with_ctx(
                 hwc_parser::BinaryOperator::Subtract => Ok(l - r),
                 hwc_parser::BinaryOperator::Multiply => Ok(l * r),
                 hwc_parser::BinaryOperator::Divide => {
-                    if r == 0 { Err(IrError::RoutingError("Division by zero".into())) }
+                    if r == 0 { Err(IrError::InvalidRouteExpression {
+                        expression: "division".into(),
+                        reason: "Division by zero".into(),
+                    }) }
                     else { Ok(l / r) }
                 }
                 hwc_parser::BinaryOperator::Modulo => Ok(l % r),
@@ -137,7 +148,10 @@ fn evaluate_with_ctx(
         hwc_parser::Expression::Grouped { expression, .. } => {
             evaluate_with_ctx(expression, ctx, symbol_table)
         }
-        _ => Err(IrError::RoutingError(format!("Unsupported expression in pattern step"))),
+        _ => Err(IrError::InvalidRouteExpression {
+            expression: "pattern step".into(),
+            reason: "Unsupported expression in pattern step".into(),
+        }),
     }
 }
 

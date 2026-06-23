@@ -21,6 +21,154 @@ pub enum ParseError {
         found: CompactString,
     },
 
+    // Phase 1.1 — Break up S14 into specific error codes (S30-S37)
+
+    #[error("{message}")]
+    #[diagnostic(
+        code(S30),
+        url("https://docs.hw-script.org/errors/S30"),
+        help("Use ':' to separate property names from values (The Boundary Law: ':' for properties, '=' for logic)")
+    )]
+    ExpectedColon {
+        #[label("Expected ':' here")]
+        span: SourceSpan,
+        message: CompactString,
+    },
+
+    #[error("{message}")]
+    #[diagnostic(
+        code(S31),
+        url("https://docs.hw-script.org/errors/S31"),
+        help("This field requires a quoted string, e.g., `technology: \"ASIC\"`")
+    )]
+    ExpectedQuotedString {
+        #[label("Expected quoted string here")]
+        span: SourceSpan,
+        message: CompactString,
+    },
+
+    #[error("{message}")]
+    #[diagnostic(
+        code(S32),
+        url("https://docs.hw-script.org/errors/S32"),
+        help("Expected a name here, e.g., `component Name:`")
+    )]
+    ExpectedIdentifier {
+        #[label("Expected identifier here")]
+        span: SourceSpan,
+        message: CompactString,
+    },
+
+    #[error("{message}")]
+    #[diagnostic(
+        code(S33),
+        url("https://docs.hw-script.org/errors/S33"),
+        help("Expected a value, number, measurement, or variable")
+    )]
+    ExpectedExpression {
+        #[label("Expected expression here")]
+        span: SourceSpan,
+        message: CompactString,
+    },
+
+    #[error("{message}")]
+    #[diagnostic(
+        code(S34),
+        url("https://docs.hw-script.org/errors/S34"),
+        help("Each statement must be on its own line")
+    )]
+    ExpectedNewline {
+        #[label("Expected newline here")]
+        span: SourceSpan,
+        message: CompactString,
+    },
+
+    #[error("{message}")]
+    #[diagnostic(
+        code(S35),
+        url("https://docs.hw-script.org/errors/S35"),
+        help("This block requires increased indentation (4 spaces per level)")
+    )]
+    ExpectedIndent {
+        #[label("Expected increased indentation here")]
+        span: SourceSpan,
+        message: CompactString,
+    },
+
+    #[error("{message}")]
+    #[diagnostic(
+        code(S36),
+        url("https://docs.hw-script.org/errors/S36"),
+        help("Missing closing delimiter for this block")
+    )]
+    ExpectedClosingDelimiter {
+        #[label("Missing closing delimiter")]
+        span: SourceSpan,
+        message: CompactString,
+    },
+
+    #[error("{message}")]
+    #[diagnostic(
+        code(S37),
+        url("https://docs.hw-script.org/errors/S37"),
+        help("List valid keywords for this context")
+    )]
+    ExpectedPropertyKeyword {
+        #[label("Unknown keyword here")]
+        span: SourceSpan,
+        message: CompactString,
+    },
+
+    // Phase 1.2 — Additional specific error codes (S40-S43)
+
+    #[error("{message}")]
+    #[diagnostic(
+        code(S40),
+        url("https://docs.hw-script.org/errors/S40"),
+        help("List valid fields for this block type")
+    )]
+    UnknownField {
+        #[label("Unrecognized field name")]
+        span: SourceSpan,
+        message: CompactString,
+    },
+
+    #[error("{message}")]
+    #[diagnostic(
+        code(S41),
+        url("https://docs.hw-script.org/errors/S41"),
+        help("{message}")
+    )]
+    InvalidSyntax {
+        #[label("Syntax error")]
+        span: SourceSpan,
+        message: CompactString,
+    },
+
+    #[error("{message}")]
+    #[diagnostic(
+        code(S42),
+        url("https://docs.hw-script.org/errors/S42"),
+        help("Migration instructions: see documentation for updated syntax")
+    )]
+    DeprecatedSyntax {
+        #[label("Removed or renamed syntax")]
+        span: SourceSpan,
+        message: CompactString,
+    },
+
+    #[error("{message}")]
+    #[diagnostic(
+        code(S43),
+        url("https://docs.hw-script.org/errors/S43"),
+        help("Expression syntax guidance: check operator precedence and operand placement")
+    )]
+    InvalidExpression {
+        #[label("Malformed expression")]
+        span: SourceSpan,
+        message: CompactString,
+    },
+
     #[error("File ended unexpectedly")]
     #[diagnostic(
         code(S15),

@@ -9,8 +9,8 @@ use thiserror::Error;
 pub enum IrError {
     #[error("No space definition found in program")]
     #[diagnostic(
-        code(C31),
-        url("https://docs.hw-script.org/errors/C31"),
+        code(C28),
+        url("https://docs.hw-script.org/errors/C28"),
         help("Hardware Script files must contain a 'space Name:' block")
     )]
     NoSpaceDefinition,
@@ -33,27 +33,95 @@ pub enum IrError {
 
     #[error("Invalid coordinate: [{0}, {1}, {2}] exceeds grid bounds")]
     #[diagnostic(
-        code(C21),
-        url("https://docs.hw-script.org/errors/C21"),
+        code(C27),
+        url("https://docs.hw-script.org/errors/C27"),
         help("Coordinates must be within the grid dimensions specified in the space definition")
     )]
     InvalidCoordinate(usize, usize, usize),
 
-    #[error("Component placement failed: {0}")]
+    #[error("Bridge material transition invalid: {from_material} -> {to_material}: {reason}")]
     #[diagnostic(
         code(R15),
         url("https://docs.hw-script.org/errors/R15"),
-        help("Check component position, rotation, and ensure no collisions with other components")
+        help("Check bridge material compatibility")
     )]
-    PlacementError(String),
+    BridgeValidationFailed {
+        from_material: CompactString,
+        to_material: CompactString,
+        reason: String,
+    },
 
-    #[error("Routing failed: {0}")]
+    #[error("Failed to resolve coordinate expression '{coordinate_str}': {reason}")]
+    #[diagnostic(
+        code(R17),
+        url("https://docs.hw-script.org/errors/R17"),
+        help("Verify coordinate syntax and that all variables are defined")
+    )]
+    CoordinateResolutionFailed {
+        coordinate_str: String,
+        reason: String,
+    },
+
+    #[error("Failed to resolve layer '{layer_name}': {reason}")]
+    #[diagnostic(
+        code(R18),
+        url("https://docs.hw-script.org/errors/R18"),
+        help("Verify layer name exists in the profile stackup")
+    )]
+    StackupResolutionFailed {
+        layer_name: CompactString,
+        reason: String,
+    },
+
+    #[error("Placement constraint violation: {message}")]
+    #[diagnostic(
+        code(R19),
+        url("https://docs.hw-script.org/errors/R19"),
+        help("Check placement constraints for this component")
+    )]
+    PlacementConstraint {
+        message: String,
+        component: String,
+    },
+
+    #[error("No route path found from {from_pin} to {to_pin}")]
     #[diagnostic(
         code(R16),
         url("https://docs.hw-script.org/errors/R16"),
-        help("Verify waypoints are valid and path is not blocked by components")
+        help("Check that components are within routing reach")
     )]
-    RoutingError(String),
+    NoPathFound {
+        net: CompactString,
+        from_pin: CompactString,
+        to_pin: CompactString,
+    },
+
+    #[error("Route for net '{net}' has no waypoints")]
+    #[diagnostic(
+        code(R20),
+        url("https://docs.hw-script.org/errors/R20"),
+        help("Add waypoints or use auto-routing")
+    )]
+    EmptyRoute { net: CompactString },
+
+    #[error("Invalid route expression '{expression}': {reason}")]
+    #[diagnostic(
+        code(R21),
+        url("https://docs.hw-script.org/errors/R21"),
+        help("Check route expression syntax")
+    )]
+    InvalidRouteExpression {
+        expression: String,
+        reason: String,
+    },
+
+    #[error("Manual route missing required field: {missing_field}")]
+    #[diagnostic(
+        code(R22),
+        url("https://docs.hw-script.org/errors/R22"),
+        help("Add the missing field to the route definition")
+    )]
+    ManualRouteIncomplete { missing_field: String },
 
     #[error("Pin reference not found: {component}.{pin}")]
     #[diagnostic(
@@ -74,13 +142,37 @@ pub enum IrError {
     )]
     DisconnectedNet(Box<DisconnectedNetDetails>),
 
-    #[error("Compilation error: {0}")]
+    #[error("Invalid resolution: {value} nm")]
     #[diagnostic(
-        code(C99),
-        url("https://docs.hw-script.org/errors/C99"),
-        help("Check the error message for details")
+        code(C39),
+        url("https://docs.hw-script.org/errors/C39"),
+        help("Resolution must be a positive value, e.g., `resolution: 1nm`.")
     )]
-    CompilationError(String),
+    InvalidResolution { value: i64 },
+
+    #[error("Profile '{name}' not found")]
+    #[diagnostic(
+        code(C40),
+        url("https://docs.hw-script.org/errors/C40"),
+        help("Import or declare profile '{name}'.")
+    )]
+    ProfileNotFound { name: CompactString },
+
+    #[error("Logic synthesis failed: {message}")]
+    #[diagnostic(
+        code(C41),
+        url("https://docs.hw-script.org/errors/C41"),
+        help("Check the logic definition for errors.")
+    )]
+    LogicSynthesisFailed { message: String },
+
+    #[error("Compilation aborted: {error_count} previous error{}", if *error_count == 1 { "" } else { "s" })]
+    #[diagnostic(
+        code(C42),
+        url("https://docs.hw-script.org/errors/C42"),
+        help("Fix the preceding errors and try again.")
+    )]
+    CompilationAborted { error_count: usize },
 
     #[error("Missing profile constraint: {field}")]
     #[diagnostic(
@@ -114,8 +206,8 @@ pub enum IrError {
 
     #[error("Invalid expression in loop: {0}")]
     #[diagnostic(
-        code(C34),
-        url("https://docs.hw-script.org/errors/C34"),
+        code(C43),
+        url("https://docs.hw-script.org/errors/C43"),
         help("Check the expression syntax and ensure all variables are defined")
     )]
     InvalidExpression(String),
@@ -199,6 +291,45 @@ pub enum IrError {
         )
     )]
     CircularReference { path: String },
+
+    #[error("ASIC compile failed: {message}")]
+    #[diagnostic(
+        code(C36),
+        url("https://docs.hw-script.org/errors/C36"),
+        help("Under ASIC technology, all physical constraints must be explicitly declared. No implicit defaults are permitted.\n\n{hint}")
+    )]
+    MissingAsicConstraint {
+        message: String,
+        hint: String,
+    },
+
+    #[error("Material '{material}' is missing required property '{property}'")]
+    #[diagnostic(
+        code(C37),
+        url("https://docs.hw-script.org/errors/C37"),
+        help("Declare the required property '{property}' in the material definition for '{material}'")
+    )]
+    MissingPhysicalProperty {
+        material: CompactString,
+        property: String,
+    },
+
+    #[error("Placement error: {0}")]
+    PlacementError(String),
+
+    #[error("Routing error: {0}")]
+    RoutingError(String),
+
+    #[error("Active net '{net}' is missing electrical specifications")]
+    #[diagnostic(
+        code(C38),
+        url("https://docs.hw-script.org/errors/C38"),
+        help("Add explicit voltage, current, or classification properties to the net '{net}': {detail}")
+    )]
+    MissingElectricalSpecification {
+        net: CompactString,
+        detail: String,
+    },
 }
 
 #[derive(Debug, Clone)]

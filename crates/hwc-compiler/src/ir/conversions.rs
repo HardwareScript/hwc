@@ -163,13 +163,13 @@ pub fn evaluate_expression_to_ma(
     }
 }
 
-pub fn measurement_to_nm(measurement: &Measurement, symbol_table: &crate::SymbolTable) -> i64 {
+pub fn measurement_to_nm(measurement: &Measurement, symbol_table: &crate::SymbolTable) -> Result<i64, String> {
     let expr = Expression::Measurement {
         value: measurement.value,
         unit: measurement.unit.clone(),
         span: hwc_parser::Span::new(0, 0),
     };
-    evaluate_expression_to_nm(&expr, symbol_table).unwrap()
+    evaluate_expression_to_nm(&expr, symbol_table)
 }
 
 pub(crate) fn z_expr_is_physical(z_expr: &Expression) -> bool {
@@ -257,12 +257,12 @@ pub fn resolve_coordinate_z_nm(
     Ok(final_z)
 }
 
-pub fn coordinate_to_point(coord: &Coordinate, ctx: &CoordinateContext) -> Point3D {
+pub fn coordinate_to_point(coord: &Coordinate, ctx: &CoordinateContext) -> Result<Point3D, String> {
     let (x_expr, y_expr, z_expr) = match coord {
         Coordinate::Positional { x, y, z, .. } | Coordinate::Declarative { x, y, z, .. } => {
             (x, y, z)
         }
-        Coordinate::Relative(_) => panic!("Relative coordinates must be resolved"),
+        Coordinate::Relative(_) => return Err("Relative coordinates must be resolved before placement".into()),
     };
 
     let has_anchor_refs = x_expr.contains_anchor_reference()
@@ -272,7 +272,7 @@ pub fn coordinate_to_point(coord: &Coordinate, ctx: &CoordinateContext) -> Point
     let x_nm = if let Ok(Value::Percentage(pct)) = x_expr.evaluate(ctx.eval_context) {
         ((pct / 100.0) * ctx.space_dimensions.width_nm as f64) as i64
     } else if has_anchor_refs && x_expr.contains_anchor_reference() {
-        let tracker = ctx.bbox_tracker.expect("Tracker required");
+        let tracker = ctx.bbox_tracker.ok_or("BoundingBoxTracker required")?;
         super::placement::coordinate_evaluation::evaluate_coordinate_with_anchors(
             x_expr,
             ctx.symbol_table,
@@ -280,15 +280,15 @@ pub fn coordinate_to_point(coord: &Coordinate, ctx: &CoordinateContext) -> Point
             CoordinateAxis::X,
             ctx.origin.z,
         )
-        .unwrap()
+        .map_err(|e| e.to_string())?
     } else {
-        evaluate_expression_to_nm(x_expr, ctx.symbol_table).unwrap()
+        evaluate_expression_to_nm(x_expr, ctx.symbol_table)?
     };
 
     let y_nm = if let Ok(Value::Percentage(pct)) = y_expr.evaluate(ctx.eval_context) {
         ((pct / 100.0) * ctx.space_dimensions.height_nm as f64) as i64
     } else if has_anchor_refs && y_expr.contains_anchor_reference() {
-        let tracker = ctx.bbox_tracker.expect("Tracker required");
+        let tracker = ctx.bbox_tracker.ok_or("BoundingBoxTracker required")?;
         super::placement::coordinate_evaluation::evaluate_coordinate_with_anchors(
             y_expr,
             ctx.symbol_table,
@@ -296,12 +296,12 @@ pub fn coordinate_to_point(coord: &Coordinate, ctx: &CoordinateContext) -> Point
             CoordinateAxis::Y,
             ctx.origin.z,
         )
-        .unwrap()
+        .map_err(|e| e.to_string())?
     } else {
-        evaluate_expression_to_nm(y_expr, ctx.symbol_table).unwrap()
+        evaluate_expression_to_nm(y_expr, ctx.symbol_table)?
     };
 
-    let z_nm = resolve_coordinate_z_nm(z_expr, ctx, has_anchor_refs).unwrap();
+    let z_nm = resolve_coordinate_z_nm(z_expr, ctx, has_anchor_refs)?;
 
     use hwc_parser::OriginXY;
     let final_x_nm = match ctx.origin.xy {
@@ -313,7 +313,7 @@ pub fn coordinate_to_point(coord: &Coordinate, ctx: &CoordinateContext) -> Point
         OriginXY::TL | OriginXY::TR => ctx.space_dimensions.height_nm - y_nm,
     };
 
-    Point3D::new(final_x_nm, final_y_nm, z_nm)
+    Ok(Point3D::new(final_x_nm, final_y_nm, z_nm))
 }
 
 pub fn spanning_coordinate_to_point(
@@ -325,7 +325,7 @@ pub fn spanning_coordinate_to_point(
         Coordinate::Positional { x, y, z, .. } | Coordinate::Declarative { x, y, z, .. } => {
             (x, y, z)
         }
-        Coordinate::Relative(_) => panic!("Relative coordinates must be resolved"),
+        Coordinate::Relative(_) => return Err("Relative coordinates must be resolved before placement".into()),
     };
 
     let has_anchor_refs = x_expr.contains_anchor_reference()

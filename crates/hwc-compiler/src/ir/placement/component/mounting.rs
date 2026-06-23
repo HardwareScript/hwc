@@ -48,17 +48,32 @@ pub fn resolve_mounting_and_elevation(
                 .layout
                 .as_ref()
                 .and_then(|l| l.shape.as_ref())
-                .and_then(|s| parse_rectangle_dimensions(s))
+                .and_then(|s| parse_rectangle_dimensions(s, symbol_table))
                 .map(|(_, _, d)| d)
-                .unwrap_or(100_000) // Default 0.1mm
+                .ok_or_else(|| IrError::MissingAsicConstraint {
+                    message: format!(
+                        "Component '{}' has no explicit height in its layout definition.",
+                        component.component_type
+                    ),
+                    hint: "Add 'shape: Rectangle(w, h, d)' to the component's layout definition.".into(),
+                })?
         } else {
-            100_000
+            return Err(IrError::MissingAsicConstraint {
+                message: format!(
+                    "Component type '{}' is not declared in the symbol table.",
+                    component.component_type
+                ),
+                hint: "Declare the component type with a layout definition before using it.".into(),
+            });
         };
 
     // v0.1.7: Resolve standoff height (default to 0 if omitted)
     let standoff_nm = match &component.standoff {
         Some(expr) => {
-            evaluate_expression_to_nm(expr, symbol_table).map_err(IrError::PlacementError)?
+            evaluate_expression_to_nm(expr, symbol_table).map_err(|e| IrError::CoordinateResolutionFailed {
+                coordinate_str: "standoff height".into(),
+                reason: e.to_string(),
+            })?
         }
         None => {
             // Fallback to component definition's standoff
@@ -69,7 +84,10 @@ pub fn resolve_mounting_and_elevation(
                     .and_then(|l| l.standoff.as_ref())
                     .map(|expr| evaluate_expression_to_nm(expr, symbol_table))
                     .transpose()
-                    .map_err(IrError::PlacementError)?
+                    .map_err(|e| IrError::CoordinateResolutionFailed {
+                        coordinate_str: "component definition standoff".into(),
+                        reason: e.to_string(),
+                    })?
                     .unwrap_or(0) // Default to 0 (no secret compiler offsets!)
             } else {
                 0

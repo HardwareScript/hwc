@@ -1,0 +1,39 @@
+# inverter.hw
+import * from @std/primitives/units
+import NMOS_Transistor from nmos_transistor
+import PMOS_Transistor from pmos_transistor
+import Silicon_N, Silicon_P, Polysilicon, Aluminum from materials
+
+module Inverter_Schematic:
+    pins: [
+        input VIN,
+        output VOUT,
+        power VDD,
+        ground GND
+    ]
+    add NMOS_Transistor named M1
+    add PMOS_Transistor named M2
+    
+    route M1.gate to VIN
+    route M2.gate to VIN
+    route M1.drain to VOUT
+    route M2.drain to VOUT
+    route M1.source to GND
+    route M1.bulk to GND
+    route M2.source to VDD
+    route M2.bulk to VDD
+
+# We declare the inverter as a reusable component (Standard Cell)
+component CMOS_Inverter implements Inverter_Schematic:
+    pins: [VIN, VOUT, VDD, GND]
+    layout:
+        shape: Rectangle(1.2um, 2.4um, 400nm)
+        pin_positions:
+            VIN at [600nm, 600nm]
+            VOUT at [1.0um, 1.2um]
+            VDD at [600nm, 2.2um]
+            GND at [600nm, 100nm]
+
+        # Hierarchical instantiation: our component contains other components
+        add NMOS_Transistor named M1 at [x: 0nm, y: 0nm] on layer: active
+        add PMOS_Transistor named M2 at [x: 0nm, y: 1.2um] on layer: active

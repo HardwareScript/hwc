@@ -11,13 +11,6 @@
 * Net: NET_M1_drain_to_M2_drain (pour: M2_Drain_Diff, material: Silicon_P, z: 0.3000mm)
 * Net: NET_M1_gate_to_M2_gate (width=100000nm, material=Copper)
 * Net: NET_M1_drain_to_M2_drain (width=100000nm, material=Copper)
-*   Connected pins:
-*     - M1.gate
-*     - M2.gate
-* Net: TEMP_NET (width=180nm, material=Polysilicon)
-*   Connected pins:
-*     - M1.drain
-*     - M2.drain
 
 
 * ========================================
