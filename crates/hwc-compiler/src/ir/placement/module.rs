@@ -412,6 +412,7 @@ pub fn place_module_instance(
                     span: module_route.to.span,
                 },
                 width: None,
+                layer: None,
                 strategy: None,
                 pattern: None,
                 strategy_params: vec![],
@@ -433,7 +434,7 @@ pub fn place_module_instance(
                 ctx.stackup_manager,
                 ctx.profile,
             )
-            .map_err(|e| {
+            .map_err(|_e| {
                 IrError::NoPathFound {
                     net: format!("{}.{}", instance_name, module_route.from.pin).into(),
                     from_pin: format!("{}.{}", from_component, module_route.from.pin).into(),

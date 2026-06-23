@@ -191,6 +191,7 @@ impl super::Parser {
         let to = self.parse_pin_ref()?;
 
         let mut width = None;
+        let mut layer = None;
         let mut strategy = None;
         let mut pattern = None;
         let mut strategy_params = Vec::new();
@@ -265,6 +266,9 @@ impl super::Parser {
                     match key.as_str() {
                         "width" => {
                             width = Some(self.parse_expression()?);
+                        }
+                        "layer" => {
+                            layer = Some(self.expect_identifier()?);
                         }
                         "strategy" => {
                             strategy = Some(self.expect_identifier()?);
@@ -349,6 +353,7 @@ impl super::Parser {
             from,
             to,
             width,
+            layer,
             strategy,
             pattern,
             strategy_params,

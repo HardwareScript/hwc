@@ -290,6 +290,7 @@ pub struct Route {
     pub from: PinReference,
     pub to: PinReference,
     pub width: Option<Expression>,
+    pub layer: Option<Identifier>,     // v0.1.8: Target routing layer (e.g. metal1)
     pub strategy: Option<Identifier>, // e.g. DDR5_Match (references a strategy definition)
     pub pattern: Option<PatternInstantiation>, // v0.1.8: Direct pattern reference e.g. Trombone(gap: 0.3mm, amp: 2.5mm)
     pub strategy_params: Vec<(Identifier, Expression)>, // e.g. target_length: 50mm

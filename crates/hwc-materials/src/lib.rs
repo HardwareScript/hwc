@@ -6,7 +6,7 @@ pub mod stackup;
 
 pub use constraints::{
     BridgeRule, ClearanceConstraints, ConstraintError, ConstraintSet, LayerConstraints,
-    StackupConstraints, ThermalConstraints, TraceConstraints, ViaConstraints,
+    RoutableMode, StackupConstraints, ThermalConstraints, TraceConstraints, ViaConstraints,
 };
 pub use database::{MaterialDatabase, MaterialError};
 pub use material::{

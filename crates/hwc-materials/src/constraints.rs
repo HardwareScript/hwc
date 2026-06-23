@@ -61,6 +61,21 @@ pub struct BridgeRule {
     pub fill_material: CompactString,
 }
 
+/// Whether a stackup layer permits routing (v0.1.8 Physical Synthesis Guardrails).
+///
+/// This is a table-driven constraint: each layer in the stackup declares its
+/// routability mode. The pathfinder consults this table before placing trace
+/// segments.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum RoutableMode {
+    /// Full routing permitted (metal layers)
+    True,
+    /// No routing permitted (substrate, active, oxide)
+    False,
+    /// Local interconnects only with max length limit
+    LocalOnly,
+}
+
 /// Complete constraint set for a fabrication process
 #[derive(Debug, Clone)]
 pub struct ConstraintSet {
@@ -77,6 +92,13 @@ pub struct ConstraintSet {
     pub solder_mask_expansion_nm: Option<i64>,
     /// Technology node string (e.g. "PCB", "ASIC") for manufacturing checks.
     pub technology: Option<String>,
+    /// Per-layer routability map (v0.1.8 Physical Synthesis Guardrails).
+    /// Maps layer name (e.g., "active", "metal1") to its routable mode.
+    /// The pathfinder looks up this table before placing trace segments.
+    pub layer_routability: rustc_hash::FxHashMap<CompactString, RoutableMode>,
+    /// Maximum route length for `local_only` layers in nanometers (v0.1.8).
+    /// Default: 10_000 nm (10µm).
+    pub max_local_route_length_nm: Option<i64>,
 }
 
 /// Stackup constraints for impedance-controlled routing
@@ -293,6 +315,8 @@ impl Default for ConstraintSet {
             bridges: vec![],
             solder_mask_expansion_nm: None, // No solder mask expansion by default
             technology: None,
+            layer_routability: rustc_hash::FxHashMap::default(),
+            max_local_route_length_nm: None,
         }
     }
 }

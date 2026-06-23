@@ -14,6 +14,25 @@ pub struct StackupLayer {
     pub z_min_nm: i64,
     pub z_max_nm: i64,
     pub material_id: u8,
+    /// v0.1.8: Whether this layer permits routing.
+    /// Table-driven constraint — the pathfinder consults this before placing
+    /// trace segments. `None` defaults to full routing (backward compatible).
+    pub routable: Option<RoutableMode>,
+}
+
+/// Whether a stackup layer permits routing (v0.1.8 Physical Synthesis Guardrails).
+///
+/// Mirrors the parser-side `RoutableMode` but lives in the engine to avoid
+/// cross-crate dependencies. The engine uses this enum for O(1) pattern
+/// matching in the hot path.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum RoutableMode {
+    /// Full routing permitted (metal layers)
+    True,
+    /// No routing permitted (substrate, active, oxide)
+    False,
+    /// Local interconnects only with max length limit
+    LocalOnly,
 }
 
 /// Manages the ordered stackup of PCB layers.
@@ -64,6 +83,32 @@ impl StackupManager {
     /// Whether the stackup is empty.
     pub fn is_empty(&self) -> bool {
         self.layers.is_empty()
+    }
+
+    /// Query whether a layer permits routing (v0.1.8 Physical Synthesis Guardrails).
+    ///
+    /// Returns the `RoutableMode` for the named layer. If the layer is not
+    /// found or has no declared routable mode, defaults to `RoutableMode::True`
+    /// for backward compatibility with legacy profiles.
+    #[inline]
+    pub fn is_routable(&self, layer_name: &str) -> RoutableMode {
+        self.layers
+            .iter()
+            .find(|l| l.name == layer_name)
+            .and_then(|l| l.routable)
+            .unwrap_or(RoutableMode::True)
+    }
+
+    /// Check if a layer is non-routable (`routable: false`).
+    #[inline]
+    pub fn is_non_routable(&self, layer_name: &str) -> bool {
+        self.is_routable(layer_name) == RoutableMode::False
+    }
+
+    /// Check if a layer is local-only (`routable: local_only`).
+    #[inline]
+    pub fn is_local_only(&self, layer_name: &str) -> bool {
+        self.is_routable(layer_name) == RoutableMode::LocalOnly
     }
 }
 
@@ -162,9 +207,9 @@ mod tests {
 
     fn make_stackup() -> StackupManager {
         StackupManager::new(vec![
-            StackupLayer { name: "M1".into(), z_min_nm: 0, z_max_nm: 100_000, material_id: 0 },
-            StackupLayer { name: "M2".into(), z_min_nm: 100_000, z_max_nm: 200_000, material_id: 1 },
-            StackupLayer { name: "M3".into(), z_min_nm: 200_000, z_max_nm: 300_000, material_id: 2 },
+            StackupLayer { name: "M1".into(), z_min_nm: 0, z_max_nm: 100_000, material_id: 0, routable: None },
+            StackupLayer { name: "M2".into(), z_min_nm: 100_000, z_max_nm: 200_000, material_id: 1, routable: None },
+            StackupLayer { name: "M3".into(), z_min_nm: 200_000, z_max_nm: 300_000, material_id: 2, routable: None },
         ])
     }
 

@@ -13,6 +13,7 @@ use crate::geometry::transform::BoundingBox2D;
 use crate::geometry_router::partition::PartitionGrid;
 use crate::geometry_router::spatial_index::{DynamicSpatialIndex, IndexedSegment};
 use crate::geometry_router::route_decomposition::VirtualJunction;
+use crate::material::{MaterialConductivity, MaterialId, MaterialRegistry};
 
 use rayon::prelude::*;
 
@@ -34,7 +35,35 @@ pub enum ViolationType {
     ShortCircuit,
     /// Same-net overlap not at a valid VirtualJunction or component port.
     SameNetOverlap,
+    /// v0.1.8: Coplanar forbidden junction — conductor touching semiconductor
+    /// without an intermediate ohmic contact bridge.
+    ForbiddenJunction {
+        mat_a: CompactString,
+        mat_b: CompactString,
+    },
 }
+
+/// v0.1.8: Classification of a material junction between two touching geometries.
+///
+/// This is a table-driven classification: the DRC engine queries the material
+/// registry for conductivity categories and the bridge table for registered
+/// transitions. No hard-coding — all rules come from the profile + material DB.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum JunctionClassification {
+    /// The junction is allowed (same category, or insulator involved).
+    Allowed,
+    /// A bridge is required and has been declared in the profile.
+    /// Contains the bridge material name for diagnostic suggestions.
+    BridgeRequired { bridge: CompactString },
+    /// The junction is forbidden — conductor touching semiconductor with
+    /// no declared bridge. This is a hard error.
+    Forbidden,
+}
+
+/// Bridge table lookup key: "FromMaterial:ToMaterial" → bridge material name.
+pub type BridgeTable = rustc_hash::FxHashMap<CompactString, CompactString>;
+
+use compact_str::CompactString;
 
 // ============================================================================
 // Ghost Registry
@@ -326,6 +355,23 @@ pub enum OverlapResult {
         net_id: u32,
         is_valid_junction: bool,
     },
+    /// v0.1.8: Same-net intersection with different materials (volumetric overlap).
+    /// Clipper2 cannot weld different materials, so overlapping conductor+semiconductor
+    /// on the same net produces invalid mesh data. Must trigger P45.
+    SameNetIntersection {
+        net_id: u32,
+        mat_a: MaterialId,
+        mat_b: MaterialId,
+        intersection_area: i64,
+    },
+    /// v0.1.8: Material junction classification (coplanar face-touching).
+    /// Two different materials touch on the same Z-layer. The classification
+    /// determines whether this is Allowed, requires a Bridge, or is Forbidden.
+    MaterialJunction {
+        classification: JunctionClassification,
+        mat_a_name: CompactString,
+        mat_b_name: CompactString,
+    },
     /// No meaningful overlap.
     NoOverlap,
 }
@@ -334,17 +380,92 @@ pub enum OverlapResult {
 ///
 /// Different-net overlaps are checked against clearance rules.
 /// Same-net overlaps must land on a `VirtualJunctionNode` or component port bbox.
+///
+/// v0.1.8: Also performs material junction classification for same-net
+/// different-material intersections and coplanar face-touching.
 pub fn classify_overlap(
     seg_a: &IndexedSegment,
     seg_b: &IndexedSegment,
     junctions: &[VirtualJunction],
     default_clearance_nm: i64,
+    mat_a_id: Option<MaterialId>,
+    mat_b_id: Option<MaterialId>,
+    material_registry: &MaterialRegistry,
+    bridge_table: &BridgeTable,
 ) -> OverlapResult {
     if seg_a.net_id == seg_b.net_id {
         let is_valid_junction = junctions.iter().any(|j| {
             j.net_id.0 == seg_a.net_id as u32
                 && is_point_in_overlap_envelope(j.position, seg_a, seg_b)
         });
+
+        // v0.1.8: Check for same-net different-material intersection.
+        // If two segments on the same net have different materials and their
+        // AABBs intersect (not just face-touch), this is a volumetric overlap
+        // that Clipper2 cannot weld. Must trigger P45.
+        if let (Some(ma), Some(mb)) = (mat_a_id, mat_b_id) {
+            if ma != mb {
+                let a = segment_bbox(seg_a);
+                let b = segment_bbox(seg_b);
+                let intersection_area = compute_bbox_intersection_area(&a, &b);
+
+                if intersection_area > 0 {
+                    // Volumetric intersection detected — classify the junction
+                    let classification = classify_junction(ma, mb, material_registry, bridge_table);
+                    let name_a = material_registry.get_name(ma).unwrap_or("Unknown");
+                    let name_b = material_registry.get_name(mb).unwrap_or("Unknown");
+
+                    return match classification {
+                        JunctionClassification::Forbidden => OverlapResult::MaterialJunction {
+                            classification,
+                            mat_a_name: name_a.into(),
+                            mat_b_name: name_b.into(),
+                        },
+                        JunctionClassification::BridgeRequired { .. } => {
+                            OverlapResult::MaterialJunction {
+                                classification,
+                                mat_a_name: name_a.into(),
+                                mat_b_name: name_b.into(),
+                            }
+                        }
+                        JunctionClassification::Allowed => {
+                            // Same net, different material, but allowed — still flag
+                            // as SameNetIntersection for diagnostic purposes
+                            OverlapResult::SameNetIntersection {
+                                net_id: seg_a.net_id as u32,
+                                mat_a: ma,
+                                mat_b: mb,
+                                intersection_area,
+                            }
+                        }
+                    };
+                }
+            }
+        }
+
+        // v0.1.8: Check for coplanar face-touching with different materials.
+        // This catches cases where two segments touch at a boundary (not volumetric
+        // intersection) but have different materials on the same net.
+        if let (Some(ma), Some(mb)) = (mat_a_id, mat_b_id) {
+            if ma != mb {
+                let a = segment_bbox(seg_a);
+                let b = segment_bbox(seg_b);
+                let intersection_area = compute_bbox_intersection_area(&a, &b);
+
+                // Face-touching: bounding boxes touch but don't volumetrically overlap
+                if intersection_area == 0 && aabb_faces_touch(&a, &b) {
+                    let classification = classify_junction(ma, mb, material_registry, bridge_table);
+                    let name_a = material_registry.get_name(ma).unwrap_or("Unknown");
+                    let name_b = material_registry.get_name(mb).unwrap_or("Unknown");
+
+                    return OverlapResult::MaterialJunction {
+                        classification,
+                        mat_a_name: name_a.into(),
+                        mat_b_name: name_b.into(),
+                    };
+                }
+            }
+        }
 
         OverlapResult::SameNet {
             net_id: seg_a.net_id as u32,
@@ -378,6 +499,62 @@ fn is_point_in_overlap_envelope(point: Point3D, seg_a: &IndexedSegment, seg_b: &
     let max_y = a.max_y.max(b.max_y);
 
     point.x >= min_x && point.x <= max_x && point.y >= min_y && point.y <= max_y
+}
+
+/// v0.1.8: Classify a material junction between two touching geometries.
+///
+/// This is the core table-driven junction classifier for Physical Synthesis
+/// Guardrails. It uses the `MaterialRegistry` (symbol table) for conductivity
+/// lookups and the `BridgeTable` (profile bridge rules) for junction rules.
+///
+/// # Classification Rules
+/// - Conductor touching Semiconductor without a declared bridge → `Forbidden`
+/// - Conductor touching Semiconductor with a declared bridge → `BridgeRequired`
+/// - Same category or insulator involved → `Allowed`
+///
+/// # Arguments
+/// * `mat_a_id` - Material ID of the first geometry (from `MaterialRegistry`)
+/// * `mat_b_id` - Material ID of the second geometry
+/// * `registry` - The engine's material registry (lookup table for conductivity)
+/// * `bridge_table` - Profile bridge rules (lookup table for junctions)
+///
+/// # Returns
+/// `JunctionClassification` indicating whether the junction is allowed,
+/// requires a bridge, or is forbidden.
+pub fn classify_junction(
+    mat_a_id: MaterialId,
+    mat_b_id: MaterialId,
+    registry: &MaterialRegistry,
+    bridge_table: &BridgeTable,
+) -> JunctionClassification {
+    let cat_a = match registry.get_conductivity(mat_a_id) {
+        Some(c) => c,
+        None => return JunctionClassification::Allowed, // Unknown material → skip
+    };
+    let cat_b = match registry.get_conductivity(mat_b_id) {
+        Some(c) => c,
+        None => return JunctionClassification::Allowed,
+    };
+
+    let name_a = registry.get_name(mat_a_id).unwrap_or("Unknown");
+    let name_b = registry.get_name(mat_b_id).unwrap_or("Unknown");
+
+    match (cat_a, cat_b) {
+        // Conductor touching Semiconductor → check for bridge
+        (MaterialConductivity::Conductor, MaterialConductivity::Semiconductor)
+        | (MaterialConductivity::Semiconductor, MaterialConductivity::Conductor) => {
+            let key: CompactString = format!("{}:{}", name_a, name_b).into();
+            if let Some(bridge_name) = bridge_table.get(key.as_str()) {
+                JunctionClassification::BridgeRequired {
+                    bridge: bridge_name.clone(),
+                }
+            } else {
+                JunctionClassification::Forbidden
+            }
+        }
+        // Same category or insulator involved → OK
+        _ => JunctionClassification::Allowed,
+    }
 }
 
 /// Compute the actual edge-to-edge clearance between two Manhattan axis-aligned segments.
@@ -420,6 +597,32 @@ fn compute_overlap_area(seg_a: &IndexedSegment, seg_b: &IndexedSegment) -> i64 {
     overlap_w * overlap_h
 }
 
+/// v0.1.8: Compute the intersection area of two AABBs (axis-aligned bounding boxes).
+/// Returns 0 if the boxes don't overlap. Used to detect volumetric intersections
+/// between different-material segments on the same net.
+#[inline]
+fn compute_bbox_intersection_area(a: &SegmentBbox, b: &SegmentBbox) -> i64 {
+    let overlap_w = (a.max_x.min(b.max_x) - a.min_x.max(b.min_x)).max(0);
+    let overlap_h = (a.max_y.min(b.max_y) - a.min_y.max(b.min_y)).max(0);
+    overlap_w * overlap_h
+}
+
+/// v0.1.8: Check if two AABBs touch at a face (coplanar boundary contact).
+/// Two boxes "face-touch" when they are adjacent along one axis with zero gap
+/// but don't volumetrically overlap. This is distinct from corner/edge touching.
+#[inline]
+fn aabb_faces_touch(a: &SegmentBbox, b: &SegmentBbox) -> bool {
+    // Boxes must be strictly adjacent (not overlapping) on one axis
+    // and overlapping on the other axis.
+    let x_adjacent = a.max_x == b.min_x || b.max_x == a.min_x;
+    let y_adjacent = a.max_y == b.min_y || b.max_y == a.min_y;
+
+    let x_overlap = a.min_x < b.max_x && a.max_x > b.min_x;
+    let y_overlap = a.min_y < b.max_y && a.max_y > b.min_y;
+
+    (x_adjacent && y_overlap) || (y_adjacent && x_overlap)
+}
+
 // ============================================================================
 // Per-G-Cell Sweep Context
 // ============================================================================
@@ -440,11 +643,23 @@ struct GCellSweepContext {
 /// Each G-cell is processed on a separate thread via `par_iter()`.
 /// No global memory locks — each thread collects violations locally.
 /// Returns a merged `Vec<SweepViolation>` of all DRC violations found.
+///
+/// # Arguments
+/// * `grid` - G-cell partition grid
+/// * `spatial_index` - R*-tree of routed segments
+/// * `junctions` - Virtual junctions from route decomposition
+/// * `default_clearance_nm` - Minimum clearance between different nets
+/// * `layer_to_material` - v0.1.8: Table mapping layer ID to material ID
+/// * `material_registry` - v0.1.8: Material symbol table for conductivity lookups
+/// * `bridge_table` - v0.1.8: Profile bridge rules for junction classification
 pub fn verify_gcell_sweep(
     grid: &PartitionGrid,
     spatial_index: &DynamicSpatialIndex,
     junctions: &[VirtualJunction],
     default_clearance_nm: i64,
+    layer_to_material: &rustc_hash::FxHashMap<i64, MaterialId>,
+    material_registry: &MaterialRegistry,
+    bridge_table: &BridgeTable,
 ) -> Vec<SweepViolation> {
     let contexts: Vec<GCellSweepContext> = grid
         .cells
@@ -469,7 +684,16 @@ pub fn verify_gcell_sweep(
 
     let violation_results: Vec<Vec<SweepViolation>> = contexts
         .par_iter()
-        .map(|ctx| verify_single_gcell(ctx, junctions, default_clearance_nm))
+        .map(|ctx| {
+            verify_single_gcell(
+                ctx,
+                junctions,
+                default_clearance_nm,
+                layer_to_material,
+                material_registry,
+                bridge_table,
+            )
+        })
         .collect();
 
     violation_results.into_iter().flatten().collect()
@@ -480,6 +704,9 @@ fn verify_single_gcell(
     ctx: &GCellSweepContext,
     junctions: &[VirtualJunction],
     default_clearance_nm: i64,
+    layer_to_material: &rustc_hash::FxHashMap<i64, MaterialId>,
+    material_registry: &MaterialRegistry,
+    bridge_table: &BridgeTable,
 ) -> Vec<SweepViolation> {
     if ctx.segments.len() < 2 {
         return Vec::new();
@@ -519,7 +746,27 @@ fn verify_single_gcell(
             continue;
         }
 
-        let result = classify_overlap(seg_a, seg_b, junctions, default_clearance_nm);
+        // v0.1.8: Look up material IDs for both segments via the layer-to-material table.
+        let mat_a_id = layer_to_material.get(&seg_a.layer).copied();
+        let mat_b_id = layer_to_material.get(&seg_b.layer).copied();
+
+        let result = classify_overlap(
+            seg_a,
+            seg_b,
+            junctions,
+            default_clearance_nm,
+            mat_a_id,
+            mat_b_id,
+            material_registry,
+            bridge_table,
+        );
+
+        let center_a = seg_a.center();
+        let center_b = seg_b.center();
+        let midpoint = (
+            (center_a.x + center_b.x) / 2,
+            (center_a.y + center_b.y) / 2,
+        );
 
         match result {
             OverlapResult::DifferentNet {
@@ -528,17 +775,11 @@ fn verify_single_gcell(
                 required_clearance,
                 ..
             } => {
-                let center_a = seg_a.center();
-                let center_b = seg_b.center();
-                let location = (
-                    (center_a.x + center_b.x) / 2,
-                    (center_a.y + center_b.y) / 2,
-                );
                 let actual = compute_actual_clearance(seg_a, seg_b);
                 violations.push(SweepViolation {
                     net_a,
                     net_b,
-                    location,
+                    location: midpoint,
                     violation_type: ViolationType::ClearanceViolation {
                         required: required_clearance,
                         actual,
@@ -550,18 +791,62 @@ fn verify_single_gcell(
                 is_valid_junction,
             } => {
                 if !is_valid_junction {
-                    let center_a = seg_a.center();
-                    let center_b = seg_b.center();
-                    let location = (
-                        (center_a.x + center_b.x) / 2,
-                        (center_a.y + center_b.y) / 2,
-                    );
                     violations.push(SweepViolation {
                         net_a: net_id,
                         net_b: net_id,
-                        location,
+                        location: midpoint,
                         violation_type: ViolationType::SameNetOverlap,
                     });
+                }
+            }
+            OverlapResult::SameNetIntersection {
+                net_id,
+                mat_a,
+                mat_b,
+                ..
+            } => {
+                // v0.1.8: Same-net different-material intersection → P45
+                let mat_a_name = material_registry
+                    .get_name(mat_a)
+                    .unwrap_or("Unknown")
+                    .to_string();
+                let mat_b_name = material_registry
+                    .get_name(mat_b)
+                    .unwrap_or("Unknown")
+                    .to_string();
+                violations.push(SweepViolation {
+                    net_a: net_id,
+                    net_b: net_id,
+                    location: midpoint,
+                    violation_type: ViolationType::ForbiddenJunction {
+                        mat_a: mat_a_name.into(),
+                        mat_b: mat_b_name.into(),
+                    },
+                });
+            }
+            OverlapResult::MaterialJunction {
+                classification,
+                mat_a_name,
+                mat_b_name,
+            } => {
+                match classification {
+                    JunctionClassification::Forbidden => {
+                        // v0.1.8: Conductor-semiconductor without bridge → P45 error
+                        violations.push(SweepViolation {
+                            net_a: 0,
+                            net_b: 0,
+                            location: midpoint,
+                            violation_type: ViolationType::ForbiddenJunction {
+                                mat_a: mat_a_name,
+                                mat_b: mat_b_name,
+                            },
+                        });
+                    }
+                    JunctionClassification::BridgeRequired { .. } => {
+                        // Bridge declared → warning only, not a violation
+                        // The bridge_validator.rs handles the actual bridge validation
+                    }
+                    JunctionClassification::Allowed => {}
                 }
             }
             OverlapResult::NoOverlap => {}
@@ -835,7 +1120,7 @@ mod tests {
             layer: 1,
         };
 
-        match classify_overlap(&seg_a, &seg_b, &[], 500_000) {
+        match classify_overlap(&seg_a, &seg_b, &[], 500_000, None, None, &MaterialRegistry::new(), &BridgeTable::default()) {
             OverlapResult::DifferentNet { net_a, net_b, .. } => {
                 assert_eq!(net_a, 1);
                 assert_eq!(net_b, 2);
@@ -863,7 +1148,7 @@ mod tests {
             layer: 1,
         };
 
-        match classify_overlap(&seg_a, &seg_b, &[], 500_000) {
+        match classify_overlap(&seg_a, &seg_b, &[], 500_000, None, None, &MaterialRegistry::new(), &BridgeTable::default()) {
             OverlapResult::SameNet {
                 net_id,
                 is_valid_junction,
@@ -903,7 +1188,7 @@ mod tests {
             inductance_nh: 0.0,
         }];
 
-        match classify_overlap(&seg_a, &seg_b, &junctions, 500_000) {
+        match classify_overlap(&seg_a, &seg_b, &junctions, 500_000, None, None, &MaterialRegistry::new(), &BridgeTable::default()) {
             OverlapResult::SameNet {
                 is_valid_junction, ..
             } => {
@@ -932,7 +1217,7 @@ mod tests {
             layer: 1,
         };
 
-        match classify_overlap(&seg_a, &seg_b, &[], 500_000) {
+        match classify_overlap(&seg_a, &seg_b, &[], 500_000, None, None, &MaterialRegistry::new(), &BridgeTable::default()) {
             OverlapResult::NoOverlap => {}
             other => panic!("Expected NoOverlap, got {:?}", other),
         }

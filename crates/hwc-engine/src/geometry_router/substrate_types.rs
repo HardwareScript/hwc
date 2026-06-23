@@ -922,6 +922,54 @@ impl ComponentMetadata {
 
         false
     }
+
+    /// v0.1.8: Check if this component has physical material on a given Z-layer.
+    ///
+    /// A component "has material" on a layer if its Z-range (from `bbox.min.z`
+    /// to `bbox.max.z`) overlaps the layer's Z-range. This is used for
+    /// layer-aware interior lockout — the router only blocks cost on layers
+    /// where the component actually has physical material.
+    ///
+    /// # Arguments
+    /// * `layer_z_min` - Lower Z bound of the layer (inclusive)
+    /// * `layer_z_max` - Upper Z bound of the layer (exclusive)
+    #[inline]
+    pub fn has_material_on_z_range(&self, layer_z_min: i64, layer_z_max: i64) -> bool {
+        // Overlap test: component Z-range intersects layer Z-range
+        self.bbox.min.z < layer_z_max && self.bbox.max.z > layer_z_min
+    }
+
+    /// v0.1.8: Compute the boundary port for a pin on this component.
+    ///
+    /// The boundary port is the intersection of the pin's XY position with
+    /// the component's bounding box surface. Traces must terminate at
+    /// boundary ports — never at the pin's interior coordinates.
+    ///
+    /// # Arguments
+    /// * `pin_x` - X coordinate of the pin (nm)
+    /// * `pin_y` - Y coordinate of the pin (nm)
+    /// * `pin_z` - Z coordinate of the pin (nm)
+    /// * `direction` - Cardinal direction toward which the trace exits
+    ///
+    /// # Returns
+    /// The boundary port (x, y, z) on the component's bounding box face.
+    pub fn boundary_port(&self, pin_x: i64, pin_y: i64, pin_z: i64, direction: CardinalDirection) -> (i64, i64, i64) {
+        match direction {
+            CardinalDirection::North => (pin_x, self.bbox.max.y, pin_z),
+            CardinalDirection::South => (pin_x, self.bbox.min.y, pin_z),
+            CardinalDirection::East => (self.bbox.max.x, pin_y, pin_z),
+            CardinalDirection::West => (self.bbox.min.x, pin_y, pin_z),
+        }
+    }
+}
+
+/// Cardinal directions for boundary port computation (v0.1.8).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum CardinalDirection {
+    North,
+    South,
+    East,
+    West,
 }
 
 /// Memory usage statistics for the substrate/entity system.

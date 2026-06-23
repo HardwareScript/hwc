@@ -7,9 +7,10 @@ impl super::super::super::Parser {
     ///
     /// Syntax:
     ///     stackup:
-    ///         l1: [material: Copper, thickness: 35um]
-    ///         d1: [material: FR4,    thickness: 0.2mm]
-    ///         ...
+    ///         substrate: [material: Silicon_P, thickness: 300um, routable: false]
+    ///         active:    [material: Silicon_N, thickness: 200nm, routable: false]
+    ///         poly:      [material: Polysilicon, thickness: 150nm, routable: local_only]
+    ///         metal1:    [material: Aluminum, thickness: 400nm, routable: true]
     pub(super) fn parse_stackup_constraints(&mut self) -> Result<LayerStackup, ParseError> {
         let _start_pos = self.current_span().start;
         let mut layers = Vec::new();
@@ -31,6 +32,7 @@ impl super::super::super::Parser {
 
             let mut material = None;
             let mut thickness = None;
+            let mut routable = None;
 
             // Parse key: value pairs inside the brackets (comma separated)
             while !self.check(&Token::CloseBracket) && !self.is_at_end() {
@@ -52,6 +54,22 @@ impl super::super::super::Parser {
                     "thickness" => {
                         // Use parse_expression so we can support variables/expressions later
                         thickness = Some(self.parse_expression()?);
+                    }
+                    "routable" => {
+                        // v0.1.8: Parse routable mode for Physical Synthesis Guardrails.
+                        // Table-driven: each layer declares its routability.
+                        let mode_str = self.expect_identifier()?;
+                        routable = Some(match mode_str.as_str() {
+                            "true" => RoutableMode::True,
+                            "false" => RoutableMode::False,
+                            "local_only" => RoutableMode::LocalOnly,
+                            _ => {
+                                return Err(self.error(&format!(
+                                    "Unknown routable mode: '{}' (expected 'true', 'false', or 'local_only')",
+                                    mode_str
+                                )));
+                            }
+                        });
                     }
                     _ => {
                         return Err(
@@ -80,6 +98,7 @@ impl super::super::super::Parser {
                 name,
                 material: material.into(),
                 thickness,
+                routable,
             });
         }
 

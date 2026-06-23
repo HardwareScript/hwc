@@ -22,6 +22,28 @@ pub enum RoutingDirection {
     Any,
 }
 
+/// Whether a stackup layer permits routing (v0.1.8 Physical Synthesis Guardrails).
+///
+/// This is a table-driven constraint: each layer in the stackup declares its
+/// routability mode. The pathfinder consults this table before placing trace
+/// segments, ensuring no trace lands on a non-routable layer (e.g., `active`,
+/// `substrate`, `oxide`).
+///
+/// # Modes
+/// - `True`: Full routing permitted (metal layers like metal1, metal2)
+/// - `False`: No routing permitted (substrate, active, oxide layers)
+/// - `LocalOnly`: Local interconnects permitted with a max length limit;
+///   may exit component boundaries briefly for gate-to-gate ties (e.g., poly)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RoutableMode {
+    /// Full routing permitted on this layer
+    True,
+    /// No routing permitted on this layer
+    False,
+    /// Local interconnects only — bounded by `max_local_route_length`
+    LocalOnly,
+}
+
 /// Routing constraints from the profile's `routing:` block (v0.1.7).
 ///
 /// Controls gridded routing behavior for ASIC designs.
@@ -30,6 +52,11 @@ pub struct RoutingConstraints {
     /// Per-layer routing direction preferences.
     /// Maps layer name (e.g., "m1", "m2") to preferred direction.
     pub layer_directions: rustc_hash::FxHashMap<String, RoutingDirection>,
+    /// Maximum route length for `routable: local_only` layers (v0.1.8).
+    /// When a trace on a local_only layer exceeds this length outside a
+    /// component bounding box, the pathfinder rejects the segment.
+    /// Default: 10µm (10_000 nm).
+    pub max_local_route_length: Option<Measurement>,
     pub span: Span,
 }
 
@@ -254,6 +281,12 @@ pub struct StackupLayer {
 
     /// Physical thickness (can be a measurement or expression)
     pub thickness: Expression,
+
+    /// Whether this layer permits routing (v0.1.8 Physical Synthesis Guardrails).
+    /// Table-driven constraint — the pathfinder consults this before placing
+    /// trace segments. `None` means the field was not declared (legacy files
+    /// default to `true` for backward compatibility).
+    pub routable: Option<RoutableMode>,
 }
 
 /// Export & Visualization constraints (v0.1.6: Anti-Aliasing Switch)

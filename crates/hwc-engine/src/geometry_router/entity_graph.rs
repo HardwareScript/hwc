@@ -8,6 +8,7 @@ use crate::geometry_router::substrate_types::{
 };
 use crate::netlist::{ComponentId, NetId, NetlistArena};
 use crate::space::VoxelSize;
+use compact_str::CompactString;
 use rustc_hash::FxHashMap;
 
 // Re-export substrate types so callers don't need to reference substrate_types module
@@ -1005,6 +1006,97 @@ impl EntityGraph {
     /// Clear voxels in a bounding box (VoxelGrid-compatible API, delegates to drill_hole).
     pub fn clear_voxels_in_bbox(&mut self, bbox: &BoundingBox) {
         self.drill_hole(*bbox, None, 0);
+    }
+
+    // ── v0.1.8: Physical Synthesis Guardrails — Interior Lockout ──
+
+    /// v0.1.8: Get all component metadata entries (read-only).
+    pub fn iter_components(&self) -> &[ComponentMetadata] {
+        &self.component_metadata
+    }
+
+    /// v0.1.8: Get the bounding box for a named component.
+    pub fn get_component_bbox(&self, name: &str) -> Option<BoundingBox> {
+        self.component_metadata
+            .iter()
+            .find(|c| c.name == name)
+            .map(|c| c.bbox)
+    }
+
+    /// v0.1.8: Compute the boundary port for a pin, clamped to the component's bbox surface.
+    ///
+    /// The boundary port is the projection of the pin's position onto the
+    /// nearest face of the component's bounding box in the given direction.
+    /// This ensures traces terminate at the component boundary, never inside.
+    pub fn compute_boundary_port(
+        &self,
+        pin_x: i64,
+        pin_y: i64,
+        pin_z: i64,
+        component_name: &str,
+        direction: crate::geometry_router::substrate_types::CardinalDirection,
+    ) -> Option<(i64, i64, i64)> {
+        let comp = self.component_metadata.iter().find(|c| c.name == component_name)?;
+        Some(comp.boundary_port(pin_x, pin_y, pin_z, direction))
+    }
+
+    /// v0.1.8: Check if a point is inside any component's bounding box on a specific Z-layer.
+    ///
+    /// Used by the pathfinder to enforce interior lockout: the router must
+    /// never place a trace segment whose midpoint lies inside a component's
+    /// physical body on the active/poly layers.
+    pub fn is_point_inside_any_component(&self, x: i64, y: i64, z: i64) -> bool {
+        self.component_metadata
+            .iter()
+            .any(|c| c.has_material_on_z_range(z, z + 1) && c.contains_nm(x, y, z))
+    }
+
+    /// v0.1.8: Get all component bounding boxes that overlap a given Z-range.
+    ///
+    /// Returns (name, bbox) pairs for components whose physical material
+    /// occupies the specified Z-layer. Used for layer-aware interior lockout.
+    pub fn get_components_on_z_range(&self, z_min: i64, z_max: i64) -> Vec<(&str, BoundingBox)> {
+        self.component_metadata
+            .iter()
+            .filter(|c| c.has_material_on_z_range(z_min, z_max))
+            .map(|c| (c.name.as_str(), c.bbox))
+            .collect()
+    }
+
+    /// v0.1.8: Get all pins belonging to a specific net.
+    pub fn get_pins_for_net(&self, net_name: &str) -> Vec<&ComponentPin> {
+        self.component_pins
+            .iter()
+            .filter(|p| p.net.as_deref() == Some(net_name))
+            .collect()
+    }
+
+    /// v0.1.8: Check if a pin exists at a given coordinate (with tolerance).
+    pub fn is_at_pin(&self, x: i64, y: i64, z: i64, tolerance_nm: i64) -> Option<&ComponentPin> {
+        self.component_pins.iter().find(|p| {
+            (p.x_nm - x).abs() <= tolerance_nm
+                && (p.y_nm - y).abs() <= tolerance_nm
+                && (p.z_nm - z).abs() <= tolerance_nm
+        })
+    }
+
+    /// v0.1.8: Post-route validation — check that no trace midpoint lies inside
+    /// any component's bounding box (except at terminal endpoints).
+    ///
+    /// Returns a list of (component_name, x, y, z) violations.
+    pub fn validate_no_route_penetration(
+        &self,
+        trace_midpoints: &[(i64, i64, i64)],
+    ) -> Vec<(CompactString, i64, i64, i64)> {
+        let mut violations = Vec::new();
+        for &(x, y, z) in trace_midpoints {
+            for comp in &self.component_metadata {
+                if comp.has_material_on_z_range(z, z + 1) && comp.contains_nm(x, y, z) {
+                    violations.push((comp.name.clone(), x, y, z));
+                }
+            }
+        }
+        violations
     }
 }
 

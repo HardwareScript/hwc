@@ -66,6 +66,22 @@ pub fn route_automatic(
     let (start_boundary, goal_boundary, start_dir, goal_dir) =
         calculate_boundary_points(space, route, trace_width_nm)?;
 
+    // v0.1.8: Resolve target layer override
+    // If `route.layer` is specified, override the Z coordinate of the route
+    // to force it onto the specified layer. The auto-via inserter will handle
+    // the layer transitions at the pin boundaries.
+    let target_z_nm = if let Some(ref layer_id) = route.layer {
+        let layer_name = layer_id.name.as_str();
+        let z = stackup_manager.get_layer_start_z(layer_name)
+            .ok_or_else(|| IrError::InvalidRouteExpression {
+                expression: format!("layer '{}'", layer_name),
+                reason: format!("Unknown routing layer '{}' in stackup", layer_name),
+            })?;
+        Some(z)
+    } else {
+        None
+    };
+
     // v0.1.7: External A* Seeding
     // To prevent "hooks" inside pads, the A* solver starts one voxel OUTSIDE the pad.
     let voxel_size = space.voxel_size.x_nm;
@@ -104,6 +120,14 @@ pub fn route_automatic(
     } else if goal_dir.1 != 0 {
         // North/South escape: Lock X to boundary coordinate
         goal_pos.x = goal_boundary.x;
+    }
+
+    // v0.1.8: Override start/goal Z when target layer is specified
+    // The route is stamped on the target layer. Transition segments at the
+    // pin boundaries create Z changes that the auto-via inserter detects.
+    if let Some(z) = target_z_nm {
+        start_pos.z = z;
+        goal_pos.z = z;
     }
 
     // PHASE 2: GEOMETRY ROUTER
@@ -172,7 +196,7 @@ pub fn route_automatic(
         occupied_voxels: &occupied_voxels,
         entity_graph: Some(&space.entity_graph), // v0.1.7: Enable Strict Interior Lockout
         corridor: None,   // No corridor constraint in compiler automatic routing
-        fixed_z_nm: Some(start_pos.z), // v0.1.7: Lock to starting Z plane
+        fixed_z_nm: target_z_nm.or(Some(start_pos.z)), // v0.1.8: Lock to target layer Z if specified
         exempt_components: &exempt_components, // v0.1.7: Escape Exemption
         substrate_layers: None, // v0.1.7: No substrate context in basic automatic routing
         is_high_speed_net: false, // v0.1.7: Default to non-high-speed
@@ -297,6 +321,20 @@ pub fn route_automatic(
     // Primitives Over Pixels
     let segments = {
         let mut segs = Vec::new();
+
+        // v0.1.8: Layer override transition segments
+        // When route.layer is specified, add vertical segments at start/end
+        // to transition from the pin's Z to the target layer's Z.
+        // The auto-via inserter detects these Z transitions and inserts vias.
+        if let Some(target_z) = target_z_nm {
+            let pin_z = start_boundary.z;
+            if pin_z != target_z {
+                // Vertical transition at start: pin Z -> target layer Z
+                let start_up = Point3D::new(start_boundary.x, start_boundary.y, target_z);
+                segs.push(hwc_engine::LineSegment::new(start_boundary, start_up));
+            }
+        }
+
         if refined_path.len() >= 2 {
             let mut start = refined_path[0];
             for i in 1..refined_path.len() - 1 {
@@ -339,6 +377,16 @@ pub fn route_automatic(
                 segs.push(hwc_engine::LineSegment::new(start, last));
             }
         }
+
+        // v0.1.8: Vertical transition at end: target layer Z -> pin Z
+        if let Some(target_z) = target_z_nm {
+            let pin_z = goal_boundary.z;
+            if pin_z != target_z {
+                let goal_down = Point3D::new(goal_boundary.x, goal_boundary.y, target_z);
+                segs.push(hwc_engine::LineSegment::new(goal_down, goal_boundary));
+            }
+        }
+
         segs
     };
 
@@ -496,7 +544,7 @@ pub fn route_automatic(
     }
 
     if !violations.is_empty() {
-        let violation_summary = violations
+        let _violation_summary = violations
             .iter()
             .map(|(route_name, comp_name, actual_clearance)| {
                 format!(

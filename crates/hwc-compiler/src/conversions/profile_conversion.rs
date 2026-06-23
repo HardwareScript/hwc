@@ -1,6 +1,7 @@
 use crate::symbol_table::SymbolTable;
 use hwc_materials::{
-    ClearanceConstraints, ConstraintSet, LayerConstraints, TraceConstraints, ViaConstraints,
+    ClearanceConstraints, ConstraintSet, LayerConstraints, RoutableMode, TraceConstraints,
+    ViaConstraints,
 };
 use hwc_parser::ProfileDefinition;
 
@@ -159,6 +160,29 @@ pub fn profile_to_constraints(
         })
         .collect();
 
+    // v0.1.8: Propagate per-layer routability from the stackup to the constraint set.
+    // Table-driven: each stackup layer's `routable` field becomes a lookup entry.
+    let mut layer_routability = rustc_hash::FxHashMap::default();
+    if let Some(stackup) = &profile.stackup {
+        for layer in &stackup.layers {
+            if let Some(mode) = layer.routable {
+                let mode_cm = match mode {
+                    hwc_parser::RoutableMode::True => RoutableMode::True,
+                    hwc_parser::RoutableMode::False => RoutableMode::False,
+                    hwc_parser::RoutableMode::LocalOnly => RoutableMode::LocalOnly,
+                };
+                layer_routability.insert(layer.name.name.clone().into(), mode_cm);
+            }
+        }
+    }
+
+    // v0.1.8: Propagate max_local_route_length from routing constraints.
+    let max_local_route_length_nm = profile
+        .routing
+        .as_ref()
+        .and_then(|r| r.max_local_route_length.as_ref())
+        .map(measurement_to_nm);
+
     Ok(ConstraintSet {
         name: profile.name.to_string().into(),
         description: profile.description.clone().unwrap_or_default(),
@@ -171,5 +195,7 @@ pub fn profile_to_constraints(
         bridges,
         solder_mask_expansion_nm,
         technology: profile.technology.clone(),
+        layer_routability,
+        max_local_route_length_nm,
     })
 }

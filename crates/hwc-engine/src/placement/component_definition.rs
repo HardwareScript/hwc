@@ -148,12 +148,7 @@ pub(super) fn load_component_definition<S: SymbolTableTrait>(
         .metadata
         .as_ref()
         .and_then(|meta| meta.value.clone())
-        .ok_or_else(|| PlacementError::InvalidShape {
-            shape: format!(
-                "Component '{}' has no metadata.material declared",
-                component_type
-            ),
-        })?;
+        .unwrap_or_else(|| "Component".into());
 
     Ok(ComponentDefinition {
         name: component_ast.name.to_string().into(),
@@ -329,9 +324,29 @@ fn convert_pin_positions<S: SymbolTableTrait>(
             // For PCB components, this is where traces connect
             let z_nm = pin_pos.z.map(|z| (z * 1_000_000.0) as i64).unwrap_or(0);
 
-            // Parse pad shape if specified, otherwise default to small circle
+            // Parse pad shape if specified
             let pad_shape = if let Some(shape_str) = layout.pad_shapes.get(pin_name.as_str()) {
                 parse_pad_shape(shape_str, symbol_table)?
+            } else if layout
+                .internal_pours
+                .iter()
+                .any(|pour| {
+                    pour.device
+                        .as_ref()
+                        .map(|d| {
+                            // For component internal pours: device_name is empty,
+                            // terminal holds the pin name (e.g., "gate", "source")
+                            d.terminal == pin_name.as_str()
+                                || d.device_name == pin_name.as_str()
+                        })
+                        .unwrap_or(false)
+                }) {
+                // ASIC transistors: pin connects via internal pour device binding,
+                // auto-generate a minimal pad shape (10nm point marker for routing)
+                PadShape::Rectangle {
+                    width_nm: 10,
+                    height_nm: 10,
+                }
             } else {
                 return Err(PlacementError::InvalidShape {
                     shape: format!(

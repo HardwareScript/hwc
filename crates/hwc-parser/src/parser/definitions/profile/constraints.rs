@@ -427,10 +427,12 @@ impl super::super::super::Parser {
     ///     m1: horizontal
     ///     m2: vertical
     ///     m3: horizontal
+    ///     max_local_route_length: 10um
     /// ```
     pub(super) fn parse_routing_constraints(&mut self) -> Result<RoutingConstraints, ParseError> {
         let start_pos = self.current_span().start;
         let mut layer_directions = rustc_hash::FxHashMap::default();
+        let mut max_local_route_length = None;
 
         while !self.check(&Token::Dedent) && !self.is_at_end() {
             self.skip_whitespace();
@@ -439,8 +441,15 @@ impl super::super::super::Parser {
                 break;
             }
 
-            let layer_name = self.expect_identifier()?.to_string();
+            let field_name = self.expect_identifier()?;
             self.expect(&Token::Colon)?;
+
+            // Check if this is the max_local_route_length meta-field (not a layer direction)
+            if field_name.as_str() == "max_local_route_length" {
+                max_local_route_length = Some(self.parse_measurement()?);
+                self.skip_whitespace();
+                continue;
+            }
 
             let direction_str = self.expect_identifier()?;
             let direction = match direction_str.as_str() {
@@ -455,7 +464,7 @@ impl super::super::super::Parser {
                 }
             };
 
-            layer_directions.insert(layer_name, direction);
+            layer_directions.insert(field_name.to_string(), direction);
             self.skip_whitespace();
         }
 
@@ -463,6 +472,7 @@ impl super::super::super::Parser {
 
         Ok(RoutingConstraints {
             layer_directions,
+            max_local_route_length,
             span: Span::new(start_pos, end_pos),
         })
     }

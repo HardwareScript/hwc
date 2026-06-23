@@ -330,6 +330,77 @@ pub enum IrError {
         net: CompactString,
         detail: String,
     },
+
+    // =====================================================================
+    // v0.1.8 Physical Synthesis Guardrails
+    // =====================================================================
+
+    /// R25: Pathfinder attempted to place a trace on a layer with `routable: false`.
+    #[error("Trace placed on non-routable layer '{layer}' (material: {material})")]
+    #[diagnostic(
+        code(R25),
+        url("https://docs.hw-script.org/errors/R25"),
+        help("Layer '{layer}' is declared as routable: false in the profile stackup. \
+              Routing is only permitted on layers with routable: true. \
+              Route the trace on a different layer, or change the layer's routable attribute.")
+    )]
+    NonRoutableLayer {
+        layer: CompactString,
+        material: CompactString,
+    },
+
+    /// R25a: Pathfinder exceeded the max route length on a `local_only` layer.
+    #[error("Local-only route on layer '{layer}' exceeded maximum length ({actual_nm} nm > {max_nm} nm)")]
+    #[diagnostic(
+        code(R25),
+        url("https://docs.hw-script.org/errors/R25"),
+        help("Layer '{layer}' is declared as routable: local_only. Routes on this layer \
+              must not exceed {max_nm} nm. Use a routable: true metal layer for longer routes, \
+              or increase routing.max_local_route_length in the profile.")
+    )]
+    LocalRouteExceeded {
+        layer: CompactString,
+        actual_nm: i64,
+        max_nm: i64,
+    },
+
+    /// R30: Post-route validation found a trace midpoint inside a component's bounding box.
+    #[error("Route penetrates interior of component '{component}' at ({x_nm}, {y_nm}, {z_nm})")]
+    #[diagnostic(
+        code(R30),
+        url("https://docs.hw-script.org/errors/R30"),
+        help("A routed trace segment passes through the physical body of component '{component}'. \
+              Traces must terminate at boundary ports (exit:/enter: cardinal directions) \
+              and must not penetrate the component's bounding box. \
+              Adjust the route's exit/enter directions to dock at the component boundary.")
+    )]
+    RoutePenetratesComponent {
+        component: CompactString,
+        x_nm: i64,
+        y_nm: i64,
+        z_nm: i64,
+    },
+
+    /// P45: Coplanar conductor-semiconductor contact without a declared bridge.
+    #[error("Forbidden junction: {mat_a} touching {mat_b} at ({x_nm}, {y_nm}, {z_nm}) without a bridge")]
+    #[diagnostic(
+        code(P45),
+        url("https://docs.hw-script.org/errors/P45"),
+        help("Material '{mat_a}' (category: {cat_a}) is in direct coplanar contact with \
+              '{mat_b}' (category: {cat_b}) without an intermediate ohmic contact bridge. \
+              Declare a bridge rule in the profile: \
+              'bridge {mat_a} to {mat_b}: <BridgeMaterial>' \
+              where <BridgeMaterial> is a material with category: ohmic_contact.")
+    )]
+    ForbiddenJunction {
+        mat_a: CompactString,
+        cat_a: CompactString,
+        mat_b: CompactString,
+        cat_b: CompactString,
+        x_nm: i64,
+        y_nm: i64,
+        z_nm: i64,
+    },
 }
 
 #[derive(Debug, Clone)]

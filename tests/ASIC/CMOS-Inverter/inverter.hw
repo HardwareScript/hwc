@@ -2,37 +2,7 @@
 import * from @std/primitives/units
 import * from @std/primitives/math
 import * from materials
-
-# ============================================================================
-# 1. Silicon Foundry Stackup Profile (TSMC 180nm)
-# ============================================================================
-profile Silicon_180nm:
-    technology: "ASIC"
-    
-    stackup:
-        substrate: [material: Silicon_P, thickness: 300um]
-        active:    [material: Silicon_N, thickness: 200nm]
-        poly:      [material: Polysilicon, thickness: 150nm]
-        d1:        [material: SiO2,      thickness: 500nm]
-        metal1:    [material: Aluminum,  thickness: 400nm]
-
-    trace:
-        min_width: 180nm
-        min_spacing: 180nm
-
-    via:
-        min_diameter: 220nm
-        min_annular_ring: 100nm
-
-    manufacturing:
-        copper_thickness: 400nm
-
-    clearance:
-        high_voltage: 500nm
-        safety_factor: 2.0
-
-    layer:
-        min_thickness: 100nm
+import Silicon_180nm from foundry_pdk
 
 # ============================================================================
 # 2. Logical Schematic (The Module)
@@ -144,9 +114,12 @@ space CMOS_Inverter implements Inverter_Schematic:
     # Router automatically connects the terminals using our logical netlist
     # The exit and enter rules tell the router where to dock on the component bounding boxes
     route M1.gate to M2.gate:
+        width: 180nm
         exit: North
         enter: South
         
     route M1.drain to M2.drain:
+        width: 180nm
+        layer: metal1
         exit: North
         enter: South

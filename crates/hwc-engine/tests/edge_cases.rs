@@ -17,6 +17,8 @@ use hwc_engine::geometry_router::parasitic_extraction::{
 use hwc_engine::geometry_router::route_decomposition::VirtualJunction;
 use hwc_engine::geometry_router::spatial_index::DynamicSpatialIndex;
 use hwc_engine::geometry_router::spatial_index::IndexedSegment;
+use hwc_engine::geometry_router::gcell_sweep::BridgeTable;
+use hwc_engine::material::{MaterialId, MaterialRegistry};
 use hwc_engine::netlist::NetId;
 
 // ---------------------------------------------------------------------------
@@ -191,7 +193,7 @@ fn test_two_overlapping_same_net_no_violation() {
     };
 
     // Same-net overlap should be classified as SameNet
-    let result = classify_overlap(&seg_a, &seg_b, &[], 200_000);
+    let result = classify_overlap(&seg_a, &seg_b, &[], 200_000, None, None, &MaterialRegistry::new(), &BridgeTable::default());
     match result {
         OverlapResult::SameNet { net_id, .. } => {
             assert_eq!(net_id, 1);
@@ -228,7 +230,7 @@ fn test_two_overlapping_same_net_with_junction() {
         inductance_nh: 0.05,
     }];
 
-    let result = classify_overlap(&seg_a, &seg_b, &junctions, 200_000);
+    let result = classify_overlap(&seg_a, &seg_b, &junctions, 200_000, None, None, &MaterialRegistry::new(), &BridgeTable::default());
     match result {
         OverlapResult::SameNet {
             is_valid_junction, ..
@@ -262,7 +264,7 @@ fn test_two_overlapping_different_net_violation() {
         layer: 0,
     };
 
-    let result = classify_overlap(&seg_a, &seg_b, &[], 200_000);
+    let result = classify_overlap(&seg_a, &seg_b, &[], 200_000, None, None, &MaterialRegistry::new(), &BridgeTable::default());
     match result {
         OverlapResult::DifferentNet {
             net_a,
@@ -610,7 +612,7 @@ fn test_parallel_segments_exactly_at_clearance() {
     assert_eq!(clearance, 200_000, "Clearance should be exactly 200um");
 
     // With default clearance of 200_000, this is exactly at the boundary
-    let result = classify_overlap(&seg_a, &seg_b, &[], 200_000);
+    let result = classify_overlap(&seg_a, &seg_b, &[], 200_000, None, None, &MaterialRegistry::new(), &BridgeTable::default());
     match result {
         OverlapResult::DifferentNet { .. } => {
             // At exactly the clearance limit, this is a violation (strict <)
@@ -647,7 +649,7 @@ fn test_parallel_segments_within_clearance() {
     assert_eq!(clearance, 100_000, "Clearance should be 100um");
     assert!(clearance < 200_000, "Should violate 200um clearance");
 
-    let result = classify_overlap(&seg_a, &seg_b, &[], 200_000);
+    let result = classify_overlap(&seg_a, &seg_b, &[], 200_000, None, None, &MaterialRegistry::new(), &BridgeTable::default());
     match result {
         OverlapResult::DifferentNet {
             required_clearance, ..
@@ -683,7 +685,7 @@ fn test_parallel_segments_outside_clearance() {
     assert_eq!(clearance, 400_000, "Clearance should be 400um");
     assert!(clearance >= 200_000, "Should satisfy 200um clearance");
 
-    let result = classify_overlap(&seg_a, &seg_b, &[], 200_000);
+    let result = classify_overlap(&seg_a, &seg_b, &[], 200_000, None, None, &MaterialRegistry::new(), &BridgeTable::default());
     match result {
         OverlapResult::NoOverlap => {}
         other => panic!("Expected NoOverlap, got {:?}", other),
