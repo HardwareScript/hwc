@@ -4,7 +4,6 @@
 //! from their layout blocks, used in hierarchical parallel routing.
 
 use crate::geometry::{BoundingBox, Point3D};
-use crate::VoxelSize;
 
 /// Calculate the bounding box for a module instance from its layout block.
 ///
@@ -13,21 +12,13 @@ use crate::VoxelSize;
 ///
 /// # Arguments
 /// * `layout` - The layout block containing component placements
-/// * `voxel_size` - The voxel size for coordinate conversion
-/// * `default_voxel_size_nm` - Default voxel size to use for minimal bounding box
+/// * `resolution_nm` - The snapping resolution in nanometers
 ///
 /// # Returns
 /// A `BoundingBox` that encompasses all components in the layout
-///
-/// # Reference
-/// - `ROADMAP/v0.1.4/Gap3.md` (Phase 1: Partitioning)
-///
-/// # Example
-/// Calculates the 3D bounding box for all components in a module layout.
 pub fn calculate_module_bounding_box(
     layout: &hwc_parser::ModuleLayoutBlock,
-    voxel_size: &VoxelSize,
-    default_voxel_size_nm: i64,
+    resolution_nm: i64,
 ) -> BoundingBox {
     // Extract all placements from layout statements (flattening for loops and if statements)
     let placements = extract_placements_from_layout(&layout.statements);
@@ -36,11 +27,7 @@ pub fn calculate_module_bounding_box(
     if placements.is_empty() {
         return BoundingBox::new(
             Point3D::new(0, 0, 0),
-            Point3D::new(
-                default_voxel_size_nm,
-                default_voxel_size_nm,
-                default_voxel_size_nm,
-            ),
+            Point3D::new(resolution_nm, resolution_nm, resolution_nm),
         );
     }
 
@@ -48,8 +35,6 @@ pub fn calculate_module_bounding_box(
     let first_placement = &placements[0];
 
     // For bounding box calculation, we need to convert coordinates to nanometers
-    // Since we don't have space dimensions here, we'll use a simple approach:
-    // Extract the coordinate values and convert them later
     let (first_x_val, first_y_val, first_z_val) =
         first_placement.position.evaluate_const().unwrap_or((
             hwc_parser::Value::Number(0),
@@ -57,10 +42,10 @@ pub fn calculate_module_bounding_box(
             hwc_parser::Value::Number(0),
         ));
 
-    // Convert to nanometers (for measurements) or keep as-is (for percentages/numbers)
+    // Convert to nanometers
     let first_x = first_x_val.to_nanometers().unwrap_or(0);
     let first_y = first_y_val.to_nanometers().unwrap_or(0);
-    let first_z = first_z_val.as_integer().unwrap_or(0) * voxel_size.z_nm;
+    let first_z = first_z_val.as_integer().unwrap_or(0) * resolution_nm;
 
     let mut min_x = first_x;
     let mut max_x = first_x;
@@ -79,7 +64,7 @@ pub fn calculate_module_bounding_box(
 
         let x = x_val.to_nanometers().unwrap_or(0);
         let y = y_val.to_nanometers().unwrap_or(0);
-        let z = z_val.as_integer().unwrap_or(0) * voxel_size.z_nm;
+        let z = z_val.as_integer().unwrap_or(0) * resolution_nm;
 
         min_x = min_x.min(x);
         max_x = max_x.max(x);

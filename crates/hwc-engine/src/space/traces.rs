@@ -119,6 +119,9 @@ pub struct AnalyticTrace {
 
     /// Net name for debugging and export
     pub net_name: CompactString,
+
+    /// Current in milliamps (from route current_limit declaration, or 20mA default)
+    pub current_ma: f64,
 }
 
 impl AnalyticTrace {
@@ -129,6 +132,7 @@ impl AnalyticTrace {
         segments: Vec<LineSegment>,
         material: MaterialId,
         net_name: CompactString,
+        current_ma: f64,
     ) -> Self {
         Self {
             net_id,
@@ -137,6 +141,7 @@ impl AnalyticTrace {
             segments,
             material,
             net_name,
+            current_ma,
         }
     }
 

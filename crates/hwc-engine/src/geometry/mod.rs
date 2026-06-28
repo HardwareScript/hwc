@@ -92,6 +92,31 @@ impl fmt::Display for Point3D {
     }
 }
 
+/// Simple 2D integer point for pad shapes and polygons.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Point2D {
+    pub x: i64,
+    pub y: i64,
+}
+
+impl Point2D {
+    pub fn new(x: i64, y: i64) -> Self {
+        Self { x, y }
+    }
+}
+
+/// Simple polygon (list of 2D points)
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Polygon {
+    pub points: Vec<Point2D>,
+}
+
+impl Polygon {
+    pub fn new(points: Vec<Point2D>) -> Self {
+        Self { points }
+    }
+}
+
 /// Manhattan routing directions (axis-aligned only).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Direction {
@@ -140,6 +165,34 @@ impl Direction {
 pub struct BoundingBox {
     pub min: Point3D,
     pub max: Point3D,
+}
+
+/// Edge enum for relative positioning (Sprint 3, Task 3.1)
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Edge {
+    Left,
+    Right,
+    Top,
+    Bottom,
+    Front,
+    Back,
+    MinZ,
+    MaxZ,
+}
+
+impl Edge {
+    pub fn direction_vector(&self) -> (i64, i64, i64) {
+        match self {
+            Edge::Left => (-1, 0, 0),
+            Edge::Right => (1, 0, 0),
+            Edge::Top => (0, 1, 0),
+            Edge::Bottom => (0, -1, 0),
+            Edge::Front => (0, 0, -1),
+            Edge::Back => (0, 0, 1),
+            Edge::MinZ => (0, 0, -1),
+            Edge::MaxZ => (0, 0, 1),
+        }
+    }
 }
 
 impl BoundingBox {
@@ -288,11 +341,16 @@ impl BoundingBox {
             Edge::MaxZ => Point3D::new(self.min.x, self.min.y, self.max.z),
         }
     }
-}
 
-/// Edge enum for relative positioning (Sprint 3, Task 3.1)
-/// Re-exported from placement module for use in geometry
-pub use crate::placement::Edge;
+    /// Calculate Manhattan distance to another bounding box.
+    #[inline]
+    pub fn manhattan_distance(&self, other: &BoundingBox) -> i64 {
+        let dx = (self.min.x - other.max.x).max(0).max(other.min.x - self.max.x);
+        let dy = (self.min.y - other.max.y).max(0).max(other.min.y - self.max.y);
+        let dz = (self.min.z - other.max.z).max(0).max(other.min.z - self.max.z);
+        dx + dy + dz
+    }
+}
 
 impl fmt::Display for BoundingBox {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

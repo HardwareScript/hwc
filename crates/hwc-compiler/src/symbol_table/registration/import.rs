@@ -116,8 +116,7 @@ impl SymbolTable {
             .insert(name_str.clone().into(), def);
 
         // SEMANTIC BAKING: Bake imported components too
-        use hwc_engine::placement::bake_component_definition;
-        match bake_component_definition(&name_str, self) {
+        match self.bake_component(&name_str) {
             Ok(baked) => {
                 self.cache_baked_component(name_str.into(), baked);
             }

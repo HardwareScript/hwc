@@ -30,15 +30,8 @@ pub struct GeometryRouter {
     /// Layer directions for Manhattan routing
     pub(super) layer_directions: Vec<LayerDirection>,
 
-    /// Voxel size in nanometers (legacy/internal snap-step)
-    pub(super) voxel_size_nm: i64,
-
     /// v0.1.8 continuous database snap-step resolution in nanometers
     pub(super) resolution_nm: i64,
-
-    /// Occupied voxels from previously routed nets
-    /// Maps voxel position to the net that occupies it
-    pub(super) occupied_voxels: FxHashMap<crate::geometry::Point3D, crate::netlist::NetId>,
 
     /// EntityGraph for component metadata, substrate layers, and spatial queries.
     /// Replaces the legacy VoxelGrid for all engine-internal operations.
@@ -113,6 +106,13 @@ pub struct GeometryRouter {
     /// decomposition uses `route_net_with_length_constraint` instead of
     /// `route_net_global` to inject pattern macro-moves during routing.
     pub route_net_policies: FxHashMap<crate::netlist::NetId, super::super::routing_patterns::RoutingPattern>,
+
+    /// v0.1.8: SDF (Signed Distance Field) generator for Leap-Frog A* routing.
+    /// Built in `route_space()` from the EntityGraph after component registration.
+    /// When present, `route_net_global()` uses SDF-accelerated A* instead of
+    /// the legacy TopologicalRouter, enabling guardrails (R25, Interior Lockout,
+    /// Via-Portal Exemption) via `calculate_move_cost()`.
+    pub sdf_generator: Option<super::super::sdf_generator::SdfGenerator>,
 }
 
 /// Copper pour definition for anti-pad generation.
@@ -143,26 +143,13 @@ impl GeometryRouter {
     /// let router = GeometryRouter::new(bounds, constraints);
     /// ```
     pub fn new(bounds: GridBounds, constraints: ConstraintRulebook) -> Self {
-        let voxel_size_nm = constraints.voxel_size_nm;
-        let resolution_nm = constraints.voxel_size_nm; // Default to voxel size for v0.1.8 migration
+        let resolution_nm = constraints.resolution_nm;
 
         // Extract layer directions from constraints
         let num_layers = constraints.layer_directions.len();
         let layer_directions = (0..num_layers)
             .map(|i| constraints.get_layer_direction(i))
             .collect();
-
-        // Calculate VoxelGrid dimensions from bounds and voxel size
-        let _grid_x = ((bounds.width_nm / voxel_size_nm) as usize).max(1);
-        let _grid_y = ((bounds.height_nm / voxel_size_nm) as usize).max(1);
-        let _grid_z = ((bounds.depth_nm / voxel_size_nm) as usize).max(1);
-
-        // Create VoxelSize for the grid
-        let _voxel_size = crate::space::VoxelSize {
-            x_nm: voxel_size_nm,
-            y_nm: voxel_size_nm,
-            z_nm: voxel_size_nm,
-        };
 
         // Create EntityGraph for spatial queries and component metadata
         let entity_graph = super::super::EntityGraph::new();
@@ -171,9 +158,7 @@ impl GeometryRouter {
             bounds,
             constraints,
             layer_directions,
-            voxel_size_nm,
             resolution_nm,
-            occupied_voxels: FxHashMap::default(),
             entity_graph,
             vias: Vec::new(),
             copper_pours: Vec::new(),
@@ -188,6 +173,7 @@ impl GeometryRouter {
             partition_grid: None,
             query_store: None,
             route_net_policies: FxHashMap::default(),
+            sdf_generator: None,
         }
     }
 
@@ -213,8 +199,8 @@ impl GeometryRouter {
     ///
     /// Removes the voxel from the occupied voxels map, making it available
     /// for routing again.
-    pub fn clear_voxel(&mut self, point: Point3D) {
-        self.occupied_voxels.remove(&point);
+    pub fn clear_voxel(&mut self, _point: Point3D) {
+        // Voxel system removed - EntityGraph manages occupancy
     }
 
     /// Add a copper pour to the router (for anti-pad generation).
@@ -403,9 +389,32 @@ impl GeometryRouter {
         // collision queries that the router can use alongside VoxelGrid.
         self.build_entity_graph();
 
+        // v0.1.8: Build SDF generator for Leap-Frog A* routing.
+        // The SDF enables the router to skip empty space during pathfinding,
+        // and provides the distance field needed by calculate_move_cost() for
+        // guardrails (R25 non-routable layers, Interior Lockout, Via-Portal Exemption).
+        {
+            let x_size = ((grid_bbox.max.x - grid_bbox.min.x) / self.resolution_nm).max(1) as usize;
+            let y_size = ((grid_bbox.max.y - grid_bbox.min.y) / self.resolution_nm).max(1) as usize;
+            let z_size = ((grid_bbox.max.z - grid_bbox.min.z) / self.resolution_nm).max(1) as usize;
+            let mut sdf = super::super::sdf_generator::SdfGenerator::new(
+                x_size, y_size, z_size,
+                super::super::sdf_generator::VoxelSize {
+                    x_nm: self.resolution_nm,
+                    y_nm: self.resolution_nm,
+                    z_nm: self.resolution_nm,
+                },
+                0, // substrate_height_nm
+            );
+            for meta in self.entity_graph.get_component_metadata() {
+                sdf.register_component(meta.clone());
+            }
+            self.sdf_generator = Some(sdf);
+        }
+
         // Create a coarse PartitionGrid before routing branches.
         // This enables topological routing with partition-guided pathfinding.
-        let track_pitch = self.voxel_size_nm;
+        let track_pitch = self.resolution_nm;
         let max_clearance = self.constraints.fabrication.as_ref()
             .map(|fab| fab.min_trace_spacing_nm)
             .unwrap_or(200_000);
@@ -578,9 +587,7 @@ impl GeometryRouter {
                         bounds: self.bounds,
                         constraints: self.constraints.clone(),
                         layer_directions: self.layer_directions.clone(),
-                        voxel_size_nm: self.voxel_size_nm,
                         resolution_nm: self.resolution_nm,
-                        occupied_voxels: FxHashMap::default(),
                         entity_graph: isolated_entity_graph,
                         vias: Vec::new(),
                         copper_pours: self.copper_pours.clone(),
@@ -595,6 +602,7 @@ impl GeometryRouter {
                         partition_grid: None,
                         query_store: None,
                         route_net_policies: self.route_net_policies.clone(),
+                        sdf_generator: None, // Isolated router: rebuild SDF if needed
                     };
 
                     let result = isolated.decompose_net_steiner(net_id, pins);
@@ -685,9 +693,7 @@ impl GeometryRouter {
                         ),
                         constraints: self.constraints.clone(),
                         layer_directions: self.layer_directions.clone(),
-                        voxel_size_nm: self.voxel_size_nm,
                         resolution_nm: self.resolution_nm,
-                        occupied_voxels: FxHashMap::default(),
                         entity_graph: super::super::EntityGraph::new(),
                         vias: Vec::new(),
                         copper_pours: Vec::new(),
@@ -702,6 +708,7 @@ impl GeometryRouter {
                         partition_grid: None,
                         query_store: None,
                         route_net_policies: self.route_net_policies.clone(),
+                        sdf_generator: None, // Cell router: will be built in route_space
                     };
 
                     let local_nets: FxHashMap<crate::netlist::NetId, Vec<crate::geometry::Point3D>> =
@@ -821,9 +828,7 @@ impl GeometryRouter {
                             ),
                             constraints: self.constraints.clone(),
                             layer_directions: self.layer_directions.clone(),
-                            voxel_size_nm: self.voxel_size_nm,
                             resolution_nm: self.resolution_nm,
-                            occupied_voxels: FxHashMap::default(),
                             entity_graph: super::super::EntityGraph::new(),
                             vias: Vec::new(),
                             copper_pours: Vec::new(),
@@ -838,6 +843,7 @@ impl GeometryRouter {
                             partition_grid: None,
                             query_store: None,
                             route_net_policies: self.route_net_policies.clone(),
+                            sdf_generator: None, // Cell router: will be built in route_space
                         };
 
                         let local_nets: FxHashMap<

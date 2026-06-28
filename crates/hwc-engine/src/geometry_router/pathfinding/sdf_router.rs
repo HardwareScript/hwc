@@ -1,7 +1,6 @@
 //! SDF-accelerated A* routing (Leap-Frog Router)
 
 use crate::geometry::Point3D;
-use crate::geometry_router::coarse_grid::CoarseGrid;
 use crate::geometry_router::neighbor_generation::get_neighbors_stable;
 use crate::geometry_router::sdf_generator::SdfGenerator;
 
@@ -40,39 +39,53 @@ pub fn route_net_sdf_accelerated(
     params: &RoutingParams,
     sdf: &SdfGenerator,
 ) -> Option<Vec<Point3D>> {
-    // Snap start and goal to voxel centers
-    let snap_coord = |coord: i64, voxel_size: i64| -> i64 {
-        if voxel_size > 0 {
-            // Snap to the center of the voxel that contains this coordinate
-            // index = floor(coord / voxel_size)
-            // center = (index * voxel_size) + (voxel_size / 2)
+    // Terminal Guard: fast rejection if start or goal pins are already short-circuited.
+    // Check if start/goal positions overlap with geometry from a different net.
+    if let Some(eg) = params.entity_graph {
+        let probe_radius = params.resolution_nm.max(200_000);
+        for &(px, py) in &[(start.x, start.y), (goal.x, goal.y)] {
+            let nearby = eg.spatial().query_radius(px, py, probe_radius);
+            for seg in nearby {
+                if seg.net_id != params.net_id.raw() as usize {
+                    // Different net geometry overlaps this terminal — short circuit.
+                    return None;
+                }
+            }
+        }
+    }
+
+    // Find nearest grid cell to start and goal for A* search.
+    // The Manhattan Escape algorithm later inserts corners from the
+    // original coordinates to these grid-aligned points.
+    let nearest_grid = |coord: i64, res_nm: i64| -> i64 {
+        if res_nm > 0 {
             let index = if coord >= 0 {
-                coord / voxel_size
+                coord / res_nm
             } else {
-                (coord - voxel_size + 1) / voxel_size
+                (coord - res_nm + 1) / res_nm
             };
-            (index * voxel_size) + (voxel_size / 2)
+            (index * res_nm) + (res_nm / 2)
         } else {
             coord
         }
     };
 
     let start_snapped = Point3D::new(
-        snap_coord(start.x, params.voxel_size.x_nm),
-        snap_coord(start.y, params.voxel_size.y_nm),
+        nearest_grid(start.x, params.resolution_nm),
+        nearest_grid(start.y, params.resolution_nm),
         if params.fixed_z_nm.is_some() {
             start.z // v0.1.7: Lock to exact physical Z for 2.5D routing
         } else {
-            snap_coord(start.z, params.voxel_size.z_nm)
+            nearest_grid(start.z, params.resolution_nm)
         },
     );
     let goal_snapped = Point3D::new(
-        snap_coord(goal.x, params.voxel_size.x_nm),
-        snap_coord(goal.y, params.voxel_size.y_nm),
+        nearest_grid(goal.x, params.resolution_nm),
+        nearest_grid(goal.y, params.resolution_nm),
         if params.fixed_z_nm.is_some() {
             goal.z // v0.1.7: Lock to exact physical Z for 2.5D routing
         } else {
-            snap_coord(goal.z, params.voxel_size.z_nm)
+            nearest_grid(goal.z, params.resolution_nm)
         },
     );
 
@@ -107,12 +120,7 @@ pub fn route_net_sdf_accelerated(
         iterations += 1;
 
         if iterations % 10_000 == 0 {
-            eprintln!(
-                "[ROUTER DEBUG] Iteration {}: {} nodes in queue, {} visited",
-                iterations,
-                state.priority_queue.len(),
-                state.visited.len()
-            );
+            // Progress logging removed for production
         }
 
         if iterations > MAX_ITERATIONS {
@@ -136,19 +144,12 @@ pub fn route_net_sdf_accelerated(
 
         // Goal reached - reconstruct path
         if current == goal_snapped {
-            eprintln!(
-                "[ROUTER DEBUG] Goal reached after {} iterations!",
-                iterations
-            );
             let mut path = reconstruct_path(&state.came_from, start_snapped, goal_snapped);
 
             // v0.1.7: Path Refinement - Adjust all points to exact nanometer coordinates
             // This eliminates "stair-stepping" or "hooks" by ensuring the
             // trace stays on the exact physical Z-plane of the target layer.
             if path.len() >= 2 {
-                eprintln!("[ROUTER DEBUG] Reconstructed path length: {}", path.len());
-                eprintln!("[ROUTER DEBUG]   Start Voxel: {:?}", path[0]);
-                eprintln!("[ROUTER DEBUG]   Goal Voxel: {:?}", path[path.len() - 1]);
 
                 // v0.1.7: MANHATTAN ESCAPE (GOD-TIER FIX)
                 // Instead of just replacing the first/last points (which creates diagonals),
@@ -184,11 +185,6 @@ pub fn route_net_sdf_accelerated(
 
                 // v0.1.7 Fix: Lock ALL points to the exact physical Z-plane if requested.
                 if let Some(fixed_z) = params.fixed_z_nm {
-                    eprintln!(
-                        "[ROUTER DEBUG]   Planar Lock Active: Locking {} points to Z={}nm",
-                        path.len(),
-                        fixed_z
-                    );
                     for point in path.iter_mut() {
                         point.z = fixed_z;
                     }
@@ -216,7 +212,7 @@ pub fn route_net_sdf_accelerated(
         let current_cost = *state.cost_so_far.get(&current)?;
 
         // SDF ACCELERATION: Check if we can leap over empty space
-        let (gx, gy, gz) = voxel_to_coords(current, params.voxel_size);
+        let (gx, gy, gz) = voxel_to_coords(current, params.resolution_nm);
         let distance = sdf.get_distance_with_exemptions(gx, gy, gz, params.exempt_components);
 
         // if iterations == 1 {
@@ -230,7 +226,7 @@ pub fn route_net_sdf_accelerated(
         // If SDF returns MAX_DISTANCE (255), the board is empty - leap directly toward goal
         let effective_distance = if distance == 255 {
             // Board is empty - distance is just the Manhattan distance to goal
-            (current.manhattan_distance(&goal_snapped) / params.voxel_size.x_nm) as u8
+            (current.manhattan_distance(&goal_snapped) / params.resolution_nm) as u8
         } else {
             distance
         };
@@ -275,14 +271,14 @@ pub fn route_net_sdf_accelerated(
 
             // Leap distance: min(SDF distance, distance to goal)
             let leap_dist = (effective_distance as i64)
-                .min(current.manhattan_distance(&goal_snapped) / params.voxel_size.x_nm);
+                .min(current.manhattan_distance(&goal_snapped) / params.resolution_nm);
 
             if leap_dist > 1 {
                 // Try to leap
                 let leap_target = Point3D::new(
-                    current.x + (step_x * leap_dist * params.voxel_size.x_nm),
-                    current.y + (step_y * leap_dist * params.voxel_size.y_nm),
-                    current.z + (step_z * leap_dist * params.voxel_size.z_nm),
+                    current.x + (step_x * leap_dist * params.resolution_nm),
+                    current.y + (step_y * leap_dist * params.resolution_nm),
+                    current.z + (step_z * leap_dist * params.resolution_nm),
                 );
 
                 // if iterations <= 5 {
@@ -292,7 +288,7 @@ pub fn route_net_sdf_accelerated(
 
                 // Check if leap target is valid
                 if params.bounds.contains(leap_target) && !state.visited.contains(&leap_target) {
-                    let (lx, ly, lz) = voxel_to_coords(leap_target, params.voxel_size);
+                    let (lx, ly, lz) = voxel_to_coords(leap_target, params.resolution_nm);
 
                     // Only leap if target is also empty (obeying exemptions)
                     // Check both SDF distance AND component interior lockout
@@ -335,12 +331,12 @@ pub fn route_net_sdf_accelerated(
             current,
             params.bounds,
             params.layer_direction,
-            params.voxel_size,
+            params.resolution_nm,
         );
 
         // BINARY COLLISION SKIP: Try to validate all neighbors at once
         let valid_neighbors = if let Some(entity_graph) = params.entity_graph {
-            try_binary_collision_skip(current, &neighbors, entity_graph, params.voxel_size)
+            try_binary_collision_skip(current, &neighbors, entity_graph, params.resolution_nm)
         } else {
             None
         };
@@ -354,22 +350,6 @@ pub fn route_net_sdf_accelerated(
         for neighbor in neighbors_to_check {
             if state.visited.contains(&neighbor) {
                 continue;
-            }
-
-            // CORRIDOR CONSTRAINT: If a corridor is specified, skip neighbors outside it
-            if let Some(corridor) = params.corridor {
-                if !CoarseGrid::point_in_corridor(neighbor, corridor, params.voxel_size.x_nm) {
-                    continue;
-                }
-            }
-
-            // Hard block occupied voxels (unless it's the target pin or another segment of the SAME net)
-            if neighbor != goal_snapped {
-                if let Some(&occupying_net) = params.occupied_voxels.get(&neighbor) {
-                    if occupying_net != params.net_id {
-                        continue;
-                    }
-                }
             }
 
             // v0.1.7 (Strict Box Model): Block the entire interior volume of all components.
@@ -393,24 +373,35 @@ pub fn route_net_sdf_accelerated(
             // SDF OBSTACLE DETECTION (v0.1.7): Hard block if inside a component or substrate
             // This ensures that the A* fallback (effective_distance <= 3) is not blind to obstacles
             if neighbor != goal_snapped && neighbor != start_snapped {
-                let (nx, ny, nz) = voxel_to_coords(neighbor, params.voxel_size);
+                let (nx, ny, nz) = voxel_to_coords(neighbor, params.resolution_nm);
                 if sdf.get_distance_with_exemptions(nx, ny, nz, params.exempt_components) == 0 {
                     continue;
                 }
             }
 
             // Calculate new cost with layer direction preference
+            let is_inside_component = params.entity_graph
+                .map(|eg| eg.point_in_component(neighbor.x, neighbor.y, neighbor.z).is_some())
+                .unwrap_or(false);
+
             let move_cost_params = MoveCostParams {
                 from: current,
                 to: neighbor,
                 net_id: params.net_id,
                 constraints: params.constraints,
-                voxel_size_nm: params.voxel_size.x_nm,
-                occupied_voxels: params.occupied_voxels,
+                voxel_size_nm: params.resolution_nm,
+                occupied_voxels: &rustc_hash::FxHashMap::default(),
                 clearance_zones: params.clearance_zones,
                 layer_direction: Some(params.layer_direction),
                 substrate_layers: params.substrate_layers,
                 is_high_speed_net: params.is_high_speed_net,
+                layer_routable_mode: params.layer_routable_mode,
+                max_local_route_length_nm: params.max_local_route_length_nm,
+                local_route_length_nm: 0,
+                is_inside_component,
+                via_drill_diameter_nm: params.via_drill_diameter_nm,
+                active_net_pin_positions: params.active_net_pin_positions,
+                component_keepouts: params.component_keepouts,
             };
             let move_cost = calculate_move_cost(&move_cost_params);
             let new_cost = current_cost + move_cost;

@@ -86,7 +86,7 @@ pub fn add_substrate(
                 let cy1 = (layer.bbox.min.y + layer.bbox.max.y) / 2;
                 let cx2 = (other.bbox.min.x + other.bbox.max.x) / 2;
                 let cy2 = (other.bbox.min.y + other.bbox.max.y) / 2;
-                let res = space.resolution_nm.unwrap_or(1000);
+                let res = space.resolution_nm;
                 (cx1 - cx2).abs() < res && (cy1 - cy2).abs() < res
             };
 
@@ -139,7 +139,7 @@ pub fn add_substrate(
                     let cy1 = (layer.bbox.min.y + layer.bbox.max.y) / 2;
                     let cx2 = (drill.bbox.min.x + drill.bbox.max.x) / 2;
                     let cy2 = (drill.bbox.min.y + drill.bbox.max.y) / 2;
-                    let res = space.resolution_nm.unwrap_or(1000);
+                    let res = space.resolution_nm;
                     (cx1 - cx2).abs() < res && (cy1 - cy2).abs() < res
                 };
 
@@ -390,7 +390,7 @@ pub fn add_substrate(
                 let cy1 = (layer.bbox.min.y + layer.bbox.max.y) / 2;
                 let cx2 = (other.bbox.min.x + other.bbox.max.x) / 2;
                 let cy2 = (other.bbox.min.y + other.bbox.max.y) / 2;
-                let res = space.resolution_nm.unwrap_or(1000);
+                let res = space.resolution_nm;
                 (cx1 - cx2).abs() < res && (cy1 - cy2).abs() < res
             };
 
@@ -409,7 +409,7 @@ pub fn add_substrate(
                 && layer.net != 0
                 && layer.net == other.net
             {
-                let res = space.resolution_nm.unwrap_or(1000);
+                let res = space.resolution_nm;
                 let bounding_boxes_match = (layer.bbox.min.x - other.bbox.min.x).abs() < res
                     && (layer.bbox.max.x - other.bbox.max.x).abs() < res
                     && (layer.bbox.min.y - other.bbox.min.y).abs() < res
@@ -421,7 +421,7 @@ pub fn add_substrate(
             }
 
             if should_cull_bottom || should_cull_top {
-                let res = space.resolution_nm.unwrap_or(1000);
+                let res = space.resolution_nm;
                 let touching_bottom = (layer.bbox.min.z - other.bbox.max.z).abs() < res;
                 let touching_top = (layer.bbox.max.z - other.bbox.min.z).abs() < res;
 
@@ -684,7 +684,7 @@ pub fn add_substrate(
         // This prevents 'Pad Deformation' by cleaning up collinear vertices
         // using the user-defined resolution.
         let mut refined_contours = Vec::new();
-        let res = space.resolution_nm.unwrap_or(1000);
+        let res = space.resolution_nm;
 
         fn collect_refined(
             tree: &clipper2_rust::PolyTree64,

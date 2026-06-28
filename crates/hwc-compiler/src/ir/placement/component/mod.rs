@@ -9,7 +9,7 @@ use super::helpers::parse_rectangle_dimensions;
 use super::context::PlacementContext;
 use super::module::place_module_instance;
 use hwc_engine::geometry::{BoundingBox, Point3D};
-use hwc_engine::{ComponentPlacer, HardwareSpace, PlacementParams};
+use hwc_engine::HardwareSpace;
 
 pub fn place_component(
     space: &mut HardwareSpace,
@@ -40,8 +40,6 @@ pub fn place_component(
         coordinates::resolve_position(component, bbox_tracker, ctx.eval_context)?;
 
     let coord_ctx = CoordinateContext {
-        voxel_size: &space.voxel_size,
-        grid_size: &space.grid,
         origin: ctx.origin,
         space_dimensions: &space.dimensions,
         symbol_table: ctx.symbol_table,
@@ -78,35 +76,34 @@ pub fn place_component(
     }
 
     let rotation_deg = component.rotation.as_ref().map(|r| r.angle).unwrap_or(0.0);
-    let z_val = untransformed_origin.z / space.voxel_size.z_nm.max(1);
+    let z_val = untransformed_origin.z / 1_000_000; // Use mm-scale for name if needed
     let name = component
         .name
         .as_ref()
         .map(|n| n.to_string())
         .unwrap_or_else(|| format!("{}_{}", component.component_type, z_val).into());
 
-    let engine_position =
+    let _engine_position =
         hwc_engine::geometry::Point3D::new(position.x, position.y, mounting_res.body_min_z);
 
-    let placer = ComponentPlacer::new();
-    placer
-        .place_component(PlacementParams {
-            entity_graph: &mut space.entity_graph,
-            voxel_size: &space.voxel_size,
-            arena: &mut space.netlist,
-            symbol_table: ctx.symbol_table,
-            material_registry: &mut space.material_registry,
-            name: name.clone(),
-            component_type: component.component_type.to_string().into(),
-            position: engine_position,
-            rotation_deg,
-            merge_waiver: component.waivers.merge.clone(),
-            collector: Some(&crate::DiagnosticReporterAdapter(ctx.collector)),
-        })
-        .map_err(|e| IrError::PlacementConstraint {
-            message: format!("Failed to place component: {}", e),
-            component: name.to_string(),
-        })?;
+    // Add component to netlist arena (v0.1.8 replacement for ComponentPlacer)
+    let component_id = space.netlist.add_component(
+        name.clone(),
+        component.component_type.to_string().into(),
+        (position.x, position.y, position.z),
+    );
+
+    // Register pins in netlist arena so they can be connected during unrolling
+    if let Ok(component_def) = ctx.symbol_table.get_component(component.component_type.as_str()) {
+        for pin_name in &component_def.pins {
+            space.netlist.add_pin(
+                component_id,
+                pin_name.clone(),
+                (0, 0, 0), // Local offsets are handled during analytic unrolling
+                None,
+            );
+        }
+    }
 
     if let Ok(component_def) = ctx
         .symbol_table

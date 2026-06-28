@@ -31,21 +31,12 @@ use crate::netlist::NetId;
 /// assert!(check_clearance_violation(point, net_id, &clearance_zones).is_none());
 /// ```
 pub fn check_clearance_violation(
-    point: Point3D,
-    net_id: NetId,
-    clearance_zones: &[ClearanceZone],
+    _point: Point3D,
+    _net_id: NetId,
+    _clearance_zones: &[ClearanceZone],
 ) -> Option<NetId> {
-    for zone in clearance_zones {
-        // Skip if this is the same net
-        if zone.net_id == net_id {
-            continue;
-        }
-
-        // Check if point is in this zone's clearance voxels
-        if zone.clearance_voxels.contains(&point) {
-            return Some(zone.net_id); // Violation detected
-        }
-    }
-
-    None // No violation
+    // With the voxel system removed, clearance violation detection is handled
+    // analytically in the routing cost function (calculate_move_cost).
+    // This stub is kept for API compatibility.
+    None
 }

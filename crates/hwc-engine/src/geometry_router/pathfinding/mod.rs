@@ -1,5 +1,9 @@
-mod router;
+mod collision;
+mod cost;
+mod heuristic;
+mod sdf_router;
+mod state;
 mod types;
 
-pub use router::route_net_deterministic;
+pub use sdf_router::route_net_sdf_accelerated;
 pub use types::RoutingParams;

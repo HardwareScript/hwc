@@ -93,8 +93,6 @@ pub fn calculate_untransformed_origin(
     };
 
     let z_ctx = CoordinateContext {
-        voxel_size: &space.voxel_size,
-        grid_size: &space.grid,
         origin: ctx.origin,
         space_dimensions: &space.dimensions,
         symbol_table: ctx.symbol_table,

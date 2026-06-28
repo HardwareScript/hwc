@@ -237,17 +237,16 @@ impl SymbolTable {
         // Register the AST definition
         self.local.components.insert(name_str.clone().into(), def);
 
-        // SEMANTIC BAKING: Immediately parse and cache the component as integers
-        // This happens ONCE during registration, not N times during placement
-        use hwc_engine::placement::bake_component_definition;
-        match bake_component_definition(&name_str, self) {
+        // SEMANTIC BAKING: Bake local components too
+        match self.bake_component(&name_str) {
             Ok(baked) => {
                 self.cache_baked_component(name_str.into(), baked);
             }
             Err(e) => {
-                // If baking fails, report it but don't block registration
-                // The component can still be used, it just won't be cached
-                eprintln!("[WARN] Failed to bake component '{}': {:?}", name_str, e);
+                eprintln!(
+                    "[WARN] Failed to bake local component '{}': {:?}",
+                    name_str, e
+                );
             }
         }
     }

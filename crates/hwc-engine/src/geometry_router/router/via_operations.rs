@@ -51,7 +51,7 @@ impl GeometryRouter {
             // v0.1.7: Added Z-Threshold to prevent phantom vias from sub-voxel quantization noise.
             // A via is only real if it spans more than 50% of a voxel height.
             let z_delta = (to_z - from_z).abs();
-            if to_z != from_z && z_delta > (self.voxel_size_nm / 2) {
+            if to_z != from_z && z_delta > (self.resolution_nm / 2) {
                 let diameter_nm = self
                     .constraints
                     .fabrication
@@ -67,7 +67,7 @@ impl GeometryRouter {
                     net_id,
                     board_min_z_nm,
                     board_max_z_nm,
-                    self.voxel_size_nm,
+                    self.resolution_nm,
                     self.constraints
                         .fabrication
                         .as_ref()
@@ -107,7 +107,7 @@ impl GeometryRouter {
             properties: rustc_hash::FxHashMap::default(),
         };
 
-        for z_nm in via.z_planes(self.voxel_size_nm) {
+        for z_nm in via.z_planes(self.resolution_nm) {
             if !self.is_circular_area_clear(position, total_radius, z_nm) {
                 return false;
             }
@@ -126,7 +126,7 @@ impl GeometryRouter {
         let annular_ring = fabrication.min_annular_ring_nm;
         let total_radius = (via.diameter_nm + 2 * annular_ring) / 2;
 
-        for z_nm in via.z_planes(self.voxel_size_nm) {
+        for z_nm in via.z_planes(self.resolution_nm) {
             self.mark_circular_area_occupied(via.position, total_radius, z_nm, via.net_id);
         }
 
@@ -143,7 +143,7 @@ impl GeometryRouter {
         let clearance = fabrication.min_trace_spacing_nm;
         let antipad_radius = (via.diameter_nm + 2 * clearance) / 2;
 
-        for z_nm in via.z_planes(self.voxel_size_nm) {
+        for z_nm in via.z_planes(self.resolution_nm) {
             for pour in &self.copper_pours.clone() {
                 if pour.z_bottom_nm == z_nm {
                     if pour.net_id != via.net_id {
@@ -157,16 +157,10 @@ impl GeometryRouter {
                             };
                             let _generator = ThermalReliefGenerator::new(
                                 ThermalReliefConfig::default(),
-                                self.voxel_size_nm,
-                            );
-                            let center = crate::geometry_router::polygon_rasterizer::Point2D::new(
-                                via.position.0,
-                                via.position.1,
+                                self.resolution_nm,
                             );
                             // TODO(v0.1.8): Thermal relief generation migrated to EntityGraph
-                            // The thermal relief generator still requires VoxelGrid;
-                            // this will be updated when VoxelGrid is fully removed.
-                            let _ = (&center, &via, &pour);
+                            let _ = (&via, &pour);
                         }
                     }
                 }
@@ -180,7 +174,7 @@ impl GeometryRouter {
             v.position != via.position || v.from_z_nm != via.from_z_nm || v.to_z_nm != via.to_z_nm
         });
 
-        for z_nm in via.z_planes(self.voxel_size_nm) {
+        for z_nm in via.z_planes(self.resolution_nm) {
             self.remove_circular_area(via.position, via.diameter_nm, z_nm);
         }
     }
@@ -251,13 +245,13 @@ impl GeometryRouter {
                 let from_z = if (current_idx as usize) < self.layer_z_positions.len() {
                     self.layer_z_positions[current_idx as usize]
                 } else {
-                    current_idx as i64 * self.voxel_size_nm
+                    current_idx as i64 * self.resolution_nm
                 };
 
                 let to_z = if next_idx < self.layer_z_positions.len() {
                     self.layer_z_positions[next_idx]
                 } else {
-                    next_idx as i64 * self.voxel_size_nm
+                    next_idx as i64 * self.resolution_nm
                 };
 
                 via_tower.push(Via::new_with_type(
@@ -277,12 +271,12 @@ impl GeometryRouter {
             let from_z = if start_layer_idx < self.layer_z_positions.len() {
                 self.layer_z_positions[start_layer_idx]
             } else {
-                start_layer_idx as i64 * self.voxel_size_nm
+                start_layer_idx as i64 * self.resolution_nm
             };
             let to_z = if end_layer_idx < self.layer_z_positions.len() {
                 self.layer_z_positions[end_layer_idx]
             } else {
-                end_layer_idx as i64 * self.voxel_size_nm
+                end_layer_idx as i64 * self.resolution_nm
             };
 
             via_tower.push(Via::new_with_type(
@@ -322,7 +316,7 @@ impl GeometryRouter {
 
         for via in via_tower {
             // For each intermediate Z plane (not the first or last), stamp a landing pad
-            let z_planes = via.z_planes(self.voxel_size_nm);
+            let z_planes = via.z_planes(self.resolution_nm);
             for (i, &z_nm) in z_planes.iter().enumerate() {
                 if i == 0 || i == z_planes.len() - 1 {
                     continue; // Skip the start and end layers (already have pads from the via)

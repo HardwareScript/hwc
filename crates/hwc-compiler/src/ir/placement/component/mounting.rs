@@ -121,17 +121,20 @@ pub fn resolve_mounting_and_elevation(
 }
 
 pub fn handle_snap_to_surface(space: &HardwareSpace, position: &mut Point3D) {
-    // Find the highest substrate/pour at this location
-    // We use the specified (x, y) as the probe point
-    let (vx, vy, _) = hwc_engine::geometry_router::EntityGraph::nm_to_voxel(*position, &space.voxel_size);
-
-    // Safety: Clamp vx, vy to grid bounds
-    let vx = vx.min(space.grid_cells().x_cols - 1);
-    let vy = vy.min(space.grid_cells().y_rows - 1);
-
     let mut highest_z_nm = 0;
 
-    // Check substrate bounding box (the sparse substrate)
+    // Check substrate layers for highest surface
+    for layer in &space.entity_graph.substrate_layers {
+        if position.x >= layer.bbox.min.x
+            && position.x <= layer.bbox.max.x
+            && position.y >= layer.bbox.min.y
+            && position.y <= layer.bbox.max.y
+        {
+            highest_z_nm = highest_z_nm.max(layer.bbox.max.z);
+        }
+    }
+
+    // Check substrate bounding box (global fallback)
     if let Some(bbox) = &space.substrate_bbox {
         if position.x >= bbox.min.x
             && position.x <= bbox.max.x
@@ -139,16 +142,6 @@ pub fn handle_snap_to_surface(space: &HardwareSpace, position: &mut Point3D) {
             && position.y <= bbox.max.y
         {
             highest_z_nm = highest_z_nm.max(bbox.max.z);
-        }
-    }
-
-    // Check voxel grid for pours and other filled voxels
-    for vz in (0..space.grid_cells().z_layers).rev() {
-        if !space.entity_graph.is_empty(vx, vy, vz) {
-            // The surface is the TOP of the highest occupied voxel
-            let surface_z_nm = (vz as i64 + 1) * space.voxel_size.z_nm;
-            highest_z_nm = highest_z_nm.max(surface_z_nm);
-            break;
         }
     }
 

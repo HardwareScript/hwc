@@ -152,7 +152,7 @@ impl AutoViaInserter {
                 &space.analytic_routes,
                 stackup_manager,
                 profile,
-            );
+            )?;
 
             if !route_transitions.is_empty() {
                 println!(

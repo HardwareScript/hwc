@@ -1,6 +1,6 @@
 //! Test utilities shared across all test modules
 
-use crate::space::VoxelSize;
+use crate::geometry_router::sdf_generator::VoxelSize;
 
 /// Helper function to create a standard test VoxelSize
 pub fn test_voxel_size() -> VoxelSize {

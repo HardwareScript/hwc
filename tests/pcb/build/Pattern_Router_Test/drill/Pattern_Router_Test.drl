@@ -1,8 +1,0 @@
-M48
-; DRILL file {Pattern_Router_Test} date 2026-06-20
-; v0.1.7 physical Z (mm) recorded per tool pass where applicable
-; FORMAT={-:-/ absolute / inch / decimal}
-FMAT,2
-INCH
-%
-M30

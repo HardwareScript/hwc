@@ -2,14 +2,12 @@
 
 use crate::ir::placement::coordinate_evaluation::CoordinateAxis;
 use crate::ir::stackup_manager::StackupManager;
-use hwc_engine::{GridCells, Point3D, VoxelSize};
+use hwc_engine::Point3D;
 use hwc_parser::{Coordinate, Expression, Measurement, Unit, Value};
 
 /// Context for coordinate-to-point conversion operations.
 /// Groups related parameters to avoid exceeding Clippy's argument limit.
 pub struct CoordinateContext<'a> {
-    pub voxel_size: &'a VoxelSize,
-    pub grid_size: &'a GridCells,
     pub origin: hwc_parser::OriginPoint,
     pub space_dimensions: &'a hwc_engine::Dimensions,
     pub symbol_table: &'a crate::SymbolTable,

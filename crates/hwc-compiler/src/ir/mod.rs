@@ -1,8 +1,8 @@
-//! IR Integration Module: Transform parser AST into voxel grid representation.
+//! IR Integration Module: Transform parser AST into continuous physical representation.
 //!
-//! This module bridges System 1 (Parser & Compiler) and System 2 (Voxel Engine).
+//! This module bridges System 1 (Parser & Compiler) and System 2 (Continuous Engine).
 //! It takes the parsed AST with Symbol Table and transforms it into a fully populated
-//! voxel grid with placed components and routed traces.
+//! entity graph with placed components and routed traces.
 //!
 //! ## Module Structure
 //! - `errors`: Error types for IR transformation
@@ -17,7 +17,7 @@
 //! - **Realization Lag**: Physical boundaries of pours/contacts referencing component anchors may default
 //!   to [0,0,0] if the anchor isn't fully realized at the time of evaluation.
 //! - **No Collision Avoidance**: Conductive pours can interpenetrate component geometry.
-//! - **Voxel Aliasing**: Fixed 1um resolution may cause blockiness at SoC scales.
+//! - **Analytic Complexity**: Very large designs may require spatial index optimization.
 
 pub mod bridge_validator;
 pub mod conversions;
@@ -191,7 +191,7 @@ fn compile_single_space(
     let stackup_manager = crate::ir::stackup_manager::StackupManager::new(
         profile.as_ref().and_then(|prof| prof.stackup.as_ref()),
         symbol_table,
-        space.voxel_size.z_nm,
+        space.resolution_nm,
         origin.z,
         solder_mask_thickness_nm,
     )
@@ -200,7 +200,7 @@ fn compile_single_space(
         crate::ir::stackup_manager::StackupManager::new(
             None,
             symbol_table,
-            space.voxel_size.z_nm,
+            space.resolution_nm,
             origin.z,
             solder_mask_thickness_nm,
         )
@@ -521,6 +521,28 @@ fn compile_single_space(
         }
     }
 
+    // Pass 1.5: Static Geometry Guard (Fail-Fast Before Routing)
+    // Detects coplanar short circuits between different-net conductors
+    // before the expensive A* routing phase begins.
+    {
+        let guard_violations = hwc_engine::geometry_router::check_static_shorts(
+            &space.entity_graph,
+            &space.netlist,
+        );
+        if !guard_violations.is_empty() {
+            for v in &guard_violations {
+                eprintln!("[STATIC GUARD] P42: {}", v);
+            }
+            return Err(IrError::StaticGeometryShort {
+                net_a: guard_violations[0].net_a.clone(),
+                net_b: guard_violations[0].net_b.clone(),
+                x_nm: guard_violations[0].bbox.min.x,
+                y_nm: guard_violations[0].bbox.min.y,
+                z_nm: guard_violations[0].bbox.min.z,
+            });
+        }
+    }
+
     // Pass 2: Realize traces against the now-complete, frozen BBoxTracker + HardwareSpace component_bboxes.
     // Every component transformation is baked; anchors like last.right or M1.top reflect final rotated geometry.
     //
@@ -571,7 +593,7 @@ fn compile_single_space(
         if let Some(PlacementItem::Route(route)) = item_map.get(id) {
             // v0.1.7: Register net connectivity in the netlist for all routes
             // This ensures both manual and automatic routes are represented in the logical netlist.
-            routing::register_net_for_route(&mut space, route, symbol_table)?;
+            routing::register_net_for_route(&mut space, route, symbol_table, &stackup_manager, profile)?;
 
             if !routing::needs_automatic_routing(route) {
                 // Phase 1: Manual Route (Absolute Control)
@@ -599,7 +621,6 @@ fn compile_single_space(
 
     // Phase 3: Execute Auto-Routing Batch
     // v0.1.7: AVS Lock-File Determinism - Load cached routes before routing
-    // Priority: try new rkyv binary lockfile first, then fall back to old JSON lockfile
     let mut routes_loaded_from_lock = false;
     if let Some(path) = lockfile_path {
         if force_reroute {
@@ -613,31 +634,34 @@ fn compile_single_space(
             match hwc_engine::geometry_router::load_lockfile(path) {
                 Ok(loaded) => {
                     if hwc_engine::geometry_router::is_valid(&loaded, &current_fingerprint) {
-                        let copper_id = space.material_registry.get_id("Copper").ok_or_else(|| {
-                            IrError::UndeclaredMaterial { material: "Copper".into() }
-                        })?;
                         let layer_z_map = hwc_engine::geometry_router::build_layer_z_map(
                             &space.entity_graph,
                         );
-                        let cached_traces = hwc_engine::geometry_router::lockfile_to_traces(
+                        match hwc_engine::geometry_router::lockfile_to_traces(
                             &loaded,
-                            copper_id,
                             &space.netlist,
                             &layer_z_map,
-                        );
-                        let route_count = cached_traces.len();
-                        for trace in cached_traces {
-                            space.add_analytic_route(trace);
+                            &space.material_registry,
+                        ) {
+                            Ok(cached_traces) => {
+                                let route_count = cached_traces.len();
+                                for trace in cached_traces {
+                                    space.add_analytic_route(trace);
+                                }
+                                eprintln!(
+                                    "[LOCK] Binary match found for '{}'. Bypassing A* solver.",
+                                    space.name
+                                );
+                                eprintln!(
+                                    "[LOCK]   Loaded {} cached routes (rkyv binary)",
+                                    route_count
+                                );
+                                routes_loaded_from_lock = true;
+                            }
+                            Err(e) => {
+                                eprintln!("[LOCK] Binary lockfile read failed: {}. Re-routing.", e);
+                            }
                         }
-                        eprintln!(
-                            "[LOCK] Binary match found for '{}'. Bypassing A* solver.",
-                            space.name
-                        );
-                        eprintln!(
-                            "[LOCK]   Loaded {} cached routes (rkyv binary)",
-                            route_count
-                        );
-                        routes_loaded_from_lock = true;
                     } else {
                         eprintln!(
                             "[LOCK] Binary lockfile fingerprint mismatch for '{}'. Re-routing.",
@@ -646,51 +670,7 @@ fn compile_single_space(
                     }
                 }
                 Err(_) => {
-                    // Binary lockfile doesn't exist or is corrupt — try legacy JSON
-                    match hwc_engine::geometry_router::CompactLockfile::load(path) {
-                        Ok(lockfile) => {
-                            let current_hash = hwc_engine::geometry_router::compute_placement_hash(&space);
-                            if lockfile.validate_placement(&current_hash) && !lockfile.instances.is_empty() {
-                                let copper_id = space.material_registry.get_id("Copper").ok_or_else(|| {
-                                    IrError::UndeclaredMaterial { material: "Copper".into() }
-                                })?;
-                                let cached_traces = lockfile.to_analytic_traces(copper_id, &space.netlist);
-                                let route_count = cached_traces.len();
-                                for trace in cached_traces {
-                                    space.add_analytic_route(trace);
-                                }
-                                eprintln!(
-                                    "[LOCK] Legacy match for '{}'. Bypassing A* solver. Loading routes from JSON lockfile.",
-                                    space.name
-                                );
-                                eprintln!(
-                                    "[LOCK]   Loaded {} cached routes (legacy JSON)",
-                                    route_count
-                                );
-                                routes_loaded_from_lock = true;
-                            } else if !lockfile.validate_placement(&current_hash) {
-                                eprintln!(
-                                    "[LOCK] Invalidation detected for '{}'. Discarding lock file and re-running A* pathfinder",
-                                    space.name
-                                );
-                            }
-                        }
-                        Err(hwc_engine::geometry_router::LockfileError::ObsoleteVersion(ver)) => {
-                            eprintln!(
-                                "[LOCK] Obsolete lockfile detected (version {}). Delete the .routes.lock file and rebuild.",
-                                ver
-                            );
-                        }
-                        Err(hwc_engine::geometry_router::LockfileError::ParseError(e)) => {
-                            eprintln!(
-                                "[LOCK] Failed to parse lockfile: {}. Delete the .routes.lock file and rebuild.",
-                                e
-                            );
-                        }
-                        Err(hwc_engine::geometry_router::LockfileError::IoError(_)) => {
-                            // No lockfile exists — first-time compilation
-                        }
-                    }
+                    // No valid lockfile — will re-run A* solver
                 }
             }
         }
@@ -746,6 +726,95 @@ fn compile_single_space(
     // This ensures that internal component pours (pads/rings) inherit the nets
     // assigned during the routing phase above.
     space.synchronize_nets();
+
+    // v0.1.8: G-Cell Sweep DRC — P45 Forbidden Junction Detection
+    // Run the unified sweep-line DRC engine after routing to catch
+    // same-net different-material intersections (Copper-on-Silicon),
+    // clearance violations, and forbidden junctions.
+    {
+        use hwc_engine::geometry_router::gcell_sweep::verify_gcell_sweep;
+        use hwc_engine::geometry_router::partition::PartitionGrid;
+        use hwc_engine::geometry_router::spatial_index::{DynamicSpatialIndex, IndexedSegment};
+        use hwc_engine::material::MaterialId;
+
+        // Build layer_to_material map from the stackup definition
+        let mut layer_to_material: rustc_hash::FxHashMap<i64, MaterialId> = rustc_hash::FxHashMap::default();
+                if let Some(stackup_def) = profile.and_then(|p| p.stackup.as_ref()) {
+            for (idx, layer) in stackup_def.layers.iter().enumerate() {
+                let material_name = &layer.material;
+                if let Some(mat_id) = space.material_registry.get_id(material_name.as_str()) {
+                    layer_to_material.insert(idx as i64, mat_id);
+                }
+            }
+        }
+
+        // Build BridgeTable from profile bridge rules
+        // The engine's BridgeTable is FxHashMap<CompactString, CompactString>
+        // mapping "MatA:MatB" -> bridge_material_name
+        let mut bridge_table: rustc_hash::FxHashMap<compact_str::CompactString, compact_str::CompactString> = rustc_hash::FxHashMap::default();
+        if let Some(profile_def) = profile {
+            for bridge_rule in &profile_def.bridges {
+                let key: compact_str::CompactString = format!("{}:{}", bridge_rule.from, bridge_rule.to).into();
+                let value = bridge_rule.interface_material.clone();
+                bridge_table.insert(key, value);
+            }
+        }
+
+        // Build DynamicSpatialIndex from committed route segments
+        let mut spatial_index = DynamicSpatialIndex::new();
+        let mut seg_id = 0usize;
+        for (net_id, segments) in space.entity_graph.get_all_routes() {
+            for seg in segments {
+                let _width_nm = seg.width_nm;
+                spatial_index.insert(IndexedSegment::new(
+                    seg_id,
+                    net_id.0 as usize,
+                    seg,
+                    0, // layer ID - will be resolved by Z-position lookup
+                ));
+                seg_id += 1;
+            }
+        }
+
+        // Build PartitionGrid for DRC sweep
+        let grid_bbox = hwc_engine::geometry::BoundingBox::new(
+            hwc_engine::geometry::Point3D::new(0, 0, 0),
+            hwc_engine::geometry::Point3D::new(
+                space.dimensions.width_nm,
+                space.dimensions.height_nm,
+                space.dimensions.depth_nm,
+            ),
+        );
+        let cell_size_nm = 10_000_000; // 10mm G-cells
+        let track_pitch = space.resolution_nm;
+        let max_clearance = space.fabrication_constraints.as_ref()
+            .map(|c| c.trace.min_width_nm)
+            .unwrap_or(200_000);
+        let partition_grid = PartitionGrid::new(grid_bbox, cell_size_nm, cell_size_nm, track_pitch, max_clearance);
+
+        // Run the G-Cell sweep DRC
+        let default_clearance_nm = space.fabrication_constraints.as_ref()
+            .map(|c| c.trace.min_width_nm)
+            .unwrap_or(200_000);
+        let violations = verify_gcell_sweep(
+            &partition_grid,
+            &spatial_index,
+            &[], // No virtual junctions for now
+            default_clearance_nm,
+            &layer_to_material,
+            &space.material_registry,
+            &bridge_table,
+        );
+
+        if !violations.is_empty() {
+            eprintln!("[DRC] G-Cell sweep found {} violations:", violations.len());
+            for v in &violations {
+                eprintln!("  - {:?}", v);
+            }
+            // For now, log violations as warnings. In the future, these should
+            // be converted to IrError and halt compilation.
+        }
+    }
 
     if component_count > 0 {
         // eprintln!($3"[DEBUG program_to_space] All components placed (avg: {:.6}ms/component)",
@@ -814,14 +883,8 @@ fn compile_single_space(
     // Commit all placements and routes to the visible plane
     // This makes substrate, pours, components, and routes visible to exporters
     let _commit_start = std::time::Instant::now();
-    let _stats_before = space.entity_graph.memory_stats();
+    // commit_route() is gone in v0.1.8
     let _commit_start2 = std::time::Instant::now();
-    space.entity_graph.commit_route();
-    // eprintln!($3"[DEBUG program_to_space] commit_route() took {:?}", commit_start2.elapsed());
-    let _stats_after = space.entity_graph.memory_stats();
-    // eprintln!($3"[DEBUG program_to_space] After commit: {} occupied voxels",
-    //     stats_after.occupied_voxels
-    // );
 
     // v0.1.7 DFM: Dummy metal fill (thieving) for manufacturing density balance
     {
@@ -949,7 +1012,13 @@ fn save_routes_to_lockfile(
     _source_content: &str,
 ) {
     let fingerprint = hwc_engine::geometry_router::compute_fingerprint_from_space(space);
-    let binary_lockfile = hwc_engine::geometry_router::traces_to_lockfile(space, fingerprint);
+    let binary_lockfile = match hwc_engine::geometry_router::traces_to_lockfile(space, fingerprint) {
+        Ok(lockfile) => lockfile,
+        Err(e) => {
+            eprintln!("[LOCK] FATAL: failed to build lockfile: {}", e);
+            return;
+        }
+    };
 
     let route_count = binary_lockfile.arcs.len();
 

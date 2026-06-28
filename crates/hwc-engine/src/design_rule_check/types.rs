@@ -100,7 +100,7 @@ impl fmt::Display for DrcViolation {
             } => {
                 write!(
                     f,
-                    "Clearance violation between {} and {} at {}: {:.3}mm actual, {:.3}mm required",
+                    "Clearance violation between {} and {} at {}: {:.4}mm actual, {:.4}mm required",
                     net_a,
                     net_b,
                     location,
@@ -116,7 +116,7 @@ impl fmt::Display for DrcViolation {
             } => {
                 write!(
                     f,
-                    "Trace width violation for {} at {}: {:.3}mm actual, {:.3}mm required",
+                    "Trace width violation for {} at {}: {:.4}mm actual, {:.4}mm required",
                     net,
                     location,
                     *actual_nm as f64 / 1_000_000.0,
@@ -155,7 +155,7 @@ impl fmt::Display for DrcViolation {
             } => {
                 write!(
                     f,
-                    "Via diameter violation for {} at {}: {:.3}mm actual, {:.3}mm required",
+                    "Via diameter violation for {} at {}: {:.4}mm actual, {:.4}mm required",
                     net,
                     location,
                     *actual_nm as f64 / 1_000_000.0,
@@ -170,7 +170,7 @@ impl fmt::Display for DrcViolation {
             } => {
                 write!(
                     f,
-                    "Via enclosure violation for {} at {}: {:.3}mm actual, {:.3}mm required annular ring",
+                    "Via enclosure violation for {} at {}: {:.4}mm actual, {:.4}mm required annular ring",
                     net,
                     location,
                     *actual_nm as f64 / 1_000_000.0,
@@ -208,7 +208,7 @@ impl fmt::Display for DrcViolation {
             } => {
                 write!(
                     f,
-                    "Drill clearance: {} ↔ {} at {} ({:.3}mm < {:.3}mm)",
+                    "Drill clearance: {} ↔ {} at {} ({:.4}mm < {:.4}mm)",
                     via_a,
                     via_b,
                     location,
@@ -313,93 +313,3 @@ impl fmt::Display for DrcReport {
     }
 }
 
-// ============================================================================
-// Net Voxels
-// ============================================================================
-
-/// Geometry type for thermal and electrical analysis
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum GeometryType {
-    /// 1D trace - thin wire with length >> width
-    /// Thermal: Use I²R calculation with trace length and cross-sectional area
-    Trace,
-
-    /// 2D pour/pad - large copper area (width ≈ length)
-    /// Thermal: Use surface area and heat dissipation to ambient
-    Pour,
-
-    /// 3D contact/via - vertical connection between layers
-    /// Thermal: Use via resistance and current density
-    Contact,
-}
-
-/// Net voxel data for DRC checking.
-#[derive(Debug, Clone)]
-pub struct NetVoxels {
-    pub net_name: CompactString,
-    pub voxels: Vec<Point3D>,
-
-    /// Geometry type for proper thermal/electrical analysis
-    /// Added in v0.1.6 for accurate physics validation
-    pub geometry_type: GeometryType,
-
-    /// Net classification (v0.1.7: for HV isolation checks)
-    pub classification: crate::space::NetClassification,
-}
-
-#[cfg(test)]
-impl NetVoxels {
-    /// Test helper: Create a NetVoxels with Trace geometry type
-    pub fn trace(net_name: impl Into<CompactString>, voxels: Vec<Point3D>) -> Self {
-        Self {
-            net_name: net_name.into(),
-            voxels,
-            geometry_type: GeometryType::Trace,
-            classification: crate::space::NetClassification::Unclassified,
-        }
-    }
-
-    /// Test helper: Create a NetVoxels with Pour geometry type
-    pub fn pour(net_name: impl Into<CompactString>, voxels: Vec<Point3D>) -> Self {
-        Self {
-            net_name: net_name.into(),
-            voxels,
-            geometry_type: GeometryType::Pour,
-            classification: crate::space::NetClassification::Unclassified,
-        }
-    }
-
-    /// Test helper: Create a NetVoxels with Contact geometry type
-    pub fn contact(net_name: impl Into<CompactString>, voxels: Vec<Point3D>) -> Self {
-        Self {
-            net_name: net_name.into(),
-            voxels,
-            geometry_type: GeometryType::Contact,
-            classification: crate::space::NetClassification::Unclassified,
-        }
-    }
-}
-
-// ============================================================================
-// Material Properties
-// ============================================================================
-
-/// Material properties for thermal calculations.
-#[derive(Debug, Clone)]
-pub struct MaterialProperties {
-    /// Resistivity in Ω·nm
-    pub resistivity_ohm_nm: f64,
-
-    /// Thermal conductivity in W/(m·K)
-    pub thermal_conductivity: f64,
-}
-
-impl Default for MaterialProperties {
-    fn default() -> Self {
-        // Copper properties
-        Self {
-            resistivity_ohm_nm: 16.8,    // Copper: 1.68e-8 Ω·m = 16.8 Ω·nm
-            thermal_conductivity: 401.0, // Copper: 401 W/(m·K)
-        }
-    }
-}

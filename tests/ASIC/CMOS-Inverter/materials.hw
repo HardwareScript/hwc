@@ -66,6 +66,7 @@ material Silicon_P:
         band_gap: 1.12eV
         electron_mobility: 1400.0cm2_Vs
         hole_mobility: 450.0cm2_Vs
+        resistivity: 1.0ohm_m
         thermal_conductivity: 150.0W_mK
         density: 2330.0kg_m3
         doping_type: "p-type"
@@ -83,6 +84,7 @@ material Silicon_N:
         band_gap: 1.12eV
         electron_mobility: 1400.0cm2_Vs
         hole_mobility: 450.0cm2_Vs
+        resistivity: 0.5ohm_m
         thermal_conductivity: 150.0W_mK
         density: 2330.0kg_m3
         doping_type: "n-type"
@@ -118,8 +120,37 @@ material FR4:
         dielectric_strength: 20.0kV_mm
         relative_permittivity: 4.5
         thermal_conductivity: 0.3W_mK
-        density: 1850.0kg_m3
+        density: 1800.0kg_m3
         glass_transition_temp: 130.0C
+
+material Tungsten:
+    category: conductor
+    symbol: "W"
+    description: "Via fill material for CMOS contact/via plugs"
+    properties:
+        color: "#707070"
+        metallic: 1.0
+        roughness: 0.3
+        opacity: 1.0
+        resistivity: 5.6e-8ohm_m
+        thermal_conductivity: 173.0W_mK
+        density: 19300.0kg_m3
+        max_current_density: 10.0A_mm2
+        melting_point: 3422.0C
+
+material Titanium_Silicide:
+    category: conductor
+    symbol: "TiSi2"
+    description: "Silicide interface for silicon-to-metal contacts"
+    properties:
+        color: "#505060"
+        metallic: 0.8
+        roughness: 0.4
+        opacity: 1.0
+        resistivity: 1.3e-7ohm_m
+        thermal_conductivity: 20.0W_mK
+        density: 4250.0kg_m3
+        max_current_density: 15.0A_mm2
 
 # ============================================================================
 # Compiler Internal Materials

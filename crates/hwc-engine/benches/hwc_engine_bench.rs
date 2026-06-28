@@ -59,6 +59,7 @@ fn make_horizontal_segment(
         segment_id,
         net_id,
         width_nm,
+        thickness_nm: 35_000,
         start: Point3D::new(x1, y1, 1),
         end: Point3D::new(x1 + len, y1, 1),
         layer: 1,
@@ -210,6 +211,7 @@ fn make_connectivity_segments(
                 segment_id: net * segs_per_net + s,
                 net_id: net,
                 width_nm: 200_000,
+                thickness_nm: 35_000,
                 start: Point3D::new(x, y, 1),
                 end: Point3D::new(end_x, end_y, 1),
                 layer: 1,
@@ -454,12 +456,15 @@ fn make_lockfile(arcs_count: usize) -> CompactLockfileBinary {
             let y2 = rng.gen_range(0, board_size);
             ArchivedArcSegment {
                 net_id: i,
-                layer: (rng.next_u64() % 6) as u8,
+                layer: (rng.next_u64() % 6) as u16,
                 width_nm: rng.gen_range(50_000, 300_000),
                 x1,
                 y1,
                 x2,
                 y2,
+                thickness_nm: 35_000,
+                material_name: "Copper".to_string(),
+                current_ma: 20_000,
             }
         })
         .collect();

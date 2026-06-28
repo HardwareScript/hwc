@@ -120,7 +120,7 @@ impl AutoViaInserter {
         routes: &[AnalyticTrace],
         stackup_manager: &crate::ir::stackup_manager::StackupManager,
         profile: Option<&hwc_parser::ProfileDefinition>,
-    ) -> Vec<LayerTransition> {
+    ) -> Result<Vec<LayerTransition>, String> {
         let mut transitions = Vec::new();
 
         for route in routes {
@@ -149,8 +149,8 @@ impl AutoViaInserter {
                     continue;
                 }
 
-                let from_material = resolve_material_for_z(lower_z, stackup_manager, profile);
-                let to_material = resolve_material_for_z(upper_z, stackup_manager, profile);
+                let from_material = resolve_material_for_z(lower_z, stackup_manager, profile)?;
+                let to_material = resolve_material_for_z(upper_z, stackup_manager, profile)?;
 
                 let transition_x = seg.start.x;
                 let transition_y = seg.start.y;
@@ -191,7 +191,7 @@ impl AutoViaInserter {
             }
         }
 
-        transitions
+        Ok(transitions)
     }
 
     pub(crate) fn find_overlap(
@@ -324,7 +324,7 @@ impl AutoViaInserter {
 
         if overlap_width_nm < required_size_nm || overlap_height_nm < required_size_nm {
             return Err(format!(
-                "Overlap region too small for via. Required: {:.3}mm, Available: {:.3}mm x {:.3}mm",
+                "Overlap region too small for via. Required: {:.4}mm, Available: {:.4}mm x {:.4}mm",
                 required_size_nm as f64 / 1_000_000.0,
                 overlap_width_nm as f64 / 1_000_000.0,
                 overlap_height_nm as f64 / 1_000_000.0
@@ -354,17 +354,21 @@ fn resolve_material_for_z(
     z_nm: i64,
     stackup_manager: &crate::ir::stackup_manager::StackupManager,
     profile: Option<&hwc_parser::ProfileDefinition>,
-) -> CompactString {
-    let layer_name = match stackup_manager.get_layer_name_at_z(z_nm) {
-        Some(name) => name,
-        None => return "Copper".into(),
-    };
+) -> Result<CompactString, String> {
+    let layer_name = stackup_manager.get_layer_name_at_z(z_nm)
+        .ok_or_else(|| format!(
+            "[VIA] FATAL: no stackup layer found at z={}nm — cannot resolve material",
+            z_nm
+        ))?;
 
     if let Some(stackup) = profile.and_then(|p| p.stackup.as_ref()) {
         if let Some(layer) = stackup.layers.iter().find(|l| l.name.name == layer_name) {
-            return layer.material.to_string().into();
+            return Ok(layer.material.to_string().into());
         }
     }
 
-    "Copper".into()
+    Err(format!(
+        "[VIA] FATAL: layer '{}' at z={}nm has no material definition in the stackup",
+        layer_name, z_nm
+    ))
 }

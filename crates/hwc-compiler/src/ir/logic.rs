@@ -26,7 +26,7 @@ pub fn synthesize_and_place_logic(
     collector: &DiagnosticCollector,
 ) -> Result<(), IrError> {
     // Create native logic synthesizer that directly mutates the space
-    let mut synthesizer = LogicSynthesizer::new(space, symbol_table, collector);
+    let mut synthesizer = LogicSynthesizer::new(space, symbol_table);
 
     // Synthesize directly into the space
     // The synthesizer mutates space in-place, returns only warnings

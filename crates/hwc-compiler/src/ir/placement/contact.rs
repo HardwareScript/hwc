@@ -5,7 +5,7 @@
 use super::super::errors::IrError;
 use super::super::stackup_manager::StackupManager;
 use compact_str::CompactString;
-use hwc_engine::{ComponentPlacer, HardwareSpace, Point3D};
+use hwc_engine::{HardwareSpace, Point3D};
 
 fn get_prop_nm(
     contact: &hwc_parser::ContactPlacement,
@@ -96,8 +96,6 @@ pub fn place_contact(
 
     // v0.1.7: Use canonical coordinate conversion to respect origin (Fixes XY separation)
     let ctx = crate::ir::conversions::CoordinateContext {
-        voxel_size: &space.voxel_size,
-        grid_size: &space.grid,
         origin,
         space_dimensions: &space.dimensions,
         symbol_table,
@@ -131,18 +129,25 @@ pub fn place_contact(
         })?;
     let radius_nm = diameter_nm / 2;
 
-    let from_bottom_nm =
-        stackup_manager.resolve_elevation(&contact.from_elevation, symbol_table)?;
-    let to_bottom_nm = stackup_manager.resolve_elevation(&contact.to_elevation, symbol_table)?;
+    let from_bottom_nm = stackup_manager.resolve_elevation_bottom(
+        &contact.from_elevation,
+        symbol_table,
+        space.resolution_nm,
+    )?;
+    let to_bottom_nm = stackup_manager.resolve_elevation_bottom(
+        &contact.to_elevation,
+        symbol_table,
+        space.resolution_nm,
+    )?;
     let from_top_nm = stackup_manager.resolve_elevation_top(
         &contact.from_elevation,
         symbol_table,
-        space.voxel_size.z_nm,
+        space.resolution_nm,
     )?;
     let to_top_nm = stackup_manager.resolve_elevation_top(
         &contact.to_elevation,
         symbol_table,
-        space.voxel_size.z_nm,
+        space.resolution_nm,
     )?;
 
     let contact_name_debug = contact
@@ -212,8 +217,8 @@ pub fn place_contact(
         end_z - start_z
     );
 
-    // Create a cylindrical via by filling voxels within radius
-    let placer = ComponentPlacer::new();
+    // v0.1.8: Via is placed via the entity graph; no ComponentPlacer needed.
+    // A cylindrical via is created by constructing a Via struct for drill export.
 
     // v0.1.7: The Unified Contact Placement
     // They connect pours at Z-boundaries (face-to-face contact).
@@ -354,7 +359,7 @@ pub fn place_contact(
 
     // v0.1.7: Register via for Excellon drill export
     // This ensures that ALL contacts (vias, THT pins, TSVs) are registered for the drill file.
-    let board_max_z_nm = (space.grid_cells().z_layers as i64) * space.voxel_size.z_nm;
+    let board_max_z_nm = space.dimensions.depth_nm;
     let via_net_id = hwc_engine::netlist::NetId::new(net_id);
 
     let via = hwc_engine::geometry_router::Via::new(
@@ -363,9 +368,9 @@ pub fn place_contact(
         end_z,
         diameter_nm,
         via_net_id,
-        0,              // min_z
-        board_max_z_nm, // max_z
-        space.voxel_size.z_nm,
+        0,                 // min_z
+        board_max_z_nm,    // max_z
+        space.resolution_nm,
         annular_ring_nm,
     );
     space.add_vias(vec![via]);
@@ -418,7 +423,7 @@ pub fn place_contact(
             material_id,
         );
 
-        let params = hwc_engine::geometry_router::entity_graph::TSVParams {
+        let _params = hwc_engine::geometry_router::entity_graph::TSVParams {
             diameter_nm,
             stack,
             koz_multiplier,
@@ -426,118 +431,61 @@ pub fn place_contact(
 
         // Coordination: Drill, Stamp, and Register TSV
         space.entity_graph.add_tsv_stack(
-            xy_point.x,
-            xy_point.y,
-            start_z,
-            end_z,
-            params,
-            hwc_engine::netlist::NetHandle::new(net_id),
+            material_id,
+            net_id,
+            contact_bbox,
+            diameter_nm as u32,
+            (diameter_nm / 2) as u32, // Default inner dia
         );
     } else if let Some(bridge_mat) = bridge_material_id {
         // Compound via (Phase 1/2)
         // Interface layer is the bottom layer
-        let interface_end_z = start_z + space.voxel_size.z_nm;
+        let interface_end_z = start_z + space.resolution_nm;
 
-        let interface_end_point = Point3D::new(end_point.x, end_point.y, interface_end_z);
-        let fill_start_point = Point3D::new(start_point.x, start_point.y, interface_end_z);
+        let _interface_end_point = Point3D::new(end_point.x, end_point.y, interface_end_z);
+        let _fill_start_point = Point3D::new(start_point.x, start_point.y, interface_end_z);
 
         // v0.2.0: Use polygon contour if available, fallback to cylinder
         if let Some(ref contour) = contour {
-            placer
-                .place_polygon_substrate(
-                    &mut space.entity_graph,
-                    bridge_mat,
-                    start_point,
-                    interface_end_point,
-                    net_id,
-                    contour,
-                )
-                .map_err(|e| {
-                    IrError::PlacementConstraint {
-                        message: format!(
-                            "Failed to place contact bridge: {}",
-                            e
-                        ),
-                        component: contact
-                            .name
-                            .as_ref()
-                            .map(|n| n.to_string())
-                            .unwrap_or_else(|| "unnamed".into()).into(),
-                    }
-                })?;
+            let points = contour.iter().map(|p| hwc_engine::geometry::Point2D::new(p.x, p.y)).collect();
+            let polygon = hwc_engine::geometry::Polygon::new(points);
+            space.entity_graph.add_polygon_substrate_layer(
+                bridge_mat,
+                net_id,
+                contact_bbox,
+                polygon,
+            );
         } else {
-            placer
-                .place_cylinder_substrate(
-                    &mut space.entity_graph,
-                    bridge_mat,
-                    start_point,
-                    interface_end_point,
-                    net_id,
-                    diameter_nm,
-                )
-                .map_err(|e| {
-                    IrError::PlacementConstraint {
-                        message: format!(
-                            "Failed to place contact bridge: {}",
-                            e
-                        ),
-                        component: contact
-                            .name
-                            .as_ref()
-                            .map(|n| n.to_string())
-                            .unwrap_or_else(|| "unnamed".into()).into(),
-                    }
-                })?;
+            space.entity_graph.add_cylinder_substrate_layer(
+                bridge_mat,
+                net_id,
+                contact_bbox,
+                diameter_nm,
+                32,
+                0,
+            );
         }
 
         // Place via fill (e.g., Tungsten) - use contour-aware placement
         if interface_end_z < end_z {
             if let Some(ref contour) = contour {
-                placer
-                    .place_polygon_substrate(
-                        &mut space.entity_graph,
-                        material_id,
-                        fill_start_point,
-                        end_point,
-                        net_id,
-                        contour,
-                    )
-                    .map_err(|e| {
-                        IrError::PlacementConstraint {
-                            message: format!(
-                                "Failed to place contact fill: {}",
-                                e
-                            ),
-                            component: contact
-                                .name
-                                .as_ref()
-                                .map(|n| n.to_string())
-                                .unwrap_or_else(|| "unnamed".into()).into(),
-                        }
-                    })?;
+                let points = contour.iter().map(|p| hwc_engine::geometry::Point2D::new(p.x, p.y)).collect();
+                let polygon = hwc_engine::geometry::Polygon::new(points);
+                space.entity_graph.add_polygon_substrate_layer(
+                    material_id,
+                    net_id,
+                    contact_bbox,
+                    polygon,
+                );
             } else {
-                placer
-                    .place_cylinder_substrate(
-                        &mut space.entity_graph,
-                        material_id,
-                        fill_start_point,
-                        end_point,
-                        net_id,
-                        diameter_nm,
-                    )
-                    .map_err(|e| {
-                        IrError::PlacementConstraint {
-                            message: format!(
-                                "Failed to place contact fill: {}",
-                                e
-                            ),
-                            component: contact
-                                .name
-                                .as_ref()
-                                .map(|n| n.to_string())
-                                .unwrap_or_else(|| "unnamed".into()).into(),
-                        }
-                    })?;
+                space.entity_graph.add_cylinder_substrate_layer(
+                    material_id,
+                    net_id,
+                    contact_bbox,
+                    diameter_nm,
+                    32,
+                    0,
+                );
             }
         }
     } else {
@@ -722,60 +670,34 @@ pub fn place_contact(
 
             // Simple via - use contour-aware placement (deposited, not drilled)
             // v0.2.0: Use polygon contour if available, fallback to cylinder
-            if let Some(ref contour) = contour {
+            if let Some(path) = contour {
                 println!("[PLACE_CONTACT] '{}' Placing polygon via: mat={}, net={}, start=({},{},{}) end=({},{},{}) dia={}",
                     contact_name_debug, contact.material, net_id,
                     start_point.x, start_point.y, start_point.z,
                     end_point.x, end_point.y, end_point.z, diameter_nm);
-                placer
-                    .place_polygon_substrate(
-                        &mut space.entity_graph,
-                        material_id,
-                        start_point,
-                        end_point,
-                        net_id,
-                        contour,
-                    )
-                    .map_err(|e| {
-                        IrError::PlacementConstraint {
-                            message: format!(
-                                "Failed to place contact: {}",
-                                e
-                            ),
-                            component: contact
-                                .name
-                                .as_ref()
-                                .map(|n| n.to_string())
-                                .unwrap_or_else(|| "unnamed".into()).into(),
-                        }
-                    })?;
+                
+                let points = path.iter().map(|p| hwc_engine::geometry::Point2D::new(p.x, p.y)).collect();
+                let polygon = hwc_engine::geometry::Polygon::new(points);
+
+                space.entity_graph.add_polygon_substrate_layer(
+                    material_id,
+                    net_id,
+                    contact_bbox,
+                    polygon,
+                );
             } else {
                 println!("[PLACE_CONTACT] '{}' Placing cylinder via: mat={}, net={}, start=({},{},{}) end=({},{},{}) dia={}",
                     contact_name_debug, contact.material, net_id,
                     start_point.x, start_point.y, start_point.z,
                     end_point.x, end_point.y, end_point.z, diameter_nm);
-                placer
-                    .place_cylinder_substrate(
-                        &mut space.entity_graph,
-                        material_id,
-                        start_point,
-                        end_point,
-                        net_id,
-                        diameter_nm,
-                    )
-                    .map_err(|e| {
-                        IrError::PlacementConstraint {
-                            message: format!(
-                                "Failed to place contact: {}",
-                                e
-                            ),
-                            component: contact
-                                .name
-                                .as_ref()
-                                .map(|n| n.to_string())
-                                .unwrap_or_else(|| "unnamed".into()).into(),
-                        }
-                    })?;
+                space.entity_graph.add_cylinder_substrate_layer(
+                    material_id,
+                    net_id,
+                    contact_bbox,
+                    diameter_nm,
+                    32,
+                    0,
+                );
             }
         }
     }
@@ -848,6 +770,7 @@ pub fn place_contact(
         net: contact.net.as_ref().map(|n| n.to_string()),
         bridge: bridge_material_name,
         bbox: Some(pad_bbox),
+        drill_diameter_nm: Some(diameter_nm),
         voxels: Vec::new(), // Empty - analytic geometry only
         is_tented,
         mask_clearance_diameter_nm: get_prop_nm(

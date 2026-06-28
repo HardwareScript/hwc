@@ -1,33 +1,11 @@
 //! Trait implementations for external crate integration
 
 use super::layer::SymbolTable;
-use hwc_parser::{ComponentDefinition, MaterialDefinition, ProfileDefinition};
+use hwc_parser::{MaterialDefinition, ProfileDefinition};
 
 // ========== hwc-engine trait implementations ==========
 
-impl hwc_engine::placement::SymbolTableTrait for SymbolTable {
-    fn get_component(&self, name: &str) -> Result<&ComponentDefinition, String> {
-        self.get_component(name).map_err(|e| e.to_string())
-    }
-
-    fn get_material(&self, name: &str) -> Result<&MaterialDefinition, String> {
-        self.get_material(name).map_err(|e| e.to_string())
-    }
-
-    fn resolve_unit_symbol(&self, symbol: &str) -> Option<&hwc_parser::UnitDefinition> {
-        self.resolve_unit_symbol(symbol)
-    }
-
-    fn measurement_to_nm(&self, measurement: &hwc_parser::Measurement) -> Result<i64, String> {
-        self.measurement_to_nm(measurement)
-    }
-
-    fn get_baked_component(&self, name: &str) -> Option<&hwc_engine::placement::BakedComponent> {
-        self.get_baked_component(name)
-    }
-}
-
-impl hwc_engine::constraint_manager::SymbolTableTrait for SymbolTable {
+impl hwc_engine::SymbolTableTrait for SymbolTable {
     fn get_material(&self, name: &str) -> Result<&MaterialDefinition, String> {
         self.get_material(name).map_err(|e| e.to_string())
     }

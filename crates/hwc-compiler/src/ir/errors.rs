@@ -174,6 +174,23 @@ pub enum IrError {
     )]
     CompilationAborted { error_count: usize },
 
+    /// P42: Static geometry guard detected coplanar short circuits before routing.
+    #[error("Static short circuit: net '{net_a}' overlaps net '{net_b}' at ({x_nm},{y_nm},{z_nm}) nm")]
+    #[diagnostic(
+        code(P42),
+        url("https://docs.hw-script.org/errors/P42"),
+        help("Coplanar conductors on different nets overlap in the XY and Z planes. \
+              Separate the overlapping geometry or verify that these nets should be connected. \
+              Detected by the static geometry guard before routing to fail fast.")
+    )]
+    StaticGeometryShort {
+        net_a: CompactString,
+        net_b: CompactString,
+        x_nm: i64,
+        y_nm: i64,
+        z_nm: i64,
+    },
+
     #[error("Missing profile constraint: {field}")]
     #[diagnostic(
         code(C34),

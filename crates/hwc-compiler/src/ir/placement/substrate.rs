@@ -1,7 +1,7 @@
 use super::super::conversions::{spanning_coordinate_to_point, CoordinateContext};
 use super::super::errors::IrError;
 use super::context::PlacementContext;
-use hwc_engine::{ComponentPlacer, HardwareSpace};
+use hwc_engine::HardwareSpace;
 
 pub fn place_substrate(
     space: &mut HardwareSpace,
@@ -16,8 +16,6 @@ pub fn place_substrate(
     space.substrate_material_id = material_id;
 
     let coord_ctx = CoordinateContext {
-        voxel_size: &space.voxel_size,
-        grid_size: &space.grid,
         origin: ctx.origin,
         space_dimensions: &space.dimensions,
         symbol_table: ctx.symbol_table,
@@ -57,8 +55,6 @@ pub fn place_substrate(
     space.substrate_bbox = Some(physical_substrate_bbox);
 
     let z_ctx = CoordinateContext {
-        voxel_size: &space.voxel_size,
-        grid_size: &space.grid,
         origin: ctx.origin,
         space_dimensions: &space.dimensions,
         symbol_table: ctx.symbol_table,
@@ -92,52 +88,16 @@ pub fn place_substrate(
     let user_substrate_bbox = hwc_engine::geometry::BoundingBox::new(user_start, user_end);
     bbox_tracker.register("substrate".into(), user_substrate_bbox, user_start);
 
-    let placer = ComponentPlacer::new();
+    // Add substrate to entity graph (v0.1.8 replacement for ComponentPlacer)
+    space.entity_graph.add_substrate_layer(
+        material_id,
+        0, // Substrate is typically net 0
+        physical_substrate_bbox,
+        hwc_engine::geometry_router::substrate_types::SubstrateLayerType::Substrate,
+    );
 
-    if !cutout_bboxes.is_empty() {
-        placer
-            .place_substrate(
-                &mut space.entity_graph,
-                &space.voxel_size,
-                material_id,
-                start,
-                end,
-                0,
-            )
-            .map_err(|e| IrError::PlacementConstraint {
-                message: format!("Failed to place substrate: {}", e),
-                component: "substrate".into(),
-            })?;
-
-        for cutout_bbox in cutout_bboxes {
-            placer
-                .place_substrate(
-                    &mut space.entity_graph,
-                    &space.voxel_size,
-                    0,
-                    cutout_bbox.min,
-                    cutout_bbox.max,
-                    0,
-                )
-                .map_err(|e| IrError::PlacementConstraint {
-                    message: format!("Failed to place substrate cutout: {}", e),
-                    component: "substrate".into(),
-                })?;
-        }
-    } else {
-        placer
-            .place_substrate(
-                &mut space.entity_graph,
-                &space.voxel_size,
-                material_id,
-                start,
-                end,
-                0,
-            )
-            .map_err(|e| IrError::PlacementConstraint {
-                message: format!("Failed to place substrate: {}", e),
-                component: "substrate".into(),
-            })?;
+    for cutout_bbox in cutout_bboxes {
+        space.drill_hole(cutout_bbox, None, hwc_engine::netlist::NetId::new(0));
     }
 
     Ok(())

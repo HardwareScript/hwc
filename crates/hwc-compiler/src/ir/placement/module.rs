@@ -3,7 +3,7 @@ use super::super::errors::IrError;
 use super::context::PlacementContext;
 use super::helpers::extract_placements_from_layout_statements;
 use compact_str::CompactString;
-use hwc_engine::{ComponentPlacer, HardwareSpace, PlacementParams, Point3D};
+use hwc_engine::{HardwareSpace, Point3D};
 use rustc_hash::FxHashMap;
 
 pub fn place_module_instance(
@@ -46,7 +46,7 @@ pub fn place_module_instance(
                 end: None,
             },
             ctx.symbol_table,
-            space.voxel_size.z_nm,
+            space.resolution_nm,
         )
         .unwrap_or(0);
 
@@ -102,8 +102,6 @@ pub fn place_module_instance(
                 })?;
 
             let coord_ctx = CoordinateContext {
-                voxel_size: &space.voxel_size,
-                grid_size: &space.grid,
                 origin: ctx.origin,
                 space_dimensions: &space.dimensions,
                 symbol_table: ctx.symbol_table,
@@ -133,34 +131,29 @@ pub fn place_module_instance(
             let comp_name = format!("{}.{}", instance_name, comp_internal_name);
             println!("   ├─ Placing {} at position", comp_name);
 
-            let placer = ComponentPlacer::new();
-            placer
-                .place_component(PlacementParams {
-                    entity_graph: &mut space.entity_graph,
-                    voxel_size: &space.voxel_size,
-                    arena: &mut space.netlist,
-                    symbol_table: ctx.symbol_table,
-                    material_registry: &mut space.material_registry,
-                    name: comp_name.clone().into(),
-                    component_type: module_comp.component_type.clone(),
-                    position,
-                    rotation_deg: 0.0,
-                    merge_waiver: hwc_parser::MergeWaiver::None,
-                    collector: Some(&crate::DiagnosticReporterAdapter(ctx.collector)),
-                })
-                .map_err(|e| {
-                    IrError::PlacementConstraint {
-                        message: format!("Failed to place module component: {}", e),
-                        component: comp_name.clone().into(),
-                    }
-                })?;
+            // Add component to netlist arena (v0.1.8 replacement for ComponentPlacer)
+            let component_id = space.netlist.add_component(
+                comp_name.clone().into(),
+                module_comp.component_type.clone(),
+                (position.x, position.y, position.z),
+            );
+
+            // Register pins in netlist arena
+            if let Ok(component_def) = ctx.symbol_table.get_component(module_comp.component_type.as_str()) {
+                for pin_name in &component_def.pins {
+                    space.netlist.add_pin(
+                        component_id,
+                        pin_name.clone(),
+                        (0, 0, 0),
+                        None,
+                    );
+                }
+            }
         }
     } else {
         println!("   ⚠️  No layout (intrinsic or external) - using automatic offset placement (may cause collisions)");
 
         let coord_ctx = CoordinateContext {
-            voxel_size: &space.voxel_size,
-            grid_size: &space.grid,
             origin: ctx.origin,
             space_dimensions: &space.dimensions,
             symbol_table: ctx.symbol_table,
@@ -187,27 +180,24 @@ pub fn place_module_instance(
             let position =
                 Point3D::new(base_position.x + offset_x, base_position.y, base_position.z);
 
-            let placer = ComponentPlacer::new();
-            placer
-                .place_component(PlacementParams {
-                    entity_graph: &mut space.entity_graph,
-                    voxel_size: &space.voxel_size,
-                    arena: &mut space.netlist,
-                    symbol_table: ctx.symbol_table,
-                    material_registry: &mut space.material_registry,
-                    name: comp_name.clone().into(),
-                    component_type: module_comp.component_type.clone(),
-                    position,
-                    rotation_deg: 0.0,
-                    merge_waiver: hwc_parser::MergeWaiver::None,
-                    collector: Some(&crate::DiagnosticReporterAdapter(ctx.collector)),
-                })
-                .map_err(|e| {
-                    IrError::PlacementConstraint {
-                        message: format!("Failed to place module component: {}", e),
-                        component: comp_name.clone().into(),
-                    }
-                })?;
+            // Add component to netlist arena (v0.1.8 replacement for ComponentPlacer)
+            let component_id = space.netlist.add_component(
+                comp_name.clone().into(),
+                module_comp.component_type.clone(),
+                (position.x, position.y, position.z),
+            );
+
+            // Register pins in netlist arena
+            if let Ok(component_def) = ctx.symbol_table.get_component(module_comp.component_type.as_str()) {
+                for pin_name in &component_def.pins {
+                    space.netlist.add_pin(
+                        component_id,
+                        pin_name.clone(),
+                        (0, 0, 0),
+                        None,
+                    );
+                }
+            }
         }
     }
 
@@ -282,8 +272,6 @@ pub fn place_module_instance(
         use crate::symbol_table::expand_pin_declarations;
 
         let coord_ctx = CoordinateContext {
-            voxel_size: &space.voxel_size,
-            grid_size: &space.grid,
             origin: ctx.origin,
             space_dimensions: &space.dimensions,
             symbol_table: ctx.symbol_table,

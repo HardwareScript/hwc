@@ -55,7 +55,7 @@ impl GridBounds {
 /// * `cell` - Current cell position
 /// * `bounds` - Grid bounds for bounds checking
 /// * `layer_direction` - Direction restriction for this layer
-/// * `voxel_size` - Voxel size in nanometers (X, Y, Z)
+/// * `resolution_nm` - Step size in nanometers
 ///
 /// # Returns
 /// Vector of valid neighbor positions in stable order
@@ -63,7 +63,7 @@ pub fn get_neighbors_stable(
     cell: Point3D,
     bounds: GridBounds,
     layer_direction: LayerDirection,
-    voxel_size: crate::VoxelSize,
+    resolution_nm: i64,
 ) -> Vec<Point3D> {
     // Fixed order for determinism: North, South, East, West, Up, Down
     let directions = [
@@ -78,13 +78,7 @@ pub fn get_neighbors_stable(
     let mut neighbors = Vec::with_capacity(6);
 
     for dir in &directions {
-        let step_nm = match dir {
-            Direction::North | Direction::South => voxel_size.y_nm,
-            Direction::East | Direction::West => voxel_size.x_nm,
-            Direction::Up | Direction::Down => voxel_size.z_nm,
-        };
-
-        let neighbor = cell.move_direction(*dir, step_nm);
+        let neighbor = cell.move_direction(*dir, resolution_nm);
 
         // Check bounds
         if !bounds.contains(neighbor) {

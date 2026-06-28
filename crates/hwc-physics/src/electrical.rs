@@ -21,10 +21,11 @@ pub struct ProfileConstraints {
 impl Default for ProfileConstraints {
     fn default() -> Self {
         Self {
-            max_voltage_drop_mv: Some(100.0), // Default 100mV max drop
-            max_temp_rise_c: Some(20.0),      // Default 20°C max rise
-            max_operating_temp_c: Some(85.0), // Default 85°C max temp
-            ambient_temp_c: 25.0,             // Default 25°C ambient
+            // Conservative library-level defaults; overridden by profile constraints at runtime.
+            max_voltage_drop_mv: Some(100.0),
+            max_temp_rise_c: Some(20.0),
+            max_operating_temp_c: Some(85.0),
+            ambient_temp_c: 25.0,
         }
     }
 }

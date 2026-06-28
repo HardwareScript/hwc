@@ -18,7 +18,6 @@ use crate::constraint_manager::types::{
 };
 use crate::geometry::BoundingBox;
 use crate::netlist::NetlistArena;
-use crate::VoxelSize;
 use rustc_hash::FxHashMap;
 
 /// Constraint Manager: Main entry point for constraint generation.
@@ -30,8 +29,8 @@ use rustc_hash::FxHashMap;
 /// - `Docs/v0.1.3/ROUTING-AND-PHYSICS.md` (lines 1-400, constraint translation)
 /// - `Docs/v0.1.3/COMPILER-INTERNALS.md` (lines 400-600, Layer 3 Physical IR)
 pub struct ConstraintManager {
-    /// Voxel size for spatial discretization
-    voxel_size_nm: i64,
+    /// Coordinate snapping resolution in nanometers
+    resolution_nm: i64,
 
     /// Default safety factor for clearance calculations
     safety_factor: i64,
@@ -45,28 +44,18 @@ pub struct ConstraintManager {
 
 impl ConstraintManager {
     /// Create a new constraint manager.
-    ///
-    /// # Arguments
-    /// * `voxel_size_nm` - Size of one voxel in nanometers (e.g., 500_000 for 0.5mm)
-    ///
-    /// # Examples
-    /// ```
-    /// use hwc_engine::constraint_manager::ConstraintManager;
-    ///
-    /// let manager = ConstraintManager::new(500_000);  // 0.5mm voxels
-    /// ```
-    pub fn new(voxel_size_nm: i64) -> Self {
+    pub fn new(resolution_nm: i64) -> Self {
         Self {
-            voxel_size_nm,
+            resolution_nm,
             safety_factor: 2,        // 2× safety factor (industry standard)
             default_temp_rise_c: 10, // 10°C temperature rise
             default_max_parallel_nm: 10_000_000, // 10mm max parallel length
         }
     }
 
-    /// Get the voxel size
-    pub fn voxel_size_nm(&self) -> i64 {
-        self.voxel_size_nm
+    /// Get the snapping resolution
+    pub fn resolution_nm(&self) -> i64 {
+        self.resolution_nm
     }
 
     /// Get the safety factor
@@ -97,24 +86,19 @@ impl ConstraintManager {
     }
 
     /// Generate clearance zone for a net.
-    ///
-    /// Delegates to the constraint_generation module.
     pub fn generate_clearance_zone<S: SymbolTableTrait>(
         &self,
         net_id: crate::netlist::NetId,
         voltage_mv: i64,
-        occupied_voxels: Vec<crate::geometry::Point3D>,
         material_name: &str,
         symbol_table: &S,
     ) -> Result<crate::constraint_manager::types::ClearanceZone, String> {
         generate_clearance_zone(
             net_id,
             voltage_mv,
-            occupied_voxels,
             material_name,
             symbol_table,
             self.safety_factor,
-            self.voxel_size_nm,
         )
     }
 
@@ -168,7 +152,7 @@ impl ConstraintManager {
         is_external: bool,
         fabrication_constraints: Option<&FabricationConstraints>,
     ) -> Result<ConstraintRulebook, String> {
-        let mut rulebook = ConstraintRulebook::new(self.voxel_size_nm);
+        let mut rulebook = ConstraintRulebook::new(self.resolution_nm);
 
         // Assign layer directions for Manhattan routing
         rulebook.layer_directions = self.assign_layer_directions(num_layers);
@@ -201,13 +185,9 @@ impl ConstraintManager {
 
             // Generate clearance zone if net has voltage
             if voltage_mv > 0 {
-                // For now, use empty occupied voxels (will be populated during routing)
-                let occupied_voxels = Vec::new();
-
                 let clearance_zone = self.generate_clearance_zone(
                     net_id,
                     voltage_mv,
-                    occupied_voxels,
                     material_name,
                     symbol_table,
                 )?;
@@ -238,26 +218,14 @@ impl ConstraintManager {
     }
 
     /// Calculate the bounding box for a module instance from its layout block.
-    ///
-    /// Delegates to the bounding_box module.
     pub fn calculate_module_bounding_box(
         &self,
         layout: &hwc_parser::ModuleLayoutBlock,
-        voxel_size: &VoxelSize,
     ) -> BoundingBox {
-        calculate_module_bounding_box(layout, voxel_size, self.voxel_size_nm)
+        calculate_module_bounding_box(layout, self.resolution_nm)
     }
 
     /// Classify all nets as internal (within a module) or global (crossing boundaries).
-    ///
-    /// This is Phase 1 of the Hierarchical Parallel Routing architecture (GAP3).
-    /// Returns classification for each net and interface pin lists for each module.
-    ///
-    /// Delegates to the net_classification module.
-    ///
-    /// # Reference
-    /// - `ROADMAP/v0.1.4/Gap3.md` (Phase 1: Partitioning)
-    /// - `ROADMAP/v0.1.4/GAP-IMPLEMENTATION-PLAN.md` (Section 2.1)
     pub fn classify_nets(
         &self,
         netlist: &NetlistArena,
@@ -268,6 +236,6 @@ impl ConstraintManager {
 
 impl Default for ConstraintManager {
     fn default() -> Self {
-        Self::new(500_000) // Default 0.5mm voxels
+        Self::new(1) // Default 1nm resolution
     }
 }

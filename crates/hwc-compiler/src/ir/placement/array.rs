@@ -208,8 +208,6 @@ fn calculate_pour_bboxes_for_array(
         };
 
         let coord_ctx = CoordinateContext {
-            voxel_size: &space.voxel_size,
-            grid_size: &space.grid,
             origin: ctx.origin,
             space_dimensions: &space.dimensions,
             symbol_table: ctx.symbol_table,
@@ -236,7 +234,7 @@ fn calculate_pour_bboxes_for_array(
         let z_top_nm = ctx.stackup_manager.resolve_elevation_top(
             &pour.elevation,
             ctx.symbol_table,
-            space.voxel_size.z_nm,
+            space.resolution_nm,
         )?;
 
         let instance_start =
@@ -404,26 +402,13 @@ fn merge_pour_across_instances(
             None
         };
 
-        use hwc_engine::ComponentPlacer;
-        let placer = ComponentPlacer::new();
-        placer
-            .place_substrate(
-                &mut space.entity_graph,
-                &space.voxel_size,
-                material_id,
-                bbox.min,
-                bbox.max,
-                net_id,
-            )
-            .map_err(|e| {
-                IrError::PlacementConstraint {
-                    message: format!(
-                        "Failed to place merged pour '{}': {}",
-                        merged_name, e
-                    ),
-                    component: merged_name.clone(),
-                }
-            })?;
+        // Add substrate layer (v0.1.8 replacement for ComponentPlacer)
+        space.entity_graph.add_substrate_layer(
+            material_id,
+            net_id,
+            bbox,
+            hwc_engine::geometry_router::substrate_types::SubstrateLayerType::Pour,
+        );
 
         let area_nm2 = (bbox.max.x - bbox.min.x) * (bbox.max.y - bbox.min.y);
         space.pours.push(hwc_engine::space::PourMetadata {

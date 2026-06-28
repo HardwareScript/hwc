@@ -8,11 +8,12 @@ profile Silicon_180nm:
     technology: "ASIC"
     
     stackup:
-        substrate: [material: Silicon_P, thickness: 300um, routable: false]
-        active:    [material: Silicon_N, thickness: 200nm, routable: false]
-        poly:      [material: Polysilicon, thickness: 150nm, routable: local_only]
-        d1:        [material: SiO2,      thickness: 500nm, routable: false]
-        metal1:    [material: Aluminum,  thickness: 400nm, routable: true]
+        substrate:  [material: SiO2,       thickness: 100nm, routable: false]
+        active:     [material: SiO2,       thickness: 200nm, routable: false]
+        gate_oxide: [material: SiO2,      thickness: 10nm,  routable: false]
+        poly:       [material: SiO2,      thickness: 150nm, routable: local_only]
+        d1:         [material: SiO2,      thickness: 500nm, routable: false]
+        metal1:     [material: SiO2,      thickness: 400nm, routable: true]
 
     # Explicitly declare physical transition bridges inside the PDK profile
     bridge Silicon_N to Aluminum:
@@ -46,6 +47,12 @@ profile Silicon_180nm:
     clearance:
         high_voltage: 500nm
         safety_factor: 2.0
+
+    thermal:
+        ambient_temp: 25C
+        max_operating_temp: 125C
+        max_temp_rise: 50C
+        clustering_threshold: 10um
 
     layer:
         min_thickness: 100nm

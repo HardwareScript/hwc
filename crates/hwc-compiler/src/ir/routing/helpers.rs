@@ -3,7 +3,6 @@
 use super::super::errors::IrError;
 use compact_str::CompactString;
 use hwc_engine::{HardwareSpace, Point3D};
-use rustc_hash::FxHashMap;
 
 /// Construct full component name from pin reference (Sprint 3.10: Parametric Routing)
 ///
@@ -204,6 +203,8 @@ pub fn register_net_for_route(
     space: &mut HardwareSpace,
     route: &hwc_parser::Route,
     symbol_table: &crate::SymbolTable,
+    stackup_manager: &crate::ir::stackup_manager::StackupManager,
+    profile: Option<&hwc_parser::ProfileDefinition>,
 ) -> Result<hwc_engine::netlist::NetId, IrError> {
     let (start_pin_id, goal_pin_id) = get_pin_ids(space, route)?;
 
@@ -225,8 +226,23 @@ pub fn register_net_for_route(
         100_000 // Default 100um
     };
 
-    let copper_id = space.material_registry.get_id("Copper").ok_or_else(|| {
-        IrError::UndeclaredMaterial { material: "Copper".into() }
+    // Resolve material from stackup layer at the start pin's Z position
+    let start_pin_z = space.netlist.get_pin_position(start_pin_id)
+        .map(|pos| pos.2)
+        .unwrap_or(0);
+    let copper_id = (|| -> Option<hwc_engine::material::MaterialId> {
+        let layer_name = stackup_manager.get_layer_name_at_z(start_pin_z)?;
+        let mat_name = profile
+            .and_then(|p| p.stackup.as_ref())
+            .and_then(|stackup| {
+                stackup.layers.iter()
+                    .find(|l| l.name.name == layer_name)
+                    .map(|l| l.material.clone())
+            })?;
+        space.material_registry.get_id(&mat_name)
+    })()
+    .ok_or_else(|| IrError::UndeclaredMaterial {
+        material: format!("No material found at Z={}nm (check stackup definition)", start_pin_z).into(),
     })?;
 
     // Check if start pin already has a net
@@ -280,54 +296,4 @@ pub fn register_net_for_route(
     Ok(net_id)
 }
 
-/// Collect all existing nets from the voxel grid for DRC validation.
-pub fn collect_existing_nets(
-    space: &HardwareSpace,
-) -> Vec<hwc_engine::design_rule_check::NetVoxels> {
-    use hwc_engine::design_rule_check::NetVoxels;
 
-    eprintln!(
-        "[ROUTER DEBUG] collect_existing_nets: Using SPARSE iteration over occupied voxels..."
-    );
-
-    let mut nets_map: FxHashMap<u32, Vec<Point3D>> = FxHashMap::default();
-
-    // CRITICAL FIX: Use sparse iteration instead of dense O(N³) loop
-    // This iterates only over occupied chunks, not all 4 billion voxel coordinates!
-    for (x, y, z, _material, net_handle) in space.entity_graph.iter_occupied() {
-        let net_id = net_handle;
-        if net_id > 0 {
-            let position = space.voxel_to_position(x, y, z);
-            nets_map.entry(net_id).or_default().push(position);
-        }
-    }
-
-    eprintln!(
-        "[ROUTER DEBUG] Sparse iteration complete. Found {} nets",
-        nets_map.len()
-    );
-
-    nets_map
-        .into_iter()
-        .map(|(net_id, voxels)| {
-            let net_name = space
-                .netlist
-                .get_net(hwc_engine::netlist::NetId::new(net_id))
-                .map(|n| n.name.clone())
-                .unwrap_or_else(|| format!("Net_{}", net_id).into());
-
-            let classification = space
-                .net_classifications
-                .get(&net_name)
-                .copied()
-                .unwrap_or(hwc_engine::space::NetClassification::Unclassified);
-
-            NetVoxels {
-                net_name,
-                voxels,
-                geometry_type: hwc_engine::design_rule_check::GeometryType::Trace, // Routed nets are traces
-                classification,
-            }
-        })
-        .collect()
-}

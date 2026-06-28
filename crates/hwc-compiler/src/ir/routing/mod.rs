@@ -8,8 +8,7 @@ mod manual;
 pub use automatic::{calculate_boundary_points, route_automatic};
 pub use global::AutoRouter;
 pub use helpers::{
-    collect_existing_nets, evaluate_index_expression, get_pin_positions, needs_automatic_routing,
-    register_net_for_route,
+    evaluate_index_expression, get_pin_positions, needs_automatic_routing, register_net_for_route,
 };
 pub use manual::route_manual;
 
@@ -30,7 +29,7 @@ pub fn route_trace(
     profile: Option<&hwc_parser::ProfileDefinition>,
 ) -> Result<(), IrError> {
     if needs_automatic_routing(route) {
-        route_automatic(space, route, symbol_table, stackup_manager)
+        route_automatic(space, route, symbol_table, stackup_manager, profile)
     } else {
         route_manual(
             space,

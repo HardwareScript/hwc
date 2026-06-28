@@ -148,7 +148,8 @@ pub fn export_glb(
         if !mat_map.contains_key(&mesh.material_name) {
             let mat_idx = materials_array.len();
             let (material_node, _) =
-                get_or_create_material(&mut materials_owned, &mesh.material_name);
+                get_or_create_material(&mut materials_owned, &mesh.material_name)
+                    .expect("Failed to get or create material");
             mat_map.insert(mesh.material_name.clone(), mat_idx);
 
             // Add fallback material with inferred properties

@@ -21,10 +21,9 @@ pub use error::SynthesisError;
 use crate::electrical_symbol_table::ElectricalSymbolTable;
 use crate::symbol_table::SymbolTable;
 use crate::width_inference::{WidthInference, WidthValidationResult, WidthWarning};
-use crate::DiagnosticReporterAdapter;
 use compact_str::CompactString;
 use hwc_diagnostics::DiagnosticCollector;
-use hwc_engine::{ComponentId, ComponentPlacer, HardwareSpace, PinId, PlacementParams, Point3D};
+use hwc_engine::{ComponentId, HardwareSpace, PinId, Point3D};
 use hwc_parser::ast::LogicOperator;
 use hwc_parser::logic::*;
 
@@ -44,8 +43,6 @@ pub struct LogicSynthesizer<'a> {
     dependency_graph: DependencyGraph,
     /// Warnings collected during synthesis
     warnings: Vec<WidthWarning>,
-    /// Diagnostic collector for reporting waivers
-    collector: &'a DiagnosticCollector,
 }
 
 impl<'a> LogicSynthesizer<'a> {
@@ -53,7 +50,6 @@ impl<'a> LogicSynthesizer<'a> {
     pub fn new(
         space: &'a mut HardwareSpace,
         symbol_table: &'a SymbolTable,
-        collector: &'a DiagnosticCollector,
     ) -> Self {
         Self {
             space,
@@ -63,7 +59,6 @@ impl<'a> LogicSynthesizer<'a> {
             next_component_id: 0,
             dependency_graph: DependencyGraph::new(),
             warnings: Vec::new(),
-            collector,
         }
     }
 
@@ -211,22 +206,24 @@ impl<'a> LogicSynthesizer<'a> {
         component_type: CompactString,
         position: Point3D,
     ) -> Result<(), SynthesisError> {
-        let placer = ComponentPlacer::new();
-        placer
-            .place_component(PlacementParams {
-                entity_graph: &mut self.space.entity_graph,
-                voxel_size: &self.space.voxel_size,
-                arena: &mut self.space.netlist,
-                symbol_table: self.symbol_table,
-                material_registry: &mut self.space.material_registry,
-                name,
-                component_type,
-                position,
-                rotation_deg: 0.0,
-                merge_waiver: hwc_parser::MergeWaiver::None,
-                collector: Some(&DiagnosticReporterAdapter(self.collector)),
-            })
-            .map_err(|e| SynthesisError::internal(e.to_string().into(), None))?;
+        // Add component to netlist arena (v0.1.8 replacement for ComponentPlacer)
+        let component_id = self.space.netlist.add_component(
+            name.clone(),
+            component_type.clone(),
+            (position.x, position.y, position.z),
+        );
+
+        // Register pins in netlist arena
+        if let Ok(component_def) = self.symbol_table.get_component(component_type.as_str()) {
+            for pin_name in &component_def.pins {
+                self.space.netlist.add_pin(
+                    component_id,
+                    pin_name.clone(),
+                    (0, 0, 0),
+                    None,
+                );
+            }
+        }
 
         Ok(())
     }

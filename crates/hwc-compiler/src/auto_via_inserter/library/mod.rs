@@ -122,7 +122,10 @@ impl ViaLibrary {
                             .material
                             .as_ref()
                             .map(|material| material.name.clone())
-                            .unwrap_or_else(|| "Copper".into()),
+                            .unwrap_or_else(|| panic!(
+                                "Via '{}' in profile '{}' has no material. Declare via.material in the profile.",
+                                via_def.name.name, profile.name
+                            )),
                         from,
                         to,
                         Self::measurement_to_mm(&via_def.diameter),
@@ -148,13 +151,27 @@ impl ViaLibrary {
                         .map(|v| Self::measurement_to_mm(&v.min_annular_ring))
                         .unwrap_or(0.15);
 
-                    let conductive_indices: Vec<usize> = stackup
-                        .layers
-                        .iter()
-                        .enumerate()
-                        .filter(|(_, layer)| _is_conductive_material(&layer.material))
-                        .map(|(i, _)| i)
-                        .collect();
+                    let conductive_indices: Vec<usize> = if profile.is_asic() {
+                        // v0.1.8: ASIC profiles need vias between ALL stackup layers,
+                        // not just conductive ones. The via stack must connect through
+                        // all intermediate layers (active→poly→metal1, etc.).
+                        // Exclude only the substrate layer (index 0, routable: false).
+                        stackup
+                            .layers
+                            .iter()
+                            .enumerate()
+                            .skip(1) // Skip substrate
+                            .map(|(i, _)| i)
+                            .collect()
+                    } else {
+                        stackup
+                            .layers
+                            .iter()
+                            .enumerate()
+                            .filter(|(_, layer)| _is_conductive_material(&layer.material))
+                            .map(|(i, _)| i)
+                            .collect()
+                    };
 
                     if profile.is_asic() {
                         // ASIC: auto-generate adjacent-layer vias (m1→m2, m2→m3, etc.)

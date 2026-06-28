@@ -305,7 +305,7 @@ impl Default for ConstraintSet {
                 safety_factor: 2.0,
             },
             layer: LayerConstraints {
-                min_thickness_nm: 35_000, // 35µm (1oz copper)
+                min_thickness_nm: 35_000, // 1 oz copper = 35 µm (IPC standard)
                 max_thickness_nm: 0,      // unlimited
                 allowed_conductors: vec!["copper".into()],
                 allowed_dielectrics: vec!["fr4".into(), "air".into()],

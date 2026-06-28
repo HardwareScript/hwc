@@ -286,16 +286,16 @@ impl<'a> ConstraintSolver<'a> {
         similar.into_iter().collect()
     }
 
-    fn convert_edge(&self, edge: hwc_parser::Edge) -> hwc_engine::placement::Edge {
+    fn convert_edge(&self, edge: hwc_parser::Edge) -> hwc_engine::geometry::Edge {
         match edge {
-            hwc_parser::Edge::Left => hwc_engine::placement::Edge::Left,
-            hwc_parser::Edge::Right => hwc_engine::placement::Edge::Right,
-            hwc_parser::Edge::Top => hwc_engine::placement::Edge::Top,
-            hwc_parser::Edge::Bottom => hwc_engine::placement::Edge::Bottom,
-            hwc_parser::Edge::Front => hwc_engine::placement::Edge::Front,
-            hwc_parser::Edge::Back => hwc_engine::placement::Edge::Back,
-            hwc_parser::Edge::MinZ => hwc_engine::placement::Edge::MinZ,
-            hwc_parser::Edge::MaxZ => hwc_engine::placement::Edge::MaxZ,
+            hwc_parser::Edge::Left => hwc_engine::geometry::Edge::Left,
+            hwc_parser::Edge::Right => hwc_engine::geometry::Edge::Right,
+            hwc_parser::Edge::Top => hwc_engine::geometry::Edge::Top,
+            hwc_parser::Edge::Bottom => hwc_engine::geometry::Edge::Bottom,
+            hwc_parser::Edge::Front => hwc_engine::geometry::Edge::Front,
+            hwc_parser::Edge::Back => hwc_engine::geometry::Edge::Back,
+            hwc_parser::Edge::MinZ => hwc_engine::geometry::Edge::MinZ,
+            hwc_parser::Edge::MaxZ => hwc_engine::geometry::Edge::MaxZ,
         }
     }
 
@@ -303,7 +303,7 @@ impl<'a> ConstraintSolver<'a> {
         &self,
         base_point: Point3D,
         offset: &RelativeOffset,
-        edge: hwc_engine::placement::Edge,
+        edge: hwc_engine::geometry::Edge,
     ) -> Result<Point3D, String> {
         match offset {
             RelativeOffset::Single(measurement) => {

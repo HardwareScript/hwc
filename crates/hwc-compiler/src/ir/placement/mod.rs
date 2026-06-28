@@ -9,7 +9,7 @@ mod component;
 mod contact;
 pub mod context;
 pub mod coordinate_evaluation; // Made public for anchor reference evaluation
-mod helpers;
+pub mod helpers;
 mod module;
 mod plane;
 mod pour;

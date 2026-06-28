@@ -4,6 +4,32 @@ use super::super::errors::IrError;
 use super::helpers::get_pin_positions;
 use hwc_engine::{HardwareSpace, Point3D};
 
+/// Resolve the conductor material for a trace at the given Z position.
+/// Looks up the stackup layer at that Z and returns the material ID from the registry.
+fn resolve_material_for_z(
+    z_nm: i64,
+    stackup_manager: &crate::ir::stackup_manager::StackupManager,
+    material_registry: &hwc_engine::material::MaterialRegistry,
+    profile: Option<&hwc_parser::ProfileDefinition>,
+) -> Result<hwc_engine::material::MaterialId, crate::ir::errors::IrError> {
+    if let Some(layer_name) = stackup_manager.get_layer_name_at_z(z_nm) {
+        if let Some(mat_name) = profile
+            .and_then(|p| p.stackup.as_ref())
+            .and_then(|stackup| {
+                stackup.layers.iter()
+                    .find(|l| l.name.name == layer_name)
+                    .map(|l| l.material.clone())
+            })
+        {
+            return material_registry.get_id(&mat_name)
+                .ok_or_else(|| crate::ir::errors::IrError::UndeclaredMaterial { material: mat_name });
+        }
+    }
+    Err(crate::ir::errors::IrError::UndeclaredMaterial {
+        material: format!("No material found at Z={}nm (check stackup definition)", z_nm).into(),
+    })
+}
+
 /// Route a trace automatically using A* pathfinding.
 ///
 /// Implements the 3-phase routing pipeline:
@@ -15,8 +41,9 @@ pub fn route_automatic(
     route: &hwc_parser::Route,
     symbol_table: &crate::SymbolTable,
     stackup_manager: &crate::ir::stackup_manager::StackupManager,
+    profile: Option<&hwc_parser::ProfileDefinition>,
 ) -> Result<(), IrError> {
-    use hwc_engine::constraint_manager::{ConstraintManager, LayerDirection, RouteConstraints};
+    use hwc_engine::constraint_manager::{LayerDirection, RouteConstraints};
     use hwc_engine::geometry_router::GridBounds;
 
     // eprintln!(
@@ -25,7 +52,18 @@ pub fn route_automatic(
     // );
 
     // PHASE 1: CONSTRAINT MANAGER
-    let voltage_mv = 5000;
+    // v0.1.8: Use profile constraints when available, fall back to physics calculation
+    let min_clearance_nm = space.fabrication_constraints.as_ref()
+        .map(|c| c.trace.min_spacing_nm)
+        .unwrap_or_else(|| {
+            let voltage_mv = 5000;
+            let dielectric_strength_kv_mm = 20.0;
+            hwc_engine::constraint_manager::calculate_clearance_nm(
+                voltage_mv,
+                dielectric_strength_kv_mm,
+                2,
+            )
+        });
 
     // v0.1.8: Read current limit from route declaration instead of hardcoding
     let current_ma: f64 = if let Some(ref ac) = route.current_limit_ac {
@@ -39,16 +77,7 @@ pub fn route_automatic(
         20.0 // safe default
     };
 
-    let dielectric_strength_kv_mm = 20.0;
     let is_external = true;
-
-    let _constraint_manager = ConstraintManager::new(space.voxel_size.x_nm);
-
-    let min_clearance_nm = hwc_engine::constraint_manager::calculate_clearance_nm(
-        voltage_mv,
-        dielectric_strength_kv_mm,
-        2,
-    );
 
     let min_trace_width_nm =
         hwc_engine::constraint_manager::calculate_trace_width_nm(current_ma as i64, 10, is_external);
@@ -72,11 +101,13 @@ pub fn route_automatic(
     // the layer transitions at the pin boundaries.
     let target_z_nm = if let Some(ref layer_id) = route.layer {
         let layer_name = layer_id.name.as_str();
+        eprintln!("[ROUTER] route.layer='{}' specified, resolving Z from stackup...", layer_name);
         let z = stackup_manager.get_layer_start_z(layer_name)
             .ok_or_else(|| IrError::InvalidRouteExpression {
                 expression: format!("layer '{}'", layer_name),
                 reason: format!("Unknown routing layer '{}' in stackup", layer_name),
             })?;
+        eprintln!("[ROUTER] Resolved layer '{}' -> Z={}nm (pin_z={})", layer_name, z, start_boundary.z);
         Some(z)
     } else {
         None
@@ -84,22 +115,22 @@ pub fn route_automatic(
 
     // v0.1.7: External A* Seeding
     // To prevent "hooks" inside pads, the A* solver starts one voxel OUTSIDE the pad.
-    let voxel_size = space.voxel_size.x_nm;
+    let resolution_nm = space.resolution_nm;
 
     // Helper to snap a coordinate to the nearest voxel center
-    let _snap_to_center = |coord: i64, v_size: i64| {
-        (coord / v_size) * v_size + (v_size / 2)
+    let _snap_to_center = |coord: i64, res_nm: i64| {
+        (coord / res_nm) * res_nm + (res_nm / 2)
     };
 
     let mut start_pos = hwc_engine::Point3D::new(
-        start_boundary.x + (start_dir.0 * voxel_size),
-        start_boundary.y + (start_dir.1 * voxel_size),
+        start_boundary.x + (start_dir.0 * resolution_nm),
+        start_boundary.y + (start_dir.1 * resolution_nm),
         start_boundary.z,
     );
 
     let mut goal_pos = hwc_engine::Point3D::new(
-        goal_boundary.x + (goal_dir.0 * voxel_size),
-        goal_boundary.y + (goal_dir.1 * voxel_size),
+        goal_boundary.x + (goal_dir.0 * resolution_nm),
+        goal_boundary.y + (goal_dir.1 * resolution_nm),
         goal_boundary.z,
     );
 
@@ -133,7 +164,7 @@ pub fn route_automatic(
     // PHASE 2: GEOMETRY ROUTER
     // v0.1.7: Register net connectivity in the netlist
     // This ensures both pins share the same logical net ID.
-    let net_id = super::helpers::register_net_for_route(space, route, symbol_table)?;
+    let net_id = super::helpers::register_net_for_route(space, route, symbol_table, stackup_manager, profile)?;
     let net_name = space.netlist.get_net(net_id)
         .ok_or_else(|| IrError::InvalidRouteExpression {
             expression: format!("net ID {}", net_id.raw()),
@@ -172,13 +203,19 @@ pub fn route_automatic(
     use hwc_engine::constraint_manager::ClearanceZone;
     use rustc_hash::FxHashMap;
 
-    let occupied_voxels: FxHashMap<hwc_engine::Point3D, hwc_engine::netlist::NetId> = FxHashMap::default();
+    let _occupied_voxels: FxHashMap<hwc_engine::Point3D, hwc_engine::netlist::NetId> = FxHashMap::default();
     let clearance_zones: Vec<ClearanceZone> = Vec::new();
 
-    // Get Copper material ID from registry
-    let copper_id = space.material_registry.get_id("Copper").ok_or_else(|| {
-        IrError::UndeclaredMaterial { material: "Copper".into() }
-    })?;
+    // Resolve material ID from stackup layer at the route's target Z position.
+    // When layer: is specified, use target_z_nm (the routing layer).
+    // Otherwise fall back to start_pos.z (the pin's layer).
+    let route_z = target_z_nm.unwrap_or(start_pos.z);
+    let copper_id = resolve_material_for_z(
+        route_z,
+        stackup_manager,
+        &space.material_registry,
+        profile,
+    )?;
 
     // v0.1.7: Identify exempt components (start and goal)
     let from_component_name = super::helpers::construct_component_name(&route.from)?;
@@ -186,27 +223,101 @@ pub fn route_automatic(
 
     let exempt_components = [from_component_name.clone(), to_component_name.clone()];
 
+    // v0.1.8: Resolve routability for the target layer
+    let layer_routable_mode = if let Some(z) = target_z_nm.or(Some(start_pos.z)) {
+        // Look up the layer name at this Z position from the stackup
+        stackup_manager.get_layer_name_at_z(z)
+            .and_then(|layer_name| {
+                // Query the profile's stackup for routability
+                profile.and_then(|p| p.stackup.as_ref()).and_then(|stackup| {
+                    stackup.layers.iter().find(|l| l.name.name == layer_name).and_then(|l| l.routable)
+                })
+            })
+            .map(|mode| match mode {
+                hwc_parser::RoutableMode::True => hwc_engine::geometry_router::stackup_slicing::RoutableMode::True,
+                hwc_parser::RoutableMode::False => hwc_engine::geometry_router::stackup_slicing::RoutableMode::False,
+                hwc_parser::RoutableMode::LocalOnly => hwc_engine::geometry_router::stackup_slicing::RoutableMode::LocalOnly,
+            })
+    } else {
+        None
+    };
+
+    // v0.1.8: Build component keepouts from entity graph for Interior Lockout
+    let component_keepouts: Vec<(i64, i64, i64, i64, i64, i64)> = space.entity_graph
+        .get_component_metadata()
+        .iter()
+        .filter(|c| !exempt_components.iter().any(|e| e == &c.name))
+        .flat_map(|c| {
+            // Create one keepout tuple per Z-range where the component has material
+            if c.blocked_z_ranges.is_empty() {
+                // No Z-range info: use the full bounding box as a keepout
+                vec![(c.bbox.min.z, c.bbox.max.z, c.bbox.min.x, c.bbox.min.y, c.bbox.max.x, c.bbox.max.y)]
+            } else {
+                c.blocked_z_ranges.iter().map(|z_range| {
+                    (z_range.0, z_range.1, c.bbox.min.x, c.bbox.min.y, c.bbox.max.x, c.bbox.max.y)
+                }).collect()
+            }
+        })
+        .collect();
+
+    // v0.1.8: Collect pin positions for Via-Portal Exemption
+    let active_net_pin_positions: Vec<(i64, i64)> = space.entity_graph
+        .get_component_pins()
+        .iter()
+        .filter(|pin| pin.net.as_ref() == Some(&net_name))
+        .map(|pin| (pin.x_nm, pin.y_nm))
+        .collect();
+
+    // v0.1.8: Resolve via drill diameter from profile
+    let via_drill_diameter_nm = profile
+        .and_then(|p| p.via.as_ref())
+        .map(|v| crate::ir::conversions::measurement_to_nm(&v.min_diameter, symbol_table).unwrap_or(200_000))
+        .unwrap_or(200_000);
+
     let routing_params = hwc_engine::geometry_router::RoutingParams {
         net_id,
         constraints: &route_constraints,
         bounds,
         layer_direction,
-        voxel_size: space.voxel_size,
+        resolution_nm: space.resolution_nm,
         clearance_zones: &clearance_zones,
-        occupied_voxels: &occupied_voxels,
         entity_graph: Some(&space.entity_graph), // v0.1.7: Enable Strict Interior Lockout
-        corridor: None,   // No corridor constraint in compiler automatic routing
+
         fixed_z_nm: target_z_nm.or(Some(start_pos.z)), // v0.1.8: Lock to target layer Z if specified
         exempt_components: &exempt_components, // v0.1.7: Escape Exemption
-        substrate_layers: None, // v0.1.7: No substrate context in basic automatic routing
+        substrate_layers: Some(&space.entity_graph.substrate_layers),
         is_high_speed_net: false, // v0.1.7: Default to non-high-speed
+        layer_routable_mode,
+        max_local_route_length_nm: Some(10_000_000), // Default 10mm
+        via_drill_diameter_nm,
+        active_net_pin_positions: &active_net_pin_positions,
+        component_keepouts: &component_keepouts,
     };
 
-    // eprintln!("[ROUTER] Starting topological line-search routing...");
-    let mut path = hwc_engine::geometry_router::route_net_deterministic(
+    // v0.1.8: Build SDF for Leap-Frog A* routing
+    let voxel_size_struct = hwc_engine::geometry_router::sdf_generator::VoxelSize {
+        x_nm: space.resolution_nm,
+        y_nm: space.resolution_nm,
+        z_nm: space.resolution_nm,
+    };
+    let x_size = (space.dimensions.width_nm / space.resolution_nm) as usize;
+    let y_size = (space.dimensions.height_nm / space.resolution_nm) as usize;
+    let z_size = (space.dimensions.depth_nm / space.resolution_nm).max(1) as usize;
+
+    let mut sdf = hwc_engine::geometry_router::sdf_generator::SdfGenerator::new(
+        x_size, y_size, z_size,
+        voxel_size_struct,
+        0, // substrate_height_nm
+    );
+    for meta in space.entity_graph.get_component_metadata() {
+        sdf.register_component(meta.clone());
+    }
+
+    let mut path = hwc_engine::geometry_router::route_net_sdf_accelerated(
         start_pos,
         goal_pos,
         &routing_params,
+        &sdf,
     )
     .ok_or_else(|| {
         IrError::NoPathFound {
@@ -221,6 +332,26 @@ pub fn route_automatic(
     // This ensures the trace connects perfectly to the pad edge.
     path.insert(0, start_boundary);
     path.push(goal_boundary);
+
+    // v0.1.8: R25 Non-Routable Layer Check (Post-Route)
+    // The SDF router's calculate_move_cost rejects non-routable layers via
+    // infinite cost, but this post-route check catches any edge cases where
+    // the router may have slipped through (e.g. Z-transitions).
+    if let Some(stackup) = profile.and_then(|p| p.stackup.as_ref()) {
+        for point in &path {
+            if let Some(layer_name) = stackup_manager.get_layer_name_at_z(point.z) {
+                if let Some(layer_def) = stackup.layers.iter().find(|l| l.name.name == layer_name) {
+                    if let Some(hwc_parser::RoutableMode::False) = layer_def.routable {
+                        let material = layer_def.material.clone();
+                        return Err(IrError::NonRoutableLayer {
+                            layer: layer_name.into(),
+                            material,
+                        });
+                    }
+                }
+            }
+        }
+    }
 
     // v0.1.7: Global Axis Alignment (Neat Routing)
     // If the start and goal share an axis (straight route), lock all intermediate
@@ -261,7 +392,7 @@ pub fn route_automatic(
     // We transform the router's voxel-snapped path back into exact physical layer heights
     // using the StackupManager. This eliminates the 21µm "discretization noise".
     let mut refined_path = path.clone();
-    let mut trace_thickness_nm = space.voxel_size.z_nm; // Default to voxel size
+    let mut trace_thickness_nm = space.resolution_nm; // Default to resolution size
 
     if refined_path.len() >= 2 {
         // v0.1.7: When fixed_z_nm is set (planar-locked 2.5D routing), the SDF router
@@ -316,6 +447,18 @@ pub fn route_automatic(
                 }
             }
         }
+    }
+
+    // After the Z-refinement loop, verify thickness was resolved from stackup
+    if trace_thickness_nm == space.resolution_nm && refined_path.len() >= 2 {
+        return Err(IrError::InvalidRouteExpression {
+            expression: format!("route from {}.{} to {}.{}", route.from.component, route.from.pin, route.to.component, route.to.pin),
+            reason: format!(
+                "Could not resolve trace thickness from stackup at Z={}nm. \
+                 Ensure the stackup is properly defined in your PDK profile.",
+                refined_path[0].z
+            ),
+        });
     }
 
     // Primitives Over Pixels
@@ -399,9 +542,9 @@ pub fn route_automatic(
             start_boundary,
             goal_boundary,
             trace_width_nm,
-            &teardrop_config,
-            space.voxel_size.x_nm,
-            hwc_engine::netlist::NetHandle::new(net_id.raw() as u32),
+        &teardrop_config,
+        space.resolution_nm,
+        hwc_engine::netlist::NetHandle::new(net_id.raw() as u32),
         );
     }
 
@@ -413,7 +556,17 @@ pub fn route_automatic(
         segments,
         copper_id,
         net_name.clone(),
+        current_ma,
     );
+
+    eprintln!("[ROUTER] Net '{}': {} segments registered (start_z={}, goal_z={}, target_z={:?})",
+        net_name, analytic_trace.segments.len(), start_boundary.z, goal_boundary.z, target_z_nm);
+    for (i, seg) in analytic_trace.segments.iter().enumerate() {
+        if seg.start.z != seg.end.z {
+            eprintln!("[ROUTER]   seg[{}]: Z-TRANSITION ({},{},{}) -> ({},{},{})",
+                i, seg.start.x, seg.start.y, seg.start.z, seg.end.x, seg.end.y, seg.end.z);
+        }
+    }
 
     // v0.1.8: EM/Thermal verification using parsed current_limit_ac
     {
@@ -439,6 +592,7 @@ pub fn route_automatic(
                 segment_id: i,
                 net_id: net_id.raw() as usize,
                 width_nm: analytic_trace.width_nm,
+                thickness_nm: trace_thickness_nm,
                 start: seg.start,
                 end: seg.end,
                 layer: 0,
@@ -451,9 +605,15 @@ pub fn route_automatic(
         };
 
         let thermal_params = hwc_engine::ThermalParams {
-            ambient_temp_c: 25.0,
-            max_temp_rise_c: 20.0,
-            copper_thickness_m: 35e-6, // 1 oz copper
+            ambient_temp_c: profile
+                .and_then(|p| p.thermal.as_ref())
+                .map(|t| t.ambient_temp.value)
+                .unwrap_or(25.0),
+            max_temp_rise_c: profile
+                .and_then(|p| p.thermal.as_ref())
+                .map(|t| t.max_temp_rise.value)
+                .unwrap_or(20.0),
+            copper_thickness_m: trace_thickness_nm as f64 * 1e-9,
             substrate_er: 4.2,
         };
 
@@ -548,7 +708,7 @@ pub fn route_automatic(
             .iter()
             .map(|(route_name, comp_name, actual_clearance)| {
                 format!(
-                    "  - Clearance violation: Route '{}' too close to component '{}': {:.3}mm actual, {:.3}mm required",
+                    "  - Clearance violation [P18]: Route '{}' too close to component '{}': {:.4}mm actual, {:.4}mm required",
                     route_name,
                     comp_name,
                     *actual_clearance as f64 / 1_000_000.0,

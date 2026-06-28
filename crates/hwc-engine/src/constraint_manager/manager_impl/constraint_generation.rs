@@ -5,10 +5,9 @@
 
 use super::impedance::{calculate_trace_impedance, determine_target_impedance};
 use super::symbol_table::{extract_dielectric_strength, SymbolTableTrait};
-use crate::constraint_manager::clearance::{calculate_clearance_nm, expand_clearance_zone};
+use crate::constraint_manager::clearance::{calculate_clearance_nm};
 use crate::constraint_manager::trace_width::calculate_trace_width_nm;
 use crate::constraint_manager::types::{ClearanceZone, FabricationConstraints, RouteConstraints};
-use crate::geometry::Point3D;
 use crate::netlist::{NetData, NetId};
 
 /// Parameters for generating net constraints
@@ -125,11 +124,9 @@ pub fn generate_net_constraints<S: SymbolTableTrait>(
 /// # Arguments
 /// * `net_id` - Net identifier
 /// * `voltage_mv` - Net voltage in millivolts
-/// * `occupied_voxels` - Actual copper voxel locations
 /// * `material_name` - Name of the dielectric material (e.g., "FR4", "Air")
 /// * `symbol_table` - Symbol Table containing material definitions
 /// * `safety_factor` - Safety factor for clearance calculations
-/// * `voxel_size_nm` - Voxel size for spatial discretization
 ///
 /// # Returns
 /// Clearance zone for this net, or error if material not found
@@ -140,11 +137,9 @@ pub fn generate_net_constraints<S: SymbolTableTrait>(
 pub fn generate_clearance_zone<S: SymbolTableTrait>(
     net_id: NetId,
     voltage_mv: i64,
-    occupied_voxels: Vec<Point3D>,
     material_name: &str,
     symbol_table: &S,
     safety_factor: i64,
-    voxel_size_nm: i64,
 ) -> Result<ClearanceZone, String> {
     // Load material from Symbol Table (v0.1.4 integration)
     let material_def = symbol_table.get_material(material_name)?;
@@ -156,15 +151,9 @@ pub fn generate_clearance_zone<S: SymbolTableTrait>(
     let clearance_radius_nm =
         calculate_clearance_nm(voltage_mv, dielectric_strength_kv_mm, safety_factor);
 
-    // Expand clearance zone around occupied voxels
-    let clearance_voxels =
-        expand_clearance_zone(&occupied_voxels, clearance_radius_nm, voxel_size_nm);
-
     Ok(ClearanceZone {
         net_id,
         voltage_mv,
-        occupied_voxels,
-        clearance_voxels,
         clearance_radius_nm,
     })
 }

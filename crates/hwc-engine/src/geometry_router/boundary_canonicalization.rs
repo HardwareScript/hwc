@@ -409,7 +409,7 @@ mod tests {
             (100, 100),
             (0, 100),
         ];
-        let result = canonicalize(polygon, WindingType::OuterContour, 10);
+        let result = canonicalize(polygon, WindingType::OuterContour, 10, 1_000);
         let result = result.expect("should produce a valid polygon");
         assert!(result.len() >= 3);
         assert!(signed_area(&result) > 0, "outer contour should be CCW");
@@ -418,7 +418,7 @@ mod tests {
     #[test]
     fn canonicalize_degenerate_sliver_returns_none() {
         let polygon = vec![(0, 0), (1, 0), (0, 1)];
-        assert!(canonicalize(polygon, WindingType::OuterContour, 100).is_none());
+        assert!(canonicalize(polygon, WindingType::OuterContour, 100, 1_000).is_none());
     }
 
     #[test]
@@ -429,7 +429,7 @@ mod tests {
             (90, 90),
             (10, 90),
         ];
-        let result = canonicalize(polygon, WindingType::HoleContour, 10);
+        let result = canonicalize(polygon, WindingType::HoleContour, 10, 1_000);
         let result = result.expect("should produce a valid polygon");
         assert!(signed_area(&result) < 0, "hole contour should be CW");
     }

@@ -16,6 +16,12 @@ pub enum SceneGraphError {
 
     #[error("Component definition not found: {component}")]
     ComponentNotFound { component: String },
+
+    #[error(
+        "Material '{material}' is not declared in the PDK. \
+         Add a material definition to your materials.hw file or PDK profile."
+    )]
+    MaterialNotFound { material: String },
 }
 
 /// Parse hex color string (#RRGGBB)
@@ -33,92 +39,21 @@ pub fn parse_hex_color(hex: &str) -> Result<Color, SceneGraphError> {
     Ok(Color::new(r, g, b))
 }
 
-/// Infer material properties from name patterns using heuristics.
-/// This provides scalable fallback for user-defined materials without hardcoded names.
-pub fn infer_material_from_name(name: &str) -> MaterialNode {
-    let name_lower = name.to_lowercase();
-
-    // Pattern-based inference for precedence and visual properties
-    let (color, precedence, metallic, roughness) =
-        if name_lower.contains("copper") || name_lower.contains("cu") {
-            (Color::new(184, 115, 51), 1, 1.0, 0.2)
-        } else if name_lower.contains("gold") || name_lower.contains("au") {
-            (Color::new(255, 215, 0), 1, 1.0, 0.1)
-        } else if name_lower.contains("silver") || name_lower.contains("ag") {
-            (Color::new(192, 192, 192), 1, 1.0, 0.1)
-        } else if name_lower.contains("aluminum")
-            || name_lower.contains("al")
-            || name_lower.contains("alu")
-        {
-            (Color::new(200, 200, 200), 1, 0.9, 0.3)
-        } else if name_lower.contains("pour")
-            || name_lower.contains("fill")
-            || name_lower.contains("thief")
-        {
-            // Dummy metal fill (thieving) - typically copper-like
-            (Color::new(184, 115, 51), 4, 1.0, 0.2)
-        } else if name_lower.contains("silicon") || name_lower.contains("si") {
-            (Color::new(100, 150, 100), 2, 0.1, 0.7)
-        } else if name_lower.contains("soldermask") || name_lower.contains("mask") {
-            let shade = if name_lower.contains("green") {
-                Color::new(0, 150, 0)
-            } else if name_lower.contains("red") {
-                Color::new(200, 0, 0)
-            } else if name_lower.contains("blue") {
-                Color::new(0, 0, 200)
-            } else {
-                Color::new(0, 100, 0)
-            };
-            (shade, 3, 0.0, 0.5)
-        } else if name_lower.contains("solder") {
-            (Color::new(200, 200, 200), 1, 0.2, 0.8)
-        } else if name_lower.contains("substrate")
-            || name_lower.contains("fr4")
-            || name_lower.contains("pcb")
-        {
-            (Color::new(26, 77, 26), 4, 0.0, 0.8)
-        } else if name_lower.contains("via") || name_lower.contains("trace") {
-            (Color::new(184, 115, 51), 1, 1.0, 0.2)
-        } else if name_lower.contains("component") {
-            (Color::new(40, 40, 40), 2, 0.1, 0.5)
-        } else if name_lower.contains("dielectric") || name_lower.contains("prepreg") {
-            (Color::new(100, 100, 150), 4, 0.0, 0.6)
-        } else {
-            // Default fallback: assume conductor-like for unknown materials
-            (Color::new(184, 115, 51), 4, 1.0, 0.2)
-        };
-
-    MaterialNode {
-        name: name.into(),
-        color,
-        opacity: 1.0,
-        outline_opacity: 1.0,
-        metallic,
-        roughness,
-        ior: 1.5,
-        clearcoat: 0.0,
-        clearcoat_roughness: 0.0,
-        subsurface: 0.0,
-        anisotropy: 0.0,
-        anisotropy_rotation: 0.0,
-        texture: None,
-        precedence,
-    }
-}
-
-/// Get or create a material with depth bias metadata for the glTF export.
-/// Uses a lookup table approach with pattern-based inference for unknown materials.
+/// Look up an existing material by name. Fails if the material was not declared in the PDK.
+///
+/// No inference or heuristics — if a material is not declared in the symbol table,
+/// this returns an error so the compiler fails loudly.
 pub fn get_or_create_material<'a>(
     materials: &'a mut FxHashMap<CompactString, MaterialNode>,
     name: &CompactString,
-) -> (&'a MaterialNode, CompactString) {
-    let is_new = !materials.contains_key(name);
-    if is_new {
-        let material_node = infer_material_from_name(name.as_str());
-        materials.insert(name.clone(), material_node);
+) -> Result<(&'a MaterialNode, CompactString), SceneGraphError> {
+    if !materials.contains_key(name) {
+        return Err(SceneGraphError::MaterialNotFound {
+            material: name.to_string(),
+        });
     }
     let mat = materials.get(name).unwrap();
-    (mat, name.clone())
+    Ok((mat, name.clone()))
 }
 
 /// Add materials from Symbol Table
@@ -217,43 +152,6 @@ pub fn add_materials_from_symbol_table(
             texture: None,
             precedence: 0, // Void has absolute highest precedence (it overrides everything)
         });
-
-    // Standard Procedural Materials (Limitation 6)
-    let default_materials = [
-        ("Copper", Color::new(184, 115, 51), 1.0, 1.0, 1.0, 0.2), // #B87333
-        ("FR4", Color::new(26, 77, 26), 1.0, 0.1, 0.0, 0.8),      // Dark Green
-        ("SolderMask", Color::new(0, 100, 0), 0.8, 0.0, 0.0, 0.5),
-        ("SilkScreen", Color::new(240, 240, 240), 1.0, 0.0, 0.0, 1.0),
-        ("Component", Color::new(26, 26, 26), 1.0, 1.0, 0.0, 0.5), // #1A1A1A
-        ("Gold", Color::new(255, 215, 0), 1.0, 1.0, 1.0, 0.1),
-        ("Silver", Color::new(192, 192, 192), 1.0, 1.0, 1.0, 0.1),
-    ];
-
-    for (name, color, opacity, outline_opacity, metallic, roughness) in default_materials {
-        materials
-            .entry(CompactString::from(name))
-            .or_insert_with(|| MaterialNode {
-                name: name.into(),
-                color,
-                opacity,
-                outline_opacity,
-                metallic,
-                roughness,
-                ior: 1.5,
-                clearcoat: 0.0,
-                clearcoat_roughness: 0.0,
-                subsurface: 0.0,
-                anisotropy: 0.0,
-                anisotropy_rotation: 0.0,
-                texture: None,
-                precedence: match name {
-                    "Copper" | "Gold" | "Silver" => 1,
-                    "Component" => 2,
-                    "SolderMask" | "SilkScreen" => 3,
-                    _ => 4,
-                },
-            });
-    }
 
     Ok(())
 }

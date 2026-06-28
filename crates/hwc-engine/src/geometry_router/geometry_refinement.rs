@@ -190,7 +190,7 @@ mod tests {
         // Two overlapping squares should merge into one contour
         let square_a = vec![(0, 0), (2000, 0), (2000, 2000), (0, 2000)];
         let square_b = vec![(1000, 1000), (3000, 1000), (3000, 3000), (1000, 3000)];
-        let refined = refine_layer(vec![square_a, square_b]);
+        let refined = refine_layer(vec![square_a, square_b], 1_000);
         assert!(!refined.is_empty());
         // Merged area should be less than sum of individual areas (overlap removed)
         let total_area: i128 = refined.iter().map(|c| c.area).sum();
@@ -201,7 +201,7 @@ mod tests {
     #[test]
     fn test_refine_layer_single_shape() {
         let square = vec![(0, 0), (1000, 0), (1000, 1000), (0, 1000)];
-        let refined = refine_layer(vec![square]);
+        let refined = refine_layer(vec![square], 1_000);
         assert_eq!(refined.len(), 1);
         assert_eq!(refined[0].area, 1_000_000);
     }
@@ -255,14 +255,14 @@ mod tests {
             holes: Vec::new(),
             area: 1_000_000,
         }];
-        canonicalize_contours(&mut contours);
+        canonicalize_contours(&mut contours, 1_000);
         // Collinear point (500, 0) should be removed
         assert_eq!(contours[0].outer.len(), 4);
     }
 
     #[test]
     fn test_refine_geometry_empty() {
-        let result = refine_geometry(Vec::new());
+        let result = refine_geometry(Vec::new(), 1_000);
         assert!(result.is_empty());
     }
 

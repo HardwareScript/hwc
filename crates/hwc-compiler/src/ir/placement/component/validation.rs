@@ -83,11 +83,11 @@ pub fn validate_and_register(
                         let substrate_min_z = substrate_bbox.min.z;
                         let substrate_max_z = substrate_bbox.max.z;
 
-                        let component_z_layer = (component_min_z / space.voxel_size.z_nm) as usize;
+                        let component_z_layer = (component_min_z / space.resolution_nm) as usize;
                         let substrate_min_layer =
-                            (substrate_min_z / space.voxel_size.z_nm) as usize;
+                            (substrate_min_z / space.resolution_nm) as usize;
                         let substrate_max_layer =
-                            (substrate_max_z / space.voxel_size.z_nm) as usize;
+                            (substrate_max_z / space.resolution_nm) as usize;
 
                         let source = ctx.collector.source.as_str();
                         let original_line = source

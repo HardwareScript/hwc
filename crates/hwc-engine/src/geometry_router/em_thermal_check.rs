@@ -127,8 +127,7 @@ pub fn check_electromigration(segment: &IndexedSegment, params: &EmParams) -> Op
     if (segment.width_nm as f64) < min_width_nm_f {
         let min_width_nm = min_width_nm_f as i64;
         // Current density at actual width: J = I / A, A ≈ width * copper_thickness
-        // Use 35µm (1 oz copper) as default thickness
-        let copper_thickness = 35e-6;
+        let copper_thickness = segment.thickness_nm as f64 / 1_000_000_000.0;
         let width_m = segment.width_nm as f64 / 1_000_000_000.0;
         let cross_section = width_m * copper_thickness;
         let current_density = if cross_section > 0.0 {
@@ -231,6 +230,7 @@ mod tests {
             segment_id: 0,
             net_id,
             width_nm,
+            thickness_nm: 35_000,
             start: Point3D::new(0, 0, 0),
             end: Point3D::new(10_000_000, 0, 0), // 10mm
             layer: 0,
@@ -264,6 +264,7 @@ mod tests {
             segment_id: 1,
             net_id: 1,
             width_nm: 0,
+            thickness_nm: 35_000,
             start: Point3D::new(0, 0, 0),
             end: Point3D::new(10_000_000, 0, 0),
             layer: 0,
@@ -280,6 +281,7 @@ mod tests {
             segment_id: 1,
             net_id: 1,
             width_nm: 0,
+            thickness_nm: 35_000,
             start: Point3D::new(0, 0, 0),
             end: Point3D::new(10_000_000, 0, 0),
             layer: 0,

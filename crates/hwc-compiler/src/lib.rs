@@ -59,17 +59,6 @@ pub use validator::Validator;
 // Re-export BakedComponent from hwc-engine for semantic baking
 pub use hwc_engine::placement::BakedComponent;
 
-// v0.1.7: Implement DiagnosticReporter to bridge engine logs to native printer.
-// Using an adapter struct to satisfy orphan rules (DiagnosticCollector and DiagnosticReporter
-// are both defined in other crates).
-pub struct DiagnosticReporterAdapter<'a>(pub &'a hwc_diagnostics::DiagnosticCollector);
-
-impl<'a> hwc_engine::placement::DiagnosticReporter for DiagnosticReporterAdapter<'a> {
-    fn report_waiver(&self, message: &str) {
-        self.0.report(hwc_diagnostics::WaiverApplied::new(message));
-    }
-}
-
 #[derive(Debug)]
 pub struct CompilationMetadata {
     pub source_file: CompactString,

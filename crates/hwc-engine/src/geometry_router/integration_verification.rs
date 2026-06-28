@@ -19,6 +19,7 @@ mod tests {
             segment_id: id,
             net_id: net,
             width_nm: w,
+            thickness_nm: 35_000,
             start: Point3D::new(x1, y1, 0),
             end: Point3D::new(x2, y2, 0),
             layer: 0,
@@ -207,6 +208,9 @@ mod tests {
                     y1: 2_000_000,
                     x2: 3_000_000,
                     y2: 4_000_000,
+                    thickness_nm: 35_000,
+                    material_name: "Copper".to_string(),
+                    current_ma: 20_000,
                 },
                 ArchivedArcSegment {
                     net_id: 7,
@@ -216,6 +220,9 @@ mod tests {
                     y1: 6_000_000,
                     x2: 7_000_000,
                     y2: 8_000_000,
+                    thickness_nm: 35_000,
+                    material_name: "Copper".to_string(),
+                    current_ma: 20_000,
                 },
             ],
             instances: vec![ArchivedComponentInstance {
@@ -264,6 +271,9 @@ mod tests {
                 y1: 0,
                 x2: 1_000_000,
                 y2: 0,
+                thickness_nm: 35_000,
+                material_name: "Copper".to_string(),
+                current_ma: 20_000,
             }],
             instances: vec![],
         };
@@ -525,9 +535,14 @@ mod tests {
                 y1: 3_000_000,
                 x2: 8_000_000,
                 y2: 9_000_000,
+                thickness_nm: 35_000,
+                material_name: "Copper".to_string(),
+                current_ma: 20_000,
             }],
             instances: vec![],
         };
+
+        // Serialize
         let bytes: rkyv::AlignedVec =
             rkyv::to_bytes::<_, 1_048_576>(&lockfile).expect("serialize");
         let archived =

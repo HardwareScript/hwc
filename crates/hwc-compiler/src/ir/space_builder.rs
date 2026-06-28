@@ -3,7 +3,7 @@
 use super::conversions::measurement_to_nm;
 use super::errors::IrError;
 use crate::conversions::profile_to_constraints;
-use hwc_engine::{Dimensions, GridCells, HardwareSpace, MaterialRegistry, AIR_MATERIAL_ID};
+use hwc_engine::{Dimensions, HardwareSpace, MaterialRegistry, AIR_MATERIAL_ID};
 use hwc_parser::SpaceDefinition;
 
 /// Create a hardware space from space definition.
@@ -26,26 +26,17 @@ pub fn create_hardware_space(
             .map_err(|e| IrError::InvalidExpression(e))?,
     };
 
-    // Derive grid from resolution + dimensions, or error.
-    let grid_cells = if let Some(res_measurement) = &space_def.resolution {
-        let resolution_nm = measurement_to_nm(res_measurement, symbol_table)
+    // Determine resolution for coordinate snapping
+    let resolution_nm = if let Some(res_measurement) = &space_def.resolution {
+        let res = measurement_to_nm(res_measurement, symbol_table)
             .map_err(|e| IrError::InvalidExpression(e))?;
-        if resolution_nm <= 0 {
-            return Err(IrError::InvalidResolution { value: resolution_nm });
+        if res <= 0 {
+            return Err(IrError::InvalidResolution { value: res });
         }
-
-        // v0.1.8: resolution is a coordinate snapping step, NOT a grid cell count.
-        // The engine should use continuous vector coordinates (i64 picometers), not a voxel grid.
-        // TODO: Remove VoxelGrid dependency entirely. For now, derive a coarse grid from
-        // dimensions to keep the legacy engine running, but this should be eliminated
-        // once EntityGraph + TopologicalRouter fully replace the voxel pathfinder.
-        let x_cols = ((dims.width_nm / 200_000).max(1)).min(500) as usize;  // ~200um cells
-        let y_rows = ((dims.height_nm / 200_000).max(1)).min(500) as usize;
-        let z_layers = ((dims.depth_nm / 200_000).max(1)).min(4) as usize;
-
-        GridCells::new(x_cols, y_rows, z_layers)
+        res
     } else {
-        return Err(IrError::MissingGrid);
+        // Default resolution if not specified (e.g., 1nm for ASIC, 10um for PCB)
+        1
     };
 
     // Create material registry
@@ -83,6 +74,33 @@ pub fn create_hardware_space(
             }
         };
         material_registry.register_with_properties(&name, conductivity, process);
+
+        // Extract and store physical properties for thermal/electrical calculations
+        let mut resistivity_ohm_m: Option<f64> = None;
+        let mut thermal_conductivity_w_mk: Option<f64> = None;
+        for prop in &mat_def.properties {
+            match prop.key.as_str() {
+                "resistivity" => {
+                    if let hwc_parser::PropertyValue::Measurement(m) = &prop.value {
+                        // Value is already in base units (e.g. 2.82e-8ohm_m -> 2.82e-8)
+                        resistivity_ohm_m = Some(m.value);
+                    }
+                }
+                "thermal_conductivity" => {
+                    if let hwc_parser::PropertyValue::Measurement(m) = &prop.value {
+                        thermal_conductivity_w_mk = Some(m.value);
+                    } else if let hwc_parser::PropertyValue::Number(v) = prop.value {
+                        thermal_conductivity_w_mk = Some(v);
+                    }
+                }
+                _ => {}
+            }
+        }
+        if let (Some(rho), Some(k)) = (resistivity_ohm_m, thermal_conductivity_w_mk) {
+            if let Some(id) = material_registry.get_id(&name) {
+                material_registry.set_physical_props(id, rho, k);
+            }
+        }
     }
 
     // Determine space view orientation (v0.1.6)
@@ -99,14 +117,14 @@ pub fn create_hardware_space(
         hwc_engine::SpaceView::Horizontal
     };
 
-    // Create hardware space (VoxelGrid and NetlistArena are created inside)
+    // Create hardware space
     let mut space = HardwareSpace::new(
         space_def.name.to_string().into(),
         dims,
-        grid_cells,
         AIR_MATERIAL_ID, // Default substrate material, will be set if substrate specified
         material_registry,
         space_view,
+        resolution_nm,
     );
 
     // Load fabrication constraints from profile (v0.1.6: DRC Integration)
@@ -121,12 +139,6 @@ pub fn create_hardware_space(
         })?;
 
         space.fabrication_constraints = Some(constraints);
-    }
-
-    // Store resolution for coordinate snapping
-    if let Some(res_measurement) = &space_def.resolution {
-        space.resolution_nm = Some(measurement_to_nm(res_measurement, symbol_table)
-            .map_err(|e| IrError::InvalidExpression(e))?);
     }
 
     // Process net classifications (v0.1.6)
@@ -289,10 +301,7 @@ mod tests {
         let space = create_hardware_space(space_def, &symbol_table).unwrap();
         assert_eq!(space.name, "Test");
         assert_eq!(space.dimensions.width_nm, 50_000_000);
-        // Grid is derived from resolution: ~200um cells, capped at 500
-        // 50mm / 200um = 250 columns
-        assert_eq!(space.grid_cells().x_cols, 250);
-        // Voxel size = width / columns = 50_000_000 / 250 = 200_000
-        assert_eq!(space.voxel_size.x_nm, 200_000);
+        // Resolution is 100um (100_000 nm)
+        assert_eq!(space.resolution_nm, 100_000);
     }
 }

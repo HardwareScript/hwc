@@ -262,7 +262,7 @@ pub fn export(space: &HardwareSpace, output_dir: &Path) -> Result<(), Box<dyn st
     }
 
     let (board_min_z_nm, board_max_z_nm) = board_z_extent(space);
-    let voxel_z_nm = space.voxel_size.z_nm.max(1);
+    let voxel_z_nm = space.resolution_nm.max(1);
 
     let drill_vias: Vec<DrillVia> = vias
         .iter()

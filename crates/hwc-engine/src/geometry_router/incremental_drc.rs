@@ -305,6 +305,7 @@ mod tests {
             segment_id: id,
             net_id: net,
             width_nm: w,
+            thickness_nm: 35_000,
             start: Point3D::new(x1, y1, 0),
             end: Point3D::new(x2, y2, 0),
             layer: 1,

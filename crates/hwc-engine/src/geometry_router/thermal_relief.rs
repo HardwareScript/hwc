@@ -7,9 +7,67 @@
 // GOD-TIER: All operations write directly to VoxelGrid. No intermediate HashMaps.
 
 use crate::geometry_router::EntityGraph;
-use crate::geometry_router::polygon_rasterizer::{Point2D, Polygon, PolygonRasterizer};
 use crate::geometry_router::substrate_types::{MaterialId, NetId};
+use crate::geometry::{Point2D, Polygon};
 use std::f64::consts::PI;
+
+/// Polygon rasterizer for filling polygons into the entity graph
+pub struct PolygonRasterizer {
+    #[allow(dead_code)]
+    resolution_nm: i64,
+}
+
+impl PolygonRasterizer {
+    pub fn new(resolution_nm: i64) -> Self {
+        Self { resolution_nm }
+    }
+
+    pub fn rasterize_into_grid(
+        &self,
+        polygon: &Polygon,
+        z_layer: i64,
+        material: crate::geometry_router::substrate_types::MaterialId,
+        net: crate::geometry_router::substrate_types::NetId,
+        grid: &mut EntityGraph,
+    ) {
+        if polygon.points.len() < 3 {
+            return;
+        }
+        let min_y = polygon.points.iter().map(|p| p.y).min().unwrap_or(0);
+        let max_y = polygon.points.iter().map(|p| p.y).max().unwrap_or(0);
+
+        let res = self.resolution_nm.max(1);
+        let mut y = min_y;
+        while y <= max_y {
+            let mut intersections = Vec::new();
+            let n = polygon.points.len();
+            for i in 0..n {
+                let j = (i + 1) % n;
+                let p1 = &polygon.points[i];
+                let p2 = &polygon.points[j];
+                if (p1.y <= y && p2.y > y) || (p2.y <= y && p1.y > y) {
+                    let t = (y - p1.y) as f64 / (p2.y - p1.y) as f64;
+                    let x_intersect = p1.x as f64 + t * (p2.x - p1.x) as f64;
+                    intersections.push(x_intersect as i64);
+                }
+            }
+            intersections.sort();
+            let mut k = 0;
+            while k + 1 < intersections.len() {
+                let x_start = intersections[k];
+                let x_end = intersections[k + 1];
+                let mut x = x_start;
+                while x <= x_end {
+                    let point = crate::geometry::Point3D::new(x, y, z_layer);
+                    grid.occupy_point(point, crate::netlist::NetId(net), material);
+                    x += res;
+                }
+                k += 2;
+            }
+            y += res;
+        }
+    }
+}
 
 /// Thermal relief pattern type
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -49,7 +107,7 @@ impl Default for ThermalReliefConfig {
 /// Thermal relief generator
 pub struct ThermalReliefGenerator {
     config: ThermalReliefConfig,
-    voxel_size_nm: i64,
+    resolution_nm: i64,
 }
 
 /// Parameters for spoke generation
@@ -74,10 +132,10 @@ pub struct RectangularPadParams {
 }
 
 impl ThermalReliefGenerator {
-    pub fn new(config: ThermalReliefConfig, voxel_size_nm: i64) -> Self {
+    pub fn new(config: ThermalReliefConfig, resolution_nm: i64) -> Self {
         Self {
             config,
-            voxel_size_nm,
+            resolution_nm,
         }
     }
 
@@ -109,7 +167,7 @@ impl ThermalReliefGenerator {
                 // Complete isolation - drill clearance gap through substrate layers
                 let clearance_radius = pad_radius_nm + self.config.gap_width_nm;
                 let half = clearance_radius;
-                let z_half = self.voxel_size_nm * 2;
+                let z_half = self.resolution_nm * 2;
                 let cutout = crate::geometry::BoundingBox::new(
                     crate::geometry::Point3D::new(center.x - half, center.y - half, z_layer - z_half),
                     crate::geometry::Point3D::new(center.x + half, center.y + half, z_layer + z_half),
@@ -139,7 +197,7 @@ impl ThermalReliefGenerator {
 
         // Clear clearance gap via substrate drill_hole
         let half = clearance_radius;
-        let z_half = self.voxel_size_nm * 2;
+        let z_half = self.resolution_nm * 2;
         let cutout = crate::geometry::BoundingBox::new(
             crate::geometry::Point3D::new(center.x - half, center.y - half, z_layer - z_half),
             crate::geometry::Point3D::new(center.x + half, center.y + half, z_layer + z_half),
@@ -147,7 +205,7 @@ impl ThermalReliefGenerator {
         grid.drill_hole(cutout, Some(clearance_radius * 2), net);
 
         // Add spokes
-        let spoke_length = self.config.gap_width_nm + self.voxel_size_nm * 2;
+        let spoke_length = self.config.gap_width_nm + self.resolution_nm * 2;
         let angle_step = 2.0 * PI / self.config.spoke_count as f64;
 
         for i in 0..self.config.spoke_count {
@@ -201,7 +259,7 @@ impl ThermalReliefGenerator {
         let p4_y = outer_y + (half_width as f64 * perp_sin) as i64;
 
         // GOD-TIER: Rasterize spoke rectangle directly into VoxelGrid
-        let mut rasterizer = PolygonRasterizer::new(self.voxel_size_nm);
+        let rasterizer = PolygonRasterizer::new(self.resolution_nm);
         let polygon = Polygon::new(vec![
             Point2D::new(p1_x, p1_y),
             Point2D::new(p2_x, p2_y),
@@ -225,7 +283,7 @@ impl ThermalReliefGenerator {
                 let gap = self.config.gap_width_nm;
                 let half_w = params.width_nm / 2 + gap;
                 let half_h = params.height_nm / 2 + gap;
-                let z_half = self.voxel_size_nm * 2;
+                let z_half = self.resolution_nm * 2;
                 let cutout = crate::geometry::BoundingBox::new(
                     crate::geometry::Point3D::new(params.center.x - half_w, params.center.y - half_h, params.z_layer - z_half),
                     crate::geometry::Point3D::new(params.center.x + half_w, params.center.y + half_h, params.z_layer + z_half),

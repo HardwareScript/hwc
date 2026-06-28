@@ -26,6 +26,7 @@ fn make_determinism_test_segments() -> Vec<IndexedSegment> {
         segment_id: 0,
         net_id: 1,
         width_nm: 200_000,
+        thickness_nm: 35_000,
         start: Point3D::new(0, 0, 0),
         end: Point3D::new(5_000_000, 0, 0),
         layer: 0,
@@ -36,6 +37,7 @@ fn make_determinism_test_segments() -> Vec<IndexedSegment> {
         segment_id: 1,
         net_id: 2,
         width_nm: 150_000,
+        thickness_nm: 35_000,
         start: Point3D::new(2_500_000, -2_000_000, 0),
         end: Point3D::new(2_500_000, 2_000_000, 0),
         layer: 0,
@@ -46,6 +48,7 @@ fn make_determinism_test_segments() -> Vec<IndexedSegment> {
         segment_id: 2,
         net_id: 3,
         width_nm: 100_000,
+        thickness_nm: 35_000,
         start: Point3D::new(0, 3_000_000, 0),
         end: Point3D::new(4_000_000, 3_000_000, 0),
         layer: 0,
@@ -54,6 +57,7 @@ fn make_determinism_test_segments() -> Vec<IndexedSegment> {
         segment_id: 3,
         net_id: 3,
         width_nm: 100_000,
+        thickness_nm: 35_000,
         start: Point3D::new(4_000_000, 3_000_000, 0),
         end: Point3D::new(4_000_000, 7_000_000, 0),
         layer: 0,
@@ -64,6 +68,7 @@ fn make_determinism_test_segments() -> Vec<IndexedSegment> {
         segment_id: 4,
         net_id: 4,
         width_nm: 250_000,
+        thickness_nm: 35_000,
         start: Point3D::new(1_000_000, 1_000_000, 1_400_000),
         end: Point3D::new(6_000_000, 1_000_000, 1_400_000),
         layer: 1,
@@ -74,6 +79,7 @@ fn make_determinism_test_segments() -> Vec<IndexedSegment> {
         segment_id: 5,
         net_id: 5,
         width_nm: 250_000,
+        thickness_nm: 35_000,
         start: Point3D::new(1_000_000, 2_000_000, 1_400_000),
         end: Point3D::new(6_000_000, 2_000_000, 1_400_000),
         layer: 1,
@@ -499,8 +505,8 @@ fn test_refine_layer_deterministic() {
         vec![(1000, 1000), (3000, 1000), (3000, 3000), (1000, 3000)],
     ];
 
-    let result1 = refine_layer(shapes.clone());
-    let result2 = refine_layer(shapes);
+    let result1 = refine_layer(shapes.clone(), 100);
+    let result2 = refine_layer(shapes, 100);
     assert_eq!(result1.len(), result2.len());
 
     for (i, (a, b)) in result1.iter().zip(result2.iter()).enumerate() {

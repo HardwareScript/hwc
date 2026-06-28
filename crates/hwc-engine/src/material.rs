@@ -44,6 +44,15 @@ pub enum ManufacturingProcess {
     Etched,
 }
 
+/// Physical properties for thermal/electrical calculations.
+#[derive(Debug, Clone, Copy)]
+pub struct MaterialPhysicalProps {
+    /// Resistivity in Ohm·meters
+    pub resistivity_ohm_m: f64,
+    /// Thermal conductivity in W/(m·K)
+    pub thermal_conductivity_w_mk: f64,
+}
+
 /// Strict material registry — maps material names to IDs and conductivity classes.
 ///
 /// # Design Philosophy
@@ -64,6 +73,8 @@ pub struct MaterialRegistry {
     id_to_conductivity: Vec<MaterialConductivity>,
     /// Fast lookup for manufacturing: ID → Process (Vec for O(1) indexing)
     id_to_process: Vec<ManufacturingProcess>,
+    /// Fast lookup for physics: ID → Physical properties (resistivity, thermal conductivity)
+    id_to_physical: FxHashMap<MaterialId, MaterialPhysicalProps>,
 }
 
 impl MaterialRegistry {
@@ -78,6 +89,7 @@ impl MaterialRegistry {
             id_to_name: vec!["Air".into()],
             id_to_conductivity: vec![MaterialConductivity::Insulator],
             id_to_process: vec![ManufacturingProcess::Deposited],
+            id_to_physical: FxHashMap::default(),
         };
         registry.name_to_id.insert("Air".into(), AIR_MATERIAL_ID);
         registry
@@ -204,6 +216,33 @@ impl MaterialRegistry {
     #[inline]
     pub fn is_insulator(&self, id: MaterialId) -> bool {
         matches!(self.get_conductivity(id), Some(MaterialConductivity::Insulator))
+    }
+
+    /// Store physical properties (resistivity, thermal conductivity) for a material.
+    pub fn set_physical_props(
+        &mut self,
+        id: MaterialId,
+        resistivity_ohm_m: f64,
+        thermal_conductivity_w_mk: f64,
+    ) {
+        self.id_to_physical.insert(
+            id,
+            MaterialPhysicalProps {
+                resistivity_ohm_m,
+                thermal_conductivity_w_mk,
+            },
+        );
+    }
+
+    /// Get physical properties for a material. Returns `None` if not stored.
+    #[inline]
+    pub fn get_physical_props(&self, id: MaterialId) -> Option<MaterialPhysicalProps> {
+        self.id_to_physical.get(&id).copied()
+    }
+
+    /// Get physical properties by material name. Returns `None` if not found.
+    pub fn get_physical_props_by_name(&self, name: &str) -> Option<MaterialPhysicalProps> {
+        self.get_id(name).and_then(|id| self.get_physical_props(id))
     }
 }
 

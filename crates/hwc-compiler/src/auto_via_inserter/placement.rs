@@ -183,6 +183,7 @@ impl AutoViaInserter {
                 Point3D::new(x_nm - radius_nm, y_nm - radius_nm, transition.from_z_nm),
                 Point3D::new(x_nm + radius_nm, y_nm + radius_nm, transition.to_z_nm),
             )),
+            drill_diameter_nm: Some(diameter_nm),
             voxels: Vec::new(),
             is_tented: false,
             mask_clearance_diameter_nm: None,

@@ -113,9 +113,9 @@ pub fn execute(
             "[{:>8.2}ms] HardwareSpace created: {} ({}x{}x{})",
             start_time.elapsed().as_secs_f64() * 1000.0,
             space.name,
-            space.grid.x_cols,
-            space.grid.y_rows,
-            space.grid.z_layers
+            space.dimensions.width_nm,
+            space.dimensions.height_nm,
+            space.dimensions.depth_nm
         );
 
         // Run alignment validation

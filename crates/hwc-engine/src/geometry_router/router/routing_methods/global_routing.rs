@@ -132,59 +132,117 @@ impl GeometryRouter {
         
         let topo_router = TopologicalRouter::new(trace_width, track_pitch);
 
-        match topo_router.route(start, goal, &spatial_index, &board_bounds) {
-            Some(topo_path) if topo_path.waypoints.len() >= 2 => {
-                let path = topo_path.waypoints;
-                let detected_vias = self.extract_vias_from_path(&path, route.net_id);
+        // v0.1.8: Prefer SDF-accelerated A* routing when an SDF generator is available.
+        // The SDF router enforces guardrails (R25, Interior Lockout, Via-Portal Exemption).
+        let path = if let Some(ref sdf) = self.sdf_generator {
+            use crate::geometry_router::pathfinding::RoutingParams;
+            use crate::geometry_router::pathfinding::route_net_sdf_accelerated;
+            use crate::constraint_manager::LayerDirection;
 
-                let unrolled_vias: Vec<_> = detected_vias
-                    .iter()
-                    .flat_map(|via| self.unroll_detected_via(via))
-                    .collect();
+                let routing_params = RoutingParams {
+                    net_id: route.net_id,
+                    constraints: &crate::constraint_manager::RouteConstraints {
+                        min_trace_width_nm: trace_width,
+                        min_clearance_nm: self.constraints.fabrication.as_ref()
+                            .map(|fab| fab.min_trace_spacing_nm)
+                            .unwrap_or(200_000),
+                        max_parallel_length_nm: 10_000_000,
+                        max_resistance_ohm: 100.0,
+                        max_current_ma: 20,
+                        impedance_ohm: None,
+                    },
+                    bounds: self.bounds.clone(),
+                    layer_direction: LayerDirection::Any,
+                    resolution_nm: self.resolution_nm,
+                    clearance_zones: &[],
+                    entity_graph: Some(&self.entity_graph),
+                    // v0.1.8: Lock to exact physical Z when start and goal share the same Z.
+                    // This prevents the SDF router from snapping Z to voxel centers, which
+                    // would destroy layer overrides (e.g. layer: metal1 → Z=300850).
+                    fixed_z_nm: None,
+                    exempt_components: &[],
+                    substrate_layers: self.substrate_layers.as_deref(),
+                    is_high_speed_net: false,
+                    layer_routable_mode: None,
+                    max_local_route_length_nm: None,
+                    via_drill_diameter_nm: 0,
+                    active_net_pin_positions: &[],
+                    component_keepouts: &[],
+                };
 
-                let mut placed_vias = Vec::new();
-                for via in unrolled_vias {
-                    if self.can_place_via(via.position, via.from_z_nm, via.to_z_nm) {
-                        self.stamp_via(&via);
-                        self.vias.push(via.clone());
-                        placed_vias.push(via);
+            match route_net_sdf_accelerated(start, goal, &routing_params, sdf) {
+                Some(sdf_path) if sdf_path.len() >= 2 => {
+                    // SDF routing success logged for debugging
+                    // eprintln!("[SDF-ROUTER] net {} routed via SDF ({} points)", route.net_id.raw(), sdf_path.len());
+                    sdf_path
+                }
+                _ => {
+                    // eprintln!("[SDF-ROUTER] net {} SDF failed, falling back to TopologicalRouter", route.net_id.raw());
+                    match topo_router.route(start, goal, &spatial_index, &board_bounds) {
+                        Some(topo_path) if topo_path.waypoints.len() >= 2 => topo_path.waypoints,
+                        _ => {
+                            let collision_window = BoundingBox::new(start, goal);
+                            if let Ok(legalized_path) = self.legalize_local_window(&collision_window, route) {
+                                legalized_path
+                            } else {
+                                return Err(RoutingError::NoPathFound {
+                                    net_id: route.net_id,
+                                    start: route.start,
+                                    goal: route.goal,
+                                });
+                            }
+                        }
                     }
                 }
-
-                // Commit canonically to the EntityGraph (no occupied_voxels)
-                self.entity_graph.register_route(route.net_id, &path);
-
-                let mut final_path = path;
-                if !final_path.is_empty() {
-                    final_path[0] = route.start;
-                    *final_path.last_mut().unwrap() = route.goal;
-                }
-
-                Ok(RoutedNet {
-                    net_id: route.net_id,
-                    paths: vec![final_path],
-                    vias: placed_vias,
-                })
             }
-            _ => {
-                // --- FALLBACK: Localized Legalization and Compaction ---
-                let collision_window = BoundingBox::new(start, goal);
-                if let Ok(legalized_path) = self.legalize_local_window(&collision_window, route) {
-                    self.entity_graph.register_route(route.net_id, &legalized_path);
-                    Ok(RoutedNet {
-                        net_id: route.net_id,
-                        paths: vec![legalized_path],
-                        vias: Vec::new(),
-                    })
-                } else {
-                    Err(RoutingError::NoPathFound {
-                        net_id: route.net_id,
-                        start: route.start,
-                        goal: route.goal,
-                    })
+        } else {
+            match topo_router.route(start, goal, &spatial_index, &board_bounds) {
+                Some(topo_path) if topo_path.waypoints.len() >= 2 => topo_path.waypoints,
+                _ => {
+                    let collision_window = BoundingBox::new(start, goal);
+                    if let Ok(legalized_path) = self.legalize_local_window(&collision_window, route) {
+                        legalized_path
+                    } else {
+                        return Err(RoutingError::NoPathFound {
+                            net_id: route.net_id,
+                            start: route.start,
+                            goal: route.goal,
+                        });
+                    }
                 }
+            }
+        };
+
+        let detected_vias = self.extract_vias_from_path(&path, route.net_id);
+
+        let unrolled_vias: Vec<_> = detected_vias
+            .iter()
+            .flat_map(|via| self.unroll_detected_via(via))
+            .collect();
+
+        let mut placed_vias = Vec::new();
+        for via in unrolled_vias {
+            if self.can_place_via(via.position, via.from_z_nm, via.to_z_nm) {
+                self.stamp_via(&via);
+                self.vias.push(via.clone());
+                placed_vias.push(via);
             }
         }
+
+        // Commit canonically to the EntityGraph (no occupied_voxels)
+        self.entity_graph.register_route(route.net_id, &path);
+
+        let mut final_path = path;
+        if !final_path.is_empty() {
+            final_path[0] = route.start;
+            *final_path.last_mut().unwrap() = route.goal;
+        }
+
+        Ok(RoutedNet {
+            net_id: route.net_id,
+            paths: vec![final_path],
+            vias: placed_vias,
+        })
     }
 
     pub fn route_all_nets_steiner_global(

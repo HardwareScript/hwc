@@ -12,7 +12,7 @@
 //!
 //! This module is organized into logical submodules:
 //!
-//! - `types` - Core data structures (DrcViolation, DrcReport, NetVoxels, MaterialProperties)
+//! - `types` - Core data structures (DrcViolation, DrcReport)
 //! - `clearance` - Clearance validation logic
 //! - `trace_width` - Trace width validation logic
 //! - `thermal` - Thermal validation logic
@@ -36,9 +36,9 @@ pub use checker::DesignRuleChecker;
 pub use clearance::validate_clearances;
 pub use error::{report_to_errors, violation_to_error, DrcError};
 pub use parallel::{validate_physics_parallel, validate_physics_sequential};
-pub use thermal::{calculate_temperature_rise, calculate_trace_length, validate_thermal};
+pub use thermal::validate_thermal_analytic;
 pub use trace_width::validate_trace_widths;
-pub use types::{DrcReport, DrcViolation, GeometryType, MaterialProperties, NetVoxels};
+pub use types::{DrcReport, DrcViolation};
 pub use via_checks::{
     validate_drill_to_drill_clearance, validate_via_diameters_analytic,
     validate_via_enclosure_analytic,

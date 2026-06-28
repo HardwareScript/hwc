@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use clipper2_rust::clipper::union_subjects_64;
 use clipper2_rust::core::{FillRule, Path64, Paths64, Point64};
 
-use crate::PadShape;
+use crate::placement::PadShape;
 
 /// A bucket grouping copper geometries by net and material.
 #[derive(Debug, Clone)]

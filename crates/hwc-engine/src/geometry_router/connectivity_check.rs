@@ -271,6 +271,7 @@ mod tests {
             segment_id,
             net_id,
             width_nm: 200_000,
+            thickness_nm: 35_000,
             start,
             end,
             layer: 1,

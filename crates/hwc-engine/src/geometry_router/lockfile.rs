@@ -18,12 +18,15 @@ use std::path::Path;
 #[archive(check_bytes)]
 pub struct ArchivedArcSegment {
     pub net_id: u32,
-    pub layer: u8,
+    pub layer: u16,
     pub width_nm: i64,
     pub x1: i64,
     pub y1: i64,
     pub x2: i64,
     pub y2: i64,
+    pub thickness_nm: i64,
+    pub material_name: String,
+    pub current_ma: i64,
 }
 
 /// A component instance stored in the lockfile.
@@ -93,10 +96,10 @@ pub fn compute_fingerprint(
 ///
 /// Scans the entity graph's substrate layers to find which layer owns the
 /// given Z-position. Returns a stable u8 layer index for lockfile storage.
-fn resolve_z_to_layer_index(z_nm: i64, entity_graph: &crate::geometry_router::entity_graph::EntityGraph) -> u8 {
+fn resolve_z_to_layer_index(z_nm: i64, entity_graph: &crate::geometry_router::entity_graph::EntityGraph) -> u16 {
     use rustc_hash::FxHashMap;
-    let mut z_to_layer: FxHashMap<i64, u8> = FxHashMap::default();
-    let mut next_idx: u8 = 0;
+    let mut z_to_layer: FxHashMap<i64, u16> = FxHashMap::default();
+    let mut next_idx: u16 = 0;
 
     for layer in entity_graph.get_substrate_layers() {
         let z_min = layer.bbox.min.z;
@@ -110,7 +113,7 @@ fn resolve_z_to_layer_index(z_nm: i64, entity_graph: &crate::geometry_router::en
     }
 
     // Find the closest Z-layer
-    let mut best_layer: u8 = 0;
+    let mut best_layer: u16 = 0;
     let mut best_dist: i64 = i64::MAX;
     for (layer_z, layer_idx) in &z_to_layer {
         let dist = (z_nm - layer_z).abs();
@@ -124,13 +127,13 @@ fn resolve_z_to_layer_index(z_nm: i64, entity_graph: &crate::geometry_router::en
 
 /// Build a layer-index → Z-position mapping from substrate layers.
 ///
-/// Returns a `Vec<(u8, i64)>` suitable for passing to `lockfile_to_traces`.
+/// Returns a `Vec<(u16, i64)>` suitable for passing to `lockfile_to_traces`.
 pub fn build_layer_z_map(
     entity_graph: &crate::geometry_router::entity_graph::EntityGraph,
-) -> Vec<(u8, i64)> {
+) -> Vec<(u16, i64)> {
     use rustc_hash::FxHashMap;
-    let mut z_to_layer: FxHashMap<i64, u8> = FxHashMap::default();
-    let mut next_idx: u8 = 0;
+    let mut z_to_layer: FxHashMap<i64, u16> = FxHashMap::default();
+    let mut next_idx: u16 = 0;
 
     for layer in entity_graph.get_substrate_layers() {
         let z_min = layer.bbox.min.z;
@@ -250,6 +253,9 @@ pub fn inspect_lockfile(path: &Path) -> io::Result<String> {
                 "y1": a.y1,
                 "x2": a.x2,
                 "y2": a.y2,
+                "thickness_nm": a.thickness_nm,
+                "material_name": &*a.material_name,
+                "current_ma": a.current_ma,
             })
         })
         .collect();
@@ -298,9 +304,29 @@ pub fn compute_fingerprint_from_space(space: &crate::space::HardwareSpace) -> [u
         .collect();
     component_bounds.sort();
 
-    let rules_hash = [0u8; 32];
-    let stackup_hash = [0u8; 32];
-    let router_version = 1u32;
+    let rules_hash = {
+        let mut hasher = Sha256::new();
+        hasher.update(format!("{:?}", space.fabrication_constraints).as_bytes());
+        let result = hasher.finalize();
+        let mut out = [0u8; 32];
+        out.copy_from_slice(&result);
+        out
+    };
+    let stackup_hash = {
+        let mut hasher = Sha256::new();
+        hasher.update(format!("{:?}", space.substrate_material_id).as_bytes());
+        hasher.update(format!("{:?}", space.dimensions).as_bytes());
+        let result = hasher.finalize();
+        let mut out = [0u8; 32];
+        out.copy_from_slice(&result);
+        out
+    };
+    let router_version = {
+        let mut hasher = Sha256::new();
+        hasher.update(env!("CARGO_PKG_VERSION").as_bytes());
+        let result = hasher.finalize();
+        u32::from_le_bytes([result[0], result[1], result[2], result[3]])
+    };
 
     compute_fingerprint(&component_bounds, &rules_hash, &stackup_hash, router_version)
 }
@@ -311,7 +337,7 @@ pub fn compute_fingerprint_from_space(space: &crate::space::HardwareSpace) -> [u
 pub fn traces_to_lockfile(
     space: &crate::space::HardwareSpace,
     fingerprint: [u8; 32],
-) -> CompactLockfileBinary {
+) -> Result<CompactLockfileBinary, String> {
     let mut arcs = Vec::new();
 
     for trace in &space.analytic_routes {
@@ -319,6 +345,12 @@ pub fn traces_to_lockfile(
             let z_center = seg.start.z.min(seg.end.z)
                 + ((seg.start.z.max(seg.end.z) - seg.start.z.min(seg.end.z)) / 2);
             let layer_idx = resolve_z_to_layer_index(z_center, &space.entity_graph);
+            let material_name = space.material_registry.get_name(trace.material)
+                .ok_or_else(|| format!(
+                    "[LOCK] FATAL: material_id {} not found in registry for net '{}'",
+                    trace.material, trace.net_name
+                ))?
+                .to_string();
             arcs.push(ArchivedArcSegment {
                 net_id: trace.net_id.raw(),
                 layer: layer_idx,
@@ -327,19 +359,22 @@ pub fn traces_to_lockfile(
                 y1: seg.start.y,
                 x2: seg.end.x,
                 y2: seg.end.y,
+                thickness_nm: trace.thickness_nm,
+                material_name,
+                current_ma: (trace.current_ma * 1000.0) as i64,
             });
         }
     }
 
     let board_name = space.name.to_string();
 
-    CompactLockfileBinary {
+    Ok(CompactLockfileBinary {
         version: 1,
         board_name,
         placement_hash: fingerprint,
         arcs,
         instances: Vec::new(),
-    }
+    })
 }
 
 /// Convert a loaded binary lockfile into `AnalyticTrace` objects.
@@ -350,20 +385,24 @@ pub fn traces_to_lockfile(
 /// resilient to stackup thickness changes.
 pub fn lockfile_to_traces(
     data: &LockfileData,
-    material_id: crate::material::MaterialId,
     netlist: &crate::netlist::NetlistArena,
-    layer_z_positions: &[(u8, i64)],
-) -> Vec<crate::space::AnalyticTrace> {
+    layer_z_positions: &[(u16, i64)],
+    material_registry: &crate::material::MaterialRegistry,
+) -> Result<Vec<crate::space::AnalyticTrace>, String> {
     use rustc_hash::FxHashMap;
 
     let d = data.data();
     let mut per_net: FxHashMap<u32, Vec<crate::space::LineSegment>> = FxHashMap::default();
     let mut net_widths: FxHashMap<u32, i64> = FxHashMap::default();
+    let mut net_material_names: FxHashMap<u32, String> = FxHashMap::default();
+    let mut net_currents: FxHashMap<u32, i64> = FxHashMap::default();
 
-    let layer_to_z: FxHashMap<u8, i64> = layer_z_positions.iter().copied().collect();
+    let layer_to_z: FxHashMap<u16, i64> = layer_z_positions.iter().copied().collect();
 
     for arc in d.arcs.iter() {
-        let z = layer_to_z.get(&arc.layer).copied().unwrap_or(0);
+        let z = *layer_to_z.get(&arc.layer).ok_or_else(|| {
+            format!("[LOCK] FATAL: layer {} not found in layer_z_map (stackup mismatch or corrupt lockfile)", arc.layer)
+        })?;
         per_net
             .entry(arc.net_id)
             .or_default()
@@ -372,6 +411,8 @@ pub fn lockfile_to_traces(
                 crate::geometry::Point3D::new(arc.x2, arc.y2, z),
             ));
         net_widths.entry(arc.net_id).or_insert(arc.width_nm);
+        net_material_names.entry(arc.net_id).or_insert_with(|| arc.material_name.to_string());
+        net_currents.entry(arc.net_id).or_insert(arc.current_ma);
     }
 
     let mut traces = Vec::new();
@@ -380,23 +421,36 @@ pub fn lockfile_to_traces(
             continue;
         }
         let net_id = crate::netlist::NetId::new(net_id_raw);
-        let width_nm = net_widths.get(&net_id_raw).copied().unwrap_or(100_000);
+        let width_nm = net_widths.get(&net_id_raw).copied()
+            .ok_or_else(|| format!("[LOCK] FATAL: missing width for net {}", net_id_raw))?;
         let net_name = netlist
             .get_net(net_id)
             .map(|n| n.name.clone())
-            .unwrap_or_else(|| format!("net_{}", net_id_raw).into());
+            .ok_or_else(|| format!("[LOCK] FATAL: net {} not found in netlist", net_id_raw))?;
+
+        let material_name = net_material_names.get(&net_id_raw)
+            .ok_or_else(|| format!("[LOCK] FATAL: missing material for net {}", net_id_raw))?;
+        let material_id = material_registry.get_id(material_name)
+            .ok_or_else(|| format!("[LOCK] FATAL: material '{}' not found in registry", material_name))?;
+        let current_ma = *net_currents.get(&net_id_raw).unwrap_or(&0) as f64 / 1000.0;
+
+        let thickness_nm = d.arcs.iter()
+            .find(|a| a.net_id == net_id_raw)
+            .map(|a| a.thickness_nm)
+            .ok_or_else(|| format!("[LOCK] FATAL: no arcs found for net {}", net_id_raw))?;
 
         traces.push(crate::space::AnalyticTrace::new(
             net_id,
             width_nm,
-            35_000,
+            thickness_nm,
             segments,
             material_id,
             net_name,
+            current_ma,
         ));
     }
 
-    traces
+    Ok(traces)
 }
 
 // ---------------------------------------------------------------------------
@@ -461,6 +515,9 @@ mod tests {
                     y1: 0,
                     x2: 5_000_000,
                     y2: 0,
+                    thickness_nm: 35_000,
+                    material_name: "Copper".to_string(),
+                    current_ma: 20_000,
                 },
                 ArchivedArcSegment {
                     net_id: 2,
@@ -470,6 +527,9 @@ mod tests {
                     y1: 2_000_000,
                     x2: 1_000_000,
                     y2: 8_000_000,
+                    thickness_nm: 35_000,
+                    material_name: "Copper".to_string(),
+                    current_ma: 20_000,
                 },
             ],
             instances: vec![
@@ -509,6 +569,9 @@ mod tests {
         assert_eq!(a0.y1, 0);
         assert_eq!(a0.x2, 5_000_000);
         assert_eq!(a0.y2, 0);
+        assert_eq!(a0.thickness_nm, 35_000);
+        assert_eq!(a0.material_name, "Copper");
+        assert_eq!(a0.current_ma, 20_000);
 
         let a1 = &data.arcs[1];
         assert_eq!(a1.net_id, 2);
@@ -518,6 +581,9 @@ mod tests {
         assert_eq!(a1.y1, 2_000_000);
         assert_eq!(a1.x2, 1_000_000);
         assert_eq!(a1.y2, 8_000_000);
+        assert_eq!(a1.thickness_nm, 35_000);
+        assert_eq!(a1.material_name, "Copper");
+        assert_eq!(a1.current_ma, 20_000);
 
         let i0 = &data.instances[0];
         assert_eq!(i0.id, 100);
@@ -574,6 +640,9 @@ mod tests {
                 y1: 200,
                 x2: 300,
                 y2: 400,
+                thickness_nm: 35_000,
+                material_name: "Copper".to_string(),
+                current_ma: 20_000,
             }],
             instances: vec![ArchivedComponentInstance {
                 id: 10,

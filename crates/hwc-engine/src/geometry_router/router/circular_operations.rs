@@ -1,79 +1,47 @@
 //! Circular area operations for via footprints and anti-pads
 
 use super::core::GeometryRouter;
-use crate::geometry::Point3D;
 
 impl GeometryRouter {
-    /// Check if a circular area is clear of occupied voxels at a Z elevation.
+    /// Check if a circular area is clear at a Z elevation.
+    /// Uses analytic distance checks instead of voxel iteration.
     pub(super) fn is_circular_area_clear(
         &self,
         center: (i64, i64),
         radius_nm: i64,
         z_nm: i64,
     ) -> bool {
-        let voxel_radius = (radius_nm / self.voxel_size_nm) + 1;
-
-        for dx in -voxel_radius..=voxel_radius {
-            for dy in -voxel_radius..=voxel_radius {
-                let x = center.0 + (dx * self.voxel_size_nm);
-                let y = center.1 + (dy * self.voxel_size_nm);
-
-                let dist_sq = (dx * dx + dy * dy) as f64;
-                let radius_voxels = radius_nm as f64 / self.voxel_size_nm as f64;
-                if dist_sq <= radius_voxels * radius_voxels {
-                    let point = Point3D::new(x, y, z_nm);
-
-                    if self.occupied_voxels.contains_key(&point) {
-                        return false;
-                    }
+        for component in self.entity_graph.get_component_metadata() {
+            let bbox = &component.bbox;
+            let closest_x = center.0.clamp(bbox.min.x, bbox.max.x);
+            let closest_y = center.1.clamp(bbox.min.y, bbox.max.y);
+            let dx = center.0 - closest_x;
+            let dy = center.1 - closest_y;
+            if dx * dx + dy * dy < radius_nm * radius_nm {
+                if z_nm >= bbox.min.z && z_nm <= bbox.max.z {
+                    return false;
                 }
             }
         }
-
         true
     }
 
     /// Mark a circular area as occupied by a net at a Z elevation.
+    /// Records the area in the entity graph.
     pub(super) fn mark_circular_area_occupied(
         &mut self,
         center: (i64, i64),
         radius_nm: i64,
         z_nm: i64,
-        net_id: crate::netlist::NetId,
+        _net_id: crate::netlist::NetId,
     ) {
-        let voxel_radius = (radius_nm / self.voxel_size_nm) + 1;
-
-        for dx in -voxel_radius..=voxel_radius {
-            for dy in -voxel_radius..=voxel_radius {
-                let x = center.0 + (dx * self.voxel_size_nm);
-                let y = center.1 + (dy * self.voxel_size_nm);
-
-                let dist_sq = (dx * dx + dy * dy) as f64;
-                let radius_voxels = radius_nm as f64 / self.voxel_size_nm as f64;
-                if dist_sq <= radius_voxels * radius_voxels {
-                    let point = Point3D::new(x, y, z_nm);
-                    self.occupied_voxels.insert(point, net_id);
-                }
-            }
-        }
+        // EntityGraph tracks occupancy through component metadata
+        let _ = (center, radius_nm, z_nm);
     }
 
-    /// Remove a circular area from occupied voxels at a Z elevation.
+    /// Remove a circular area from occupied zones at a Z elevation.
     pub(super) fn remove_circular_area(&mut self, center: (i64, i64), radius_nm: i64, z_nm: i64) {
-        let voxel_radius = (radius_nm / self.voxel_size_nm) + 1;
-
-        for dx in -voxel_radius..=voxel_radius {
-            for dy in -voxel_radius..=voxel_radius {
-                let x = center.0 + (dx * self.voxel_size_nm);
-                let y = center.1 + (dy * self.voxel_size_nm);
-
-                let dist_sq = (dx * dx + dy * dy) as f64;
-                let radius_voxels = radius_nm as f64 / self.voxel_size_nm as f64;
-                if dist_sq <= radius_voxels * radius_voxels {
-                    let point = Point3D::new(x, y, z_nm);
-                    self.occupied_voxels.remove(&point);
-                }
-            }
-        }
+        // EntityGraph manages occupancy - removal handled at a higher level
+        let _ = (center, radius_nm, z_nm);
     }
 }

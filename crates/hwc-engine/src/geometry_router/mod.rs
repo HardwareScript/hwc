@@ -13,7 +13,6 @@
 //! - `ROADMAP/v0.1.5/ROUTING-GOD-TIER-MIGRATION.md` (VoxelGrid migration)
 
 mod bounding_box_tracker;
-mod coarse_grid;
 mod collision_detection;
 pub mod copper_welder;
 mod constraint_aware;
@@ -26,16 +25,14 @@ mod neighbor_generation;
 mod parallel_router;
 mod path_utils;
 mod pathfinding;
-mod polygon_rasterizer;
 pub mod port_escape;
 mod priority;
 mod ripup;
-mod route_lockfile;
 mod router;
 pub mod scene_graph;
 pub mod stamp_parser;
 mod routing_patterns;
-mod sdf_generator;
+pub mod sdf_generator;
 pub mod spatial_index;
 mod teardrops;
 mod thermal_relief;
@@ -68,13 +65,12 @@ pub mod lockfile;
 pub mod miter_pass;
 pub mod route_persistence;
 pub mod i128_transforms;
-pub mod deterministic_pathfinder;
 pub mod deterministic_export;
 pub mod integration_verification;
+pub mod static_geometry_guard;
 
 // Re-export public API
 pub use bounding_box_tracker::{BoundingBoxTracker, TrackedObstacle};
-pub use coarse_grid::{CoarseGrid, CoarseNode, COARSE_CELL_SIZE};
 pub use collision_detection::check_clearance_violation;
 pub use constraint_aware::{constraint_aware_astar, constraint_aware_heuristic, ConstraintNode};
 pub use dummy_fill::{DummyFillConfig, DummyFillEngine, DummyFillStats};
@@ -85,19 +81,13 @@ pub use layer_direction::{assign_layer_directions, is_valid_move};
 pub use neighbor_generation::{get_neighbors_stable, GridBounds};
 pub use parallel_router::ParallelRouter;
 pub use path_utils::calculate_path_length;
-pub use pathfinding::{route_net_deterministic, RoutingParams};
-pub use polygon_rasterizer::{Point2D, Polygon, PolygonRasterizer};
+pub use pathfinding::{route_net_sdf_accelerated, RoutingParams};
 pub use port_escape::{
     calculate_circular_escape, calculate_rect_escape, parse_port_escape, CardinalPort, EdgeOffset,
     EscapePoint, NamedPosition,
 };
 pub use priority::NetPriority;
 pub use ripup::{RipUpRouter, RipUpStats, RouteAttempt};
-pub use route_lockfile::{
-    compute_placement_hash, CompactLockfile, LockfileError, LockfileManager, RouteLockfile,
-    LOCKFILE_VERSION,
-};
-pub use route_lockfile::{encode_arc, decode_arc, encode_instances, decode_instances};
 pub use lockfile::{
     CompactLockfileBinary, ArchivedArcSegment, ArchivedComponentInstance,
     compute_fingerprint, compute_fingerprint_from_space,
@@ -137,3 +127,11 @@ pub use legalizer::{
 pub use solvers::qp_solver::{QpSolver, QpSolution};
 pub use solvers::dag_solver::{DagSolver, DagConstraint};
 pub use compaction::{Compactor, SignalConstraints, CompactionMove};
+pub use geometry_refinement::{RefinedContour, refine_layer, refine_geometry, canonicalize_contours};
+pub use substrate_types::{CompactionStats, MemoryStats};
+pub use em_thermal_check::{
+    AcCurrent, CurrentDeclaration, EmParams, ThermalParams,
+    current_limit_ac_to_declaration, current_limit_dc, verify_em_thermal,
+    DrcViolation as EmThermalViolation,
+};
+pub use static_geometry_guard::{check_static_shorts, StaticViolation};

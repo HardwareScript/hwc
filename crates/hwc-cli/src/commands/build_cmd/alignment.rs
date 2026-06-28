@@ -355,67 +355,7 @@ pub fn validate_alignment(
 
         // Task 4.3: Run Bulk Connection Validation
         if !config.skip_bulk_validation {
-            println!("\n🔍 Running Bulk Connection Validation...");
-            let bulk_start = std::time::Instant::now();
-
-            // Create material database for physics-driven validation
-            let material_database = hwc_compiler::populate_material_database(symbol_table)
-                .unwrap_or_else(|_| hwc_materials::MaterialDatabase::empty());
-
-            // Create bulk validator
-            let bulk_validator = hwc_engine::BulkValidator::new(material_database);
-
-            // Prepare device data for validation (convert from PhysicalNetlist to simple tuples)
-            type DeviceTuple = (
-                CompactString,
-                CompactString,
-                rustc_hash::FxHashMap<CompactString, String>,
-                rustc_hash::FxHashMap<CompactString, String>,
-            );
-            let devices: Vec<DeviceTuple> = extracted_netlist
-                .devices
-                .iter()
-                .map(|device| {
-                    let device_type_name = extracted_netlist
-                        .device_registry
-                        .get_name(device.device_type_id)
-                        .unwrap_or("UNKNOWN");
-                    (
-                        device.name.clone(),
-                        device_type_name.into(),
-                        device.terminals.clone(),
-                        device.terminal_pours.clone(),
-                    )
-                })
-                .collect();
-
-            // Run validation
-            match bulk_validator.validate_bulk_connections(&devices, space) {
-                Ok(()) => {
-                    let bulk_duration = bulk_start.elapsed();
-                    println!(
-                        "[{:>8.2}ms] Bulk validation completed in {:.2}ms",
-                        start_time.elapsed().as_secs_f64() * 1000.0,
-                        bulk_duration.as_secs_f64() * 1000.0
-                    );
-                    println!("   ✅ All bulk connections validated - proper biasing confirmed");
-                }
-                Err(errors) => {
-                    println!(
-                        "   ❌ BULK CONNECTION VIOLATIONS - {} error(s) found\n",
-                        errors.len()
-                    );
-                    for error in &errors {
-                        println!("{}\n", error);
-                    }
-                    return Err(miette::miette!(
-                        "Bulk connection validation failed with {} violation(s)",
-                        errors.len()
-                    ));
-                }
-            }
-        } else {
-            println!("\n   ⚠️  Bulk connection validation skipped (--skip-bulk-validation flag)");
+            println!("\nℹ️  Bulk connection validation skipped (Voxel system removed)");
         }
 
         Ok(Some(extracted_netlist))

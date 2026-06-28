@@ -13,15 +13,15 @@ use rayon::prelude::*;
 
 pub struct ParallelRouter {
     constraints: ConstraintRulebook,
-    voxel_size_nm: i64,
+    resolution_nm: i64,
 }
 
 impl ParallelRouter {
     pub fn new(constraints: ConstraintRulebook) -> Self {
-        let voxel_size_nm = constraints.voxel_size_nm;
+        let resolution_nm = constraints.resolution_nm;
         Self {
             constraints,
-            voxel_size_nm,
+            resolution_nm,
         }
     }
 
@@ -37,7 +37,7 @@ impl ParallelRouter {
                     &domain,
                     netlist,
                     &self.constraints,
-                    self.voxel_size_nm,
+                    self.resolution_nm,
                 );
 
                 let grid_chunk = EntityGraph::new();
@@ -59,7 +59,7 @@ impl ParallelRouter {
         domain: &RoutingDomain,
         netlist: &NetlistArena,
         _constraints: &ConstraintRulebook,
-        voxel_size_nm: i64,
+        resolution_nm: i64,
     ) -> Vec<Route> {
         let mut routes = Vec::new();
 
@@ -82,7 +82,10 @@ impl ParallelRouter {
             seg_id += 1;
         }
 
-        let topo_router = TopologicalRouter::new(voxel_size_nm, voxel_size_nm);
+        let topo_router = TopologicalRouter::new(
+            _constraints.fabrication.as_ref().map(|f| f.min_trace_width_nm).unwrap_or(100_000),
+            resolution_nm,
+        );
 
         for &net_id in &domain.internal_nets {
             let net_data = match netlist.get_net(net_id) {

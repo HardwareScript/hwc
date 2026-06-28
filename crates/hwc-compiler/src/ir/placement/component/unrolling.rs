@@ -25,9 +25,6 @@ fn offset_declarative_coord(
                 .unwrap_or(0);
             let z_nm = crate::ir::conversions::evaluate_expression_to_nm(z, ctx.symbol_table)
                 .unwrap_or(0);
-            eprintln!("[DEBUG offset] position=({}, {}, {}) local=({}, {}, {}) -> abs=({}, {}, {})",
-                position.x, position.y, position.z, x_nm, y_nm, z_nm,
-                position.x + x_nm, position.y + y_nm, position.z + z_nm);
             hwc_parser::Coordinate::Positional {
                 x: hwc_parser::Expression::Measurement {
                     value: (position.x + x_nm) as f64 / 1_000_000.0,
@@ -91,33 +88,6 @@ pub fn unroll_internal_features(
                             .map(|net_id| net_id.base.clone())
                     };
 
-                    if let Some(ref net_name_str) = net_assignment {
-                        let default_trace_width_nm = space.fabrication_constraints.as_ref()
-                            .map(|c| c.trace.min_width_nm)
-                            .expect("Fabrication constraints (min_trace_width) must be defined in profile");
-
-                        let net_id = if let Some(existing_net_id) =
-                            space.netlist.get_net_by_name(net_name_str)
-                        {
-                            existing_net_id
-                        } else {
-                            space
-                                .netlist
-                                .add_net(net_name_str.clone(), default_trace_width_nm, 2)
-                        };
-
-                        let pins = space.netlist.get_component_pins(component_id);
-                        if let Some(&pin_id) = pins.iter().find(|&&pid| {
-                            space
-                                .netlist
-                                .get_pin(pid)
-                                .map(|p| p.name == *pin_name)
-                                .unwrap_or(false)
-                        }) {
-                            space.netlist.connect_pin(pin_id, net_id);
-                        }
-                    }
-
                     let (center_x, center_y) = match ctx.origin.xy {
                         OriginXY::TL => {
                             (pd.position.x + width_nm / 2, pd.position.y - height_nm / 2)
@@ -157,6 +127,46 @@ pub fn unroll_internal_features(
                     };
                     let absolute_z_nm =
                         pd.position.z + (pin_pos.z.unwrap_or(0.0) * 1_000_000.0) as i64;
+
+                    if let Some(ref net_name_str) = net_assignment {
+                        let default_trace_width_nm = space.fabrication_constraints.as_ref()
+                            .map(|c| c.trace.min_width_nm)
+                            .expect("Fabrication constraints (min_trace_width) must be defined in profile");
+
+                        let net_material_id = (|| -> Option<hwc_engine::material::MaterialId> {
+                            let layer_name = ctx.stackup_manager.get_layer_name_at_z(absolute_z_nm)?;
+                            let mat_name = ctx.profile
+                                .and_then(|p| p.stackup.as_ref())
+                                .and_then(|stackup| {
+                                    stackup.layers.iter()
+                                        .find(|l| l.name.name == layer_name)
+                                        .map(|l| l.material.clone())
+                                })?;
+                            space.material_registry.get_id(&mat_name)
+                        })()
+                        .unwrap_or(0);
+
+                        let net_id = if let Some(existing_net_id) =
+                            space.netlist.get_net_by_name(net_name_str)
+                        {
+                            existing_net_id
+                        } else {
+                            space
+                                .netlist
+                                .add_net(net_name_str.clone(), default_trace_width_nm, net_material_id)
+                        };
+
+                        let pins = space.netlist.get_component_pins(component_id);
+                        if let Some(&pin_id) = pins.iter().find(|&&pid| {
+                            space
+                                .netlist
+                                .get_pin(pid)
+                                .map(|p| p.name == *pin_name)
+                                .unwrap_or(false)
+                        }) {
+                            space.netlist.connect_pin(pin_id, net_id);
+                        }
+                    }
 
                     let pin_point = Point3D::new(absolute_x_nm, absolute_y_nm, absolute_z_nm);
                     let pin_bbox = BoundingBox::new(pin_point, pin_point);
@@ -209,8 +219,22 @@ pub fn unroll_internal_features(
 
                             space.drill_hole(hole_bbox, Some(drill_diameter_nm), via_net_id);
 
-                            let copper_material_id =
-                                space.material_registry.get_id("Copper").unwrap_or(2);
+                            let copper_material_id = (|| -> Option<hwc_engine::material::MaterialId> {
+                                let layer_name = ctx.stackup_manager.get_layer_name_at_z(absolute_z_nm)?;
+                                let mat_name = ctx.profile
+                                    .and_then(|p| p.stackup.as_ref())
+                                    .and_then(|stackup| {
+                                        stackup.layers.iter()
+                                            .find(|l| l.name.name == layer_name)
+                                            .map(|l| l.material.clone())
+                                    })?;
+                                space.material_registry.get_id(&mat_name)
+                            })()
+                            .ok_or_else(|| IrError::PlacementError(format!(
+                                "No conductor material found at Z={}nm for via pad '{}'. \
+                                 Ensure the stackup is properly defined in your profile.",
+                                absolute_z_nm, pin_name
+                            )))?;
                             let plating_thickness_nm = 25_000;
                             let outer_diameter_nm = drill_diameter_nm;
                             let inner_diameter_nm = drill_diameter_nm - (2 * plating_thickness_nm);
@@ -237,8 +261,8 @@ pub fn unroll_internal_features(
                             );
 
                             let pad_half_nm = pad_diameter_nm / 2;
-                            let start_z_nm = (substrate_bbox.min.z / space.voxel_size.z_nm)
-                                * space.voxel_size.z_nm;
+                            let start_z_nm = (substrate_bbox.min.z / space.resolution_nm)
+                                * space.resolution_nm;
                             let pad_bbox_start = BoundingBox::new(
                                 Point3D::new(
                                     absolute_x_nm - pad_half_nm,
@@ -248,7 +272,7 @@ pub fn unroll_internal_features(
                                 Point3D::new(
                                     absolute_x_nm + pad_half_nm,
                                     absolute_y_nm + pad_half_nm,
-                                    start_z_nm + space.voxel_size.z_nm,
+                                    start_z_nm + space.resolution_nm,
                                 ),
                             );
                             space.entity_graph.add_cylinder_substrate_layer(
@@ -260,8 +284,8 @@ pub fn unroll_internal_features(
                                 0,
                             );
 
-                            let end_z_nm = (substrate_bbox.max.z / space.voxel_size.z_nm - 1)
-                                * space.voxel_size.z_nm;
+                            let end_z_nm = (substrate_bbox.max.z / space.resolution_nm - 1)
+                                * space.resolution_nm;
                             let pad_bbox_end = BoundingBox::new(
                                 Point3D::new(
                                     absolute_x_nm - pad_half_nm,
@@ -271,7 +295,7 @@ pub fn unroll_internal_features(
                                 Point3D::new(
                                     absolute_x_nm + pad_half_nm,
                                     absolute_y_nm + pad_half_nm,
-                                    end_z_nm + space.voxel_size.z_nm,
+                                    end_z_nm + space.resolution_nm,
                                 ),
                             );
                             space.entity_graph.add_cylinder_substrate_layer(
@@ -283,8 +307,8 @@ pub fn unroll_internal_features(
                                 0,
                             );
 
-                            let board_max_z_nm = (space.grid_cells().z_layers as i64).saturating_sub(1)
-                                * space.voxel_size.z_nm;
+                            let board_max_z_nm = (space.dimensions.depth_nm / space.resolution_nm).saturating_sub(1)
+                                * space.resolution_nm;
                             let via = Via::new(
                                 (absolute_x_nm, absolute_y_nm),
                                 substrate_bbox.min.z,
@@ -293,19 +317,35 @@ pub fn unroll_internal_features(
                                 via_net_id,
                                 0,
                                 board_max_z_nm,
-                                space.voxel_size.z_nm,
+                                space.resolution_nm,
                                 min_annular_ring_nm,
                             );
                             space.add_vias(vec![via]);
 
+                            let resolved_material_name: compact_str::CompactString = (|| -> Option<compact_str::CompactString> {
+                                let layer_name = ctx.stackup_manager.get_layer_name_at_z(absolute_z_nm)?;
+                                ctx.profile
+                                    .and_then(|p| p.stackup.as_ref())
+                                    .and_then(|stackup| {
+                                        stackup.layers.iter()
+                                            .find(|l| l.name.name == layer_name)
+                                            .map(|l| l.material.clone())
+                                    })
+                            })()
+                            .unwrap_or_else(|| panic!(
+                                "[VIA] FATAL: no material found for layer at z={}nm in stackup — declare stackup.layers with material in the PDK profile",
+                                absolute_z_nm
+                            ));
+
                             space.contacts.push(ContactMetadata {
                                 name: format!("{}_{}_via", pd.name, pin_name).into(),
-                                material_name: "Copper".into(),
+                                material_name: resolved_material_name.into(),
                                 z_start_nm: substrate_bbox.min.z,
                                 z_end_nm: substrate_bbox.max.z,
                                 net: net_assignment.clone(),
                                 bridge: None,
                                 bbox: Some(hole_bbox),
+                                drill_diameter_nm: Some(drill_diameter_nm),
                                 voxels: Vec::new(),
                                 is_tented: false,
                                 mask_clearance_diameter_nm: None,
@@ -359,65 +399,67 @@ pub fn unroll_internal_features(
                                 span: d.span,
                             });
 
-                        if let Some(anchor_bbox) = bbox_tracker.get(&pd.name) {
-                            let anchor_z = anchor_bbox.min.z;
+                        if matches!(pour.elevation, hwc_parser::Elevation::Relative) {
+                            if let Some(anchor_bbox) = bbox_tracker.get(&pd.name) {
+                                let anchor_z = anchor_bbox.min.z;
 
-                            let layer_name = ctx.stackup_manager.get_layer_name_at_z(anchor_z);
+                                let layer_name = ctx.stackup_manager.get_layer_name_at_z(anchor_z);
 
-                            let copper_thickness = if let Some(t_expr) = &pour.thickness {
-                                crate::ir::conversions::evaluate_expression_to_nm(
-                                    t_expr,
-                                    ctx.symbol_table,
-                                )
-                                .map_err(|e| {
-                                    IrError::PlacementError(format!(
-                                        "Failed to evaluate pad thickness: {}",
-                                        e
-                                    ))
-                                })?
-                            } else if let Some(ref name) = layer_name {
-                                ctx.stackup_manager
-                                    .get_layer_thickness(name)
-                                    .ok_or_else(|| {
+                                let copper_thickness = if let Some(t_expr) = &pour.thickness {
+                                    crate::ir::conversions::evaluate_expression_to_nm(
+                                        t_expr,
+                                        ctx.symbol_table,
+                                    )
+                                    .map_err(|e| {
                                         IrError::PlacementError(format!(
-                                            "Layer '{}' has no thickness in stackup",
-                                            name
+                                            "Failed to evaluate pad thickness: {}",
+                                            e
                                         ))
                                     })?
-                            } else {
-                                return Err(IrError::PlacementError(format!(
-                                    "Component pad '{}' at Z={}nm is not within any defined stackup layer. \
-                                     Check your profile stackup or component elevation.",
-                                    pour.name, anchor_z
-                                )));
-                            };
+                                } else if let Some(ref name) = layer_name {
+                                    ctx.stackup_manager
+                                        .get_layer_thickness(name)
+                                        .ok_or_else(|| {
+                                            IrError::PlacementError(format!(
+                                                "Layer '{}' has no thickness in stackup",
+                                                name
+                                            ))
+                                        })?
+                                } else {
+                                    return Err(IrError::PlacementError(format!(
+                                        "Component pad '{}' at Z={}nm is not within any defined stackup layer. \
+                                         Check your profile stackup or component elevation.",
+                                        pour.name, anchor_z
+                                    )));
+                                };
 
-                            let p_min = anchor_z;
-                            let p_max = anchor_z + copper_thickness;
+                                let p_min = anchor_z;
+                                let p_max = anchor_z + copper_thickness;
 
-                            /*
-                            eprintln!("[DEBUG unroll] Pad '{}' (anchor={}) layer={:?} anchor_z={}nm -> thickness={}nm", 
-                                pour.name, anchor_name, layer_name, anchor_z, copper_thickness);
-                            */
+                                /*
+                                eprintln!("[DEBUG unroll] Pad '{}' (anchor={}) layer={:?} anchor_z={}nm -> thickness={}nm", 
+                                    pour.name, anchor_name, layer_name, anchor_z, copper_thickness);
+                                */
 
-                            unrolled_pour.elevation = hwc_parser::Elevation::Physical {
-                                start: hwc_parser::Expression::Measurement {
-                                    value: p_min as f64 / 1_000_000.0,
+                                unrolled_pour.elevation = hwc_parser::Elevation::Physical {
+                                    start: hwc_parser::Expression::Measurement {
+                                        value: p_min as f64 / 1_000_000.0,
+                                        unit: hwc_parser::Unit::Millimeter,
+                                        span: pour.span,
+                                    },
+                                    end: Some(hwc_parser::Expression::Measurement {
+                                        value: p_max as f64 / 1_000_000.0,
+                                        unit: hwc_parser::Unit::Millimeter,
+                                        span: pour.span,
+                                    }),
+                                };
+
+                                unrolled_pour.thickness = Some(hwc_parser::Expression::Measurement {
+                                    value: copper_thickness as f64 / 1_000_000.0,
                                     unit: hwc_parser::Unit::Millimeter,
                                     span: pour.span,
-                                },
-                                end: Some(hwc_parser::Expression::Measurement {
-                                    value: p_max as f64 / 1_000_000.0,
-                                    unit: hwc_parser::Unit::Millimeter,
-                                    span: pour.span,
-                                }),
-                            };
-
-                            unrolled_pour.thickness = Some(hwc_parser::Expression::Measurement {
-                                value: copper_thickness as f64 / 1_000_000.0,
-                                unit: hwc_parser::Unit::Millimeter,
-                                span: pour.span,
-                            });
+                                });
+                            }
                         }
 
                         let mut world_origin = ctx.origin;

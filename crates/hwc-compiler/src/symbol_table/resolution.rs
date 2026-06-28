@@ -361,6 +361,94 @@ impl SymbolTable {
 
     // ========== SEMANTIC BAKING CACHE ==========
 
+    /// Bake a component definition into a BakedComponent (Pass 2)
+    ///
+    /// Resolves dimensions and pins into pure nanometer integers.
+    pub fn bake_component(&self, name: &str) -> Result<crate::BakedComponent, String> {
+        let def = self.get_component(name).map_err(|e| e.to_string())?;
+
+        let layout = def.layout.as_ref().ok_or_else(|| {
+            format!("Component '{}' has no layout block and cannot be baked", name)
+        })?;
+
+        // 1. Resolve dimensions strictly from shape string (e.g., "Rectangle(6mm, 6mm, 1mm)")
+        let (width_nm, height_nm) = if let Some(shape_str) = &layout.shape {
+            let (w, h, _) =
+                crate::ir::placement::helpers::parse_rectangle_dimensions(shape_str, self)
+                    .ok_or_else(|| format!("Invalid shape format for component '{}': '{}'", name, shape_str))?;
+            (w, h)
+        } else {
+            // If no explicit shape, derive bounds from pins exactly
+            let mut min_x = i64::MAX;
+            let mut max_x = i64::MIN;
+            let mut min_y = i64::MAX;
+            let mut max_y = i64::MIN;
+
+            for pin_pos in layout.pin_positions.values() {
+                let x_nm = (pin_pos.x * 1_000_000.0) as i64;
+                let y_nm = (pin_pos.y * 1_000_000.0) as i64;
+                min_x = min_x.min(x_nm);
+                max_x = max_x.max(x_nm);
+                min_y = min_y.min(y_nm);
+                max_y = max_y.max(y_nm);
+            }
+
+            if min_x == i64::MAX {
+                return Err(format!("Component '{}' has no shape and no pins to derive dimensions from", name));
+            }
+            
+            (max_x - min_x, max_y - min_y)
+        };
+
+        let mut pins = Vec::new();
+        for pin_name in &def.pins {
+            // Find pin position in layout
+            let pin_pos = layout
+                .pin_positions
+                .get(pin_name)
+                .ok_or_else(|| format!("Pin '{}' not found in layout of '{}'", pin_name, name))?;
+
+            let x_nm = (pin_pos.x * 1_000_000.0) as i64;
+            let y_nm = (pin_pos.y * 1_000_000.0) as i64;
+            let z_nm = (pin_pos.z.unwrap_or(0.0) * 1_000_000.0) as i64;
+
+            // Resolve pad shape strictly from layout.pad_shapes (e.g., "Circle(0.5mm)")
+            let pad_shape_str = layout.pad_shapes.get(pin_name).ok_or_else(|| {
+                format!("Pin '{}' in component '{}' is missing a pad shape definition", pin_name, name)
+            })?;
+
+            let (w, h, _) = crate::ir::placement::helpers::parse_rectangle_dimensions(pad_shape_str, self)
+                .ok_or_else(|| format!("Invalid pad shape format for pin '{}' in component '{}': '{}'", pin_name, name, pad_shape_str))?;
+
+            let pad_shape = if pad_shape_str.starts_with("Circle") {
+                hwc_engine::placement::PadShape::Circle { diameter_nm: w }
+            } else if pad_shape_str.starts_with("Obround") {
+                hwc_engine::placement::PadShape::Obround { width_nm: w, height_nm: h }
+            } else if pad_shape_str.starts_with("RoundedRect") {
+                // For RoundedRect, we'd need to parse the corner radius too if supported by helper
+                hwc_engine::placement::PadShape::Rectangle { width_nm: w, height_nm: h }
+            } else {
+                hwc_engine::placement::PadShape::Rectangle {
+                    width_nm: w,
+                    height_nm: h,
+                }
+            };
+
+            pins.push(hwc_engine::placement::BakedPin {
+                name: pin_name.clone(),
+                local_offset: hwc_engine::geometry::Point3D::new(x_nm, y_nm, z_nm),
+                pad_shape,
+            });
+        }
+
+        Ok(crate::BakedComponent {
+            name: name.into(),
+            width_nm,
+            height_nm,
+            pins,
+        })
+    }
+
     /// Get a baked component definition (pre-parsed integers).
     ///
     /// PERFORMANCE: This returns a cached BakedComponent that was parsed once during

@@ -161,7 +161,7 @@ pub fn execute(
             println!("✅ Semantic validation passed");
             println!(
                 "   - Space: {} ({}x{}x{})",
-                space.name, space.grid.x_cols, space.grid.y_rows, space.grid.z_layers
+                space.name, space.dimensions.width_nm, space.dimensions.height_nm, space.dimensions.depth_nm
             );
             println!("   - Components: {}", space.netlist.stats().component_count);
             println!("   - Nets: {}", space.netlist.stats().net_count);

@@ -187,18 +187,33 @@ impl StackupManager {
     }
 
     /// Resolves any `Elevation` into an absolute Z position in nanometers.
-    ///
-    /// - `Physical`: Evaluates the expression directly (Assembly paradigm).
-    /// - `Semantic`: Looks up the pre-computed starting Z from the LayerStackup (High-Level paradigm).
-    /// - `Relative`: Returns 0 (intended for use in component-relative unrolling).
     pub fn resolve_elevation(
         &self,
         elevation: &Elevation,
         symbol_table: &SymbolTable,
     ) -> Result<i64, IrError> {
+        self.resolve_elevation_bottom(elevation, symbol_table, 0)
+    }
+
+    /// Returns the thickness in nm for a semantic layer (useful for via/contact spanning).
+    pub fn get_layer_thickness(&self, layer_name: &str) -> Option<i64> {
+        self.layer_thickness_nm.get(layer_name).copied()
+    }
+
+    /// Returns the starting Z (bottom) in nm for a semantic layer.
+    pub fn get_layer_start_z(&self, layer_name: &str) -> Option<i64> {
+        self.layer_start_z_nm.get(layer_name).copied()
+    }
+
+    /// Bottom Z for an elevation.
+    pub fn resolve_elevation_bottom(
+        &self,
+        elevation: &Elevation,
+        symbol_table: &SymbolTable,
+        _resolution_nm: i64,
+    ) -> Result<i64, IrError> {
         match elevation {
             Elevation::Physical { start, .. } => {
-                // Assembly paradigm — direct physical measurement/expression
                 evaluate_expression_to_nm(start, symbol_table).map_err(|e| {
                     IrError::CoordinateResolutionFailed {
                         coordinate_str: "physical Z expression".into(),
@@ -220,27 +235,14 @@ impl StackupManager {
         }
     }
 
-    /// Returns the thickness in nm for a semantic layer (useful for via/contact spanning).
-    pub fn get_layer_thickness(&self, layer_name: &str) -> Option<i64> {
-        self.layer_thickness_nm.get(layer_name).copied()
-    }
-
-    /// Returns the starting Z (bottom) in nm for a semantic layer.
-    pub fn get_layer_start_z(&self, layer_name: &str) -> Option<i64> {
-        self.layer_start_z_nm.get(layer_name).copied()
-    }
-
     /// Top Z (exclusive upper bound) for an elevation: bottom + layer thickness.
-    ///
-    /// Physical elevations use `default_layer_height_nm` (typically one Z voxel).
-    /// Semantic elevations use stackup thickness when available.
     pub fn resolve_elevation_top(
         &self,
         elevation: &Elevation,
         symbol_table: &SymbolTable,
         default_layer_height_nm: i64,
     ) -> Result<i64, IrError> {
-        let bottom = self.resolve_elevation(elevation, symbol_table)?;
+        let bottom = self.resolve_elevation_bottom(elevation, symbol_table, 0)?;
         let thickness = match elevation {
             Elevation::Semantic(ident) => self
                 .get_layer_thickness(ident.name.as_ref())

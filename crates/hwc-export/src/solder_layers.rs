@@ -14,7 +14,7 @@
 
 use crate::physical_z::{board_z_extent, is_on_board_face, z_mm};
 use compact_str::CompactString;
-use hwc_engine::{HardwareSpace, PadShape};
+use hwc_engine::{HardwareSpace, placement::PadShape};
 use std::path::Path;
 
 /// Solder mask expansion in nanometers (0.075mm = 75µm)
@@ -164,7 +164,7 @@ pub fn export(space: &HardwareSpace, output_dir: &Path) -> Result<(), Box<dyn st
     let pads = collect_pads(space)?;
 
     let (board_min_z_nm, board_max_z_nm) = board_z_extent(space);
-    let voxel_z_nm = space.voxel_size.z_nm.max(1);
+    let voxel_z_nm = space.resolution_nm.max(1);
 
     export_layer(
         &pads,

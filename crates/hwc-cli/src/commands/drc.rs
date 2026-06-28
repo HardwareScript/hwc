@@ -1,5 +1,6 @@
 use hwc_compiler::{program_to_space, SymbolTable};
-use hwc_engine::design_rule_check::{DesignRuleChecker, NetVoxels};
+use hwc_engine::constraint_manager::ConstraintRulebook;
+use hwc_engine::design_rule_check::DesignRuleChecker;
 use hwc_parser::{Lexer, Parser};
 use miette::Result;
 use std::path::PathBuf;
@@ -47,26 +48,51 @@ pub fn execute(input: PathBuf, _build_dir: PathBuf) -> Result<()> {
     let space = program_to_space(&ast, &symbol_table, &collector)
         .map_err(|e| miette::miette!("Failed to create hardware space: {}", e))?;
 
-    // Collect nets from voxel grid
     println!("📊 Analyzing design...");
-    let nets = collect_nets_from_space(&space);
 
-    if nets.is_empty() {
-        println!("⚠️  No nets found in design");
-        println!("\n✅ DRC COMPLETE (no nets to check)");
-        return Ok(());
+    // Build constraint rulebook from fabrication profile
+    let mut constraint_rulebook = ConstraintRulebook::new(space.resolution_nm);
+
+    if let Some(ref constraints) = space.fabrication_constraints {
+        use hwc_engine::constraint_manager::{FabricationConstraints, StackupInfo};
+
+        let stackup = constraints.stackup.as_ref().map(|s| StackupInfo {
+            dielectric_height_nm: s.dielectric_height_nm,
+            copper_thickness_nm: s.copper_thickness_nm,
+            relative_permittivity: s.relative_permittivity,
+            default_impedance_ohm: s.default_impedance_ohm,
+        });
+
+        let fab_constraints = FabricationConstraints {
+            min_trace_width_nm: constraints.trace.min_width_nm,
+            min_trace_spacing_nm: constraints.trace.min_spacing_nm,
+            min_via_diameter_nm: constraints.via.min_diameter_nm,
+            default_via_diameter_nm: constraints.via.default_diameter_nm,
+            min_annular_ring_nm: constraints.via.min_annular_ring_nm,
+            min_spacing_nm: constraints.via.min_spacing_nm,
+            low_voltage_clearance_nm: constraints.clearance.low_voltage_nm,
+            medium_voltage_clearance_nm: constraints.clearance.medium_voltage_nm,
+            high_voltage_clearance_nm: constraints.clearance.high_voltage_nm,
+            safety_factor: constraints.clearance.safety_factor,
+            stackup,
+            solder_mask_expansion_nm: constraints.solder_mask_expansion_nm,
+            technology: constraints.technology.clone(),
+        };
+
+        constraint_rulebook.set_fabrication_constraints(fab_constraints);
+
+        if let Some(ref thermal) = constraints.thermal {
+            constraint_rulebook.max_temp_rise_c = Some(thermal.max_temp_rise_c);
+            constraint_rulebook.ambient_temp_c = Some(thermal.ambient_temp_c);
+        }
     }
-
-    println!("   Found {} net(s)", nets.len());
 
     // Run DRC validation
     println!("\n🔬 Running design rule checks...");
-
-    let drc_checker = DesignRuleChecker::default();
-    let constraint_rulebook =
-        hwc_engine::constraint_manager::ConstraintRulebook::new(space.voxel_size.x_nm);
-
-    let report = drc_checker.check(&nets, &constraint_rulebook, space.voxel_size.x_nm);
+    let drc_checker = DesignRuleChecker::new();
+    let report = drc_checker
+        .check(&space, &constraint_rulebook)
+        .map_err(|e| miette::miette!(e))?;
 
     // Display results
     println!("\n📋 DRC RESULTS");
@@ -75,9 +101,9 @@ pub fn execute(input: PathBuf, _build_dir: PathBuf) -> Result<()> {
     if report.is_valid() {
         println!("✅ All checks passed!");
         println!("\nChecks performed:");
-        println!("  ✓ Clearance violations (P16)");
-        println!("  ✓ Trace width violations (P21)");
-        println!("  ✓ Thermal violations (P22)");
+        println!("  ✓ Clearance violations");
+        println!("  ✓ Trace width violations");
+        println!("  ✓ Thermal violations");
         println!("\n✅ DRC COMPLETE - Design is valid");
         Ok(())
     } else {
@@ -92,53 +118,4 @@ pub fn execute(input: PathBuf, _build_dir: PathBuf) -> Result<()> {
             report.violations.len()
         ))
     }
-}
-
-/// Collect nets from hardware space voxel grid
-fn collect_nets_from_space(space: &hwc_engine::HardwareSpace) -> Vec<NetVoxels> {
-    use rustc_hash::FxHashMap;
-
-    let mut net_map: FxHashMap<u32, Vec<hwc_engine::Point3D>> = FxHashMap::default();
-
-    // Scan voxel grid for occupied voxels
-    let (x_size, y_size, z_size) = space.entity_graph.size();
-
-    for x in 0..x_size {
-        for y in 0..y_size {
-            for z in 0..z_size {
-                let net_id = space.entity_graph.get_net(x, y, z);
-
-                // Skip empty voxels (net_id == 0)
-                if net_id > 0 {
-                    let point = space.voxel_to_position(x, y, z);
-                    net_map.entry(net_id).or_default().push(point);
-                }
-            }
-        }
-    }
-
-    // Convert to NetVoxels
-    net_map
-        .into_iter()
-        .map(|(net_id, voxels)| {
-            let net_name = space
-                .netlist
-                .get_net(hwc_engine::netlist::NetId::new(net_id))
-                .map(|n| n.name.clone())
-                .unwrap_or_else(|| format!("Net_{}", net_id).into());
-
-            let classification = space
-                .net_classifications
-                .get(&net_name)
-                .copied()
-                .unwrap_or(hwc_engine::space::NetClassification::Unclassified);
-
-            NetVoxels {
-                net_name,
-                voxels,
-                geometry_type: hwc_engine::design_rule_check::GeometryType::Trace, // Standalone DRC assumes traces
-                classification,
-            }
-        })
-        .collect()
 }

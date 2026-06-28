@@ -104,24 +104,93 @@ impl GeometryRouter {
             .unwrap_or(self.resolution_nm);
         let track_pitch = self.resolution_nm; // Use snap-resolution for pitch
 
-        let topo_router = TopologicalRouter::new(trace_width, track_pitch);
-
         let path = if start.x == goal.x && start.y == goal.y && start.z == goal.z {
             vec![start, goal]
         } else {
-            match topo_router.route(start, goal, &spatial_index, &board_bounds) {
-                Some(topo_path) if topo_path.waypoints.len() >= 2 => topo_path.waypoints,
-                _ => {
-                    // --- FALLBACK: Try Localized Legalization Window ---
-                    let collision_window = BoundingBox::new(start, goal);
-                    if let Ok(legalized_coords) = self.legalize_local_window(&collision_window, route) {
-                        legalized_coords
-                    } else {
-                        return Err(RoutingError::NoPathFound {
-                            net_id: route.net_id,
-                            start: route.start,
-                            goal: route.goal,
-                        });
+            // v0.1.8: Prefer SDF-accelerated A* routing when an SDF generator is available.
+            // The SDF router uses Leap-Frog sphere tracing to skip empty space, and its
+            // cost function enforces guardrails (R25 non-routable layers, Interior Lockout,
+            // Via-Portal Exemption). Fall back to TopologicalRouter when no SDF is built.
+            if let Some(ref sdf) = self.sdf_generator {
+                // eprintln!("[SDF-ROUTER] Net {}: routing via SDF-accelerated A* ({},{},{}) -> ({},{},{})",
+                //     route.net_id.raw(), start.x, start.y, start.z, goal.x, goal.y, goal.z);
+                use crate::geometry_router::pathfinding::RoutingParams;
+                use crate::geometry_router::pathfinding::route_net_sdf_accelerated;
+                use crate::constraint_manager::LayerDirection;
+
+                let routing_params = RoutingParams {
+                    net_id: route.net_id,
+                    constraints: &crate::constraint_manager::RouteConstraints {
+                        min_trace_width_nm: trace_width,
+                        min_clearance_nm: self.constraints.fabrication.as_ref()
+                            .map(|fab| fab.min_trace_spacing_nm)
+                            .unwrap_or(200_000),
+                        max_parallel_length_nm: 10_000_000,
+                        max_resistance_ohm: 100.0,
+                        max_current_ma: 20,
+                        impedance_ohm: None,
+                    },
+                    bounds: self.bounds.clone(),
+                    layer_direction: LayerDirection::Any,
+                    resolution_nm: self.resolution_nm,
+                    clearance_zones: &[], // No clearance zones in GeometryRouter path
+                    entity_graph: Some(&self.entity_graph),
+                    fixed_z_nm: None,
+                    exempt_components: &[], // Endpoint exemption handled by build_routing_spatial_index
+                    substrate_layers: self.substrate_layers.as_deref(),
+                    is_high_speed_net: false,
+                    layer_routable_mode: None,
+                    max_local_route_length_nm: None,
+                    via_drill_diameter_nm: 0,
+                    active_net_pin_positions: &[],
+                    component_keepouts: &[],
+                };
+
+                match route_net_sdf_accelerated(start, goal, &routing_params, sdf) {
+                    Some(sdf_path) if sdf_path.len() >= 2 => {
+                        // eprintln!("[SDF-ROUTER] Net {}: SDF returned {} points", route.net_id.raw(), sdf_path.len());
+                        sdf_path
+                    }
+                    _ => {
+                        // SDF failed: fall back to TopologicalRouter
+                        // eprintln!("[SDF-ROUTER] Net {}: SDF failed, falling back to TopologicalRouter", route.net_id.raw());
+                        let topo_router = TopologicalRouter::new(trace_width, track_pitch);
+                        match topo_router.route(start, goal, &spatial_index, &board_bounds) {
+                            Some(topo_path) if topo_path.waypoints.len() >= 2 => topo_path.waypoints,
+                            _ => {
+                                // --- FALLBACK: Try Localized Legalization Window ---
+                                let collision_window = BoundingBox::new(start, goal);
+                                if let Ok(legalized_coords) = self.legalize_local_window(&collision_window, route) {
+                                    legalized_coords
+                                } else {
+                                    return Err(RoutingError::NoPathFound {
+                                        net_id: route.net_id,
+                                        start: route.start,
+                                        goal: route.goal,
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                // No SDF generator: use legacy TopologicalRouter
+                // eprintln!("[SDF-ROUTER] Net {}: NO SDF generator, falling back to TopologicalRouter", route.net_id.raw());
+                let topo_router = TopologicalRouter::new(trace_width, track_pitch);
+                match topo_router.route(start, goal, &spatial_index, &board_bounds) {
+                    Some(topo_path) if topo_path.waypoints.len() >= 2 => topo_path.waypoints,
+                    _ => {
+                        // --- FALLBACK: Try Localized Legalization Window ---
+                        let collision_window = BoundingBox::new(start, goal);
+                        if let Ok(legalized_coords) = self.legalize_local_window(&collision_window, route) {
+                            legalized_coords
+                        } else {
+                            return Err(RoutingError::NoPathFound {
+                                net_id: route.net_id,
+                                start: route.start,
+                                goal: route.goal,
+                            });
+                        }
                     }
                 }
             }
@@ -198,7 +267,10 @@ impl GeometryRouter {
         );
 
         let updated_spatial_index = self.build_routing_spatial_index(route);
-        let topo_router = TopologicalRouter::new(self.voxel_size_nm, self.voxel_size_nm);
+        let topo_router = TopologicalRouter::new(
+            self.constraints.fabrication.as_ref().map(|f| f.min_trace_width_nm).unwrap_or(100_000),
+            self.resolution_nm,
+        );
 
         match topo_router.route(route.start, route.goal, &updated_spatial_index, &board_bounds) {
             Some(topo_path) if topo_path.waypoints.len() >= 2 => Ok(topo_path.waypoints),
@@ -222,9 +294,9 @@ impl GeometryRouter {
     ) -> Result<RoutedNet, RoutingError> {
         use super::super::super::constraint_aware::constraint_aware_astar;
 
-        let target_voxels = target_length_nm / self.voxel_size_nm;
+        let target_voxels = target_length_nm / self.resolution_nm;
 
-        let occupied_set: rustc_hash::FxHashSet<_> = self.occupied_voxels.keys().copied().collect();
+        let occupied_set: rustc_hash::FxHashSet<_> = rustc_hash::FxHashSet::default();
 
         let bounds = (
             self.bounds.width_nm,
@@ -239,7 +311,7 @@ impl GeometryRouter {
             pattern,
             &occupied_set,
             bounds,
-            self.voxel_size_nm,
+            self.resolution_nm,
         );
 
         match path_result {

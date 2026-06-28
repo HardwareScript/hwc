@@ -61,12 +61,6 @@ pub struct ClearanceZone {
     /// Voltage of this net in millivolts
     pub voltage_mv: i64,
 
-    /// Actual copper voxel locations (occupied space)
-    pub occupied_voxels: Vec<Point3D>,
-
-    /// Clearance zone voxels (forbidden space around copper)
-    pub clearance_voxels: Vec<Point3D>,
-
     /// Radius of the clearance zone in nanometers
     pub clearance_radius_nm: i64,
 }
@@ -131,8 +125,14 @@ pub struct FabricationConstraints {
     /// Minimum spacing between drill holes in nanometers (v0.1.7)
     pub min_spacing_nm: i64,
 
-    /// High voltage clearance in nanometers (optional)
-    pub high_voltage_clearance_nm: Option<i64>,
+    /// Low-voltage clearance (<50V) in nanometers
+    pub low_voltage_clearance_nm: i64,
+
+    /// Medium-voltage clearance (50-150V) in nanometers
+    pub medium_voltage_clearance_nm: i64,
+
+    /// High voltage clearance (>150V) in nanometers
+    pub high_voltage_clearance_nm: i64,
 
     /// Safety factor for clearance calculations (default: 2.0)
     pub safety_factor: f64,
@@ -163,8 +163,8 @@ pub struct ConstraintRulebook {
     /// Layer-specific routing directions (Manhattan routing)
     pub layer_directions: FxHashMap<usize, LayerDirection>,
 
-    /// Voxel size in nanometers (for voxel conversions)
-    pub voxel_size_nm: i64,
+    /// Coordinate snapping resolution in nanometers
+    pub resolution_nm: i64,
 
     /// Default current for thermal calculations (milliamps)
     /// Used when net-specific current is not available
@@ -174,6 +174,10 @@ pub struct ConstraintRulebook {
     /// Used for thermal validation
     pub max_temp_rise_c: Option<f64>,
 
+    /// Ambient temperature (°C)
+    /// Used for thermal validation
+    pub ambient_temp_c: Option<f64>,
+
     /// Fabrication constraints from profile (v0.1.4 Phase 3 addition)
     /// Contains manufacturing limits (trace widths, clearances, via sizes)
     pub fabrication: Option<FabricationConstraints>,
@@ -181,14 +185,15 @@ pub struct ConstraintRulebook {
 
 impl ConstraintRulebook {
     /// Create a new empty constraint rulebook.
-    pub fn new(voxel_size_nm: i64) -> Self {
+    pub fn new(resolution_nm: i64) -> Self {
         Self {
             per_net_constraints: FxHashMap::default(),
             clearance_zones: Vec::new(),
             layer_directions: FxHashMap::default(),
-            voxel_size_nm,
+            resolution_nm,
             default_current_ma: Some(20), // 20mA default for signal traces
             max_temp_rise_c: Some(50.0),  // 50°C default max temperature rise (more realistic)
+            ambient_temp_c: Some(25.0),   // 25°C ambient temperature
             fabrication: None,            // No fabrication constraints by default
         }
     }
@@ -226,20 +231,12 @@ impl ConstraintRulebook {
             .unwrap_or(LayerDirection::Any)
     }
 
-    /// Check if a voxel is in any clearance zone.
-    pub fn is_in_clearance_zone(&self, point: Point3D, net_id: NetId) -> bool {
-        for zone in &self.clearance_zones {
-            // Skip if this is the same net (nets can route through their own clearance)
-            if zone.net_id == net_id {
-                continue;
-            }
-
-            // Check if point is in this zone's clearance voxels
-            if zone.clearance_voxels.contains(&point) {
-                return true;
-            }
-        }
-
+    /// Check if a point is in any clearance zone.
+    ///
+    /// NOTE: With the voxel system removed, clearance zones are checked analytically
+    /// during routing via `check_clearance_violation`. This method is kept for API
+    /// compatibility but always returns false.
+    pub fn is_in_clearance_zone(&self, _point: Point3D, _net_id: NetId) -> bool {
         false
     }
 }

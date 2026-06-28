@@ -191,21 +191,28 @@ pub fn extract_via_constraints<S: SymbolTableTrait>(
 pub fn extract_clearance_constraints<S: SymbolTableTrait>(
     profile: &ProfileDefinition,
     symbol_table: &S,
-) -> Result<Option<(i64, f64)>, String> {
+) -> Result<Option<(i64, i64, i64, f64)>, String> {
     if let Some(clearance) = &profile.clearance {
-        let high_voltage_nm = if let Some(hv) = &clearance.high_voltage {
-            Some(symbol_table.measurement_to_nm(hv)?)
-        } else {
-            None
-        };
+        let high_voltage_nm = clearance
+            .high_voltage
+            .as_ref()
+            .map(|m| symbol_table.measurement_to_nm(m))
+            .transpose()?
+            .unwrap_or(0);
 
         let safety_factor = clearance.safety_factor.unwrap_or(2.0);
 
-        if let Some(hv_nm) = high_voltage_nm {
-            Ok(Some((hv_nm, safety_factor)))
-        } else {
-            Ok(None)
-        }
+        // v0.1.8: Low/medium voltage clearance derived from trace.min_spacing.
+        // The profile's trace.min_spacing is the standard net-to-net spacing,
+        // appropriate for low/medium voltage nets.
+        let default_clearance = profile
+            .trace
+            .as_ref()
+            .map(|t| symbol_table.measurement_to_nm(&t.min_spacing))
+            .transpose()?
+            .unwrap_or(0);
+
+        Ok(Some((default_clearance, default_clearance, high_voltage_nm, safety_factor)))
     } else {
         Ok(None)
     }

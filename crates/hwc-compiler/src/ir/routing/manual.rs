@@ -17,8 +17,6 @@ pub fn route_manual(
     profile: Option<&hwc_parser::ProfileDefinition>,
 ) -> Result<(), IrError> {
     let ctx = CoordinateContext {
-        voxel_size: &space.voxel_size,
-        grid_size: &space.grid,
         origin,
         space_dimensions: &space.dimensions,
         symbol_table,
@@ -83,7 +81,7 @@ pub fn route_manual(
 
     // Check that first waypoint is on the start pad's edge
     if let Some(bbox) = &start_bbox {
-        if !waypoint_on_pad_edge(first_waypoint, bbox, space.voxel_size.x_nm) {
+        if !waypoint_on_pad_edge(first_waypoint, bbox, space.resolution_nm) {
             return Err(IrError::NoPathFound {
                 net: format!("{}.{} -> {}.{}", route.from.component, route.from.pin, route.to.component, route.to.pin).into(),
                 from_pin: format!("{}.{}", route.from.component, route.from.pin).into(),
@@ -92,9 +90,18 @@ pub fn route_manual(
         }
     }
 
+    let _router = hwc_engine::geometry_router::GeometryRouter::new(
+        hwc_engine::geometry_router::GridBounds::new(
+            space.dimensions.width_nm,
+            space.dimensions.height_nm,
+            space.dimensions.depth_nm,
+        ),
+        hwc_engine::constraint_manager::ConstraintRulebook::new(space.resolution_nm),
+    );
+
     // Check that last waypoint is on the end pad's edge
     if let Some(bbox) = &end_bbox {
-        if !waypoint_on_pad_edge(last_waypoint, bbox, space.voxel_size.x_nm) {
+        if !waypoint_on_pad_edge(last_waypoint, bbox, space.resolution_nm) {
             return Err(IrError::NoPathFound {
                 net: format!("{}.{} -> {}.{}", route.from.component, route.from.pin, route.to.component, route.to.pin).into(),
                 from_pin: format!("{}.{}", route.from.component, route.from.pin).into(),
@@ -105,27 +112,25 @@ pub fn route_manual(
 
     // PHASE 2: TRACE PLACEMENT
     // v0.1.7: Use the net ID already registered for this route
-    let net_id = super::helpers::register_net_for_route(space, route, symbol_table)?;
+    let net_id = super::helpers::register_net_for_route(space, route, symbol_table, stackup_manager, profile)?;
 
     // v0.1.7: Resolve material dynamically from the stackup layer
     // This ensures that manual traces merge perfectly with via rings/pours on the same layer.
-    let material_name = if let (Some(p), Some(first_wp)) = (profile, waypoints.first()) {
-        if let (Some(stackup), Some(layer_name)) = (
-            p.stackup.as_ref(),
-            stackup_manager.get_layer_name_at_z(first_wp.z),
-        ) {
-            stackup
-                .layers
-                .iter()
-                .find(|l| l.name.name == layer_name)
-                .map(|l| l.material.to_string())
-                .unwrap_or_else(|| "Copper".to_string())
-        } else {
-            "Copper".to_string()
-        }
-    } else {
-        "Copper".to_string()
-    };
+    let first_wp_z = waypoints.first().map(|p| p.z).unwrap_or(0);
+    let material_name: compact_str::CompactString = (|| -> Option<compact_str::CompactString> {
+        let layer_name = stackup_manager.get_layer_name_at_z(first_wp_z)?;
+        profile
+            .and_then(|p| p.stackup.as_ref())
+            .and_then(|stackup| {
+                stackup.layers.iter()
+                    .find(|l| l.name.name == layer_name)
+                    .map(|l| l.material.clone())
+            })
+    })()
+    .ok_or_else(|| IrError::InvalidRouteExpression {
+        expression: "manual route".into(),
+        reason: format!("Could not resolve material at Z={}nm from stackup", first_wp_z),
+    })?;
 
     let copper_id = space.material_registry.get_id(&material_name).ok_or_else(|| {
         IrError::UndeclaredMaterial { material: material_name.clone().into() }
@@ -156,10 +161,19 @@ pub fn route_manual(
         if let Some(layer_idx) = stackup_manager.get_layer_index_at_z(first_wp.z) {
             stackup_manager.get_thickness_for_layer_index(layer_idx)
         } else {
-            space.voxel_size.z_nm
+            return Err(IrError::InvalidRouteExpression {
+                expression: "manual route".into(),
+                reason: format!(
+                    "Could not resolve trace thickness from stackup at Z={}nm. \
+                     Ensure the stackup is properly defined in your profile.",
+                    first_wp.z
+                ),
+            });
         }
     } else {
-        space.voxel_size.z_nm
+        return Err(IrError::EmptyRoute {
+            net: format!("{}.{} -> {}.{}", route.from.component, route.from.pin, route.to.component, route.to.pin).into(),
+        });
     };
 
     let mut segments = Vec::new();
@@ -172,6 +186,17 @@ pub fn route_manual(
         .get_net(net_id)
         .map(|n| n.name.clone())
         .unwrap_or_default();
+
+    let current_ma = if let Some(ref ac) = route.current_limit_ac {
+        let rms = crate::ir::conversions::evaluate_expression_to_ma(&ac.rms, symbol_table)
+            .unwrap_or(20.0);
+        let peak = crate::ir::conversions::evaluate_expression_to_ma(&ac.peak, symbol_table)
+            .unwrap_or(rms);
+        peak
+    } else {
+        20.0
+    };
+
     let analytic_trace = hwc_engine::AnalyticTrace::new(
         net_id,
         trace_width_nm,
@@ -179,6 +204,7 @@ pub fn route_manual(
         segments,
         copper_id,
         net_name,
+        current_ma,
     );
 
     space.add_analytic_route(analytic_trace);

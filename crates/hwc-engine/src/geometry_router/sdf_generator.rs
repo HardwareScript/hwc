@@ -31,6 +31,14 @@
 use crate::geometry::{BoundingBox, Point3D};
 use crate::geometry_router::substrate_types::ComponentMetadata;
 
+/// Grid cell sizes in nanometers for each axis
+#[derive(Debug, Clone, Copy)]
+pub struct VoxelSize {
+    pub x_nm: i64,
+    pub y_nm: i64,
+    pub z_nm: i64,
+}
+
 /// Maximum distance value (255 voxels = ~25mm at 100μm resolution)
 const MAX_DISTANCE: u8 = 255;
 
@@ -148,7 +156,7 @@ pub struct SdfGenerator {
     pub substrate_height_nm: i64,
 
     /// Voxel sizes for converting distances to voxel units (X, Y, Z)
-    pub voxel_size: crate::VoxelSize,
+    pub voxel_size: VoxelSize,
 
     /// Grid dimensions (for bounds checking)
     pub size: (usize, usize, usize),
@@ -170,7 +178,7 @@ impl SdfGenerator {
         x_size: usize,
         y_size: usize,
         z_size: usize,
-        voxel_size: crate::VoxelSize,
+        voxel_size: VoxelSize,
         substrate_height_nm: i64,
     ) -> Self {
         Self {
@@ -255,7 +263,7 @@ impl SdfGenerator {
         x_size: usize,
         y_size: usize,
         z_size: usize,
-        voxel_size: crate::VoxelSize,
+        voxel_size: VoxelSize,
         substrate_height_nm: i64,
     ) -> Self {
         let mut sdf = Self::new(x_size, y_size, z_size, voxel_size, substrate_height_nm);

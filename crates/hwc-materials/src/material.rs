@@ -286,8 +286,7 @@ impl ConductorProperties {
         // where k depends on layer type
         let k = if is_external { 0.048 } else { 0.024 };
 
-        // Standard copper thickness (1oz = 35µm)
-        // This is a manufacturing standard, not a material property
+        // 1 oz copper = 35 µm = 35,000 nm (IPC standard weight-to-thickness conversion)
         let copper_thickness_nm = 35_000;
 
         let current_a = current_ma as f64 / 1000.0;

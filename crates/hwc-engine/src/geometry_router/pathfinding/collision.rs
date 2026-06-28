@@ -12,19 +12,20 @@ pub(super) fn try_binary_collision_skip(
     _current: Point3D,
     _neighbors: &[Point3D],
     _entity_graph: &EntityGraph,
-    _voxel_size: crate::VoxelSize,
+    _resolution_nm: i64,
 ) -> Option<Vec<Point3D>> {
     None
 }
 
-/// Convert Point3D to voxel coordinates
+/// Convert Point3D to discrete coordinates based on resolution
 #[inline]
 pub(super) fn voxel_to_coords(
     point: Point3D,
-    voxel_size: crate::VoxelSize,
+    resolution_nm: i64,
 ) -> (usize, usize, usize) {
-    let x = (point.x / voxel_size.x_nm.max(1)).max(0) as usize;
-    let y = (point.y / voxel_size.y_nm.max(1)).max(0) as usize;
-    let z = (point.z / voxel_size.z_nm.max(1)).max(0) as usize;
+    let res = resolution_nm.max(1);
+    let x = (point.x / res).max(0) as usize;
+    let y = (point.y / res).max(0) as usize;
+    let z = (point.z / res).max(0) as usize;
     (x, y, z)
 }

@@ -94,9 +94,13 @@ pub fn profile_to_constraints(
         .unwrap_or(150.0);
 
     let clearance = if let Some(clearance_def) = &profile.clearance {
+        // v0.1.8: Use trace.min_spacing as the base clearance for all voltage tiers.
+        // The profile's trace.min_spacing is the standard net-to-net spacing.
+        // High-voltage clearance is declared separately in the clearance block
+        // and is used only for HV net pairs.
         ClearanceConstraints {
-            low_voltage_nm: 0,
-            medium_voltage_nm: 0,
+            low_voltage_nm: trace.min_spacing_nm,
+            medium_voltage_nm: trace.min_spacing_nm,
             high_voltage_nm: clearance_def
                 .high_voltage
                 .as_ref()

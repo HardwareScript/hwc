@@ -61,6 +61,9 @@ pub struct ContactMetadata {
     pub net: Option<CompactString>,
     pub bridge: Option<CompactString>,
     pub bbox: Option<crate::geometry::BoundingBox>,
+    /// Actual via drill diameter in nanometers (excludes annular ring/pad extension).
+    /// The bbox includes pad (drill + 2*annular_ring); this is the inner hole only.
+    pub drill_diameter_nm: Option<i64>,
     /// Voxel positions that make up this via (for DRC validation)
     /// Task 4.2: Via geometry tracking for diameter/enclosure checks
     pub voxels: Vec<crate::geometry::Point3D>,

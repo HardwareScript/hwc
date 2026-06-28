@@ -73,8 +73,6 @@ pub fn place_pour(
     let solver = crate::constraint_solver::ConstraintSolver::new(bbox_tracker, ctx.eval_context);
 
     let coord_ctx = CoordinateContext {
-        voxel_size: &space.voxel_size,
-        grid_size: &space.grid,
         origin: ctx.origin,
         space_dimensions: &space.dimensions,
         symbol_table: ctx.symbol_table,
@@ -314,12 +312,6 @@ pub fn place_pour(
         merged_region_id: None,
         waivers: pour.waivers.clone(),
     });
-
-    eprintln!("[DEBUG place_pour] '{}' bbox: min=({}, {}, {}) max=({}, {}, {}) net={:?}",
-        pour.name,
-        bbox.min.x, bbox.min.y, bbox.min.z,
-        bbox.max.x, bbox.max.y, bbox.max.z,
-        resolved_net_name);
 
     let net_id = if let Some(net_name) = resolved_net_name.as_ref() {
         let center_x = (start_with_z.x + end_with_z.x) / 2;

@@ -10,12 +10,11 @@ pub fn z_mm(z_nm: i64) -> f64 {
     z_nm as f64 / 1_000_000.0
 }
 
-/// Board Z extent in nanometers: bottom face to top face of the voxel grid.
+/// Board Z extent in nanometers: bottom face to top face of the board.
 pub fn board_z_extent(space: &HardwareSpace) -> (i64, i64) {
-    let voxel_z_nm = space.voxel_size.z_nm.max(1);
     let board_min_z_nm = 0;
-    // v0.1.7 FIXED: Board max Z is the product of layers and voxel size, not (layers-1)
-    let board_max_z_nm = (space.grid.z_layers as i64) * voxel_z_nm;
+    // v0.1.8: Use physical depth from dimensions (voxel_size.z_nm was removed)
+    let board_max_z_nm = space.dimensions.depth_nm;
     (board_min_z_nm, board_max_z_nm)
 }
 
@@ -83,7 +82,7 @@ pub fn is_on_board_face(z_nm: i64, face_z_nm: i64, voxel_z_nm: i64) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use hwc_engine::{Dimensions, GridCells, HardwareSpace, SpaceView};
+    use hwc_engine::{Dimensions, HardwareSpace, SpaceView};
 
     fn test_space(z_layers: usize, voxel_z_mm: i64) -> HardwareSpace {
         let voxel_z_nm = voxel_z_mm * 1_000_000;
@@ -94,14 +93,10 @@ mod tests {
                 height_nm: 10_000_000_000,
                 depth_nm: z_layers as i64 * voxel_z_nm,
             },
-            GridCells {
-                x_cols: 10,
-                y_rows: 10,
-                z_layers,
-            },
             0,
             hwc_engine::MaterialRegistry::new(),
             SpaceView::Horizontal,
+            voxel_z_nm,
         )
     }
 
@@ -126,3 +121,4 @@ mod tests {
         );
     }
 }
+

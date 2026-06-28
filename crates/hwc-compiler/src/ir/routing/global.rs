@@ -129,6 +129,15 @@ impl<'a> AutoRouter<'a> {
         let mut explicit_segments: Vec<(NetId, Vec<Point3D>)> = Vec::new();
         let mut net_id_to_name: FxHashMap<NetId, CompactString> = FxHashMap::default();
         let mut route_segments: Vec<(NetId, Vec<Point3D>)> = Vec::new();
+        // v0.1.8: Track which nets have a layer override for vertical transition segments.
+        // Keyed by net name (stable across Chain-Link ID remapping).
+        let mut net_layer_targets: FxHashMap<CompactString, i64> = FxHashMap::default();
+        // v0.1.8: Track declared route widths per net for analytic trace registration.
+        // Keyed by net name. Falls back to profile min_width if not specified.
+        let mut net_declared_widths: FxHashMap<CompactString, i64> = FxHashMap::default();
+        // v0.1.8: Track declared route currents per net for thermal validation.
+        // Keyed by net name. Falls back to 20mA if not specified.
+        let mut net_currents_ma: FxHashMap<CompactString, f64> = FxHashMap::default();
 
         if !self.auto_routes.is_empty() {
             // eprintln!("[ROUTER] Using Chain-Link mode ({} explicit routes)", self.auto_routes.len());
@@ -143,7 +152,7 @@ impl<'a> AutoRouter<'a> {
             for route in &auto_routes {
                 // Get or create net ID for this route
                 let net_id = self.find_net_id_for_name("TEMP_NET")?; // Dummy for resolution
-                let actual_net_id = crate::ir::routing::register_net_for_route(self.space, route, &crate::SymbolTable::new())
+                let actual_net_id = crate::ir::routing::register_net_for_route(self.space, route, &crate::SymbolTable::new(), self.stackup_manager, self.profile)
                     .unwrap_or(net_id);
                 let net_name = self.space.netlist.get_net(actual_net_id).map(|n| n.name.clone()).unwrap_or_else(|| "unnamed".into());
 
@@ -282,7 +291,28 @@ impl<'a> AutoRouter<'a> {
 
                 if let Ok((start, goal, _, _)) = crate::ir::routing::calculate_boundary_points(self.space, &modified_route, min_width) {
                     route_segments.push((actual_net_id, vec![start, goal]));
-                    net_id_to_name.insert(actual_net_id, net_name);
+                    net_id_to_name.insert(actual_net_id, net_name.clone());
+                    // v0.1.8: Track layer override for vertical transition segments
+                    if let Some(ref layer_id) = route.layer {
+                        if let Some(target_z) = self.stackup_manager.get_layer_start_z(&layer_id.name) {
+                            net_layer_targets.insert(net_name.clone(), target_z);
+                        }
+                    }
+                    // v0.1.8: Track declared route width for analytic trace registration.
+                    // Resolves user-specified width (e.g. `width: 500nm`) to nanometers.
+                    if let Some(ref width_expr) = route.width {
+                        if let Ok(w_nm) = crate::ir::conversions::evaluate_expression_to_nm(width_expr, &crate::SymbolTable::new()) {
+                            net_declared_widths.insert(net_name.clone(), w_nm);
+                        }
+                    }
+                    // v0.1.8: Track declared route current for thermal validation.
+                    if let Some(ref ac) = route.current_limit_ac {
+                        let rms = crate::ir::conversions::evaluate_expression_to_ma(&ac.rms, &crate::SymbolTable::new())
+                            .unwrap_or(20.0);
+                        let peak = crate::ir::conversions::evaluate_expression_to_ma(&ac.peak, &crate::SymbolTable::new())
+                            .unwrap_or(rms);
+                        net_currents_ma.insert(net_name, peak);
+                    }
                 }
             }
         }
@@ -349,7 +379,7 @@ impl<'a> AutoRouter<'a> {
         );
 
         let constraints =
-            hwc_engine::constraint_manager::ConstraintRulebook::new(self.space.voxel_size.x_nm);
+            hwc_engine::constraint_manager::ConstraintRulebook::new(self.space.resolution_nm);
 
         let mut geo_router = hwc_engine::GeometryRouter::new(grid_bounds, constraints);
 
@@ -503,7 +533,7 @@ impl<'a> AutoRouter<'a> {
                 // Convert RouteResult paths back to AnalyticTrace primitives
                 // v0.1.7: Resolve copper thickness from the stackup for the routing layer.
                 let trace_thickness_nm = {
-                    let default_thickness = self.space.voxel_size.z_nm;
+                    let default_thickness = self.space.resolution_nm;
                     let sample_z = result
                         .paths
                         .values()
@@ -572,6 +602,10 @@ impl<'a> AutoRouter<'a> {
                             }
                         };
 
+                        // Save the original pin Z BEFORE the Z-override below,
+                        // because the override sets all points to target_z.
+                        let original_pin_z = refined_path.first().map(|p| p.z).unwrap_or(0);
+
                         if let Some(z) = target_z {
                             for point in refined_path.iter_mut() {
                                 point.z = z;
@@ -589,11 +623,32 @@ impl<'a> AutoRouter<'a> {
                             }
                         }
 
+                        // v0.1.8: Layer Transition Segments
+                        // When `route.layer` is specified, the route runs at the target layer Z
+                        // but the pins are at a different Z (e.g. active). Add vertical transition
+                        // segments at start/end so the auto-via inserter detects the Z change
+                        // and stamps vias for the layer transition.
+                        if let Some(&target_z) = net_layer_targets.get::<str>(net_name.as_ref()) {
+                            if original_pin_z != target_z {
+                                let start_point = *refined_path.first().unwrap();
+                                refined_path.insert(0, Point3D::new(start_point.x, start_point.y, original_pin_z));
+                                refined_path.insert(1, Point3D::new(start_point.x, start_point.y, target_z));
+
+                                let end_point = *refined_path.last().unwrap();
+                                refined_path.push(Point3D::new(end_point.x, end_point.y, target_z));
+                                refined_path.push(Point3D::new(end_point.x, end_point.y, original_pin_z));
+                            }
+                        }
+
+                        let declared_width = net_declared_widths.get::<str>(net_name.as_ref()).copied();
+                        let current_ma = net_currents_ma.get::<str>(net_name.as_ref()).copied().unwrap_or(20.0);
                         self.register_analytic_route(
                             actual_net_id,
                             &net_name,
                             refined_path,
                             actual_thickness,
+                            declared_width,
+                            current_ma,
                         )?;
                     }
                 }
@@ -686,6 +741,8 @@ impl<'a> AutoRouter<'a> {
         net_name: &str,
         path: Vec<Point3D>,
         thickness_nm: i64,
+        declared_width_nm: Option<i64>,
+        current_ma: f64,
     ) -> Result<(), IrError> {
         use hwc_engine::{AnalyticTrace, LineSegment};
 
@@ -693,7 +750,7 @@ impl<'a> AutoRouter<'a> {
             return Ok(());
         }
 
-        let trace_width_nm = self
+        let min_width_nm = self
             .space
             .fabrication_constraints
             .as_ref()
@@ -702,6 +759,11 @@ impl<'a> AutoRouter<'a> {
                 message: "Analytic route requires trace width constraint but none is loaded.".into(),
                 hint: "Ensure a profile with 'trace:' constraints is declared in the space definition.".into(),
             })?;
+
+        // v0.1.8: Use declared route width if specified, otherwise fall back to profile minimum.
+        // This ensures the AnalyticTrace carries the user-specified width (e.g. 500nm)
+        // for accurate via enclosure checks in the auto-via inserter.
+        let trace_width_nm = declared_width_nm.unwrap_or(min_width_nm);
 
         // v0.1.7: Strict Boundary-Docking Model
         // ...
@@ -721,9 +783,14 @@ impl<'a> AutoRouter<'a> {
             let d2y = p3.y - p2.y;
             let d2z = p3.z - p2.z;
 
-            let is_collinear = (d1x == 0 && d2x == 0 && d1y == 0 && d2y == 0)
-                || (d1x == 0 && d2x == 0 && d1z == 0 && d2z == 0)
-                || (d1y == 0 && d2y == 0 && d1z == 0 && d2z == 0);
+            // v0.1.8: Collinearity check — skip middle point only if both segments
+            // move along the same axis (same two coordinates are zero).
+            // The first condition was too broad: it collapsed Z-transition segments
+            // (up then down) at the same XY position. Now requires ALL three axes
+            // to be zero-movement for the first case, preventing Z-transition loss.
+            let is_collinear = (d1x == 0 && d2x == 0 && d1y == 0 && d2y == 0 && d1z == 0 && d2z == 0)
+                || (d1x == 0 && d2x == 0 && d1z == 0 && d2z == 0 && d1y.signum() == d2y.signum() && d1y != 0)
+                || (d1y == 0 && d2y == 0 && d1z == 0 && d2z == 0 && d1x.signum() == d2x.signum() && d1x != 0);
 
             if !is_collinear {
                 // v0.1.7: Prevent zero-length segments which cause "box" artifacts in DXF
@@ -741,9 +808,28 @@ impl<'a> AutoRouter<'a> {
             segments.push(LineSegment::new(start, last));
         }
 
-        let copper_id = self.space.material_registry.get_id("Copper").ok_or_else(|| {
-            IrError::UndeclaredMaterial { material: "Copper".into() }
-        })?;
+        // Resolve material from stackup layer at the route's target Z position.
+        // path[0] is the pin Z (active layer), path[1] is the routing layer target.
+        // Use the second point for material resolution to match the actual routing layer.
+        let sample_z = if path.len() > 1 { path[1].z } else { path[0].z };
+        let copper_id = if let Some(layer_name) = self.stackup_manager.get_layer_name_at_z(sample_z) {
+            let mat_name = self.profile
+                .and_then(|p| p.stackup.as_ref())
+                .and_then(|stackup| {
+                    stackup.layers.iter()
+                        .find(|l| l.name.name == layer_name)
+                        .map(|l| l.material.clone())
+                })
+                .ok_or_else(|| IrError::UndeclaredMaterial {
+                    material: format!("No material defined for layer '{}' at Z={}nm", layer_name, sample_z).into(),
+                })?;
+            self.space.material_registry.get_id(&mat_name)
+                .ok_or_else(|| IrError::UndeclaredMaterial { material: mat_name })?
+        } else {
+            return Err(IrError::UndeclaredMaterial {
+                material: format!("No stackup layer found at Z={}nm", sample_z).into(),
+            });
+        };
         let trace = AnalyticTrace::new(
             net_id,
             trace_width_nm,
@@ -751,6 +837,7 @@ impl<'a> AutoRouter<'a> {
             segments,
             copper_id,
             net_name.into(),
+            current_ma,
         );
 
         self.space.analytic_routes.push(trace);

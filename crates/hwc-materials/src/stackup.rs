@@ -212,9 +212,9 @@ impl StackupProfile {
         }
     }
 
-    /// Get copper thickness in nanometers based on copper weight
+    /// Get copper thickness in nanometers based on copper weight.
+    /// 1 oz copper = 35 µm = 35,000 nm (IPC standard weight-to-thickness conversion).
     pub fn get_copper_thickness_nm(&self) -> i64 {
-        // 1oz copper = 35µm = 35,000nm
         (self.board.copper_weight_oz as i64) * 35_000
     }
 

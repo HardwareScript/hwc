@@ -28,12 +28,20 @@ use rustc_hash::FxHashMap;
 /// - Net classifications for physics validation (v0.1.6)
 /// - **Bounding box tracker for component placement (Sprint 3.10)**
 /// - **Analytic route overlay for native geometry (v0.1.7 - GOD-TIER)**
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum PadShape {
+    Rect,
+    Rectangle, // Alias for Rect
+    Circle,
+    Hexagon,
+    Polygon,
+    Obround,
+    RoundedRect,
+}
+
 pub struct HardwareSpace {
     pub name: CompactString,
     pub dimensions: Dimensions,
-    pub grid: GridCells,
-    pub voxel_size: VoxelSize,
     pub substrate_material_id: MaterialId,
     pub view: SpaceView,
 
@@ -74,7 +82,7 @@ pub struct HardwareSpace {
     pub keep_out_zones: Vec<KeepOutZone>,
 
     /// **v0.1.8: Coordinate snapping resolution in nanometers.**
-    pub resolution_nm: Option<i64>,
+    pub resolution_nm: i64,
 }
 
 impl HardwareSpace {
@@ -82,20 +90,17 @@ impl HardwareSpace {
     pub fn new(
         name: CompactString,
         dimensions: Dimensions,
-        grid: GridCells,
         substrate_material_id: MaterialId,
         material_registry: MaterialRegistry,
         view: SpaceView,
+        resolution_nm: i64,
     ) -> Self {
-        let voxel_size = VoxelSize::from_dimensions(dimensions, grid);
         let entity_graph = EntityGraph::new();
         let netlist = NetlistArena::new();
 
         Self {
             name,
             dimensions,
-            grid,
-            voxel_size,
             substrate_material_id,
             material_registry,
             view,
@@ -110,19 +115,8 @@ impl HardwareSpace {
             analytic_routes: Vec::new(),
             fabrication_constraints: None,
             keep_out_zones: Vec::new(),
-            resolution_nm: None,
+            resolution_nm,
         }
-    }
-
-    /// Derive grid cell counts from dimensions and voxel size.
-    ///
-    /// This replaces the removed `grid: GridCells` field.
-    pub fn grid_cells(&self) -> GridCells {
-        GridCells::new(
-            ((self.dimensions.width_nm + self.voxel_size.x_nm - 1) / self.voxel_size.x_nm) as usize,
-            ((self.dimensions.height_nm + self.voxel_size.y_nm - 1) / self.voxel_size.y_nm) as usize,
-            ((self.dimensions.depth_nm + self.voxel_size.z_nm - 1) / self.voxel_size.z_nm) as usize,
-        )
     }
 
     /// Register a component bbox and its metadata in the entity graph.
@@ -144,6 +138,25 @@ impl HardwareSpace {
         );
     }
 
+    pub fn set_net_classification(
+        &mut self,
+        net_name: CompactString,
+        classification: NetClassification,
+    ) {
+        self.net_classifications.insert(net_name, classification);
+    }
+
+    pub fn get_net_classification(&self, net_name: &str) -> NetClassification {
+        self.net_classifications
+            .get(net_name)
+            .copied()
+            .unwrap_or(NetClassification::Unclassified)
+    }
+
+    pub fn add_vias(&mut self, vias: Vec<crate::geometry_router::Via>) {
+        self.vias.extend(vias);
+    }
+
     /// **v0.1.7: Register a Keep-Out Zone (KOZ)**
     pub fn register_keep_out_zone(&mut self, koz: KeepOutZone) {
         self.keep_out_zones.push(koz);
@@ -154,46 +167,6 @@ impl HardwareSpace {
         &self,
     ) -> impl Iterator<Item = (&CompactString, &crate::geometry::BoundingBox)> {
         self.component_bboxes.iter()
-    }
-
-    /// Get net classification (v0.1.6)
-    pub fn get_net_classification(&self, net_name: &str) -> NetClassification {
-        if let Some(&classification) = self.net_classifications.get(net_name) {
-            return classification;
-        }
-        NetClassification::Unclassified
-    }
-
-    /// Set net classification (v0.1.6)
-    pub fn set_net_classification(
-        &mut self,
-        net_name: CompactString,
-        classification: NetClassification,
-    ) {
-        self.net_classifications.insert(net_name, classification);
-    }
-
-    /// Add vias from routing results.
-    pub fn add_vias(&mut self, vias: Vec<crate::geometry_router::Via>) {
-        self.vias.extend(vias);
-    }
-
-    /// Convert voxel coordinates to physical position.
-    pub fn voxel_to_position(&self, x: usize, y: usize, z: usize) -> Point3D {
-        Point3D::new(
-            x as i64 * self.voxel_size.x_nm,
-            y as i64 * self.voxel_size.y_nm,
-            z as i64 * self.voxel_size.z_nm,
-        )
-    }
-
-    /// Convert physical position to voxel coordinates.
-    pub fn position_to_voxel(&self, pos: Point3D) -> (usize, usize, usize) {
-        (
-            (pos.x / self.voxel_size.x_nm) as usize,
-            (pos.y / self.voxel_size.y_nm) as usize,
-            (pos.z / self.voxel_size.z_nm) as usize,
-        )
     }
 
     /// **v0.1.7: Add an analytic route (GOD-TIER NATIVE API)**
@@ -214,15 +187,8 @@ impl HardwareSpace {
 
     /// **v0.1.7: Realize analytic routes into substrate layers (LAZY REALIZATION)**
     pub fn realize_analytic_routes(&mut self) {
-        // eprintln!(
-        //     "[ANALYTIC ROUTES] Realizing {} routes into sparse substrate layers...",
-        //     self.analytic_routes.len()
-        // );
-        let start = std::time::Instant::now();
+        let _start = std::time::Instant::now();
 
-        let mut _segment_count = 0;
-
-        use rustc_hash::FxHashMap;
         let mut groups: FxHashMap<(i64, i64, MaterialId, u32), Vec<BoundingBox>> =
             FxHashMap::default();
 
@@ -230,10 +196,6 @@ impl HardwareSpace {
             let half_w = route.width_nm / 2;
 
             for seg in &route.segments {
-                // v0.1.8: Fixed Z-axis 'Phantom Offset' bug.
-                // The realization pipeline was calculating z_max as seg.z + thickness.
-                // However, in a vector-first system, the anchor 'z' is the CENTER of 
-                // the copper thickness. The realization must expand symmetrically.
                 let half_t = route.thickness_nm / 2;
                 let z_min = seg.start.z.min(seg.end.z) - half_t;
                 let z_max = seg.start.z.max(seg.end.z) + half_t;
@@ -254,12 +216,9 @@ impl HardwareSpace {
 
                 let key = (z_min, z_max, route.material, route.net_id.0);
                 groups.entry(key).or_default().push(bbox);
-
-                _segment_count += 1;
             }
         }
 
-        let mut _layer_count = 0;
         for ((z_min, z_max, material, net), bboxes) in groups {
             let group_bbox = BoundingBox::new(
                 Point3D::new(
@@ -274,27 +233,18 @@ impl HardwareSpace {
                 ),
             );
 
-            let mut layer = crate::geometry_router::substrate_types::SubstrateLayer::new(material, net, group_bbox, crate::geometry_router::substrate_types::SubstrateLayerType::Pour);
+            let mut layer = crate::geometry_router::substrate_types::SubstrateLayer::new(
+                material,
+                net,
+                group_bbox,
+                crate::geometry_router::substrate_types::SubstrateLayerType::Pour,
+            );
             for bbox in bboxes {
                 layer.append_region(bbox);
             }
             self.entity_graph.get_substrate_layers_mut().push(layer);
-            _layer_count += 1;
         }
 
-        let _duration = start.elapsed();
-        // eprintln!(
-        //     "[ANALYTIC ROUTES] Realization complete: {} segments → {} sparse layers ({}ms)",
-        //     segment_count,
-        //     layer_count,
-        //     duration.as_millis()
-        // );
-
-        // Post-realization drill pass for vias
-        // eprintln!(
-        //     "[ANALYTIC ROUTES] Running post-realization drill pass for {} vias...",
-        //     self.vias.len()
-        // );
         let vias = self.vias.clone();
         for via in vias {
             let z_start = via.from_z_nm.min(via.to_z_nm);
@@ -370,13 +320,15 @@ impl HardwareSpace {
             self.pours[pour_idx].net = Some(net_name.into());
 
             if let Some(pour_bbox) = bbox {
-                let material_id = self.material_registry.get_id(&material_name)
-                    .unwrap_or_else(|| panic!(
+                let material_id = self.material_registry.get_id(&material_name).unwrap_or_else(|| {
+                    panic!(
                         "Internal error: material '{}' should have been registered during pour placement",
                         material_name
-                    ));
+                    )
+                });
                 for layer in self.entity_graph.get_substrate_layers_mut() {
-                    if layer.layer_type == crate::geometry_router::substrate_types::SubstrateLayerType::Pour
+                    if layer.layer_type
+                        == crate::geometry_router::substrate_types::SubstrateLayerType::Pour
                         && layer.material == material_id
                         && layer.bbox == pour_bbox
                     {
@@ -390,13 +342,12 @@ impl HardwareSpace {
             if let Some(net_name) = &contact.net {
                 if let Some(net_id) = self.netlist.get_net_by_name(net_name.as_str()) {
                     if let Some(contact_bbox) = contact.bbox {
-                        let material_id = self
-                            .material_registry
-                            .get_id(&contact.material_name)
-                            .unwrap_or_else(|| panic!(
+                        let material_id = self.material_registry.get_id(&contact.material_name).unwrap_or_else(|| {
+                            panic!(
                                 "Internal error: material '{}' should have been registered during contact placement",
                                 contact.material_name
-                            ));
+                            )
+                        });
                         for layer in self.entity_graph.get_substrate_layers_mut() {
                             if layer.material == material_id && layer.bbox == contact_bbox {
                                 layer.net = net_id.raw();
