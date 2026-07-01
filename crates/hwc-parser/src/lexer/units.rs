@@ -7,7 +7,7 @@
 use compact_str::CompactString;
 use std::fmt;
 
-/// Distance units - REQUIRED for voxel placement and routing
+/// Distance units - REQUIRED for placement and routing
 ///
 /// All distance units can be converted to picometers (pm), which is the
 /// engine's internal coordinate representation. Maximum addressable range:

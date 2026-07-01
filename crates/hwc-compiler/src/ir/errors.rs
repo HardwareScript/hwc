@@ -498,3 +498,20 @@ pub struct DisconnectedNetDetails {
     pub pin_pos: CompactString,
     pub distance: CompactString,
 }
+
+// Conversion from ConversionError to IrError
+impl From<crate::conversions::ConversionError> for IrError {
+    fn from(err: crate::conversions::ConversionError) -> Self {
+        match err {
+            crate::conversions::ConversionError::MissingProfileConstraint(field) => {
+                IrError::MissingProfileConstraint { field }
+            }
+            crate::conversions::ConversionError::MissingProperty { material, property } => {
+                IrError::MissingPhysicalProperty { material, property }
+            }
+            crate::conversions::ConversionError::InvalidUnit(msg) => {
+                IrError::PlacementError(format!("Invalid unit: {}", msg))
+            }
+        }
+    }
+}

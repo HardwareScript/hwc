@@ -97,6 +97,7 @@ pub fn route_manual(
             space.dimensions.depth_nm,
         ),
         hwc_engine::constraint_manager::ConstraintRulebook::new(space.resolution_nm),
+        space.material_registry.clone(),
     );
 
     // Check that last waypoint is on the end pad's edge
@@ -159,7 +160,7 @@ pub fn route_manual(
 
     let thickness_nm = if let Some(first_wp) = waypoints.first() {
         if let Some(layer_idx) = stackup_manager.get_layer_index_at_z(first_wp.z) {
-            stackup_manager.get_thickness_for_layer_index(layer_idx)
+            stackup_manager.get_thickness_for_layer_index(layer_idx)?
         } else {
             return Err(IrError::InvalidRouteExpression {
                 expression: "manual route".into(),
@@ -176,9 +177,18 @@ pub fn route_manual(
         });
     };
 
+    // DEBUG: Print waypoints BEFORE creating LineSegments
+    eprintln!("[MANUAL WAYPOINTS] Creating segments from {} waypoints", waypoints.len());
+    for (i, wp) in waypoints.iter().enumerate() {
+        eprintln!("  waypoint[{}]: ({},{},{})", i, wp.x, wp.y, wp.z);
+    }
+    
     let mut segments = Vec::new();
-    for window in waypoints.windows(2) {
-        segments.push(hwc_engine::LineSegment::new(window[0], window[1]));
+    for (i, window) in waypoints.windows(2).enumerate() {
+        let seg = hwc_engine::LineSegment::new(window[0], window[1]);
+        eprintln!("[MANUAL SEGMENT CREATE] seg[{}]: start=({},{},{}), end=({},{},{})",
+            i, seg.start.x, seg.start.y, seg.start.z, seg.end.x, seg.end.y, seg.end.z);
+        segments.push(seg);
     }
 
     let net_name = space
@@ -197,6 +207,12 @@ pub fn route_manual(
         20.0
     };
 
+    let net_actual_current_ma = space
+        .netlist
+        .get_net(net_id)
+        .and_then(|n| n.current_ma)
+        .unwrap_or(0.0);
+
     let analytic_trace = hwc_engine::AnalyticTrace::new(
         net_id,
         trace_width_nm,
@@ -204,7 +220,8 @@ pub fn route_manual(
         segments,
         copper_id,
         net_name,
-        current_ma,
+        net_actual_current_ma,  // Actual operating current from net
+        current_ma,             // Route's declared capability
     );
 
     space.add_analytic_route(analytic_trace);

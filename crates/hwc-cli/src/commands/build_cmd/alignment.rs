@@ -46,7 +46,7 @@ pub fn validate_alignment(
 
         // **HANDSHAKE C: GEOMETRIC REALIZATION (Sprint 3.12 - Gap 3 Fix)**
         //
-        // Realize analytic routes into voxel grid for geometric analysis.
+        // Realize analytic routes for geometric analysis.
         // This enables:
         // - Device extraction (silicon: copper-silicon contact detection)
         // - Parasitic extraction (both PCB and silicon)
@@ -57,7 +57,7 @@ pub fn validate_alignment(
         // - Bulk operation with sparse chunk allocation
         // - Universal: works for both PCB and silicon designs
         if !space.analytic_routes.is_empty() {
-            // println!($3"[DEBUG] Realizing {} analytic routes into voxel grid for geometric analysis...",
+            // println!($3"[DEBUG] Realizing {} analytic routes for geometric analysis...",
             //    space.analytic_routes.len()
             // );
             let realize_start = std::time::Instant::now();
@@ -140,148 +140,37 @@ pub fn validate_alignment(
         // Sprint 4.1.1: Run Physical Continuity Check (Layer 2 of Triple-Check Architecture)
         // Physical continuity validates actual copper paths before parameter extraction
         if !config.skip_physical_continuity {
-            println!("\n🔍 Running Physical Continuity Validation...");
-            let continuity_start = std::time::Instant::now();
-
             let (physics_substrate_layers, physics_route_segments) =
                 super::validation::utils::convert_metadata_to_physics(space);
 
-            // Get bridge rules from profile (v0.1.7)
-            let bridge_rules: Vec<hwc_physics::BridgeRule> =
-                if let Some(ref constraints) = space.fabrication_constraints {
-                    constraints
-                        .bridges
-                        .iter()
-                        .map(|b| hwc_physics::BridgeRule {
-                            from_material: b.from_material.clone(),
-                            to_material: b.to_material.clone(),
-                            interface_material: b.interface_material.clone(),
-                            fill_material: b.fill_material.clone(),
-                        })
-                        .collect()
-                } else {
-                    Vec::new()
-                };
-
-            // Get material name -> ID mapping for physics (v0.1.7)
-            let mut material_mapping = rustc_hash::FxHashMap::default();
-            for (id, name) in space.material_registry.all_materials() {
-                material_mapping.insert(compact_str::CompactString::from(name), id);
-            }
-
-            let physical_continuity_checker = hwc_physics::PhysicalContinuityChecker::new(
+            let continuity_errors = super::validation::continuity::run_physical_continuity_check(
+                space,
                 &physics_substrate_layers,
                 &physics_route_segments,
-                &bridge_rules,
-                material_mapping,
-            );
+                config,
+                start_time,
+            ).map_err(|e| miette::miette!("Physical continuity validation error: {}", e))?;
 
-            // Extract pin positions
-            let pin_positions: Vec<hwc_physics::PinPosition> =
-                {
-                    let component_pins = space.entity_graph.get_component_pins();
-                    component_pins
-                        .iter()
-                        .map(|pin| {
-                            let component_id =
-                                pin.component_name.as_bytes().iter().fold(0u32, |acc, &b| {
-                                    acc.wrapping_mul(31).wrapping_add(b as u32)
-                                });
-                            let pin_id =
-                                pin.pin_name.as_bytes().iter().fold(0u32, |acc, &b| {
-                                    acc.wrapping_mul(31).wrapping_add(b as u32)
-                                });
-                            hwc_physics::PinPosition {
-                                component_id,
-                                pin_id,
-                                x_nm: pin.x_nm,
-                                y_nm: pin.y_nm,
-                                z_nm: pin.z_nm,
-                            }
-                        })
-                        .collect()
-                };
-
-            // Build islands and validate
-            let islands =
-                physical_continuity_checker.build_conductive_islands(Some(&pin_positions));
-            let bindings = physical_continuity_checker.bind_nets_to_islands(&islands);
-            let continuity_violations =
-                physical_continuity_checker.validate_continuity(&islands, &bindings, false);
-
-            let continuity_duration = continuity_start.elapsed();
-            println!(
-                "[{:>8.2}ms] Physical continuity check completed in {:.2}ms",
-                start_time.elapsed().as_secs_f64() * 1000.0,
-                continuity_duration.as_secs_f64() * 1000.0
-            );
-
-            if !continuity_violations.is_empty() {
+            if !continuity_errors.is_empty() {
                 println!(
                     "\n❌ PHYSICAL CONTINUITY VIOLATIONS - Cannot proceed to parameter validation:"
                 );
-                for violation in &continuity_violations {
-                    match violation {
-                        hwc_physics::PhysicalContinuityViolation::DisconnectedNet {
-                            net_name,
-                            island_count,
-                            islands,
-                            suggested_fix,
-                        } => {
-                            println!("\n   P41: Disconnected Net '{}'", net_name);
-                            println!("   → Net has {} disconnected islands", island_count);
-                            for (i, island) in islands.iter().enumerate() {
-                                println!(
-                                    "      Island {}: {} nodes at ({:.1}, {:.1}, {:.1})mm",
-                                    i + 1,
-                                    island.node_count,
-                                    island.bbox.min_x as f64 / 1e6,
-                                    island.bbox.min_y as f64 / 1e6,
-                                    island.bbox.min_z as f64 / 1e6
-                                );
-                            }
-                            println!("   💡 {}", suggested_fix);
-                        }
-                        hwc_physics::PhysicalContinuityViolation::ShortCircuit {
-                            net_names,
-                            suggested_fix,
-                            ..
-                        } => {
-                            println!("\n   P42: Short Circuit");
-                            println!("   → Multiple nets: {:?}", net_names);
-                            println!("   💡 {}", suggested_fix);
-                        }
-                        hwc_physics::PhysicalContinuityViolation::FloatingConductor {
-                            material_name,
-                            bbox,
-                            suggested_fix,
-                            ..
-                        } => {
-                            println!("\n   P43: Floating Conductor");
-                            println!("   → Material: {}", material_name);
-                            println!(
-                                "   → Location: ({:.1}, {:.1}, {:.1})mm",
-                                bbox.min_x as f64 / 1e6,
-                                bbox.min_y as f64 / 1e6,
-                                bbox.min_z as f64 / 1e6
-                            );
-                            println!("   💡 {}", suggested_fix);
-                        }
-                    }
+                for error in &continuity_errors {
+                    println!("   {} ({}): {}", error.code, error.message, error.suggestion.as_ref().unwrap_or(&"No suggestion".into()));
                 }
 
                 // Task 5.3: Respect --force-export flag
                 if config.force_export {
                     println!("\n   ⚠️  --force-export: Continuing despite {} physical continuity violation(s)", 
-                        continuity_violations.len());
+                        continuity_errors.len());
                 } else {
                     return Err(miette::miette!(
                         "Physical continuity validation failed with {} violation(s). Alignment Layer cannot validate fragmented nets.",
-                        continuity_violations.len()
+                        continuity_errors.len()
                     ));
                 }
             } else {
-                println!("   ✅ Physical continuity validated - all nets are continuous");
+                println!("   ✅ Physical continuity validation passed: All nets are physically continuous");
             }
         } else {
             println!(
@@ -355,7 +244,7 @@ pub fn validate_alignment(
 
         // Task 4.3: Run Bulk Connection Validation
         if !config.skip_bulk_validation {
-            println!("\nℹ️  Bulk connection validation skipped (Voxel system removed)");
+            println!("\nℹ️  Bulk connection validation skipped");
         }
 
         Ok(Some(extracted_netlist))

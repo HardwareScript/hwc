@@ -17,7 +17,7 @@ use rustc_hash::FxHashMap;
 /// A compound bridge stack: interface material + fill material
 ///
 /// Physical Reality: In real chips, the bridge (e.g., Silicide) is only a thin
-/// "crust" (typically 50nm = 1 voxel) at the interface. The rest of the via is
+/// "crust" (typically ~50nm) at the interface. The rest of the via is
 /// filled with a different material (e.g., Tungsten).
 ///
 /// Example:
@@ -26,7 +26,7 @@ use rustc_hash::FxHashMap;
 ///                     │   Tungsten  │  ← Via fill material
 ///                     │   Tungsten  │
 /// Layer 2 (ILD)       │   Tungsten  │
-///                     │  Silicide   │  ← Bridge interface (1 voxel)
+///                     │  Silicide   │  ← Bridge interface
 /// Layer 1 (Silicon)   └─────────────┘
 /// ```
 #[derive(Debug, Clone, PartialEq)]
@@ -35,7 +35,7 @@ pub struct BridgeStack {
     /// This is the thin layer that touches the source material
     pub interface_material: CompactString,
 
-    /// Interface thickness in nanometers (typically 50nm = 1 voxel)
+    /// Interface thickness in nanometers (typically ~50nm)
     pub interface_thickness_nm: f64,
 
     /// The via fill material (e.g., "Tungsten")

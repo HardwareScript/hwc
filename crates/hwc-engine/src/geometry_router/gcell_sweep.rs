@@ -129,7 +129,7 @@ impl Default for GhostRegistry {
 /// Compute a 2D Morton code (Z-order curve) for cache-friendly spatial sorting.
 ///
 /// Interleaves the bits of x and y coordinates to produce a single u64 value.
-/// Voxel positions close in 2D space produce similar Morton codes, yielding
+/// Positions close in 2D space produce similar Morton codes, yielding
 /// excellent L1/L2 cache hit rates during the sweep.
 #[inline]
 pub fn compute_morton_code(x: i64, y: i64) -> u64 {

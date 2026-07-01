@@ -1,0 +1,43 @@
+# Minimal PDK - Simple 2-layer stackup
+# Layer 0: Silicon substrate (0-100nm)
+# Layer 1: Metal (500-900nm) - this is our routing layer
+
+import * from materials
+
+profile Minimal_PDK:
+    technology: "ASIC"
+    
+    stackup:
+        substrate:   [material: Silicon,  thickness: 100nm, routable: false]
+        dielectric:  [material: FR4,      thickness: 400nm, routable: false]
+        metal1:      [material: Aluminum, thickness: 400nm, routable: true]
+    
+    trace:
+        min_width: 100nm
+        min_spacing: 100nm
+    
+    via:
+        min_diameter: 180nm
+        min_annular_ring: 100nm
+        min_spacing: 200nm
+        shape: cylinder
+    
+    manufacturing:
+        copper_thickness: 400nm
+    
+    clearance:
+        high_voltage: 500nm
+        safety_factor: 2.0
+    
+    layer:
+        min_thickness: 100nm
+        allowed_conductors: [Aluminum]
+        allowed_dielectrics: [FR4, Silicon]
+    
+    routing:
+        max_local_route_length: 10um
+    
+    thermal:
+        ambient_temp: 25C
+        max_operating_temp: 125C
+        max_temp_rise: 10C

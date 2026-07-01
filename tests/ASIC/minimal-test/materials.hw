@@ -1,0 +1,42 @@
+# Minimal material definitions
+# Only what we need: Aluminum for pads/traces, Silicon for substrate
+
+material Aluminum:
+    category: conductor
+    symbol: "Al"
+    description: "Metal routing layer"
+    properties:
+        color: "#C0C0C0"
+        metallic: 0.9
+        roughness: 0.3
+        opacity: 1.0
+        resistivity: 2.82e-8ohm_m
+        thermal_conductivity: 237.0W_mK
+        density: 2700.0kg_m3
+        max_current_density: 20.0A_mm2
+
+material Silicon:
+    category: semiconductor
+    symbol: "Si"
+    description: "Substrate"
+    properties:
+        color: "#808080"
+        metallic: 0.1
+        roughness: 0.7
+        opacity: 1.0
+        resistivity: 640.0ohm_m
+        thermal_conductivity: 150.0W_mK
+        density: 2330.0kg_m3
+
+material FR4:
+    category: insulator
+    symbol: "FR4"
+    description: "Dielectric"
+    properties:
+        color: "#2E7D32"
+        metallic: 0.0
+        roughness: 0.8
+        opacity: 1.0
+        relative_permittivity: 4.5
+        thermal_conductivity: 0.3W_mK
+        density: 1800.0kg_m3

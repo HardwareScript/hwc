@@ -1,12 +1,12 @@
 //! Metadata Dependency Tracker
 //!
 //! Tracks changes to material properties, profile settings, and constraints
-//! that don't affect voxel positions but require re-validation of physics checks.
+//! that don't affect routing positions but require re-validation of physics checks.
 //!
 //! # The Problem
 //!
-//! Dirty bits track voxel changes, but not material property changes.
-//! If a user changes "Dielectric Strength" of FR4, no voxels moved, so dirty bits are 0.
+//! Dirty bits track routing changes, but not material property changes.
+//! If a user changes "Dielectric Strength" of FR4, no routes moved, so dirty bits are 0.
 //! The engine won't re-run voltage checks, leading to incorrect validation.
 //!
 //! # The Solution

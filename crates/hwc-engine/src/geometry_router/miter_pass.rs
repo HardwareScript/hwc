@@ -72,26 +72,31 @@ impl MiterEngine {
                 && (v2_x != 0 || v2_y != 0);
 
             if is_corner {
-                let len1 = ((v1_x * v1_x + v1_y * v1_y) as f64).sqrt() as i64;
-                let len2 = ((v2_x * v2_x + v2_y * v2_y) as f64).sqrt() as i64;
+                let len1_f = ((v1_x * v1_x + v1_y * v1_y) as f64).sqrt();
+                let len2_f = ((v2_x * v2_x + v2_y * v2_y) as f64).sqrt();
+                let len1 = len1_f as i64;
+                let len2 = len2_f as i64;
 
                 if len1 > miter_dist && len2 > miter_dist {
-                    // Unit direction vectors
-                    let u1_x = v1_x / len1;
-                    let u1_y = v1_y / len1;
-                    let u2_x = v2_x / len2;
-                    let u2_y = v2_y / len2;
+                    // v0.1.9.1 BUG FIX: Use floating-point for unit vector calculation
+                    // Previous code used integer division (v1_x / len1) which caused
+                    // massive coordinate corruption when results rounded to 0 or 1.
+                    // Unit direction vectors (floating point)
+                    let u1_x_f = v1_x as f64 / len1_f;
+                    let u1_y_f = v1_y as f64 / len1_f;
+                    let u2_x_f = v2_x as f64 / len2_f;
+                    let u2_y_f = v2_y as f64 / len2_f;
 
                     // Miter start: rollback from corner along incoming direction
                     let p_a = Point3D::new(
-                        p_curr.x - u1_x * miter_dist,
-                        p_curr.y - u1_y * miter_dist,
+                        p_curr.x - (u1_x_f * miter_dist as f64).round() as i64,
+                        p_curr.y - (u1_y_f * miter_dist as f64).round() as i64,
                         p_curr.z,
                     );
                     // Miter end: advance from corner along outgoing direction
                     let p_b = Point3D::new(
-                        p_curr.x + u2_x * miter_dist,
-                        p_curr.y + u2_y * miter_dist,
+                        p_curr.x + (u2_x_f * miter_dist as f64).round() as i64,
+                        p_curr.y + (u2_y_f * miter_dist as f64).round() as i64,
                         p_curr.z,
                     );
 

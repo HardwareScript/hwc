@@ -170,14 +170,6 @@ pub struct ConstraintRulebook {
     /// Used when net-specific current is not available
     pub default_current_ma: Option<i64>,
 
-    /// Maximum allowed temperature rise (°C)
-    /// Used for thermal validation
-    pub max_temp_rise_c: Option<f64>,
-
-    /// Ambient temperature (°C)
-    /// Used for thermal validation
-    pub ambient_temp_c: Option<f64>,
-
     /// Fabrication constraints from profile (v0.1.4 Phase 3 addition)
     /// Contains manufacturing limits (trace widths, clearances, via sizes)
     pub fabrication: Option<FabricationConstraints>,
@@ -185,16 +177,17 @@ pub struct ConstraintRulebook {
 
 impl ConstraintRulebook {
     /// Create a new empty constraint rulebook.
+    ///
+    /// v0.1.8: No hardcoded defaults for current, temperature, or clearance.
+    /// All values must come from the PDK profile. Fail-fast if not provided.
     pub fn new(resolution_nm: i64) -> Self {
         Self {
             per_net_constraints: FxHashMap::default(),
             clearance_zones: Vec::new(),
             layer_directions: FxHashMap::default(),
             resolution_nm,
-            default_current_ma: Some(20), // 20mA default for signal traces
-            max_temp_rise_c: Some(50.0),  // 50°C default max temperature rise (more realistic)
-            ambient_temp_c: Some(25.0),   // 25°C ambient temperature
-            fabrication: None,            // No fabrication constraints by default
+            default_current_ma: None, // v0.1.8: No default. Fail if current_limit not declared.
+            fabrication: None,        // Must come from PDK profile.
         }
     }
 
@@ -233,9 +226,9 @@ impl ConstraintRulebook {
 
     /// Check if a point is in any clearance zone.
     ///
-    /// NOTE: With the voxel system removed, clearance zones are checked analytically
-    /// during routing via `check_clearance_violation`. This method is kept for API
-    /// compatibility but always returns false.
+    /// NOTE: Clearance zones are checked analytically during routing via
+    /// `check_clearance_violation`. This method is kept for API compatibility
+    /// but always returns false.
     pub fn is_in_clearance_zone(&self, _point: Point3D, _net_id: NetId) -> bool {
         false
     }

@@ -11,7 +11,7 @@
 //! These units represent fundamental physical quantities that the compiler MUST
 //! understand to perform its core functions:
 //!
-//! - **Distance** (mm, cm, µm/um, nm): Voxel grid calculations, routing, collision detection
+//! - **Distance** (mm, cm, µm/um, nm): Grid calculations, routing, collision detection
 //! - **Voltage** (V, mV, kV): Safety clearance validation (IPC-2221)
 //! - **Current** (A, mA, µA/uA): Trace width calculations (IPC-2221)
 //! - **Temperature** (C, °C): Thermal limit validation
@@ -115,7 +115,7 @@ pub fn parse_generic_measurement(lex: &mut logos::Lexer<Token>) -> Option<Measur
         match unit_str {
             // === CORE COMPILER UNITS ===
 
-            // Distance (needed for voxel placement and routing)
+            // Distance (needed for placement and routing)
             "mm" => Unit::Distance(DistanceUnit::Millimeters),
             "cm" => Unit::Distance(DistanceUnit::Centimeters),
             "µm" | "um" => Unit::Distance(DistanceUnit::Micrometers),

@@ -2,6 +2,7 @@
 
 use super::super::errors::IrError;
 use super::helpers::get_pin_positions;
+use compact_str::CompactString;
 use hwc_engine::{HardwareSpace, Point3D};
 
 /// Resolve the conductor material for a trace at the given Z position.
@@ -52,48 +53,79 @@ pub fn route_automatic(
     // );
 
     // PHASE 1: CONSTRAINT MANAGER
-    // v0.1.8: Use profile constraints when available, fall back to physics calculation
+    // v0.1.8: Use profile constraints when available, fail if missing
     let min_clearance_nm = space.fabrication_constraints.as_ref()
         .map(|c| c.trace.min_spacing_nm)
-        .unwrap_or_else(|| {
-            let voltage_mv = 5000;
-            let dielectric_strength_kv_mm = 20.0;
-            hwc_engine::constraint_manager::calculate_clearance_nm(
-                voltage_mv,
-                dielectric_strength_kv_mm,
-                2,
-            )
-        });
+        .ok_or_else(|| IrError::MissingAsicConstraint {
+            message: "Route requires fabrication constraints for clearance calculation but none are loaded.".into(),
+            hint: "Declare a profile with 'clearance:' constraints in the space definition.".into(),
+        })?;
 
-    // v0.1.8: Read current limit from route declaration instead of hardcoding
+    // v0.1.8: Read current limit from route declaration — fail if missing
     let current_ma: f64 = if let Some(ref ac) = route.current_limit_ac {
-        let rms = crate::ir::conversions::evaluate_expression_to_ma(&ac.rms, symbol_table)
-            .unwrap_or(20.0);
+        let _rms = crate::ir::conversions::evaluate_expression_to_ma(&ac.rms, symbol_table)
+            .map_err(|e| IrError::InvalidRouteExpression {
+                expression: "current_limit_ac.rms".into(),
+                reason: e.to_string(),
+            })?;
         let peak = crate::ir::conversions::evaluate_expression_to_ma(&ac.peak, symbol_table)
-            .unwrap_or(rms);
-        // For constraint calculations, use the peak value (worst case)
+            .map_err(|e| IrError::InvalidRouteExpression {
+                expression: "current_limit_ac.peak".into(),
+                reason: e.to_string(),
+            })?;
         peak
     } else {
-        20.0 // safe default
+        return Err(IrError::MissingAsicConstraint {
+            message: "Route has no current_limit declaration. All routes must declare current capacity.".into(),
+            hint: "Add 'current_limit_ac: { rms: <value>, peak: <value> }' to the route declaration.".into(),
+        });
     };
 
     let is_external = true;
 
-    let min_trace_width_nm =
-        hwc_engine::constraint_manager::calculate_trace_width_nm(current_ma as i64, 10, is_external);
+    let temp_rise_c = profile
+        .and_then(|p| p.thermal.as_ref())
+        .map(|t| t.max_temp_rise.value as i64)
+        .ok_or_else(|| IrError::MissingAsicConstraint {
+            message: "Route requires thermal constraints for trace width calculation but none are declared.".into(),
+            hint: "Declare 'thermal: { max_temp_rise: <value> }' in the profile.".into(),
+        })?;
+
+    let _min_trace_width_nm =
+        hwc_engine::constraint_manager::calculate_trace_width_nm(current_ma as i64, temp_rise_c, is_external);
 
     // v0.1.7: Resolve explicit width if provided, otherwise use calculated minimum
     let trace_width_nm = if let Some(width_expr) = &route.width {
         crate::ir::conversions::evaluate_expression_to_nm(width_expr, symbol_table)
             .map_err(IrError::InvalidExpression)?
     } else {
-        min_trace_width_nm
+        // Task 15.11: Route width must be explicitly specified
+        return Err(IrError::InvalidRouteExpression {
+            expression: format!("route from {}.{} to {}.{}", route.from.component, route.from.pin, route.to.component, route.to.pin),
+            reason: "Route has no 'width:' specified. All routes must declare an explicit trace width.".into(),
+        });
     };
+
+    // Task 15.11: Warn if net has no current_limit declared (DRC will skip current-density check)
+    if route.current_limit_ac.is_none() {
+        eprintln!(
+            "[ROUTER] WARNING: Net {}.{} has no current_limit declared. DRC will skip current-density check.",
+            route.from.component, route.to.component
+        );
+    }
 
     // v0.1.7: Unified Boundary-Docking Model
     // Instead of routing to pin centers, we calculate exact boundary points.
     let (start_boundary, goal_boundary, start_dir, goal_dir) =
         calculate_boundary_points(space, route, trace_width_nm)?;
+    
+    // DEBUG: Check if boundary points are corrupted
+    eprintln!("[BOUNDARY DEBUG] Route: {}.{} -> {}.{}", 
+        route.from.component, route.from.pin, route.to.component, route.to.pin);
+    eprintln!("[BOUNDARY DEBUG]   start_boundary: ({},{},{})", 
+        start_boundary.x, start_boundary.y, start_boundary.z);
+    eprintln!("[BOUNDARY DEBUG]   goal_boundary: ({},{},{})", 
+        goal_boundary.x, goal_boundary.y, goal_boundary.z);
 
     // v0.1.8: Resolve target layer override
     // If `route.layer` is specified, override the Z coordinate of the route
@@ -114,10 +146,10 @@ pub fn route_automatic(
     };
 
     // v0.1.7: External A* Seeding
-    // To prevent "hooks" inside pads, the A* solver starts one voxel OUTSIDE the pad.
+    // To prevent "hooks" inside pads, the A* solver starts one grid unit OUTSIDE the pad.
     let resolution_nm = space.resolution_nm;
 
-    // Helper to snap a coordinate to the nearest voxel center
+    // Helper to snap a coordinate to the nearest grid center
     let _snap_to_center = |coord: i64, res_nm: i64| {
         (coord / res_nm) * res_nm + (res_nm / 2)
     };
@@ -172,21 +204,23 @@ pub fn route_automatic(
         })?
         .name.clone();
 
-    /*
-    println!("[BOX-MODEL-DEBUG] Net: {}", net_name);
-    println!("[BOX-MODEL-DEBUG]   Start Boundary: ({}, {}, {})", start_boundary.x, start_boundary.y, start_boundary.z);
-    println!("[BOX-MODEL-DEBUG]   Start Dir: {:?}", start_dir);
-    println!("[BOX-MODEL-DEBUG]   Start Seed (A* Start): ({}, {}, {})", start_pos.x, start_pos.y, start_pos.z);
-    println!("[BOX-MODEL-DEBUG]   Goal Boundary: ({}, {}, {})", goal_boundary.x, goal_boundary.y, goal_boundary.z);
-    println!("[BOX-MODEL-DEBUG]   Goal Dir: {:?}", goal_dir);
-    println!("[BOX-MODEL-DEBUG]   Goal Seed (A* Goal): ({}, {}, {})", goal_pos.x, goal_pos.y, goal_pos.z);
-    */
+    eprintln!("[BOX-MODEL-DEBUG] Net: {}", net_name);
+    eprintln!("[BOX-MODEL-DEBUG]   Start Boundary: ({}, {}, {})", start_boundary.x, start_boundary.y, start_boundary.z);
+    eprintln!("[BOX-MODEL-DEBUG]   Start Dir: {:?}", start_dir);
+    eprintln!("[BOX-MODEL-DEBUG]   Start Seed (A* Start): ({}, {}, {})", start_pos.x, start_pos.y, start_pos.z);
+    eprintln!("[BOX-MODEL-DEBUG]   Goal Boundary: ({}, {}, {})", goal_boundary.x, goal_boundary.y, goal_boundary.z);
+    eprintln!("[BOX-MODEL-DEBUG]   Goal Dir: {:?}", goal_dir);
+    eprintln!("[BOX-MODEL-DEBUG]   Goal Seed (A* Goal): ({}, {}, {})", goal_pos.x, goal_pos.y, goal_pos.z);
 
     let route_constraints = RouteConstraints {
         min_trace_width_nm: trace_width_nm,
         min_clearance_nm,
-        max_parallel_length_nm: 10_000_000,
-        max_resistance_ohm: 100.0,
+        max_parallel_length_nm: profile
+            .and_then(|p| p.routing.as_ref())
+            .and_then(|r| r.max_local_route_length.as_ref())
+            .map(|m| crate::ir::conversions::measurement_to_nm(m, symbol_table).unwrap_or(0))
+            .unwrap_or(10_000_000), // 10mm default
+        max_resistance_ohm: 100.0, // Routing algorithm parameter — no PDK equivalent
         max_current_ma: current_ma as i64,
         impedance_ohm: None,
     };
@@ -199,11 +233,9 @@ pub fn route_automatic(
 
     let layer_direction = LayerDirection::Any;
 
-    // Collect clearance zones and occupied voxels for pathfinding
+    // Collect clearance zones for pathfinding
     use hwc_engine::constraint_manager::ClearanceZone;
-    use rustc_hash::FxHashMap;
 
-    let _occupied_voxels: FxHashMap<hwc_engine::Point3D, hwc_engine::netlist::NetId> = FxHashMap::default();
     let clearance_zones: Vec<ClearanceZone> = Vec::new();
 
     // Resolve material ID from stackup layer at the route's target Z position.
@@ -268,11 +300,19 @@ pub fn route_automatic(
         .map(|pin| (pin.x_nm, pin.y_nm))
         .collect();
 
-    // v0.1.8: Resolve via drill diameter from profile
+    // v0.1.8: Resolve via drill diameter from profile — fail if missing
     let via_drill_diameter_nm = profile
         .and_then(|p| p.via.as_ref())
-        .map(|v| crate::ir::conversions::measurement_to_nm(&v.min_diameter, symbol_table).unwrap_or(200_000))
-        .unwrap_or(200_000);
+        .map(|v| crate::ir::conversions::measurement_to_nm(&v.min_diameter, symbol_table))
+        .transpose()
+        .map_err(|e| IrError::InvalidRouteExpression {
+            expression: "via.min_diameter".into(),
+            reason: e.to_string(),
+        })?
+        .ok_or_else(|| IrError::MissingAsicConstraint {
+            message: "Route requires via drill diameter but no via constraints are declared in the profile.".into(),
+            hint: "Declare 'via: { min_diameter: <value> }' in the profile.".into(),
+        })?;
 
     let routing_params = hwc_engine::geometry_router::RoutingParams {
         net_id,
@@ -295,18 +335,8 @@ pub fn route_automatic(
     };
 
     // v0.1.8: Build SDF for Leap-Frog A* routing
-    let voxel_size_struct = hwc_engine::geometry_router::sdf_generator::VoxelSize {
-        x_nm: space.resolution_nm,
-        y_nm: space.resolution_nm,
-        z_nm: space.resolution_nm,
-    };
-    let x_size = (space.dimensions.width_nm / space.resolution_nm) as usize;
-    let y_size = (space.dimensions.height_nm / space.resolution_nm) as usize;
-    let z_size = (space.dimensions.depth_nm / space.resolution_nm).max(1) as usize;
-
     let mut sdf = hwc_engine::geometry_router::sdf_generator::SdfGenerator::new(
-        x_size, y_size, z_size,
-        voxel_size_struct,
+        space.resolution_nm,
         0, // substrate_height_nm
     );
     for meta in space.entity_graph.get_component_metadata() {
@@ -389,7 +419,7 @@ pub fn route_automatic(
         .name.clone();
 
     // v0.1.7: Grid-Agnostic Z-Resolution
-    // We transform the router's voxel-snapped path back into exact physical layer heights
+    // We transform the router's grid-snapped path back into exact physical layer heights
     // using the StackupManager. This eliminates the 21µm "discretization noise".
     let mut refined_path = path.clone();
     let mut trace_thickness_nm = space.resolution_nm; // Default to resolution size
@@ -403,7 +433,7 @@ pub fn route_automatic(
         if let Some(fixed_z) = routing_params.fixed_z_nm {
             // Resolve thickness once from the fixed Z plane
             if let Some(layer_idx) = stackup_manager.get_layer_index_at_z(fixed_z) {
-                trace_thickness_nm = stackup_manager.get_thickness_for_layer_index(layer_idx);
+                trace_thickness_nm = stackup_manager.get_thickness_for_layer_index(layer_idx)?;
             }
             /*
             eprintln!(
@@ -422,14 +452,14 @@ pub fn route_automatic(
             */
             for (_i, point) in refined_path.iter_mut().enumerate() {
                 let _old_z = point.z;
-                // 1. Identify which PHYSICAL layer this point is in (v0.1.7 Fix: Use StackupManager, not voxel math)
+                // 1. Identify which PHYSICAL layer this point is in (v0.1.7 Fix: Use StackupManager, not grid math)
                 if let Some(layer_idx) = stackup_manager.get_layer_index_at_z(point.z) {
                     // 2. Resolve the EXACT physical starting height for that layer
-                    // This bypasses the coarse voxel grid's multiplication formula.
-                    let true_z = stackup_manager.get_z_start_nm_for_layer_index(layer_idx);
+                    // This bypasses the coarse grid's multiplication formula.
+                    let true_z = stackup_manager.get_z_start_nm_for_layer_index(layer_idx)?;
 
                     // v0.1.7: Extract physical thickness for this layer to prevent "wobbly" 3D meshes
-                    trace_thickness_nm = stackup_manager.get_thickness_for_layer_index(layer_idx);
+                    trace_thickness_nm = stackup_manager.get_thickness_for_layer_index(layer_idx)?;
 
                     // 3. Update the point's Z to the physical truth
                     point.z = true_z;
@@ -499,7 +529,7 @@ pub fn route_automatic(
                                    (d1x == 0 && d2x == 0 && d1z == 0 && d2z == 0) || // Y axis
                                    (d1y == 0 && d2y == 0 && d1z == 0 && d2z == 0); // X axis
 
-                // v0.1.7: Filter short perpendicular steps caused by voxel snap
+                // v0.1.7: Filter short perpendicular steps caused by grid snap
                 let seg_len_sq =
                     (p2.x - start.x).pow(2) + (p2.y - start.y).pow(2) + (p2.z - start.z).pow(2);
                 let min_seg_len_sq = 200_000i64.pow(2); // 0.2mm minimum segment length
@@ -549,6 +579,12 @@ pub fn route_automatic(
     }
 
     // Register main trace as analytic primitive
+    let net_actual_current_ma = space
+        .netlist
+        .get_net(net_id)
+        .and_then(|n| n.current_ma)
+        .unwrap_or(0.0); // Default to 0 if not declared
+
     let analytic_trace = hwc_engine::AnalyticTrace::new(
         net_id,
         trace_width_nm,
@@ -556,7 +592,8 @@ pub fn route_automatic(
         segments,
         copper_id,
         net_name.clone(),
-        current_ma,
+        net_actual_current_ma,  // Actual operating current from net declaration
+        current_ma,             // Route's declared capability from current_limit_ac.peak
     );
 
     eprintln!("[ROUTER] Net '{}': {} segments registered (start_z={}, goal_z={}, target_z={:?})",
@@ -572,15 +609,21 @@ pub fn route_automatic(
     {
         let current_decl = if let Some(ref ac) = route.current_limit_ac {
             let rms_ma = crate::ir::conversions::evaluate_expression_to_ma(&ac.rms, symbol_table)
-                .unwrap_or(20.0);
+                .map_err(|e| IrError::InvalidRouteExpression {
+                    expression: "current_limit_ac.rms".into(),
+                    reason: e.to_string(),
+                })?;
             let peak_ma = crate::ir::conversions::evaluate_expression_to_ma(&ac.peak, symbol_table)
-                .unwrap_or(rms_ma);
+                .map_err(|e| IrError::InvalidRouteExpression {
+                    expression: "current_limit_ac.peak".into(),
+                    reason: e.to_string(),
+                })?;
             hwc_engine::CurrentDeclaration::Ac(hwc_engine::AcCurrent {
-                rms: rms_ma / 1000.0, // convert mA to Amps
-                peak: peak_ma / 1000.0,
+                rms: rms_ma / 1000.0, // mA-to-A conversion — unit constant
+                peak: peak_ma / 1000.0, // mA-to-A conversion — unit constant
             })
         } else {
-            hwc_engine::CurrentDeclaration::Dc(current_ma / 1000.0) // convert mA to Amps
+            hwc_engine::CurrentDeclaration::Dc(current_ma / 1000.0) // mA-to-A conversion — unit constant
         };
 
         // Build IndexedSegments from the analytic route for verification
@@ -589,6 +632,10 @@ pub fn route_automatic(
             .iter()
             .enumerate()
             .map(|(i, seg)| hwc_engine::IndexedSegment {
+                source: hwc_engine::geometry_router::spatial_index::SpatialEntitySource::RouteSegment {
+                    net_idx: net_id.raw() as usize,
+                    seg_idx: i,
+                },
                 segment_id: i,
                 net_id: net_id.raw() as usize,
                 width_nm: analytic_trace.width_nm,
@@ -600,7 +647,10 @@ pub fn route_automatic(
             .collect();
 
         let em_params = hwc_engine::EmParams {
-            j_limit: 1e6,  // 1 MA/m² default (silicon EM limit)
+            j_limit: profile
+                .and_then(|p| p.other.get("em_current_density_limit"))
+                .and_then(|s| s.parse::<f64>().ok())
+                .unwrap_or(1e6),  // 1 MA/m² default (silicon EM limit)
             i_peak: current_decl.peak(),
         };
 
@@ -613,8 +663,15 @@ pub fn route_automatic(
                 .and_then(|p| p.thermal.as_ref())
                 .map(|t| t.max_temp_rise.value)
                 .unwrap_or(20.0),
-            copper_thickness_m: trace_thickness_nm as f64 * 1e-9,
-            substrate_er: 4.2,
+            copper_thickness_m: trace_thickness_nm as f64 * 1e-9, // nm-to-m conversion — physics constant
+            substrate_er: profile
+                .and_then(|p| p.stackup.as_ref())
+                .and_then(|s| s.layers.iter().find(|l| l.material.to_lowercase().contains("fr4") || l.material.to_lowercase().contains("dielectric")))
+                .and_then(|l| {
+                    let er_key: CompactString = format!("substrate_er_{}", l.name.name).into();
+                    profile.and_then(|p| p.other.get(&er_key)).and_then(|s| s.parse::<f64>().ok())
+                })
+                .unwrap_or(4.2),
         };
 
         let violations = hwc_engine::verify_em_thermal(
@@ -663,7 +720,7 @@ pub fn route_automatic(
     // PHASE 3: ANALYTIC DESIGN RULE CHECK (v0.1.7 - GOD-TIER)
     //
     // Geometry-based DRC using analytic distance calculations.
-    // Nanometer-exact with no voxel discretization artifacts.
+    // Nanometer-exact with no grid discretization artifacts.
 
     // Extract full component names from route endpoints to exclude them from clearance checks
     // (pins are on component boundaries, so routes will naturally touch their own components)

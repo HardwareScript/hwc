@@ -1,0 +1,43 @@
+# MINIMAL TEST CASE
+# Two aluminum pads connected by one aluminum trace
+# Everything explicitly defined, no complexity
+
+import * from @std/primitives/units
+import * from @std/primitives/math
+import * from materials
+import Minimal_PDK from foundry_pdk
+
+# Simple 2-pin module
+module TwoPin:
+    pins: [input A, output B]
+    
+    # Direct connection
+    route A to B
+
+# Space with explicit geometry
+space MinimalTest implements TwoPin:
+    dimensions: 2000nm by 1000nm by 900nm
+    resolution: 1nm
+    origin: bl by b
+    profile: Minimal_PDK
+    
+    # Net declarations with minimal current
+    nets:
+        A: { classification: signal, potential: 0V, current: 0.01uA }
+        B: { classification: signal, potential: 0V, current: 0.01uA }
+    
+    # LEFT PAD: 300nm square at left side
+    add pour(Aluminum) named PadA on layer: metal1:
+        net: A
+        boundary: [x: 200nm, y: 350nm] to [x: 500nm, y: 650nm]
+    
+    # RIGHT PAD: 300nm square at right side  
+    add pour(Aluminum) named PadB on layer: metal1:
+        net: B
+        boundary: [x: 1500nm, y: 350nm] to [x: 1800nm, y: 650nm]
+    
+    # ROUTE: Connect pads with 200nm wide trace
+    route PadA to PadB:
+        width: 200nm
+        layer: metal1
+        current_limit_ac: { rms: 0.5uA, peak: 1.0uA }

@@ -10,10 +10,10 @@
 //! - You have a soul (schematic)
 //! - Then you run LVS to see if the soul fits the body
 //!
-//! Hardware Script uses "Silent Atoms" and "Voxel Stamping" for **Correct-by-Construction**:
+//! Hardware Script uses "Silent Atoms" and placement constraints for **Correct-by-Construction**:
 //! - The `implements` keyword enforces that layout follows the module
 //! - The router only routes what the module says (mathematically impossible to create mismatches)
-//! - Physical continuity is validated at the voxel level (not abstract netlists)
+//! - Physical continuity is validated at the geometry level (not abstract netlists)
 //!
 //! # The Triple-Check Architecture
 //!
@@ -30,7 +30,7 @@
 //! - Catch disconnected copper blocks with same net label
 //! - Detect short circuits (multiple nets on one island)
 //! - Detect floating conductors (islands with no pins)
-//! - **Performance**: O(voxels) flood-fill, runs once
+//! - **Performance**: O(geometry) flood-fill, runs once
 //!
 //! ## Layer 3: Device Extraction (Parameter Validation)
 //! - Extract physical parameters from geometry (W/L, R, C)
@@ -74,8 +74,8 @@
 //! # Why This is Better Than Traditional LVS
 //!
 //! - **No Graph Isomorphism**: Router follows module, so topology is guaranteed correct
-//! - **Physics-Aware**: Validates actual voxel connectivity, not abstract netlists
-//! - **Faster**: O(devices + voxels) vs O(devices² × nets²) for graph matching
+//! - **Physics-Aware**: Validates actual physical connectivity, not abstract netlists
+//! - **Faster**: O(devices + geometry) vs O(devices² × nets²) for graph matching
 //! - **Better Errors**: Shows physical locations and gaps, not just "net mismatch"
 //! - **Correct-by-Construction**: Catches errors during routing, not after
 
@@ -106,7 +106,7 @@ impl AlignmentValidator {
     /// Create a new Alignment Validator
     ///
     /// # Arguments
-    /// * `physical_netlist` - Extracted from voxel grid via DeviceExtractor
+    /// * `physical_netlist` - Extracted from physical geometry via DeviceExtractor
     /// * `module` - Module definition containing logical schematic
     /// * `symbol_table` - Symbol table for unit conversion (optional)
     pub fn new(

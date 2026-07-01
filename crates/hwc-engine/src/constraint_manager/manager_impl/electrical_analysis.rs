@@ -8,12 +8,11 @@
 //! NOT guess voltages or currents from net name patterns.
 
 use crate::netlist::{NetData, NetlistArena};
-use hwc_parser::NetClassification;
 
 /// Analyze electrical properties of a net.
 ///
-/// Determines voltage and current requirements from the net's declaration
-/// in the space definition's `nets:` block. No name-based guessing.
+/// Determines voltage from the net's declaration in the space definition's
+/// `nets:` block. Returns current as Option — None means no current declared.
 ///
 /// # Arguments
 /// * `net` - Net data from the netlist
@@ -21,12 +20,12 @@ use hwc_parser::NetClassification;
 /// * `net_declaration` - Optional declaration from the space definition's `nets:` block
 ///
 /// # Returns
-/// Tuple of (voltage_mv, current_ma), or error if no declaration is provided
+/// Tuple of (voltage_mv, Option<current_ma>), or error if no declaration is provided
 pub fn analyze_net_electrical(
     net: &NetData,
     _netlist: &NetlistArena,
     net_declaration: Option<&hwc_parser::NetDeclaration>,
-) -> Result<(i64, i64), String> {
+) -> Result<(i64, Option<i64>), String> {
     let decl = net_declaration.ok_or_else(|| {
         format!(
             "Net '{}' has no electrical specification. Add a 'nets:' declaration with classification and potential.",
@@ -41,13 +40,9 @@ pub fn analyze_net_electrical(
         )
     })?;
 
-    let current_ma = match decl.classification {
-        NetClassification::Power => 1000,
-        NetClassification::Ground => 5000,
-        NetClassification::Signal => 100,
-        NetClassification::HighVoltage => 100,
-        NetClassification::Unclassified => 10,
-    };
+    // v0.1.8: Use declared current from NetDeclaration. 
+    // If not declared, return None (caller will handle defaults/errors).
+    let current_ma = decl.current_ma.map(|c| c as i64);
 
     Ok((voltage_mv, current_ma))
 }

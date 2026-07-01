@@ -55,6 +55,12 @@ pub fn load_fabrication_constraints<S: SymbolTableTrait>(
     // Extract solder mask expansion (v0.1.7)
     let solder_mask_expansion_nm = extract_solder_mask_expansion(profile_def, symbol_table)?;
 
+    let (low_voltage_clearance_nm, medium_voltage_clearance_nm, high_voltage_clearance_nm, safety_factor) =
+        clearance.ok_or_else(|| format!(
+            "Profile '{}': missing clearance constraints. All clearance values must be explicitly declared in your PDK profile.",
+            profile_name
+        ))?;
+
     Ok(FabricationConstraints {
         min_trace_width_nm,
         min_trace_spacing_nm,
@@ -62,10 +68,10 @@ pub fn load_fabrication_constraints<S: SymbolTableTrait>(
         default_via_diameter_nm,
         min_annular_ring_nm,
         min_spacing_nm,
-        low_voltage_clearance_nm: clearance.map(|(lv, _, _, _)| lv).unwrap_or(0),
-        medium_voltage_clearance_nm: clearance.map(|(_, mv, _, _)| mv).unwrap_or(0),
-        high_voltage_clearance_nm: clearance.map(|(_, _, hv, _)| hv).unwrap_or(0),
-        safety_factor: clearance.map(|(_, _, _, sf)| sf).unwrap_or(2.0),
+        low_voltage_clearance_nm,
+        medium_voltage_clearance_nm,
+        high_voltage_clearance_nm,
+        safety_factor,
         stackup,
         solder_mask_expansion_nm,
         technology: profile_def.technology.clone(),

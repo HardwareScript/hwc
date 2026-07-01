@@ -26,7 +26,7 @@ impl LineSegment {
     }
 
     /// Calculate the minimum distance from this segment to a bounding box
-    /// This is the core of analytic DRC - nanometer-exact, no voxel discretization
+    /// This is the core of analytic DRC - nanometer-exact, no discretization
     pub fn distance_to_bbox(&self, bbox: &BoundingBox) -> i64 {
         // For a Manhattan segment (axis-aligned), calculate the minimum distance
         // between the segment and the bounding box
@@ -96,10 +96,10 @@ impl LineSegment {
 /// This is stored in HardwareSpace.analytic_routes during the build phase.
 ///
 /// **Why this is revolutionary:**
-/// - A 2mm trace is ONE AnalyticTrace (not 2,000 voxels)
-/// - DRC checks analytic geometry (not voxel scanning)
+/// - A 2mm trace is ONE AnalyticTrace (not 2,000 grid cells)
+/// - DRC checks analytic geometry (not grid scanning)
 /// - Exporters receive clean primitives (not pixelated reconstruction)
-/// - Memory: 1KB per trace (not 5MB of voxel chunks)
+/// - Memory: 1KB per trace (not 5MB of grid chunks)
 #[derive(Debug, Clone)]
 pub struct AnalyticTrace {
     /// Net this trace belongs to
@@ -120,8 +120,11 @@ pub struct AnalyticTrace {
     /// Net name for debugging and export
     pub net_name: CompactString,
 
-    /// Current in milliamps (from route current_limit declaration, or 20mA default)
+    /// Actual operating current in milliamps (from net declaration)
     pub current_ma: f64,
+
+    /// Maximum current capacity in milliamps (from route current_limit_ac.peak declaration)
+    pub current_limit_ma: f64,
 }
 
 impl AnalyticTrace {
@@ -133,6 +136,7 @@ impl AnalyticTrace {
         material: MaterialId,
         net_name: CompactString,
         current_ma: f64,
+        current_limit_ma: f64,
     ) -> Self {
         Self {
             net_id,
@@ -142,6 +146,7 @@ impl AnalyticTrace {
             material,
             net_name,
             current_ma,
+            current_limit_ma,
         }
     }
 
@@ -202,12 +207,12 @@ impl AnalyticTrace {
     ///
     /// # Arguments
     /// * `config` - Teardrop configuration.
-    /// * `voxel_size_nm` - Voxel size for coordinate conversion.
+    /// * `resolution_nm` - Resolution in nanometers.
     /// * `net_handle` - Net handle for the trace.
     pub fn apply_teardrops_to_trace(
         &self,
         config: &crate::geometry_router::TeardropConfig,
-        _voxel_size_nm: i64,
+        _resolution_nm: i64,
         _net_handle: crate::netlist::NetHandle,
     ) -> Option<Vec<LineSegment>> {
         if !config.enabled || self.segments.is_empty() {

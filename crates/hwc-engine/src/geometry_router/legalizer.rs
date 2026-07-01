@@ -143,6 +143,7 @@ impl Legalizer {
                     start: neighbor.start,
                     end: neighbor.end,
                     width_nm: neighbor.width_nm,
+                    material_id: 0,
                 };
 
                 let shift = Self::required_shift(seg, &neighbor_seg, self.min_clearance_nm);
@@ -275,6 +276,7 @@ impl Legalizer {
                         start: Point3D::new(seg.start.x + dx, seg.start.y + dy, seg.start.z),
                         end: Point3D::new(seg.end.x + dx, seg.end.y + dy, seg.end.z),
                         width_nm: seg.width_nm,
+                        material_id: seg.material_id,
                     }
                 } else {
                     seg.clone()
@@ -318,7 +320,15 @@ impl Legalizer {
 
         for (idx, seg) in current.iter().enumerate() {
             spatial.insert(crate::geometry_router::spatial_index::IndexedSegment::new(
-                idx, idx, seg, seg.start.z,
+                hwc_physics::spatial_index::SpatialEntitySource::RouteSegment {
+                    net_idx: 0,
+                    seg_idx: idx,
+                },
+                idx,
+                idx,
+                seg,
+                seg.start.z,
+                35_000,
             ));
         }
 
@@ -372,7 +382,15 @@ impl Legalizer {
             spatial = DynamicSpatialIndex::new();
             for (idx, seg) in current.iter().enumerate() {
                 spatial.insert(crate::geometry_router::spatial_index::IndexedSegment::new(
-                    idx, idx, seg, seg.start.z,
+                    hwc_physics::spatial_index::SpatialEntitySource::RouteSegment {
+                        net_idx: 0,
+                        seg_idx: idx,
+                    },
+                    idx,
+                    idx,
+                    seg,
+                    seg.start.z,
+                    35_000,
                 ));
             }
         }

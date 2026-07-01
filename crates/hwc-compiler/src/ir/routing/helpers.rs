@@ -252,10 +252,32 @@ pub fn register_net_for_route(
         None
     };
 
-    let net_id = if let Some(id) = existing_net {
-        id
+    let goal_net = if let Some(pin_data) = space.netlist.get_pin(goal_pin_id) {
+        pin_data.connected_net
     } else {
-        space.netlist.add_net(net_name.clone(), width_nm, copper_id)
+        None
+    };
+
+    let net_id = match (existing_net, goal_net) {
+        (Some(e), Some(g)) if e == g => e,
+        (Some(e), Some(g)) => {
+            let prefer_g = {
+                let e_data = space.netlist.get_net(e).unwrap();
+                let g_data = space.netlist.get_net(g).unwrap();
+                g_data.current_ma.is_some() || (!g_data.name.starts_with("NET_") && e_data.name.starts_with("NET_"))
+            };
+            let (keep, drop) = if prefer_g { (g, e) } else { (e, g) };
+            
+            if let Some(drop_pins) = space.netlist.get_net_pins(drop).map(|p| p.to_vec()) {
+                for p in drop_pins {
+                    space.netlist.connect_pin(p, keep);
+                }
+            }
+            keep
+        },
+        (Some(e), None) => e,
+        (None, Some(g)) => g,
+        (None, None) => space.netlist.add_net(net_name.clone(), width_nm, copper_id),
     };
 
     // Connect both pins to the net in the logical netlist
@@ -269,7 +291,7 @@ pub fn register_net_for_route(
         .map(|n| n.name.clone())
         .unwrap_or(net_name);
 
-    // v0.1.7: Handshake B - Synchronize VoxelGrid metadata
+    // Handshake B - Synchronize netlist metadata
     // This ensures the AutoRouter can find these pins when analyzing nets.
     let start_pin_name = space.netlist.get_pin(start_pin_id)
         .ok_or_else(|| IrError::PinNotFound {

@@ -150,6 +150,8 @@ pub fn execute(
                 );
                 println!("   ⚠️  WARNING: Exporting design with known physical integrity issues");
             } else {
+                // v0.1.9: LOCKFILE DETERMINISM - Build failed validation, do NOT save lockfile
+                eprintln!("[LOCK] Build failed validation - lockfile NOT saved to preserve working state");
                 return Err(miette::Report::new(BuildError::from_validation_failures(
                     &validation_result.violations,
                 )));
@@ -161,6 +163,24 @@ pub fn execute(
                 "\n⚠️  Artist Mode: Exporting despite {} validation warning(s)",
                 validation_result.violation_count
             );
+        }
+
+        // v0.1.9: LOCKFILE DETERMINISM - Save lockfile ONLY after validation passes
+        // This ensures we never overwrite a working lockfile with one that fails validation.
+        if validation_result.passed || config.force_export {
+            if let Some(ref lockfile_path) = lockfile_path {
+                // Only save if routes were freshly computed (not loaded from cache)
+                // Check if this is a fresh build by seeing if lockfile existed before
+                let was_cached = lockfile_path.exists() && !config.force_reroute;
+                if !was_cached {
+                    eprintln!("[LOCK] Validation passed - saving lockfile for future builds");
+                    hwc_compiler::ir::save_routes_to_lockfile(
+                        lockfile_path,
+                        &space,
+                        &source_content,
+                    );
+                }
+            }
         }
 
         // v0.1.7: Debug net identity trace

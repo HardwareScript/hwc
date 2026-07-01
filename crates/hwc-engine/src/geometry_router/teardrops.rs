@@ -18,10 +18,10 @@
 //! ## How It Works
 //! 1. Identify trace endpoints that terminate at a pad or via.
 //! 2. Compute a smooth fillet that widens the trace near the junction.
-//! 3. The fillet transitions from `trace_width` to `pad_width` over ~3-5 voxels.
+//! 3. The fillet transitions from `trace_width` to `pad_width` over ~3-5 grid steps.
 //!
 //! ## Integration
-//! Applied during trace-to-voxel conversion after pathfinding completes.
+//! Applied during trace processing after pathfinding completes.
 
 use crate::geometry::Point3D;
 use crate::geometry_router::EntityGraph;
@@ -102,17 +102,17 @@ pub struct TeardropEngine;
 impl TeardropEngine {
     /// Apply teardrops at the endpoints of a routed path.
     ///
-    /// Modifies the VoxelGrid to create wider, filleted transitions
+    /// Modifies the EntityGraph to create wider, filleted transitions
     /// where the trace meets its start/goal pads.
     ///
     /// # Arguments
-    /// * `voxel_grid` - The VoxelGrid containing the routed trace.
+    /// * `entity_graph` - The EntityGraph containing the routed trace.
     /// * `path` - The routed path in nanometers.
     /// * `start_pin` - The start pin position (center of pad).
     /// * `goal_pin` - The goal pin position (center of pad).
     /// * `trace_width_nm` - Width of the trace being routed.
     /// * `config` - Teardrop configuration.
-    /// * `voxel_size_nm` - Voxel size for coordinate conversion.
+    /// * `resolution_nm` - Resolution in nanometers.
     /// * `net_handle` - Net handle for the trace.
     #[allow(clippy::too_many_arguments)]
     pub fn apply_teardrops(
@@ -122,7 +122,7 @@ impl TeardropEngine {
         _goal_pin: Point3D,
         _trace_width_nm: i64,
         config: &TeardropConfig,
-        _voxel_size_nm: i64,
+        _resolution_nm: i64,
         _net_handle: crate::netlist::NetHandle,
     ) {
         if !config.enabled || path.len() < 2 {

@@ -1,0 +1,45 @@
+# Materials for capacitor test
+import * from @std/primitives/units
+
+material Aluminum:
+    category: conductor
+    symbol: "Al"
+    description: "Aluminum for metal plates"
+    properties:
+        color: "#C0C0C0"
+        metallic: 0.9
+        resistivity: 2.82e-8ohm_m
+        thermal_conductivity: 237.0W_mK
+        density: 2700.0kg_m3
+        max_current_density: 20.0A_mm2
+
+material Silicon_Dioxide:
+    category: insulator
+    symbol: "SiO2"
+    description: "Silicon dioxide dielectric"
+    properties:
+        color: "#E8F4F8"
+        relative_permittivity: 3.9
+        density: 2200.0kg_m3
+        thermal_conductivity: 1.4W_mK
+
+material Copper:
+    category: conductor
+    symbol: "Cu"
+    description: "Copper for wiring"
+    properties:
+        color: "#B87333"
+        metallic: 0.95
+        resistivity: 1.68e-8ohm_m
+        thermal_conductivity: 401.0W_mK
+        density: 8960.0kg_m3
+        max_current_density: 30.0A_mm2
+
+material Silicon:
+    category: semiconductor
+    symbol: "Si"
+    description: "Silicon substrate"
+    properties:
+        color: "#808080"
+        resistivity: 640.0ohm_m
+        density: 2330.0kg_m3

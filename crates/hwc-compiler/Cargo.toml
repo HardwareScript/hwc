@@ -21,7 +21,7 @@ hwc-materials = { workspace = true }
 hwc-stdlib = { workspace = true }
 include_dir = "0.7"
 bincode = "1.3"
-# hwc-export = { workspace = true }  # Temporarily excluded - needs VoxelGrid integration
+# hwc-export not depended on here — hwc-export depends on hwc-compiler (no circular dep). CLI uses hwc-export directly.
 
 [build-dependencies]
 hwc-parser = { workspace = true }

@@ -12,6 +12,21 @@ use hwc_engine::{
 };
 use hwc_parser::{OriginXY, OriginZ};
 
+/// Offset a declarative coordinate by the component's position
+///
+/// **CRITICAL FIX (v0.2.0): Zero-Stamping Architecture**
+/// 
+/// This function offsets XY coordinates but does NOT offset Z for internal geometry
+/// that has its own semantic layer declaration. This prevents the "layer override bug"
+/// where internal pours declared on `layer: metal1` would drift to wrong Z-coordinates
+/// when the component was placed `on layer: active`.
+/// 
+/// The fix implements the first step toward the Zero-Stamping Scene Graph architecture
+/// described in LAYER-OVERRIDE-BUG.md:
+/// - Internal geometry with semantic layers (e.g., `on layer: metal1`) preserves its
+///   declared layer and does not inherit the parent component's Z-offset
+/// - XY translation is always applied (component placement in the plane)
+/// - Z-offset is only applied for relative coordinates, not semantic layer declarations
 fn offset_declarative_coord(
     coord: &hwc_parser::Coordinate,
     position: &Point3D,
@@ -36,8 +51,11 @@ fn offset_declarative_coord(
                     unit: hwc_parser::Unit::Millimeter,
                     span: *span,
                 },
+                // ✅ CRITICAL FIX: Do NOT add position.z offset for semantic layer declarations
+                // Internal geometry coordinates are component-relative in XY but absolute in Z
+                // when they have their own layer declaration
                 z: hwc_parser::Expression::Measurement {
-                    value: (position.z + z_nm) as f64 / 1_000_000.0,
+                    value: z_nm as f64 / 1_000_000.0,
                     unit: hwc_parser::Unit::Millimeter,
                     span: *span,
                 },
@@ -181,6 +199,19 @@ pub fn unroll_internal_features(
                     let pad_shape = layout.pad_shapes.get(pin_name);
 
                     if is_tht || pad_shape.is_some() {
+                        // v0.1.8 CRITICAL FIX: Skip substrate-spanning pad geometry for ASIC components
+                        // ASIC pins don't need top/bottom pads - they exist at specific layers
+                        // Only PCB through-hole components need substrate-spanning geometry
+                        let is_asic = space.fabrication_constraints.as_ref()
+                            .and_then(|c| c.technology.as_ref())
+                            .map_or(false, |t| t.to_lowercase() == "asic");
+                        
+                        if is_asic {
+                            // For ASIC: pads are already handled by internal pours (e.g., metal1 landing pads)
+                            // Skip the substrate-spanning geometry entirely
+                            continue;
+                        }
+                        
                         let drill_diameter_nm = if let Some(ps) = pad_shape {
                             if ps.starts_with("Circle(") {
                                 let val_str =
@@ -315,9 +346,9 @@ pub fn unroll_internal_features(
                                 board_max_z_nm,
                                 drill_diameter_nm,
                                 via_net_id,
+                                copper_material_id,
                                 0,
                                 board_max_z_nm,
-                                space.resolution_nm,
                                 min_annular_ring_nm,
                             );
                             space.add_vias(vec![via]);
@@ -346,7 +377,6 @@ pub fn unroll_internal_features(
                                 bridge: None,
                                 bbox: Some(hole_bbox),
                                 drill_diameter_nm: Some(drill_diameter_nm),
-                                voxels: Vec::new(),
                                 is_tented: false,
                                 mask_clearance_diameter_nm: None,
                             });
@@ -398,6 +428,11 @@ pub fn unroll_internal_features(
                                 terminal: d.terminal.clone(),
                                 span: d.span,
                             });
+
+                        // v0.1.8 CRITICAL: Preserve semantic layer elevation for internal pours
+                        // Internal pours declared with `on layer: metal1` must NOT inherit the
+                        // component's placement layer. This prevents the layer override bug.
+                        // Only process Relative elevation (which needs anchor resolution).
 
                         if matches!(pour.elevation, hwc_parser::Elevation::Relative) {
                             if let Some(anchor_bbox) = bbox_tracker.get(&pd.name) {

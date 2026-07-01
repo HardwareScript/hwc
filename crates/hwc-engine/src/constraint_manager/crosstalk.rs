@@ -25,8 +25,8 @@ use crate::geometry::Point3D;
 /// - `Docs/v0.1.3/ROUTING-AND-PHYSICS.md` (lines 300-400, Translation 3)
 ///
 /// # Arguments
-/// * `route_a` - First route's voxel path
-/// * `route_b` - Second route's voxel path
+/// * `route_a` - First route's path points
+/// * `route_b` - Second route's path points
 /// * `threshold_distance_nm` - Maximum distance to consider "parallel"
 ///
 /// # Returns

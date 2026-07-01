@@ -164,34 +164,34 @@ pub fn export(space: &HardwareSpace, output_dir: &Path) -> Result<(), Box<dyn st
     let pads = collect_pads(space)?;
 
     let (board_min_z_nm, board_max_z_nm) = board_z_extent(space);
-    let voxel_z_nm = space.resolution_nm.max(1);
+    let slab_z_nm = space.resolution_nm.max(1);
 
     export_layer(
         &pads,
         LayerType::TopSolderMask,
         board_max_z_nm,
-        voxel_z_nm,
+        slab_z_nm,
         output_dir,
     )?;
     export_layer(
         &pads,
         LayerType::BottomSolderMask,
         board_min_z_nm,
-        voxel_z_nm,
+        slab_z_nm,
         output_dir,
     )?;
     export_layer(
         &pads,
         LayerType::TopSolderPaste,
         board_max_z_nm,
-        voxel_z_nm,
+        slab_z_nm,
         output_dir,
     )?;
     export_layer(
         &pads,
         LayerType::BottomSolderPaste,
         board_min_z_nm,
-        voxel_z_nm,
+        slab_z_nm,
         output_dir,
     )?;
 
@@ -278,7 +278,7 @@ fn export_layer(
     pads: &[PadInfo],
     layer_type: LayerType,
     target_face_z_nm: i64,
-    voxel_z_nm: i64,
+    slab_z_nm: i64,
     output_dir: &Path,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut emitter = SolderLayerEmitter::new(layer_type);
@@ -286,7 +286,7 @@ fn export_layer(
     // Filter pads on the target board face by physical Z
     let layer_pads: Vec<_> = pads
         .iter()
-        .filter(|pad| is_on_board_face(pad.z_nm, target_face_z_nm, voxel_z_nm))
+        .filter(|pad| is_on_board_face(pad.z_nm, target_face_z_nm, slab_z_nm))
         .collect();
 
     if layer_pads.is_empty() {

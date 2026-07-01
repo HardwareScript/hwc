@@ -382,12 +382,9 @@ impl Validator {
         origin_z: hwc_parser::OriginZ,
         grid_z_layers: usize,
     ) -> BoundingBox {
-        // Default component size: 1mm in each dimension
-        let voxel_size_z_nm = 1_000_000; // 1mm default when grid unknown at validate time
         let (x_nm, y_nm, z_nm) = self.coordinate_to_nm(
             position,
             symbol_table,
-            voxel_size_z_nm,
             space_dimensions_nm,
             origin_z,
             grid_z_layers,
@@ -409,7 +406,6 @@ impl Validator {
         &self,
         coord: &Coordinate,
         symbol_table: &crate::SymbolTable,
-        _voxel_size_z_nm: i64,
         space_dimensions_nm: (i64, i64, i64),
         _origin_z: hwc_parser::OriginZ,
         _grid_z_layers: usize,

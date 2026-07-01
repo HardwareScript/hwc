@@ -129,6 +129,10 @@ pub struct NetData {
     /// None if frequency is unspecified. Used to classify high-speed nets
     /// that must avoid reference-plane voids.
     pub frequency_hz: Option<f64>,
+
+    /// v0.1.8: Target current in milliamps (e.g., 500mA).
+    /// None if current is unspecified. Used for thermal and EM validation.
+    pub current_ma: Option<f64>,
 }
 
 /// ECS-style arena for netlist storage.
@@ -234,6 +238,7 @@ impl NetlistArena {
             material,
             pins: SmallVec::new(),
             frequency_hz: None,
+            current_ma: None,
         };
 
         self.nets.push(net);
@@ -244,9 +249,25 @@ impl NetlistArena {
 
     /// v0.1.7: Set the signal frequency (in Hz) for a net.
     pub fn set_net_frequency(&mut self, net: NetId, frequency_hz: f64) {
-        if let Some(net_data) = self.nets.get_mut(net.0 as usize) {
-            net_data.frequency_hz = Some(frequency_hz);
+        if net.0 > 0 {
+            if let Some(net_data) = self.nets.get_mut((net.0 - 1) as usize) {
+                net_data.frequency_hz = Some(frequency_hz);
+            }
         }
+    }
+
+    /// v0.1.8: Set the target current (in mA) for a net.
+    pub fn set_net_current(&mut self, net: NetId, current_ma: f64) {
+        if net.0 > 0 {
+            if let Some(net_data) = self.nets.get_mut((net.0 - 1) as usize) {
+                net_data.current_ma = Some(current_ma);
+            }
+        }
+    }
+
+    /// Returns the name of a net.
+    pub fn get_net_name(&self, net: NetId) -> Option<CompactString> {
+        self.nets.get((net.0 - 1) as usize).map(|n| n.name.clone())
     }
 
     /// Connect a pin to a net.
@@ -257,8 +278,10 @@ impl NetlistArena {
         }
 
         // Add pin to net's pin list
-        if let Some(net_data) = self.nets.get_mut(net.0 as usize) {
-            net_data.pins.push(pin);
+        if net.0 > 0 {
+            if let Some(net_data) = self.nets.get_mut((net.0 - 1) as usize) {
+                net_data.pins.push(pin);
+            }
         }
     }
 

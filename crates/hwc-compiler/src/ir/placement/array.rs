@@ -234,7 +234,6 @@ fn calculate_pour_bboxes_for_array(
         let z_top_nm = ctx.stackup_manager.resolve_elevation_top(
             &pour.elevation,
             ctx.symbol_table,
-            space.resolution_nm,
         )?;
 
         let instance_start =

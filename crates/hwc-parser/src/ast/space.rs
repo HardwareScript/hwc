@@ -231,6 +231,9 @@ pub struct NetDeclaration {
     pub name: CompactString,
     pub classification: NetClassification,
     pub potential_mv: Option<i64>, // Optional voltage in millivolts
+    /// v0.1.8: Optional current capacity in milliamps (e.g., 500mA).
+    /// Used for thermal and electromigration validation.
+    pub current_ma: Option<f64>,
     /// v0.1.7: Optional signal frequency in Hz (e.g., 5_000_000_000.0 for 5 GHz).
     /// Used to classify high-speed nets that must avoid reference-plane voids.
     pub frequency_hz: Option<f64>,

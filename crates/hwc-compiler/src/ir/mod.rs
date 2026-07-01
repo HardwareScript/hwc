@@ -48,17 +48,18 @@ use hwc_parser::Program;
 /// This is the shared implementation used by both `program_to_space` and `program_to_spaces`.
 ///
 /// v0.1.8: Accepts an optional `QueryStore` for memoized per-G-cell routing.
-/// Returns the space and the query store (which may have been populated with
-/// cached results for incremental rebuilds).
+/// Returns the space, the query store (which may have been populated with
+/// cached results for incremental rebuilds), and a boolean indicating whether
+/// routes were loaded from the lockfile cache.
 fn compile_single_space(
     space_def: &hwc_parser::SpaceDefinition,
     symbol_table: &SymbolTable,
     collector: &hwc_diagnostics::DiagnosticCollector,
     lockfile_path: Option<&std::path::Path>,
-    source_content: Option<&str>,
+    _source_content: Option<&str>,
     force_reroute: bool,
     query_store: Option<hwc_engine::geometry_router::query_engine::QueryStore>,
-) -> Result<(HardwareSpace, Option<hwc_engine::geometry_router::query_engine::QueryStore>), IrError> {
+) -> Result<(HardwareSpace, Option<hwc_engine::geometry_router::query_engine::QueryStore>, bool), IrError> {
     // Sprint 3.8: Process statements in textual order to support anchor references
     //
     // Physical Reality: When element B references element A's position, A must be placed first.
@@ -206,7 +207,27 @@ fn compile_single_space(
         )
         .expect("Failed to create fallback StackupManager")
     });
-    // eprintln!($3"[DEBUG program_to_space] Origin: {:?}", origin);
+
+    // v0.1.9: Write stackup layer thicknesses into MaterialRegistry.
+    // This is the authoritative source for conductor thickness — the material
+    // definition declares resistivity/thermal conductivity, and the stackup
+    // declares how thick each layer is. Both are needed for physics calculations.
+    if let Some(stackup) = profile.as_ref().and_then(|p| p.stackup.as_ref()) {
+        for layer in &stackup.layers {
+            if let Ok(thickness_nm) = crate::ir::conversions::evaluate_expression_to_nm(&layer.thickness, symbol_table) {
+                if let Some(mat_id) = space.material_registry.get_id(&layer.material) {
+                    let existing = space.material_registry.get_physical_props(mat_id);
+                    space.material_registry.set_physical_props(
+                        mat_id,
+                        existing.map(|p| p.resistivity_ohm_m).unwrap_or(0.0),
+                        existing.map(|p| p.thermal_conductivity_w_mk).unwrap_or(0.0),
+                        thickness_nm,
+                        existing.and_then(|p| p.max_current_density_a_mm2),
+                    );
+                }
+            }
+        }
+    }
 
     // Sprint 3, Task 3.1: Initialize BoundingBoxTracker for relative positioning
     let mut bbox_tracker = crate::bounding_box_tracker::BoundingBoxTracker::new();
@@ -547,90 +568,17 @@ fn compile_single_space(
     // Every component transformation is baked; anchors like last.right or M1.top reflect final rotated geometry.
     //
     // v0.1.7: 3-Phase Routing Engine
+    // Phase 0: Lockfile Check (if valid, skip all routing)
     // Phase 1: Manual Realization (process routes with path:)
     // Phase 2: Obstacle Blitting (Implicit - registered components + manual traces)
     // Phase 3: Auto-Routing (Deferred batch process)
-    let mut auto_routes = Vec::new();
-
-    // v0.1.8: Collect route net policies from `route net:` statements.
-    // These map net names -> RoutingPattern for pattern-guided auto routing.
-    let mut route_net_policies: rustc_hash::FxHashMap<hwc_engine::netlist::NetId, hwc_engine::RoutingPattern> =
-        rustc_hash::FxHashMap::default();
-    for policy in &space_def.route_net_policies() {
-        if let Some(ref pattern_inst) = policy.pattern {
-            match routing::instantiate_pattern(pattern_inst, symbol_table) {
-                Ok(pattern) => {
-                    // Resolve net name to NetId
-                    if let Some(net_id) = space.netlist.get_net_by_name(policy.net_id.as_str()) {
-                        // eprintln!(
-                        //     "[ROUTER] Route net policy: '{}' -> pattern '{}' ({} steps)",
-                        //     policy.net_id, pattern.name, pattern.steps.len()
-                        // );
-                        route_net_policies.insert(net_id, pattern);
-                    } else {
-                        eprintln!(
-                            "[ROUTER] WARNING: Route net policy for unknown net '{}', skipping",
-                            policy.net_id
-                        );
-                    }
-                }
-                Err(e) => {
-                    eprintln!(
-                        "[ROUTER] WARNING: Failed to instantiate pattern for net '{}': {}",
-                        policy.net_id, e
-                    );
-                }
-            }
-        }
-    }
-    let routing_mode = space_def
-        .routing_config
-        .as_ref()
-        .map(|c| c.mode)
-        .unwrap_or(hwc_parser::RoutingMode::Mixed);
-
-    for id in sorted_ids.iter() {
-        if let Some(PlacementItem::Route(route)) = item_map.get(id) {
-            // v0.1.7: Register net connectivity in the netlist for all routes
-            // This ensures both manual and automatic routes are represented in the logical netlist.
-            routing::register_net_for_route(&mut space, route, symbol_table, &stackup_manager, profile)?;
-
-            if !routing::needs_automatic_routing(route) {
-                // Phase 1: Manual Route (Absolute Control)
-                routing::route_trace(
-                    &mut space,
-                    route,
-                    origin,
-                    symbol_table,
-                    &eval_context,
-                    &stackup_manager,
-                    profile,
-                )?;
-            } else {
-                // Phase 3 Candidate: Automatic or Patterned Route
-                if routing_mode == hwc_parser::RoutingMode::ManualOnly {
-                    return Err(IrError::RoutingError(format!(
-                        "Automatic routing found in 'manual_only' space: {}.{} to {}.{}",
-                        route.from.component, route.from.pin, route.to.component, route.to.pin
-                    )));
-                }
-                auto_routes.push(route.clone());
-            }
-        }
-    }
-
-    // Phase 3: Execute Auto-Routing Batch
-    // v0.1.7: AVS Lock-File Determinism - Load cached routes before routing
+    
+    // Phase 0: Try to load routes from lockfile BEFORE any routing
     let mut routes_loaded_from_lock = false;
     if let Some(path) = lockfile_path {
-        if force_reroute {
-            eprintln!(
-                "[LOCK] --force-reroute: Skipping lockfile load, will re-run A* solver"
-            );
-        } else {
+        if !force_reroute {
             let current_fingerprint = hwc_engine::geometry_router::compute_fingerprint_from_space(&space);
 
-            // Try new rkyv binary lockfile first
             match hwc_engine::geometry_router::load_lockfile(path) {
                 Ok(loaded) => {
                     if hwc_engine::geometry_router::is_valid(&loaded, &current_fingerprint) {
@@ -644,33 +592,122 @@ fn compile_single_space(
                             &space.material_registry,
                         ) {
                             Ok(cached_traces) => {
-                                let route_count = cached_traces.len();
+                                // Load cached routes into entity graph and analytic routes
                                 for trace in cached_traces {
+                                    let trace_segments: Vec<hwc_engine::geometry::TraceSegment> = trace
+                                        .segments
+                                        .iter()
+                                        .map(|line_seg| {
+                                            hwc_engine::geometry::TraceSegment::new(
+                                                line_seg.start,
+                                                line_seg.end,
+                                                trace.width_nm,
+                                                trace.material as u8,
+                                            )
+                                        })
+                                        .collect();
+                                    
+                                    space.entity_graph.register_trace_segments(trace.net_id, trace_segments);
                                     space.add_analytic_route(trace);
                                 }
+                                
+                                space.entity_graph.rebuild_spatial_index(&space.material_registry);
+                                
                                 eprintln!(
-                                    "[LOCK] Binary match found for '{}'. Bypassing A* solver.",
+                                    "[LOCK] Valid lockfile loaded for '{}'. Skipping all routing (manual + auto).",
                                     space.name
-                                );
-                                eprintln!(
-                                    "[LOCK]   Loaded {} cached routes (rkyv binary)",
-                                    route_count
                                 );
                                 routes_loaded_from_lock = true;
                             }
                             Err(e) => {
-                                eprintln!("[LOCK] Binary lockfile read failed: {}. Re-routing.", e);
+                                eprintln!("[LOCK] Lockfile load failed: {}. Will compute routes fresh.", e);
                             }
                         }
                     } else {
                         eprintln!(
-                            "[LOCK] Binary lockfile fingerprint mismatch for '{}'. Re-routing.",
+                            "[LOCK] Lockfile fingerprint mismatch for '{}'. Will compute routes fresh.",
                             space.name
                         );
                     }
                 }
                 Err(_) => {
-                    // No valid lockfile — will re-run A* solver
+                    // No lockfile exists - will compute routes
+                }
+            }
+        } else {
+            eprintln!(
+                "[LOCK] --force-reroute: Skipping lockfile load, will compute all routes fresh"
+            );
+        }
+    }
+    
+    let mut auto_routes = Vec::new();
+
+    // v0.1.8: Collect route net policies from `route net:` statements.
+    // These map net names -> RoutingPattern for pattern-guided auto routing.
+    let mut route_net_policies: rustc_hash::FxHashMap<hwc_engine::netlist::NetId, hwc_engine::RoutingPattern> =
+        rustc_hash::FxHashMap::default();
+
+    // Only process routing if lockfile wasn't loaded
+    if !routes_loaded_from_lock {
+        for policy in &space_def.route_net_policies() {
+            if let Some(ref pattern_inst) = policy.pattern {
+                match routing::instantiate_pattern(pattern_inst, symbol_table) {
+                    Ok(pattern) => {
+                        // Resolve net name to NetId
+                        if let Some(net_id) = space.netlist.get_net_by_name(policy.net_id.as_str()) {
+                            route_net_policies.insert(net_id, pattern);
+                        } else {
+                            eprintln!(
+                                "[ROUTER] WARNING: Route net policy for unknown net '{}', skipping",
+                                policy.net_id
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!(
+                            "[ROUTER] WARNING: Failed to instantiate pattern for net '{}': {}",
+                            policy.net_id, e
+                        );
+                    }
+                }
+            }
+        }
+    }
+    let routing_mode = space_def
+        .routing_config
+        .as_ref()
+        .map(|c| c.mode)
+        .unwrap_or(hwc_parser::RoutingMode::Mixed);
+
+    // Only process routes if lockfile wasn't loaded
+    if !routes_loaded_from_lock {
+        for id in sorted_ids.iter() {
+            if let Some(PlacementItem::Route(route)) = item_map.get(id) {
+                // v0.1.7: Register net connectivity in the netlist for all routes
+                // This ensures both manual and automatic routes are represented in the logical netlist.
+                routing::register_net_for_route(&mut space, route, symbol_table, &stackup_manager, profile)?;
+
+                if !routing::needs_automatic_routing(route) {
+                    // Phase 1: Manual Route (Absolute Control)
+                    routing::route_trace(
+                        &mut space,
+                        route,
+                        origin,
+                        symbol_table,
+                        &eval_context,
+                        &stackup_manager,
+                        profile,
+                    )?;
+                } else {
+                    // Phase 3 Candidate: Automatic or Patterned Route
+                    if routing_mode == hwc_parser::RoutingMode::ManualOnly {
+                        return Err(IrError::RoutingError(format!(
+                            "Automatic routing found in 'manual_only' space: {}.{} to {}.{}",
+                            route.from.component, route.from.pin, route.to.component, route.to.pin
+                        )));
+                    }
+                    auto_routes.push(route.clone());
                 }
             }
         }
@@ -716,12 +753,6 @@ fn compile_single_space(
         });
     }
 
-    // v0.1.7: Lock-File Determinism - Save routes to lockfile after routing
-    // This runs whether routes were loaded from cache or freshly computed
-    if let (Some(path), Some(content)) = (lockfile_path, source_content) {
-        save_routes_to_lockfile(path, &space, content);
-    }
-
     // v0.1.7: Synchronize net names from pins to bound pours
     // This ensures that internal component pours (pads/rings) inherit the nets
     // assigned during the routing phase above.
@@ -734,7 +765,7 @@ fn compile_single_space(
     {
         use hwc_engine::geometry_router::gcell_sweep::verify_gcell_sweep;
         use hwc_engine::geometry_router::partition::PartitionGrid;
-        use hwc_engine::geometry_router::spatial_index::{DynamicSpatialIndex, IndexedSegment};
+        use hwc_engine::geometry_router::spatial_index::{DynamicSpatialIndex, IndexedSegment, SpatialEntitySource};
         use hwc_engine::material::MaterialId;
 
         // Build layer_to_material map from the stackup definition
@@ -765,12 +796,29 @@ fn compile_single_space(
         let mut seg_id = 0usize;
         for (net_id, segments) in space.entity_graph.get_all_routes() {
             for seg in segments {
-                let _width_nm = seg.width_nm;
+                // v0.1.8: Resolve the physical layer ID from the segment's Z-position.
+                // This is CRITICAL for the G-Cell sweep DRC. If all segments default
+                // to Layer 0, the 2D sweep-line will falsely detect short circuits
+                // between traces on different vertical layers (e.g. M1 and M2).
+                let mid_z = (seg.start.z + seg.end.z) / 2;
+                let layer_id = stackup_manager
+                    .get_layer_index_at_z(mid_z)
+                    .map(|idx| idx as i64)
+                    .unwrap_or(0);
+
+                let thickness_nm = stackup_manager
+                    .get_thickness_for_layer_index(layer_id as usize)
+                    .unwrap_or(0);
                 spatial_index.insert(IndexedSegment::new(
+                    SpatialEntitySource::RouteSegment {
+                        net_idx: net_id.0 as usize,
+                        seg_idx: seg_id,
+                    },
                     seg_id,
                     net_id.0 as usize,
                     seg,
-                    0, // layer ID - will be resolved by Z-position lookup
+                    layer_id,
+                    thickness_nm,
                 ));
                 seg_id += 1;
             }
@@ -825,65 +873,35 @@ fn compile_single_space(
     // Validate manually placed contacts against the profile's bridge rules
     bridge_validator::validate_bridges(&space, profile)?;
 
-    // Sprint 3.3: Automatic Via Insertion
-    // Run after all manual placements to detect layer transitions
-    // eprintln!($3"[DEBUG program_to_space] Running automatic via insertion...");
-    let _auto_via_start = std::time::Instant::now();
+    // v0.1.7: Synchronize net names from pins to bound pours
+    // This ensures that internal component pours (pads/rings) inherit the nets
+    // assigned during the routing phase above.
+    space.synchronize_nets();
 
-    // Load fabrication constraints from profile for AutoViaInserter (v0.1.7 Limitation 7)
-    let fab_constraints = space_def
-        .profile
-        .as_ref()
-        .and_then(|profile_name| {
-            hwc_engine::constraint_manager::load_fabrication_constraints(
-                profile_name.as_str(),
-                symbol_table,
-            )
-            .ok()
-        })
-        .ok_or_else(|| IrError::MissingAsicConstraint {
-            message: "Auto via insertion requires fabrication constraints but none were loaded.".into(),
-            hint: "Ensure a profile with 'via:' constraints is declared in the space definition.".into(),
-        })?;
-
-    let auto_via_inserter = crate::auto_via_inserter::AutoViaInserter::from_profile(
-        profile,
-        &stackup_manager,
-        &fab_constraints,
-        Some(symbol_table),
-    )?;
-
-    match auto_via_inserter.insert_vias(&space, profile, &stackup_manager) {
-        Ok(auto_vias) => {
-            // eprintln!($3"[DEBUG program_to_space] Auto via insertion complete: {} vias inserted in {:?}",
-            //     auto_vias.len(),
-            //     auto_via_start.elapsed()
-            // );
-            // Place the auto-inserted vias
-            for via in &auto_vias {
-                placement::place_contact(
-                    &mut space,
-                    via,
-                    origin,
-                    symbol_table,
-                    &eval_context,
-                    &stackup_manager,
-                    profile,
-                )?;
-            }
-        }
-        Err(_e) => {
-            // eprintln!($3"[DEBUG program_to_space] ⚠️  Auto via insertion failed: {}",
-            //     e
-            // );
-            // Non-fatal: Continue without auto vias
-        }
+    // Sprint 3.3: Native Via Resolution (v0.1.8)
+    // Replaces legacy AutoViaInserter with data-driven ViaResolver.
+    // Run after net synchronization to ensure elements have correct nets.
+    {
+        let _resolver_start = std::time::Instant::now();
+        let via_resolver = crate::via_resolver::ViaResolver::from_profile(
+            profile,
+            &stackup_manager,
+            symbol_table,
+        )?;
+        via_resolver.resolve_connectivity(&mut space, &stackup_manager)?;
     }
 
     // Commit all placements and routes to the visible plane
     // This makes substrate, pours, components, and routes visible to exporters
     let _commit_start = std::time::Instant::now();
     // commit_route() is gone in v0.1.8
+
+    // v0.1.8: REBUILD SPATIAL INDEX (The Master Database)
+    // This ensures that the R*-tree in the EntityGraph is perfectly synchronized
+    // with all placed components, substrate layers, and routed segments.
+    // This is the source of truth for all DRC checks.
+    space.entity_graph.rebuild_spatial_index(&space.material_registry);
+
     let _commit_start2 = std::time::Instant::now();
 
     // v0.1.7 DFM: Dummy metal fill (thieving) for manufacturing density balance
@@ -894,7 +912,7 @@ fn compile_single_space(
             ..hwc_engine::DummyFillConfig::default()
         };
         let mut dummy_fill_engine = hwc_engine::DummyFillEngine::new();
-        let fill_stats = dummy_fill_engine.run(&space.entity_graph, &dummy_fill_config);
+        let fill_stats = dummy_fill_engine.run(&mut space.entity_graph, &dummy_fill_config);
         if fill_stats.zones_filled > 0 {
             eprintln!(
                 "[DFM] Dummy fill: {} zones analyzed, {} zones filled, {} dummies placed (avg density before: {:.1}%)",
@@ -906,9 +924,8 @@ fn compile_single_space(
         }
     }
 
-    // SPARSE-VOXEL HANDSHAKE: The three-step lookup in get_material() handles
-    // substrate layers efficiently without syncing to voxels. No validation needed.
-    // The handshake works: voxels → substrate_layers → default_insulator
+    // Substrate-layer handshake: the three-step lookup in get_material() handles
+    // substrate layers efficiently. No validation needed.
 
     // Sprint 9 (Task 9.1): PLACEMENT GATE
     // This is the "rustc model": collect up to N errors, then stop.
@@ -917,10 +934,12 @@ fn compile_single_space(
         return Err(IrError::CompilationAborted { error_count: n });
     }
 
-    Ok((space, Some(qs)))
+    Ok((space, Some(qs), routes_loaded_from_lock))
 }
 
-/// Transform a parsed program into a hardware space with voxel grid.
+// v0.1.8: G-Cell Sweep DRC — P45 Forbidden Junction Detection
+
+/// Transform a parsed program into a hardware space.
 ///
 /// This is the main entry point for IR integration.
 pub fn program_to_space(
@@ -940,7 +959,7 @@ pub fn program_to_space(
         })
         .ok_or(IrError::NoSpaceDefinition)?;
 
-    let (space, _qs) = compile_single_space(space_def, symbol_table, collector, None, None, false, None)?;
+    let (space, _qs, _from_cache) = compile_single_space(space_def, symbol_table, collector, None, None, false, None)?;
     Ok(space)
 }
 
@@ -989,7 +1008,7 @@ pub fn program_to_spaces_with_lockfile(
 
     for space_def in space_defs {
         let space_name: compact_str::CompactString = space_def.name.to_string().into();
-        let (space, qs) = compile_single_space(
+        let (space, qs, _from_cache) = compile_single_space(
             space_def,
             symbol_table,
             collector,
@@ -998,6 +1017,14 @@ pub fn program_to_spaces_with_lockfile(
             force_reroute,
             shared_qs.take(),
         )?;
+        
+        // v0.1.9: LOCKFILE DETERMINISM FIX
+        // Lockfile saving has been moved to build_cmd AFTER validation passes.
+        // This ensures we never save a lockfile for a build that fails validation,
+        // preventing corruption of previously-working cached routes.
+        // The from_cache flag is still tracked to avoid overwriting lockfiles
+        // when routes were loaded from cache (no new routing was performed).
+        
         shared_qs = qs;
         spaces.insert(space_name, space);
     }
@@ -1006,7 +1033,10 @@ pub fn program_to_spaces_with_lockfile(
 }
 
 /// Save routes from a HardwareSpace to a rkyv binary lockfile (v0.1.7).
-fn save_routes_to_lockfile(
+/// 
+/// v0.1.9: This function is now public and called from build_cmd AFTER validation
+/// passes, ensuring lockfiles are only created for successfully validated builds.
+pub fn save_routes_to_lockfile(
     path: &std::path::Path,
     space: &HardwareSpace,
     _source_content: &str,

@@ -46,7 +46,6 @@ pub fn place_module_instance(
                 end: None,
             },
             ctx.symbol_table,
-            space.resolution_nm,
         )
         .unwrap_or(0);
 

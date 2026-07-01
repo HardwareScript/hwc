@@ -1,7 +1,7 @@
 //! Component and substrate placement.
 //!
 //! This module provides functionality for placing hardware components, substrates,
-//! pours, contacts, and modules in the voxel grid. It has been refactored into
+//! pours, contacts, and modules. It has been refactored into
 //! smaller, focused submodules for better maintainability.
 
 mod array;

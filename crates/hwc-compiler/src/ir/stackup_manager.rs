@@ -12,7 +12,6 @@ use crate::SymbolTable;
 #[derive(Debug, Clone)]
 pub struct StackupManager {
     /// Maps semantic layer name (e.g. "l1", "d1") to the absolute Z starting height (bottom of the layer) in nm.
-    /// For the voxel engine, this is the lowest Z voxel this layer occupies.
     layer_start_z_nm: HashMap<String, i64>,
 
     /// Maps semantic layer name to its thickness in nanometers.
@@ -21,10 +20,12 @@ pub struct StackupManager {
     /// Ordered list of layer names (bottom-to-top) for index-based lookup.
     ordered_layers: Vec<String>,
 
-    /// Fallback when operating in pure Assembly mode (no profile/stackup).
-    /// Planned for future use; currently Physical always evaluates the expression directly.
-    #[allow(dead_code)]
-    default_z_voxel_nm: i64,
+    /// Maps semantic layer name to its material name.
+    layer_materials: HashMap<String, String>,
+
+    /// Set of layer names that are conductive (Conductor or Semiconductor).
+    /// v0.1.8: Determined at construction by looking up materials in the Symbol Table.
+    conductive_layers: std::collections::HashSet<String>,
 
     /// Solder mask thickness loaded dynamically from the active profile.
     /// Used to offset component mounting planes so bodies sit on the mask, not on copper.
@@ -38,7 +39,8 @@ impl StackupManager {
             layer_start_z_nm: HashMap::new(),
             layer_thickness_nm: HashMap::new(),
             ordered_layers: Vec::new(),
-            default_z_voxel_nm: 0,
+            layer_materials: HashMap::new(),
+            conductive_layers: std::collections::HashSet::new(),
             solder_mask_thickness_nm: 0, // Opt-in: disabled unless profile declares solder_mask_thickness
         }
     }
@@ -49,21 +51,23 @@ impl StackupManager {
     /// (common in PCB design: l1 is the top copper layer).
     ///
     /// The manager inverts this so that `Z=0` is at the bottom of the board,
-    /// matching the Voxel Engine's coordinate system.
+    /// matching the board's coordinate system.
     pub fn new(
         stackup_opt: Option<&LayerStackup>,
         symbol_table: &SymbolTable,
-        default_z_voxel_nm: i64,
+        _resolution_nm: i64,
         origin_z: hwc_parser::OriginZ,
         solder_mask_thickness_nm: i64,
     ) -> Result<Self, IrError> {
         let mut layer_start_z_nm = HashMap::new();
         let mut layer_thickness_nm = HashMap::new();
         let mut ordered_layers = Vec::new();
+        let mut layer_materials = HashMap::new();
+        let mut conductive_layers = std::collections::HashSet::new();
 
         if let Some(stackup) = stackup_opt {
             // Step 1: Resolve all thicknesses and calculate total height
-            let mut resolved: Vec<(String, i64)> = Vec::new();
+            let mut resolved: Vec<(String, i64, bool, String)> = Vec::new();
 
             for layer in &stackup.layers {
                 let thickness_nm = evaluate_expression_to_nm(&layer.thickness, symbol_table)
@@ -74,7 +78,27 @@ impl StackupManager {
                         }
                     })?;
 
-                resolved.push((layer.name.name.to_string(), thickness_nm));
+                // v0.1.8: Determine conductivity by looking up the material in the Symbol Table.
+                // No hardcoded names or fallbacks.
+                let is_conductive = if let Ok(mat_def) = symbol_table.get_material(&layer.material) {
+                    match mat_def.category {
+                        hwc_parser::MaterialCategory::Conductor
+                        | hwc_parser::MaterialCategory::OhmicContact
+                        | hwc_parser::MaterialCategory::DieInterconnect
+                        | hwc_parser::MaterialCategory::PcbSolder
+                        | hwc_parser::MaterialCategory::BarrierLayer
+                        | hwc_parser::MaterialCategory::Adhesive
+                        | hwc_parser::MaterialCategory::Semiconductor => true,
+                        hwc_parser::MaterialCategory::Insulator => false,
+                    }
+                } else {
+                    // Material not found in symbol table - this is an error in the design.
+                    return Err(IrError::UndeclaredMaterial {
+                        material: layer.material.clone(),
+                    });
+                };
+
+                resolved.push((layer.name.name.to_string(), thickness_nm, is_conductive, layer.material.to_string()));
             }
 
             // Step 2: Assign absolute Z positions
@@ -85,29 +109,30 @@ impl StackupManager {
                     // Z=0 is the bottom of the board.
                     // The first layer in the file is the physical bottom.
                     let mut current_z = 0;
-                    for (name, thickness_nm) in resolved {
+                    for (name, thickness_nm, is_conductive, material) in resolved {
                         layer_start_z_nm.insert(name.clone(), current_z);
                         layer_thickness_nm.insert(name.clone(), thickness_nm);
+                        layer_materials.insert(name.clone(), material);
                         ordered_layers.push(name.clone());
-                        // eprintln!(
-                        //     "[DEBUG stackup] Bottom-Up Mapping: {} -> z: {} nm (t: {} nm)",
-                        //     name, current_z, thickness_nm
-                        // );
+                        if is_conductive {
+                            conductive_layers.insert(name);
+                        }
                         current_z += thickness_nm;
                     }
                 }
                 hwc_parser::OriginZ::Top => {
                     // Z=0 is the top of the board.
                     // The first layer in the file is the physical bottom, so it's at Z = -total_thickness.
-                    // But for Top-origin, we usually want Z=0 to be the top copper.
-                    // So the first layer (bottom) starts at -total_height.
-                    let total_height: i64 = resolved.iter().map(|(_, t)| t).sum();
+                    let total_height: i64 = resolved.iter().map(|(_, t, _, _)| t).sum();
                     let mut current_z = -total_height;
-                    for (name, thickness_nm) in resolved {
+                    for (name, thickness_nm, is_conductive, material) in resolved {
                         layer_start_z_nm.insert(name.clone(), current_z);
                         layer_thickness_nm.insert(name.clone(), thickness_nm);
+                        layer_materials.insert(name.clone(), material);
                         ordered_layers.push(name.clone());
-                        // eprintln!("[DEBUG stackup] Top-Origin Mapping (First=Bottom): {} -> z: {} nm (t: {} nm)", name, current_z, thickness_nm);
+                        if is_conductive {
+                            conductive_layers.insert(name);
+                        }
                         current_z += thickness_nm;
                     }
                 }
@@ -118,7 +143,8 @@ impl StackupManager {
             layer_start_z_nm,
             layer_thickness_nm,
             ordered_layers,
-            default_z_voxel_nm,
+            layer_materials,
+            conductive_layers,
             solder_mask_thickness_nm,
         })
     }
@@ -151,39 +177,74 @@ impl StackupManager {
         }
     }
 
-    /// Get the thickness of the outermost copper layer on the specified side
-    pub fn outer_copper_thickness_nm(&self, side: hwc_parser::MountingSide) -> i64 {
+    /// Get the thickness of the outermost conductive layer on the specified side.
+    ///
+    /// This strictly follows the user-defined stackup. If no conductive layer
+    /// is found on the requested side, it returns an error rather than falling
+    /// back to a hardcoded default (e.g. 35um).
+    pub fn outer_conductive_thickness_nm(&self, side: hwc_parser::MountingSide) -> Result<i64, IrError> {
         match side {
             hwc_parser::MountingSide::Top => {
-                // Search for the first copper layer from the top
+                // Search for the first conductive layer from the top
                 for name in self.ordered_layers.iter().rev() {
-                    if name.to_lowercase().contains('m') || name.to_lowercase().contains("copper") {
-                        if let Some(t) = self.get_layer_thickness(name) {
-                            return t;
-                        }
+                    if self.is_layer_conductive(name) {
+                        return Ok(self.get_layer_thickness(name).unwrap_or(0));
                     }
                 }
-                // v0.1.7: No more hardcoded 35um. If no layer is found, return 0.
-                // Callers must handle the missing layer error.
-                self.get_layer_thickness("top")
-                    .or_else(|| self.get_layer_thickness("L1"))
-                    .unwrap_or(0)
+                Err(IrError::StackupResolutionFailed {
+                    layer_name: "top".into(),
+                    reason: "No conductive layer found in stackup for top mounting.".into(),
+                })
             }
             hwc_parser::MountingSide::Bottom => {
-                // Search for the first copper layer from the bottom
+                // Search for the first conductive layer from the bottom
                 for name in self.ordered_layers.iter() {
-                    if name.to_lowercase().contains('m') || name.to_lowercase().contains("copper") {
-                        if let Some(t) = self.get_layer_thickness(name) {
-                            return t;
-                        }
+                    if self.is_layer_conductive(name) {
+                        return Ok(self.get_layer_thickness(name).unwrap_or(0));
                     }
                 }
-                self.get_layer_thickness("bottom")
-                    .or_else(|| self.get_layer_thickness("L2"))
-                    .unwrap_or(0)
+                Err(IrError::StackupResolutionFailed {
+                    layer_name: "bottom".into(),
+                    reason: "No conductive layer found in stackup for bottom mounting.".into(),
+                })
             }
-            hwc_parser::MountingSide::Embedded => 0,
+            hwc_parser::MountingSide::Embedded => Ok(0),
         }
+    }
+
+    /// Returns true if the layer name is conductive according to the Symbol Table.
+    pub fn is_layer_conductive(&self, name: &str) -> bool {
+        self.conductive_layers.contains(name)
+    }
+
+    /// Returns a reference to the ordered layer names (bottom-to-top).
+    pub fn ordered_layers(&self) -> &[String] {
+        &self.ordered_layers
+    }
+
+    /// Returns the material name for a layer by its index.
+    pub fn get_material_for_layer_index(&self, index: usize) -> Option<String> {
+        let name = self.ordered_layers.get(index)?;
+        self.layer_materials.get(name).cloned()
+    }
+
+    /// Returns the top Z coordinate for a layer by its index.
+    pub fn get_layer_top_z(&self, index: usize) -> Option<i64> {
+        let name = self.ordered_layers.get(index)?;
+        let start = self.layer_start_z_nm.get(name)?;
+        let thickness = self.layer_thickness_nm.get(name)?;
+        Some(start + thickness)
+    }
+
+    /// Returns the bottom Z coordinate for a layer by its index.
+    pub fn get_layer_bottom_z(&self, index: usize) -> Option<i64> {
+        let name = self.ordered_layers.get(index)?;
+        self.layer_start_z_nm.get(name).copied()
+    }
+
+    /// Returns the starting Z (bottom) in nm for a semantic layer.
+    pub fn get_layer_start_z(&self, layer_name: &str) -> Option<i64> {
+        self.layer_start_z_nm.get(layer_name).copied()
     }
 
     /// Resolves any `Elevation` into an absolute Z position in nanometers.
@@ -198,11 +259,6 @@ impl StackupManager {
     /// Returns the thickness in nm for a semantic layer (useful for via/contact spanning).
     pub fn get_layer_thickness(&self, layer_name: &str) -> Option<i64> {
         self.layer_thickness_nm.get(layer_name).copied()
-    }
-
-    /// Returns the starting Z (bottom) in nm for a semantic layer.
-    pub fn get_layer_start_z(&self, layer_name: &str) -> Option<i64> {
-        self.layer_start_z_nm.get(layer_name).copied()
     }
 
     /// Bottom Z for an elevation.
@@ -240,13 +296,15 @@ impl StackupManager {
         &self,
         elevation: &Elevation,
         symbol_table: &SymbolTable,
-        default_layer_height_nm: i64,
     ) -> Result<i64, IrError> {
         let bottom = self.resolve_elevation_bottom(elevation, symbol_table, 0)?;
         let thickness = match elevation {
-            Elevation::Semantic(ident) => self
-                .get_layer_thickness(ident.name.as_ref())
-                .unwrap_or(default_layer_height_nm),
+            Elevation::Semantic(ident) => self.get_layer_thickness(ident.name.as_ref()).ok_or_else(|| {
+                IrError::StackupResolutionFailed {
+                    layer_name: ident.name.clone(),
+                    reason: format!("Unknown semantic layer '{}' in profile stackup", ident.name),
+                }
+            })?,
             Elevation::Physical { end, .. } => {
                 if let Some(end_expr) = end {
                     let top = evaluate_expression_to_nm(end_expr, symbol_table).map_err(|e| {
@@ -257,10 +315,18 @@ impl StackupManager {
                     })?;
                     top - bottom
                 } else {
-                    default_layer_height_nm
+                    return Err(IrError::CoordinateResolutionFailed {
+                        coordinate_str: "physical elevation".into(),
+                        reason: "Physical elevation must have an explicit 'to' Z-coordinate when resolving top boundary.".into(),
+                    });
                 }
             }
-            Elevation::Relative => default_layer_height_nm,
+            Elevation::Relative => {
+                return Err(IrError::CoordinateResolutionFailed {
+                    coordinate_str: "relative elevation".into(),
+                    reason: "Relative elevation cannot resolve a top boundary without a layer context.".into(),
+                });
+            }
         };
         Ok(bottom + thickness.max(1))
     }
@@ -306,45 +372,43 @@ impl StackupManager {
 
     /// Returns the semantic layer name for a physical Z position.
     pub fn get_layer_name_at_z(&self, z_nm: i64) -> Option<String> {
-        let count = self.ordered_layers.len();
-        for (idx, name) in self.ordered_layers.iter().enumerate() {
-            let start = *self.layer_start_z_nm.get(name)?;
-            let thickness = *self.layer_thickness_nm.get(name)?;
-            let is_top = idx == count - 1;
-
-            let contains = if is_top {
-                z_nm >= start && z_nm <= start + thickness
-            } else {
-                z_nm >= start && z_nm < start + thickness
-            };
-
-            if contains {
-                return Some(name.clone());
-            }
-        }
-        None
+        self.get_layer_index_at_z(z_nm)
+            .map(|idx| self.ordered_layers[idx].clone())
     }
 
-    /// Returns a reference to the ordered layer names (bottom-to-top).
-    pub fn ordered_layers(&self) -> &[String] {
-        &self.ordered_layers
-    }
+
 
     /// Returns the absolute Z starting position (bottom) in nm for a layer index.
-    pub fn get_z_start_nm_for_layer_index(&self, index: usize) -> i64 {
+    pub fn get_z_start_nm_for_layer_index(&self, index: usize) -> Result<i64, IrError> {
         if let Some(name) = self.ordered_layers.get(index) {
-            self.layer_start_z_nm.get(name).copied().unwrap_or(0)
+            self.layer_start_z_nm.get(name).copied().ok_or_else(|| {
+                IrError::StackupResolutionFailed {
+                    layer_name: name.clone().into(),
+                    reason: "Layer index found but Z-start mapping is missing.".into(),
+                }
+            })
         } else {
-            0
+            Err(IrError::StackupResolutionFailed {
+                layer_name: format!("index {}", index).into(),
+                reason: "Layer index out of bounds.".into(),
+            })
         }
     }
 
     /// Returns the thickness in nm for a layer index.
-    pub fn get_thickness_for_layer_index(&self, index: usize) -> i64 {
+    pub fn get_thickness_for_layer_index(&self, index: usize) -> Result<i64, IrError> {
         if let Some(name) = self.ordered_layers.get(index) {
-            self.layer_thickness_nm.get(name).copied().unwrap_or(0)
+            self.layer_thickness_nm.get(name).copied().ok_or_else(|| {
+                IrError::StackupResolutionFailed {
+                    layer_name: name.clone().into(),
+                    reason: "Layer index found but thickness mapping is missing.".into(),
+                }
+            })
         } else {
-            0
+            Err(IrError::StackupResolutionFailed {
+                layer_name: format!("index {}", index).into(),
+                reason: "Layer index out of bounds.".into(),
+            })
         }
     }
 
@@ -382,9 +446,9 @@ impl StackupManager {
         self.ordered_layers.iter().position(|l| l == layer_name)
     }
 
-    /// Voxel slab index (0-based) from a bottom Z elevation — used only for via-library lookup in auto-via.
-    pub fn grid_layer_index(z_bottom_nm: i64, voxel_z_nm: i64) -> usize {
-        (z_bottom_nm / voxel_z_nm.max(1)).max(0) as usize
+    /// Semantic layer index (0-based) from a bottom Z elevation.
+    pub fn layer_index_at_z(&self, z_bottom_nm: i64) -> Option<usize> {
+        self.get_layer_index_at_z(z_bottom_nm)
     }
 
     /// Resolve a Z coordinate expression, supporting semantic layer names (e.g. Variable "l1")

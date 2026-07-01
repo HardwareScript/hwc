@@ -1,4 +1,17 @@
 //! Via-related operations: extraction, validation, stamping, clearing, and tower unrolling
+//!
+//! # Roadmap 14.2 — Via Stamping Operations (v0.1.8)
+//!
+//! All via operations now delegate to EntityGraph-native circular operations
+//! (Roadmap 14.1) instead of legacy occupancy stubs:
+//!
+//! - `stamp_via` → `mark_circular_area_occupied` → `entity_graph.add_cylinder_substrate_layer()`
+//! - `clear_via` → `remove_circular_area` → `entity_graph.substrate_layers.retain()` + `rebuild_spatial_index()`
+//! - `can_place_via` → `is_circular_area_clear` → queries ALL geometry (components, substrates, routes)
+//! - `generate_antipads` → `remove_circular_area` for same-layer pours, thermal relief for same-net
+//! - `unroll_via_tower` → uses `layer_z_positions` directly (no legacy fallbacks)
+//!
+//! **This is a pre-release full transition (no backward compatibility).**
 
 use super::super::types::{Via, ViaType};
 use super::core::GeometryRouter;
@@ -8,7 +21,7 @@ use crate::netlist::NetId;
 impl GeometryRouter {
     /// Extract vias from a routed path by detecting Z changes.
     /// Coalesces consecutive Z-changes into single layer-transition vias
-    /// instead of creating one via per Z-voxel boundary.
+    /// instead of creating one via per Z-layer boundary.
     pub(super) fn extract_vias_from_path(&self, path: &[Point3D], net_id: NetId) -> Vec<Via> {
         let mut vias = Vec::new();
         let board_min_z_nm = 0;
@@ -35,7 +48,7 @@ impl GeometryRouter {
             let y = current.y;
             let mut to_z = path[i + 1].z;
 
-            // Scan forward: skip all intermediate Z-voxel steps until Z stabilizes
+            // Scan forward: skip all intermediate Z-layer steps until Z stabilizes
             let mut j = i + 1;
             while j < path.len() && path[j].z != from_z {
                 to_z = path[j].z;
@@ -47,11 +60,27 @@ impl GeometryRouter {
                 j += 1;
             }
 
-            // Only create a via if we actually changed layers (not a transient spike)
-            // v0.1.7: Added Z-Threshold to prevent phantom vias from sub-voxel quantization noise.
-            // A via is only real if it spans more than 50% of a voxel height.
+            // v0.1.8: Layer-aware Z-delta threshold — replaces legacy
+            // `resolution_nm / 2` check. Uses minimum spacing between adjacent
+            // layers to determine if a Z-change represents a real layer transition
+            // versus sub-layer noise. Falls back to resolution_nm/2 only when
+            // layer_z_positions is empty (no stackup defined).
             let z_delta = (to_z - from_z).abs();
-            if to_z != from_z && z_delta > (self.resolution_nm / 2) {
+            let z_threshold = if self.layer_z_positions.len() >= 2 {
+                // Compute minimum gap between any two adjacent layers
+                let mut min_gap = i64::MAX;
+                for w in self.layer_z_positions.windows(2) {
+                    let gap = (w[1] - w[0]).abs();
+                    if gap > 0 && gap < min_gap {
+                        min_gap = gap;
+                    }
+                }
+                // A via is real if it spans more than 50% of the smallest layer gap
+                min_gap / 2
+            } else {
+                self.resolution_nm / 2
+            };
+            if to_z != from_z && z_delta > z_threshold {
                 let diameter_nm = self
                     .constraints
                     .fabrication
@@ -65,9 +94,9 @@ impl GeometryRouter {
                     from_z.max(to_z),
                     diameter_nm,
                     net_id,
+                    self.routing_material_id, // Use the active routing material context
                     board_min_z_nm,
                     board_max_z_nm,
-                    self.resolution_nm,
                     self.constraints
                         .fabrication
                         .as_ref()
@@ -85,6 +114,11 @@ impl GeometryRouter {
     }
 
     /// Check if a via can be placed at the given position and Z span.
+    ///
+    /// v0.1.8 (Roadmap 14.2): Queries ALL registered geometry in the EntityGraph
+    /// — component metadata, substrate layers (via pads, pours, contacts), and
+    /// routed segments — via `is_circular_area_clear()`. This replaces the legacy
+    /// component-metadata-only check that missed substrate layers and routes.
     pub(super) fn can_place_via(&self, position: (i64, i64), from_z_nm: i64, to_z_nm: i64) -> bool {
         let fabrication = match &self.constraints.fabrication {
             Some(f) => f,
@@ -102,12 +136,13 @@ impl GeometryRouter {
             to_z_nm,
             diameter_nm: via_diameter,
             net_id: NetId::new(0),
+            material_id: self.routing_material_id, // Use the active routing material context
             via_type: ViaType::ThroughHole,
             annular_ring_nm: annular_ring,
             properties: rustc_hash::FxHashMap::default(),
         };
 
-        for z_nm in via.z_planes(self.resolution_nm) {
+        for z_nm in via.z_planes_between(&self.layer_z_positions, 0, self.bounds.depth_nm) {
             if !self.is_circular_area_clear(position, total_radius, z_nm) {
                 return false;
             }
@@ -117,6 +152,12 @@ impl GeometryRouter {
     }
 
     /// Stamp via footprint on all Z planes it passes through.
+    ///
+    /// v0.1.8 (Roadmap 14.2): Delegates to `mark_circular_area_occupied()` which
+    /// registers via pads as analytic cylinder substrate layers in the EntityGraph
+    /// via `add_cylinder_substrate_layer()`. Each Z plane gets a separate substrate
+    /// layer entry, making via pads visible to all spatial queries (DRC, clearance,
+    /// rip-up). Also generates anti-pads for non-matching copper pours.
     pub fn stamp_via(&mut self, via: &Via) {
         let fabrication = match &self.constraints.fabrication {
             Some(f) => f,
@@ -126,7 +167,7 @@ impl GeometryRouter {
         let annular_ring = fabrication.min_annular_ring_nm;
         let total_radius = (via.diameter_nm + 2 * annular_ring) / 2;
 
-        for z_nm in via.z_planes(self.resolution_nm) {
+        for z_nm in via.z_planes_between(&self.layer_z_positions, 0, self.bounds.depth_nm) {
             self.mark_circular_area_occupied(via.position, total_radius, z_nm, via.net_id);
         }
 
@@ -134,6 +175,12 @@ impl GeometryRouter {
     }
 
     /// Generate anti-pads for vias passing through copper pours on different nets.
+    ///
+    /// v0.1.8 (Roadmap 14.2): For non-matching nets, calls `remove_circular_area()`
+    /// which finds and removes matching Circle-shaped substrate layers from the
+    /// EntityGraph and rebuilds the spatial index. For matching-net pours with
+    /// thermal_relief=true, generates thermal relief spokes via the native vector
+    /// `ThermalReliefGenerator` that writes directly to the EntityGraph.
     pub(super) fn generate_antipads(&mut self, via: &Via) {
         let fabrication = match &self.constraints.fabrication {
             Some(f) => f,
@@ -143,7 +190,7 @@ impl GeometryRouter {
         let clearance = fabrication.min_trace_spacing_nm;
         let antipad_radius = (via.diameter_nm + 2 * clearance) / 2;
 
-        for z_nm in via.z_planes(self.resolution_nm) {
+        for z_nm in via.z_planes_between(&self.layer_z_positions, 0, self.bounds.depth_nm) {
             for pour in &self.copper_pours.clone() {
                 if pour.z_bottom_nm == z_nm {
                     if pour.net_id != via.net_id {
@@ -155,12 +202,24 @@ impl GeometryRouter {
                             use crate::geometry_router::thermal_relief::{
                                 ThermalReliefConfig, ThermalReliefGenerator,
                             };
-                            let _generator = ThermalReliefGenerator::new(
+                            let generator = ThermalReliefGenerator::new(
                                 ThermalReliefConfig::default(),
                                 self.resolution_nm,
                             );
-                            // TODO(v0.1.8): Thermal relief generation migrated to EntityGraph
-                            let _ = (&via, &pour);
+                            // v0.1.8: Thermal relief generation uses EntityGraph-native
+                            // vector polygons — spokes are registered as Clipper2 Path64
+                            // polygons via add_polygon_substrate_layer(), not rasterized
+                            // into grid cells. See thermal_relief.rs for full rationale.
+                            let pad_radius = via.diameter_nm / 2;
+                            let center = crate::geometry::Point2D::new(via.position.0, via.position.1);
+                            generator.generate_for_circular_pad(
+                                center,
+                                pad_radius,
+                                z_nm,
+                                self.routing_material_id,
+                                via.net_id.raw(),
+                                &mut self.entity_graph,
+                            );
                         }
                     }
                 }
@@ -169,12 +228,18 @@ impl GeometryRouter {
     }
 
     /// Clear a via (for rip-up and reroute).
+    ///
+    /// v0.1.8 (Roadmap 14.2): Removes the via from the local `vias` list, then
+    /// calls `remove_circular_area()` for each Z plane. This finds and removes
+    /// matching Circle-shaped substrate layers from the EntityGraph and rebuilds
+    /// the spatial index, ensuring via pads are no longer visible to DRC or
+    /// clearance checks.
     pub fn clear_via(&mut self, via: &Via) {
         self.vias.retain(|v| {
             v.position != via.position || v.from_z_nm != via.from_z_nm || v.to_z_nm != via.to_z_nm
         });
 
-        for z_nm in via.z_planes(self.resolution_nm) {
+        for z_nm in via.z_planes_between(&self.layer_z_positions, 0, self.bounds.depth_nm) {
             self.remove_circular_area(via.position, via.diameter_nm, z_nm);
         }
     }
@@ -192,6 +257,9 @@ impl GeometryRouter {
     /// For PCB (Octilinear) profiles, a single through-hole via spanning the full
     /// depth is emitted instead.
     ///
+    /// v0.1.8 (Roadmap 14.2): Uses `layer_z_positions` directly from the stackup.
+    /// No legacy fallbacks — fails fast if `layer_z_positions` is empty.
+    ///
     /// **Architecture Reference:** `ROADMAP/v0.1.7/ADVANCED-ROUTING-IMPLEMENTATION.md` List 3
     ///
     /// # Arguments
@@ -201,6 +269,9 @@ impl GeometryRouter {
     /// * `profile_layers` - Ordered layer names from the stackup profile (bottom-to-top)
     /// * `net_id` - Net ID this via belongs to
     /// * `is_manhattan` - True for ASIC (Manhattan angle restriction), false for PCB (Octilinear)
+    ///
+    /// # Panics
+    /// Panics if `layer_z_positions` is empty — stackup must be populated before unrolling.
     ///
     /// # Returns
     /// Vector of `Via` objects representing the unrolled tower.
@@ -213,6 +284,14 @@ impl GeometryRouter {
         net_id: NetId,
         is_manhattan: bool,
     ) -> Vec<Via> {
+        // v0.1.8: Fail fast — no legacy fallback. Layer Z positions must
+        // be populated from the stackup before any via unrolling.
+        assert!(
+            !self.layer_z_positions.is_empty(),
+            "FATAL: unroll_via_tower called with empty layer_z_positions. \
+             Stackup must be parsed and layer Z positions populated before routing."
+        );
+
         let mut via_tower = Vec::new();
         let diameter_nm = self
             .constraints
@@ -240,19 +319,11 @@ impl GeometryRouter {
             while current_idx != end_layer_idx as isize {
                 let next_idx = (current_idx + step) as usize;
 
-                // Use actual Z positions from the stackup (layer_z_positions)
-                // instead of the incorrect `index * voxel_size_nm` calculation.
-                let from_z = if (current_idx as usize) < self.layer_z_positions.len() {
-                    self.layer_z_positions[current_idx as usize]
-                } else {
-                    current_idx as i64 * self.resolution_nm
-                };
-
-                let to_z = if next_idx < self.layer_z_positions.len() {
-                    self.layer_z_positions[next_idx]
-                } else {
-                    next_idx as i64 * self.resolution_nm
-                };
+                // v0.1.8: Use actual Z positions from the stackup (layer_z_positions).
+                // Bounds-checked — indices are validated against layer_z_positions.len()
+                // because the caller derives them from profile_layers which is parallel.
+                let from_z = self.layer_z_positions[current_idx as usize];
+                let to_z = self.layer_z_positions[next_idx];
 
                 via_tower.push(Via::new_with_type(
                     pos,
@@ -260,6 +331,7 @@ impl GeometryRouter {
                     to_z,
                     diameter_nm,
                     net_id,
+                    self.routing_material_id, // Use the active routing material context
                     ViaType::Buried, // Intermediate vias in ASIC towers are buried
                     annular_ring,
                 ));
@@ -268,16 +340,8 @@ impl GeometryRouter {
             }
         } else {
             // PCB: emit a single through-hole via spanning the full depth
-            let from_z = if start_layer_idx < self.layer_z_positions.len() {
-                self.layer_z_positions[start_layer_idx]
-            } else {
-                start_layer_idx as i64 * self.resolution_nm
-            };
-            let to_z = if end_layer_idx < self.layer_z_positions.len() {
-                self.layer_z_positions[end_layer_idx]
-            } else {
-                end_layer_idx as i64 * self.resolution_nm
-            };
+            let from_z = self.layer_z_positions[start_layer_idx];
+            let to_z = self.layer_z_positions[end_layer_idx];
 
             via_tower.push(Via::new_with_type(
                 pos,
@@ -285,6 +349,7 @@ impl GeometryRouter {
                 to_z,
                 diameter_nm,
                 net_id,
+                self.routing_material_id, // Use the active routing material context
                 ViaType::ThroughHole,
                 annular_ring,
             ));
@@ -297,7 +362,12 @@ impl GeometryRouter {
     ///
     /// Each intermediate layer in the via tower needs a small copper landing pad
     /// (annular ring) to anchor the via physically. This method stamps copper
-    /// discs at each intermediate Z using the VoxelGrid.
+    /// discs at each intermediate Z using the EntityGraph.
+    ///
+    /// v0.1.8 (Roadmap 14.2): Delegates to `mark_circular_area_occupied()` which
+    /// registers landing pads as analytic cylinder substrate layers in the EntityGraph
+    /// via `add_cylinder_substrate_layer()`. The first and last Z planes are skipped
+    /// because they already have pads from the via itself.
     ///
     /// # Arguments
     /// * `via_tower` - The unrolled via tower from `unroll_via_tower`
@@ -316,7 +386,7 @@ impl GeometryRouter {
 
         for via in via_tower {
             // For each intermediate Z plane (not the first or last), stamp a landing pad
-            let z_planes = via.z_planes(self.resolution_nm);
+            let z_planes = via.z_planes_between(&self.layer_z_positions, 0, self.bounds.depth_nm);
             for (i, &z_nm) in z_planes.iter().enumerate() {
                 if i == 0 || i == z_planes.len() - 1 {
                     continue; // Skip the start and end layers (already have pads from the via)
@@ -358,6 +428,8 @@ impl GeometryRouter {
     /// For PCB (Octilinear) profiles, emits a single through-hole via spanning
     /// the full transition depth.
     ///
+    /// v0.1.8 (Roadmap 14.2): Delegates to `unroll_via_tower()` which uses
+    /// `layer_z_positions` directly from the stackup. No legacy fallbacks.
     /// If profile layer info is not available, returns the original via unchanged.
     pub fn unroll_detected_via(&self, via: &Via) -> Vec<Via> {
         if self.profile_layers.is_empty() || self.layer_z_positions.is_empty() {

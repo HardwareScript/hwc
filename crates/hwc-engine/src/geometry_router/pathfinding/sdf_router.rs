@@ -4,7 +4,7 @@ use crate::geometry::Point3D;
 use crate::geometry_router::neighbor_generation::get_neighbors_stable;
 use crate::geometry_router::sdf_generator::SdfGenerator;
 
-use super::collision::{try_binary_collision_skip, voxel_to_coords};
+use super::collision::try_binary_collision_skip;
 use super::cost::{calculate_move_cost, MoveCostParams};
 use super::heuristic::heuristic;
 use super::state::{reconstruct_path, PathfindingState};
@@ -13,11 +13,11 @@ use super::types::RoutingParams;
 /// Route a net using SDF-accelerated A* pathfinding (Leap-Frog Router).
 ///
 /// This version uses Signed Distance Fields to skip over empty space, dramatically
-/// reducing the number of voxels that need to be checked.
+/// reducing the number of grid positions that need to be checked.
 ///
 /// **Sphere Tracing Algorithm**:
 /// 1. Query SDF at current position
-/// 2. If distance is D, we can safely skip D voxels in the direction of the goal
+/// 2. If distance is D, we can safely skip D grid steps in the direction of the goal
 /// 3. Jump to that position and repeat
 /// 4. When close to obstacles (distance < threshold), fall back to normal A*
 ///
@@ -99,10 +99,10 @@ pub fn route_net_sdf_accelerated(
         "[ROUTER DEBUG]   Goal: {:?} nm -> Snapped: {:?}",
         goal, goal_snapped
     );
-    eprintln!("[ROUTER DEBUG]   Voxel size: {:?} nm", params.voxel_size);
+    eprintln!("[ROUTER DEBUG]   Resolution: {:?} nm", params.resolution_nm);
     eprintln!(
-        "[ROUTER DEBUG]   Manhattan distance: {} voxels",
-        start_snapped.manhattan_distance(&goal_snapped) / params.voxel_size.x_nm
+        "[ROUTER DEBUG]   Manhattan distance: {} resolution units",
+        start_snapped.manhattan_distance(&goal_snapped) / params.resolution_nm
     );
     */
 
@@ -153,7 +153,7 @@ pub fn route_net_sdf_accelerated(
 
                 // v0.1.7: MANHATTAN ESCAPE (GOD-TIER FIX)
                 // Instead of just replacing the first/last points (which creates diagonals),
-                // we insert Manhattan corners to escape from the pin to the voxel grid.
+                // we insert Manhattan corners to escape from the pin to the routing grid.
                 let start_snapped = path[0];
                 let goal_snapped = *path.last().unwrap();
 
@@ -212,8 +212,7 @@ pub fn route_net_sdf_accelerated(
         let current_cost = *state.cost_so_far.get(&current)?;
 
         // SDF ACCELERATION: Check if we can leap over empty space
-        let (gx, gy, gz) = voxel_to_coords(current, params.resolution_nm);
-        let distance = sdf.get_distance_with_exemptions(gx, gy, gz, params.exempt_components);
+        let distance = sdf.get_distance_with_exemptions(current, params.exempt_components);
 
         // if iterations == 1 {
         //     eprintln!("[ROUTER DEBUG] First iteration SDF query: gx={}, gy={}, gz={}, distance={}",
@@ -282,14 +281,12 @@ pub fn route_net_sdf_accelerated(
                 );
 
                 // if iterations <= 5 {
-                //     eprintln!("[ROUTER DEBUG] Iteration {}: LEAPING {} voxels to {:?}",
+                //     eprintln!("[ROUTER DEBUG] Iteration {}: LEAPING {} grid steps to {:?}",
                 //         iterations, leap_dist, leap_target);
                 // }
 
                 // Check if leap target is valid
                 if params.bounds.contains(leap_target) && !state.visited.contains(&leap_target) {
-                    let (lx, ly, lz) = voxel_to_coords(leap_target, params.resolution_nm);
-
                     // Only leap if target is also empty (obeying exemptions)
                     // Check both SDF distance AND component interior lockout
                     let leap_blocked_by_component = if let Some(entity_graph) = params.entity_graph {
@@ -301,7 +298,7 @@ pub fn route_net_sdf_accelerated(
                     } else {
                         false
                     };
-                    if !leap_blocked_by_component && sdf.get_distance_with_exemptions(lx, ly, lz, params.exempt_components) > 0 {
+                    if !leap_blocked_by_component && sdf.get_distance_with_exemptions(leap_target, params.exempt_components) > 0 {
                         let move_cost = leap_dist; // Cost is proportional to distance
                         let new_cost = current_cost + move_cost;
 
@@ -373,8 +370,7 @@ pub fn route_net_sdf_accelerated(
             // SDF OBSTACLE DETECTION (v0.1.7): Hard block if inside a component or substrate
             // This ensures that the A* fallback (effective_distance <= 3) is not blind to obstacles
             if neighbor != goal_snapped && neighbor != start_snapped {
-                let (nx, ny, nz) = voxel_to_coords(neighbor, params.resolution_nm);
-                if sdf.get_distance_with_exemptions(nx, ny, nz, params.exempt_components) == 0 {
+                if sdf.get_distance_with_exemptions(neighbor, params.exempt_components) == 0 {
                     continue;
                 }
             }
@@ -389,8 +385,6 @@ pub fn route_net_sdf_accelerated(
                 to: neighbor,
                 net_id: params.net_id,
                 constraints: params.constraints,
-                voxel_size_nm: params.resolution_nm,
-                occupied_voxels: &rustc_hash::FxHashMap::default(),
                 clearance_zones: params.clearance_zones,
                 layer_direction: Some(params.layer_direction),
                 substrate_layers: params.substrate_layers,

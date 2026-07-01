@@ -1,14 +1,13 @@
 //! Handle-based net indirection for O(1) renaming.
 //!
-//! This module implements a handle-based system where voxels store NetHandles
-//! instead of direct NetIds. This enables O(1) net renaming by only updating
-//! the lookup table instead of scanning billions of voxels.
+//! This module implements a handle-based system where routing metadata stores
+//! NetHandles instead of direct NetIds. This enables O(1) net renaming by only
+//! updating the lookup table instead of scanning all routed geometry.
 //!
 //! ARCHITECTURE:
-//! - VoxelChunk stores NetHandle (u32 wrapper)
+//! - Routing metadata stores NetHandle (u32 wrapper)
 //! - NetLookupTable maps Handle → NetId
 //! - Renaming a net only updates the lookup table (< 1μs)
-//! - No voxel scanning required!
 
 use super::NetId;
 use parking_lot::RwLock;
@@ -17,7 +16,7 @@ use std::sync::Arc;
 
 /// Strongly-typed net handle (newtype wrapper around u32).
 ///
-/// This is what voxels actually store. It's an indirection layer
+/// This is what routing metadata stores. It's an indirection layer
 /// that points to the real NetId in the lookup table.
 ///
 /// Zero memory overhead - compiles to a raw u32.
@@ -37,7 +36,7 @@ impl NetHandle {
         self.0
     }
 
-    /// Special handle for "no net" (air/empty voxels).
+    /// Special handle for "no net" (air/empty space).
     #[inline]
     pub const fn none() -> Self {
         Self(0)
@@ -53,9 +52,9 @@ impl NetHandle {
 /// Lookup table mapping NetHandle → NetId.
 ///
 /// This is the secret sauce for O(1) renaming:
-/// - Voxels store handles (never change)
+/// - Routing metadata stores handles (never change)
 /// - Lookup table maps handle → current NetId
-/// - Renaming updates the table, not the voxels
+/// - Renaming updates the table, not the metadata
 ///
 /// Thread-safe using RwLock for concurrent access.
 #[derive(Debug, Clone)]
@@ -100,7 +99,7 @@ impl NetLookupTable {
 
     /// Resolve a handle to its current NetId.
     ///
-    /// This is the hot path for voxel queries.
+    /// This is the hot path for net lookups.
     /// Uses read lock for concurrent access.
     ///
     /// # Arguments
@@ -121,7 +120,7 @@ impl NetLookupTable {
     /// Rename a net (O(1) operation!).
     ///
     /// This is the God-Tier operation that makes HMR possible.
-    /// Instead of scanning billions of voxels, we just update one entry
+    /// Instead of scanning all routed geometry, we just update one entry
     /// in the lookup table.
     ///
     /// # Arguments
@@ -130,7 +129,7 @@ impl NetLookupTable {
     ///
     /// # Performance
     /// O(N) where N = number of handles (typically small)
-    /// Does NOT scan voxels!
+    /// Does NOT scan geometry!
     pub fn rename_net(&self, old_net_id: NetId, new_net_id: NetId) {
         let mut table = self.handle_to_net.write();
 

@@ -4,16 +4,14 @@
 //! It performs deterministic pathfinding with physics constraints to route
 //! nets automatically when users don't provide explicit waypoints.
 //!
-//! **GOD-TIER Architecture**: All voxel storage uses VoxelGrid with flat array indexing.
-//! No HashMap-based voxel storage anywhere in the routing pipeline.
+//! **GOD-TIER Architecture**: EntityGraph stores sparse metadata with analytic geometry.
+//! No grid-based collision storage — clearance is checked analytically during routing.
 //!
 //! **Documentation References**:
 //! - `Docs/v0.1.3/ROUTING-AND-PHYSICS.md` (lines 400-800, Manhattan routing)
 //! - `ROADMAP/v0.1.4/Gap3.md` (Hierarchical Parallel Routing)
-//! - `ROADMAP/v0.1.5/ROUTING-GOD-TIER-MIGRATION.md` (VoxelGrid migration)
 
 mod bounding_box_tracker;
-mod collision_detection;
 pub mod copper_welder;
 mod constraint_aware;
 mod dummy_fill;
@@ -71,7 +69,6 @@ pub mod static_geometry_guard;
 
 // Re-export public API
 pub use bounding_box_tracker::{BoundingBoxTracker, TrackedObstacle};
-pub use collision_detection::check_clearance_violation;
 pub use constraint_aware::{constraint_aware_astar, constraint_aware_heuristic, ConstraintNode};
 pub use dummy_fill::{DummyFillConfig, DummyFillEngine, DummyFillStats};
 pub use entity_graph::EntityGraph;
@@ -100,7 +97,7 @@ pub use routing_patterns::{
 };
 pub use sdf_generator::SdfGenerator;
 pub use spatial_index::{
-    DynamicSpatialIndex, IndexedSegment, Point2Df64, query_overlapping_segments,
+    DynamicSpatialIndex, IndexedSegment, query_overlapping_segments,
 };
 pub use teardrops::{IpcClass, TeardropConfig, TeardropEngine};
 pub use thermal_relief::{
@@ -128,7 +125,7 @@ pub use solvers::qp_solver::{QpSolver, QpSolution};
 pub use solvers::dag_solver::{DagSolver, DagConstraint};
 pub use compaction::{Compactor, SignalConstraints, CompactionMove};
 pub use geometry_refinement::{RefinedContour, refine_layer, refine_geometry, canonicalize_contours};
-pub use substrate_types::{CompactionStats, MemoryStats};
+pub use substrate_types::CompactionStats;
 pub use em_thermal_check::{
     AcCurrent, CurrentDeclaration, EmParams, ThermalParams,
     current_limit_ac_to_declaration, current_limit_dc, verify_em_thermal,

@@ -1,0 +1,101 @@
+# MINIMAL TEST - All inline, no imports
+# This will help us isolate if the issue is with imports or with the definitions
+
+# Define profile FIRST
+profile Minimal_PDK:
+    technology: "ASIC"
+    
+    stackup:
+        substrate:   [material: Silicon,  thickness: 100nm, routable: false]
+        dielectric:  [material: FR4,      thickness: 400nm, routable: false]
+        metal1:      [material: Aluminum, thickness: 400nm, routable: true]
+    
+    trace:
+        min_width: 100nm
+        min_spacing: 100nm
+    
+    via:
+        min_diameter: 180nm
+        min_annular_ring: 100nm
+        min_spacing: 200nm
+        shape: cylinder
+    
+    manufacturing:
+        copper_thickness: 400nm
+    
+    clearance:
+        high_voltage: 500nm
+        safety_factor: 2.0
+    
+    layer:
+        min_thickness: 100nm
+        allowed_conductors: [Aluminum]
+        allowed_dielectrics: [FR4, Silicon]
+    
+    routing:
+        max_local_route_length: 10um
+    
+    thermal:
+        ambient_temp: 25C
+        max_operating_temp: 125C
+        max_temp_rise: 10C
+
+# Define materials AFTER profile
+material Aluminum:
+    category: conductor
+    symbol: "Al"
+    description: "Metal routing"
+    properties:
+        color: "#C0C0C0"
+        metallic: 0.9
+        resistivity: 2.82e-8ohm_m
+        thermal_conductivity: 237.0W_mK
+        density: 2700.0kg_m3
+        max_current_density: 20.0A_mm2
+
+material Silicon:
+    category: semiconductor
+    symbol: "Si"
+    description: "Substrate"
+    properties:
+        color: "#808080"
+        resistivity: 640.0ohm_m
+        density: 2330.0kg_m3
+
+material FR4:
+    category: insulator
+    symbol: "FR4"
+    description: "Dielectric"
+    properties:
+        color: "#2E7D32"
+        relative_permittivity: 4.5
+        density: 1800.0kg_m3
+
+# Simple module
+module TwoPin:
+    pins: [input A, output B]
+    route A to B
+
+# Space
+space MinimalTest implements TwoPin:
+    dimensions: 2000nm by 1000nm by 900nm
+    resolution: 1nm
+    origin: bl by b
+    profile: Minimal_PDK
+    
+    nets:
+        A: { classification: signal, potential: 0V, current: 0.01uA }
+        B: { classification: signal, potential: 0V, current: 0.01uA }
+    
+    add pour(Aluminum) named PadA on layer: metal1:
+        net: A
+        boundary: [x: 200nm, y: 350nm] to [x: 500nm, y: 650nm]
+    
+    add pour(Aluminum) named PadB on layer: metal1:
+        net: B
+        boundary: [x: 1500nm, y: 350nm] to [x: 1800nm, y: 650nm]
+    
+    route PadA to PadB:
+        width: 200nm
+        layer: metal1
+        current_limit_ac: { rms: 0.5uA, peak: 1.0uA }

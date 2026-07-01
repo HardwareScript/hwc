@@ -6,14 +6,14 @@ use super::types::TrackedObstacle;
 
 /// BoundingBoxTracker: The spatial index for Minkowski-inflated obstacle queries.
 ///
-/// This replaces the need for per-voxel clearance checking by storing obstacles
+/// This replaces the need for per-point clearance checking by storing obstacles
 /// with pre-computed inflation margins. The pathfinder's "zero-width" ray must
 /// simply avoid intersecting any inflated AABB, and all clearance constraints
 /// are automatically satisfied.
 ///
 /// **Performance**: O(N) per query where N = number of obstacles on that layer.
 /// Since typical designs have 10-1000 obstacles per layer, this is effectively
-/// constant-time compared to scanning billions of voxels.
+/// constant-time compared to scanning all geometry.
 ///
 /// # Example
 /// ```

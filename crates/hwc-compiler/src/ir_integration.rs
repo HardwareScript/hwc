@@ -1,8 +1,8 @@
-//! IR Integration: Transform parser AST into voxel grid representation.
+//! IR Integration: Transform parser AST into continuous physical representation.
 //!
-//! This module bridges System 1 (Parser & Compiler) and System 2 (Voxel Engine).
+//! This module bridges System 1 (Parser & Compiler) and System 2 (Engine).
 //! It takes the parsed AST with Symbol Table and transforms it into a fully populated
-//! voxel grid with placed components and routed traces.
+//! entity graph with placed components and routed traces.
 //!
 //! **Phase 4.1 Complete**: Moved from hwc-engine to hwc-compiler to access Symbol Table.
 //! **Modular Structure**: The implementation is now split into logical submodules in `src/ir/`:

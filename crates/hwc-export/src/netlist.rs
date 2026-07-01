@@ -151,13 +151,13 @@ pub fn export(
                 let pins = space.netlist.get_component_pins(comp_id);
 
                 // Build net list for this component
-                // v0.1.6 Item #13: Use pin net assignments from VoxelGrid (from net: block)
+                // v0.1.6 Item #13: Use pin net assignments from entity graph (from net: block)
                 let mut net_names = Vec::new();
                 for pin_id in &pins {
                     if let Some(pin) = space.netlist.get_pin(*pin_id) {
-                        // First, try to get net assignment from VoxelGrid component pins
+                        // First, try to get net assignment from entity graph component pins
                         // (these come from the net: block in component placement)
-                        let voxel_grid_net = space
+                        let entity_graph_net = space
                             .entity_graph
                             .get_component_pins()
                             .iter()
@@ -166,7 +166,7 @@ pub fn export(
                             })
                             .and_then(|vp| vp.net.clone());
 
-                        if let Some(net_name) = voxel_grid_net {
+                        if let Some(net_name) = entity_graph_net {
                             // Use net assignment from net: block
                             net_names.push(net_name);
                         } else if let Some(net_id) = pin.connected_net {

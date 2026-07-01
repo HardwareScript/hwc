@@ -36,8 +36,23 @@ impl GeometryRouter {
 
             let width = meta.bbox.max.x - meta.bbox.min.x;
             let height = meta.bbox.max.y - meta.bbox.min.y;
-            let trace_seg = TraceSegment::new(meta.bbox.min, meta.bbox.max, width.max(height));
-            spatial_index.insert(IndexedSegment::new(seg_id, 0, &trace_seg, meta.bbox.min.z));
+            let trace_seg = TraceSegment::new(meta.bbox.min, meta.bbox.max, width.max(height), meta.material);
+            let thickness_nm = meta.bbox.max.z - meta.bbox.min.z;
+            let component_net_id = meta.net_bindings.values().next()
+                .copied()
+                .unwrap_or(0) as usize;
+            spatial_index.insert(IndexedSegment {
+                source: hwc_physics::spatial_index::SpatialEntitySource::ComponentInstance {
+                    instance_id: seg_id,
+                },
+                segment_id: seg_id,
+                net_id: component_net_id,
+                width_nm: trace_seg.width_nm,
+                thickness_nm,
+                start: trace_seg.start,
+                end: trace_seg.end,
+                layer: meta.bbox.min.z,
+            });
             seg_id += 1;
         }
 
@@ -49,7 +64,7 @@ impl GeometryRouter {
                 continue;
             }
 
-            for segment in segments {
+            for (seg_idx, segment) in segments.iter().enumerate() {
                 // Skip segments that touch our start or goal endpoints to allow connection
                 let touches_start = segment.start == active_route.start
                     || segment.end == active_route.start;
@@ -60,12 +75,30 @@ impl GeometryRouter {
                     continue;
                 }
 
-                spatial_index.insert(IndexedSegment::new(
-                    seg_id,
-                    0, // Treat as hard obstacle to force routing around it
-                    segment,
-                    segment.start.z,
-                ));
+                spatial_index.insert(IndexedSegment {
+                    source: hwc_physics::spatial_index::SpatialEntitySource::RouteSegment {
+                        net_idx: (*net_id).raw() as usize,
+                        seg_idx,
+                    },
+                    segment_id: seg_idx,
+                    net_id: (*net_id).raw() as usize,
+                    width_nm: segment.width_nm,
+                    thickness_nm: {
+                        let mat_props = self.material_registry.get_material(segment.material_id)
+                            .unwrap_or_else(|| panic!(
+                                "FATAL: Route segment references unregistered material_id={}",
+                                segment.material_id
+                            ));
+                        assert!(mat_props.thickness_nm > 0,
+                            "FATAL: Material id={} has zero thickness",
+                            segment.material_id
+                        );
+                        mat_props.thickness_nm
+                    },
+                    start: segment.start,
+                    end: segment.end,
+                    layer: segment.start.z,
+                });
                 seg_id += 1;
             }
         }
@@ -214,7 +247,12 @@ impl GeometryRouter {
         }
 
         // Commit the resolved vector route canonically to the EntityGraph
-        self.entity_graph.register_route(route.net_id, &path);
+        self.entity_graph.register_route(
+            route.net_id,
+            &path,
+            self.routing_material_id,
+            self.trace_width_nm,
+        );
 
         Ok(RoutedNet {
             net_id: route.net_id,
@@ -243,7 +281,7 @@ impl GeometryRouter {
         let overlapping = spatial_index.query_bbox(window);
 
         let segments: Vec<TraceSegment> = overlapping.iter().map(|idx| {
-            TraceSegment::new(idx.start, idx.end, idx.width_nm)
+            TraceSegment::new(idx.start, idx.end, idx.width_nm, self.routing_material_id)
         }).collect();
 
         if segments.is_empty() {
@@ -294,10 +332,6 @@ impl GeometryRouter {
     ) -> Result<RoutedNet, RoutingError> {
         use super::super::super::constraint_aware::constraint_aware_astar;
 
-        let target_voxels = target_length_nm / self.resolution_nm;
-
-        let occupied_set: rustc_hash::FxHashSet<_> = rustc_hash::FxHashSet::default();
-
         let bounds = (
             self.bounds.width_nm,
             self.bounds.height_nm,
@@ -307,9 +341,8 @@ impl GeometryRouter {
         let path_result = constraint_aware_astar(
             route.start,
             route.goal,
-            target_voxels,
+            target_length_nm,
             pattern,
-            &occupied_set,
             bounds,
             self.resolution_nm,
         );
@@ -333,7 +366,12 @@ impl GeometryRouter {
                 }
 
                 // Commit canonically to the EntityGraph
-                self.entity_graph.register_route(route.net_id, &path);
+                self.entity_graph.register_route(
+                    route.net_id,
+                    &path,
+                    self.routing_material_id,
+                    self.trace_width_nm,
+                );
 
                 Ok(RoutedNet {
                     net_id: route.net_id,

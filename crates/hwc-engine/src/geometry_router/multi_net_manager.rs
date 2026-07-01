@@ -1,5 +1,7 @@
 use crate::geometry::{BoundingBox, Point3D};
+use crate::geometry_router::entity_graph::EntityGraph;
 use crate::geometry_router::route_decomposition::RouteSegment;
+use crate::material::MaterialId;
 use crate::netlist::NetId;
 use rustc_hash::FxHashMap;
 
@@ -33,6 +35,13 @@ pub struct NetRoutingOrder {
 ///
 /// Isolates routing identities and parameters of separate nets.
 /// Manages net ordering, constraint propagation, and same-net collision bypass.
+///
+/// v0.1.8 — Roadmap 14.6: Collision detection moved from per-point HashMap tracking
+/// to EntityGraph R*-tree spatial index queries. The `check_conflict()` and
+/// `occupy_position()` methods now operate on `&EntityGraph` / `&mut EntityGraph`
+/// instead of maintaining a separate `FxHashMap<Point3D, NetId>` occupancy grid.
+/// The R*-tree provides O(log n) spatial queries and integrates with the unified
+/// EntityGraph that already indexes components, substrate layers, and routes.
 pub struct MultiNetManager {
     /// Per-net routing states
     pub states: FxHashMap<NetId, NetRouteState>,
@@ -98,31 +107,50 @@ impl MultiNetManager {
 
     /// Check if a point conflicts with a different-net obstacle.
     /// Allows same-net traces to overlap (same-net bypass).
+    ///
+    /// v0.1.8 — Roadmap 14.6: Multi-Net Position Tracking
+    /// v0.1.8 — Roadmap 14.6: Multi-Net Position Tracking
+    /// Replaced legacy `FxHashMap<Point3D, NetId>` collision tracking with
+    /// EntityGraph R*-tree spatial index queries. The R*-tree provides O(log n) nearest-
+    /// neighbor lookups instead of O(1) hash lookups that required maintaining a separate
+    /// dense occupancy map. This eliminates the parallel HashMap and unifies collision
+    /// detection under the single EntityGraph spatial index.
     #[inline]
     pub fn check_conflict(
         &self,
         point: Point3D,
         net_id: NetId,
-        occupied: &FxHashMap<Point3D, NetId>,
+        entity_graph: &EntityGraph,
     ) -> bool {
-        if let Some(&occupant_net) = occupied.get(&point) {
-            if occupant_net == net_id {
-                return false; // Same net — allowed to overlap
+        // Query the R*-tree for any spatial entities within 1nm of the point.
+        // The inter_net_clearance_nm is the minimum gap between different-net geometries,
+        // but for point occupancy we check at the point itself (zero radius).
+        let nearby = entity_graph.spatial().query_radius(point.x, point.y, 1);
+        for segment in &nearby {
+            if segment.net_id != net_id.raw() as usize {
+                return true; // Different net — conflict
             }
-            return true; // Different net — conflict
         }
-        false // Empty — no conflict
+        false // Empty or same-net only — no conflict
     }
 
-    /// Record that a net occupies a position.
+    /// Record that a net occupies a position in the EntityGraph spatial index.
+    ///
+    /// v0.1.8 — Roadmap 14.6: Multi-Net Position Tracking
+    /// v0.1.8 — Roadmap 14.6: Multi-Net Position Tracking
+    /// Replaced legacy `FxHashMap<Point3D, NetId>` occupancy recording with
+    /// EntityGraph `occupy_point()` which inserts a zero-length TraceSegment into the
+    /// canonical routed_segments list. The R*-tree is rebuilt via `rebuild_spatial_index()`
+    /// after routing completes, so individual point registrations go through the EntityGraph
+    /// directly rather than a separate HashMap.
     #[inline]
     pub fn occupy_position(
-        &self,
-        occupied: &mut FxHashMap<Point3D, NetId>,
+        entity_graph: &mut EntityGraph,
         pos: Point3D,
         net_id: NetId,
+        material: MaterialId,
     ) {
-        occupied.insert(pos, net_id);
+        entity_graph.occupy_point(pos, net_id, material);
     }
 
     /// Mark a net's segment as routed.

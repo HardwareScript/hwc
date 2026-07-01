@@ -33,8 +33,11 @@ pub struct GeometryRouter {
     /// v0.1.8 continuous database snap-step resolution in nanometers
     pub(super) resolution_nm: i64,
 
+    /// Material registry for physical thickness lookups (v0.1.8)
+    pub(super) material_registry: crate::material::MaterialRegistry,
+
     /// EntityGraph for component metadata, substrate layers, and spatial queries.
-    /// Replaces the legacy VoxelGrid for all engine-internal operations.
+    /// Single source of truth for all engine-internal operations.
     pub(super) entity_graph: super::super::EntityGraph,
 
     /// All vias placed during routing (for drill file generation)
@@ -113,6 +116,15 @@ pub struct GeometryRouter {
     /// the legacy TopologicalRouter, enabling guardrails (R25, Interior Lockout,
     /// Via-Portal Exemption) via `calculate_move_cost()`.
     pub sdf_generator: Option<super::super::sdf_generator::SdfGenerator>,
+
+    /// Routing trace material ID resolved from the stackup (set before routing).
+    /// Every `register_route` call stamps segments with this material so that
+    /// `rebuild_spatial_index` can look up thickness from the MaterialRegistry.
+    pub(super) routing_material_id: u8,
+
+    /// Trace width in nanometers resolved from fabrication constraints.
+    /// Every `register_route` call stamps segments with this width.
+    pub(super) trace_width_nm: i64,
 }
 
 /// Copper pour definition for anti-pad generation.
@@ -142,7 +154,11 @@ impl GeometryRouter {
     ///
     /// let router = GeometryRouter::new(bounds, constraints);
     /// ```
-    pub fn new(bounds: GridBounds, constraints: ConstraintRulebook) -> Self {
+    pub fn new(
+        bounds: GridBounds,
+        constraints: ConstraintRulebook,
+        material_registry: crate::material::MaterialRegistry,
+    ) -> Self {
         let resolution_nm = constraints.resolution_nm;
 
         // Extract layer directions from constraints
@@ -159,6 +175,7 @@ impl GeometryRouter {
             constraints,
             layer_directions,
             resolution_nm,
+            material_registry,
             entity_graph,
             vias: Vec::new(),
             copper_pours: Vec::new(),
@@ -174,6 +191,8 @@ impl GeometryRouter {
             query_store: None,
             route_net_policies: FxHashMap::default(),
             sdf_generator: None,
+            routing_material_id: 0,  // Default: AIR — must be set via set_routing_context()
+            trace_width_nm: 100_000, // Default: 100µm — must be set via set_routing_context()
         }
     }
 
@@ -190,17 +209,18 @@ impl GeometryRouter {
         self.route_net_policies = policies;
     }
 
+    /// Set the routing context: material and trace width for all subsequent routes.
+    ///
+    /// Must be called before `route_space()`. The material_id is resolved from the
+    /// stackup layer at the routing Z position, and trace_width from fabrication constraints.
+    pub fn set_routing_context(&mut self, material_id: u8, trace_width_nm: i64) {
+        self.routing_material_id = material_id;
+        self.trace_width_nm = trace_width_nm;
+    }
+
     /// Get all vias placed during routing (for drill file export).
     pub fn get_vias(&self) -> &[super::super::types::Via] {
         &self.vias
-    }
-
-    /// Clear a voxel (for rip-up and reroute).
-    ///
-    /// Removes the voxel from the occupied voxels map, making it available
-    /// for routing again.
-    pub fn clear_voxel(&mut self, _point: Point3D) {
-        // Voxel system removed - EntityGraph manages occupancy
     }
 
     /// Add a copper pour to the router (for anti-pad generation).
@@ -384,9 +404,6 @@ impl GeometryRouter {
         }
         self.net_frequencies = net_frequencies.clone();
 
-        // Build the Entity Graph from VoxelGrid component metadata.
-        // This populates the SceneGraph + R*-tree spatial index for vector-first
-        // collision queries that the router can use alongside VoxelGrid.
         self.build_entity_graph();
 
         // v0.1.8: Build SDF generator for Leap-Frog A* routing.
@@ -394,16 +411,8 @@ impl GeometryRouter {
         // and provides the distance field needed by calculate_move_cost() for
         // guardrails (R25 non-routable layers, Interior Lockout, Via-Portal Exemption).
         {
-            let x_size = ((grid_bbox.max.x - grid_bbox.min.x) / self.resolution_nm).max(1) as usize;
-            let y_size = ((grid_bbox.max.y - grid_bbox.min.y) / self.resolution_nm).max(1) as usize;
-            let z_size = ((grid_bbox.max.z - grid_bbox.min.z) / self.resolution_nm).max(1) as usize;
             let mut sdf = super::super::sdf_generator::SdfGenerator::new(
-                x_size, y_size, z_size,
-                super::super::sdf_generator::VoxelSize {
-                    x_nm: self.resolution_nm,
-                    y_nm: self.resolution_nm,
-                    z_nm: self.resolution_nm,
-                },
+                self.resolution_nm,
                 0, // substrate_height_nm
             );
             for meta in self.entity_graph.get_component_metadata() {
@@ -552,7 +561,7 @@ impl GeometryRouter {
 
         // Step 3: Route cross-cell nets in parallel on the full board.
         // Each net is routed independently (no inter-net collision tracking during parallel phase),
-        // then results are merged sequentially to build the occupied_voxels map.
+        // then results are merged sequentially. The EntityGraph / spatial index owns occupancy.
         // This produces straight traces (no G-Cell boundary jogs) with parallel A* speed.
         let t_cross = std::time::Instant::now();
         if !cross_cell_nets.is_empty() {
@@ -577,7 +586,7 @@ impl GeometryRouter {
                         );
                     }
 
-                    // Create an isolated router clone for this net (no shared occupied_voxels)
+                    // Create an isolated router clone for this net
                     let mut isolated_entity_graph = super::super::EntityGraph::new();
                     // v0.1.7: Propagate component metadata to the isolated router.
                     // This ensures the A* solver "sees" pads as obstacles for Interior Lockout.
@@ -588,6 +597,7 @@ impl GeometryRouter {
                         constraints: self.constraints.clone(),
                         layer_directions: self.layer_directions.clone(),
                         resolution_nm: self.resolution_nm,
+                        material_registry: self.material_registry.clone(),
                         entity_graph: isolated_entity_graph,
                         vias: Vec::new(),
                         copper_pours: self.copper_pours.clone(),
@@ -602,7 +612,9 @@ impl GeometryRouter {
                         partition_grid: None,
                         query_store: None,
                         route_net_policies: self.route_net_policies.clone(),
-                        sdf_generator: None, // Isolated router: rebuild SDF if needed
+                        sdf_generator: None,
+                        routing_material_id: self.routing_material_id,
+                        trace_width_nm: self.trace_width_nm,
                     };
 
                     let result = isolated.decompose_net_steiner(net_id, pins);
@@ -610,7 +622,7 @@ impl GeometryRouter {
                 })
                 .collect();
 
-            // Phase 3b: Merge results sequentially into final_result + build occupied_voxels
+            // Phase 3b: Merge results sequentially into final_result
             for (net_id, result) in cross_results {
                 let routed = result.map_err(|e| {
                     // eprintln!(
@@ -622,7 +634,12 @@ impl GeometryRouter {
 
                 // Record routed segments canonically in the EntityGraph for subsequent nets
                 for segment in &routed.paths {
-                    self.entity_graph.register_route(net_id, segment);
+                    self.entity_graph.register_route(
+                        net_id,
+                        segment,
+                        self.routing_material_id,
+                        self.trace_width_nm,
+                    );
                 }
 
                 final_result.paths.insert(net_id, routed.paths);
@@ -694,6 +711,7 @@ impl GeometryRouter {
                         constraints: self.constraints.clone(),
                         layer_directions: self.layer_directions.clone(),
                         resolution_nm: self.resolution_nm,
+                        material_registry: self.material_registry.clone(),
                         entity_graph: super::super::EntityGraph::new(),
                         vias: Vec::new(),
                         copper_pours: Vec::new(),
@@ -708,7 +726,9 @@ impl GeometryRouter {
                         partition_grid: None,
                         query_store: None,
                         route_net_policies: self.route_net_policies.clone(),
-                        sdf_generator: None, // Cell router: will be built in route_space
+                        sdf_generator: None,
+                        routing_material_id: self.routing_material_id,
+                        trace_width_nm: self.trace_width_nm,
                     };
 
                     let local_nets: FxHashMap<crate::netlist::NetId, Vec<crate::geometry::Point3D>> =
@@ -829,6 +849,7 @@ impl GeometryRouter {
                             constraints: self.constraints.clone(),
                             layer_directions: self.layer_directions.clone(),
                             resolution_nm: self.resolution_nm,
+                            material_registry: self.material_registry.clone(),
                             entity_graph: super::super::EntityGraph::new(),
                             vias: Vec::new(),
                             copper_pours: Vec::new(),
@@ -843,7 +864,9 @@ impl GeometryRouter {
                             partition_grid: None,
                             query_store: None,
                             route_net_policies: self.route_net_policies.clone(),
-                            sdf_generator: None, // Cell router: will be built in route_space
+                            sdf_generator: None,
+                            routing_material_id: self.routing_material_id,
+                            trace_width_nm: self.trace_width_nm,
                         };
 
                         let local_nets: FxHashMap<
@@ -925,7 +948,7 @@ impl GeometryRouter {
         Ok(final_result)
     }
 
-    /// Add a component obstacle to the router's VoxelGrid (GAP3).
+    /// Add a component obstacle (GAP3).
     ///
     /// This enables the router to avoid routing through components.
     /// Components are stored as sparse metadata (bounding boxes only).
@@ -952,7 +975,7 @@ impl GeometryRouter {
         );
     }
 
-    /// Add a component pin to the router's VoxelGrid (GAP3).
+    /// Add a component pin (GAP3).
     ///
     /// This allows the router to route TO component pins (endpoints)
     /// while blocking routing THROUGH components.
@@ -1009,6 +1032,6 @@ impl GeometryRouter {
         }
 
         // Build the R*-tree spatial index from all placed instances
-        self.entity_graph.rebuild_spatial_index();
+        self.entity_graph.rebuild_spatial_index(&self.material_registry);
     }
 }

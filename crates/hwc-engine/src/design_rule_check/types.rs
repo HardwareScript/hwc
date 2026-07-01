@@ -30,11 +30,11 @@ pub enum DrcViolation {
         location: Point3D,
     },
 
-    /// Thermal violation (temperature too high).
-    ThermalViolation {
+    /// Current density exceeds material limit (electromigration/ampacity)
+    CurrentDensityViolation {
         net: CompactString,
-        temperature_c: f64,
-        max_c: f64,
+        actual_density_a_mm2: f64,
+        max_density_a_mm2: f64,
         location: Point3D,
     },
 
@@ -123,16 +123,16 @@ impl fmt::Display for DrcViolation {
                     *required_nm as f64 / 1_000_000.0
                 )
             }
-            DrcViolation::ThermalViolation {
+            DrcViolation::CurrentDensityViolation {
                 net,
-                temperature_c,
-                max_c,
+                actual_density_a_mm2,
+                max_density_a_mm2,
                 location,
             } => {
                 write!(
                     f,
-                    "Thermal violation for {} at {}: {:.1}°C actual, {:.1}°C max",
-                    net, location, temperature_c, max_c
+                    "Current density violation for {} at {}: {:.2} A/mm² actual, {:.2} A/mm² max",
+                    net, location, actual_density_a_mm2, max_density_a_mm2
                 )
             }
             DrcViolation::ImpedanceViolation {

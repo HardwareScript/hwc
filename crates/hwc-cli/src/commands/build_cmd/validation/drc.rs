@@ -12,12 +12,26 @@ pub fn run_drc_check(
     // Skip DRC if no fabrication constraints are defined
     // DRC requires a profile with min_trace_width, min_spacing, etc.
     if space.fabrication_constraints.is_none() {
+        eprintln!("[DRC DEBUG] Skipped - no fabrication constraints");
         if config.verbose {
             println!("ℹ️  DRC skipped: No fabrication profile defined");
             println!("   Add a 'profile:' clause to your space to enable DRC");
         }
         return Ok(());
     }
+
+    eprintln!("[DRC DEBUG] Running DRC check...");
+    eprintln!("[DRC DEBUG] Spatial index: {} entities", space.entity_graph.spatial().len());
+    eprintln!("[DRC DEBUG] Routed segments: {} nets", space.entity_graph.get_all_routes().len());
+    eprintln!("[DRC DEBUG] Analytic routes: {} traces", space.analytic_routes.len());
+    eprintln!("[DRC DEBUG] Substrate layers: {} pours", space.entity_graph.get_substrate_layers().len());
+    
+    // Count route segments
+    let mut total_route_segs = 0;
+    for (_net_id, segments) in space.entity_graph.get_all_routes() {
+        total_route_segs += segments.len();
+    }
+    eprintln!("[DRC DEBUG] Total route segments across all nets: {}", total_route_segs);
 
     if config.verbose {
         println!("🔍 Running Design Rule Check (DRC)...");
@@ -58,62 +72,23 @@ pub fn run_drc_check(
         };
 
         constraint_rulebook.set_fabrication_constraints(fab_constraints);
-
-        // Load thermal constraints from profile (v0.1.8: Proper PDK integration)
-        if let Some(ref thermal) = constraints.thermal {
-            constraint_rulebook.max_temp_rise_c = Some(thermal.max_temp_rise_c);
-            constraint_rulebook.ambient_temp_c = Some(thermal.ambient_temp_c);
-        }
     }
 
-    // Run DRC — fully analytic, no voxel scanning
+    // Run DRC — fully analytic (includes via checks inside validate_physics_parallel)
     let drc_checker = DesignRuleChecker::new();
-    let mut drc_report = drc_checker
+    let drc_report = drc_checker
         .check(space, &constraint_rulebook)
         .map_err(|e| miette::miette!(e))?;
 
-    // Task 4.2: Run analytic via checks (Primitives Over Pixels)
-    let via_diameter_report = hwc_engine::design_rule_check::validate_via_diameters_analytic(
-        &space.contacts,
-        &constraint_rulebook,
-    );
-
-    // Merge via diameter violations into main report
-    for violation in via_diameter_report.violations {
-        drc_report.add_violation(violation);
-    }
-
-    // Run analytic via enclosure check
-    let substrate_layers = space.entity_graph.get_substrate_layers();
-    let via_enclosure_report = hwc_engine::design_rule_check::validate_via_enclosure_analytic(
-        &space.contacts,
-        substrate_layers,
-        &constraint_rulebook,
-        &space.netlist,
-        &space.material_registry,
-        &space.analytic_routes,
-    );
-
-    // Merge via enclosure violations into main report
-    for violation in via_enclosure_report.violations {
-        drc_report.add_violation(violation);
-    }
-
-    // v0.1.7: Run analytic drill-to-drill clearance check (Primitives Over Pixels)
-    let drill_clearance_report = hwc_engine::design_rule_check::validate_drill_to_drill_clearance(
-        &space.contacts,
-        &constraint_rulebook,
-    );
-
-    // Merge drill clearance violations into main report
-    for violation in drill_clearance_report.violations {
-        drc_report.add_violation(violation);
-    }
-
-    // v0.1.7: Physics validator removed with Voxel system
+    // v0.1.7: Physics validator removed
 
     if !drc_report.is_valid() {
         println!("\n❌ DRC VIOLATIONS DETECTED:");
+        
+        // v0.1.9: DEBUG - Log spatial index state for diagnosis
+        eprintln!("[DRC DEBUG] Spatial index contains {} entities", space.entity_graph.spatial().len());
+        eprintln!("[DRC DEBUG] Entity graph has {} routed segments", space.entity_graph.get_all_routes().len());
+        eprintln!("[DRC DEBUG] Space has {} analytic routes", space.analytic_routes.len());
 
         // Group violations by type for cleaner output
         use rustc_hash::FxHashMap;

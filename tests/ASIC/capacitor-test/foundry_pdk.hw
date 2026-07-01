@@ -1,0 +1,41 @@
+# Multi-layer PDK for capacitor structure
+import * from materials
+
+profile Capacitor_PDK:
+    technology: "ASIC"
+    
+    stackup:
+        substrate:    [material: Silicon,         thickness: 200nm, routable: false]
+        bottom_metal: [material: Aluminum,        thickness: 100nm, routable: true]
+        dielectric:   [material: Silicon_Dioxide, thickness: 50nm,  routable: false]
+        top_metal:    [material: Copper,          thickness: 100nm, routable: true]
+    
+    trace:
+        min_width: 200nm
+        min_spacing: 200nm
+    
+    via:
+        min_diameter: 300nm
+        min_annular_ring: 150nm
+        min_spacing: 400nm
+        shape: cylinder
+    
+    manufacturing:
+        copper_thickness: 100nm
+    
+    clearance:
+        high_voltage: 500nm
+        safety_factor: 2.0
+    
+    layer:
+        min_thickness: 50nm
+        allowed_conductors: [Aluminum, Copper]
+        allowed_dielectrics: [Silicon_Dioxide, Silicon]
+    
+    routing:
+        max_local_route_length: 20um
+    
+    thermal:
+        ambient_temp: 25C
+        max_operating_temp: 125C
+        max_temp_rise: 10C

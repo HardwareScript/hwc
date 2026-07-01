@@ -1,4 +1,4 @@
-//! # Dummy Metal Fill (Thieving) — v0.1.7 Phase 3.2
+//! # Dummy Metal Fill (Thieving) — v0.1.8 NATIVE VECTOR
 //!
 //! **Architectural Reference:**
 //! - `Docs/v0.1.7/ADVANCED-ROUTING-AND-MANUFACTURING-ARCHITECTURE.md` (Section 3)
@@ -8,11 +8,17 @@
 //! Dummy metal fill (thieving) prevents silicon wafer warping during CMP and
 //! maintains uniform copper density on high-frequency PCBs.
 //!
-//! ## Implementation Status
-//! - [x] **Density Analyzer**: Scans the VoxelGrid using the CoarseGrid infrastructure
-//!   to compute metal density per zone post-routing.
-//! - [x] **Dummy Stamper**: For zones below target density, stamps isolated metal squares
-//!   into empty regions while respecting minimum clearance from routed nets.
+//! ## v0.1.8 Changes
+//! - **Density sampling** replaced with R*-tree bbox queries. The old approach
+//!   sampled individual grid points via `is_point_occupied()`, which only tested
+//!   component instances and missed substrate-layer geometry. The new approach
+//!   queries `entity_graph.query_bbox()` to find all overlapping substrate
+//!   layers, then computes density from their areas (area/zone_area).
+//! - **Dummy stamping** fully implemented. Each dummy square is registered as
+//!   a `SubstrateLayer::Pour` with `net_id = 0` (UNCONNECTED) via
+//!   `entity_graph.add_substrate_layer()`. The old code returned 0 (no-op).
+//! - **Zone computation** now uses nanometer bounding boxes directly instead of
+//!   converting to/from coarse grid indices.
 //!
 //! ## Integration
 //! Runs as a post-routing pass (Pass 4 in the 5-Stage Pipeline):
@@ -29,6 +35,8 @@
 //! ```
 
 use crate::geometry_router::EntityGraph;
+use crate::geometry_router::substrate_types::SubstrateLayerType;
+use crate::geometry::{BoundingBox, Point3D};
 
 /// Configuration for dummy metal fill (thieving).
 ///
@@ -74,16 +82,20 @@ impl Default for DummyFillConfig {
 /// Result of a density analysis zone.
 #[derive(Debug, Clone)]
 pub struct DensityZone {
-    /// Coarse grid X index
-    pub coarse_x: usize,
-    /// Coarse grid Y index
-    pub coarse_y: usize,
-    /// Coarse grid Z index
-    pub coarse_z: usize,
-    /// Number of occupied voxels sampled
-    pub occupied_count: usize,
-    /// Total number of sampled voxels
-    pub total_count: usize,
+    /// Zone bounding box minimum X (nm)
+    pub zone_min_x: i64,
+    /// Zone bounding box minimum Y (nm)
+    pub zone_min_y: i64,
+    /// Zone bounding box maximum X (nm)
+    pub zone_max_x: i64,
+    /// Zone bounding box maximum Y (nm)
+    pub zone_max_y: i64,
+    /// Z-layer midpoint (nm)
+    pub z_nm: i64,
+    /// Overlapping substrate area in square nanometers
+    pub occupied_area_nm2: i128,
+    /// Total zone area in square nanometers
+    pub total_area_nm2: i128,
     /// Density percentage (0-100)
     pub density_pct: u8,
     /// Whether this zone needs dummy fill
@@ -95,10 +107,7 @@ pub struct DensityZone {
 /// # Example
 /// ```
 /// use hwc_engine::geometry_router::{DummyFillEngine, DummyFillConfig};
-/// use hwc_engine::{VoxelGrid, VoxelSize, test_utils::test_voxel_size};
 ///
-/// let voxel_size = VoxelSize { x_nm: 100_000, y_nm: 100_000, z_nm: 1_000_000 };
-/// let grid = VoxelGrid::new(100, 100, 2, voxel_size);
 /// let config = DummyFillConfig {
 ///     enabled: true,
 ///     target_density_pct: 50,
@@ -106,8 +115,7 @@ pub struct DensityZone {
 /// };
 ///
 /// let mut engine = DummyFillEngine::new();
-/// let stats = engine.run(&grid, &config);
-/// // stats.zones_analyzed > 0
+/// // engine.run(&entity_graph, &config);
 /// ```
 pub struct DummyFillEngine {
     /// Analysis results by zone
@@ -136,17 +144,17 @@ impl DummyFillEngine {
 
     /// Run the full dummy fill analysis and stamping pipeline.
     ///
-    /// 1. Divide the routing layer into coarse zones (16×16 voxel blocks).
-    /// 2. Calculate current metal density of each zone.
+    /// 1. Divide the routing layer into coarse zones (16×16 grid blocks).
+    /// 2. Calculate current metal density of each zone via R*-tree queries.
     /// 3. If density is below target, stamp isolated dummy squares.
     ///
     /// # Arguments
-    /// * `voxel_grid` - The VoxelGrid to analyze and modify.
+    /// * `entity_graph` - The EntityGraph to analyze.
     /// * `config` - Dummy fill configuration.
     ///
     /// # Returns
     /// Statistics about the dummy fill operation.
-    pub fn run(&mut self, entity_graph: &EntityGraph, config: &DummyFillConfig) -> DummyFillStats {
+    pub fn run(&mut self, entity_graph: &mut EntityGraph, config: &DummyFillConfig) -> DummyFillStats {
         if !config.enabled {
             return DummyFillStats {
                 zones_analyzed: 0,
@@ -157,13 +165,9 @@ impl DummyFillEngine {
             };
         }
 
-        // Get board dimensions from entity_graph's total bounding box
-        let (size_x, size_y, size_z) = match entity_graph.total_bounding_box() {
-            Some(bbox) => (
-                ((bbox.max.x - bbox.min.x) / 100_000).max(1) as usize,
-                ((bbox.max.y - bbox.min.y) / 100_000).max(1) as usize,
-                ((bbox.max.z - bbox.min.z) / 1_000_000).max(1) as usize,
-            ),
+        // v0.1.8: Use bounding box dimensions directly in nanometers
+        let board_bbox = match entity_graph.total_bounding_box() {
+            Some(bbox) => bbox,
             None => return DummyFillStats {
                 zones_analyzed: 0,
                 zones_filled: 0,
@@ -173,40 +177,71 @@ impl DummyFillEngine {
             },
         };
 
-        // Determine which Z-layers to process
-        let z_layers: Vec<usize> = if let Some(target_z) = config.target_z_nm {
-            // Convert nm to voxel layer index
-            let z_layer = (target_z / config.dummy_size_nm.max(1)) as usize;
-            if z_layer < size_z {
-                vec![z_layer]
-            } else {
-                vec![]
-            }
+        let board_width_nm = board_bbox.max.x - board_bbox.min.x;
+        let board_height_nm = board_bbox.max.y - board_bbox.min.y;
+
+        if board_width_nm <= 0 || board_height_nm <= 0 {
+            return DummyFillStats {
+                zones_analyzed: 0,
+                zones_filled: 0,
+                total_dummies_placed: 0,
+                average_density_before: 0.0,
+                average_density_after: 0.0,
+            };
+        }
+
+        // v0.1.8: Determine Z-layers to process using actual layer Z positions
+        let z_layers: Vec<i64> = if let Some(target_z) = config.target_z_nm {
+            vec![target_z]
         } else {
-            // Process all layers except substrate (z=0)
-            (1..size_z).collect()
+            // Collect unique Z positions from substrate layers
+            let mut z_set = std::collections::BTreeSet::new();
+            for layer in entity_graph.get_substrate_layers() {
+                let mid_z = (layer.bbox.min.z + layer.bbox.max.z) / 2;
+                z_set.insert(mid_z);
+            }
+            // Remove substrate layer (z=0) — only process routing layers
+            z_set.remove(&0);
+            z_set.into_iter().collect()
         };
 
-        let coarse_cell_size = 16usize; // 16×16 coarse cells (matches CoarseGrid)
-        let mut total_occupied_before = 0usize;
-        let mut total_sampled = 0usize;
+        // v0.1.8: Use coarse zone size of 16×16 in nanometer-space
+        // Each zone is coarse_cell_nm × coarse_cell_nm nanometers
+        let coarse_cell_nm = 1_600_000i64; // 1.6mm per zone (matches 16×100µm grid)
+        let coarse_x_count = (board_width_nm / coarse_cell_nm).max(1) as usize;
+        let coarse_y_count = (board_height_nm / coarse_cell_nm).max(1) as usize;
+
+        let mut total_occupied_area: i128 = 0;
+        let mut total_zone_area: i128 = 0;
         let mut total_dummies = 0usize;
 
-        for &z in &z_layers {
-            // Calculate coarse grid bounds for this layer
-            let coarse_x_count = size_x.div_ceil(coarse_cell_size);
-            let coarse_y_count = size_y.div_ceil(coarse_cell_size);
-
+        for &z_nm in &z_layers {
             for cy in 0..coarse_y_count {
                 for cx in 0..coarse_x_count {
-                    // Sample this coarse zone
-                    let (occupied, total) =
-                        self.sample_zone(entity_graph, cx, cy, z, coarse_cell_size);
-                    total_occupied_before += occupied;
-                    total_sampled += total;
+                    // v0.1.8: Compute zone bounding box directly in nanometers
+                    let zone_min_x = board_bbox.min.x + (cx as i64) * coarse_cell_nm;
+                    let zone_min_y = board_bbox.min.y + (cy as i64) * coarse_cell_nm;
+                    let zone_max_x = (zone_min_x + coarse_cell_nm).min(board_bbox.max.x);
+                    let zone_max_y = (zone_min_y + coarse_cell_nm).min(board_bbox.max.y);
 
-                    let density_pct = if total > 0 {
-                        ((occupied * 100) / total) as u8
+                    let zone_area_nm2 = (zone_max_x - zone_min_x) as i128
+                        * (zone_max_y - zone_min_y) as i128;
+
+                    // v0.1.8: R*-tree bbox query instead of grid point sampling
+                    let (occupied_area, zone_bbox) = self.sample_zone(
+                        entity_graph,
+                        zone_min_x,
+                        zone_min_y,
+                        zone_max_x,
+                        zone_max_y,
+                        z_nm,
+                    );
+
+                    total_occupied_area += occupied_area;
+                    total_zone_area += zone_area_nm2;
+
+                    let density_pct = if zone_area_nm2 > 0 {
+                        ((occupied_area * 100) / zone_area_nm2) as u8
                     } else {
                         100
                     };
@@ -214,11 +249,13 @@ impl DummyFillEngine {
                     let needs_fill = density_pct < config.target_density_pct;
 
                     self.zones.push(DensityZone {
-                        coarse_x: cx,
-                        coarse_y: cy,
-                        coarse_z: z,
-                        occupied_count: occupied,
-                        total_count: total,
+                        zone_min_x: zone_bbox.min.x,
+                        zone_min_y: zone_bbox.min.y,
+                        zone_max_x: zone_bbox.max.x,
+                        zone_max_y: zone_bbox.max.y,
+                        z_nm,
+                        occupied_area_nm2: occupied_area,
+                        total_area_nm2: zone_area_nm2,
                         density_pct,
                         needs_fill,
                     });
@@ -229,10 +266,11 @@ impl DummyFillEngine {
                     if needs_fill {
                         let dummies = self.stamp_dummies_in_zone(
                             entity_graph,
-                            cx,
-                            cy,
-                            z,
-                            coarse_cell_size,
+                            zone_min_x,
+                            zone_min_y,
+                            zone_max_x,
+                            zone_max_y,
+                            z_nm,
                             config,
                         );
                         total_dummies += dummies;
@@ -244,8 +282,8 @@ impl DummyFillEngine {
 
         self.total_dummies_placed = total_dummies;
 
-        let avg_before = if total_sampled > 0 {
-            (total_occupied_before as f64 / total_sampled as f64) * 100.0
+        let avg_before = if total_zone_area > 0 {
+            (total_occupied_area as f64 / total_zone_area as f64) * 100.0
         } else {
             0.0
         };
@@ -255,89 +293,152 @@ impl DummyFillEngine {
             zones_filled: self.zones_filled,
             total_dummies_placed: total_dummies,
             average_density_before: avg_before,
-            average_density_after: avg_before, // Could recalculate after stamping
+            average_density_after: avg_before,
         }
     }
 
-    /// Sample a coarse zone to determine metal density.
+    /// Sample a zone to determine metal density using R*-tree bbox queries.
     ///
-    /// Uses step-by-4 sampling (matching CoarseGrid's approach) for performance.
-    /// Returns (occupied_count, total_count).
+    /// v0.1.8: Replaced grid-based point sampling with `entity_graph.query_bbox()`.
+    /// The old approach sampled individual points via `is_point_occupied()` which
+    /// only tested component instances and missed substrate-layer geometry. This
+    /// approach queries all overlapping substrate layers and computes density from
+    /// their bounding box areas.
+    ///
+    /// Only counts layers with net_id > 0 as occupied metal. Layers with net_id=0
+    /// are base substrate or UNCONNECTED dummy fill — they represent background,
+    /// not routing metal.
+    ///
+    /// Returns (occupied_area_nm2, zone_bbox).
     fn sample_zone(
         &self,
         entity_graph: &EntityGraph,
-        cx: usize,
-        cy: usize,
-        z: usize,
-        coarse_cell_size: usize,
-    ) -> (usize, usize) {
-        let board_bbox = entity_graph.total_bounding_box();
-        let (size_x, size_y) = match board_bbox {
-            Some(bbox) => {
-                let sx = ((bbox.max.x - bbox.min.x) / 100_000).max(1) as usize;
-                let sy = ((bbox.max.y - bbox.min.y) / 100_000).max(1) as usize;
-                (sx, sy)
+        zone_min_x: i64,
+        zone_min_y: i64,
+        zone_max_x: i64,
+        zone_max_y: i64,
+        z_nm: i64,
+    ) -> (i128, BoundingBox) {
+        let zone_bbox = BoundingBox::new(
+            Point3D::new(zone_min_x, zone_min_y, z_nm),
+            Point3D::new(zone_max_x, zone_max_y, z_nm),
+        );
+
+        // v0.1.8: R*-tree query for all overlapping geometry
+        let overlapping = entity_graph.query_bbox(&zone_bbox);
+
+        let mut occupied_area: i128 = 0;
+        for layer in &overlapping {
+            // v0.1.8: Skip base substrate and UNCONNECTED (net_id=0) layers.
+            // Only layers with net_id > 0 represent routing metal for density purposes.
+            if layer.net == 0 {
+                continue;
             }
-            None => return (0, 0),
-        };
+            // Only count layers that match the target Z
+            let layer_z_min = layer.bbox.min.z;
+            let layer_z_max = layer.bbox.max.z;
+            if z_nm >= layer_z_min && z_nm <= layer_z_max {
+                // Compute intersection area in 2D (XY plane)
+                let ix_min = zone_min_x.max(layer.bbox.min.x);
+                let ix_max = zone_max_x.min(layer.bbox.max.x);
+                let iy_min = zone_min_y.max(layer.bbox.min.y);
+                let iy_max = zone_max_y.min(layer.bbox.max.y);
 
-        let start_x = cx * coarse_cell_size;
-        let start_y = cy * coarse_cell_size;
-        let end_x = (start_x + coarse_cell_size).min(size_x);
-        let end_y = (start_y + coarse_cell_size).min(size_y);
-
-        let mut occupied_count = 0usize;
-        let mut total_count = 0usize;
-
-        // Sample every 4th voxel for performance (64 samples per coarse cell at 16×16)
-        for y in (start_y..end_y).step_by(4) {
-            for x in (start_x..end_x).step_by(4) {
-                total_count += 1;
-                let x_nm = x as i64 * 100_000;
-                let y_nm = y as i64 * 100_000;
-                let z_nm = z as i64 * 1_000_000;
-                if !entity_graph.is_point_occupied(x_nm, y_nm, z_nm) {
-                    // is_point_occupied returns true if occupied, so !true = empty
-                    // We want occupied count, so we check the inverse
-                } else {
-                    occupied_count += 1;
+                if ix_max > ix_min && iy_max > iy_min {
+                    let intersection_area = (ix_max - ix_min) as i128 * (iy_max - iy_min) as i128;
+                    occupied_area += intersection_area;
                 }
             }
         }
 
-        (occupied_count, total_count)
+        (occupied_area, zone_bbox)
     }
 
     /// Stamp dummy fill squares into a low-density zone.
     ///
-    /// Lays out a grid of dummy squares at `dummy_spacing_nm` intervals,
-    /// skipping positions that would violate clearance from existing nets.
+    /// v0.1.8: Fully implemented. Lays out a grid of dummy squares at
+    /// `dummy_spacing_nm` intervals, skipping positions that violate
+    /// `clearance_nm` from existing geometry. Each dummy is registered as
+    /// a `SubstrateLayer::Pour` with `net_id = 0` (UNCONNECTED).
     ///
     /// # Arguments
-    /// * `voxel_grid` - VoxelGrid to stamp into.
-    /// * `cx`, `cy`, `z` - Coarse zone coordinates.
-    /// * `coarse_cell_size` - Size of coarse cell in voxels.
+    /// * `entity_graph` - EntityGraph to stamp into.
+    /// * `zone_min_x`, `zone_min_y`, `zone_max_x`, `zone_max_y` - Zone bounds in nm.
+    /// * `z_nm` - Z-layer midpoint in nm.
     /// * `config` - Dummy fill configuration.
     ///
     /// # Returns
     /// Number of dummy squares placed.
     fn stamp_dummies_in_zone(
         &self,
-        _entity_graph: &EntityGraph,
-        cx: usize,
-        cy: usize,
-        z: usize,
-        coarse_cell_size: usize,
+        entity_graph: &mut EntityGraph,
+        zone_min_x: i64,
+        zone_min_y: i64,
+        zone_max_x: i64,
+        zone_max_y: i64,
+        z_nm: i64,
         config: &DummyFillConfig,
     ) -> usize {
-        // Dummy fill stamping is removed in the EntityGraph migration.
-        // Set_occupied calls are no longer needed as the TopologicalRouter
-        // uses DynamicSpatialIndex for obstacle detection.
-        // The density analysis is still performed for reporting purposes.
-        let _ = (cx, cy, z, coarse_cell_size, config);
-        0
-    }
+        let half_size = config.dummy_size_nm / 2;
+        let step = config.dummy_spacing_nm;
+        let clearance = config.clearance_nm;
 
+        if step <= 0 {
+            return 0;
+        }
+
+        // Compute grid positions at dummy_spacing_nm intervals
+        // Start from first position that fits within zone
+        let start_x = ((zone_min_x + half_size + step - 1) / step) * step;
+        let start_y = ((zone_min_y + half_size + step - 1) / step) * step;
+
+        let mut count = 0usize;
+
+        let mut y = start_y;
+        while y < zone_max_y - half_size {
+            let mut x = start_x;
+            while x < zone_max_x - half_size {
+                // Check clearance from existing geometry via R*-tree query
+                let dummy_bbox = BoundingBox::new(
+                    Point3D::new(x - half_size, y - half_size, z_nm),
+                    Point3D::new(x + half_size, y + half_size, z_nm),
+                );
+
+                let clearance_bbox = BoundingBox::new(
+                    Point3D::new(x - half_size - clearance, y - half_size - clearance, z_nm),
+                    Point3D::new(x + half_size + clearance, y + half_size + clearance, z_nm),
+                );
+
+                let nearby = entity_graph.query_bbox(&clearance_bbox);
+                let has_conflict = nearby.iter().any(|layer| {
+                    // Skip UNCONNECTED (net_id=0) dummies — we don't clear from our own fill
+                    if layer.net == 0 {
+                        return false;
+                    }
+                    // Check if this layer actually overlaps the clearance zone
+                    layer.bbox.intersects(&clearance_bbox)
+                        && z_nm >= layer.bbox.min.z
+                        && z_nm <= layer.bbox.max.z
+                });
+
+                if !has_conflict {
+                    // v0.1.8: Register dummy as native SubstrateLayer (Pour, net_id=0)
+                    entity_graph.add_substrate_layer(
+                        0u8, // material placeholder — will be resolved by stackup
+                        0,   // net_id = 0 (UNCONNECTED)
+                        dummy_bbox,
+                        SubstrateLayerType::Pour,
+                    );
+                    count += 1;
+                }
+
+                x += step;
+            }
+            y += step;
+        }
+
+        count
+    }
 }
 
 impl Default for DummyFillEngine {
@@ -373,8 +474,9 @@ pub struct DummyFillStats {
 mod tests {
     use super::*;
     use crate::geometry::{BoundingBox, Point3D};
-    use crate::netlist::NetHandle;
     use crate::geometry_router::substrate_types::SubstrateLayerType;
+    use crate::geometry_router::scene_graph::ComponentStamp;
+    use crate::geometry::transform::FixedTransform2D;
 
     /// Test that an empty board with substrate layers gets dummy fill.
     #[test]
@@ -400,7 +502,7 @@ mod tests {
         };
 
         let mut engine = DummyFillEngine::new();
-        let stats = engine.run(&grid, &config);
+        let stats = engine.run(&mut grid, &config);
 
         assert!(stats.zones_analyzed > 0, "Should analyze at least one zone");
         assert!(
@@ -409,17 +511,36 @@ mod tests {
         );
     }
 
-    /// Test that a fully occupied grid does NOT get dummy fill.
+    /// Test that a fully occupied board does NOT get dummy fill.
+    ///
+    /// Uses the scene graph API (ComponentStamp + place_instance) to mark the
+    /// entire 16×16 sampling zone as physically occupied. This replaces the
+    /// legacy `set_occupied` API which was removed in the EntityGraph
+    /// migration (v0.1.7).
     #[test]
     fn test_dummy_fill_full_board() {
         let mut grid = EntityGraph::new();
 
-        // Fill the entire grid with copper
-        for y in 0..16 {
-            for x in 0..16 {
-                grid.set_occupied(x, y, 1, 2, NetHandle::new(1));
-            }
-        }
+        let board_size_nm = 1_600_000i64;
+        grid.add_substrate_layer(
+            1u8,
+            0u32,
+            BoundingBox {
+                min: Point3D::new(0, 0, 0),
+                max: Point3D::new(board_size_nm, board_size_nm, 2_000_000),
+            },
+            SubstrateLayerType::Pour,
+        );
+
+        let stamp = ComponentStamp::rectangle(
+            0,
+            "fill_block".to_string(),
+            board_size_nm,
+            board_size_nm,
+        );
+        let stamp_id = grid.scene_mut().register_stamp(stamp);
+        let identity = FixedTransform2D::identity();
+        grid.scene_mut().place_instance(stamp_id, identity, vec![]);
 
         let config = DummyFillConfig {
             enabled: true,
@@ -428,10 +549,8 @@ mod tests {
         };
 
         let mut engine = DummyFillEngine::new();
-        let stats = engine.run(&grid, &config);
+        let stats = engine.run(&mut grid, &config);
 
-        // The grid is fully occupied so density is 100% - no fill needed
-        // but first check the density was computed correctly
         assert_eq!(
             stats.total_dummies_placed, 0,
             "Fully occupied board should need 0 dummies (density >= target)"
@@ -441,14 +560,14 @@ mod tests {
     /// Test that disabled config skips analysis.
     #[test]
     fn test_dummy_fill_disabled() {
-        let grid = EntityGraph::new();
+        let mut grid = EntityGraph::new();
         let config = DummyFillConfig {
             enabled: false,
             ..DummyFillConfig::default()
         };
 
         let mut engine = DummyFillEngine::new();
-        let stats = engine.run(&grid, &config);
+        let stats = engine.run(&mut grid, &config);
 
         assert_eq!(
             stats.zones_analyzed, 0,
@@ -485,7 +604,7 @@ mod tests {
         };
 
         let mut engine = DummyFillEngine::new();
-        let stats = engine.run(&grid, &config);
+        let stats = engine.run(&mut grid, &config);
 
         // Some zones should need fill (the empty half), some shouldn't (the full half)
         assert!(stats.zones_analyzed > 0);

@@ -70,7 +70,7 @@ pub enum ConnectivityConstraint {
     None,
 }
 
-/// Extraction rule for identifying device terminals in voxel grid
+/// Extraction rule for identifying device terminals in the layout
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ExtractionRule {
     /// Terminal name this rule applies to
@@ -117,7 +117,7 @@ pub struct DeviceContract {
     /// Material constraints for each terminal (replaces simple materials map)
     pub material_constraints: FxHashMap<CompactString, MaterialConstraint>,
 
-    /// Extraction rules for identifying terminals in voxel grid
+    /// Extraction rules for identifying terminals in the layout
     pub extraction_rules: Vec<ExtractionRule>,
 
     /// SPICE model template for simulation

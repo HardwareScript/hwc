@@ -6,7 +6,7 @@
 //!
 //! KEY FEATURES:
 //! - Priority-based routing: High-priority nets (power, clock, high-speed) route first
-//! - Dynamic trace deletion: Remove traces from BitChunks and VoxelGrid
+//! - Dynamic trace deletion: Remove traces from EntityGraph
 //! - Conflict resolution: Detect and resolve routing conflicts automatically
 //! - Iterative rerouting: Attempt multiple reroute cycles until success or max iterations
 //!
@@ -19,7 +19,7 @@
 //! 6. Reroute the ripped-up nets later in the queue
 //!
 //! PERFORMANCE:
-//! - BitChunk-based deletion: O(1) per voxel using bitmask operations
+//! - BitChunk-based deletion: O(1) per trace segment using bitmask operations
 //! - Conflict detection: O(N) where N = number of routed nets
 //! - Max iterations: Configurable (default 10) to prevent infinite loops
 
@@ -189,11 +189,11 @@ impl<'a> RipUpRouter<'a> {
 
     /// Detect which nets are blocking a route
     fn detect_blocking_nets(&self, net: &NetRoute) -> Vec<NetId> {
-        // Simple heuristic: check which nets occupy voxels near the start/goal
+        // Simple heuristic: check which nets occupy space near the start/goal
         let mut blocking_nets = Vec::new();
 
         // Check a small region around start and goal
-        let search_radius = 5; // voxels
+        let search_radius = 5; // grid steps
 
         for routed_net in self.routed_nets.values() {
             if routed_net.net_id == net.net_id {
@@ -227,8 +227,8 @@ impl<'a> RipUpRouter<'a> {
 
     /// Rip up a routed net (remove it from the grid)
     ///
-    /// This method performs dynamic trace deletion from the voxel grid.
-    /// It clears all voxels and vias occupied by the net, making them
+    /// This method performs dynamic trace deletion from the entity graph.
+    /// It clears all geometry and vias occupied by the net, making them
     /// available for other nets to use.
     ///
     /// # Arguments
@@ -239,14 +239,6 @@ impl<'a> RipUpRouter<'a> {
             *self.ripup_counts.entry(net_id).or_insert(0) += 1;
             self.ripped_up_this_cycle.insert(net_id);
             self.total_ripups += 1;
-
-            // Clear all voxels occupied by this net
-            // This is the "dynamic trace deletion from BitChunks" requirement
-            for segment in &routed_net.paths {
-                for point in segment {
-                    self.router.clear_voxel(*point);
-                }
-            }
 
             // Clear vias
             for via in &routed_net.vias {

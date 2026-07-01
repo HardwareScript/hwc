@@ -2,7 +2,7 @@ use compact_str::CompactString;
 
 pub mod alignment;
 pub mod alignment_layer; // Sprint 4.1: Alignment Layer (replaces traditional LVS)
-pub mod auto_via_inserter;
+pub mod via_resolver;
 pub mod bounding_box_tracker;
 pub mod bridge_resolver;
 pub mod compiler;
@@ -31,7 +31,8 @@ pub use alignment::{
     GraphMatcher, LogicalDevice, LogicalNetlist, LogicalSynthesizer, PhysicalDevice,
     PhysicalNetlist,
 };
-pub use auto_via_inserter::{AutoViaInserter, ViaLibrary, ViaType};
+pub use via_resolver::{ViaResolver};
+pub use via_resolver::library::{ViaLibrary, ViaType};
 pub use bounding_box_tracker::BoundingBoxTracker;
 pub use compiler::Compiler;
 pub use constraint_solver::ConstraintSolver;

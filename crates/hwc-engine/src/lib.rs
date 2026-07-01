@@ -19,8 +19,8 @@ pub use constraint_manager::{
     RouteConstraints, SymbolTableTrait,
 };
 pub use design_rule_check::{
-    report_to_errors, validate_clearances, validate_physics_parallel, validate_physics_sequential,
-    validate_thermal_analytic, validate_trace_widths, violation_to_error, DesignRuleChecker, DrcError,
+    report_to_errors, validate_clearances, validate_physics_parallel,
+    validate_current_density, validate_trace_widths, violation_to_error, DesignRuleChecker, DrcError,
     DrcReport, DrcViolation,
 };
 pub use geometry::{BoundingBox, Direction, Point3D, TraceSegment};
@@ -30,7 +30,7 @@ pub use geometry::entity_ids::{
     RouteGraphId, GeometryGraphId, JunctionGraphId,
 };
 pub use geometry_router::{
-    assign_layer_directions, check_clearance_violation, get_neighbors_stable,
+    assign_layer_directions, get_neighbors_stable,
     is_valid_move, route_net_sdf_accelerated,
     EntityGraph, GeometryRouter, GridBounds, NetRoute, RoutedNet,
     RoutingError, SdfGenerator,
@@ -65,7 +65,7 @@ pub use geometry_router::{
     NegotiatedCongestionEngine,
 };
 pub use geometry_router::geometry_refinement::{RefinedContour, refine_layer, refine_geometry, canonicalize_contours};
-pub use geometry_router::substrate_types::{CompactionStats, MemoryStats};
+pub use geometry_router::substrate_types::CompactionStats;
 pub use netlist::{
     ArenaStats, ComponentData, ComponentId, NetData, NetId, NetlistArena, PinData, PinId,
 };

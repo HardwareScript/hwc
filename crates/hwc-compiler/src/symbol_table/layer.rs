@@ -202,6 +202,26 @@ impl SymbolTable {
             || self.core.profiles.contains_key(name)
     }
 
+    /// Debug method to list all profile names in all layers
+    pub fn debug_list_profiles(&self) -> Vec<String> {
+        let mut profiles = Vec::new();
+        for key in self.local.profiles.keys() {
+            profiles.push(format!("local:{}", key));
+        }
+        for (idx, layer) in self.hpm.iter().enumerate() {
+            for key in layer.profiles.keys() {
+                profiles.push(format!("hpm[{}]:{}", idx, key));
+            }
+        }
+        for key in self.prelude.profiles.keys() {
+            profiles.push(format!("prelude:{}", key));
+        }
+        for key in self.core.profiles.keys() {
+            profiles.push(format!("core:{}", key));
+        }
+        profiles
+    }
+
     /// Check if a component exists in any layer
     /// Supports namespaced lookups: "Parts.MCU"
     pub fn has_component(&self, name: &str) -> bool {

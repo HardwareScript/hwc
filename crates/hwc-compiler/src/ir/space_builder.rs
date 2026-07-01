@@ -78,11 +78,12 @@ pub fn create_hardware_space(
         // Extract and store physical properties for thermal/electrical calculations
         let mut resistivity_ohm_m: Option<f64> = None;
         let mut thermal_conductivity_w_mk: Option<f64> = None;
+        let mut thickness_nm: i64 = 0;
+        let mut max_current_density_a_mm2: Option<f64> = None;
         for prop in &mat_def.properties {
             match prop.key.as_str() {
                 "resistivity" => {
                     if let hwc_parser::PropertyValue::Measurement(m) = &prop.value {
-                        // Value is already in base units (e.g. 2.82e-8ohm_m -> 2.82e-8)
                         resistivity_ohm_m = Some(m.value);
                     }
                 }
@@ -93,12 +94,38 @@ pub fn create_hardware_space(
                         thermal_conductivity_w_mk = Some(v);
                     }
                 }
+                "thickness" => {
+                    thickness_nm = match &prop.value {
+                        hwc_parser::PropertyValue::Measurement(m) => {
+                            measurement_to_nm(m, symbol_table)
+                                .unwrap_or((m.value * 1_000_000.0) as i64)
+                        }
+                        hwc_parser::PropertyValue::Number(v) => (*v * 1_000_000.0) as i64,
+                        _ => 0,
+                    };
+                }
+                "max_current_density" => {
+                    if let hwc_parser::PropertyValue::Measurement(m) = &prop.value {
+                        max_current_density_a_mm2 = Some(m.value);
+                    } else if let hwc_parser::PropertyValue::Number(v) = prop.value {
+                        max_current_density_a_mm2 = Some(v);
+                    }
+                }
                 _ => {}
             }
         }
-        if let (Some(rho), Some(k)) = (resistivity_ohm_m, thermal_conductivity_w_mk) {
-            if let Some(id) = material_registry.get_id(&name) {
-                material_registry.set_physical_props(id, rho, k);
+        if let Some(id) = material_registry.get_id(&name) {
+            if let (Some(rho), Some(k)) = (resistivity_ohm_m, thermal_conductivity_w_mk) {
+                material_registry.set_physical_props(id, rho, k, thickness_nm, max_current_density_a_mm2);
+            } else if thickness_nm > 0 {
+                material_registry.set_physical_props(id, 0.0, 0.0, thickness_nm, max_current_density_a_mm2);
+            }
+            // Validate conductor materials have all required physical properties
+            if let Err(msg) = material_registry.validate_conductor_props(id, &name) {
+                return Err(IrError::MissingPhysicalProperty {
+                    material: name,
+                    property: msg,
+                });
             }
         }
     }
@@ -134,9 +161,8 @@ pub fn create_hardware_space(
             IrError::ProfileNotFound { name: profile_name.name.clone().into() }
         })?;
 
-        let constraints = profile_to_constraints(profile_def, symbol_table).map_err(|_e| {
-            IrError::ProfileNotFound { name: profile_name.name.clone().into() }
-        })?;
+        // Convert profile to constraints - preserve the actual error instead of masking it
+        let constraints = profile_to_constraints(profile_def, symbol_table)?;
 
         space.fabrication_constraints = Some(constraints);
     }
@@ -156,11 +182,20 @@ pub fn create_hardware_space(
         };
         space.set_net_classification(net_decl.name.clone(), classification);
 
+        let is_asic = space.fabrication_constraints.as_ref().map_or(false, |c| {
+            c.technology.as_ref().map_or(false, |t| t.to_lowercase() == "asic")
+        });
+        let min_width = space.fabrication_constraints.as_ref().map(|c| c.trace.min_width_nm).unwrap_or(200_000);
+        let net_id = space.netlist.get_or_create_net_with_technology(&net_decl.name, is_asic, min_width);
+
         // v0.1.7: Set net frequency on the netlist (for SI-aware routing)
         if let Some(freq_hz) = net_decl.frequency_hz {
-            if let Some(net_id) = space.netlist.get_net_by_name(&net_decl.name) {
-                space.netlist.set_net_frequency(net_id, freq_hz);
-            }
+            space.netlist.set_net_frequency(net_id, freq_hz);
+        }
+
+        // v0.1.8: Set net current on the netlist (for thermal/EM validation)
+        if let Some(current_ma) = net_decl.current_ma {
+            space.netlist.set_net_current(net_id, current_ma);
         }
     }
 
@@ -220,6 +255,45 @@ pub fn validate_asic_constraints(
                     ),
                     hint: net_hint,
                 });
+            }
+        }
+    }
+
+    // Rule 2b: Every route width must be >= the PDK's declared trace.min_width
+    //
+    // Without this check a designer can silently declare a sub-minimum width that
+    // passes Rule 2 (width is present) but produces geometry that violates DRC
+    // only after expensive routing — or, as in the CMOS Inverter case, routes so
+    // wide that they overlap adjacent pads and merge into a solid mass.
+    let pdk_min_width_nm = profile
+        .as_ref()
+        .and_then(|p| p.trace.as_ref())
+        .and_then(|t| measurement_to_nm(&t.min_width, symbol_table).ok())
+        .unwrap_or(0);
+
+    if pdk_min_width_nm > 0 {
+        for statement in &space_def.statements {
+            if let hwc_parser::SpaceTopLevelStatement::Route(route) = statement {
+                if let Some(w_expr) = &route.width {
+                    if let Ok(width_nm) =
+                        crate::ir::conversions::evaluate_expression_to_nm(w_expr, symbol_table)
+                    {
+                        if width_nm < pdk_min_width_nm {
+                            return Err(IrError::MissingAsicConstraint {
+                                message: format!(
+                                    "Route {:?} -> {:?}: width {}nm is below PDK minimum trace width {}nm.",
+                                    route.from, route.to, width_nm, pdk_min_width_nm
+                                ),
+                                hint: format!(
+                                    "Increase the route width to at least {}nm (PDK trace.min_width). \
+                                     Using a sub-minimum width causes DRC failures and, when the width \
+                                     exceeds pad dimensions, produces merged geometry in the 3D output.",
+                                    pdk_min_width_nm
+                                ),
+                            });
+                        }
+                    }
+                }
             }
         }
     }

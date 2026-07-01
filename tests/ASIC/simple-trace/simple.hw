@@ -1,0 +1,40 @@
+# Minimal Test: Two pads connected by one trace
+# This should produce a clean, verifiable output
+
+import * from @std/primitives/units
+import * from @std/primitives/math
+import * from materials
+import Silicon_180nm from foundry_pdk
+
+# Simple schematic with 2 nets
+module Simple_Module:
+    pins: [input A, output B]
+    
+    # Just connect A to B
+    route A to B
+
+# Minimal space - just two pads and one route
+space Simple_Space implements Simple_Module:
+    dimensions: 3um by 2um by 1.36um
+    resolution: 1nm
+    origin: bl by b
+    profile: Silicon_180nm
+    
+    nets:
+        A: { classification: signal, potential: 0V, current: 0.1uA }
+        B: { classification: signal, potential: 0V, current: 0.1uA }
+    
+    # Two simple pads on metal1, separated horizontally
+    add pour(Aluminum) named Pad_A on layer: metal1:
+        net: A
+        boundary: [x: 0.2um, y: 0.8um] to [x: 0.6um, y: 1.2um]
+    
+    add pour(Aluminum) named Pad_B on layer: metal1:
+        net: B
+        boundary: [x: 2.4um, y: 0.8um] to [x: 2.8um, y: 1.2um]
+    
+    # Single route connecting them
+    route Pad_A to Pad_B:
+        width: 300nm
+        layer: metal1
+        current_limit_ac: { rms: 0.5uA, peak: 1.0uA }

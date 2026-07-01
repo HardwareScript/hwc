@@ -69,9 +69,8 @@ pub fn generate_net_constraints<S: SymbolTableTrait>(
     // Use net's specified width if larger than minimum
     let final_trace_width_nm = min_trace_width_nm.max(net.width_nm);
 
-    // Calculate maximum resistance (simplified: R = ρL/A)
-    // For copper: ρ = 1.68e-8 Ω·m = 16.8 Ω·nm
-    let max_resistance_ohm = 100.0; // Placeholder - will be calculated from route length
+    // Calculate maximum resistance — no limit without PDK specification
+    let max_resistance_ohm = f64::INFINITY;
 
     // Determine target impedance for high-speed signals
     // Note: This is a TARGET impedance, not calculated impedance

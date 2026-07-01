@@ -66,7 +66,7 @@ fn get_prop_cap_type(
     })
 }
 
-/// Place a contact in the voxel grid.
+/// Place a contact in the EntityGraph.
 pub fn place_contact(
     space: &mut HardwareSpace,
     contact: &hwc_parser::ContactPlacement,
@@ -142,12 +142,10 @@ pub fn place_contact(
     let from_top_nm = stackup_manager.resolve_elevation_top(
         &contact.from_elevation,
         symbol_table,
-        space.resolution_nm,
     )?;
     let to_top_nm = stackup_manager.resolve_elevation_top(
         &contact.to_elevation,
         symbol_table,
-        space.resolution_nm,
     )?;
 
     let contact_name_debug = contact
@@ -323,7 +321,7 @@ pub fn place_contact(
         if let Some(shape_name) = get_prop_string(contact, "shape", eval_context) {
             if let Some(shape_def) = symbol_table.get_shape(shape_name.as_str()) {
                 let constants = symbol_table.get_all_constants();
-                contour = Some(crate::auto_via_inserter::library::evaluate_shape_points(
+                contour = Some(crate::via_resolver::library::evaluate_shape_points(
                     shape_def,
                     diameter_nm,
                     &constants,
@@ -368,9 +366,9 @@ pub fn place_contact(
         end_z,
         diameter_nm,
         via_net_id,
+        material_id,
         0,                 // min_z
         board_max_z_nm,    // max_z
-        space.resolution_nm,
         annular_ring_nm,
     );
     space.add_vias(vec![via]);
@@ -750,7 +748,7 @@ pub fn place_contact(
         .unwrap_or_else(|| format!("Via_{}_{}", from_bottom_nm, to_bottom_nm).into());
 
     // Task 4.2: Store via geometry as analytic primitive (bounding box only)
-    // PRIMITIVES OVER PIXELS: No voxel collection needed - DRC uses bounding boxes directly
+    // PRIMITIVES OVER PIXELS: DRC uses bounding boxes directly
     println!(
         "[PLACE_CONTACT] '{}' Storing contact metadata: bbox=({},{}-{},{}), z={}→{}nm, net={:?}",
         contact_name_debug,
@@ -771,7 +769,6 @@ pub fn place_contact(
         bridge: bridge_material_name,
         bbox: Some(pad_bbox),
         drill_diameter_nm: Some(diameter_nm),
-        voxels: Vec::new(), // Empty - analytic geometry only
         is_tented,
         mask_clearance_diameter_nm: get_prop_nm(
             contact,

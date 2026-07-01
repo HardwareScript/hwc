@@ -64,9 +64,6 @@ pub struct ContactMetadata {
     /// Actual via drill diameter in nanometers (excludes annular ring/pad extension).
     /// The bbox includes pad (drill + 2*annular_ring); this is the inner hole only.
     pub drill_diameter_nm: Option<i64>,
-    /// Voxel positions that make up this via (for DRC validation)
-    /// Task 4.2: Via geometry tracking for diameter/enclosure checks
-    pub voxels: Vec<crate::geometry::Point3D>,
     /// Whether the via is tented (covered by solder mask) — v0.1.7
     pub is_tented: bool,
     /// Optional explicit solder mask opening diameter in nanometers — v0.1.7

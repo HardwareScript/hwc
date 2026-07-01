@@ -4,9 +4,13 @@ use crate::constraint_manager::ConstraintRulebook;
 use crate::space::HardwareSpace;
 
 use super::clearance::validate_clearances;
-use super::thermal::validate_thermal_analytic;
 use super::trace_width::validate_trace_widths;
+use super::thermal::validate_current_density;
 use super::types::DrcReport;
+use super::via_checks::{
+    validate_drill_to_drill_clearance, validate_via_diameters_analytic,
+    validate_via_enclosure_analytic,
+};
 
 /// Validate physics in parallel using Rayon.
 pub fn validate_physics_parallel(
@@ -15,25 +19,51 @@ pub fn validate_physics_parallel(
 ) -> Result<DrcReport, String> {
     let mut report = DrcReport::new();
 
-    // 1. Clearance Validation (now analytic)
-    let clearance_violations = validate_clearances(space, constraints);
+    // 1. Clearance Validation (analytic)
+    let clearance_violations = validate_clearances(space, constraints)?;
     for violation in clearance_violations {
         report.add_violation(violation);
     }
 
-    // 2. Trace Width Validation (now analytic)
-    let width_violations = validate_trace_widths(space, constraints);
+    // 2. Trace Width Validation (analytic)
+    let width_violations = validate_trace_widths(space, constraints)?;
     for violation in width_violations {
         report.add_violation(violation);
     }
 
-    // 3. Thermal Validation (analytic)
-    let thermal_violations = validate_thermal_analytic(
+    // 3. Current Density Validation (PDK material limits)
+    let current_density_violations = validate_current_density(
         &space.analytic_routes,
-        constraints,
         &space.material_registry,
     )?;
-    for violation in thermal_violations {
+    for violation in current_density_violations {
+        report.add_violation(violation);
+    }
+
+    // 4. Via Diameter Validation
+    let via_diameter_report = validate_via_diameters_analytic(
+        &space.contacts,
+        constraints,
+    )?;
+    for violation in via_diameter_report.violations {
+        report.add_violation(violation);
+    }
+
+    // 5. Via Enclosure Validation
+    let via_enclosure_report = validate_via_enclosure_analytic(
+        &space.contacts,
+        constraints,
+    )?;
+    for violation in via_enclosure_report.violations {
+        report.add_violation(violation);
+    }
+
+    // 6. Drill-to-Drill Clearance Validation
+    let drill_clearance_report = validate_drill_to_drill_clearance(
+        &space.contacts,
+        constraints,
+    )?;
+    for violation in drill_clearance_report.violations {
         report.add_violation(violation);
     }
 
@@ -51,12 +81,4 @@ pub fn validate_physics_parallel(
     }
 
     Ok(report)
-}
-
-/// Validate physics in single-threaded mode (for comparison/testing).
-pub fn validate_physics_sequential(
-    space: &HardwareSpace,
-    constraints: &ConstraintRulebook,
-) -> Result<DrcReport, String> {
-    validate_physics_parallel(space, constraints)
 }

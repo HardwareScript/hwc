@@ -1,0 +1,64 @@
+# PARALLEL PLATE CAPACITOR TEST
+# A simple capacitor with:
+# - Bottom plate (Aluminum)
+# - Dielectric layer (SiO2) 
+# - Top plate (Copper)
+# - Connection traces (different materials)
+
+import * from @std/primitives/units
+import * from materials
+import Capacitor_PDK from foundry_pdk
+
+# Simple capacitor module
+module SimpleCapacitor:
+    pins: [input P1, output P2]
+    
+    # Capacitive connection
+    route P1 to P2
+
+# Space definition
+space CapacitorTest implements SimpleCapacitor:
+    dimensions: 5000nm by 3000nm by 450nm
+    resolution: 1nm
+    origin: bl by b
+    profile: Capacitor_PDK
+    
+    # Net declarations - lower current for small geometry
+    nets:
+        P1: { classification: signal, potential: 0V, current: 0.01uA }
+        P2: { classification: signal, potential: 0V, current: 0.01uA }
+    
+    # BOTTOM PLATE (Aluminum) - 2µm × 2µm on bottom_metal layer
+    add pour(Aluminum) named BottomPlate on layer: bottom_metal:
+        net: P1
+        boundary: [x: 1500nm, y: 500nm] to [x: 3500nm, y: 2500nm]
+    
+    # DIELECTRIC FILL (Silicon_Dioxide) - covers the capacitor area
+    # Note: The dielectric layer in the stackup provides this
+    
+    # TOP PLATE (Copper) - 1.8µm × 1.8µm on top_metal layer (slightly smaller)
+    add pour(Copper) named TopPlate on layer: top_metal:
+        net: P2
+        boundary: [x: 1600nm, y: 600nm] to [x: 3400nm, y: 2400nm]
+    
+    # CONNECTION PAD for Bottom Plate (Aluminum trace)
+    add pour(Aluminum) named BottomPad on layer: bottom_metal:
+        net: P1
+        boundary: [x: 200nm, y: 1000nm] to [x: 800nm, y: 2000nm]
+    
+    # CONNECTION PAD for Top Plate (Copper trace)  
+    add pour(Copper) named TopPad on layer: top_metal:
+        net: P2
+        boundary: [x: 4200nm, y: 1000nm] to [x: 4800nm, y: 2000nm]
+    
+    # TRACE connecting Bottom Pad to Bottom Plate (very low current)
+    route BottomPad to BottomPlate:
+        width: 400nm
+        layer: bottom_metal
+        current_limit_ac: { rms: 0.01uA, peak: 0.02uA }
+    
+    # TRACE connecting Top Pad to Top Plate (very low current)
+    route TopPad to TopPlate:
+        width: 400nm
+        layer: top_metal
+        current_limit_ac: { rms: 0.01uA, peak: 0.02uA }

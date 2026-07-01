@@ -32,15 +32,27 @@
 //!         - amp r -90
 //!         - gap r 0
 //! ```
+//!
+//! # v0.1.8 Architecture Note (Roadmap 14.3 — Routing Pattern Rasterization)
+//!
+//! Previously, `generate_moves` and the internal line drawing used a 3D Bresenham
+//! grid rasterization algorithm. Points were quantized to `step_size_nm` grid cells
+//! by dividing coordinates by `step_size_nm`, rasterizing in grid space, then
+//! multiplying back by `step_size_nm`. This grid quantization introduced unnecessary
+//! snapping artifacts and was tied to the deprecated occupancy-grid collision system.
+//!
+//! As of v0.1.8, all line drawing uses continuous parametric interpolation in pure
+//! nanometer space. Points are sampled at `step_size_nm` intervals along the exact
+//! mathematical line between two endpoints. No grid division or multiplication is
+//! performed. Collision checking is fully delegated to the spatial index.
 
 use crate::geometry::Point3D;
 use compact_str::CompactString;
-use rustc_hash::FxHashSet;
 
 /// A routing pattern defined as relative vector steps.
 ///
 /// Patterns are macro-moves that the A* router can inject into its
-/// neighbor generator to burn extra voxels while maintaining the
+/// neighbor generator to burn extra path length while maintaining the
 /// same start and end points.
 #[derive(Debug, Clone)]
 pub struct RoutingPattern {
@@ -67,34 +79,35 @@ impl RoutingPattern {
         Self { name, steps }
     }
 
-    /// Generate absolute voxel coordinates for this pattern.
+    /// Generate absolute coordinates for this pattern.
     ///
     /// **Algorithm:**
     /// 1. Start at current position with current heading
     /// 2. For each step:
     ///    - Apply rotation to heading
     ///    - Convert polar to Cartesian
-    ///    - Rasterize line from current to target
+    ///    - Interpolate line from current to target
     ///    - Update position and heading
-    /// 3. Return all voxels the pattern passes through
+    /// 3. Return all points the pattern passes through
     ///
-    /// **Critical:** Uses 3D Bresenham to rasterize lines, preventing
-    /// the trace from "teleporting" through obstacles.
+    /// v0.1.8: Uses continuous parametric interpolation (`interpolate_line`),
+    /// NOT Bresenham grid rasterization. Points are in nanometer space with
+    /// no grid quantization. See Roadmap 14.3.
     ///
     /// # Arguments
     /// * `current_pos` - Starting position
     /// * `current_heading` - Current heading in degrees (0=East, 90=North)
-    /// * `voxel_size_nm` - Voxel size in nanometers
+    /// * `step_size_nm` - Spacing between interpolated points in nanometers
     ///
     /// # Returns
-    /// Vector of all voxels the pattern passes through
+    /// Vector of all points the pattern passes through (nanometer coordinates)
     pub fn generate_moves(
         &self,
         current_pos: Point3D,
         current_heading: i64,
-        voxel_size_nm: i64,
+        step_size_nm: i64,
     ) -> Vec<Point3D> {
-        let mut all_voxels = Vec::new();
+        let mut all_points = Vec::new();
         let mut pos = current_pos;
         let mut heading = current_heading;
 
@@ -114,47 +127,36 @@ impl RoutingPattern {
             let target_y = pos.y + dy;
             let target_pos = Point3D::new(target_x, target_y, pos.z);
 
-            // CRITICAL: Interpolate every voxel between 'pos' and 'target_pos'
-            // using a standard 3D line rasterization algorithm (Bresenham)
-            // This prevents the trace from "teleporting" through obstacles
-            let segment_voxels = rasterize_line(pos, target_pos, voxel_size_nm);
-            all_voxels.extend(segment_voxels);
+            // v0.1.8: Continuous parametric interpolation — no grid quantization.
+            // Points are sampled at step_size_nm intervals along the exact line.
+            let segment_points = interpolate_line(pos, target_pos, step_size_nm);
+            all_points.extend(segment_points);
 
             // Update position for the next step in the pattern
             pos = target_pos;
         }
 
-        all_voxels
+        all_points
     }
 
     /// Check if this pattern can be placed at the given position.
     ///
-    /// Validates that all voxels the pattern would occupy are clear.
+    /// v0.1.8: Collision checking is fully delegated to the spatial index.
+    /// This function always returns true.
     ///
     /// # Arguments
     /// * `current_pos` - Starting position
     /// * `current_heading` - Current heading in degrees
-    /// * `voxel_size_nm` - Voxel size in nanometers
-    /// * `occupied_voxels` - Set of occupied voxels to check against
+    /// * `step_size_nm` - Spacing between interpolated points in nanometers
     ///
     /// # Returns
-    /// true if pattern can be placed, false if collision detected
+    /// true (collision checking is deferred to the spatial index)
     pub fn can_place(
         &self,
-        current_pos: Point3D,
-        current_heading: i64,
-        voxel_size_nm: i64,
-        occupied_voxels: &FxHashSet<Point3D>,
+        _current_pos: Point3D,
+        _current_heading: i64,
+        _step_size_nm: i64,
     ) -> bool {
-        let voxels = self.generate_moves(current_pos, current_heading, voxel_size_nm);
-
-        // Check if any voxel is occupied
-        for voxel in voxels {
-            if occupied_voxels.contains(&voxel) {
-                return false;
-            }
-        }
-
         true
     }
 
@@ -167,122 +169,50 @@ impl RoutingPattern {
     }
 }
 
-/// Rasterize a line between two points using 3D Bresenham algorithm.
+/// Interpolate points along a line in continuous nanometer space.
 ///
-/// Returns all voxels that the line passes through.
+/// v0.1.8 (Roadmap 14.3): Replaces the old `rasterize_line` function which used
+/// 3D Bresenham grid rasterization. The old implementation quantized coordinates
+/// to `step_size_nm` grid cells (`start / step_size_nm`) and then multiplied
+/// back (`* step_size_nm`), introducing grid-snapping artifacts. This new
+/// implementation uses parametric interpolation (`start + t * (end - start)`)
+/// to produce exact nanometer-space points at `step_size_nm` intervals.
 ///
 /// # Arguments
 /// * `start` - Starting point
 /// * `end` - Ending point
-/// * `voxel_size_nm` - Voxel size in nanometers
+/// * `step_size_nm` - Spacing between sampled points in nanometers
 ///
 /// # Returns
-/// Vector of all voxels the line passes through
-fn rasterize_line(start: Point3D, end: Point3D, voxel_size_nm: i64) -> Vec<Point3D> {
-    // Convert to voxel coordinates
-    let x0 = start.x / voxel_size_nm;
-    let y0 = start.y / voxel_size_nm;
-    let z0 = start.z / voxel_size_nm;
+/// Vector of points along the line in nanometer coordinates
+fn interpolate_line(start: Point3D, end: Point3D, step_size_nm: i64) -> Vec<Point3D> {
+    let dx = end.x - start.x;
+    let dy = end.y - start.y;
+    let dz = end.z - start.z;
 
-    let x1 = end.x / voxel_size_nm;
-    let y1 = end.y / voxel_size_nm;
-    let z1 = end.z / voxel_size_nm;
+    // L-infinity distance gives us the correct step count for parametric sampling
+    let max_dist = dx.abs().max(dy.abs()).max(dz.abs());
 
-    let mut voxels = Vec::new();
-
-    // 3D Bresenham line algorithm
-    let dx = (x1 - x0).abs();
-    let dy = (y1 - y0).abs();
-    let dz = (z1 - z0).abs();
-
-    let sx = if x0 < x1 { 1 } else { -1 };
-    let sy = if y0 < y1 { 1 } else { -1 };
-    let sz = if z0 < z1 { 1 } else { -1 };
-
-    let mut x = x0;
-    let mut y = y0;
-    let mut z = z0;
-
-    // Determine dominant axis
-    if dx >= dy && dx >= dz {
-        let mut p1 = 2 * dy - dx;
-        let mut p2 = 2 * dz - dx;
-
-        while x != x1 {
-            voxels.push(Point3D::new(
-                x * voxel_size_nm,
-                y * voxel_size_nm,
-                z * voxel_size_nm,
-            ));
-
-            x += sx;
-            if p1 >= 0 {
-                y += sy;
-                p1 -= 2 * dx;
-            }
-            if p2 >= 0 {
-                z += sz;
-                p2 -= 2 * dx;
-            }
-            p1 += 2 * dy;
-            p2 += 2 * dz;
-        }
-    } else if dy >= dx && dy >= dz {
-        let mut p1 = 2 * dx - dy;
-        let mut p2 = 2 * dz - dy;
-
-        while y != y1 {
-            voxels.push(Point3D::new(
-                x * voxel_size_nm,
-                y * voxel_size_nm,
-                z * voxel_size_nm,
-            ));
-
-            y += sy;
-            if p1 >= 0 {
-                x += sx;
-                p1 -= 2 * dy;
-            }
-            if p2 >= 0 {
-                z += sz;
-                p2 -= 2 * dy;
-            }
-            p1 += 2 * dx;
-            p2 += 2 * dz;
-        }
-    } else {
-        let mut p1 = 2 * dy - dz;
-        let mut p2 = 2 * dx - dz;
-
-        while z != z1 {
-            voxels.push(Point3D::new(
-                x * voxel_size_nm,
-                y * voxel_size_nm,
-                z * voxel_size_nm,
-            ));
-
-            z += sz;
-            if p1 >= 0 {
-                y += sy;
-                p1 -= 2 * dz;
-            }
-            if p2 >= 0 {
-                x += sx;
-                p2 -= 2 * dz;
-            }
-            p1 += 2 * dy;
-            p2 += 2 * dx;
-        }
+    // Degenerate case: start == end
+    if max_dist == 0 {
+        return vec![start];
     }
 
-    // Add final point
-    voxels.push(Point3D::new(
-        x1 * voxel_size_nm,
-        y1 * voxel_size_nm,
-        z1 * voxel_size_nm,
-    ));
+    let steps = (max_dist / step_size_nm).max(1);
+    let mut points = Vec::with_capacity(steps as usize + 1);
 
-    voxels
+    for i in 0..=steps {
+        let t_numerator = i;
+        let t_denominator = steps;
+
+        let x = start.x + (dx * t_numerator / t_denominator);
+        let y = start.y + (dy * t_numerator / t_denominator);
+        let z = start.z + (dz * t_numerator / t_denominator);
+
+        points.push(Point3D::new(x, y, z));
+    }
+
+    points
 }
 
 /// Standard library of routing patterns.

@@ -13,9 +13,11 @@ impl GeometryRouter {
     /// All coordinates are calculated as absolute integer values — no magic numbers.
     pub fn resolve_boundary_port(&self, pin: Point3D, target: Point3D) -> Point3D {
         // Read clearance in nanometers directly from fabrication constraints (zero-magic)
-        let clearance_nm = self.constraints.fabrication.as_ref()
-            .map(|fab| fab.min_trace_spacing_nm)
-            .unwrap_or(200_000); // Default to 200um
+        // No fallback - if constraints are missing, this will panic with a clear error.
+        let clearance_nm = self.constraints.fabrication
+            .as_ref()
+            .expect("BUG: Fabrication constraints required for boundary port resolution")
+            .min_trace_spacing_nm;
 
         // Try 1: component_metadata lookup (fast, exact)
         let maybe_bbox = self
@@ -47,7 +49,7 @@ impl GeometryRouter {
         // This prevents the 'Z-mismatch' bug where traces would float above or below pads.
         let escape_z = pin.z;
 
-        // Use resolution/snap-step for coordinate snapping instead of voxel grid cell size
+        // Use resolution/snap-step for coordinate snapping.
         let _resolution_nm = self.resolution_nm; 
         
         // Calculate a proper cardinal port escape to ensure orthogonal "clean" entry
@@ -88,7 +90,7 @@ impl GeometryRouter {
             port,
             crate::geometry_router::port_escape::EdgeOffset::Center,
             0,
-            clearance_nm + self.resolution_nm, // Ensure we are truly outside the box
+            clearance_nm, // BUG FIX: Don't add resolution_nm - clearance is already applied inside calculate_rect_escape
             escape_z,
         );
 
@@ -157,7 +159,7 @@ impl GeometryRouter {
                     clearance_zones: &[],
                     entity_graph: Some(&self.entity_graph),
                     // v0.1.8: Lock to exact physical Z when start and goal share the same Z.
-                    // This prevents the SDF router from snapping Z to voxel centers, which
+                    // This prevents the SDF router from snapping Z to grid centers, which
                     // would destroy layer overrides (e.g. layer: metal1 → Z=300850).
                     fixed_z_nm: None,
                     exempt_components: &[],
@@ -229,13 +231,37 @@ impl GeometryRouter {
             }
         }
 
-        // Commit canonically to the EntityGraph (no occupied_voxels)
-        self.entity_graph.register_route(route.net_id, &path);
+        // Commit canonically to the EntityGraph.
+        self.entity_graph.register_route(
+            route.net_id,
+            &path,
+            self.routing_material_id,
+            self.trace_width_nm,
+        );
 
         let mut final_path = path;
+        
+        eprintln!("[ROUTE_NET_GLOBAL DEBUG] Path BEFORE boundary restore:");
+        eprintln!("  route.start=({},{},{}), route.goal=({},{},{})", 
+            route.start.x, route.start.y, route.start.z, route.goal.x, route.goal.y, route.goal.z);
+        for (i, p) in final_path.iter().enumerate().take(4) {
+            eprintln!("  final_path[{}]=({},{},{})", i, p.x, p.y, p.z);
+        }
+        if final_path.len() > 4 {
+            eprintln!("  ... and {} more points", final_path.len() - 4);
+        }
+        
         if !final_path.is_empty() {
             final_path[0] = route.start;
             *final_path.last_mut().unwrap() = route.goal;
+        }
+        
+        eprintln!("[ROUTE_NET_GLOBAL DEBUG] Path AFTER boundary restore:");
+        for (i, p) in final_path.iter().enumerate().take(4) {
+            eprintln!("  final_path[{}]=({},{},{})", i, p.x, p.y, p.z);
+        }
+        if final_path.len() > 4 {
+            eprintln!("  ... and {} more points", final_path.len() - 4);
         }
 
         Ok(RoutedNet {
@@ -290,7 +316,21 @@ impl GeometryRouter {
                     goal: points[i + 1],
                 };
 
+                eprintln!("[EXPLICIT DEBUG] net_id={}, start=({},{},{}), goal=({},{},{})", 
+                    net_id.raw(), route.start.x, route.start.y, route.start.z,
+                    route.goal.x, route.goal.y, route.goal.z);
+
                 let routed = self.route_net_global(&route)?;
+                
+                if let Some(path) = routed.paths.first() {
+                    eprintln!("[EXPLICIT DEBUG] Returned path ({} points):", path.len());
+                    for (j, p) in path.iter().enumerate().take(4) {
+                        eprintln!("  path[{}]: ({},{},{})", j, p.x, p.y, p.z);
+                    }
+                    if path.len() > 4 {
+                        eprintln!("  ... and {} more points", path.len() - 4);
+                    }
+                }
                 if let Some(path) = routed.paths.into_iter().next() {
                     if i > 0 && !net_path.is_empty() {
                         net_path.extend(path.into_iter().skip(1));

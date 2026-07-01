@@ -296,6 +296,7 @@ fn bench_legalization_small(c: &mut Criterion) {
             start: Point3D::new(x, 0, 1),
             end: Point3D::new(x + 500_000, 0, 1),
             width_nm,
+            material_id: 0,
         };
         segments.push(seg);
         // Overlapping: shift by less than width to create violations
@@ -308,6 +309,7 @@ fn bench_legalization_small(c: &mut Criterion) {
             start: Point3D::new(y, 0, 1),
             end: Point3D::new(y, 500_000, 1),
             width_nm: 200_000,
+            material_id: 0,
         };
         segments.push(seg);
         y += rng.gen_range(50_000, 150_000);
@@ -344,6 +346,7 @@ fn bench_legalization_medium(c: &mut Criterion) {
             start: Point3D::new(x, 0, 1),
             end: Point3D::new(x + 500_000, 0, 1),
             width_nm,
+            material_id: 0,
         };
         segments.push(seg);
         x += rng.gen_range(100_000, 300_000);
@@ -354,6 +357,7 @@ fn bench_legalization_medium(c: &mut Criterion) {
             start: Point3D::new(y, 0, 1),
             end: Point3D::new(y, 500_000, 1),
             width_nm: 200_000,
+            material_id: 0,
         };
         segments.push(seg);
         y += rng.gen_range(50_000, 150_000);

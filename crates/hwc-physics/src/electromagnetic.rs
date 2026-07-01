@@ -261,52 +261,68 @@ impl EMAnalyzer {
         }
     }
 
-    /// Detect parallel overlap between two nets using dilation-based analysis.
+    /// Detect parallel overlap between two nets using geometric segment intersection.
     ///
-    /// This is the CRITICAL crosstalk detection method for Task B2.
-    /// Uses bit-counting to calculate parallel overlap length between nets on adjacent layers.
+    /// Projects traces onto the X-Y plane as line segments and computes the total
+    /// physical overlap length where parallel segments from each net are collinear.
     ///
     /// # Arguments
-    /// * `net_a_voxels` - List of (x, y, z) coordinates for net A
-    /// * `net_b_voxels` - List of (x, y, z) coordinates for net B
-    /// * `voxel_size_nm` - Size of each voxel in nanometers
+    /// * `net_a_coords` - Physical (x, y, z) coordinates in nanometers for net A
+    /// * `net_b_coords` - Physical (x, y, z) coordinates in nanometers for net B
     ///
     /// # Returns
-    /// Parallel overlap length in nanometers
+    /// Total parallel overlap length in nanometers
     ///
     /// # Algorithm
-    /// 1. Project both nets onto X-Y plane (ignore Z)
-    /// 2. Count overlapping voxels using bit-counting
-    /// 3. Convert voxel count to physical length
-    ///
-    /// # Performance
-    /// O(N + M) where N and M are the number of voxels in each net
+    /// 1. Build segments from consecutive points (projected onto X-Y, Z ignored)
+    /// 2. For each pair of segments (one from each net):
+    ///    - If both horizontal and on the same Y: compute X-range overlap
+    ///    - If both vertical and on the same X: compute Y-range overlap
+    /// 3. Sum all overlap lengths
     pub fn detect_parallel_overlap(
         &self,
-        net_a_voxels: &[(usize, usize, usize)],
-        net_b_voxels: &[(usize, usize, usize)],
-        voxel_size_nm: i64,
+        net_a_coords: &[(i64, i64, i64)],
+        net_b_coords: &[(i64, i64, i64)],
     ) -> i64 {
-        use rustc_hash::FxHashSet;
-
-        // Project both nets onto X-Y plane
-        let mut net_a_xy: FxHashSet<(usize, usize)> = FxHashSet::default();
-        let mut net_b_xy: FxHashSet<(usize, usize)> = FxHashSet::default();
-
-        for &(x, y, _z) in net_a_voxels {
-            net_a_xy.insert((x, y));
+        fn build_segments(coords: &[(i64, i64, i64)]) -> Vec<((i64, i64), (i64, i64))> {
+            coords
+                .windows(2)
+                .map(|w| {
+                    let a = (w[0].0, w[0].1);
+                    let b = (w[1].0, w[1].1);
+                    if a <= b { (a, b) } else { (b, a) }
+                })
+                .collect()
         }
 
-        for &(x, y, _z) in net_b_voxels {
-            net_b_xy.insert((x, y));
+        let segs_a = build_segments(net_a_coords);
+        let segs_b = build_segments(net_b_coords);
+
+        let mut total_overlap = 0i64;
+
+        for &(a_start, a_end) in &segs_a {
+            for &(b_start, b_end) in &segs_b {
+                // Both horizontal on the same Y
+                if a_start.1 == a_end.1 && b_start.1 == b_end.1 && a_start.1 == b_start.1 {
+                    let lo = a_start.0.max(b_start.0);
+                    let hi = a_end.0.min(b_end.0);
+                    if lo < hi {
+                        total_overlap += hi - lo;
+                    }
+                }
+                // Both vertical on the same X
+                else if a_start.0 == a_end.0 && b_start.0 == b_end.0 && a_start.0 == b_start.0
+                {
+                    let lo = a_start.1.max(b_start.1);
+                    let hi = a_end.1.min(b_end.1);
+                    if lo < hi {
+                        total_overlap += hi - lo;
+                    }
+                }
+            }
         }
 
-        // Count overlapping voxels (bit-counting equivalent)
-        let overlap_count = net_a_xy.intersection(&net_b_xy).count();
-
-        // Convert to physical length (approximate as sqrt of area)
-        let overlap_length_voxels = (overlap_count as f64).sqrt();
-        (overlap_length_voxels * voxel_size_nm as f64) as i64
+        total_overlap
     }
 
     /// Validate crosstalk risk between two nets based on parallel overlap.
@@ -316,9 +332,8 @@ impl EMAnalyzer {
     /// # Arguments
     /// * `net_a` - First net name
     /// * `net_b` - Second net name
-    /// * `net_a_voxels` - Voxel coordinates for net A
-    /// * `net_b_voxels` - Voxel coordinates for net B
-    /// * `voxel_size_nm` - Voxel size in nanometers
+    /// * `net_a_coords` - Physical (x, y, z) coordinates in nanometers for net A
+    /// * `net_b_coords` - Physical (x, y, z) coordinates in nanometers for net B
     /// * `max_parallel_overlap_nm` - Maximum acceptable parallel overlap (e.g., 10mm = 10_000_000nm)
     ///
     /// # Returns
@@ -327,12 +342,11 @@ impl EMAnalyzer {
         &self,
         net_a: &str,
         net_b: &str,
-        net_a_voxels: &[(usize, usize, usize)],
-        net_b_voxels: &[(usize, usize, usize)],
-        voxel_size_nm: i64,
+        net_a_coords: &[(i64, i64, i64)],
+        net_b_coords: &[(i64, i64, i64)],
         max_parallel_overlap_nm: i64,
     ) -> Result<(), EMViolation> {
-        let overlap_nm = self.detect_parallel_overlap(net_a_voxels, net_b_voxels, voxel_size_nm);
+        let overlap_nm = self.detect_parallel_overlap(net_a_coords, net_b_coords);
 
         if overlap_nm > max_parallel_overlap_nm {
             // Convert to crosstalk coefficient for violation reporting

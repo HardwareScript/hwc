@@ -15,14 +15,14 @@ use compact_str::CompactString;
 /// - A 3D bounding box defining its physical boundaries
 /// - A list of internal nets that route entirely within the domain
 /// - A list of interface pins that connect to the outside world
-/// - An isolated voxel grid for collision-free parallel routing
+/// - An isolated entity graph for collision-free parallel routing
 ///
 /// # Reference
 /// - `ROADMAP/v0.1.4/Gap3.md` (Section "1. The Domain Structure")
 ///
 /// # Example
 /// A routing domain represents a module instance with its bounding box,
-/// internal nets, interface pins, and local voxel grid for routing.
+/// internal nets, interface pins, and local entity graph for routing.
 #[derive(Debug)]
 pub struct RoutingDomain {
     /// Unique identifier for this domain (e.g., "MainDSP.ALU_Core")
@@ -38,7 +38,7 @@ pub struct RoutingDomain {
     pub interface_pins: Vec<PinId>,
 
     /// Local entity graph for collision-free parallel routing
-    /// Uses EntityGraph with sparse metadata instead of voxel grid
+    /// Uses EntityGraph with sparse metadata
     pub local_grid: EntityGraph,
 }
 
@@ -48,13 +48,13 @@ pub struct RoutingDomain {
 /// - The domain identifier
 /// - The bounding box offset for coordinate translation
 /// - All routes that were successfully placed
-/// - The occupied voxel grid chunk
+/// - The entity graph chunk for routed domain
 ///
 /// # Reference
 /// - `ROADMAP/v0.1.4/Gap3.md` (Section "1. The Domain Structure")
 ///
 /// # Example
-/// A routed domain contains the successfully placed routes and occupied voxels
+/// A routed domain contains the successfully placed routes and entity graph
 /// for a module instance after parallel routing.
 #[derive(Debug)]
 pub struct RoutedDomain {

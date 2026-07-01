@@ -6,15 +6,19 @@ use super::types::DrcViolation;
 pub fn validate_trace_widths(
     space: &HardwareSpace,
     constraints: &ConstraintRulebook,
-) -> Vec<DrcViolation> {
+) -> Result<Vec<DrcViolation>, String> {
     let mut violations = Vec::new();
 
-    // Get required trace width from fabrication constraints (v0.1.4)
+    // Get required trace width from fabrication constraints — fail-fast if missing
     let required_width_nm = constraints
         .fabrication
         .as_ref()
         .map(|fab| fab.min_trace_width_nm)
-        .unwrap_or(100_000); // Default 0.1mm
+        .ok_or_else(|| {
+            "[DRC] FATAL: No fabrication constraints loaded. \
+             Add a 'profile:' clause to your space to enable DRC."
+                .to_string()
+        })?;
 
     // v0.1.8: Perform analytic trace width checks using the EntityGraph.
     // In a vector-first system, trace width is a property of the analytic segment itself.
@@ -31,5 +35,5 @@ pub fn validate_trace_widths(
         }
     }
 
-    violations
+    Ok(violations)
 }

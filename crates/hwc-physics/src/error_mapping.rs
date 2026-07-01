@@ -1,6 +1,6 @@
 use crate::{
     ClearanceViolation, ConnectivityViolation, EMViolation, ElectricalViolation,
-    PhysicalContinuityViolation, ThermalViolation,
+    FragmentationReport, ThermalViolation,
 };
 /// Error code mapping for physics violations.
 ///
@@ -29,7 +29,7 @@ use compact_str::CompactString;
 /// - **P41: DISCONNECTED_NET** - Net has no physical path between geometries
 /// - **P45: MATERIAL_INTERPENETRATION** - Different materials overlap on same net
 ///
-/// ## Layer 3: Physical Continuity (Voxel-based)
+/// ## Layer 3: Physical Continuity (Geometry-based)
 /// Flood-fills through actual conductive material to verify electron flow.
 /// - **P41: DISCONNECTED_NET** - Net has multiple disconnected islands (deeper check)
 /// - **P42: SHORT_CIRCUIT** - Island has multiple net labels
@@ -95,7 +95,7 @@ pub mod codes {
     /// Detected by Layer 2 (connectivity.rs) only.
     ///
     /// Two geometries with different materials occupy the same physical
-    /// space (voxels), even though they're on the same net. This is
+    /// space, even though they're on the same net. This is
     /// physically impossible.
     pub const MATERIAL_INTERPENETRATION: &str = "P45";
 
@@ -392,75 +392,33 @@ pub fn connectivity_to_error(violation: &ConnectivityViolation) -> PhysicsError 
     }
 }
 
-/// Convert physical continuity violation to error code
-pub fn physical_continuity_to_error(violation: &PhysicalContinuityViolation) -> PhysicsError {
-    match violation {
-        PhysicalContinuityViolation::DisconnectedNet {
-            net_name,
-            island_count,
-            islands,
-            suggested_fix,
-        } => {
-            let island_details = islands
-                .iter()
-                .map(|island| {
+/// Convert PIVB fragmentation report to error code
+pub fn pivb_to_error(report: &FragmentationReport) -> PhysicsError {
+    let island_details = report.islands
+        .iter()
+        .map(|island| {
+                    let z_min = island.bbox.min.z;
+                    let z_max = island.bbox.max.z;
+                    let z_str = if z_max - z_min < 1_000_000 {
+                        format!("{}nm-{}nm", z_min, z_max)
+                    } else {
+                        format!("{}mm-{}mm", z_min / 1_000_000, z_max / 1_000_000)
+                    };
                     format!(
-                        "Island {} at z:{}-{} ({} nodes)",
-                        island.id,
-                        island.bbox.min_z / 1_000_000,
-                        island.bbox.max_z / 1_000_000,
-                        island.node_count
+                        "Island group {} at z:{} ({} islands)",
+                        island.group_index, z_str, island.island_count
                     )
                 })
-                .collect::<Vec<_>>()
-                .join(", ");
+        .collect::<Vec<_>>()
+        .join(", ");
 
-            PhysicsError::new(
-                codes::DISCONNECTED_NET,
-                format!(
-                    "Net '{}' has {} disconnected conductive islands: {}",
-                    net_name, island_count, island_details
-                )
-                .into(),
-            )
-            .with_suggestion(suggested_fix.clone())
-        }
-        PhysicalContinuityViolation::ShortCircuit {
-            island_id,
-            net_names,
-            overlap_location,
-            suggested_fix,
-        } => PhysicsError::new(
-            codes::SHORT_CIRCUIT,
-            format!(
-                "Short circuit detected: Island {} connects multiple nets: {} at {}",
-                island_id,
-                net_names.join(", "),
-                overlap_location
-            )
-            .into(),
+    PhysicsError::new(
+        codes::DISCONNECTED_NET,
+        format!(
+            "Net '{}' has {} disconnected conductive components: {}",
+            report.net_name, report.component_count, island_details
         )
-        .with_suggestion(suggested_fix.clone()),
-        PhysicalContinuityViolation::FloatingConductor {
-            island_id,
-            material_name,
-            bbox,
-            suggested_fix,
-        } => PhysicsError::new(
-            codes::FLOATING_CONDUCTOR,
-            format!(
-                "Floating conductor detected: Island {} ({}) has no pins at x:{}-{}, y:{}-{}, z:{}-{}",
-                island_id,
-                material_name,
-                bbox.min_x / 1_000_000,
-                bbox.max_x / 1_000_000,
-                bbox.min_y / 1_000_000,
-                bbox.max_y / 1_000_000,
-                bbox.min_z / 1_000_000,
-                bbox.max_z / 1_000_000
-            )
-            .into(),
-        )
-        .with_suggestion(suggested_fix.clone()),
-    }
+        .into(),
+    )
+    .with_suggestion(report.suggested_fix.clone())
 }

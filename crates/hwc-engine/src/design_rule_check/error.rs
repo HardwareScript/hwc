@@ -40,17 +40,17 @@ pub enum DrcError {
         location: Point3D,
     },
 
-    /// P22: Component Overheating
-    #[error("Thermal violation for '{net}'")]
+    /// P22: Current Density Exceeds Material Limit
+    #[error("Current density violation for '{net}'")]
     #[diagnostic(
         code(P22),
         url("https://docs.hw-script.org/errors/P22"),
-        help("Physical Explanation: Power dissipation (I²R) causes temperature rise. Excessive temperature can damage components or cause solder joint failure.\n\nActual Temperature: {temperature_c:.1}°C\nMaximum Allowed: {max_c:.1}°C\n\nSolution: Increase trace width, add thermal vias, or reduce current.\n\nThermal Calculation: ΔT = P / (k × A) where P = I²R")
+        help("Physical Explanation: Current density exceeds the material's maximum allowed limit, risking electromigration or trace burnout.\n\nActual Density: {actual_density_a_mm2:.2} A/mm²\nMaximum Allowed: {max_density_a_mm2:.2} A/mm²\n\nSolution: Increase trace width or reduce current.\n\nMaterial current density limit is defined in materials.hw via max_current_density.")
     )]
-    ThermalViolation {
+    CurrentDensityViolation {
         net: CompactString,
-        temperature_c: f64,
-        max_c: f64,
+        actual_density_a_mm2: f64,
+        max_density_a_mm2: f64,
         location: Point3D,
     },
 
@@ -175,15 +175,15 @@ impl From<&DrcViolation> for DrcError {
                 required_mm: *required_nm as f64 / 1_000_000.0,
                 location: *location,
             },
-            DrcViolation::ThermalViolation {
+            DrcViolation::CurrentDensityViolation {
                 net,
-                temperature_c,
-                max_c,
+                actual_density_a_mm2,
+                max_density_a_mm2,
                 location,
-            } => DrcError::ThermalViolation {
+            } => DrcError::CurrentDensityViolation {
                 net: net.clone(),
-                temperature_c: *temperature_c,
-                max_c: *max_c,
+                actual_density_a_mm2: *actual_density_a_mm2,
+                max_density_a_mm2: *max_density_a_mm2,
                 location: *location,
             },
             DrcViolation::ImpedanceViolation {

@@ -80,11 +80,6 @@ pub fn execute(input: PathBuf, _build_dir: PathBuf) -> Result<()> {
         };
 
         constraint_rulebook.set_fabrication_constraints(fab_constraints);
-
-        if let Some(ref thermal) = constraints.thermal {
-            constraint_rulebook.max_temp_rise_c = Some(thermal.max_temp_rise_c);
-            constraint_rulebook.ambient_temp_c = Some(thermal.ambient_temp_c);
-        }
     }
 
     // Run DRC validation

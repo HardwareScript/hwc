@@ -1,9 +1,9 @@
 //! Parasitic extraction (RCX) for Hardware Script physics validation.
 //!
-//! This module provides bitwise parasitic extraction using the dilation engine:
+//! This module provides parasitic extraction for trace segments:
 //! - Trace resistance calculation using length × resistivity
-//! - Trace capacitance calculation using dilation overlap with GND planes
-//! - Bit-counting (popcnt) for copper surface area calculation
+//! - Trace capacitance calculation using parallel-plate model with GND planes
+//! - Surface area calculation from trace dimensions (rectangular prism)
 //! - Conversion of overlap area to capacitance (pF = area × dielectric constant)
 //!
 //! # Architecture
@@ -14,7 +14,7 @@
 //!
 //! # Performance Target
 //!
-//! Extract parasitics for 1M voxel design in < 10ms using O(1) per chunk operations.
+//! Extract parasitics for large designs in < 10ms using O(1) per chunk operations.
 
 use crate::property_extraction::{extract_relative_permittivity, extract_resistivity};
 use crate::PropertyError;
@@ -47,10 +47,6 @@ pub struct ParasiticExtractionParams<'a> {
     pub width_nm: i64,
     /// Trace thickness in nanometers
     pub thickness_nm: i64,
-    /// Number of occupied voxels (from bit-counting)
-    pub voxel_count: u32,
-    /// Size of one voxel in nanometers
-    pub voxel_size_nm: i64,
     /// Distance to ground plane in nanometers
     pub dielectric_thickness_nm: i64,
     /// Conductor material name (e.g., "Copper")
@@ -179,13 +175,13 @@ impl ParasiticExtractor {
         Ok(resistivity * (length_m / area_m2))
     }
 
-    /// Extract trace capacitance using dilation overlap with GND planes.
+    /// Extract trace capacitance using parallel-plate model with GND planes.
     ///
-    /// This uses bit-counting (popcnt) to calculate copper surface area,
-    /// then converts to capacitance using the dielectric constant.
+    /// Uses surface area from trace dimensions and converts to capacitance
+    /// using the dielectric constant.
     ///
     /// # Arguments
-    /// * `surface_area_nm2` - Copper surface area in square nanometers (from bit-counting)
+    /// * `surface_area_nm2` - Copper surface area in square nanometers
     /// * `dielectric_thickness_nm` - Distance to ground plane in nanometers
     /// * `dielectric_material_name` - Dielectric material name (e.g., "FR4")
     /// * `symbol_table` - Symbol Table containing material definitions
@@ -236,24 +232,24 @@ impl ParasiticExtractor {
         Ok(capacitance_f * 1e12)
     }
 
-    /// Calculate copper surface area from voxel count using bit-counting.
+    /// Calculate copper surface area from trace dimensions.
     ///
-    /// This is a helper function that converts voxel count to physical area.
+    /// Uses the formula for a rectangular prism:
+    ///   A = 2 * (L*W + L*T + W*T)
     ///
     /// # Arguments
-    /// * `voxel_count` - Number of occupied voxels (from popcnt)
-    /// * `voxel_size_nm` - Size of one voxel in nanometers
+    /// * `length_nm` - Trace length in nanometers
+    /// * `width_nm` - Trace width in nanometers
+    /// * `thickness_nm` - Trace thickness in nanometers
     ///
     /// # Returns
     /// Surface area in square nanometers
     ///
     /// # Performance
-    /// O(1) - simple multiplication
+    /// O(1) - simple arithmetic
     #[inline]
-    pub fn calculate_surface_area(voxel_count: u32, voxel_size_nm: i64) -> i64 {
-        // Each voxel contributes voxel_size² to the surface area
-        let area_per_voxel = voxel_size_nm * voxel_size_nm;
-        voxel_count as i64 * area_per_voxel
+    pub fn calculate_surface_area(length_nm: i64, width_nm: i64, thickness_nm: i64) -> i64 {
+        2 * (length_nm * width_nm + length_nm * thickness_nm + width_nm * thickness_nm)
     }
 
     /// Extract complete parasitic values for a trace segment.
@@ -283,9 +279,12 @@ impl ParasiticExtractor {
             symbol_table,
         )?;
 
-        // Calculate surface area from voxel count
-        let surface_area_nm2 =
-            Self::calculate_surface_area(params.voxel_count, params.voxel_size_nm);
+        // Calculate surface area from trace dimensions
+        let surface_area_nm2 = Self::calculate_surface_area(
+            params.length_nm,
+            params.width_nm,
+            params.thickness_nm,
+        );
 
         // Extract capacitance
         let capacitance_pf = self.extract_trace_capacitance(

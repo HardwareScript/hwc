@@ -1,0 +1,284 @@
+# inverter.hw
+import * from @std/primitives/units
+import * from @std/primitives/math
+import * from materials
+import Silicon_250nm from foundry_pdk
+
+# ============================================================================
+# 1. Logical Schematic (The Module)
+# ============================================================================
+
+module Inverter_Schematic:
+    pins: [
+        input VIN, 
+        output VOUT, 
+        power VDD, 
+        ground GND
+    ]
+
+    # Declare our two devices logically
+    add NMOS named M1
+    add PMOS named M2
+
+    # Establish the logical connections (Netlist)
+    route M1.gate to VIN
+    route M2.gate to VIN
+
+    route M1.drain to VOUT
+    route M2.drain to VOUT
+
+    route M1.source to GND
+    route M1.bulk to GND
+
+    route M2.source to VDD
+    route M2.bulk to VDD
+
+# ============================================================================
+# 2. Transistor Components (The Footprints based on Table 5.1 & Lambda = 125nm)
+# ============================================================================
+
+component NMOS_Transistor:
+    pins: [gate, source, drain, bulk]
+    layout:
+        shape: Rectangle(1.25um, 1.0um, 200nm)
+        pin_positions:
+            gate at [625nm, 500nm, 1160nm]
+            source at [250nm, 187nm, 1160nm]
+            drain at [1000nm, 187nm, 1160nm]
+            bulk at [625nm, 800nm, 1160nm]
+
+        pad_shapes:
+            gate: Rectangle(250nm, 250nm, 0nm)
+            source: Rectangle(250nm, 250nm, 0nm)
+            drain: Rectangle(250nm, 250nm, 0nm)
+            bulk: Rectangle(250nm, 250nm, 0nm)
+    
+        # Physical Pours with NMOS active dimensions (W = 375nm, L = 250nm)
+        add pour(Polysilicon) named Gate_Poly on layer: poly:
+            device: gate
+            boundary: [x: 500nm, y: 0nm] to [x: 750nm, y: 600nm]
+            
+        add pour(Silicon_N) named Source_Diff on layer: active:
+            device: source
+            boundary: [x: 0nm, y: 0nm] to [x: 500nm, y: 375nm]
+            
+        add pour(Silicon_N) named Drain_Diff on layer: active:
+            device: drain
+            boundary: [x: 750nm, y: 0nm] to [x: 1.25um, y: 375nm]
+            
+        add pour(Silicon_P) named Bulk_Contact on layer: active:
+            device: bulk
+            boundary: [x: 500nm, y: 700nm] to [x: 750nm, y: 950nm]
+
+        # Metal1 Landing Pads
+        add pour(Aluminum) named Source_Pad on layer: metal1:
+            device: source
+            boundary: [x: 50nm, y: 50nm] to [x: 450nm, y: 325nm]
+            
+        add pour(Aluminum) named Drain_Pad on layer: metal1:
+            device: drain
+            boundary: [x: 800nm, y: 50nm] to [x: 1.20um, y: 325nm]
+
+        add pour(Aluminum) named Gate_Pad on layer: metal1:
+            device: gate
+            boundary: [x: 500nm, y: 375nm] to [x: 750nm, y: 625nm]
+            
+        add pour(Aluminum) named Bulk_Pad on layer: metal1:
+            device: bulk
+            boundary: [x: 500nm, y: 700nm] to [x: 750nm, y: 950nm]
+
+component PMOS_Transistor:
+    pins: [gate, source, drain, bulk]
+    layout:
+        shape: Rectangle(1.25um, 1.8um, 200nm)
+        pin_positions:
+            gate at [625nm, 900nm, 1160nm]
+            source at [250nm, 562nm, 1160nm]
+            drain at [1000nm, 562nm, 1160nm]
+            bulk at [625nm, 1500nm, 1160nm]
+
+        pad_shapes:
+            gate: Rectangle(250nm, 250nm, 0nm)
+            source: Rectangle(250nm, 250nm, 0nm)
+            drain: Rectangle(250nm, 250nm, 0nm)
+            bulk: Rectangle(250nm, 250nm, 0nm)
+    
+        # Physical Pours with PMOS active dimensions (W = 1125nm, L = 250nm)
+        add pour(Polysilicon) named Gate_Poly on layer: poly:
+            device: gate
+            boundary: [x: 500nm, y: 0nm] to [x: 750nm, y: 1.35um]
+            
+        add pour(Silicon_P) named Source_Diff on layer: active:
+            device: source
+            boundary: [x: 0nm, y: 0nm] to [x: 500nm, y: 1.125um]
+            
+        add pour(Silicon_P) named Drain_Diff on layer: active:
+            device: drain
+            boundary: [x: 750nm, y: 0nm] to [x: 1.25um, y: 1.125um]
+            
+        add pour(Silicon_N) named Bulk_Contact on layer: active:
+            device: bulk
+            boundary: [x: 500nm, y: 1.40um] to [x: 750nm, y: 1.65um]
+
+        # Metal1 Landing Pads
+        add pour(Aluminum) named Source_Pad on layer: metal1:
+            device: source
+            boundary: [x: 50nm, y: 100nm] to [x: 450nm, y: 1.025um]
+            
+        add pour(Aluminum) named Drain_Pad on layer: metal1:
+            device: drain
+            boundary: [x: 800nm, y: 100nm] to [x: 1.20um, y: 1.025um]
+
+        add pour(Aluminum) named Gate_Pad on layer: metal1:
+            device: gate
+            boundary: [x: 500nm, y: 1.125um] to [x: 750nm, y: 1.375um]
+            
+        add pour(Aluminum) named Bulk_Pad on layer: metal1:
+            device: bulk
+            boundary: [x: 500nm, y: 1.40um] to [x: 750nm, y: 1.65um]
+
+# ============================================================================
+# 3. Physical Layout (The Space)
+# ============================================================================
+
+space CMOS_Inverter implements Inverter_Schematic:
+    dimensions: 3.0um by 4.0um by 1.36um
+    resolution: 1nm
+    origin: bl by b
+    profile: Silicon_250nm
+
+    nets:
+        VIN:  { classification: signal, potential: 0V,   current: 1uA }
+        VOUT: { classification: signal, potential: 0V,   current: 1uA }
+        VDD:  { classification: power,  potential: 2.5V, current: 3uA } # VDD updated to 2.5V
+        GND:  { classification: ground, potential: 0V,   current: 3uA }
+
+    # Place devices very close together vertically
+    add NMOS_Transistor named M1 at [x: 0.875um, y: 0.9um] on layer: active
+    add PMOS_Transistor named M2 at [x: 0.875um, y: 2.0um] on layer: active
+
+    # Interconnects mapped to Metal1 with 250nm widths
+    route M1.gate to M2.gate:
+        width: 250nm
+        layer: metal1
+        current_limit_ac: { rms: 1uA, peak: 3uA }
+        
+    route M1.gate to VIN_Pad:
+        width: 250nm
+        layer: metal1
+        current_limit_ac: { rms: 1uA, peak: 3uA }
+        
+    route M1.drain to M2.drain:
+        width: 250nm
+        layer: metal1
+        current_limit_ac: { rms: 1uA, peak: 3uA }
+        
+    route M1.drain to VOUT_Pad:
+        width: 250nm
+        layer: metal1
+        current_limit_ac: { rms: 1uA, peak: 3uA }
+
+    route M1.source to GND_Rail:
+        width: 250nm
+        layer: metal1
+        current_limit_ac: { rms: 3uA, peak: 6uA }
+        
+    route M1.bulk to GND_Rail:
+        width: 250nm
+        layer: metal1
+        current_limit_ac: { rms: 3uA, peak: 6uA }
+        
+    route M2.source to VDD_Rail:
+        width: 250nm
+        layer: metal1
+        current_limit_ac: { rms: 3uA, peak: 6uA }
+        
+    route M2.bulk to VDD_Rail:
+        width: 250nm
+        layer: metal1
+        current_limit_ac: { rms: 3uA, peak: 6uA }
+
+    # IO and Power Rail Structures on Metal1 - compact layout
+    add pour(Aluminum) named VIN_Pad on layer: metal1:
+        net: VIN
+        boundary: [x: 0nm, y: 1.4um] to [x: 0.5um, y: 2.0um]
+    
+    # Manual bridge to connect M1 gate to VIN
+    add pour(Aluminum) named VIN_to_M1_Gate on layer: metal1:
+        net: VIN
+        boundary: [x: 0.5um, y: 1.375um] to [x: 1.5um, y: 1.625um]
+    
+    # Manual bridge to connect M2 gate to VIN
+    add pour(Aluminum) named VIN_to_M2_Gate on layer: metal1:
+        net: VIN
+        boundary: [x: 0.5um, y: 2.925um] to [x: 1.5um, y: 3.175um]
+        
+    add pour(Aluminum) named VOUT_Pad on layer: metal1:
+        net: VOUT
+        boundary: [x: 2.5um, y: 1.4um] to [x: 3.0um, y: 2.0um]
+
+    add pour(Aluminum) named VDD_Rail on layer: metal1:
+        net: VDD
+        boundary: [x: 0nm, y: 3.4um] to [x: 3.0um, y: 4.0um]
+        
+    add pour(Aluminum) named GND_Rail on layer: metal1:
+        net: GND
+        boundary: [x: 0nm, y: 0nm] to [x: 3.0um, y: 0.6um]
+    
+    # Bridge from M1 source to GND rail (M1 source pad is at 0.925-1.325um X, 0.95-1.225um Y)
+    add pour(Aluminum) named M1_Source_to_GND on layer: metal1:
+        net: GND
+        boundary: [x: 0.925um, y: 0.6um] to [x: 1.05um, y: 1.225um]
+    
+    # Bridge from M1 bulk to GND rail - route on far left to avoid VIN
+    # M1 bulk pad is at 1.375-1.625um X, 1.6-1.85um Y
+    # VIN_Pad is at X=0-0.5um, Y=1.4-2.0um, so stop vertical bridge before Y=1.4um
+    add pour(Aluminum) named M1_Bulk_to_GND_vertical on layer: metal1:
+        net: GND
+        boundary: [x: 0.05um, y: 0.6um] to [x: 0.15um, y: 1.35um]
+    
+    add pour(Aluminum) named M1_Bulk_to_GND_horizontal on layer: metal1:
+        net: GND
+        boundary: [x: 0.05um, y: 1.25um] to [x: 1.625um, y: 1.35um]
+    
+    add pour(Aluminum) named M1_Bulk_to_GND_final on layer: metal1:
+        net: GND
+        boundary: [x: 1.5um, y: 1.25um] to [x: 1.625um, y: 1.85um]
+    
+    # Bridge from M2 source to VDD rail - complex routing to avoid all overlaps
+    # M2 source pad is at 0.925-1.325um X, 2.1-3.025um Y
+    # VIN_to_M2_Gate is at X=0.5-1.5um, Y=2.925-3.175um
+    # Drain_Bridge (VOUT) is at X=1.85-1.95um, Y=0.95-3.025um
+    
+    # First go right from M2 source pad to clear VIN trace (stay below VIN at Y < 2.925um)
+    add pour(Aluminum) named M2_Source_Right on layer: metal1:
+        net: VDD
+        boundary: [x: 1.0um, y: 2.6um] to [x: 1.75um, y: 2.75um]
+    
+    # Then go up past VIN and VOUT drains
+    add pour(Aluminum) named VDD_Right_Up on layer: metal1:
+        net: VDD
+        boundary: [x: 1.65um, y: 2.6um] to [x: 1.75um, y: 3.35um]
+    
+    # Then go right to avoid VOUT drain bridge at X=1.85-1.95um
+    add pour(Aluminum) named VDD_Top_Right on layer: metal1:
+        net: VDD
+        boundary: [x: 1.65um, y: 3.25um] to [x: 2.2um, y: 3.35um]
+    
+    # Finally drop down to VDD rail
+    add pour(Aluminum) named VDD_Final_Drop on layer: metal1:
+        net: VDD
+        boundary: [x: 2.1um, y: 3.25um] to [x: 2.2um, y: 3.6um]
+    
+    # Bridge from M2 bulk to VDD rail (M2 bulk pad is at 1.375-1.625um X, 3.4-3.65um Y)
+    # This one is easy - bulk pad already touches VDD rail at Y=3.4um
+    add pour(Aluminum) named M2_Bulk_to_VDD on layer: metal1:
+        net: VDD
+        boundary: [x: 1.45um, y: 3.4um] to [x: 1.55um, y: 3.65um]
+    
+    # Bridge from M1 drain to M2 drain (VOUT connection)
+    # M1 drain pad: 1.675-2.075um X, 0.95-1.225um Y
+    # M2 drain pad: 1.675-2.075um X, 2.1-3.025um Y
+    add pour(Aluminum) named Drain_Bridge on layer: metal1:
+        net: VOUT
+        boundary: [x: 1.85um, y: 0.95um] to [x: 1.95um, y: 3.025um]

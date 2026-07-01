@@ -67,6 +67,33 @@ impl<'a> AutoRouter<'a> {
         self.query_store = Some(query_store);
     }
 
+    /// Resolve a copper material ID from the stackup for use as the routing material.
+    ///
+    /// Samples the first routed path's Z position to determine the layer material.
+    /// Returns the material ID from the registry, or `IrError::UndeclaredMaterial` if
+    /// the stackup or material is not properly declared.
+    fn resolve_sample_copper_id(&self) -> Result<hwc_engine::material::MaterialId, IrError> {
+        let sample_z = self.space.resolution_nm; // Default: bottom of board
+        if let Some(layer_name) = self.stackup_manager.get_layer_name_at_z(sample_z) {
+            let mat_name = self.profile
+                .and_then(|p| p.stackup.as_ref())
+                .and_then(|stackup| {
+                    stackup.layers.iter()
+                        .find(|l| l.name.name == layer_name)
+                        .map(|l| l.material.clone())
+                })
+                .ok_or_else(|| IrError::UndeclaredMaterial {
+                    material: format!("No material defined for layer '{}'", layer_name).into(),
+                })?;
+            self.space.material_registry.get_id(&mat_name)
+                .ok_or_else(|| IrError::UndeclaredMaterial { material: mat_name })
+        } else {
+            Err(IrError::UndeclaredMaterial {
+                material: "No stackup layer found for routing material resolution".into(),
+            })
+        }
+    }
+
     /// v0.1.8: Retrieve the memoized query store after routing completes.
     ///
     /// The caller should hold onto this store and pass it back via
@@ -121,6 +148,9 @@ impl<'a> AutoRouter<'a> {
     /// primitives for the rest of the pipeline.
     pub fn route_all_nets(&mut self) -> Result<(), IrError> {
         use hwc_engine::geometry::BoundingBox;
+
+        // v0.1.9: Track the starting index of analytic_routes to identify new routes
+        let starting_route_count = self.space.analytic_routes.len();
 
         // Phase 1: Build the nets HashMap required by GeometryRouter::route_space()
         // v0.1.7 Chain-Link Logic: If explicit 'route' statements exist, we route them
@@ -308,7 +338,7 @@ impl<'a> AutoRouter<'a> {
                     // v0.1.8: Track declared route current for thermal validation.
                     if let Some(ref ac) = route.current_limit_ac {
                         let rms = crate::ir::conversions::evaluate_expression_to_ma(&ac.rms, &crate::SymbolTable::new())
-                            .unwrap_or(20.0);
+                            .unwrap_or(0.0);
                         let peak = crate::ir::conversions::evaluate_expression_to_ma(&ac.peak, &crate::SymbolTable::new())
                             .unwrap_or(rms);
                         net_currents_ma.insert(net_name, peak);
@@ -326,6 +356,13 @@ impl<'a> AutoRouter<'a> {
                 let coords: Vec<Point3D> = pins.iter().map(|p| p.position).collect();
                 geo_nets.insert(net_id, coords);
                 net_id_to_name.insert(net_id, net_name.clone());
+
+                // v0.1.8: Pull current from netlist for legacy/auto-nets
+                if let Some(net_data) = self.space.netlist.get_net(net_id) {
+                    if let Some(c) = net_data.current_ma {
+                        net_currents_ma.insert(net_data.name.clone(), c);
+                    }
+                }
             }
         } else {
             // v0.1.7: Unified Net IDs for Chain-Link mode.
@@ -340,9 +377,16 @@ impl<'a> AutoRouter<'a> {
             // redundant parallel traces. The "0 nets routed" log is preferred
             // over physically incorrect redundant copper.
             for (net_id, _points) in &route_segments {
-                net_id_to_name.entry(*net_id).or_insert_with(|| {
+                let name = net_id_to_name.entry(*net_id).or_insert_with(|| {
                     compact_str::CompactString::from(format!("chain_net_{}", net_id.raw()))
-                });
+                }).clone();
+                
+                // v0.1.8: Pull current from netlist for explicit routes
+                if let Some(net_data) = self.space.netlist.get_net(*net_id) {
+                    if let Some(c) = net_data.current_ma {
+                        net_currents_ma.entry(name).or_insert(c);
+                    }
+                }
             }
         }
 
@@ -378,10 +422,51 @@ impl<'a> AutoRouter<'a> {
             self.space.dimensions.depth_nm,
         );
 
-        let constraints =
+        let mut constraints =
             hwc_engine::constraint_manager::ConstraintRulebook::new(self.space.resolution_nm);
 
-        let mut geo_router = hwc_engine::GeometryRouter::new(grid_bounds, constraints);
+        // v0.1.9: Set fabrication constraints from space (required for boundary port resolution)
+        if let Some(ref constraint_set) = self.space.fabrication_constraints {
+            use hwc_engine::constraint_manager::{FabricationConstraints, StackupInfo};
+            
+            let stackup = constraint_set.stackup.as_ref().map(|s| StackupInfo {
+                dielectric_height_nm: s.dielectric_height_nm,
+                copper_thickness_nm: s.copper_thickness_nm,
+                relative_permittivity: s.relative_permittivity,
+                default_impedance_ohm: s.default_impedance_ohm,
+            });
+
+            let fab_constraints = FabricationConstraints {
+                min_trace_width_nm: constraint_set.trace.min_width_nm,
+                min_trace_spacing_nm: constraint_set.trace.min_spacing_nm,
+                min_via_diameter_nm: constraint_set.via.min_diameter_nm,
+                default_via_diameter_nm: constraint_set.via.default_diameter_nm,
+                min_annular_ring_nm: constraint_set.via.min_annular_ring_nm,
+                min_spacing_nm: constraint_set.via.min_spacing_nm,
+                low_voltage_clearance_nm: constraint_set.clearance.low_voltage_nm,
+                medium_voltage_clearance_nm: constraint_set.clearance.medium_voltage_nm,
+                high_voltage_clearance_nm: constraint_set.clearance.high_voltage_nm,
+                safety_factor: constraint_set.clearance.safety_factor,
+                stackup,
+                solder_mask_expansion_nm: constraint_set.solder_mask_expansion_nm,
+                technology: constraint_set.technology.clone(),
+            };
+
+            constraints.set_fabrication_constraints(fab_constraints);
+        }
+
+        let mut geo_router = hwc_engine::GeometryRouter::new(grid_bounds, constraints, self.space.material_registry.clone());
+
+        // v0.1.9: Set routing material and trace width so every segment stamped
+        // into the EntityGraph carries the correct physical properties.
+        {
+            let trace_width = self.space.fabrication_constraints.as_ref()
+                .map(|c| c.trace.min_width_nm)
+                .unwrap_or(100_000);
+            let routing_copper_id = self.resolve_sample_copper_id()
+                .unwrap_or(0);
+            geo_router.set_routing_context(routing_copper_id, trace_width);
+        }
 
         // v0.1.8: Wire per-net routing pattern policies into the GeometryRouter.
         if !self.route_net_policies.is_empty() {
@@ -511,11 +596,17 @@ impl<'a> AutoRouter<'a> {
                     // The meander injector mutated paths in the RouteResult, but the
                     // EntityGraph still holds the original, stale straight segments.
                     // Sync the expanded meander paths back so exporters see the real geometry.
+                    let routing_copper_id = self.resolve_sample_copper_id()?;
                     let mut _total_meander_segments = 0usize;
                     for (&net_id, mutated_paths) in &result.paths {
                         self.space.entity_graph.clear_routes_for_net(net_id);
                         for path in mutated_paths {
-                            self.space.entity_graph.register_route(net_id, path);
+                            self.space.entity_graph.register_route(
+                                net_id,
+                                path,
+                                routing_copper_id,
+                                trace_width,
+                            );
                             _total_meander_segments += path.len().saturating_sub(1);
                         }
                     }
@@ -545,7 +636,7 @@ impl<'a> AutoRouter<'a> {
                     self.stackup_manager
                         .get_layer_index_at_z(sample_z)
                         .map(|idx| self.stackup_manager.get_thickness_for_layer_index(idx))
-                        .unwrap_or(default_thickness)
+                        .unwrap_or(Ok(default_thickness))?
                 };
 
                 for (net_id_raw, segments) in &result.paths {
@@ -575,8 +666,27 @@ impl<'a> AutoRouter<'a> {
                                 message: "Miter chamfer requires trace width constraint but none is loaded.".into(),
                                 hint: "Ensure a profile with 'trace:' constraints is declared in the space definition.".into(),
                             })?;
+                        
+                        // DEBUG: Print path BEFORE miter
+                        eprintln!("[MITER DEBUG] Path BEFORE miter ({} points):", path.len());
+                        for (i, p) in path.iter().enumerate().take(4) {
+                            eprintln!("  pre_miter[{}]: ({},{},{})", i, p.x, p.y, p.z);
+                        }
+                        if path.len() > 4 {
+                            eprintln!("  ... and {} more points", path.len() - 4);
+                        }
+                        
                         let miter_engine = hwc_engine::MiterEngine::new(trace_width);
                         let mitered_path = miter_engine.apply_miter_pass(path);
+                        
+                        // DEBUG: Print path AFTER miter
+                        eprintln!("[MITER DEBUG] Path AFTER miter ({} points):", mitered_path.len());
+                        for (i, p) in mitered_path.iter().enumerate().take(4) {
+                            eprintln!("  post_miter[{}]: ({},{},{})", i, p.x, p.y, p.z);
+                        }
+                        if mitered_path.len() > 4 {
+                            eprintln!("  ... and {} more points", mitered_path.len() - 4);
+                        }
 
                         // v0.1.7: Grid-Agnostic Z-Resolution via StackupManager
                         let mut refined_path = mitered_path;
@@ -591,11 +701,11 @@ impl<'a> AutoRouter<'a> {
                             match (first_layer, last_layer) {
                                 (Some(a), Some(b)) if a == b => {
                                     // Resolve physical thickness for this specific layer
-                                    actual_thickness = self.stackup_manager.get_thickness_for_layer_index(a);
+                                    actual_thickness = self.stackup_manager.get_thickness_for_layer_index(a)?;
                                     Some((first_z + last_z) / 2)
                                 }
                                 (Some(a), _) => {
-                                    actual_thickness = self.stackup_manager.get_thickness_for_layer_index(a);
+                                    actual_thickness = self.stackup_manager.get_thickness_for_layer_index(a)?;
                                     Some(first_z)
                                 }
                                 _ => None,
@@ -618,7 +728,7 @@ impl<'a> AutoRouter<'a> {
                                 {
                                     point.z = self
                                         .stackup_manager
-                                        .get_z_start_nm_for_layer_index(layer_idx);
+                                        .get_z_start_nm_for_layer_index(layer_idx)?;
                                 }
                             }
                         }
@@ -641,7 +751,37 @@ impl<'a> AutoRouter<'a> {
                         }
 
                         let declared_width = net_declared_widths.get::<str>(net_name.as_ref()).copied();
-                        let current_ma = net_currents_ma.get::<str>(net_name.as_ref()).copied().unwrap_or(20.0);
+                        
+                        // v0.1.8: Enforce current declaration for ASICs. No hardcoded defaults.
+                        let current_ma = net_currents_ma.get::<str>(net_name.as_ref()).copied()
+                            .ok_or_else(|| {
+                                let is_asic = self.profile.as_ref().map_or(false, |p| p.is_asic());
+                                if is_asic {
+                                    IrError::MissingAsicConstraint {
+                                        message: format!("Net '{}' has no current_limit or net current declaration.", net_name),
+                                        hint: "Add 'current_limit_ac: { rms: <val>, peak: <val> }' to the route OR 'current: <val>' to the nets: declaration.".into(),
+                                    }
+                                } else {
+                                    // PCB builds still allow implicit 0mA (skips DRC)
+                                    IrError::MissingAsicConstraint {
+                                        message: "Internal error: current missing in global router".into(),
+                                        hint: "".into(),
+                                    }
+                                }
+                            });
+
+                        // If it's not an ASIC, we can just use 0.0 (skips DRC)
+                        let current_ma = match current_ma {
+                            Ok(c) => c,
+                            Err(e) => {
+                                if self.profile.as_ref().map_or(false, |p| p.is_asic()) {
+                                    return Err(e);
+                                } else {
+                                    0.0
+                                }
+                            }
+                        };
+
                         self.register_analytic_route(
                             actual_net_id,
                             &net_name,
@@ -664,6 +804,71 @@ impl<'a> AutoRouter<'a> {
 
         // Commit all batch routes
         self.space.entity_graph.commit_route();
+
+        // v0.1.9.1: CRITICAL FIX - Re-register ALL routes for modified nets
+        // The DRC G-Cell sweep and continuity checker depend on entity_graph.get_all_routes().
+        // Previously, fresh routes were only added to analytic_routes, while lockfile routes
+        // were registered in BOTH. This caused DRC to only run on cached builds, missing
+        // violations in fresh builds. Now we ensure consistency by registering fresh routes
+        // in entity_graph as well, matching the lockfile loading behavior.
+        //
+        // v0.1.9.1 FIX: Re-register ALL routes for nets that were modified, not just new ones.
+        // Problem: Manual routes are registered in entity_graph before starting_route_count.
+        // If auto-router adds another route for the same net, we were clearing that net and only
+        // registering routes added after starting_route_count, LOSING the manual routes.
+        // Solution: Re-register ALL routes from analytic_routes for nets that were touched.
+        
+        // Build a set of nets that have new routes added during this session
+        let mut nets_modified: rustc_hash::FxHashSet<hwc_engine::netlist::NetId> = 
+            rustc_hash::FxHashSet::default();
+        for trace in self.space.analytic_routes.iter().skip(starting_route_count) {
+            nets_modified.insert(trace.net_id);
+        }
+        
+        // Clear existing entity_graph entries for modified nets to prevent duplicates
+        for &net_id in &nets_modified {
+            self.space.entity_graph.clear_routes_for_net(net_id);
+        }
+        
+        // Re-register ALL routes from analytic_routes for the modified nets
+        // This ensures we don't lose manual routes that were registered before starting_route_count
+        for trace in self.space.analytic_routes.iter() {
+            if nets_modified.contains(&trace.net_id) {
+                // DEBUG: Log what we're reading from analytic_routes
+                eprintln!("[AUTO-ROUTER RE-REGISTER] net_id={}, {} segments from analytic_routes", 
+                    trace.net_id.0, trace.segments.len());
+                for (i, line_seg) in trace.segments.iter().take(3).enumerate() {
+                    eprintln!("  analytic_seg[{}]: start=({},{},{}), end=({},{},{})", 
+                        i, line_seg.start.x, line_seg.start.y, line_seg.start.z,
+                        line_seg.end.x, line_seg.end.y, line_seg.end.z);
+                }
+                if trace.segments.len() > 3 {
+                    eprintln!("  ... and {} more segments", trace.segments.len() - 3);
+                }
+                
+                // Convert AnalyticTrace LineSegments to TraceSegments
+                let trace_segments: Vec<hwc_engine::geometry::TraceSegment> = trace
+                    .segments
+                    .iter()
+                    .map(|line_seg| {
+                        hwc_engine::geometry::TraceSegment::new(
+                            line_seg.start,
+                            line_seg.end,
+                            trace.width_nm,
+                            trace.material as u8,
+                        )
+                    })
+                    .collect();
+                
+                // Register in entity_graph for DRC and continuity checking
+                if !trace_segments.is_empty() {
+                    self.space.entity_graph.register_trace_segments(trace.net_id, trace_segments);
+                }
+            }
+        }
+
+        // Rebuild spatial index after registering all routes
+        self.space.entity_graph.rebuild_spatial_index(&self.space.material_registry);
 
         // v0.1.8: Retrieve the QueryStore back from the GeometryRouter so it
         // can be reused for subsequent compilations (incremental rebuilds).
@@ -742,7 +947,7 @@ impl<'a> AutoRouter<'a> {
         path: Vec<Point3D>,
         thickness_nm: i64,
         declared_width_nm: Option<i64>,
-        current_ma: f64,
+        current_limit_ma: f64,
     ) -> Result<(), IrError> {
         use hwc_engine::{AnalyticTrace, LineSegment};
 
@@ -830,6 +1035,13 @@ impl<'a> AutoRouter<'a> {
                 material: format!("No stackup layer found at Z={}nm", sample_z).into(),
             });
         };
+
+        let net_actual_current_ma = self.space
+            .netlist
+            .get_net(net_id)
+            .and_then(|n| n.current_ma)
+            .unwrap_or(0.0);
+
         let trace = AnalyticTrace::new(
             net_id,
             trace_width_nm,
@@ -837,10 +1049,25 @@ impl<'a> AutoRouter<'a> {
             segments,
             copper_id,
             net_name.into(),
-            current_ma,
+            net_actual_current_ma,  // Actual operating current from net
+            current_limit_ma,       // Route's declared capability
         );
 
         self.space.analytic_routes.push(trace);
+        
+        // DEBUG: Verify what was stored in analytic_routes
+        if let Some(stored_trace) = self.space.analytic_routes.last() {
+            eprintln!("[MANUAL ROUTE STORED] net_id={}, {} segments in analytic_routes", 
+                stored_trace.net_id.0, stored_trace.segments.len());
+            for (i, seg) in stored_trace.segments.iter().take(2).enumerate() {
+                eprintln!("  stored_seg[{}]: start=({},{},{}), end=({},{},{})", 
+                    i, seg.start.x, seg.start.y, seg.start.z, seg.end.x, seg.end.y, seg.end.z);
+            }
+            if stored_trace.segments.len() > 2 {
+                eprintln!("  ... and {} more segments", stored_trace.segments.len() - 2);
+            }
+        }
+        
         Ok(())
     }
 }

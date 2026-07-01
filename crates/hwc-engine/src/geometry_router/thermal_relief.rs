@@ -1,73 +1,24 @@
-// Thermal Relief Generation - GOD-TIER NATIVE
+// Thermal Relief Generation — v0.1.8 NATIVE VECTOR
 // Reference: GAP1 Section 5.5
 //
 // Generates thermal relief patterns (spokes) for pads connected to copper pours.
 // Prevents cold solder joints by restricting heat flow during manufacturing.
 //
-// GOD-TIER: All operations write directly to VoxelGrid. No intermediate HashMaps.
+// v0.1.8: Scanline rasterization (`PolygonRasterizer`) has been deleted.
+// The old approach filled polygons by scanline-rasterizing them into individual
+// occupied grid points via `occupy_point()`. This produced thousands of
+// degenerate zero-length TraceSegments and was incompatible with Clipper2
+// boolean operations needed for pour merging.
+//
+// REPLACEMENT: Spokes are now registered as native vector polygons via
+// `entity_graph.add_polygon_substrate_layer()`. This stores the spoke as a
+// single Clipper2 Path64 polygon in `SubstrateLayerShape::Polygon`, enabling
+// seamless union/intersection with copper pours and proper DRC.
 
 use crate::geometry_router::EntityGraph;
 use crate::geometry_router::substrate_types::{MaterialId, NetId};
-use crate::geometry::{Point2D, Polygon};
+use crate::geometry::{BoundingBox, Point2D, Point3D, Polygon};
 use std::f64::consts::PI;
-
-/// Polygon rasterizer for filling polygons into the entity graph
-pub struct PolygonRasterizer {
-    #[allow(dead_code)]
-    resolution_nm: i64,
-}
-
-impl PolygonRasterizer {
-    pub fn new(resolution_nm: i64) -> Self {
-        Self { resolution_nm }
-    }
-
-    pub fn rasterize_into_grid(
-        &self,
-        polygon: &Polygon,
-        z_layer: i64,
-        material: crate::geometry_router::substrate_types::MaterialId,
-        net: crate::geometry_router::substrate_types::NetId,
-        grid: &mut EntityGraph,
-    ) {
-        if polygon.points.len() < 3 {
-            return;
-        }
-        let min_y = polygon.points.iter().map(|p| p.y).min().unwrap_or(0);
-        let max_y = polygon.points.iter().map(|p| p.y).max().unwrap_or(0);
-
-        let res = self.resolution_nm.max(1);
-        let mut y = min_y;
-        while y <= max_y {
-            let mut intersections = Vec::new();
-            let n = polygon.points.len();
-            for i in 0..n {
-                let j = (i + 1) % n;
-                let p1 = &polygon.points[i];
-                let p2 = &polygon.points[j];
-                if (p1.y <= y && p2.y > y) || (p2.y <= y && p1.y > y) {
-                    let t = (y - p1.y) as f64 / (p2.y - p1.y) as f64;
-                    let x_intersect = p1.x as f64 + t * (p2.x - p1.x) as f64;
-                    intersections.push(x_intersect as i64);
-                }
-            }
-            intersections.sort();
-            let mut k = 0;
-            while k + 1 < intersections.len() {
-                let x_start = intersections[k];
-                let x_end = intersections[k + 1];
-                let mut x = x_start;
-                while x <= x_end {
-                    let point = crate::geometry::Point3D::new(x, y, z_layer);
-                    grid.occupy_point(point, crate::netlist::NetId(net), material);
-                    x += res;
-                }
-                k += 2;
-            }
-            y += res;
-        }
-    }
-}
 
 /// Thermal relief pattern type
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -139,9 +90,9 @@ impl ThermalReliefGenerator {
         }
     }
 
-    /// Generate thermal relief pattern for a circular pad - GOD-TIER NATIVE
+    /// Generate thermal relief pattern for a circular pad — v0.1.8 NATIVE VECTOR
     ///
-    /// Writes directly to VoxelGrid. No intermediate HashMap allocations.
+    /// Writes directly to EntityGraph. No intermediate HashMap allocations.
     ///
     /// # Arguments
     /// * `center` - Pad center in nanometers
@@ -149,7 +100,7 @@ impl ThermalReliefGenerator {
     /// * `z_layer` - Z coordinate in nanometers
     /// * `material` - Material ID for spokes
     /// * `net` - Net ID for spokes
-    /// * `grid` - VoxelGrid to write into
+    /// * `grid` - EntityGraph to write into
     pub fn generate_for_circular_pad(
         &self,
         center: Point2D,
@@ -161,16 +112,16 @@ impl ThermalReliefGenerator {
     ) {
         match self.config.relief_type {
             ThermalReliefType::Direct => {
-                // No relief - pad directly connects to pour (no modifications)
+                // No relief — pad directly connects to pour (no modifications)
             }
             ThermalReliefType::Isolated => {
-                // Complete isolation - drill clearance gap through substrate layers
+                // Complete isolation — drill clearance gap through substrate layers
                 let clearance_radius = pad_radius_nm + self.config.gap_width_nm;
                 let half = clearance_radius;
                 let z_half = self.resolution_nm * 2;
-                let cutout = crate::geometry::BoundingBox::new(
-                    crate::geometry::Point3D::new(center.x - half, center.y - half, z_layer - z_half),
-                    crate::geometry::Point3D::new(center.x + half, center.y + half, z_layer + z_half),
+                let cutout = BoundingBox::new(
+                    Point3D::new(center.x - half, center.y - half, z_layer - z_half),
+                    Point3D::new(center.x + half, center.y + half, z_layer + z_half),
                 );
                 grid.drill_hole(cutout, Some(clearance_radius * 2), net);
             }
@@ -180,9 +131,9 @@ impl ThermalReliefGenerator {
         }
     }
 
-    /// Generate spoke pattern for thermal relief - GOD-TIER NATIVE
+    /// Generate spoke pattern for thermal relief — v0.1.8 NATIVE VECTOR
     ///
-    /// Writes directly to VoxelGrid. No intermediate HashMap allocations.
+    /// Writes directly to EntityGraph. No intermediate HashMap allocations.
     fn generate_spoke_pattern(
         &self,
         center: Point2D,
@@ -198,9 +149,9 @@ impl ThermalReliefGenerator {
         // Clear clearance gap via substrate drill_hole
         let half = clearance_radius;
         let z_half = self.resolution_nm * 2;
-        let cutout = crate::geometry::BoundingBox::new(
-            crate::geometry::Point3D::new(center.x - half, center.y - half, z_layer - z_half),
-            crate::geometry::Point3D::new(center.x + half, center.y + half, z_layer + z_half),
+        let cutout = BoundingBox::new(
+            Point3D::new(center.x - half, center.y - half, z_layer - z_half),
+            Point3D::new(center.x + half, center.y + half, z_layer + z_half),
         );
         grid.drill_hole(cutout, Some(clearance_radius * 2), net);
 
@@ -210,7 +161,6 @@ impl ThermalReliefGenerator {
 
         for i in 0..self.config.spoke_count {
             let angle = i as f64 * angle_step;
-            // GOD-TIER: Generate spoke directly into VoxelGrid
             self.generate_spoke(
                 SpokeParams {
                     center,
@@ -226,9 +176,12 @@ impl ThermalReliefGenerator {
         }
     }
 
-    /// Generate a single spoke at given angle - GOD-TIER NATIVE
+    /// Generate a single spoke at given angle — v0.1.8 NATIVE VECTOR
     ///
-    /// Writes directly to VoxelGrid. No intermediate HashMap allocations.
+    /// v0.1.8: Replaced `PolygonRasterizer::rasterize_into_grid()` with native
+    /// polygon registration via `add_polygon_substrate_layer()`. The spoke is
+    /// stored as a single Clipper2 Path64 polygon in SubstrateLayerShape::Polygon,
+    /// enabling seamless boolean operations with copper pours and proper DRC.
     fn generate_spoke(&self, params: SpokeParams, grid: &mut EntityGraph) {
         let cos_angle = params.angle_rad.cos();
         let sin_angle = params.angle_rad.sin();
@@ -241,14 +194,12 @@ impl ThermalReliefGenerator {
         let outer_y = params.center.y
             + ((params.start_radius_nm + params.length_nm) as f64 * sin_angle) as i64;
 
-        // Rasterize spoke as a thick line
-        let half_width = self.config.spoke_width_nm / 2;
-
         // Perpendicular direction for width
+        let half_width = self.config.spoke_width_nm / 2;
         let perp_cos = -sin_angle;
         let perp_sin = cos_angle;
 
-        // Generate rectangle for spoke
+        // Generate rectangle vertices for spoke
         let p1_x = inner_x + (half_width as f64 * perp_cos) as i64;
         let p1_y = inner_y + (half_width as f64 * perp_sin) as i64;
         let p2_x = inner_x - (half_width as f64 * perp_cos) as i64;
@@ -258,8 +209,7 @@ impl ThermalReliefGenerator {
         let p4_x = outer_x + (half_width as f64 * perp_cos) as i64;
         let p4_y = outer_y + (half_width as f64 * perp_sin) as i64;
 
-        // GOD-TIER: Rasterize spoke rectangle directly into VoxelGrid
-        let rasterizer = PolygonRasterizer::new(self.resolution_nm);
+        // v0.1.8: Register spoke as native vector polygon (replaces scanline rasterization)
         let polygon = Polygon::new(vec![
             Point2D::new(p1_x, p1_y),
             Point2D::new(p2_x, p2_y),
@@ -267,16 +217,29 @@ impl ThermalReliefGenerator {
             Point2D::new(p4_x, p4_y),
         ]);
 
-        rasterizer.rasterize_into_grid(&polygon, params.z_layer, params.material, params.net, grid);
+        let bbox = BoundingBox::new(
+            Point3D::new(
+                p1_x.min(p2_x).min(p3_x).min(p4_x),
+                p1_y.min(p2_y).min(p3_y).min(p4_y),
+                params.z_layer,
+            ),
+            Point3D::new(
+                p1_x.max(p2_x).max(p3_x).max(p4_x),
+                p1_y.max(p2_y).max(p3_y).max(p4_y),
+                params.z_layer,
+            ),
+        );
+
+        grid.add_polygon_substrate_layer(params.material, params.net, bbox, polygon);
     }
 
-    /// Generate thermal relief for a rectangular pad - GOD-TIER NATIVE
+    /// Generate thermal relief for a rectangular pad — v0.1.8 NATIVE VECTOR
     ///
-    /// Writes directly to VoxelGrid. No intermediate HashMap allocations.
+    /// Writes directly to EntityGraph. No intermediate HashMap allocations.
     pub fn generate_for_rectangular_pad(&self, params: RectangularPadParams, grid: &mut EntityGraph) {
         match self.config.relief_type {
             ThermalReliefType::Direct => {
-                // No relief - pad directly connects to pour (no modifications)
+                // No relief — pad directly connects to pour (no modifications)
             }
             ThermalReliefType::Isolated => {
                 // Clear clearance around pad using drill_hole
@@ -284,9 +247,9 @@ impl ThermalReliefGenerator {
                 let half_w = params.width_nm / 2 + gap;
                 let half_h = params.height_nm / 2 + gap;
                 let z_half = self.resolution_nm * 2;
-                let cutout = crate::geometry::BoundingBox::new(
-                    crate::geometry::Point3D::new(params.center.x - half_w, params.center.y - half_h, params.z_layer - z_half),
-                    crate::geometry::Point3D::new(params.center.x + half_w, params.center.y + half_h, params.z_layer + z_half),
+                let cutout = BoundingBox::new(
+                    Point3D::new(params.center.x - half_w, params.center.y - half_h, params.z_layer - z_half),
+                    Point3D::new(params.center.x + half_w, params.center.y + half_h, params.z_layer + z_half),
                 );
                 grid.drill_hole(cutout, None, params.net);
             }

@@ -51,6 +51,10 @@ pub struct MaterialPhysicalProps {
     pub resistivity_ohm_m: f64,
     /// Thermal conductivity in W/(m·K)
     pub thermal_conductivity_w_mk: f64,
+    /// Default layer thickness in nanometers (from material definition)
+    pub thickness_nm: i64,
+    /// Maximum current density in A/mm² (for EM checks)
+    pub max_current_density_a_mm2: Option<f64>,
 }
 
 /// Strict material registry — maps material names to IDs and conductivity classes.
@@ -218,18 +222,22 @@ impl MaterialRegistry {
         matches!(self.get_conductivity(id), Some(MaterialConductivity::Insulator))
     }
 
-    /// Store physical properties (resistivity, thermal conductivity) for a material.
+    /// Store physical properties (resistivity, thermal conductivity, thickness) for a material.
     pub fn set_physical_props(
         &mut self,
         id: MaterialId,
         resistivity_ohm_m: f64,
         thermal_conductivity_w_mk: f64,
+        thickness_nm: i64,
+        max_current_density_a_mm2: Option<f64>,
     ) {
         self.id_to_physical.insert(
             id,
             MaterialPhysicalProps {
                 resistivity_ohm_m,
                 thermal_conductivity_w_mk,
+                thickness_nm,
+                max_current_density_a_mm2,
             },
         );
     }
@@ -240,9 +248,52 @@ impl MaterialRegistry {
         self.id_to_physical.get(&id).copied()
     }
 
+    /// Validate that a conductor material has all required physical properties.
+    pub fn validate_conductor_props(&self, id: MaterialId, name: &str) -> Result<(), String> {
+        if !self.is_conductor(id) {
+            return Ok(());
+        }
+        let props = self.get_physical_props(id);
+        let mut missing = Vec::new();
+        match props {
+            Some(p) => {
+                if p.resistivity_ohm_m == 0.0 {
+                    missing.push("resistivity");
+                }
+                if p.thermal_conductivity_w_mk == 0.0 {
+                    missing.push("thermal_conductivity");
+                }
+                if p.max_current_density_a_mm2.is_none() {
+                    missing.push("max_current_density");
+                }
+            }
+            None => {
+                missing.push("resistivity");
+                missing.push("thermal_conductivity");
+                missing.push("max_current_density");
+            }
+        }
+        if missing.is_empty() {
+            Ok(())
+        } else {
+            Err(format!(
+                "Conductor material '{}' is missing required physical properties: {}",
+                name,
+                missing.join(", ")
+            ))
+        }
+    }
+
     /// Get physical properties by material name. Returns `None` if not found.
     pub fn get_physical_props_by_name(&self, name: &str) -> Option<MaterialPhysicalProps> {
         self.get_id(name).and_then(|id| self.get_physical_props(id))
+    }
+
+    /// Get material physical properties by material ID (alias for get_physical_props).
+    /// Returns `None` if no physical properties are stored for this material.
+    #[inline]
+    pub fn get_material(&self, id: MaterialId) -> Option<MaterialPhysicalProps> {
+        self.get_physical_props(id)
     }
 }
 

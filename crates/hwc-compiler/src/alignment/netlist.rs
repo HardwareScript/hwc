@@ -7,7 +7,7 @@
 //!
 //! Both physical and logical netlists use the same data structures, making
 //! comparison straightforward. The only difference is their source:
-//! - **Physical Netlist**: Extracted from voxel geometry by Device Extractor
+//! - **Physical Netlist**: Extracted from physical geometry by Device Extractor
 //! - **Logical Netlist**: Synthesized from module definition by Logical Synthesizer
 //!
 //! # Data-Driven Architecture

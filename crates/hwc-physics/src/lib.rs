@@ -5,10 +5,12 @@ pub mod connectivity;
 pub mod electrical;
 pub mod electromagnetic;
 pub mod error_mapping;
+pub mod geometry;
 pub mod metadata_tracker;
 pub mod parasitic;
-pub mod physical_continuity;
+pub mod pivb;
 pub mod property_extraction;
+pub mod spatial_index;
 pub mod thermal;
 pub mod timing;
 
@@ -18,18 +20,20 @@ pub use electrical::{ElectricalAnalysis, ElectricalAnalyzer, ElectricalViolation
 pub use electromagnetic::{EMAnalysis, EMAnalyzer, EMViolation};
 pub use error_mapping::{
     clearance_to_error, connectivity_to_error, electrical_to_error, em_to_error,
-    physical_continuity_to_error, thermal_to_error, PhysicsError,
+    pivb_to_error, thermal_to_error, PhysicsError,
 };
+pub use geometry::{BoundingBox, Direction, Point3D, TraceSegment};
 pub use metadata_tracker::{MetadataChangeFlags, MetadataTracker};
 pub use parasitic::{ParasiticExtractionParams, ParasiticExtractor, ParasiticValues};
-pub use physical_continuity::{
-    ConductiveIsland, GeometryNodeRef, NetIslandBinding, PhysicalContinuityChecker,
-    PhysicalContinuityViolation, PinPosition, PinRef, RouteSegmentMetadata,
+pub use pivb::{
+    ConnectivityGraph, ConnectivityResult, ContactPlacement, FragmentationReport,
+    FragmentedIsland, PivbSolver, PlanarIsland, VerticalBridge,
 };
 pub use property_extraction::{
     extract_dielectric_strength, extract_relative_permittivity, extract_resistivity,
     extract_thermal_conductivity, PropertyError,
 };
+pub use spatial_index::{DynamicSpatialIndex, IndexedSegment, SpatialEntitySource};
 pub use thermal::{ThermalAnalysis, ThermalAnalyzer, ThermalViolation};
 pub use timing::{TimingAnalyzer, TimingConstraint, TimingResult, TimingViolation};
 
@@ -42,6 +46,15 @@ pub struct BridgeRule {
     pub fill_material: CompactString,
 }
 
+/// Vector-first route segment metadata for continuity checking.
+#[derive(Debug, Clone)]
+pub struct RouteSegmentMetadata {
+    pub net: u32,
+    pub net_name: Option<CompactString>,
+    pub material: u8,
+    pub bbox: BoundingBox,
+}
+
 /// Comprehensive physics validation report.
 ///
 /// Contains all violations from all physics analyzers.
@@ -52,7 +65,7 @@ pub struct PhysicsReport {
     pub em_violations: Vec<EMViolation>,
     pub clearance_violations: Vec<ClearanceViolation>,
     pub connectivity_violations: Vec<ConnectivityViolation>,
-    pub continuity_violations: Vec<PhysicalContinuityViolation>,
+    pub pivb_results: Vec<ConnectivityResult>,
 }
 
 impl PhysicsReport {
@@ -63,7 +76,7 @@ impl PhysicsReport {
             em_violations: Vec::new(),
             clearance_violations: Vec::new(),
             connectivity_violations: Vec::new(),
-            continuity_violations: Vec::new(),
+            pivb_results: Vec::new(),
         }
     }
 
@@ -73,7 +86,7 @@ impl PhysicsReport {
             && self.em_violations.is_empty()
             && self.clearance_violations.is_empty()
             && self.connectivity_violations.is_empty()
-            && self.continuity_violations.is_empty()
+            && self.pivb_results.iter().all(|r| r.is_pass())
     }
 
     pub fn total_violations(&self) -> usize {
@@ -82,7 +95,7 @@ impl PhysicsReport {
             + self.em_violations.len()
             + self.clearance_violations.len()
             + self.connectivity_violations.len()
-            + self.continuity_violations.len()
+            + self.pivb_results.iter().filter(|r| r.is_fail()).count()
     }
 
     /// Convert all violations to error codes with messages
@@ -109,8 +122,10 @@ impl PhysicsReport {
             errors.push(connectivity_to_error(violation));
         }
 
-        for violation in &self.continuity_violations {
-            errors.push(error_mapping::physical_continuity_to_error(violation));
+        for result in &self.pivb_results {
+            if let ConnectivityResult::Fail(report) = result {
+                errors.push(pivb_to_error(report));
+            }
         }
 
         errors
@@ -295,72 +310,32 @@ impl PhysicsReport {
             output.push('\n');
         }
 
-        // Physical Continuity violations (Layer 3)
-        if !self.continuity_violations.is_empty() {
+        // PIVB Connectivity results (Layer 3)
+        let failures: Vec<&FragmentationReport> = self.pivb_results.iter()
+            .filter_map(|r| if let ConnectivityResult::Fail(f) = r { Some(f) } else { None })
+            .collect();
+
+        if !failures.is_empty() {
             output.push_str(&format!(
-                "⚡ Physical Continuity Violations ({}):\n",
-                self.continuity_violations.len()
+                "⚡ Physical Connectivity Violations ({}):\n",
+                failures.len()
             ));
-            for (i, violation) in self.continuity_violations.iter().enumerate() {
+            for (i, report) in failures.iter().enumerate() {
                 output.push_str(&format!("  {}. ", i + 1));
-                match violation {
-                    PhysicalContinuityViolation::DisconnectedNet {
-                        net_name,
-                        island_count,
-                        islands,
-                        suggested_fix,
-                    } => {
-                        output.push_str(&format!(
-                            "Physical Disconnection: Net '{}' has {} disconnected islands\n",
-                            net_name, island_count
-                        ));
-                        for island in islands {
-                            output.push_str(&format!(
-                                "     Island {} at z:{}-{} ({} nodes)\n",
-                                island.id,
-                                island.bbox.min_z / 1_000_000,
-                                island.bbox.max_z / 1_000_000,
-                                island.node_count
-                            ));
-                        }
-                        output.push_str(&format!("     Fix: {}\n", suggested_fix));
-                    }
-                    PhysicalContinuityViolation::ShortCircuit {
-                        island_id,
-                        net_names,
-                        overlap_location,
-                        suggested_fix,
-                    } => {
-                        output.push_str(&format!(
-                            "Short Circuit: Island {} connects nets: {}\n",
-                            island_id,
-                            net_names.join(", ")
-                        ));
-                        output.push_str(&format!("     Location: {}\n", overlap_location));
-                        output.push_str(&format!("     Fix: {}\n", suggested_fix));
-                    }
-                    PhysicalContinuityViolation::FloatingConductor {
-                        island_id,
-                        material_name,
-                        bbox,
-                        suggested_fix,
-                    } => {
-                        output.push_str(&format!(
-                            "Floating Conductor: Island {} ({}) has no pins\n",
-                            island_id, material_name
-                        ));
-                        output.push_str(&format!(
-                            "     Location: x:{}-{}, y:{}-{}, z:{}-{}\n",
-                            bbox.min_x / 1_000_000,
-                            bbox.max_x / 1_000_000,
-                            bbox.min_y / 1_000_000,
-                            bbox.max_y / 1_000_000,
-                            bbox.min_z / 1_000_000,
-                            bbox.max_z / 1_000_000
-                        ));
-                        output.push_str(&format!("     Fix: {}\n", suggested_fix));
-                    }
+                output.push_str(&format!(
+                    "Physical Disconnection: Net '{}' has {} disconnected islands\n",
+                    report.net_name, report.component_count
+                ));
+                for island in &report.islands {
+                    output.push_str(&format!(
+                        "     Island group {} at z:{}-{} ({} nodes)\n",
+                        island.group_index,
+                        island.bbox.min.z / 1_000_000,
+                        island.bbox.max.z / 1_000_000,
+                        island.island_count
+                    ));
                 }
+                output.push_str(&format!("     Fix: {}\n", report.suggested_fix));
             }
             output.push('\n');
         }
@@ -441,7 +416,7 @@ impl Default for PhysicsReport {
 /// ```text
 /// Layer 2: Logical IR (hwc-compiler) — Two-Pass Compilation
 ///          ↓ (produces HardwareIR + SymbolTable)
-/// Layer 3: Physical IR (hwc-engine) — Voxel Grid + Routing
+/// Layer 3: Physical IR (hwc-engine) — Routing + EntityGraph
 ///          ↓ (produces routed board)
 /// Layer 4: Physics IR (hwc-physics) — Validation ← PhysicsEngine
 ///          ↓ (validates against physics constraints)

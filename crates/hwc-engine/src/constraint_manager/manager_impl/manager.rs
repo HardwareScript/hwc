@@ -44,12 +44,19 @@ pub struct ConstraintManager {
 
 impl ConstraintManager {
     /// Create a new constraint manager.
-    pub fn new(resolution_nm: i64) -> Self {
+    ///
+    /// All parameters must come from the PDK profile.
+    pub fn new(
+        resolution_nm: i64,
+        safety_factor: i64,
+        default_temp_rise_c: i64,
+        default_max_parallel_nm: i64,
+    ) -> Self {
         Self {
             resolution_nm,
-            safety_factor: 2,        // 2× safety factor (industry standard)
-            default_temp_rise_c: 10, // 10°C temperature rise
-            default_max_parallel_nm: 10_000_000, // 10mm max parallel length
+            safety_factor,
+            default_temp_rise_c,
+            default_max_parallel_nm,
         }
     }
 
@@ -164,13 +171,13 @@ impl ConstraintManager {
                 .ok_or_else(|| format!("Net ID {:?} not found in netlist", net_id))?;
 
             // Perform electrical analysis for this net
-            let (voltage_mv, current_ma) =
+            let (voltage_mv, current_ma_opt) =
                 electrical_analysis::analyze_net_electrical(net, netlist, None)?;
 
             // Generate routing constraints for this net
             let params = NetConstraintParams {
                 voltage_mv,
-                current_ma,
+                current_ma: current_ma_opt.unwrap_or(0),
                 material_name,
                 is_external,
                 safety_factor: self.safety_factor,
@@ -231,11 +238,5 @@ impl ConstraintManager {
         netlist: &NetlistArena,
     ) -> super::net_classification::NetClassificationResult {
         classify_nets(netlist)
-    }
-}
-
-impl Default for ConstraintManager {
-    fn default() -> Self {
-        Self::new(1) // Default 1nm resolution
     }
 }

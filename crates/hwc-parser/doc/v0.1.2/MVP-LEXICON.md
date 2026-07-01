@@ -44,7 +44,7 @@ These act as keys inside indented blocks to define parameters.
 | Key | Purpose | Example |
 |-----|---------|---------|
 | `dimensions:` | Continuous physical measurements (length, width, depth) | `dimensions: 50mm by 50mm by 4mm` |
-| `grid:` | Discrete integers defining the voxel matrix size | `grid: 500 by 500 by 4` |
+| `grid:` | Discrete integers defining the resolution grid size | `grid: 500 by 500 by 4` |
 | `path:` | Opens an indented YAML-style list of waypoints for manual trace routing | `path:` followed by `- [1, 10, 10]` |
 
 ## 4. Rotation System (Arbitrary Angles)
@@ -77,11 +77,11 @@ add Resistor (4.7kΩ) named PullUp at [1,20,15] rotated 90deg
 
 ### Physical Engine Challenge
 
-**90-Degree Rotations**: Pins perfectly align with the discrete voxel grid. X becomes Y. Mathematically perfect.
+**90-Degree Rotations**: Pins perfectly align with the resolution grid. X becomes Y. Mathematically perfect.
 
 **Arbitrary Rotations**: Pins land on fractional coordinates (e.g., X: 14.33, Y: 18.91).
 
-**Solution**: The compiler uses trigonometry (sine/cosine) to rotate the component's bounding box and pins, then applies a **Nearest-Neighbor Snapping Algorithm** to lock pins to the nearest whole integer voxel so the router can connect traces.
+**Solution**: The compiler uses trigonometry (sine/cosine) to rotate the component's bounding box and pins, then applies a **Nearest-Neighbor Snapping Algorithm** to lock pins to the nearest resolution coordinate so the router can connect traces.
 
 ## 5. Punctuation & Symbols (The "Structure")
 

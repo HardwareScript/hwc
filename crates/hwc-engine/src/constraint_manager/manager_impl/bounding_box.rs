@@ -110,7 +110,7 @@ pub fn calculate_module_bounding_box(
         placements
     }
 
-    // Convert to nanometers using voxel size
+    // All coordinates are already in nanometers
     let min = Point3D::new(min_x, min_y, min_z);
     let max = Point3D::new(max_x, max_y, max_z);
 

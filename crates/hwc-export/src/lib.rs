@@ -1,5 +1,4 @@
 pub mod bom;
-pub mod contour_tracer; // v0.1.6: Voxel-to-vector conversion with anti-aliasing
 pub mod device_extractor;
 pub mod dxf;
 pub mod excellon;
@@ -21,5 +20,3 @@ pub use solder_layers::{export as export_solder_layers, LayerType};
 // Re-export device extractor types
 pub use device_extractor::{format_spice, DeviceExtractionError, DeviceExtractor};
 
-// Re-export contour tracer types (v0.1.6)
-pub use contour_tracer::{Contour, ContourConfig, ContourTracer, Point};

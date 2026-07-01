@@ -65,7 +65,7 @@ impl OrientedBoundingBox {
 
 /// A local-coordinate OBVH (Oriented Bounding Volume Hierarchy) for a component type.
 /// Each component definition is parsed exactly once into a ComponentStamp at origin [0, 0, 0].
-/// This eliminates voxel stamping — geometry is stored as analytical vectors.
+/// Geometry is stored as analytical vectors (no grid-based stamping).
 #[derive(Clone, Debug)]
 pub struct ComponentStamp {
     /// Unique identifier for this stamp

@@ -61,7 +61,7 @@ impl SceneGraph {
     /// merging and punch-through. This function is kept for backward compatibility but
     /// is now a no-op to prevent duplication.
     pub fn add_traces(&mut self, _space: &HardwareSpace) {
-        // Traces are now handled by add_substrate() via voxel-realized layers.
+        // Traces are now handled by add_substrate() via realized layers.
     }
 
     /// Add components from HardwareSpace

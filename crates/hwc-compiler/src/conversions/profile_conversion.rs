@@ -126,12 +126,12 @@ pub fn profile_to_constraints(
                 .map(measurement_to_nm)
                 .unwrap_or(copper_thickness_nm),
             max_thickness_nm: 0,
-            allowed_conductors: vec!["copper".into()],
-            allowed_dielectrics: vec!["fr4".into(), "air".into()],
+            allowed_conductors: layer_def.allowed_conductors.clone(),
+            allowed_dielectrics: layer_def.allowed_dielectrics.clone(),
         }
     } else {
         return Err(ConversionError::MissingProfileConstraint(
-            "layer (min_thickness)".into(),
+            "layer (allowed_conductors, allowed_dielectrics)".into(),
         ));
     };
 

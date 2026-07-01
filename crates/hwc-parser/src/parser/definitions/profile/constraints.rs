@@ -1,6 +1,7 @@
 use super::super::super::error::{span_to_source_span, ParseError};
 use crate::ast::*;
 use crate::lexer::{Span, Token};
+use compact_str::CompactString;
 
 impl super::super::super::Parser {
     /// Parse trace constraints block
@@ -71,6 +72,8 @@ impl super::super::super::Parser {
         let start_pos = self.current_span().start;
         let mut max_count = None;
         let mut min_thickness = None;
+        let mut allowed_conductors = Vec::new();
+        let mut allowed_dielectrics = Vec::new();
 
         while !self.check(&Token::Dedent) && !self.is_at_end() {
             self.skip_whitespace();
@@ -91,6 +94,14 @@ impl super::super::super::Parser {
                     min_thickness = Some(self.parse_measurement()?);
                     self.skip_whitespace();
                 }
+                "allowed_conductors" => {
+                    allowed_conductors = self.parse_identifier_array()?;
+                    self.skip_whitespace();
+                }
+                "allowed_dielectrics" => {
+                    allowed_dielectrics = self.parse_identifier_array()?;
+                    self.skip_whitespace();
+                }
                 _ => {
                     return Err(self.error(&format!("Unknown layer constraint: '{}'", field_name)));
                 }
@@ -102,8 +113,37 @@ impl super::super::super::Parser {
         Ok(LayerConstraints {
             max_count,
             min_thickness,
+            allowed_conductors,
+            allowed_dielectrics,
             span: Span::new(start_pos, end_pos),
         })
+    }
+
+    /// Parse array of identifiers: [Copper, Aluminum]
+    pub(super) fn parse_identifier_array(&mut self) -> Result<Vec<CompactString>, ParseError> {
+        self.expect(&Token::OpenBracket)?;
+        let mut idents = Vec::new();
+
+        while !self.check(&Token::CloseBracket) && !self.is_at_end() {
+            self.skip_whitespace();
+
+            if self.check(&Token::CloseBracket) {
+                break;
+            }
+
+            let ident = self.expect_identifier()?;
+            idents.push(ident.name.clone());
+
+            self.skip_whitespace();
+
+            if self.check(&Token::Comma) {
+                self.advance();
+                self.skip_whitespace();
+            }
+        }
+
+        self.expect(&Token::CloseBracket)?;
+        Ok(idents)
     }
 
     /// Parse clearance constraints block

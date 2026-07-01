@@ -42,8 +42,8 @@ impl ParallelRouter {
 
                 let grid_chunk = EntityGraph::new();
 
-                // Occupied voxels tracking is now handled by the entity graph
-                // No need to copy occupied data - the TopologicalRouter uses DynamicSpatialIndex
+                // v0.1.8: Occupancy tracking is now handled by the EntityGraph.
+                // No need to copy occupancy data — the TopologicalRouter uses DynamicSpatialIndex.
 
                 RoutedDomain {
                     id: domain.domain_id.clone(),
@@ -64,7 +64,6 @@ impl ParallelRouter {
         let mut routes = Vec::new();
 
         let (width, height, depth) = domain.dimensions();
-        let mut occupied_voxels = rustc_hash::FxHashMap::default();
 
         let board_bounds = BoundingBox::new(
             Point3D::new(0, 0, 0),
@@ -77,8 +76,23 @@ impl ParallelRouter {
         for meta in domain.local_grid.get_component_metadata() {
             let w = meta.bbox.max.x - meta.bbox.min.x;
             let h = meta.bbox.max.y - meta.bbox.min.y;
-            let trace_seg = TraceSegment::new(meta.bbox.min, meta.bbox.max, w.max(h));
-            spatial_index.insert(IndexedSegment::new(seg_id, 0, &trace_seg, meta.bbox.min.z));
+            let trace_seg = TraceSegment::new(meta.bbox.min, meta.bbox.max, w.max(h), meta.material);
+            let thickness_nm = meta.bbox.max.z - meta.bbox.min.z;
+            let component_net_id = meta.net_bindings.values().next()
+                .copied()
+                .unwrap_or(0) as usize;
+            spatial_index.insert(IndexedSegment {
+                source: hwc_physics::spatial_index::SpatialEntitySource::ComponentInstance {
+                    instance_id: seg_id,
+                },
+                segment_id: seg_id,
+                net_id: component_net_id,
+                width_nm: trace_seg.width_nm,
+                thickness_nm,
+                start: trace_seg.start,
+                end: trace_seg.end,
+                layer: meta.bbox.min.z,
+            });
             seg_id += 1;
         }
 
@@ -117,9 +131,6 @@ impl ParallelRouter {
                 if let Some(topo_path) = topo_router.route(start_local, end_local, &spatial_index, &board_bounds) {
                     if topo_path.waypoints.len() >= 2 {
                         let waypoints = topo_path.waypoints;
-                        for point in &waypoints {
-                            occupied_voxels.insert(*point, net_id);
-                        }
                         routes.push(Route { net_id, waypoints });
                     }
                 }

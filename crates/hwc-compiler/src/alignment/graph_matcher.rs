@@ -304,14 +304,14 @@ impl<'a> GraphMatcher<'a> {
         Ok(())
     }
 
-    /// Normalize net names for comparison (handle common aliases)
+    /// Normalize net names for comparison.
+    ///
+    /// v0.1.8 ZERO-MAGIC: No aliasing. Net names must match exactly as declared
+    /// in the PDK profile. The compiler must NOT guess that "0" means "GND" or
+    /// that "VCC" means "VDD" — this violates the Zero-Magic Compiler mandate.
+    /// If net names differ, the compiler must fail-fast with a clear error.
     fn normalize_net_name(&self, net: &str) -> CompactString {
-        match net {
-            "0" => "GND".into(),
-            "VSS" => "GND".into(),
-            "VCC" => "VDD".into(),
-            _ => net.to_uppercase().into(),
-        }
+        net.to_uppercase().into()
     }
 
     /// Get spatial information for a device terminal

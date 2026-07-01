@@ -276,15 +276,23 @@ impl super::Parser {
                         "pattern" => {
                             pattern = Some(self.parse_pattern_instantiation()?);
                         }
-                        "current_limit" => {
+                        "current_limit" | "current_limit_ac" => {
                             // Parse: current_limit: [rms: <Value>, peak: <Value>]
+                            // or: current_limit_ac: { rms: <Value>, peak: <Value> }
                             // Or backward compat: current_limit: <Value>
-                            if self.check(&Token::OpenBracket) {
-                                self.advance(); // consume '['
+                            if self.check(&Token::OpenBracket) || self.check(&Token::OpenBrace) {
+                                let is_brace = self.check(&Token::OpenBrace);
+                                self.advance(); // consume '[' or '{'
                                 let mut rms = None;
                                 let mut peak = None;
 
-                                while !self.check(&Token::CloseBracket) && !self.is_at_end() {
+                                let close_token = if is_brace {
+                                    Token::CloseBrace
+                                } else {
+                                    Token::CloseBracket
+                                };
+
+                                while !self.check(&close_token) && !self.is_at_end() {
                                     if self.check(&Token::Newline) {
                                         self.advance();
                                         continue;
@@ -308,7 +316,7 @@ impl super::Parser {
                                         self.advance();
                                     }
                                 }
-                                self.expect(&Token::CloseBracket)?;
+                                self.expect(&close_token)?;
 
                                 let rms_expr =
                                     rms.ok_or_else(|| self.error("current_limit missing 'rms' field"))?;

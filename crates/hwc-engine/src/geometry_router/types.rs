@@ -102,6 +102,9 @@ pub struct Via {
     /// Net ID this via belongs to
     pub net_id: NetId,
 
+    /// v0.1.8: Material ID (e.g. Tungsten for contacts)
+    pub material_id: u8,
+
     /// Via type classification (through-hole, blind, buried, microvia)
     pub via_type: ViaType,
 
@@ -121,9 +124,9 @@ impl Via {
         to_z_nm: i64,
         diameter_nm: i64,
         net_id: NetId,
+        material_id: u8,
         board_min_z_nm: i64,
         board_max_z_nm: i64,
-        voxel_z_nm: i64,
         annular_ring_nm: i64,
     ) -> Self {
         let via_type = Self::classify_via_type(
@@ -132,7 +135,6 @@ impl Via {
             diameter_nm,
             board_min_z_nm,
             board_max_z_nm,
-            voxel_z_nm,
         );
 
         Self {
@@ -141,6 +143,7 @@ impl Via {
             to_z_nm,
             diameter_nm,
             net_id,
+            material_id,
             via_type,
             annular_ring_nm,
             properties: FxHashMap::default(),
@@ -154,6 +157,7 @@ impl Via {
         to_z_nm: i64,
         diameter_nm: i64,
         net_id: NetId,
+        material_id: u8,
         via_type: ViaType,
         annular_ring_nm: i64,
     ) -> Self {
@@ -163,6 +167,7 @@ impl Via {
             to_z_nm,
             diameter_nm,
             net_id,
+            material_id,
             via_type,
             annular_ring_nm,
             properties: FxHashMap::default(),
@@ -176,9 +181,7 @@ impl Via {
         diameter_nm: i64,
         board_min_z_nm: i64,
         board_max_z_nm: i64,
-        voxel_z_nm: i64,
     ) -> ViaType {
-        let voxel_z_nm = voxel_z_nm.max(1);
         let min_z = from_z_nm.min(to_z_nm);
         let max_z = from_z_nm.max(to_z_nm);
         let z_span = max_z - min_z;
@@ -187,13 +190,13 @@ impl Via {
             return ViaType::ThroughHole;
         }
 
-        // Microvia: <150µm diameter and spans at most two voxel slabs
-        if diameter_nm < 150_000 && z_span <= 2 * voxel_z_nm {
+        // Microvia: <150µm diameter and spans at most 200µm physical
+        if diameter_nm < 150_000 && z_span <= 200_000 {
             return ViaType::Microvia;
         }
 
-        let touches_bottom = min_z <= board_min_z_nm + voxel_z_nm / 2;
-        let touches_top = max_z >= board_max_z_nm - voxel_z_nm / 2;
+        let touches_bottom = min_z <= board_min_z_nm;
+        let touches_top = max_z >= board_max_z_nm;
 
         if touches_bottom && touches_top {
             return ViaType::ThroughHole;
@@ -207,52 +210,54 @@ impl Via {
     }
 
     /// Check if this is a through-hole via (spans the full board Z extent).
-    pub fn is_through_hole(
-        &self,
-        board_min_z_nm: i64,
-        board_max_z_nm: i64,
-        voxel_z_nm: i64,
-    ) -> bool {
-        let voxel_z_nm = voxel_z_nm.max(1);
+    pub fn is_through_hole(&self, board_min_z_nm: i64, board_max_z_nm: i64) -> bool {
         let min_z = self.from_z_nm.min(self.to_z_nm);
         let max_z = self.from_z_nm.max(self.to_z_nm);
-        min_z <= board_min_z_nm + voxel_z_nm / 2 && max_z >= board_max_z_nm - voxel_z_nm / 2
+        min_z <= board_min_z_nm && max_z >= board_max_z_nm
     }
 
     /// Check if this is a blind via (touches one outer Z face but not both).
-    pub fn is_blind(&self, board_min_z_nm: i64, board_max_z_nm: i64, voxel_z_nm: i64) -> bool {
-        let voxel_z_nm = voxel_z_nm.max(1);
+    pub fn is_blind(&self, board_min_z_nm: i64, board_max_z_nm: i64) -> bool {
         let min_z = self.from_z_nm.min(self.to_z_nm);
         let max_z = self.from_z_nm.max(self.to_z_nm);
-        let touches_bottom = min_z <= board_min_z_nm + voxel_z_nm / 2;
-        let touches_top = max_z >= board_max_z_nm - voxel_z_nm / 2;
+        let touches_bottom = min_z <= board_min_z_nm;
+        let touches_top = max_z >= board_max_z_nm;
         (touches_bottom || touches_top) && !(touches_bottom && touches_top)
     }
 
     /// Check if this is a buried via (does not touch either board Z face).
-    pub fn is_buried(&self, board_min_z_nm: i64, board_max_z_nm: i64, voxel_z_nm: i64) -> bool {
-        let voxel_z_nm = voxel_z_nm.max(1);
+    pub fn is_buried(&self, board_min_z_nm: i64, board_max_z_nm: i64) -> bool {
         let min_z = self.from_z_nm.min(self.to_z_nm);
         let max_z = self.from_z_nm.max(self.to_z_nm);
-        min_z > board_min_z_nm + voxel_z_nm / 2 && max_z < board_max_z_nm - voxel_z_nm / 2
+        min_z > board_min_z_nm && max_z < board_max_z_nm
     }
 
-    /// Sample Z plane positions (bottom of each voxel slab) between the via endpoints.
-    pub fn z_planes(&self, voxel_z_nm: i64) -> Vec<i64> {
-        let voxel_z_nm = voxel_z_nm.max(1);
+    /// Get Z plane positions between via endpoints using explicit layer Z positions.
+    ///
+    /// v0.1.7: Replaces slab-based `z_planes` with stackup-driven iteration.
+    pub fn z_planes_between(
+        &self,
+        layer_z_positions: &[i64],
+        board_min_z_nm: i64,
+        board_max_z_nm: i64,
+    ) -> Vec<i64> {
         let min_z = self.from_z_nm.min(self.to_z_nm);
         let max_z = self.from_z_nm.max(self.to_z_nm);
-        let first = (min_z / voxel_z_nm) * voxel_z_nm;
-        let mut z = if first < min_z {
-            first + voxel_z_nm
-        } else {
-            first
-        };
-        let mut planes = Vec::new();
-        while z <= max_z {
-            planes.push(z);
-            z += voxel_z_nm;
+
+        let mut planes: Vec<i64> = layer_z_positions
+            .iter()
+            .filter(|&&z| z >= min_z && z <= max_z)
+            .copied()
+            .collect();
+
+        if min_z <= board_min_z_nm && !planes.contains(&board_min_z_nm) {
+            planes.insert(0, board_min_z_nm);
         }
+        if max_z >= board_max_z_nm && !planes.contains(&board_max_z_nm) {
+            planes.push(board_max_z_nm);
+        }
+
+        planes.sort_unstable();
         planes
     }
 
@@ -324,7 +329,7 @@ pub enum RoutingError {
         location: Point3D,
     },
 
-    /// Via placement blocked by occupied voxels
+    /// Via placement blocked by occupied grid positions
     #[error("Via placement blocked for net {} at {} - insufficient clearance on intermediate layers", .net_id.raw(), .position)]
     #[diagnostic(
         code(R23),

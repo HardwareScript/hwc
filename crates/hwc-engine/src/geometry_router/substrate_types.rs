@@ -2,7 +2,7 @@
 //!
 //! These types define the physical substrate layers, component metadata,
 //! and pin positions used throughout the engine. They are independent of
-//! any voxel grid and represent pure continuous geometry.
+//! any grid and represent pure continuous geometry.
 
 use crate::geometry::{BoundingBox, Point3D};
 use clipper2_rust::{Path64, Paths64};
@@ -12,6 +12,7 @@ use smallvec::SmallVec;
 
 // Re-export MaterialId from the material module
 pub use crate::material::MaterialId;
+pub use hwc_physics::connectivity::SubstrateLayerType;
 
 /// Net ID type — u32 for up to 4 billion nets.
 pub type NetId = u32;
@@ -27,19 +28,6 @@ pub struct Terminal {
     pub material_id: MaterialId,
     /// Net binding
     pub net_id: Option<NetId>,
-}
-
-/// Type of substrate layer for proper physics validation
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SubstrateLayerType {
-    /// 2D copper pour (pad, plane, filled region)
-    Pour,
-    /// 3D vertical contact (via, through-hole)
-    Contact,
-    /// 3D dielectric substrate (FR4, core, prepreg)
-    Substrate,
-    /// Solder mask coating on top/bottom board faces
-    SolderMask,
 }
 
 /// Type of cap for tube shapes
@@ -674,100 +662,7 @@ impl SubstrateLayer {
         self.cutouts.is_empty()
     }
 
-    /// Convert substrate layer to 2D boolean grid for contour tracing.
-    pub fn to_2d_boolean_grid(&self, voxel_size_nm: i64) -> (Vec<bool>, usize, usize) {
-        let width = ((self.bbox.max.x - self.bbox.min.x) / voxel_size_nm) as usize;
-        let height = ((self.bbox.max.y - self.bbox.min.y) / voxel_size_nm) as usize;
 
-        let mut grid = vec![true; width * height];
-
-        for cutout in &self.cutouts {
-            let cutout_min_x =
-                ((cutout.bbox.min.x - self.bbox.min.x) / voxel_size_nm).max(0) as usize;
-            let cutout_min_y =
-                ((cutout.bbox.min.y - self.bbox.min.y) / voxel_size_nm).max(0) as usize;
-            let cutout_max_x =
-                ((cutout.bbox.max.x - self.bbox.min.x) / voxel_size_nm).min(width as i64) as usize;
-            let cutout_max_y =
-                ((cutout.bbox.max.y - self.bbox.min.y) / voxel_size_nm).min(height as i64) as usize;
-
-            for y in cutout_min_y..cutout_max_y {
-                for x in cutout_min_x..cutout_max_x {
-                    if y * width + x < grid.len() {
-                        match &cutout.shape {
-                            SubstrateLayerShape::Polygon { outer_contour, .. } => {
-                                let x_nm = self.bbox.min.x + (x as i64 * voxel_size_nm);
-                                let y_nm = self.bbox.min.y + (y as i64 * voxel_size_nm);
-                                let center_x = (cutout.bbox.min.x + cutout.bbox.max.x) / 2;
-                                let center_y = (cutout.bbox.min.y + cutout.bbox.max.y) / 2;
-                                let px = x_nm - center_x;
-                                let py = y_nm - center_y;
-
-                                let mut min_x = i64::MAX;
-                                let mut max_x = i64::MIN;
-                                let mut min_y = i64::MAX;
-                                let mut max_y = i64::MIN;
-                                for p in outer_contour.iter() {
-                                    if p.x < min_x {
-                                        min_x = p.x;
-                                    }
-                                    if p.x > max_x {
-                                        max_x = p.x;
-                                    }
-                                    if p.y < min_y {
-                                        min_y = p.y;
-                                    }
-                                    if p.y > max_y {
-                                        max_y = p.y;
-                                    }
-                                }
-
-                                if px >= min_x && px <= max_x && py >= min_y && py <= max_y {
-                                    grid[y * width + x] = false;
-                                }
-                            }
-                            SubstrateLayerShape::Tube {
-                                outer_diameter,
-                                inner_diameter,
-                                ..
-                            } => {
-                                let x_nm = self.bbox.min.x + (x as i64 * voxel_size_nm);
-                                let y_nm = self.bbox.min.y + (y as i64 * voxel_size_nm);
-                                let center_x = (cutout.bbox.min.x + cutout.bbox.max.x) / 2;
-                                let center_y = (cutout.bbox.min.y + cutout.bbox.max.y) / 2;
-                                let dx = x_nm - center_x;
-                                let dy = y_nm - center_y;
-                                let outer_radius = *outer_diameter as i64 / 2;
-                                let inner_radius = *inner_diameter as i64 / 2;
-                                let dist_sq = dx * dx + dy * dy;
-                                if dist_sq <= outer_radius * outer_radius
-                                    && dist_sq >= inner_radius * inner_radius
-                                {
-                                    grid[y * width + x] = false;
-                                }
-                            }
-                            SubstrateLayerShape::Rect => {
-                                grid[y * width + x] = false;
-                            }
-                            SubstrateLayerShape::Circle { radius } => {
-                                let x_nm = self.bbox.min.x + (x as i64 * voxel_size_nm);
-                                let y_nm = self.bbox.min.y + (y as i64 * voxel_size_nm);
-                                let center_x = (cutout.bbox.min.x + cutout.bbox.max.x) / 2;
-                                let center_y = (cutout.bbox.min.y + cutout.bbox.max.y) / 2;
-                                let dx = x_nm - center_x;
-                                let dy = y_nm - center_y;
-                                if dx * dx + dy * dy <= radius * radius {
-                                    grid[y * width + x] = false;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        (grid, width, height)
-    }
 }
 
 /// Ray-casting point-in-polygon test.
@@ -972,17 +867,6 @@ pub enum CardinalDirection {
     West,
 }
 
-/// Memory usage statistics for the substrate/entity system.
-#[derive(Debug, Clone, Default)]
-pub struct MemoryStats {
-    pub total_voxels: usize,
-    pub occupied_voxels: usize,
-    pub occupancy_percent: f64,
-    pub materials_bytes: usize,
-    pub net_ids_bytes: usize,
-    pub collision_bytes: usize,
-    pub total_bytes: usize,
-}
 
 /// Compaction statistics for monitoring memory health.
 #[derive(Debug, Clone, Copy, PartialEq)]

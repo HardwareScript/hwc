@@ -153,7 +153,7 @@ impl Resolution {
 pub enum Unit {
     // === CORE COMPILER UNITS (needed for geometry/safety) ===
 
-    // Distance - for voxel placement and routing
+    // Distance - for placement and routing
     Millimeter,
     Centimeter,
     Micrometer,

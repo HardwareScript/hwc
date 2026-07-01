@@ -1,0 +1,64 @@
+# foundry_pdk.hw
+import * from @std/primitives/units
+import Silicon_P, Silicon_N, Polysilicon, Aluminum, SiO2 from materials
+import Titanium_Silicide from stdlib/materials/bridges
+import Tungsten from stdlib/materials/conductors
+
+profile Silicon_180nm:
+    technology: "ASIC"
+    
+    stackup:
+        substrate:  [material: Silicon_P,   thickness: 100nm, routable: false]
+        active:     [material: Silicon_N,   thickness: 200nm, routable: false]
+        gate_oxide: [material: SiO2,        thickness: 10nm,  routable: false]
+        poly:       [material: Polysilicon, thickness: 150nm, routable: local_only]
+        d1:         [material: SiO2,        thickness: 500nm, routable: false]
+        metal1:     [material: Aluminum,    thickness: 400nm, routable: true]
+
+    # Explicitly declare physical transition bridges inside the PDK profile
+    bridge Silicon_N to Aluminum:
+        interface: Titanium_Silicide
+        thickness: 50nm
+        fill: Tungsten
+
+    bridge Silicon_P to Aluminum:
+        interface: Titanium_Silicide
+        thickness: 50nm
+        fill: Tungsten
+
+    bridge Polysilicon to Aluminum:
+        interface: Titanium_Silicide
+        thickness: 50nm
+        fill: Tungsten
+
+    trace:
+        min_width: 180nm
+        min_spacing: 180nm
+
+    via:
+        min_diameter: 220nm
+        min_annular_ring: 100nm
+        min_spacing: 300nm
+        shape: cylinder
+        default_via_fill: Tungsten
+
+    manufacturing:
+        copper_thickness: 400nm
+
+    clearance:
+        high_voltage: 500nm
+        safety_factor: 2.0
+
+    thermal:
+        ambient_temp: 25C
+        max_operating_temp: 125C
+        max_temp_rise: 50C
+        clustering_threshold: 10um
+
+    layer:
+        min_thickness: 100nm
+        allowed_conductors: [Aluminum, Polysilicon, Silicon_N, Silicon_P]
+        allowed_dielectrics: [SiO2]
+
+    routing:
+        max_local_route_length: 10um

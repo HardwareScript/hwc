@@ -138,7 +138,7 @@ pub struct BridgeRule {
     /// Bridge interface material name (e.g., "Titanium_Silicide")
     /// This is the thin layer that touches the source material
     pub interface_material: CompactString,
-    /// Interface thickness (e.g., 50nm) - typically 1 voxel
+    /// Interface thickness (e.g., 50nm)
     pub interface_thickness: Option<Measurement>,
     /// Via fill material (e.g., "Tungsten") - fills the rest of the via
     pub fill_material: Option<CompactString>,
@@ -236,6 +236,12 @@ pub struct ViaConstraints {
 pub struct LayerConstraints {
     pub max_count: Option<usize>,
     pub min_thickness: Option<Measurement>,
+    /// List of materials permitted for conductive traces/pours.
+    /// v0.1.8: Replaces hardcoded "copper" default.
+    pub allowed_conductors: Vec<CompactString>,
+    /// List of materials permitted for dielectric isolation.
+    /// v0.1.8: Replaces hardcoded "fr4", "air" defaults.
+    pub allowed_dielectrics: Vec<CompactString>,
     pub span: Span,
 }
 
@@ -292,7 +298,7 @@ pub struct StackupLayer {
 /// Export & Visualization constraints (v0.1.6: Anti-Aliasing Switch)
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ExportConstraints {
-    /// Enable anti-aliasing/smoothing for voxel-to-vector conversion
+    /// Enable anti-aliasing/smoothing for discrete-to-vector conversion
     pub antialiasing: bool,
 
     /// Maximum deviation allowed during smoothing (e.g., 5nm)

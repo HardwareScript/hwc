@@ -22,8 +22,10 @@ pub struct ArchivedArcSegment {
     pub width_nm: i64,
     pub x1: i64,
     pub y1: i64,
+    pub z1: i64,  // v0.1.9: Added for vector engine - preserves vertical connectivity
     pub x2: i64,
     pub y2: i64,
+    pub z2: i64,  // v0.1.9: Added for vector engine - preserves vertical connectivity
     pub thickness_nm: i64,
     pub material_name: String,
     pub current_ma: i64,
@@ -251,8 +253,10 @@ pub fn inspect_lockfile(path: &Path) -> io::Result<String> {
                 "width_nm": a.width_nm,
                 "x1": a.x1,
                 "y1": a.y1,
+                "z1": a.z1,
                 "x2": a.x2,
                 "y2": a.y2,
+                "z2": a.z2,
                 "thickness_nm": a.thickness_nm,
                 "material_name": &*a.material_name,
                 "current_ma": a.current_ma,
@@ -286,6 +290,87 @@ pub fn inspect_lockfile(path: &Path) -> io::Result<String> {
 
     serde_json::to_string_pretty(&obj)
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("json: {e}")))
+}
+
+// ---------------------------------------------------------------------------
+// Path Topology Reconstruction
+// ---------------------------------------------------------------------------
+
+/// Reconstruct the original path connectivity from an unordered set of segments.
+/// 
+/// When segments are saved to the lockfile and loaded back via HashMap iteration,
+/// they lose their original order. This function rebuilds a connected path by
+/// finding segments that share endpoints.
+/// 
+/// Algorithm:
+/// 1. Build an adjacency graph of segments (which segments connect to which)
+/// 2. Find chain endpoints (segments with only one connection)
+/// 3. Walk the chain from start to end, building the ordered path
+/// 4. Handle branching/multi-path nets gracefully (keep all segments)
+fn reconstruct_path_topology(mut segments: Vec<crate::space::LineSegment>) -> Vec<crate::space::LineSegment> {
+    if segments.len() <= 1 {
+        return segments; // Single segment or empty - no reordering needed
+    }
+
+    // Build adjacency map: for each segment, find which other segments share an endpoint
+    use rustc_hash::FxHashMap;
+    let mut connections: FxHashMap<usize, Vec<usize>> = FxHashMap::default();
+    
+    for (i, seg_i) in segments.iter().enumerate() {
+        for (j, seg_j) in segments.iter().enumerate() {
+            if i == j {
+                continue;
+            }
+            // Check if segments share an endpoint
+            if seg_i.end == seg_j.start || seg_i.end == seg_j.end ||
+               seg_i.start == seg_j.start || seg_i.start == seg_j.end {
+                connections.entry(i).or_default().push(j);
+            }
+        }
+    }
+
+    // Find a starting segment (prefer one with only one connection = chain endpoint)
+    let start_idx = connections.iter()
+        .find(|(_, neighbors)| neighbors.len() == 1)
+        .map(|(idx, _)| *idx)
+        .unwrap_or(0); // Fallback to first segment if no clear endpoint
+
+    // Walk the chain from start, building ordered path
+    let mut ordered = Vec::new();
+    let mut visited = vec![false; segments.len()];
+    let mut current = start_idx;
+
+    while !visited[current] {
+        visited[current] = true;
+        ordered.push(current);
+
+        // Find next unvisited neighbor
+        if let Some(neighbors) = connections.get(&current) {
+            if let Some(&next) = neighbors.iter().find(|&&n| !visited[n]) {
+                current = next;
+            } else {
+                break; // No more unvisited neighbors
+            }
+        } else {
+            break; // No neighbors
+        }
+    }
+
+    // Collect any unvisited segments (handles branching nets)
+    for (i, &vis) in visited.iter().enumerate() {
+        if !vis {
+            ordered.push(i);
+        }
+    }
+
+    // Rebuild segment vector in the reconstructed order
+    let original_segments = segments.clone();
+    segments.clear();
+    for &idx in &ordered {
+        segments.push(original_segments[idx].clone());
+    }
+
+    segments
 }
 
 // ---------------------------------------------------------------------------
@@ -339,26 +424,61 @@ pub fn traces_to_lockfile(
     fingerprint: [u8; 32],
 ) -> Result<CompactLockfileBinary, String> {
     let mut arcs = Vec::new();
+    
+    // v0.1.9: DEDUPLICATION MAP
+    // The routing engine creates bidirectional segments (A->B and B->A) for connectivity.
+    // We only need to store one direction to preserve the route geometry.
+    use rustc_hash::FxHashSet;
+    let mut seen_segments: FxHashSet<(u32, i64, i64, i64, i64, i64, i64)> = FxHashSet::default();
 
     for trace in &space.analytic_routes {
         for seg in &trace.segments {
+            // v0.1.9: CRITICAL FIX - Skip zero-length point markers
+            let dx = (seg.end.x - seg.start.x).abs();
+            let dy = (seg.end.y - seg.start.y).abs();
+            let dz = (seg.end.z - seg.start.z).abs();
+            
+            if dx == 0 && dy == 0 && dz == 0 {
+                // True zero-length point marker - skip it
+                continue;
+            }
+            
+            // v0.1.9: DEDUPLICATION - Create canonical key (always min->max order)
+            let key = if (seg.start.x, seg.start.y, seg.start.z) <= (seg.end.x, seg.end.y, seg.end.z) {
+                (trace.net_id.raw(), seg.start.x, seg.start.y, seg.start.z, seg.end.x, seg.end.y, seg.end.z)
+            } else {
+                (trace.net_id.raw(), seg.end.x, seg.end.y, seg.end.z, seg.start.x, seg.start.y, seg.start.z)
+            };
+            
+            // Skip if we've already seen this segment (or its reverse)
+            if !seen_segments.insert(key) {
+                continue;
+            }
+            
+            // v0.1.9: VECTOR ENGINE FIX
+            // Store the ACTUAL 3D vector coordinates (x1,y1,z1) -> (x2,y2,z2)
+            // The layer field is now only used for semantic grouping/debugging
             let z_center = seg.start.z.min(seg.end.z)
                 + ((seg.start.z.max(seg.end.z) - seg.start.z.min(seg.end.z)) / 2);
             let layer_idx = resolve_z_to_layer_index(z_center, &space.entity_graph);
+            
             let material_name = space.material_registry.get_name(trace.material)
                 .ok_or_else(|| format!(
                     "[LOCK] FATAL: material_id {} not found in registry for net '{}'",
                     trace.material, trace.net_name
                 ))?
                 .to_string();
+            
             arcs.push(ArchivedArcSegment {
                 net_id: trace.net_id.raw(),
                 layer: layer_idx,
                 width_nm: trace.width_nm,
                 x1: seg.start.x,
                 y1: seg.start.y,
+                z1: seg.start.z,
                 x2: seg.end.x,
                 y2: seg.end.y,
+                z2: seg.end.z,
                 thickness_nm: trace.thickness_nm,
                 material_name,
                 current_ma: (trace.current_ma * 1000.0) as i64,
@@ -397,18 +517,18 @@ pub fn lockfile_to_traces(
     let mut net_material_names: FxHashMap<u32, String> = FxHashMap::default();
     let mut net_currents: FxHashMap<u32, i64> = FxHashMap::default();
 
-    let layer_to_z: FxHashMap<u16, i64> = layer_z_positions.iter().copied().collect();
+    let _layer_to_z: FxHashMap<u16, i64> = layer_z_positions.iter().copied().collect();
 
     for arc in d.arcs.iter() {
-        let z = *layer_to_z.get(&arc.layer).ok_or_else(|| {
-            format!("[LOCK] FATAL: layer {} not found in layer_z_map (stackup mismatch or corrupt lockfile)", arc.layer)
-        })?;
+        // v0.1.9: VECTOR ENGINE FIX
+        // Use the stored z1/z2 coordinates directly instead of resolving from layer.
+        // This preserves vertical connectivity for vias and maintains the true 3D vector nature.
         per_net
             .entry(arc.net_id)
             .or_default()
             .push(crate::space::LineSegment::new(
-                crate::geometry::Point3D::new(arc.x1, arc.y1, z),
-                crate::geometry::Point3D::new(arc.x2, arc.y2, z),
+                crate::geometry::Point3D::new(arc.x1, arc.y1, arc.z1),
+                crate::geometry::Point3D::new(arc.x2, arc.y2, arc.z2),
             ));
         net_widths.entry(arc.net_id).or_insert(arc.width_nm);
         net_material_names.entry(arc.net_id).or_insert_with(|| arc.material_name.to_string());
@@ -416,10 +536,23 @@ pub fn lockfile_to_traces(
     }
 
     let mut traces = Vec::new();
-    for (net_id_raw, segments) in per_net {
+    
+    // v0.1.9: Sort net IDs to ensure deterministic trace order
+    let mut net_ids: Vec<u32> = per_net.keys().copied().collect();
+    net_ids.sort_unstable();
+    
+    for net_id_raw in net_ids {
+        let mut segments = per_net.remove(&net_id_raw).expect("net_id exists");
         if segments.is_empty() {
             continue;
         }
+        
+        // v0.1.9: CRITICAL FIX - Reconstruct path connectivity
+        // The lockfile stores segments in arbitrary order (HashMap iteration).
+        // We must rebuild the original path topology by connecting segments end-to-end.
+        // This ensures the physical continuity checker sees a connected chain.
+        segments = reconstruct_path_topology(segments);
+        
         let net_id = crate::netlist::NetId::new(net_id_raw);
         let width_nm = net_widths.get(&net_id_raw).copied()
             .ok_or_else(|| format!("[LOCK] FATAL: missing width for net {}", net_id_raw))?;
@@ -432,12 +565,25 @@ pub fn lockfile_to_traces(
             .ok_or_else(|| format!("[LOCK] FATAL: missing material for net {}", net_id_raw))?;
         let material_id = material_registry.get_id(material_name)
             .ok_or_else(|| format!("[LOCK] FATAL: material '{}' not found in registry", material_name))?;
-        let current_ma = *net_currents.get(&net_id_raw).unwrap_or(&0) as f64 / 1000.0;
+        // v0.1.8: Fail-fast if current is missing from lockfile. No hardcoded defaults.
+        let current_ma_raw = net_currents.get(&net_id_raw)
+            .ok_or_else(|| format!(
+                "[LOCK] FATAL: net {} has no current value in lockfile. \
+                 Ensure all nets have current_limit declared.",
+                net_id_raw
+            ))?;
+        let current_ma = *current_ma_raw as f64 / 1000.0;
 
         let thickness_nm = d.arcs.iter()
             .find(|a| a.net_id == net_id_raw)
             .map(|a| a.thickness_nm)
             .ok_or_else(|| format!("[LOCK] FATAL: no arcs found for net {}", net_id_raw))?;
+
+        // Get net's actual operating current from netlist
+        let net_actual_current_ma = netlist
+            .get_net(net_id)
+            .and_then(|n| n.current_ma)
+            .unwrap_or(0.0);
 
         traces.push(crate::space::AnalyticTrace::new(
             net_id,
@@ -446,7 +592,8 @@ pub fn lockfile_to_traces(
             segments,
             material_id,
             net_name,
-            current_ma,
+            net_actual_current_ma,  // Actual operating current from net
+            current_ma,             // Route's capability from lockfile
         ));
     }
 
@@ -513,8 +660,10 @@ mod tests {
                     width_nm: 100_000,
                     x1: 0,
                     y1: 0,
+                    z1: 0,
                     x2: 5_000_000,
                     y2: 0,
+                    z2: 0,
                     thickness_nm: 35_000,
                     material_name: "Copper".to_string(),
                     current_ma: 20_000,
@@ -525,8 +674,10 @@ mod tests {
                     width_nm: 150_000,
                     x1: 1_000_000,
                     y1: 2_000_000,
+                    z1: 100_000,
                     x2: 1_000_000,
                     y2: 8_000_000,
+                    z2: 100_000,
                     thickness_nm: 35_000,
                     material_name: "Copper".to_string(),
                     current_ma: 20_000,
@@ -638,8 +789,10 @@ mod tests {
                 width_nm: 200_000,
                 x1: 100,
                 y1: 200,
+                z1: 50_000,
                 x2: 300,
                 y2: 400,
+                z2: 50_000,
                 thickness_nm: 35_000,
                 material_name: "Copper".to_string(),
                 current_ma: 20_000,

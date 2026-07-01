@@ -30,7 +30,7 @@ rotated -30.5     # Float (negative)
 rotated 90deg     # Optional 'deg' unit
 ```
 
-**Rationale**: LEDs in circular arrays need 30°, 60°, etc. Components in tight enclosures need precise angles. The physical engine will handle pin snapping to the voxel grid.
+**Rationale**: LEDs in circular arrays need 30°, 60°, etc. Components in tight enclosures need precise angles. The physical engine will handle pin snapping to the physical coordinate system.
 
 **Full Details**: See [v0.1.2/MVP-LEXICON.md](../v0.1.2/MVP-LEXICON.md#4-rotation-system-arbitrary-angles)
 

@@ -194,22 +194,22 @@ mod tests {
 
     #[test]
     fn test_parallel_run_length_horizontal() {
-        let a = TraceSegment::new(Point3D::new(0, 0, 1), Point3D::new(100, 0, 1), 10);
-        let b = TraceSegment::new(Point3D::new(50, 0, 1), Point3D::new(200, 0, 1), 10);
+        let a = TraceSegment::new(Point3D::new(0, 0, 1), Point3D::new(100, 0, 1), 10, 0);
+        let b = TraceSegment::new(Point3D::new(50, 0, 1), Point3D::new(200, 0, 1), 10, 0);
         assert_eq!(Compactor::parallel_run_length(&a, &b), 50);
     }
 
     #[test]
     fn test_parallel_run_length_vertical() {
-        let a = TraceSegment::new(Point3D::new(0, 0, 1), Point3D::new(0, 100, 1), 10);
-        let b = TraceSegment::new(Point3D::new(0, 50, 1), Point3D::new(0, 200, 1), 10);
+        let a = TraceSegment::new(Point3D::new(0, 0, 1), Point3D::new(0, 100, 1), 10, 0);
+        let b = TraceSegment::new(Point3D::new(0, 50, 1), Point3D::new(0, 200, 1), 10, 0);
         assert_eq!(Compactor::parallel_run_length(&a, &b), 50);
     }
 
     #[test]
     fn test_parallel_run_length_not_parallel() {
-        let a = TraceSegment::new(Point3D::new(0, 0, 1), Point3D::new(100, 0, 1), 10);
-        let b = TraceSegment::new(Point3D::new(0, 0, 1), Point3D::new(0, 100, 1), 10);
+        let a = TraceSegment::new(Point3D::new(0, 0, 1), Point3D::new(100, 0, 1), 10, 0);
+        let b = TraceSegment::new(Point3D::new(0, 0, 1), Point3D::new(0, 100, 1), 10, 0);
         assert_eq!(Compactor::parallel_run_length(&a, &b), 0);
     }
 
@@ -219,6 +219,7 @@ mod tests {
             Point3D::new(10, 20, 1),
             Point3D::new(100, 20, 1),
             10,
+            0,
         )];
         let moves = vec![CompactionMove {
             segment_id: 0,

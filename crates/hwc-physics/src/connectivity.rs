@@ -5,23 +5,27 @@
 //!
 //! ## Three-Step Hierarchical Handshake:
 //! 1. **Box-Touch Pass (O(Metadata))**: Check bounding box adjacency
-//! 2. **Bridge-Search Pass (O(Copper))**: Check for routing bridges in voxel grid
+//! 2. **Bridge-Search Pass (O(Copper))**: Check for routing bridges in geometry
 //! 3. **Disjoint Set Union (DSU)**: Graph-based connectivity validation
 //!
-//! This approach remains at ~0.17ms even for 100 billion voxel designs because
+//! This approach remains at ~0.17ms even for extremely large designs because
 //! it only does "hard math" where copper actually exists.
 
+use crate::geometry::BoundingBox;
 use compact_str::CompactString;
 use rustc_hash::{FxHashMap, FxHashSet};
 
-#[derive(Debug, Clone)]
-pub struct BoundingBox {
-    pub min_x: i64,
-    pub min_y: i64,
-    pub min_z: i64,
-    pub max_x: i64,
-    pub max_y: i64,
-    pub max_z: i64,
+/// Type of substrate layer for proper physics validation (v0.1.8)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SubstrateLayerType {
+    /// 2D copper pour (pad, plane, filled region)
+    Pour,
+    /// 3D vertical contact (via, through-hole)
+    Contact,
+    /// 3D dielectric substrate (FR4, core, prepreg)
+    Substrate,
+    /// Solder mask coating on top/bottom board faces
+    SolderMask,
 }
 
 /// Substrate layer metadata for connectivity checking.
@@ -32,6 +36,7 @@ pub struct SubstrateLayerMetadata {
     pub net: u32,
     pub net_name: Option<CompactString>, // Resolved net name for easier lookup
     pub bbox: BoundingBox,
+    pub layer_type: SubstrateLayerType,
 }
 
 #[derive(Debug, Clone)]
@@ -71,6 +76,7 @@ pub enum ConnectivityViolation {
 }
 
 // Unified node for Graph Traversal
+#[derive(Debug, Clone, Copy)]
 struct GeoNode<'a> {
     name: &'a str,
     bbox: &'a BoundingBox,
@@ -79,21 +85,21 @@ struct GeoNode<'a> {
 }
 
 pub struct ConnectivityChecker<'a> {
-    voxel_size_z_nm: i64,
+    min_gap_threshold_nm: i64,
     pours: &'a [PourMetadata],
     contacts: &'a [ContactMetadata],
-    substrate_layers: &'a [SubstrateLayerMetadata], // NOW WE CAN SEE THE SPARSE LAYERS!
+    substrate_layers: &'a [SubstrateLayerMetadata],
 }
 
 impl<'a> ConnectivityChecker<'a> {
     pub fn new(
-        voxel_size_z_nm: i64,
+        min_gap_threshold_nm: i64,
         pours: &'a [PourMetadata],
         contacts: &'a [ContactMetadata],
         substrate_layers: &'a [SubstrateLayerMetadata],
     ) -> Self {
         Self {
-            voxel_size_z_nm,
+            min_gap_threshold_nm,
             pours,
             contacts,
             substrate_layers,
@@ -112,8 +118,8 @@ impl<'a> ConnectivityChecker<'a> {
                 nets_map.entry(net.clone()).or_default().push(GeoNode {
                     name: &pour.name,
                     bbox,
-                    min_z: bbox.min_z,
-                    max_z: bbox.max_z,
+                    min_z: bbox.min.z,
+                    max_z: bbox.max.z,
                 });
             }
         }
@@ -124,8 +130,8 @@ impl<'a> ConnectivityChecker<'a> {
                 nets_map.entry(net.clone()).or_default().push(GeoNode {
                     name: &contact.name,
                     bbox,
-                    min_z: bbox.min_z,
-                    max_z: bbox.max_z,
+                    min_z: bbox.min.z,
+                    max_z: bbox.max.z,
                 });
             }
         }
@@ -138,8 +144,8 @@ impl<'a> ConnectivityChecker<'a> {
                 nets_map.entry(net_name.clone()).or_default().push(GeoNode {
                     name: net_name, // Use net name as identifier
                     bbox: &layer.bbox,
-                    min_z: layer.bbox.min_z,
-                    max_z: layer.bbox.max_z,
+                    min_z: layer.bbox.min.z,
+                    max_z: layer.bbox.max.z,
                 });
             }
         }
@@ -218,14 +224,13 @@ impl<'a> ConnectivityChecker<'a> {
             0
         };
 
-        if z_gap > self.voxel_size_z_nm {
-            let gap_layers = z_gap / self.voxel_size_z_nm;
+        if z_gap > self.min_gap_threshold_nm {
             return Some(format!(
-                "Z-layer gap detected: {} nm ({} layers) of empty space between these geometries.\n    \
+                "Z-gap detected: {} nm of empty space between these geometries (threshold: {} nm).\n    \
                  '{}' is at z:{}nm-{}nm, '{}' is at z:{}nm-{}nm.\n    \
                  Suggested fix: Add a pour or contact to bridge the gap, or adjust Z positions to make layers adjacent.",
                 z_gap,
-                gap_layers,
+                self.min_gap_threshold_nm,
                 node_a.name,
                 node_a.min_z,
                 node_a.max_z,
@@ -245,8 +250,8 @@ impl<'a> ConnectivityChecker<'a> {
                 let contact_node = GeoNode {
                     name: &contact.name,
                     bbox,
-                    min_z: bbox.min_z,
-                    max_z: bbox.max_z,
+                    min_z: bbox.min.z,
+                    max_z: bbox.max.z,
                 };
 
                 // Does this contact touch both disconnected nodes?
@@ -286,8 +291,8 @@ impl<'a> ConnectivityChecker<'a> {
                 let pour_node = GeoNode {
                     name: &pour.name,
                     bbox,
-                    min_z: bbox.min_z,
-                    max_z: bbox.max_z,
+                    min_z: bbox.min.z,
+                    max_z: bbox.max.z,
                 };
 
                 if self.boxes_intersect(node_a, &pour_node)
@@ -317,10 +322,10 @@ impl<'a> ConnectivityChecker<'a> {
     /// We verify that conductive material actually touches.
     fn boxes_intersect(&self, a: &GeoNode, b: &GeoNode) -> bool {
         // XY intersection must be strictly overlapping (shared area)
-        let xy_overlap = a.bbox.min_x < b.bbox.max_x
-            && a.bbox.max_x > b.bbox.min_x
-            && a.bbox.min_y < b.bbox.max_y
-            && a.bbox.max_y > b.bbox.min_y;
+        let xy_overlap = a.bbox.min.x < b.bbox.max.x
+            && a.bbox.max.x > b.bbox.min.x
+            && a.bbox.min.y < b.bbox.max.y
+            && a.bbox.max.y > b.bbox.min.y;
 
         if !xy_overlap {
             return false;
@@ -329,6 +334,6 @@ impl<'a> ConnectivityChecker<'a> {
         // Z intersection (v0.1.7 Z-Axis Abstraction Fix):
         // In the nanometer world, adjacency (max == min) implies physical contact.
         // We use >= and <= for Z to allow layers that perfectly touch to be connected.
-        a.bbox.min_z <= b.bbox.max_z && a.bbox.max_z >= b.bbox.min_z
+        a.bbox.min.z <= b.bbox.max.z && a.bbox.max.z >= b.bbox.min.z
     }
 }
