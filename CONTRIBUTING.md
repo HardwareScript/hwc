@@ -15,7 +15,7 @@ Hardware Script is proudly 100% open-source under the AGPLv3 license. We deeply 
 ### Why we take this approach
 We don't decline contributions to gatekeep — we do it to ensure **rigorous research and alignment** with our core philosophy before writing code. Here's why:
 
-1. **Architectural Purity:** Hardware Script follows a strict "C-like" philosophy. We keep the core extremely lean and push domain complexity to the Standard Library and Package Registry. An idea that doesn't align with this vision could compromise the entire architecture.
+1. **Architectural Purity:** Hardware Script follows The Lean Core Philosophy. We keep the core extremely lean and push domain complexity to the Standard Library and Package Registry. An idea that doesn't align with this vision could compromise the entire architecture.
 2. **Deep Research First:** We want to properly benchmark, validate, and understand every change before it enters the compiler. When you share an idea via Issue, we do the due diligence — reading papers, running benchmarks, testing edge cases — before implementing.
 3. **The LLM Era:** AI-generated PRs often look functional but introduce subtle performance degradations or violate our strict memory/voxel architectures. Research-first prevents these issues.
 4. **Legal Clarity:** Because Hardware Script offers a dual-license model for enterprises, the core team must retain clean, 100% copyright ownership over the compiler engine. By writing the code internally, we avoid the need for complex Contributor License Agreements (CLAs).
@@ -54,9 +54,9 @@ If you find a typo, want to improve a tutorial, or translate documentation, you 
 
 ---
 
-## The C Philosophy: Lightweight Compiler
+## The Lean Core Philosophy
 
-Hardware Script follows a strict **C philosophy** — the compiler must stay as lightweight and fast as possible. This means:
+Hardware Script follows **The Lean Core Philosophy** — the compiler must stay as lightweight and fast as possible. This means:
 
 - **The compiler is the engine, not the car.** It handles parsing, validation, and compilation. Everything else is a library.
 - **Standard Library (`@std`)**: Only irreducible baseline primitives (units, basic components). No domain-specific features.

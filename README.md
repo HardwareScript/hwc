@@ -335,7 +335,7 @@ We welcome contributions! This is an open-source project with a clear roadmap.
 
 ### How to Contribute
 
-Hardware Script follows a **C philosophy** — the compiler stays as lightweight and fast as possible. We operate on an **Issue-Driven Development** model. We do **not** accept Pull Requests for the core compiler code (`hwc`). This isn't about declining contributions — it's about ensuring **rigorous research and alignment** with our core philosophy before implementing. When you share an idea via Issue, we research it thoroughly (benchmarks, papers, edge cases) before writing the code.
+Hardware Script follows **The Lean Core Philosophy** — the compiler stays as lightweight and fast as possible. We operate on an **Issue-Driven Development** model. We do **not** accept Pull Requests for the core compiler code (`hwc`). This isn't about declining contributions — it's about ensuring **rigorous research and alignment** with our core philosophy before implementing. When you share an idea via Issue, we research it thoroughly (benchmarks, papers, edge cases) before writing the code.
 
 1. **Found a bug?** Open a [Bug Report Issue](../../issues/new?template=bug_report.md).
 2. **Have an optimization idea?** Open an [Issue](../../issues/new?template=optimization.md) — we'll research it and implement it if it aligns with our vision.

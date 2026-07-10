@@ -14,7 +14,7 @@ A clear and concise description of your optimization idea.
 
 Why is this optimization important? What problem does it solve?
 
-**Hardware Script follows a C philosophy** — the compiler must stay as lightweight and fast as possible. Optimizations should aim for O(1) lookups, minimal memory usage, and sub-millisecond compilation.
+**Hardware Script follows The Lean Core Philosophy** — the compiler must stay as lightweight and fast as possible. Optimizations should aim for O(1) lookups, minimal memory usage, and sub-millisecond compilation.
 
 ## Current Behavior
 

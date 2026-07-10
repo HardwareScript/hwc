@@ -12,7 +12,7 @@ A clear and concise description of your syntax proposal.
 
 ## Where Does This Belong?
 
-Hardware Script follows a **C philosophy** — the compiler stays as lightweight as possible. Advanced features belong in libraries, not the core.
+Hardware Script follows **The Lean Core Philosophy** — the compiler stays as lightweight as possible. Advanced features belong in libraries, not the core.
 
 - [ ] **Compiler core**: This is a fundamental language primitive (e.g., `component`, `space`, `route`, `logic:`)
 - [ ] **Standard Library (`@std`)**: This is an irreducible baseline primitive that ships with the compiler
