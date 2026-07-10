@@ -1,123 +1,65 @@
 # Hardware Script - The Vision
 
-**The Matrix Moment**: What happens when you treat physical reality as a discrete 3D tensor grid.
+**The Evolution**: From discrete 3D tensor grids to continuous vector-first architecture with picometer precision.
 
 ---
 
-## The Realization
+## The Current Reality (v0.1.8-alpha)
 
-Traditional EDA tools treat hardware design as continuous 3D geometry with floating-point coordinates. This creates fundamental limitations:
+Hardware Script has proven that hardware design can be text-based, deterministic, and Git-friendly. The v0.1.8 compiler successfully:
 
-- Complex collision detection ($O(n^2)$ geometry checks).
-- Unpredictable auto-routing.
-- Fragmented tools for PCBs vs silicon chips.
-- Heavy, slow simulation loops.
-- Difficulty for AI to reason about continuous space.
+- Compiles `.hw` text files to SPICE, BOM, GLB, and DXF formats
+- Validates physical continuity and logical correctness (LVS)
+- Performs design rule checking (DRC)
+- Handles ASIC and PCB designs with semantic layer abstraction
+- Provides clear, structured error messages for debugging
 
-**Hardware Script uses a discrete 3D tensor grid.** This single architectural decision unlocks capabilities that seem impossible in traditional tools.
-
----
-
-## The Four Epiphanies
-
-### 1. O(1) Collision Detection - The "Impossible" Made Trivial
-
-**The Problem**: Modern chips have thousands of pins in a microscopic area. Routing them without shorts is computationally expensive.
-
-**Traditional EDA**: Complex floating-point geometry calculations to check if traces intersect.
-
-**Hardware Script**:
-```rust
-// Internal representation
-if voxel_grid.is_occupied(x, y, layer) {
-    return Err(ValidationError::Collision);
-}
-```
-
-**Result**: Mathematically impossible to create short circuits. Two things cannot occupy the exact same spatial grid location.
-
-**Why This Matters**: 
-- High-density BGA escape routing becomes trivial.
-- Designs compile and route in milliseconds.
-- AI can generate complex routing without geometry libraries.
+**The foundation works.** Now we're building the advanced routing and synthesis pipeline.
 
 ---
 
-### 2. Scale Invariance - From PCBs to Silicon Chips
+## The Architectural Evolution
 
-**The Realization**: Designing a PCB and designing a silicon chip are the same mathematical problem—routing connections in 3D space without collisions.
+### From Voxels to Vectors (v0.1.5-v0.1.7 → v0.1.8)
 
-**PCB Design** (millimeter scale):
-```hw
-space PCB:
-    dimensions: 50mm by 50mm by 2.0mm
-    grid: 500 by 500 by 4
-    
-add substrate(FR4) spanning all
-```
+**The Voxel Era (v0.1.5-v0.1.7):**
+- Proved the concept with discrete 3D tensor grid
+- Morton Z-curve encoding for spatial efficiency
+- $O(1)$ collision detection via grid lookups
+- Successfully validated deterministic compilation
 
-**Silicon Chip Design** (nanometer scale):
-```hw
-space Microchip:
-    dimensions: 10nm by 10nm by 2.0nm
-    grid: 1000 by 1000 by 50
-    
-add substrate(Silicon) spanning all
-```
+**The Vector Evolution (v0.1.8):**
+- **Picometer-precision database** — All coordinates as 64-bit integer picometers (1pm = 10⁻¹² m)
+- **Zero-stamping scene graph** — Components stored once with FixedTransform2D instances
+- **Continuous coordinates** — No grid quantization, no staircase artifacts
+- **Hybrid spatial indexing** — `rstar` (dynamic) + `geo-index` (static) for $O(\log N)$ queries
+- **Scale invariance preserved** — From PCBs to sub-nanometer silicon in the same tool
 
-**The compiler doesn't care.** The math is identical. Change the materials database from "FR4 and Copper" to "Silicon and Doped Polysilicon" and you've gone from PCB design to VLSI (Very Large Scale Integration) chip design.
+### Why This Matters
 
-**Why This Matters**:
-- One tool for all scales (PCB, IC, MEMS, silicon photonics).
-- Same unified syntax from simple hobbyist boards to custom silicon.
-- The materials database is the only difference.
+**Picometer Precision:**
+- 64-bit integer coordinates (±9,220 km addressable range)
+- No floating-point jitter or rounding errors
+- Perfect for both PCB (mm scale) and ASIC (nm scale)
 
----
+**Scale Invariance:**
+- Change materials database: FR4+Copper → Silicon+Polysilicon
+- Same compiler, same syntax, same workflow
+- Hobbyist PCBs to custom ASICs in one tool
 
-### 3. Multi-Layer Mastery - The Z-Axis Advantage
+**Deterministic Compilation:**
+- FixedTransform2D with i128 intermediate arithmetic
+- Integer-only coordinate transforms prevent platform-specific results
+- Same `.hw` source = identical output across all machines
 
-**The Problem**: Modern boards have 10-50 layers. Traditional tools struggle with via placement and layer transitions.
-
-**Hardware Script's Advantage**:
-```hw
-route CPU.DataBus to RAM.Input:
-    path:
-        - [x: 50mm, y: 50mm, layer: l1]    # Top layer
-        - [x: 50mm, y: 50mm, layer: l25]   # Via through 24 inner layers
-        - [x: 80mm, y: 50mm, layer: l25]   # Route on layer l25
-        - [x: 80mm, y: 50mm, layer: l1]    # Via back to top
-    clearance: 0.5mm
-```
-
-**The compiler automatically**:
-- Drills plated-through-holes (PTH) and vias at layer transitions.
-- Clears anti-pads in copper planes.
-- Validates annular ring sizes and via clearance.
-- Checks current capacity and voltage drop per layer.
-
-**Why This Matters**:
-- Complex multi-layer stackups become manageable.
-- Perfect layer alignment is guaranteed by design.
-- True 3D routing bypasses the limits of flat 2D layout.
+**Developer Experience:**
+- Plain text `.hw` files (Git-friendly, diff-friendly, merge-friendly)
+- AI-readable and AI-writable (LLMs can generate valid hardware)
+- Import system for modular, reusable designs
 
 ---
 
-### 4. Code > GUI - The Developer Experience
-
-**The Realization**: Hardware design should work like modern software development.
-
-**Traditional EDA**: Clicking buttons in a heavy GUI, saving opaque binary/XML files that break Git diffs, and manual routing.
-
-**Hardware Script**: Write code, save git-friendly `.hw` files, compile with `hwc`, and visualize with **Hardware Script Monitor** (`hsm`) hot-reloading `.hsx` binaries in under 50ms.
-
-**Why This Matters**:
-- Git-friendly source files (easy merges, pull requests, version history).
-- AI can generate, review, and refactor hardware designs.
-- Automate design steps with scripts, macros, and CI/CD pipelines.
-
----
-
-## The Ultimate Vision: Hardware as Pure Math
+## The Ultimate Vision: Hardware as Code
 
 ### The Fundamental Insight
 
@@ -239,37 +181,6 @@ space System:
 - Simple array operations.
 - Same math at all scales.
 
----
-
-## The "Impossible" Features
-
-These features seem impossible in traditional EDA tools but are natural in Hardware Script:
-
-### 1. Instant Collision Detection
-**Traditional**: $O(n^2)$ geometry checks.  
-**Hardware Script**: $O(1)$ array lookup.
-
-### 2. Deterministic Routing
-**Traditional**: Auto-router produces different results each run.  
-**Hardware Script**: Same input = same output, always.
-
-### 3. AI Generation
-**Traditional**: AI can't click buttons or generate binary files.  
-**Hardware Script**: AI writes text, compiler handles the rest.
-
-### 4. Unified Spatial View
-**Traditional**: Separate 2D layout, 3D casing, and netlist files.  
-**Hardware Script**: Single compiled exchange binary (`.hsx`) visualized instantly in Babylon.js/Three.js.
-
-### 5. Scale Invariance
-**Traditional**: Different tools for PCB vs silicon.  
-**Hardware Script**: Same tool, different materials database.
-
-### 6. Formal Verification
-**Traditional**: Impossible to prove correctness.  
-**Hardware Script**: Mathematical proof via tensor validation.
-
----
 
 ## The Market Opportunity
 
@@ -278,7 +189,7 @@ These features seem impossible in traditional EDA tools but are natural in Hardw
 - **PCB Tools**: KiCad (free), Altium ($7K/year), Eagle (acquired)
 - **Silicon Tools**: Cadence, Synopsys ($100K+/year)
 - **Total Market**: $12B+ annually
-- **Problem**: Fragmented, expensive, GUI-dependent
+- **Problem**: Fragmented, expensive
 
 ### Hardware Script Opportunity
 
@@ -293,24 +204,6 @@ These features seem impossible in traditional EDA tools but are natural in Hardw
 - Companies needing rapid prototyping.
 - Teams wanting Git-based workflows.
 - AI-driven hardware generation.
-
----
-
-## The Competitive Moat
-
-### Why Hardware Script Can't Be Copied
-
-1. **Architecture**: Discrete 3D tensor grid with nested tensors is fundamental. Can't bolt it onto existing tools.
-
-2. **First-Mover**: First text-based, AI-native hardware compiler. Network effects matter.
-
-3. **Ecosystem**: GitHub-based package registry. Community builds the component library.
-
-4. **Scale Invariance**: Only tool that works from PCBs to silicon. Unique positioning.
-
-5. **Open Source**: AGPLv3 license. Corporations must buy commercial licenses.
-
----
 
 ## The End Game
 
@@ -359,7 +252,7 @@ This vision is achievable. The v0.1.7 compiler proves the foundation works.
 
 **Hardware Script** - Making hardware design as simple as writing code.
 
-**Join the revolution**: [GitHub Repository]
+**Join the revolution**: [[GitHub Repository](https://github.com/HardwareScript/hwc)]
 
 ---
 

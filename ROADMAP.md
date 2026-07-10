@@ -36,67 +36,75 @@ To make hardware development feel like software development, we must solve these
 
 ## Version Roadmap
 
-### ✅ v0.1.x - Active Beta (March 2026 – Present)
+### ✅ v0.1.8 - Active Development (Q2 2026 – Present)
 
-**Theme**: Foundation, Engine, and Language Stabilization
+**Theme**: Vector-First Architecture & Advanced Physical Synthesis
 
-**Completed**:
-- Unified 3-File Architecture (`hw.toml`, `hw.lock`, `.hw` source).
-- Compiled exchange binary format (`.hsx`) — memory-mapped, zero-copy.
-- Rust rewrite: `hwc` compiler workspace (`hwc-cli`, `hwc-parser`, `hwc-engine`, `hwc-physics`, `hwc-export`).
-- Unified grammar (`v0.1.6`): Dropped `define` keyword, bare identifiers, universal `[]` lists, `:` for structure, `=` for logic.
-- v0.1.7 Z-Axis Abstraction Fix: Physical layer names (`layer: l1`) and physical units (`z: 1.5mm`) replacing raw voxel indices.
-- `NetlistArena` ECS entity-component storage for $O(1)$ lookups.
-- 3D sparse voxel grid with Morton Z-curve encoding.
-- 3-Phase automatic routing pipeline (Constraint Manager, A* Geometry Router, DRC).
-- Analytic trace representation (`AnalyticTrace`) — continuous mathematical lines, no voxel-crawling.
-- Cylindrical via representation (PTH, annular rings).
-- Logic synthesis block (`logic:`): operators → gates, control flow → mux trees, D-flip-flops.
-- Clock domain and CDC tracking.
-- LVS physical-vs-logical netlist comparison.
-- Parallel domain partitioning with Rayon.
-- Gerber X3, GDSII, DXF, OBJ, GLB, and Blender scene script emitters.
-- Hardware Script Monitor (`hsm`): Tauri v2 + SolidJS + Babylon.js + PixiJS + uPlot live preview companion.
-- Standard library prelude — SI units and physical constants auto-loaded.
-- Comptime loop unrolling, conditional evaluation, and array index math.
-- Testing primarily driven by `.hw` integration test files.
+**Completed:**
+- Unified v0.1.6 syntax (bare identifiers, `[]` lists, `:` vs `=` boundary)
+- Semantic layer abstraction (`on layer: metal1` replaces raw Z coordinates)
+- Picometer-precision coordinate database (64-bit integer pm, ±9,220 km range)
+- Native Rust compiler with 7+ specialized crates
+- Symbol table with stackup, materials, profiles, components
+- Two-pass compilation (resolution → IR generation)
+- Logical netlist synthesis from `module` blocks
+- Physical layout validation (LVS, continuity, DRC)
+- PIVB solver for connectivity analysis
+- Device binding validation (physical pours → logical terminals)
+- Manual routing with explicit `path:` statements
+- Pour generation with boundary definitions
+- Via resolver infrastructure
+- Bridge rule parsing and storage
+- Standard library auto-loading (`@std/units.hw`)
+- Export: SPICE (`.sp`), BOM (`.csv`), GLB (`.glb`), DXF (`.dxf`)
+- Comprehensive test suite (ASIC designs, capacitors, traces)
+- `miette`-powered error diagnostics with context
+
+**In Active Development:**
+- **Vector-first routing engine** — Transition from voxel grid to continuous coordinates
+- **Zero-stamping scene graph** — ComponentStamp + FixedTransform2D instances
+- **Hybrid spatial indexing** — `rstar` (dynamic macro-placement) + `geo-index` (static detailed routing)
+- **Topological line-search router** — Axis-Aligned Slab Method for $O(\log N)$ obstacle queries
+- **Multi-layer automatic routing** — Via/contact insertion with bridge rule application
+- **Pattern-guided meander injection** — Closed-form polar decomposition for length matching
+- **Convex legalization** — Hybrid `clarabel` (macro) + active-set/DAG (micro) solvers
+- **G-cell-local unified sweep** — SIMD-accelerated DRC + same-net topology in single pass
+- **Wheeler-Sakurai-Greenhouse BEM** — Analytic parasitic extraction (R/C/L/M)
 
 ---
 
-### 🔄 v0.2 - First Production Release (Target: Q2 2026)
+### 🔄 v0.2 - Production Release (Target: Q3-Q4 2026)
 
-**Theme**: Stabilization, Ecosystem, and Multi-Layer Production
+**Theme**: Production-Ready Routing & Complete Export Pipeline
 
-#### Language & Syntax
-- [ ] Final syntax freeze and formal UHWSL v1.0 spec.
-- [ ] Full `signal_group` block (differential pairs, impedance, timing).
-- [ ] Complete `test` block CI/CD assertions.
-- [ ] Stable `interface` bindings (hardware ↔ firmware pin API).
+#### Physical Synthesis
+- [ ] **Multi-layer auto-router** — Complete via/contact insertion with bridge rule application
+- [ ] **Pattern system** — `pattern` and `strategy` definitions for meander injection
+- [ ] **Miter pass** — Automatic 45° chamfering for impedance-stable corners
+- [ ] **Port-aware routing** — Outer bounding box edge docking (no inside-routing)
+- [ ] **Boundary track buffering** — G-cell interface port negotiation
+- [ ] **Diagonal grid-snapping** — $L_{\text{snapped}} = \text{round}(N \cdot \text{pitch} / \sin(45°))$
 
-#### Component System
-- [ ] Formal parametric component generics (`component Resistor (val: Resistance, tol: Ratio):`).
-- [ ] Standard component library: resistors, capacitors, inductors, transistors, common ICs.
-- [ ] Footprint validation — trace-to-pad and pad-to-pad spacing.
-- [ ] 3D `.glb` mesh attachment for all standard components.
+#### Export & Manufacturing
+- [ ] **Complete Gerber package** — All copper layers, silkscreen, solder mask, board edge
+- [ ] **Excellon drill files** — Via drills, mounting holes, proper tooling
+- [ ] **Pick-and-place** — CPL format with component positions and rotations
+- [ ] **Enhanced BOM** — Manufacturer part numbers, datasheets, pricing
+- [ ] **GDSII export** — Full silicon foundry format for ASIC manufacturing
 
-#### Package Registry (hpm)
-- [ ] Launch `hardwarescript-registry` community GitHub repository.
-- [ ] Community contribution flow via Pull Request.
-- [ ] Package versioning and `hw.lock` dependency resolution.
-- [ ] `hpm publish` and `hpm install` working against live registry.
+#### Language & Syntax  
+- [ ] **Formal UHWSL v1.0 spec** — Language specification freeze
+- [ ] **Signal groups** — Differential pairs, impedance matching, timing constraints
+- [ ] **Interface blocks** — Firmware bindings for hardware↔software API
+- [ ] **Test blocks** — CI/CD physics assertions for automated validation
 
-#### Documentation System (hwsd)
-- [ ] Parse `##` documentation comments from `.hw` source.
-- [ ] Generate HTML documentation (like rustdoc/HexDocs).
-- [ ] LLM-friendly JSON output format.
+#### Tooling
+- [ ] **HPM package registry** — Launch public GitHub-based component registry
+- [ ] **HWSD documentation** — Auto-generate docs from `##` comments
+- [ ] **Binary lockfile** — `rkyv` + `memmap2` zero-copy deserialization
+- [ ] **CLI inspect tool** — `hwc lock inspect` for human-readable lockfile viewing
 
-#### Export Improvements
-- [ ] Complete Gerber package: all copper, silkscreen, solder mask, and board-edge layers.
-- [ ] Excellon drill file export.
-- [ ] BOM generation (CSV format).
-- [ ] Pick-and-place file (CPL format).
-
-**Target**: First stable, production-ready PCB workflows for real boards.
+**Target**: First production PCBs manufactured from HardwareScript source code
 
 ---
 
@@ -124,7 +132,7 @@ To make hardware development feel like software development, we must solve these
 
 ---
 
-### 💭 v0.4+ - Scale Invariance & Parametric Modules (2027+)
+###  v0.4+ - Scale Invariance & Parametric Modules (2027+)
 
 **Theme**: The Holy Grail — Hardware as Libraries at All Scales
 
@@ -171,42 +179,9 @@ To make hardware development feel like software development, we must solve these
 
 **Cost**: $0 (GitHub hosts everything).
 
-**Architecture**:
-```
-hardwarescript-registry/
-├── registry.yaml          # Maps package names to GitHub URLs
-├── packages/
-│   ├── power/
-│   │   └── voltage_regulator.yaml
-│   ├── sensors/
-│   │   └── temperature.yaml
-│   └── comms/
-│       └── uart.yaml
-```
 
-**Publishing Flow**:
-1. Developer creates a component package (GitHub repo containing `.hw` source files).
-2. Developer submits a PR to `hardwarescript-registry`.
-3. Community reviews.
-4. Merge = package published.
 
----
 
-## Business Model
-
-### Open Source (AGPLv3)
-- Free for hobbyists, students, and open-source projects.
-- Community-driven development.
-- Public GitHub repository.
-
-### Commercial Licensing
-- For corporations that cannot open-source their designs.
-- Removes AGPLv3 restrictions.
-- Priority support, SLA guarantees, and legal warranties.
-
-**Revenue Model**: Dual licensing (like MongoDB, Qt, Sidekiq).
-
----
 
 ## Success Metrics
 
@@ -258,4 +233,4 @@ hardwarescript-registry/
 
 **Hardware Script** - Making hardware design as simple as writing code.
 
-**Join us**: [GitHub Repository URL]
+**Join us**: [[GitHub Repository URL](https://github.com/HardwareScript/hwc)]

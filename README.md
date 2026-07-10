@@ -2,7 +2,7 @@
 
 **Text-Based Hardware Design Language**
 
-[![Status](https://img.shields.io/badge/status-Active%20Beta%20v0.1.7-blue)]()
+[![Status](https://img.shields.io/badge/status-Alpha%20v0.1.8-orange)]()
 [![Rust](https://img.shields.io/badge/compiler-Rust-orange)]()
 [![License](https://img.shields.io/badge/license-AGPLv3-blue)]()
 
@@ -10,9 +10,11 @@
 
 ## What is Hardware Script?
 
-Hardware Script (`.hw`) is a plain-text hardware design language that compiles to multiple industry-standard formats. Design PCBs, silicon chips, and entire systems all from human-readable, Git-friendly text.
+Hardware Script (`.hw`) is an experimental text-based hardware design language that compiles to industry-standard formats. The goal is to design PCBs, silicon chips, and electronic systems from human-readable, Git-friendly text.
 
-**The Goal**: Bring the npm/software workflow to hardware. Write hardware like code, compile it deterministically, and manufacture real boards from a single source of truth.
+**The Vision**: Bring the npm/software workflow to hardware. Write hardware like code, compile it deterministically, and manufacture real boards from a single source of truth.
+
+**Current Reality (v0.1.8-alpha)**: The compiler successfully handles single-layer designs and basic ASIC layouts. Multi-layer routing with automatic via insertion is under active development.
 
 ```hw
 space MyBoard:
@@ -30,13 +32,12 @@ space MyBoard:
             - [x: 15mm, y: 15mm, layer: l1]
 ```
 
-**Compiles to**:
-- ✅ Gerber X3 (PCB manufacturing)
-- ✅ GDSII (silicon foundry)
-- ✅ DXF (2D CAD, viewable in LibreCAD)
-- ✅ OBJ / GLB (3D models, viewable in Babylon.js Sandbox)
-- ✅ SPICE netlist (analog simulation)
-- ✅ Drill files (viewable in Gerbv Viewer)
+**Compiles to** (with limitations):
+- ✅ SPICE netlist (analog simulation) — Fully functional
+- ✅ BOM (Bill of Materials) — CSV format
+- ✅ GLB (3D models) — Basic geometry visualization
+- ✅ DXF (2D CAD) — Board outlines
+
 
 ---
 
@@ -73,7 +74,7 @@ Create `my_board.hw`:
 ```hw
 space FirstBoard:
     dimensions: 20mm by 20mm by 2.0mm
-    grid: 200 by 200 by 4
+    resolution: 1nm
     origin: tl by t
 
     route A to B:
@@ -122,25 +123,26 @@ import Regulator5V from "@power/5v-regulator"
 ```hw
 space MyRobot:
     dimensions: 100mm by 100mm by 2.0mm
-    grid: 1000 by 1000 by 4
+    resolution: 1nm
     origin: tl by t
 
-    add Regulator5V named PowerSupply at [x: 50mm, y: 50mm, layer: l1]
+    add Regulator5V named PowerSupply at [x: 50mm, y: 50mm] on layer: l1
 
     route Battery.Plus to PowerSupply.VIN
     route PowerSupply.VOUT to ESP32.VIN
 ```
 
-**That's where we're headed.** v0.1.7 proves the Rust compiler works end-to-end.
+**That's where we're headed.** v0.1.8-alpha has the foundation working with active development on advanced routing features.
 
 ### The "Matrix Moment"
 
-Hardware Script uses a **discrete 3D tensor grid** instead of continuous geometry. This single architectural decision unlocks capabilities impossible in traditional tools:
+Hardware Script v0.1.8 is transitioning to a **vector-first continuous coordinate architecture** with picometer precision. This architectural evolution unlocks capabilities impossible in traditional tools:
 
-- **$O(1)$ collision detection** — Mathematically impossible to create short circuits.
-- **Scale invariance** — Same tool for PCBs and silicon chips (just change the materials database).
-- **Deterministic routing** — Same input always produces the same physical output.
-- **Plain-text access** — Any tool or person that can read text can read, edit, or generate `.hw` files.
+- **Picometer-precision database** — All coordinates stored as 64-bit integer picometers (1pm = 10⁻¹² m)
+- **Scale invariance** — Same tool for PCBs (millimeters) and silicon chips (nanometers)
+- **Deterministic compilation** — Same input always produces identical output
+- **Zero-stamping scene graph** — Components stored once, instances as lightweight transforms
+- **Plain-text source** — Git-friendly, LLM-readable, human-editable
 
 **Read the full vision**: [VISION.md](VISION.md)
 
@@ -148,32 +150,58 @@ Hardware Script uses a **discrete 3D tensor grid** instead of continuous geometr
 
 ## Features
 
-### ✅ Implemented (v0.1.x)
+### ✅ Core Compiler (v0.1.8-alpha)
 
-- **Text-based design** — Write hardware like code.
-- **Unified 3-File Architecture** — `hw.toml`, `hw.lock`, and `.hw` source.
-- **Rust compiler** — `hwc` workspace with `logos` lexer and `miette` errors.
-- **Unified syntax** — Bare identifiers, `[]` lists, `:` properties, `=` logic.
-- **Z-axis abstraction** — Physical layer names (`layer: l1`) or physical units (`z: 1.5mm`).
-- **Native SI unit parsing** — `254µm`, `4.7kΩ`, `100nF` parsed directly in the lexer.
-- **Auto-routing** — 3-phase pipeline (Constraint Manager, A* Geometry Router, DRC).
-- **Logic synthesis** — `logic:` block translates operators to gates and D-flip-flops.
-- **Clock domain tracking** — CDC violation detection.
-- **Analytic traces** — Continuous mathematical line segments (fast, memory-efficient).
-- **Cylindrical vias** — PTH, via drills, and annular rings.
-- **Multi-format export** — Gerber X3, GDSII, DXF, OBJ, GLB, SPICE.
-- **Live preview** — `hsm` (Hardware Script Monitor) with Babylon.js, PixiJS, and uPlot.
-- **Standard library** — SI units and physical constants auto-loaded.
-- **Parallel routing** — Rayon-powered domain partitioning.
-- **LVS checking** — Physical extracted netlist vs. logical schematic comparison.
+**Syntax & Language:**
+- **Text-based design** — Write hardware like code in `.hw` files
+- **Unified 3-File Architecture** — `hw.toml`, `hw.lock`, and `.hw` source
+- **Unified syntax (v0.1.6)** — Bare identifiers, `[]` lists, `:` for structure, `=` for logic
+- **Native SI unit parsing** — `254µm`, `4.7kΩ`, `100nF` parsed directly in lexer
+- **Parametric components** — Components accept measurement parameters
 
-### 🔄 In Progress (v0.2)
+**Compilation Pipeline:**
+- **Rust compiler workspace** — `logos` lexer, `miette` error reporting, 7+ crates
+- **Symbol table** — Component, material, profile, stackup management
+- **Logical netlist synthesis** — Module-to-schematic extraction
+- **Device binding validation** — Physical layout matches logical schematic (LVS)
+- **Physical continuity checking** — Verifies all nets are connected (no floating islands)
+- **DRC validation** — Design rule checking (spacing, width, clearances)
 
-- Formal UHWSL language specification freeze.
-- Full public HPM package registry.
-- Parametric component generics.
-- Complete Gerber package (all layers, silkscreen, solder mask).
-- `hwsd` documentation generation from `##` comments.
+**Routing & Physical Synthesis:**
+- **Manual routing** — Full path specification with `route ... path:` statements
+- **Single-layer auto-routing** — ✅ Working for simple designs
+- **Layer abstraction** — `on layer: <name>` semantic layer references
+- **Trace geometry** — Width, spacing, clearance validation
+- **Pour support** — Copper pours with boundary definitions
+
+**Export Formats:**
+- **SPICE netlist** — `.sp` files with device parameters
+- **BOM (Bill of Materials)** — `.csv` component lists
+- **GLB 3D models** — Visual preview (basic geometry)
+- **DXF 2D drawings** — Board outlines
+
+**Development Tools:**
+- **Standard library** — SI units (`@std/units.hw`)
+- **Test suite** — Integration tests in `.hw` format
+- **Error diagnostics** — Clear error messages with suggestions
+
+
+
+**In Development:**
+- Vector-first routing engine (migration from voxel-based)
+- Topological line-search router with Axis-Aligned Slab Method
+- Hybrid spatial indexing (`rstar` + `geo-index`)
+- Pattern-guided meander injection
+- Wheeler-Sakurai BEM parasitic extraction
+
+### � Roadmap (v0.2+)
+
+- **Multi-layer auto-router** — Automatic via generation with bridge rule application
+- **HPM package registry** — Public component library
+- **Complete export suite** — Full Gerber, Excellon drill, pick-and-place
+- **Advanced routing** — Length matching, differential pairs, RF features
+- **LSP integration** — VS Code language server
+- **Live monitor (`hsm`)** — Tauri-based visual preview with hot-reload
 
 ---
 
