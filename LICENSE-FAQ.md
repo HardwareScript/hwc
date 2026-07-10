@@ -202,7 +202,7 @@ See [COMMERCIAL-LICENSE.md](COMMERCIAL-LICENSE.md) for complete details.
 
 ### Contact for Commercial Licensing
 
-**Email**: hwsl.dev@gmail.com  
+**Email**: hardwarescript@gmail.com  
 **Subject**: "Commercial License Request - [Your Company Name]"
 
 ## Contributor License Agreement (CLA)
@@ -327,9 +327,9 @@ This licensing policy supplements the AGPLv3 license. If you cannot or will not 
 
 ## Contact
 
-- **Email**: hwsl.dev@gmail.com
+- **Email**: hardwarescript@gmail.com
 - **GitHub**: https://github.com/hwsl-lang
-- **Discord**: https://discord.gg/G9VBxKpW
+- **Discord**: https://discord.gg/9zqH8nuCet
 - **Twitter**: @hwsl_lang
 
 ---

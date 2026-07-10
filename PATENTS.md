@@ -36,8 +36,8 @@ See GOVERNANCE.md for the founder's commitment to keeping Hardware Script perman
 ## Contact
 
 For patent-related inquiries:
-- Email: hwsl.dev@gmail.com
+- Email: hardwarescript@gmail.com
 - GitHub: https://github.com/hwsl-lang
-- Discord: https://discord.gg/G9VBxKpW
+- Discord: https://discord.gg/9zqH8nuCet
 
 Last Updated: March 16, 2026

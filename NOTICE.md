@@ -130,5 +130,5 @@ For complete license texts of dependencies, please refer to their respective
 repositories and documentation.
 
 For questions about licensing or attribution, contact:
-Email: hwsl.dev@gmail.com
+Email: hardwarescript@gmail.com
 GitHub: https://github.com/hwsl-lang

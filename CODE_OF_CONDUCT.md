@@ -34,7 +34,7 @@ This Code of Conduct applies within all community spaces, and also applies when 
 
 ## Enforcement
 
-Instances of abusive, harassing, or otherwise unacceptable behavior may be reported by contacting the project team at hwsl.dev@gmail.com. All complaints will be reviewed and investigated and will result in a response that is deemed necessary and appropriate to the circumstances.
+Instances of abusive, harassing, or otherwise unacceptable behavior may be reported by contacting the project team at hardwarescript@gmail.com. All complaints will be reviewed and investigated and will result in a response that is deemed necessary and appropriate to the circumstances.
 
 ## Enforcement Guidelines
 
@@ -70,9 +70,9 @@ This Code of Conduct is adapted from the [Contributor Covenant](https://www.cont
 
 ## Contact
 
-- **Email**: hwsl.dev@gmail.com
+- **Email**: hardwarescript@gmail.com
 - **GitHub**: https://github.com/HardwareScript
-- **Discord**: https://discord.gg/G9VBxKpW
+- **Discord**: https://discord.gg/9zqH8nuCet
 
 ---
 

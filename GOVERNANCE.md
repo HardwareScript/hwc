@@ -141,9 +141,9 @@ This document is a public commitment. The community will hold me accountable. I 
 
 I welcome community oversight and questions:
 
-- **Email**: hwsl.dev@gmail.com
+- **Email**: hardwarescript@gmail.com
 - **GitHub**: https://github.com/hwsl-lang
-- **Discord**: https://discord.gg/G9VBxKpW
+- **Discord**: https://discord.gg/9zqH8nuCet
 
 This document will be updated as governance evolves. All changes will be tracked in git history for transparency.
 

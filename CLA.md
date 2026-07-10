@@ -65,7 +65,7 @@ When the Hardware Script Foundation is established, all rights granted to Olowoo
 
 - Read our [Governance](GOVERNANCE.md) document
 - See our [Commercial Licensing](COMMERCIAL-LICENSE.md) policy
-- Contact us: hwsl.dev@gmail.com
+- Contact us: hardwarescript@gmail.com
 
 ## Legal References
 

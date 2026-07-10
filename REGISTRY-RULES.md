@@ -285,8 +285,8 @@ MIT and Apache 2.0 already require attribution (keeping your copyright notice). 
 Questions about registry rules?
 
 - **GitHub Discussions**: https://github.com/hwsl-lang/discussions
-- **Discord**: https://discord.gg/G9VBxKpW
-- **Email**: hwsl.dev@gmail.com
+- **Discord**: https://discord.gg/9zqH8nuCet
+- **Email**: hardwarescript@gmail.com
 
 ---
 

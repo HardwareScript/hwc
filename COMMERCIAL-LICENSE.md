@@ -188,7 +188,7 @@ Every commercial license includes:
 
 **Ready to get started? Contact our sales team:**
 
-**Email**: hwsl.dev@gmail.com  
+**Email**: hardwarescript@gmail.com  
 **Subject Line**: "Commercial License Request - [Your Company Name]"
 
 **Please include**:

@@ -349,9 +349,9 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) for the full guide.
 ## Community
 
 - **GitHub**: https://github.com/HardwareScript
-- **Discord**: https://discord.gg/G9VBxKpW
+- **Discord**: https://discord.gg/9zqH8nuCet
 - **Twitter**: @hwsl_lang
-- **Email**: hwsl.dev@gmail.com
+- **Email**: hardwarescript@gmail.com
 
 ---
 

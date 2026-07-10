@@ -9,7 +9,7 @@
 
 ## Reporting a Vulnerability
 
-If you discover a security vulnerability within Hardware Script, please send an email to hwsl.dev@gmail.com. All security vulnerabilities will be promptly addressed.
+If you discover a security vulnerability within Hardware Script, please send an email to hardwarescript@gmail.com. All security vulnerabilities will be promptly addressed.
 
 **Please do not report security vulnerabilities through public GitHub issues.**
 
@@ -83,7 +83,7 @@ Currently, Hardware Script does not offer a bug bounty program. However, we deep
 
 ## Contact
 
-- **Security Email**: hwsl.dev@gmail.com
+- **Security Email**: hardwarescript@gmail.com
 - **Subject Line**: [SECURITY] Brief description
 - **GitHub**: https://github.com/HardwareScript
 
