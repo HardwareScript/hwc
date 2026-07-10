@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Contributing Guide
+    url: https://github.com/HardwareScript/hwc/blob/main/CONTRIBUTING.md
+    about: Read our contributing guide before opening an issue
+  - name: Discord Community
+    url: https://discord.gg/G9VBxKpW
+    about: Ask questions and discuss ideas with the community
+  - name: Security Vulnerability
+    url: https://github.com/HardwareScript/hwc/blob/main/SECURITY.md
+    about: Report security vulnerabilities privately via email

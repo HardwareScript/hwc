@@ -10,25 +10,28 @@ Please read this document carefully before contributing.
 
 ## The "Open Source, Closed Core" Philosophy
 
-Hardware Script is proudly 100% open-source under the AGPLv3 license. However, **we generally do not accept Pull Requests (PRs) that modify the core compiler codebase (`hwc`).**
+Hardware Script is proudly 100% open-source under the AGPLv3 license. We deeply value every contribution and idea from the community. However, **we do not accept Pull Requests (PRs) that modify the core compiler codebase (`hwc`).** Instead, we ask that you share your ideas through Issues so our team can research them thoroughly before implementation.
 
-### Why do we reject core Pull Requests?
-1. **Architectural Purity:** Hardware Script follows a strict "C-like" philosophy. We keep the core extremely lean and push domain complexity to the Standard Library and Package Registry. 
-2. **The LLM Era:** AI-generated PRs often look functional but introduce subtle performance degradations or violate our strict memory/voxel architectures.
-3. **Legal Clarity:** Because Hardware Script offers a dual-license model for enterprises, the core team must retain clean, 100% copyright ownership over the compiler engine. By writing the code internally, we avoid the need for complex Contributor License Agreements (CLAs).
+### Why we take this approach
+We don't decline contributions to gatekeep — we do it to ensure **rigorous research and alignment** with our core philosophy before writing code. Here's why:
+
+1. **Architectural Purity:** Hardware Script follows a strict "C-like" philosophy. We keep the core extremely lean and push domain complexity to the Standard Library and Package Registry. An idea that doesn't align with this vision could compromise the entire architecture.
+2. **Deep Research First:** We want to properly benchmark, validate, and understand every change before it enters the compiler. When you share an idea via Issue, we do the due diligence — reading papers, running benchmarks, testing edge cases — before implementing.
+3. **The LLM Era:** AI-generated PRs often look functional but introduce subtle performance degradations or violate our strict memory/voxel architectures. Research-first prevents these issues.
+4. **Legal Clarity:** Because Hardware Script offers a dual-license model for enterprises, the core team must retain clean, 100% copyright ownership over the compiler engine. By writing the code internally, we avoid the need for complex Contributor License Agreements (CLAs).
 
 ---
 
-## How to Contribute (The Right Way)
+## How to Contribute
 
-While we don't accept core PRs, community contribution is the lifeblood of this project. Here is how you can make a massive impact:
+While we don't accept core PRs, community contribution is the lifeblood of this project. Our Issue-Driven model ensures your ideas get the rigorous research and attention they deserve before becoming part of the compiler.
 
 ### 1. Architectural & Optimization Suggestions (Issues)
 Did you find a way to make the compiler faster? Do you know a superior mathematical approach to Manhattan routing or 3D voxel parsing? 
 * **Do not write a Pull Request.**
 * **Open an Issue** tagged as `Optimization` or `Architecture`.
 * Explain your logic, share your research, or drop a pseudo-code snippet. 
-* Our internal team will review it, research it, and if it aligns with our high-performance ideology, *we will implement the core Rust code ourselves* and credit you in the release notes.
+* Our internal team will review it, research it thoroughly (reading papers, running benchmarks), and if it aligns with our high-performance ideology, *we will implement the core Rust code ourselves* and credit you in the release notes.
 
 ### 2. Bug Reports
 If you find a gap where the compiler fails, panics, or produces invalid physics/geometry:
@@ -48,6 +51,21 @@ The core compiler is intentionally primitive. The real power of Hardware Script 
 ### 4. Documentation & Typo Fixes
 We **DO** accept Pull Requests for the `Docs/` folder. 
 If you find a typo, want to improve a tutorial, or translate documentation, you are welcome to submit a PR for those specific markdown files.
+
+---
+
+## The C Philosophy: Lightweight Compiler
+
+Hardware Script follows a strict **C philosophy** — the compiler must stay as lightweight and fast as possible. This means:
+
+- **The compiler is the engine, not the car.** It handles parsing, validation, and compilation. Everything else is a library.
+- **Standard Library (`@std`)**: Only irreducible baseline primitives (units, basic components). No domain-specific features.
+- **HPM Packages**: Domain-specific features (RF components, vendor chips, aerospace units) belong in the community registry.
+- **No feature creep**: If a feature can be built with existing primitives, it stays out of the compiler.
+
+**Before proposing a feature, ask yourself**: "Is this a fundamental primitive, or can it be built as a library?"
+
+If it's a library, build it as an HPM package and publish it to the registry. The compiler stays lean; the ecosystem provides everything else.
 
 ---
 
