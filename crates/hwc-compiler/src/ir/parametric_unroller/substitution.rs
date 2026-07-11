@@ -315,10 +315,14 @@ pub fn unroll_contact(
 /// for i in 0..2:
 ///     route Adder[i].carry_out to Adder[i+1].carry_in
 /// ```
-pub fn unroll_route(route: &Route, variable: &str, value: usize) -> Result<Route, IrError> {
-    // Substitute loop variable in pin references
-    let from = substitute_in_pin_reference(&route.from, variable, value)?;
-    let to = substitute_in_pin_reference(&route.to, variable, value)?;
+pub fn unroll_route(
+    route: &hwc_parser::Route,
+    variable: &str,
+    value: usize,
+) -> Result<hwc_parser::Route, IrError> {
+    // Substitute loop variable in endpoints
+    let from = substitute_in_route_endpoint(&route.from, variable, value)?;
+    let to = substitute_in_route_endpoint(&route.to, variable, value)?;
 
     // Substitute loop variable in width
     let width = route
@@ -582,41 +586,51 @@ pub fn substitute_in_net_name_string(
     Ok(net_name.into())
 }
 
-/// Substitute loop variable in a pin reference (Sprint 3.10: Parametric Routing)
-///
-/// Handles pin references with parametric indices:
-/// - `Adder[i].carry_out` → `Adder[0].carry_out` (when i=0)
-/// - `Adder[i+1].carry_in` → `Adder[1].carry_in` (when i=0)
-/// - `Bus[i-1].data` → `Bus[0].data` (when i=1)
-pub fn substitute_in_pin_reference(
-    pin_ref: &hwc_parser::PinReference,
+/// Substitute loop variable in a route endpoint (v0.1.8)
+pub fn substitute_in_route_endpoint(
+    endpoint: &hwc_parser::RouteEndpointSpec,
     variable: &str,
     value: usize,
-) -> Result<hwc_parser::PinReference, IrError> {
-    // Substitute in component name (v0.1.6: no more legacy _i suffixing)
-    let component = pin_ref.component.clone();
-
-    // Substitute in component index expression (if present)
-    let component_index = if let Some(ref expr) = pin_ref.component_index {
-        Some(substitute_in_expression(expr, variable, value)?)
-    } else {
-        None
-    };
-
-    // Substitute in pin index expression (if present)
-    let pin_index = if let Some(ref expr) = pin_ref.pin_index {
-        Some(substitute_in_expression(expr, variable, value)?)
-    } else {
-        None
-    };
-
-    Ok(hwc_parser::PinReference {
-        component,
-        component_index,
-        pin: pin_ref.pin.clone(),
-        pin_index,
-        span: pin_ref.span,
-    })
+) -> Result<hwc_parser::RouteEndpointSpec, IrError> {
+    match endpoint {
+        hwc_parser::RouteEndpointSpec::ComponentPin {
+            component_name,
+            component_index,
+            pin_name,
+            pin_index,
+            span,
+        } => {
+            let component_index_sub = if let Some(ref expr) = component_index {
+                Some(substitute_in_expression(expr, variable, value)?)
+            } else {
+                None
+            };
+            let pin_index_sub = if let Some(ref expr) = pin_index {
+                Some(substitute_in_expression(expr, variable, value)?)
+            } else {
+                None
+            };
+            Ok(hwc_parser::RouteEndpointSpec::ComponentPin {
+                component_name: component_name.clone(),
+                component_index: component_index_sub,
+                pin_name: pin_name.clone(),
+                pin_index: pin_index_sub,
+                span: *span,
+            })
+        }
+        hwc_parser::RouteEndpointSpec::SpaceEntity { name, index, span } => {
+            let index_sub = if let Some(ref expr) = index {
+                Some(substitute_in_expression(expr, variable, value)?)
+            } else {
+                None
+            };
+            Ok(hwc_parser::RouteEndpointSpec::SpaceEntity {
+                name: name.clone(),
+                index: index_sub,
+                span: *span,
+            })
+        }
+    }
 }
 
 /// Substitute loop variable in a coordinate

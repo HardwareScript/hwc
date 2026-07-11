@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 
-use super::common::{Coordinate, Dimensions, Identifier, Measurement, OriginPoint, PinReference};
+use super::common::{Coordinate, Dimensions, Identifier, Measurement, OriginPoint};
 use super::component::ComponentPlacement;
 use super::expression::Expression;
 use super::pattern::PatternInstantiation;
@@ -287,11 +287,43 @@ pub struct CoordinatePair {
     pub to: Coordinate,
 }
 
+/// Route endpoint specification in the parsed AST (v0.1.8)
+///
+/// Replaces the generic `PinReference` to distinguish between component pins
+/// (e.g., `M1.gate`) and space-level entities (e.g., `VIN_Pad`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum RouteEndpointSpec {
+    /// Component pin reference: `M1.gate`, `R1.A`, `Adder[i].sum`, etc.
+    ComponentPin {
+        component_name: CompactString,
+        component_index: Option<Expression>,
+        pin_name: CompactString,
+        pin_index: Option<Expression>,
+        span: Span,
+    },
+
+    /// Space-level entity reference: `VIN_Pad`, `GND_Rail`, `Pads[i]`, etc.
+    SpaceEntity {
+        name: CompactString,
+        index: Option<Expression>,
+        span: Span,
+    },
+}
+
+impl RouteEndpointSpec {
+    pub fn span(&self) -> Span {
+        match self {
+            RouteEndpointSpec::ComponentPin { span, .. } => *span,
+            RouteEndpointSpec::SpaceEntity { span, .. } => *span,
+        }
+    }
+}
+
 /// Route: `route From.Pin to To.Pin:` with `path:` block
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Route {
-    pub from: PinReference,
-    pub to: PinReference,
+    pub from: RouteEndpointSpec,
+    pub to: RouteEndpointSpec,
     pub width: Option<Expression>,
     pub layer: Option<Identifier>,     // v0.1.8: Target routing layer (e.g. metal1)
     pub strategy: Option<Identifier>, // e.g. DDR5_Match (references a strategy definition)
@@ -351,7 +383,7 @@ pub enum NamedPosition {
 /// Expose: `expose Pin as Alias`
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Expose {
-    pub pin: PinReference,
+    pub pin: RouteEndpointSpec,
     pub alias: CompactString,
     pub span: Span,
 }

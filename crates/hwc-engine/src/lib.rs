@@ -62,7 +62,6 @@ pub use geometry_router::{
 };
 pub use geometry_router::{
     PinNode, RouteSegment, VirtualJunction, DecomposedNet, decompose_net,
-    NegotiatedCongestionEngine,
 };
 pub use geometry_router::geometry_refinement::{RefinedContour, refine_layer, refine_geometry, canonicalize_contours};
 pub use geometry_router::substrate_types::CompactionStats;

@@ -2,7 +2,7 @@
 
 mod automatic;
 mod global;
-mod helpers;
+pub(crate) mod helpers;
 mod manual;
 
 pub use automatic::{calculate_boundary_points, route_automatic};
@@ -161,17 +161,17 @@ mod tests {
     #[test]
     fn test_needs_automatic_routing_with_path() {
         let route = hwc_parser::Route {
-            from: hwc_parser::PinReference {
-                component: "Power".into(),
+            from: hwc_parser::RouteEndpointSpec::ComponentPin {
+                component_name: "Power".into(),
                 component_index: None,
-                pin: "Plus".into(),
+                pin_name: "Plus".into(),
                 pin_index: None,
                 span: hwc_parser::Span::new(0, 0),
             },
-            to: hwc_parser::PinReference {
-                component: "Light".into(),
+            to: hwc_parser::RouteEndpointSpec::ComponentPin {
+                component_name: "Light".into(),
                 component_index: None,
-                pin: "Anode".into(),
+                pin_name: "Anode".into(),
                 pin_index: None,
                 span: hwc_parser::Span::new(0, 0),
             },
@@ -209,17 +209,17 @@ mod tests {
     #[test]
     fn test_needs_automatic_routing_without_path() {
         let route = hwc_parser::Route {
-            from: hwc_parser::PinReference {
-                component: "Power".into(),
+            from: hwc_parser::RouteEndpointSpec::ComponentPin {
+                component_name: "Power".into(),
                 component_index: None,
-                pin: "Plus".into(),
+                pin_name: "Plus".into(),
                 pin_index: None,
                 span: hwc_parser::Span::new(0, 0),
             },
-            to: hwc_parser::PinReference {
-                component: "Light".into(),
+            to: hwc_parser::RouteEndpointSpec::ComponentPin {
+                component_name: "Light".into(),
                 component_index: None,
-                pin: "Anode".into(),
+                pin_name: "Anode".into(),
                 pin_index: None,
                 span: hwc_parser::Span::new(0, 0),
             },

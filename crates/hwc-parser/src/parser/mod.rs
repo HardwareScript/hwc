@@ -8,6 +8,7 @@
 //! - `routing`: Route and expose statement parsing
 
 mod components;
+mod context_errors; // New: Context-aware error generation
 mod definitions; // Now a folder with submodules
 mod error;
 mod expression;
@@ -16,6 +17,14 @@ mod logic;
 mod routing;
 
 pub use error::ParseError;
+pub use context_errors::{
+    ContextErrorGenerator, 
+    ParsingContext, 
+    PlacementParseState,
+    RouteParseState,
+    PourParseState,
+    SpaceParseState,
+};
 
 use crate::ast::*;
 use crate::lexer::SpannedToken;
@@ -24,12 +33,18 @@ use crate::lexer::SpannedToken;
 pub struct Parser {
     tokens: Vec<SpannedToken>,
     current: usize,
+    /// Context-aware error generator (Phase 1 refactor)
+    error_context: ContextErrorGenerator,
 }
 
 impl Parser {
     /// Create a new parser from a token stream
     pub fn new(tokens: Vec<SpannedToken>) -> Self {
-        Self { tokens, current: 0 }
+        Self { 
+            tokens, 
+            current: 0,
+            error_context: ContextErrorGenerator::new(),
+        }
     }
 
     /// Parse the token stream into a Program AST with multi-error reporting (v0.1.6).

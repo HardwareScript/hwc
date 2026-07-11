@@ -344,8 +344,8 @@ pub fn place_module_instance(
             );
 
             let space_route = hwc_parser::Route {
-                from: hwc_parser::PinReference {
-                    component: from_component.clone().into(),
+                from: hwc_parser::RouteEndpointSpec::ComponentPin {
+                    component_name: from_component.clone().into(),
                     component_index: module_route.from.component_index.clone().and_then(|idx| {
                         match idx {
                             hwc_parser::ArrayIndex::Literal(n) => {
@@ -357,7 +357,7 @@ pub fn place_module_instance(
                             _ => None,
                         }
                     }),
-                    pin: module_route.from.pin.clone(),
+                    pin_name: module_route.from.pin.clone(),
                     pin_index: module_route
                         .from
                         .pin_index
@@ -373,8 +373,8 @@ pub fn place_module_instance(
                         }),
                     span: module_route.from.span,
                 },
-                to: hwc_parser::PinReference {
-                    component: to_component.clone().into(),
+                to: hwc_parser::RouteEndpointSpec::ComponentPin {
+                    component_name: to_component.clone().into(),
                     component_index: module_route.to.component_index.clone().and_then(|idx| {
                         match idx {
                             hwc_parser::ArrayIndex::Literal(n) => {
@@ -386,7 +386,7 @@ pub fn place_module_instance(
                             _ => None,
                         }
                     }),
-                    pin: module_route.to.pin.clone(),
+                    pin_name: module_route.to.pin.clone(),
                     pin_index: module_route.to.pin_index.clone().and_then(|idx| match idx {
                         hwc_parser::ArrayIndex::Literal(n) => {
                             Some(hwc_parser::Expression::Literal {

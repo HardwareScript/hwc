@@ -208,6 +208,26 @@ pub fn place_plane(
 
     bbox_tracker.register(plane.name.to_string(), bbox, start_with_z);
 
+    // v0.1.8: Register plane in EntityGraph for O(1) resolution
+    let net_id = if let Some(net_name) = &plane.net {
+        let _min_width_nm = space.fabrication_constraints.as_ref()
+            .and_then(|c| Some(c.trace.min_width_nm))
+            .ok_or_else(|| IrError::MissingAsicConstraint {
+                message: "PDK missing required 'trace.min_width_nm' constraint".into(),
+                hint: "Add a 'trace:' block to your profile with explicit min_width.\n\nExample:\n  trace:\n    min_width: 180nm".into(),
+            })?;
+        Some(space.netlist.get_or_create_net(&net_name.base))
+    } else {
+        None
+    };
+
+    space.entity_graph.register_space_entity(
+        &plane.name.base,
+        bbox,
+        net_id,
+        z_start_nm,
+    );
+
     println!(
         "   ├─ Registered plane '{}' bbox: min=({:.3}, {:.3}, {:.3}) max=({:.3}, {:.3}, {:.3})",
         plane.name,

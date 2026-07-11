@@ -354,7 +354,7 @@ impl ModuleResolver {
         if collector.has_errors() {
             return Err(ResolverError::ParseError {
                 path: path.display().to_string().into(),
-                error: collector.summary().to_string(),
+                error: collector.format_errors(),
             });
         }
 

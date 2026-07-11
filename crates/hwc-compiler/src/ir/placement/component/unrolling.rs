@@ -147,9 +147,12 @@ pub fn unroll_internal_features(
                         pd.position.z + (pin_pos.z.unwrap_or(0.0) * 1_000_000.0) as i64;
 
                     if let Some(ref net_name_str) = net_assignment {
-                        let default_trace_width_nm = space.fabrication_constraints.as_ref()
+                        let min_width_nm = space.fabrication_constraints.as_ref()
                             .map(|c| c.trace.min_width_nm)
-                            .expect("Fabrication constraints (min_trace_width) must be defined in profile");
+                            .ok_or_else(|| IrError::MissingAsicConstraint {
+                                message: "PDK missing required 'trace.min_width_nm' constraint".into(),
+                                hint: "Add a 'trace:' block to your profile with explicit min_width.\n\nExample:\n  trace:\n    min_width: 180nm".into(),
+                            })?;
 
                         let net_material_id = (|| -> Option<hwc_engine::material::MaterialId> {
                             let layer_name = ctx.stackup_manager.get_layer_name_at_z(absolute_z_nm)?;
@@ -171,7 +174,7 @@ pub fn unroll_internal_features(
                         } else {
                             space
                                 .netlist
-                                .add_net(net_name_str.clone(), default_trace_width_nm, net_material_id)
+                                .add_net(net_name_str.clone(), min_width_nm, net_material_id)
                         };
 
                         let pins = space.netlist.get_component_pins(component_id);
@@ -190,6 +193,25 @@ pub fn unroll_internal_features(
                     let pin_bbox = BoundingBox::new(pin_point, pin_point);
                     let pin_anchor_name = format!("{}.{}", pd.name, pin_name);
                     bbox_tracker.register(pin_anchor_name.clone().into(), pin_bbox, pin_point);
+
+                    // v0.1.8: Register pin in EntityGraph for O(1) resolution
+                    let net_id = space.netlist.get_component_pins(component_id)
+                        .iter()
+                        .find_map(|&pid| {
+                            let pin = space.netlist.get_pin(pid)?;
+                            if pin.name == *pin_name {
+                                pin.connected_net
+                            } else {
+                                None
+                            }
+                        });
+                    
+                    space.entity_graph.register_component_pin(
+                        &pd.name,
+                        pin_name,
+                        pin_bbox,
+                        net_id,
+                    );
 
                     let is_tht = component_def
                         .render

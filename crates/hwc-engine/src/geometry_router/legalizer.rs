@@ -1,5 +1,6 @@
 use crate::geometry::{BoundingBox, Point3D, TraceSegment};
 use crate::geometry_router::spatial_index::DynamicSpatialIndex;
+use crate::material::MaterialRegistry;
 use crate::netlist::NetId;
 use rustc_hash::FxHashMap;
 
@@ -104,12 +105,14 @@ impl Legalizer {
     pub fn detect_violations(
         &self,
         segments: &[TraceSegment],
+        net_ids: &[NetId],
         spatial_index: &DynamicSpatialIndex,
     ) -> Vec<ClearanceViolation> {
         let mut violations = Vec::new();
         let mut seen_pairs = rustc_hash::FxHashSet::default();
 
         for (idx, seg) in segments.iter().enumerate() {
+            let seg_net_id = net_ids.get(idx).map(|n| n.raw() as usize).unwrap_or(0);
             let half_w = seg.width_nm / 2;
             let query_bbox = BoundingBox {
                 min: Point3D::new(
@@ -135,16 +138,17 @@ impl Legalizer {
                     continue;
                 }
 
-                if neighbor.net_id == idx {
-                    continue;
-                }
-
                 let neighbor_seg = TraceSegment {
                     start: neighbor.start,
                     end: neighbor.end,
                     width_nm: neighbor.width_nm,
                     material_id: 0,
                 };
+
+                // Skip same-net overlaps (these are legal T-junctions or taps)
+                if neighbor.net_id == seg_net_id {
+                    continue;
+                }
 
                 let shift = Self::required_shift(seg, &neighbor_seg, self.min_clearance_nm);
                 if shift <= 0 {
@@ -156,7 +160,7 @@ impl Legalizer {
                 violations.push(ClearanceViolation {
                     violator_id: idx,
                     victim_id: neighbor.segment_id,
-                    violator_net: NetId(idx as u32),
+                    violator_net: NetId(seg_net_id as u32),
                     victim_net: NetId(neighbor.net_id as u32),
                     overlap_bbox: overlap,
                     required_shift_nm: shift,
@@ -221,36 +225,36 @@ impl Legalizer {
         let dir_x = victim_cx - violator_cx;
         let dir_y = victim_cy - violator_cy;
 
-        let half_shift = violation.required_shift_nm / 2;
+        let shift = violation.required_shift_nm;
 
         if violator.is_horizontal() {
             if dir_y >= 0 {
-                (0, -half_shift)
+                (0, -shift)
             } else {
-                (0, half_shift)
+                (0, shift)
             }
         } else if violator.is_vertical() {
             if dir_x >= 0 {
-                (-half_shift, 0)
+                (-shift, 0)
             } else {
-                (half_shift, 0)
+                (shift, 0)
             }
         } else {
             let dist_sq = dir_x * dir_x + dir_y * dir_y;
             if dist_sq == 0 {
-                (half_shift, 0)
+                (shift, 0)
             } else {
                 let dist = approx_sqrt(dist_sq);
                 if dist == 0 {
-                    (half_shift, 0)
+                    (shift, 0)
                 } else {
                     let nx = -dir_y;
                     let ny = dir_x;
                     let n_len = approx_sqrt(nx * nx + ny * ny);
                     if n_len == 0 {
-                        (half_shift, 0)
+                        (shift, 0)
                     } else {
-                        let scale = half_shift * 1_000_000 / n_len;
+                        let scale = shift * 1_000_000 / n_len;
                         ((nx * scale) / 1_000_000, (ny * scale) / 1_000_000)
                     }
                 }
@@ -312,28 +316,43 @@ impl Legalizer {
     pub fn legalize(
         &self,
         segments: &[TraceSegment],
+        net_ids: &[NetId],
+        material_registry: &MaterialRegistry,
         _spatial_index: &DynamicSpatialIndex,
         max_iterations: usize,
-    ) -> Vec<TraceSegment> {
+    ) -> (Vec<TraceSegment>, Vec<NetId>) {
         let mut current = segments.to_vec();
+        let current_net_ids = net_ids.to_vec();
         let mut spatial = DynamicSpatialIndex::new();
 
         for (idx, seg) in current.iter().enumerate() {
+            let net_id = current_net_ids.get(idx).map(|n| n.raw() as usize).unwrap_or(0);
+            // Look up thickness from material registry using segment's material_id
+            let thickness_nm = material_registry
+                .get_material(seg.material_id)
+                .map(|m| m.thickness_nm)
+                .unwrap_or_else(|| {
+                    // Fail-fast: thickness must be declared in PDK
+                    panic!(
+                        "FATAL: Material id={} has zero thickness — must be declared in PDK",
+                        seg.material_id
+                    )
+                });
             spatial.insert(crate::geometry_router::spatial_index::IndexedSegment::new(
                 hwc_physics::spatial_index::SpatialEntitySource::RouteSegment {
-                    net_idx: 0,
+                    net_idx: net_id,
                     seg_idx: idx,
                 },
                 idx,
-                idx,
+                net_id,
                 seg,
                 seg.start.z,
-                35_000,
+                thickness_nm,
             ));
         }
 
         for _iter in 0..max_iterations {
-            let violations = self.detect_violations(&current, &spatial);
+            let violations = self.detect_violations(&current, &current_net_ids, &spatial);
             if violations.is_empty() {
                 break;
             }
@@ -381,27 +400,31 @@ impl Legalizer {
 
             spatial = DynamicSpatialIndex::new();
             for (idx, seg) in current.iter().enumerate() {
+                let net_id = current_net_ids.get(idx).map(|n| n.raw() as usize).unwrap_or(0);
+                let thickness_nm = material_registry
+                    .get_material(seg.material_id)
+                    .map(|m| m.thickness_nm)
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "FATAL: Material id={} has zero thickness — must be declared in PDK",
+                            seg.material_id
+                        )
+                    });
                 spatial.insert(crate::geometry_router::spatial_index::IndexedSegment::new(
                     hwc_physics::spatial_index::SpatialEntitySource::RouteSegment {
-                        net_idx: 0,
+                        net_idx: net_id,
                         seg_idx: idx,
                     },
                     idx,
-                    idx,
+                    net_id,
                     seg,
                     seg.start.z,
-                    35_000,
+                    thickness_nm,
                 ));
             }
         }
 
-        current
-    }
-}
-
-impl Default for Legalizer {
-    fn default() -> Self {
-        Self::new(200_000)
+        (current, current_net_ids)
     }
 }
 

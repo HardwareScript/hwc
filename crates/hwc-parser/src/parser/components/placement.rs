@@ -34,6 +34,25 @@ impl crate::parser::Parser {
     pub(in crate::parser) fn parse_component_placement(
         &mut self,
     ) -> Result<ComponentPlacement, ParseError> {
+        // Enter component placement context for better error messages
+        self.error_context.enter_context(crate::parser::ParsingContext::ComponentPlacement);
+        
+        // Track parsing state for intelligent error messages
+        let mut state = crate::parser::PlacementParseState::default();
+        
+        let result = self.parse_component_placement_impl(&mut state);
+        
+        // Exit context
+        self.error_context.exit_context();
+        
+        result
+    }
+
+    /// Internal implementation with state tracking
+    fn parse_component_placement_impl(
+        &mut self,
+        state: &mut crate::parser::PlacementParseState,
+    ) -> Result<ComponentPlacement, ParseError> {
         let start_pos = self.current_span().start;
         self.expect(&Token::Add)?;
 
@@ -79,6 +98,7 @@ impl crate::parser::Parser {
         // Parse position: at [Z,X,Y] (Z is optional in v0.1.7 High-Level mode)
         self.expect(&Token::At)?;
         let position = self.parse_coordinate_optional_z()?;
+        state.has_position = true;
 
         // v0.1.7: Support 'on layer: l1' or 'on z: 1mm' prepositional syntax
         let elevation = if self.check(&Token::On) {
@@ -87,6 +107,7 @@ impl crate::parser::Parser {
                 self.advance(); // consume 'layer'
                 self.expect(&Token::Colon)?;
                 let layer_name = self.expect_identifier()?;
+                state.has_elevation = true;
                 if layer_name.as_str() == "self" {
                     Some(Elevation::Relative)
                 } else {
@@ -98,6 +119,7 @@ impl crate::parser::Parser {
 
                 if self.check_identifier("relative") {
                     self.advance();
+                    state.has_elevation = true;
                     Some(Elevation::Relative)
                 } else {
                     let start = self.parse_expression()?;
@@ -108,6 +130,7 @@ impl crate::parser::Parser {
                         end = Some(self.parse_expression()?);
                     }
 
+                    state.has_elevation = true;
                     Some(Elevation::Physical { start, end })
                 }
             } else {
@@ -117,8 +140,29 @@ impl crate::parser::Parser {
             None
         };
 
+        // Check for common ordering mistake: rotated before on layer
+        if !state.has_elevation && self.check(&Token::Rotated) {
+            // User might be trying to put rotated before on layer
+            // Look ahead to see if there's an 'on' keyword coming
+            let saved_pos = self.current;
+            self.advance(); // skip 'rotated'
+            if let Ok(_) = self.parse_rotation() {
+                if self.check(&Token::On) {
+                    // Yep, they put rotated before on layer
+                    self.current = saved_pos; // restore position
+                    return Err(self.error_context.unexpected_token_error(
+                        &Token::Rotated,
+                        &self.current_span(),
+                        Some(state),
+                    ));
+                }
+            }
+            self.current = saved_pos; // restore position
+        }
+
         // Parse optional rotation: rotated 45 or rotated -30.5
         let rotation = if self.check(&Token::Rotated) {
+            state.has_rotation = true;
             Some(self.parse_rotation()?)
         } else {
             None
@@ -136,6 +180,7 @@ impl crate::parser::Parser {
         let mut standoff = None;
 
         if self.check(&Token::Colon) {
+            state.has_config_block = true;
             self.advance(); // consume colon
             self.expect(&Token::Newline)?;
             self.expect(&Token::Indent)?;
@@ -164,6 +209,7 @@ impl crate::parser::Parser {
                     self.advance();
                     self.expect(&Token::Colon)?;
                     let side_name = self.expect_identifier_string()?;
+                    state.has_mount = true;
                     mount = Some(match side_name.as_str() {
                         "top" => MountingSide::Top,
                         "bottom" => MountingSide::Bottom,
@@ -178,6 +224,7 @@ impl crate::parser::Parser {
                 } else if self.check_identifier("standoff") {
                     self.advance();
                     self.expect(&Token::Colon)?;
+                    state.has_standoff = true;
                     standoff = Some(self.parse_expression()?);
                     self.skip_whitespace();
                 } else if self.check_identifier("merge") {
@@ -227,6 +274,7 @@ impl crate::parser::Parser {
                     // Net bindings (Item #13)
                     self.advance(); // consume 'net'
                     self.expect(&Token::Colon)?;
+                    state.has_net_bindings = true;
                     pin_net_bindings = self.parse_net_bindings()?;
                     self.skip_whitespace();
                 } else if self.check_identifier("allow_substrate_overlap") {
@@ -238,12 +286,16 @@ impl crate::parser::Parser {
                     }
                     self.skip_whitespace();
                 } else {
-                    return Err(self.error(&format!(
-                        "Unknown property in component configuration: '{}'",
-                        self.current()
-                            .map(|t| t.token.to_string())
-                            .unwrap_or_default()
-                    )));
+                    // Use context-aware error generation
+                    if let Some(current) = self.current() {
+                        return Err(self.error_context.unexpected_token_error(
+                            &current.token,
+                            &current.span,
+                            Some(state),
+                        ));
+                    } else {
+                        return Err(self.error("Unexpected end of file in component configuration"));
+                    }
                 }
             }
 

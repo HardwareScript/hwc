@@ -47,6 +47,7 @@ pub enum RoutableMode {
 /// Routing constraints from the profile's `routing:` block (v0.1.7).
 ///
 /// Controls gridded routing behavior for ASIC designs.
+/// v0.1.8: All routing heuristic weights come from the PDK profile.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RoutingConstraints {
     /// Per-layer routing direction preferences.
@@ -57,6 +58,30 @@ pub struct RoutingConstraints {
     /// component bounding box, the pathfinder rejects the segment.
     /// Default: 10µm (10_000 nm).
     pub max_local_route_length: Option<Measurement>,
+    /// A* pathfinder: cost per grid step (base movement cost).
+    pub base_cost: Option<i64>,
+    /// A* pathfinder: penalty for via transitions (layer changes).
+    /// Higher values discourage vias. Default: 50.
+    pub via_penalty: Option<i64>,
+    /// A* pathfinder: penalty for moving against preferred layer direction.
+    /// Higher values enforce stricter direction adherence. Default: 10.
+    pub direction_penalty: Option<i64>,
+    /// A* pathfinder: penalty when clearance is tight.
+    /// Applied when min_clearance < 2 * min_trace_width. Default: 2.
+    pub tight_clearance_penalty: Option<i64>,
+    /// A* pathfinder: penalty for crosstalk risk (long parallel runs).
+    /// Applied when max_parallel_length < 10 * min_trace_width. Default: 3.
+    pub crosstalk_penalty: Option<i64>,
+    /// A* pathfinder: penalty for impedance-controlled nets.
+    /// Default: 1.
+    pub impedance_penalty: Option<i64>,
+    /// A* pathfinder: extreme penalty for crossing reference-plane voids.
+    /// Applied to high-speed nets. Default: 5_000_000.
+    pub reference_void_penalty: Option<i64>,
+    /// Net routing priorities from PDK profile.
+    /// Maps net name to priority (higher = routed first).
+    /// v0.1.8 ZERO-MAGIC: Priority must be declared here, not guessed from names.
+    pub net_priorities: rustc_hash::FxHashMap<String, u8>,
     pub span: Span,
 }
 

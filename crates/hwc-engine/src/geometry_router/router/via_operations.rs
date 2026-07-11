@@ -156,8 +156,8 @@ impl GeometryRouter {
     /// v0.1.8 (Roadmap 14.2): Delegates to `mark_circular_area_occupied()` which
     /// registers via pads as analytic cylinder substrate layers in the EntityGraph
     /// via `add_cylinder_substrate_layer()`. Each Z plane gets a separate substrate
-    /// layer entry, making via pads visible to all spatial queries (DRC, clearance,
-    /// rip-up). Also generates anti-pads for non-matching copper pours.
+    /// layer entry, making via pads visible to all spatial queries (DRC, clearance).
+    /// Also generates anti-pads for non-matching copper pours.
     pub fn stamp_via(&mut self, via: &Via) {
         let fabrication = match &self.constraints.fabrication {
             Some(f) => f,
@@ -227,7 +227,7 @@ impl GeometryRouter {
         }
     }
 
-    /// Clear a via (for rip-up and reroute).
+    /// Clear a via and remove its pads from the spatial index.
     ///
     /// v0.1.8 (Roadmap 14.2): Removes the via from the local `vias` list, then
     /// calls `remove_circular_area()` for each Z plane. This finds and removes

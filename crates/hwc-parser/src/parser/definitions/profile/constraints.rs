@@ -468,11 +468,26 @@ impl super::super::super::Parser {
     ///     m2: vertical
     ///     m3: horizontal
     ///     max_local_route_length: 10um
+    ///     base_cost: 1
+    ///     via_penalty: 50
+    ///     direction_penalty: 10
+    ///     tight_clearance_penalty: 2
+    ///     crosstalk_penalty: 3
+    ///     impedance_penalty: 1
+    ///     reference_void_penalty: 5000000
     /// ```
     pub(super) fn parse_routing_constraints(&mut self) -> Result<RoutingConstraints, ParseError> {
         let start_pos = self.current_span().start;
         let mut layer_directions = rustc_hash::FxHashMap::default();
         let mut max_local_route_length = None;
+        let mut base_cost = None;
+        let mut via_penalty = None;
+        let mut direction_penalty = None;
+        let mut tight_clearance_penalty = None;
+        let mut crosstalk_penalty = None;
+        let mut impedance_penalty = None;
+        let mut reference_void_penalty = None;
+        let mut net_priorities = rustc_hash::FxHashMap::default();
 
         while !self.check(&Token::Dedent) && !self.is_at_end() {
             self.skip_whitespace();
@@ -484,11 +499,61 @@ impl super::super::super::Parser {
             let field_name = self.expect_identifier()?;
             self.expect(&Token::Colon)?;
 
-            // Check if this is the max_local_route_length meta-field (not a layer direction)
-            if field_name.as_str() == "max_local_route_length" {
-                max_local_route_length = Some(self.parse_measurement()?);
-                self.skip_whitespace();
-                continue;
+            // Check if this is a meta-field (not a layer direction)
+            match field_name.as_str() {
+                "max_local_route_length" => {
+                    max_local_route_length = Some(self.parse_measurement()?);
+                    self.skip_whitespace();
+                    continue;
+                }
+                "base_cost" => {
+                    base_cost = Some(self.expect_integer()? as i64);
+                    self.skip_whitespace();
+                    continue;
+                }
+                "via_penalty" => {
+                    via_penalty = Some(self.expect_integer()? as i64);
+                    self.skip_whitespace();
+                    continue;
+                }
+                "direction_penalty" => {
+                    direction_penalty = Some(self.expect_integer()? as i64);
+                    self.skip_whitespace();
+                    continue;
+                }
+                "tight_clearance_penalty" => {
+                    tight_clearance_penalty = Some(self.expect_integer()? as i64);
+                    self.skip_whitespace();
+                    continue;
+                }
+                "crosstalk_penalty" => {
+                    crosstalk_penalty = Some(self.expect_integer()? as i64);
+                    self.skip_whitespace();
+                    continue;
+                }
+                "impedance_penalty" => {
+                    impedance_penalty = Some(self.expect_integer()? as i64);
+                    self.skip_whitespace();
+                    continue;
+                }
+                "reference_void_penalty" => {
+                    reference_void_penalty = Some(self.expect_integer()? as i64);
+                    self.skip_whitespace();
+                    continue;
+                }
+                "net_priorities" => {
+                    // Marker — actual entries are net_priority_<name>: <level>
+                    self.skip_whitespace();
+                    continue;
+                }
+                _ if field_name.name.starts_with("net_priority_") => {
+                    let net_name = &field_name.name["net_priority_".len()..];
+                    let priority = self.expect_integer()? as u8;
+                    net_priorities.insert(net_name.to_string(), priority);
+                    self.skip_whitespace();
+                    continue;
+                }
+                _ => {} // Fall through to layer direction parsing
             }
 
             let direction_str = self.expect_identifier()?;
@@ -513,6 +578,14 @@ impl super::super::super::Parser {
         Ok(RoutingConstraints {
             layer_directions,
             max_local_route_length,
+            base_cost,
+            via_penalty,
+            direction_penalty,
+            tight_clearance_penalty,
+            crosstalk_penalty,
+            impedance_penalty,
+            reference_void_penalty,
+            net_priorities,
             span: Span::new(start_pos, end_pos),
         })
     }

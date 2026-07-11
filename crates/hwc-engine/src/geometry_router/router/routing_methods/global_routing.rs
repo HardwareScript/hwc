@@ -92,6 +92,7 @@ impl GeometryRouter {
             0,
             clearance_nm, // BUG FIX: Don't add resolution_nm - clearance is already applied inside calculate_rect_escape
             escape_z,
+            None, // v0.1.9: No board bounds available in legacy global routing context
         );
 
         // eprintln!(
@@ -104,6 +105,18 @@ impl GeometryRouter {
 
     /// Global continuous router with localized active-set optimization fallback.
     pub fn route_net_global(&mut self, route: &NetRoute) -> Result<RoutedNet, RoutingError> {
+        // v0.1.8: Fail-Fast — fabrication constraints are MANDATORY.
+        // No hardcoded fallbacks. All values come from the PDK profile.
+        let fabrication = self.constraints.fabrication.as_ref()
+            .ok_or_else(|| RoutingError::MissingFabricationConstraints {
+                net_id: route.net_id,
+                message: "No fabrication constraints loaded from PDK profile. \
+                    Ensure a profile with 'trace:' and 'clearance:' constraints \
+                    is declared in the space definition.".into(),
+            })?;
+
+        let trace_width = fabrication.min_trace_width_nm;
+
         let max_valid_x = self.bounds.width_nm.saturating_sub(1);
         let max_valid_y = self.bounds.height_nm.saturating_sub(1);
         let max_valid_z = self.bounds.depth_nm.saturating_sub(1);
@@ -124,12 +137,6 @@ impl GeometryRouter {
 
         let spatial_index = self.build_routing_spatial_index(route);
         
-        // v0.1.8: Use the actual trace width from fabrication constraints instead of 
-        // a grid-based size. This ensures the router "sees" the board as a vector 
-        // space with correct physical clearances.
-        let trace_width = self.constraints.fabrication.as_ref()
-            .map(|fab| fab.min_trace_width_nm)
-            .unwrap_or(self.resolution_nm);
         let track_pitch = self.resolution_nm; // Use snap-resolution for pitch
         
         let topo_router = TopologicalRouter::new(trace_width, track_pitch);
@@ -141,17 +148,15 @@ impl GeometryRouter {
             use crate::geometry_router::pathfinding::route_net_sdf_accelerated;
             use crate::constraint_manager::LayerDirection;
 
+                // v0.1.9: Empty layer routability map for engine internal routing
+                let empty_layer_map = rustc_hash::FxHashMap::default();
+
                 let routing_params = RoutingParams {
                     net_id: route.net_id,
                     constraints: &crate::constraint_manager::RouteConstraints {
                         min_trace_width_nm: trace_width,
-                        min_clearance_nm: self.constraints.fabrication.as_ref()
-                            .map(|fab| fab.min_trace_spacing_nm)
-                            .unwrap_or(200_000),
-                        max_parallel_length_nm: 10_000_000,
-                        max_resistance_ohm: 100.0,
-                        max_current_ma: 20,
-                        impedance_ohm: None,
+                        min_clearance_nm: fabrication.min_trace_spacing_nm,
+                        ..Default::default()
                     },
                     bounds: self.bounds.clone(),
                     layer_direction: LayerDirection::Any,
@@ -165,11 +170,41 @@ impl GeometryRouter {
                     exempt_components: &[],
                     substrate_layers: self.substrate_layers.as_deref(),
                     is_high_speed_net: false,
-                    layer_routable_mode: None,
+                    layer_routability_map: &empty_layer_map,
                     max_local_route_length_nm: None,
                     via_drill_diameter_nm: 0,
                     active_net_pin_positions: &[],
                     component_keepouts: &[],
+                    // v0.1.8: Routing heuristic weights from PDK profile — fail if missing
+                    base_cost: self.routing_heuristics.as_ref()
+                        .ok_or_else(|| RoutingError::MissingFabricationConstraints {
+                            net_id: route.net_id,
+                            message: "Profile does not declare routing heuristics (base_cost, via_penalty, etc.). All routing weights must come from the PDK profile's 'routing:' block.".into(),
+                        })?.base_cost,
+                    via_penalty: self.routing_heuristics.as_ref().ok_or_else(|| RoutingError::MissingFabricationConstraints {
+                        net_id: route.net_id,
+                        message: "Missing via_penalty in profile routing heuristics.".into(),
+                    })?.via_penalty,
+                    direction_penalty: self.routing_heuristics.as_ref().ok_or_else(|| RoutingError::MissingFabricationConstraints {
+                        net_id: route.net_id,
+                        message: "Missing direction_penalty in profile routing heuristics.".into(),
+                    })?.direction_penalty,
+                    tight_clearance_penalty: self.routing_heuristics.as_ref().ok_or_else(|| RoutingError::MissingFabricationConstraints {
+                        net_id: route.net_id,
+                        message: "Missing tight_clearance_penalty in profile routing heuristics.".into(),
+                    })?.tight_clearance_penalty,
+                    crosstalk_penalty: self.routing_heuristics.as_ref().ok_or_else(|| RoutingError::MissingFabricationConstraints {
+                        net_id: route.net_id,
+                        message: "Missing crosstalk_penalty in profile routing heuristics.".into(),
+                    })?.crosstalk_penalty,
+                    impedance_penalty: self.routing_heuristics.as_ref().ok_or_else(|| RoutingError::MissingFabricationConstraints {
+                        net_id: route.net_id,
+                        message: "Missing impedance_penalty in profile routing heuristics.".into(),
+                    })?.impedance_penalty,
+                    reference_void_penalty: self.routing_heuristics.as_ref().ok_or_else(|| RoutingError::MissingFabricationConstraints {
+                        net_id: route.net_id,
+                        message: "Missing reference_void_penalty in profile routing heuristics.".into(),
+                    })?.reference_void_penalty,
                 };
 
             match route_net_sdf_accelerated(start, goal, &routing_params, sdf) {

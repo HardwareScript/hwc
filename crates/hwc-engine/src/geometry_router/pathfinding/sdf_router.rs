@@ -389,13 +389,20 @@ pub fn route_net_sdf_accelerated(
                 layer_direction: Some(params.layer_direction),
                 substrate_layers: params.substrate_layers,
                 is_high_speed_net: params.is_high_speed_net,
-                layer_routable_mode: params.layer_routable_mode,
+                layer_routability_map: params.layer_routability_map,
                 max_local_route_length_nm: params.max_local_route_length_nm,
                 local_route_length_nm: 0,
                 is_inside_component,
                 via_drill_diameter_nm: params.via_drill_diameter_nm,
                 active_net_pin_positions: params.active_net_pin_positions,
                 component_keepouts: params.component_keepouts,
+                base_cost: params.base_cost,
+                via_penalty: params.via_penalty,
+                direction_penalty: params.direction_penalty,
+                tight_clearance_penalty: params.tight_clearance_penalty,
+                crosstalk_penalty: params.crosstalk_penalty,
+                impedance_penalty: params.impedance_penalty,
+                reference_void_penalty: params.reference_void_penalty,
             };
             let move_cost = calculate_move_cost(&move_cost_params);
             let new_cost = current_cost + move_cost;

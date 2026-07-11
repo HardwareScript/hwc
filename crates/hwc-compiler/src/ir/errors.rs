@@ -88,7 +88,7 @@ pub enum IrError {
     #[diagnostic(
         code(R16),
         url("https://docs.hw-script.org/errors/R16"),
-        help("Check that components are within routing reach")
+        help("No valid path exists for this net. With the legalization-only workflow, this is a terminal error — there is no rip-up or retry mechanism.\n\nCheck that components are within routing reach, or reduce congestion.")
     )]
     NoPathFound {
         net: CompactString,
@@ -309,6 +309,19 @@ pub enum IrError {
     )]
     CircularReference { path: String },
 
+    #[error("Failed to resolve route endpoint '{endpoint}'")]
+    #[diagnostic(
+        code(R22),
+        url("https://docs.hw-script.org/errors/R22"),
+    )]
+    UnresolvedEndpoint {
+        endpoint: String,
+        #[label("this endpoint could not be resolved")]
+        span: miette::SourceSpan,
+        #[help]
+        help_message: String,
+    },
+
     #[error("ASIC compile failed: {message}")]
     #[diagnostic(
         code(C36),
@@ -417,6 +430,33 @@ pub enum IrError {
         x_nm: i64,
         y_nm: i64,
         z_nm: i64,
+    },
+
+    /// v0.1.8: Missing routing heuristic weights from PDK profile.
+    #[error("Missing routing heuristic '{field}' in profile")]
+    #[diagnostic(
+        code(R25),
+        url("https://docs.hw-script.org/errors/R25"),
+        help("The PDK profile must declare all routing heuristic weights in the 'routing:' block. \
+              The compiler is a deterministic engine — no hardcoded fallbacks. \
+              {hint}")
+    )]
+    MissingRoutingHeuristics {
+        field: CompactString,
+        hint: String,
+    },
+
+    /// v0.1.9: Clearance violation during placement (early DRC)
+    #[error("Clearance violation during placement of '{entity_name}'")]
+    #[diagnostic(
+        code(P46),
+        url("https://docs.hw-script.org/errors/P46"),
+        help("{reason}")
+    )]
+    ClearanceViolation {
+        entity_type: CompactString,
+        entity_name: CompactString,
+        reason: CompactString,
     },
 }
 

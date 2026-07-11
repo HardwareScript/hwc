@@ -12,6 +12,25 @@ use rustc_hash::FxHashMap;
 // Re-export substrate types
 pub use crate::geometry_router::substrate_types::{CapType, LinerStack, TSVParams, SubstrateLayerType};
 
+/// Type of entity in the Entity Graph (v0.1.8)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+pub enum EntityType {
+    ComponentPin,
+    SpacePour,
+    SubstrateRegion,
+    MechanicalKeepout,
+}
+
+/// Metadata for an entity in the Entity Graph (v0.1.8)
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct EntityData {
+    pub entity_type: EntityType,
+    pub bbox: BoundingBox,
+    pub net_id: Option<NetId>,
+    pub name: compact_str::CompactString,
+    pub layer_z: Option<i64>,
+}
+
 /// The Entity Graph — master registry for all design entities.
 pub struct EntityGraph {
     /// Component/pin/net ECS arena (logical connectivity)
@@ -22,6 +41,9 @@ pub struct EntityGraph {
 
     /// R*-tree spatial index (dynamic, for floorplanning)
     pub(crate) spatial: DynamicSpatialIndex,
+
+    /// Master registry for all routing-targetable entities (v0.1.8)
+    pub(crate) entity_registry: FxHashMap<EntityId, EntityData>,
 
     /// Map from arena ComponentId to graph ComponentGraphId
     component_id_map: FxHashMap<ComponentId, ComponentGraphId>,
@@ -53,6 +75,7 @@ impl EntityGraph {
             netlist: NetlistArena::new(),
             scene: SceneGraph::new(),
             spatial: DynamicSpatialIndex::new(),
+            entity_registry: FxHashMap::default(),
             component_id_map: FxHashMap::default(),
             net_id_map: FxHashMap::default(),
             _next_stamp_id: 0,
@@ -62,6 +85,88 @@ impl EntityGraph {
             component_pins: Vec::new(),
             routed_segments: Vec::new(),
         }
+    }
+
+    /// Register a component pin and return its EntityId (v0.1.8)
+    pub fn register_component_pin(
+        &mut self,
+        component_name: &str,
+        pin_name: &str,
+        bbox: BoundingBox,
+        net_id: Option<NetId>,
+    ) -> EntityId {
+        let id = EntityId::from_str(&format!("pin:{}:{}", component_name, pin_name));
+        eprintln!("[DEBUG register_component_pin] Registering '{}.{}' with EntityId: {}, net_id: {:?}", component_name, pin_name, id, net_id);
+        self.entity_registry.insert(
+            id,
+            EntityData {
+                entity_type: EntityType::ComponentPin,
+                bbox,
+                net_id,
+                name: format!("{}.{}", component_name, pin_name).into(),
+                layer_z: None,
+            },
+        );
+        id
+    }
+
+    /// Register a space-level pour/pad and return its EntityId (v0.1.8)
+    pub fn register_space_entity(
+        &mut self,
+        name: &str,
+        bbox: BoundingBox,
+        net_id: Option<NetId>,
+        layer_z: i64,
+    ) -> EntityId {
+        let id = EntityId::from_str(&format!("space:{}", name));
+        eprintln!("[DEBUG register_space_entity] Registering '{}' with EntityId: {}, net_id: {:?}", name, id, net_id);
+        self.entity_registry.insert(
+            id,
+            EntityData {
+                entity_type: EntityType::SpacePour,
+                bbox,
+                net_id,
+                name: name.into(),
+                layer_z: Some(layer_z),
+            },
+        );
+        id
+    }
+
+    /// Get bounding box for a space entity by name (v0.1.9.1)
+    pub fn get_space_entity_bbox(&self, name: &str) -> Option<BoundingBox> {
+        let entity_id = EntityId::from_str(&format!("space:{}", name));
+        self.entity_registry.get(&entity_id).map(|entity_data| entity_data.bbox)
+    }
+
+    /// Get the bounding box for a component pin (v0.1.9.1)
+    /// Looks up the pin directly in the entity registry
+    pub fn get_component_pin_bbox(&self, component_name: &str, pin_name: &str) -> Option<BoundingBox> {
+        let entity_id = EntityId::from_str(&format!("pin:{}:{}", component_name, pin_name));
+        self.entity_registry.get(&entity_id).map(|entity_data| entity_data.bbox)
+    }
+
+    /// Update net assignment for an entity (v0.1.8)
+    pub fn set_entity_net(&mut self, entity_name: &str, net_name: &str) {
+        // This is a bit inefficient as it requires a linear scan if we don't have a name map.
+        // In v0.1.8, we should probably maintain a name -> EntityId map.
+        // For now, let's just update the registry.
+        let net_id = self.netlist.get_or_create_net(net_name);
+        for data in self.entity_registry.values_mut() {
+            if data.name == entity_name {
+                data.net_id = Some(net_id);
+            }
+        }
+    }
+
+    /// Lookup entity data by EntityId (v0.1.8)
+    /// Fails fast if the entity does not exist.
+    pub fn get_entity_data(&self, id: EntityId) -> Result<&EntityData, String> {
+        let result = self.entity_registry.get(&id);
+        if result.is_none() {
+            eprintln!("[DEBUG get_entity_data] EntityId {} NOT FOUND in registry (size: {})", id, self.entity_registry.len());
+        }
+        result.ok_or_else(|| format!("EntityId {} not found in registry", id))
     }
 
     /// Access the underlying NetlistArena (read-only).
@@ -233,6 +338,11 @@ impl EntityGraph {
         &self.component_metadata
     }
 
+    /// Get all registered entity IDs (v0.1.8)
+    pub fn iter_entity_ids(&self) -> impl Iterator<Item = &EntityId> {
+        self.entity_registry.keys()
+    }
+
     /// Query: Which component name is at this point?
     pub fn point_in_component(&self, x: i64, y: i64, z: i64) -> Option<compact_str::CompactString> {
         for meta in &self.component_metadata {
@@ -254,6 +364,12 @@ impl EntityGraph {
     }
 
     /// Add a full SubstrateLayer.
+    /// Add a substrate layer with optional clearance validation.
+    /// 
+    /// # Arguments
+    /// * `min_clearance_nm` - If Some(distance), validates that this pour maintains
+    ///   at least `distance` nm clearance from all existing pours on different nets.
+    ///   Returns an error if validation fails.
     pub fn add_substrate_layer(
         &mut self,
         material: MaterialId,
@@ -263,6 +379,52 @@ impl EntityGraph {
     ) {
         let layer = SubstrateLayer::new(material, net, bbox, layer_type);
         self.substrate_layers.push(layer);
+    }
+
+    /// Add a substrate layer with clearance validation (v0.1.9).
+    /// 
+    /// Validates that the new pour maintains required clearance from existing
+    /// pours on different nets. Returns Ok(()) if valid, Err with details if
+    /// clearance is violated.
+    /// 
+    /// This should be used during IR construction to catch design rule violations
+    /// early, rather than waiting until final DRC.
+    pub fn add_substrate_layer_checked(
+        &mut self,
+        material: MaterialId,
+        net: u32,
+        bbox: BoundingBox,
+        layer_type: SubstrateLayerType,
+        min_clearance_nm: i64,
+    ) -> Result<(), String> {
+        // Check clearance against existing substrate layers on different nets
+        if net != 0 {  // Skip clearance check for unconnected geometry (net_id=0)
+            for existing in &self.substrate_layers {
+                // Skip if same net (same-net overlap is allowed for junctions)
+                if existing.net == 0 || existing.net == net {
+                    continue;
+                }
+                
+                // Calculate clearance
+                let distance = bbox.distance_to(&existing.bbox);
+                
+                if distance < min_clearance_nm {
+                    return Err(format!(
+                        "Clearance violation: Pour on net {} at {:?} is {}nm from net {} (required: {}nm)",
+                        net,
+                        bbox,
+                        distance,
+                        existing.net,
+                        min_clearance_nm
+                    ));
+                }
+            }
+        }
+        
+        // If validation passed, add the layer
+        let layer = SubstrateLayer::new(material, net, bbox, layer_type);
+        self.substrate_layers.push(layer);
+        Ok(())
     }
 
     /// Get a reference to all substrate layers.
@@ -679,6 +841,9 @@ impl EntityGraph {
     }
 
     /// Register a routed path canonically as continuous vector segments.
+    ///
+    /// Deduplicates consecutive identical points to prevent zero-length segments
+    /// that cause SameNetOverlap DRC violations.
     pub fn register_route(
         &mut self,
         net_id: NetId,
@@ -686,44 +851,89 @@ impl EntityGraph {
         material_id: u8,
         width_nm: i64,
     ) {
+        self.register_route_with_z_materials(
+            net_id,
+            waypoints,
+            material_id,
+            width_nm,
+            None::<fn(i64) -> Option<u8>>,
+        )
+    }
+
+    /// Register a route with Z-aware material resolution (v0.1.9.1)
+    ///
+    /// This is the internal implementation that supports layer-aware material assignment.
+    /// When `z_to_material` is provided, horizontal segments use the material from their
+    /// Z layer instead of the default routing material.
+    ///
+    /// # Arguments
+    /// * `z_to_material` - Optional closure that maps Z coordinate to material ID
+    pub fn register_route_with_z_materials<F>(
+        &mut self,
+        net_id: NetId,
+        waypoints: &[crate::geometry::Point3D],
+        default_material_id: u8,
+        width_nm: i64,
+        z_to_material: Option<F>,
+    ) where
+        F: Fn(i64) -> Option<u8>,
+    {
         if waypoints.len() < 2 {
             return;
         }
-        
-        // BUG DEBUG: Log waypoints being registered
-        eprintln!("[ROUTE REGISTER] net_id={}, waypoints count={}", net_id.raw(), waypoints.len());
-        for (i, wp) in waypoints.iter().enumerate() {
-            eprintln!("  waypoint[{}]: ({}, {}, {})", i, wp.x, wp.y, wp.z);
+
+        // Deduplicate consecutive identical points to prevent zero-length segments
+        let deduped: Vec<crate::geometry::Point3D> = waypoints
+            .iter()
+            .copied()
+            .enumerate()
+            .filter(|(i, p)| *i == 0 || *p != waypoints[i - 1])
+            .map(|(_, p)| p)
+            .collect();
+
+        if deduped.len() < 2 {
+            return;
         }
-        
-        let segments: Vec<crate::geometry::TraceSegment> = waypoints
+
+        // v0.1.9.1: Z-aware material resolution
+        // Each segment uses the material from its Z layer, not a single routing material.
+        // This fixes the bug where horizontal traces at z=100nm (active layer) were
+        // incorrectly stamped with Aluminum (metal1 material) instead of Silicon_N.
+        let segments: Vec<crate::geometry::TraceSegment> = deduped
             .windows(2)
+            .filter(|w| w[0] != w[1]) // Extra safety: skip zero-length
             .map(|w| {
-                let seg = crate::geometry::TraceSegment::new(w[0], w[1], width_nm, material_id);
-                eprintln!("  segment: start=({},{},{}), end=({},{},{})", 
-                    seg.start.x, seg.start.y, seg.start.z,
-                    seg.end.x, seg.end.y, seg.end.z);
-                seg
+                let start = w[0];
+                let end = w[1];
+                
+                // Determine segment material based on its Z coordinate
+                // For horizontal segments (start.z == end.z), use that Z layer's material
+                // For vertical segments, use the routing material (via/transition material)
+                let seg_material_id = if start.z == end.z {
+                    // Horizontal segment - try to resolve material from Z layer
+                    if let Some(ref resolver) = z_to_material {
+                        resolver(start.z).unwrap_or(default_material_id)
+                    } else {
+                        default_material_id
+                    }
+                } else {
+                    // Vertical segment - use routing material (vias, transitions)
+                    default_material_id
+                };
+                
+                crate::geometry::TraceSegment::new(start, end, width_nm, seg_material_id)
             })
             .collect();
-        
-        // v0.1.9: CRITICAL FIX - Append to existing net entry instead of creating duplicates
+
+        if segments.is_empty() {
+            return;
+        }
+
+        // Append to existing net entry instead of creating duplicates
         if let Some(entry) = self.routed_segments.iter_mut().find(|(id, _)| *id == net_id) {
             entry.1.extend(segments);
         } else {
             self.routed_segments.push((net_id, segments));
-        }
-        
-        // DEBUG: Verify what was actually stored
-        if let Some((stored_net_id, stored_segs)) = self.routed_segments.iter().find(|(id, _)| *id == net_id) {
-            eprintln!("[ROUTE REGISTER VERIFY] Stored net_id={}, segments count={}", stored_net_id.raw(), stored_segs.len());
-            for (i, seg) in stored_segs.iter().take(3).enumerate() {  // Only show first 3
-                eprintln!("  stored[{}]: start=({},{},{}), end=({},{},{})", 
-                    i, seg.start.x, seg.start.y, seg.start.z, seg.end.x, seg.end.y, seg.end.z);
-            }
-            if stored_segs.len() > 3 {
-                eprintln!("  ... and {} more segments", stored_segs.len() - 3);
-            }
         }
     }
 
@@ -830,6 +1040,7 @@ impl Clone for EntityGraph {
             netlist: NetlistArena::new(),
             scene: SceneGraph::new(),
             spatial: DynamicSpatialIndex::new(),
+            entity_registry: self.entity_registry.clone(),
             component_id_map: self.component_id_map.clone(),
             net_id_map: self.net_id_map.clone(),
             _next_stamp_id: self._next_stamp_id,

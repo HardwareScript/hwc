@@ -10,8 +10,7 @@
 //! - `mark_circular_area_occupied` silently discarded all occupancy data,
 //!   so via pads were invisible to the EntityGraph spatial index.
 //! - `remove_circular_area` silently ignored removal requests, leaving stale
-//!   occupancy in the spatial index and causing phantom DRC violations during
-//!   rip-up and reroute.
+//!   occupancy in the spatial index and causing phantom DRC violations.
 //! - `is_circular_area_clear` only checked `component_metadata` bounding boxes,
 //!   missing substrate layers (pours, contacts) and routed segments entirely.
 //!
@@ -109,7 +108,7 @@ impl GeometryRouter {
     ///
     /// Registers the via pad as an analytic cylinder substrate layer in the
     /// EntityGraph via `add_cylinder_substrate_layer()`. This makes via pads
-    /// visible to all spatial queries (DRC, clearance checks, rip-up).
+    /// visible to all spatial queries (DRC, clearance checks).
     ///
     /// v0.1.8: Replaces the legacy no-op stub that silently discarded occupancy
     /// data, causing via pads to be invisible to the EntityGraph spatial index.

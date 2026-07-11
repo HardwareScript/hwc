@@ -109,11 +109,13 @@ impl Compactor {
     pub fn compact(
         &self,
         segments: &[TraceSegment],
+        net_ids: &[NetId],
         constraints: &FxHashMap<NetId, SignalConstraints>,
     ) -> Vec<CompactionMove> {
         let mut moves = Vec::new();
 
         for (i, seg_a) in segments.iter().enumerate() {
+            let net_a = net_ids.get(i).copied().unwrap_or(NetId(0));
             for (j, seg_b) in segments.iter().enumerate().skip(i + 1) {
                 if seg_a.start.z != seg_b.start.z {
                     continue;
@@ -124,8 +126,9 @@ impl Compactor {
                     continue;
                 }
 
-                let constraints_a = constraints.get(&NetId(0));
-                let constraints_b = constraints.get(&NetId(0));
+                let net_b = net_ids.get(j).copied().unwrap_or(NetId(0));
+                let constraints_a = constraints.get(&net_a);
+                let constraints_b = constraints.get(&net_b);
 
                 // Compute current spacing (perpendicular distance)
                 let current_spacing = if seg_a.start.y == seg_a.end.y && seg_a.start.y == seg_b.start.y
@@ -148,14 +151,18 @@ impl Compactor {
 
                 if current_spacing > min_sp {
                     let shift = (current_spacing - min_sp) / 2;
-                    let dy = if seg_a.start.y > seg_b.start.y {
-                        -shift
+                    let (dx, dy) = if seg_a.start.y == seg_a.end.y && seg_a.start.y == seg_b.start.y {
+                        // Horizontal traces — shift vertically
+                        let dy = if seg_a.start.y > seg_b.start.y { -shift } else { shift };
+                        (0, dy)
                     } else {
-                        shift
+                        // Vertical traces — shift horizontally
+                        let dx = if seg_a.start.x > seg_b.start.x { -shift } else { shift };
+                        (dx, 0)
                     };
                     moves.push(CompactionMove {
                         segment_id: j,
-                        dx: 0,
+                        dx,
                         dy,
                     });
                 }
@@ -178,12 +185,6 @@ impl Compactor {
             }
         }
         result
-    }
-}
-
-impl Default for Compactor {
-    fn default() -> Self {
-        Self::new(200_000)
     }
 }
 

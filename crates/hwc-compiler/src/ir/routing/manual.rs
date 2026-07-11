@@ -41,7 +41,7 @@ pub fn route_manual(
 
     if waypoints.is_empty() {
         return Err(IrError::EmptyRoute {
-            net: format!("{}.{} -> {}.{}", route.from.component, route.from.pin, route.to.component, route.to.pin).into(),
+            net: format!("{} -> {}", super::helpers::endpoint_label(&route.from), super::helpers::endpoint_label(&route.to)).into(),
         });
     }
 
@@ -76,16 +76,25 @@ pub fn route_manual(
             .next()
     };
 
-    let start_bbox = find_pad_bbox(&route.from.component);
-    let end_bbox = find_pad_bbox(&route.to.component);
+    let start_comp_name = match &route.from {
+        hwc_parser::RouteEndpointSpec::ComponentPin { component_name, .. } => component_name.as_str(),
+        hwc_parser::RouteEndpointSpec::SpaceEntity { name, .. } => name.as_str(),
+    };
+    let end_comp_name = match &route.to {
+        hwc_parser::RouteEndpointSpec::ComponentPin { component_name, .. } => component_name.as_str(),
+        hwc_parser::RouteEndpointSpec::SpaceEntity { name, .. } => name.as_str(),
+    };
+
+    let start_bbox = find_pad_bbox(start_comp_name);
+    let end_bbox = find_pad_bbox(end_comp_name);
 
     // Check that first waypoint is on the start pad's edge
     if let Some(bbox) = &start_bbox {
         if !waypoint_on_pad_edge(first_waypoint, bbox, space.resolution_nm) {
             return Err(IrError::NoPathFound {
-                net: format!("{}.{} -> {}.{}", route.from.component, route.from.pin, route.to.component, route.to.pin).into(),
-                from_pin: format!("{}.{}", route.from.component, route.from.pin).into(),
-                to_pin: format!("{}.{}", route.to.component, route.to.pin).into(),
+                net: format!("{} -> {}", super::helpers::endpoint_label(&route.from), super::helpers::endpoint_label(&route.to)).into(),
+                from_pin: super::helpers::endpoint_label(&route.from).into(),
+                to_pin: super::helpers::endpoint_label(&route.to).into(),
             });
         }
     }
@@ -104,9 +113,9 @@ pub fn route_manual(
     if let Some(bbox) = &end_bbox {
         if !waypoint_on_pad_edge(last_waypoint, bbox, space.resolution_nm) {
             return Err(IrError::NoPathFound {
-                net: format!("{}.{} -> {}.{}", route.from.component, route.from.pin, route.to.component, route.to.pin).into(),
-                from_pin: format!("{}.{}", route.from.component, route.from.pin).into(),
-                to_pin: format!("{}.{}", route.to.component, route.to.pin).into(),
+                net: format!("{} -> {}", super::helpers::endpoint_label(&route.from), super::helpers::endpoint_label(&route.to)).into(),
+                from_pin: super::helpers::endpoint_label(&route.from).into(),
+                to_pin: super::helpers::endpoint_label(&route.to).into(),
             });
         }
     }
@@ -173,7 +182,7 @@ pub fn route_manual(
         }
     } else {
         return Err(IrError::EmptyRoute {
-            net: format!("{}.{} -> {}.{}", route.from.component, route.from.pin, route.to.component, route.to.pin).into(),
+            net: format!("{} -> {}", super::helpers::endpoint_label(&route.from), super::helpers::endpoint_label(&route.to)).into(),
         });
     };
 
@@ -198,13 +207,22 @@ pub fn route_manual(
         .unwrap_or_default();
 
     let current_ma = if let Some(ref ac) = route.current_limit_ac {
-        let rms = crate::ir::conversions::evaluate_expression_to_ma(&ac.rms, symbol_table)
-            .unwrap_or(20.0);
+        let _rms = crate::ir::conversions::evaluate_expression_to_ma(&ac.rms, symbol_table)
+            .map_err(|e| IrError::InvalidRouteExpression {
+                expression: "current_limit_ac.rms".into(),
+                reason: e.to_string(),
+            })?;
         let peak = crate::ir::conversions::evaluate_expression_to_ma(&ac.peak, symbol_table)
-            .unwrap_or(rms);
+            .map_err(|e| IrError::InvalidRouteExpression {
+                expression: "current_limit_ac.peak".into(),
+                reason: e.to_string(),
+            })?;
         peak
     } else {
-        20.0
+        return Err(IrError::MissingAsicConstraint {
+            message: "Route missing required 'current_limit_ac' property.".into(),
+            hint: "Add 'current_limit_ac: [rms: <Value>, peak: <Value>]' to the route definition.".into(),
+        });
     };
 
     let net_actual_current_ma = space

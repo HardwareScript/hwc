@@ -178,6 +178,26 @@ pub fn place_pour(
 
     bbox_tracker.register(pour.name.to_string(), bbox, start_with_z);
 
+    // v0.1.8: Register pour in EntityGraph for O(1) resolution
+    let net_id = if let Some(net_name) = &pour.net {
+        let _min_width_nm = space.fabrication_constraints.as_ref()
+            .and_then(|c| Some(c.trace.min_width_nm))
+            .ok_or_else(|| IrError::MissingAsicConstraint {
+                message: "PDK missing required 'trace.min_width_nm' constraint".into(),
+                hint: "Add a 'trace:' block to your profile with explicit min_width.\n\nExample:\n  trace:\n    min_width: 180nm".into(),
+            })?;
+        Some(space.netlist.get_or_create_net(&net_name.base))
+    } else {
+        None
+    };
+    
+    space.entity_graph.register_space_entity(
+        &pour.name.base,
+        bbox,
+        net_id,
+        z_start_nm,
+    );
+
     // println!(
     //     "   ├─ Registered pour '{}' bbox: min=({:.3}, {:.3}, {:.3}) max=({:.3}, {:.3}, {:.3})",
     //     pour.name,
@@ -328,6 +348,13 @@ pub fn place_pour(
             space
                 .netlist
                 .add_pin(pour_component_id, "anchor".into(), (0, 0, 0), None);
+        
+        // v0.1.8: Also create a virtual pin for routing endpoint resolution
+        let virtual_pin_name = format!("__virtual_{}", pour.name);
+        let _virtual_pin_id =
+            space
+                .netlist
+                .add_pin(pour_component_id, virtual_pin_name.into(), (center_x, center_y, center_z), None);
 
         let net_id_handle =
             if let Some(existing_net) = space.netlist.get_net_by_name(net_name.as_str()) {
@@ -339,6 +366,7 @@ pub fn place_pour(
             };
 
         space.netlist.connect_pin(anchor_pin_id, net_id_handle);
+        space.netlist.connect_pin(_virtual_pin_id, net_id_handle);
 
         if let Some(binding) = &pour.device {
             if let Some(target_comp_id) = space.netlist.get_component_by_name(&binding.device_name)
@@ -392,17 +420,42 @@ pub fn place_pour(
     };
 
     let bbox = hwc_engine::geometry::BoundingBox::new(start_with_z, end_with_z);
+    
+    // Get min_spacing from profile for early clearance validation (v0.1.9)
+    // NO DEFAULTS - require explicit profile declaration
+    let min_clearance_nm = space
+        .fabrication_constraints
+        .as_ref()
+        .ok_or_else(|| IrError::MissingAsicConstraint {
+            message: "Cannot validate pour clearance without fabrication constraints".into(),
+            hint: "Add a profile with 'trace: min_spacing: <value>' to enable early DRC validation".into(),
+        })?
+        .trace
+        .min_spacing_nm;
+    
     if let Some(radius) = circle_radius_nm {
         space
             .entity_graph
             .add_circle_substrate_layer(material_id, net_id, bbox, radius);
     } else {
-        space.entity_graph.add_substrate_layer(
+        // Use checked version to catch clearance violations early (v0.1.9)
+        if let Err(msg) = space.entity_graph.add_substrate_layer_checked(
             material_id,
             net_id,
             bbox,
             hwc_engine::geometry_router::entity_graph::SubstrateLayerType::Pour,
-        );
+            min_clearance_nm,
+        ) {
+            return Err(IrError::ClearanceViolation {
+                entity_type: "pour".into(),
+                entity_name: pour.name.to_string().into(),
+                reason: format!(
+                    "{}\nRequired spacing: {}nm (from profile trace.min_spacing)\n\
+                     Adjust the pour boundary to maintain clearance from other nets.",
+                    msg, min_clearance_nm
+                ).into(),
+            });
+        }
     }
 
     Ok(())

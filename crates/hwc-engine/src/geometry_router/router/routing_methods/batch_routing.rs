@@ -1,5 +1,6 @@
 use super::super::super::types::{NetRoute, RoutedNet, RoutingError};
 use super::super::core::GeometryRouter;
+use rustc_hash::FxHashMap;
 
 impl GeometryRouter {
     pub fn route_all_nets(&mut self, nets: &[NetRoute]) -> Result<Vec<RoutedNet>, RoutingError> {
@@ -14,29 +15,20 @@ impl GeometryRouter {
         Ok(routed_nets)
     }
 
+    /// Route all nets sorted by priority (highest first).
+    ///
+    /// Priorities come from the PDK profile's `routing.net_priorities` block.
+    /// Nets not declared in the profile get priority 0 (lowest).
     pub fn route_all_nets_with_priority(
         &mut self,
         nets: &[NetRoute],
-        netlist: &crate::netlist::NetlistArena,
+        priorities: &FxHashMap<crate::netlist::NetId, u8>,
     ) -> Result<Vec<RoutedNet>, RoutingError> {
-        use super::super::super::priority::NetPriority;
-        use rustc_hash::FxHashMap;
-
-        let mut priorities = FxHashMap::default();
-        for net in nets {
-            if let Some(net_data) = netlist.get_net(net.net_id) {
-                let priority = NetPriority::from_net_name(&net_data.name);
-                priorities.insert(net.net_id, priority);
-            } else {
-                priorities.insert(net.net_id, NetPriority::LowSpeed);
-            }
-        }
-
         let mut sorted_nets: Vec<NetRoute> = nets.to_vec();
         sorted_nets.sort_by(|a, b| {
-            let priority_a = priorities.get(&a.net_id).unwrap();
-            let priority_b = priorities.get(&b.net_id).unwrap();
-            priority_b.cmp(priority_a)
+            let pa = priorities.get(&a.net_id).copied().unwrap_or(0);
+            let pb = priorities.get(&b.net_id).copied().unwrap_or(0);
+            pb.cmp(&pa) // highest first
         });
 
         let mut routed_map = FxHashMap::default();

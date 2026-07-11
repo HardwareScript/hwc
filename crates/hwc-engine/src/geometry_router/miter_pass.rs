@@ -46,26 +46,38 @@ impl MiterEngine {
             return path.to_vec();
         }
 
-        let mut mitered = Vec::with_capacity(path.len() + path.len() / 2);
-        mitered.push(path[0]);
+        // Step 1: Deduplicate consecutive identical points (zero-length segments)
+        let deduped: Vec<Point3D> = path
+            .iter()
+            .copied()
+            .enumerate()
+            .filter(|(i, p)| *i == 0 || *p != path[i - 1])
+            .map(|(_, p)| p)
+            .collect();
+
+        if deduped.len() < 3 {
+            return deduped;
+        }
+
+        let mut mitered = Vec::with_capacity(deduped.len() + deduped.len() / 2);
+        mitered.push(deduped[0]);
 
         // Miter distance: 1.5× trace width for standard impedance stability
         let miter_dist = self.trace_width_nm * 3 / 2;
 
         let mut i = 1;
-        while i < path.len() - 1 {
-            let p_prev = path[i - 1];
-            let p_curr = path[i];
-            let p_next = path[i + 1];
+        while i < deduped.len() - 1 {
+            let p_prev = deduped[i - 1];
+            let p_curr = deduped[i];
+            let p_next = deduped[i + 1];
 
-            // Direction vectors
+            // Direction vectors (XY only — miter is a 2D operation)
             let v1_x = p_curr.x - p_prev.x;
             let v1_y = p_curr.y - p_prev.y;
             let v2_x = p_next.x - p_curr.x;
             let v2_y = p_next.y - p_curr.y;
 
             // Check for 90° corner: orthogonal segments in the XY plane
-            // (Z is ignored — miter is a 2D operation on the routing layer)
             let dot = v1_x * v2_x + v1_y * v2_y;
             let is_corner = dot == 0
                 && (v1_x != 0 || v1_y != 0)
@@ -78,42 +90,48 @@ impl MiterEngine {
                 let len2 = len2_f as i64;
 
                 if len1 > miter_dist && len2 > miter_dist {
-                    // v0.1.9.1 BUG FIX: Use floating-point for unit vector calculation
-                    // Previous code used integer division (v1_x / len1) which caused
-                    // massive coordinate corruption when results rounded to 0 or 1.
-                    // Unit direction vectors (floating point)
                     let u1_x_f = v1_x as f64 / len1_f;
                     let u1_y_f = v1_y as f64 / len1_f;
                     let u2_x_f = v2_x as f64 / len2_f;
                     let u2_y_f = v2_y as f64 / len2_f;
 
-                    // Miter start: rollback from corner along incoming direction
                     let p_a = Point3D::new(
                         p_curr.x - (u1_x_f * miter_dist as f64).round() as i64,
                         p_curr.y - (u1_y_f * miter_dist as f64).round() as i64,
                         p_curr.z,
                     );
-                    // Miter end: advance from corner along outgoing direction
                     let p_b = Point3D::new(
                         p_curr.x + (u2_x_f * miter_dist as f64).round() as i64,
                         p_curr.y + (u2_y_f * miter_dist as f64).round() as i64,
                         p_curr.z,
                     );
 
-                    mitered.push(p_a);
-                    mitered.push(p_b);
+                    // Skip if miter points are duplicates of existing points
+                    if p_a != *mitered.last().unwrap() {
+                        mitered.push(p_a);
+                    }
+                    if p_b != p_next {
+                        mitered.push(p_b);
+                    }
                 } else {
                     // Segment too short for miter, keep original corner
-                    mitered.push(p_curr);
+                    if p_curr != *mitered.last().unwrap() {
+                        mitered.push(p_curr);
+                    }
                 }
             } else {
                 // Not a 90° corner, keep as-is
-                mitered.push(p_curr);
+                if p_curr != *mitered.last().unwrap() {
+                    mitered.push(p_curr);
+                }
             }
             i += 1;
         }
 
-        mitered.push(*path.last().unwrap());
+        let last = *deduped.last().unwrap();
+        if last != *mitered.last().unwrap() {
+            mitered.push(last);
+        }
         mitered
     }
 

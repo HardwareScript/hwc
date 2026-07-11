@@ -31,15 +31,18 @@ profile Silicon_250nm:
         thickness: 50nm
         fill: Tungsten
 
-    # Aluminum-to-Aluminum via (for vertical connections within metal layers)
+    # Aluminum-to-Aluminum via (for vertical connections between metal layers)
+    # This handles vias within the same conductor material across different layers
     bridge Aluminum to Aluminum:
-        interface: Aluminum
-        thickness: 0nm
+        interface: Tungsten  # Use tungsten plug for vertical transition
+        thickness: 50nm
         fill: Tungsten
+
+
 
     trace:
         min_width: 250nm   # Minimal width for 0.25um process
-        min_spacing: 250nm
+        min_spacing: 100nm  # Reduced for tight transistor layouts
 
     via:
         min_diameter: 250nm
@@ -50,7 +53,8 @@ profile Silicon_250nm:
 
     manufacturing:
         copper_thickness: 400nm
-        solder_mask_expansion: 75um
+        solder_mask_thickness: 0nm
+        solder_mask_expansion: 0nm
 
     clearance:
         high_voltage: 500nm

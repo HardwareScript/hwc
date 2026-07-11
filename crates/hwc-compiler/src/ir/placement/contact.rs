@@ -511,7 +511,10 @@ pub fn place_contact(
             .fabrication_constraints
             .as_ref()
             .map(|c| c.trace.min_spacing_nm)
-            .unwrap_or(150_000); // Default 150um
+            .ok_or_else(|| IrError::MissingAsicConstraint {
+                message: "PDK missing required 'trace.min_spacing_nm' constraint".into(),
+                hint: "Add a 'trace:' block to your profile with explicit min_spacing.\n\nExample:\n  trace:\n    min_spacing: 200nm".into(),
+            })?;
 
         println!(
             "[PLACE_CONTACT] '{}' process={:?}, net_id={}, material_id={}",
@@ -526,7 +529,10 @@ pub fn place_contact(
                 .fabrication_constraints
                 .as_ref()
                 .and_then(|c| c.solder_mask_expansion_nm)
-                .unwrap_or(75_000);
+                .ok_or_else(|| IrError::MissingAsicConstraint {
+                    message: "PDK missing required 'solder_mask_expansion_nm' constraint".into(),
+                    hint: "Add 'solder_mask_expansion_nm: <value>' to your profile manufacturing block.".into(),
+                })?;
 
             // 2. ACTION: Auto-Drill (v0.1.7)
             // We use drill_via_hole to ensure we carve the substrate, OTHER-NET pours,
@@ -544,7 +550,10 @@ pub fn place_contact(
             // 3. ACTION: Calculate remaining Unified Via parameters (Plating)
             let plating_thickness_nm =
                 get_prop_nm(contact, "plating_thickness", symbol_table, eval_context)
-                    .unwrap_or(25_000);
+                    .ok_or_else(|| IrError::MissingAsicConstraint {
+                        message: format!("Contact '{}' missing required 'plating_thickness' property", contact_name_debug),
+                        hint: "Add 'plating_thickness: <value>' to the contact properties.".into(),
+                    })?;
             let inner_diameter_nm = diameter_nm - (2 * plating_thickness_nm);
 
             let bottom_diameter_nm =
@@ -557,7 +566,12 @@ pub fn place_contact(
             let top_cap = match get_prop_cap_type(contact, "top_cap", eval_context) {
                 Some(cap) => cap,
                 None => {
-                    if get_prop_bool(contact, "caps", eval_context).unwrap_or(true) {
+                    if get_prop_bool(contact, "caps", eval_context)
+                        .ok_or_else(|| IrError::MissingAsicConstraint {
+                            message: format!("Contact '{}' missing required 'top_cap' or 'caps' property", contact_name_debug),
+                            hint: "Add 'top_cap: annular|solid|none' or 'caps: true|false' to the contact properties.".into(),
+                        })?
+                    {
                         hwc_engine::geometry_router::entity_graph::CapType::Annular
                     } else {
                         hwc_engine::geometry_router::entity_graph::CapType::None
@@ -568,7 +582,12 @@ pub fn place_contact(
             let bottom_cap = match get_prop_cap_type(contact, "bottom_cap", eval_context) {
                 Some(cap) => cap,
                 None => {
-                    if get_prop_bool(contact, "caps", eval_context).unwrap_or(true) {
+                    if get_prop_bool(contact, "caps", eval_context)
+                        .ok_or_else(|| IrError::MissingAsicConstraint {
+                            message: format!("Contact '{}' missing required 'bottom_cap' or 'caps' property", contact_name_debug),
+                            hint: "Add 'bottom_cap: annular|solid|none' or 'caps: true|false' to the contact properties.".into(),
+                        })?
+                    {
                         hwc_engine::geometry_router::entity_graph::CapType::Annular
                     } else {
                         hwc_engine::geometry_router::entity_graph::CapType::None
@@ -595,9 +614,15 @@ pub fn place_contact(
             );
 
             // 5. ACTION: Handle Filled Vias (v0.1.9: VIPPO)
-            if get_prop_bool(contact, "filled", eval_context).unwrap_or(false) {
+            if get_prop_bool(contact, "filled", eval_context).ok_or_else(|| IrError::MissingAsicConstraint {
+                message: format!("Contact '{}' missing required 'filled' property", contact_name_debug),
+                hint: "Add 'filled: true|false' to the contact properties.".into(),
+            })? {
                 let fill_material_name = get_prop_string(contact, "fill_material", eval_context);
-                let fill_mat_str = fill_material_name.as_deref().unwrap_or("Epoxy");
+                let fill_mat_str = fill_material_name.as_deref().ok_or_else(|| IrError::MissingAsicConstraint {
+                    message: format!("Contact '{}' is filled but missing 'fill_material' property", contact_name_debug),
+                    hint: "Add 'fill_material: <MaterialName>' to the contact properties.".into(),
+                })?;
                 let fill_material_id = space.material_registry.get_id(fill_mat_str).ok_or_else(|| {
                     IrError::UndeclaredMaterial { material: fill_mat_str.into() }
                 })?;
@@ -651,7 +676,10 @@ pub fn place_contact(
                 .fabrication_constraints
                 .as_ref()
                 .and_then(|c| c.solder_mask_expansion_nm)
-                .unwrap_or(75_000);
+                .ok_or_else(|| IrError::MissingAsicConstraint {
+                    message: "PDK missing required 'solder_mask_expansion_nm' constraint".into(),
+                    hint: "Add 'solder_mask_expansion_nm: <value>' to your profile manufacturing block.".into(),
+                })?;
             println!("[PLACE_CONTACT] '{}' Deposited path: drilling via hole at bbox=({},{}-{},{}) dia={}",
                 contact_name_debug,
                 contact_bbox.min.x, contact_bbox.min.y, contact_bbox.max.x, contact_bbox.max.y,

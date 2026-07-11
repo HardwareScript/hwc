@@ -136,6 +136,7 @@ fn resolve_offset_to_ratio(offset: EdgeOffset) -> f64 {
 /// * `trace_width_nm` - Width of the trace for corner clamping
 /// * `clearance_nm` - Clearance distance from pad edge
 /// * `z` - Z coordinate (layer) for the escape point
+/// * `board_bounds` - Optional physical space boundaries for clamping (v0.1.9)
 ///
 /// # Returns
 /// An `EscapePoint` with the exact coordinate and exit direction.
@@ -146,6 +147,7 @@ pub fn calculate_rect_escape(
     trace_width_nm: i64,
     clearance_nm: i64,
     z: i64,
+    board_bounds: Option<&BoundingBox>,
 ) -> EscapePoint {
     let direction = port.direction_vector();
 
@@ -192,12 +194,21 @@ pub fn calculate_rect_escape(
     let coordinate = edge_min + ((edge_max - edge_min) as f64 * ratio) as i64;
 
     // Calculate the escape point with clearance
-    let point = match port {
+    let mut point = match port {
         CardinalPort::North => Point3D::new(coordinate, bbox.max.y + clearance_nm, z),
         CardinalPort::South => Point3D::new(coordinate, bbox.min.y - clearance_nm, z),
         CardinalPort::East => Point3D::new(bbox.max.x + clearance_nm, coordinate, z),
         CardinalPort::West => Point3D::new(bbox.min.x - clearance_nm, coordinate, z),
     };
+
+    // v0.1.9: CLAMP to physical wafer boundaries to prevent out-of-bounds routing
+    // This fixes the "Co-Planar Escape Port Trap" where pads at space boundaries
+    // project escape points into negative coordinates or beyond the wafer edge.
+    if let Some(bounds) = board_bounds {
+        let margin = trace_width_nm / 2;
+        point.x = point.x.max(bounds.min.x + margin).min(bounds.max.x - margin);
+        point.y = point.y.max(bounds.min.y + margin).min(bounds.max.y - margin);
+    }
 
     EscapePoint {
         point,
@@ -448,6 +459,7 @@ mod tests {
             100_000,
             50_000,
             35_000,
+            None,
         );
         // Center of East edge (600um) + clearance (50um)
         assert_eq!(escape.point.x, 650_000);

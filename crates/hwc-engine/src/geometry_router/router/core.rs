@@ -83,6 +83,11 @@ pub struct GeometryRouter {
     /// Parallel array: `layer_z_positions[i]` corresponds to `profile_layers[i]`.
     pub(super) layer_z_positions: Vec<i64>,
 
+    /// Material ID for each layer in `profile_layers` (v0.1.9.1).
+    /// Parallel array: `layer_materials[i]` corresponds to `profile_layers[i]`.
+    /// Used for Z-aware material resolution in route registration.
+    pub(super) layer_materials: Vec<u8>,
+
     // =========================================================================
     // v0.1.7 Substrate & Reference-Plane Aware Routing
     // =========================================================================
@@ -125,6 +130,12 @@ pub struct GeometryRouter {
     /// Trace width in nanometers resolved from fabrication constraints.
     /// Every `register_route` call stamps segments with this width.
     pub(super) trace_width_nm: i64,
+
+    /// v0.1.8: Routing heuristic weights from the PDK profile.
+    /// All cost function weights are sourced from the profile's `routing:` block.
+    /// `None` means the profile hasn't declared routing heuristics — the router
+    /// must fail with a clear error before attempting to route.
+    pub routing_heuristics: Option<super::super::types::RoutingHeuristics>,
 }
 
 /// Copper pour definition for anti-pad generation.
@@ -185,6 +196,7 @@ impl GeometryRouter {
             is_manhattan: false,           // Default: PCB (Octilinear) mode
             profile_layers: Vec::new(),    // Empty: no stackup info
             layer_z_positions: Vec::new(), // Empty: no stackup info
+            layer_materials: Vec::new(),   // Empty: no stackup info
             substrate_layers: None,
             net_frequencies: FxHashMap::default(),
             partition_grid: None,
@@ -193,6 +205,7 @@ impl GeometryRouter {
             sdf_generator: None,
             routing_material_id: 0,  // Default: AIR — must be set via set_routing_context()
             trace_width_nm: 100_000, // Default: 100µm — must be set via set_routing_context()
+            routing_heuristics: None, // Must be set via set_routing_heuristics() before routing
         }
     }
 
@@ -216,6 +229,15 @@ impl GeometryRouter {
     pub fn set_routing_context(&mut self, material_id: u8, trace_width_nm: i64) {
         self.routing_material_id = material_id;
         self.trace_width_nm = trace_width_nm;
+    }
+
+    /// Set routing heuristic weights from the PDK profile.
+    ///
+    /// Must be called before `route_space()`. The heuristics are sourced from
+    /// the profile's `routing:` block. If not set, routing will fail with a
+    /// clear error about missing PDK constraints.
+    pub fn set_routing_heuristics(&mut self, heuristics: super::super::types::RoutingHeuristics) {
+        self.routing_heuristics = Some(heuristics);
     }
 
     /// Get all vias placed during routing (for drill file export).
@@ -251,15 +273,18 @@ impl GeometryRouter {
     /// * `is_manhattan` - True for ASIC (Manhattan), false for PCB (Octilinear)
     /// * `profile_layers` - Ordered layer names (bottom-to-top) from the stackup
     /// * `layer_z_positions` - Z start positions (bottom) in nm for each layer
+    /// * `layer_materials` - Material ID for each layer (v0.1.9.1)
     pub fn set_profile_mode(
         &mut self,
         is_manhattan: bool,
         profile_layers: Vec<String>,
         layer_z_positions: Vec<i64>,
+        layer_materials: Vec<u8>,
     ) {
         self.is_manhattan = is_manhattan;
         self.profile_layers = profile_layers;
         self.layer_z_positions = layer_z_positions;
+        self.layer_materials = layer_materials;
     }
 
     /// v0.1.7: Set substrate layers and net frequencies for SI-aware routing.
@@ -607,6 +632,7 @@ impl GeometryRouter {
                         is_manhattan: self.is_manhattan,
                         profile_layers: self.profile_layers.clone(),
                         layer_z_positions: self.layer_z_positions.clone(),
+                        layer_materials: self.layer_materials.clone(),
                         substrate_layers: self.substrate_layers.clone(),
                         net_frequencies: self.net_frequencies.clone(),
                         partition_grid: None,
@@ -615,6 +641,7 @@ impl GeometryRouter {
                         sdf_generator: None,
                         routing_material_id: self.routing_material_id,
                         trace_width_nm: self.trace_width_nm,
+                        routing_heuristics: self.routing_heuristics.clone(),
                     };
 
                     let result = isolated.decompose_net_steiner(net_id, pins);
@@ -634,11 +661,31 @@ impl GeometryRouter {
 
                 // Record routed segments canonically in the EntityGraph for subsequent nets
                 for segment in &routed.paths {
-                    self.entity_graph.register_route(
+                    // v0.1.9.1: Build Z-to-material resolver closure
+                    let layer_z_positions = self.layer_z_positions.clone();
+                    let layer_materials = self.layer_materials.clone();
+                    let z_to_material = move |z: i64| -> Option<u8> {
+                        // Find which layer this Z coordinate falls into
+                        for i in 0..layer_z_positions.len() {
+                            let z_start = layer_z_positions[i];
+                            let z_end = if i + 1 < layer_z_positions.len() {
+                                layer_z_positions[i + 1]
+                            } else {
+                                i64::MAX // Last layer extends to infinity
+                            };
+                            if z >= z_start && z < z_end {
+                                return layer_materials.get(i).copied();
+                            }
+                        }
+                        None
+                    };
+
+                    self.entity_graph.register_route_with_z_materials(
                         net_id,
                         segment,
                         self.routing_material_id,
                         self.trace_width_nm,
+                        Some(z_to_material),
                     );
                 }
 
@@ -721,6 +768,7 @@ impl GeometryRouter {
                         is_manhattan: self.is_manhattan,
                         profile_layers: self.profile_layers.clone(),
                         layer_z_positions: self.layer_z_positions.clone(),
+                        layer_materials: self.layer_materials.clone(),
                         substrate_layers: self.substrate_layers.clone(),
                         net_frequencies: self.net_frequencies.clone(),
                         partition_grid: None,
@@ -729,6 +777,7 @@ impl GeometryRouter {
                         sdf_generator: None,
                         routing_material_id: self.routing_material_id,
                         trace_width_nm: self.trace_width_nm,
+                        routing_heuristics: self.routing_heuristics.clone(),
                     };
 
                     let local_nets: FxHashMap<crate::netlist::NetId, Vec<crate::geometry::Point3D>> =
@@ -859,6 +908,7 @@ impl GeometryRouter {
                             is_manhattan: self.is_manhattan,
                             profile_layers: self.profile_layers.clone(),
                             layer_z_positions: self.layer_z_positions.clone(),
+                            layer_materials: self.layer_materials.clone(),
                             substrate_layers: self.substrate_layers.clone(),
                             net_frequencies: self.net_frequencies.clone(),
                             partition_grid: None,
@@ -867,6 +917,7 @@ impl GeometryRouter {
                             sdf_generator: None,
                             routing_material_id: self.routing_material_id,
                             trace_width_nm: self.trace_width_nm,
+                            routing_heuristics: self.routing_heuristics.clone(),
                         };
 
                         let local_nets: FxHashMap<

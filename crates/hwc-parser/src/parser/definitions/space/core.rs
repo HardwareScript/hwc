@@ -9,6 +9,22 @@ impl crate::parser::Parser {
         &mut self,
         collector: &crate::DiagnosticCollector,
     ) -> Option<SpaceDefinition> {
+        // Enter space context
+        self.error_context.enter_context(crate::parser::ParsingContext::SpaceDefinition);
+        
+        let result = self.parse_space_impl(collector);
+        
+        // Exit context
+        self.error_context.exit_context();
+        
+        result
+    }
+
+    /// Internal space parsing with context tracking
+    fn parse_space_impl(
+        &mut self,
+        collector: &crate::DiagnosticCollector,
+    ) -> Option<SpaceDefinition> {
         let start_pos = self.current_span().start;
 
         if let Err(e) = self.expect(&Token::Space) {

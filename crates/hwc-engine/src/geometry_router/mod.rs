@@ -25,7 +25,6 @@ mod path_utils;
 mod pathfinding;
 pub mod port_escape;
 mod priority;
-mod ripup;
 mod router;
 pub mod scene_graph;
 pub mod stamp_parser;
@@ -37,7 +36,6 @@ mod thermal_relief;
 pub mod substrate_types;
 mod types;
 pub mod route_decomposition;
-pub mod negotiated_congestion;
 pub mod partition;
 pub mod soft_corridor;
 pub mod topological_router;
@@ -56,7 +54,6 @@ pub mod boundary_canonicalization;
 pub mod geometry_refinement;
 pub mod export_isolation;
 pub mod query_engine;
-pub mod incremental_dag;
 pub mod deterministic_sort;
 pub mod stable_hash_map;
 pub mod lockfile;
@@ -83,8 +80,7 @@ pub use port_escape::{
     calculate_circular_escape, calculate_rect_escape, parse_port_escape, CardinalPort, EdgeOffset,
     EscapePoint, NamedPosition,
 };
-pub use priority::NetPriority;
-pub use ripup::{RipUpRouter, RipUpStats, RouteAttempt};
+pub use priority::{NetPriorityMap, get_net_priority};
 pub use lockfile::{
     CompactLockfileBinary, ArchivedArcSegment, ArchivedComponentInstance,
     compute_fingerprint, compute_fingerprint_from_space,
@@ -103,7 +99,7 @@ pub use teardrops::{IpcClass, TeardropConfig, TeardropEngine};
 pub use thermal_relief::{
     RectangularPadParams, ThermalReliefConfig, ThermalReliefGenerator, ThermalReliefType,
 };
-pub use types::{NetRoute, RouteResult, RoutedNet, RoutingError, Via, ViaType};
+pub use types::{NetRoute, RouteResult, RoutedNet, RoutingError, RoutingHeuristics, Via, ViaType};
 pub use scene_graph::{ComponentInstance, ComponentStamp, OrientedBoundingBox, SceneGraph};
 pub use stamp_parser::{
     bake_stamp, bake_stamp_from_rect, register_baked_stamps, stamp_pin_global_position,
@@ -112,7 +108,6 @@ pub use route_decomposition::{
     PinNode, RouteSegment, VirtualJunction, DecomposedNet,
     decompose_net, collect_pin_nodes, prim_mst, distance_matrix, detect_junctions,
 };
-pub use negotiated_congestion::{NegotiatedCongestionEngine, ResourceState};
 pub use partition::{BoundaryPort, GCell, GCellId, PartitionGrid, partition_nets, shared_boundary_bounds};
 pub use soft_corridor::{corridor_cost, generate_corridors, is_in_envelope, is_on_center_line, SoftCorridor};
 pub use soft_corridor::cost as corridor_cost_levels;

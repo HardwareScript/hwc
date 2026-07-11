@@ -468,11 +468,20 @@ impl Validator {
             }
         }
 
+        let pin_label = |endpoint: &hwc_parser::RouteEndpointSpec| -> CompactString {
+            match endpoint {
+                hwc_parser::RouteEndpointSpec::ComponentPin { component_name, pin_name, .. } => {
+                    format!("{}.{}", component_name, pin_name).into()
+                }
+                hwc_parser::RouteEndpointSpec::SpaceEntity { name, .. } => name.clone(),
+            }
+        };
+
         // Build connected pins set from routes
         let mut connected_pins: FxHashSet<CompactString> = FxHashSet::default();
         for route in &space.routes {
-            let from_pin = format!("{}.{}", route.from.component, route.from.pin);
-            let to_pin = format!("{}.{}", route.to.component, route.to.pin);
+            let from_pin = pin_label(&route.from);
+            let to_pin = pin_label(&route.to);
 
             connected_pins.insert(from_pin.clone().into());
             connected_pins.insert(to_pin.clone().into());
@@ -531,9 +540,18 @@ impl Validator {
         // Build nets: group routes by connected pins
         let mut nets: FxHashMap<CompactString, Vec<CompactString>> = FxHashMap::default();
 
+        let pin_label = |endpoint: &hwc_parser::RouteEndpointSpec| -> CompactString {
+            match endpoint {
+                hwc_parser::RouteEndpointSpec::ComponentPin { component_name, pin_name, .. } => {
+                    format!("{}.{}", component_name, pin_name).into()
+                }
+                hwc_parser::RouteEndpointSpec::SpaceEntity { name, .. } => name.clone(),
+            }
+        };
+
         for route in routes {
-            let from_pin = format!("{}.{}", route.from.component, route.from.pin);
-            let to_pin = format!("{}.{}", route.to.component, route.to.pin);
+            let from_pin = pin_label(&route.from);
+            let to_pin = pin_label(&route.to);
 
             // Find or create net
             let net_id = self.find_or_create_net(&from_pin, &to_pin, &mut nets);

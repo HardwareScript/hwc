@@ -308,7 +308,7 @@ pub enum RoutingError {
     #[diagnostic(
         code(R21),
         url("https://docs.hw-script.org/errors/R21"),
-        help("Physical Explanation: Routing failed because no valid path exists between the start and goal points. This can happen due to:\n- Insufficient clearance between obstacles\n- All routing layers blocked by other nets\n- Design rule constraints too restrictive\n\nSolution:\n1. Increase board size or add more routing layers\n2. Relax clearance constraints if safe\n3. Move components to create routing channels\n4. Use manual waypoints to guide the router\n\nDebugging: Use 'hwc route --debug' to visualize blocked regions.")
+        help("Physical Explanation: Routing failed because no valid path exists between the start and goal points. With the legalization-only workflow, this is a terminal error — there is no rip-up or retry mechanism.\n\nThis can happen due to:\n- Insufficient clearance between obstacles\n- All routing layers blocked by other nets\n- Design rule constraints too restrictive\n- G-cell interface at capacity (congested boundary)\n\nSolution:\n1. Increase board size or add more routing layers\n2. Relax clearance constraints if safe\n3. Move components to create routing channels\n4. Use manual waypoints to guide the router\n5. Reduce net count or component density\n\nDebugging: Use 'hwc route --debug' to visualize blocked regions.")
     )]
     NoPathFound {
         net_id: NetId,
@@ -347,12 +347,12 @@ pub enum RoutingError {
     )]
     ConstraintFailed { net_id: NetId, message: String },
 
-    /// Maximum rip-up iterations exceeded
-    #[error("Maximum rip-up iterations exceeded for net {}", .0.raw())]
+    /// Maximum routing iterations exceeded (legalization failed to resolve violations)
+    #[error("Maximum routing iterations exceeded for net {}", .0.raw())]
     #[diagnostic(
         code(R31),
         url("https://docs.hw-script.org/errors/R31"),
-        help("Physical Explanation: Router attempted to rip-up and reroute this net multiple times but failed to find a valid solution. This indicates:\n- Severe routing congestion\n- Conflicting constraints\n- Insufficient routing resources\n\nRip-up and reroute is a last-resort strategy when initial routing fails.\n\nSolution:\n1. Increase board size or add routing layers\n2. Reduce number of nets or component density\n3. Manual routing for critical nets\n4. Adjust routing priority (route critical nets first)")
+        help("Physical Explanation: The legalization engine attempted to resolve clearance violations but could not converge within the allowed iterations. This indicates:\n- Severe routing congestion\n- Conflicting constraints\n- Insufficient routing resources\n\nSolution:\n1. Increase board size or add routing layers\n2. Reduce number of nets or component density\n3. Manual routing for critical nets\n4. Adjust routing priority (route critical nets first)")
     )]
     MaxIterationsExceeded(NetId),
 
@@ -364,4 +364,40 @@ pub enum RoutingError {
         help("Internal Error: Router received an invalid net ID. This is likely a compiler bug.\n\nPlease report this issue with your .hw file.")
     )]
     InvalidNet(NetId),
+
+    /// Missing fabrication constraints — PDK profile not loaded or incomplete
+    #[error("Missing fabrication constraints for net {}: {}", .net_id.raw(), .message)]
+    #[diagnostic(
+        code(R25),
+        url("https://docs.hw-script.org/errors/R25"),
+        help("Physical Explanation: The routing engine requires fabrication constraints (trace width, clearance, etc.) from the PDK profile, but none are loaded or the profile is incomplete.\n\nThe v0.1.8 architecture enforces PDK-driven execution: all routing parameters must come from the profile's BridgeRegistry and fabrication rules. No hardcoded fallbacks are permitted.\n\nSolution:\n1. Ensure a profile with 'trace:' and 'clearance:' constraints is declared in the space definition\n2. Verify the profile file contains all required fabrication rules\n3. Check that the profile is correctly loaded before routing begins")
+    )]
+    MissingFabricationConstraints { net_id: NetId, message: String },
+}
+
+/// v0.1.8: Routing heuristic weights from the PDK profile.
+///
+/// All cost function weights are sourced from the profile's `routing:` block.
+/// No hardcoded values — the compiler is a deterministic engine that executes
+/// the PDK's manufacturing truth, rather than guessing at it.
+///
+/// If the profile does not declare these fields, the compiler fails with
+/// a clear error. Users who want convenience can import a default profile
+/// from the stdlib.
+#[derive(Debug, Clone)]
+pub struct RoutingHeuristics {
+    /// Base cost for any single grid movement.
+    pub base_cost: i64,
+    /// Penalty for via transitions (layer changes).
+    pub via_penalty: i64,
+    /// Penalty for moving against preferred layer direction.
+    pub direction_penalty: i64,
+    /// Penalty when clearance is tight.
+    pub tight_clearance_penalty: i64,
+    /// Penalty for crosstalk risk.
+    pub crosstalk_penalty: i64,
+    /// Penalty for impedance-controlled nets.
+    pub impedance_penalty: i64,
+    /// Extreme penalty for crossing reference-plane voids.
+    pub reference_void_penalty: i64,
 }

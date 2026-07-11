@@ -36,6 +36,58 @@ impl Parser {
         }
     }
 
+    /// Parse route endpoint: Component.Pin, Component[i].Pin, or SpaceEntity
+    ///
+    /// v0.1.8: Distinguishes between ComponentPin and SpaceEntity based on presence of '.'
+    pub(crate) fn parse_route_endpoint(&mut self) -> Result<crate::ast::RouteEndpointSpec, ParseError> {
+        let start_pos = self.current_span().start;
+        let first = self.expect_identifier_string()?;
+
+        // Check for array index: Name[i] or Name[i+1]
+        let first_index = if self.check(&Token::OpenBracket) {
+            self.advance(); // consume '['
+            let index_expr = self.parse_expression()?;
+            self.expect(&Token::CloseBracket)?;
+            Some(index_expr)
+        } else {
+            None
+        };
+
+        // Check if there's a dot (component.pin syntax)
+        if self.check(&Token::Dot) {
+            self.advance();
+            let pin = self.expect_identifier_string()?;
+
+            // Check for array index on pin: Pin[i] or Pin[i-1]
+            let pin_index = if self.check(&Token::OpenBracket) {
+                self.advance(); // consume '['
+                let index_expr = self.parse_expression()?;
+                self.expect(&Token::CloseBracket)?;
+                Some(index_expr)
+            } else {
+                None
+            };
+
+            let end_pos = self.previous_span().end;
+
+            Ok(crate::ast::RouteEndpointSpec::ComponentPin {
+                component_name: first.into(),
+                component_index: first_index,
+                pin_name: pin.into(),
+                pin_index,
+                span: Span::new(start_pos, end_pos),
+            })
+        } else {
+            // No dot -> SpaceEntity
+            let end_pos = self.previous_span().end;
+            Ok(crate::ast::RouteEndpointSpec::SpaceEntity {
+                name: first.into(),
+                index: first_index,
+                span: Span::new(start_pos, end_pos),
+            })
+        }
+    }
+
     /// Parse pin reference: Component.Pin, Component[i].Pin, Component.Pin[i+1], or Component[i].Pin[j]
     ///
     /// Supports parametric indices with loop variables and expressions (Sprint 3.10):

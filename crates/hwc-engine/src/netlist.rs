@@ -15,7 +15,7 @@ use smallvec::SmallVec;
 /// Strongly-typed component ID (newtype wrapper around u32).
 ///
 /// Zero memory overhead - compiles to a raw u32.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct ComponentId(pub u32);
 
 impl ComponentId {
@@ -35,7 +35,7 @@ impl ComponentId {
 /// Strongly-typed pin ID (newtype wrapper around u32).
 ///
 /// Zero memory overhead - compiles to a raw u32.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct PinId(pub u32);
 
 impl PinId {
@@ -55,7 +55,7 @@ impl PinId {
 /// Strongly-typed net ID (newtype wrapper around u32).
 ///
 /// Zero memory overhead - compiles to a raw u32.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct NetId(pub u32);
 
 impl NetId {

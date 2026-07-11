@@ -8,6 +8,7 @@
 
 use crate::geometry::{BoundingBox, Point3D};
 use crate::netlist::NetId;
+use rustc_hash::FxHashMap;
 
 /// A unique identifier for a G-cell in the partition grid.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -58,6 +59,8 @@ pub struct PartitionGrid {
     pub track_pitch_nm: i64,
     /// Maximum clearance limit (for boundary halo expansion).
     pub max_clearance_nm: i64,
+    /// Capacity per boundary interface: (from_cell, to_cell) -> (used_ports, max_ports).
+    boundary_capacity: FxHashMap<(GCellId, GCellId), (usize, usize)>,
 }
 
 impl PartitionGrid {
@@ -107,6 +110,7 @@ impl PartitionGrid {
             board_bounds,
             track_pitch_nm,
             max_clearance_nm,
+            boundary_capacity: FxHashMap::default(),
         }
     }
 
@@ -189,10 +193,32 @@ impl PartitionGrid {
         }
     }
 
+    /// Compute the maximum number of routing tracks that fit along a shared boundary.
+    fn boundary_max_capacity(&self, from: GCellId, to: GCellId) -> usize {
+        let from_cell = match self.get_cell(from) {
+            Some(c) => c,
+            None => return 0,
+        };
+        let to_cell = match self.get_cell(to) {
+            Some(c) => c,
+            None => return 0,
+        };
+        let boundary = match shared_boundary_bounds(from_cell, to_cell) {
+            Some(b) => b,
+            None => return 0,
+        };
+        let boundary_length = (boundary.max.x - boundary.min.x).max(boundary.max.y - boundary.min.y);
+        if self.track_pitch_nm > 0 {
+            (boundary_length / self.track_pitch_nm) as usize
+        } else {
+            0
+        }
+    }
+
     /// Allocate boundary ports for a net crossing from one cell to another.
     ///
     /// Returns the allocated port position (may differ from requested if
-    /// relocation is needed).
+    /// relocation is needed). Returns None if the boundary is at capacity.
     pub fn allocate_boundary_port(
         &mut self,
         from: GCellId,
@@ -205,6 +231,16 @@ impl PartitionGrid {
         let to_cell = self.get_cell(to)?;
 
         let boundary = shared_boundary_bounds(from_cell, to_cell)?;
+
+        // Capacity check: refuse if boundary is full
+        let key = (from, to);
+        let max_cap = self.boundary_max_capacity(from, to);
+        if max_cap > 0 {
+            let entry = self.boundary_capacity.entry(key).or_insert((0, max_cap));
+            if entry.0 >= entry.1 {
+                return None; // Boundary at capacity — caller must find alternative route
+            }
+        }
 
         // Clamp preferred_position to within the shared boundary
         let clamped_x = preferred_position.x
@@ -224,6 +260,11 @@ impl PartitionGrid {
             clearance_nm,
             relocated: false,
         };
+
+        // Increment capacity counter
+        if let Some(entry) = self.boundary_capacity.get_mut(&key) {
+            entry.0 += 1;
+        }
 
         // Register in both cells
         if let Some(cell) = self.get_cell_mut(from) {

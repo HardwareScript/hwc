@@ -334,6 +334,22 @@ impl DiagnosticCollector {
         }
     }
 
+    /// Get formatted error messages as a string (for error propagation).
+    ///
+    /// This returns the full formatted diagnostics that would be printed
+    /// to stderr, useful for including detailed error messages in propagated
+    /// errors (e.g., import resolution failures).
+    pub fn format_errors(&self) -> String {
+        let reports = self.reports.lock().unwrap();
+        let printer = DiagnosticPrinter::new(&self.source, &self.file_name);
+
+        reports
+            .iter()
+            .map(|report| printer.format_diagnostic(report.as_ref()))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
     /// Clear all accumulated diagnostics (thread-safe).
     pub fn clear(&self) {
         let mut reports = self.reports.lock().unwrap();

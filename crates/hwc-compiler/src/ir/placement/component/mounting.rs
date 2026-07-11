@@ -22,13 +22,24 @@ pub fn resolve_mounting_and_elevation(
     mut position: Point3D,
     origin: hwc_parser::OriginPoint,
 ) -> Result<MountingResult, IrError> {
-    // v0.1.7: Component Mounting Abstraction
-    let mount_side = component.mount.unwrap_or(hwc_parser::MountingSide::Top);
+    // Check if we're in ASIC mode (strict validation)
+    let is_asic = space.fabrication_constraints.as_ref().map_or(false, |c| {
+        c.technology.as_ref().map_or(false, |t| t.to_lowercase() == "asic")
+    });
 
-    // Default position.z to the board surface if no elevation is specified
-    if component.elevation.is_none() {
-        position.z = stackup_manager.board_surface_z(mount_side);
-    }
+    // v0.1.7: Component Mounting Abstraction
+    let mount_side = component.mount.ok_or_else(|| {
+        if is_asic {
+            IrError::MissingAsicConstraint {
+                message: format!("Component '{}' missing required 'mount:' property (top|bottom|embedded)", 
+                    component.name.as_ref().map(|n| n.as_str()).unwrap_or("unnamed")),
+                hint: "Under ASIC technology, add 'mount: top', 'mount: bottom', or 'mount: embedded' to the component placement.".into(),
+            }
+        } else {
+            IrError::PlacementError(format!("Component '{}' missing required 'mount:' property", 
+                component.name.as_ref().map(|n| n.as_str()).unwrap_or("unnamed")))
+        }
+    })?;
 
     // v0.1.7: Resolve elevation from 'on layer:' or 'on z:' prepositional syntax
     if let Some(elevation) = &component.elevation {
@@ -39,6 +50,17 @@ pub fn resolve_mounting_and_elevation(
             space.dimensions.depth_nm,
         );
         position.z = final_z;
+    } else {
+        return Err(if is_asic {
+            IrError::MissingAsicConstraint {
+                message: format!("Component '{}' missing required 'on layer:' or 'on z:' elevation.",
+                    component.name.as_ref().map(|n| n.as_str()).unwrap_or("unnamed")),
+                hint: "Under ASIC technology, add 'on layer: <LayerName>' or 'on z: <Value>' to the component placement.".into(),
+            }
+        } else {
+            IrError::PlacementError(format!("Component '{}' missing required 'on layer:' or 'on z:' elevation.",
+                component.name.as_ref().map(|n| n.as_str()).unwrap_or("unnamed")))
+        });
     }
 
     // v0.1.7: Component Mounting Abstraction - Calculate body bounds
@@ -50,24 +72,40 @@ pub fn resolve_mounting_and_elevation(
                 .and_then(|l| l.shape.as_ref())
                 .and_then(|s| parse_rectangle_dimensions(s, symbol_table))
                 .map(|(_, _, d)| d)
-                .ok_or_else(|| IrError::MissingAsicConstraint {
-                    message: format!(
-                        "Component '{}' has no explicit height in its layout definition.",
-                        component.component_type
-                    ),
-                    hint: "Add 'shape: Rectangle(w, h, d)' to the component's layout definition.".into(),
+                .ok_or_else(|| {
+                    if is_asic {
+                        IrError::MissingAsicConstraint {
+                            message: format!(
+                                "Component '{}' has no explicit height in its layout definition.",
+                                component.component_type
+                            ),
+                            hint: "Under ASIC technology, add 'shape: Rectangle(w, h, d)' to the component's layout definition.".into(),
+                        }
+                    } else {
+                        IrError::PlacementError(format!(
+                            "Component '{}' has no explicit height in its layout definition.",
+                            component.component_type
+                        ))
+                    }
                 })?
         } else {
-            return Err(IrError::MissingAsicConstraint {
-                message: format!(
+            return Err(if is_asic {
+                IrError::MissingAsicConstraint {
+                    message: format!(
+                        "Component type '{}' is not declared in the symbol table.",
+                        component.component_type
+                    ),
+                    hint: "Under ASIC technology, declare the component type with a layout definition before using it.".into(),
+                }
+            } else {
+                IrError::PlacementError(format!(
                     "Component type '{}' is not declared in the symbol table.",
                     component.component_type
-                ),
-                hint: "Declare the component type with a layout definition before using it.".into(),
+                ))
             });
         };
 
-    // v0.1.7: Resolve standoff height (default to 0 if omitted)
+    // v0.1.7: Resolve standoff height
     let standoff_nm = match &component.standoff {
         Some(expr) => {
             evaluate_expression_to_nm(expr, symbol_table).map_err(|e| IrError::CoordinateResolutionFailed {
@@ -88,9 +126,27 @@ pub fn resolve_mounting_and_elevation(
                         coordinate_str: "component definition standoff".into(),
                         reason: e.to_string(),
                     })?
-                    .unwrap_or(0) // Default to 0 (no secret compiler offsets!)
+                    .ok_or_else(|| {
+                        if is_asic {
+                            IrError::MissingAsicConstraint {
+                                message: format!("Component '{}' missing required 'standoff' property in placement or definition.", 
+                                    component.component_type),
+                                hint: "Under ASIC technology, add 'standoff: <Value>' to the component placement or its layout definition.".into(),
+                            }
+                        } else {
+                            IrError::PlacementError(format!("Component '{}' missing required 'standoff' property in placement or definition.", 
+                                component.component_type))
+                        }
+                    })?
             } else {
-                0
+                return Err(if is_asic {
+                    IrError::MissingAsicConstraint {
+                        message: format!("Component type '{}' not found in symbol table.", component.component_type),
+                        hint: "Under ASIC technology, declare the component type before using it.".into(),
+                    }
+                } else {
+                    IrError::PlacementError(format!("Component type '{}' not found in symbol table.", component.component_type))
+                });
             }
         }
     };

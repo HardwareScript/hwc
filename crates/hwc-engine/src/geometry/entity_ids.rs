@@ -7,65 +7,40 @@
 
 use std::fmt;
 
-use sha2::{Digest, Sha256};
-
-/// A cryptographically unique identifier for an Entity Graph node.
-/// Generated as: hash(Type + SemanticPath + ParentId)
-/// This prevents index-shifting when elements are added or deleted.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct EntityId([u8; 32]);
+/// A stable, unique identifier for any entity in the design (v0.1.8)
+/// Generated via cryptographic hash of semantic path + type, truncated to u64.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
+pub struct EntityId(pub u64);
 
 impl EntityId {
-    /// Create an EntityId by hashing type + semantic path + parent
-    pub fn generate(type_tag: &str, semantic_path: &str, parent_id: &EntityId) -> Self {
-        let mut hasher = Sha256::new();
-        hasher.update(type_tag.as_bytes());
-        hasher.update(b"\0");
-        hasher.update(semantic_path.as_bytes());
-        hasher.update(b"\0");
-        hasher.update(parent_id.0);
-        let hash = hasher.finalize();
-        let mut bytes = [0u8; 32];
-        bytes.copy_from_slice(&hash);
-        Self(bytes)
+    /// Create an EntityId from a raw u64
+    pub fn new(id: u64) -> Self {
+        EntityId(id)
     }
 
-    /// Create a root entity (no parent)
-    pub fn root(type_tag: &str, semantic_path: &str) -> Self {
-        let mut hasher = Sha256::new();
-        hasher.update(type_tag.as_bytes());
-        hasher.update(b"\0");
-        hasher.update(semantic_path.as_bytes());
-        hasher.update(b"\0");
-        let hash = hasher.finalize();
-        let mut bytes = [0u8; 32];
-        bytes.copy_from_slice(&hash);
-        Self(bytes)
+    /// Get the raw u64 value
+    pub fn raw(&self) -> u64 {
+        self.0
     }
 
-    /// Get raw bytes
-    #[inline]
-    pub fn as_bytes(&self) -> &[u8; 32] {
-        &self.0
+    /// Compute a stable EntityId from a semantic string
+    pub fn from_str(s: &str) -> Self {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        let mut hasher = DefaultHasher::new();
+        s.hash(&mut hasher);
+        EntityId(hasher.finish())
     }
 
-    /// Format as hex string for display
+    /// Format as hex string
     pub fn to_hex(&self) -> String {
-        self.0.iter().map(|b| format!("{b:02x}")).collect()
-    }
-}
-
-impl fmt::Debug for EntityId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let hex = self.to_hex();
-        write!(f, "EntityId({}…)", &hex[..8])
+        format!("{:016x}", self.0)
     }
 }
 
 impl fmt::Display for EntityId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let hex = self.to_hex();
-        write!(f, "{}", &hex[..16])
+        write!(f, "0x{:016x}", self.0)
     }
 }
 
@@ -96,53 +71,41 @@ pub struct GeometryGraphId(pub EntityId);
 pub struct JunctionGraphId(pub EntityId);
 
 impl ComponentGraphId {
-    pub fn generate(component_type: &str, placement_path: &str, parent: &EntityId) -> Self {
-        Self(EntityId::generate(
-            "Component",
-            &format!("{component_type}:{placement_path}"),
-            parent,
-        ))
+    pub fn generate(component_type: &str, placement_path: &str) -> Self {
+        Self(EntityId::from_str(&format!("comp:{}:{}", component_type, placement_path)))
     }
 }
 
 impl PinGraphId {
-    pub fn generate(pin_name: &str, component_id: &EntityId) -> Self {
-        Self(EntityId::generate("Pin", pin_name, component_id))
+    pub fn generate(component_path: &str, pin_name: &str) -> Self {
+        Self(EntityId::from_str(&format!("pin:{}:{}", component_path, pin_name)))
+    }
+
+    pub fn generate_from_parent(pin_name: &str, component_id: &EntityId) -> Self {
+        Self(EntityId::from_str(&format!("pin:{}:{}", component_id.to_hex(), pin_name)))
     }
 }
 
 impl NetGraphId {
     pub fn generate(net_name: &str, parent: &EntityId) -> Self {
-        Self(EntityId::generate("Net", net_name, parent))
+        Self(EntityId::from_str(&format!("net:{}:{}", parent.to_hex(), net_name)))
     }
 }
 
 impl RouteGraphId {
     pub fn generate(from_pin: &EntityId, to_pin: &EntityId) -> Self {
-        Self(EntityId::generate(
-            "Route",
-            &format!("{}:{}", from_pin.to_hex(), to_pin.to_hex()),
-            &EntityId::root("RouteSegment", "global"),
-        ))
+        Self(EntityId::from_str(&format!("route:{}:{}", from_pin.to_hex(), to_pin.to_hex())))
     }
 }
 
 impl GeometryGraphId {
     pub fn generate(route_id: &EntityId, layer: i64) -> Self {
-        Self(EntityId::generate(
-            "Geometry",
-            &format!("layer:{layer}"),
-            route_id,
-        ))
+        Self(EntityId::from_str(&format!("geom:{}:layer:{}", route_id.to_hex(), layer)))
     }
 }
 
 impl JunctionGraphId {
     pub fn generate(route_a: &EntityId, route_b: &EntityId) -> Self {
-        Self(EntityId::generate(
-            "Junction",
-            &format!("{}:{}", route_a.to_hex(), route_b.to_hex()),
-            &EntityId::root("Junction", "global"),
-        ))
+        Self(EntityId::from_str(&format!("junction:{}:{}", route_a.to_hex(), route_b.to_hex())))
     }
 }

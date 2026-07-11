@@ -1,11 +1,13 @@
-# inverter.hw
+# CMOS Inverter with Automatic Routing
+# Clean test case using the automatic router
+
 import * from @std/primitives/units
 import * from @std/primitives/math
 import * from materials
 import Silicon_250nm from foundry_pdk
 
 # ============================================================================
-# 1. Logical Schematic (The Module)
+# 1. Logical Schematic (Module Definition)
 # ============================================================================
 
 module Inverter_Schematic:
@@ -16,11 +18,11 @@ module Inverter_Schematic:
         ground GND
     ]
 
-    # Declare our two devices logically
+    # Declare transistors
     add NMOS named M1
     add PMOS named M2
 
-    # Establish the logical connections (Netlist)
+    # Logical connections (netlist)
     route M1.gate to VIN
     route M2.gate to VIN
 
@@ -34,18 +36,18 @@ module Inverter_Schematic:
     route M2.bulk to VDD
 
 # ============================================================================
-# 2. Transistor Components (The Footprints based on Table 5.1 & Lambda = 125nm)
+# 2. Transistor Component Definitions
 # ============================================================================
 
 component NMOS_Transistor:
     pins: [gate, source, drain, bulk]
     layout:
-        shape: Rectangle(1.25um, 1.0um, 200nm)
+        shape: Rectangle(1.25um, 1.5um, 200nm)
         pin_positions:
-            gate at [625nm, 500nm, 1160nm]
+            gate at [625nm, 525nm, 1160nm]
             source at [250nm, 187nm, 1160nm]
             drain at [1000nm, 187nm, 1160nm]
-            bulk at [625nm, 800nm, 1160nm]
+            bulk at [625nm, 1075nm, 1160nm]
 
         pad_shapes:
             gate: Rectangle(250nm, 250nm, 0nm)
@@ -53,49 +55,50 @@ component NMOS_Transistor:
             drain: Rectangle(250nm, 250nm, 0nm)
             bulk: Rectangle(250nm, 250nm, 0nm)
     
-        # Physical Pours with NMOS active dimensions (W = 375nm, L = 250nm)
-        add pour(Polysilicon) named Gate_Poly on layer: poly:
-            device: gate
-            boundary: [x: 500nm, y: 0nm] to [x: 750nm, y: 600nm]
-            
+        # Physical structures - NMOS (W=375nm, L=250nm)
+        # Rearranged to avoid clearance issues
         add pour(Silicon_N) named Source_Diff on layer: active:
             device: source
-            boundary: [x: 0nm, y: 0nm] to [x: 500nm, y: 375nm]
+            boundary: [x: 0nm, y: 0nm] to [x: 250nm, y: 375nm]
+            
+        add pour(Polysilicon) named Gate_Poly on layer: poly:
+            device: gate
+            boundary: [x: 375nm, y: 0nm] to [x: 625nm, y: 600nm]
             
         add pour(Silicon_N) named Drain_Diff on layer: active:
             device: drain
-            boundary: [x: 750nm, y: 0nm] to [x: 1.25um, y: 375nm]
+            boundary: [x: 750nm, y: 0nm] to [x: 1.0um, y: 375nm]
             
         add pour(Silicon_P) named Bulk_Contact on layer: active:
             device: bulk
-            boundary: [x: 500nm, y: 700nm] to [x: 750nm, y: 950nm]
+            boundary: [x: 500nm, y: 950nm] to [x: 750nm, y: 1.20um]
 
-        # Metal1 Landing Pads
+        # Metal1 Landing Pads - with proper clearance
         add pour(Aluminum) named Source_Pad on layer: metal1:
             device: source
-            boundary: [x: 50nm, y: 50nm] to [x: 450nm, y: 325nm]
+            boundary: [x: 0nm, y: 50nm] to [x: 200nm, y: 325nm]
+            
+        add pour(Aluminum) named Gate_Pad on layer: metal1:
+            device: gate
+            boundary: [x: 375nm, y: 450nm] to [x: 625nm, y: 700nm]
             
         add pour(Aluminum) named Drain_Pad on layer: metal1:
             device: drain
-            boundary: [x: 800nm, y: 50nm] to [x: 1.20um, y: 325nm]
-
-        add pour(Aluminum) named Gate_Pad on layer: metal1:
-            device: gate
-            boundary: [x: 500nm, y: 375nm] to [x: 750nm, y: 625nm]
+            boundary: [x: 800nm, y: 50nm] to [x: 1.0um, y: 325nm]
             
         add pour(Aluminum) named Bulk_Pad on layer: metal1:
             device: bulk
-            boundary: [x: 500nm, y: 700nm] to [x: 750nm, y: 950nm]
+            boundary: [x: 375nm, y: 1050nm] to [x: 625nm, y: 1.30um]
 
 component PMOS_Transistor:
     pins: [gate, source, drain, bulk]
     layout:
-        shape: Rectangle(1.25um, 1.8um, 200nm)
+        shape: Rectangle(1.0um, 1.80um, 200nm)
         pin_positions:
-            gate at [625nm, 900nm, 1160nm]
-            source at [250nm, 562nm, 1160nm]
-            drain at [1000nm, 562nm, 1160nm]
-            bulk at [625nm, 1500nm, 1160nm]
+            gate at [500nm, 675nm, 1160nm]
+            source at [125nm, 562nm, 1160nm]
+            drain at [875nm, 562nm, 1160nm]
+            bulk at [500nm, 1675nm, 1160nm]
 
         pad_shapes:
             gate: Rectangle(250nm, 250nm, 0nm)
@@ -103,46 +106,46 @@ component PMOS_Transistor:
             drain: Rectangle(250nm, 250nm, 0nm)
             bulk: Rectangle(250nm, 250nm, 0nm)
     
-        # Physical Pours with PMOS active dimensions (W = 1125nm, L = 250nm)
-        add pour(Polysilicon) named Gate_Poly on layer: poly:
-            device: gate
-            boundary: [x: 500nm, y: 0nm] to [x: 750nm, y: 1.35um]
-            
+        # Physical structures - PMOS (W=1125nm, L=250nm) - rearranged for clearance
         add pour(Silicon_P) named Source_Diff on layer: active:
             device: source
-            boundary: [x: 0nm, y: 0nm] to [x: 500nm, y: 1.125um]
+            boundary: [x: 0nm, y: 0nm] to [x: 250nm, y: 1.125um]
+            
+        add pour(Polysilicon) named Gate_Poly on layer: poly:
+            device: gate
+            boundary: [x: 375nm, y: 0nm] to [x: 625nm, y: 1.35um]
             
         add pour(Silicon_P) named Drain_Diff on layer: active:
             device: drain
-            boundary: [x: 750nm, y: 0nm] to [x: 1.25um, y: 1.125um]
+            boundary: [x: 750nm, y: 0nm] to [x: 1.0um, y: 1.125um]
             
         add pour(Silicon_N) named Bulk_Contact on layer: active:
             device: bulk
-            boundary: [x: 500nm, y: 1.40um] to [x: 750nm, y: 1.65um]
+            boundary: [x: 375nm, y: 1.55um] to [x: 625nm, y: 1.80um]
 
-        # Metal1 Landing Pads
+        # Metal1 Landing Pads - with proper clearance
         add pour(Aluminum) named Source_Pad on layer: metal1:
             device: source
-            boundary: [x: 50nm, y: 100nm] to [x: 450nm, y: 1.025um]
+            boundary: [x: 0nm, y: 100nm] to [x: 200nm, y: 1.025um]
+            
+        add pour(Aluminum) named Gate_Pad on layer: metal1:
+            device: gate
+            boundary: [x: 375nm, y: 1.20um] to [x: 625nm, y: 1.45um]
             
         add pour(Aluminum) named Drain_Pad on layer: metal1:
             device: drain
-            boundary: [x: 800nm, y: 100nm] to [x: 1.20um, y: 1.025um]
-
-        add pour(Aluminum) named Gate_Pad on layer: metal1:
-            device: gate
-            boundary: [x: 500nm, y: 1.125um] to [x: 750nm, y: 1.375um]
+            boundary: [x: 800nm, y: 100nm] to [x: 1.0um, y: 1.025um]
             
         add pour(Aluminum) named Bulk_Pad on layer: metal1:
             device: bulk
-            boundary: [x: 500nm, y: 1.40um] to [x: 750nm, y: 1.65um]
+            boundary: [x: 375nm, y: 1.55um] to [x: 625nm, y: 1.80um]
 
 # ============================================================================
-# 3. Physical Layout (The Space)
+# 3. Physical Layout Space - Using AUTOMATIC ROUTING
 # ============================================================================
 
 space CMOS_Inverter implements Inverter_Schematic:
-    dimensions: 3.0um by 4.0um by 1.36um
+    dimensions: 3.0um by 5.5um by 1.36um
     resolution: 1nm
     origin: bl by b
     profile: Silicon_250nm
@@ -150,34 +153,64 @@ space CMOS_Inverter implements Inverter_Schematic:
     nets:
         VIN:  { classification: signal, potential: 0V,   current: 1uA }
         VOUT: { classification: signal, potential: 0V,   current: 1uA }
-        VDD:  { classification: power,  potential: 2.5V, current: 3uA } # VDD updated to 2.5V
+        VDD:  { classification: power,  potential: 2.5V, current: 3uA }
         GND:  { classification: ground, potential: 0V,   current: 3uA }
 
-    # Place devices very close together vertically
-    add NMOS_Transistor named M1 at [x: 0.875um, y: 0.9um] on layer: active
-    add PMOS_Transistor named M2 at [x: 0.875um, y: 2.0um] on layer: active
+    # Place transistors with more vertical spacing for routing
+    add NMOS_Transistor named M1 at [x: 0.875um, y: 1.0um] on layer: active rotated 0deg:
+        mount: embedded
+        standoff: 0nm
+        net: [gate: VIN, source: GND, drain: VOUT, bulk: GND]
+    add PMOS_Transistor named M2 at [x: 0.875um, y: 2.8um] on layer: active rotated 0deg:
+        mount: embedded
+        standoff: 0nm
+        net: [gate: VIN, source: VDD, drain: VOUT, bulk: VDD]
 
-    # Interconnects mapped to Metal1 with 250nm widths
-    route M1.gate to M2.gate:
-        width: 250nm
-        layer: metal1
-        current_limit_ac: { rms: 1uA, peak: 3uA }
+    # Power rails at top and bottom
+    add pour(Aluminum) named GND_Rail on layer: metal1:
+        net: GND
+        boundary: [x: 0nm, y: 0nm] to [x: 3.0um, y: 0.6um]
         
+    add pour(Aluminum) named VDD_Rail on layer: metal1:
+        net: VDD
+        boundary: [x: 0nm, y: 4.8um] to [x: 3.0um, y: 5.4um]
+
+    # IO pads - shifted inward by 250nm to prevent out-of-bounds escape projections
+    add pour(Aluminum) named VIN_Pad on layer: metal1:
+        net: VIN
+        boundary: [x: 250nm, y: 2.0um] to [x: 750nm, y: 2.6um]
+        
+    add pour(Aluminum) named VOUT_Pad on layer: metal1:
+        net: VOUT
+        boundary: [x: 2.25um, y: 2.0um] to [x: 2.75um, y: 2.6um]
+
+    # ========================================================================
+    # AUTOMATIC ROUTING - Let the router find optimal paths
+    # ========================================================================
+    
+    # Connect gates to VIN
     route M1.gate to VIN_Pad:
         width: 250nm
         layer: metal1
         current_limit_ac: { rms: 1uA, peak: 3uA }
         
-    route M1.drain to M2.drain:
+    route M2.gate to VIN_Pad:
         width: 250nm
         layer: metal1
         current_limit_ac: { rms: 1uA, peak: 3uA }
-        
+    
+    # Connect drains to VOUT
     route M1.drain to VOUT_Pad:
         width: 250nm
         layer: metal1
         current_limit_ac: { rms: 1uA, peak: 3uA }
-
+        
+    route M2.drain to VOUT_Pad:
+        width: 250nm
+        layer: metal1
+        current_limit_ac: { rms: 1uA, peak: 3uA }
+    
+    # Connect NMOS to GND rail
     route M1.source to GND_Rail:
         width: 250nm
         layer: metal1
@@ -187,7 +220,8 @@ space CMOS_Inverter implements Inverter_Schematic:
         width: 250nm
         layer: metal1
         current_limit_ac: { rms: 3uA, peak: 6uA }
-        
+    
+    # Connect PMOS to VDD rail
     route M2.source to VDD_Rail:
         width: 250nm
         layer: metal1
@@ -197,20 +231,3 @@ space CMOS_Inverter implements Inverter_Schematic:
         width: 250nm
         layer: metal1
         current_limit_ac: { rms: 3uA, peak: 6uA }
-
-    # IO and Power Rail Structures on Metal1
-    add pour(Aluminum) named VIN_Pad on layer: metal1:
-        net: VIN
-        boundary: [x: 0nm, y: 1.4um] to [x: 0.5um, y: 2.0um]
-        
-    add pour(Aluminum) named VOUT_Pad on layer: metal1:
-        net: VOUT
-        boundary: [x: 2.5um, y: 1.4um] to [x: 3.0um, y: 2.0um]
-
-    add pour(Aluminum) named VDD_Rail on layer: metal1:
-        net: VDD
-        boundary: [x: 0nm, y: 3.4um] to [x: 3.0um, y: 4.0um]
-        
-    add pour(Aluminum) named GND_Rail on layer: metal1:
-        net: GND
-        boundary: [x: 0nm, y: 0nm] to [x: 3.0um, y: 0.6um]

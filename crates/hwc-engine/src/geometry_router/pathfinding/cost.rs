@@ -1,4 +1,8 @@
 //! Cost calculation for pathfinding
+//!
+//! v0.1.8: All physical thresholds come from RouteConstraints (PDK profile).
+//! All routing heuristic weights come from the profile's `routing:` block.
+//! No hardcoded fallback values — the caller must provide valid constraints.
 
 use crate::constraint_manager::{ClearanceZone, LayerDirection, RouteConstraints};
 use crate::geometry::Point3D;
@@ -25,10 +29,9 @@ pub struct MoveCostParams<'a> {
 
     // ── v0.1.8: Physical Synthesis Guardrails ──
 
-    /// v0.1.8: Routable mode for the current routing layer.
-    /// The pathfinder queries this before placing trace segments.
-    /// `None` defaults to full routing (backward compatible).
-    pub layer_routable_mode: Option<RoutableMode>,
+    /// v0.1.9: Z-coordinate to RoutableMode mapping for dynamic per-node checking (Fix #2).
+    /// Keys are layer Z-centers (in nm), values are routability modes.
+    pub layer_routability_map: &'a rustc_hash::FxHashMap<i64, RoutableMode>,
 
     /// v0.1.8: Maximum length for `local_only` layers (in nanometers).
     /// If exceeded outside a component bounding box, the segment is rejected.
@@ -56,96 +59,91 @@ pub struct MoveCostParams<'a> {
     /// Each entry is (layer_z_min, layer_z_max, bbox_min_x, bbox_min_y, bbox_max_x, bbox_max_y).
     /// Only layers where the component has material are blocked.
     pub component_keepouts: &'a [(i64, i64, i64, i64, i64, i64)],
+
+    // ── v0.1.8: Routing Heuristic Weights (from PDK profile) ──
+
+    /// Base cost for any single grid movement. Default: 1.
+    pub base_cost: i64,
+    /// Penalty for via transitions (layer changes). Default: 50.
+    pub via_penalty: i64,
+    /// Penalty for moving against preferred layer direction. Default: 10.
+    pub direction_penalty: i64,
+    /// Penalty when clearance is tight. Default: 2.
+    pub tight_clearance_penalty: i64,
+    /// Penalty for crosstalk risk. Default: 3.
+    pub crosstalk_penalty: i64,
+    /// Penalty for impedance-controlled nets. Default: 1.
+    pub impedance_penalty: i64,
+    /// Extreme penalty for crossing reference-plane voids. Default: 5_000_000.
+    pub reference_void_penalty: i64,
 }
 
 /// Calculate move cost for A* pathfinding with full clearance and crosstalk detection.
 ///
 /// Applies penalties for vias, clearance violations, and routing constraints.
 ///
-/// **Cost Structure (v0.1.5 - Task B1)**:
-/// - Base cost: 1 (one physical-nm step)
-/// - Via penalty: +50 (layer switch - vias are expensive and degrade signals)
-/// - Preferred direction penalty: +10 (off-axis movement on Manhattan layers)
-/// - Clearance violation penalty: +100 (moderate - avoid but don't block completely)
-/// - Tight clearance penalty: +2 (for nets with strict clearance requirements)
-/// - Crosstalk-sensitive penalty: +3 (for nets with strict parallel length limits)
-/// - Impedance-controlled penalty: +1 (prefer direct paths for impedance control)
-///
-/// **v0.1.4 Full Implementation**:
-/// Clearance violations are now HARD BLOCKS handled in
-/// route_net_deterministic with `continue` statements. This prevents A* cost
-/// explosion where soft penalties cause the router to explore the entire board.
-///
-/// **v0.1.5 Task B1 - Via-Penalty & Preferred Direction**:
-/// Added preferred direction enforcement per layer. Layers alternate between
-/// horizontal (EastWest) and vertical (NorthSouth) to produce professional-looking
-/// routes with minimal vias. Off-axis moves incur a +10 penalty.
+/// **Cost Structure (v0.1.8 - PDK-driven)**:
+/// All cost weights come from the profile's `routing:` block.
+/// No hardcoded values — the caller must provide valid constraints.
 ///
 /// # Arguments
-/// * `from` - Starting position
-/// * `to` - Destination position
-/// * `net_id` - Net ID being routed
-/// * `constraints` - Routing constraints for this net
-/// * `clearance_zones` - All clearance zones (for clearance violation detection)
-/// * `layer_direction` - Preferred direction for the current layer (None = no preference)
+/// * `params` - MoveCostParams containing all routing context and heuristic weights
 ///
 /// # Returns
 /// Total movement cost
 #[inline]
 pub fn calculate_move_cost(params: &MoveCostParams) -> i64 {
-    let mut cost = 1i64;
+    let mut cost = params.base_cost;
 
     let dx = params.to.x - params.from.x;
     let dy = params.to.y - params.from.y;
     let dz = params.to.z - params.from.z;
 
     if dz != 0 {
-        cost += 50;
+        cost += params.via_penalty;
     }
 
     if let Some(direction) = params.layer_direction {
         match direction {
             LayerDirection::EastWest => {
                 if dy != 0 && dx == 0 {
-                    cost += 10;
+                    cost += params.direction_penalty;
                 }
             }
             LayerDirection::NorthSouth => {
                 if dx != 0 && dy == 0 {
-                    cost += 10;
+                    cost += params.direction_penalty;
                 }
             }
             LayerDirection::Any => {}
         }
     }
 
-    // Clearance violation detection is now handled analytically in the
+    // Clearance violation detection is handled analytically in the
     // TopologicalRouter via ray-AABB intersection against the flat-packed geo-index.
-    // The legacy grid-based check_clearance_violation stub has been purged.
 
-    if params.constraints.min_clearance_nm < 200_000 {
-        cost += 2;
+    // v0.1.8: Apply penalties based on PDK constraint values.
+    // Tight clearance penalty: when the net requires smaller clearance than typical
+    // (indicates dense routing area or high-voltage net).
+    if params.constraints.min_clearance_nm > 0 && params.constraints.min_clearance_nm < params.constraints.min_trace_width_nm * 2 {
+        cost += params.tight_clearance_penalty;
     }
 
-    if params.constraints.max_parallel_length_nm < 5_000_000 {
-        cost += 3;
+    // Crosstalk penalty: when the net has strict parallel length limits
+    // (indicates high-speed or noise-sensitive net).
+    if params.constraints.max_parallel_length_nm > 0 && params.constraints.max_parallel_length_nm < params.constraints.min_trace_width_nm * 10 {
+        cost += params.crosstalk_penalty;
     }
 
     if params.constraints.impedance_ohm.is_some() {
-        cost += 1;
+        cost += params.impedance_penalty;
     }
 
     // =========================================================================
     // v0.1.7 Substrate & Reference-Plane Aware Routing
     // =========================================================================
-    // When routing a high-speed signal, crossing a split or void in the
-    // ground/power reference plane causes signal reflections. Detect this
-    // and apply an extreme penalty to force the router to deviate.
     if params.is_high_speed_net {
         if let Some(substrate_layers) = params.substrate_layers {
-            // Look for a reference plane (Pour type) at the same Z as the target.
-            // A point is "over a void" if it is within the pour's bounding box
-            // but NOT contained by `contains_nm` (which excludes cutouts).
             let has_void = substrate_layers.iter().any(|layer| {
                 layer.layer_type == crate::geometry_router::substrate_types::SubstrateLayerType::Pour
                     && params.to.z >= layer.bbox.min.z
@@ -154,24 +152,27 @@ pub fn calculate_move_cost(params: &MoveCostParams) -> i64 {
             });
 
             if has_void {
-                cost += 5_000_000; // Extreme penalty to force deviation around dielectric voids
+                cost += params.reference_void_penalty;
             }
         }
     }
 
     // =========================================================================
-    // v0.1.8 Physical Synthesis Guardrails
+    // v0.1.9: Physical Synthesis Guardrails (Dynamic Layer Checking - Fix #2)
     // =========================================================================
 
     // Guardrail 1: Non-Routable Layer (R25)
+    // Query the target node's Z-coordinate against the routability map
+    let target_layer_routable = params.layer_routability_map.get(&params.to.z).copied();
+
     // If the current layer has routable: false, reject with INFINITE cost.
-    if let Some(RoutableMode::False) = params.layer_routable_mode {
+    if let Some(RoutableMode::False) = target_layer_routable {
         return i64::MAX; // Hard block — trace cannot be placed on this layer
     }
 
     // Guardrail 1a: Local-Only Layer Length Limit
     // If the current layer has routable: local_only, enforce max length.
-    if let Some(RoutableMode::LocalOnly) = params.layer_routable_mode {
+    if let Some(RoutableMode::LocalOnly) = target_layer_routable {
         if let Some(max_len) = params.max_local_route_length_nm {
             if params.local_route_length_nm > max_len && !params.is_inside_component {
                 return i64::MAX; // Hard block — local route exceeded length limit

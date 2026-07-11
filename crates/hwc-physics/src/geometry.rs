@@ -28,7 +28,7 @@ impl Edge {
 }
 
 /// Fixed-point 3D coordinate in nanometers.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct Point3D {
     pub x: i64,
     pub y: i64,
@@ -70,7 +70,7 @@ impl fmt::Display for Point3D {
 }
 
 /// Fixed-point 2D coordinate in nanometers.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct Point2D {
     pub x: i64,
     pub y: i64,
@@ -102,7 +102,7 @@ pub enum Direction {
 }
 
 /// Axis-Aligned Bounding Box (integer coordinates).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct BoundingBox {
     pub min: Point3D,
     pub max: Point3D,

@@ -197,8 +197,22 @@ impl<'a> AutoRouter<'a> {
                 // We manually resolve ports here if they haven't been specified,
                 // checking for collisions with already-used ports on the same net.
                 let mut modified_route = route.clone();
-                let from_key = (CompactString::from(route.from.component.clone()), CompactString::from(route.from.pin.clone()));
-                let to_key = (CompactString::from(route.to.component.clone()), CompactString::from(route.to.pin.clone()));
+                let from_key = match &route.from {
+                    hwc_parser::RouteEndpointSpec::ComponentPin { component_name, pin_name, .. } => {
+                        (component_name.clone(), pin_name.clone())
+                    }
+                    hwc_parser::RouteEndpointSpec::SpaceEntity { name, .. } => {
+                        (name.clone(), CompactString::default())
+                    }
+                };
+                let to_key = match &route.to {
+                    hwc_parser::RouteEndpointSpec::ComponentPin { component_name, pin_name, .. } => {
+                        (component_name.clone(), pin_name.clone())
+                    }
+                    hwc_parser::RouteEndpointSpec::SpaceEntity { name, .. } => {
+                        (name.clone(), CompactString::default())
+                    }
+                };
 
                 if modified_route.exit_escape.is_none() {
                     // Try to find a free port
@@ -319,29 +333,34 @@ impl<'a> AutoRouter<'a> {
                     }
                 }
 
-                if let Ok((start, goal, _, _)) = crate::ir::routing::calculate_boundary_points(self.space, &modified_route, min_width) {
-                    route_segments.push((actual_net_id, vec![start, goal]));
-                    net_id_to_name.insert(actual_net_id, net_name.clone());
-                    // v0.1.8: Track layer override for vertical transition segments
-                    if let Some(ref layer_id) = route.layer {
-                        if let Some(target_z) = self.stackup_manager.get_layer_start_z(&layer_id.name) {
-                            net_layer_targets.insert(net_name.clone(), target_z);
+                match crate::ir::routing::calculate_boundary_points(self.space, &modified_route, min_width) {
+                    Ok((start, goal, _, _)) => {
+                        route_segments.push((actual_net_id, vec![start, goal]));
+                        net_id_to_name.insert(actual_net_id, net_name.clone());
+                        // v0.1.8: Track layer override for vertical transition segments
+                        if let Some(ref layer_id) = route.layer {
+                            if let Some(target_z) = self.stackup_manager.get_layer_start_z(&layer_id.name) {
+                                net_layer_targets.insert(net_name.clone(), target_z);
+                            }
                         }
-                    }
-                    // v0.1.8: Track declared route width for analytic trace registration.
-                    // Resolves user-specified width (e.g. `width: 500nm`) to nanometers.
-                    if let Some(ref width_expr) = route.width {
-                        if let Ok(w_nm) = crate::ir::conversions::evaluate_expression_to_nm(width_expr, &crate::SymbolTable::new()) {
-                            net_declared_widths.insert(net_name.clone(), w_nm);
+                        // v0.1.8: Track declared route width for analytic trace registration.
+                        // Resolves user-specified width (e.g. `width: 500nm`) to nanometers.
+                        if let Some(ref width_expr) = route.width {
+                            if let Ok(w_nm) = crate::ir::conversions::evaluate_expression_to_nm(width_expr, &crate::SymbolTable::new()) {
+                                net_declared_widths.insert(net_name.clone(), w_nm);
+                            }
                         }
-                    }
-                    // v0.1.8: Track declared route current for thermal validation.
-                    if let Some(ref ac) = route.current_limit_ac {
-                        let rms = crate::ir::conversions::evaluate_expression_to_ma(&ac.rms, &crate::SymbolTable::new())
-                            .unwrap_or(0.0);
-                        let peak = crate::ir::conversions::evaluate_expression_to_ma(&ac.peak, &crate::SymbolTable::new())
-                            .unwrap_or(rms);
-                        net_currents_ma.insert(net_name, peak);
+                        // v0.1.8: Track declared route current for thermal validation.
+                        if let Some(ref ac) = route.current_limit_ac {
+                            let rms = crate::ir::conversions::evaluate_expression_to_ma(&ac.rms, &crate::SymbolTable::new())
+                                .unwrap_or(0.0);
+                            let peak = crate::ir::conversions::evaluate_expression_to_ma(&ac.peak, &crate::SymbolTable::new())
+                                .unwrap_or(rms);
+                            net_currents_ma.insert(net_name, peak);
+                        }
+                    },
+                    Err(e) => {
+                        eprintln!("[ROUTER WARNING] Failed to calculate boundary points for route on net '{}': {:?} - skipping", net_name, e);
                     }
                 }
             }
@@ -391,6 +410,9 @@ impl<'a> AutoRouter<'a> {
         }
 
         if geo_nets.is_empty() && explicit_segments.is_empty() {
+            eprintln!("[ROUTER WARNING] No nets to route! geo_nets and explicit_segments are both empty");
+            eprintln!("  route_segments.len() = {}", route_segments.len());
+            eprintln!("  auto_routes.len() = {}", self.auto_routes.len());
             return Ok(());
         }
 
@@ -462,9 +484,15 @@ impl<'a> AutoRouter<'a> {
         {
             let trace_width = self.space.fabrication_constraints.as_ref()
                 .map(|c| c.trace.min_width_nm)
-                .unwrap_or(100_000);
+                .ok_or_else(|| IrError::MissingAsicConstraint {
+                    message: "PDK missing required 'trace.min_width_nm' constraint".into(),
+                    hint: "Add a 'trace:' block to your profile with explicit min_width.".into(),
+                })?;
             let routing_copper_id = self.resolve_sample_copper_id()
-                .unwrap_or(0);
+                .map_err(|e| IrError::InvalidRouteExpression {
+                    expression: "routing material".into(),
+                    reason: e.to_string(),
+                })?;
             geo_router.set_routing_context(routing_copper_id, trace_width);
         }
 
@@ -493,16 +521,95 @@ impl<'a> AutoRouter<'a> {
             if !profile_layers.is_empty() {
                 let layer_z_positions: Vec<i64> = profile_layers
                     .iter()
-                    .map(|name| self.stackup_manager.get_layer_start_z(name).unwrap_or(0))
-                    .collect();
+                    .map(|name| {
+                        self.stackup_manager.get_layer_start_z(name)
+                            .ok_or_else(|| IrError::InvalidRouteExpression {
+                                expression: format!("stackup layer '{}'", name),
+                                reason: "Layer exists in profile list but not in physical stackup.".into(),
+                            })
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                
+                // v0.1.9.1: Build layer-to-material mapping for Z-aware route registration
+                let layer_materials: Vec<u8> = profile_layers
+                    .iter()
+                    .map(|name| {
+                        let mat_name = profile.stackup.as_ref()
+                            .and_then(|stackup| {
+                                stackup.layers.iter()
+                                    .find(|l| l.name.name == *name)
+                                    .map(|l| l.material.clone())
+                            })
+                            .ok_or_else(|| IrError::UndeclaredMaterial {
+                                material: format!("No material defined for layer '{}'", name).into(),
+                            })?;
+                        self.space.material_registry.get_id(&mat_name)
+                            .ok_or_else(|| IrError::UndeclaredMaterial { material: mat_name })
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                
                 // eprintln!(
                 //     "[ROUTER] {} mode enabled: {} layers, {} layer Z positions",
                 //     if is_manhattan { "ASIC" } else { "PCB" },
                 //     profile_layers.len(),
                 //     layer_z_positions.len()
                 // );
-                geo_router.set_profile_mode(is_manhattan, profile_layers, layer_z_positions);
+                geo_router.set_profile_mode(is_manhattan, profile_layers, layer_z_positions, layer_materials);
             }
+
+            // v0.1.8: Set routing heuristic weights from PDK profile.
+            // All cost function weights must come from the profile's `routing:` block.
+            // No hardcoded values — the compiler is a deterministic engine.
+            if let Some(routing) = &profile.routing {
+                let heuristics = hwc_engine::geometry_router::RoutingHeuristics {
+                    base_cost: routing.base_cost
+                        .ok_or_else(|| IrError::MissingRoutingHeuristics {
+                            field: "base_cost".into(),
+                            hint: "Add 'base_cost: <value>' to the profile's 'routing:' block.".into(),
+                        })?,
+                    via_penalty: routing.via_penalty
+                        .ok_or_else(|| IrError::MissingRoutingHeuristics {
+                            field: "via_penalty".into(),
+                            hint: "Add 'via_penalty: <value>' to the profile's 'routing:' block.".into(),
+                        })?,
+                    direction_penalty: routing.direction_penalty
+                        .ok_or_else(|| IrError::MissingRoutingHeuristics {
+                            field: "direction_penalty".into(),
+                            hint: "Add 'direction_penalty: <value>' to the profile's 'routing:' block.".into(),
+                        })?,
+                    tight_clearance_penalty: routing.tight_clearance_penalty
+                        .ok_or_else(|| IrError::MissingRoutingHeuristics {
+                            field: "tight_clearance_penalty".into(),
+                            hint: "Add 'tight_clearance_penalty: <value>' to the profile's 'routing:' block.".into(),
+                        })?,
+                    crosstalk_penalty: routing.crosstalk_penalty
+                        .ok_or_else(|| IrError::MissingRoutingHeuristics {
+                            field: "crosstalk_penalty".into(),
+                            hint: "Add 'crosstalk_penalty: <value>' to the profile's 'routing:' block.".into(),
+                        })?,
+                    impedance_penalty: routing.impedance_penalty
+                        .ok_or_else(|| IrError::MissingRoutingHeuristics {
+                            field: "impedance_penalty".into(),
+                            hint: "Add 'impedance_penalty: <value>' to the profile's 'routing:' block.".into(),
+                        })?,
+                    reference_void_penalty: routing.reference_void_penalty
+                        .ok_or_else(|| IrError::MissingRoutingHeuristics {
+                            field: "reference_void_penalty".into(),
+                            hint: "Add 'reference_void_penalty: <value>' to the profile's 'routing:' block.".into(),
+                        })?,
+                };
+                geo_router.set_routing_heuristics(heuristics);
+            } else {
+                return Err(IrError::MissingRoutingHeuristics {
+                    field: "routing".into(),
+                    hint: "Add a 'routing:' block to the profile with all heuristic weights.".into(),
+                });
+            }
+        } else {
+            return Err(IrError::MissingRoutingHeuristics {
+                field: "profile".into(),
+                hint: "Declare a profile with routing heuristics in the space definition.".into(),
+            });
         }
 
         // Register component obstacles and pins with the GeometryRouter
@@ -550,6 +657,13 @@ impl<'a> AutoRouter<'a> {
         let _t_route = std::time::Instant::now();
         let substrate_layers = self.space.entity_graph.get_substrate_layers();
         let has_substrate = !substrate_layers.is_empty();
+        
+        eprintln!("[ROUTER DEBUG] About to call route_space:");
+        eprintln!("  geo_nets.len() = {}", geo_nets.len());
+        eprintln!("  explicit_segments.len() = {}", explicit_segments.len());
+        eprintln!("  obstacle_bboxes.len() = {}", obstacle_bboxes.len());
+        eprintln!("  has_substrate = {}", has_substrate);
+        
         match geo_router.route_space(
             &grid_bbox,
             &geo_nets,
@@ -847,15 +961,38 @@ impl<'a> AutoRouter<'a> {
                 }
                 
                 // Convert AnalyticTrace LineSegments to TraceSegments
+                // v0.1.9.1: Use Z-aware material resolution for horizontal segments
                 let trace_segments: Vec<hwc_engine::geometry::TraceSegment> = trace
                     .segments
                     .iter()
                     .map(|line_seg| {
+                        // Resolve material based on Z coordinate for horizontal segments
+                        let seg_material = if line_seg.start.z == line_seg.end.z {
+                            // Horizontal segment - resolve from stackup
+                            let z = line_seg.start.z;
+                            self.profile
+                                .and_then(|p| p.stackup.as_ref())
+                                .and_then(|stackup| {
+                                    self.stackup_manager.get_layer_name_at_z(z)
+                                        .and_then(|layer_name| {
+                                            stackup.layers.iter()
+                                                .find(|l| l.name.name == layer_name)
+                                                .and_then(|l| {
+                                                    self.space.material_registry.get_id(&l.material)
+                                                })
+                                        })
+                                })
+                                .unwrap_or(trace.material as u8)
+                        } else {
+                            // Vertical segment - use trace material (via material)
+                            trace.material as u8
+                        };
+                        
                         hwc_engine::geometry::TraceSegment::new(
                             line_seg.start,
                             line_seg.end,
                             trace.width_nm,
-                            trace.material as u8,
+                            seg_material,
                         )
                     })
                     .collect();
@@ -867,8 +1004,114 @@ impl<'a> AutoRouter<'a> {
             }
         }
 
+        // v0.1.8: Localized Legalization Engine (Stage 4)
+        // After all routes are registered, run legalization to fix clearance violations.
+        // This implements the v0.1.8 architecture's "Localized Legalization Engine" that
+        // uses continuous convex optimization to nudge traces apart without global re-routing.
+        {
+            let min_clearance = self.space.fabrication_constraints.as_ref()
+                .map(|c| c.trace.min_spacing_nm)
+                .ok_or_else(|| IrError::MissingAsicConstraint {
+                    message: "Legalization requires trace spacing constraints but none are loaded.".into(),
+                    hint: "Ensure a profile with 'trace:' constraints is declared in the space definition.".into(),
+                })?;
+            
+            let legalizer = hwc_engine::geometry_router::Legalizer::new(min_clearance);
+            
+            // Collect all segments and net_ids from entity_graph
+            let all_routes = self.space.entity_graph.get_all_routes();
+            let mut all_segments = Vec::new();
+            let mut all_net_ids = Vec::new();
+            for (net_id, segments) in all_routes {
+                for seg in segments {
+                    all_segments.push(seg.clone());
+                    all_net_ids.push(*net_id);
+                }
+            }
+            
+            if !all_segments.is_empty() {
+                let (legalized_segments, legalized_net_ids) = legalizer.legalize(
+                    &all_segments,
+                    &all_net_ids,
+                    &self.space.material_registry,
+                    self.space.entity_graph.spatial(),
+                    10, // max_iterations
+                );
+                
+                // Re-register legalized segments
+                // First clear all routes
+                let net_ids_to_clear: Vec<_> = self.space.entity_graph.get_all_routes()
+                    .iter()
+                    .map(|(net_id, _)| *net_id)
+                    .collect();
+                for net_id in net_ids_to_clear {
+                    self.space.entity_graph.clear_routes_for_net(net_id);
+                }
+                
+                // Then re-register legalized segments
+                for (idx, seg) in legalized_segments.iter().enumerate() {
+                    let net_id = legalized_net_ids[idx];
+                    self.space.entity_graph.register_trace_segments(
+                        net_id,
+                        vec![seg.clone()],
+                    );
+                }
+            }
+        }
+
         // Rebuild spatial index after registering all routes
         self.space.entity_graph.rebuild_spatial_index(&self.space.material_registry);
+
+        // v0.1.8: Rebuild analytic_routes from legalized entity_graph.
+        // Legalization nudges traces apart, but analytic_routes (used by DRC)
+        // are generated during routing BEFORE legalization. We must rebuild them
+        // from the legalized entity_graph routes so DRC sees correct geometry.
+        {
+            let all_routes = self.space.entity_graph.get_all_routes();
+            let mut new_analytic_routes = Vec::new();
+            for (net_id, segments) in all_routes {
+                if segments.is_empty() {
+                    continue;
+                }
+                let net_name: CompactString = self.space.netlist
+                    .get_net(*net_id)
+                    .map(|n| n.name.clone().into())
+                    .unwrap_or_else(|| format!("net_{}", net_id.raw()).into());
+
+                let width_nm = segments.first().map(|s| s.width_nm).unwrap_or(250);
+                let material = segments.first().map(|s| s.material_id).unwrap_or(0);
+                let thickness_nm = self.space.material_registry
+                    .get_material(material)
+                    .map(|m| m.thickness_nm)
+                    .unwrap_or(400);
+
+                let line_segments: Vec<hwc_engine::LineSegment> = segments
+                    .iter()
+                    .map(|seg| hwc_engine::LineSegment {
+                        start: seg.start,
+                        end: seg.end,
+                    })
+                    .collect();
+
+                let current_ma = self.space.netlist
+                    .get_net(*net_id)
+                    .and_then(|n| n.current_ma)
+                    .unwrap_or(0.0);
+                let current_limit_ma = 0.0;
+
+                new_analytic_routes.push(hwc_engine::AnalyticTrace {
+                    net_id: *net_id,
+                    width_nm,
+                    thickness_nm,
+                    segments: line_segments,
+                    material,
+                    net_name,
+                    current_ma,
+                    current_limit_ma,
+                });
+            }
+            self.space.analytic_routes = new_analytic_routes;
+        }
 
         // v0.1.8: Retrieve the QueryStore back from the GeometryRouter so it
         // can be reused for subsequent compilations (incremental rebuilds).
@@ -955,6 +1198,19 @@ impl<'a> AutoRouter<'a> {
             return Ok(());
         }
 
+        // Step 1: Deduplicate consecutive identical points
+        let path: Vec<Point3D> = path
+            .iter()
+            .copied()
+            .enumerate()
+            .filter(|(i, p)| *i == 0 || *p != path[i - 1])
+            .map(|(_, p)| p)
+            .collect();
+
+        if path.len() < 2 {
+            return Ok(());
+        }
+
         let min_width_nm = self
             .space
             .fabrication_constraints
@@ -988,17 +1244,20 @@ impl<'a> AutoRouter<'a> {
             let d2y = p3.y - p2.y;
             let d2z = p3.z - p2.z;
 
-            // v0.1.8: Collinearity check — skip middle point only if both segments
-            // move along the same axis (same two coordinates are zero).
-            // The first condition was too broad: it collapsed Z-transition segments
-            // (up then down) at the same XY position. Now requires ALL three axes
-            // to be zero-movement for the first case, preventing Z-transition loss.
+            // Collinearity check — skip middle point if both segments move along
+            // the same axis in the same direction, or if the middle point is between
+            // start and end on the same axis (backtracking/collinearity).
             let is_collinear = (d1x == 0 && d2x == 0 && d1y == 0 && d2y == 0 && d1z == 0 && d2z == 0)
                 || (d1x == 0 && d2x == 0 && d1z == 0 && d2z == 0 && d1y.signum() == d2y.signum() && d1y != 0)
-                || (d1y == 0 && d2y == 0 && d1z == 0 && d2z == 0 && d1x.signum() == d2x.signum() && d1x != 0);
+                || (d1y == 0 && d2y == 0 && d1z == 0 && d2z == 0 && d1x.signum() == d2x.signum() && d1x != 0)
+                // Backtracking: same axis, opposite direction, middle point between start/end
+                || (d1x == 0 && d2x == 0 && d1z == 0 && d2z == 0 && d1y != 0 && d2y != 0
+                    && ((p1.y < p2.y && p2.y > p3.y) || (p1.y > p2.y && p2.y < p3.y)))
+                || (d1y == 0 && d2y == 0 && d1z == 0 && d2z == 0 && d1x != 0 && d2x != 0
+                    && ((p1.x < p2.x && p2.x > p3.x) || (p1.x > p2.x && p2.x < p3.x)));
 
             if !is_collinear {
-                // v0.1.7: Prevent zero-length segments which cause "box" artifacts in DXF
+                // Prevent zero-length segments which cause "box" artifacts in DXF
                 if start != p2 {
                     segments.push(LineSegment::new(start, p2));
                     start = p2;

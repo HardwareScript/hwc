@@ -4,21 +4,85 @@ use super::super::errors::IrError;
 use compact_str::CompactString;
 use hwc_engine::{HardwareSpace, Point3D};
 
-/// Construct full component name from pin reference (Sprint 3.10: Parametric Routing)
-///
-/// Handles component array indices:
-/// - `Adder` + None → `"Adder"`
-/// - `Adder` + Some(Expression::Literal { value: 0, .. }) → `"Adder[0]"`
-/// - `Adder` + Some(Expression::Binary { 0 + 1 }) → `"Adder[1]"` (evaluates expression)
-pub fn construct_component_name(
-    pin_ref: &hwc_parser::PinReference,
-) -> Result<CompactString, IrError> {
-    if let Some(ref index_expr) = pin_ref.component_index {
-        // Evaluate the expression to get a concrete index
-        let index_value = evaluate_index_expression(index_expr)?;
-        Ok(format!("{}[{}]", pin_ref.component, index_value).into())
+/// Generate a list of available routing endpoints for error messages
+fn list_available_endpoints(space: &HardwareSpace) -> String {
+    let mut endpoints = Vec::new();
+    
+    // Get all entities from the entity registry
+    let entity_count = space.entity_graph.iter_entity_ids().count();
+    eprintln!("[DEBUG list_available_endpoints] Entity count at error construction: {}", entity_count);
+    
+    for entity_id in space.entity_graph.iter_entity_ids() {
+        // Get the entity data to access the name
+        if let Ok(entity_data) = space.entity_graph.get_entity_data(*entity_id) {
+            let name = entity_data.name.as_str();
+            eprintln!("[DEBUG] Entity name: {} (type: {:?})", name, entity_data.entity_type);
+            
+            match entity_data.entity_type {
+                hwc_engine::geometry_router::entity_graph::EntityType::ComponentPin => {
+                    // Component pin names are formatted as "ComponentName:pin_name"
+                    // We want to display them as "ComponentName.pin_name" for routing
+                    if let Some((comp_name, pin_name)) = name.split_once(':') {
+                        endpoints.push(format!("{}.{}", comp_name, pin_name));
+                    } else {
+                        endpoints.push(name.to_string());
+                    }
+                }
+                hwc_engine::geometry_router::entity_graph::EntityType::SpacePour => {
+                    // Space pours can be routed to directly by name
+                    endpoints.push(name.to_string());
+                }
+                _ => {
+                    // Other entity types (SubstrateRegion, MechanicalKeepout) are not routing endpoints
+                }
+            }
+        }
+    }
+    
+    eprintln!("[DEBUG] Parsed {} endpoints from {} entities", endpoints.len(), entity_count);
+    
+    // Always show the list, even if empty
+    if endpoints.is_empty() {
+        "\n\nAvailable endpoints: (none registered yet)".to_string()
     } else {
-        Ok(pin_ref.component.clone())
+        endpoints.sort();
+        endpoints.dedup();
+        format!("\n\nAvailable endpoints:\n  {}", endpoints.join("\n  "))
+    }
+}
+
+/// Human-readable label for a route endpoint (e.g. "M1.gate" or "VIN_Pad").
+pub fn endpoint_label(endpoint: &hwc_parser::RouteEndpointSpec) -> String {
+    construct_entity_name(endpoint)
+        .map(|s| s.to_string())
+        .unwrap_or_else(|_| "unknown".to_string())
+}
+
+/// Construct full entity name from route endpoint (v0.1.8)
+pub fn construct_entity_name(
+    endpoint: &hwc_parser::RouteEndpointSpec,
+) -> Result<CompactString, IrError> {
+    match endpoint {
+        hwc_parser::RouteEndpointSpec::ComponentPin {
+            component_name,
+            component_index,
+            ..
+        } => {
+            if let Some(ref index_expr) = component_index {
+                let index_value = evaluate_index_expression(index_expr)?;
+                Ok(format!("{}[{}]", component_name, index_value).into())
+            } else {
+                Ok(component_name.clone())
+            }
+        }
+        hwc_parser::RouteEndpointSpec::SpaceEntity { name, index, .. } => {
+            if let Some(ref index_expr) = index {
+                let index_value = evaluate_index_expression(index_expr)?;
+                Ok(format!("{}[{}]", name, index_value).into())
+            } else {
+                Ok(name.clone())
+            }
+        }
     }
 }
 
@@ -87,7 +151,7 @@ pub fn needs_automatic_routing(route: &hwc_parser::Route) -> bool {
     route.path.is_none()
 }
 
-/// Get start and goal positions from pin references.
+/// Get start and goal positions from route endpoints (v0.1.8)
 pub fn get_pin_positions(
     space: &HardwareSpace,
     route: &hwc_parser::Route,
@@ -98,9 +162,14 @@ pub fn get_pin_positions(
         space
             .netlist
             .get_pin_position(start_id)
-            .ok_or_else(|| IrError::PinNotFound {
-                component: route.from.component.clone(),
-                pin: route.from.pin.to_string(),
+            .ok_or_else(|| {
+                let name = construct_entity_name(&route.from).unwrap_or_else(|_| "unknown".into());
+                let available = list_available_endpoints(space);
+                IrError::UnresolvedEndpoint {
+                    endpoint: name.to_string(),
+                    span: miette::SourceSpan::from((route.from.span().start, route.from.span().end)),
+                    help_message: format!("Verify that the component, pin, or space pour/pad exists and is correctly named.{}", available),
+                }
             })?;
     let start_pos = Point3D::new(start_pos_tuple.0, start_pos_tuple.1, start_pos_tuple.2);
 
@@ -108,91 +177,141 @@ pub fn get_pin_positions(
         space
             .netlist
             .get_pin_position(goal_id)
-            .ok_or_else(|| IrError::PinNotFound {
-                component: route.to.component.clone(),
-                pin: route.to.pin.to_string(),
+            .ok_or_else(|| {
+                let name = construct_entity_name(&route.to).unwrap_or_else(|_| "unknown".into());
+                let available = list_available_endpoints(space);
+                IrError::UnresolvedEndpoint {
+                    endpoint: name.to_string(),
+                    span: miette::SourceSpan::from((route.to.span().start, route.to.span().end)),
+                    help_message: format!("Verify that the component, pin, or space pour/pad exists and is correctly named.{}", available),
+                }
             })?;
     let goal_pos = Point3D::new(goal_pos_tuple.0, goal_pos_tuple.1, goal_pos_tuple.2);
 
     Ok((start_pos, goal_pos))
 }
 
-/// Get start and goal pin IDs from pin references.
+/// Get start and goal pin IDs from route endpoints (v0.1.8)
 pub fn get_pin_ids(
     space: &HardwareSpace,
     route: &hwc_parser::Route,
 ) -> Result<(hwc_engine::netlist::PinId, hwc_engine::netlist::PinId), IrError> {
-    // Construct full component names including array indices if present
-    let start_component_name = construct_component_name(&route.from)?;
-    let goal_component_name = construct_component_name(&route.to)?;
-
-    let start_component_id = space
-        .netlist
-        .get_component_by_name(&start_component_name)
-        .ok_or_else(|| IrError::PinNotFound {
-            component: start_component_name.clone(),
-            pin: route.from.pin.to_string(),
-        })?;
-
-    let goal_component_id = space
-        .netlist
-        .get_component_by_name(&goal_component_name)
-        .ok_or_else(|| IrError::PinNotFound {
-            component: goal_component_name.clone(),
-            pin: route.to.pin.to_string(),
-        })?;
-
-    let start_pin_name = if let Some(ref index_expr) = route.from.pin_index {
-        match index_expr {
-            hwc_parser::Expression::Literal { value, .. } => {
-                format!("{}[{}]", route.from.pin, value)
+    eprintln!("[DEBUG get_pin_ids] Called with {} entities registered", space.entity_graph.iter_entity_ids().count());
+    
+    let resolve_endpoint = |endpoint: &hwc_parser::RouteEndpointSpec| -> Result<hwc_engine::netlist::PinId, IrError> {
+        let entity_name = construct_entity_name(endpoint)?;
+        
+        // v0.1.8: Use EntityGraph for O(1) resolution
+        let entity_id = match endpoint {
+            hwc_parser::RouteEndpointSpec::ComponentPin { .. } => {
+                let full_comp_name = construct_entity_name(endpoint)?; // Reuse for index evaluation
+                let pin_name = match endpoint {
+                    hwc_parser::RouteEndpointSpec::ComponentPin { pin_name, pin_index, .. } => {
+                        if let Some(ref idx) = pin_index {
+                            let val = evaluate_index_expression(idx)?;
+                            format!("{}[{}]", pin_name, val)
+                        } else {
+                            pin_name.to_string()
+                        }
+                    }
+                    _ => unreachable!(),
+                };
+                hwc_engine::geometry::EntityId::from_str(&format!("pin:{}:{}", full_comp_name, pin_name))
             }
-            _ => route.from.pin.to_string(),
+            hwc_parser::RouteEndpointSpec::SpaceEntity { .. } => {
+                let entity_name = construct_entity_name(endpoint)?;
+                eprintln!("[DEBUG] Constructing EntityId for space entity: space:{}", entity_name);
+                hwc_engine::geometry::EntityId::from_str(&format!("space:{}", entity_name))
+            }
+        };
+        
+        eprintln!("[DEBUG] Looking up EntityId: {}", entity_id);
+
+        let entity_data = space.entity_graph.get_entity_data(entity_id)
+            .map_err(|_| {
+                let available = list_available_endpoints(space);
+                eprintln!("[DEBUG] get_entity_data FAILED for EntityId: {}", entity_id);
+                IrError::UnresolvedEndpoint {
+                    endpoint: entity_name.to_string(),
+                    span: miette::SourceSpan::from((endpoint.span().start, endpoint.span().end)),
+                    help_message: format!("Verify that the component, pin, or space pour/pad exists and is correctly named.{}", available),
+                }
+            })?;
+
+        eprintln!("[DEBUG] Found entity '{}', net_id: {:?}", entity_data.name, entity_data.net_id);
+
+        // v0.1.8: Route endpoints must have a pre-assigned net (fail-fast)
+        let _net_id = entity_data.net_id.ok_or_else(|| {
+            eprintln!("[DEBUG] Entity '{}' has NO net_id!", entity_name);
+            IrError::UnresolvedEndpoint {
+                endpoint: format!("Entity '{}' has no net assignment (check PDK/Script)", entity_name),
+                span: miette::SourceSpan::from((endpoint.span().start, endpoint.span().end)),
+                help_message: "Ensure the entity has a net: binding in the space definition or component layout.".to_string(),
+            }
+        })?;
+        
+        eprintln!("[DEBUG] Entity '{}' has valid net_id, continuing...", entity_name);
+
+        // In hwc-engine v0.1.8, we still need a PinId for the netlist.
+        // We can find/create it based on the entity data.
+        if let hwc_engine::geometry_router::entity_graph::EntityType::ComponentPin = entity_data.entity_type {
+            let comp_name = match endpoint {
+                hwc_parser::RouteEndpointSpec::ComponentPin { component_name, .. } => component_name.as_str(),
+                _ => unreachable!(),
+            };
+            let comp_id = space.netlist.get_component_by_name(comp_name)
+                .ok_or_else(|| IrError::PinNotFound {
+                    component: comp_name.into(),
+                    pin: entity_data.name.to_string(),
+                })?;
+            
+            let pins = space.netlist.get_component_pins(comp_id);
+            pins.iter()
+                .find(|&&pid| {
+                    if let Some(pin) = space.netlist.get_pin(pid) {
+                        pin.name == entity_data.name.split('.').last().unwrap_or("")
+                    } else {
+                        false
+                    }
+                })
+                .copied()
+                .ok_or_else(|| IrError::PinNotFound {
+                    component: comp_name.into(),
+                    pin: entity_data.name.to_string(),
+                })
+        } else {
+            // For space entities, we might need a virtual pin in the netlist
+            // or handle them as direct net connections.
+            // If not, we create a virtual pin for the space entity.
+            let virtual_pin_name = format!("__virtual_{}", entity_name);
+            let mut found_pin = None;
+            for cid in 0..space.netlist.component_count() {
+                if let Some(pin_id) = space.netlist.get_pin_by_name(
+                    hwc_engine::netlist::ComponentId::new(cid as u32),
+                    &virtual_pin_name,
+                ) {
+                    found_pin = Some(pin_id);
+                    break;
+                }
+            }
+            if let Some(pin_id) = found_pin {
+                Ok(pin_id)
+            } else {
+                // This shouldn't happen if we register everything correctly during IR unrolling
+                let available = list_available_endpoints(space);
+                Err(IrError::UnresolvedEndpoint {
+                    endpoint: entity_name.to_string(),
+                    span: miette::SourceSpan::from((endpoint.span().start, endpoint.span().end)),
+                    help_message: format!("Verify that the component, pin, or space pour/pad exists and is correctly named.{}", available),
+                })
+            }
         }
-    } else {
-        route.from.pin.to_string()
     };
 
-    let goal_pin_name = if let Some(ref index_expr) = route.to.pin_index {
-        match index_expr {
-            hwc_parser::Expression::Literal { value, .. } => format!("{}[{}]", route.to.pin, value),
-            _ => route.to.pin.to_string(),
-        }
-    } else {
-        route.to.pin.to_string()
-    };
+    let start_pin_id = resolve_endpoint(&route.from)?;
+    let goal_pin_id = resolve_endpoint(&route.to)?;
 
-    let start_pins = space.netlist.get_component_pins(start_component_id);
-    let start_pin_id = start_pins
-        .iter()
-        .find(|&&pin_id| {
-            if let Some(pin_data) = space.netlist.get_pin(pin_id) {
-                pin_data.name == start_pin_name
-            } else {
-                false
-            }
-        })
-        .ok_or_else(|| IrError::PinNotFound {
-            component: route.from.component.clone(),
-            pin: start_pin_name.clone(),
-        })?;
-
-    let goal_pins = space.netlist.get_component_pins(goal_component_id);
-    let goal_pin_id = goal_pins
-        .iter()
-        .find(|&&pin_id| {
-            if let Some(pin_data) = space.netlist.get_pin(pin_id) {
-                pin_data.name == goal_pin_name
-            } else {
-                false
-            }
-        })
-        .ok_or_else(|| IrError::PinNotFound {
-            component: route.to.component.clone(),
-            pin: goal_pin_name.clone(),
-        })?;
-
-    Ok((*start_pin_id, *goal_pin_id))
+    Ok((start_pin_id, goal_pin_id))
 }
 
 /// Register a net for a route and connect the source and target pins.
@@ -209,11 +328,9 @@ pub fn register_net_for_route(
     let (start_pin_id, goal_pin_id) = get_pin_ids(space, route)?;
 
     // Construct a unique net name if none provided
-    let net_name: CompactString = format!(
-        "NET_{}_{}_to_{}_{}",
-        route.from.component, route.from.pin, route.to.component, route.to.pin
-    )
-    .into();
+    let from_name = construct_entity_name(&route.from).unwrap_or_else(|_| "src".into());
+    let to_name = construct_entity_name(&route.to).unwrap_or_else(|_| "dst".into());
+    let net_name: CompactString = format!("NET_{}_to_{}", from_name, to_name).into();
 
     // Get trace width and material
     let width_nm = if let Some(w_expr) = &route.width {
@@ -223,7 +340,18 @@ pub fn register_net_for_route(
                 reason: e.to_string(),
             })?
     } else {
-        100_000 // Default 100um
+        // v0.1.8: No hardcoded defaults. Must come from profile.
+        profile.and_then(|p| p.trace.as_ref())
+            .map(|t| crate::ir::conversions::measurement_to_nm(&t.min_width, symbol_table))
+            .transpose()
+            .map_err(|e| IrError::InvalidRouteExpression {
+                expression: "profile trace width".into(),
+                reason: e.to_string(),
+            })?
+            .ok_or_else(|| IrError::MissingAsicConstraint {
+                message: "Route has no explicit width and PDK has no 'trace.min_width' constraint".into(),
+                hint: "Add 'width: <value>' to the route, or declare 'trace: min_width: <value>' in the profile.".into(),
+            })?
     };
 
     // Resolve material from stackup layer at the start pin's Z position
@@ -259,24 +387,56 @@ pub fn register_net_for_route(
     };
 
     let net_id = match (existing_net, goal_net) {
+        // Both endpoints already on the same net → good, use it
         (Some(e), Some(g)) if e == g => e,
+        
+        // Both endpoints have different nets → this is a SHORT CIRCUIT error!
+        // Do NOT merge them automatically - report the conflict
         (Some(e), Some(g)) => {
-            let prefer_g = {
-                let e_data = space.netlist.get_net(e).unwrap();
-                let g_data = space.netlist.get_net(g).unwrap();
-                g_data.current_ma.is_some() || (!g_data.name.starts_with("NET_") && e_data.name.starts_with("NET_"))
-            };
-            let (keep, drop) = if prefer_g { (g, e) } else { (e, g) };
+            let e_name = space.netlist.get_net(e).map(|n| n.name.as_str()).unwrap_or("unknown");
+            let g_name = space.netlist.get_net(g).map(|n| n.name.as_str()).unwrap_or("unknown");
             
-            if let Some(drop_pins) = space.netlist.get_net_pins(drop).map(|p| p.to_vec()) {
-                for p in drop_pins {
-                    space.netlist.connect_pin(p, keep);
+            // If both are semantic nets (not auto-generated), this is a user error
+            if !e_name.starts_with("NET_") && !g_name.starts_with("NET_") && e_name != g_name {
+                return Err(IrError::InvalidRouteExpression {
+                    expression: format!("route {} to {}", 
+                        construct_entity_name(&route.from)?,
+                        construct_entity_name(&route.to)?),
+                    reason: format!(
+                        "Route would short-circuit two different nets: '{}' and '{}'. \
+                        Endpoints are already connected to different nets.",
+                        e_name, g_name
+                    ),
+                });
+            }
+            
+            // One is auto-generated → merge into the semantic net
+            let (keep, drop) = if e_name.starts_with("NET_") && !g_name.starts_with("NET_") {
+                (g, e)
+            } else if !e_name.starts_with("NET_") && g_name.starts_with("NET_") {
+                (e, g)
+            } else {
+                // Both auto-generated or same name → merge (shouldn't happen but handle it)
+                (e, g)
+            };
+            
+            // Only merge if 'drop' is an auto-generated net
+            let drop_name = space.netlist.get_net(drop).map(|n| n.name.as_str()).unwrap_or("");
+            if drop_name.starts_with("NET_") {
+                if let Some(drop_pins) = space.netlist.get_net_pins(drop).map(|p| p.to_vec()) {
+                    for p in drop_pins {
+                        space.netlist.connect_pin(p, keep);
+                    }
                 }
             }
             keep
         },
+        
+        // One endpoint has a net, the other doesn't → use the existing net
         (Some(e), None) => e,
         (None, Some(g)) => g,
+        
+        // Neither endpoint has a net → create a new one
         (None, None) => space.netlist.add_net(net_name.clone(), width_nm, copper_id),
     };
 
@@ -292,28 +452,20 @@ pub fn register_net_for_route(
         .unwrap_or(net_name);
 
     // Handshake B - Synchronize netlist metadata
-    // This ensures the AutoRouter can find these pins when analyzing nets.
-    let start_pin_name = space.netlist.get_pin(start_pin_id)
-        .ok_or_else(|| IrError::PinNotFound {
-            component: route.from.component.clone(),
-            pin: route.from.pin.to_string(),
-        })?
-        .name.clone();
-    let goal_pin_name = space.netlist.get_pin(goal_pin_id)
-        .ok_or_else(|| IrError::PinNotFound {
-            component: route.to.component.clone(),
-            pin: route.to.pin.to_string(),
-        })?
-        .name.clone();
-    let start_comp_name = construct_component_name(&route.from)?;
-    let goal_comp_name = construct_component_name(&route.to)?;
+    // ONLY update entity net assignments if we created a new net or merged nets.
+    // Do NOT update if both endpoints already had the correct net - this prevents
+    // accidental net ID reassignment due to get_or_create_net returning a new ID.
+    if existing_net.is_none() || goal_net.is_none() || existing_net != goal_net {
+        let start_name = construct_entity_name(&route.from)?;
+        let goal_name = construct_entity_name(&route.to)?;
 
-    space
-        .entity_graph
-        .set_pin_net(&start_comp_name, &start_pin_name, actual_net_name.as_str());
-    space
-        .entity_graph
-        .set_pin_net(&goal_comp_name, &goal_pin_name, actual_net_name.as_str());
+        space
+            .entity_graph
+            .set_entity_net(&start_name, actual_net_name.as_str());
+        space
+            .entity_graph
+            .set_entity_net(&goal_name, actual_net_name.as_str());
+    }
 
     Ok(net_id)
 }

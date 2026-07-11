@@ -42,6 +42,7 @@ pub use units::{format_distance, format_position_mm, nm_to_mm};
 use crate::SymbolTable;
 use hwc_engine::HardwareSpace;
 use hwc_parser::Program;
+use rustc_hash::FxHashMap;
 
 /// Compile a single space definition into a HardwareSpace.
 ///
@@ -186,8 +187,16 @@ fn compile_single_space(
         .as_ref()
         .and_then(|p| p.manufacturing.as_ref())
         .and_then(|m| m.solder_mask_thickness.as_ref())
-        .and_then(|t| crate::ir::conversions::measurement_to_nm(t, symbol_table).ok())
-        .unwrap_or(0); // Opt-in: 0 = disabled unless profile explicitly declares solder_mask_thickness
+        .map(|t| crate::ir::conversions::measurement_to_nm(t, symbol_table))
+        .transpose()
+        .map_err(|e| IrError::InvalidRouteExpression {
+            expression: "solder_mask_thickness".into(),
+            reason: e.to_string(),
+        })?
+        .ok_or_else(|| IrError::MissingAsicConstraint {
+            message: "PDK missing required 'manufacturing.solder_mask_thickness' constraint.".into(),
+            hint: "Add 'manufacturing: { solder_mask_thickness: <value> }' to your profile.".into(),
+        })?;
 
     let stackup_manager = crate::ir::stackup_manager::StackupManager::new(
         profile.as_ref().and_then(|prof| prof.stackup.as_ref()),
@@ -380,16 +389,34 @@ fn compile_single_space(
             PlacementItem::Route(r) => {
                 // Routes depend on the components they connect
                 // Must resolve component_index (e.g. J0[0]) to match item_map keys
-                let resolve_name = |pr: &hwc_parser::PinReference| -> compact_str::CompactString {
-                    match &pr.component_index {
-                        Some(idx) => {
-                            if let Ok(val) = crate::ir::routing::evaluate_index_expression(idx) {
-                                format!("{}[{}]", pr.component, val).into()
+                let resolve_name = |endpoint: &hwc_parser::RouteEndpointSpec| -> compact_str::CompactString {
+                    match endpoint {
+                        hwc_parser::RouteEndpointSpec::ComponentPin {
+                            component_name,
+                            component_index,
+                            ..
+                        } => {
+                            if let Some(idx) = component_index {
+                                if let Ok(val) = crate::ir::routing::evaluate_index_expression(idx) {
+                                    format!("{}[{}]", component_name, val).into()
+                                } else {
+                                    component_name.clone()
+                                }
                             } else {
-                                pr.component.clone()
+                                component_name.clone()
                             }
                         }
-                        None => pr.component.clone(),
+                        hwc_parser::RouteEndpointSpec::SpaceEntity { name, index, .. } => {
+                            if let Some(idx) = index {
+                                if let Ok(val) = crate::ir::routing::evaluate_index_expression(idx) {
+                                    format!("{}[{}]", name, val).into()
+                                } else {
+                                    name.clone()
+                                }
+                            } else {
+                                name.clone()
+                            }
+                        }
                     }
                 };
                 let from_name = resolve_name(&r.from);
@@ -489,6 +516,8 @@ fn compile_single_space(
     let mut total_placement_time = std::time::Duration::ZERO;
     let mut component_count = 0;
 
+    eprintln!("[DEBUG] Starting placement loop with {} sorted items", sorted_ids.len());
+    
     for id in sorted_ids.iter() {
         let item = item_map.get(id).unwrap();
         let item_start = std::time::Instant::now();
@@ -504,15 +533,20 @@ fn compile_single_space(
 
         match item {
             PlacementItem::Substrate(sub) => {
+                eprintln!("[DEBUG] Placing substrate");
                 placement::place_substrate(&mut space, sub, &mut bbox_tracker, &place_ctx)?;
             }
             PlacementItem::Pour(pour) => {
+                eprintln!("[DEBUG] Placing pour: {}", pour.name);
                 placement::place_pour(&mut space, pour, &mut bbox_tracker, &place_ctx)?;
+                eprintln!("[DEBUG] Pour placed successfully, entity count: {}", space.entity_graph.iter_entity_ids().count());
             }
             PlacementItem::Plane(plane) => {
+                eprintln!("[DEBUG] Placing plane: {}", plane.name);
                 placement::place_plane(&mut space, plane, &mut bbox_tracker, &place_ctx)?;
             }
             PlacementItem::Contact(contact) => {
+                eprintln!("[DEBUG] Placing contact");
                 placement::place_contact(
                     &mut space,
                     contact,
@@ -524,6 +558,7 @@ fn compile_single_space(
                 )?;
             }
             PlacementItem::Component(component) => {
+                eprintln!("[DEBUG] Placing component: {:?}", component.name);
                 component_count += 1;
                 placement::place_component(
                     &mut space,
@@ -537,6 +572,7 @@ fn compile_single_space(
                 total_placement_time += elapsed;
             }
             PlacementItem::Route(_) => {
+                eprintln!("[DEBUG] Skipping route during placement phase");
                 continue;
             }
         }
@@ -682,8 +718,13 @@ fn compile_single_space(
 
     // Only process routes if lockfile wasn't loaded
     if !routes_loaded_from_lock {
+        eprintln!("[DEBUG] Starting route processing, entity count: {}", space.entity_graph.iter_entity_ids().count());
+        let mut _seg_id = 0;
         for id in sorted_ids.iter() {
             if let Some(PlacementItem::Route(route)) = item_map.get(id) {
+                eprintln!("[DEBUG] Processing route: {} to {}", 
+                    routing::helpers::endpoint_label(&route.from),
+                    routing::helpers::endpoint_label(&route.to));
                 // v0.1.7: Register net connectivity in the netlist for all routes
                 // This ensures both manual and automatic routes are represented in the logical netlist.
                 routing::register_net_for_route(&mut space, route, symbol_table, &stackup_manager, profile)?;
@@ -703,170 +744,40 @@ fn compile_single_space(
                     // Phase 3 Candidate: Automatic or Patterned Route
                     if routing_mode == hwc_parser::RoutingMode::ManualOnly {
                         return Err(IrError::RoutingError(format!(
-                            "Automatic routing found in 'manual_only' space: {}.{} to {}.{}",
-                            route.from.component, route.from.pin, route.to.component, route.to.pin
+                            "Automatic routing found in 'manual_only' space: {} to {}",
+                            routing::helpers::endpoint_label(&route.from),
+                            routing::helpers::endpoint_label(&route.to)
                         )));
                     }
                     auto_routes.push(route.clone());
                 }
+                _seg_id += 1;
             }
-        }
-    }
-
-    // v0.1.8: Initialize the memoized query store for per-G-cell routing cache.
-    let mut qs = query_store.unwrap_or_else(|| {
-        hwc_engine::geometry_router::query_engine::QueryStore::new()
-    });
-
-    let has_unrouted_nets = space.netlist.num_nets() > 0;
-
-    if (!auto_routes.is_empty() || has_unrouted_nets) && !routes_loaded_from_lock {
-        // v0.1.7: Build net frequencies HashMap from space definition's net declarations
-        let mut net_frequencies: rustc_hash::FxHashMap<hwc_engine::netlist::NetId, f64> =
-            rustc_hash::FxHashMap::default();
-        for net_decl in &space_def.nets {
-            if let Some(freq_hz) = net_decl.frequency_hz {
-                if let Some(net_id) = space.netlist.get_net_by_name(&net_decl.name) {
-                    net_frequencies.insert(net_id, freq_hz);
-                }
-            }
-        }
-
-        let mut auto_router = routing::AutoRouter::new(
-            &mut space,
-            symbol_table,
-            &stackup_manager,
-            profile,
-            net_frequencies,
-            auto_routes,
-            route_net_policies,
-        );
-
-        // v0.1.8: Wire the memoized query store into the AutoRouter.
-        auto_router.set_query_store(qs);
-
-        auto_router.route_all_nets()?;
-
-        // v0.1.8: Retrieve the query store back for the caller to persist.
-        qs = auto_router.take_query_store().unwrap_or_else(|| {
-            hwc_engine::geometry_router::query_engine::QueryStore::new()
-        });
-    }
-
-    // v0.1.7: Synchronize net names from pins to bound pours
-    // This ensures that internal component pours (pads/rings) inherit the nets
-    // assigned during the routing phase above.
-    space.synchronize_nets();
-
-    // v0.1.8: G-Cell Sweep DRC — P45 Forbidden Junction Detection
-    // Run the unified sweep-line DRC engine after routing to catch
-    // same-net different-material intersections (Copper-on-Silicon),
-    // clearance violations, and forbidden junctions.
-    {
-        use hwc_engine::geometry_router::gcell_sweep::verify_gcell_sweep;
-        use hwc_engine::geometry_router::partition::PartitionGrid;
-        use hwc_engine::geometry_router::spatial_index::{DynamicSpatialIndex, IndexedSegment, SpatialEntitySource};
-        use hwc_engine::material::MaterialId;
-
-        // Build layer_to_material map from the stackup definition
-        let mut layer_to_material: rustc_hash::FxHashMap<i64, MaterialId> = rustc_hash::FxHashMap::default();
-                if let Some(stackup_def) = profile.and_then(|p| p.stackup.as_ref()) {
-            for (idx, layer) in stackup_def.layers.iter().enumerate() {
-                let material_name = &layer.material;
-                if let Some(mat_id) = space.material_registry.get_id(material_name.as_str()) {
-                    layer_to_material.insert(idx as i64, mat_id);
-                }
-            }
-        }
-
-        // Build BridgeTable from profile bridge rules
-        // The engine's BridgeTable is FxHashMap<CompactString, CompactString>
-        // mapping "MatA:MatB" -> bridge_material_name
-        let mut bridge_table: rustc_hash::FxHashMap<compact_str::CompactString, compact_str::CompactString> = rustc_hash::FxHashMap::default();
-        if let Some(profile_def) = profile {
-            for bridge_rule in &profile_def.bridges {
-                let key: compact_str::CompactString = format!("{}:{}", bridge_rule.from, bridge_rule.to).into();
-                let value = bridge_rule.interface_material.clone();
-                bridge_table.insert(key, value);
-            }
-        }
-
-        // Build DynamicSpatialIndex from committed route segments
-        let mut spatial_index = DynamicSpatialIndex::new();
-        let mut seg_id = 0usize;
-        for (net_id, segments) in space.entity_graph.get_all_routes() {
-            for seg in segments {
-                // v0.1.8: Resolve the physical layer ID from the segment's Z-position.
-                // This is CRITICAL for the G-Cell sweep DRC. If all segments default
-                // to Layer 0, the 2D sweep-line will falsely detect short circuits
-                // between traces on different vertical layers (e.g. M1 and M2).
-                let mid_z = (seg.start.z + seg.end.z) / 2;
-                let layer_id = stackup_manager
-                    .get_layer_index_at_z(mid_z)
-                    .map(|idx| idx as i64)
-                    .unwrap_or(0);
-
-                let thickness_nm = stackup_manager
-                    .get_thickness_for_layer_index(layer_id as usize)
-                    .unwrap_or(0);
-                spatial_index.insert(IndexedSegment::new(
-                    SpatialEntitySource::RouteSegment {
-                        net_idx: net_id.0 as usize,
-                        seg_idx: seg_id,
-                    },
-                    seg_id,
-                    net_id.0 as usize,
-                    seg,
-                    layer_id,
-                    thickness_nm,
-                ));
-                seg_id += 1;
-            }
-        }
-
-        // Build PartitionGrid for DRC sweep
-        let grid_bbox = hwc_engine::geometry::BoundingBox::new(
-            hwc_engine::geometry::Point3D::new(0, 0, 0),
-            hwc_engine::geometry::Point3D::new(
-                space.dimensions.width_nm,
-                space.dimensions.height_nm,
-                space.dimensions.depth_nm,
-            ),
-        );
-        let cell_size_nm = 10_000_000; // 10mm G-cells
-        let track_pitch = space.resolution_nm;
-        let max_clearance = space.fabrication_constraints.as_ref()
-            .map(|c| c.trace.min_width_nm)
-            .unwrap_or(200_000);
-        let partition_grid = PartitionGrid::new(grid_bbox, cell_size_nm, cell_size_nm, track_pitch, max_clearance);
-
-        // Run the G-Cell sweep DRC
-        let default_clearance_nm = space.fabrication_constraints.as_ref()
-            .map(|c| c.trace.min_width_nm)
-            .unwrap_or(200_000);
-        let violations = verify_gcell_sweep(
-            &partition_grid,
-            &spatial_index,
-            &[], // No virtual junctions for now
-            default_clearance_nm,
-            &layer_to_material,
-            &space.material_registry,
-            &bridge_table,
-        );
-
-        if !violations.is_empty() {
-            eprintln!("[DRC] G-Cell sweep found {} violations:", violations.len());
-            for v in &violations {
-                eprintln!("  - {:?}", v);
-            }
-            // For now, log violations as warnings. In the future, these should
-            // be converted to IrError and halt compilation.
         }
     }
 
     if component_count > 0 {
         // eprintln!($3"[DEBUG program_to_space] All components placed (avg: {:.6}ms/component)",
         // total_placement_time.as_secs_f64() * 1000.0 / component_count as f64);
+    }
+
+    // v0.1.8: Batch-route all automatic routes using AutoRouter
+    if !auto_routes.is_empty() {
+        eprintln!("[ROUTER] Processing {} automatic routes using AutoRouter", auto_routes.len());
+        let mut auto_router = routing::AutoRouter::new(
+            &mut space,
+            symbol_table,
+            &stackup_manager,
+            profile,
+            FxHashMap::default(), // net_frequencies
+            auto_routes.clone(),
+            FxHashMap::default(), // route_net_policies
+        );
+        
+        // Invoke the batch router
+        auto_router.route_all_nets()?;
+        
+        eprintln!("[ROUTER] Automatic routing complete");
     }
 
     // Phase 2: P45 Forbidden Junction Detection (Assembly Level)
@@ -934,7 +845,7 @@ fn compile_single_space(
         return Err(IrError::CompilationAborted { error_count: n });
     }
 
-    Ok((space, Some(qs), routes_loaded_from_lock))
+    Ok((space, query_store, routes_loaded_from_lock))
 }
 
 // v0.1.8: G-Cell Sweep DRC — P45 Forbidden Junction Detection

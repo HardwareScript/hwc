@@ -14,8 +14,8 @@ impl super::Parser {
         let start_pos = self.current_span().start;
         self.expect(&Token::Expose)?;
 
-        // Parse pin reference
-        let pin = self.parse_pin_ref()?;
+        // Parse endpoint reference
+        let pin = self.parse_route_endpoint()?;
 
         self.expect(&Token::As)?;
 
@@ -179,16 +179,34 @@ impl super::Parser {
     /// Parse route: `route From.Pin to To.Pin` (auto-routing)
     /// or `route From.Pin to To.Pin:` with `path:` and optional `strategy:` (v0.1.7)
     pub(super) fn parse_route(&mut self) -> Result<Route, ParseError> {
+        // Enter route context for better error messages
+        self.error_context.enter_context(crate::parser::ParsingContext::RouteStatement);
+        
+        // Track parsing state
+        let mut state = crate::parser::RouteParseState::default();
+        
+        let result = self.parse_route_impl(&mut state);
+        
+        // Exit context
+        self.error_context.exit_context();
+        
+        result
+    }
+
+    /// Internal route parsing with state tracking
+    fn parse_route_impl(&mut self, state: &mut crate::parser::RouteParseState) -> Result<Route, ParseError> {
         let start_pos = self.current_span().start;
         self.expect(&Token::Route)?;
 
-        // Parse from pin reference
-        let from = self.parse_pin_ref()?;
+        // Parse from endpoint
+        let from = self.parse_route_endpoint()?;
+        state.has_from = true;
 
         self.expect(&Token::To)?;
 
-        // Parse to pin reference
-        let to = self.parse_pin_ref()?;
+        // Parse to endpoint
+        let to = self.parse_route_endpoint()?;
+        state.has_to = true;
 
         let mut width = None;
         let mut layer = None;
@@ -266,17 +284,21 @@ impl super::Parser {
                     match key.as_str() {
                         "width" => {
                             width = Some(self.parse_expression()?);
+                            state.has_width = true;
                         }
                         "layer" => {
                             layer = Some(self.expect_identifier()?);
+                            state.has_layer = true;
                         }
                         "strategy" => {
                             strategy = Some(self.expect_identifier()?);
+                            state.has_strategy = true;
                         }
                         "pattern" => {
                             pattern = Some(self.parse_pattern_instantiation()?);
                         }
                         "current_limit" | "current_limit_ac" => {
+                            state.has_current_limit = true;
                             // Parse: current_limit: [rms: <Value>, peak: <Value>]
                             // or: current_limit_ac: { rms: <Value>, peak: <Value> }
                             // Or backward compat: current_limit: <Value>
@@ -586,58 +608,7 @@ impl super::Parser {
         }
     }
 
-    /// Parse pin reference: `Component.Pin`, `Component[i].Pin`, `Component.Pin[i+1]`, or `Component[i].Pin[j]`
-    ///
-    /// Supports shorthand for pours: `PourName` (defaults to `PourName.anchor`)
-    pub(super) fn parse_pin_ref(&mut self) -> Result<PinReference, ParseError> {
-        let start_pos = self.current_span().start;
-        let component = self.expect_identifier_string()?;
 
-        // Check for array index on component: Component[i] or Component[i+1]
-        let component_index = if self.check(&Token::OpenBracket) {
-            self.advance(); // consume '['
-            let index_expr = self.parse_expression()?;
-            self.expect(&Token::CloseBracket)?;
-            Some(index_expr)
-        } else {
-            None
-        };
-
-        // Shorthand: If no dot follows, default to "anchor" pin (common for pours)
-        if !self.check(&Token::Dot) {
-            let end_pos = self.previous_span().end;
-            return Ok(PinReference {
-                component: component.into(),
-                component_index,
-                pin: "anchor".into(),
-                pin_index: None,
-                span: Span::new(start_pos, end_pos),
-            });
-        }
-
-        self.expect(&Token::Dot)?;
-        let pin = self.expect_identifier_string()?;
-
-        // Check for array index on pin: Pin[i] or Pin[i-1]
-        let pin_index = if self.check(&Token::OpenBracket) {
-            self.advance(); // consume '['
-            let index_expr = self.parse_expression()?;
-            self.expect(&Token::CloseBracket)?;
-            Some(index_expr)
-        } else {
-            None
-        };
-
-        let end_pos = self.previous_span().end;
-
-        Ok(PinReference {
-            component: component.into(),
-            component_index,
-            pin: pin.into(),
-            pin_index,
-            span: Span::new(start_pos, end_pos),
-        })
-    }
 
     /// Parse waypoints: list of coordinates in path block
     /// Empty path block is allowed for automatic routing

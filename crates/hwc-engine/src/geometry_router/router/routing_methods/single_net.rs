@@ -3,6 +3,7 @@ use super::super::core::GeometryRouter;
 use crate::geometry_router::topological_router::TopologicalRouter;
 use crate::geometry_router::spatial_index::{DynamicSpatialIndex, IndexedSegment};
 use crate::geometry::{BoundingBox, TraceSegment};
+use rustc_hash::FxHashMap;
 
 impl GeometryRouter {
     /// Build a DynamicSpatialIndex from component obstacles and committed vector trace segments.
@@ -56,7 +57,32 @@ impl GeometryRouter {
             seg_id += 1;
         }
 
-        // 2. Insert already-routed vector segments directly from the EntityGraph
+        // 2. Insert substrate layers (pours) as hard obstacles.
+        // Pours belong to specific nets; routes must not pass through pours of other nets.
+        for sub_layer in self.entity_graph.get_substrate_layers() {
+            let sub_net_id = sub_layer.net;
+            // Same-net pours are not obstacles (we can route over our own pours)
+            if crate::netlist::NetId(sub_net_id) == active_route.net_id {
+                continue;
+            }
+            let width = sub_layer.bbox.max.x - sub_layer.bbox.min.x;
+            let height = sub_layer.bbox.max.y - sub_layer.bbox.min.y;
+            spatial_index.insert(IndexedSegment {
+                source: hwc_physics::spatial_index::SpatialEntitySource::SubstrateLayer {
+                    index: seg_id,
+                },
+                segment_id: seg_id,
+                net_id: sub_net_id as usize,
+                width_nm: width.max(height),
+                thickness_nm: sub_layer.bbox.max.z - sub_layer.bbox.min.z,
+                start: sub_layer.bbox.min,
+                end: sub_layer.bbox.max,
+                layer: sub_layer.bbox.min.z,
+            });
+            seg_id += 1;
+        }
+
+        // 3. Insert already-routed vector segments directly from the EntityGraph
         for (net_id, segments) in self.entity_graph.get_all_routes() {
             // v0.1.8 Same-Net Tapping: If these segments belong to the same net,
             // they are NOT hard obstacles. We can tap into them or overlap them.
@@ -108,6 +134,17 @@ impl GeometryRouter {
 
     /// Continuous detailed route of a point-to-point NetRoute with active legalization fallback.
     pub fn route_net(&mut self, route: &NetRoute) -> Result<RoutedNet, RoutingError> {
+        // v0.1.8: Fail-Fast — fabrication constraints are MANDATORY.
+        // No hardcoded fallbacks. All values come from the PDK profile.
+        let fabrication = self.constraints.fabrication.as_ref()
+            .ok_or_else(|| RoutingError::MissingFabricationConstraints {
+                net_id: route.net_id,
+                message: "No fabrication constraints loaded from PDK profile. \
+                    Ensure a profile with 'trace:' and 'clearance:' constraints \
+                    is declared in the space definition.".into(),
+            })?;
+
+        let trace_width = fabrication.min_trace_width_nm;
         let max_x = self.bounds.width_nm.saturating_sub(1);
         let max_y = self.bounds.height_nm.saturating_sub(1);
         let max_z = self.bounds.depth_nm.saturating_sub(1);
@@ -129,12 +166,6 @@ impl GeometryRouter {
         // Pass route context to exempt active endpoints from obstacles
         let spatial_index = self.build_routing_spatial_index(route);
         
-        // v0.1.8: Use the actual trace width from fabrication constraints instead of 
-        // a grid-based size. This ensures the router "sees" the board as a vector 
-        // space with correct physical clearances.
-        let trace_width = self.constraints.fabrication.as_ref()
-            .map(|fab| fab.min_trace_width_nm)
-            .unwrap_or(self.resolution_nm);
         let track_pitch = self.resolution_nm; // Use snap-resolution for pitch
 
         let path = if start.x == goal.x && start.y == goal.y && start.z == goal.z {
@@ -151,17 +182,15 @@ impl GeometryRouter {
                 use crate::geometry_router::pathfinding::route_net_sdf_accelerated;
                 use crate::constraint_manager::LayerDirection;
 
+                // v0.1.9: Empty layer routability map for engine internal routing
+                let empty_layer_map = rustc_hash::FxHashMap::default();
+
                 let routing_params = RoutingParams {
                     net_id: route.net_id,
                     constraints: &crate::constraint_manager::RouteConstraints {
                         min_trace_width_nm: trace_width,
-                        min_clearance_nm: self.constraints.fabrication.as_ref()
-                            .map(|fab| fab.min_trace_spacing_nm)
-                            .unwrap_or(200_000),
-                        max_parallel_length_nm: 10_000_000,
-                        max_resistance_ohm: 100.0,
-                        max_current_ma: 20,
-                        impedance_ohm: None,
+                        min_clearance_nm: fabrication.min_trace_spacing_nm,
+                        ..Default::default()
                     },
                     bounds: self.bounds.clone(),
                     layer_direction: LayerDirection::Any,
@@ -172,11 +201,41 @@ impl GeometryRouter {
                     exempt_components: &[], // Endpoint exemption handled by build_routing_spatial_index
                     substrate_layers: self.substrate_layers.as_deref(),
                     is_high_speed_net: false,
-                    layer_routable_mode: None,
+                    layer_routability_map: &empty_layer_map,
                     max_local_route_length_nm: None,
                     via_drill_diameter_nm: 0,
                     active_net_pin_positions: &[],
                     component_keepouts: &[],
+                    // v0.1.8: Routing heuristic weights from PDK profile — fail if missing
+                    base_cost: self.routing_heuristics.as_ref()
+                        .ok_or_else(|| RoutingError::MissingFabricationConstraints {
+                            net_id: route.net_id,
+                            message: "Profile does not declare routing heuristics (base_cost, via_penalty, etc.). All routing weights must come from the PDK profile's 'routing:' block.".into(),
+                        })?.base_cost,
+                    via_penalty: self.routing_heuristics.as_ref().ok_or_else(|| RoutingError::MissingFabricationConstraints {
+                        net_id: route.net_id,
+                        message: "Missing via_penalty in profile routing heuristics.".into(),
+                    })?.via_penalty,
+                    direction_penalty: self.routing_heuristics.as_ref().ok_or_else(|| RoutingError::MissingFabricationConstraints {
+                        net_id: route.net_id,
+                        message: "Missing direction_penalty in profile routing heuristics.".into(),
+                    })?.direction_penalty,
+                    tight_clearance_penalty: self.routing_heuristics.as_ref().ok_or_else(|| RoutingError::MissingFabricationConstraints {
+                        net_id: route.net_id,
+                        message: "Missing tight_clearance_penalty in profile routing heuristics.".into(),
+                    })?.tight_clearance_penalty,
+                    crosstalk_penalty: self.routing_heuristics.as_ref().ok_or_else(|| RoutingError::MissingFabricationConstraints {
+                        net_id: route.net_id,
+                        message: "Missing crosstalk_penalty in profile routing heuristics.".into(),
+                    })?.crosstalk_penalty,
+                    impedance_penalty: self.routing_heuristics.as_ref().ok_or_else(|| RoutingError::MissingFabricationConstraints {
+                        net_id: route.net_id,
+                        message: "Missing impedance_penalty in profile routing heuristics.".into(),
+                    })?.impedance_penalty,
+                    reference_void_penalty: self.routing_heuristics.as_ref().ok_or_else(|| RoutingError::MissingFabricationConstraints {
+                        net_id: route.net_id,
+                        message: "Missing reference_void_penalty in profile routing heuristics.".into(),
+                    })?.reference_void_penalty,
                 };
 
                 match route_net_sdf_accelerated(start, goal, &routing_params, sdf) {
@@ -265,26 +324,33 @@ impl GeometryRouter {
     /// nudge adjacent traces within a bounding window to clear a path.
     pub(crate) fn legalize_local_window(
         &mut self,
-        window: &BoundingBox,
+        _window: &BoundingBox,
         route: &NetRoute,
     ) -> Result<Vec<crate::geometry::Point3D>, RoutingError> {
         use crate::geometry_router::legalizer::Legalizer;
 
+        // v0.1.8: Fail-Fast — fabrication constraints are MANDATORY.
         let min_clearance = self.constraints.fabrication.as_ref()
             .map(|fab| fab.min_trace_spacing_nm)
-            .unwrap_or(200_000);
+            .ok_or_else(|| RoutingError::MissingFabricationConstraints {
+                net_id: route.net_id,
+                message: "Legalization requires fabrication constraints but none are loaded.".into(),
+            })?;
 
         let legalizer = Legalizer::new(min_clearance);
 
-        // Pass route context to exempt active endpoints
-        let spatial_index = self.build_routing_spatial_index(route);
-        let overlapping = spatial_index.query_bbox(window);
+        // Collect all segments and net_ids from the entity graph (the source of truth)
+        let all_routes = self.entity_graph.get_all_routes();
+        let mut all_segments = Vec::new();
+        let mut all_net_ids = Vec::new();
+        for (net_id, segments) in all_routes {
+            for seg in segments {
+                all_segments.push(seg.clone());
+                all_net_ids.push(*net_id);
+            }
+        }
 
-        let segments: Vec<TraceSegment> = overlapping.iter().map(|idx| {
-            TraceSegment::new(idx.start, idx.end, idx.width_nm, self.routing_material_id)
-        }).collect();
-
-        if segments.is_empty() {
+        if all_segments.is_empty() {
             // No existing traces to nudge — try a direct Manhattan path
             let mut path = Vec::new();
             path.push(route.start);
@@ -296,9 +362,76 @@ impl GeometryRouter {
         }
 
         // Run legalization to nudge existing traces
-        let _legalized = legalizer.legalize(&segments, &spatial_index, 5);
+        let spatial_index = self.build_routing_spatial_index(route);
 
-        // After legalization, attempt routing again with the updated spatial index
+        // Record original positions to compute displacements for via sliding
+        let original_centers: Vec<(crate::netlist::NetId, i64, i64)> = all_segments.iter()
+            .zip(all_net_ids.iter())
+            .map(|(seg, net_id)| {
+                let cx = (seg.start.x + seg.end.x) / 2;
+                let cy = (seg.start.y + seg.end.y) / 2;
+                (*net_id, cx, cy)
+            })
+            .collect();
+
+        let (legalized_segments, legalized_net_ids) = legalizer.legalize(
+            &all_segments,
+            &all_net_ids,
+            &self.material_registry,
+            &spatial_index,
+            5,
+        );
+
+        // Compute per-net displacement from legalization and update via positions
+        let mut net_displacements: FxHashMap<crate::netlist::NetId, (i64, i64)> = FxHashMap::default();
+        let mut net_counts: FxHashMap<crate::netlist::NetId, usize> = FxHashMap::default();
+        for (idx, seg) in legalized_segments.iter().enumerate() {
+            let net_id = legalized_net_ids[idx];
+            let new_cx = (seg.start.x + seg.end.x) / 2;
+            let new_cy = (seg.start.y + seg.end.y) / 2;
+            if let Some((orig_cx, orig_cy)) = original_centers.get(idx).map(|(_, cx, cy)| (*cx, *cy)) {
+                let entry = net_displacements.entry(net_id).or_insert((0, 0));
+                entry.0 += new_cx - orig_cx;
+                entry.1 += new_cy - orig_cy;
+                *net_counts.entry(net_id).or_insert(0) += 1;
+            }
+        }
+        // Average displacement per net
+        for (net_id, count) in &net_counts {
+            if let Some(disp) = net_displacements.get_mut(net_id) {
+                if *count > 0 {
+                    disp.0 /= *count as i64;
+                    disp.1 /= *count as i64;
+                }
+            }
+        }
+        // Slide vias that belong to displaced nets
+        for via in &mut self.vias {
+            if let Some(&(dx, dy)) = net_displacements.get(&via.net_id) {
+                if dx != 0 || dy != 0 {
+                    via.position.0 += dx;
+                    via.position.1 += dy;
+                }
+            }
+        }
+
+        // Write legalized segments back to EntityGraph (source of truth)
+        let net_ids_to_clear: Vec<_> = self.entity_graph.get_all_routes()
+            .iter()
+            .map(|(net_id, _)| *net_id)
+            .collect();
+        for net_id in net_ids_to_clear {
+            self.entity_graph.clear_routes_for_net(net_id);
+        }
+        for (idx, seg) in legalized_segments.iter().enumerate() {
+            let net_id = legalized_net_ids[idx];
+            self.entity_graph.register_trace_segments(
+                net_id,
+                vec![seg.clone()],
+            );
+        }
+
+        // Rebuild spatial index from updated EntityGraph
         let board_bounds = BoundingBox::new(
             crate::geometry::Point3D::new(0, 0, 0),
             crate::geometry::Point3D::new(self.bounds.width_nm, self.bounds.height_nm, self.bounds.depth_nm),
@@ -306,14 +439,15 @@ impl GeometryRouter {
 
         let updated_spatial_index = self.build_routing_spatial_index(route);
         let topo_router = TopologicalRouter::new(
-            self.constraints.fabrication.as_ref().map(|f| f.min_trace_width_nm).unwrap_or(100_000),
+            self.constraints.fabrication.as_ref()
+                .map(|f| f.min_trace_width_nm)
+                .unwrap_or(min_clearance),
             self.resolution_nm,
         );
 
         match topo_router.route(route.start, route.goal, &updated_spatial_index, &board_bounds) {
             Some(topo_path) if topo_path.waypoints.len() >= 2 => Ok(topo_path.waypoints),
             _ => {
-                // Last resort: direct Manhattan path
                 let mut path = vec![route.start];
                 if route.start.x != route.goal.x && route.start.y != route.goal.y {
                     path.push(crate::geometry::Point3D::new(route.goal.x, route.start.y, route.start.z));

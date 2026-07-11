@@ -1,0 +1,27 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,0.00x0.01x0.00mm,,,,,1
+M1,NMOS_Transistor,,,,,,1
+M2,PMOS_Transistor,,,,,,1
+
+# MATERIAL USAGE (Fabrication)
+Reference,Type,Material,Layer_Z_nm,Area_nm2,Volume_nm3
+M1_Source_Diff,Pour,Silicon_N,z:100,93750,18750000
+M1_Gate_Poly,Pour,Polysilicon,z:305,150000,22500000
+M1_Drain_Diff,Pour,Silicon_N,z:100,93750,18750000
+M1_Bulk_Contact,Pour,Silicon_P,z:100,62500,12500000
+M1_Source_Pad,Pour,Aluminum,z:955,55000,22000000
+M1_Gate_Pad,Pour,Aluminum,z:955,62500,25000000
+M1_Drain_Pad,Pour,Aluminum,z:955,55000,22000000
+M1_Bulk_Pad,Pour,Aluminum,z:955,62500,25000000
+M2_Source_Diff,Pour,Silicon_P,z:100,281000,56200000
+M2_Gate_Poly,Pour,Polysilicon,z:305,337500,50625000
+M2_Drain_Diff,Pour,Silicon_P,z:100,281000,56200000
+M2_Bulk_Contact,Pour,Silicon_N,z:100,62500,12500000
+M2_Source_Pad,Pour,Aluminum,z:955,185000,74000000
+M2_Gate_Pad,Pour,Aluminum,z:955,62500,25000000
+M2_Drain_Pad,Pour,Aluminum,z:955,185000,74000000
+M2_Bulk_Pad,Pour,Aluminum,z:955,62500,25000000
+GND_Rail,Pour,Aluminum,z:955,1800000,720000000
+VDD_Rail,Pour,Aluminum,z:955,1800000,720000000
+VIN_Pad,Pour,Aluminum,z:955,300000,120000000
+VOUT_Pad,Pour,Aluminum,z:955,300000,120000000

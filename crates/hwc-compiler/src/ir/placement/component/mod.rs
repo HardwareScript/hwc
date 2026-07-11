@@ -75,7 +75,24 @@ pub fn place_component(
         untransformed_origin.z = position.z;
     }
 
-    let rotation_deg = component.rotation.as_ref().map(|r| r.angle).unwrap_or(0.0);
+    let rotation_deg = component.rotation.as_ref()
+        .map(|r| r.angle)
+        .ok_or_else(|| {
+            let is_asic = space.fabrication_constraints.as_ref().map_or(false, |c| {
+                c.technology.as_ref().map_or(false, |t| t.to_lowercase() == "asic")
+            });
+            
+            if is_asic {
+                IrError::MissingAsicConstraint {
+                    message: format!("Component '{}' missing required rotation.",
+                        component.name.as_ref().map(|n| n.as_str()).unwrap_or("unnamed")),
+                    hint: "Under ASIC technology, add 'rotated <Angle>' after the position (e.g., 'at [x: 1mm, y: 2mm] rotated 0deg').".into(),
+                }
+            } else {
+                IrError::PlacementError(format!("Component '{}' missing required rotation.",
+                    component.name.as_ref().map(|n| n.as_str()).unwrap_or("unnamed")))
+            }
+        })?;
     let z_val = untransformed_origin.z / 1_000_000; // Use mm-scale for name if needed
     let name = component
         .name

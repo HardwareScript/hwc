@@ -47,10 +47,8 @@ pub fn route_automatic(
     use hwc_engine::constraint_manager::{LayerDirection, RouteConstraints};
     use hwc_engine::geometry_router::GridBounds;
 
-    // eprintln!(
-    //     "[ROUTER] Route automatic: {}.{} → {}.{}",
-    //     route.from.component, route.from.pin, route.to.component, route.to.pin
-    // );
+    let from_name = super::helpers::construct_entity_name(&route.from)?;
+    let to_name = super::helpers::construct_entity_name(&route.to)?;
 
     // PHASE 1: CONSTRAINT MANAGER
     // v0.1.8: Use profile constraints when available, fail if missing
@@ -99,18 +97,25 @@ pub fn route_automatic(
         crate::ir::conversions::evaluate_expression_to_nm(width_expr, symbol_table)
             .map_err(IrError::InvalidExpression)?
     } else {
-        // Task 15.11: Route width must be explicitly specified
-        return Err(IrError::InvalidRouteExpression {
-            expression: format!("route from {}.{} to {}.{}", route.from.component, route.from.pin, route.to.component, route.to.pin),
-            reason: "Route has no 'width:' specified. All routes must declare an explicit trace width.".into(),
-        });
+        // v0.1.8: No hardcoded defaults. Must come from profile.
+        profile.and_then(|p| p.trace.as_ref())
+            .map(|t| crate::ir::conversions::measurement_to_nm(&t.min_width, symbol_table))
+            .transpose()
+            .map_err(|e| IrError::InvalidRouteExpression {
+                expression: "profile trace width".into(),
+                reason: e.to_string(),
+            })?
+            .ok_or_else(|| IrError::MissingAsicConstraint {
+                message: "Route has no explicit width and PDK has no 'trace.min_width' constraint".into(),
+                hint: "Add 'width: <value>' to the route, or declare 'trace: min_width: <value>' in the profile.".into(),
+            })?
     };
 
     // Task 15.11: Warn if net has no current_limit declared (DRC will skip current-density check)
     if route.current_limit_ac.is_none() {
         eprintln!(
-            "[ROUTER] WARNING: Net {}.{} has no current_limit declared. DRC will skip current-density check.",
-            route.from.component, route.to.component
+            "[ROUTER] WARNING: Net {} -> {} has no current_limit declared. DRC will skip current-density check.",
+            from_name, to_name
         );
     }
 
@@ -120,8 +125,8 @@ pub fn route_automatic(
         calculate_boundary_points(space, route, trace_width_nm)?;
     
     // DEBUG: Check if boundary points are corrupted
-    eprintln!("[BOUNDARY DEBUG] Route: {}.{} -> {}.{}", 
-        route.from.component, route.from.pin, route.to.component, route.to.pin);
+    eprintln!("[BOUNDARY DEBUG] Route: {} -> {}", 
+        from_name, to_name);
     eprintln!("[BOUNDARY DEBUG]   start_boundary: ({},{},{})", 
         start_boundary.x, start_boundary.y, start_boundary.z);
     eprintln!("[BOUNDARY DEBUG]   goal_boundary: ({},{},{})", 
@@ -218,8 +223,16 @@ pub fn route_automatic(
         max_parallel_length_nm: profile
             .and_then(|p| p.routing.as_ref())
             .and_then(|r| r.max_local_route_length.as_ref())
-            .map(|m| crate::ir::conversions::measurement_to_nm(m, symbol_table).unwrap_or(0))
-            .unwrap_or(10_000_000), // 10mm default
+            .map(|m| crate::ir::conversions::measurement_to_nm(m, symbol_table))
+            .transpose()
+            .map_err(|e| IrError::InvalidRouteExpression {
+                expression: "max_parallel_length".into(),
+                reason: e.to_string(),
+            })?
+            .ok_or_else(|| IrError::MissingAsicConstraint {
+                message: "PDK missing required 'routing.max_local_route_length' constraint.".into(),
+                hint: "Add 'routing: { max_local_route_length: <value> }' to your profile.".into(),
+            })?,
         max_resistance_ohm: 100.0, // Routing algorithm parameter — no PDK equivalent
         max_current_ma: current_ma as i64,
         impedance_ohm: None,
@@ -250,29 +263,46 @@ pub fn route_automatic(
     )?;
 
     // v0.1.7: Identify exempt components (start and goal)
-    let from_component_name = super::helpers::construct_component_name(&route.from)?;
-    let to_component_name = super::helpers::construct_component_name(&route.to)?;
+    let from_component_name = super::helpers::construct_entity_name(&route.from)?;
+    let to_component_name = super::helpers::construct_entity_name(&route.to)?;
 
     let exempt_components = [from_component_name.clone(), to_component_name.clone()];
 
-    // v0.1.8: Resolve routability for the target layer
-    let layer_routable_mode = if let Some(z) = target_z_nm.or(Some(start_pos.z)) {
-        // Look up the layer name at this Z position from the stackup
-        stackup_manager.get_layer_name_at_z(z)
-            .and_then(|layer_name| {
-                // Query the profile's stackup for routability
-                profile.and_then(|p| p.stackup.as_ref()).and_then(|stackup| {
-                    stackup.layers.iter().find(|l| l.name.name == layer_name).and_then(|l| l.routable)
-                })
-            })
-            .map(|mode| match mode {
-                hwc_parser::RoutableMode::True => hwc_engine::geometry_router::stackup_slicing::RoutableMode::True,
-                hwc_parser::RoutableMode::False => hwc_engine::geometry_router::stackup_slicing::RoutableMode::False,
-                hwc_parser::RoutableMode::LocalOnly => hwc_engine::geometry_router::stackup_slicing::RoutableMode::LocalOnly,
-            })
-    } else {
-        None
-    };
+    // v0.1.9: Build dynamic layer routability map for per-node checking (Fix #2)
+    // Map EVERY Z coordinate in each layer's range to its routability mode
+    let layer_routability_map: rustc_hash::FxHashMap<i64, hwc_engine::geometry_router::stackup_slicing::RoutableMode> = 
+        if let Some(p) = profile {
+            if let Some(stackup) = &p.stackup {
+                let mut map = rustc_hash::FxHashMap::default();
+                
+                for layer in &stackup.layers {
+                    if let Some(routable) = layer.routable {
+                        let layer_start = stackup_manager.get_layer_start_z(&layer.name.name);
+                        let layer_thickness = stackup_manager.get_layer_thickness(&layer.name.name);
+                        
+                        if let (Some(start), Some(thickness)) = (layer_start, layer_thickness) {
+                            let mode = match routable {
+                                hwc_parser::RoutableMode::True => hwc_engine::geometry_router::stackup_slicing::RoutableMode::True,
+                                hwc_parser::RoutableMode::False => hwc_engine::geometry_router::stackup_slicing::RoutableMode::False,
+                                hwc_parser::RoutableMode::LocalOnly => hwc_engine::geometry_router::stackup_slicing::RoutableMode::LocalOnly,
+                            };
+                            
+                            // Map every nanometer in this layer's Z range
+                            let end = start + thickness;
+                            for z in start..end {
+                                map.insert(z, mode);
+                            }
+                        }
+                    }
+                }
+                
+                map
+            } else {
+                rustc_hash::FxHashMap::default()
+            }
+        } else {
+            rustc_hash::FxHashMap::default()
+        };
 
     // v0.1.8: Build component keepouts from entity graph for Interior Lockout
     let component_keepouts: Vec<(i64, i64, i64, i64, i64, i64)> = space.entity_graph
@@ -327,11 +357,73 @@ pub fn route_automatic(
         exempt_components: &exempt_components, // v0.1.7: Escape Exemption
         substrate_layers: Some(&space.entity_graph.substrate_layers),
         is_high_speed_net: false, // v0.1.7: Default to non-high-speed
-        layer_routable_mode,
-        max_local_route_length_nm: Some(10_000_000), // Default 10mm
+        layer_routability_map: &layer_routability_map, // v0.1.9: Dynamic layer map (Fix #2)
+        max_local_route_length_nm: Some(profile
+            .and_then(|p| p.routing.as_ref())
+            .and_then(|r| r.max_local_route_length.as_ref())
+            .map(|m| crate::ir::conversions::measurement_to_nm(m, symbol_table))
+            .transpose()
+            .map_err(|e| IrError::InvalidRouteExpression {
+                expression: "max_local_route_length".into(),
+                reason: e.to_string(),
+            })?
+            .ok_or_else(|| IrError::MissingAsicConstraint {
+                message: "PDK missing required 'routing.max_local_route_length' constraint.".into(),
+                hint: "Add 'routing: { max_local_route_length: <value> }' to your profile.".into(),
+            })?),
         via_drill_diameter_nm,
         active_net_pin_positions: &active_net_pin_positions,
         component_keepouts: &component_keepouts,
+        // v0.1.8: Routing heuristic weights from PDK profile — fail if missing
+        base_cost: profile
+            .and_then(|p| p.routing.as_ref())
+            .and_then(|r| r.base_cost)
+            .ok_or_else(|| IrError::MissingRoutingHeuristics {
+                field: "base_cost".into(),
+                hint: "Add 'base_cost: <value>' to the profile's 'routing:' block.".into(),
+            })?,
+        via_penalty: profile
+            .and_then(|p| p.routing.as_ref())
+            .and_then(|r| r.via_penalty)
+            .ok_or_else(|| IrError::MissingRoutingHeuristics {
+                field: "via_penalty".into(),
+                hint: "Add 'via_penalty: <value>' to the profile's 'routing:' block.".into(),
+            })?,
+        direction_penalty: profile
+            .and_then(|p| p.routing.as_ref())
+            .and_then(|r| r.direction_penalty)
+            .ok_or_else(|| IrError::MissingRoutingHeuristics {
+                field: "direction_penalty".into(),
+                hint: "Add 'direction_penalty: <value>' to the profile's 'routing:' block.".into(),
+            })?,
+        tight_clearance_penalty: profile
+            .and_then(|p| p.routing.as_ref())
+            .and_then(|r| r.tight_clearance_penalty)
+            .ok_or_else(|| IrError::MissingRoutingHeuristics {
+                field: "tight_clearance_penalty".into(),
+                hint: "Add 'tight_clearance_penalty: <value>' to the profile's 'routing:' block.".into(),
+            })?,
+        crosstalk_penalty: profile
+            .and_then(|p| p.routing.as_ref())
+            .and_then(|r| r.crosstalk_penalty)
+            .ok_or_else(|| IrError::MissingRoutingHeuristics {
+                field: "crosstalk_penalty".into(),
+                hint: "Add 'crosstalk_penalty: <value>' to the profile's 'routing:' block.".into(),
+            })?,
+        impedance_penalty: profile
+            .and_then(|p| p.routing.as_ref())
+            .and_then(|r| r.impedance_penalty)
+            .ok_or_else(|| IrError::MissingRoutingHeuristics {
+                field: "impedance_penalty".into(),
+                hint: "Add 'impedance_penalty: <value>' to the profile's 'routing:' block.".into(),
+            })?,
+        reference_void_penalty: profile
+            .and_then(|p| p.routing.as_ref())
+            .and_then(|r| r.reference_void_penalty)
+            .ok_or_else(|| IrError::MissingRoutingHeuristics {
+                field: "reference_void_penalty".into(),
+                hint: "Add 'reference_void_penalty: <value>' to the profile's 'routing:' block.".into(),
+            })?,
     };
 
     // v0.1.8: Build SDF for Leap-Frog A* routing
@@ -351,9 +443,9 @@ pub fn route_automatic(
     )
     .ok_or_else(|| {
         IrError::NoPathFound {
-            net: format!("{}.{} -> {}.{}", route.from.component, route.from.pin, route.to.component, route.to.pin).into(),
-            from_pin: format!("{}.{}", route.from.component, route.from.pin).into(),
-            to_pin: format!("{}.{}", route.to.component, route.to.pin).into(),
+            net: format!("{} -> {}", super::helpers::endpoint_label(&route.from), super::helpers::endpoint_label(&route.to)).into(),
+            from_pin: super::helpers::endpoint_label(&route.from).into(),
+            to_pin: super::helpers::endpoint_label(&route.to).into(),
         }
     })?;
 
@@ -398,7 +490,7 @@ pub fn route_automatic(
 
     if path.is_empty() {
         return Err(IrError::EmptyRoute {
-            net: format!("{}.{} -> {}.{}", route.from.component, route.from.pin, route.to.component, route.to.pin).into(),
+            net: format!("{} -> {}", super::helpers::endpoint_label(&route.from), super::helpers::endpoint_label(&route.to)).into(),
         });
     }
 
@@ -482,7 +574,7 @@ pub fn route_automatic(
     // After the Z-refinement loop, verify thickness was resolved from stackup
     if trace_thickness_nm == space.resolution_nm && refined_path.len() >= 2 {
         return Err(IrError::InvalidRouteExpression {
-            expression: format!("route from {}.{} to {}.{}", route.from.component, route.from.pin, route.to.component, route.to.pin),
+            expression: format!("route from {} to {}", super::helpers::endpoint_label(&route.from), super::helpers::endpoint_label(&route.to)),
             reason: format!(
                 "Could not resolve trace thickness from stackup at Z={}nm. \
                  Ensure the stackup is properly defined in your PDK profile.",
@@ -650,7 +742,10 @@ pub fn route_automatic(
             j_limit: profile
                 .and_then(|p| p.other.get("em_current_density_limit"))
                 .and_then(|s| s.parse::<f64>().ok())
-                .unwrap_or(1e6),  // 1 MA/m² default (silicon EM limit)
+                .ok_or_else(|| IrError::MissingAsicConstraint {
+                    message: "PDK missing required 'em_current_density_limit' in profile 'other' block.".into(),
+                    hint: "Add 'other: em_current_density_limit: <value>' to your profile.".into(),
+                })?,
             i_peak: current_decl.peak(),
         };
 
@@ -658,11 +753,17 @@ pub fn route_automatic(
             ambient_temp_c: profile
                 .and_then(|p| p.thermal.as_ref())
                 .map(|t| t.ambient_temp.value)
-                .unwrap_or(25.0),
+                .ok_or_else(|| IrError::MissingAsicConstraint {
+                    message: "PDK missing required 'thermal.ambient_temp' constraint.".into(),
+                    hint: "Add a 'thermal:' block to your profile with 'ambient_temp: <value>'.".into(),
+                })?,
             max_temp_rise_c: profile
                 .and_then(|p| p.thermal.as_ref())
                 .map(|t| t.max_temp_rise.value)
-                .unwrap_or(20.0),
+                .ok_or_else(|| IrError::MissingAsicConstraint {
+                    message: "PDK missing required 'thermal.max_temp_rise' constraint.".into(),
+                    hint: "Add a 'thermal:' block to your profile with 'max_temp_rise: <value>'.".into(),
+                })?,
             copper_thickness_m: trace_thickness_nm as f64 * 1e-9, // nm-to-m conversion — physics constant
             substrate_er: profile
                 .and_then(|p| p.stackup.as_ref())
@@ -671,7 +772,10 @@ pub fn route_automatic(
                     let er_key: CompactString = format!("substrate_er_{}", l.name.name).into();
                     profile.and_then(|p| p.other.get(&er_key)).and_then(|s| s.parse::<f64>().ok())
                 })
-                .unwrap_or(4.2),
+                .ok_or_else(|| IrError::MissingAsicConstraint {
+                    message: "PDK missing required substrate dielectric constant (substrate_er).".into(),
+                    hint: "Add 'other: substrate_er_<LayerName>: <value>' to your profile.".into(),
+                })?,
         };
 
         let violations = hwc_engine::verify_em_thermal(
@@ -713,8 +817,8 @@ pub fn route_automatic(
     space.netlist.connect_pin(goal_pin_id, net_id);
 
     // eprintln!(
-    //     "[ROUTER] ✓ Pins connected: {}.{} ← {} → {}.{}\n",
-    //     from_component_name, start_pin_name, net_name, to_component_name, goal_pin_name
+    //     "[ROUTER] ✓ Pins connected: {} ← {} → {}\n",
+    //     from_name, net_name, to_name
     // );
 
     // PHASE 3: ANALYTIC DESIGN RULE CHECK (v0.1.7 - GOD-TIER)
@@ -777,8 +881,8 @@ pub fn route_automatic(
 
         return Err(IrError::NoPathFound {
             net: net_name.clone(),
-            from_pin: format!("{}.{}", route.from.component, route.from.pin).into(),
-            to_pin: format!("{}.{}", route.to.component, route.to.pin).into(),
+            from_pin: super::helpers::endpoint_label(&route.from).into(),
+            to_pin: super::helpers::endpoint_label(&route.to).into(),
         });
     }
 
@@ -794,6 +898,9 @@ pub fn calculate_boundary_points(
     use hwc_engine::geometry_router::port_escape::{
         calculate_rect_escape, CardinalPort, EdgeOffset, NamedPosition,
     };
+
+    // v0.1.9: Extract physical space boundaries for clamping (Fix #1)
+    let board_bounds = space.entity_graph.total_bounding_box();
 
     // Helper to resolve parser EdgeOffsetSpec to engine EdgeOffset
     let resolve_offset = |spec: &Option<hwc_parser::EdgeOffsetSpec>| -> EdgeOffset {
@@ -867,17 +974,30 @@ pub fn calculate_boundary_points(
     };
 
     // Helper to resolve a port+offset spec to an EscapePoint
-    let resolve_point = |from_comp: &str, pin: &str, port: CardinalPort, offset: EdgeOffset, z: i64| {
-        space.entity_graph.get_pour_bbox_for_pin(from_comp, pin).map(|bbox| {
+    // v0.1.9.1: Handle both ComponentPin and SpaceEntity endpoints using entity registry
+    let resolve_point = |endpoint: &hwc_parser::RouteEndpointSpec, port: CardinalPort, offset: EdgeOffset, z: i64| {
+        let bbox_opt = match endpoint {
+            hwc_parser::RouteEndpointSpec::ComponentPin { component_name, pin_name, .. } => {
+                // v0.1.9.1: Look up component pin bbox directly from entity registry
+                space.entity_graph.get_component_pin_bbox(component_name.as_str(), pin_name.as_str())
+            }
+            hwc_parser::RouteEndpointSpec::SpaceEntity { name, .. } => {
+                // v0.1.9.1: Look up space entity bbox directly from entity registry
+                space.entity_graph.get_space_entity_bbox(name.as_str())
+            }
+        };
+        
+        bbox_opt.map(|bbox| {
             // v0.1.7: Use half trace width as clearance to ensure trace touches pad edge
             // but does not penetrate the interior ("physically touching" model)
             let boundary_clearance = trace_width_nm / 2;
-            calculate_rect_escape(&bbox, port, offset, trace_width_nm, boundary_clearance, z)
+            // v0.1.9: Pass board_bounds to prevent out-of-bounds projection (Fix #1)
+            calculate_rect_escape(&bbox, port, offset, trace_width_nm, boundary_clearance, z, board_bounds.as_ref())
         })
     };
 
-    let from_comp = super::helpers::construct_component_name(&route.from)?;
-    let to_comp = super::helpers::construct_component_name(&route.to)?;
+    let from_label = super::helpers::construct_entity_name(&route.from)?;
+    let to_label = super::helpers::construct_entity_name(&route.to)?;
 
     // Start Escape
     let start_esc = if let Some(exit_escape) = &route.exit_escape {
@@ -888,13 +1008,13 @@ pub fn calculate_boundary_points(
             hwc_parser::CardinalDirection::West => CardinalPort::West,
         };
         let offset = resolve_offset(&exit_escape.offset);
-        resolve_point(&from_comp, &route.from.pin, port, offset, start_pin_center.z)
+        resolve_point(&route.from, port, offset, start_pin_center.z)
     } else {
-        resolve_point(&from_comp, &route.from.pin, auto_exit_port, EdgeOffset::Center, start_pin_center.z)
+        resolve_point(&route.from, auto_exit_port, EdgeOffset::Center, start_pin_center.z)
     }.ok_or_else(|| IrError::NoPathFound {
-        net: format!("{}.{} -> {}.{}", route.from.component, route.from.pin, route.to.component, route.to.pin).into(),
-        from_pin: format!("{}.{}", from_comp, route.from.pin).into(),
-        to_pin: format!("{}.{}", to_comp, route.to.pin).into(),
+        net: format!("{} -> {}", from_label, to_label).into(),
+        from_pin: from_label.clone(),
+        to_pin: to_label.clone(),
     })?;
 
     // Goal Escape
@@ -906,13 +1026,13 @@ pub fn calculate_boundary_points(
             hwc_parser::CardinalDirection::West => CardinalPort::West,
         };
         let offset = resolve_offset(&enter_escape.offset);
-        resolve_point(&to_comp, &route.to.pin, port, offset, goal_pin_center.z)
+        resolve_point(&route.to, port, offset, goal_pin_center.z)
     } else {
-        resolve_point(&to_comp, &route.to.pin, auto_enter_port, EdgeOffset::Center, goal_pin_center.z)
+        resolve_point(&route.to, auto_enter_port, EdgeOffset::Center, goal_pin_center.z)
     }.ok_or_else(|| IrError::NoPathFound {
-        net: format!("{}.{} -> {}.{}", route.from.component, route.from.pin, route.to.component, route.to.pin).into(),
-        from_pin: format!("{}.{}", from_comp, route.from.pin).into(),
-        to_pin: format!("{}.{}", to_comp, route.to.pin).into(),
+        net: format!("{} -> {}", from_label, to_label).into(),
+        from_pin: from_label.clone(),
+        to_pin: to_label.clone(),
     })?;
 
     Ok((start_esc.point, goal_esc.point, start_esc.direction, goal_esc.direction))

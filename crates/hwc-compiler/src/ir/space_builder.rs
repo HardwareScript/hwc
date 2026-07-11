@@ -27,17 +27,17 @@ pub fn create_hardware_space(
     };
 
     // Determine resolution for coordinate snapping
-    let resolution_nm = if let Some(res_measurement) = &space_def.resolution {
-        let res = measurement_to_nm(res_measurement, symbol_table)
-            .map_err(|e| IrError::InvalidExpression(e))?;
-        if res <= 0 {
-            return Err(IrError::InvalidResolution { value: res });
-        }
-        res
-    } else {
-        // Default resolution if not specified (e.g., 1nm for ASIC, 10um for PCB)
-        1
-    };
+    let resolution_nm = space_def.resolution.as_ref()
+        .map(|res_measurement| {
+            measurement_to_nm(res_measurement, symbol_table)
+                .map_err(|e| IrError::InvalidExpression(e))
+        })
+        .transpose()?
+        .ok_or_else(|| IrError::MissingGrid)?;
+
+    if resolution_nm <= 0 {
+        return Err(IrError::InvalidResolution { value: resolution_nm });
+    }
 
     // Create material registry
     let mut material_registry = MaterialRegistry::new();
@@ -185,7 +185,12 @@ pub fn create_hardware_space(
         let is_asic = space.fabrication_constraints.as_ref().map_or(false, |c| {
             c.technology.as_ref().map_or(false, |t| t.to_lowercase() == "asic")
         });
-        let min_width = space.fabrication_constraints.as_ref().map(|c| c.trace.min_width_nm).unwrap_or(200_000);
+        let min_width = space.fabrication_constraints.as_ref()
+            .map(|c| c.trace.min_width_nm)
+            .ok_or_else(|| IrError::MissingAsicConstraint {
+                message: "PDK missing required 'trace.min_width_nm' constraint".into(),
+                hint: "Add a 'trace:' block to your profile with explicit min_width.\n\nExample:\n  trace:\n    min_width: 180nm".into(),
+            })?;
         let net_id = space.netlist.get_or_create_net_with_technology(&net_decl.name, is_asic, min_width);
 
         // v0.1.7: Set net frequency on the netlist (for SI-aware routing)
