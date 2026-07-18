@@ -104,8 +104,16 @@ mod tests {
         // A -> B (gap 5) -> C (gap 5)
         let positions = vec![0, 0, 0];
         let constraints = vec![
-            DagConstraint { from_idx: 0, to_idx: 1, min_gap: 5 },
-            DagConstraint { from_idx: 1, to_idx: 2, min_gap: 5 },
+            DagConstraint {
+                from_idx: 0,
+                to_idx: 1,
+                min_gap: 5,
+            },
+            DagConstraint {
+                from_idx: 1,
+                to_idx: 2,
+                min_gap: 5,
+            },
         ];
         let result = DagSolver::solve_1d(&positions, &constraints);
         assert_eq!(result, vec![0, 5, 10]);
@@ -115,8 +123,16 @@ mod tests {
     fn test_already_satisfied() {
         let positions = vec![0, 100, 200];
         let constraints = vec![
-            DagConstraint { from_idx: 0, to_idx: 1, min_gap: 5 },
-            DagConstraint { from_idx: 1, to_idx: 2, min_gap: 5 },
+            DagConstraint {
+                from_idx: 0,
+                to_idx: 1,
+                min_gap: 5,
+            },
+            DagConstraint {
+                from_idx: 1,
+                to_idx: 2,
+                min_gap: 5,
+            },
         ];
         let result = DagSolver::solve_1d(&positions, &constraints);
         assert_eq!(result, positions);
@@ -125,8 +141,16 @@ mod tests {
     #[test]
     fn test_2d_compaction() {
         let positions = vec![(0, 0), (50, 50)];
-        let x_constraints = vec![DagConstraint { from_idx: 0, to_idx: 1, min_gap: 100 }];
-        let y_constraints = vec![DagConstraint { from_idx: 0, to_idx: 1, min_gap: 100 }];
+        let x_constraints = vec![DagConstraint {
+            from_idx: 0,
+            to_idx: 1,
+            min_gap: 100,
+        }];
+        let y_constraints = vec![DagConstraint {
+            from_idx: 0,
+            to_idx: 1,
+            min_gap: 100,
+        }];
         let result = DagSolver::solve_2d(&positions, &x_constraints, &y_constraints);
         assert_eq!(result, vec![(0, 0), (100, 100)]);
     }

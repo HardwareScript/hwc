@@ -15,9 +15,9 @@
 // single Clipper2 Path64 polygon in `SubstrateLayerShape::Polygon`, enabling
 // seamless union/intersection with copper pours and proper DRC.
 
-use crate::geometry_router::EntityGraph;
-use crate::geometry_router::substrate_types::{MaterialId, NetId};
 use crate::geometry::{BoundingBox, Point2D, Point3D, Polygon};
+use crate::geometry_router::substrate_types::{MaterialId, NetId};
+use crate::geometry_router::EntityGraph;
 use std::f64::consts::PI;
 
 /// Thermal relief pattern type
@@ -236,7 +236,11 @@ impl ThermalReliefGenerator {
     /// Generate thermal relief for a rectangular pad — v0.1.8 NATIVE VECTOR
     ///
     /// Writes directly to EntityGraph. No intermediate HashMap allocations.
-    pub fn generate_for_rectangular_pad(&self, params: RectangularPadParams, grid: &mut EntityGraph) {
+    pub fn generate_for_rectangular_pad(
+        &self,
+        params: RectangularPadParams,
+        grid: &mut EntityGraph,
+    ) {
         match self.config.relief_type {
             ThermalReliefType::Direct => {
                 // No relief — pad directly connects to pour (no modifications)
@@ -248,8 +252,16 @@ impl ThermalReliefGenerator {
                 let half_h = params.height_nm / 2 + gap;
                 let z_half = self.resolution_nm * 2;
                 let cutout = BoundingBox::new(
-                    Point3D::new(params.center.x - half_w, params.center.y - half_h, params.z_layer - z_half),
-                    Point3D::new(params.center.x + half_w, params.center.y + half_h, params.z_layer + z_half),
+                    Point3D::new(
+                        params.center.x - half_w,
+                        params.center.y - half_h,
+                        params.z_layer - z_half,
+                    ),
+                    Point3D::new(
+                        params.center.x + half_w,
+                        params.center.y + half_h,
+                        params.z_layer + z_half,
+                    ),
                 );
                 grid.drill_hole(cutout, None, params.net);
             }

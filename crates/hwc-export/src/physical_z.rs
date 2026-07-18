@@ -49,7 +49,11 @@ pub fn dxf_layer_name(
                 return Ok(format!("BOTTOM_{}", material.to_uppercase()));
             }
         }
-        return Ok(format!("{}_{}", layer_name.to_uppercase(), material.to_uppercase()));
+        return Ok(format!(
+            "{}_{}",
+            layer_name.to_uppercase(),
+            material.to_uppercase()
+        ));
     }
 
     // v0.1.8: No heuristics. If Z-coordinate is outside defined stackup, fail fast.
@@ -108,4 +112,3 @@ mod tests {
         );
     }
 }
-

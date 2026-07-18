@@ -1,6 +1,7 @@
 //! Routing module for trace routing between pins.
 
 mod automatic;
+pub mod electrical_optimizer;
 mod global;
 pub(crate) mod helpers;
 mod manual;
@@ -17,7 +18,7 @@ use hwc_engine::HardwareSpace;
 
 /// Route a trace between pins.
 ///
-/// Automatically selects between automatic A* routing or manual waypoint routing
+/// Automatically selects between automatic topological routing or manual waypoint routing
 /// based on whether waypoints are provided.
 pub fn route_trace(
     space: &mut HardwareSpace,
@@ -54,12 +55,12 @@ pub fn instantiate_pattern(
 ) -> Result<hwc_engine::RoutingPattern, IrError> {
     use hwc_engine::{PatternStep, RoutingPattern};
 
-    let definition = symbol_table
-        .get_pattern(&instantiation.name)
-        .map_err(|e| IrError::InvalidRouteExpression {
+    let definition = symbol_table.get_pattern(&instantiation.name).map_err(|e| {
+        IrError::InvalidRouteExpression {
             expression: format!("pattern '{}'", instantiation.name),
             reason: format!("Unknown pattern '{}': {}", instantiation.name, e),
-        })?;
+        }
+    })?;
 
     // Build evaluation context: bind instantiation args to definition param names
     let mut eval_ctx: rustc_hash::FxHashMap<compact_str::CompactString, f64> =
@@ -120,7 +121,12 @@ fn evaluate_with_ctx(
                 })
             }
         }
-        hwc_parser::Expression::Binary { left, operator, right, .. } => {
+        hwc_parser::Expression::Binary {
+            left,
+            operator,
+            right,
+            ..
+        } => {
             let l = evaluate_with_ctx(left, ctx, symbol_table)?;
             let r = evaluate_with_ctx(right, ctx, symbol_table)?;
             match operator {
@@ -128,16 +134,21 @@ fn evaluate_with_ctx(
                 hwc_parser::BinaryOperator::Subtract => Ok(l - r),
                 hwc_parser::BinaryOperator::Multiply => Ok(l * r),
                 hwc_parser::BinaryOperator::Divide => {
-                    if r == 0 { Err(IrError::InvalidRouteExpression {
-                        expression: "division".into(),
-                        reason: "Division by zero".into(),
-                    }) }
-                    else { Ok(l / r) }
+                    if r == 0 {
+                        Err(IrError::InvalidRouteExpression {
+                            expression: "division".into(),
+                            reason: "Division by zero".into(),
+                        })
+                    } else {
+                        Ok(l / r)
+                    }
                 }
                 hwc_parser::BinaryOperator::Modulo => Ok(l % r),
             }
         }
-        hwc_parser::Expression::Unary { operator, operand, .. } => {
+        hwc_parser::Expression::Unary {
+            operator, operand, ..
+        } => {
             let val = evaluate_with_ctx(operand, ctx, symbol_table)?;
             match operator {
                 hwc_parser::UnaryOperator::Negate => Ok(-val),

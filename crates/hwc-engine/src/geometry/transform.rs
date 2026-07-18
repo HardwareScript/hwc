@@ -141,7 +141,10 @@ impl FixedTransform2D {
         let rx = (x_128 * cos_128 - y_128 * sin_128) / Self::SCALE_FACTOR;
         let ry = (x_128 * sin_128 + y_128 * cos_128) / Self::SCALE_FACTOR;
 
-        ((rx as i64).wrapping_add(self.tx_pm), (ry as i64).wrapping_add(self.ty_pm))
+        (
+            (rx as i64).wrapping_add(self.tx_pm),
+            (ry as i64).wrapping_add(self.ty_pm),
+        )
     }
 
     /// Transform a 2D bounding box by transforming all 4 corners

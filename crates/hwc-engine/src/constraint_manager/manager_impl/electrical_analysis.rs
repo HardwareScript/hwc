@@ -40,7 +40,7 @@ pub fn analyze_net_electrical(
         )
     })?;
 
-    // v0.1.8: Use declared current from NetDeclaration. 
+    // v0.1.8: Use declared current from NetDeclaration.
     // If not declared, return None (caller will handle defaults/errors).
     let current_ma = decl.current_ma.map(|c| c as i64);
 

@@ -1,0 +1,97 @@
+# Test 3: Dense Grid Routing
+# Objective: Verify router performance and correctness in high-density layouts
+
+import * from @std/primitives/units
+import * from @std/primitives/math
+import * from ../materials
+import Silicon_180nm from ../foundry_pdk
+
+module Dense_Grid:
+    pins: [
+        input A1, output B1,
+        input A2, output B2,
+        input A3, output B3,
+        input A4, output B4
+    ]
+    # Criss-cross routing pattern for dense routing test
+    route A1 to B4
+    route A2 to B3
+    route A3 to B2
+    route A4 to B1
+
+shape CubicPad(w: Measurement, h: Measurement):
+    geometry:
+        Rectangle(width: w, height: h)
+
+space Dense_Demo implements Dense_Grid:
+    dimensions: 1.5mm by 1.8mm by 136um
+    resolution: 100nm
+    origin: bl by b
+    profile: Silicon_180nm
+
+    nets:
+        A1: { classification: signal, potential: 0V, current: 0.1uA }
+        B1: { classification: signal, potential: 0V, current: 0.1uA }
+        A2: { classification: signal, potential: 0V, current: 0.1uA }
+        B2: { classification: signal, potential: 0V, current: 0.1uA }
+        A3: { classification: signal, potential: 0V, current: 0.1uA }
+        B3: { classification: signal, potential: 0V, current: 0.1uA }
+        A4: { classification: signal, potential: 0V, current: 0.1uA }
+        B4: { classification: signal, potential: 0V, current: 0.1uA }
+
+    # 4x2 grid of pads - left column (sources)
+    add plane(Aluminum) named Pad_A1 on layer: metal1:
+        shape: CubicPad(w: 100um, h: 100um)
+        at: [x: 100um, y: 100um]
+        net: A1
+
+    add plane(Aluminum) named Pad_A2 above Pad_A1 with spacing: 150um on layer: metal1:
+        shape: CubicPad(w: 100um, h: 100um)
+        net: A2
+
+    add plane(Aluminum) named Pad_A3 above Pad_A2 with spacing: 150um on layer: metal1:
+        shape: CubicPad(w: 100um, h: 100um)
+        net: A3
+
+    add plane(Aluminum) named Pad_A4 above Pad_A3 with spacing: 150um on layer: metal1:
+        shape: CubicPad(w: 100um, h: 100um)
+        net: A4
+
+    # Right column (destinations) - staggered to force complex routing
+    add plane(Aluminum) named Pad_B1 on layer: metal1:
+        shape: CubicPad(w: 100um, h: 100um)
+        at: [x: 1200um, y: 700um]  # Top right
+        net: B1
+
+    add plane(Aluminum) named Pad_B2 below Pad_B1 with spacing: 150um on layer: metal1:
+        shape: CubicPad(w: 100um, h: 100um)
+        net: B2
+
+    add plane(Aluminum) named Pad_B3 below Pad_B2 with spacing: 150um on layer: metal1:
+        shape: CubicPad(w: 100um, h: 100um)
+        net: B3
+
+    add plane(Aluminum) named Pad_B4 below Pad_B3 with spacing: 150um on layer: metal1:
+        shape: CubicPad(w: 100um, h: 100um)
+        net: B4
+
+    # Criss-cross routing pattern (A1->B4, A2->B3, A3->B2, A4->B1)
+    route Pad_A1 to Pad_B4:
+        width: 25um
+        layer: metal1
+        current_limit_ac: { rms: 0.5uA, peak: 1.0uA }
+
+    route Pad_A2 to Pad_B3:
+        width: 25um
+        layer: metal1
+        current_limit_ac: { rms: 0.5uA, peak: 1.0uA }
+
+    route Pad_A3 to Pad_B2:
+        width: 25um
+        layer: metal1
+        current_limit_ac: { rms: 0.5uA, peak: 1.0uA }
+
+    route Pad_A4 to Pad_B1:
+        width: 25um
+        layer: metal1
+        current_limit_ac: { rms: 0.5uA, peak: 1.0uA }

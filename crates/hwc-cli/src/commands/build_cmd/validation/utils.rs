@@ -7,7 +7,8 @@ pub fn convert_metadata_to_physics(
     Vec<hwc_physics::connectivity::SubstrateLayerMetadata>,
     Vec<hwc_physics::RouteSegmentMetadata>,
 ) {
-    let mut physics_substrate_layers: Vec<hwc_physics::connectivity::SubstrateLayerMetadata> = Vec::new();
+    let mut physics_substrate_layers: Vec<hwc_physics::connectivity::SubstrateLayerMetadata> =
+        Vec::new();
 
     // v0.1.8: Preserve indices to maintain compatibility with the Unified Spatial Index.
     // We no longer skip Net 0 layers here; they are handled by the Conductive Island Gate
@@ -128,8 +129,16 @@ pub fn convert_metadata_to_physics(
     for via in &space.vias {
         let radius = via.diameter_nm / 2;
         let bbox = BoundingBox::new(
-            Point3D::new(via.position.0 - radius, via.position.1 - radius, via.from_z_nm),
-            Point3D::new(via.position.0 + radius, via.position.1 + radius, via.to_z_nm),
+            Point3D::new(
+                via.position.0 - radius,
+                via.position.1 - radius,
+                via.from_z_nm,
+            ),
+            Point3D::new(
+                via.position.0 + radius,
+                via.position.1 + radius,
+                via.to_z_nm,
+            ),
         );
 
         let material_id = via.material_id;

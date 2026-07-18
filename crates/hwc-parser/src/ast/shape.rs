@@ -73,7 +73,10 @@ pub enum GeometryStatement {
     /// A point expression: Point(x: expr, y: expr)
     Point { x: Expr, y: Expr },
     /// A generator call: GeneratorName(points: 16, outer: width / 2, inner: width / 4)
-    GeneratorCall { name: String, args: Vec<(String, Expr)> },
+    GeneratorCall {
+        name: String,
+        args: Vec<(String, Expr)>,
+    },
 }
 
 /// A geometry block in a shape definition (Mode B: Parametric Loop & Trigonometry)

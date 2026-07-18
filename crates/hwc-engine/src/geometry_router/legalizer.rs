@@ -268,8 +268,10 @@ impl Legalizer {
         _window: &LegalizationWindow,
         displacements: &[(usize, i64, i64)],
     ) -> Vec<TraceSegment> {
-        let disp_map: FxHashMap<usize, (i64, i64)> =
-            displacements.iter().map(|&(id, dx, dy)| (id, (dx, dy))).collect();
+        let disp_map: FxHashMap<usize, (i64, i64)> = displacements
+            .iter()
+            .map(|&(id, dx, dy)| (id, (dx, dy)))
+            .collect();
 
         segments
             .iter()
@@ -326,7 +328,10 @@ impl Legalizer {
         let mut spatial = DynamicSpatialIndex::new();
 
         for (idx, seg) in current.iter().enumerate() {
-            let net_id = current_net_ids.get(idx).map(|n| n.raw() as usize).unwrap_or(0);
+            let net_id = current_net_ids
+                .get(idx)
+                .map(|n| n.raw() as usize)
+                .unwrap_or(0);
             // Look up thickness from material registry using segment's material_id
             let thickness_nm = material_registry
                 .get_material(seg.material_id)
@@ -400,7 +405,10 @@ impl Legalizer {
 
             spatial = DynamicSpatialIndex::new();
             for (idx, seg) in current.iter().enumerate() {
-                let net_id = current_net_ids.get(idx).map(|n| n.raw() as usize).unwrap_or(0);
+                let net_id = current_net_ids
+                    .get(idx)
+                    .map(|n| n.raw() as usize)
+                    .unwrap_or(0);
                 let thickness_nm = material_registry
                     .get_material(seg.material_id)
                     .map(|m| m.thickness_nm)

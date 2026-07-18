@@ -60,7 +60,10 @@ pub fn refine_layer(shapes: Vec<Vec<(i64, i64)>>, resolution_nm: i64) -> Vec<Ref
 
 /// Refine raw shapes through the full union + canonicalize pipeline.
 #[inline]
-pub fn refine_geometry(raw_shapes: Vec<Vec<(i64, i64)>>, resolution_nm: i64) -> Vec<RefinedContour> {
+pub fn refine_geometry(
+    raw_shapes: Vec<Vec<(i64, i64)>>,
+    resolution_nm: i64,
+) -> Vec<RefinedContour> {
     refine_layer(raw_shapes, resolution_nm)
 }
 
@@ -70,15 +73,21 @@ pub fn refine_geometry(raw_shapes: Vec<Vec<(i64, i64)>>, resolution_nm: i64) -> 
 /// on both outer and hole rings.
 pub fn canonicalize_contours(contours: &mut [RefinedContour], resolution_nm: i64) {
     for contour in contours.iter_mut() {
-        if let Some(canonical) =
-            boundary_canonicalization::canonicalize(contour.outer.clone(), WindingType::OuterContour, 0, resolution_nm)
-        {
+        if let Some(canonical) = boundary_canonicalization::canonicalize(
+            contour.outer.clone(),
+            WindingType::OuterContour,
+            0,
+            resolution_nm,
+        ) {
             contour.outer = canonical;
         }
         for hole in &mut contour.holes {
-            if let Some(canonical) =
-                boundary_canonicalization::canonicalize(hole.clone(), WindingType::HoleContour, 0, resolution_nm)
-            {
+            if let Some(canonical) = boundary_canonicalization::canonicalize(
+                hole.clone(),
+                WindingType::HoleContour,
+                0,
+                resolution_nm,
+            ) {
                 *hole = canonical;
             }
         }

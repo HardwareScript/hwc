@@ -480,6 +480,7 @@ impl super::super::super::Parser {
         let start_pos = self.current_span().start;
         let mut layer_directions = rustc_hash::FxHashMap::default();
         let mut max_local_route_length = None;
+        let mut min_segment_length = None;
         let mut base_cost = None;
         let mut via_penalty = None;
         let mut direction_penalty = None;
@@ -503,6 +504,11 @@ impl super::super::super::Parser {
             match field_name.as_str() {
                 "max_local_route_length" => {
                     max_local_route_length = Some(self.parse_measurement()?);
+                    self.skip_whitespace();
+                    continue;
+                }
+                "min_segment_length" => {
+                    min_segment_length = Some(self.parse_measurement()?);
                     self.skip_whitespace();
                     continue;
                 }
@@ -578,6 +584,7 @@ impl super::super::super::Parser {
         Ok(RoutingConstraints {
             layer_directions,
             max_local_route_length,
+            min_segment_length,
             base_cost,
             via_penalty,
             direction_penalty,

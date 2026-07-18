@@ -36,19 +36,6 @@ pub struct RouteConstraints {
     pub impedance_ohm: Option<f64>,
 }
 
-impl Default for RouteConstraints {
-    fn default() -> Self {
-        Self {
-            min_trace_width_nm: 100_000,        // 0.1mm default
-            min_clearance_nm: 200_000,          // 0.2mm default
-            max_parallel_length_nm: 10_000_000, // 10mm default
-            max_resistance_ohm: 1.0,            // 1Ω default
-            max_current_ma: 100,                // 100mA default
-            impedance_ohm: None,                // No impedance control by default
-        }
-    }
-}
-
 /// Clearance zone around a net (the "forcefield").
 ///
 /// This represents the forbidden zone around a net where other nets cannot route.
@@ -199,15 +186,22 @@ impl ConstraintRulebook {
     }
 
     /// Get default constraints for nets that don't have specific rules.
+    ///
+    /// **v0.1.8**: Fabrication constraints are MANDATORY. All values come from
+    /// the PDK profile — no silent defaults.
     pub fn get_default_constraints(&self) -> RouteConstraints {
-        if let Some(fab) = &self.fabrication {
-            RouteConstraints {
-                min_trace_width_nm: fab.min_trace_width_nm,
-                min_clearance_nm: fab.min_trace_spacing_nm,
-                ..RouteConstraints::default()
-            }
-        } else {
-            RouteConstraints::default()
+        let fab = self.fabrication.as_ref().expect(
+            "ConstraintRulebook: fabrication constraints are required but none are loaded. \
+             Declare a profile with 'trace:' and 'clearance:' constraints in the space definition.",
+        );
+
+        RouteConstraints {
+            min_trace_width_nm: fab.min_trace_width_nm,
+            min_clearance_nm: fab.min_trace_spacing_nm,
+            max_parallel_length_nm: 0, // Unlimited — no crosstalk limit by default
+            max_resistance_ohm: 0.0,   // Unlimited — no resistance limit by default
+            max_current_ma: 0,         // Unlimited — no current limit by default
+            impedance_ohm: None,       // No impedance control by default
         }
     }
 

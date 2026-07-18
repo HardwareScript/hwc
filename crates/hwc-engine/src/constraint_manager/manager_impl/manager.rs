@@ -192,12 +192,8 @@ impl ConstraintManager {
 
             // Generate clearance zone if net has voltage
             if voltage_mv > 0 {
-                let clearance_zone = self.generate_clearance_zone(
-                    net_id,
-                    voltage_mv,
-                    material_name,
-                    symbol_table,
-                )?;
+                let clearance_zone =
+                    self.generate_clearance_zone(net_id, voltage_mv, material_name, symbol_table)?;
 
                 rulebook.clearance_zones.push(clearance_zone);
             }

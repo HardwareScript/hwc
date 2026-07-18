@@ -1,14 +1,28 @@
-use crate::geometry::{Point3D, Point2D};
+use crate::geometry::{Point2D, Point3D};
 use compact_str::CompactString;
 
 /// Pad shape with dimensional data for stamp parsing
 #[derive(Debug, Clone)]
 pub enum PadShape {
-    Rectangle { width_nm: i64, height_nm: i64 },
-    Circle { diameter_nm: i64 },
-    Obround { width_nm: i64, height_nm: i64 },
-    Polygon { points: Vec<Point2D> },
-    RoundedRect { width_nm: i64, height_nm: i64, corner_radius_nm: i64 },
+    Rectangle {
+        width_nm: i64,
+        height_nm: i64,
+    },
+    Circle {
+        diameter_nm: i64,
+    },
+    Obround {
+        width_nm: i64,
+        height_nm: i64,
+    },
+    Polygon {
+        points: Vec<Point2D>,
+    },
+    RoundedRect {
+        width_nm: i64,
+        height_nm: i64,
+        corner_radius_nm: i64,
+    },
 }
 
 /// Pin data for a baked component
@@ -32,10 +46,20 @@ impl PadShape {
     /// Compute an approximate bounding box (width, height) in nanometers.
     pub fn bounding_box(&self) -> (i64, i64) {
         match self {
-            PadShape::Rectangle { width_nm, height_nm } => (*width_nm, *height_nm),
+            PadShape::Rectangle {
+                width_nm,
+                height_nm,
+            } => (*width_nm, *height_nm),
             PadShape::Circle { diameter_nm } => (*diameter_nm, *diameter_nm),
-            PadShape::Obround { width_nm, height_nm } => (*width_nm, *height_nm),
-            PadShape::RoundedRect { width_nm, height_nm, .. } => (*width_nm, *height_nm),
+            PadShape::Obround {
+                width_nm,
+                height_nm,
+            } => (*width_nm, *height_nm),
+            PadShape::RoundedRect {
+                width_nm,
+                height_nm,
+                ..
+            } => (*width_nm, *height_nm),
             PadShape::Polygon { points } => {
                 let min_x = points.iter().map(|p| p.x).min().unwrap_or(0);
                 let max_x = points.iter().map(|p| p.x).max().unwrap_or(0);
@@ -54,5 +78,10 @@ pub fn bake_component_definition(
     height_nm: i64,
     pins: Vec<BakedPin>,
 ) -> BakedComponent {
-    BakedComponent { name, width_nm, height_nm, pins }
+    BakedComponent {
+        name,
+        width_nm,
+        height_nm,
+        pins,
+    }
 }

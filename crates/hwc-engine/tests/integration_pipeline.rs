@@ -17,13 +17,11 @@ use hwc_engine::geometry_router::gcell_sweep::{
     compute_actual_clearance, compute_morton_code, find_overlaps, segment_bbox,
     sort_segments_by_morton,
 };
-use hwc_engine::geometry_router::parasitic_extraction::{
-    extract_parasitics, ExtractionParams,
-};
+use hwc_engine::geometry_router::geometry_refinement::RefinedContour;
+use hwc_engine::geometry_router::parasitic_extraction::{extract_parasitics, ExtractionParams};
 use hwc_engine::geometry_router::partition::{partition_nets, PartitionGrid};
 use hwc_engine::geometry_router::route_decomposition::VirtualJunction;
 use hwc_engine::geometry_router::spatial_index::{DynamicSpatialIndex, IndexedSegment};
-use hwc_engine::geometry_router::geometry_refinement::RefinedContour;
 use hwc_engine::netlist::NetId;
 
 // ---------------------------------------------------------------------------
@@ -250,7 +248,9 @@ fn test_full_pipeline_small_pcb() {
         "SPICE netlist should not be empty"
     );
     assert!(
-        extraction_result.spice_netlist.contains(".SUBCKT BOARD_PARASITICS"),
+        extraction_result
+            .spice_netlist
+            .contains(".SUBCKT BOARD_PARASITICS"),
         "SPICE netlist should contain subcircuit header"
     );
 
@@ -277,18 +277,12 @@ fn test_full_pipeline_small_pcb() {
         .collect();
 
     let dxf_output = export_dxf_deterministic(&contours, &std::collections::HashMap::new());
-    assert!(
-        !dxf_output.is_empty(),
-        "DXF output should not be empty"
-    );
+    assert!(!dxf_output.is_empty(), "DXF output should not be empty");
     assert!(
         dxf_output.contains("POLYLINE"),
         "DXF should contain POLYLINE entities"
     );
-    assert!(
-        dxf_output.contains("0\nEOF\n"),
-        "DXF should end with EOF"
-    );
+    assert!(dxf_output.contains("0\nEOF\n"), "DXF should end with EOF");
 
     // Step 6: Verify DXF is deterministic
     let dxf_output_2 = export_dxf_deterministic(&contours, &std::collections::HashMap::new());
@@ -310,9 +304,16 @@ fn test_spatial_index_insert_query() {
     assert_eq!(index.len(), 20);
 
     // Query bounding box covering the full board
-    let board_bbox = BoundingBox::new(Point3D::new(0, 0, 0), Point3D::new(15_000_000, 10_000_000, 2_000_000));
+    let board_bbox = BoundingBox::new(
+        Point3D::new(0, 0, 0),
+        Point3D::new(15_000_000, 10_000_000, 2_000_000),
+    );
     let results = index.query_bbox(&board_bbox);
-    assert!(results.len() >= 10, "Full board query should return most segments, got {}", results.len());
+    assert!(
+        results.len() >= 10,
+        "Full board query should return most segments, got {}",
+        results.len()
+    );
 
     // Query a small region
     let small_bbox = BoundingBox::new(Point3D::new(0, 0, 0), Point3D::new(2_000_000, 2_000_000, 1));
@@ -324,7 +325,10 @@ fn test_spatial_index_insert_query() {
 
     // Query radius around a known point
     let results = index.query_radius(5_000_000, 1_000_000, 2_000_000);
-    assert!(!results.is_empty(), "Radius query near segments should return results");
+    assert!(
+        !results.is_empty(),
+        "Radius query near segments should return results"
+    );
 
     // Query nearest
     let results = index.query_nearest(5_000_000, 1_000_000);
@@ -333,7 +337,10 @@ fn test_spatial_index_insert_query() {
 
 #[test]
 fn test_partition_grid_creation() {
-    let board_bounds = BoundingBox::new(Point3D::new(0, 0, 0), Point3D::new(100_000_000, 100_000_000, 0));
+    let board_bounds = BoundingBox::new(
+        Point3D::new(0, 0, 0),
+        Point3D::new(100_000_000, 100_000_000, 0),
+    );
     let grid = PartitionGrid::new(board_bounds, 10_000_000, 10_000_000, 100_000, 200_000);
 
     assert_eq!(grid.cols, 10);
@@ -345,12 +352,18 @@ fn test_partition_grid_creation() {
     assert!(cell.is_some(), "Point inside board should return a cell");
 
     let cell_outside = grid.cell_at(Point3D::new(200_000_000, 200_000_000, 0));
-    assert!(cell_outside.is_none(), "Point outside board should return None");
+    assert!(
+        cell_outside.is_none(),
+        "Point outside board should return None"
+    );
 
     // Neighbors
     let cell_id = cell.unwrap();
     let neighbors = grid.neighbors(cell_id);
-    assert!(neighbors.len() <= 4, "Interior cell should have 4 neighbors");
+    assert!(
+        neighbors.len() <= 4,
+        "Interior cell should have 4 neighbors"
+    );
 }
 
 #[test]
@@ -388,7 +401,10 @@ fn test_deterministic_sort_segments() {
 
     sort_segments_deterministic(&mut segs1);
     sort_segments_deterministic(&mut segs2);
-    assert_eq!(segs1, segs2, "Deterministic sort must produce identical results");
+    assert_eq!(
+        segs1, segs2,
+        "Deterministic sort must produce identical results"
+    );
 }
 
 #[test]
@@ -438,7 +454,10 @@ fn test_clearance_computation() {
     };
     let clearance = compute_actual_clearance(&seg_h, &seg_v);
     // Crossing segments: clearance is negative (they overlap)
-    assert!(clearance < 0, "Crossing segments should have negative clearance");
+    assert!(
+        clearance < 0,
+        "Crossing segments should have negative clearance"
+    );
 }
 
 #[test]
@@ -574,7 +593,10 @@ fn test_connectivity_fully_connected_net() {
         .iter()
         .filter(|v| matches!(v, hwc_engine::geometry_router::connectivity_check::ConnectivityViolation::DisconnectedPin { .. }))
         .count();
-    assert_eq!(disconnected, 0, "Fully connected net should have no disconnected pins");
+    assert_eq!(
+        disconnected, 0,
+        "Fully connected net should have no disconnected pins"
+    );
 }
 
 #[test]
@@ -607,7 +629,10 @@ fn test_connectivity_disconnected_net() {
         .iter()
         .filter(|v| matches!(v, hwc_engine::geometry_router::connectivity_check::ConnectivityViolation::DisconnectedPin { .. }))
         .count();
-    assert!(disconnected >= 2, "Disconnected net should have at least 2 disconnected pins");
+    assert!(
+        disconnected >= 2,
+        "Disconnected net should have at least 2 disconnected pins"
+    );
 }
 
 #[test]
@@ -641,7 +666,10 @@ fn test_connectivity_short_detection() {
         .iter()
         .filter(|v| matches!(v, hwc_engine::geometry_router::connectivity_check::ConnectivityViolation::UnwaivedShort { .. }))
         .count();
-    assert_eq!(shorts, 1, "Should detect exactly 1 short between the two nets");
+    assert_eq!(
+        shorts, 1,
+        "Should detect exactly 1 short between the two nets"
+    );
 }
 
 #[test]
@@ -658,26 +686,32 @@ fn test_segment_bbox_computation() {
 
     let bbox = segment_bbox(&seg);
     // Half-width = 200_000
-    assert_eq!(bbox.min_x, 800_000);   // 1_000_000 - 200_000
-    assert_eq!(bbox.max_x, 5_200_000);  // 5_000_000 + 200_000
-    assert_eq!(bbox.min_y, 1_800_000);  // 2_000_000 - 200_000
-    assert_eq!(bbox.max_y, 2_200_000);  // 2_000_000 + 200_000
+    assert_eq!(bbox.min_x, 800_000); // 1_000_000 - 200_000
+    assert_eq!(bbox.max_x, 5_200_000); // 5_000_000 + 200_000
+    assert_eq!(bbox.min_y, 1_800_000); // 2_000_000 - 200_000
+    assert_eq!(bbox.max_y, 2_200_000); // 2_000_000 + 200_000
 }
 
 #[test]
 fn test_partition_nets_in_grid() {
-    let board_bounds = BoundingBox::new(Point3D::new(0, 0, 0), Point3D::new(100_000_000, 100_000_000, 0));
+    let board_bounds = BoundingBox::new(
+        Point3D::new(0, 0, 0),
+        Point3D::new(100_000_000, 100_000_000, 0),
+    );
     let mut grid = PartitionGrid::new(board_bounds, 10_000_000, 10_000_000, 100_000, 200_000);
 
     // Net 1 spans the full board
-    let net1_bbox = BoundingBox::new(Point3D::new(0, 0, 0), Point3D::new(100_000_000, 100_000_000, 0));
+    let net1_bbox = BoundingBox::new(
+        Point3D::new(0, 0, 0),
+        Point3D::new(100_000_000, 100_000_000, 0),
+    );
     // Net 2 is in a small region
-    let net2_bbox = BoundingBox::new(Point3D::new(5_000_000, 5_000_000, 0), Point3D::new(15_000_000, 15_000_000, 0));
+    let net2_bbox = BoundingBox::new(
+        Point3D::new(5_000_000, 5_000_000, 0),
+        Point3D::new(15_000_000, 15_000_000, 0),
+    );
 
-    let net_bboxes = vec![
-        (NetId::new(1), net1_bbox),
-        (NetId::new(2), net2_bbox),
-    ];
+    let net_bboxes = vec![(NetId::new(1), net1_bbox), (NetId::new(2), net2_bbox)];
 
     partition_nets(&mut grid, &net_bboxes);
 
@@ -690,7 +724,11 @@ fn test_partition_nets_in_grid() {
     }
 
     // Only cells overlapping net 2's bbox should have net 2
-    let cell_with_net2 = grid.cells.iter().filter(|c| c.nets.contains(&NetId::new(2))).count();
+    let cell_with_net2 = grid
+        .cells
+        .iter()
+        .filter(|c| c.nets.contains(&NetId::new(2)))
+        .count();
     assert!(
         cell_with_net2 > 0 && cell_with_net2 < 100,
         "Net 2 should be in some but not all cells, got {cell_with_net2}"
@@ -699,7 +737,10 @@ fn test_partition_nets_in_grid() {
 
 #[test]
 fn test_boundary_port_allocation() {
-    let board_bounds = BoundingBox::new(Point3D::new(0, 0, 0), Point3D::new(100_000_000, 100_000_000, 0));
+    let board_bounds = BoundingBox::new(
+        Point3D::new(0, 0, 0),
+        Point3D::new(100_000_000, 100_000_000, 0),
+    );
     let mut grid = PartitionGrid::new(board_bounds, 10_000_000, 10_000_000, 100_000, 200_000);
 
     // Allocate a boundary port between cells (0,0) and (1,0)
@@ -714,11 +755,17 @@ fn test_boundary_port_allocation() {
         200_000,
     );
 
-    assert!(port.is_some(), "Port allocation should succeed for adjacent cells");
+    assert!(
+        port.is_some(),
+        "Port allocation should succeed for adjacent cells"
+    );
     let port = port.unwrap();
     assert_eq!(port.net_id, NetId::new(1));
     assert_eq!(port.clearance_nm, 200_000);
-    assert_eq!(port.position.x, 10_000_000, "Port X should be on the boundary");
+    assert_eq!(
+        port.position.x, 10_000_000,
+        "Port X should be on the boundary"
+    );
 }
 
 #[test]

@@ -262,9 +262,9 @@ mod tests {
         let decoded = decode_rlc("RkU46Dk").expect("decode");
         let expected = vec![
             (0, 0),
-            (20, 0),      // Rk: Right 20
-            (20, 150),    // U46: Up 150  (4*36 + 6 = 150)
-            (20, 130),    // Dk: Down 20
+            (20, 0),   // Rk: Right 20
+            (20, 150), // U46: Up 150  (4*36 + 6 = 150)
+            (20, 130), // Dk: Down 20
         ];
         assert_eq!(decoded, expected);
     }
@@ -355,15 +355,9 @@ mod tests {
     fn error_cases() {
         assert_eq!(decode_rlc(""), Err(RlcError::EmptyInput));
         // 'X' is not a direction character → InvalidDirection
-        assert_eq!(
-            decode_rlc("X10"),
-            Err(RlcError::InvalidDirection('X'))
-        );
+        assert_eq!(decode_rlc("X10"), Err(RlcError::InvalidDirection('X')));
         // 'R' is valid direction, then '{' is not a valid base-36 digit
-        assert_eq!(
-            decode_rlc("R{"),
-            Err(RlcError::InvalidMagnitude('{'))
-        );
+        assert_eq!(decode_rlc("R{"), Err(RlcError::InvalidMagnitude('{')));
     }
 
     #[test]

@@ -1,746 +1,122 @@
 //! Substrate layer processing and net-aware clustering
 
-use super::mesh_generation::{
-    create_box_with_holes_mesh, create_cylinder_mesh, create_via_mesh, CutoutParams,
-};
-use super::types::{BoxParams, FaceCulling, MaterialNode, MeshNode};
-use crate::geometry_union::{circle_to_path, rect_to_path};
+use super::mesh_generation::{create_box_with_holes_mesh, create_via_mesh};
+use super::types::{BoxParams, MaterialNode, MeshNode};
+use crate::geometry_union::{circle_to_path, rect_to_path, stroke_route_segments};
 use crate::mesh_extrusion::extrude_polygon_mesh;
 use clipper2_rust::core::FillRule;
 use compact_str::CompactString;
 use hwc_engine::geometry_router::entity_graph::CapType;
-use hwc_engine::geometry_router::substrate_types::SubstrateLayerShape;
 use hwc_engine::HardwareSpace;
 use hwc_parser::ProfileDefinition;
 use rustc_hash::FxHashMap;
 
-/// Add substrate mesh (FR4 base) from actual substrate layers
+/// Add substrate mesh (FR4 base) from analytic routes
 pub fn add_substrate(
     meshes: &mut Vec<MeshNode>,
     space: &HardwareSpace,
-    materials: &FxHashMap<CompactString, MaterialNode>,
+    _materials: &FxHashMap<CompactString, MaterialNode>,
     _profile: Option<&ProfileDefinition>,
 ) {
-    let mut substrate_layers = space.entity_graph.get_substrate_layers().to_vec();
+    let substrate_layers = space.entity_graph.get_substrate_layers();
 
-    // v0.1.7: Ensure a base substrate exists
-    let has_base_substrate = substrate_layers.iter().any(|l| {
-        let mat_name = space.material_registry.get_name(l.material).unwrap_or("");
-        (l.layer_type == hwc_engine::geometry_router::entity_graph::SubstrateLayerType::Pour
-            || l.layer_type == hwc_engine::geometry_router::entity_graph::SubstrateLayerType::Substrate)
-            && mat_name != "Void"
-    });
-
-    if !has_base_substrate {
-        let width_nm = space.dimensions.width_nm;
-        let height_nm = space.dimensions.height_nm;
-        let depth_nm = space.dimensions.depth_nm;
-
-        let base_bbox = hwc_engine::geometry::BoundingBox::new(
-            hwc_engine::geometry::Point3D::new(0, 0, 0),
-            hwc_engine::geometry::Point3D::new(width_nm, height_nm, depth_nm),
-        );
-
-        let base_layer = hwc_engine::geometry_router::substrate_types::SubstrateLayer::new(
-            space.substrate_material_id,
-            0,
-            base_bbox,
-            hwc_engine::geometry_router::entity_graph::SubstrateLayerType::Substrate,
-        );
-        substrate_layers.push(base_layer);
-    }
-
-    let drills: Vec<_> = substrate_layers
-        .iter()
-        .filter(|l| l.layer_type == hwc_engine::geometry_router::entity_graph::SubstrateLayerType::Contact)
-        .cloned()
-        .collect();
-
-    let mut layer_precedences = Vec::with_capacity(substrate_layers.len());
-    for layer in &substrate_layers {
-        let mat_name = space
-            .material_registry
-            .get_name(layer.material)
-            .unwrap_or("");
-        let precedence = materials.get(mat_name).map(|m| m.precedence).unwrap_or(4);
-        layer_precedences.push(precedence);
-    }
-
-    let original_layers = substrate_layers.clone();
-    for (i, layer) in substrate_layers.iter_mut().enumerate() {
-        let my_precedence = layer_precedences[i];
-
-        for (j, other) in original_layers.iter().enumerate() {
-            if i == j {
-                continue;
-            }
-            let other_precedence = layer_precedences[j];
-            let mut should_subtract = other_precedence < my_precedence
-                || (other_precedence == my_precedence && j > i && layer.material == other.material);
-
-            // v0.1.9: PURE GEOMETRIC CONCENTRIC CHECK
-            // If the XY center coordinates of two layers match exactly, they are
-            // concentric components of the same via structure. We bypass subtraction.
-            let concentric = {
-                let cx1 = (layer.bbox.min.x + layer.bbox.max.x) / 2;
-                let cy1 = (layer.bbox.min.y + layer.bbox.max.y) / 2;
-                let cx2 = (other.bbox.min.x + other.bbox.max.x) / 2;
-                let cy2 = (other.bbox.min.y + other.bbox.max.y) / 2;
-                let res = space.resolution_nm;
-                (cx1 - cx2).abs() < res && (cy1 - cy2).abs() < res
-            };
-
-            if concentric {
-                should_subtract = false;
-            }
-
-            if layer.layer_type == hwc_engine::geometry_router::entity_graph::SubstrateLayerType::Pour
-                && layer.net != 0
-                && layer.net == other.net
-            {
-                should_subtract = false;
-            }
-
-            if should_subtract && layer.bbox.intersects(&other.bbox) {
-                match other.shape {
-                    SubstrateLayerShape::Tube { outer_diameter, .. } => {
-                        layer.add_cylinder_cutout(other.bbox, outer_diameter as i64);
-                    }
-                    SubstrateLayerShape::Polygon {
-                        ref outer_contour, ..
-                    } => {
-                        if let Some(eff_diam) = compute_polygon_effective_diameter(outer_contour) {
-                            layer.add_cylinder_cutout(other.bbox, eff_diam);
-                        } else {
-                            layer.add_cutout(other.bbox);
-                        }
-                    }
-                    _ => {
-                        layer.add_cutout(other.bbox);
-                    }
-                }
-            }
-        }
-
-        if layer.layer_type == hwc_engine::geometry_router::entity_graph::SubstrateLayerType::Substrate
-            || layer.layer_type == hwc_engine::geometry_router::entity_graph::SubstrateLayerType::Pour
-        {
-            for drill in &drills {
-                if layer.layer_type == hwc_engine::geometry_router::entity_graph::SubstrateLayerType::Pour
-                    && layer.net != 0
-                    && layer.net == drill.net
-                {
-                    continue;
-                }
-
-                // Skip if the FR4 substrate slice is concentric with a drill
-                let concentric = {
-                    let cx1 = (layer.bbox.min.x + layer.bbox.max.x) / 2;
-                    let cy1 = (layer.bbox.min.y + layer.bbox.max.y) / 2;
-                    let cx2 = (drill.bbox.min.x + drill.bbox.max.x) / 2;
-                    let cy2 = (drill.bbox.min.y + drill.bbox.max.y) / 2;
-                    let res = space.resolution_nm;
-                    (cx1 - cx2).abs() < res && (cy1 - cy2).abs() < res
-                };
-
-                if concentric {
-                    continue;
-                }
-
-                match drill.shape {
-                    SubstrateLayerShape::Tube { outer_diameter, .. } => {
-                        layer.add_cylinder_cutout(drill.bbox, outer_diameter as i64);
-                    }
-                    SubstrateLayerShape::Polygon {
-                        ref outer_contour, ..
-                    } => {
-                        if let Some(eff_diam) = compute_polygon_effective_diameter(outer_contour) {
-                            layer.add_cylinder_cutout(drill.bbox, eff_diam);
-                        } else {
-                            layer.add_cutout(drill.bbox);
-                        }
-                    }
-                    _ => {
-                        layer.add_cutout(drill.bbox);
-                    }
-                }
-            }
-        }
-    }
-
-    fn nm_to_mm_precise(nm: i64) -> f64 {
-        let mm_whole = nm / 1_000_000;
-        let nm_remainder = nm % 1_000_000;
-        mm_whole as f64 + (nm_remainder as f64 / 1_000_000.0)
-    }
-
-    // --- STRATEGY A: NET-AWARE COPPER UNIONING POOL ---
-    let mut copper_pools: FxHashMap<
+    // --- PURE VECTOR PATH OFFSETTING: The Font-Engine Exporter ---
+    // Generate meshes directly from topological router output using Clipper2's native
+    // path stroking engine. This preserves pristine 45° miters and arbitrary angles.
+    
+    let mut analytic_copper_pools: FxHashMap<
         (i64, i64, hwc_engine::geometry_router::substrate_types::MaterialId, u32),
         Vec<clipper2_rust::Path64>,
     > = FxHashMap::default();
-    // v0.1.8: Via inner holes collected separately for subtraction after union
-    let mut via_holes: FxHashMap<
-        (i64, i64, hwc_engine::geometry_router::substrate_types::MaterialId, u32),
-        Vec<clipper2_rust::Path64>,
-    > = FxHashMap::default();
-
-    // 1. Gather all copper pours (Traces)
-    for layer in &substrate_layers {
-        if layer.layer_type == hwc_engine::geometry_router::entity_graph::SubstrateLayerType::Pour && layer.net != 0 {
-            let key = (
-                layer.bbox.min.z,
-                layer.bbox.max.z,
-                layer.material,
-                layer.net,
-            );
-
-            // v0.1.8: If layer has child regions, emit one path per region.
-            // Otherwise emit a single path from the layer bbox (legacy behavior).
-            let region_bboxes: Vec<_> = if layer.regions.is_empty() {
-                vec![layer.bbox]
-            } else {
-                layer.regions.to_vec()
-            };
-
-            for region_bbox in &region_bboxes {
-                let path = match layer.shape {
-                    SubstrateLayerShape::Rect => rect_to_path(region_bbox),
-                    SubstrateLayerShape::Circle { radius } => {
-                        let cx = (region_bbox.min.x + region_bbox.max.x) / 2;
-                        let cy = (region_bbox.min.y + region_bbox.max.y) / 2;
-                        circle_to_path(cx, cy, radius, 64)
-                    }
-                    _ => continue,
-                };
-
-                // v0.1.7: Subtract cutouts from the path before adding to the pool
-                if !layer.cutouts.is_empty() {
-                    let mut hole_paths = Vec::new();
-                    for cutout in &layer.cutouts {
-                        match cutout.shape {
-                            SubstrateLayerShape::Rect => {
-                                hole_paths.push(rect_to_path(&cutout.bbox))
-                            }
-                            SubstrateLayerShape::Polygon {
-                                ref outer_contour, ..
-                            } => {
-                                hole_paths.push(outer_contour.clone());
-                            }
-                            _ => {}
-                        }
-                    }
-                    if !hole_paths.is_empty() {
-                        let diff = clipper2_rust::difference_64(
-                            &vec![path],
-                            &hole_paths,
-                            FillRule::NonZero,
-                        );
-                        for p in diff {
-                            copper_pools.entry(key).or_default().push(p);
-                        }
-                        continue;
-                    }
-                }
-
-                copper_pools.entry(key).or_default().push(path);
-            }
-        }
-    }
-
-    // 2. Extract and inject via caps (Annular Rings) into the copper pools
-    for layer in &substrate_layers {
-        if layer.layer_type == hwc_engine::geometry_router::entity_graph::SubstrateLayerType::Contact && layer.net != 0
-        {
-            if let SubstrateLayerShape::Tube {
-                outer_diameter: _,
-                inner_diameter,
-                pad_diameter,
-                top_cap,
-                bottom_cap,
-                ..
-            } = layer.shape
-            {
-                let cx = (layer.bbox.min.x + layer.bbox.max.x) / 2;
-                let cy = (layer.bbox.min.y + layer.bbox.max.y) / 2;
-                let pad_radius = pad_diameter as i64 / 2;
-                let inner_radius = inner_diameter as i64 / 2;
-
-                let copper_thickness = 35_000;
-
-                if top_cap != CapType::None {
-                    let target_key = (
-                        layer.bbox.max.z - copper_thickness,
-                        layer.bbox.max.z,
-                        layer.material,
-                        layer.net,
-                    );
-
-                    // Add outer pad boundary to copper pool
-                    copper_pools
-                        .entry(target_key)
-                        .or_default()
-                        .push(circle_to_path(cx, cy, pad_radius, 64));
-
-                    // v0.1.8: For annular rings, collect inner hole for subtraction
-                    if top_cap == CapType::Annular {
-                        via_holes
-                            .entry(target_key)
-                            .or_default()
-                            .push(circle_to_path(cx, cy, inner_radius, 64));
-                    }
-                }
-
-                if bottom_cap != CapType::None {
-                    let target_key = (
-                        layer.bbox.min.z,
-                        layer.bbox.min.z + copper_thickness,
-                        layer.material,
-                        layer.net,
-                    );
-
-                    // Add outer pad boundary to copper pool
-                    copper_pools
-                        .entry(target_key)
-                        .or_default()
-                        .push(circle_to_path(cx, cy, pad_radius, 64));
-
-                    // v0.1.8: For annular rings, collect inner hole for subtraction
-                    if bottom_cap == CapType::Annular {
-                        via_holes
-                            .entry(target_key)
-                            .or_default()
-                            .push(circle_to_path(cx, cy, inner_radius, 64));
-                    }
-                }
-            }
-        }
-
-        // Polygon-based via caps: inject the polygon contour as a copper pad
-        if layer.layer_type == hwc_engine::geometry_router::entity_graph::SubstrateLayerType::Contact && layer.net != 0
-        {
-            if let SubstrateLayerShape::Polygon {
-                ref outer_contour, ..
-            } = layer.shape
-            {
-                if outer_contour.len() >= 3 {
+    
+    // Add substrate layer pads (Pad_A, Pad_B, obstacles, etc.) to the pools
+    use hwc_engine::geometry_router::substrate_types::SubstrateLayerShape;
+    
+    for layer in substrate_layers {
+        if layer.layer_type == hwc_engine::geometry_router::entity_graph::SubstrateLayerType::Pour {
+            let key = (layer.bbox.min.z, layer.bbox.max.z, layer.material, layer.net);
+            
+            let path = match layer.shape {
+                SubstrateLayerShape::Rect => rect_to_path(&layer.bbox),
+                SubstrateLayerShape::Circle { radius } => {
                     let cx = (layer.bbox.min.x + layer.bbox.max.x) / 2;
                     let cy = (layer.bbox.min.y + layer.bbox.max.y) / 2;
-
-                    let copper_thickness = 35_000;
-
-                    // Build pad path by offsetting contour points to absolute coordinates
-                    let pad_path: clipper2_rust::Path64 = outer_contour
-                        .iter()
-                        .map(|p| clipper2_rust::Point64::new(p.x + cx, p.y + cy))
-                        .collect();
-
-                    // Top cap: inject into copper pool at the top Z range
-                    let top_key = (
-                        layer.bbox.max.z - copper_thickness,
-                        layer.bbox.max.z,
-                        layer.material,
-                        layer.net,
-                    );
-                    copper_pools
-                        .entry(top_key)
-                        .or_default()
-                        .push(pad_path.clone());
-
-                    // Bottom cap: inject into copper pool at the bottom Z range
-                    let bottom_key = (
-                        layer.bbox.min.z,
-                        layer.bbox.min.z + copper_thickness,
-                        layer.material,
-                        layer.net,
-                    );
-                    copper_pools.entry(bottom_key).or_default().push(pad_path);
+                    circle_to_path(cx, cy, radius, 64)
                 }
-            }
-        }
-    }
-
-    // --- RENDER PASSES ---
-    for (idx, layer) in substrate_layers.iter().enumerate() {
-        let my_precedence = layer_precedences[idx];
-        let material_name = space
-            .material_registry
-            .get_name(layer.material)
-            .unwrap_or("Unknown");
-
-        if material_name == "Void" || material_name == "Air" {
-            continue;
-        }
-
-        // Skip copper pours (traces) standalone, as they are processed in the unioned pool below
-        if layer.layer_type == hwc_engine::geometry_router::entity_graph::SubstrateLayerType::Pour && layer.net != 0 {
-            continue;
-        }
-
-        let mut base_culling = FaceCulling::none();
-        for (other_idx, other) in original_layers.iter().enumerate() {
-            if idx == other_idx {
-                continue;
-            }
-            let other_precedence = layer_precedences[other_idx];
-
-            // v0.1.7: PURE GEOMETRIC CONCENTRIC CULLING EXEMPTION
-            let is_concentric = {
-                let cx1 = (layer.bbox.min.x + layer.bbox.max.x) / 2;
-                let cy1 = (layer.bbox.min.y + layer.bbox.max.y) / 2;
-                let cx2 = (other.bbox.min.x + other.bbox.max.x) / 2;
-                let cy2 = (other.bbox.min.y + other.bbox.max.y) / 2;
-                let res = space.resolution_nm;
-                (cx1 - cx2).abs() < res && (cy1 - cy2).abs() < res
+                _ => continue,
             };
-
-            if is_concentric {
-                continue;
-            }
-
-            let mut should_cull_bottom = false;
-            let mut should_cull_top = false;
-
-            if my_precedence > other_precedence {
-                should_cull_bottom = true;
-                should_cull_top = true;
-            } else if my_precedence == other_precedence
-                && layer.material == other.material
-                && layer.net != 0
-                && layer.net == other.net
-            {
-                let res = space.resolution_nm;
-                let bounding_boxes_match = (layer.bbox.min.x - other.bbox.min.x).abs() < res
-                    && (layer.bbox.max.x - other.bbox.max.x).abs() < res
-                    && (layer.bbox.min.y - other.bbox.min.y).abs() < res
-                    && (layer.bbox.max.y - other.bbox.max.y).abs() < res;
-
-                if bounding_boxes_match {
-                    should_cull_top = true;
-                }
-            }
-
-            if should_cull_bottom || should_cull_top {
-                let res = space.resolution_nm;
-                let touching_bottom = (layer.bbox.min.z - other.bbox.max.z).abs() < res;
-                let touching_top = (layer.bbox.max.z - other.bbox.min.z).abs() < res;
-
-                if (touching_bottom || touching_top)
-                    && layer.bbox.min.x < other.bbox.max.x
-                    && layer.bbox.max.x > other.bbox.min.x
-                    && layer.bbox.min.y < other.bbox.max.y
-                    && layer.bbox.max.y > other.bbox.min.y
-                {
-                    if touching_bottom && should_cull_bottom {
-                        base_culling.bottom = true;
-                    }
-                    if touching_top && should_cull_top {
-                        base_culling.top = true;
-                    }
-                }
-            }
-        }
-
-        let min_x_mm = nm_to_mm_precise(layer.bbox.min.x);
-        let min_y_mm = nm_to_mm_precise(layer.bbox.min.y);
-        let min_z_mm = nm_to_mm_precise(layer.bbox.min.z);
-
-        let max_x_mm = nm_to_mm_precise(layer.bbox.max.x);
-        let max_y_mm = nm_to_mm_precise(layer.bbox.max.y);
-        let max_z_mm = nm_to_mm_precise(layer.bbox.max.z);
-
-        let width = max_x_mm - min_x_mm;
-        let height = max_y_mm - min_y_mm;
-        let depth = max_z_mm - min_z_mm;
-
-        match layer.shape {
-            SubstrateLayerShape::Polygon {
-                ref outer_contour,
-                ref holes,
-                ..
-            } => {
-                let center_x_nm = (layer.bbox.min.x + layer.bbox.max.x) / 2;
-                let center_y_nm = (layer.bbox.min.y + layer.bbox.max.y) / 2;
-                let cx_mm = center_x_nm as f64 / 1_000_000.0;
-                let cy_mm = center_y_nm as f64 / 1_000_000.0;
-
-                let outer_points: Vec<(f64, f64)> = outer_contour
-                    .iter()
-                    .map(|p| {
-                        (
-                            p.x as f64 / 1_000_000.0 + cx_mm,
-                            p.y as f64 / 1_000_000.0 + cy_mm,
-                        )
-                    })
-                    .collect();
-
-                let hole_polygons: Vec<Vec<(f64, f64)>> = holes
-                    .iter()
-                    .map(|hole| {
-                        hole.iter()
-                            .map(|p| {
-                                (
-                                    p.x as f64 / 1_000_000.0 + cx_mm,
-                                    p.y as f64 / 1_000_000.0 + cy_mm,
-                                )
-                            })
-                            .collect()
-                    })
-                    .collect();
-
-                if outer_points.len() >= 3 {
-                    meshes.push(extrude_polygon_mesh(
-                        &format!("Via_Polygon_{}", idx),
-                        &outer_points,
-                        &hole_polygons,
-                        min_z_mm,
-                        depth,
-                        material_name,
-                        space.view,
-                    ));
-                }
-            }
-            SubstrateLayerShape::Tube {
-                outer_diameter,
-                inner_diameter,
-                pad_diameter,
-                segments,
-                top_cap: _,
-                bottom_cap: _,
-                bottom_outer_diameter,
-            } => {
-                let outer_diameter_mm = outer_diameter as f64 / 1_000_000.0;
-                let inner_diameter_mm = inner_diameter as f64 / 1_000_000.0;
-                let pad_diameter_mm = pad_diameter as f64 / 1_000_000.0;
-                let bottom_outer_diameter_mm =
-                    bottom_outer_diameter.map(|d| d as f64 / 1_000_000.0);
-                let center_x_mm = (min_x_mm + max_x_mm) / 2.0;
-                let center_y_mm = (min_y_mm + max_y_mm) / 2.0;
-
-                // v0.1.8 Split-Via Fix: The 3D via mesh only renders the vertical tube barrel.
-                // We pass CapType::None for both caps, as the flat circular pads are already
-                // handled by the 2D unioning pool (Strategy A), preventing duplicate geometry and Z-fighting.
-                meshes.push(create_via_mesh(
-                    &format!("Bare_Via_Tube_{}", idx),
-                    (center_x_mm, center_y_mm, min_z_mm),
-                    outer_diameter_mm,
-                    pad_diameter_mm,
-                    (outer_diameter_mm - inner_diameter_mm) / 2.0,
-                    depth,
-                    segments,
-                    CapType::None,
-                    CapType::None,
-                    bottom_outer_diameter_mm,
-                    material_name,
-                    space.view,
-                ));
-            }
-            SubstrateLayerShape::Rect => {
-                let mut z_boundaries = vec![layer.bbox.min.z, layer.bbox.max.z];
-                for cutout in &layer.cutouts {
-                    if cutout.bbox.min.z > layer.bbox.min.z && cutout.bbox.min.z < layer.bbox.max.z
-                    {
-                        z_boundaries.push(cutout.bbox.min.z);
-                    }
-                    if cutout.bbox.max.z > layer.bbox.min.z && cutout.bbox.max.z < layer.bbox.max.z
-                    {
-                        z_boundaries.push(cutout.bbox.max.z);
-                    }
-                }
-                z_boundaries.sort();
-                z_boundaries.dedup();
-
-                for i in 0..(z_boundaries.len() - 1) {
-                    let z_start = z_boundaries[i];
-                    let z_end = z_boundaries[i + 1];
-                    let slice_depth = nm_to_mm_precise(z_end - z_start);
-                    let z_min_mm = nm_to_mm_precise(z_start);
-
-                    let mut slice_cutouts = Vec::new();
-                    for cutout in &layer.cutouts {
-                        if cutout.bbox.min.z < z_end && cutout.bbox.max.z > z_start {
-                            match cutout.shape {
-                                SubstrateLayerShape::Polygon {
-                                    ref outer_contour, ..
-                                } => {
-                                    let cx = (nm_to_mm_precise(cutout.bbox.min.x)
-                                        + nm_to_mm_precise(cutout.bbox.max.x))
-                                        / 2.0;
-                                    let cy = (nm_to_mm_precise(cutout.bbox.min.y)
-                                        + nm_to_mm_precise(cutout.bbox.max.y))
-                                        / 2.0;
-                                    if let Some(eff_diam) =
-                                        compute_polygon_effective_diameter(outer_contour)
-                                    {
-                                        let dia = eff_diam as f64 / 1_000_000.0;
-                                        slice_cutouts.push(CutoutParams::Cylinder {
-                                            cx,
-                                            cy,
-                                            dia,
-                                            z_min: nm_to_mm_precise(cutout.bbox.min.z),
-                                            z_max: nm_to_mm_precise(cutout.bbox.max.z),
-                                        });
-                                    } else {
-                                        let x1 = nm_to_mm_precise(cutout.bbox.min.x);
-                                        let y1 = nm_to_mm_precise(cutout.bbox.min.y);
-                                        let x2 = nm_to_mm_precise(cutout.bbox.max.x);
-                                        let y2 = nm_to_mm_precise(cutout.bbox.max.y);
-                                        slice_cutouts.push(CutoutParams::Rect {
-                                            x1,
-                                            y1,
-                                            x2,
-                                            y2,
-                                            z_min: nm_to_mm_precise(cutout.bbox.min.z),
-                                            z_max: nm_to_mm_precise(cutout.bbox.max.z),
-                                        });
-                                    }
-                                }
-                                SubstrateLayerShape::Rect => {
-                                    let x1 = nm_to_mm_precise(cutout.bbox.min.x);
-                                    let y1 = nm_to_mm_precise(cutout.bbox.min.y);
-                                    let x2 = nm_to_mm_precise(cutout.bbox.max.x);
-                                    let y2 = nm_to_mm_precise(cutout.bbox.max.y);
-                                    slice_cutouts.push(CutoutParams::Rect {
-                                        x1,
-                                        y1,
-                                        x2,
-                                        y2,
-                                        z_min: nm_to_mm_precise(cutout.bbox.min.z),
-                                        z_max: nm_to_mm_precise(cutout.bbox.max.z),
-                                    });
-                                }
-                                SubstrateLayerShape::Circle { .. } => {} // Circle cutouts handled via union
-                                _ => {}
-                            }
-                        }
-                    }
-
-                    let mut slice_culling = FaceCulling::none();
-                    if z_start == layer.bbox.min.z {
-                        slice_culling.bottom = base_culling.bottom;
-                    }
-                    if z_end == layer.bbox.max.z {
-                        slice_culling.top = base_culling.top;
-                    }
-
-                    meshes.push(create_box_with_holes_mesh(
-                        &format!("Substrate_Layer_{}_Z{}", idx, i),
-                        BoxParams::new(min_x_mm, min_y_mm, z_min_mm, width, height, slice_depth),
-                        slice_cutouts,
-                        material_name,
-                        space.view,
-                        slice_culling,
-                    ));
-                }
-            }
-            SubstrateLayerShape::Circle { radius } => {
-                let diameter_mm = radius as f64 * 2.0 / 1_000_000.0;
-                let center_x_mm = (min_x_mm + max_x_mm) / 2.0;
-                let center_y_mm = (min_y_mm + max_y_mm) / 2.0;
-
-                meshes.push(create_cylinder_mesh(
-                    &format!("Circle_Pour_{}", idx),
-                    (center_x_mm, center_y_mm, min_z_mm),
-                    diameter_mm,
-                    depth,
-                    64, // Standard 64-segment circle
-                    material_name,
-                    space.view,
-                    base_culling,
-                ));
-            }
+            
+            analytic_copper_pools.entry(key).or_default().push(path);
         }
     }
-
-    // --- EXTRUDE UNIONED COPPER POOLS ---
-    for ((z_min_nm, z_max_nm, material_id, net_raw), paths) in copper_pools {
+    
+    // Gather trace paths from analytic routes using native path offsetting
+    for route in &space.analytic_routes {
+        let half_t = route.thickness_nm / 2;
+        
+        let z_min = route.segments.iter().map(|s| s.start.z.min(s.end.z)).min().unwrap_or(0) - half_t;
+        let z_max = route.segments.iter().map(|s| s.start.z.max(s.end.z)).max().unwrap_or(0) + half_t;
+        
+        // Use the shared stroke_route_segments function to generate perfect mitered outlines
+        let trace_outline = stroke_route_segments(&route.segments, route.width_nm);
+        
+        let key = (z_min, z_max, route.material, route.net_id.raw());
+        analytic_copper_pools.entry(key).or_default().extend(trace_outline);
+    }
+    
+    // Add via pads to analytic copper pools
+    for via in &space.vias {
+        let z_start = via.from_z_nm.min(via.to_z_nm);
+        let z_end = via.from_z_nm.max(via.to_z_nm);
+        let pad_radius = via.diameter_nm / 2 + via.annular_ring_nm.max(via.diameter_nm / 4);
+        let copper_thickness = 35_000;
+        
+        let copper_material_id = space.material_registry
+            .all_materials()
+            .into_iter()
+            .find(|(_, name)| name.contains("Copper") || name.contains("Aluminum") || name.contains("Metal"))
+            .map(|(id, _)| id)
+            .unwrap_or(space.substrate_material_id);
+        
+        // Top pad
+        let top_key = (z_end - copper_thickness, z_end, copper_material_id, via.net_id.raw());
+        analytic_copper_pools
+            .entry(top_key)
+            .or_default()
+            .push(circle_to_path(via.position.0, via.position.1, pad_radius, 64));
+        
+        // Bottom pad
+        let bottom_key = (z_start, z_start + copper_thickness, copper_material_id, via.net_id.raw());
+        analytic_copper_pools
+            .entry(bottom_key)
+            .or_default()
+            .push(circle_to_path(via.position.0, via.position.1, pad_radius, 64));
+    }
+    
+    // Union and extrude analytic trace segments with proper welding
+    for ((z_min_nm, z_max_nm, material_id, net_raw), paths) in analytic_copper_pools {
         let material_name = space
             .material_registry
             .get_name(material_id)
             .unwrap_or("Copper");
-
+        
+        // Perform 2D Boolean Union to weld overlapping rectangles
         let unioned = clipper2_rust::union_64(&paths, &vec![], FillRule::NonZero);
-        let subjects = if let Some(holes) =
-            via_holes.get(&(z_min_nm, z_max_nm, material_id, net_raw))
-        {
-            clipper2_rust::difference_64(&unioned, holes, FillRule::NonZero)
-        } else {
-            unioned
-        };
-
-        let mut clipper = clipper2_rust::Clipper64::new();
-        clipper.add_subject(&subjects);
-
-        let mut polytree = clipper2_rust::PolyTree64::new();
-        let mut dummy_open_paths = Vec::new();
-        clipper.execute_tree(
-            clipper2_rust::ClipType::Union,
-            clipper2_rust::FillRule::NonZero,
-            &mut polytree,
-            &mut dummy_open_paths,
-        );
-
-        // v0.1.8: Convert PolyTree to RefinedContours for canonicalization
-        // This prevents 'Pad Deformation' by cleaning up collinear vertices
-        // using the user-defined resolution.
-        let mut refined_contours = Vec::new();
-        let res = space.resolution_nm;
-
-        fn collect_refined(
-            tree: &clipper2_rust::PolyTree64,
-            node: &clipper2_rust::PolyPath64,
-            result: &mut Vec<hwc_engine::RefinedContour>,
-        ) {
-            for &island_idx in node.children() {
-                let island = &tree.nodes[island_idx];
-                let outer_path = island.polygon();
-                let mut holes = Vec::new();
-                for &hole_idx in island.children() {
-                    let hole_node = &tree.nodes[hole_idx];
-                    holes.push(
-                        hole_node
-                            .polygon()
-                            .iter()
-                            .map(|pt| (pt.x, pt.y))
-                            .collect::<Vec<_>>(),
-                    );
-                    collect_refined(tree, hole_node, result);
-                }
-
-                result.push(hwc_engine::RefinedContour {
-                    outer: outer_path.iter().map(|pt| (pt.x, pt.y)).collect(),
-                    holes,
-                    area: 0, // Will be computed by canonicalize_contours
-                });
-            }
-        }
-        collect_refined(&polytree, polytree.root(), &mut refined_contours);
-        hwc_engine::canonicalize_contours(&mut refined_contours, res);
-
+        
         let z_min_mm = z_min_nm as f64 / 1_000_000.0;
         let depth_mm = (z_max_nm - z_min_nm) as f64 / 1_000_000.0;
-
-        for (c_idx, contour) in refined_contours.into_iter().enumerate() {
-            if contour.outer.len() >= 3 {
-                let outer_points: Vec<(f64, f64)> = contour
-                    .outer
+        
+        for (c_idx, path) in unioned.iter().enumerate() {
+            if path.len() >= 3 {
+                let outer_points: Vec<(f64, f64)> = path
                     .iter()
-                    .map(|(x, y)| (*x as f64 / 1_000_000.0, *y as f64 / 1_000_000.0))
+                    .map(|pt| (pt.x as f64 / 1_000_000.0, pt.y as f64 / 1_000_000.0))
                     .collect();
-                let hole_polygons: Vec<Vec<(f64, f64)>> = contour
-                    .holes
-                    .iter()
-                    .map(|h| {
-                        h.iter()
-                            .map(|(x, y)| (*x as f64 / 1_000_000.0, *y as f64 / 1_000_000.0))
-                            .collect()
-                    })
-                    .collect();
-
+                
                 meshes.push(extrude_polygon_mesh(
-                    &format!("Unified_Net_{}_Contour_{}", net_raw, c_idx),
+                    &format!("Analytic_Route_Net_{}_Contour_{}", net_raw, c_idx),
                     &outer_points,
-                    &hole_polygons,
+                    &vec![],
                     z_min_mm,
                     depth_mm,
                     material_name,
@@ -749,21 +125,87 @@ pub fn add_substrate(
             }
         }
     }
-}
+    
+    // Render via barrel tubes
+    for (via_idx, via) in space.vias.iter().enumerate() {
+        let z_start = via.from_z_nm.min(via.to_z_nm);
+        let z_end = via.from_z_nm.max(via.to_z_nm);
+        
+        let z_min_mm = z_start as f64 / 1_000_000.0;
+        let depth_mm = (z_end - z_start) as f64 / 1_000_000.0;
+        let center_x_mm = via.position.0 as f64 / 1_000_000.0;
+        let center_y_mm = via.position.1 as f64 / 1_000_000.0;
+        let outer_dia_mm = via.diameter_nm as f64 / 1_000_000.0;
+        let pad_dia_mm = (via.diameter_nm + 2 * via.annular_ring_nm.max(via.diameter_nm / 4)) as f64 / 1_000_000.0;
+        let barrel_thickness_mm = outer_dia_mm;
+        
+        let material_name = space
+            .material_registry
+            .get_name(space.substrate_material_id)
+            .unwrap_or("Copper");
+        
+        meshes.push(create_via_mesh(
+            &format!("Analytic_Via_Barrel_{}", via_idx),
+            (center_x_mm, center_y_mm, z_min_mm),
+            outer_dia_mm,
+            pad_dia_mm,
+            barrel_thickness_mm,
+            depth_mm,
+            32,
+            CapType::None,
+            CapType::None,
+            None,
+            material_name,
+            space.view,
+        ));
+    }
 
-fn compute_polygon_effective_diameter(contour: &clipper2_rust::Path64) -> Option<i64> {
-    if contour.is_empty() {
-        return None;
+    // Legacy substrate layer system removed - using pure analytic routes only
+    
+    // Render substrate base (FR4) if present
+    for (idx, layer) in substrate_layers.iter().enumerate() {
+        if layer.layer_type != hwc_engine::geometry_router::entity_graph::SubstrateLayerType::Substrate {
+            continue;
+        }
+        
+        let material_name = space
+            .material_registry
+            .get_name(layer.material)
+            .unwrap_or("Unknown");
+        
+        if material_name == "Void" || material_name == "Air" {
+            continue;
+        }
+        
+        let min_x_mm = layer.bbox.min.x as f64 / 1_000_000.0;
+        let min_y_mm = layer.bbox.min.y as f64 / 1_000_000.0;
+        let min_z_mm = layer.bbox.min.z as f64 / 1_000_000.0;
+        let max_x_mm = layer.bbox.max.x as f64 / 1_000_000.0;
+        let max_y_mm = layer.bbox.max.y as f64 / 1_000_000.0;
+        let max_z_mm = layer.bbox.max.z as f64 / 1_000_000.0;
+        let width = max_x_mm - min_x_mm;
+        let height = max_y_mm - min_y_mm;
+        let depth = max_z_mm - min_z_mm;
+        
+        meshes.push(MeshNode {
+            name: format!("Substrate_Base_{}", idx).into(),
+            vertices: Vec::new(),
+            faces: create_box_with_holes_mesh(
+                &format!("Substrate_Base_{}", idx),
+                BoxParams {
+                    x: min_x_mm,
+                    y: min_y_mm,
+                    z: min_z_mm,
+                    width,
+                    height,
+                    depth,
+                },
+                vec![],
+                material_name,
+                space.view,
+                super::types::FaceCulling::none(),
+            ).faces,
+            material_name: material_name.to_string().into(),
+        });
     }
-    let mut min_x = i64::MAX;
-    let mut max_x = i64::MIN;
-    let mut min_y = i64::MAX;
-    let mut max_y = i64::MIN;
-    for p in contour.iter() {
-        min_x = min_x.min(p.x);
-        max_x = max_x.max(p.x);
-        min_y = min_y.min(p.y);
-        max_y = max_y.max(p.y);
-    }
-    Some((max_x - min_x).max(max_y - min_y))
 }

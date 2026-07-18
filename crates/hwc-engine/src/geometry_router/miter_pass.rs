@@ -79,9 +79,7 @@ impl MiterEngine {
 
             // Check for 90° corner: orthogonal segments in the XY plane
             let dot = v1_x * v2_x + v1_y * v2_y;
-            let is_corner = dot == 0
-                && (v1_x != 0 || v1_y != 0)
-                && (v2_x != 0 || v2_y != 0);
+            let is_corner = dot == 0 && (v1_x != 0 || v1_y != 0) && (v2_x != 0 || v2_y != 0);
 
             if is_corner {
                 let len1_f = ((v1_x * v1_x + v1_y * v1_y) as f64).sqrt();
@@ -154,10 +152,7 @@ mod tests {
     #[test]
     fn test_no_miter_on_short_path() {
         let engine = MiterEngine::new(200_000);
-        let path = vec![
-            Point3D::new(0, 0, 0),
-            Point3D::new(1_000_000, 0, 0),
-        ];
+        let path = vec![Point3D::new(0, 0, 0), Point3D::new(1_000_000, 0, 0)];
         let result = engine.apply_miter_pass(&path);
         assert_eq!(result.len(), 2);
         assert_eq!(result, path);
@@ -181,7 +176,7 @@ mod tests {
         let engine = MiterEngine::new(200_000);
         let path = vec![
             Point3D::new(0, 0, 0),
-            Point3D::new(5_000_000, 0, 0),      // corner
+            Point3D::new(5_000_000, 0, 0), // corner
             Point3D::new(5_000_000, 5_000_000, 0),
         ];
         let result = engine.apply_miter_pass(&path);
@@ -190,7 +185,7 @@ mod tests {
         assert_eq!(result.len(), 4);
         // Miter points should be on the diagonal
         assert!(result[1].x < 5_000_000); // p_a rolled back
-        assert!(result[2].y > 0);          // p_b advanced
+        assert!(result[2].y > 0); // p_b advanced
     }
 
     #[test]

@@ -25,14 +25,46 @@ struct TrigEntry {
 }
 
 const TRIG_TABLE: &[TrigEntry] = &[
-    TrigEntry { angle: 0,   cos_nm:  1_000_000_000, sin_nm: 0 },
-    TrigEntry { angle: 45,  cos_nm:  707_106_781,   sin_nm: 707_106_781 },
-    TrigEntry { angle: 90,  cos_nm:  0,             sin_nm: 1_000_000_000 },
-    TrigEntry { angle: 135, cos_nm: -707_106_781,   sin_nm: 707_106_781 },
-    TrigEntry { angle: 180, cos_nm: -1_000_000_000, sin_nm: 0 },
-    TrigEntry { angle: 225, cos_nm: -707_106_781,   sin_nm: -707_106_781 },
-    TrigEntry { angle: 270, cos_nm:  0,             sin_nm: -1_000_000_000 },
-    TrigEntry { angle: 315, cos_nm:  707_106_781,   sin_nm: -707_106_781 },
+    TrigEntry {
+        angle: 0,
+        cos_nm: 1_000_000_000,
+        sin_nm: 0,
+    },
+    TrigEntry {
+        angle: 45,
+        cos_nm: 707_106_781,
+        sin_nm: 707_106_781,
+    },
+    TrigEntry {
+        angle: 90,
+        cos_nm: 0,
+        sin_nm: 1_000_000_000,
+    },
+    TrigEntry {
+        angle: 135,
+        cos_nm: -707_106_781,
+        sin_nm: 707_106_781,
+    },
+    TrigEntry {
+        angle: 180,
+        cos_nm: -1_000_000_000,
+        sin_nm: 0,
+    },
+    TrigEntry {
+        angle: 225,
+        cos_nm: -707_106_781,
+        sin_nm: -707_106_781,
+    },
+    TrigEntry {
+        angle: 270,
+        cos_nm: 0,
+        sin_nm: -1_000_000_000,
+    },
+    TrigEntry {
+        angle: 315,
+        cos_nm: 707_106_781,
+        sin_nm: -707_106_781,
+    },
 ];
 
 /// Return (cos_nm, sin_nm) for the given angle in degrees.
@@ -152,10 +184,7 @@ pub fn verify_no_overflow(x: i64, y: i128, cos_nm: i128, sin_nm: i128) -> bool {
     let prod_x_sin = x_i.checked_mul(sin_nm);
     let prod_y_cos = y_i.checked_mul(cos_nm);
 
-    prod_x_cos.is_some()
-        && prod_y_sin.is_some()
-        && prod_x_sin.is_some()
-        && prod_y_cos.is_some()
+    prod_x_cos.is_some() && prod_y_sin.is_some() && prod_x_sin.is_some() && prod_y_cos.is_some()
 }
 
 /// Clamp an i128 value to the i64 range.
@@ -239,8 +268,7 @@ mod tests {
     #[test]
     fn transform_bbox_preserves_area_90deg() {
         let (cos, sin) = trig_values_i128(90);
-        let (nx0, ny0, nx1, ny1) =
-            transform_bbox_i128(0, 0, 1000, 500, cos, sin, 0, 0);
+        let (nx0, ny0, nx1, ny1) = transform_bbox_i128(0, 0, 1000, 500, cos, sin, 0, 0);
         // 90° rotation: (0,0)->(0,0), (1000,0)->(0,1000), (0,500)->(-500,0), (1000,500)->(-500,1000)
         // AABB: min=(-500,0), max=(0,1000)
         assert_eq!(nx0, -500);
@@ -256,8 +284,7 @@ mod tests {
     #[test]
     fn transform_bbox_preserves_area_0deg() {
         let (cos, sin) = trig_values_i128(0);
-        let (nx0, ny0, nx1, ny1) =
-            transform_bbox_i128(100, 200, 600, 800, cos, sin, 0, 0);
+        let (nx0, ny0, nx1, ny1) = transform_bbox_i128(100, 200, 600, 800, cos, sin, 0, 0);
         assert_eq!(nx0, 100);
         assert_eq!(ny0, 200);
         assert_eq!(nx1, 600);
@@ -332,8 +359,7 @@ mod tests {
     fn transform_bbox_45deg_square() {
         let (cos, sin) = trig_values_i128(45);
         // 1000x1000 square rotated 45°: AABB becomes ~1414x1414
-        let (nx0, ny0, nx1, ny1) =
-            transform_bbox_i128(0, 0, 1000, 1000, cos, sin, 0, 0);
+        let (nx0, ny0, nx1, ny1) = transform_bbox_i128(0, 0, 1000, 1000, cos, sin, 0, 0);
         let width = nx1 - nx0;
         let height = ny1 - ny0;
         // Should be approximately 1000 * sqrt(2) ≈ 1414

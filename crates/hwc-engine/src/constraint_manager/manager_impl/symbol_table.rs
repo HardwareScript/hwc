@@ -212,7 +212,12 @@ pub fn extract_clearance_constraints<S: SymbolTableTrait>(
             .transpose()?
             .unwrap_or(0);
 
-        Ok(Some((default_clearance, default_clearance, high_voltage_nm, safety_factor)))
+        Ok(Some((
+            default_clearance,
+            default_clearance,
+            high_voltage_nm,
+            safety_factor,
+        )))
     } else {
         Ok(None)
     }

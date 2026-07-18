@@ -1,5 +1,5 @@
-use crate::geometry::{BoundingBox, Point3D};
 use crate::geometry::transform::FixedTransform2D;
+use crate::geometry::{BoundingBox, Point3D};
 
 /// An Oriented Bounding Box (OBB) for rotated components.
 /// Stores center, half-extents, and rotation angle.
@@ -13,8 +13,20 @@ pub struct OrientedBoundingBox {
 }
 
 impl OrientedBoundingBox {
-    pub fn new(center_x: i64, center_y: i64, half_width: i64, half_height: i64, rotation_deg: i64) -> Self {
-        Self { center_x, center_y, half_width, half_height, rotation_deg }
+    pub fn new(
+        center_x: i64,
+        center_y: i64,
+        half_width: i64,
+        half_height: i64,
+        rotation_deg: i64,
+    ) -> Self {
+        Self {
+            center_x,
+            center_y,
+            half_width,
+            half_height,
+            rotation_deg,
+        }
     }
 
     /// Check if a point is inside this OBB using SAT (Separating Axis Theorem)
@@ -96,19 +108,30 @@ impl ComponentStamp {
         local_pin_offsets: Vec<(String, Point3D)>,
     ) -> Self {
         Self {
-            stamp_id, name, local_bbox, local_obb_children,
-            local_aabb_children, local_polygons, local_pin_offsets,
+            stamp_id,
+            name,
+            local_bbox,
+            local_obb_children,
+            local_aabb_children,
+            local_polygons,
+            local_pin_offsets,
         }
     }
 
     /// Create a simple rectangular stamp (most common case)
     pub fn rectangle(stamp_id: usize, name: String, width_nm: i64, height_nm: i64) -> Self {
-        let local_bbox = BoundingBox::new(
-            Point3D::new(0, 0, 0),
-            Point3D::new(width_nm, height_nm, 0),
-        );
+        let local_bbox =
+            BoundingBox::new(Point3D::new(0, 0, 0), Point3D::new(width_nm, height_nm, 0));
         let local_aabb_children = vec![local_bbox];
-        Self::new(stamp_id, name, local_bbox, Vec::new(), local_aabb_children, Vec::new(), Vec::new())
+        Self::new(
+            stamp_id,
+            name,
+            local_bbox,
+            Vec::new(),
+            local_aabb_children,
+            Vec::new(),
+            Vec::new(),
+        )
     }
 }
 
@@ -126,7 +149,7 @@ pub struct ComponentInstance {
     pub transform: FixedTransform2D,
     /// Logical net bindings (indices into the netlist)
     pub net_bindings: Vec<usize>,
-    
+
     // === Pre-transformed global bounding boxes ===
     /// Global bounding box in world-coordinate space
     pub global_bbox: BoundingBox,
@@ -150,12 +173,16 @@ impl ComponentInstance {
         let global_bbox = Self::transform_bbox_to_global(&stamp.local_bbox, &transform);
 
         // Transform OBB children
-        let global_obb_children = stamp.local_obb_children.iter()
+        let global_obb_children = stamp
+            .local_obb_children
+            .iter()
             .map(|obb| Self::transform_obb_to_global(obb, &transform))
             .collect();
 
         // Transform AABB children
-        let global_aabb_children = stamp.local_aabb_children.iter()
+        let global_aabb_children = stamp
+            .local_aabb_children
+            .iter()
             .map(|aabb| Self::transform_bbox_to_global(aabb, &transform))
             .collect();
 
@@ -171,7 +198,10 @@ impl ComponentInstance {
     }
 
     /// Transform a local AABB to global space using the instance's transform
-    fn transform_bbox_to_global(local_bbox: &BoundingBox, transform: &FixedTransform2D) -> BoundingBox {
+    fn transform_bbox_to_global(
+        local_bbox: &BoundingBox,
+        transform: &FixedTransform2D,
+    ) -> BoundingBox {
         let (x1, y1) = transform.transform_point(local_bbox.min.x, local_bbox.min.y);
         let (x2, y2) = transform.transform_point(local_bbox.max.x, local_bbox.min.y);
         let (x3, y3) = transform.transform_point(local_bbox.min.x, local_bbox.max.y);
@@ -182,14 +212,14 @@ impl ComponentInstance {
         let min_y = y1.min(y2).min(y3).min(y4);
         let max_y = y1.max(y2).max(y3).max(y4);
 
-        BoundingBox::new(
-            Point3D::new(min_x, min_y, 0),
-            Point3D::new(max_x, max_y, 0),
-        )
+        BoundingBox::new(Point3D::new(min_x, min_y, 0), Point3D::new(max_x, max_y, 0))
     }
 
     /// Transform a local OBB to global space
-    fn transform_obb_to_global(local_obb: &OrientedBoundingBox, transform: &FixedTransform2D) -> OrientedBoundingBox {
+    fn transform_obb_to_global(
+        local_obb: &OrientedBoundingBox,
+        transform: &FixedTransform2D,
+    ) -> OrientedBoundingBox {
         let (cx, cy) = transform.transform_point(local_obb.center_x, local_obb.center_y);
         let global_rotation = {
             let cos = transform.cos_scale as f64 / 1_000_000_000.0;
@@ -198,7 +228,13 @@ impl ComponentInstance {
             let total_rad = local_rad + sin.atan2(cos);
             (total_rad * 180.0 / std::f64::consts::PI) as i64
         };
-        OrientedBoundingBox::new(cx, cy, local_obb.half_width, local_obb.half_height, global_rotation)
+        OrientedBoundingBox::new(
+            cx,
+            cy,
+            local_obb.half_width,
+            local_obb.half_height,
+            global_rotation,
+        )
     }
 
     /// Fast, non-allocating world-space collision check using pre-calculated bounds.
@@ -315,12 +351,19 @@ impl SceneGraph {
 
     /// Estimate memory usage in bytes
     pub fn estimate_memory_bytes(&self) -> usize {
-        let stamp_mem: usize = self.stamps.iter().map(|s| {
-            std::mem::size_of::<ComponentStamp>()
-                + s.local_obb_children.len() * std::mem::size_of::<OrientedBoundingBox>()
-                + s.local_aabb_children.len() * std::mem::size_of::<BoundingBox>()
-                + s.local_polygons.iter().map(|p| p.len() * std::mem::size_of::<Point3D>()).sum::<usize>()
-        }).sum();
+        let stamp_mem: usize = self
+            .stamps
+            .iter()
+            .map(|s| {
+                std::mem::size_of::<ComponentStamp>()
+                    + s.local_obb_children.len() * std::mem::size_of::<OrientedBoundingBox>()
+                    + s.local_aabb_children.len() * std::mem::size_of::<BoundingBox>()
+                    + s.local_polygons
+                        .iter()
+                        .map(|p| p.len() * std::mem::size_of::<Point3D>())
+                        .sum::<usize>()
+            })
+            .sum();
         let instance_mem: usize = self.instances.len() * std::mem::size_of::<ComponentInstance>();
         stamp_mem + instance_mem
     }

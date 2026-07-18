@@ -288,10 +288,14 @@ impl Validator {
         space: &SpaceDefinition,
     ) {
         for component in &space.components() {
-            if component.position.is_relative() {
+            let position = match &component.position {
+                Some(pos) => pos,
+                None => continue, // v0.1.9: Skip components with unresolved relational constraints
+            };
+            if position.is_relative() {
                 continue;
             }
-            if !crate::ir::conversions::z_expr_is_physical(component.position.z()) {
+            if !crate::ir::conversions::z_expr_is_physical(position.z()) {
                 collector.report(ValidationError::DimensionlessZCoordinate);
             }
         }
@@ -339,13 +343,17 @@ impl Validator {
         let mut bboxes: Vec<(String, BoundingBox)> = Vec::new();
 
         for component in components {
+            let position = match &component.position {
+                Some(pos) => pos,
+                None => continue, // v0.1.9: Skip components with unresolved relational constraints
+            };
             let name = component
                 .name
                 .as_ref()
                 .map(|n| n.to_string())
                 .unwrap_or_else(|| component.component_type.to_string().into());
             let bbox = self.calculate_bounding_box(
-                &component.position,
+                position,
                 dimensions_nm,
                 symbol_table,
                 hwc_parser::OriginZ::Bottom,
@@ -470,9 +478,11 @@ impl Validator {
 
         let pin_label = |endpoint: &hwc_parser::RouteEndpointSpec| -> CompactString {
             match endpoint {
-                hwc_parser::RouteEndpointSpec::ComponentPin { component_name, pin_name, .. } => {
-                    format!("{}.{}", component_name, pin_name).into()
-                }
+                hwc_parser::RouteEndpointSpec::ComponentPin {
+                    component_name,
+                    pin_name,
+                    ..
+                } => format!("{}.{}", component_name, pin_name).into(),
                 hwc_parser::RouteEndpointSpec::SpaceEntity { name, .. } => name.clone(),
             }
         };
@@ -542,9 +552,11 @@ impl Validator {
 
         let pin_label = |endpoint: &hwc_parser::RouteEndpointSpec| -> CompactString {
             match endpoint {
-                hwc_parser::RouteEndpointSpec::ComponentPin { component_name, pin_name, .. } => {
-                    format!("{}.{}", component_name, pin_name).into()
-                }
+                hwc_parser::RouteEndpointSpec::ComponentPin {
+                    component_name,
+                    pin_name,
+                    ..
+                } => format!("{}.{}", component_name, pin_name).into(),
                 hwc_parser::RouteEndpointSpec::SpaceEntity { name, .. } => name.clone(),
             }
         };

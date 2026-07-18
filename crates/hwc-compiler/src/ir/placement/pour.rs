@@ -10,9 +10,12 @@ pub fn place_pour(
     bbox_tracker: &mut crate::bounding_box_tracker::BoundingBoxTracker,
     ctx: &PlacementContext,
 ) -> Result<(), IrError> {
-    let material_id = space.material_registry.get_id(&pour.material).ok_or_else(|| {
-        IrError::UndeclaredMaterial { material: pour.material.clone() }
-    })?;
+    let material_id = space
+        .material_registry
+        .get_id(&pour.material)
+        .ok_or_else(|| IrError::UndeclaredMaterial {
+            material: pour.material.clone(),
+        })?;
 
     let boundary = pour
         .boundary
@@ -107,16 +110,18 @@ pub fn place_pour(
                 (**to_raw).clone()
             };
 
-            let s = spanning_coordinate_to_point(&from, &coord_ctx, false)
-                .map_err(|e| IrError::CoordinateResolutionFailed {
+            let s = spanning_coordinate_to_point(&from, &coord_ctx, false).map_err(|e| {
+                IrError::CoordinateResolutionFailed {
                     coordinate_str: format!("pour '{}' from", pour.name),
                     reason: e,
-                })?;
-            let e = spanning_coordinate_to_point(&to, &coord_ctx, true)
-                .map_err(|e| IrError::CoordinateResolutionFailed {
+                }
+            })?;
+            let e = spanning_coordinate_to_point(&to, &coord_ctx, true).map_err(|e| {
+                IrError::CoordinateResolutionFailed {
                     coordinate_str: format!("pour '{}' to", pour.name),
                     reason: e,
-                })?;
+                }
+            })?;
 
             let w = (e.x - s.x).abs();
             let h = (e.y - s.y).abs();
@@ -128,11 +133,9 @@ pub fn place_pour(
         } => {
             let radius_nm =
                 crate::ir::conversions::evaluate_expression_to_nm(radius, ctx.symbol_table)
-                    .map_err(|e| {
-                        IrError::CoordinateResolutionFailed {
-                            coordinate_str: format!("pour '{}' circle radius", pour.name),
-                            reason: e.to_string(),
-                        }
+                    .map_err(|e| IrError::CoordinateResolutionFailed {
+                        coordinate_str: format!("pour '{}' circle radius", pour.name),
+                        reason: e.to_string(),
                     })?;
             circle_radius_nm = Some(radius_nm);
 
@@ -190,13 +193,10 @@ pub fn place_pour(
     } else {
         None
     };
-    
-    space.entity_graph.register_space_entity(
-        &pour.name.base,
-        bbox,
-        net_id,
-        z_start_nm,
-    );
+
+    space
+        .entity_graph
+        .register_space_entity(&pour.name.base, bbox, net_id, z_start_nm);
 
     // println!(
     //     "   ├─ Registered pour '{}' bbox: min=({:.3}, {:.3}, {:.3}) max=({:.3}, {:.3}, {:.3})",
@@ -348,13 +348,15 @@ pub fn place_pour(
             space
                 .netlist
                 .add_pin(pour_component_id, "anchor".into(), (0, 0, 0), None);
-        
+
         // v0.1.8: Also create a virtual pin for routing endpoint resolution
         let virtual_pin_name = format!("__virtual_{}", pour.name);
-        let _virtual_pin_id =
-            space
-                .netlist
-                .add_pin(pour_component_id, virtual_pin_name.into(), (center_x, center_y, center_z), None);
+        let _virtual_pin_id = space.netlist.add_pin(
+            pour_component_id,
+            virtual_pin_name.into(),
+            (center_x, center_y, center_z),
+            None,
+        );
 
         let net_id_handle =
             if let Some(existing_net) = space.netlist.get_net_by_name(net_name.as_str()) {
@@ -420,7 +422,7 @@ pub fn place_pour(
     };
 
     let bbox = hwc_engine::geometry::BoundingBox::new(start_with_z, end_with_z);
-    
+
     // Get min_spacing from profile for early clearance validation (v0.1.9)
     // NO DEFAULTS - require explicit profile declaration
     let min_clearance_nm = space
@@ -428,11 +430,12 @@ pub fn place_pour(
         .as_ref()
         .ok_or_else(|| IrError::MissingAsicConstraint {
             message: "Cannot validate pour clearance without fabrication constraints".into(),
-            hint: "Add a profile with 'trace: min_spacing: <value>' to enable early DRC validation".into(),
+            hint: "Add a profile with 'trace: min_spacing: <value>' to enable early DRC validation"
+                .into(),
         })?
         .trace
         .min_spacing_nm;
-    
+
     if let Some(radius) = circle_radius_nm {
         space
             .entity_graph
@@ -453,7 +456,8 @@ pub fn place_pour(
                     "{}\nRequired spacing: {}nm (from profile trace.min_spacing)\n\
                      Adjust the pour boundary to maintain clearance from other nets.",
                     msg, min_clearance_nm
-                ).into(),
+                )
+                .into(),
             });
         }
     }

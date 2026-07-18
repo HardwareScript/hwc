@@ -10,9 +10,7 @@ use std::collections::HashMap;
 
 use sha2::{Digest, Sha256};
 
-use crate::geometry_router::export_isolation::{
-    BomEntry, SpiceParams,
-};
+use crate::geometry_router::export_isolation::{BomEntry, SpiceParams};
 use crate::geometry_router::geometry_refinement::RefinedContour;
 use crate::geometry_router::spatial_index::IndexedSegment;
 
@@ -84,7 +82,11 @@ pub fn sort_mesh_vertices_deterministic(vertices: &mut [(f32, f32, f32)]) {
 /// Sort triangles deterministically by (v0, v1, v2).
 #[inline]
 pub fn sort_triangles_deterministic(triangles: &mut [(u32, u32, u32)]) {
-    triangles.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)).then_with(|| a.2.cmp(&b.2)));
+    triangles.sort_by(|a, b| {
+        a.0.cmp(&b.0)
+            .then_with(|| a.1.cmp(&b.1))
+            .then_with(|| a.2.cmp(&b.2))
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -137,7 +139,10 @@ fn write_polyline_deterministic(out: &mut String, ring: &[(i64, i64)], layer: &s
 /// Contours are sorted by (layer_id, first point x, first point y) before writing.
 /// Within each contour, the outer ring is written first (CCW), then holes (CW).
 /// Output is byte-identical across runs for the same input.
-pub fn export_dxf_deterministic(contours: &[RefinedContour], layer_names: &HashMap<u8, String>) -> String {
+pub fn export_dxf_deterministic(
+    contours: &[RefinedContour],
+    layer_names: &HashMap<u8, String>,
+) -> String {
     let mut out = String::with_capacity(4096);
 
     // DXF header
@@ -158,7 +163,11 @@ pub fn export_dxf_deterministic(contours: &[RefinedContour], layer_names: &HashM
     let mut tagged: Vec<(u8, i64, i64, &RefinedContour)> = Vec::with_capacity(contours.len());
     for (i, contour) in contours.iter().enumerate() {
         let layer_id = (i % 256) as u8;
-        let first = contour.outer.first().copied().unwrap_or((i64::MAX, i64::MAX));
+        let first = contour
+            .outer
+            .first()
+            .copied()
+            .unwrap_or((i64::MAX, i64::MAX));
         tagged.push((layer_id, first.0, first.1, contour));
     }
 
@@ -668,14 +677,12 @@ mod tests {
 
     #[test]
     fn test_verify_export_deterministic_csv() {
-        let entries = vec![
-            BomEntry {
-                ref_des: "R1".to_string(),
-                value: "10k".to_string(),
-                footprint: "0402".to_string(),
-                quantity: 1,
-            },
-        ];
+        let entries = vec![BomEntry {
+            ref_des: "R1".to_string(),
+            value: "10k".to_string(),
+            footprint: "0402".to_string(),
+            quantity: 1,
+        }];
         let result = verify_export_deterministic(|| {
             export_csv_bom_deterministic(&mut entries.clone()).into_bytes()
         });

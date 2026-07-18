@@ -93,11 +93,11 @@ impl SymbolTable {
 
                 // Detect circular aliases
                 if visited.contains(next_name) {
-                return Err(SymbolError::circular(
-                    current_name.to_string().into(),
-                    next_name.to_string().into(),
-                    (alias.span.start, alias.span.end),
-                ));
+                    return Err(SymbolError::circular(
+                        current_name.to_string().into(),
+                        next_name.to_string().into(),
+                        (alias.span.start, alias.span.end),
+                    ));
                 }
 
                 // Check depth limit (e.g. 10) to prevent infinite loops even without exact cycles
@@ -368,14 +368,22 @@ impl SymbolTable {
         let def = self.get_component(name).map_err(|e| e.to_string())?;
 
         let layout = def.layout.as_ref().ok_or_else(|| {
-            format!("Component '{}' has no layout block and cannot be baked", name)
+            format!(
+                "Component '{}' has no layout block and cannot be baked",
+                name
+            )
         })?;
 
         // 1. Resolve dimensions strictly from shape string (e.g., "Rectangle(6mm, 6mm, 1mm)")
         let (width_nm, height_nm) = if let Some(shape_str) = &layout.shape {
             let (w, h, _) =
                 crate::ir::placement::helpers::parse_rectangle_dimensions(shape_str, self)
-                    .ok_or_else(|| format!("Invalid shape format for component '{}': '{}'", name, shape_str))?;
+                    .ok_or_else(|| {
+                        format!(
+                            "Invalid shape format for component '{}': '{}'",
+                            name, shape_str
+                        )
+                    })?;
             (w, h)
         } else {
             // If no explicit shape, derive bounds from pins exactly
@@ -394,9 +402,12 @@ impl SymbolTable {
             }
 
             if min_x == i64::MAX {
-                return Err(format!("Component '{}' has no shape and no pins to derive dimensions from", name));
+                return Err(format!(
+                    "Component '{}' has no shape and no pins to derive dimensions from",
+                    name
+                ));
             }
-            
+
             (max_x - min_x, max_y - min_y)
         };
 
@@ -414,19 +425,34 @@ impl SymbolTable {
 
             // Resolve pad shape strictly from layout.pad_shapes (e.g., "Circle(0.5mm)")
             let pad_shape_str = layout.pad_shapes.get(pin_name).ok_or_else(|| {
-                format!("Pin '{}' in component '{}' is missing a pad shape definition", pin_name, name)
+                format!(
+                    "Pin '{}' in component '{}' is missing a pad shape definition",
+                    pin_name, name
+                )
             })?;
 
-            let (w, h, _) = crate::ir::placement::helpers::parse_rectangle_dimensions(pad_shape_str, self)
-                .ok_or_else(|| format!("Invalid pad shape format for pin '{}' in component '{}': '{}'", pin_name, name, pad_shape_str))?;
+            let (w, h, _) =
+                crate::ir::placement::helpers::parse_rectangle_dimensions(pad_shape_str, self)
+                    .ok_or_else(|| {
+                        format!(
+                            "Invalid pad shape format for pin '{}' in component '{}': '{}'",
+                            pin_name, name, pad_shape_str
+                        )
+                    })?;
 
             let pad_shape = if pad_shape_str.starts_with("Circle") {
                 hwc_engine::placement::PadShape::Circle { diameter_nm: w }
             } else if pad_shape_str.starts_with("Obround") {
-                hwc_engine::placement::PadShape::Obround { width_nm: w, height_nm: h }
+                hwc_engine::placement::PadShape::Obround {
+                    width_nm: w,
+                    height_nm: h,
+                }
             } else if pad_shape_str.starts_with("RoundedRect") {
                 // For RoundedRect, we'd need to parse the corner radius too if supported by helper
-                hwc_engine::placement::PadShape::Rectangle { width_nm: w, height_nm: h }
+                hwc_engine::placement::PadShape::Rectangle {
+                    width_nm: w,
+                    height_nm: h,
+                }
             } else {
                 hwc_engine::placement::PadShape::Rectangle {
                     width_nm: w,

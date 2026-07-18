@@ -1,5 +1,5 @@
-use rustc_hash::FxHashMap;
 use super::types::PlanarIsland;
+use rustc_hash::FxHashMap;
 
 /// Undirected connectivity graph for the PIVB solver.
 ///
@@ -139,7 +139,16 @@ impl ConnectivityGraph {
 
             for &w in &adj[v] {
                 if indices[w] == -1 {
-                    strongconnect(w, adj, index_counter, stack, on_stack, indices, lowlinks, sccs);
+                    strongconnect(
+                        w,
+                        adj,
+                        index_counter,
+                        stack,
+                        on_stack,
+                        indices,
+                        lowlinks,
+                        sccs,
+                    );
                     lowlinks[v] = lowlinks[v].min(lowlinks[w]);
                 } else if on_stack[w] {
                     lowlinks[v] = lowlinks[v].min(indices[w]);

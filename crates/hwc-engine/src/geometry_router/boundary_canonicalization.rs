@@ -72,9 +72,9 @@ pub fn merge_collinear_edges(polygon: &[(i64, i64)], resolution_nm: i64) -> Vec<
 
         let len_ab = abx.abs().max(aby.abs());
         let len_bc = bcx.abs().max(bcy.abs());
-        
+
         // v0.1.8: Scalable 'Pad Deformation' protection.
-        // Instead of a hardcoded 1000nm (1um) cap, we scale the tolerance 
+        // Instead of a hardcoded 1000nm (1um) cap, we scale the tolerance
         // relative to the user-defined resolution snap-step.
         // This ensures sub-atomic physical correctness at any scale.
         let tolerance = 1_i64.max((len_ab.min(len_bc) / 1000).min(resolution_nm));
@@ -115,7 +115,11 @@ pub fn clean_polygons(polygons: Vec<Vec<(i64, i64)>>, min_area: i64) -> Vec<Vec<
         .into_iter()
         .filter_map(|p| {
             let cleaned = remove_slivers(&p, min_area);
-            if cleaned.is_empty() { None } else { Some(cleaned) }
+            if cleaned.is_empty() {
+                None
+            } else {
+                Some(cleaned)
+            }
         })
         .collect()
 }
@@ -179,8 +183,7 @@ pub fn point_in_polygon(point: (i64, i64), polygon: &[(i64, i64)]) -> bool {
             return true;
         }
 
-        let crosses = ((y0 > py) != (y1 > py))
-            && (px < (x1 - x0) * (py - y0) / (y1 - y0) + x0);
+        let crosses = ((y0 > py) != (y1 > py)) && (px < (x1 - x0) * (py - y0) / (y1 - y0) + x0);
         if crosses {
             inside = !inside;
         }
@@ -199,8 +202,8 @@ fn point_on_segment(px: i64, py: i64, x0: i64, y0: i64, x1: i64, y1: i64) -> boo
     if px < min_x || px > max_x || py < min_y || py > max_y {
         return false;
     }
-    let cross = ((px - x0) as i128) * ((y1 - y0) as i128)
-        - ((py - y0) as i128) * ((x1 - x0) as i128);
+    let cross =
+        ((px - x0) as i128) * ((y1 - y0) as i128) - ((py - y0) as i128) * ((x1 - x0) as i128);
     cross == 0
 }
 
@@ -267,14 +270,7 @@ mod tests {
 
     #[test]
     fn collinear_merge_reduces_vertices_on_straight_edges() {
-        let polygon = vec![
-            (0, 0),
-            (100, 0),
-            (200, 0),
-            (300, 0),
-            (300, 300),
-            (0, 300),
-        ];
+        let polygon = vec![(0, 0), (100, 0), (200, 0), (300, 0), (300, 300), (0, 300)];
         let merged = merge_collinear_edges(&polygon, 1000);
         assert!(merged.len() < polygon.len());
         assert!(merged.len() >= 3);
@@ -402,13 +398,7 @@ mod tests {
 
     #[test]
     fn canonicalize_polygon_with_collinear_edges_and_slivers() {
-        let polygon = vec![
-            (0, 0),
-            (50, 0),
-            (100, 0),
-            (100, 100),
-            (0, 100),
-        ];
+        let polygon = vec![(0, 0), (50, 0), (100, 0), (100, 100), (0, 100)];
         let result = canonicalize(polygon, WindingType::OuterContour, 10, 1_000);
         let result = result.expect("should produce a valid polygon");
         assert!(result.len() >= 3);
@@ -423,12 +413,7 @@ mod tests {
 
     #[test]
     fn canonicalize_hole_produces_cw() {
-        let polygon = vec![
-            (10, 10),
-            (90, 10),
-            (90, 90),
-            (10, 90),
-        ];
+        let polygon = vec![(10, 10), (90, 10), (90, 90), (10, 90)];
         let result = canonicalize(polygon, WindingType::HoleContour, 10, 1_000);
         let result = result.expect("should produce a valid polygon");
         assert!(signed_area(&result) < 0, "hole contour should be CW");

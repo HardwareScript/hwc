@@ -271,9 +271,7 @@ impl Value {
                 super::Unit::Picometer => Ok(*value as i64),
                 _ => Err(format!("Cannot convert {:?} to picometers", unit)),
             },
-            Value::Percentage(pct) => {
-                Ok(((pct / 100.0) * reference_pm as f64) as i64)
-            }
+            Value::Percentage(pct) => Ok(((pct / 100.0) * reference_pm as f64) as i64),
         }
     }
 

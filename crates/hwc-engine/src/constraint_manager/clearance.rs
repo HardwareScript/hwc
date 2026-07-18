@@ -59,5 +59,3 @@ pub fn calculate_clearance_nm(
     // Apply safety factor
     (min_clearance_nm * safety_factor as f64) as i64
 }
-
-

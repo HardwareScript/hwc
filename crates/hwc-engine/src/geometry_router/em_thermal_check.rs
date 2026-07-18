@@ -58,10 +58,7 @@ impl CurrentDeclaration {
 ///
 /// Evaluates the RMS and peak expressions to milliamps and wraps them
 /// in the appropriate enum variant.
-pub fn current_limit_ac_to_declaration(
-    rms_ma: f64,
-    peak_ma: f64,
-) -> CurrentDeclaration {
+pub fn current_limit_ac_to_declaration(rms_ma: f64, peak_ma: f64) -> CurrentDeclaration {
     CurrentDeclaration::Ac(AcCurrent {
         rms: rms_ma,
         peak: peak_ma,
@@ -241,8 +238,8 @@ mod tests {
     fn test_em_narrow_trace_violation() {
         let seg = make_segment(5_000, 1); // 5µm wide
         let params = EmParams {
-            j_limit: 1e6,  // 1 MA/m²
-            i_peak: 0.01,  // 10mA → needs 10nm minimum
+            j_limit: 1e6, // 1 MA/m²
+            i_peak: 0.01, // 10mA → needs 10nm minimum
         };
         // A_min = I/J = 0.01 / 1e6 = 10nm → 5000nm > 10nm → pass
         assert!(check_electromigration(&seg, &params).is_none());

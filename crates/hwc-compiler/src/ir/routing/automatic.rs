@@ -1,9 +1,11 @@
-//! Automatic routing using A* pathfinding.
+//! Automatic routing using topological ray-casting.
 
 use super::super::errors::IrError;
 use super::helpers::get_pin_positions;
 use compact_str::CompactString;
+use hwc_engine::netlist::NetId;
 use hwc_engine::{HardwareSpace, Point3D};
+use rustc_hash::FxHashMap;
 
 /// Resolve the conductor material for a trace at the given Z position.
 /// Looks up the stackup layer at that Z and returns the material ID from the registry.
@@ -17,25 +19,32 @@ fn resolve_material_for_z(
         if let Some(mat_name) = profile
             .and_then(|p| p.stackup.as_ref())
             .and_then(|stackup| {
-                stackup.layers.iter()
+                stackup
+                    .layers
+                    .iter()
                     .find(|l| l.name.name == layer_name)
                     .map(|l| l.material.clone())
             })
         {
-            return material_registry.get_id(&mat_name)
-                .ok_or_else(|| crate::ir::errors::IrError::UndeclaredMaterial { material: mat_name });
+            return material_registry.get_id(&mat_name).ok_or_else(|| {
+                crate::ir::errors::IrError::UndeclaredMaterial { material: mat_name }
+            });
         }
     }
     Err(crate::ir::errors::IrError::UndeclaredMaterial {
-        material: format!("No material found at Z={}nm (check stackup definition)", z_nm).into(),
+        material: format!(
+            "No material found at Z={}nm (check stackup definition)",
+            z_nm
+        )
+        .into(),
     })
 }
 
-/// Route a trace automatically using A* pathfinding.
+/// Route a trace automatically using topological ray-casting.
 ///
 /// Implements the 3-phase routing pipeline:
 /// 1. Constraint Manager: Generate geometric constraints from physics
-/// 2. Geometry Router: A* pathfinding with Manhattan routing
+/// 2. Geometry Router: Topological ray-casting with Manhattan routing
 /// 3. Design Rule Check: Validate physics compliance
 pub fn route_automatic(
     space: &mut HardwareSpace,
@@ -44,9 +53,6 @@ pub fn route_automatic(
     stackup_manager: &crate::ir::stackup_manager::StackupManager,
     profile: Option<&hwc_parser::ProfileDefinition>,
 ) -> Result<(), IrError> {
-    use hwc_engine::constraint_manager::{LayerDirection, RouteConstraints};
-    use hwc_engine::geometry_router::GridBounds;
-
     let from_name = super::helpers::construct_entity_name(&route.from)?;
     let to_name = super::helpers::construct_entity_name(&route.to)?;
 
@@ -74,8 +80,12 @@ pub fn route_automatic(
         peak
     } else {
         return Err(IrError::MissingAsicConstraint {
-            message: "Route has no current_limit declaration. All routes must declare current capacity.".into(),
-            hint: "Add 'current_limit_ac: { rms: <value>, peak: <value> }' to the route declaration.".into(),
+            message:
+                "Route has no current_limit declaration. All routes must declare current capacity."
+                    .into(),
+            hint:
+                "Add 'current_limit_ac: { rms: <value>, peak: <value> }' to the route declaration."
+                    .into(),
         });
     };
 
@@ -89,8 +99,11 @@ pub fn route_automatic(
             hint: "Declare 'thermal: { max_temp_rise: <value> }' in the profile.".into(),
         })?;
 
-    let _min_trace_width_nm =
-        hwc_engine::constraint_manager::calculate_trace_width_nm(current_ma as i64, temp_rise_c, is_external);
+    let _min_trace_width_nm = hwc_engine::constraint_manager::calculate_trace_width_nm(
+        current_ma as i64,
+        temp_rise_c,
+        is_external,
+    );
 
     // v0.1.7: Resolve explicit width if provided, otherwise use calculated minimum
     let trace_width_nm = if let Some(width_expr) = &route.width {
@@ -123,14 +136,17 @@ pub fn route_automatic(
     // Instead of routing to pin centers, we calculate exact boundary points.
     let (start_boundary, goal_boundary, start_dir, goal_dir) =
         calculate_boundary_points(space, route, trace_width_nm)?;
-    
+
     // DEBUG: Check if boundary points are corrupted
-    eprintln!("[BOUNDARY DEBUG] Route: {} -> {}", 
-        from_name, to_name);
-    eprintln!("[BOUNDARY DEBUG]   start_boundary: ({},{},{})", 
-        start_boundary.x, start_boundary.y, start_boundary.z);
-    eprintln!("[BOUNDARY DEBUG]   goal_boundary: ({},{},{})", 
-        goal_boundary.x, goal_boundary.y, goal_boundary.z);
+    eprintln!("[BOUNDARY DEBUG] Route: {} -> {}", from_name, to_name);
+    eprintln!(
+        "[BOUNDARY DEBUG]   start_boundary: ({},{},{})",
+        start_boundary.x, start_boundary.y, start_boundary.z
+    );
+    eprintln!(
+        "[BOUNDARY DEBUG]   goal_boundary: ({},{},{})",
+        goal_boundary.x, goal_boundary.y, goal_boundary.z
+    );
 
     // v0.1.8: Resolve target layer override
     // If `route.layer` is specified, override the Z coordinate of the route
@@ -138,26 +154,31 @@ pub fn route_automatic(
     // the layer transitions at the pin boundaries.
     let target_z_nm = if let Some(ref layer_id) = route.layer {
         let layer_name = layer_id.name.as_str();
-        eprintln!("[ROUTER] route.layer='{}' specified, resolving Z from stackup...", layer_name);
-        let z = stackup_manager.get_layer_start_z(layer_name)
+        eprintln!(
+            "[ROUTER] route.layer='{}' specified, resolving Z from stackup...",
+            layer_name
+        );
+        let z = stackup_manager
+            .get_layer_start_z(layer_name)
             .ok_or_else(|| IrError::InvalidRouteExpression {
                 expression: format!("layer '{}'", layer_name),
                 reason: format!("Unknown routing layer '{}' in stackup", layer_name),
             })?;
-        eprintln!("[ROUTER] Resolved layer '{}' -> Z={}nm (pin_z={})", layer_name, z, start_boundary.z);
+        eprintln!(
+            "[ROUTER] Resolved layer '{}' -> Z={}nm (pin_z={})",
+            layer_name, z, start_boundary.z
+        );
         Some(z)
     } else {
         None
     };
 
-    // v0.1.7: External A* Seeding
-    // To prevent "hooks" inside pads, the A* solver starts one grid unit OUTSIDE the pad.
+    // v0.1.7: External Seeding
+    // To prevent "hooks" inside pads, the topological router starts one grid unit OUTSIDE the pad.
     let resolution_nm = space.resolution_nm;
 
     // Helper to snap a coordinate to the nearest grid center
-    let _snap_to_center = |coord: i64, res_nm: i64| {
-        (coord / res_nm) * res_nm + (res_nm / 2)
-    };
+    let _snap_to_center = |coord: i64, res_nm: i64| (coord / res_nm) * res_nm + (res_nm / 2);
 
     let mut start_pos = hwc_engine::Point3D::new(
         start_boundary.x + (start_dir.0 * resolution_nm),
@@ -201,264 +222,185 @@ pub fn route_automatic(
     // PHASE 2: GEOMETRY ROUTER
     // v0.1.7: Register net connectivity in the netlist
     // This ensures both pins share the same logical net ID.
-    let net_id = super::helpers::register_net_for_route(space, route, symbol_table, stackup_manager, profile)?;
-    let net_name = space.netlist.get_net(net_id)
+    let net_id = super::helpers::register_net_for_route(
+        space,
+        route,
+        symbol_table,
+        stackup_manager,
+        profile,
+        None,
+    )?;
+    let net_name = space
+        .netlist
+        .get_net(net_id)
         .ok_or_else(|| IrError::InvalidRouteExpression {
             expression: format!("net ID {}", net_id.raw()),
             reason: "Net not found after registration".into(),
         })?
-        .name.clone();
+        .name
+        .clone();
 
     eprintln!("[BOX-MODEL-DEBUG] Net: {}", net_name);
-    eprintln!("[BOX-MODEL-DEBUG]   Start Boundary: ({}, {}, {})", start_boundary.x, start_boundary.y, start_boundary.z);
+    eprintln!(
+        "[BOX-MODEL-DEBUG]   Start Boundary: ({}, {}, {})",
+        start_boundary.x, start_boundary.y, start_boundary.z
+    );
     eprintln!("[BOX-MODEL-DEBUG]   Start Dir: {:?}", start_dir);
-    eprintln!("[BOX-MODEL-DEBUG]   Start Seed (A* Start): ({}, {}, {})", start_pos.x, start_pos.y, start_pos.z);
-    eprintln!("[BOX-MODEL-DEBUG]   Goal Boundary: ({}, {}, {})", goal_boundary.x, goal_boundary.y, goal_boundary.z);
+    eprintln!(
+        "[BOX-MODEL-DEBUG]   Start Seed (Router Start): ({}, {}, {})",
+        start_pos.x, start_pos.y, start_pos.z
+    );
+    eprintln!(
+        "[BOX-MODEL-DEBUG]   Goal Boundary: ({}, {}, {})",
+        goal_boundary.x, goal_boundary.y, goal_boundary.z
+    );
     eprintln!("[BOX-MODEL-DEBUG]   Goal Dir: {:?}", goal_dir);
-    eprintln!("[BOX-MODEL-DEBUG]   Goal Seed (A* Goal): ({}, {}, {})", goal_pos.x, goal_pos.y, goal_pos.z);
-
-    let route_constraints = RouteConstraints {
-        min_trace_width_nm: trace_width_nm,
-        min_clearance_nm,
-        max_parallel_length_nm: profile
-            .and_then(|p| p.routing.as_ref())
-            .and_then(|r| r.max_local_route_length.as_ref())
-            .map(|m| crate::ir::conversions::measurement_to_nm(m, symbol_table))
-            .transpose()
-            .map_err(|e| IrError::InvalidRouteExpression {
-                expression: "max_parallel_length".into(),
-                reason: e.to_string(),
-            })?
-            .ok_or_else(|| IrError::MissingAsicConstraint {
-                message: "PDK missing required 'routing.max_local_route_length' constraint.".into(),
-                hint: "Add 'routing: { max_local_route_length: <value> }' to your profile.".into(),
-            })?,
-        max_resistance_ohm: 100.0, // Routing algorithm parameter — no PDK equivalent
-        max_current_ma: current_ma as i64,
-        impedance_ohm: None,
-    };
-
-    let bounds = GridBounds::new(
-        space.dimensions.width_nm,
-        space.dimensions.height_nm,
-        space.dimensions.depth_nm,
+    eprintln!(
+        "[BOX-MODEL-DEBUG]   Goal Seed (Router Goal): ({}, {}, {})",
+        goal_pos.x, goal_pos.y, goal_pos.z
     );
 
-    let layer_direction = LayerDirection::Any;
+    // PHASE 2: GEOMETRY ROUTER
+    // v0.1.7: Register net connectivity in the netlist
+    // This ensures both pins share the same logical net ID.
+    let net_id = super::helpers::register_net_for_route(
+        space,
+        route,
+        symbol_table,
+        stackup_manager,
+        profile,
+        None,
+    )?;
+    let net_name = space
+        .netlist
+        .get_net(net_id)
+        .ok_or_else(|| IrError::InvalidRouteExpression {
+            expression: format!("net ID {}", net_id.raw()),
+            reason: "Net not found after registration".into(),
+        })?
+        .name
+        .clone();
 
-    // Collect clearance zones for pathfinding
-    use hwc_engine::constraint_manager::ClearanceZone;
-
-    let clearance_zones: Vec<ClearanceZone> = Vec::new();
+    eprintln!("[BOX-MODEL-DEBUG] Net: {}", net_name);
+    eprintln!(
+        "[BOX-MODEL-DEBUG]   Start Boundary: ({}, {}, {})",
+        start_boundary.x, start_boundary.y, start_boundary.z
+    );
+    eprintln!("[BOX-MODEL-DEBUG]   Start Dir: {:?}", start_dir);
+    eprintln!(
+        "[BOX-MODEL-DEBUG]   Start Seed (Router Start): ({}, {}, {})",
+        start_pos.x, start_pos.y, start_pos.z
+    );
+    eprintln!(
+        "[BOX-MODEL-DEBUG]   Goal Boundary: ({}, {}, {})",
+        goal_boundary.x, goal_boundary.y, goal_boundary.z
+    );
+    eprintln!("[BOX-MODEL-DEBUG]   Goal Dir: {:?}", goal_dir);
+    eprintln!(
+        "[BOX-MODEL-DEBUG]   Goal Seed (Router Goal): ({}, {}, {})",
+        goal_pos.x, goal_pos.y, goal_pos.z
+    );
 
     // Resolve material ID from stackup layer at the route's target Z position.
-    // When layer: is specified, use target_z_nm (the routing layer).
-    // Otherwise fall back to start_pos.z (the pin's layer).
     let route_z = target_z_nm.unwrap_or(start_pos.z);
-    let copper_id = resolve_material_for_z(
-        route_z,
-        stackup_manager,
-        &space.material_registry,
-        profile,
-    )?;
+    let copper_id =
+        resolve_material_for_z(route_z, stackup_manager, &space.material_registry, profile)?;
 
-    // v0.1.7: Identify exempt components (start and goal)
+    // Identify component names for DRC exemption
     let from_component_name = super::helpers::construct_entity_name(&route.from)?;
     let to_component_name = super::helpers::construct_entity_name(&route.to)?;
 
-    let exempt_components = [from_component_name.clone(), to_component_name.clone()];
+    // v0.1.9: Use TopologicalRouter as the single authoritative routing engine
+    // Obstacles are queried via the DynamicSpatialIndex (per-layer sorted vectors, i64 nm)
+    let topo_router =
+        hwc_engine::geometry_router::TopologicalRouter::new(trace_width_nm, space.resolution_nm, min_clearance_nm);
 
-    // v0.1.9: Build dynamic layer routability map for per-node checking (Fix #2)
-    // Map EVERY Z coordinate in each layer's range to its routability mode
-    let layer_routability_map: rustc_hash::FxHashMap<i64, hwc_engine::geometry_router::stackup_slicing::RoutableMode> = 
-        if let Some(p) = profile {
-            if let Some(stackup) = &p.stackup {
-                let mut map = rustc_hash::FxHashMap::default();
-                
-                for layer in &stackup.layers {
-                    if let Some(routable) = layer.routable {
-                        let layer_start = stackup_manager.get_layer_start_z(&layer.name.name);
-                        let layer_thickness = stackup_manager.get_layer_thickness(&layer.name.name);
-                        
-                        if let (Some(start), Some(thickness)) = (layer_start, layer_thickness) {
-                            let mode = match routable {
-                                hwc_parser::RoutableMode::True => hwc_engine::geometry_router::stackup_slicing::RoutableMode::True,
-                                hwc_parser::RoutableMode::False => hwc_engine::geometry_router::stackup_slicing::RoutableMode::False,
-                                hwc_parser::RoutableMode::LocalOnly => hwc_engine::geometry_router::stackup_slicing::RoutableMode::LocalOnly,
-                            };
-                            
-                            // Map every nanometer in this layer's Z range
-                            let end = start + thickness;
-                            for z in start..end {
-                                map.insert(z, mode);
-                            }
-                        }
-                    }
-                }
-                
-                map
-            } else {
-                rustc_hash::FxHashMap::default()
-            }
-        } else {
-            rustc_hash::FxHashMap::default()
-        };
+    let board_bounds = hwc_engine::BoundingBox::new(
+        hwc_engine::Point3D::new(0, 0, 0),
+        hwc_engine::Point3D::new(
+            space.dimensions.width_nm,
+            space.dimensions.height_nm,
+            space.dimensions.depth_nm,
+        ),
+    );
 
-    // v0.1.8: Build component keepouts from entity graph for Interior Lockout
-    let component_keepouts: Vec<(i64, i64, i64, i64, i64, i64)> = space.entity_graph
-        .get_component_metadata()
-        .iter()
-        .filter(|c| !exempt_components.iter().any(|e| e == &c.name))
-        .flat_map(|c| {
-            // Create one keepout tuple per Z-range where the component has material
-            if c.blocked_z_ranges.is_empty() {
-                // No Z-range info: use the full bounding box as a keepout
-                vec![(c.bbox.min.z, c.bbox.max.z, c.bbox.min.x, c.bbox.min.y, c.bbox.max.x, c.bbox.max.y)]
-            } else {
-                c.blocked_z_ranges.iter().map(|z_range| {
-                    (z_range.0, z_range.1, c.bbox.min.x, c.bbox.min.y, c.bbox.max.x, c.bbox.max.y)
-                }).collect()
-            }
-        })
-        .collect();
-
-    // v0.1.8: Collect pin positions for Via-Portal Exemption
-    let active_net_pin_positions: Vec<(i64, i64)> = space.entity_graph
-        .get_component_pins()
-        .iter()
-        .filter(|pin| pin.net.as_ref() == Some(&net_name))
-        .map(|pin| (pin.x_nm, pin.y_nm))
-        .collect();
-
-    // v0.1.8: Resolve via drill diameter from profile — fail if missing
-    let via_drill_diameter_nm = profile
-        .and_then(|p| p.via.as_ref())
-        .map(|v| crate::ir::conversions::measurement_to_nm(&v.min_diameter, symbol_table))
-        .transpose()
-        .map_err(|e| IrError::InvalidRouteExpression {
-            expression: "via.min_diameter".into(),
-            reason: e.to_string(),
-        })?
-        .ok_or_else(|| IrError::MissingAsicConstraint {
-            message: "Route requires via drill diameter but no via constraints are declared in the profile.".into(),
-            hint: "Declare 'via: { min_diameter: <value> }' in the profile.".into(),
-        })?;
-
-    let routing_params = hwc_engine::geometry_router::RoutingParams {
-        net_id,
-        constraints: &route_constraints,
-        bounds,
-        layer_direction,
-        resolution_nm: space.resolution_nm,
-        clearance_zones: &clearance_zones,
-        entity_graph: Some(&space.entity_graph), // v0.1.7: Enable Strict Interior Lockout
-
-        fixed_z_nm: target_z_nm.or(Some(start_pos.z)), // v0.1.8: Lock to target layer Z if specified
-        exempt_components: &exempt_components, // v0.1.7: Escape Exemption
-        substrate_layers: Some(&space.entity_graph.substrate_layers),
-        is_high_speed_net: false, // v0.1.7: Default to non-high-speed
-        layer_routability_map: &layer_routability_map, // v0.1.9: Dynamic layer map (Fix #2)
-        max_local_route_length_nm: Some(profile
-            .and_then(|p| p.routing.as_ref())
-            .and_then(|r| r.max_local_route_length.as_ref())
-            .map(|m| crate::ir::conversions::measurement_to_nm(m, symbol_table))
-            .transpose()
-            .map_err(|e| IrError::InvalidRouteExpression {
-                expression: "max_local_route_length".into(),
-                reason: e.to_string(),
-            })?
-            .ok_or_else(|| IrError::MissingAsicConstraint {
-                message: "PDK missing required 'routing.max_local_route_length' constraint.".into(),
-                hint: "Add 'routing: { max_local_route_length: <value> }' to your profile.".into(),
-            })?),
-        via_drill_diameter_nm,
-        active_net_pin_positions: &active_net_pin_positions,
-        component_keepouts: &component_keepouts,
-        // v0.1.8: Routing heuristic weights from PDK profile — fail if missing
-        base_cost: profile
-            .and_then(|p| p.routing.as_ref())
-            .and_then(|r| r.base_cost)
-            .ok_or_else(|| IrError::MissingRoutingHeuristics {
-                field: "base_cost".into(),
-                hint: "Add 'base_cost: <value>' to the profile's 'routing:' block.".into(),
-            })?,
-        via_penalty: profile
-            .and_then(|p| p.routing.as_ref())
-            .and_then(|r| r.via_penalty)
-            .ok_or_else(|| IrError::MissingRoutingHeuristics {
-                field: "via_penalty".into(),
-                hint: "Add 'via_penalty: <value>' to the profile's 'routing:' block.".into(),
-            })?,
-        direction_penalty: profile
-            .and_then(|p| p.routing.as_ref())
-            .and_then(|r| r.direction_penalty)
-            .ok_or_else(|| IrError::MissingRoutingHeuristics {
-                field: "direction_penalty".into(),
-                hint: "Add 'direction_penalty: <value>' to the profile's 'routing:' block.".into(),
-            })?,
-        tight_clearance_penalty: profile
-            .and_then(|p| p.routing.as_ref())
-            .and_then(|r| r.tight_clearance_penalty)
-            .ok_or_else(|| IrError::MissingRoutingHeuristics {
-                field: "tight_clearance_penalty".into(),
-                hint: "Add 'tight_clearance_penalty: <value>' to the profile's 'routing:' block.".into(),
-            })?,
-        crosstalk_penalty: profile
-            .and_then(|p| p.routing.as_ref())
-            .and_then(|r| r.crosstalk_penalty)
-            .ok_or_else(|| IrError::MissingRoutingHeuristics {
-                field: "crosstalk_penalty".into(),
-                hint: "Add 'crosstalk_penalty: <value>' to the profile's 'routing:' block.".into(),
-            })?,
-        impedance_penalty: profile
-            .and_then(|p| p.routing.as_ref())
-            .and_then(|r| r.impedance_penalty)
-            .ok_or_else(|| IrError::MissingRoutingHeuristics {
-                field: "impedance_penalty".into(),
-                hint: "Add 'impedance_penalty: <value>' to the profile's 'routing:' block.".into(),
-            })?,
-        reference_void_penalty: profile
-            .and_then(|p| p.routing.as_ref())
-            .and_then(|r| r.reference_void_penalty)
-            .ok_or_else(|| IrError::MissingRoutingHeuristics {
-                field: "reference_void_penalty".into(),
-                hint: "Add 'reference_void_penalty: <value>' to the profile's 'routing:' block.".into(),
-            })?,
+    // Build spatial index for obstacle queries (layered, i64 nm)
+    let spatial_index = {
+        let mut idx = hwc_engine::geometry_router::DynamicSpatialIndex::new();
+        // Copy layer Z-ranges from the entity graph's spatial index
+        if let Some(z_ranges) = space.entity_graph.spatial().layer_z_ranges() {
+            idx.set_layer_z_ranges(&z_ranges);
+        }
+        
+        // Add substrate layers (pours, contacts, etc.) — CRITICAL for obstacle detection!
+        for (layer_idx, layer) in space.entity_graph.get_substrate_layers().iter().enumerate() {
+            let width = layer.bbox.max.x - layer.bbox.min.x;
+            let height = layer.bbox.max.y - layer.bbox.min.y;
+            let trace_seg = hwc_engine::geometry_router::IndexedSegment {
+                source: hwc_engine::geometry_router::spatial_index::SpatialEntitySource::SubstrateLayer {
+                    index: layer_idx,
+                },
+                segment_id: layer_idx,
+                net_id: layer.net as usize,
+                width_nm: width.max(height),
+                thickness_nm: layer.bbox.max.z - layer.bbox.min.z,
+                start: layer.bbox.min,
+                end: layer.bbox.max,
+                layer: layer.bbox.min.z,
+            };
+            eprintln!(
+                "[AUTO ROUTE INDEX] Adding substrate layer {}: net_id={}, bbox=({},{},{}) to ({},{},{})",
+                layer_idx, layer.net, 
+                layer.bbox.min.x, layer.bbox.min.y, layer.bbox.min.z,
+                layer.bbox.max.x, layer.bbox.max.y, layer.bbox.max.z
+            );
+            idx.insert(trace_seg);
+        }
+        
+        // Add component metadata
+        for meta in space.entity_graph.get_component_metadata() {
+            let width = meta.bbox.max.x - meta.bbox.min.x;
+            let height = meta.bbox.max.y - meta.bbox.min.y;
+            let trace_seg = hwc_engine::geometry_router::IndexedSegment {
+                source: hwc_engine::geometry_router::spatial_index::SpatialEntitySource::ComponentInstance {
+                    instance_id: 0,
+                },
+                segment_id: 0,
+                net_id: 0,
+                width_nm: width.max(height),
+                thickness_nm: meta.bbox.max.z - meta.bbox.min.z,
+                start: meta.bbox.min,
+                end: meta.bbox.max,
+                layer: meta.bbox.min.z,
+            };
+            idx.insert(trace_seg);
+        }
+        idx
     };
 
-    // v0.1.8: Build SDF for Leap-Frog A* routing
-    let mut sdf = hwc_engine::geometry_router::sdf_generator::SdfGenerator::new(
-        space.resolution_nm,
-        0, // substrate_height_nm
-    );
-    for meta in space.entity_graph.get_component_metadata() {
-        sdf.register_component(meta.clone());
-    }
-
-    let mut path = hwc_engine::geometry_router::route_net_sdf_accelerated(
-        start_pos,
-        goal_pos,
-        &routing_params,
-        &sdf,
-    )
-    .ok_or_else(|| {
-        IrError::NoPathFound {
-            net: format!("{} -> {}", super::helpers::endpoint_label(&route.from), super::helpers::endpoint_label(&route.to)).into(),
+    let mut path = topo_router
+        .route(start_pos, goal_pos, &spatial_index, &board_bounds)
+        .ok_or_else(|| IrError::NoPathFound {
+            net: format!(
+                "{} -> {}",
+                super::helpers::endpoint_label(&route.from),
+                super::helpers::endpoint_label(&route.to)
+            )
+            .into(),
             from_pin: super::helpers::endpoint_label(&route.from).into(),
             to_pin: super::helpers::endpoint_label(&route.to).into(),
-        }
-    })?;
+        })?
+        .waypoints;
 
     // v0.1.7: Boundary Stitching
-    // We prepend/append the actual boundary points to the A* path.
+    // We prepend/append the actual boundary points to the routed path.
     // This ensures the trace connects perfectly to the pad edge.
     path.insert(0, start_boundary);
     path.push(goal_boundary);
 
     // v0.1.8: R25 Non-Routable Layer Check (Post-Route)
-    // The SDF router's calculate_move_cost rejects non-routable layers via
-    // infinite cost, but this post-route check catches any edge cases where
-    // the router may have slipped through (e.g. Z-transitions).
+    // The topological router skips non-routable layers, but this post-route check
+    // catches any edge cases where the router may have slipped through (e.g. Z-transitions).
     if let Some(stackup) = profile.and_then(|p| p.stackup.as_ref()) {
         for point in &path {
             if let Some(layer_name) = stackup_manager.get_layer_name_at_z(point.z) {
@@ -490,25 +432,36 @@ pub fn route_automatic(
 
     if path.is_empty() {
         return Err(IrError::EmptyRoute {
-            net: format!("{} -> {}", super::helpers::endpoint_label(&route.from), super::helpers::endpoint_label(&route.to)).into(),
+            net: format!(
+                "{} -> {}",
+                super::helpers::endpoint_label(&route.from),
+                super::helpers::endpoint_label(&route.to)
+            )
+            .into(),
         });
     }
 
     // **v0.1.7: ANALYTIC ROUTE REGISTRATION (GOD-TIER PARADIGM SHIFT)**
     let (start_pin_id, goal_pin_id) = super::helpers::get_pin_ids(space, route)?;
 
-    let _start_pin_name = space.netlist.get_pin(start_pin_id)
+    let _start_pin_name = space
+        .netlist
+        .get_pin(start_pin_id)
         .ok_or_else(|| IrError::InvalidRouteExpression {
             expression: format!("pin ID {}", start_pin_id.raw()),
             reason: "Start pin not found".into(),
         })?
-        .name.clone();
-    let _goal_pin_name = space.netlist.get_pin(goal_pin_id)
+        .name
+        .clone();
+    let _goal_pin_name = space
+        .netlist
+        .get_pin(goal_pin_id)
         .ok_or_else(|| IrError::InvalidRouteExpression {
             expression: format!("pin ID {}", goal_pin_id.raw()),
             reason: "Goal pin not found".into(),
         })?
-        .name.clone();
+        .name
+        .clone();
 
     // v0.1.7: Grid-Agnostic Z-Resolution
     // We transform the router's grid-snapped path back into exact physical layer heights
@@ -517,12 +470,9 @@ pub fn route_automatic(
     let mut trace_thickness_nm = space.resolution_nm; // Default to resolution size
 
     if refined_path.len() >= 2 {
-        // v0.1.7: When fixed_z_nm is set (planar-locked 2.5D routing), the SDF router
-        // already locks all path points to the exact physical Z. Skip Z-refinement entirely
-        // to avoid the StackupManager incorrectly remapping Z to a different layer
-        // (e.g. z=0 copper → z=35000 FR4 boundary), which creates fake L0→L1 transitions
-        // and inflates trace_thickness_nm to the dielectric thickness.
-        if let Some(fixed_z) = routing_params.fixed_z_nm {
+        // v0.1.9: When target layer is specified, the TopologicalRouter routes on that
+        // layer. Skip Z-refinement to avoid the StackupManager incorrectly remapping Z.
+        if let Some(fixed_z) = target_z_nm.or(Some(start_pos.z)) {
             // Resolve thickness once from the fixed Z plane
             if let Some(layer_idx) = stackup_manager.get_layer_index_at_z(fixed_z) {
                 trace_thickness_nm = stackup_manager.get_thickness_for_layer_index(layer_idx)?;
@@ -551,7 +501,8 @@ pub fn route_automatic(
                     let true_z = stackup_manager.get_z_start_nm_for_layer_index(layer_idx)?;
 
                     // v0.1.7: Extract physical thickness for this layer to prevent "wobbly" 3D meshes
-                    trace_thickness_nm = stackup_manager.get_thickness_for_layer_index(layer_idx)?;
+                    trace_thickness_nm =
+                        stackup_manager.get_thickness_for_layer_index(layer_idx)?;
 
                     // 3. Update the point's Z to the physical truth
                     point.z = true_z;
@@ -574,7 +525,11 @@ pub fn route_automatic(
     // After the Z-refinement loop, verify thickness was resolved from stackup
     if trace_thickness_nm == space.resolution_nm && refined_path.len() >= 2 {
         return Err(IrError::InvalidRouteExpression {
-            expression: format!("route from {} to {}", super::helpers::endpoint_label(&route.from), super::helpers::endpoint_label(&route.to)),
+            expression: format!(
+                "route from {} to {}",
+                super::helpers::endpoint_label(&route.from),
+                super::helpers::endpoint_label(&route.to)
+            ),
             reason: format!(
                 "Could not resolve trace thickness from stackup at Z={}nm. \
                  Ensure the stackup is properly defined in your PDK profile.",
@@ -593,67 +548,73 @@ pub fn route_automatic(
         // The auto-via inserter detects these Z transitions and inserts vias.
         if let Some(target_z) = target_z_nm {
             let pin_z = start_boundary.z;
-            if pin_z != target_z {
+            eprintln!(
+                "[VIA TRANSITION DEBUG] Start: pin_z={}, target_z={}, diff={}",
+                pin_z,
+                target_z,
+                (pin_z - target_z).abs()
+            );
+
+            // Only add via transition if there's a significant Z difference (> 50nm tolerance)
+            // This prevents unnecessary vias when routing on the same layer
+            if (pin_z - target_z).abs() > 50 {
+                eprintln!(
+                    "  ✅ Adding START via transition: {} -> {}",
+                    pin_z, target_z
+                );
                 // Vertical transition at start: pin Z -> target layer Z
                 let start_up = Point3D::new(start_boundary.x, start_boundary.y, target_z);
                 segs.push(hwc_engine::LineSegment::new(start_boundary, start_up));
+            } else {
+                eprintln!("  ⏭️  Skipping START via: pin already on target layer");
             }
         }
 
+        // Collinear merge + PDK min_segment_length filter (required, no default).
         if refined_path.len() >= 2 {
-            let mut start = refined_path[0];
-            for i in 1..refined_path.len() - 1 {
-                let p1 = refined_path[i - 1];
-                let p2 = refined_path[i];
-                let p3 = refined_path[i + 1];
-
-                // Calculate direction vectors
-                let d1x = p2.x - p1.x;
-                let d1y = p2.y - p1.y;
-                let d1z = p2.z - p1.z;
-
-                let d2x = p3.x - p2.x;
-                let d2y = p3.y - p2.y;
-                let d2z = p3.z - p2.z;
-
-                // v0.1.7: MANHATTAN COLLINEARITY CHECK (GOD-TIER SIMPLIFICATION)
-                let is_collinear = (d1x == 0 && d2x == 0 && d1y == 0 && d2y == 0) || // Z axis
-                                   (d1x == 0 && d2x == 0 && d1z == 0 && d2z == 0) || // Y axis
-                                   (d1y == 0 && d2y == 0 && d1z == 0 && d2z == 0); // X axis
-
-                // v0.1.7: Filter short perpendicular steps caused by grid snap
-                let seg_len_sq =
-                    (p2.x - start.x).pow(2) + (p2.y - start.y).pow(2) + (p2.z - start.z).pow(2);
-                let min_seg_len_sq = 200_000i64.pow(2); // 0.2mm minimum segment length
-                let is_short = seg_len_sq < min_seg_len_sq;
-
-                if !is_collinear && !is_short {
-                    if start != p2 {
-                        segs.push(hwc_engine::LineSegment::new(start, p2));
-                        start = p2;
-                    }
-                }
-            }
-            let last = *refined_path.last()
-                .ok_or_else(|| IrError::EmptyRoute {
-                    net: net_name.clone(),
-                })?;
-            if start != last {
-                segs.push(hwc_engine::LineSegment::new(start, last));
-            }
+            let min_seg_len_nm = super::helpers::require_min_segment_length_nm(profile)?;
+            segs.extend(super::helpers::manhattan_path_to_segments(
+                &refined_path,
+                min_seg_len_nm,
+            ));
         }
 
         // v0.1.8: Vertical transition at end: target layer Z -> pin Z
         if let Some(target_z) = target_z_nm {
             let pin_z = goal_boundary.z;
-            if pin_z != target_z {
+            eprintln!(
+                "[VIA TRANSITION DEBUG] Goal: pin_z={}, target_z={}, diff={}",
+                pin_z,
+                target_z,
+                (pin_z - target_z).abs()
+            );
+
+            // Only add via transition if there's a significant Z difference (> 50nm tolerance)
+            if (pin_z - target_z).abs() > 50 {
+                eprintln!("  ✅ Adding GOAL via transition: {} -> {}", target_z, pin_z);
                 let goal_down = Point3D::new(goal_boundary.x, goal_boundary.y, target_z);
                 segs.push(hwc_engine::LineSegment::new(goal_down, goal_boundary));
+            } else {
+                eprintln!("  ⏭️  Skipping GOAL via: pin already on target layer");
             }
         }
 
         segs
     };
+
+    eprintln!(
+        "[SEGMENT DEBUG] Created {} segments from path:",
+        segments.len()
+    );
+    for (i, seg) in segments.iter().enumerate().take(4) {
+        eprintln!(
+            "  seg[{}]: ({},{},{}) -> ({},{},{})",
+            i, seg.start.x, seg.start.y, seg.start.z, seg.end.x, seg.end.y, seg.end.z
+        );
+    }
+    if segments.len() > 4 {
+        eprintln!("  ... and {} more segments", segments.len() - 4);
+    }
 
     // v0.1.7 DFM: Teardrops strengthen pad/trace junctions for manufacturing reliability
     {
@@ -664,9 +625,9 @@ pub fn route_automatic(
             start_boundary,
             goal_boundary,
             trace_width_nm,
-        &teardrop_config,
-        space.resolution_nm,
-        hwc_engine::netlist::NetHandle::new(net_id.raw() as u32),
+            &teardrop_config,
+            space.resolution_nm,
+            hwc_engine::netlist::NetHandle::new(net_id.raw() as u32),
         );
     }
 
@@ -684,16 +645,24 @@ pub fn route_automatic(
         segments,
         copper_id,
         net_name.clone(),
-        net_actual_current_ma,  // Actual operating current from net declaration
-        current_ma,             // Route's declared capability from current_limit_ac.peak
+        net_actual_current_ma, // Actual operating current from net declaration
+        current_ma,            // Route's declared capability from current_limit_ac.peak
     );
 
-    eprintln!("[ROUTER] Net '{}': {} segments registered (start_z={}, goal_z={}, target_z={:?})",
-        net_name, analytic_trace.segments.len(), start_boundary.z, goal_boundary.z, target_z_nm);
+    eprintln!(
+        "[ROUTER] Net '{}': {} segments registered (start_z={}, goal_z={}, target_z={:?})",
+        net_name,
+        analytic_trace.segments.len(),
+        start_boundary.z,
+        goal_boundary.z,
+        target_z_nm
+    );
     for (i, seg) in analytic_trace.segments.iter().enumerate() {
         if seg.start.z != seg.end.z {
-            eprintln!("[ROUTER]   seg[{}]: Z-TRANSITION ({},{},{}) -> ({},{},{})",
-                i, seg.start.x, seg.start.y, seg.start.z, seg.end.x, seg.end.y, seg.end.z);
+            eprintln!(
+                "[ROUTER]   seg[{}]: Z-TRANSITION ({},{},{}) -> ({},{},{})",
+                i, seg.start.x, seg.start.y, seg.start.z, seg.end.x, seg.end.y, seg.end.z
+            );
         }
     }
 
@@ -702,16 +671,16 @@ pub fn route_automatic(
         let current_decl = if let Some(ref ac) = route.current_limit_ac {
             let rms_ma = crate::ir::conversions::evaluate_expression_to_ma(&ac.rms, symbol_table)
                 .map_err(|e| IrError::InvalidRouteExpression {
-                    expression: "current_limit_ac.rms".into(),
-                    reason: e.to_string(),
-                })?;
+                expression: "current_limit_ac.rms".into(),
+                reason: e.to_string(),
+            })?;
             let peak_ma = crate::ir::conversions::evaluate_expression_to_ma(&ac.peak, symbol_table)
                 .map_err(|e| IrError::InvalidRouteExpression {
                     expression: "current_limit_ac.peak".into(),
                     reason: e.to_string(),
                 })?;
             hwc_engine::CurrentDeclaration::Ac(hwc_engine::AcCurrent {
-                rms: rms_ma / 1000.0, // mA-to-A conversion — unit constant
+                rms: rms_ma / 1000.0,   // mA-to-A conversion — unit constant
                 peak: peak_ma / 1000.0, // mA-to-A conversion — unit constant
             })
         } else {
@@ -724,10 +693,11 @@ pub fn route_automatic(
             .iter()
             .enumerate()
             .map(|(i, seg)| hwc_engine::IndexedSegment {
-                source: hwc_engine::geometry_router::spatial_index::SpatialEntitySource::RouteSegment {
-                    net_idx: net_id.raw() as usize,
-                    seg_idx: i,
-                },
+                source:
+                    hwc_engine::geometry_router::spatial_index::SpatialEntitySource::RouteSegment {
+                        net_idx: net_id.raw() as usize,
+                        seg_idx: i,
+                    },
                 segment_id: i,
                 net_id: net_id.raw() as usize,
                 width_nm: analytic_trace.width_nm,
@@ -743,7 +713,9 @@ pub fn route_automatic(
                 .and_then(|p| p.other.get("em_current_density_limit"))
                 .and_then(|s| s.parse::<f64>().ok())
                 .ok_or_else(|| IrError::MissingAsicConstraint {
-                    message: "PDK missing required 'em_current_density_limit' in profile 'other' block.".into(),
+                    message:
+                        "PDK missing required 'em_current_density_limit' in profile 'other' block."
+                            .into(),
                     hint: "Add 'other: em_current_density_limit: <value>' to your profile.".into(),
                 })?,
             i_peak: current_decl.peak(),
@@ -755,35 +727,41 @@ pub fn route_automatic(
                 .map(|t| t.ambient_temp.value)
                 .ok_or_else(|| IrError::MissingAsicConstraint {
                     message: "PDK missing required 'thermal.ambient_temp' constraint.".into(),
-                    hint: "Add a 'thermal:' block to your profile with 'ambient_temp: <value>'.".into(),
+                    hint: "Add a 'thermal:' block to your profile with 'ambient_temp: <value>'."
+                        .into(),
                 })?,
             max_temp_rise_c: profile
                 .and_then(|p| p.thermal.as_ref())
                 .map(|t| t.max_temp_rise.value)
                 .ok_or_else(|| IrError::MissingAsicConstraint {
                     message: "PDK missing required 'thermal.max_temp_rise' constraint.".into(),
-                    hint: "Add a 'thermal:' block to your profile with 'max_temp_rise: <value>'.".into(),
+                    hint: "Add a 'thermal:' block to your profile with 'max_temp_rise: <value>'."
+                        .into(),
                 })?,
             copper_thickness_m: trace_thickness_nm as f64 * 1e-9, // nm-to-m conversion — physics constant
             substrate_er: profile
                 .and_then(|p| p.stackup.as_ref())
-                .and_then(|s| s.layers.iter().find(|l| l.material.to_lowercase().contains("fr4") || l.material.to_lowercase().contains("dielectric")))
+                .and_then(|s| {
+                    s.layers.iter().find(|l| {
+                        l.material.to_lowercase().contains("fr4")
+                            || l.material.to_lowercase().contains("dielectric")
+                    })
+                })
                 .and_then(|l| {
                     let er_key: CompactString = format!("substrate_er_{}", l.name.name).into();
-                    profile.and_then(|p| p.other.get(&er_key)).and_then(|s| s.parse::<f64>().ok())
+                    profile
+                        .and_then(|p| p.other.get(&er_key))
+                        .and_then(|s| s.parse::<f64>().ok())
                 })
                 .ok_or_else(|| IrError::MissingAsicConstraint {
-                    message: "PDK missing required substrate dielectric constant (substrate_er).".into(),
+                    message: "PDK missing required substrate dielectric constant (substrate_er)."
+                        .into(),
                     hint: "Add 'other: substrate_er_<LayerName>: <value>' to your profile.".into(),
                 })?,
         };
 
-        let violations = hwc_engine::verify_em_thermal(
-            &em_segments,
-            &current_decl,
-            &em_params,
-            &thermal_params,
-        );
+        let violations =
+            hwc_engine::verify_em_thermal(&em_segments, &current_decl, &em_params, &thermal_params);
 
         if !violations.is_empty() {
             let msg = violations
@@ -804,7 +782,10 @@ pub fn route_automatic(
                 })
                 .collect::<Vec<_>>()
                 .join("\n  ");
-            eprintln!("[ROUTER] ⚠ EM/Thermal violations for route {}:\n  {}", net_name, msg);
+            eprintln!(
+                "[ROUTER] ⚠ EM/Thermal violations for route {}:\n  {}",
+                net_name, msg
+            );
         }
     }
 
@@ -833,7 +814,9 @@ pub fn route_automatic(
 
     // Check only the CURRENT route (the last one added) against all components
     // This avoids false positives from previous routes
-    let current_route = space.analytic_routes.last()
+    let current_route = space
+        .analytic_routes
+        .last()
         .ok_or_else(|| IrError::EmptyRoute {
             net: net_name.clone(),
         })?;
@@ -975,24 +958,41 @@ pub fn calculate_boundary_points(
 
     // Helper to resolve a port+offset spec to an EscapePoint
     // v0.1.9.1: Handle both ComponentPin and SpaceEntity endpoints using entity registry
-    let resolve_point = |endpoint: &hwc_parser::RouteEndpointSpec, port: CardinalPort, offset: EdgeOffset, z: i64| {
+    let resolve_point = |endpoint: &hwc_parser::RouteEndpointSpec,
+                         port: CardinalPort,
+                         offset: EdgeOffset,
+                         z: i64| {
         let bbox_opt = match endpoint {
-            hwc_parser::RouteEndpointSpec::ComponentPin { component_name, pin_name, .. } => {
+            hwc_parser::RouteEndpointSpec::ComponentPin {
+                component_name,
+                pin_name,
+                ..
+            } => {
                 // v0.1.9.1: Look up component pin bbox directly from entity registry
-                space.entity_graph.get_component_pin_bbox(component_name.as_str(), pin_name.as_str())
+                space
+                    .entity_graph
+                    .get_component_pin_bbox(component_name.as_str(), pin_name.as_str())
             }
             hwc_parser::RouteEndpointSpec::SpaceEntity { name, .. } => {
                 // v0.1.9.1: Look up space entity bbox directly from entity registry
                 space.entity_graph.get_space_entity_bbox(name.as_str())
             }
         };
-        
+
         bbox_opt.map(|bbox| {
             // v0.1.7: Use half trace width as clearance to ensure trace touches pad edge
             // but does not penetrate the interior ("physically touching" model)
             let boundary_clearance = trace_width_nm / 2;
             // v0.1.9: Pass board_bounds to prevent out-of-bounds projection (Fix #1)
-            calculate_rect_escape(&bbox, port, offset, trace_width_nm, boundary_clearance, z, board_bounds.as_ref())
+            calculate_rect_escape(
+                &bbox,
+                port,
+                offset,
+                trace_width_nm,
+                boundary_clearance,
+                z,
+                board_bounds.as_ref(),
+            )
         })
     };
 
@@ -1010,8 +1010,14 @@ pub fn calculate_boundary_points(
         let offset = resolve_offset(&exit_escape.offset);
         resolve_point(&route.from, port, offset, start_pin_center.z)
     } else {
-        resolve_point(&route.from, auto_exit_port, EdgeOffset::Center, start_pin_center.z)
-    }.ok_or_else(|| IrError::NoPathFound {
+        resolve_point(
+            &route.from,
+            auto_exit_port,
+            EdgeOffset::Center,
+            start_pin_center.z,
+        )
+    }
+    .ok_or_else(|| IrError::NoPathFound {
         net: format!("{} -> {}", from_label, to_label).into(),
         from_pin: from_label.clone(),
         to_pin: to_label.clone(),
@@ -1028,12 +1034,106 @@ pub fn calculate_boundary_points(
         let offset = resolve_offset(&enter_escape.offset);
         resolve_point(&route.to, port, offset, goal_pin_center.z)
     } else {
-        resolve_point(&route.to, auto_enter_port, EdgeOffset::Center, goal_pin_center.z)
-    }.ok_or_else(|| IrError::NoPathFound {
+        resolve_point(
+            &route.to,
+            auto_enter_port,
+            EdgeOffset::Center,
+            goal_pin_center.z,
+        )
+    }
+    .ok_or_else(|| IrError::NoPathFound {
         net: format!("{} -> {}", from_label, to_label).into(),
         from_pin: from_label.clone(),
         to_pin: to_label.clone(),
     })?;
 
-    Ok((start_esc.point, goal_esc.point, start_esc.direction, goal_esc.direction))
+    Ok((
+        start_esc.point,
+        goal_esc.point,
+        start_esc.direction,
+        goal_esc.direction,
+    ))
+}
+
+/// Re-register all resolved routes from the analytic routes database into the physical entity graph.
+///
+/// v0.1.9.1: This function ensures that only the final, detour-aware routes are registered
+/// in the physical database, preventing "Double-Registration" bugs where the original
+/// straight-line path and the detour path coexist (causing Clipper2 to weld them into a solid sheet).
+pub fn re_register_resolved_routes(space: &mut HardwareSpace) -> Result<(), IrError> {
+    // 1. Clear ALL old, unrouted physical segments from the database
+    // This ensures we have a clean slate before re-populating from the analytic source of truth.
+    let net_ids_to_clear: Vec<_> = space
+        .entity_graph
+        .get_all_routes()
+        .iter()
+        .map(|(net_id, _)| *net_id)
+        .collect();
+    for net_id in net_ids_to_clear {
+        space.entity_graph.clear_routes_for_net(net_id);
+    }
+
+    // 2. Read the resolved paths strictly from the compiled analytic routes
+    // Deduplicate by NetId. If multiple routes exist for the same net,
+    // prefer the one with more segments (likely a resolved detour) over
+    // a single-segment straight line.
+    let mut unique_routes: FxHashMap<NetId, hwc_engine::AnalyticTrace> = FxHashMap::default();
+    for trace in &space.analytic_routes {
+        let entry = unique_routes.entry(trace.net_id);
+        match entry {
+            std::collections::hash_map::Entry::Vacant(e) => {
+                e.insert(trace.clone());
+            }
+            std::collections::hash_map::Entry::Occupied(mut e) => {
+                // If the new trace has more segments, it's likely the resolved detour.
+                // The original straight line usually has only 1 segment.
+                if trace.segments.len() > e.get().segments.len() {
+                    eprintln!(
+                        "[AUTO-ROUTER RE-REGISTER] Replacing route for net_id={} ({} segments) with detour ({} segments)",
+                        trace.net_id.raw(),
+                        e.get().segments.len(),
+                        trace.segments.len()
+                    );
+                    e.insert(trace.clone());
+                } else {
+                    eprintln!(
+                        "[AUTO-ROUTER RE-REGISTER] Skipping redundant route for net_id={} ({} segments) as we already have {} segments",
+                        trace.net_id.raw(),
+                        trace.segments.len(),
+                        e.get().segments.len()
+                    );
+                }
+            }
+        }
+    }
+
+    for (net_id, route_trace) in unique_routes {
+        eprintln!(
+            "[AUTO-ROUTER RE-REGISTER] net_id={}, {} segments from analytic_routes",
+            net_id.raw(),
+            route_trace.segments.len()
+        );
+
+        let trace_segments: Vec<hwc_engine::geometry::TraceSegment> = route_trace
+            .segments
+            .iter()
+            .map(|line_seg| {
+                hwc_engine::geometry::TraceSegment::new(
+                    line_seg.start,
+                    line_seg.end,
+                    route_trace.width_nm,
+                    route_trace.material as u8,
+                )
+            })
+            .collect();
+
+        // Register in entity_graph for DRC and continuity checking
+        if !trace_segments.is_empty() {
+            space
+                .entity_graph
+                .register_trace_segments(net_id, trace_segments);
+        }
+    }
+
+    Ok(())
 }

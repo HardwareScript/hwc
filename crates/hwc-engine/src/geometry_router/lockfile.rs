@@ -22,10 +22,10 @@ pub struct ArchivedArcSegment {
     pub width_nm: i64,
     pub x1: i64,
     pub y1: i64,
-    pub z1: i64,  // v0.1.9: Added for vector engine - preserves vertical connectivity
+    pub z1: i64, // v0.1.9: Added for vector engine - preserves vertical connectivity
     pub x2: i64,
     pub y2: i64,
-    pub z2: i64,  // v0.1.9: Added for vector engine - preserves vertical connectivity
+    pub z2: i64, // v0.1.9: Added for vector engine - preserves vertical connectivity
     pub thickness_nm: i64,
     pub material_name: String,
     pub current_ma: i64,
@@ -98,7 +98,10 @@ pub fn compute_fingerprint(
 ///
 /// Scans the entity graph's substrate layers to find which layer owns the
 /// given Z-position. Returns a stable u8 layer index for lockfile storage.
-fn resolve_z_to_layer_index(z_nm: i64, entity_graph: &crate::geometry_router::entity_graph::EntityGraph) -> u16 {
+fn resolve_z_to_layer_index(
+    z_nm: i64,
+    entity_graph: &crate::geometry_router::entity_graph::EntityGraph,
+) -> u16 {
     use rustc_hash::FxHashMap;
     let mut z_to_layer: FxHashMap<i64, u16> = FxHashMap::default();
     let mut next_idx: u16 = 0;
@@ -161,12 +164,8 @@ pub fn build_layer_z_map(
 /// The 16-byte alignment ensures the mmap can be used directly.
 pub fn write_lockfile(lockfile: &CompactLockfileBinary, path: &Path) -> io::Result<()> {
     // 1 MiB scratch buffer — large enough for typical lockfiles
-    let bytes: rkyv::AlignedVec = rkyv::to_bytes::<_, 1_048_576>(lockfile).map_err(|e| {
-        io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("rkyv serialize: {e}"),
-        )
-    })?;
+    let bytes: rkyv::AlignedVec = rkyv::to_bytes::<_, 1_048_576>(lockfile)
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("rkyv serialize: {e}")))?;
 
     fs::write(path, bytes.as_slice())
 }
@@ -211,12 +210,7 @@ pub fn load_lockfile(path: &Path) -> io::Result<LockfileData> {
     let archived = rkyv::validation::validators::check_archived_root::<CompactLockfileBinary>(
         &mmap,
     )
-    .map_err(|e| {
-        io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("rkyv validation: {e}"),
-        )
-    })?;
+    .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("rkyv validation: {e}")))?;
 
     let ptr: *const _ = archived;
     Ok(LockfileData { _mmap: mmap, ptr })
@@ -297,17 +291,19 @@ pub fn inspect_lockfile(path: &Path) -> io::Result<String> {
 // ---------------------------------------------------------------------------
 
 /// Reconstruct the original path connectivity from an unordered set of segments.
-/// 
+///
 /// When segments are saved to the lockfile and loaded back via HashMap iteration,
 /// they lose their original order. This function rebuilds a connected path by
 /// finding segments that share endpoints.
-/// 
+///
 /// Algorithm:
 /// 1. Build an adjacency graph of segments (which segments connect to which)
 /// 2. Find chain endpoints (segments with only one connection)
 /// 3. Walk the chain from start to end, building the ordered path
 /// 4. Handle branching/multi-path nets gracefully (keep all segments)
-fn reconstruct_path_topology(mut segments: Vec<crate::space::LineSegment>) -> Vec<crate::space::LineSegment> {
+fn reconstruct_path_topology(
+    mut segments: Vec<crate::space::LineSegment>,
+) -> Vec<crate::space::LineSegment> {
     if segments.len() <= 1 {
         return segments; // Single segment or empty - no reordering needed
     }
@@ -315,22 +311,26 @@ fn reconstruct_path_topology(mut segments: Vec<crate::space::LineSegment>) -> Ve
     // Build adjacency map: for each segment, find which other segments share an endpoint
     use rustc_hash::FxHashMap;
     let mut connections: FxHashMap<usize, Vec<usize>> = FxHashMap::default();
-    
+
     for (i, seg_i) in segments.iter().enumerate() {
         for (j, seg_j) in segments.iter().enumerate() {
             if i == j {
                 continue;
             }
             // Check if segments share an endpoint
-            if seg_i.end == seg_j.start || seg_i.end == seg_j.end ||
-               seg_i.start == seg_j.start || seg_i.start == seg_j.end {
+            if seg_i.end == seg_j.start
+                || seg_i.end == seg_j.end
+                || seg_i.start == seg_j.start
+                || seg_i.start == seg_j.end
+            {
                 connections.entry(i).or_default().push(j);
             }
         }
     }
 
     // Find a starting segment (prefer one with only one connection = chain endpoint)
-    let start_idx = connections.iter()
+    let start_idx = connections
+        .iter()
         .find(|(_, neighbors)| neighbors.len() == 1)
         .map(|(idx, _)| *idx)
         .unwrap_or(0); // Fallback to first segment if no clear endpoint
@@ -413,7 +413,12 @@ pub fn compute_fingerprint_from_space(space: &crate::space::HardwareSpace) -> [u
         u32::from_le_bytes([result[0], result[1], result[2], result[3]])
     };
 
-    compute_fingerprint(&component_bounds, &rules_hash, &stackup_hash, router_version)
+    compute_fingerprint(
+        &component_bounds,
+        &rules_hash,
+        &stackup_hash,
+        router_version,
+    )
 }
 
 /// Build a `CompactLockfileBinary` from the analytic routes in a `HardwareSpace`.
@@ -424,7 +429,7 @@ pub fn traces_to_lockfile(
     fingerprint: [u8; 32],
 ) -> Result<CompactLockfileBinary, String> {
     let mut arcs = Vec::new();
-    
+
     // v0.1.9: DEDUPLICATION MAP
     // The routing engine creates bidirectional segments (A->B and B->A) for connectivity.
     // We only need to store one direction to preserve the route geometry.
@@ -437,38 +442,59 @@ pub fn traces_to_lockfile(
             let dx = (seg.end.x - seg.start.x).abs();
             let dy = (seg.end.y - seg.start.y).abs();
             let dz = (seg.end.z - seg.start.z).abs();
-            
+
             if dx == 0 && dy == 0 && dz == 0 {
                 // True zero-length point marker - skip it
                 continue;
             }
-            
+
             // v0.1.9: DEDUPLICATION - Create canonical key (always min->max order)
-            let key = if (seg.start.x, seg.start.y, seg.start.z) <= (seg.end.x, seg.end.y, seg.end.z) {
-                (trace.net_id.raw(), seg.start.x, seg.start.y, seg.start.z, seg.end.x, seg.end.y, seg.end.z)
-            } else {
-                (trace.net_id.raw(), seg.end.x, seg.end.y, seg.end.z, seg.start.x, seg.start.y, seg.start.z)
-            };
-            
+            let key =
+                if (seg.start.x, seg.start.y, seg.start.z) <= (seg.end.x, seg.end.y, seg.end.z) {
+                    (
+                        trace.net_id.raw(),
+                        seg.start.x,
+                        seg.start.y,
+                        seg.start.z,
+                        seg.end.x,
+                        seg.end.y,
+                        seg.end.z,
+                    )
+                } else {
+                    (
+                        trace.net_id.raw(),
+                        seg.end.x,
+                        seg.end.y,
+                        seg.end.z,
+                        seg.start.x,
+                        seg.start.y,
+                        seg.start.z,
+                    )
+                };
+
             // Skip if we've already seen this segment (or its reverse)
             if !seen_segments.insert(key) {
                 continue;
             }
-            
+
             // v0.1.9: VECTOR ENGINE FIX
             // Store the ACTUAL 3D vector coordinates (x1,y1,z1) -> (x2,y2,z2)
             // The layer field is now only used for semantic grouping/debugging
             let z_center = seg.start.z.min(seg.end.z)
                 + ((seg.start.z.max(seg.end.z) - seg.start.z.min(seg.end.z)) / 2);
             let layer_idx = resolve_z_to_layer_index(z_center, &space.entity_graph);
-            
-            let material_name = space.material_registry.get_name(trace.material)
-                .ok_or_else(|| format!(
-                    "[LOCK] FATAL: material_id {} not found in registry for net '{}'",
-                    trace.material, trace.net_name
-                ))?
+
+            let material_name = space
+                .material_registry
+                .get_name(trace.material)
+                .ok_or_else(|| {
+                    format!(
+                        "[LOCK] FATAL: material_id {} not found in registry for net '{}'",
+                        trace.material, trace.net_name
+                    )
+                })?
                 .to_string();
-            
+
             arcs.push(ArchivedArcSegment {
                 net_id: trace.net_id.raw(),
                 layer: layer_idx,
@@ -531,50 +557,62 @@ pub fn lockfile_to_traces(
                 crate::geometry::Point3D::new(arc.x2, arc.y2, arc.z2),
             ));
         net_widths.entry(arc.net_id).or_insert(arc.width_nm);
-        net_material_names.entry(arc.net_id).or_insert_with(|| arc.material_name.to_string());
+        net_material_names
+            .entry(arc.net_id)
+            .or_insert_with(|| arc.material_name.to_string());
         net_currents.entry(arc.net_id).or_insert(arc.current_ma);
     }
 
     let mut traces = Vec::new();
-    
+
     // v0.1.9: Sort net IDs to ensure deterministic trace order
     let mut net_ids: Vec<u32> = per_net.keys().copied().collect();
     net_ids.sort_unstable();
-    
+
     for net_id_raw in net_ids {
         let mut segments = per_net.remove(&net_id_raw).expect("net_id exists");
         if segments.is_empty() {
             continue;
         }
-        
+
         // v0.1.9: CRITICAL FIX - Reconstruct path connectivity
         // The lockfile stores segments in arbitrary order (HashMap iteration).
         // We must rebuild the original path topology by connecting segments end-to-end.
         // This ensures the physical continuity checker sees a connected chain.
         segments = reconstruct_path_topology(segments);
-        
+
         let net_id = crate::netlist::NetId::new(net_id_raw);
-        let width_nm = net_widths.get(&net_id_raw).copied()
+        let width_nm = net_widths
+            .get(&net_id_raw)
+            .copied()
             .ok_or_else(|| format!("[LOCK] FATAL: missing width for net {}", net_id_raw))?;
         let net_name = netlist
             .get_net(net_id)
             .map(|n| n.name.clone())
             .ok_or_else(|| format!("[LOCK] FATAL: net {} not found in netlist", net_id_raw))?;
 
-        let material_name = net_material_names.get(&net_id_raw)
+        let material_name = net_material_names
+            .get(&net_id_raw)
             .ok_or_else(|| format!("[LOCK] FATAL: missing material for net {}", net_id_raw))?;
-        let material_id = material_registry.get_id(material_name)
-            .ok_or_else(|| format!("[LOCK] FATAL: material '{}' not found in registry", material_name))?;
+        let material_id = material_registry.get_id(material_name).ok_or_else(|| {
+            format!(
+                "[LOCK] FATAL: material '{}' not found in registry",
+                material_name
+            )
+        })?;
         // v0.1.8: Fail-fast if current is missing from lockfile. No hardcoded defaults.
-        let current_ma_raw = net_currents.get(&net_id_raw)
-            .ok_or_else(|| format!(
+        let current_ma_raw = net_currents.get(&net_id_raw).ok_or_else(|| {
+            format!(
                 "[LOCK] FATAL: net {} has no current value in lockfile. \
                  Ensure all nets have current_limit declared.",
                 net_id_raw
-            ))?;
+            )
+        })?;
         let current_ma = *current_ma_raw as f64 / 1000.0;
 
-        let thickness_nm = d.arcs.iter()
+        let thickness_nm = d
+            .arcs
+            .iter()
             .find(|a| a.net_id == net_id_raw)
             .map(|a| a.thickness_nm)
             .ok_or_else(|| format!("[LOCK] FATAL: no arcs found for net {}", net_id_raw))?;
@@ -592,8 +630,8 @@ pub fn lockfile_to_traces(
             segments,
             material_id,
             net_name,
-            net_actual_current_ma,  // Actual operating current from net
-            current_ma,             // Route's capability from lockfile
+            net_actual_current_ma, // Actual operating current from net
+            current_ma,            // Route's capability from lockfile
         ));
     }
 

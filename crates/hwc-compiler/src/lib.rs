@@ -2,7 +2,6 @@ use compact_str::CompactString;
 
 pub mod alignment;
 pub mod alignment_layer; // Sprint 4.1: Alignment Layer (replaces traditional LVS)
-pub mod via_resolver;
 pub mod bounding_box_tracker;
 pub mod bridge_resolver;
 pub mod compiler;
@@ -24,6 +23,7 @@ pub mod span_utils;
 pub mod symbol_table;
 pub mod unit_resolver;
 pub mod validator;
+pub mod via_resolver;
 pub mod width_inference;
 
 pub use alignment::{
@@ -31,12 +31,12 @@ pub use alignment::{
     GraphMatcher, LogicalDevice, LogicalNetlist, LogicalSynthesizer, PhysicalDevice,
     PhysicalNetlist,
 };
-pub use via_resolver::{ViaResolver};
-pub use via_resolver::library::{ViaLibrary, ViaType};
 pub use bounding_box_tracker::BoundingBoxTracker;
 pub use compiler::Compiler;
 pub use constraint_solver::ConstraintSolver;
 pub use conversions::{populate_material_database, profile_to_constraints, ConversionError};
+pub use via_resolver::library::{ViaLibrary, ViaType};
+pub use via_resolver::ViaResolver;
 // Re-export DiagnosticCollector from hwc-diagnostics
 pub use electrical_symbol_table::{ElectricalSymbolError, ElectricalSymbolTable};
 pub use hwc_diagnostics::{DiagnosticCollector, ErrorFingerprint};
@@ -47,7 +47,9 @@ pub use width_inference::{WidthError, WidthInference};
 // Re-export from modular ir_integration
 pub use alignment_layer::{AlignmentReport, AlignmentViolation}; // Sprint 4.1: Alignment Layer
 pub use ir::routing::AutoRouter;
-pub use ir_integration::{program_to_space, program_to_spaces, program_to_spaces_with_lockfile, IrError};
+pub use ir_integration::{
+    program_to_space, program_to_spaces, program_to_spaces_with_lockfile, IrError,
+};
 pub use logic_synthesizer::{LogicSynthesizer, SynthesisError};
 pub use module_flattener::{flatten_module, FlattenError, FlattenedModule, ModuleBoundingBox};
 pub use module_resolver::{ModuleResolver, ResolverError};

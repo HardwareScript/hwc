@@ -426,9 +426,12 @@ impl SubstrateLayer {
     pub fn contains_nm(&self, x: i64, y: i64, z: i64) -> bool {
         if !self.regions.is_empty() {
             let in_any_region = self.regions.iter().any(|r| {
-                x >= r.min.x && x <= r.max.x
-                    && y >= r.min.y && y <= r.max.y
-                    && z >= r.min.z && z <= r.max.z
+                x >= r.min.x
+                    && x <= r.max.x
+                    && y >= r.min.y
+                    && y <= r.max.y
+                    && z >= r.min.z
+                    && z <= r.max.z
             });
             if !in_any_region {
                 return false;
@@ -661,8 +664,6 @@ impl SubstrateLayer {
     pub fn is_axis_aligned_rectangle(&self) -> bool {
         self.cutouts.is_empty()
     }
-
-
 }
 
 /// Ray-casting point-in-polygon test.
@@ -848,7 +849,13 @@ impl ComponentMetadata {
     ///
     /// # Returns
     /// The boundary port (x, y, z) on the component's bounding box face.
-    pub fn boundary_port(&self, pin_x: i64, pin_y: i64, pin_z: i64, direction: CardinalDirection) -> (i64, i64, i64) {
+    pub fn boundary_port(
+        &self,
+        pin_x: i64,
+        pin_y: i64,
+        pin_z: i64,
+        direction: CardinalDirection,
+    ) -> (i64, i64, i64) {
         match direction {
             CardinalDirection::North => (pin_x, self.bbox.max.y, pin_z),
             CardinalDirection::South => (pin_x, self.bbox.min.y, pin_z),
@@ -866,7 +873,6 @@ pub enum CardinalDirection {
     East,
     West,
 }
-
 
 /// Compaction statistics for monitoring memory health.
 #[derive(Debug, Clone, Copy, PartialEq)]

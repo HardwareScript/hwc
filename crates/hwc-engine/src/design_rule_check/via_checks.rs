@@ -75,13 +75,13 @@ pub fn validate_via_diameters_analytic(
                     (bbox.min.z + bbox.max.z) / 2,
                 );
 
-                    let net_name = contact.net.clone().ok_or_else(|| {
-                        format!(
-                            "[DRC] FATAL: via '{}' has no net assignment. \
+                let net_name = contact.net.clone().ok_or_else(|| {
+                    format!(
+                        "[DRC] FATAL: via '{}' has no net assignment. \
                              All vias must be connected to a declared net.",
-                            contact.name
-                        )
-                    })?;
+                        contact.name
+                    )
+                })?;
 
                 report.add_violation(super::types::DrcViolation::ViaDiameterViolation {
                     net: net_name,

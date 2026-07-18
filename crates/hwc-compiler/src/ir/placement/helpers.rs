@@ -53,6 +53,70 @@ pub fn parse_rectangle_dimensions(
     None
 }
 
+/// Resolve parameterized shape string by substituting parameter values
+/// For example: "Rectangle(w, h, 0nm)" with parameters {w: 600nm, h: 600nm}
+/// becomes "Rectangle(600nm, 600nm, 0nm)"
+pub fn resolve_parameterized_shape(
+    shape_str: &str,
+    parameters: &[hwc_parser::Parameter],
+    symbol_table: &crate::SymbolTable,
+) -> Option<String> {
+    use hwc_parser::ParameterValue;
+
+    // Build a map of parameter names to their resolved values
+    let mut param_map = std::collections::HashMap::new();
+
+    for param in parameters {
+        let hwc_parser::Parameter::Keyword { name, value } = param;
+        let resolved_value = match value {
+            ParameterValue::Measurement(m) => {
+                let nm = symbol_table.measurement_to_nm(m).ok()?;
+                // Convert back to a string with nm suffix
+                format!("{}nm", nm)
+            }
+            ParameterValue::String(s) => s.to_string(),
+            ParameterValue::Number(n) => n.to_string(),
+        };
+        param_map.insert(name.as_str(), resolved_value);
+    }
+
+    // If no parameters, return original
+    if param_map.is_empty() {
+        return Some(shape_str.to_string());
+    }
+
+    // Simple string substitution for shape parameters
+    // This handles patterns like "Rectangle(w, h, depth)" or "Circle(diameter)"
+    let mut result = shape_str.to_string();
+
+    // Extract the part inside parentheses
+    if let Some(start_idx) = result.find('(') {
+        if let Some(end_idx) = result.rfind(')') {
+            let prefix = &result[..start_idx + 1];
+            let params_str = &result[start_idx + 1..end_idx];
+            let suffix = &result[end_idx..];
+
+            // Split by commas and substitute each parameter
+            let parts: Vec<&str> = params_str.split(',').map(|s| s.trim()).collect();
+            let mut resolved_parts = Vec::new();
+
+            for part in parts {
+                // Check if this part is a parameter name
+                if let Some(value) = param_map.get(part) {
+                    resolved_parts.push(value.clone());
+                } else {
+                    // Keep as-is (probably already a literal value)
+                    resolved_parts.push(part.to_string());
+                }
+            }
+
+            result = format!("{}{}{}", prefix, resolved_parts.join(", "), suffix);
+        }
+    }
+
+    Some(result)
+}
+
 /// Parse a measurement string to nanometers via the SymbolTable.
 /// Delegates to the canonical `SymbolTable::measurement_to_nm()` for unit resolution,
 /// supporting both built-in units and custom/user-defined units.
@@ -111,7 +175,8 @@ pub fn offset_coordinate(
             })
         }
         hwc_parser::Coordinate::Positional { .. } => Err(IrError::PlacementConstraint {
-            message: "Positional coordinates not supported for arrays (use declarative syntax)".into(),
+            message: "Positional coordinates not supported for arrays (use declarative syntax)"
+                .into(),
             component: "array".into(),
         }),
         hwc_parser::Coordinate::Relative(_) => Err(IrError::PlacementConstraint {

@@ -18,6 +18,6 @@ pub struct BuildConfig {
     pub deny_warnings: bool,
     pub space: Option<CompactString>, // Filter to build only a specific space
     pub tolerance: Option<f64>,       // Alignment validation tolerance (default: 0.01 = 1%)
-    pub debug_identity: bool,         // v0.1.7: Trace net decomposition (LogicalNet → Route → Physical)
-    pub verify_only: bool,            // v0.1.7: Run verification without export
+    pub debug_identity: bool, // v0.1.7: Trace net decomposition (LogicalNet → Route → Physical)
+    pub verify_only: bool,    // v0.1.7: Run verification without export
 }

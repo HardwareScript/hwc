@@ -52,8 +52,16 @@ impl GeometryRouter {
     ) -> bool {
         let half_thickness = self.resolution_nm / 2;
         let bbox = BoundingBox::new(
-            Point3D::new(center.0 - radius_nm, center.1 - radius_nm, z_nm - half_thickness),
-            Point3D::new(center.0 + radius_nm, center.1 + radius_nm, z_nm + half_thickness),
+            Point3D::new(
+                center.0 - radius_nm,
+                center.1 - radius_nm,
+                z_nm - half_thickness,
+            ),
+            Point3D::new(
+                center.0 + radius_nm,
+                center.1 + radius_nm,
+                z_nm + half_thickness,
+            ),
         );
 
         // 1. Check component metadata (bounding box overlap + circle distance)
@@ -122,8 +130,16 @@ impl GeometryRouter {
     ) {
         let half_thickness = self.resolution_nm / 2;
         let bbox = BoundingBox::new(
-            Point3D::new(center.0 - radius_nm, center.1 - radius_nm, z_nm - half_thickness),
-            Point3D::new(center.0 + radius_nm, center.1 + radius_nm, z_nm + half_thickness),
+            Point3D::new(
+                center.0 - radius_nm,
+                center.1 - radius_nm,
+                z_nm - half_thickness,
+            ),
+            Point3D::new(
+                center.0 + radius_nm,
+                center.1 + radius_nm,
+                z_nm + half_thickness,
+            ),
         );
 
         self.entity_graph.add_cylinder_substrate_layer(
@@ -150,8 +166,16 @@ impl GeometryRouter {
     pub(super) fn remove_circular_area(&mut self, center: (i64, i64), radius_nm: i64, z_nm: i64) {
         let half_thickness = self.resolution_nm / 2;
         let bbox = BoundingBox::new(
-            Point3D::new(center.0 - radius_nm, center.1 - radius_nm, z_nm - half_thickness),
-            Point3D::new(center.0 + radius_nm, center.1 + radius_nm, z_nm + half_thickness),
+            Point3D::new(
+                center.0 - radius_nm,
+                center.1 - radius_nm,
+                z_nm - half_thickness,
+            ),
+            Point3D::new(
+                center.0 + radius_nm,
+                center.1 + radius_nm,
+                z_nm + half_thickness,
+            ),
         );
 
         self.entity_graph.substrate_layers.retain(|layer| {
@@ -174,6 +198,8 @@ impl GeometryRouter {
             true
         });
 
-        self.entity_graph.rebuild_spatial_index(&self.material_registry);
+        // NOTE: entity_graph's spatial index is no longer used for routing.
+        // Each routing method builds its own independent spatial index via build_routing_spatial_index.
+        // self.entity_graph.rebuild_spatial_index(&self.material_registry); // REMOVED
     }
 }

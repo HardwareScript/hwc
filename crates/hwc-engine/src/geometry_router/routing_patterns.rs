@@ -51,8 +51,8 @@ use compact_str::CompactString;
 
 /// A routing pattern defined as relative vector steps.
 ///
-/// Patterns are macro-moves that the A* router can inject into its
-/// neighbor generator to burn extra path length while maintaining the
+/// Patterns are macro-moves that the topological router can inject into its
+/// path segments to burn extra path length while maintaining the
 /// same start and end points.
 #[derive(Debug, Clone)]
 pub struct RoutingPattern {

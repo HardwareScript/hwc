@@ -208,12 +208,15 @@ pub struct ThermalConstraints {
 }
 
 impl ConstraintSet {
-    /// Create an empty constraint set with default values
+    /// Create an empty constraint set — ALWAYS PANICS.
     ///
-    /// Used for testing or when no profile is specified.
-    /// Default values follow IPC-2221 Class 2 standards.
+    /// Fabrication constraints MUST come from the PDK profile. There are no
+    /// silent defaults. Use `hwc_compiler::profile_to_constraints()` instead.
     pub fn empty() -> Self {
-        Self::default()
+        panic!(
+            "ConstraintSet::empty() is not allowed. Fabrication constraints must be \
+             declared in the PDK profile. No silent defaults."
+        )
     }
 
     /// Create constraint set from profile definition (v0.1.4)
@@ -276,47 +279,5 @@ impl ConstraintSet {
         }
 
         Ok(())
-    }
-}
-
-impl Default for ConstraintSet {
-    fn default() -> Self {
-        Self {
-            name: "Default".into(),
-            description: "Default constraints".into(),
-            trace: TraceConstraints {
-                min_width_nm: 100_000,     // 100µm
-                max_width_nm: 0,           // unlimited
-                min_spacing_nm: 100_000,   // 100µm
-                default_width_nm: 250_000, // 250µm
-            },
-            via: ViaConstraints {
-                min_diameter_nm: 300_000,     // 300µm
-                max_diameter_nm: 0,           // unlimited
-                min_annular_ring_nm: 150_000, // 150µm
-                min_spacing_nm: 600_000,      // 600µm (v0.1.7)
-                default_diameter_nm: 500_000, // 500µm
-                shape: None,                  // Default: cylinder
-            },
-            clearance: ClearanceConstraints {
-                low_voltage_nm: 200_000,    // 200µm
-                medium_voltage_nm: 500_000, // 500µm
-                high_voltage_nm: 2_000_000, // 2mm
-                safety_factor: 2.0,
-            },
-            layer: LayerConstraints {
-                min_thickness_nm: 35_000, // 1 oz copper = 35 µm (IPC standard)
-                max_thickness_nm: 0,      // unlimited
-                allowed_conductors: vec!["copper".into()],
-                allowed_dielectrics: vec!["fr4".into(), "air".into()],
-            },
-            thermal: None, // No thermal constraints by default
-            stackup: None, // No stackup constraints by default
-            bridges: vec![],
-            solder_mask_expansion_nm: None, // No solder mask expansion by default
-            technology: None,
-            layer_routability: rustc_hash::FxHashMap::default(),
-            max_local_route_length_nm: None,
-        }
     }
 }

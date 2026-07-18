@@ -1,0 +1,174 @@
+# CMOS Inverter - SCMOS Standard Cell (Middle-Level ASIC Syntax)
+# Demonstrates: engineering-mode, relational geometry, vertical contacts
+#
+# KEY ARCHITECTURAL PRINCIPLE:
+#   In a real ASIC standard cell, the NMOS and PMOS are NOT separate components.
+#   They share a continuous Polysilicon gate strip and are stitched together by
+#   internal metal connections. The entire cell is ONE component with internal
+#   pours that describe the active, poly, and metal1 geometry declaratively.
+
+import * from @std/primitives/units
+import * from @std/primitives/math
+import * from materials
+import Silicon_250nm from foundry_pdk
+
+# ============================================================================
+# 1. Logical Schematic (Module Definition)
+# ============================================================================
+module Inverter_Schematic:
+    pins: [input VIN, output VOUT, power VDD, ground GND]
+
+# ============================================================================
+# 2. Parameterized Standard Cell (Unified Silicon-Native)
+# ============================================================================
+component CMOS_Inverter_Cell(w_n: Measurement, w_p: Measurement, l_g: Measurement):
+    pins: [VIN, VOUT, VDD, GND]
+    layout:
+        shape: Rectangle(3.0um, 5.5um, 200nm)
+        pin_positions:
+            VIN at [1.0um, 2.75um, 1160nm]
+            VOUT at [1.5um, 2.75um, 1160nm]
+            VDD at [1.5um, 5.2um, 1160nm]
+            GND at [1.5um, 300nm, 1160nm]
+        pad_shapes:
+            VIN: Rectangle(250nm, 250nm, 0nm)
+            VOUT: Rectangle(250nm, 250nm, 0nm)
+            VDD: Rectangle(250nm, 250nm, 0nm)
+            GND: Rectangle(250nm, 250nm, 0nm)
+
+        # ----------------------------------------------------------------
+        # NMOS Active Diffusion (bottom half of cell)
+        # NMOS: [500nm, 1000nm] to [1500nm, 1375nm] (w_n=375nm)
+        # ----------------------------------------------------------------
+        add pour(Silicon_N) named NMOS_Active on layer: active:
+            device: drain
+            boundary: [x: 500nm, y: 1000nm] to [x: 1500nm, y: 1375nm]
+
+        # ----------------------------------------------------------------
+        # PMOS Active Diffusion (top half, 1.5um gap from NMOS)
+        # PMOS: [500nm, 2875nm] to [1500nm, 4000nm] (w_p=1125nm)
+        # ----------------------------------------------------------------
+        add pour(Silicon_P) named PMOS_Active on layer: active:
+            device: source
+            boundary: [x: 500nm, y: 2875nm] to [x: 1500nm, y: 4000nm]
+
+        # ----------------------------------------------------------------
+        # Continuous Shared Polysilicon Gate (center_x=1000nm, spans both actives)
+        # ----------------------------------------------------------------
+        add pour(Polysilicon) named Shared_Gate on layer: poly:
+            device: gate
+            boundary: [x: 875nm, y: 800nm] to [x: 1125nm, y: 4200nm]
+
+        # ----------------------------------------------------------------
+        # N-Well: Encloses PMOS active with 400nm overhang
+        # ----------------------------------------------------------------
+        add pour(Silicon_P) named N_Well on layer: substrate:
+            boundary: [x: 100nm, y: 2475nm] to [x: 1900nm, y: 4400nm]
+
+        # ----------------------------------------------------------------
+        # Power Rails (Metal1)
+        # ----------------------------------------------------------------
+        add pour(Aluminum) named GND_Rail on layer: metal1:
+            net: GND
+            boundary: [x: 0nm, y: 0nm] to [x: 3000nm, y: 600nm]
+
+        add pour(Aluminum) named VDD_Rail on layer: metal1:
+            net: VDD
+            boundary: [x: 0nm, y: 4900nm] to [x: 3000nm, y: 5500nm]
+
+        # ----------------------------------------------------------------
+        # Shared Drain Metal (VOUT) - stitches NMOS and PMOS drains
+        # ----------------------------------------------------------------
+        add pour(Aluminum) named Shared_Drain on layer: metal1:
+            net: VOUT
+            boundary: [x: 1125nm, y: 1000nm] to [x: 1500nm, y: 4000nm]
+
+        # ----------------------------------------------------------------
+        # Source/Bulk Landing Pads (Metal1)
+        # ----------------------------------------------------------------
+        add pour(Aluminum) named NMOS_Source_Pad on layer: metal1:
+            net: GND
+            boundary: [x: 500nm, y: 0nm] to [x: 750nm, y: 1250nm]
+
+        add pour(Aluminum) named PMOS_Source_Pad on layer: metal1:
+            net: VDD
+            boundary: [x: 500nm, y: 4000nm] to [x: 750nm, y: 5500nm]
+
+        add pour(Aluminum) named NMOS_Bulk_Pad on layer: metal1:
+            net: GND
+            boundary: [x: 1750nm, y: 0nm] to [x: 2000nm, y: 1250nm]
+
+        add pour(Aluminum) named PMOS_Bulk_Pad on layer: metal1:
+            net: VDD
+            boundary: [x: 1750nm, y: 4000nm] to [x: 2000nm, y: 5500nm]
+
+# ============================================================================
+# 3. Physical Layout Space (Engineering Mode Active)
+# ============================================================================
+
+space CMOS_Inverter_Middle implements Inverter_Schematic:
+    dimensions: 3.0um by 5.5um by 1.36um
+    origin: bl by b
+    resolution: 1nm
+    profile: Silicon_250nm
+
+    nets:
+        VIN:  { classification: signal, potential: 0V }
+        VOUT: { classification: signal, potential: 0V }
+        VDD:  { classification: power,  potential: 2.5V }
+        GND:  { classification: ground, potential: 0V }
+
+    add CMOS_Inverter_Cell(w_n: 375nm, w_p: 1125nm, l_g: 250nm) named INV1 on layer: active at [x: 0nm, y: 0nm] rotated 0deg:
+        mount: embedded
+        standoff: 0nm
+        net: [VIN: VIN, VOUT: VOUT, VDD: VDD, GND: GND]
+
+    # ================================================================
+    # VERTICAL OHMIC CONTACTS (Bridges active/poly to metal1)
+    # ================================================================
+    # Without these, the layers float disconnected in 3D space.
+    # Contacts are placed at the space level using absolute coordinates.
+    #
+    # NOTE: Tungsten (W) contacts in CMOS are solid CVD-filled plugs,
+    # NOT hollow plated tubes. plating_thickness = diameter/2 = solid fill.
+
+    # NMOS Source Contact (active to metal1) -> GND
+    add contact(Tungsten) named Via_NMOS_Source net: GND at [x: 625nm, y: 1125nm] spanning layer: active to metal1:
+        diameter: 250nm
+        plating_thickness: 125nm
+        caps: true
+        filled: true
+        fill_material: Tungsten
+
+    # PMOS Source Contact (active to metal1) -> VDD
+    add contact(Tungsten) named Via_PMOS_Source net: VDD at [x: 625nm, y: 4125nm] spanning layer: active to metal1:
+        diameter: 250nm
+        plating_thickness: 125nm
+        caps: true
+        filled: true
+        fill_material: Tungsten
+
+    # Gate Contact (poly to metal1) -> VIN
+    add contact(Tungsten) named Via_Gate net: VIN at [x: 1000nm, y: 2750nm] spanning layer: poly to metal1:
+        diameter: 250nm
+        plating_thickness: 125nm
+        caps: true
+        filled: true
+        fill_material: Tungsten
+
+    # NMOS Bulk Tap (P-Substrate to GND metal)
+    add contact(Tungsten) named Via_NMOS_Bulk net: GND at [x: 1875nm, y: 1125nm] spanning layer: active to metal1:
+        diameter: 250nm
+        plating_thickness: 125nm
+        caps: true
+        filled: true
+        fill_material: Tungsten
+
+    # PMOS Bulk Tap (N-Well to VDD metal)
+    add contact(Tungsten) named Via_PMOS_Bulk net: VDD at [x: 1875nm, y: 4125nm] spanning layer: active to metal1:
+        diameter: 250nm
+        plating_thickness: 125nm
+        caps: true
+        filled: true
+        fill_material: Tungsten
+

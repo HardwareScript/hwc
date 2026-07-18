@@ -1,11 +1,11 @@
 //! Fast Global Router using G-Cell Line-Casting
 //!
-//! Instead of running high-resolution A* over the entire board for cross-cell nets,
+//! Instead of running high-resolution topological routing over the entire board for cross-cell nets,
 //! this module uses a fast geometric line-casting algorithm to determine which
 //! G-Cells each net intersects. The net is then decomposed into local segments
 //! bounded by each G-Cell, which are routed in parallel via Rayon.
 //!
-//! **Performance**: < 2ms for 128 nets on 100mm² board (vs 35s with A* fallback)
+//! **Performance**: < 2ms for 128 nets on 100mm² board (vs 35s with grid-based fallback)
 
 use crate::geometry::{BoundingBox, Point3D};
 
@@ -61,7 +61,11 @@ impl GCellGrid {
     /// v0.1.7: Get cell index at absolute coordinate
     pub fn get_cell_index_at(&self, x: i64, y: i64) -> Option<usize> {
         for (i, cell) in self.cells.iter().enumerate() {
-            if x >= cell.bbox.min.x && x < cell.bbox.max.x && y >= cell.bbox.min.y && y < cell.bbox.max.y {
+            if x >= cell.bbox.min.x
+                && x < cell.bbox.max.x
+                && y >= cell.bbox.min.y
+                && y < cell.bbox.max.y
+            {
                 return Some(i);
             }
         }

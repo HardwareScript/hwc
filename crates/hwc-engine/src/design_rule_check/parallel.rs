@@ -4,8 +4,8 @@ use crate::constraint_manager::ConstraintRulebook;
 use crate::space::HardwareSpace;
 
 use super::clearance::validate_clearances;
-use super::trace_width::validate_trace_widths;
 use super::thermal::validate_current_density;
+use super::trace_width::validate_trace_widths;
 use super::types::DrcReport;
 use super::via_checks::{
     validate_drill_to_drill_clearance, validate_via_diameters_analytic,
@@ -32,37 +32,26 @@ pub fn validate_physics_parallel(
     }
 
     // 3. Current Density Validation (PDK material limits)
-    let current_density_violations = validate_current_density(
-        &space.analytic_routes,
-        &space.material_registry,
-    )?;
+    let current_density_violations =
+        validate_current_density(&space.analytic_routes, &space.material_registry)?;
     for violation in current_density_violations {
         report.add_violation(violation);
     }
 
     // 4. Via Diameter Validation
-    let via_diameter_report = validate_via_diameters_analytic(
-        &space.contacts,
-        constraints,
-    )?;
+    let via_diameter_report = validate_via_diameters_analytic(&space.contacts, constraints)?;
     for violation in via_diameter_report.violations {
         report.add_violation(violation);
     }
 
     // 5. Via Enclosure Validation
-    let via_enclosure_report = validate_via_enclosure_analytic(
-        &space.contacts,
-        constraints,
-    )?;
+    let via_enclosure_report = validate_via_enclosure_analytic(&space.contacts, constraints)?;
     for violation in via_enclosure_report.violations {
         report.add_violation(violation);
     }
 
     // 6. Drill-to-Drill Clearance Validation
-    let drill_clearance_report = validate_drill_to_drill_clearance(
-        &space.contacts,
-        constraints,
-    )?;
+    let drill_clearance_report = validate_drill_to_drill_clearance(&space.contacts, constraints)?;
     for violation in drill_clearance_report.violations {
         report.add_violation(violation);
     }

@@ -14,7 +14,9 @@ impl GeometryRouter {
     pub fn resolve_boundary_port(&self, pin: Point3D, target: Point3D) -> Point3D {
         // Read clearance in nanometers directly from fabrication constraints (zero-magic)
         // No fallback - if constraints are missing, this will panic with a clear error.
-        let clearance_nm = self.constraints.fabrication
+        let clearance_nm = self
+            .constraints
+            .fabrication
             .as_ref()
             .expect("BUG: Fabrication constraints required for boundary port resolution")
             .min_trace_spacing_nm;
@@ -34,7 +36,10 @@ impl GeometryRouter {
         // Try 2: fallback to pour substrate layers (catches pads with no component metadata)
         let bbox = match maybe_bbox {
             Some(b) => b,
-            None => match self.entity_graph.get_pour_bbox_at_position(pin.x, pin.y, pin.z) {
+            None => match self
+                .entity_graph
+                .get_pour_bbox_at_position(pin.x, pin.y, pin.z)
+            {
                 Some(b) => b,
                 None => return pin,
             },
@@ -44,18 +49,18 @@ impl GeometryRouter {
         // The router targets the outer bounding box edge of the selected cardinal port
         // and terminates the path the instant it touches the edge.
         // Pad interiors are marked as impenetrable to prevent internal loops.
-        
+
         // v0.1.8: Ensure the escape point maintains the EXACT Z-height of the pin.
         // This prevents the 'Z-mismatch' bug where traces would float above or below pads.
         let escape_z = pin.z;
 
         // Use resolution/snap-step for coordinate snapping.
-        let _resolution_nm = self.resolution_nm; 
-        
+        let _resolution_nm = self.resolution_nm;
+
         // Calculate a proper cardinal port escape to ensure orthogonal "clean" entry
         // into the pad from the center of one of its faces.
         // The escape point is now outside the pad boundary by exactly one clearance_nm.
-        
+
         // v0.1.8: Use the Bounding Box Center for direction calculation instead of
         // the pin position. This ensures perfectly orthogonal escapes even if the
         // pin (anchor) is slightly offset or if we're dealing with logical corners.
@@ -105,17 +110,31 @@ impl GeometryRouter {
 
     /// Global continuous router with localized active-set optimization fallback.
     pub fn route_net_global(&mut self, route: &NetRoute) -> Result<RoutedNet, RoutingError> {
-        // v0.1.8: Fail-Fast — fabrication constraints are MANDATORY.
-        // No hardcoded fallbacks. All values come from the PDK profile.
-        let fabrication = self.constraints.fabrication.as_ref()
-            .ok_or_else(|| RoutingError::MissingFabricationConstraints {
+        // v0.1.9: Fail-Fast — trace width MUST be declared for this net.
+        // No fallbacks to PDK minimum. The compiler is responsible for ensuring
+        // every route has an explicit width or a valid default.
+        let trace_width = self.net_trace_widths.get(&route.net_id).copied().ok_or_else(|| {
+            RoutingError::MissingFabricationConstraints {
+                net_id: route.net_id,
+                message: format!(
+                    "No trace width declared for net_id={}. Every route must have an explicit \
+                     'width:' parameter or the space must provide a default trace width.",
+                    route.net_id.raw()
+                )
+                .into(),
+            }
+        })?;
+
+        // v0.1.9: Fabrication constraints still required for clearance rules
+        let fabrication = self.constraints.fabrication.as_ref().ok_or_else(|| {
+            RoutingError::MissingFabricationConstraints {
                 net_id: route.net_id,
                 message: "No fabrication constraints loaded from PDK profile. \
                     Ensure a profile with 'trace:' and 'clearance:' constraints \
-                    is declared in the space definition.".into(),
-            })?;
-
-        let trace_width = fabrication.min_trace_width_nm;
+                    is declared in the space definition."
+                    .into(),
+            }
+        })?;
 
         let max_valid_x = self.bounds.width_nm.saturating_sub(1);
         let max_valid_y = self.bounds.height_nm.saturating_sub(1);
@@ -132,114 +151,127 @@ impl GeometryRouter {
 
         let board_bounds = BoundingBox::new(
             Point3D::new(0, 0, 0),
-            Point3D::new(self.bounds.width_nm, self.bounds.height_nm, self.bounds.depth_nm),
+            Point3D::new(
+                self.bounds.width_nm,
+                self.bounds.height_nm,
+                self.bounds.depth_nm,
+            ),
         );
 
         let spatial_index = self.build_routing_spatial_index(route);
-        
+
         let track_pitch = self.resolution_nm; // Use snap-resolution for pitch
-        
-        let topo_router = TopologicalRouter::new(trace_width, track_pitch);
 
-        // v0.1.8: Prefer SDF-accelerated A* routing when an SDF generator is available.
-        // The SDF router enforces guardrails (R25, Interior Lockout, Via-Portal Exemption).
-        let path = if let Some(ref sdf) = self.sdf_generator {
-            use crate::geometry_router::pathfinding::RoutingParams;
-            use crate::geometry_router::pathfinding::route_net_sdf_accelerated;
-            use crate::constraint_manager::LayerDirection;
+        // Try fast topological routing first (Tier 0-1)
+        let topo_router = TopologicalRouter::new(trace_width, track_pitch, fabrication.min_trace_spacing_nm);
+        let path = match topo_router.route(start, goal, &spatial_index, &board_bounds) {
+            Some(topo_path) if topo_path.waypoints.len() >= 2 => topo_path.waypoints,
+            _ => {
+                // Tier 1 failed - try Tier 2: Navigable Space Extraction
+                eprintln!(
+                    "[ROUTE_NET_GLOBAL] Topological routing failed, trying navigable space extraction for net {}",
+                    route.net_id.raw()
+                );
+                
+                // Collect obstacles from spatial index
+                let query_box = board_bounds.clone();
+                let obstacles: Vec<_> = spatial_index
+                    .query_bbox(&query_box)
+                    .iter()
+                    .map(|seg| {
+                        BoundingBox::new(
+                            Point3D::new(
+                                seg.start.x.min(seg.end.x) - seg.width_nm / 2,
+                                seg.start.y.min(seg.end.y) - seg.width_nm / 2,
+                                seg.start.z.min(seg.end.z),
+                            ),
+                            Point3D::new(
+                                seg.start.x.max(seg.end.x) + seg.width_nm / 2,
+                                seg.start.y.max(seg.end.y) + seg.width_nm / 2,
+                                seg.start.z.max(seg.end.z),
+                            ),
+                        )
+                    })
+                    .collect();
 
-                // v0.1.9: Empty layer routability map for engine internal routing
-                let empty_layer_map = rustc_hash::FxHashMap::default();
-
-                let routing_params = RoutingParams {
-                    net_id: route.net_id,
-                    constraints: &crate::constraint_manager::RouteConstraints {
-                        min_trace_width_nm: trace_width,
-                        min_clearance_nm: fabrication.min_trace_spacing_nm,
-                        ..Default::default()
-                    },
-                    bounds: self.bounds.clone(),
-                    layer_direction: LayerDirection::Any,
-                    resolution_nm: self.resolution_nm,
-                    clearance_zones: &[],
-                    entity_graph: Some(&self.entity_graph),
-                    // v0.1.8: Lock to exact physical Z when start and goal share the same Z.
-                    // This prevents the SDF router from snapping Z to grid centers, which
-                    // would destroy layer overrides (e.g. layer: metal1 → Z=300850).
-                    fixed_z_nm: None,
-                    exempt_components: &[],
-                    substrate_layers: self.substrate_layers.as_deref(),
-                    is_high_speed_net: false,
-                    layer_routability_map: &empty_layer_map,
-                    max_local_route_length_nm: None,
-                    via_drill_diameter_nm: 0,
-                    active_net_pin_positions: &[],
-                    component_keepouts: &[],
-                    // v0.1.8: Routing heuristic weights from PDK profile — fail if missing
-                    base_cost: self.routing_heuristics.as_ref()
-                        .ok_or_else(|| RoutingError::MissingFabricationConstraints {
+                // Use the navigable space extractor (Minkowski-inflated C-Space)
+                use crate::geometry_router::navigable_space::SpatialDecomposer;
+                
+                // For obstacle avoidance, we need clearance = trace_width/2 (physical extent)
+                // plus a small safety margin (use min_spacing as the safety margin)
+                // The SpatialDecomposer will inflate obstacles by (trace_width/2) + min_clearance
+                let min_clearance = fabrication.min_trace_spacing_nm;
+                
+                eprintln!("[ROUTE_NET_GLOBAL] Preparing to create SpatialDecomposer:");
+                eprintln!("  obstacles.len() = {}", obstacles.len());
+                for (i, obs) in obstacles.iter().enumerate() {
+                    eprintln!("  obstacle[{}]: ({},{},{}) to ({},{},{})", 
+                        i, obs.min.x, obs.min.y, obs.min.z, obs.max.x, obs.max.y, obs.max.z);
+                }
+                eprintln!("  trace_width = {} nm", trace_width);
+                eprintln!("  min_clearance (from min_trace_spacing) = {} nm", min_clearance);
+                
+                let decomposer = match SpatialDecomposer::new(
+                    obstacles,
+                    trace_width,
+                    min_clearance,
+                ) {
+                    Ok(d) => d,
+                    Err(e) => {
+                        eprintln!(
+                            "[ROUTE_NET_GLOBAL ERROR] Failed to create spatial decomposer: {}",
+                            e
+                        );
+                        return Err(RoutingError::NoPathFound {
                             net_id: route.net_id,
-                            message: "Profile does not declare routing heuristics (base_cost, via_penalty, etc.). All routing weights must come from the PDK profile's 'routing:' block.".into(),
-                        })?.base_cost,
-                    via_penalty: self.routing_heuristics.as_ref().ok_or_else(|| RoutingError::MissingFabricationConstraints {
-                        net_id: route.net_id,
-                        message: "Missing via_penalty in profile routing heuristics.".into(),
-                    })?.via_penalty,
-                    direction_penalty: self.routing_heuristics.as_ref().ok_or_else(|| RoutingError::MissingFabricationConstraints {
-                        net_id: route.net_id,
-                        message: "Missing direction_penalty in profile routing heuristics.".into(),
-                    })?.direction_penalty,
-                    tight_clearance_penalty: self.routing_heuristics.as_ref().ok_or_else(|| RoutingError::MissingFabricationConstraints {
-                        net_id: route.net_id,
-                        message: "Missing tight_clearance_penalty in profile routing heuristics.".into(),
-                    })?.tight_clearance_penalty,
-                    crosstalk_penalty: self.routing_heuristics.as_ref().ok_or_else(|| RoutingError::MissingFabricationConstraints {
-                        net_id: route.net_id,
-                        message: "Missing crosstalk_penalty in profile routing heuristics.".into(),
-                    })?.crosstalk_penalty,
-                    impedance_penalty: self.routing_heuristics.as_ref().ok_or_else(|| RoutingError::MissingFabricationConstraints {
-                        net_id: route.net_id,
-                        message: "Missing impedance_penalty in profile routing heuristics.".into(),
-                    })?.impedance_penalty,
-                    reference_void_penalty: self.routing_heuristics.as_ref().ok_or_else(|| RoutingError::MissingFabricationConstraints {
-                        net_id: route.net_id,
-                        message: "Missing reference_void_penalty in profile routing heuristics.".into(),
-                    })?.reference_void_penalty,
+                            start: route.start,
+                            goal: route.goal,
+                        });
+                    }
                 };
 
-            match route_net_sdf_accelerated(start, goal, &routing_params, sdf) {
-                Some(sdf_path) if sdf_path.len() >= 2 => {
-                    // SDF routing success logged for debugging
-                    // eprintln!("[SDF-ROUTER] net {} routed via SDF ({} points)", route.net_id.raw(), sdf_path.len());
-                    sdf_path
-                }
-                _ => {
-                    // eprintln!("[SDF-ROUTER] net {} SDF failed, falling back to TopologicalRouter", route.net_id.raw());
-                    match topo_router.route(start, goal, &spatial_index, &board_bounds) {
-                        Some(topo_path) if topo_path.waypoints.len() >= 2 => topo_path.waypoints,
-                        _ => {
-                            let collision_window = BoundingBox::new(start, goal);
-                            if let Ok(legalized_path) = self.legalize_local_window(&collision_window, route) {
-                                legalized_path
-                            } else {
-                                return Err(RoutingError::NoPathFound {
-                                    net_id: route.net_id,
-                                    start: route.start,
-                                    goal: route.goal,
-                                });
+                // Decompose the free space (Configuration Space with Minkowski inflation)
+                let cells = decomposer.decompose(&board_bounds, start.z);
+                
+                eprintln!("[NAVIGABLE SPACE] Generated {} free cells from decomposition", cells.len());
+                
+                // Extract corridor through the navigable space
+                match decomposer.extract_corridor(start, goal, &cells) {
+                    Ok(corridor) => {
+                        // Convert corridor cells to waypoints
+                        let waypoints = decomposer.corridor_to_waypoints(&corridor, &cells);
+                        if waypoints.len() >= 2 {
+                            eprintln!(
+                                "[ROUTE_NET_GLOBAL] Successfully routed via navigable space: {} waypoints",
+                                waypoints.len()
+                            );
+                            // Ensure path starts at original start and ends at original goal
+                            let mut complete_path = vec![start];
+                            complete_path.extend(waypoints);
+                            complete_path.push(goal);
+                            
+                            eprintln!("[ROUTE_NET_GLOBAL] Final complete path ({} points):", complete_path.len());
+                            for (i, pt) in complete_path.iter().enumerate() {
+                                eprintln!("  path[{}] = ({}, {}, {})", i, pt.x, pt.y, pt.z);
                             }
+                            
+                            complete_path
+                        } else {
+                            eprintln!(
+                                "[ROUTE_NET_GLOBAL ERROR] Navigable space extraction returned insufficient waypoints"
+                            );
+                            return Err(RoutingError::NoPathFound {
+                                net_id: route.net_id,
+                                start: route.start,
+                                goal: route.goal,
+                            });
                         }
                     }
-                }
-            }
-        } else {
-            match topo_router.route(start, goal, &spatial_index, &board_bounds) {
-                Some(topo_path) if topo_path.waypoints.len() >= 2 => topo_path.waypoints,
-                _ => {
-                    let collision_window = BoundingBox::new(start, goal);
-                    if let Ok(legalized_path) = self.legalize_local_window(&collision_window, route) {
-                        legalized_path
-                    } else {
+                    Err(e) => {
+                        eprintln!(
+                            "[ROUTE_NET_GLOBAL ERROR] Navigable space extraction failed: {:?}",
+                            e
+                        );
                         return Err(RoutingError::NoPathFound {
                             net_id: route.net_id,
                             start: route.start,
@@ -274,23 +306,39 @@ impl GeometryRouter {
             self.trace_width_nm,
         );
 
-        let mut final_path = path;
-        
+        let final_path = path;
+
         eprintln!("[ROUTE_NET_GLOBAL DEBUG] Path BEFORE boundary restore:");
-        eprintln!("  route.start=({},{},{}), route.goal=({},{},{})", 
-            route.start.x, route.start.y, route.start.z, route.goal.x, route.goal.y, route.goal.z);
+        eprintln!(
+            "  route.start=({},{},{}), route.goal=({},{},{})",
+            route.start.x, route.start.y, route.start.z, route.goal.x, route.goal.y, route.goal.z
+        );
+        eprintln!("  path has {} points", final_path.len());
         for (i, p) in final_path.iter().enumerate().take(4) {
             eprintln!("  final_path[{}]=({},{},{})", i, p.x, p.y, p.z);
         }
         if final_path.len() > 4 {
             eprintln!("  ... and {} more points", final_path.len() - 4);
         }
-        
-        if !final_path.is_empty() {
-            final_path[0] = route.start;
-            *final_path.last_mut().unwrap() = route.goal;
-        }
-        
+
+        // v0.1.9: Boundary Restore Fix
+        // DO NOT overwrite the path endpoints! The TopologicalRouter already computed
+        // the correct boundary-docked points. Overwriting with route.start/goal would
+        // reintroduce the pad penetration bug where traces extend into component interiors.
+        //
+        // Historical context: route.start and route.goal were originally the boundary
+        // escape points from calculate_boundary_points(), but when explicit_segments mode
+        // was added, these became the pad CENTER coordinates instead of boundary points.
+        //
+        // The TopologicalRouter's output waypoints are already correctly positioned at
+        // the pad boundaries, so we should trust them.
+        //
+        // REMOVED CODE:
+        // if !final_path.is_empty() {
+        //     final_path[0] = route.start;
+        //     *final_path.last_mut().unwrap() = route.goal;
+        // }
+
         eprintln!("[ROUTE_NET_GLOBAL DEBUG] Path AFTER boundary restore:");
         for (i, p) in final_path.iter().enumerate().take(4) {
             eprintln!("  final_path[{}]=({},{},{})", i, p.x, p.y, p.z);
@@ -351,12 +399,19 @@ impl GeometryRouter {
                     goal: points[i + 1],
                 };
 
-                eprintln!("[EXPLICIT DEBUG] net_id={}, start=({},{},{}), goal=({},{},{})", 
-                    net_id.raw(), route.start.x, route.start.y, route.start.z,
-                    route.goal.x, route.goal.y, route.goal.z);
+                eprintln!(
+                    "[EXPLICIT DEBUG] net_id={}, start=({},{},{}), goal=({},{},{})",
+                    net_id.raw(),
+                    route.start.x,
+                    route.start.y,
+                    route.start.z,
+                    route.goal.x,
+                    route.goal.y,
+                    route.goal.z
+                );
 
                 let routed = self.route_net_global(&route)?;
-                
+
                 if let Some(path) = routed.paths.first() {
                     eprintln!("[EXPLICIT DEBUG] Returned path ({} points):", path.len());
                     for (j, p) in path.iter().enumerate().take(4) {

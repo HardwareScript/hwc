@@ -55,7 +55,7 @@ impl SpatialDependencyGraph {
 
         if dependent != dependency {
             // Only add the dependency if it is a known component in the graph.
-            // (Standard materials or non-existent references are skipped; 
+            // (Standard materials or non-existent references are skipped;
             // invalid references are validated/reported in separate compiler passes).
             if self.dependencies.contains_key(&dependency) {
                 self.dependencies

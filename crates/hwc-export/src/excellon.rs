@@ -270,15 +270,19 @@ pub fn export(space: &HardwareSpace, output_dir: &Path) -> Result<(), Box<dyn st
             let via_type = if via.is_through_hole(board_min_z_nm, board_max_z_nm) {
                 ViaTypeCategory::PlatedThroughHole
             } else if via.is_blind(board_min_z_nm, board_max_z_nm) {
-                let from_layer = grid_index_from_z(via.from_z_nm.min(via.to_z_nm), space.resolution_nm);
-                let to_layer = grid_index_from_z(via.from_z_nm.max(via.to_z_nm), space.resolution_nm);
+                let from_layer =
+                    grid_index_from_z(via.from_z_nm.min(via.to_z_nm), space.resolution_nm);
+                let to_layer =
+                    grid_index_from_z(via.from_z_nm.max(via.to_z_nm), space.resolution_nm);
                 ViaTypeCategory::Blind {
                     from_layer,
                     to_layer,
                 }
             } else if via.is_buried(board_min_z_nm, board_max_z_nm) {
-                let from_layer = grid_index_from_z(via.from_z_nm.min(via.to_z_nm), space.resolution_nm);
-                let to_layer = grid_index_from_z(via.from_z_nm.max(via.to_z_nm), space.resolution_nm);
+                let from_layer =
+                    grid_index_from_z(via.from_z_nm.min(via.to_z_nm), space.resolution_nm);
+                let to_layer =
+                    grid_index_from_z(via.from_z_nm.max(via.to_z_nm), space.resolution_nm);
                 ViaTypeCategory::Buried {
                     from_layer,
                     to_layer,

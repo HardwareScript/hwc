@@ -394,21 +394,22 @@ pub fn connectivity_to_error(violation: &ConnectivityViolation) -> PhysicsError 
 
 /// Convert PIVB fragmentation report to error code
 pub fn pivb_to_error(report: &FragmentationReport) -> PhysicsError {
-    let island_details = report.islands
+    let island_details = report
+        .islands
         .iter()
         .map(|island| {
-                    let z_min = island.bbox.min.z;
-                    let z_max = island.bbox.max.z;
-                    let z_str = if z_max - z_min < 1_000_000 {
-                        format!("{}nm-{}nm", z_min, z_max)
-                    } else {
-                        format!("{}mm-{}mm", z_min / 1_000_000, z_max / 1_000_000)
-                    };
-                    format!(
-                        "Island group {} at z:{} ({} islands)",
-                        island.group_index, z_str, island.island_count
-                    )
-                })
+            let z_min = island.bbox.min.z;
+            let z_max = island.bbox.max.z;
+            let z_str = if z_max - z_min < 1_000_000 {
+                format!("{}nm-{}nm", z_min, z_max)
+            } else {
+                format!("{}mm-{}mm", z_min / 1_000_000, z_max / 1_000_000)
+            };
+            format!(
+                "Island group {} at z:{} ({} islands)",
+                island.group_index, z_str, island.island_count
+            )
+        })
         .collect::<Vec<_>>()
         .join(", ");
 

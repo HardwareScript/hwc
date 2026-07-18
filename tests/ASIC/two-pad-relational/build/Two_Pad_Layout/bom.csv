@@ -1,0 +1,9 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,0.01x0.00x0.00mm,,,,,1
+Pad_A,Plane(Aluminum),,,,,,1
+Pad_B,Plane(Aluminum),,,,,,1
+
+# MATERIAL USAGE (Fabrication)
+Reference,Type,Material,Layer_Z_nm,Area_nm2,Volume_nm3
+Pad_A,Pour,Aluminum,z:960,360000,144000000
+Pad_B,Pour,Aluminum,z:960,360000,144000000

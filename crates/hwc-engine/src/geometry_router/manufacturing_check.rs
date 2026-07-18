@@ -44,7 +44,11 @@ pub enum MfgViolationType {
     /// Stacked microvia count per column exceeds lamination cycle limit.
     LaminationCycleExceed { count: u32, limit: u32 },
     /// Solder mask expansion out of technology-specific range.
-    SolderMaskExpansion { actual: i64, min_allowed: i64, max_allowed: i64 },
+    SolderMaskExpansion {
+        actual: i64,
+        min_allowed: i64,
+        max_allowed: i64,
+    },
     /// Via spans more than a single metal layer pair (ASIC layer-local).
     ViaLayerViolation { message: String },
 }
@@ -53,7 +57,11 @@ impl fmt::Display for MfgViolationType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             MfgViolationType::ViaAspectRatio { ratio, limit } => {
-                write!(f, "Via aspect ratio {:.2}:1 exceeds limit {}:1", ratio, limit)
+                write!(
+                    f,
+                    "Via aspect ratio {:.2}:1 exceeds limit {}:1",
+                    ratio, limit
+                )
             }
             MfgViolationType::LaminationCycleExceed { count, limit } => {
                 write!(

@@ -19,8 +19,7 @@ pub fn run_physical_continuity_check(
 
     let mut conductive_material_ids = rustc_hash::FxHashSet::default();
     for (id, _name) in space.material_registry.all_materials() {
-        if space.material_registry.is_conductor(id)
-            || space.material_registry.is_semiconductor(id)
+        if space.material_registry.is_conductor(id) || space.material_registry.is_semiconductor(id)
         {
             conductive_material_ids.insert(id);
         }
@@ -40,7 +39,7 @@ pub fn run_physical_continuity_check(
 
     // Prepare ContactPlacement for PIVB Pass 2
     let mut contact_placements = Vec::new();
-    
+
     // v0.1.8: Include vertical routes from all_substrate_layers (converted from analytic_routes)
     for layer in &all_substrate_layers {
         if layer.layer_type == hwc_physics::connectivity::SubstrateLayerType::Contact {

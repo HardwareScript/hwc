@@ -109,11 +109,11 @@ impl Measurement {
     /// Returns `None` if the unit is not a distance unit.
     pub fn to_picometers_i64(&self) -> Option<i64> {
         match &self.unit {
-            Unit::Millimeter => Some((self.value * 1_000_000.0) as i64),
-            Unit::Centimeter => Some((self.value * 10_000_000.0) as i64),
-            Unit::Micrometer => Some((self.value * 1_000.0) as i64),
-            Unit::Nanometer => Some((self.value * 1_000.0) as i64),
-            Unit::Picometer => Some(self.value as i64),
+            Unit::Millimeter => Some((self.value * 1_000_000_000.0) as i64), // 1mm = 1,000,000,000 pm
+            Unit::Centimeter => Some((self.value * 10_000_000_000.0) as i64), // 1cm = 10,000,000,000 pm
+            Unit::Micrometer => Some((self.value * 1_000_000.0) as i64), // 1µm = 1,000,000 pm (FIXED!)
+            Unit::Nanometer => Some((self.value * 1_000.0) as i64),      // 1nm = 1,000 pm
+            Unit::Picometer => Some(self.value as i64),                  // 1pm = 1 pm
             _ => None,
         }
     }
@@ -142,7 +142,8 @@ impl Resolution {
     /// Create a `Resolution` from any distance `Measurement`.
     /// Returns `None` if the measurement is not a distance unit.
     pub fn from_measurement(m: &Measurement) -> Option<Self> {
-        m.to_picometers_i64().map(|pm| Resolution { snap_step_pm: pm })
+        m.to_picometers_i64()
+            .map(|pm| Resolution { snap_step_pm: pm })
     }
 }
 
@@ -716,7 +717,9 @@ mod tests {
         };
 
         // Snap to 1mm = 1,000,000 pm
-        let resolution = Resolution { snap_step_pm: 1_000_000 };
+        let resolution = Resolution {
+            snap_step_pm: 1_000_000,
+        };
         let ctx = FxHashMap::default();
         let (x_pm, y_pm, z_idx) = coord.evaluate_with_resolution(&ctx, &resolution).unwrap();
         assert_eq!(x_pm, 1_000_000); // 1,500,000 snapped to 1,000,000
@@ -750,7 +753,7 @@ mod tests {
         let ctx = FxHashMap::default();
         let (x_pm, y_pm, z_idx) = coord.evaluate_picometers(&ctx).unwrap();
         assert_eq!(x_pm, 500_000); // 500nm = 500,000 pm
-        assert_eq!(y_pm, 250);     // 250pm = 250 pm
+        assert_eq!(y_pm, 250); // 250pm = 250 pm
         assert_eq!(z_idx, 2);
     }
 }

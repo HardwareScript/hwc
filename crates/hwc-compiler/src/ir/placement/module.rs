@@ -25,11 +25,10 @@ pub fn place_module_instance(
 
     println!("🔧 Flattening module: {}", module_placement.component_type);
 
-    let flattened = flatten_module(module_def)
-        .map_err(|e| IrError::PlacementConstraint {
-            message: format!("Module flattening failed: {}", e),
-            component: module_placement.component_type.to_string(),
-        })?;
+    let flattened = flatten_module(module_def).map_err(|e| IrError::PlacementConstraint {
+        message: format!("Module flattening failed: {}", e),
+        component: module_placement.component_type.to_string(),
+    })?;
 
     println!("   ├─ Flattened {} components", flattened.components.len());
     println!("   └─ Flattened {} routes", flattened.routes.len());
@@ -49,13 +48,14 @@ pub fn place_module_instance(
         )
         .unwrap_or(0);
 
-    let instance_name = module_placement
-        .name
-        .as_ref()
-        .ok_or_else(|| IrError::PlacementConstraint {
-            message: "Module instantiation requires a name".into(),
-            component: module_placement.component_type.to_string(),
-        })?;
+    let instance_name =
+        module_placement
+            .name
+            .as_ref()
+            .ok_or_else(|| IrError::PlacementConstraint {
+                message: "Module instantiation requires a name".into(),
+                component: module_placement.component_type.to_string(),
+            })?;
 
     let intrinsic_layout = &module_def.intrinsic_layout;
     let layout_block = layouts
@@ -80,24 +80,24 @@ pub fn place_module_instance(
 
     if let Some(placements) = placements_source {
         for module_comp in &flattened.components {
-            let comp_internal_name = module_comp.name.as_ref().ok_or_else(|| {
-                IrError::PlacementConstraint {
-                    message: "Module component must have a name for layout mapping".into(),
-                    component: instance_name.to_string().into(),
-                }
-            })?;
+            let comp_internal_name =
+                module_comp
+                    .name
+                    .as_ref()
+                    .ok_or_else(|| IrError::PlacementConstraint {
+                        message: "Module component must have a name for layout mapping".into(),
+                        component: instance_name.to_string().into(),
+                    })?;
 
             let mapping = placements
                 .iter()
                 .find(|p| p.component_name == *comp_internal_name)
-                .ok_or_else(|| {
-                    IrError::PlacementConstraint {
-                        message: format!(
-                            "No layout mapping found for component '{}' in module '{}'",
-                            comp_internal_name, instance_name
-                        ),
-                        component: instance_name.to_string().into(),
-                    }
+                .ok_or_else(|| IrError::PlacementConstraint {
+                    message: format!(
+                        "No layout mapping found for component '{}' in module '{}'",
+                        comp_internal_name, instance_name
+                    ),
+                    component: instance_name.to_string().into(),
                 })?;
 
             let coord_ctx = CoordinateContext {
@@ -121,9 +121,11 @@ pub fn place_module_instance(
                 .stackup_manager
                 .resolve_z_expression(z_expr, ctx.symbol_table)
                 .unwrap_or(0);
-            let mut position = coordinate_to_point(&mapping.position, &coord_ctx).map_err(|e| IrError::CoordinateResolutionFailed {
-                coordinate_str: format!("module component '{}' position", comp_internal_name),
-                reason: e,
+            let mut position = coordinate_to_point(&mapping.position, &coord_ctx).map_err(|e| {
+                IrError::CoordinateResolutionFailed {
+                    coordinate_str: format!("module component '{}' position", comp_internal_name),
+                    reason: e,
+                }
             })?;
             position.z = resolved_z;
 
@@ -138,14 +140,14 @@ pub fn place_module_instance(
             );
 
             // Register pins in netlist arena
-            if let Ok(component_def) = ctx.symbol_table.get_component(module_comp.component_type.as_str()) {
+            if let Ok(component_def) = ctx
+                .symbol_table
+                .get_component(module_comp.component_type.as_str())
+            {
                 for pin_name in &component_def.pins {
-                    space.netlist.add_pin(
-                        component_id,
-                        pin_name.clone(),
-                        (0, 0, 0),
-                        None,
-                    );
+                    space
+                        .netlist
+                        .add_pin(component_id, pin_name.clone(), (0, 0, 0), None);
                 }
             }
         }
@@ -161,7 +163,16 @@ pub fn place_module_instance(
             stackup_manager: ctx.stackup_manager,
             profile: ctx.profile,
         };
-        let base_position = coordinate_to_point(&module_placement.position, &coord_ctx).map_err(|e| IrError::CoordinateResolutionFailed {
+        let base_position = coordinate_to_point(
+            module_placement.position.as_ref().ok_or_else(|| {
+                IrError::CoordinateResolutionFailed {
+                    coordinate_str: format!("module '{}' base position", instance_name),
+                    reason: "Module has no explicit position".into(),
+                }
+            })?,
+            &coord_ctx,
+        )
+        .map_err(|e| IrError::CoordinateResolutionFailed {
             coordinate_str: format!("module '{}' base position", instance_name),
             reason: e,
         })?;
@@ -187,14 +198,14 @@ pub fn place_module_instance(
             );
 
             // Register pins in netlist arena
-            if let Ok(component_def) = ctx.symbol_table.get_component(module_comp.component_type.as_str()) {
+            if let Ok(component_def) = ctx
+                .symbol_table
+                .get_component(module_comp.component_type.as_str())
+            {
                 for pin_name in &component_def.pins {
-                    space.netlist.add_pin(
-                        component_id,
-                        pin_name.clone(),
-                        (0, 0, 0),
-                        None,
-                    );
+                    space
+                        .netlist
+                        .add_pin(component_id, pin_name.clone(), (0, 0, 0), None);
                 }
             }
         }
@@ -279,7 +290,16 @@ pub fn place_module_instance(
             stackup_manager: ctx.stackup_manager,
             profile: ctx.profile,
         };
-        let virtual_position = coordinate_to_point(&module_placement.position, &coord_ctx).map_err(|e| IrError::CoordinateResolutionFailed {
+        let virtual_position = coordinate_to_point(
+            module_placement.position.as_ref().ok_or_else(|| {
+                IrError::CoordinateResolutionFailed {
+                    coordinate_str: format!("module '{}' virtual position", instance_name),
+                    reason: "Module has no explicit position".into(),
+                }
+            })?,
+            &coord_ctx,
+        )
+        .map_err(|e| IrError::CoordinateResolutionFailed {
             coordinate_str: format!("module '{}' virtual position", instance_name),
             reason: e,
         })?;
@@ -421,12 +441,10 @@ pub fn place_module_instance(
                 ctx.stackup_manager,
                 ctx.profile,
             )
-            .map_err(|_e| {
-                IrError::NoPathFound {
-                    net: format!("{}.{}", instance_name, module_route.from.pin).into(),
-                    from_pin: format!("{}.{}", from_component, module_route.from.pin).into(),
-                    to_pin: format!("{}.{}", to_component, module_route.to.pin).into(),
-                }
+            .map_err(|_e| IrError::NoPathFound {
+                net: format!("{}.{}", instance_name, module_route.from.pin).into(),
+                from_pin: format!("{}.{}", from_component, module_route.from.pin).into(),
+                to_pin: format!("{}.{}", to_component, module_route.to.pin).into(),
             })?;
         }
 

@@ -5,8 +5,8 @@
 //! routed independently on separate threads.
 
 use crate::geometry::{BoundingBox, Point3D};
-use crate::netlist::{NetId, PinId};
 use crate::geometry_router::EntityGraph;
+use crate::netlist::{NetId, PinId};
 use compact_str::CompactString;
 
 /// A routing domain represents an isolated "Glass Box" for parallel routing.

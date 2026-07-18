@@ -152,16 +152,17 @@ pub fn evaluate_expression_to_ma(
         Expression::Grouped { expression, .. } => {
             evaluate_expression_to_ma(expression, symbol_table)
         }
-        Expression::Percentage { .. } => {
-            Err("Percentages cannot be evaluated as current".into())
-        }
+        Expression::Percentage { .. } => Err("Percentages cannot be evaluated as current".into()),
         Expression::AnchorReference { .. } => {
             Err("Anchor references cannot be evaluated as current".into())
         }
     }
 }
 
-pub fn measurement_to_nm(measurement: &Measurement, symbol_table: &crate::SymbolTable) -> Result<i64, String> {
+pub fn measurement_to_nm(
+    measurement: &Measurement,
+    symbol_table: &crate::SymbolTable,
+) -> Result<i64, String> {
     let expr = Expression::Measurement {
         value: measurement.value,
         unit: measurement.unit.clone(),
@@ -260,7 +261,9 @@ pub fn coordinate_to_point(coord: &Coordinate, ctx: &CoordinateContext) -> Resul
         Coordinate::Positional { x, y, z, .. } | Coordinate::Declarative { x, y, z, .. } => {
             (x, y, z)
         }
-        Coordinate::Relative(_) => return Err("Relative coordinates must be resolved before placement".into()),
+        Coordinate::Relative(_) => {
+            return Err("Relative coordinates must be resolved before placement".into())
+        }
     };
 
     let has_anchor_refs = x_expr.contains_anchor_reference()
@@ -323,7 +326,9 @@ pub fn spanning_coordinate_to_point(
         Coordinate::Positional { x, y, z, .. } | Coordinate::Declarative { x, y, z, .. } => {
             (x, y, z)
         }
-        Coordinate::Relative(_) => return Err("Relative coordinates must be resolved before placement".into()),
+        Coordinate::Relative(_) => {
+            return Err("Relative coordinates must be resolved before placement".into())
+        }
     };
 
     let has_anchor_refs = x_expr.contains_anchor_reference()

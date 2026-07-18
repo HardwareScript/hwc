@@ -59,10 +59,7 @@ fn test_validate_crosstalk_overlap_pass() {
     let net_a = vec![(0_i64, 0, 0), (1, 0, 0)];
     let net_b = vec![(0_i64, 0, 1), (1, 0, 1)];
 
-    let result = analyzer.validate_crosstalk_overlap(
-        "NetA", "NetB", &net_a, &net_b,
-        10_000_000,
-    );
+    let result = analyzer.validate_crosstalk_overlap("NetA", "NetB", &net_a, &net_b, 10_000_000);
 
     assert!(result.is_ok(), "Short overlap should pass");
 }
@@ -183,17 +180,12 @@ fn test_crosstalk_configurable_thresholds() {
     let net_a = vec![(0_i64, 0, 0), (4, 0, 0)];
     let net_b = vec![(0_i64, 0, 1), (4, 0, 1)];
 
-    let result_strict = analyzer.validate_crosstalk_overlap(
-        "NetA", "NetB", &net_a, &net_b,
-        1,
-    );
+    let result_strict = analyzer.validate_crosstalk_overlap("NetA", "NetB", &net_a, &net_b, 1);
 
     assert!(result_strict.is_err(), "Strict threshold should fail");
 
-    let result_relaxed = analyzer.validate_crosstalk_overlap(
-        "NetA", "NetB", &net_a, &net_b,
-        10_000_000,
-    );
+    let result_relaxed =
+        analyzer.validate_crosstalk_overlap("NetA", "NetB", &net_a, &net_b, 10_000_000);
 
     assert!(result_relaxed.is_ok(), "Relaxed threshold should pass");
 }

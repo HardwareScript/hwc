@@ -5,8 +5,8 @@ pub mod validation;
 
 use super::super::conversions::{coordinate_to_point, CoordinateContext};
 use super::super::errors::IrError;
-use super::helpers::parse_rectangle_dimensions;
 use super::context::PlacementContext;
+use super::helpers::parse_rectangle_dimensions;
 use super::module::place_module_instance;
 use hwc_engine::geometry::{BoundingBox, Point3D};
 use hwc_engine::HardwareSpace;
@@ -48,9 +48,11 @@ pub fn place_component(
         stackup_manager: ctx.stackup_manager,
         profile: ctx.profile,
     };
-    let mut position = coordinate_to_point(&resolved_position, &coord_ctx).map_err(|e| IrError::CoordinateResolutionFailed {
-        coordinate_str: "component position".into(),
-        reason: e,
+    let mut position = coordinate_to_point(&resolved_position, &coord_ctx).map_err(|e| {
+        IrError::CoordinateResolutionFailed {
+            coordinate_str: "component position".into(),
+            reason: e,
+        }
     })?;
 
     let mut mounting_res = mounting::resolve_mounting_and_elevation(
@@ -83,10 +85,14 @@ pub fn place_component(
             });
             
             if is_asic {
-                IrError::MissingAsicConstraint {
+                IrError::MissingAsicConstraintWithSpan {
                     message: format!("Component '{}' missing required rotation.",
                         component.name.as_ref().map(|n| n.as_str()).unwrap_or("unnamed")),
                     hint: "Under ASIC technology, add 'rotated <Angle>' after the position (e.g., 'at [x: 1mm, y: 2mm] rotated 0deg').".into(),
+                    span: miette::SourceSpan::new(
+                        component.span.start.into(),
+                        (component.span.end - component.span.start).into(),
+                    ),
                 }
             } else {
                 IrError::PlacementError(format!("Component '{}' missing required rotation.",
@@ -111,7 +117,10 @@ pub fn place_component(
     );
 
     // Register pins in netlist arena so they can be connected during unrolling
-    if let Ok(component_def) = ctx.symbol_table.get_component(component.component_type.as_str()) {
+    if let Ok(component_def) = ctx
+        .symbol_table
+        .get_component(component.component_type.as_str())
+    {
         for pin_name in &component_def.pins {
             space.netlist.add_pin(
                 component_id,
@@ -128,53 +137,62 @@ pub fn place_component(
     {
         if let Some(layout) = &component_def.layout {
             if let Some(shape_str) = &layout.shape {
-                if let Some(dims) = parse_rectangle_dimensions(shape_str, ctx.symbol_table) {
-                    let (width_nm, height_nm, depth_nm) = dims;
-                    let bbox = if rotation_deg.abs() < 0.001 {
-                        BoundingBox::new(
-                            Point3D::new(
-                                untransformed_origin.x,
-                                untransformed_origin.y,
-                                untransformed_origin.z,
-                            ),
-                            Point3D::new(
-                                untransformed_origin.x + width_nm,
-                                untransformed_origin.y + height_nm,
-                                untransformed_origin.z + depth_nm,
-                            ),
-                        )
-                    } else {
-                        let center_x = untransformed_origin.x + width_nm / 2;
-                        let center_y = untransformed_origin.y + height_nm / 2;
-                        let half_w = width_nm / 2;
-                        let half_h = height_nm / 2;
-                        let corners = [
-                            (-half_w, -half_h),
-                            (half_w, -half_h),
-                            (half_w, half_h),
-                            (-half_w, half_h),
-                        ];
-                        let angle_rad = rotation_deg.to_radians();
-                        let cos_theta = angle_rad.cos();
-                        let sin_theta = angle_rad.sin();
-                        let mut min_x = i64::MAX;
-                        let mut max_x = i64::MIN;
-                        let mut min_y = i64::MAX;
-                        let mut max_y = i64::MIN;
-                        for (cx, cy) in corners.iter() {
-                            let rx = (*cx as f64 * cos_theta - *cy as f64 * sin_theta) as i64;
-                            let ry = (*cx as f64 * sin_theta + *cy as f64 * cos_theta) as i64;
-                            min_x = min_x.min(center_x + rx);
-                            max_x = max_x.max(center_x + rx);
-                            min_y = min_y.min(center_y + ry);
-                            max_y = max_y.max(center_y + ry);
-                        }
-                        BoundingBox::new(
-                            Point3D::new(min_x, min_y, untransformed_origin.z),
-                            Point3D::new(max_x, max_y, untransformed_origin.z + depth_nm),
-                        )
-                    };
-                    bbox_tracker.register(name.clone().into(), bbox, untransformed_origin);
+                // Resolve parameterized shape by substituting parameter values
+                let resolved_shape = super::helpers::resolve_parameterized_shape(
+                    shape_str,
+                    &component.parameters,
+                    ctx.symbol_table,
+                );
+
+                if let Some(resolved) = resolved_shape {
+                    if let Some(dims) = parse_rectangle_dimensions(&resolved, ctx.symbol_table) {
+                        let (width_nm, height_nm, depth_nm) = dims;
+                        let bbox = if rotation_deg.abs() < 0.001 {
+                            BoundingBox::new(
+                                Point3D::new(
+                                    untransformed_origin.x,
+                                    untransformed_origin.y,
+                                    untransformed_origin.z,
+                                ),
+                                Point3D::new(
+                                    untransformed_origin.x + width_nm,
+                                    untransformed_origin.y + height_nm,
+                                    untransformed_origin.z + depth_nm,
+                                ),
+                            )
+                        } else {
+                            let center_x = untransformed_origin.x + width_nm / 2;
+                            let center_y = untransformed_origin.y + height_nm / 2;
+                            let half_w = width_nm / 2;
+                            let half_h = height_nm / 2;
+                            let corners = [
+                                (-half_w, -half_h),
+                                (half_w, -half_h),
+                                (half_w, half_h),
+                                (-half_w, half_h),
+                            ];
+                            let angle_rad = rotation_deg.to_radians();
+                            let cos_theta = angle_rad.cos();
+                            let sin_theta = angle_rad.sin();
+                            let mut min_x = i64::MAX;
+                            let mut max_x = i64::MIN;
+                            let mut min_y = i64::MAX;
+                            let mut max_y = i64::MIN;
+                            for (cx, cy) in corners.iter() {
+                                let rx = (*cx as f64 * cos_theta - *cy as f64 * sin_theta) as i64;
+                                let ry = (*cx as f64 * sin_theta + *cy as f64 * cos_theta) as i64;
+                                min_x = min_x.min(center_x + rx);
+                                max_x = max_x.max(center_x + rx);
+                                min_y = min_y.min(center_y + ry);
+                                max_y = max_y.max(center_y + ry);
+                            }
+                            BoundingBox::new(
+                                Point3D::new(min_x, min_y, untransformed_origin.z),
+                                Point3D::new(max_x, max_y, untransformed_origin.z + depth_nm),
+                            )
+                        };
+                        bbox_tracker.register(name.clone().into(), bbox, untransformed_origin);
+                    }
                 }
             }
         }

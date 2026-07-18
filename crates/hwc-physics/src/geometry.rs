@@ -98,7 +98,12 @@ impl Polygon {
 /// Manhattan routing directions.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Direction {
-    North, South, East, West, Up, Down
+    North,
+    South,
+    East,
+    West,
+    Up,
+    Down,
 }
 
 /// Axis-Aligned Bounding Box (integer coordinates).
@@ -134,8 +139,16 @@ impl BoundingBox {
     #[inline]
     pub fn expand(&self, margin: i64) -> Self {
         Self {
-            min: Point3D::new(self.min.x - margin, self.min.y - margin, self.min.z - margin),
-            max: Point3D::new(self.max.x + margin, self.max.y + margin, self.max.z + margin),
+            min: Point3D::new(
+                self.min.x - margin,
+                self.min.y - margin,
+                self.min.z - margin,
+            ),
+            max: Point3D::new(
+                self.max.x + margin,
+                self.max.y + margin,
+                self.max.z + margin,
+            ),
         }
     }
 
@@ -176,9 +189,19 @@ impl BoundingBox {
     }
 
     pub fn distance_to(&self, other: &BoundingBox) -> i64 {
-        let dx = (self.min.x - other.max.x).max(0).max(other.min.x - self.max.x);
-        let dy = (self.min.y - other.max.y).max(0).max(other.min.y - self.max.y);
-        let dz = (self.min.z - other.max.z).max(0).max(other.min.z - self.max.z);
+        // Calculate gap in each dimension (0 if overlapping)
+        let dx = (self.min.x - other.max.x)
+            .max(other.min.x - self.max.x)
+            .max(0);
+        let dy = (self.min.y - other.max.y)
+            .max(other.min.y - self.max.y)
+            .max(0);
+        let dz = (self.min.z - other.max.z)
+            .max(other.min.z - self.max.z)
+            .max(0);
+
+        // Return Chebyshev distance (L∞ norm - maximum gap in any dimension)
+        // This is the correct metric for axis-aligned clearance checking
         dx.max(dy).max(dz)
     }
 

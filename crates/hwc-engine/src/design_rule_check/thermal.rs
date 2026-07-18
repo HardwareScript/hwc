@@ -22,85 +22,106 @@ pub fn validate_current_density(
     routes: &[AnalyticTrace],
     material_registry: &MaterialRegistry,
 ) -> Result<Vec<DrcViolation>, String> {
-    use rayon::prelude::*;
+    let cpu_cores = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(1);
+    let chunk_size = (routes.len() + cpu_cores - 1).max(1);
 
-    let violations = routes
-        .par_iter()
-        .filter_map(|route| -> Option<Result<DrcViolation, String>> {
-            // Skip routes with no current limit declared (Artist Mode)
-            if route.current_limit_ma <= 0.0 {
-                return None;
-            }
+    // Each thread validates a contiguous chunk of routes, returning either a
+    // partial violation list or an error (propagated out of the scope).
+    let partial_results: Vec<Result<Vec<DrcViolation>, String>> = std::thread::scope(|s| {
+        let mut handles = Vec::new();
 
-            let area_nm2 = route.width_nm as f64 * route.thickness_nm as f64;
-            if area_nm2 <= 0.0 {
-                return Some(Err(format!(
-                    "[DRC] FATAL: trace on net '{}' has zero cross-sectional area (width={}nm, thickness={}nm).",
-                    route.net_name, route.width_nm, route.thickness_nm
-                )));
-            }
+        for chunk in routes.chunks(chunk_size) {
+            let handle = s.spawn(move || {
+                let mut local_violations: Vec<DrcViolation> = Vec::new();
+                for route in chunk {
+                    // Skip routes with no current limit declared (Artist Mode)
+                    if route.current_limit_ma <= 0.0 {
+                        continue;
+                    }
 
-            let props = match material_registry.get_physical_props(route.material) {
-                Some(p) => p,
-                None => return Some(Err(format!(
-                    "[DRC] FATAL: material_id {} not found in registry for net '{}'.",
-                    route.material, route.net_name
-                ))),
-            };
+                    let area_nm2 = route.width_nm as f64 * route.thickness_nm as f64;
+                    if area_nm2 <= 0.0 {
+                        return Err(format!(
+                            "[DRC] FATAL: trace on net '{}' has zero cross-sectional area (width={}nm, thickness={}nm).",
+                            route.net_name, route.width_nm, route.thickness_nm
+                        ));
+                    }
 
-            let max_density_a_mm2 = match props.max_current_density_a_mm2 {
-                Some(d) => d,
-                None => return Some(Err(format!(
-                    "[DRC] FATAL: material for net '{}' has no max_current_density in materials.hw. \
-                     Add max_current_density to your material definition.",
-                    route.net_name
-                ))),
-            };
+                    let props = match material_registry.get_physical_props(route.material) {
+                        Some(p) => p,
+                        None => return Err(format!(
+                            "[DRC] FATAL: material_id {} not found in registry for net '{}'.",
+                            route.material, route.net_name
+                        )),
+                    };
 
-            // CHECK 1: Does actual operating current exceed the route's declared capability?
-            if route.current_ma > route.current_limit_ma {
-                let location = route
-                    .segments
-                    .first()
-                    .map(|s| s.start)
-                    .unwrap_or(Point3D::new(0, 0, 0));
+                    let max_density_a_mm2 = match props.max_current_density_a_mm2 {
+                        Some(d) => d,
+                        None => return Err(format!(
+                            "[DRC] FATAL: material for net '{}' has no max_current_density in materials.hw. \
+                             Add max_current_density to your material definition.",
+                            route.net_name
+                        )),
+                    };
 
-                return Some(Ok(DrcViolation::CurrentDensityViolation {
-                    net: route.net_name.clone(),
-                    actual_density_a_mm2: route.current_ma,
-                    max_density_a_mm2: route.current_limit_ma,
-                    location,
-                }));
-            }
+                    // CHECK 1: Does actual operating current exceed the route's declared capability?
+                    if route.current_ma > route.current_limit_ma {
+                        let location = route
+                            .segments
+                            .first()
+                            .map(|s| s.start)
+                            .unwrap_or(Point3D::new(0, 0, 0));
 
-            // CHECK 2: Does the route's declared capability exceed the material's physical limit?
-            // Calculate maximum current the geometry can physically handle
-            let current_limit_a = route.current_limit_ma / 1000.0;
-            let area_m2 = area_nm2 * 1e-18; // nm² → m²
-            let capability_density_a_m2 = current_limit_a / area_m2;
-            let capability_density_a_mm2 = capability_density_a_m2 / 1e6;
+                        local_violations.push(DrcViolation::CurrentDensityViolation {
+                            net: route.net_name.clone(),
+                            actual_density_a_mm2: route.current_ma,
+                            max_density_a_mm2: route.current_limit_ma,
+                            location,
+                        });
+                        continue;
+                    }
 
-            // Convert material limit to A/m² for comparison
-            let max_density_a_m2 = max_density_a_mm2 * 1e6;
+                    // CHECK 2: Does the route's declared capability exceed the material's physical limit?
+                    // Calculate maximum current the geometry can physically handle
+                    let current_limit_a = route.current_limit_ma / 1000.0;
+                    let area_m2 = area_nm2 * 1e-18; // nm² → m²
+                    let capability_density_a_m2 = current_limit_a / area_m2;
+                    let capability_density_a_mm2 = capability_density_a_m2 / 1e6;
 
-            if capability_density_a_m2 > max_density_a_m2 {
-                let location = route
-                    .segments
-                    .first()
-                    .map(|s| s.start)
-                    .unwrap_or(Point3D::new(0, 0, 0));
+                    // Convert material limit to A/m² for comparison
+                    let max_density_a_m2 = max_density_a_mm2 * 1e6;
 
-                Some(Ok(DrcViolation::CurrentDensityViolation {
-                    net: route.net_name.clone(),
-                    actual_density_a_mm2: capability_density_a_mm2,
-                    max_density_a_mm2: max_density_a_mm2,
-                    location,
-                }))
-            } else {
-                None
-            }
-        })
-        .collect::<Result<Vec<_>, String>>()?;
+                    if capability_density_a_m2 > max_density_a_m2 {
+                        let location = route
+                            .segments
+                            .first()
+                            .map(|s| s.start)
+                            .unwrap_or(Point3D::new(0, 0, 0));
+
+                        local_violations.push(DrcViolation::CurrentDensityViolation {
+                            net: route.net_name.clone(),
+                            actual_density_a_mm2: capability_density_a_mm2,
+                            max_density_a_mm2: max_density_a_mm2,
+                            location,
+                        });
+                    }
+                }
+
+                Ok(local_violations)
+            });
+            handles.push(handle);
+        }
+
+        handles.into_iter().map(|h| h.join().unwrap()).collect()
+    });
+
+    // Merge all violations, propagating errors.
+    let mut violations = Vec::new();
+    for partial in partial_results {
+        violations.extend(partial?);
+    }
 
     Ok(violations)
 }

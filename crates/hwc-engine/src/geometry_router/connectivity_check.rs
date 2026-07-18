@@ -163,7 +163,9 @@ pub fn check_reachability(graph: &ConnectivityGraph) -> Vec<ConnectivityViolatio
         while let Some(node) = queue.pop_front() {
             if let Some(neighbors) = graph.adjacency.get(&node) {
                 for &neighbor in neighbors {
-                    if !visited.contains(&neighbor) && graph.node_nets.get(&neighbor) == Some(&net_id) {
+                    if !visited.contains(&neighbor)
+                        && graph.node_nets.get(&neighbor) == Some(&net_id)
+                    {
                         visited.insert(neighbor);
                         queue.push_back(neighbor);
                     }
@@ -281,12 +283,21 @@ mod tests {
     #[test]
     fn test_fully_connected_net_no_violations() {
         let seg0 = make_segment(0, 1, Point3D::new(0, 0, 1), Point3D::new(5_000_000, 0, 1));
-        let seg1 = make_segment(1, 1, Point3D::new(5_000_000, 0, 1), Point3D::new(10_000_000, 0, 1));
+        let seg1 = make_segment(
+            1,
+            1,
+            Point3D::new(5_000_000, 0, 1),
+            Point3D::new(10_000_000, 0, 1),
+        );
         let segments = vec![seg0, seg1];
         let junctions: Vec<VirtualJunction> = vec![];
 
         let result = verify_connectivity(&segments, &junctions);
-        assert!(result.violations.is_empty(), "Expected no violations, got {:?}", result.violations);
+        assert!(
+            result.violations.is_empty(),
+            "Expected no violations, got {:?}",
+            result.violations
+        );
         assert_eq!(result.nets_checked, 1);
         assert_eq!(result.pins_verified, 3);
     }
@@ -294,7 +305,12 @@ mod tests {
     #[test]
     fn test_disconnected_pin_violation() {
         let seg0 = make_segment(0, 1, Point3D::new(0, 0, 1), Point3D::new(5_000_000, 0, 1));
-        let seg1 = make_segment(1, 1, Point3D::new(20_000_000, 0, 1), Point3D::new(25_000_000, 0, 1));
+        let seg1 = make_segment(
+            1,
+            1,
+            Point3D::new(20_000_000, 0, 1),
+            Point3D::new(25_000_000, 0, 1),
+        );
         let segments = vec![seg0, seg1];
         let junctions: Vec<VirtualJunction> = vec![];
 
@@ -304,7 +320,10 @@ mod tests {
             .iter()
             .filter(|v| matches!(v, ConnectivityViolation::DisconnectedPin { .. }))
             .count();
-        assert!(disconnected >= 2, "Expected at least 2 DisconnectedPin violations, got {disconnected}");
+        assert!(
+            disconnected >= 2,
+            "Expected at least 2 DisconnectedPin violations, got {disconnected}"
+        );
     }
 
     #[test]
@@ -337,8 +356,18 @@ mod tests {
     #[test]
     fn test_connectivity_with_junction() {
         let seg0 = make_segment(0, 1, Point3D::new(0, 0, 1), Point3D::new(5_000_000, 0, 1));
-        let seg1 = make_segment(1, 1, Point3D::new(5_000_000, 0, 1), Point3D::new(10_000_000, 0, 1));
-        let seg2 = make_segment(2, 1, Point3D::new(5_000_000, 0, 1), Point3D::new(5_000_000, 5_000_000, 1));
+        let seg1 = make_segment(
+            1,
+            1,
+            Point3D::new(5_000_000, 0, 1),
+            Point3D::new(10_000_000, 0, 1),
+        );
+        let seg2 = make_segment(
+            2,
+            1,
+            Point3D::new(5_000_000, 0, 1),
+            Point3D::new(5_000_000, 5_000_000, 1),
+        );
         let segments = vec![seg0, seg1, seg2];
 
         let junc = VirtualJunction {
@@ -352,7 +381,11 @@ mod tests {
         let junctions = vec![junc];
 
         let result = verify_connectivity(&segments, &junctions);
-        assert!(result.violations.is_empty(), "Expected no violations, got {:?}", result.violations);
+        assert!(
+            result.violations.is_empty(),
+            "Expected no violations, got {:?}",
+            result.violations
+        );
         assert_eq!(result.pins_verified, 4);
     }
 }

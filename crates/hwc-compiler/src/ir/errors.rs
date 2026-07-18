@@ -17,11 +17,14 @@ pub enum IrError {
 
     #[error("Space dimensions not specified")]
     #[diagnostic(
-        code(C32),
-        url("https://docs.hw-script.org/errors/C32"),
-        help("Add 'dimensions: <width> by <height> by <depth>' to the space definition")
+        code(C31),
+        url("https://docs.hw-script.org/errors/C31"),
+        help("Add 'dimensions: <width> by <height>' or similar to the space definition")
     )]
-    MissingDimensions,
+    MissingDimensions {
+        #[label("dimensions must be specified for this space")]
+        span: miette::SourceSpan,
+    },
 
     #[error("Space grid not specified")]
     #[diagnostic(
@@ -79,10 +82,7 @@ pub enum IrError {
         url("https://docs.hw-script.org/errors/R19"),
         help("Check placement constraints for this component")
     )]
-    PlacementConstraint {
-        message: String,
-        component: String,
-    },
+    PlacementConstraint { message: String, component: String },
 
     #[error("No route path found from {from_pin} to {to_pin}")]
     #[diagnostic(
@@ -110,10 +110,7 @@ pub enum IrError {
         url("https://docs.hw-script.org/errors/R21"),
         help("Check route expression syntax")
     )]
-    InvalidRouteExpression {
-        expression: String,
-        reason: String,
-    },
+    InvalidRouteExpression { expression: String, reason: String },
 
     #[error("Manual route missing required field: {missing_field}")]
     #[diagnostic(
@@ -175,13 +172,17 @@ pub enum IrError {
     CompilationAborted { error_count: usize },
 
     /// P42: Static geometry guard detected coplanar short circuits before routing.
-    #[error("Static short circuit: net '{net_a}' overlaps net '{net_b}' at ({x_nm},{y_nm},{z_nm}) nm")]
+    #[error(
+        "Static short circuit: net '{net_a}' overlaps net '{net_b}' at ({x_nm},{y_nm},{z_nm}) nm"
+    )]
     #[diagnostic(
         code(P42),
         url("https://docs.hw-script.org/errors/P42"),
-        help("Coplanar conductors on different nets overlap in the XY and Z planes. \
+        help(
+            "Coplanar conductors on different nets overlap in the XY and Z planes. \
               Separate the overlapping geometry or verify that these nets should be connected. \
-              Detected by the static geometry guard before routing to fail fast.")
+              Detected by the static geometry guard before routing to fail fast."
+        )
     )]
     StaticGeometryShort {
         net_a: CompactString,
@@ -310,10 +311,7 @@ pub enum IrError {
     CircularReference { path: String },
 
     #[error("Failed to resolve route endpoint '{endpoint}'")]
-    #[diagnostic(
-        code(R22),
-        url("https://docs.hw-script.org/errors/R22"),
-    )]
+    #[diagnostic(code(R22), url("https://docs.hw-script.org/errors/R22"))]
     UnresolvedEndpoint {
         endpoint: String,
         #[label("this endpoint could not be resolved")]
@@ -328,9 +326,19 @@ pub enum IrError {
         url("https://docs.hw-script.org/errors/C36"),
         help("Under ASIC technology, all physical constraints must be explicitly declared. No implicit defaults are permitted.\n\n{hint}")
     )]
-    MissingAsicConstraint {
+    MissingAsicConstraint { message: String, hint: String },
+
+    #[error("ASIC compile failed: {message}")]
+    #[diagnostic(
+        code(C36),
+        url("https://docs.hw-script.org/errors/C36"),
+        help("Under ASIC technology, all physical constraints must be explicitly declared. No implicit defaults are permitted.\n\n{hint}")
+    )]
+    MissingAsicConstraintWithSpan {
         message: String,
         hint: String,
+        #[label("missing constraint here")]
+        span: miette::SourceSpan,
     },
 
     #[error("Material '{material}' is missing required property '{property}'")]
@@ -356,23 +364,21 @@ pub enum IrError {
         url("https://docs.hw-script.org/errors/C38"),
         help("Add explicit voltage, current, or classification properties to the net '{net}': {detail}")
     )]
-    MissingElectricalSpecification {
-        net: CompactString,
-        detail: String,
-    },
+    MissingElectricalSpecification { net: CompactString, detail: String },
 
     // =====================================================================
     // v0.1.8 Physical Synthesis Guardrails
     // =====================================================================
-
     /// R25: Pathfinder attempted to place a trace on a layer with `routable: false`.
     #[error("Trace placed on non-routable layer '{layer}' (material: {material})")]
     #[diagnostic(
         code(R25),
         url("https://docs.hw-script.org/errors/R25"),
-        help("Layer '{layer}' is declared as routable: false in the profile stackup. \
+        help(
+            "Layer '{layer}' is declared as routable: false in the profile stackup. \
               Routing is only permitted on layers with routable: true. \
-              Route the trace on a different layer, or change the layer's routable attribute.")
+              Route the trace on a different layer, or change the layer's routable attribute."
+        )
     )]
     NonRoutableLayer {
         layer: CompactString,
@@ -384,9 +390,11 @@ pub enum IrError {
     #[diagnostic(
         code(R25),
         url("https://docs.hw-script.org/errors/R25"),
-        help("Layer '{layer}' is declared as routable: local_only. Routes on this layer \
+        help(
+            "Layer '{layer}' is declared as routable: local_only. Routes on this layer \
               must not exceed {max_nm} nm. Use a routable: true metal layer for longer routes, \
-              or increase routing.max_local_route_length in the profile.")
+              or increase routing.max_local_route_length in the profile."
+        )
     )]
     LocalRouteExceeded {
         layer: CompactString,
@@ -399,10 +407,12 @@ pub enum IrError {
     #[diagnostic(
         code(R30),
         url("https://docs.hw-script.org/errors/R30"),
-        help("A routed trace segment passes through the physical body of component '{component}'. \
+        help(
+            "A routed trace segment passes through the physical body of component '{component}'. \
               Traces must terminate at boundary ports (exit:/enter: cardinal directions) \
               and must not penetrate the component's bounding box. \
-              Adjust the route's exit/enter directions to dock at the component boundary.")
+              Adjust the route's exit/enter directions to dock at the component boundary."
+        )
     )]
     RoutePenetratesComponent {
         component: CompactString,
@@ -412,15 +422,19 @@ pub enum IrError {
     },
 
     /// P45: Coplanar conductor-semiconductor contact without a declared bridge.
-    #[error("Forbidden junction: {mat_a} touching {mat_b} at ({x_nm}, {y_nm}, {z_nm}) without a bridge")]
+    #[error(
+        "Forbidden junction: {mat_a} touching {mat_b} at ({x_nm}, {y_nm}, {z_nm}) without a bridge"
+    )]
     #[diagnostic(
         code(P45),
         url("https://docs.hw-script.org/errors/P45"),
-        help("Material '{mat_a}' (category: {cat_a}) is in direct coplanar contact with \
+        help(
+            "Material '{mat_a}' (category: {cat_a}) is in direct coplanar contact with \
               '{mat_b}' (category: {cat_b}) without an intermediate ohmic contact bridge. \
               Declare a bridge rule in the profile: \
               'bridge {mat_a} to {mat_b}: <BridgeMaterial>' \
-              where <BridgeMaterial> is a material with category: ohmic_contact.")
+              where <BridgeMaterial> is a material with category: ohmic_contact."
+        )
     )]
     ForbiddenJunction {
         mat_a: CompactString,
@@ -437,14 +451,13 @@ pub enum IrError {
     #[diagnostic(
         code(R25),
         url("https://docs.hw-script.org/errors/R25"),
-        help("The PDK profile must declare all routing heuristic weights in the 'routing:' block. \
+        help(
+            "The PDK profile must declare all routing heuristic weights in the 'routing:' block. \
               The compiler is a deterministic engine — no hardcoded fallbacks. \
-              {hint}")
+              {hint}"
+        )
     )]
-    MissingRoutingHeuristics {
-        field: CompactString,
-        hint: String,
-    },
+    MissingRoutingHeuristics { field: CompactString, hint: String },
 
     /// v0.1.9: Clearance violation during placement (early DRC)
     #[error("Clearance violation during placement of '{entity_name}'")]
@@ -457,6 +470,160 @@ pub enum IrError {
         entity_type: CompactString,
         entity_name: CompactString,
         reason: CompactString,
+    },
+
+    /// v0.1.9: Undeclared shape reference
+    #[error("Undeclared shape: '{shape}'")]
+    #[diagnostic(
+        code(S15),
+        url("https://docs.hw-script.org/errors/S15"),
+        help("Shape '{shape}' is used but never declared. Add a 'shape {shape}(...)' definition.")
+    )]
+    UndeclaredShape { shape: CompactString },
+
+    /// v0.1.9: Failed to resolve shape geometry
+    #[error("Failed to resolve shape '{shape}': {reason}")]
+    #[diagnostic(
+        code(S16),
+        url("https://docs.hw-script.org/errors/S16"),
+        help("The shape could not be instantiated or evaluated")
+    )]
+    ShapeResolutionFailed {
+        shape: CompactString,
+        reason: String,
+    },
+
+    // =====================================================================
+    // v0.1.9 Salsa Constraint Solver Errors
+    // =====================================================================
+
+    /// R31: Corridor extraction failed - no valid path through C-space.
+    #[error("No corridor found from ({start_x}, {start_y}, {start_z}) to ({end_x}, {end_y}, {end_z}) in G-cell {gcell_id}")]
+    #[diagnostic(
+        code(R31),
+        url("https://docs.hw-script.org/errors/R31"),
+        help(
+            "The spatial decomposer could not extract a navigable corridor between these points. \
+              Possible causes: \
+              1. All corridors are narrower than the required width (trace_width + 2 * clearance). \
+              2. Obstacles completely block the route. \
+              3. Start or end point is inside an inflated obstacle.\n\n\
+              Suggestions: \
+              - Reduce trace_width_nm or min_clearance_nm for this net. \
+              - Check that start/end ports are in free space. \
+              - Verify board_bounds encompass the routing area."
+        )
+    )]
+    CorridorExtractionFailed {
+        gcell_id: u32,
+        start_x: i64,
+        start_y: i64,
+        start_z: i64,
+        end_x: i64,
+        end_y: i64,
+        end_z: i64,
+    },
+
+    /// R32: Corridor too narrow for trace + clearance.
+    #[error("Corridor in G-cell {gcell_id} is too narrow ({actual_nm} nm) for trace + clearance ({required_nm} nm)")]
+    #[diagnostic(
+        code(R32),
+        url("https://docs.hw-script.org/errors/R32"),
+        help(
+            "The extracted corridor's bottleneck width ({actual_nm} nm) is less than the required \
+              width ({required_nm} nm = trace_width + 2 * clearance).\n\n\
+              The optimizer attempted to expand to adjacent G-cells but all alternatives were also insufficient. \
+              Reduce trace width or clearance, or restructure the layout to create wider channels."
+        )
+    )]
+    CorridorTooNarrow {
+        gcell_id: u32,
+        actual_nm: i64,
+        required_nm: i64,
+    },
+
+    /// R33: Optimization loop exhausted without convergence.
+    #[error("Optimization for net {net_id} in G-cell {gcell_id} stalled after {iterations} iterations ({violations} unresolved violations)")]
+    #[diagnostic(
+        code(R33),
+        url("https://docs.hw-script.org/errors/R33"),
+        help(
+            "The Measure → Optimize → Measure loop did not converge within the allowed iterations. \
+              The route has {violations} unresolved constraint violations.\n\n\
+              Possible causes: \
+              - Soft constraints are conflicting (e.g., length target vs. obstacle avoidance). \
+              - Hard constraints are unsatisfiable in this G-cell.\n\n\
+              Increase max_iterations in the optimization config, or relax soft constraints."
+        )
+    )]
+    OptimizationStalled {
+        net_id: u32,
+        gcell_id: u32,
+        iterations: usize,
+        violations: usize,
+    },
+
+    /// R34: Repair attempts exhausted for a net/G-cell.
+    #[error("Routing failed for net {net_id} in G-cell {gcell_id} after {attempts} repair attempts ({violations} unresolved violations)")]
+    #[diagnostic(
+        code(R34),
+        url("https://docs.hw-script.org/errors/R34"),
+        help(
+            "All repair attempts have been exhausted. The router tried {attempts} alternative strategies \
+              but could not resolve {violations} constraint violations.\n\n\
+              Possible causes: \
+              - The G-cell is congested or has geometric impossibilities. \
+              - G-cell has repeated failures across multiple nets (check repair history).\n\n\
+              Increase max_repair_attempts, restructure the layout, or declare this net as unroutable."
+        )
+    )]
+    RepairExhausted {
+        net_id: u32,
+        gcell_id: u32,
+        attempts: usize,
+        violations: usize,
+    },
+
+    /// R35: Spatial decomposer received invalid parameters.
+    #[error("Invalid spatial decomposer parameters: {reason}")]
+    #[diagnostic(
+        code(R35),
+        url("https://docs.hw-script.org/errors/R35"),
+        help(
+            "The spatial decomposer requires valid physical parameters.\n\n\
+              {reason}"
+        )
+    )]
+    InvalidDecomposerParams { reason: String },
+
+    /// R36: Navigable space extraction failed.
+    #[error("Navigable space extraction failed for G-cell {gcell_id}: {reason}")]
+    #[diagnostic(
+        code(R36),
+        url("https://docs.hw-script.org/errors/R36"),
+        help(
+            "Could not decompose free space into navigable cells.\n\n\
+              {reason}"
+        )
+    )]
+    NavigableSpaceFailed {
+        gcell_id: u32,
+        reason: String,
+    },
+
+    /// R37: Constraint validation found hard violations that cannot be resolved.
+    #[error("Hard constraint violation for net {net_id}: {description}")]
+    #[diagnostic(
+        code(R37),
+        url("https://docs.hw-script.org/errors/R37"),
+        help(
+            "A hard constraint was violated and cannot be resolved by the optimizer.\n\n\
+              {description}"
+        )
+    )]
+    HardConstraintViolation {
+        net_id: u32,
+        description: String,
     },
 }
 

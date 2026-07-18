@@ -47,10 +47,7 @@ pub struct LogicSynthesizer<'a> {
 
 impl<'a> LogicSynthesizer<'a> {
     /// Create a new native logic synthesizer that directly mutates the space.
-    pub fn new(
-        space: &'a mut HardwareSpace,
-        symbol_table: &'a SymbolTable,
-    ) -> Self {
+    pub fn new(space: &'a mut HardwareSpace, symbol_table: &'a SymbolTable) -> Self {
         Self {
             space,
             symbol_table,
@@ -216,12 +213,9 @@ impl<'a> LogicSynthesizer<'a> {
         // Register pins in netlist arena
         if let Ok(component_def) = self.symbol_table.get_component(component_type.as_str()) {
             for pin_name in &component_def.pins {
-                self.space.netlist.add_pin(
-                    component_id,
-                    pin_name.clone(),
-                    (0, 0, 0),
-                    None,
-                );
+                self.space
+                    .netlist
+                    .add_pin(component_id, pin_name.clone(), (0, 0, 0), None);
             }
         }
 

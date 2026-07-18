@@ -6,18 +6,16 @@
 use hwc_engine::geometry::Point3D;
 use hwc_engine::geometry_router::connectivity_check::verify_connectivity;
 use hwc_engine::geometry_router::deterministic_export::{content_hash, export_dxf_deterministic};
-use hwc_engine::geometry_router::geometry_refinement::RefinedContour;
+use hwc_engine::geometry_router::gcell_sweep::BridgeTable;
 use hwc_engine::geometry_router::gcell_sweep::{
     classify_overlap, compute_actual_clearance, find_overlaps, segment_bbox,
     sort_segments_by_morton, OverlapResult,
 };
-use hwc_engine::geometry_router::parasitic_extraction::{
-    extract_parasitics, ExtractionParams,
-};
+use hwc_engine::geometry_router::geometry_refinement::RefinedContour;
+use hwc_engine::geometry_router::parasitic_extraction::{extract_parasitics, ExtractionParams};
 use hwc_engine::geometry_router::route_decomposition::VirtualJunction;
 use hwc_engine::geometry_router::spatial_index::DynamicSpatialIndex;
 use hwc_engine::geometry_router::spatial_index::IndexedSegment;
-use hwc_engine::geometry_router::gcell_sweep::BridgeTable;
 use hwc_engine::material::{MaterialId, MaterialRegistry};
 use hwc_engine::netlist::NetId;
 
@@ -199,7 +197,16 @@ fn test_two_overlapping_same_net_no_violation() {
     };
 
     // Same-net overlap should be classified as SameNet
-    let result = classify_overlap(&seg_a, &seg_b, &[], 200_000, None, None, &MaterialRegistry::new(), &BridgeTable::default());
+    let result = classify_overlap(
+        &seg_a,
+        &seg_b,
+        &[],
+        200_000,
+        None,
+        None,
+        &MaterialRegistry::new(),
+        &BridgeTable::default(),
+    );
     match result {
         OverlapResult::SameNet { net_id, .. } => {
             assert_eq!(net_id, 1);
@@ -238,12 +245,24 @@ fn test_two_overlapping_same_net_with_junction() {
         inductance_nh: 0.05,
     }];
 
-    let result = classify_overlap(&seg_a, &seg_b, &junctions, 200_000, None, None, &MaterialRegistry::new(), &BridgeTable::default());
+    let result = classify_overlap(
+        &seg_a,
+        &seg_b,
+        &junctions,
+        200_000,
+        None,
+        None,
+        &MaterialRegistry::new(),
+        &BridgeTable::default(),
+    );
     match result {
         OverlapResult::SameNet {
             is_valid_junction, ..
         } => {
-            assert!(is_valid_junction, "Junction at overlap point should be valid");
+            assert!(
+                is_valid_junction,
+                "Junction at overlap point should be valid"
+            );
         }
         other => panic!("Expected SameNet with junction, got {:?}", other),
     }
@@ -274,7 +293,16 @@ fn test_two_overlapping_different_net_violation() {
         layer: 0,
     };
 
-    let result = classify_overlap(&seg_a, &seg_b, &[], 200_000, None, None, &MaterialRegistry::new(), &BridgeTable::default());
+    let result = classify_overlap(
+        &seg_a,
+        &seg_b,
+        &[],
+        200_000,
+        None,
+        None,
+        &MaterialRegistry::new(),
+        &BridgeTable::default(),
+    );
     match result {
         OverlapResult::DifferentNet {
             net_a,
@@ -313,11 +341,17 @@ fn test_crossing_different_net_segments() {
 
     // Crossing segments: clearance is negative (overlap)
     let clearance = compute_actual_clearance(&seg_h, &seg_v);
-    assert!(clearance < 0, "Crossing segments should have negative clearance");
+    assert!(
+        clearance < 0,
+        "Crossing segments should have negative clearance"
+    );
 
     // Should detect AABB overlap
     let overlaps = find_overlaps(&[seg_h, seg_v]);
-    assert!(!overlaps.is_empty(), "Crossing segments should produce overlap");
+    assert!(
+        !overlaps.is_empty(),
+        "Crossing segments should produce overlap"
+    );
 }
 
 #[test]
@@ -428,7 +462,10 @@ fn test_mixed_positive_negative_coordinates() {
     ];
 
     let overlaps = find_overlaps(&segs);
-    assert!(!overlaps.is_empty(), "Crossing segments at origin should overlap");
+    assert!(
+        !overlaps.is_empty(),
+        "Crossing segments at origin should overlap"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -460,7 +497,10 @@ fn test_one_nanometer_segment() {
     assert_eq!(index.len(), 1);
 
     let overlaps = find_overlaps(&[seg]);
-    assert!(overlaps.is_empty(), "Single tiny segment should not overlap");
+    assert!(
+        overlaps.is_empty(),
+        "Single tiny segment should not overlap"
+    );
 }
 
 #[test]
@@ -523,7 +563,10 @@ fn test_two_tiny_segments_different_net() {
         .iter()
         .filter(|v| matches!(v, hwc_engine::geometry_router::connectivity_check::ConnectivityViolation::UnwaivedShort { .. }))
         .count();
-    assert!(shorts >= 1, "Co-located segments from different nets should be detected as short, got {shorts}");
+    assert!(
+        shorts >= 1,
+        "Co-located segments from different nets should be detected as short, got {shorts}"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -579,7 +622,10 @@ fn test_zero_width_segments_no_overlap_different_nets() {
 
     // Zero-width parallel segments separated by 1mm should not overlap
     let overlaps = find_overlaps(&segs);
-    assert!(overlaps.is_empty(), "Zero-width parallel segments 1mm apart should not overlap");
+    assert!(
+        overlaps.is_empty(),
+        "Zero-width parallel segments 1mm apart should not overlap"
+    );
 }
 
 #[test]
@@ -642,7 +688,16 @@ fn test_parallel_segments_exactly_at_clearance() {
     assert_eq!(clearance, 200_000, "Clearance should be exactly 200um");
 
     // With default clearance of 200_000, this is exactly at the boundary
-    let result = classify_overlap(&seg_a, &seg_b, &[], 200_000, None, None, &MaterialRegistry::new(), &BridgeTable::default());
+    let result = classify_overlap(
+        &seg_a,
+        &seg_b,
+        &[],
+        200_000,
+        None,
+        None,
+        &MaterialRegistry::new(),
+        &BridgeTable::default(),
+    );
     match result {
         OverlapResult::DifferentNet { .. } => {
             // At exactly the clearance limit, this is a violation (strict <)
@@ -681,7 +736,16 @@ fn test_parallel_segments_within_clearance() {
     assert_eq!(clearance, 100_000, "Clearance should be 100um");
     assert!(clearance < 200_000, "Should violate 200um clearance");
 
-    let result = classify_overlap(&seg_a, &seg_b, &[], 200_000, None, None, &MaterialRegistry::new(), &BridgeTable::default());
+    let result = classify_overlap(
+        &seg_a,
+        &seg_b,
+        &[],
+        200_000,
+        None,
+        None,
+        &MaterialRegistry::new(),
+        &BridgeTable::default(),
+    );
     match result {
         OverlapResult::DifferentNet {
             required_clearance, ..
@@ -719,7 +783,16 @@ fn test_parallel_segments_outside_clearance() {
     assert_eq!(clearance, 400_000, "Clearance should be 400um");
     assert!(clearance >= 200_000, "Should satisfy 200um clearance");
 
-    let result = classify_overlap(&seg_a, &seg_b, &[], 200_000, None, None, &MaterialRegistry::new(), &BridgeTable::default());
+    let result = classify_overlap(
+        &seg_a,
+        &seg_b,
+        &[],
+        200_000,
+        None,
+        None,
+        &MaterialRegistry::new(),
+        &BridgeTable::default(),
+    );
     match result {
         OverlapResult::NoOverlap => {}
         other => panic!("Expected NoOverlap, got {:?}", other),
@@ -756,7 +829,10 @@ fn test_segments_on_different_layers_same_position() {
     // Segments on different layers at the same XY position
     // The AABB overlap check is 2D, so they will overlap
     let overlaps = find_overlaps(&segs);
-    assert!(!overlaps.is_empty(), "Segments on different layers at same XY should have AABB overlap");
+    assert!(
+        !overlaps.is_empty(),
+        "Segments on different layers at same XY should have AABB overlap"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -788,7 +864,10 @@ fn test_diagonal_segments_no_overlap() {
 
     // Diagonal segments crossing at center should overlap in AABB
     let overlaps = find_overlaps(&segs);
-    assert!(!overlaps.is_empty(), "Crossing diagonal segments should have AABB overlap");
+    assert!(
+        !overlaps.is_empty(),
+        "Crossing diagonal segments should have AABB overlap"
+    );
 }
 
 // ---------------------------------------------------------------------------

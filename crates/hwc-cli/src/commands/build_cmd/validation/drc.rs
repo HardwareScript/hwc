@@ -21,17 +21,32 @@ pub fn run_drc_check(
     }
 
     eprintln!("[DRC DEBUG] Running DRC check...");
-    eprintln!("[DRC DEBUG] Spatial index: {} entities", space.entity_graph.spatial().len());
-    eprintln!("[DRC DEBUG] Routed segments: {} nets", space.entity_graph.get_all_routes().len());
-    eprintln!("[DRC DEBUG] Analytic routes: {} traces", space.analytic_routes.len());
-    eprintln!("[DRC DEBUG] Substrate layers: {} pours", space.entity_graph.get_substrate_layers().len());
-    
+    eprintln!(
+        "[DRC DEBUG] Spatial index: {} entities",
+        space.entity_graph.spatial().len()
+    );
+    eprintln!(
+        "[DRC DEBUG] Routed segments: {} nets",
+        space.entity_graph.get_all_routes().len()
+    );
+    eprintln!(
+        "[DRC DEBUG] Analytic routes: {} traces",
+        space.analytic_routes.len()
+    );
+    eprintln!(
+        "[DRC DEBUG] Substrate layers: {} pours",
+        space.entity_graph.get_substrate_layers().len()
+    );
+
     // Count route segments
     let mut total_route_segs = 0;
     for (_net_id, segments) in space.entity_graph.get_all_routes() {
         total_route_segs += segments.len();
     }
-    eprintln!("[DRC DEBUG] Total route segments across all nets: {}", total_route_segs);
+    eprintln!(
+        "[DRC DEBUG] Total route segments across all nets: {}",
+        total_route_segs
+    );
 
     if config.verbose {
         println!("🔍 Running Design Rule Check (DRC)...");
@@ -84,11 +99,20 @@ pub fn run_drc_check(
 
     if !drc_report.is_valid() {
         println!("\n❌ DRC VIOLATIONS DETECTED:");
-        
+
         // v0.1.9: DEBUG - Log spatial index state for diagnosis
-        eprintln!("[DRC DEBUG] Spatial index contains {} entities", space.entity_graph.spatial().len());
-        eprintln!("[DRC DEBUG] Entity graph has {} routed segments", space.entity_graph.get_all_routes().len());
-        eprintln!("[DRC DEBUG] Space has {} analytic routes", space.analytic_routes.len());
+        eprintln!(
+            "[DRC DEBUG] Spatial index contains {} entities",
+            space.entity_graph.spatial().len()
+        );
+        eprintln!(
+            "[DRC DEBUG] Entity graph has {} routed segments",
+            space.entity_graph.get_all_routes().len()
+        );
+        eprintln!(
+            "[DRC DEBUG] Space has {} analytic routes",
+            space.analytic_routes.len()
+        );
 
         // Group violations by type for cleaner output
         use rustc_hash::FxHashMap;

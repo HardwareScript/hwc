@@ -67,6 +67,12 @@ impl Parser {
                 Token::If => Some("if".into()),
                 Token::Then => Some("then".into()),
                 Token::Else => Some("else".into()),
+                Token::Align => Some("align".into()),
+                Token::With => Some("with".into()),
+                Token::Above => Some("above".into()),
+                Token::Below => Some("below".into()),
+                Token::RightOf => Some("right_of".into()),
+                Token::LeftOf => Some("left_of".into()),
                 _ => None,
             };
 

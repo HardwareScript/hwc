@@ -22,7 +22,6 @@ pub enum ParseError {
     },
 
     // Phase 1.1 — Break up S14 into specific error codes (S30-S37)
-
     #[error("{message}")]
     #[diagnostic(
         code(S30),
@@ -120,7 +119,6 @@ pub enum ParseError {
     },
 
     // Phase 1.2 — Additional specific error codes (S40-S43)
-
     #[error("{message}")]
     #[diagnostic(
         code(S40),

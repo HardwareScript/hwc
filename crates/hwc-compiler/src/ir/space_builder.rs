@@ -14,7 +14,12 @@ pub fn create_hardware_space(
     let dimensions = space_def
         .dimensions
         .as_ref()
-        .ok_or(IrError::MissingDimensions)?;
+        .ok_or_else(|| IrError::MissingDimensions {
+            span: miette::SourceSpan::new(
+                space_def.span.start.into(),
+                (space_def.span.end - space_def.span.start).into(),
+            ),
+        })?;
 
     // Convert dimensions to nanometers using the symbol table (supports custom units!)
     let dims = Dimensions {
@@ -27,7 +32,9 @@ pub fn create_hardware_space(
     };
 
     // Determine resolution for coordinate snapping
-    let resolution_nm = space_def.resolution.as_ref()
+    let resolution_nm = space_def
+        .resolution
+        .as_ref()
         .map(|res_measurement| {
             measurement_to_nm(res_measurement, symbol_table)
                 .map_err(|e| IrError::InvalidExpression(e))
@@ -36,7 +43,9 @@ pub fn create_hardware_space(
         .ok_or_else(|| IrError::MissingGrid)?;
 
     if resolution_nm <= 0 {
-        return Err(IrError::InvalidResolution { value: resolution_nm });
+        return Err(IrError::InvalidResolution {
+            value: resolution_nm,
+        });
     }
 
     // Create material registry
@@ -52,15 +61,11 @@ pub fn create_hardware_space(
             | hwc_parser::MaterialCategory::DieInterconnect
             | hwc_parser::MaterialCategory::PcbSolder
             | hwc_parser::MaterialCategory::BarrierLayer
-            | hwc_parser::MaterialCategory::Adhesive => {
-                hwc_engine::MaterialConductivity::Conductor
-            }
+            | hwc_parser::MaterialCategory::Adhesive => hwc_engine::MaterialConductivity::Conductor,
             hwc_parser::MaterialCategory::Semiconductor => {
                 hwc_engine::MaterialConductivity::Semiconductor
             }
-            hwc_parser::MaterialCategory::Insulator => {
-                hwc_engine::MaterialConductivity::Insulator
-            }
+            hwc_parser::MaterialCategory::Insulator => hwc_engine::MaterialConductivity::Insulator,
         };
         let process = match mat_def.process {
             hwc_parser::ManufacturingProcess::DrilledPlated => {
@@ -69,9 +74,7 @@ pub fn create_hardware_space(
             hwc_parser::ManufacturingProcess::Deposited => {
                 hwc_engine::ManufacturingProcess::Deposited
             }
-            hwc_parser::ManufacturingProcess::Etched => {
-                hwc_engine::ManufacturingProcess::Etched
-            }
+            hwc_parser::ManufacturingProcess::Etched => hwc_engine::ManufacturingProcess::Etched,
         };
         material_registry.register_with_properties(&name, conductivity, process);
 
@@ -116,9 +119,21 @@ pub fn create_hardware_space(
         }
         if let Some(id) = material_registry.get_id(&name) {
             if let (Some(rho), Some(k)) = (resistivity_ohm_m, thermal_conductivity_w_mk) {
-                material_registry.set_physical_props(id, rho, k, thickness_nm, max_current_density_a_mm2);
+                material_registry.set_physical_props(
+                    id,
+                    rho,
+                    k,
+                    thickness_nm,
+                    max_current_density_a_mm2,
+                );
             } else if thickness_nm > 0 {
-                material_registry.set_physical_props(id, 0.0, 0.0, thickness_nm, max_current_density_a_mm2);
+                material_registry.set_physical_props(
+                    id,
+                    0.0,
+                    0.0,
+                    thickness_nm,
+                    max_current_density_a_mm2,
+                );
             }
             // Validate conductor materials have all required physical properties
             if let Err(msg) = material_registry.validate_conductor_props(id, &name) {
@@ -158,7 +173,9 @@ pub fn create_hardware_space(
     if let Some(profile_name) = &space_def.profile {
         // Look up profile in symbol table
         let profile_def = symbol_table.get_profile(&profile_name.name).map_err(|_e| {
-            IrError::ProfileNotFound { name: profile_name.name.clone().into() }
+            IrError::ProfileNotFound {
+                name: profile_name.name.clone().into(),
+            }
         })?;
 
         // Convert profile to constraints - preserve the actual error instead of masking it
@@ -183,7 +200,9 @@ pub fn create_hardware_space(
         space.set_net_classification(net_decl.name.clone(), classification);
 
         let is_asic = space.fabrication_constraints.as_ref().map_or(false, |c| {
-            c.technology.as_ref().map_or(false, |t| t.to_lowercase() == "asic")
+            c.technology
+                .as_ref()
+                .map_or(false, |t| t.to_lowercase() == "asic")
         });
         let min_width = space.fabrication_constraints.as_ref()
             .map(|c| c.trace.min_width_nm)
@@ -191,7 +210,10 @@ pub fn create_hardware_space(
                 message: "PDK missing required 'trace.min_width_nm' constraint".into(),
                 hint: "Add a 'trace:' block to your profile with explicit min_width.\n\nExample:\n  trace:\n    min_width: 180nm".into(),
             })?;
-        let net_id = space.netlist.get_or_create_net_with_technology(&net_decl.name, is_asic, min_width);
+        let net_id =
+            space
+                .netlist
+                .get_or_create_net_with_technology(&net_decl.name, is_asic, min_width);
 
         // v0.1.7: Set net frequency on the netlist (for SI-aware routing)
         if let Some(freq_hz) = net_decl.frequency_hz {
@@ -224,19 +246,17 @@ pub fn validate_asic_constraints(
         .and_then(|p| symbol_table.get_profile(p.as_str()).ok());
 
     let is_asic = profile.as_ref().is_some_and(|p| p.is_asic())
-        || space_def.profile.as_ref().map_or(false, |p| {
-            p.name.to_lowercase().contains("asic")
-        });
+        || space_def
+            .profile
+            .as_ref()
+            .map_or(false, |p| p.name.to_lowercase().contains("asic"));
 
     if !is_asic {
         return Ok(()); // PCB builds allow implicit defaults
     }
 
     // Rule 1: Profile MUST declare trace constraints with min_width
-    let has_trace_constraints = profile
-        .as_ref()
-        .and_then(|p| p.trace.as_ref())
-        .is_some();
+    let has_trace_constraints = profile.as_ref().and_then(|p| p.trace.as_ref()).is_some();
 
     if !has_trace_constraints {
         return Err(IrError::MissingAsicConstraint {

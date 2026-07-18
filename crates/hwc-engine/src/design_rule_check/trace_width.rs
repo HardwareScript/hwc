@@ -1,6 +1,6 @@
+use super::types::DrcViolation;
 use crate::constraint_manager::ConstraintRulebook;
 use crate::space::HardwareSpace;
-use super::types::DrcViolation;
 
 /// Validate trace widths for all nets using analytic geometry.
 pub fn validate_trace_widths(

@@ -71,16 +71,15 @@ impl StackupManager {
 
             for layer in &stackup.layers {
                 let thickness_nm = evaluate_expression_to_nm(&layer.thickness, symbol_table)
-                    .map_err(|e| {
-                        IrError::StackupResolutionFailed {
-                            layer_name: layer.name.name.clone().into(),
-                            reason: format!("Failed to evaluate thickness: {}", e),
-                        }
+                    .map_err(|e| IrError::StackupResolutionFailed {
+                        layer_name: layer.name.name.clone().into(),
+                        reason: format!("Failed to evaluate thickness: {}", e),
                     })?;
 
                 // v0.1.8: Determine conductivity by looking up the material in the Symbol Table.
                 // No hardcoded names or fallbacks.
-                let is_conductive = if let Ok(mat_def) = symbol_table.get_material(&layer.material) {
+                let is_conductive = if let Ok(mat_def) = symbol_table.get_material(&layer.material)
+                {
                     match mat_def.category {
                         hwc_parser::MaterialCategory::Conductor
                         | hwc_parser::MaterialCategory::OhmicContact
@@ -98,7 +97,12 @@ impl StackupManager {
                     });
                 };
 
-                resolved.push((layer.name.name.to_string(), thickness_nm, is_conductive, layer.material.to_string()));
+                resolved.push((
+                    layer.name.name.to_string(),
+                    thickness_nm,
+                    is_conductive,
+                    layer.material.to_string(),
+                ));
             }
 
             // Step 2: Assign absolute Z positions
@@ -182,7 +186,10 @@ impl StackupManager {
     /// This strictly follows the user-defined stackup. If no conductive layer
     /// is found on the requested side, it returns an error rather than falling
     /// back to a hardcoded default (e.g. 35um).
-    pub fn outer_conductive_thickness_nm(&self, side: hwc_parser::MountingSide) -> Result<i64, IrError> {
+    pub fn outer_conductive_thickness_nm(
+        &self,
+        side: hwc_parser::MountingSide,
+    ) -> Result<i64, IrError> {
         match side {
             hwc_parser::MountingSide::Top => {
                 // Search for the first conductive layer from the top
@@ -269,23 +276,18 @@ impl StackupManager {
         _resolution_nm: i64,
     ) -> Result<i64, IrError> {
         match elevation {
-            Elevation::Physical { start, .. } => {
-                evaluate_expression_to_nm(start, symbol_table).map_err(|e| {
-                    IrError::CoordinateResolutionFailed {
-                        coordinate_str: "physical Z expression".into(),
-                        reason: e.to_string(),
-                    }
-                })
-            }
+            Elevation::Physical { start, .. } => evaluate_expression_to_nm(start, symbol_table)
+                .map_err(|e| IrError::CoordinateResolutionFailed {
+                    coordinate_str: "physical Z expression".into(),
+                    reason: e.to_string(),
+                }),
             Elevation::Semantic(ident) => self
                 .layer_start_z_nm
                 .get(&ident.name.to_string())
                 .copied()
-                .ok_or_else(|| {
-                    IrError::StackupResolutionFailed {
-                        layer_name: ident.name.clone(),
-                        reason: format!("Unknown semantic layer '{}' in profile stackup", ident.name),
-                    }
+                .ok_or_else(|| IrError::StackupResolutionFailed {
+                    layer_name: ident.name.clone(),
+                    reason: format!("Unknown semantic layer '{}' in profile stackup", ident.name),
                 }),
             Elevation::Relative => Ok(0),
         }
@@ -299,12 +301,12 @@ impl StackupManager {
     ) -> Result<i64, IrError> {
         let bottom = self.resolve_elevation_bottom(elevation, symbol_table, 0)?;
         let thickness = match elevation {
-            Elevation::Semantic(ident) => self.get_layer_thickness(ident.name.as_ref()).ok_or_else(|| {
-                IrError::StackupResolutionFailed {
+            Elevation::Semantic(ident) => self
+                .get_layer_thickness(ident.name.as_ref())
+                .ok_or_else(|| IrError::StackupResolutionFailed {
                     layer_name: ident.name.clone(),
                     reason: format!("Unknown semantic layer '{}' in profile stackup", ident.name),
-                }
-            })?,
+                })?,
             Elevation::Physical { end, .. } => {
                 if let Some(end_expr) = end {
                     let top = evaluate_expression_to_nm(end_expr, symbol_table).map_err(|e| {
@@ -324,7 +326,9 @@ impl StackupManager {
             Elevation::Relative => {
                 return Err(IrError::CoordinateResolutionFailed {
                     coordinate_str: "relative elevation".into(),
-                    reason: "Relative elevation cannot resolve a top boundary without a layer context.".into(),
+                    reason:
+                        "Relative elevation cannot resolve a top boundary without a layer context."
+                            .into(),
                 });
             }
         };
@@ -353,7 +357,7 @@ impl StackupManager {
             let start = *self.layer_start_z_nm.get(name)?;
             let thickness = *self.layer_thickness_nm.get(name)?;
             let is_top = idx == count - 1;
-            
+
             // v0.1.7: Inclusive top boundary for the topmost layer.
             // This prevents coordinates exactly at the board surface (e.g. 1.27mm)
             // from being identified as "outside the board".
@@ -375,8 +379,6 @@ impl StackupManager {
         self.get_layer_index_at_z(z_nm)
             .map(|idx| self.ordered_layers[idx].clone())
     }
-
-
 
     /// Returns the absolute Z starting position (bottom) in nm for a layer index.
     pub fn get_z_start_nm_for_layer_index(&self, index: usize) -> Result<i64, IrError> {

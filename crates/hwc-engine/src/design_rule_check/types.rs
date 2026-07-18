@@ -312,4 +312,3 @@ impl fmt::Display for DrcReport {
         write!(f, "{}", self.format_report())
     }
 }
-

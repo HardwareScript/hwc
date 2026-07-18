@@ -1,17 +1,15 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use hwc_engine::geometry::{Point3D, TraceSegment};
-use hwc_engine::geometry_router::spatial_index::{DynamicSpatialIndex, IndexedSegment};
-use hwc_engine::geometry_router::gcell_sweep::{find_overlaps, sort_segments_by_morton};
 use hwc_engine::geometry_router::connectivity_check::verify_connectivity;
-use hwc_engine::geometry_router::parasitic_extraction::{
-    extract_parasitics, ExtractionParams,
-};
-use hwc_engine::geometry_router::legalizer::Legalizer;
 use hwc_engine::geometry_router::deterministic_sort::deterministic_toposort;
+use hwc_engine::geometry_router::gcell_sweep::{find_overlaps, sort_segments_by_morton};
+use hwc_engine::geometry_router::legalizer::Legalizer;
 use hwc_engine::geometry_router::lockfile::{
-    write_lockfile, load_lockfile, CompactLockfileBinary, ArchivedArcSegment,
-    ArchivedComponentInstance,
+    load_lockfile, write_lockfile, ArchivedArcSegment, ArchivedComponentInstance,
+    CompactLockfileBinary,
 };
+use hwc_engine::geometry_router::parasitic_extraction::{extract_parasitics, ExtractionParams};
+use hwc_engine::geometry_router::spatial_index::{DynamicSpatialIndex, IndexedSegment};
 
 // ---------------------------------------------------------------------------
 // Deterministic pseudo-random generator (no external deps)
@@ -27,7 +25,10 @@ impl Rng {
     }
 
     fn next_u64(&mut self) -> u64 {
-        self.state = self.state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        self.state = self
+            .state
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         self.state
     }
 
@@ -228,9 +229,7 @@ fn bench_connectivity_small(c: &mut Criterion) {
     let segments = make_connectivity_segments(10, 5, 0xAAAA);
 
     group.bench_function("10_nets_50_segments", |b| {
-        b.iter(|| {
-            verify_connectivity(&segments, &[])
-        });
+        b.iter(|| verify_connectivity(&segments, &[]));
     });
 
     group.finish();
@@ -241,9 +240,7 @@ fn bench_connectivity_medium(c: &mut Criterion) {
     let segments = make_connectivity_segments(100, 5, 0xBBBB);
 
     group.bench_function("100_nets_500_segments", |b| {
-        b.iter(|| {
-            verify_connectivity(&segments, &[])
-        });
+        b.iter(|| verify_connectivity(&segments, &[]));
     });
 
     group.finish();
@@ -271,9 +268,7 @@ fn bench_parasitic_extraction(c: &mut Criterion) {
     };
 
     group.bench_function("100_traces", |b| {
-        b.iter(|| {
-            extract_parasitics(&segments, &[], &params)
-        });
+        b.iter(|| extract_parasitics(&segments, &[], &params));
     });
 
     group.finish();
@@ -319,12 +314,7 @@ fn bench_legalization_small(c: &mut Criterion) {
         b.iter(|| {
             let mut index = DynamicSpatialIndex::new();
             for (idx, seg) in segments.iter().enumerate() {
-                index.insert(IndexedSegment::new(
-                    idx,
-                    idx,
-                    seg,
-                    seg.start.z,
-                ));
+                index.insert(IndexedSegment::new(idx, idx, seg, seg.start.z));
             }
             legalizer.legalize(&segments, &index, 3)
         });
@@ -367,12 +357,7 @@ fn bench_legalization_medium(c: &mut Criterion) {
         b.iter(|| {
             let mut index = DynamicSpatialIndex::new();
             for (idx, seg) in segments.iter().enumerate() {
-                index.insert(IndexedSegment::new(
-                    idx,
-                    idx,
-                    seg,
-                    seg.start.z,
-                ));
+                index.insert(IndexedSegment::new(idx, idx, seg, seg.start.z));
             }
             legalizer.legalize(&segments, &index, 3)
         });
@@ -410,9 +395,7 @@ fn bench_toposort_small(c: &mut Criterion) {
     let nodes = make_dag(50, 0xF001);
 
     group.bench_function("50_nodes", |b| {
-        b.iter(|| {
-            deterministic_toposort(&nodes)
-        });
+        b.iter(|| deterministic_toposort(&nodes));
     });
 
     group.finish();
@@ -423,9 +406,7 @@ fn bench_toposort_medium(c: &mut Criterion) {
     let nodes = make_dag(500, 0xF002);
 
     group.bench_function("500_nodes", |b| {
-        b.iter(|| {
-            deterministic_toposort(&nodes)
-        });
+        b.iter(|| deterministic_toposort(&nodes));
     });
 
     group.finish();
@@ -436,9 +417,7 @@ fn bench_toposort_large(c: &mut Criterion) {
     let nodes = make_dag(5000, 0xF003);
 
     group.bench_function("5000_nodes", |b| {
-        b.iter(|| {
-            deterministic_toposort(&nodes)
-        });
+        b.iter(|| deterministic_toposort(&nodes));
     });
 
     group.finish();
@@ -474,14 +453,12 @@ fn make_lockfile(arcs_count: usize) -> CompactLockfileBinary {
         .collect();
 
     let instances: Vec<ArchivedComponentInstance> = (0..100)
-        .map(|i| {
-            ArchivedComponentInstance {
-                id: i,
-                x_nm: rng.gen_range(0, board_size),
-                y_nm: rng.gen_range(0, board_size),
-                rotation_deg: (rng.next_u64() % 4) as i64 * 90,
-                mirror: rng.next_u64() % 2 == 0,
-            }
+        .map(|i| ArchivedComponentInstance {
+            id: i,
+            x_nm: rng.gen_range(0, board_size),
+            y_nm: rng.gen_range(0, board_size),
+            rotation_deg: (rng.next_u64() % 4) as i64 * 90,
+            mirror: rng.next_u64() % 2 == 0,
         })
         .collect();
 

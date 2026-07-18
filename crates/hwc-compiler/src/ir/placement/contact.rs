@@ -77,9 +77,12 @@ pub fn place_contact(
     profile: Option<&hwc_parser::ProfileDefinition>,
 ) -> Result<(), IrError> {
     // Get or register the contact material in the material registry
-    let material_id = space.material_registry.get_id(&contact.material).ok_or_else(|| {
-        IrError::UndeclaredMaterial { material: contact.material.clone() }
-    })?;
+    let material_id = space
+        .material_registry
+        .get_id(&contact.material)
+        .ok_or_else(|| IrError::UndeclaredMaterial {
+            material: contact.material.clone(),
+        })?;
 
     // XY from coordinate; Z span from elevations via StackupManager
     // Extract x and y expressions from the coordinate
@@ -89,7 +92,11 @@ pub fn place_contact(
         hwc_parser::Coordinate::Relative(_) => {
             return Err(IrError::PlacementConstraint {
                 message: "Relative coordinates are not supported for contact placement".into(),
-                component: contact.name.as_ref().map(|n| n.as_str().to_string()).unwrap_or_else(|| "unnamed".to_string()),
+                component: contact
+                    .name
+                    .as_ref()
+                    .map(|n| n.as_str().to_string())
+                    .unwrap_or_else(|| "unnamed".to_string()),
             });
         }
     };
@@ -104,10 +111,13 @@ pub fn place_contact(
         stackup_manager,
         profile,
     };
-    let xy_point = crate::ir::conversions::coordinate_to_point(&contact.position, &ctx).map_err(|e| IrError::CoordinateResolutionFailed {
-        coordinate_str: "contact position".into(),
-        reason: e,
-    })?;
+    let xy_point =
+        crate::ir::conversions::coordinate_to_point(&contact.position, &ctx).map_err(|e| {
+            IrError::CoordinateResolutionFailed {
+                coordinate_str: "contact position".into(),
+                reason: e,
+            }
+        })?;
 
     // Calculate via diameter (use default if not specified)
     // v0.1.7: Support explicit drill_diameter vs legacy diameter
@@ -139,14 +149,9 @@ pub fn place_contact(
         symbol_table,
         space.resolution_nm,
     )?;
-    let from_top_nm = stackup_manager.resolve_elevation_top(
-        &contact.from_elevation,
-        symbol_table,
-    )?;
-    let to_top_nm = stackup_manager.resolve_elevation_top(
-        &contact.to_elevation,
-        symbol_table,
-    )?;
+    let from_top_nm =
+        stackup_manager.resolve_elevation_top(&contact.from_elevation, symbol_table)?;
+    let to_top_nm = stackup_manager.resolve_elevation_top(&contact.to_elevation, symbol_table)?;
 
     let contact_name_debug = contact
         .name
@@ -308,9 +313,14 @@ pub fn place_contact(
 
     let bridge_material_name = get_prop_string(contact, "bridge", eval_context);
     let bridge_material_id = if let Some(b) = &bridge_material_name {
-        Some(space.material_registry.get_id(b).ok_or_else(|| {
-            IrError::UndeclaredMaterial { material: b.clone() }
-        })?)
+        Some(
+            space
+                .material_registry
+                .get_id(b)
+                .ok_or_else(|| IrError::UndeclaredMaterial {
+                    material: b.clone(),
+                })?,
+        )
     } else {
         None
     };
@@ -336,24 +346,25 @@ pub fn place_contact(
     }
 
     // Compute pad bbox (drill + annular ring) for contact metadata and substrate layers
-    let annular_ring_nm =
-        if let Some(nm) = get_prop_nm(contact, "annular_ring", symbol_table, eval_context) {
-            nm
-        } else if let Some(profile_ring) = space
-            .fabrication_constraints
-            .as_ref()
-            .map(|c| c.via.min_annular_ring_nm)
-        {
-            profile_ring
-        } else {
-            return Err(IrError::MissingAsicConstraint {
+    let annular_ring_nm = if let Some(nm) =
+        get_prop_nm(contact, "annular_ring", symbol_table, eval_context)
+    {
+        nm
+    } else if let Some(profile_ring) = space
+        .fabrication_constraints
+        .as_ref()
+        .map(|c| c.via.min_annular_ring_nm)
+    {
+        profile_ring
+    } else {
+        return Err(IrError::MissingAsicConstraint {
                 message: format!(
                     "Contact '{}' has no explicit annular_ring and no profile via.min_annular_ring.",
                     contact.name.as_ref().map(|n| n.to_string()).unwrap_or_else(|| "unnamed".into())
                 ),
                 hint: "Add 'annular_ring: <value>' to the contact, or declare 'via: min_annular_ring: <value>' in the profile.".into(),
             })?;
-        };
+    };
 
     // v0.1.7: Register via for Excellon drill export
     // This ensures that ALL contacts (vias, THT pins, TSVs) are registered for the drill file.
@@ -367,8 +378,8 @@ pub fn place_contact(
         diameter_nm,
         via_net_id,
         material_id,
-        0,                 // min_z
-        board_max_z_nm,    // max_z
+        0,              // min_z
+        board_max_z_nm, // max_z
         annular_ring_nm,
     );
     space.add_vias(vec![via]);
@@ -393,9 +404,12 @@ pub fn place_contact(
     // v0.1.7: TSV (Through-Silicon Via) support
     let liner_material_name = get_prop_string(contact, "liner", eval_context);
     if let Some(liner_material_name) = &liner_material_name {
-        let liner_material_id = space.material_registry.get_id(liner_material_name).ok_or_else(|| {
-            IrError::UndeclaredMaterial { material: liner_material_name.clone() }
-        })?;
+        let liner_material_id = space
+            .material_registry
+            .get_id(liner_material_name)
+            .ok_or_else(|| IrError::UndeclaredMaterial {
+                material: liner_material_name.clone(),
+            })?;
         let liner_thickness_nm =
             get_prop_nm(contact, "liner_thickness", symbol_table, eval_context).unwrap_or(5_000);
 
@@ -445,7 +459,10 @@ pub fn place_contact(
 
         // v0.2.0: Use polygon contour if available, fallback to cylinder
         if let Some(ref contour) = contour {
-            let points = contour.iter().map(|p| hwc_engine::geometry::Point2D::new(p.x, p.y)).collect();
+            let points = contour
+                .iter()
+                .map(|p| hwc_engine::geometry::Point2D::new(p.x, p.y))
+                .collect();
             let polygon = hwc_engine::geometry::Polygon::new(points);
             space.entity_graph.add_polygon_substrate_layer(
                 bridge_mat,
@@ -467,7 +484,10 @@ pub fn place_contact(
         // Place via fill (e.g., Tungsten) - use contour-aware placement
         if interface_end_z < end_z {
             if let Some(ref contour) = contour {
-                let points = contour.iter().map(|p| hwc_engine::geometry::Point2D::new(p.x, p.y)).collect();
+                let points = contour
+                    .iter()
+                    .map(|p| hwc_engine::geometry::Point2D::new(p.x, p.y))
+                    .collect();
                 let polygon = hwc_engine::geometry::Polygon::new(points);
                 space.entity_graph.add_polygon_substrate_layer(
                     material_id,
@@ -549,11 +569,31 @@ pub fn place_contact(
 
             // 3. ACTION: Calculate remaining Unified Via parameters (Plating)
             let plating_thickness_nm =
-                get_prop_nm(contact, "plating_thickness", symbol_table, eval_context)
-                    .ok_or_else(|| IrError::MissingAsicConstraint {
-                        message: format!("Contact '{}' missing required 'plating_thickness' property", contact_name_debug),
+                get_prop_nm(contact, "plating_thickness", symbol_table, eval_context).ok_or_else(
+                    || IrError::MissingAsicConstraint {
+                        message: format!(
+                            "Contact '{}' missing required 'plating_thickness' property",
+                            contact_name_debug
+                        ),
                         hint: "Add 'plating_thickness: <value>' to the contact properties.".into(),
-                    })?;
+                    },
+                )?;
+
+            if 2 * plating_thickness_nm > diameter_nm {
+                return Err(IrError::PlacementConstraint {
+                    message: format!(
+                        "Invalid via dimensions for contact '{}': plating thickness ({}nm) is greater than half of the via diameter ({}nm). \
+                         This results in a geometrically impossible negative inner diameter. \
+                         Plating thickness must be less than or equal to half of the diameter (max {}nm).",
+                        contact_name_debug,
+                        plating_thickness_nm,
+                        diameter_nm,
+                        diameter_nm / 2
+                    ),
+                    component: contact_name_debug.to_string(),
+                });
+            }
+
             let inner_diameter_nm = diameter_nm - (2 * plating_thickness_nm);
 
             let bottom_diameter_nm =
@@ -614,18 +654,33 @@ pub fn place_contact(
             );
 
             // 5. ACTION: Handle Filled Vias (v0.1.9: VIPPO)
-            if get_prop_bool(contact, "filled", eval_context).ok_or_else(|| IrError::MissingAsicConstraint {
-                message: format!("Contact '{}' missing required 'filled' property", contact_name_debug),
-                hint: "Add 'filled: true|false' to the contact properties.".into(),
+            if get_prop_bool(contact, "filled", eval_context).ok_or_else(|| {
+                IrError::MissingAsicConstraint {
+                    message: format!(
+                        "Contact '{}' missing required 'filled' property",
+                        contact_name_debug
+                    ),
+                    hint: "Add 'filled: true|false' to the contact properties.".into(),
+                }
             })? {
                 let fill_material_name = get_prop_string(contact, "fill_material", eval_context);
-                let fill_mat_str = fill_material_name.as_deref().ok_or_else(|| IrError::MissingAsicConstraint {
-                    message: format!("Contact '{}' is filled but missing 'fill_material' property", contact_name_debug),
-                    hint: "Add 'fill_material: <MaterialName>' to the contact properties.".into(),
+                let fill_mat_str = fill_material_name.as_deref().ok_or_else(|| {
+                    IrError::MissingAsicConstraint {
+                        message: format!(
+                            "Contact '{}' is filled but missing 'fill_material' property",
+                            contact_name_debug
+                        ),
+                        hint: "Add 'fill_material: <MaterialName>' to the contact properties."
+                            .into(),
+                    }
                 })?;
-                let fill_material_id = space.material_registry.get_id(fill_mat_str).ok_or_else(|| {
-                    IrError::UndeclaredMaterial { material: fill_mat_str.into() }
-                })?;
+                let fill_material_id =
+                    space
+                        .material_registry
+                        .get_id(fill_mat_str)
+                        .ok_or_else(|| IrError::UndeclaredMaterial {
+                            material: fill_mat_str.into(),
+                        })?;
 
                 let fill_net_id = if let Some(fill_mat_name) = &fill_material_name {
                     if let Some(mat_def) = symbol_table.materials().get(fill_mat_name) {
@@ -701,8 +756,11 @@ pub fn place_contact(
                     contact_name_debug, contact.material, net_id,
                     start_point.x, start_point.y, start_point.z,
                     end_point.x, end_point.y, end_point.z, diameter_nm);
-                
-                let points = path.iter().map(|p| hwc_engine::geometry::Point2D::new(p.x, p.y)).collect();
+
+                let points = path
+                    .iter()
+                    .map(|p| hwc_engine::geometry::Point2D::new(p.x, p.y))
+                    .collect();
                 let polygon = hwc_engine::geometry::Polygon::new(points);
 
                 space.entity_graph.add_polygon_substrate_layer(

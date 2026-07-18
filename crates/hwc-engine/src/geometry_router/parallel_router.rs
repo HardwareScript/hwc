@@ -1,15 +1,14 @@
-//! Parallel Router: Multi-threaded domain-based routing with Rayon.
+//! Parallel Router: Multi-threaded domain-based routing with std::thread::scope.
 //!
 //! Uses TopologicalRouter as the sole routing engine within isolated domains.
 
 use crate::constraint_manager::{ConstraintRulebook, Route, RoutedDomain, RoutingDomain};
 use crate::geometry::Point3D;
+use crate::geometry::{BoundingBox, TraceSegment};
 use crate::geometry_router::spatial_index::{DynamicSpatialIndex, IndexedSegment};
 use crate::geometry_router::topological_router::TopologicalRouter;
-use crate::geometry::{BoundingBox, TraceSegment};
-use crate::netlist::NetlistArena;
 use crate::geometry_router::EntityGraph;
-use rayon::prelude::*;
+use crate::netlist::NetlistArena;
 
 pub struct ParallelRouter {
     constraints: ConstraintRulebook,
@@ -30,29 +29,37 @@ impl ParallelRouter {
         domains: Vec<RoutingDomain>,
         netlist: &NetlistArena,
     ) -> Vec<RoutedDomain> {
-        domains
-            .into_par_iter()
-            .map(|domain| {
-                let local_routes = Self::route_internal_nets(
-                    &domain,
-                    netlist,
-                    &self.constraints,
-                    self.resolution_nm,
-                );
+        // Domains are naturally coarse-grained (typically 2-8 domains).
+        // One thread per domain via std::thread::scope is optimal: each thread
+        // owns its domain data (no Arc/Mutex needed) and there is no work-stealing
+        // overhead for small task counts.
+        let constraints = &self.constraints;
+        let resolution_nm = self.resolution_nm;
+        std::thread::scope(|s| {
+            let mut handles = Vec::new();
 
-                let grid_chunk = EntityGraph::new();
+            for domain in domains {
+                let handle = s.spawn(move || {
+                    let local_routes =
+                        Self::route_internal_nets(&domain, netlist, constraints, resolution_nm);
 
-                // v0.1.8: Occupancy tracking is now handled by the EntityGraph.
-                // No need to copy occupancy data — the TopologicalRouter uses DynamicSpatialIndex.
+                    let grid_chunk = EntityGraph::new();
 
-                RoutedDomain {
-                    id: domain.domain_id.clone(),
-                    box_offset: domain.bounding_box.min,
-                    routes: local_routes,
-                    grid_chunk,
-                }
-            })
-            .collect()
+                    // v0.1.8: Occupancy tracking is now handled by the EntityGraph.
+                    // No need to copy occupancy data — the TopologicalRouter uses DynamicSpatialIndex.
+
+                    RoutedDomain {
+                        id: domain.domain_id.clone(),
+                        box_offset: domain.bounding_box.min,
+                        routes: local_routes,
+                        grid_chunk,
+                    }
+                });
+                handles.push(handle);
+            }
+
+            handles.into_iter().map(|h| h.join().unwrap()).collect()
+        })
     }
 
     fn route_internal_nets(
@@ -65,10 +72,8 @@ impl ParallelRouter {
 
         let (width, height, depth) = domain.dimensions();
 
-        let board_bounds = BoundingBox::new(
-            Point3D::new(0, 0, 0),
-            Point3D::new(width, height, depth),
-        );
+        let board_bounds =
+            BoundingBox::new(Point3D::new(0, 0, 0), Point3D::new(width, height, depth));
 
         let mut spatial_index = DynamicSpatialIndex::new();
         let mut seg_id = 0usize;
@@ -76,11 +81,10 @@ impl ParallelRouter {
         for meta in domain.local_grid.get_component_metadata() {
             let w = meta.bbox.max.x - meta.bbox.min.x;
             let h = meta.bbox.max.y - meta.bbox.min.y;
-            let trace_seg = TraceSegment::new(meta.bbox.min, meta.bbox.max, w.max(h), meta.material);
+            let trace_seg =
+                TraceSegment::new(meta.bbox.min, meta.bbox.max, w.max(h), meta.material);
             let thickness_nm = meta.bbox.max.z - meta.bbox.min.z;
-            let component_net_id = meta.net_bindings.values().next()
-                .copied()
-                .unwrap_or(0) as usize;
+            let component_net_id = meta.net_bindings.values().next().copied().unwrap_or(0) as usize;
             spatial_index.insert(IndexedSegment {
                 source: hwc_physics::spatial_index::SpatialEntitySource::ComponentInstance {
                     instance_id: seg_id,
@@ -96,9 +100,15 @@ impl ParallelRouter {
             seg_id += 1;
         }
 
+        let fab = _constraints.fabrication.as_ref().expect(
+            "ParallelRouter: fabrication constraints are required but none are loaded. \
+             Declare a profile with 'trace:' and 'clearance:' constraints.",
+        );
+
         let topo_router = TopologicalRouter::new(
-            _constraints.fabrication.as_ref().map(|f| f.min_trace_width_nm).unwrap_or(100_000),
+            fab.min_trace_width_nm,
             resolution_nm,
+            fab.min_trace_spacing_nm,
         );
 
         for &net_id in &domain.internal_nets {
@@ -128,7 +138,9 @@ impl ParallelRouter {
 
                 let end_local = domain.global_to_local(end_pos_global);
 
-                if let Some(topo_path) = topo_router.route(start_local, end_local, &spatial_index, &board_bounds) {
+                if let Some(topo_path) =
+                    topo_router.route(start_local, end_local, &spatial_index, &board_bounds)
+                {
                     if topo_path.waypoints.len() >= 2 {
                         let waypoints = topo_path.waypoints;
                         routes.push(Route { net_id, waypoints });

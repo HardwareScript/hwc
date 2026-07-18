@@ -9,14 +9,22 @@
 //! - Nearly impossible to get wrong
 //! - Opens in Autodesk Viewer, KiCad, AutoCAD, and virtually every CAD tool
 //!
+//! This exporter uses the "Font-Engine" stroking paradigm:
+//! - Treats routed paths as continuous 1D polylines
+//! - Uses Clipper2's native path offsetting (inflate) for perfect mitered corners
+//! - Eliminates segment-by-segment welding artifacts
+//! - Produces clean, professional-grade vector traces
+//!
+//! The approach combines:
+//! 1. Vector Stroker (ClipperOffset): Generates mitered outlines from waypoint sequences
+//! 2. Boolean Welder (union_64): Merges trace outlines with pad/via geometry
+//!
 //! This is the most reliable format for visual verification of Hardware Script output.
-//! The SOLID entity ensures proper rendering, and transparency is baked into the layer
-//! definitions for tools that support it (AC1018+).
 
-use crate::geometry_union::{circle_to_path, rect_to_path};
-use clipper2_rust::FillRule;
+use crate::geometry_union::{circle_to_path, stroke_route_segments};
+use clipper2_rust::{FillRule, Paths64};
 use hwc_compiler::SymbolTable;
-use hwc_engine::geometry_router::entity_graph::{CapType, SubstrateLayerType};
+use hwc_engine::geometry_router::entity_graph::SubstrateLayerType;
 use hwc_engine::geometry_router::substrate_types::SubstrateLayerShape;
 use hwc_engine::{HardwareSpace, SpaceView};
 use rustc_hash::FxHashMap;
@@ -76,142 +84,66 @@ pub fn export(
     // 3. ENTITIES (The Actual Geometry)
     writeln!(w, "  0\nSECTION\n  2\nENTITIES")?;
 
-    // --- STRATEGY A: Union copper pours for clean DXF contours ---
-    // Collect copper pools keyed by (z_min, z_max, material, net)
-    let mut copper_pools: FxHashMap<
+    // --- PURE VECTOR PATH OFFSETTING: The Font-Engine Exporter ---
+    // This uses Clipper2's native path stroking engine to generate perfect mitered traces
+    // directly from waypoint sequences, eliminating segment-by-segment welding artifacts.
+    
+    let mut analytic_copper_pools: FxHashMap<
         (i64, i64, hwc_engine::geometry_router::substrate_types::MaterialId, u32),
-        Vec<clipper2_rust::Path64>,
+        Paths64,
     > = FxHashMap::default();
-    let mut via_holes: FxHashMap<
-        (i64, i64, hwc_engine::geometry_router::substrate_types::MaterialId, u32),
-        Vec<clipper2_rust::Path64>,
-    > = FxHashMap::default();
-
-    // Gather copper pours
-    for layer in substrate_layers {
-        if layer.layer_type == SubstrateLayerType::Pour && layer.net != 0 {
-            let key = (
-                layer.bbox.min.z,
-                layer.bbox.max.z,
-                layer.material,
-                layer.net,
-            );
-
-            // v0.1.8: If layer has child regions, emit one path per region.
-            let region_bboxes: Vec<_> = if layer.regions.is_empty() {
-                vec![layer.bbox]
-            } else {
-                layer.regions.to_vec()
-            };
-
-            for region_bbox in &region_bboxes {
-                let mut path = match layer.shape {
-                    SubstrateLayerShape::Rect => rect_to_path(region_bbox),
-                    SubstrateLayerShape::Circle { radius } => {
-                        let cx = (region_bbox.min.x + region_bbox.max.x) / 2;
-                        let cy = (region_bbox.min.y + region_bbox.max.y) / 2;
-                        circle_to_path(cx, cy, radius, 64)
-                    }
-                    _ => continue,
-                };
-
-                // v0.1.9: Subtract cutouts from the path before adding to the pool
-                if !layer.cutouts.is_empty() {
-                    let mut hole_paths = Vec::new();
-                    for cutout in &layer.cutouts {
-                        match cutout.shape {
-                            SubstrateLayerShape::Rect => {
-                                hole_paths.push(rect_to_path(&cutout.bbox))
-                            }
-                            SubstrateLayerShape::Polygon {
-                                ref outer_contour, ..
-                            } => {
-                                hole_paths.push(outer_contour.clone());
-                            }
-                            _ => {}
-                        }
-                    }
-                    if !hole_paths.is_empty() {
-                        let diff = clipper2_rust::difference_64(
-                            &vec![path.clone()],
-                            &hole_paths,
-                            FillRule::NonZero,
-                        );
-                        if !diff.is_empty() {
-                            path = diff[0].clone();
-                        }
-                    }
-                }
-
-                copper_pools.entry(key).or_default().push(path);
-            }
-        }
+    
+    // Gather trace paths from analytic routes using native path offsetting
+    for route in &space.analytic_routes {
+        let half_t = route.thickness_nm / 2;
+        
+        let z_min = route.segments.iter().map(|s| s.start.z.min(s.end.z)).min().unwrap_or(0) - half_t;
+        let z_max = route.segments.iter().map(|s| s.start.z.max(s.end.z)).max().unwrap_or(0) + half_t;
+        
+        // Use the shared stroke_route_segments function to generate perfect mitered outlines
+        let trace_outline = stroke_route_segments(&route.segments, route.width_nm);
+        
+        let key = (z_min, z_max, route.material, route.net_id.raw());
+        analytic_copper_pools.entry(key).or_default().extend(trace_outline);
     }
-
-    // Gather via caps
-    for layer in substrate_layers {
-        if layer.layer_type == SubstrateLayerType::Contact && layer.net != 0 {
-            if let SubstrateLayerShape::Tube {
-                inner_diameter,
-                pad_diameter,
-                top_cap,
-                bottom_cap,
-                ..
-            } = layer.shape
-            {
-                let cx = (layer.bbox.min.x + layer.bbox.max.x) / 2;
-                let cy = (layer.bbox.min.y + layer.bbox.max.y) / 2;
-                let pad_radius = pad_diameter as i64 / 2;
-                let inner_radius = inner_diameter as i64 / 2;
-                let copper_thickness = 35_000;
-
-                if top_cap != CapType::None {
-                    let target_key = (
-                        layer.bbox.max.z - copper_thickness,
-                        layer.bbox.max.z,
-                        layer.material,
-                        layer.net,
-                    );
-                    copper_pools
-                        .entry(target_key)
-                        .or_default()
-                        .push(circle_to_path(cx, cy, pad_radius, 64));
-                    if top_cap == CapType::Annular {
-                        via_holes
-                            .entry(target_key)
-                            .or_default()
-                            .push(circle_to_path(cx, cy, inner_radius, 64));
-                    }
-                }
-
-                if bottom_cap != CapType::None {
-                    let target_key = (
-                        layer.bbox.min.z,
-                        layer.bbox.min.z + copper_thickness,
-                        layer.material,
-                        layer.net,
-                    );
-                    copper_pools
-                        .entry(target_key)
-                        .or_default()
-                        .push(circle_to_path(cx, cy, pad_radius, 64));
-                    if bottom_cap == CapType::Annular {
-                        via_holes
-                            .entry(target_key)
-                            .or_default()
-                            .push(circle_to_path(cx, cy, inner_radius, 64));
-                    }
-                }
-            }
-        }
+    
+    // Add via pads to analytic pools
+    for via in &space.vias {
+        let z_start = via.from_z_nm.min(via.to_z_nm);
+        let z_end = via.from_z_nm.max(via.to_z_nm);
+        let pad_radius = via.diameter_nm / 2 + via.annular_ring_nm.max(via.diameter_nm / 4);
+        let copper_thickness = 35_000;
+        
+        let copper_material_id = space.material_registry
+            .all_materials()
+            .into_iter()
+            .find(|(_, name)| name.contains("Copper") || name.contains("Aluminum") || name.contains("Metal"))
+            .map(|(id, _)| id)
+            .unwrap_or(space.substrate_material_id);
+        
+        // Top pad
+        let top_key = (z_end - copper_thickness, z_end, copper_material_id, via.net_id.raw());
+        analytic_copper_pools
+            .entry(top_key)
+            .or_default()
+            .push(circle_to_path(via.position.0, via.position.1, pad_radius, 64));
+        
+        // Bottom pad
+        let bottom_key = (z_start, z_start + copper_thickness, copper_material_id, via.net_id.raw());
+        analytic_copper_pools
+            .entry(bottom_key)
+            .or_default()
+            .push(circle_to_path(via.position.0, via.position.1, pad_radius, 64));
     }
-
-    // Export unioned copper contours — sort keys for deterministic output order
-    let mut sorted_keys: Vec<_> = copper_pools.keys().cloned().collect();
+    
+    // 3. THE COPPER WELDER: We run the Boolean Union ONLY to merge
+    //    the completed trace outlines with the circular pad/via outlines!
+    let mut sorted_keys: Vec<_> = analytic_copper_pools.keys().cloned().collect();
     sorted_keys.sort();
+    
     for key in &sorted_keys {
-        let (z_min_nm, z_max_nm, material_id, net_raw) = key;
-        let paths = &copper_pools[key];
+        let (z_min_nm, _z_max_nm, material_id, _net_raw) = key;
+        let paths = &analytic_copper_pools[key];
         let mat_name = space
             .material_registry
             .get_name(*material_id)
@@ -223,18 +155,11 @@ pub fn export(
         let true_color = parse_true_color(&color_hex);
 
         let unioned = clipper2_rust::union_64(paths, &vec![], FillRule::NonZero);
-        let final_paths = if let Some(holes) =
-            via_holes.get(&(*z_min_nm, *z_max_nm, *material_id, *net_raw))
-        {
-            clipper2_rust::difference_64(&unioned, holes, FillRule::NonZero)
-        } else {
-            unioned
-        };
-        if final_paths.is_empty() {
+        if unioned.is_empty() {
             continue;
         }
 
-        for path in &final_paths {
+        for path in &unioned {
             let point_count = path.len();
             if point_count < 3 {
                 continue;
@@ -260,21 +185,20 @@ pub fn export(
         }
     }
 
-    // Export non-copper substrate layers (FR4, solder mask, etc.) and via drill holes
+    // Export substrate base, pads, and via drill holes (non-trace geometry)
     for layer in substrate_layers {
-        // Skip copper pours and contacts — already handled by the union pool above
-        if layer.layer_type == SubstrateLayerType::Pour && layer.net != 0 {
-            continue;
-        }
-        if layer.layer_type == SubstrateLayerType::Contact {
-            continue;
-        }
-
         let mat_name = space
             .material_registry
             .get_name(layer.material)
             .unwrap_or("Unknown");
         if mat_name.to_lowercase() == "void" || mat_name.to_lowercase() == "air" {
+            continue;
+        }
+        
+        // Export substrate base and pours (pads are Pour type)
+        // Skip Contact type (vias) since they're already exported as part of analytic routes
+        if layer.layer_type != SubstrateLayerType::Substrate 
+            && layer.layer_type != SubstrateLayerType::Pour {
             continue;
         }
 

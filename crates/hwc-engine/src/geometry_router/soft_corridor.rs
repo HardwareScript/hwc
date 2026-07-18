@@ -99,23 +99,13 @@ pub fn generate_corridors(
 
             let z = start.z;
 
-            let center_line = BoundingBox::new(
-                Point3D::new(min_x, min_y, z),
-                Point3D::new(max_x, max_y, z),
-            );
+            let center_line =
+                BoundingBox::new(Point3D::new(min_x, min_y, z), Point3D::new(max_x, max_y, z));
 
             // Expand center line by track_pitch for envelope
             let envelope = BoundingBox::new(
-                Point3D::new(
-                    min_x - track_pitch_nm,
-                    min_y - track_pitch_nm,
-                    z,
-                ),
-                Point3D::new(
-                    max_x + track_pitch_nm,
-                    max_y + track_pitch_nm,
-                    z,
-                ),
+                Point3D::new(min_x - track_pitch_nm, min_y - track_pitch_nm, z),
+                Point3D::new(max_x + track_pitch_nm, max_y + track_pitch_nm, z),
             );
 
             // Clip envelope to cell bounds

@@ -9,9 +9,12 @@ pub fn place_substrate(
     bbox_tracker: &mut crate::bounding_box_tracker::BoundingBoxTracker,
     ctx: &PlacementContext,
 ) -> Result<(), IrError> {
-    let material_id = space.material_registry.get_id(&substrate.material).ok_or_else(|| {
-        IrError::UndeclaredMaterial { material: substrate.material.clone() }
-    })?;
+    let material_id = space
+        .material_registry
+        .get_id(&substrate.material)
+        .ok_or_else(|| IrError::UndeclaredMaterial {
+            material: substrate.material.clone(),
+        })?;
 
     space.substrate_material_id = material_id;
 
@@ -24,28 +27,34 @@ pub fn place_substrate(
         stackup_manager: ctx.stackup_manager,
         profile: ctx.profile,
     };
-    let start = spanning_coordinate_to_point(&substrate.from, &coord_ctx, false)
-        .map_err(|e| IrError::CoordinateResolutionFailed {
+    let start = spanning_coordinate_to_point(&substrate.from, &coord_ctx, false).map_err(|e| {
+        IrError::CoordinateResolutionFailed {
             coordinate_str: "substrate from".into(),
             reason: e,
-        })?;
-    let end = spanning_coordinate_to_point(&substrate.to, &coord_ctx, true)
-        .map_err(|e| IrError::CoordinateResolutionFailed {
+        }
+    })?;
+    let end = spanning_coordinate_to_point(&substrate.to, &coord_ctx, true).map_err(|e| {
+        IrError::CoordinateResolutionFailed {
             coordinate_str: "substrate to".into(),
             reason: e,
-        })?;
+        }
+    })?;
 
     let mut cutout_bboxes = Vec::new();
     for cutout in &substrate.cutouts {
-        let cutout_start = spanning_coordinate_to_point(&cutout.from, &coord_ctx, false)
-            .map_err(|e| IrError::CoordinateResolutionFailed {
-                coordinate_str: "cutout from".into(),
-                reason: e,
+        let cutout_start =
+            spanning_coordinate_to_point(&cutout.from, &coord_ctx, false).map_err(|e| {
+                IrError::CoordinateResolutionFailed {
+                    coordinate_str: "cutout from".into(),
+                    reason: e,
+                }
             })?;
-        let cutout_end = spanning_coordinate_to_point(&cutout.to, &coord_ctx, true)
-            .map_err(|e| IrError::CoordinateResolutionFailed {
-                coordinate_str: "cutout to".into(),
-                reason: e,
+        let cutout_end =
+            spanning_coordinate_to_point(&cutout.to, &coord_ctx, true).map_err(|e| {
+                IrError::CoordinateResolutionFailed {
+                    coordinate_str: "cutout to".into(),
+                    reason: e,
+                }
             })?;
         let cutout_bbox = hwc_engine::geometry::BoundingBox::new(cutout_start, cutout_end);
         cutout_bboxes.push(cutout_bbox);

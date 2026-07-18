@@ -19,15 +19,15 @@ pub use connectivity::{ConnectivityChecker, ConnectivityViolation};
 pub use electrical::{ElectricalAnalysis, ElectricalAnalyzer, ElectricalViolation};
 pub use electromagnetic::{EMAnalysis, EMAnalyzer, EMViolation};
 pub use error_mapping::{
-    clearance_to_error, connectivity_to_error, electrical_to_error, em_to_error,
-    pivb_to_error, thermal_to_error, PhysicsError,
+    clearance_to_error, connectivity_to_error, electrical_to_error, em_to_error, pivb_to_error,
+    thermal_to_error, PhysicsError,
 };
 pub use geometry::{BoundingBox, Direction, Point3D, TraceSegment};
 pub use metadata_tracker::{MetadataChangeFlags, MetadataTracker};
 pub use parasitic::{ParasiticExtractionParams, ParasiticExtractor, ParasiticValues};
 pub use pivb::{
-    ConnectivityGraph, ConnectivityResult, ContactPlacement, FragmentationReport,
-    FragmentedIsland, PivbSolver, PlanarIsland, VerticalBridge,
+    ConnectivityGraph, ConnectivityResult, ContactPlacement, FragmentationReport, FragmentedIsland,
+    PivbSolver, PlanarIsland, VerticalBridge,
 };
 pub use property_extraction::{
     extract_dielectric_strength, extract_relative_permittivity, extract_resistivity,
@@ -311,8 +311,16 @@ impl PhysicsReport {
         }
 
         // PIVB Connectivity results (Layer 3)
-        let failures: Vec<&FragmentationReport> = self.pivb_results.iter()
-            .filter_map(|r| if let ConnectivityResult::Fail(f) = r { Some(f) } else { None })
+        let failures: Vec<&FragmentationReport> = self
+            .pivb_results
+            .iter()
+            .filter_map(|r| {
+                if let ConnectivityResult::Fail(f) = r {
+                    Some(f)
+                } else {
+                    None
+                }
+            })
             .collect();
 
         if !failures.is_empty() {
@@ -522,9 +530,9 @@ impl PhysicsEngine {
 
     /// Validate a complete design against all physics constraints in parallel.
     ///
-    /// This runs all 4 physics analyzers in parallel using Rayon for improved performance.
-    /// All analyzers have read-only access to the board data, ensuring thread safety.
-    /// Results are collected deterministically.
+    /// This runs all 4 physics analyzers in parallel using std::thread::scope
+    /// for improved performance. All analyzers have read-only access to the
+    /// board data, ensuring thread safety. Results are collected deterministically.
     ///
     /// # Arguments
     /// * `symbol_table` - Symbol Table containing material and profile definitions
@@ -553,25 +561,24 @@ impl PhysicsEngine {
             + clearance::SymbolTableTrait
             + Sync,
     {
-        use rayon::prelude::*;
+        // Exactly 4 physics analyzers run concurrently. Spawning 4 dedicated
+        // threads via std::thread::scope is optimal (no work-stealing overhead).
+        // Each thread borrows self/symbol_table/board_data safely via scoped threads.
+        let reports: Vec<PhysicsReport> = std::thread::scope(|s| {
+            let mut handles = Vec::new();
 
-        // Type alias to reduce complexity
-        type AnalyzerFn<T> = fn(&PhysicsEngine, &T, Option<&BoardData>) -> PhysicsReport;
+            let h1 = s.spawn(|| Self::run_electrical_analysis(self, _symbol_table, _board_data));
+            let h2 = s.spawn(|| Self::run_thermal_analysis(self, _symbol_table, _board_data));
+            let h3 = s.spawn(|| Self::run_em_analysis(self, _symbol_table, _board_data));
+            let h4 = s.spawn(|| Self::run_clearance_analysis(self, _symbol_table, _board_data));
 
-        // Create a vector of analyzer functions
-        // Each returns a PhysicsReport with violations from that analyzer
-        let analyzers: Vec<AnalyzerFn<T>> = vec![
-            PhysicsEngine::run_electrical_analysis,
-            PhysicsEngine::run_thermal_analysis,
-            PhysicsEngine::run_em_analysis,
-            PhysicsEngine::run_clearance_analysis,
-        ];
+            handles.push(h1);
+            handles.push(h2);
+            handles.push(h3);
+            handles.push(h4);
 
-        // Run all analyzers in parallel (read-only access to self and symbol_table)
-        let reports: Vec<PhysicsReport> = analyzers
-            .par_iter()
-            .map(|analyzer| analyzer(self, _symbol_table, _board_data))
-            .collect();
+            handles.into_iter().map(|h| h.join().unwrap()).collect()
+        });
 
         // Merge all results into a single report
         let mut report = PhysicsReport::new();

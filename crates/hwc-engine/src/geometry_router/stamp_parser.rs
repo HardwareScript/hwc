@@ -98,16 +98,8 @@ pub fn bake_stamp(stamp_id: usize, component: &BakedComponent) -> ComponentStamp
                 let max_y = points.iter().map(|p| p.y).max().unwrap_or(0);
 
                 let pad_bbox = BoundingBox::new(
-                    Point3D::new(
-                        pin.local_offset.x + min_x,
-                        pin.local_offset.y + min_y,
-                        0,
-                    ),
-                    Point3D::new(
-                        pin.local_offset.x + max_x,
-                        pin.local_offset.y + max_y,
-                        0,
-                    ),
+                    Point3D::new(pin.local_offset.x + min_x, pin.local_offset.y + min_y, 0),
+                    Point3D::new(pin.local_offset.x + max_x, pin.local_offset.y + max_y, 0),
                 );
                 local_aabb_children.push(pad_bbox);
 
@@ -160,7 +152,10 @@ pub fn register_baked_stamps(
 ) -> Vec<(usize, usize)> {
     let mut results = Vec::with_capacity(components.len());
     for component in components {
-        if scene_graph.get_stamp_by_name(component.name.as_str()).is_some() {
+        if scene_graph
+            .get_stamp_by_name(component.name.as_str())
+            .is_some()
+        {
             continue;
         }
         let stamp_id = scene_graph.stamp_count();
@@ -181,7 +176,12 @@ pub fn stamp_pin_global_position(
     pin_name: &str,
     instance: &ComponentInstance,
 ) -> Option<Point3D> {
-    let (_name, local_offset) = stamp.local_pin_offsets.iter().find(|(n, _)| n == pin_name)?;
-    let (gx, gy) = instance.transform.transform_point(local_offset.x, local_offset.y);
+    let (_name, local_offset) = stamp
+        .local_pin_offsets
+        .iter()
+        .find(|(n, _)| n == pin_name)?;
+    let (gx, gy) = instance
+        .transform
+        .transform_point(local_offset.x, local_offset.y);
     Some(Point3D::new(gx, gy, local_offset.z))
 }

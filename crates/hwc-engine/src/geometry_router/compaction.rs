@@ -38,7 +38,9 @@ pub struct Compactor {
 
 impl Compactor {
     pub fn new(default_clearance_nm: i64) -> Self {
-        Self { default_clearance_nm }
+        Self {
+            default_clearance_nm,
+        }
     }
 
     /// Compute the minimum required spacing between two parallel traces
@@ -77,8 +79,12 @@ impl Compactor {
     #[inline]
     pub fn parallel_run_length(a: &TraceSegment, b: &TraceSegment) -> i64 {
         // Both horizontal (same Y and Z)
-        if a.start.y == a.end.y && b.start.y == b.end.y && a.start.y == b.start.y
-            && a.start.z == a.end.z && b.start.z == b.end.z && a.start.z == b.start.z
+        if a.start.y == a.end.y
+            && b.start.y == b.end.y
+            && a.start.y == b.start.y
+            && a.start.z == a.end.z
+            && b.start.z == b.end.z
+            && a.start.z == b.start.z
         {
             let a_min_x = a.start.x.min(a.end.x);
             let a_max_x = a.start.x.max(a.end.x);
@@ -89,8 +95,12 @@ impl Compactor {
             return (overlap_end - overlap_start).max(0);
         }
         // Both vertical (same X and Z)
-        if a.start.x == a.end.x && b.start.x == b.end.x && a.start.x == b.start.x
-            && a.start.z == a.end.z && b.start.z == b.end.z && a.start.z == b.start.z
+        if a.start.x == a.end.x
+            && b.start.x == b.end.x
+            && a.start.x == b.start.x
+            && a.start.z == a.end.z
+            && b.start.z == b.end.z
+            && a.start.z == b.start.z
         {
             let a_min_y = a.start.y.min(a.end.y);
             let a_max_y = a.start.y.max(a.end.y);
@@ -131,16 +141,16 @@ impl Compactor {
                 let constraints_b = constraints.get(&net_b);
 
                 // Compute current spacing (perpendicular distance)
-                let current_spacing = if seg_a.start.y == seg_a.end.y && seg_a.start.y == seg_b.start.y
-                {
-                    // Horizontal traces — spacing is Y difference
-                    (seg_a.start.y - seg_b.start.y).abs()
-                } else if seg_a.start.x == seg_a.end.x && seg_a.start.x == seg_b.start.x {
-                    // Vertical traces — spacing is X difference
-                    (seg_a.start.x - seg_b.start.x).abs()
-                } else {
-                    continue;
-                };
+                let current_spacing =
+                    if seg_a.start.y == seg_a.end.y && seg_a.start.y == seg_b.start.y {
+                        // Horizontal traces — spacing is Y difference
+                        (seg_a.start.y - seg_b.start.y).abs()
+                    } else if seg_a.start.x == seg_a.end.x && seg_a.start.x == seg_b.start.x {
+                        // Vertical traces — spacing is X difference
+                        (seg_a.start.x - seg_b.start.x).abs()
+                    } else {
+                        continue;
+                    };
 
                 // Compute minimum allowed spacing
                 let min_sp = if let (Some(ca), Some(cb)) = (constraints_a, constraints_b) {
@@ -151,13 +161,22 @@ impl Compactor {
 
                 if current_spacing > min_sp {
                     let shift = (current_spacing - min_sp) / 2;
-                    let (dx, dy) = if seg_a.start.y == seg_a.end.y && seg_a.start.y == seg_b.start.y {
+                    let (dx, dy) = if seg_a.start.y == seg_a.end.y && seg_a.start.y == seg_b.start.y
+                    {
                         // Horizontal traces — shift vertically
-                        let dy = if seg_a.start.y > seg_b.start.y { -shift } else { shift };
+                        let dy = if seg_a.start.y > seg_b.start.y {
+                            -shift
+                        } else {
+                            shift
+                        };
                         (0, dy)
                     } else {
                         // Vertical traces — shift horizontally
-                        let dx = if seg_a.start.x > seg_b.start.x { -shift } else { shift };
+                        let dx = if seg_a.start.x > seg_b.start.x {
+                            -shift
+                        } else {
+                            shift
+                        };
                         (dx, 0)
                     };
                     moves.push(CompactionMove {

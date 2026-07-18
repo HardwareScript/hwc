@@ -8,8 +8,8 @@ use rustc_hash::FxHashMap;
 
 /// Geometry Router: Main routing engine.
 ///
-/// Orchestrates the automatic routing process using A* pathfinding with
-/// Manhattan routing constraints and physics-based clearance enforcement.
+/// Orchestrates the automatic routing process using topological ray-casting
+/// with Manhattan routing constraints and physics-based clearance enforcement.
 ///
 /// Supports adaptive routing modes:
 /// - **Pass-Through** (LOD 1): Small designs (<100 nets, <1mm²) bypass G-Cell
@@ -93,7 +93,8 @@ pub struct GeometryRouter {
     // =========================================================================
     /// Substrate layers for reference-plane void detection.
     /// Set via `set_substrate_context()` before routing.
-    pub(super) substrate_layers: Option<Vec<crate::geometry_router::substrate_types::SubstrateLayer>>,
+    pub(super) substrate_layers:
+        Option<Vec<crate::geometry_router::substrate_types::SubstrateLayer>>,
 
     /// Net frequencies in Hz (e.g., 5_000_000_000.0 for 5 GHz).
     /// Set via `set_substrate_context()` before routing.
@@ -113,14 +114,8 @@ pub struct GeometryRouter {
     /// Maps NetId -> RoutingPattern. When a net has a policy, the Steiner
     /// decomposition uses `route_net_with_length_constraint` instead of
     /// `route_net_global` to inject pattern macro-moves during routing.
-    pub route_net_policies: FxHashMap<crate::netlist::NetId, super::super::routing_patterns::RoutingPattern>,
-
-    /// v0.1.8: SDF (Signed Distance Field) generator for Leap-Frog A* routing.
-    /// Built in `route_space()` from the EntityGraph after component registration.
-    /// When present, `route_net_global()` uses SDF-accelerated A* instead of
-    /// the legacy TopologicalRouter, enabling guardrails (R25, Interior Lockout,
-    /// Via-Portal Exemption) via `calculate_move_cost()`.
-    pub sdf_generator: Option<super::super::sdf_generator::SdfGenerator>,
+    pub route_net_policies:
+        FxHashMap<crate::netlist::NetId, super::super::routing_patterns::RoutingPattern>,
 
     /// Routing trace material ID resolved from the stackup (set before routing).
     /// Every `register_route` call stamps segments with this material so that
@@ -136,6 +131,11 @@ pub struct GeometryRouter {
     /// `None` means the profile hasn't declared routing heuristics — the router
     /// must fail with a clear error before attempting to route.
     pub routing_heuristics: Option<super::super::types::RoutingHeuristics>,
+
+    /// v0.1.9: Per-net trace widths in nanometers (from route declarations).
+    /// Keyed by NetId. Used to lookup the actual trace width for each route.
+    /// No defaults - if a net has no entry, routing MUST fail with a clear error.
+    pub(super) net_trace_widths: FxHashMap<crate::netlist::NetId, i64>,
 }
 
 /// Copper pour definition for anti-pad generation.
@@ -202,10 +202,10 @@ impl GeometryRouter {
             partition_grid: None,
             query_store: None,
             route_net_policies: FxHashMap::default(),
-            sdf_generator: None,
-            routing_material_id: 0,  // Default: AIR — must be set via set_routing_context()
+            routing_material_id: 0, // Default: AIR — must be set via set_routing_context()
             trace_width_nm: 100_000, // Default: 100µm — must be set via set_routing_context()
             routing_heuristics: None, // Must be set via set_routing_heuristics() before routing
+            net_trace_widths: FxHashMap::default(), // Populated via route_space()
         }
     }
 
@@ -285,6 +285,21 @@ impl GeometryRouter {
         self.profile_layers = profile_layers;
         self.layer_z_positions = layer_z_positions;
         self.layer_materials = layer_materials;
+
+        // Configure the spatial index layer Z-ranges from the stackup
+        if self.layer_z_positions.len() >= 2 {
+            let mut z_ranges = Vec::with_capacity(self.layer_z_positions.len());
+            for i in 0..self.layer_z_positions.len() {
+                let z_min = self.layer_z_positions[i];
+                let z_max = if i + 1 < self.layer_z_positions.len() {
+                    self.layer_z_positions[i + 1]
+                } else {
+                    self.bounds.depth_nm
+                };
+                z_ranges.push((z_min, z_max));
+            }
+            self.entity_graph.set_spatial_layer_z_ranges(&z_ranges);
+        }
     }
 
     /// v0.1.7: Set substrate layers and net frequencies for SI-aware routing.
@@ -393,6 +408,135 @@ impl GeometryRouter {
     // =========================================================================
 
     // =========================================================================
+    // v0.1.9 Refinement Pipeline: Legalization → Compaction → Miter Pass
+    // =========================================================================
+
+    /// Apply post-routing refinement pipeline to a RouteResult.
+    ///
+    /// Pipeline stages (in order):
+    /// 1. **Legalization**: Detect and fix clearance violations by nudging
+    ///    traces along orthogonal axes (QP/DAG on H/V only).
+    /// 2. **Compaction**: Slide adjacent parallel traces together to minimize
+    ///    layout area while respecting signal integrity constraints.
+    /// 3. **Miter Pass**: Replace 90° corners with 45° diagonal chamfers to
+    ///    maintain constant impedance (Z₀) across bends.
+    ///
+    /// This method is called once after all routing is complete, before
+    /// the RouteResult is returned to the compiler.
+    fn apply_refinement_pipeline(
+        &self,
+        result: &mut super::super::types::RouteResult,
+    ) {
+        use crate::geometry::TraceSegment;
+        use crate::geometry_router::compaction::Compactor;
+        use crate::geometry_router::legalizer::Legalizer;
+        use crate::geometry_router::miter_pass::MiterEngine;
+        use crate::geometry_router::spatial_index::DynamicSpatialIndex;
+        use crate::netlist::NetId;
+
+        let min_clearance_nm = self
+            .constraints
+            .fabrication
+            .as_ref()
+            .map(|fab| fab.min_trace_spacing_nm)
+            .unwrap_or(200_000);
+
+        // --- Stage 1: Legalization ---
+        // Collect all segments and net IDs from the result
+        let mut all_segments: Vec<TraceSegment> = Vec::new();
+        let mut all_net_ids: Vec<NetId> = Vec::new();
+
+        for (&net_id, paths) in &result.paths {
+            for path in paths {
+                for window in path.windows(2) {
+                    all_segments.push(TraceSegment::new(
+                        window[0],
+                        window[1],
+                        self.trace_width_nm,
+                        self.routing_material_id,
+                    ));
+                    all_net_ids.push(net_id);
+                }
+            }
+        }
+
+        if !all_segments.is_empty() {
+            let spatial_index = DynamicSpatialIndex::new();
+            let legalizer = Legalizer::new(min_clearance_nm);
+            let (legalized_segments, legalized_net_ids) = legalizer.legalize(
+                &all_segments,
+                &all_net_ids,
+                &self.material_registry,
+                &spatial_index,
+                10, // max iterations
+            );
+
+            // --- Stage 2: Compaction ---
+            let compactor = Compactor::new(min_clearance_nm);
+            let moves = compactor.compact(&legalized_segments, &legalized_net_ids, &Default::default());
+            let compacted_segments = Compactor::apply_moves(&legalized_segments, &moves);
+
+            // --- Stage 3: Miter Pass ---
+            let miter_engine = MiterEngine::new(self.trace_width_nm);
+
+            // Rebuild paths from compacted segments, grouped by net
+            let mut refined_paths: FxHashMap<NetId, Vec<Vec<Point3D>>> = FxHashMap::default();
+            for (idx, seg) in compacted_segments.iter().enumerate() {
+                let net_id = legalized_net_ids[idx];
+                let entry = refined_paths.entry(net_id).or_default();
+
+                // Find or create a path that continues from seg.start
+                let continued = entry.iter_mut().find(|path| {
+                    path.last().map_or(false, |last| *last == seg.start)
+                });
+
+                if let Some(path) = continued {
+                    path.push(seg.end);
+                } else {
+                    entry.push(vec![seg.start, seg.end]);
+                }
+            }
+
+            // Apply miter pass to each path
+            for paths in refined_paths.values_mut() {
+                miter_engine.apply_to_paths(paths);
+            }
+
+            // Merge paths: combine segments that share endpoints into single paths
+            for (net_id, paths) in refined_paths {
+                let mut merged: Vec<Vec<Point3D>> = Vec::new();
+                let mut remaining = paths;
+
+                while let Some(mut current) = remaining.pop() {
+                    let mut changed = true;
+                    while changed {
+                        changed = false;
+                        for i in (0..remaining.len()).rev() {
+                            let other = &remaining[i];
+                            if let Some(&current_end) = current.last() {
+                                if other.first() == Some(&current_end) {
+                                    current.extend_from_slice(&other[1..]);
+                                    remaining.remove(i);
+                                    changed = true;
+                                } else if other.last() == current.first() {
+                                    let mut new_path = other.clone();
+                                    new_path.extend_from_slice(&current[1..]);
+                                    current = new_path;
+                                    remaining.remove(i);
+                                    changed = true;
+                                }
+                            }
+                        }
+                    }
+                    merged.push(current);
+                }
+
+                result.paths.insert(net_id, merged);
+            }
+        }
+    }
+
+    // =========================================================================
     // v0.1.7 Adaptive Router: Scale Detection & Mode Selection
     // =========================================================================
 
@@ -408,9 +552,11 @@ impl GeometryRouter {
     /// # Arguments
     /// * `grid_bbox` - Bounding box of the entire routing area
     /// * `nets` - Map of net IDs to their pin coordinates
+    /// * `explicit_segments` - Optional explicit routing segments (Chain-Link mode)
     /// * `obstacle_bboxes` - Bounding boxes of all placed component obstacles
     /// * `substrate_layers` - Substrate layer data for reference-plane void detection
     /// * `net_frequencies` - Map of net IDs to their signal frequencies (Hz)
+    /// * `net_trace_widths` - Map of net IDs to their declared trace widths in nanometers
     ///
     /// # Returns
     /// Unified `RouteResult` containing all paths and vias, or a `RoutingError`.
@@ -422,34 +568,24 @@ impl GeometryRouter {
         obstacle_bboxes: &[crate::geometry::BoundingBox],
         substrate_layers: Option<&[crate::geometry_router::substrate_types::SubstrateLayer]>,
         net_frequencies: &FxHashMap<crate::netlist::NetId, f64>,
+        net_trace_widths: &FxHashMap<crate::netlist::NetId, i64>,
     ) -> Result<super::super::types::RouteResult, super::super::types::RoutingError> {
         // Store substrate context on self so route_net/route_net_global can access it
         if let Some(sl) = substrate_layers {
             self.substrate_layers = Some(sl.to_vec());
         }
         self.net_frequencies = net_frequencies.clone();
+        self.net_trace_widths = net_trace_widths.clone();
 
         self.build_entity_graph();
-
-        // v0.1.8: Build SDF generator for Leap-Frog A* routing.
-        // The SDF enables the router to skip empty space during pathfinding,
-        // and provides the distance field needed by calculate_move_cost() for
-        // guardrails (R25 non-routable layers, Interior Lockout, Via-Portal Exemption).
-        {
-            let mut sdf = super::super::sdf_generator::SdfGenerator::new(
-                self.resolution_nm,
-                0, // substrate_height_nm
-            );
-            for meta in self.entity_graph.get_component_metadata() {
-                sdf.register_component(meta.clone());
-            }
-            self.sdf_generator = Some(sdf);
-        }
 
         // Create a coarse PartitionGrid before routing branches.
         // This enables topological routing with partition-guided pathfinding.
         let track_pitch = self.resolution_nm;
-        let max_clearance = self.constraints.fabrication.as_ref()
+        let max_clearance = self
+            .constraints
+            .fabrication
+            .as_ref()
             .map(|fab| fab.min_trace_spacing_nm)
             .unwrap_or(200_000);
         let partition = super::super::partition::PartitionGrid::new(
@@ -481,8 +617,14 @@ impl GeometryRouter {
             //     net_count,
             //     area_nm2 as f64 / 1_000_000_000_000.0
             // );
-            let steiner_result = self.route_all_nets_steiner(nets, obstacle_bboxes, substrate_layers, net_frequencies)?;
+            let steiner_result = self.route_all_nets_steiner(
+                nets,
+                obstacle_bboxes,
+                substrate_layers,
+                net_frequencies,
+            )?;
             result.merge(steiner_result);
+            self.apply_refinement_pipeline(&mut result);
             Ok(result)
         } else {
             // --- HIERARCHICAL MODE ---
@@ -499,6 +641,7 @@ impl GeometryRouter {
                 net_frequencies,
             )?;
             result.merge(hierarchical_result);
+            self.apply_refinement_pipeline(&mut result);
             Ok(result)
         }
     }
@@ -525,7 +668,7 @@ impl GeometryRouter {
     /// Cross-cell nets are decomposed into local segments using fast line-casting,
     /// then each G-Cell's segments are routed in parallel via Rayon.
     ///
-    /// **Performance**: < 2ms for 128 nets on 100mm² board (vs 35s with A* fallback)
+    /// **Performance**: < 2ms for 128 nets on 100mm² board (vs 35s with grid-based fallback)
     ///
     /// **Architecture** (from `Docs/v0.1.7/Adaptive-Heuristic.md`):
     /// 1. Partition space into G-Cell tiles
@@ -541,9 +684,8 @@ impl GeometryRouter {
         substrate_layers: Option<&[crate::geometry_router::substrate_types::SubstrateLayer]>,
         net_frequencies: &FxHashMap<crate::netlist::NetId, f64>,
     ) -> Result<super::super::types::RouteResult, super::super::types::RoutingError> {
-        use rayon::prelude::*;
-        use rustc_hash::FxHashMap;
         use crate::geometry::Point3D;
+        use rustc_hash::FxHashMap;
 
         // Step 1: Partition board into G-Cell regions
         let cell_size_nm = 10_000_000; // 10mm coarse tiles
@@ -587,7 +729,7 @@ impl GeometryRouter {
         // Step 3: Route cross-cell nets in parallel on the full board.
         // Each net is routed independently (no inter-net collision tracking during parallel phase),
         // then results are merged sequentially. The EntityGraph / spatial index owns occupancy.
-        // This produces straight traces (no G-Cell boundary jogs) with parallel A* speed.
+        // This produces straight traces (no G-Cell boundary jogs) with parallel topological routing speed.
         let t_cross = std::time::Instant::now();
         if !cross_cell_nets.is_empty() {
             let mut sorted_cross: Vec<_> = cross_cell_nets.iter().collect();
@@ -597,57 +739,84 @@ impl GeometryRouter {
             let cross_results: Vec<(
                 crate::netlist::NetId,
                 Result<super::super::types::RoutedNet, super::super::types::RoutingError>,
-            )> = sorted_cross
-                .par_iter()
-                .map(|(&net_id, pins)| {
-                    if pins.len() < 2 {
-                        return (
-                            net_id,
-                            Ok(super::super::types::RoutedNet {
+            )> = std::thread::scope(|s| {
+                let mut handles = Vec::new();
+
+                for &(&net_id, pins) in &sorted_cross {
+                    // Clone values needed inside the closure to avoid moving self
+                    let entity_graph_clone = self.entity_graph.clone();
+                    let bounds = self.bounds;
+                    let constraints = self.constraints.clone();
+                    let layer_directions = self.layer_directions.clone();
+                    let resolution_nm = self.resolution_nm;
+                    let material_registry = self.material_registry.clone();
+                    let copper_pours = self.copper_pours.clone();
+                    let bounding_box_tracker = self.bounding_box_tracker.clone();
+                    let area_threshold_nm2 = self.area_threshold_nm2;
+                    let net_count_threshold = self.net_count_threshold;
+                    let is_manhattan = self.is_manhattan;
+                    let profile_layers = self.profile_layers.clone();
+                    let layer_z_positions = self.layer_z_positions.clone();
+                    let layer_materials = self.layer_materials.clone();
+                    let substrate_layers = self.substrate_layers.clone();
+                    let net_frequencies = self.net_frequencies.clone();
+                    let route_net_policies = self.route_net_policies.clone();
+                    let routing_material_id = self.routing_material_id;
+                    let trace_width_nm = self.trace_width_nm;
+                    let routing_heuristics = self.routing_heuristics.clone();
+                    let net_trace_widths = self.net_trace_widths.clone();
+
+                    let handle = s.spawn(move || {
+                        if pins.len() < 2 {
+                            return (
                                 net_id,
-                                paths: vec![vec![pins[0], pins[0]]],
-                                vias: Vec::new(),
-                            }),
-                        );
-                    }
+                                Ok(super::super::types::RoutedNet {
+                                    net_id,
+                                    paths: vec![vec![pins[0], pins[0]]],
+                                    vias: Vec::new(),
+                                }),
+                            );
+                        }
 
-                    // Create an isolated router clone for this net
-                    let mut isolated_entity_graph = super::super::EntityGraph::new();
-                    // v0.1.7: Propagate component metadata to the isolated router.
-                    // This ensures the A* solver "sees" pads as obstacles for Interior Lockout.
-                    isolated_entity_graph.copy_metadata_from(&self.entity_graph);
+                        // Create an isolated router clone for this net
+                        let mut isolated_entity_graph = super::super::EntityGraph::new();
+                        isolated_entity_graph.copy_metadata_from(&entity_graph_clone);
 
-                    let mut isolated = GeometryRouter {
-                        bounds: self.bounds,
-                        constraints: self.constraints.clone(),
-                        layer_directions: self.layer_directions.clone(),
-                        resolution_nm: self.resolution_nm,
-                        material_registry: self.material_registry.clone(),
-                        entity_graph: isolated_entity_graph,
-                        vias: Vec::new(),
-                        copper_pours: self.copper_pours.clone(),
-                        bounding_box_tracker: self.bounding_box_tracker.clone(),
-                        area_threshold_nm2: self.area_threshold_nm2,
-                        net_count_threshold: self.net_count_threshold,
-                        is_manhattan: self.is_manhattan,
-                        profile_layers: self.profile_layers.clone(),
-                        layer_z_positions: self.layer_z_positions.clone(),
-                        layer_materials: self.layer_materials.clone(),
-                        substrate_layers: self.substrate_layers.clone(),
-                        net_frequencies: self.net_frequencies.clone(),
-                        partition_grid: None,
-                        query_store: None,
-                        route_net_policies: self.route_net_policies.clone(),
-                        sdf_generator: None,
-                        routing_material_id: self.routing_material_id,
-                        trace_width_nm: self.trace_width_nm,
-                        routing_heuristics: self.routing_heuristics.clone(),
-                    };
+                        let mut isolated = GeometryRouter {
+                            bounds,
+                            constraints,
+                            layer_directions,
+                            resolution_nm,
+                            material_registry,
+                            entity_graph: isolated_entity_graph,
+                            vias: Vec::new(),
+                            copper_pours,
+                            bounding_box_tracker,
+                            area_threshold_nm2,
+                            net_count_threshold,
+                            is_manhattan,
+                            profile_layers,
+                            layer_z_positions,
+                            layer_materials,
+                            substrate_layers,
+                            net_frequencies,
+                            partition_grid: None,
+                            query_store: None,
+                            route_net_policies,
+                            routing_material_id,
+                            trace_width_nm,
+                            routing_heuristics,
+                            net_trace_widths,
+                        };
 
-                    let result = isolated.decompose_net_steiner(net_id, pins);
-                    (net_id, result)
-                })
-                .collect();
+                        let result = isolated.decompose_net_steiner(net_id, pins);
+                        (net_id, result)
+                    });
+                    handles.push(handle);
+                }
+
+                handles.into_iter().map(|h| h.join().unwrap()).collect()
+            });
 
             // Phase 3b: Merge results sequentially into final_result
             for (net_id, result) in cross_results {
@@ -774,33 +943,37 @@ impl GeometryRouter {
                         partition_grid: None,
                         query_store: None,
                         route_net_policies: self.route_net_policies.clone(),
-                        sdf_generator: None,
                         routing_material_id: self.routing_material_id,
                         trace_width_nm: self.trace_width_nm,
                         routing_heuristics: self.routing_heuristics.clone(),
+                        net_trace_widths: self.net_trace_widths.clone(),
                     };
 
-                    let local_nets: FxHashMap<crate::netlist::NetId, Vec<crate::geometry::Point3D>> =
-                        cell_nets
-                            .iter()
-                            .map(|(&net_id, pins)| {
-                                let local_pins: Vec<_> = pins
-                                    .iter()
-                                    .map(|pin| {
-                                        crate::geometry::Point3D::new(
-                                            pin.x - cell_bbox.min.x,
-                                            pin.y - cell_bbox.min.y,
-                                            pin.z - cell_bbox.min.z,
-                                        )
-                                    })
-                                    .collect();
-                                (net_id, local_pins)
-                            })
-                            .collect();
+                    let local_nets: FxHashMap<
+                        crate::netlist::NetId,
+                        Vec<crate::geometry::Point3D>,
+                    > = cell_nets
+                        .iter()
+                        .map(|(&net_id, pins)| {
+                            let local_pins: Vec<_> = pins
+                                .iter()
+                                .map(|pin| {
+                                    crate::geometry::Point3D::new(
+                                        pin.x - cell_bbox.min.x,
+                                        pin.y - cell_bbox.min.y,
+                                        pin.z - cell_bbox.min.z,
+                                    )
+                                })
+                                .collect();
+                            (net_id, local_pins)
+                        })
+                        .collect();
 
                     cell_router.substrate_layers = substrate_layers.map(|sl| sl.to_vec());
                     cell_router.net_frequencies = net_frequencies.clone();
-                    cell_router.entity_graph.copy_metadata_from(&self.entity_graph);
+                    cell_router
+                        .entity_graph
+                        .copy_metadata_from(&self.entity_graph);
 
                     match cell_router.route_all_nets_steiner_global(&local_nets) {
                         Ok(local_result) => {
@@ -827,11 +1000,8 @@ impl GeometryRouter {
                             cell_result.vias.extend(local_result.vias);
 
                             // v0.1.8: Store the routed G-cell result in the QueryStore cache
-                            let segment_count: usize = cell_result
-                                .paths
-                                .values()
-                                .map(|segs| segs.len())
-                                .sum();
+                            let segment_count: usize =
+                                cell_result.paths.values().map(|segs| segs.len()).sum();
                             let hash_input = [
                                 file_id.to_le_bytes(),
                                 (gcell_id as u64).to_le_bytes(),
@@ -851,10 +1021,14 @@ impl GeometryRouter {
                                 segment_count,
                                 hash: hash_bytes,
                             };
-                            self.query_store.as_mut().unwrap().execute_query(
-                                query_id,
-                                || super::super::query_engine::QueryResult::RouteGcell(route_result),
-                            );
+                            self.query_store
+                                .as_mut()
+                                .unwrap()
+                                .execute_query(query_id, || {
+                                    super::super::query_engine::QueryResult::RouteGcell(
+                                        route_result,
+                                    )
+                                });
 
                             _routed_count += 1;
                             final_result.merge(cell_result);
@@ -877,49 +1051,23 @@ impl GeometryRouter {
                 // );
             } else {
                 // --- PARALLEL PATH (existing behavior, no memoization) ---
+                let entity_graph_ref = &self.entity_graph;
                 let intra_results: Vec<
                     Result<super::super::types::RouteResult, super::super::types::RoutingError>,
-                > = gcell_grid
-                    .cells
-                    .par_iter()
-                    .map(|cell| {
+                > = std::thread::scope(|s| {
+                    let mut handles = Vec::new();
+
+                    for cell in &gcell_grid.cells {
                         let cell_nets = match intra_cell_nets.get(cell.id) {
                             Some(nets) => nets,
-                            None => return Ok(super::super::types::RouteResult::new()),
+                            None => {
+                                handles
+                                    .push(s.spawn(|| Ok(super::super::types::RouteResult::new())));
+                                continue;
+                            }
                         };
 
-                        let cell_bbox = &cell.bbox;
-                        let mut cell_router = GeometryRouter {
-                            bounds: GridBounds::new(
-                                cell_bbox.max.x - cell_bbox.min.x,
-                                cell_bbox.max.y - cell_bbox.min.y,
-                                cell_bbox.max.z - cell_bbox.min.z,
-                            ),
-                            constraints: self.constraints.clone(),
-                            layer_directions: self.layer_directions.clone(),
-                            resolution_nm: self.resolution_nm,
-                            material_registry: self.material_registry.clone(),
-                            entity_graph: super::super::EntityGraph::new(),
-                            vias: Vec::new(),
-                            copper_pours: Vec::new(),
-                            bounding_box_tracker: BoundingBoxTracker::new(),
-                            area_threshold_nm2: self.area_threshold_nm2,
-                            net_count_threshold: self.net_count_threshold,
-                            is_manhattan: self.is_manhattan,
-                            profile_layers: self.profile_layers.clone(),
-                            layer_z_positions: self.layer_z_positions.clone(),
-                            layer_materials: self.layer_materials.clone(),
-                            substrate_layers: self.substrate_layers.clone(),
-                            net_frequencies: self.net_frequencies.clone(),
-                            partition_grid: None,
-                            query_store: None,
-                            route_net_policies: self.route_net_policies.clone(),
-                            sdf_generator: None,
-                            routing_material_id: self.routing_material_id,
-                            trace_width_nm: self.trace_width_nm,
-                            routing_heuristics: self.routing_heuristics.clone(),
-                        };
-
+                        let cell_bbox = cell.bbox;
                         let local_nets: FxHashMap<
                             crate::netlist::NetId,
                             Vec<crate::geometry::Point3D>,
@@ -940,46 +1088,106 @@ impl GeometryRouter {
                             })
                             .collect();
 
-                        // Set up sub-router context (replicate what route_space does before routing)
-                        cell_router.substrate_layers = substrate_layers.map(|sl| sl.to_vec());
-                        cell_router.net_frequencies = net_frequencies.clone();
-                        cell_router.entity_graph.copy_metadata_from(&self.entity_graph);
+                        // Replicate the owning router's context for the sub-router.
+                        let _bounds = self.bounds;
+                        let constraints = self.constraints.clone();
+                        let layer_directions = self.layer_directions.clone();
+                        let resolution_nm = self.resolution_nm;
+                        let material_registry = self.material_registry.clone();
+                        let copper_pours = self.copper_pours.clone();
+                        let _bounding_box_tracker = self.bounding_box_tracker.clone();
+                        let area_threshold_nm2 = self.area_threshold_nm2;
+                        let net_count_threshold = self.net_count_threshold;
+                        let is_manhattan = self.is_manhattan;
+                        let profile_layers = self.profile_layers.clone();
+                        let layer_z_positions = self.layer_z_positions.clone();
+                        let layer_materials = self.layer_materials.clone();
+                        let substrate_layers_vec = substrate_layers.map(|sl| sl.to_vec());
+                        let net_frequencies_clone = net_frequencies.clone();
+                        let self_net_frequencies = self.net_frequencies.clone();
+                        let route_net_policies = self.route_net_policies.clone();
+                        let routing_material_id = self.routing_material_id;
+                        let trace_width_nm = self.trace_width_nm;
+                        let routing_heuristics = self.routing_heuristics.clone();
+                        let net_trace_widths = self.net_trace_widths.clone();
 
-                        let mut cell_result = super::super::types::RouteResult::new();
-                        match cell_router.route_all_nets_steiner_global(&local_nets) {
-                            Ok(local_result) => {
-                                for (net_id, local_paths) in &local_result.paths {
-                                    let global_paths: Vec<Vec<_>> = local_paths
-                                        .iter()
-                                        .map(|segment| {
-                                            segment
-                                                .iter()
-                                                .map(|pt| {
-                                                    crate::geometry::Point3D::new(
-                                                        pt.x + cell_bbox.min.x,
-                                                        pt.y + cell_bbox.min.y,
-                                                        pt.z + cell_bbox.min.z,
-                                                    )
-                                                })
-                                                .collect()
-                                        })
-                                        .collect();
-                                    cell_result.paths.insert(*net_id, global_paths);
+                        let handle = s.spawn(move || {
+                            let mut cell_router = GeometryRouter {
+                                bounds: GridBounds::new(
+                                    cell_bbox.max.x - cell_bbox.min.x,
+                                    cell_bbox.max.y - cell_bbox.min.y,
+                                    cell_bbox.max.z - cell_bbox.min.z,
+                                ),
+                                constraints,
+                                layer_directions,
+                                resolution_nm,
+                                material_registry,
+                                entity_graph: super::super::EntityGraph::new(),
+                                vias: Vec::new(),
+                                copper_pours,
+                                bounding_box_tracker: BoundingBoxTracker::new(),
+                                area_threshold_nm2,
+                                net_count_threshold,
+                                is_manhattan,
+                                profile_layers,
+                                layer_z_positions,
+                                layer_materials,
+                                substrate_layers: substrate_layers_vec.clone(),
+                                net_frequencies: self_net_frequencies,
+                                partition_grid: None,
+                                query_store: None,
+                                route_net_policies,
+                                routing_material_id,
+                                trace_width_nm,
+                                routing_heuristics,
+                                net_trace_widths,
+                            };
+
+                            // Set up sub-router context (replicate what route_space does before routing)
+                            cell_router.net_frequencies = net_frequencies_clone;
+                            cell_router
+                                .entity_graph
+                                .copy_metadata_from(entity_graph_ref);
+
+                            let mut cell_result = super::super::types::RouteResult::new();
+                            match cell_router.route_all_nets_steiner_global(&local_nets) {
+                                Ok(local_result) => {
+                                    for (net_id, local_paths) in &local_result.paths {
+                                        let global_paths: Vec<Vec<_>> = local_paths
+                                            .iter()
+                                            .map(|segment| {
+                                                segment
+                                                    .iter()
+                                                    .map(|pt| {
+                                                        crate::geometry::Point3D::new(
+                                                            pt.x + cell_bbox.min.x,
+                                                            pt.y + cell_bbox.min.y,
+                                                            pt.z + cell_bbox.min.z,
+                                                        )
+                                                    })
+                                                    .collect()
+                                            })
+                                            .collect();
+                                        cell_result.paths.insert(*net_id, global_paths);
+                                    }
+                                    cell_result.vias.extend(local_result.vias);
                                 }
-                                cell_result.vias.extend(local_result.vias);
+                                Err(e) => {
+                                    // eprintln!(
+                                    //     "[ADAPTIVE ROUTER] G-Cell {} intra-cell routing failed: {:?}",
+                                    //     cell.id, e
+                                    // );
+                                    return Err(e);
+                                }
                             }
-                            Err(e) => {
-                                // eprintln!(
-                                //     "[ADAPTIVE ROUTER] G-Cell {} intra-cell routing failed: {:?}",
-                                //     cell.id, e
-                                // );
-                                return Err(e);
-                            }
-                        }
 
-                        Ok(cell_result)
-                    })
-                    .collect();
+                            Ok(cell_result)
+                        });
+                        handles.push(handle);
+                    }
+
+                    handles.into_iter().map(|h| h.join().unwrap()).collect()
+                });
 
                 for res in intra_results {
                     final_result.merge(res?);
@@ -1064,25 +1272,23 @@ impl GeometryRouter {
         for (idx, meta) in metadata.iter().enumerate() {
             let width = meta.bbox.max.x - meta.bbox.min.x;
             let height = meta.bbox.max.y - meta.bbox.min.y;
-            let stamp = ComponentStamp::rectangle(
-                idx,
-                meta.component_type.to_string(),
-                width,
-                height,
-            );
+            let stamp =
+                ComponentStamp::rectangle(idx, meta.component_type.to_string(), width, height);
             let stamp_id = self.entity_graph.scene_mut().register_stamp(stamp);
 
             use crate::geometry::transform::FixedTransform2D;
-            let transform = FixedTransform2D::from_translation(
-                meta.bbox.min.x,
-                meta.bbox.min.y,
-            );
+            let transform = FixedTransform2D::from_translation(meta.bbox.min.x, meta.bbox.min.y);
 
             let net_bindings: Vec<usize> = Vec::new();
-            self.entity_graph.scene_mut().place_instance(stamp_id, transform, net_bindings);
+            self.entity_graph
+                .scene_mut()
+                .place_instance(stamp_id, transform, net_bindings);
         }
 
-        // Build the R*-tree spatial index from all placed instances
-        self.entity_graph.rebuild_spatial_index(&self.material_registry);
+        // NOTE: entity_graph's spatial index is no longer used for routing.
+        // Each routing method builds its own independent spatial index via build_routing_spatial_index.
+        // This eliminates the architectural confusion where entity_graph maintained a "global" index
+        // that was never actually used by the routing algorithms.
+        // self.entity_graph.rebuild_spatial_index(&self.material_registry); // REMOVED
     }
 }

@@ -110,8 +110,7 @@ pub fn greenhouse_mutual_inductance(length_m: f64, distance_m: f64) -> f64 {
     if length_m <= 0.0 || distance_m <= 0.0 {
         return 0.0;
     }
-    MU_0 * length_m / (2.0 * std::f64::consts::PI)
-        * (2.0 * length_m / distance_m).ln()
+    MU_0 * length_m / (2.0 * std::f64::consts::PI) * (2.0 * length_m / distance_m).ln()
 }
 
 /// Parasitic values at a virtual junction.
@@ -189,7 +188,12 @@ pub fn extract_parasitics(
     for (i, &net_id) in net_ids.iter().enumerate() {
         let er_eff = wheeler_effective_permittivity(
             params.substrate_er,
-            nm_to_m(segments.iter().find(|s| s.net_id as u32 == net_id).map_or(200_000, |s| s.width_nm)),
+            nm_to_m(
+                segments
+                    .iter()
+                    .find(|s| s.net_id as u32 == net_id)
+                    .map_or(200_000, |s| s.width_nm),
+            ),
             params.substrate_height_m,
         );
 
@@ -201,10 +205,18 @@ pub fn extract_parasitics(
             let length_nm = ((dx * dx + dy * dy) as f64).sqrt();
             let length_m = length_nm * 1.0e-9;
 
-            let r = series_resistance(COPPER_RESISTIVITY, length_m, width_m, params.trace_thickness_m);
-            let c = sakurai_ground_capacitance(width_m, params.substrate_height_m, er_eff) * length_m;
+            let r = series_resistance(
+                COPPER_RESISTIVITY,
+                length_m,
+                width_m,
+                params.trace_thickness_m,
+            );
+            let c =
+                sakurai_ground_capacitance(width_m, params.substrate_height_m, er_eff) * length_m;
             let l = MU_0 * length_m / (2.0 * std::f64::consts::PI)
-                * (2.0 * length_m / (width_m + params.substrate_height_m)).ln().max(0.0);
+                * (2.0 * length_m / (width_m + params.substrate_height_m))
+                    .ln()
+                    .max(0.0);
 
             extracted_segs.push(ExtractedSegment {
                 segment_id: seg.segment_id,
@@ -403,7 +415,8 @@ mod tests {
         let length = 1.6e-3;
         let l = via_self_inductance(diameter, length);
         assert!(l > 0.0, "Via inductance must be positive, got {l}");
-        let expected = MU_0 * length / (std::f64::consts::FRAC_PI_2) * (2.0 * length / diameter).ln();
+        let expected =
+            MU_0 * length / (std::f64::consts::FRAC_PI_2) * (2.0 * length / diameter).ln();
         let tolerance = expected * 0.01;
         assert!(
             (l - expected).abs() < tolerance,
@@ -487,8 +500,8 @@ mod tests {
 
     #[test]
     fn test_extract_parasitics_full() {
-    use crate::geometry::Point3D;
-    use crate::netlist::NetId;
+        use crate::geometry::Point3D;
+        use crate::netlist::NetId;
 
         let seg0 = IndexedSegment {
             segment_id: 0,

@@ -1,0 +1,46 @@
+# Visual Demo - Larger Cubic Pads with Clear 3D Structure
+import * from @std/primitives/units
+import * from @std/primitives/math
+import * from materials
+import Silicon_180nm from foundry_pdk
+
+# Module declares logical connectivity
+module Pad_Connection:
+    pins: [input A, output B]
+    route A to B
+
+# Shape definition for a more cubic pad (larger for visibility)
+shape CubicPad(w: Measurement, h: Measurement):
+    geometry:
+        Rectangle(width: w, height: h)
+
+# Physical space with 100x larger structures for Blender visibility
+space Visual_Demo implements Pad_Connection:
+    dimensions: 1mm by 600um by 136um
+    resolution: 100nm
+    origin: bl by b
+    profile: Silicon_180nm
+
+    # Net declarations
+    nets:
+        A: { classification: signal, potential: 0V, current: 0.1uA }
+        B: { classification: signal, potential: 0V, current: 0.1uA }
+
+    # Large cubic pad A (200um x 200um x 40um thick) - 100x bigger
+    add plane(Aluminum) named Pad_A on layer: metal1:
+        shape: CubicPad(w: 200um, h: 200um)
+        at: [x: 100um, y: 200um]
+        net: A
+
+    # Large cubic pad B (200um x 200um x 40um thick) - 100x bigger
+    # Positioned relationally - to the right with more spacing
+    add plane(Aluminum) named Pad_B align: center_y with Pad_A right_of Pad_A with spacing: 500um on layer: metal1:
+        shape: CubicPad(w: 200um, h: 200um)
+        net: B
+
+    # Wide trace connecting them (50um wide for visibility) - 100x bigger
+    # Using automatic topological routing (no exit/enter constraints)
+    route Pad_A to Pad_B:
+        width: 50um
+        layer: metal1
+        current_limit_ac: { rms: 0.5uA, peak: 1.0uA }

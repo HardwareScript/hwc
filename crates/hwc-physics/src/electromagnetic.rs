@@ -290,7 +290,11 @@ impl EMAnalyzer {
                 .map(|w| {
                     let a = (w[0].0, w[0].1);
                     let b = (w[1].0, w[1].1);
-                    if a <= b { (a, b) } else { (b, a) }
+                    if a <= b {
+                        (a, b)
+                    } else {
+                        (b, a)
+                    }
                 })
                 .collect()
         }
@@ -311,8 +315,7 @@ impl EMAnalyzer {
                     }
                 }
                 // Both vertical on the same X
-                else if a_start.0 == a_end.0 && b_start.0 == b_end.0 && a_start.0 == b_start.0
-                {
+                else if a_start.0 == a_end.0 && b_start.0 == b_end.0 && a_start.0 == b_start.0 {
                     let lo = a_start.1.max(b_start.1);
                     let hi = a_end.1.min(b_end.1);
                     if lo < hi {

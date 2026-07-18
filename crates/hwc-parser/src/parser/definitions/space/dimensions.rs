@@ -115,9 +115,22 @@ mod tests {
         let mut parser = Parser::new(tokens);
         let collector = DiagnosticCollector::new(source, 100);
         let program = parser.parse(&collector);
-        assert!(!collector.has_errors(), "Parse errors: {}", collector.summary());
-        assert_eq!(program.definitions.len(), 1, "Expected exactly one definition");
-        match program.definitions.into_iter().next().expect("Expected definition") {
+        assert!(
+            !collector.has_errors(),
+            "Parse errors: {}",
+            collector.summary()
+        );
+        assert_eq!(
+            program.definitions.len(),
+            1,
+            "Expected exactly one definition"
+        );
+        match program
+            .definitions
+            .into_iter()
+            .next()
+            .expect("Expected definition")
+        {
             crate::ast::Definition::Space(s) => s,
             other => panic!("Expected space definition, got {:?}", other),
         }

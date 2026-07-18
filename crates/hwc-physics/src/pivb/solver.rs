@@ -342,7 +342,11 @@ impl<'a> PivbSolver<'a> {
 
     /// Check if a contact overlaps an island in XY.
     /// Uses contact bbox overlap if available, otherwise falls back to center point check.
-    fn contact_xy_overlaps_island(&self, contact: &ContactPlacement, island: &PlanarIsland) -> bool {
+    fn contact_xy_overlaps_island(
+        &self,
+        contact: &ContactPlacement,
+        island: &PlanarIsland,
+    ) -> bool {
         if let Some(c_bbox) = &contact.bbox {
             // XY overlap check
             c_bbox.min.x <= island.bbox.max.x
@@ -402,7 +406,10 @@ impl<'a> PivbSolver<'a> {
             .collect();
 
         for bridge in bridges {
-            if let (Some(&u), Some(&v)) = (id_to_idx.get(&bridge.island_a), id_to_idx.get(&bridge.island_b)) {
+            if let (Some(&u), Some(&v)) = (
+                id_to_idx.get(&bridge.island_a),
+                id_to_idx.get(&bridge.island_b),
+            ) {
                 graph.add_edge(u, v);
             }
         }
@@ -574,13 +581,7 @@ mod tests {
         }
     }
 
-    fn make_contact(
-        x: i64,
-        y: i64,
-        z_min: i64,
-        z_max: i64,
-        net_name: &str,
-    ) -> ContactPlacement {
+    fn make_contact(x: i64, y: i64, z_min: i64, z_max: i64, net_name: &str) -> ContactPlacement {
         ContactPlacement {
             name: "via1".into(),
             x,

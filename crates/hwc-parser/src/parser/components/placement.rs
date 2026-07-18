@@ -35,16 +35,17 @@ impl crate::parser::Parser {
         &mut self,
     ) -> Result<ComponentPlacement, ParseError> {
         // Enter component placement context for better error messages
-        self.error_context.enter_context(crate::parser::ParsingContext::ComponentPlacement);
-        
+        self.error_context
+            .enter_context(crate::parser::ParsingContext::ComponentPlacement);
+
         // Track parsing state for intelligent error messages
         let mut state = crate::parser::PlacementParseState::default();
-        
+
         let result = self.parse_component_placement_impl(&mut state);
-        
+
         // Exit context
         self.error_context.exit_context();
-        
+
         result
     }
 
@@ -95,12 +96,8 @@ impl crate::parser::Parser {
             None
         };
 
-        // Parse position: at [Z,X,Y] (Z is optional in v0.1.7 High-Level mode)
-        self.expect(&Token::At)?;
-        let position = self.parse_coordinate_optional_z()?;
-        state.has_position = true;
-
-        // v0.1.7: Support 'on layer: l1' or 'on z: 1mm' prepositional syntax
+        // v0.1.9: Parse optional 'on layer: l1' or 'on z: 1mm' prepositional syntax
+        // This can appear before or after position, so check here first
         let elevation = if self.check(&Token::On) {
             self.advance(); // consume 'on'
             if self.check_identifier("layer") {
@@ -139,6 +136,121 @@ impl crate::parser::Parser {
         } else {
             None
         };
+
+        // v0.1.9: Parse optional position (at [x,y,z])
+        // Position is optional when relational constraints are present
+        let position = if self.check(&Token::At) {
+            self.advance();
+            let pos = self.parse_coordinate_optional_z()?;
+            state.has_position = true;
+            Some(pos)
+        } else {
+            None
+        };
+
+        // v0.1.9: Parse relational constraints (align, above, below, right_of, left_of)
+        let mut relational_constraints = smallvec::smallvec![];
+
+        // Parse align constraint: align: <axis> with <target>
+        if self.check(&Token::Align) {
+            self.advance(); // consume 'align'
+            self.expect(&Token::Colon)?;
+            let axis_str = self.expect_identifier_string()?;
+            let axis = match axis_str.as_str() {
+                "center_x" => AlignmentAxis::CenterX,
+                "center_y" => AlignmentAxis::CenterY,
+                "center_z" => AlignmentAxis::CenterZ,
+                "top" => AlignmentAxis::Top,
+                "bottom" => AlignmentAxis::Bottom,
+                "left" => AlignmentAxis::Left,
+                "right" => AlignmentAxis::Right,
+                _ => {
+                    return Err(self.error(&format!(
+                        "Invalid alignment axis '{}'. Expected: center_x, center_y, center_z, top, bottom, left, or right",
+                        axis_str
+                    )))
+                }
+            };
+            self.expect(&Token::With)?;
+            let target = self.parse_component_name()?;
+            let span = Span::new(start_pos, self.previous_span().end);
+            relational_constraints.push(RelationalConstraint::Align { axis, target, span });
+        }
+
+        // Parse directional constraints: above|below|right_of|left_of <target> [with spacing: <expr>]
+        // These can appear in any order after position
+        loop {
+            if self.check(&Token::Above)
+                || self.check(&Token::Below)
+                || self.check(&Token::RightOf)
+                || self.check(&Token::LeftOf)
+            {
+                let constraint = if self.check(&Token::Above) {
+                    self.advance(); // consume 'above'
+                    let target = self.parse_component_name()?;
+                    let spacing = if self.check(&Token::With) {
+                        self.advance(); // consume 'with'
+                        self.expect_identifier()?; // consume 'spacing'
+                        self.expect(&Token::Colon)?;
+                        Some(self.parse_expression()?)
+                    } else {
+                        None
+                    };
+                    RelationalConstraint::Directional(DirectionalConstraint::Above {
+                        target,
+                        spacing,
+                    })
+                } else if self.check(&Token::Below) {
+                    self.advance(); // consume 'below'
+                    let target = self.parse_component_name()?;
+                    let spacing = if self.check(&Token::With) {
+                        self.advance(); // consume 'with'
+                        self.expect_identifier()?; // consume 'spacing'
+                        self.expect(&Token::Colon)?;
+                        Some(self.parse_expression()?)
+                    } else {
+                        None
+                    };
+                    RelationalConstraint::Directional(DirectionalConstraint::Below {
+                        target,
+                        spacing,
+                    })
+                } else if self.check(&Token::RightOf) {
+                    self.advance(); // consume 'right_of'
+                    let target = self.parse_component_name()?;
+                    let spacing = if self.check(&Token::With) {
+                        self.advance(); // consume 'with'
+                        self.expect_identifier()?; // consume 'spacing'
+                        self.expect(&Token::Colon)?;
+                        Some(self.parse_expression()?)
+                    } else {
+                        None
+                    };
+                    RelationalConstraint::Directional(DirectionalConstraint::RightOf {
+                        target,
+                        spacing,
+                    })
+                } else {
+                    self.advance(); // consume 'left_of'
+                    let target = self.parse_component_name()?;
+                    let spacing = if self.check(&Token::With) {
+                        self.advance(); // consume 'with'
+                        self.expect_identifier()?; // consume 'spacing'
+                        self.expect(&Token::Colon)?;
+                        Some(self.parse_expression()?)
+                    } else {
+                        None
+                    };
+                    RelationalConstraint::Directional(DirectionalConstraint::LeftOf {
+                        target,
+                        spacing,
+                    })
+                };
+                relational_constraints.push(constraint);
+            } else {
+                break;
+            }
+        }
 
         // Check for common ordering mistake: rotated before on layer
         if !state.has_elevation && self.check(&Token::Rotated) {
@@ -347,6 +459,7 @@ impl crate::parser::Parser {
             array_config,
             pin_net_bindings,
             waivers,
+            relational_constraints,
             span: Span::new(start_pos, end_pos),
         })
     }

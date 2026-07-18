@@ -30,10 +30,14 @@ pub fn route_manual(
         .as_ref()
         .map(|p| {
             p.iter()
-                .map(|coord| coordinate_to_point(coord, &ctx).map_err(|e| IrError::CoordinateResolutionFailed {
-                    coordinate_str: "manual route waypoint".into(),
-                    reason: e,
-                }))
+                .map(|coord| {
+                    coordinate_to_point(coord, &ctx).map_err(|e| {
+                        IrError::CoordinateResolutionFailed {
+                            coordinate_str: "manual route waypoint".into(),
+                            reason: e,
+                        }
+                    })
+                })
                 .collect::<Result<Vec<_>, _>>()
         })
         .transpose()?
@@ -41,7 +45,12 @@ pub fn route_manual(
 
     if waypoints.is_empty() {
         return Err(IrError::EmptyRoute {
-            net: format!("{} -> {}", super::helpers::endpoint_label(&route.from), super::helpers::endpoint_label(&route.to)).into(),
+            net: format!(
+                "{} -> {}",
+                super::helpers::endpoint_label(&route.from),
+                super::helpers::endpoint_label(&route.to)
+            )
+            .into(),
         });
     }
 
@@ -77,11 +86,15 @@ pub fn route_manual(
     };
 
     let start_comp_name = match &route.from {
-        hwc_parser::RouteEndpointSpec::ComponentPin { component_name, .. } => component_name.as_str(),
+        hwc_parser::RouteEndpointSpec::ComponentPin { component_name, .. } => {
+            component_name.as_str()
+        }
         hwc_parser::RouteEndpointSpec::SpaceEntity { name, .. } => name.as_str(),
     };
     let end_comp_name = match &route.to {
-        hwc_parser::RouteEndpointSpec::ComponentPin { component_name, .. } => component_name.as_str(),
+        hwc_parser::RouteEndpointSpec::ComponentPin { component_name, .. } => {
+            component_name.as_str()
+        }
         hwc_parser::RouteEndpointSpec::SpaceEntity { name, .. } => name.as_str(),
     };
 
@@ -92,7 +105,12 @@ pub fn route_manual(
     if let Some(bbox) = &start_bbox {
         if !waypoint_on_pad_edge(first_waypoint, bbox, space.resolution_nm) {
             return Err(IrError::NoPathFound {
-                net: format!("{} -> {}", super::helpers::endpoint_label(&route.from), super::helpers::endpoint_label(&route.to)).into(),
+                net: format!(
+                    "{} -> {}",
+                    super::helpers::endpoint_label(&route.from),
+                    super::helpers::endpoint_label(&route.to)
+                )
+                .into(),
                 from_pin: super::helpers::endpoint_label(&route.from).into(),
                 to_pin: super::helpers::endpoint_label(&route.to).into(),
             });
@@ -113,7 +131,12 @@ pub fn route_manual(
     if let Some(bbox) = &end_bbox {
         if !waypoint_on_pad_edge(last_waypoint, bbox, space.resolution_nm) {
             return Err(IrError::NoPathFound {
-                net: format!("{} -> {}", super::helpers::endpoint_label(&route.from), super::helpers::endpoint_label(&route.to)).into(),
+                net: format!(
+                    "{} -> {}",
+                    super::helpers::endpoint_label(&route.from),
+                    super::helpers::endpoint_label(&route.to)
+                )
+                .into(),
                 from_pin: super::helpers::endpoint_label(&route.from).into(),
                 to_pin: super::helpers::endpoint_label(&route.to).into(),
             });
@@ -122,7 +145,14 @@ pub fn route_manual(
 
     // PHASE 2: TRACE PLACEMENT
     // v0.1.7: Use the net ID already registered for this route
-    let net_id = super::helpers::register_net_for_route(space, route, symbol_table, stackup_manager, profile)?;
+    let net_id = super::helpers::register_net_for_route(
+        space,
+        route,
+        symbol_table,
+        stackup_manager,
+        profile,
+        None,
+    )?;
 
     // v0.1.7: Resolve material dynamically from the stackup layer
     // This ensures that manual traces merge perfectly with via rings/pours on the same layer.
@@ -132,34 +162,44 @@ pub fn route_manual(
         profile
             .and_then(|p| p.stackup.as_ref())
             .and_then(|stackup| {
-                stackup.layers.iter()
+                stackup
+                    .layers
+                    .iter()
                     .find(|l| l.name.name == layer_name)
                     .map(|l| l.material.clone())
             })
     })()
     .ok_or_else(|| IrError::InvalidRouteExpression {
         expression: "manual route".into(),
-        reason: format!("Could not resolve material at Z={}nm from stackup", first_wp_z),
+        reason: format!(
+            "Could not resolve material at Z={}nm from stackup",
+            first_wp_z
+        ),
     })?;
 
-    let copper_id = space.material_registry.get_id(&material_name).ok_or_else(|| {
-        IrError::UndeclaredMaterial { material: material_name.clone().into() }
-    })?;
+    let copper_id = space
+        .material_registry
+        .get_id(&material_name)
+        .ok_or_else(|| IrError::UndeclaredMaterial {
+            material: material_name.clone().into(),
+        })?;
 
     // v0.1.7: Create analytic trace for substrate layer realization
     // (manual routes must use the same analytic → substrate pipeline as auto routes)
     let trace_width_nm = if let Some(width_expr) = &route.width {
-        super::super::conversions::evaluate_expression_to_nm(width_expr, symbol_table)
-            .map_err(|e| IrError::InvalidRouteExpression {
+        super::super::conversions::evaluate_expression_to_nm(width_expr, symbol_table).map_err(
+            |e| IrError::InvalidRouteExpression {
                 expression: "route width".into(),
                 reason: e.to_string(),
-            })?
+            },
+        )?
     } else if let Some(trace) = profile.and_then(|p| p.trace.as_ref()) {
-        super::super::conversions::measurement_to_nm(&trace.min_width, symbol_table)
-            .map_err(|e| IrError::InvalidRouteExpression {
+        super::super::conversions::measurement_to_nm(&trace.min_width, symbol_table).map_err(
+            |e| IrError::InvalidRouteExpression {
                 expression: "route width from profile".into(),
                 reason: e.to_string(),
-            })?
+            },
+        )?
     } else {
         return Err(IrError::MissingAsicConstraint {
             message: "Manual route has no explicit width and no profile trace constraints.".into(),
@@ -182,21 +222,31 @@ pub fn route_manual(
         }
     } else {
         return Err(IrError::EmptyRoute {
-            net: format!("{} -> {}", super::helpers::endpoint_label(&route.from), super::helpers::endpoint_label(&route.to)).into(),
+            net: format!(
+                "{} -> {}",
+                super::helpers::endpoint_label(&route.from),
+                super::helpers::endpoint_label(&route.to)
+            )
+            .into(),
         });
     };
 
     // DEBUG: Print waypoints BEFORE creating LineSegments
-    eprintln!("[MANUAL WAYPOINTS] Creating segments from {} waypoints", waypoints.len());
+    eprintln!(
+        "[MANUAL WAYPOINTS] Creating segments from {} waypoints",
+        waypoints.len()
+    );
     for (i, wp) in waypoints.iter().enumerate() {
         eprintln!("  waypoint[{}]: ({},{},{})", i, wp.x, wp.y, wp.z);
     }
-    
+
     let mut segments = Vec::new();
     for (i, window) in waypoints.windows(2).enumerate() {
         let seg = hwc_engine::LineSegment::new(window[0], window[1]);
-        eprintln!("[MANUAL SEGMENT CREATE] seg[{}]: start=({},{},{}), end=({},{},{})",
-            i, seg.start.x, seg.start.y, seg.start.z, seg.end.x, seg.end.y, seg.end.z);
+        eprintln!(
+            "[MANUAL SEGMENT CREATE] seg[{}]: start=({},{},{}), end=({},{},{})",
+            i, seg.start.x, seg.start.y, seg.start.z, seg.end.x, seg.end.y, seg.end.z
+        );
         segments.push(seg);
     }
 
@@ -221,7 +271,8 @@ pub fn route_manual(
     } else {
         return Err(IrError::MissingAsicConstraint {
             message: "Route missing required 'current_limit_ac' property.".into(),
-            hint: "Add 'current_limit_ac: [rms: <Value>, peak: <Value>]' to the route definition.".into(),
+            hint: "Add 'current_limit_ac: [rms: <Value>, peak: <Value>]' to the route definition."
+                .into(),
         });
     };
 
@@ -238,8 +289,8 @@ pub fn route_manual(
         segments,
         copper_id,
         net_name,
-        net_actual_current_ma,  // Actual operating current from net
-        current_ma,             // Route's declared capability
+        net_actual_current_ma, // Actual operating current from net
+        current_ma,            // Route's declared capability
     );
 
     space.add_analytic_route(analytic_trace);

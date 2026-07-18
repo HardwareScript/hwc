@@ -8,10 +8,10 @@ pub use metadata::*;
 pub use primitives::*;
 pub use traces::*;
 
-use crate::geometry::{BoundingBox, Point3D};
+use crate::geometry::BoundingBox;
 use crate::geometry_router::EntityGraph;
-use crate::netlist::{NetId, NetlistArena};
 use crate::material::{MaterialId, MaterialRegistry};
+use crate::netlist::{NetId, NetlistArena};
 
 use compact_str::CompactString;
 use rustc_hash::FxHashMap;
@@ -185,100 +185,7 @@ impl HardwareSpace {
             .drill_hole(hole_bbox, diameter_nm, drill_net.raw());
     }
 
-    /// **v0.1.7: Realize analytic routes into substrate layers (LAZY REALIZATION)**
-    pub fn realize_analytic_routes(&mut self) {
-        let _start = std::time::Instant::now();
 
-        let mut groups: FxHashMap<(i64, i64, MaterialId, u32), Vec<BoundingBox>> =
-            FxHashMap::default();
-
-        for route in &self.analytic_routes {
-            let half_w = route.width_nm / 2;
-
-            for seg in &route.segments {
-                let half_t = route.thickness_nm / 2;
-                let z_min = seg.start.z.min(seg.end.z) - half_t;
-                let z_max = seg.start.z.max(seg.end.z) + half_t;
-
-                let x_min = seg.start.x.min(seg.end.x) - half_w;
-                let x_max = seg.start.x.max(seg.end.x) + half_w;
-                let y_min = seg.start.y.min(seg.end.y) - half_w;
-                let y_max = seg.start.y.max(seg.end.y) + half_w;
-
-                if x_max - x_min < 100 || y_max - y_min < 100 || z_max - z_min < 100 {
-                    continue;
-                }
-
-                let bbox = BoundingBox::new(
-                    Point3D::new(x_min, y_min, z_min),
-                    Point3D::new(x_max, y_max, z_max),
-                );
-
-                let key = (z_min, z_max, route.material, route.net_id.0);
-                groups.entry(key).or_default().push(bbox);
-            }
-        }
-
-        for ((z_min, z_max, material, net), bboxes) in groups {
-            let group_bbox = BoundingBox::new(
-                Point3D::new(
-                    bboxes.iter().map(|b| b.min.x).min().unwrap_or(0),
-                    bboxes.iter().map(|b| b.min.y).min().unwrap_or(0),
-                    z_min,
-                ),
-                Point3D::new(
-                    bboxes.iter().map(|b| b.max.x).max().unwrap_or(0),
-                    bboxes.iter().map(|b| b.max.y).max().unwrap_or(0),
-                    z_max,
-                ),
-            );
-
-            let mut layer = crate::geometry_router::substrate_types::SubstrateLayer::new(
-                material,
-                net,
-                group_bbox,
-                crate::geometry_router::substrate_types::SubstrateLayerType::Pour,
-            );
-            for bbox in bboxes {
-                layer.append_region(bbox);
-            }
-            self.entity_graph.get_substrate_layers_mut().push(layer);
-        }
-
-        let vias = self.vias.clone();
-        for via in vias {
-            let z_start = via.from_z_nm.min(via.to_z_nm);
-            let z_end = via.from_z_nm.max(via.to_z_nm);
-            let hole_bbox = BoundingBox::new(
-                Point3D::new(
-                    via.position.0 - via.diameter_nm / 2,
-                    via.position.1 - via.diameter_nm / 2,
-                    z_start,
-                ),
-                Point3D::new(
-                    via.position.0 + via.diameter_nm / 2,
-                    via.position.1 + via.diameter_nm / 2,
-                    z_end,
-                ),
-            );
-
-            let pad_diameter = via.diameter_nm
-                + 2 * if via.annular_ring_nm > 0 {
-                    via.annular_ring_nm
-                } else {
-                    via.diameter_nm / 2
-                };
-            self.entity_graph.drill_via_hole(
-                hole_bbox,
-                via.diameter_nm,
-                via.net_id.raw(),
-                0,
-                false,
-                pad_diameter,
-                75_000,
-            );
-        }
-    }
 
     /// **v0.1.7: Synchronize net names from pins to bound pours**
     pub fn synchronize_nets(&mut self) {

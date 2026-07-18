@@ -1,7 +1,9 @@
 //! Internal pour parsing for component-relative geometry (Sprint 2.2)
 
 use super::super::super::error::ParseError;
+use crate::ast::*;
 use crate::lexer::{Span, Token};
+use smallvec::SmallVec;
 
 impl super::super::super::Parser {
     /// Parse internal pour within component layout block (Sprint 2.2)
@@ -68,10 +70,111 @@ impl super::super::super::Parser {
         let mut thickness = None;
         let mut device = None;
         let mut thermal_relief = false;
+        let mut relational_constraints: SmallVec<[RelationalConstraint; 2]> = smallvec::smallvec![];
 
         while !self.is_at_end() && !self.check(&Token::Dedent) {
             if self.check(&Token::Newline) {
                 self.advance();
+                continue;
+            }
+
+            // v0.1.9: Check for relational keywords (align, above, below, right_of, left_of)
+            // These are standalone statements, not property: value pairs
+            if self.check(&Token::Align) {
+                self.advance(); // consume 'align'
+                self.expect(&Token::Colon)?;
+                let axis_str = self.expect_identifier_string()?;
+                let axis = match axis_str.as_str() {
+                    "center_x" => AlignmentAxis::CenterX,
+                    "center_y" => AlignmentAxis::CenterY,
+                    "center_z" => AlignmentAxis::CenterZ,
+                    "top" => AlignmentAxis::Top,
+                    "bottom" => AlignmentAxis::Bottom,
+                    "left" => AlignmentAxis::Left,
+                    "right" => AlignmentAxis::Right,
+                    _ => {
+                        return Err(self.error(&format!(
+                            "Invalid alignment axis '{}'. Expected: center_x, center_y, center_z, top, bottom, left, or right",
+                            axis_str
+                        )))
+                    }
+                };
+                self.expect(&Token::With)?;
+                let target = self.parse_component_name()?;
+                let span = Span::new(start_pos, self.previous_span().end);
+                relational_constraints.push(RelationalConstraint::Align { axis, target, span });
+                self.skip_whitespace();
+                continue;
+            }
+
+            if self.check(&Token::Above)
+                || self.check(&Token::Below)
+                || self.check(&Token::RightOf)
+                || self.check(&Token::LeftOf)
+            {
+                let constraint = if self.check(&Token::Above) {
+                    self.advance(); // consume 'above'
+                    let target = self.parse_component_name()?;
+                    let spacing = if self.check(&Token::With) {
+                        self.advance(); // consume 'with'
+                        self.expect_identifier()?; // consume 'spacing'
+                        self.expect(&Token::Colon)?;
+                        Some(self.parse_expression()?)
+                    } else {
+                        None
+                    };
+                    RelationalConstraint::Directional(DirectionalConstraint::Above {
+                        target,
+                        spacing,
+                    })
+                } else if self.check(&Token::Below) {
+                    self.advance(); // consume 'below'
+                    let target = self.parse_component_name()?;
+                    let spacing = if self.check(&Token::With) {
+                        self.advance(); // consume 'with'
+                        self.expect_identifier()?; // consume 'spacing'
+                        self.expect(&Token::Colon)?;
+                        Some(self.parse_expression()?)
+                    } else {
+                        None
+                    };
+                    RelationalConstraint::Directional(DirectionalConstraint::Below {
+                        target,
+                        spacing,
+                    })
+                } else if self.check(&Token::RightOf) {
+                    self.advance(); // consume 'right_of'
+                    let target = self.parse_component_name()?;
+                    let spacing = if self.check(&Token::With) {
+                        self.advance(); // consume 'with'
+                        self.expect_identifier()?; // consume 'spacing'
+                        self.expect(&Token::Colon)?;
+                        Some(self.parse_expression()?)
+                    } else {
+                        None
+                    };
+                    RelationalConstraint::Directional(DirectionalConstraint::RightOf {
+                        target,
+                        spacing,
+                    })
+                } else {
+                    self.advance(); // consume 'left_of'
+                    let target = self.parse_component_name()?;
+                    let spacing = if self.check(&Token::With) {
+                        self.advance(); // consume 'with'
+                        self.expect_identifier()?; // consume 'spacing'
+                        self.expect(&Token::Colon)?;
+                        Some(self.parse_expression()?)
+                    } else {
+                        None
+                    };
+                    RelationalConstraint::Directional(DirectionalConstraint::LeftOf {
+                        target,
+                        spacing,
+                    })
+                };
+                relational_constraints.push(constraint);
+                self.skip_whitespace();
                 continue;
             }
 
@@ -145,6 +248,7 @@ impl super::super::super::Parser {
             device,
             thermal_relief,
             waivers: crate::ast::Waivers::default(), // Internal pours use default waivers (no intentional overlaps by default)
+            relational_constraints,
             span: Span::new(start_pos, end_pos),
         })
     }

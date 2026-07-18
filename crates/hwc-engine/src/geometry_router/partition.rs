@@ -14,6 +14,20 @@ use rustc_hash::FxHashMap;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct GCellId(pub u32);
 
+impl GCellId {
+    /// Create a new G-cell ID.
+    #[inline]
+    pub const fn new(id: u32) -> Self {
+        Self(id)
+    }
+
+    /// Get the raw ID value.
+    #[inline]
+    pub const fn raw(self) -> u32 {
+        self.0
+    }
+}
+
 /// A single G-cell in the coarse partition grid.
 #[derive(Clone, Debug)]
 pub struct GCell {
@@ -207,7 +221,8 @@ impl PartitionGrid {
             Some(b) => b,
             None => return 0,
         };
-        let boundary_length = (boundary.max.x - boundary.min.x).max(boundary.max.y - boundary.min.y);
+        let boundary_length =
+            (boundary.max.x - boundary.min.x).max(boundary.max.y - boundary.min.y);
         if self.track_pitch_nm > 0 {
             (boundary_length / self.track_pitch_nm) as usize
         } else {
@@ -243,12 +258,8 @@ impl PartitionGrid {
         }
 
         // Clamp preferred_position to within the shared boundary
-        let clamped_x = preferred_position.x
-            .max(boundary.min.x)
-            .min(boundary.max.x);
-        let clamped_y = preferred_position.y
-            .max(boundary.min.y)
-            .min(boundary.max.y);
+        let clamped_x = preferred_position.x.max(boundary.min.x).min(boundary.max.x);
+        let clamped_y = preferred_position.y.max(boundary.min.y).min(boundary.max.y);
         let z = boundary.min.z;
 
         let position = Point3D::new(clamped_x, clamped_y, z);
@@ -281,11 +292,7 @@ impl PartitionGrid {
     ///
     /// Shifts the port +/- 3 * track_pitch along the shared boundary.
     /// Returns true if relocation succeeded within the allowed window.
-    pub fn relocate_boundary_port(
-        &mut self,
-        port_index: usize,
-        cell_id: GCellId,
-    ) -> bool {
+    pub fn relocate_boundary_port(&mut self, port_index: usize, cell_id: GCellId) -> bool {
         let cell = match self.get_cell(cell_id) {
             Some(c) => c,
             None => return false,
@@ -319,10 +326,7 @@ impl PartitionGrid {
 
         let new_position = if boundary_width > boundary_height {
             // Vertical boundary (shared X edge) -> shift along Y
-            let y_options = [
-                port.position.y + shift,
-                port.position.y - shift,
-            ];
+            let y_options = [port.position.y + shift, port.position.y - shift];
             let mut best = None;
             for y in y_options {
                 if y >= boundary.min.y && y <= boundary.max.y {
@@ -336,10 +340,7 @@ impl PartitionGrid {
             }
         } else {
             // Horizontal boundary (shared Y edge) -> shift along X
-            let x_options = [
-                port.position.x + shift,
-                port.position.x - shift,
-            ];
+            let x_options = [port.position.x + shift, port.position.x - shift];
             let mut best = None;
             for x in x_options {
                 if x >= boundary.min.x && x <= boundary.max.x {
@@ -384,7 +385,10 @@ impl PartitionGrid {
 impl Default for PartitionGrid {
     fn default() -> Self {
         Self::new(
-            BoundingBox::new(Point3D::new(0, 0, 0), Point3D::new(100_000_000, 100_000_000, 0)),
+            BoundingBox::new(
+                Point3D::new(0, 0, 0),
+                Point3D::new(100_000_000, 100_000_000, 0),
+            ),
             10_000_000, // 10mm default cell width
             10_000_000, // 10mm default cell height
             100_000,    // 0.1mm track pitch
@@ -437,9 +441,12 @@ pub fn partition_nets(grid: &mut PartitionGrid, net_bboxes: &[(NetId, BoundingBo
     for &(net_id, ref bbox) in net_bboxes {
         // Find the range of cells this bounding box could overlap
         let min_col = ((bbox.min.x - grid.board_bounds.min.x) / grid.cell_width_nm).max(0) as usize;
-        let max_col = ((bbox.max.x - grid.board_bounds.min.x) / grid.cell_width_nm).min((grid.cols - 1) as i64) as usize;
-        let min_row = ((bbox.min.y - grid.board_bounds.min.y) / grid.cell_height_nm).max(0) as usize;
-        let max_row = ((bbox.max.y - grid.board_bounds.min.y) / grid.cell_height_nm).min((grid.rows - 1) as i64) as usize;
+        let max_col = ((bbox.max.x - grid.board_bounds.min.x) / grid.cell_width_nm)
+            .min((grid.cols - 1) as i64) as usize;
+        let min_row =
+            ((bbox.min.y - grid.board_bounds.min.y) / grid.cell_height_nm).max(0) as usize;
+        let max_row = ((bbox.max.y - grid.board_bounds.min.y) / grid.cell_height_nm)
+            .min((grid.rows - 1) as i64) as usize;
 
         for row in min_row..=max_row {
             for col in min_col..=max_col {

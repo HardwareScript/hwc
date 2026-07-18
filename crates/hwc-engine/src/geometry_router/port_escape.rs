@@ -206,8 +206,14 @@ pub fn calculate_rect_escape(
     // project escape points into negative coordinates or beyond the wafer edge.
     if let Some(bounds) = board_bounds {
         let margin = trace_width_nm / 2;
-        point.x = point.x.max(bounds.min.x + margin).min(bounds.max.x - margin);
-        point.y = point.y.max(bounds.min.y + margin).min(bounds.max.y - margin);
+        point.x = point
+            .x
+            .max(bounds.min.x + margin)
+            .min(bounds.max.x - margin);
+        point.y = point
+            .y
+            .max(bounds.min.y + margin)
+            .min(bounds.max.y - margin);
     }
 
     EscapePoint {

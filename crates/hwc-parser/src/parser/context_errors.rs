@@ -90,7 +90,10 @@ impl ContextErrorGenerator {
     }
 
     pub fn current_context(&self) -> ParsingContext {
-        *self.context_stack.last().unwrap_or(&ParsingContext::TopLevel)
+        *self
+            .context_stack
+            .last()
+            .unwrap_or(&ParsingContext::TopLevel)
     }
 
     /// Generate a context-aware error for unexpected tokens
@@ -104,12 +107,8 @@ impl ContextErrorGenerator {
             ParsingContext::ComponentPlacement => {
                 self.component_placement_error(found, placement_state)
             }
-            ParsingContext::SpaceDefinition => {
-                self.space_definition_error(found)
-            }
-            ParsingContext::PropertyBlock => {
-                self.property_block_error(found)
-            }
+            ParsingContext::SpaceDefinition => self.space_definition_error(found),
+            ParsingContext::PropertyBlock => self.property_block_error(found),
             _ => format!("Unexpected token: {}", found),
         };
 
@@ -127,7 +126,7 @@ impl ContextErrorGenerator {
         state: Option<&RouteParseState>,
     ) -> ParseError {
         let message = self.route_statement_error(found, state);
-        
+
         ParseError::General {
             span: crate::parser::error::span_to_source_span(span),
             message: message.into(),
@@ -142,7 +141,7 @@ impl ContextErrorGenerator {
         state: Option<&PourParseState>,
     ) -> ParseError {
         let message = self.pour_statement_error(found, state);
-        
+
         ParseError::General {
             span: crate::parser::error::span_to_source_span(span),
             message: message.into(),
@@ -150,7 +149,11 @@ impl ContextErrorGenerator {
     }
 
     /// Generate specific error for component placement context
-    fn component_placement_error(&self, found: &Token, state: Option<&PlacementParseState>) -> String {
+    fn component_placement_error(
+        &self,
+        found: &Token,
+        state: Option<&PlacementParseState>,
+    ) -> String {
         if let Some(state) = state {
             // Check for common ordering mistakes
             if matches!(found, Token::On) && state.has_rotation && !state.has_elevation {
@@ -188,11 +191,14 @@ impl ContextErrorGenerator {
             }
         }
 
-        format!("Unexpected {} in component placement. Expected component placement syntax:\n\
+        format!(
+            "Unexpected {} in component placement. Expected component placement syntax:\n\
                  add Type named N at [x: X, y: Y] on layer: L rotated A:\n\
                      mount: top|bottom|embedded\n\
                      standoff: <value>\n\
-                     net: [pin1: Net1, pin2: Net2]", found)
+                     net: [pin1: Net1, pin2: Net2]",
+            found
+        )
     }
 
     /// Generate specific error for space definition context
@@ -210,16 +216,18 @@ impl ContextErrorGenerator {
                 }
                 "dimension" => {
                     return "Found 'dimension' (singular). Did you mean 'dimensions' (plural)?\n\
-                            Syntax: dimensions: <width> by <height> by <depth>".to_string();
+                            Syntax: dimensions: <width> by <height> by <depth>"
+                        .to_string();
                 }
                 "grid" => {
                     return "Found 'grid'. In v0.1.6+, use 'resolution:' instead.\n\
-                            Syntax: resolution: 1nm".to_string();
+                            Syntax: resolution: 1nm"
+                        .to_string();
                 }
                 _ => {}
             }
         }
-        
+
         format!(
             "Unexpected {} in space definition.\n\
              Valid space statements:\n\
@@ -248,7 +256,7 @@ impl ContextErrorGenerator {
                      - route Component1.pin1 to Component2.pin2"
                 );
             }
-            
+
             if state.has_from && !state.has_to && !matches!(found, Token::To) {
                 return format!(
                     "Route statement missing 'to' keyword.\n\
@@ -258,7 +266,7 @@ impl ContextErrorGenerator {
                 );
             }
         }
-        
+
         format!(
             "Unexpected {} in route statement.\n\
              Route syntax:\n\
@@ -281,7 +289,7 @@ impl ContextErrorGenerator {
                          boundary: [x: X1, y: Y1] to [x: X2, y: Y2]"
                 );
             }
-            
+
             if state.has_material && !state.has_layer {
                 return format!(
                     "Pour statement missing 'on layer:' clause.\n\
@@ -290,7 +298,7 @@ impl ContextErrorGenerator {
                 );
             }
         }
-        
+
         format!(
             "Unexpected {} in pour statement.\n\
              Pour syntax:\n\
@@ -307,10 +315,14 @@ impl ContextErrorGenerator {
         if matches!(found, Token::Equals) {
             return "Found '=' in property block. Use ':' for properties.\n\
                     The Boundary Law: ':' for declarative properties, '=' for behavioral logic.\n\
-                    Example: resistance: 10kΩ".to_string();
+                    Example: resistance: 10kΩ"
+                .to_string();
         }
 
-        format!("Unexpected {} in property block. Expected 'property: value' format", found)
+        format!(
+            "Unexpected {} in property block. Expected 'property: value' format",
+            found
+        )
     }
 
     /// Generate error with lookahead analysis
@@ -322,7 +334,8 @@ impl ContextErrorGenerator {
     ) -> ParseError {
         let message = if matches!(found, Token::On) && matches!(next, Some(Token::Identifier(_))) {
             "Found 'on layer:' in unexpected position. Check the order of placement clauses.\n\
-             Correct order: at [position] on layer: <layer> rotated <angle>:".to_string()
+             Correct order: at [position] on layer: <layer> rotated <angle>:"
+                .to_string()
         } else {
             format!("Unexpected token: {}", found)
         };

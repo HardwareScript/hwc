@@ -325,7 +325,7 @@ pub struct Route {
     pub from: RouteEndpointSpec,
     pub to: RouteEndpointSpec,
     pub width: Option<Expression>,
-    pub layer: Option<Identifier>,     // v0.1.8: Target routing layer (e.g. metal1)
+    pub layer: Option<Identifier>, // v0.1.8: Target routing layer (e.g. metal1)
     pub strategy: Option<Identifier>, // e.g. DDR5_Match (references a strategy definition)
     pub pattern: Option<PatternInstantiation>, // v0.1.8: Direct pattern reference e.g. Trombone(gap: 0.3mm, amp: 2.5mm)
     pub strategy_params: Vec<(Identifier, Expression)>, // e.g. target_length: 50mm
@@ -457,6 +457,8 @@ pub struct PourPlacement {
     pub device: Option<DeviceBinding>, // Phase 4: Explicit device terminal binding
     pub thermal_relief: bool,
     pub waivers: super::common::Waivers, // NEW v0.1.6 Sprint 8: Intentional overlap/connectivity waivers
+    /// v0.1.9: Relational placement constraints (align, above, below, right_of, left_of)
+    pub relational_constraints: smallvec::SmallVec<[super::RelationalConstraint; 2]>,
     pub span: Span,
 }
 
@@ -518,6 +520,8 @@ pub enum CutoutShape {
 pub struct PlanePlacement {
     pub material: CompactString,
     pub name: super::component::ComponentName,
+    /// v0.1.9: Optional shape reference for parameterized geometry
+    pub shape: Option<ShapeInstance>,
     /// Z elevation: either physical `z: 150um` or semantic `layer: l1`
     pub elevation: Elevation,
     pub thickness: Option<Expression>,
@@ -525,6 +529,16 @@ pub struct PlanePlacement {
     pub to: Option<Coordinate>,
     pub net: Option<NetName>,
     pub cutouts: Vec<CutoutShape>,
+    /// v0.1.9: Relational placement constraints (align, directional)
+    pub relational_constraints: smallvec::SmallVec<[super::RelationalConstraint; 2]>,
+    pub span: Span,
+}
+
+/// Shape instance with parameters (v0.1.9)
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ShapeInstance {
+    pub shape_name: CompactString,
+    pub parameters: smallvec::SmallVec<[super::component::Parameter; 4]>,
     pub span: Span,
 }
 

@@ -4,7 +4,7 @@
 //!   Phase 1: Route all nets along shortest paths (O(N log N) ray-marching)
 //!   Phase 2: Inject meander patterns into routed traces analytically (O(1) per net)
 //!
-//! This replaces the old inline pattern-guided A* routing which had O(B^d)
+//! This replaces the old inline pattern-guided routing which had O(B^d)
 //! exponential state-space explosion. The post-route approach:
 //!   - Routes 100% of nets straight first (fastest possible)
 //!   - Only processes the <5% of nets that need length matching
@@ -64,11 +64,7 @@ impl<'a> MeanderInjector<'a> {
     }
 
     /// Inject meanders into the paths of a single net.
-    fn inject_into_paths(
-        &self,
-        paths: &mut Vec<Vec<Point3D>>,
-        pattern: &RoutingPattern,
-    ) {
+    fn inject_into_paths(&self, paths: &mut Vec<Vec<Point3D>>, pattern: &RoutingPattern) {
         // Find the longest straight segment across all paths for this net
         let mut best_path_idx = 0;
         let mut best_seg_idx = 0;
@@ -197,10 +193,14 @@ impl<'a> MeanderInjector<'a> {
         let mut points = Vec::new();
 
         // Calculate total forward span to center the meander on the segment midpoint
-        let total_forward: i64 = pattern.steps.iter().map(|s| {
-            let rad = (s.angle_deg as f64).to_radians();
-            (s.distance_nm as f64 * rad.cos()) as i64
-        }).sum();
+        let total_forward: i64 = pattern
+            .steps
+            .iter()
+            .map(|s| {
+                let rad = (s.angle_deg as f64).to_radians();
+                (s.distance_nm as f64 * rad.cos()) as i64
+            })
+            .sum();
         let centered_forward = total_forward * repetitions;
         let half_span = centered_forward / 2;
 
@@ -324,10 +324,7 @@ mod tests {
             clearance_nm: 100_000,
         };
 
-        let bbox = BoundingBox::new(
-            Point3D::new(0, 0, 0),
-            Point3D::new(1_000_000, 1_000_000, 0),
-        );
+        let bbox = BoundingBox::new(Point3D::new(0, 0, 0), Point3D::new(1_000_000, 1_000_000, 0));
 
         assert!(!injector.check_collision(&bbox));
     }

@@ -28,7 +28,11 @@ pub fn place_component_array(
             }
         };
 
-        let instance_position = offset_coordinate(&component.position, offset_x_nm, offset_y_nm)?;
+        let base_position = component.position.as_ref().ok_or_else(|| IrError::PlacementConstraint {
+            message: "Array placement requires an explicit position (relational constraints not supported for arrays)".into(),
+            component: component.component_type.name.to_string(),
+        })?;
+        let instance_position = offset_coordinate(base_position, offset_x_nm, offset_y_nm)?;
 
         let instance_name = component
             .name
@@ -44,7 +48,7 @@ pub fn place_component_array(
                 index: None,
                 span: component.span,
             }),
-            position: instance_position,
+            position: Some(instance_position),
             rotation: component.rotation.clone(),
             elevation: component.elevation.clone(),
             mount: component.mount,
@@ -63,6 +67,7 @@ pub fn place_component_array(
                 virtual_component: component.waivers.virtual_component,
                 locked: component.waivers.locked,
             },
+            relational_constraints: smallvec::smallvec![], // v0.1.9: Arrays don't inherit relational constraints
             span: component.span,
         };
 
@@ -89,12 +94,13 @@ fn validate_array_collisions(
     let comp_def = ctx
         .symbol_table
         .get_component(&component.component_type.name)?;
-    let layout = comp_def.layout.as_ref().ok_or_else(|| {
-        IrError::PlacementConstraint {
+    let layout = comp_def
+        .layout
+        .as_ref()
+        .ok_or_else(|| IrError::PlacementConstraint {
             message: format!("Component '{}' missing layout", comp_def.name),
             component: comp_def.name.to_string(),
-        }
-    })?;
+        })?;
 
     for pour in &layout.internal_pours {
         let terminal_name = pour
@@ -174,24 +180,24 @@ fn calculate_pour_bboxes_for_array(
     use crate::ir::conversions::spanning_coordinate_to_point;
     use hwc_engine::geometry::{BoundingBox, Point3D};
 
-    let (from, to) =
-        match pour.boundary.as_ref().ok_or_else(|| {
-            IrError::PlacementConstraint {
-                message: format!("Pour '{}' missing boundary", pour.name),
-                component: pour.name.to_string().into(),
-            }
+    let (from, to) = match pour
+        .boundary
+        .as_ref()
+        .ok_or_else(|| IrError::PlacementConstraint {
+            message: format!("Pour '{}' missing boundary", pour.name),
+            component: pour.name.to_string().into(),
         })? {
-            hwc_parser::PourBoundary::Rect(f, t) => ((**f).clone(), (**t).clone()),
-            hwc_parser::PourBoundary::Circle { .. } => {
-                return Err(IrError::PlacementConstraint {
-                    message: format!(
-                        "Circle boundary not yet supported in arrays for pour '{}'",
-                        pour.name
-                    ),
-                    component: pour.name.to_string().into(),
-                })
-            }
-        };
+        hwc_parser::PourBoundary::Rect(f, t) => ((**f).clone(), (**t).clone()),
+        hwc_parser::PourBoundary::Circle { .. } => {
+            return Err(IrError::PlacementConstraint {
+                message: format!(
+                    "Circle boundary not yet supported in arrays for pour '{}'",
+                    pour.name
+                ),
+                component: pour.name.to_string().into(),
+            })
+        }
+    };
 
     let mut instance_bboxes = Vec::new();
 
@@ -216,25 +222,26 @@ fn calculate_pour_bboxes_for_array(
             stackup_manager: ctx.stackup_manager,
             profile: ctx.profile,
         };
-        let start = spanning_coordinate_to_point(&from, &coord_ctx, false)
-            .map_err(|e| IrError::CoordinateResolutionFailed {
+        let start = spanning_coordinate_to_point(&from, &coord_ctx, false).map_err(|e| {
+            IrError::CoordinateResolutionFailed {
                 coordinate_str: "pour boundary start".into(),
                 reason: e,
-            })?;
+            }
+        })?;
 
-        let end =
-            spanning_coordinate_to_point(&to, &coord_ctx, true).map_err(|e| IrError::CoordinateResolutionFailed {
+        let end = spanning_coordinate_to_point(&to, &coord_ctx, true).map_err(|e| {
+            IrError::CoordinateResolutionFailed {
                 coordinate_str: "pour boundary end".into(),
                 reason: e,
-            })?;
+            }
+        })?;
 
         let z_bottom_nm = ctx
             .stackup_manager
             .resolve_elevation(&pour.elevation, ctx.symbol_table)?;
-        let z_top_nm = ctx.stackup_manager.resolve_elevation_top(
-            &pour.elevation,
-            ctx.symbol_table,
-        )?;
+        let z_top_nm = ctx
+            .stackup_manager
+            .resolve_elevation_top(&pour.elevation, ctx.symbol_table)?;
 
         let instance_start =
             Point3D::new(start.x + offset_x_nm, start.y + offset_y_nm, z_bottom_nm);
@@ -259,15 +266,16 @@ fn merge_explicit_terminals(
         .symbol_table
         .get_component(&component.component_type.name)?;
 
-    let layout = component_def.layout.as_ref().ok_or_else(|| {
-        IrError::PlacementConstraint {
+    let layout = component_def
+        .layout
+        .as_ref()
+        .ok_or_else(|| IrError::PlacementConstraint {
             message: format!(
                 "Component '{}' has no layout block",
                 component.component_type.name
             ),
             component: component.component_type.name.to_string(),
-        }
-    })?;
+        })?;
 
     let pitch_nm = evaluate_measurement_to_nm(&array_config.pitch, ctx.symbol_table)?;
 
@@ -353,9 +361,12 @@ fn merge_pour_across_instances(
         merged_regions.push((merged_group, current_bbox));
     }
 
-    let material_id = space.material_registry.get_id(&pour.material).ok_or_else(|| {
-        IrError::UndeclaredMaterial { material: pour.material.clone() }
-    })?;
+    let material_id = space
+        .material_registry
+        .get_id(&pour.material)
+        .ok_or_else(|| IrError::UndeclaredMaterial {
+            material: pour.material.clone(),
+        })?;
     let net_id = if let Some(net_name) = &pour.net {
         if let Some(net) = space.netlist.get_net_by_name(net_name.base.as_str()) {
             net.raw()

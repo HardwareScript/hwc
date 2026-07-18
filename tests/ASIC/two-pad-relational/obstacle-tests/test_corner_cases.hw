@@ -1,0 +1,68 @@
+# Test 4: Corner Cases & Boundary Conditions
+# Objective: Verify router handles edge cases (tight spaces, board edges, minimal clearance)
+
+import * from @std/primitives/units
+import * from @std/primitives/math
+import * from ../materials
+import Silicon_180nm from ../foundry_pdk
+
+module Corner_Cases:
+    pins: [
+        input Edge_A, output Edge_B,
+        input Tight_A, output Tight_B
+    ]
+    route Edge_A to Edge_B
+    route Tight_A to Tight_B
+
+shape CubicPad(w: Measurement, h: Measurement):
+    geometry:
+        Rectangle(width: w, height: h)
+
+space Corner_Demo implements Corner_Cases:
+    dimensions: 1mm by 600um by 136um
+    resolution: 100nm
+    origin: bl by b
+    profile: Silicon_180nm
+
+    nets:
+        Edge_Net: { classification: signal, potential: 0V, current: 0.1uA }
+        Tight_Net: { classification: signal, potential: 0V, current: 0.1uA }
+
+    # Test 1: Pads near board edges
+    add plane(Aluminum) named Edge_A on layer: metal1:
+        shape: CubicPad(w: 150um, h: 150um)
+        at: [x: 50um, y: 50um]  # Near bottom-left corner
+        net: Edge_Net
+
+    add plane(Aluminum) named Edge_B on layer: metal1:
+        shape: CubicPad(w: 150um, h: 150um)
+        at: [x: 800um, y: 400um]  # Near top-right corner
+        net: Edge_Net
+
+    # Test 2: Tight squeeze through narrow gap
+    add plane(Aluminum) named Tight_A on layer: metal1:
+        shape: CubicPad(w: 100um, h: 100um)
+        at: [x: 300um, y: 250um]
+        net: Tight_Net
+
+    add plane(Aluminum) named Tight_B on layer: metal1:
+        shape: CubicPad(w: 100um, h: 100um)
+        at: [x: 600um, y: 250um]
+        net: Tight_Net
+
+    # Narrow obstacle creating a tight channel
+    add plane(Aluminum) named Squeeze_Block on layer: metal1:
+        shape: CubicPad(w: 120um, h: 80um)
+        at: [x: 430um, y: 235um]
+        # No net (obstacle)
+
+    # Route through tight spaces
+    route Edge_A to Edge_B:
+        width: 30um
+        layer: metal1
+        current_limit_ac: { rms: 0.5uA, peak: 1.0uA }
+
+    route Tight_A to Tight_B:
+        width: 25um  # Narrow trace to fit through gap
+        layer: metal1
+        current_limit_ac: { rms: 0.5uA, peak: 1.0uA }

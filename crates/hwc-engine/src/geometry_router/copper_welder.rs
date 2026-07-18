@@ -30,9 +30,7 @@ pub struct WeldedLayer {
 /// Convert `(i64, i64)` tuple slice to a clipper2 `Path64`.
 #[inline]
 fn to_clipper_path(pts: &[(i64, i64)]) -> Path64 {
-    pts.iter()
-        .map(|&(x, y)| Point64 { x, y })
-        .collect()
+    pts.iter().map(|&(x, y)| Point64 { x, y }).collect()
 }
 
 /// Convert clipper2 `Path64` back to `(i64, i64)` tuple vec.
@@ -183,8 +181,7 @@ pub fn pad_shape_to_path(shape: &PadShape, origin_x: i64, origin_y: i64) -> Vec<
 
             // Top-right corner
             for i in 0..=segments {
-                let angle =
-                    core::f64::consts::FRAC_PI_2 * (i as f64) / (segments as f64);
+                let angle = core::f64::consts::FRAC_PI_2 * (i as f64) / (segments as f64);
                 let x = origin_x + hw - r + (r as f64 * angle.cos()) as i64;
                 let y = origin_y - hh + r + (r as f64 * angle.sin()) as i64;
                 pts.push((x, y));
@@ -245,9 +242,7 @@ pub fn union_polygons(polygons: Vec<Vec<(i64, i64)>>) -> Vec<Vec<(i64, i64)>> {
 ///
 /// Buckets shapes by (net_id, material_id), performs union per bucket,
 /// separates outer contours from holes using winding direction.
-pub fn weld_layer_copper(
-    shapes: Vec<(u32, u8, Vec<Vec<(i64, i64)>>)>,
-) -> Vec<WeldedLayer> {
+pub fn weld_layer_copper(shapes: Vec<(u32, u8, Vec<Vec<(i64, i64)>>)>) -> Vec<WeldedLayer> {
     let buckets = bucket_copper(&shapes);
 
     buckets
@@ -262,10 +257,15 @@ pub fn weld_layer_copper(
                     continue;
                 }
                 // CCW = outer contour (positive area), CW = hole (negative area)
-                let area: i128 = polygon.iter().enumerate().map(|(i, &(x, y))| {
-                    let (x2, y2) = polygon[(i + 1) % polygon.len()];
-                    (x as i128) * (y2 as i128) - (x2 as i128) * (y as i128)
-                }).sum::<i128>() / 2;
+                let area: i128 = polygon
+                    .iter()
+                    .enumerate()
+                    .map(|(i, &(x, y))| {
+                        let (x2, y2) = polygon[(i + 1) % polygon.len()];
+                        (x as i128) * (y2 as i128) - (x2 as i128) * (y as i128)
+                    })
+                    .sum::<i128>()
+                    / 2;
                 if area > 0 {
                     contours.push(polygon.clone());
                 } else {
@@ -328,9 +328,7 @@ fn segments_intersect(p1: (i64, i64), p2: (i64, i64), p3: (i64, i64), p4: (i64, 
     let d3 = cross_product(p1, p2, p3);
     let d4 = cross_product(p1, p2, p4);
 
-    if ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0))
-        && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))
-    {
+    if ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0)) {
         return true;
     }
 
@@ -475,9 +473,7 @@ mod tests {
 
     #[test]
     fn test_pad_shape_to_path_circle() {
-        let shape = PadShape::Circle {
-            diameter_nm: 200,
-        };
+        let shape = PadShape::Circle { diameter_nm: 200 };
         let path = pad_shape_to_path(&shape, 500, 500);
         assert_eq!(path.len(), CIRCLE_SEGMENTS);
 
@@ -525,7 +521,10 @@ mod tests {
             (
                 1,
                 0,
-                vec![rect_to_path(0, 0, 200, 200), rect_to_path(100, 100, 200, 200)],
+                vec![
+                    rect_to_path(0, 0, 200, 200),
+                    rect_to_path(100, 100, 200, 200),
+                ],
             ),
             (2, 0, vec![rect_to_path(500, 500, 100, 100)]),
         ];

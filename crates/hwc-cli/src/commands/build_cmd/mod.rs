@@ -151,7 +151,9 @@ pub fn execute(
                 println!("   ⚠️  WARNING: Exporting design with known physical integrity issues");
             } else {
                 // v0.1.9: LOCKFILE DETERMINISM - Build failed validation, do NOT save lockfile
-                eprintln!("[LOCK] Build failed validation - lockfile NOT saved to preserve working state");
+                eprintln!(
+                    "[LOCK] Build failed validation - lockfile NOT saved to preserve working state"
+                );
                 return Err(miette::Report::new(BuildError::from_validation_failures(
                     &validation_result.violations,
                 )));
@@ -199,7 +201,11 @@ pub fn execute(
         if config.verify_only {
             println!(
                 "\n✅ --verify-only: Verification {} ({} violations)",
-                if validation_result.passed { "PASSED" } else { "FAILED" },
+                if validation_result.passed {
+                    "PASSED"
+                } else {
+                    "FAILED"
+                },
                 validation_result.violation_count
             );
             if !validation_result.passed {
@@ -210,10 +216,7 @@ pub fn execute(
             continue;
         }
 
-        // Realize analytic routes
-        if !space.analytic_routes.is_empty() {
-            space.realize_analytic_routes();
-        }
+
 
         // Export all formats
         export::export_all(export::ExportParams {

@@ -115,6 +115,25 @@ pub enum Token {
     #[token("enter")]
     Enter,
 
+    // v0.1.9: Middle-level relational constraint keywords
+    #[token("align")]
+    Align,
+
+    #[token("with")]
+    With,
+
+    #[token("above")]
+    Above,
+
+    #[token("below")]
+    Below,
+
+    #[token("right_of")]
+    RightOf,
+
+    #[token("left_of")]
+    LeftOf,
+
     // ========================================================================
     // BLOCK KEYS - Property names (strictly lowercase)
     // ========================================================================
@@ -577,6 +596,12 @@ impl fmt::Display for Token {
             Token::Bridge => write!(f, "the 'bridge' keyword"),
             Token::Exit => write!(f, "the 'exit' keyword"),
             Token::Enter => write!(f, "the 'enter' keyword"),
+            Token::Align => write!(f, "the 'align' keyword"),
+            Token::With => write!(f, "the 'with' keyword"),
+            Token::Above => write!(f, "the 'above' keyword"),
+            Token::Below => write!(f, "the 'below' keyword"),
+            Token::RightOf => write!(f, "the 'right_of' keyword"),
+            Token::LeftOf => write!(f, "the 'left_of' keyword"),
             Token::Dimensions => write!(f, "the 'dimensions' keyword"),
             Token::Grid => write!(f, "the 'grid' keyword"),
             Token::Resolution => write!(f, "the 'resolution' keyword"),

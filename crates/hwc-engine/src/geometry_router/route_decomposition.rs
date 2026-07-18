@@ -99,10 +99,7 @@ pub fn decompose_net(
 }
 
 /// Collect pin nodes from the netlist for a specific net.
-pub fn collect_pin_nodes(
-    net_id: NetId,
-    arena: &crate::netlist::NetlistArena,
-) -> Vec<PinNode> {
+pub fn collect_pin_nodes(net_id: NetId, arena: &crate::netlist::NetlistArena) -> Vec<PinNode> {
     let pins = match arena.get_net_pins(net_id) {
         Some(p) => p,
         None => return Vec::new(),
@@ -230,8 +227,12 @@ pub fn detect_junctions(
                     continue;
                 }
 
-                if point_on_segment(*endpoint_pos, &seg_b.from_pin.position, &seg_b.to_pin.position, tolerance)
-                    && *endpoint_pos != seg_b.from_pin.position
+                if point_on_segment(
+                    *endpoint_pos,
+                    &seg_b.from_pin.position,
+                    &seg_b.to_pin.position,
+                    tolerance,
+                ) && *endpoint_pos != seg_b.from_pin.position
                     && *endpoint_pos != seg_b.to_pin.position
                 {
                     let already_exists = junctions.iter().any(|j: &VirtualJunction| {
@@ -259,22 +260,19 @@ pub fn detect_junctions(
 }
 
 fn point_on_segment(p: Point3D, a: &Point3D, b: &Point3D, tolerance: f64) -> bool {
-    let cross = (p.y - a.y) as f64 * (b.x - a.x) as f64
-        - (p.x - a.x) as f64 * (b.y - a.y) as f64;
+    let cross = (p.y - a.y) as f64 * (b.x - a.x) as f64 - (p.x - a.x) as f64 * (b.y - a.y) as f64;
 
     if cross.abs() > tolerance {
         return false;
     }
 
-    let dot = (p.x - a.x) as f64 * (b.x - a.x) as f64
-        + (p.y - a.y) as f64 * (b.y - a.y) as f64;
+    let dot = (p.x - a.x) as f64 * (b.x - a.x) as f64 + (p.y - a.y) as f64 * (b.y - a.y) as f64;
 
     if dot < 0.0 {
         return false;
     }
 
-    let len_sq = (b.x - a.x) as f64 * (b.x - a.x) as f64
-        + (b.y - a.y) as f64 * (b.y - a.y) as f64;
+    let len_sq = (b.x - a.x) as f64 * (b.x - a.x) as f64 + (b.y - a.y) as f64 * (b.y - a.y) as f64;
 
     if dot > len_sq {
         return false;

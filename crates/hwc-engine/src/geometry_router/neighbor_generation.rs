@@ -1,11 +1,9 @@
-//! Deterministic Neighbor Generation for Pathfinding
+//! Grid bounds for board-level spatial queries.
 //!
-//! This module provides stable, deterministic neighbor generation
-//! for A* pathfinding to ensure reproducible builds.
+//! Provides the `GridBounds` type used for bounds checking during
+//! topological ray-casting routing.
 
-use super::layer_direction::is_valid_move;
-use crate::constraint_manager::LayerDirection;
-use crate::geometry::{Direction, Point3D};
+use crate::geometry::Point3D;
 
 /// Grid bounds for neighbor generation.
 ///
@@ -37,61 +35,4 @@ impl GridBounds {
             && point.y >= 0
             && point.y <= self.height_nm
     }
-}
-
-/// Get neighbors in stable order for deterministic pathfinding.
-///
-/// Returns neighbors in FIXED order: North, South, East, West, Up, Down.
-/// This ensures that the same input always produces the same output,
-/// which is critical for reproducible builds.
-///
-/// **Algorithm**:
-/// 1. Generate neighbors in fixed order (North, South, East, West, Up, Down)
-/// 2. Filter by layer direction rules (Manhattan routing)
-/// 3. Filter by grid bounds
-/// 4. Return stable-ordered vector
-///
-/// # Arguments
-/// * `cell` - Current cell position
-/// * `bounds` - Grid bounds for bounds checking
-/// * `layer_direction` - Direction restriction for this layer
-/// * `resolution_nm` - Step size in nanometers
-///
-/// # Returns
-/// Vector of valid neighbor positions in stable order
-pub fn get_neighbors_stable(
-    cell: Point3D,
-    bounds: GridBounds,
-    layer_direction: LayerDirection,
-    resolution_nm: i64,
-) -> Vec<Point3D> {
-    // Fixed order for determinism: North, South, East, West, Up, Down
-    let directions = [
-        Direction::North,
-        Direction::South,
-        Direction::East,
-        Direction::West,
-        Direction::Up,
-        Direction::Down,
-    ];
-
-    let mut neighbors = Vec::with_capacity(6);
-
-    for dir in &directions {
-        let neighbor = cell.move_direction(*dir, resolution_nm);
-
-        // Check bounds
-        if !bounds.contains(neighbor) {
-            continue;
-        }
-
-        // Check layer direction rules
-        if !is_valid_move(cell, neighbor, layer_direction) {
-            continue;
-        }
-
-        neighbors.push(neighbor);
-    }
-
-    neighbors
 }

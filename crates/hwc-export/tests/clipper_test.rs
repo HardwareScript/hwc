@@ -126,9 +126,7 @@ mod tests {
 
         let mut space =
             hwc_compiler::program_to_space(&program, &symbol_table, &collector).unwrap();
-        if !space.analytic_routes.is_empty() {
-            space.realize_analytic_routes();
-        }
+
 
         println!("SUBSTRATE LAYERS:");
         for (i, layer) in space.entity_graph.get_substrate_layers().iter().enumerate() {

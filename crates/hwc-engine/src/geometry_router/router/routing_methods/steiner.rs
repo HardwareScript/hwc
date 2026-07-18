@@ -17,13 +17,15 @@ impl GeometryRouter {
         let pin_nodes: Vec<crate::geometry_router::route_decomposition::PinNode> = pins
             .iter()
             .enumerate()
-            .map(|(i, p)| crate::geometry_router::route_decomposition::PinNode {
-                pin_id: i,
-                component_name: String::new(),
-                pin_name: String::new(),
-                position: *p,
-                net_id,
-            })
+            .map(
+                |(i, p)| crate::geometry_router::route_decomposition::PinNode {
+                    pin_id: i,
+                    component_name: String::new(),
+                    pin_name: String::new(),
+                    position: *p,
+                    net_id,
+                },
+            )
             .collect();
 
         // Solve the Minimum Spanning Tree (MST) in continuous coordinate space
@@ -41,6 +43,9 @@ impl GeometryRouter {
         let mut net_paths = Vec::new();
         let mut all_vias = Vec::new();
 
+        // Check if this net has a routing pattern policy for length matching
+        let has_pattern = self.route_net_policies.contains_key(&net_id);
+
         for (_i, segment) in decomposed.segments.iter().enumerate() {
             // v0.1.8: Use the exact anchor point positions from the pin metadata
             // for Steiner decomposition. These are the physical connection points.
@@ -55,7 +60,7 @@ impl GeometryRouter {
             // In a vector-first system, traces must be coplanar with the pad anchor.
             let final_start = start_port;
             let mut final_goal = goal_port;
-            
+
             if final_start.z != final_goal.z {
                 // eprintln!("[DEBUG STEINER] Port Z mismatch: start.z={} goal.z={}. Forcing goal to start.z", final_start.z, final_goal.z);
                 final_goal.z = final_start.z;
@@ -74,9 +79,20 @@ impl GeometryRouter {
                 goal: final_goal,
             };
 
-            let routed = self.route_net_global(&route)?;
-            
-            // v0.1.8: Stitch the pin positions to the routed path to ensure physical 
+            // v0.1.9: If net has a routing pattern, use length-constrained routing
+            // which will inject meander after the straight route if needed.
+            let routed = if has_pattern {
+                let pattern = self.route_net_policies.get(&net_id).cloned();
+                // Target length = Manhattan distance between endpoints (minimum possible)
+                let target_length = (final_start.x - final_goal.x).abs()
+                    + (final_start.y - final_goal.y).abs()
+                    + (final_start.z - final_goal.z).abs();
+                self.route_net_with_length_constraint(&route, target_length, &pattern)?
+            } else {
+                self.route_net_global(&route)?
+            };
+
+            // v0.1.8: Stitch the pin positions to the routed path to ensure physical
             // continuity and prevent gaps between the pad and the trace.
             let mut segment_path = vec![segment.from_pin.position];
             if let Some(path) = routed.paths.into_iter().next() {
@@ -87,7 +103,7 @@ impl GeometryRouter {
                 }
             }
             segment_path.push(segment.to_pin.position);
-            
+
             net_paths.push(segment_path);
             all_vias.extend(routed.vias);
         }

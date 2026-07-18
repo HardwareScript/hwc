@@ -11,15 +11,106 @@ struct ResolvedCutout {
     radius_nm: Option<i64>,
 }
 
+/// Resolve shape dimensions from a shape instance (v0.1.9 middle-level syntax)
+///
+/// This function extracts width and height from the shape instance parameters.
+/// The shape instance contains the actual parameter values passed when instantiating the shape.
+fn resolve_shape_dimensions(
+    shape_inst: &hwc_parser::ShapeInstance,
+    symbol_table: &crate::SymbolTable,
+) -> Result<(i64, i64), IrError> {
+    // Look up the shape definition to verify it exists
+    let _shape_def = symbol_table
+        .get_shape(&shape_inst.shape_name)
+        .ok_or_else(|| IrError::UndeclaredShape {
+            shape: shape_inst.shape_name.clone(),
+        })?;
+
+    eprintln!(
+        "[SHAPE DEBUG] Resolving dimensions for shape: {}",
+        shape_inst.shape_name
+    );
+    eprintln!(
+        "[SHAPE DEBUG] Parameters count: {}",
+        shape_inst.parameters.len()
+    );
+
+    // Extract width and height from the shape instance parameters
+    // Example: Pad(w: 600nm, h: 600nm) becomes parameters with keyword arguments
+    let mut width_nm = None;
+    let mut height_nm = None;
+
+    for param in &shape_inst.parameters {
+        let hwc_parser::Parameter::Keyword { name, value } = param;
+        eprintln!("[SHAPE DEBUG] Processing parameter: {} = {:?}", name, value);
+
+        let value_nm = match value {
+            hwc_parser::ParameterValue::Measurement(m) => {
+                let pm = m
+                    .to_picometers_i64()
+                    .ok_or_else(|| IrError::ShapeResolutionFailed {
+                        shape: shape_inst.shape_name.clone(),
+                        reason: format!("Parameter '{}' has non-distance unit", name),
+                    })?;
+                let nm = pm / 1000; // Convert picometers to nanometers
+                eprintln!("[SHAPE DEBUG] Converted {}pm to {}nm", pm, nm);
+                nm
+            }
+            _ => {
+                return Err(IrError::ShapeResolutionFailed {
+                    shape: shape_inst.shape_name.clone(),
+                    reason: format!("Parameter '{}' must be a Measurement", name),
+                });
+            }
+        };
+
+        // Map parameter names to width/height
+        // Common conventions: w/width for width, h/height for height
+        match name.as_str() {
+            "w" | "width" => {
+                eprintln!("[SHAPE DEBUG] Setting width = {}nm", value_nm);
+                width_nm = Some(value_nm);
+            }
+            "h" | "height" => {
+                eprintln!("[SHAPE DEBUG] Setting height = {}nm", value_nm);
+                height_nm = Some(value_nm);
+            }
+            _ => {
+                eprintln!("[SHAPE DEBUG] Ignoring unknown parameter: {}", name);
+            }
+        }
+    }
+
+    eprintln!(
+        "[SHAPE DEBUG] Final: width={:?}, height={:?}",
+        width_nm, height_nm
+    );
+
+    match (width_nm, height_nm) {
+        (Some(w), Some(h)) => {
+            eprintln!("[SHAPE DEBUG] Returning dimensions: {}nm x {}nm", w, h);
+            Ok((w, h))
+        }
+        _ => Err(IrError::ShapeResolutionFailed {
+            shape: shape_inst.shape_name.clone(),
+            reason: "Shape instance must provide 'w'/'width' and 'h'/'height' parameters for plane geometry"
+                .into(),
+        }),
+    }
+}
+
 pub fn place_plane(
     space: &mut HardwareSpace,
     plane: &hwc_parser::PlanePlacement,
     bbox_tracker: &mut crate::bounding_box_tracker::BoundingBoxTracker,
     ctx: &PlacementContext,
 ) -> Result<(), IrError> {
-    let material_id = space.material_registry.get_id(&plane.material).ok_or_else(|| {
-        IrError::UndeclaredMaterial { material: plane.material.clone() }
-    })?;
+    let material_id = space
+        .material_registry
+        .get_id(&plane.material)
+        .ok_or_else(|| IrError::UndeclaredMaterial {
+            material: plane.material.clone(),
+        })?;
 
     let layer_name = match &plane.elevation {
         hwc_parser::Elevation::Semantic(id) => id.to_string(),
@@ -74,92 +165,160 @@ pub fn place_plane(
 
     let solver = crate::constraint_solver::ConstraintSolver::new(bbox_tracker, ctx.eval_context);
 
-    let (start, end, area_nm2) = match (&plane.from, &plane.to) {
-        (Some(from_raw), Some(to_raw)) => {
-            let from = if from_raw.is_relative() {
-                solver.resolve_position(from_raw).map_err(|e| {
+    // v0.1.9: Handle shape-based planes with parameterized geometry
+    let (start, end, area_nm2) = if let Some(shape_inst) = &plane.shape {
+        // Resolve shape parameters to get dimensions
+        let (width_nm, height_nm) = resolve_shape_dimensions(shape_inst, ctx.symbol_table)?;
+
+        // Get position from `at:` field or relational constraints
+        let mut position = if let Some(from_coord) = &plane.from {
+            let from = if from_coord.is_relative() {
+                solver.resolve_position(from_coord).map_err(|e| {
                     IrError::CoordinateResolutionFailed {
-                        coordinate_str: format!("plane '{}' from position", plane.name),
+                        coordinate_str: format!("plane '{}' position", plane.name),
                         reason: e.to_string(),
                     }
                 })?
             } else {
-                from_raw.clone()
+                from_coord.clone()
             };
-
-            let to = if to_raw.is_relative() {
-                solver.resolve_position(to_raw).map_err(|e| {
-                    IrError::CoordinateResolutionFailed {
-                        coordinate_str: format!("plane '{}' to position", plane.name),
-                        reason: e.to_string(),
-                    }
-                })?
-            } else {
-                to_raw.clone()
-            };
-
-            let s = spanning_coordinate_to_point(&from, &coord_ctx, false)
-                .map_err(|e| IrError::CoordinateResolutionFailed {
-                    coordinate_str: format!("plane '{}' from", plane.name),
+            spanning_coordinate_to_point(&from, &coord_ctx, false).map_err(|e| {
+                IrError::CoordinateResolutionFailed {
+                    coordinate_str: format!("plane '{}' position", plane.name),
                     reason: e,
-                })?;
-            let e = spanning_coordinate_to_point(&to, &coord_ctx, true)
-                .map_err(|e| IrError::CoordinateResolutionFailed {
-                    coordinate_str: format!("plane '{}' to", plane.name),
-                    reason: e,
-                })?;
-
-            let w = (e.x - s.x).abs();
-            let h = (e.y - s.y).abs();
-            (s, e, w * h)
-        }
-        _ => {
+                }
+            })?
+        } else {
             return Err(IrError::PlacementConstraint {
                 message: format!(
-                    "Plane '{}' requires 'from' and 'to' coordinates",
+                    "Plane '{}' with shape requires 'at:' coordinate for positioning",
                     plane.name
                 ),
                 component: plane.name.to_string().into(),
             });
+        };
+
+        // v0.1.9: Adjust for center alignment [Spatial_Synthesis_Abstraction.md §1.4.1]
+        //
+        // CENTER ALIGNMENT SEMANTICS: The relational resolver returns the CENTER coordinate
+        // of the target object when `align: center_x/center_y/center_z` is used. To achieve
+        // true center-to-center alignment, we must:
+        //   1. Take the target's center coordinate (from resolver)
+        //   2. Subtract half of THIS object's dimensions
+        //   3. Result: bottom-left corner position that centers this object
+        //
+        // Example: Pad_A center_y = 300µm, Pad_B height = 200µm
+        //   - Resolver returns: Y = 300µm (Pad_A's center)
+        //   - We adjust: Y = 300µm - (200µm / 2) = 200µm (Pad_B's bottom-left)
+        //   - Result: Pad_B spans Y:200-400µm, center at 300µm ✓ ALIGNED
+        for constraint in &plane.relational_constraints {
+            if let hwc_parser::RelationalConstraint::Align { axis, .. } = constraint {
+                match axis {
+                    hwc_parser::AlignmentAxis::CenterX => {
+                        position.x -= width_nm / 2;
+                    }
+                    hwc_parser::AlignmentAxis::CenterY => {
+                        position.y -= height_nm / 2;
+                    }
+                    hwc_parser::AlignmentAxis::CenterZ => {
+                        // Z-centering doesn't affect XY position
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        let end_pt = Point3D::new(position.x + width_nm, position.y + height_nm, position.z);
+        let area = width_nm * height_nm;
+        (position, end_pt, area)
+    } else {
+        // Legacy behavior: use explicit from/to coordinates
+        match (&plane.from, &plane.to) {
+            (Some(from_raw), Some(to_raw)) => {
+                let from = if from_raw.is_relative() {
+                    solver.resolve_position(from_raw).map_err(|e| {
+                        IrError::CoordinateResolutionFailed {
+                            coordinate_str: format!("plane '{}' from position", plane.name),
+                            reason: e.to_string(),
+                        }
+                    })?
+                } else {
+                    from_raw.clone()
+                };
+
+                let to = if to_raw.is_relative() {
+                    solver.resolve_position(to_raw).map_err(|e| {
+                        IrError::CoordinateResolutionFailed {
+                            coordinate_str: format!("plane '{}' to position", plane.name),
+                            reason: e.to_string(),
+                        }
+                    })?
+                } else {
+                    to_raw.clone()
+                };
+
+                let s = spanning_coordinate_to_point(&from, &coord_ctx, false).map_err(|e| {
+                    IrError::CoordinateResolutionFailed {
+                        coordinate_str: format!("plane '{}' from", plane.name),
+                        reason: e,
+                    }
+                })?;
+                let e = spanning_coordinate_to_point(&to, &coord_ctx, true).map_err(|e| {
+                    IrError::CoordinateResolutionFailed {
+                        coordinate_str: format!("plane '{}' to", plane.name),
+                        reason: e,
+                    }
+                })?;
+
+                let w = (e.x - s.x).abs();
+                let h = (e.y - s.y).abs();
+                (s, e, w * h)
+            }
+            _ => {
+                return Err(IrError::PlacementConstraint {
+                    message: format!(
+                        "Plane '{}' requires 'from' and 'to' coordinates",
+                        plane.name
+                    ),
+                    component: plane.name.to_string().into(),
+                });
+            }
         }
     };
 
     let mut resolved_cutouts = Vec::new();
     for cutout in &plane.cutouts {
         let (at_raw, w_expr, h_expr, r_expr) = match cutout {
-            hwc_parser::CutoutShape::Rectangle {
-                width,
-                height,
-                at,
-            } => (at, Some(width), Some(height), None),
+            hwc_parser::CutoutShape::Rectangle { width, height, at } => {
+                (at, Some(width), Some(height), None)
+            }
             hwc_parser::CutoutShape::Circle { radius, at } => (at, None, None, Some(radius)),
         };
 
         let at_resolved = if at_raw.is_relative() {
-            solver.resolve_position(at_raw).map_err(|e| {
-                IrError::CoordinateResolutionFailed {
+            solver
+                .resolve_position(at_raw)
+                .map_err(|e| IrError::CoordinateResolutionFailed {
                     coordinate_str: format!("cutout position for plane '{}'", plane.name),
                     reason: e.to_string(),
-                }
-            })?
+                })?
         } else {
             at_raw.clone()
         };
 
-        let at_pt = spanning_coordinate_to_point(&at_resolved, &coord_ctx, false)
-            .map_err(|e| IrError::CoordinateResolutionFailed {
+        let at_pt = spanning_coordinate_to_point(&at_resolved, &coord_ctx, false).map_err(|e| {
+            IrError::CoordinateResolutionFailed {
                 coordinate_str: format!("cutout position for plane '{}'", plane.name),
                 reason: e,
-            })?;
+            }
+        })?;
 
         let width_nm = w_expr
             .map(|e| {
                 crate::ir::conversions::evaluate_expression_to_nm(e, ctx.symbol_table).map_err(
-                    |err| {
-                        IrError::CoordinateResolutionFailed {
-                            coordinate_str: format!("cutout width for plane '{}'", plane.name),
-                            reason: err.to_string(),
-                        }
+                    |err| IrError::CoordinateResolutionFailed {
+                        coordinate_str: format!("cutout width for plane '{}'", plane.name),
+                        reason: err.to_string(),
                     },
                 )
             })
@@ -168,11 +327,9 @@ pub fn place_plane(
         let height_nm = h_expr
             .map(|e| {
                 crate::ir::conversions::evaluate_expression_to_nm(e, ctx.symbol_table).map_err(
-                    |err| {
-                        IrError::CoordinateResolutionFailed {
-                            coordinate_str: format!("cutout height for plane '{}'", plane.name),
-                            reason: err.to_string(),
-                        }
+                    |err| IrError::CoordinateResolutionFailed {
+                        coordinate_str: format!("cutout height for plane '{}'", plane.name),
+                        reason: err.to_string(),
                     },
                 )
             })
@@ -181,11 +338,9 @@ pub fn place_plane(
         let radius_nm = r_expr
             .map(|e| {
                 crate::ir::conversions::evaluate_expression_to_nm(e, ctx.symbol_table).map_err(
-                    |err| {
-                        IrError::CoordinateResolutionFailed {
-                            coordinate_str: format!("cutout radius for plane '{}'", plane.name),
-                            reason: err.to_string(),
-                        }
+                    |err| IrError::CoordinateResolutionFailed {
+                        coordinate_str: format!("cutout radius for plane '{}'", plane.name),
+                        reason: err.to_string(),
                     },
                 )
             })
@@ -221,12 +376,12 @@ pub fn place_plane(
         None
     };
 
-    space.entity_graph.register_space_entity(
-        &plane.name.base,
-        bbox,
-        net_id,
-        z_start_nm,
-    );
+    space
+        .entity_graph
+        .register_space_entity(&plane.name.base, bbox, net_id, z_start_nm);
+
+    // Note: Substrate layer registration happens after netlist processing (see below)
+    // to ensure we have the correct resolved net_id
 
     println!(
         "   ├─ Registered plane '{}' bbox: min=({:.3}, {:.3}, {:.3}) max=({:.3}, {:.3}, {:.3})",
@@ -258,7 +413,9 @@ pub fn place_plane(
                 } else {
                     hwc_engine::netlist::NetId::new(0)
                 };
-                space.entity_graph.drill_hole(bbox, None, plane_net_id.raw());
+                space
+                    .entity_graph
+                    .drill_hole(bbox, None, plane_net_id.raw());
                 println!(
                     "   ├─ Auto-carved substrate for plane '{}' ({})",
                     plane.name, plane.material
@@ -326,10 +483,14 @@ pub fn place_plane(
             (center_x, center_y, center_z),
         );
 
-        let anchor_pin_id =
-            space
-                .netlist
-                .add_pin(plane_component_id, "anchor".into(), (0, 0, 0), None);
+        // v0.1.9: Use __virtual_ naming convention for routing compatibility
+        let virtual_pin_name = format!("__virtual_{}", plane.name);
+        let anchor_pin_id = space.netlist.add_pin(
+            plane_component_id,
+            virtual_pin_name.clone().into(),
+            (0, 0, 0),
+            None,
+        );
 
         let net_id_handle =
             if let Some(existing_net) = space.netlist.get_net_by_name(net_name.as_str()) {
@@ -347,7 +508,7 @@ pub fn place_plane(
             center_y,
             center_z,
             plane.name.to_string(),
-            "anchor".into(),
+            virtual_pin_name.into(),
             Some(net_name.clone()),
         );
 
@@ -365,7 +526,17 @@ pub fn place_plane(
         0
     };
 
+    // v0.1.9: Register as substrate layer so routing can see it as an obstacle
+    // Planes with net_id are conductive pours, planes without net_id are keepout zones
     let bbox = hwc_engine::geometry::BoundingBox::new(start_with_z, end_with_z);
+    eprintln!(
+        "[SUBSTRATE DEBUG] Adding plane '{}' as substrate layer: material_id={}, net={}, bbox=({},{},{}) to ({},{},{})",
+        plane.name,
+        material_id,
+        net_id,
+        bbox.min.x, bbox.min.y, bbox.min.z,
+        bbox.max.x, bbox.max.y, bbox.max.z
+    );
     space.entity_graph.add_substrate_layer(
         material_id,
         net_id,
@@ -381,16 +552,9 @@ pub fn place_plane(
             space.entity_graph.drill_hole(cutout_bbox, None, 0);
         } else if let Some(r) = rc.radius_nm {
             let rf = r as f64;
-            let cutout_start = Point3D::new(
-                rc.at_pt.x - rf as i64,
-                rc.at_pt.y - rf as i64,
-                z_start_nm,
-            );
-            let cutout_end = Point3D::new(
-                rc.at_pt.x + rf as i64,
-                rc.at_pt.y + rf as i64,
-                z_end_nm,
-            );
+            let cutout_start =
+                Point3D::new(rc.at_pt.x - rf as i64, rc.at_pt.y - rf as i64, z_start_nm);
+            let cutout_end = Point3D::new(rc.at_pt.x + rf as i64, rc.at_pt.y + rf as i64, z_end_nm);
             let cutout_bbox = hwc_engine::geometry::BoundingBox::new(cutout_start, cutout_end);
             space
                 .entity_graph

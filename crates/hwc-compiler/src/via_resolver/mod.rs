@@ -31,8 +31,14 @@ impl ViaResolver {
             crate::bridge_resolver::BridgeTable::new()
         };
 
-        let library = ViaLibrary::from_profile(profile, stackup_manager, &bridge_table, None, Some(symbol_table))?;
-        
+        let library = ViaLibrary::from_profile(
+            profile,
+            stackup_manager,
+            &bridge_table,
+            None,
+            Some(symbol_table),
+        )?;
+
         let min_spacing_nm = profile
             .and_then(|p| p.via.as_ref())
             .and_then(|v| v.min_spacing.as_ref())
@@ -57,8 +63,11 @@ impl ViaResolver {
         let nets_to_resolve = space.netlist.all_net_ids();
 
         for net_id in nets_to_resolve {
-            let net_name = space.netlist.get_net_name(net_id).unwrap_or_else(|| "unnamed".into());
-            
+            let net_name = space
+                .netlist
+                .get_net_name(net_id)
+                .unwrap_or_else(|| "unnamed".into());
+
             // 2. Query the EntityGraph for all conductive elements on this net
             let elements = space.entity_graph.get_all_elements_for_net(net_id);
             if elements.is_empty() {
@@ -70,7 +79,9 @@ impl ViaResolver {
             for el in &elements {
                 let mid_z = (el.bbox.min.z + el.bbox.max.z) / 2;
                 if let Some(layer_idx) = stackup_manager.get_layer_index_at_z(mid_z) {
-                    if stackup_manager.is_layer_conductive(&stackup_manager.ordered_layers()[layer_idx]) {
+                    if stackup_manager
+                        .is_layer_conductive(&stackup_manager.ordered_layers()[layer_idx])
+                    {
                         layers_with_net.insert(layer_idx);
                     }
                 }
@@ -116,29 +127,41 @@ impl ViaResolver {
         stackup_manager: &StackupManager,
         new_vias: &mut Vec<hwc_engine::geometry_router::Via>,
     ) -> Result<(), IrError> {
-        println!("\n🔍 [VIA RESOLVER] bridge_layers called for net '{}'", net_name);
+        println!(
+            "\n🔍 [VIA RESOLVER] bridge_layers called for net '{}'",
+            net_name
+        );
         println!("   Layer {} to Layer {}", from_layer, to_layer);
-        
+
         // v0.1.8: Get ALL elements for the net and filter them by layer index manually.
         // This compensates for the EntityGraph's lack of layer awareness.
         let all_elements = space.entity_graph.get_all_elements_for_net(net_id);
-        
-        let from_elements: Vec<&hwc_engine::geometry_router::substrate_types::SubstrateLayer> = all_elements.iter()
-            .filter(|el| {
-                let mid_z = (el.bbox.min.z + el.bbox.max.z) / 2;
-                stackup_manager.get_layer_index_at_z(mid_z) == Some(from_layer)
-            })
-            .collect();
 
-        let to_elements: Vec<&hwc_engine::geometry_router::substrate_types::SubstrateLayer> = all_elements.iter()
-            .filter(|el| {
-                let mid_z = (el.bbox.min.z + el.bbox.max.z) / 2;
-                stackup_manager.get_layer_index_at_z(mid_z) == Some(to_layer)
-            })
-            .collect();
-        
-        println!("   Found {} elements on layer {}, {} elements on layer {}", 
-            from_elements.len(), from_layer, to_elements.len(), to_layer);
+        let from_elements: Vec<&hwc_engine::geometry_router::substrate_types::SubstrateLayer> =
+            all_elements
+                .iter()
+                .filter(|el| {
+                    let mid_z = (el.bbox.min.z + el.bbox.max.z) / 2;
+                    stackup_manager.get_layer_index_at_z(mid_z) == Some(from_layer)
+                })
+                .collect();
+
+        let to_elements: Vec<&hwc_engine::geometry_router::substrate_types::SubstrateLayer> =
+            all_elements
+                .iter()
+                .filter(|el| {
+                    let mid_z = (el.bbox.min.z + el.bbox.max.z) / 2;
+                    stackup_manager.get_layer_index_at_z(mid_z) == Some(to_layer)
+                })
+                .collect();
+
+        println!(
+            "   Found {} elements on layer {}, {} elements on layer {}",
+            from_elements.len(),
+            from_layer,
+            to_elements.len(),
+            to_layer
+        );
 
         for from_el in &from_elements {
             for to_el in &to_elements {
@@ -159,10 +182,16 @@ impl ViaResolver {
                     // v0.1.8: Resolve materials for the specific elements being bridged.
                     // This ensures we use the correct bridge rule even if the layer's
                     // default material is different (e.g. Silicon_P on an 'active' layer).
-                    let from_material = space.material_registry.get_name(from_el.material)
-                        .unwrap_or("Unknown").to_string();
-                    let to_material = space.material_registry.get_name(to_el.material)
-                        .unwrap_or("Unknown").to_string();
+                    let from_material = space
+                        .material_registry
+                        .get_name(from_el.material)
+                        .unwrap_or("Unknown")
+                        .to_string();
+                    let to_material = space
+                        .material_registry
+                        .get_name(to_el.material)
+                        .unwrap_or("Unknown")
+                        .to_string();
 
                     self.insert_via_stack(
                         space,
@@ -203,11 +232,19 @@ impl ViaResolver {
         eprintln!("   To: {} (Layer {})", to_material, to_layer);
         eprintln!("   Available vias in library: {}", self.library.vias.len());
 
-        let via_def = self.library.find_via(from_layer, to_layer, from_material, to_material, stackup_manager)?;
+        let via_def = self.library.find_via(
+            from_layer,
+            to_layer,
+            from_material,
+            to_material,
+            stackup_manager,
+        )?;
 
-        eprintln!("   ✅ Selected via: {} -> {} (Layer {} -> {})", 
-            via_def.from_material, via_def.to_material, via_def.from_layer, via_def.to_layer);
-        
+        eprintln!(
+            "   ✅ Selected via: {} -> {} (Layer {} -> {})",
+            via_def.from_material, via_def.to_material, via_def.from_layer, via_def.to_layer
+        );
+
         let via = hwc_engine::geometry_router::Via::new(
             (x, y),
             via_def.z_start_nm,
@@ -224,16 +261,31 @@ impl ViaResolver {
         Ok(())
     }
 
-    fn _is_colliding(&self, space: &HardwareSpace, x: i64, y: i64, via_type: &ViaType, net_id: hwc_engine::netlist::NetId) -> bool {
+    fn _is_colliding(
+        &self,
+        space: &HardwareSpace,
+        x: i64,
+        y: i64,
+        via_type: &ViaType,
+        net_id: hwc_engine::netlist::NetId,
+    ) -> bool {
         let radius = (via_type.diameter_mm * 1_000_000.0) as i64 / 2;
         let query_bbox = hwc_engine::geometry::BoundingBox::new(
-            Point3D::new(x - radius - self._min_spacing_nm, y - radius - self._min_spacing_nm, via_type.z_start_nm),
-            Point3D::new(x + radius + self._min_spacing_nm, y + radius + self._min_spacing_nm, via_type.z_end_nm),
+            Point3D::new(
+                x - radius - self._min_spacing_nm,
+                y - radius - self._min_spacing_nm,
+                via_type.z_start_nm,
+            ),
+            Point3D::new(
+                x + radius + self._min_spacing_nm,
+                y + radius + self._min_spacing_nm,
+                via_type.z_end_nm,
+            ),
         );
 
         // Query the global spatial index for any elements in this volume
         let collisions = space.entity_graph.query_bbox(&query_bbox);
-        
+
         for col in collisions {
             // Ignore elements on the same net (vias can overlap their own pads/pours)
             if col.net == net_id.raw() {

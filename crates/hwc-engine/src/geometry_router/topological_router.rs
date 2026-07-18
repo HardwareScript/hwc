@@ -65,15 +65,86 @@ pub struct TopologicalRouter {
     pub layer_prefer_horizontal: bool,
     /// Track pitch for grid snapping
     pub track_pitch_nm: i64,
+    /// Minimum clearance from obstacles (Minkowski inflation).
+    /// Added to trace_width_nm / 2 for collision boundary calculations.
+    pub min_clearance_nm: i64,
+    /// Net IDs to exempt from collision checks (e.g., start/goal pads).
+    exempt_net_ids: Vec<usize>,
 }
 
 impl TopologicalRouter {
-    pub fn new(trace_width_nm: i64, track_pitch_nm: i64) -> Self {
+    /// Create a new router with required clearance parameter.
+    ///
+    /// `min_clearance_nm` is the PDK minimum trace spacing — it must come from
+    /// the fabrication constraints (never silently default to 0). The clearance
+    /// is used for Minkowski sum inflation: collision boundaries are expanded
+    /// by `trace_width_nm / 2 + min_clearance_nm`.
+    pub fn new(trace_width_nm: i64, track_pitch_nm: i64, min_clearance_nm: i64) -> Self {
         Self {
             trace_width_nm,
             layer_prefer_horizontal: true,
             track_pitch_nm,
+            min_clearance_nm,
+            exempt_net_ids: Vec::new(),
         }
+    }
+
+    /// Query the spatial index for obstacle candidates overlapping a bounding box.
+    ///
+    /// The DynamicSpatialIndex now uses per-layer sorted vectors with binary search,
+    /// so queries only scan the relevant physical layer(s) — no R*-tree, no f64 conversion.
+    fn query_all_obstacles(
+        &self,
+        bbox: &BoundingBox,
+        dynamic: &DynamicSpatialIndex,
+    ) -> Vec<crate::geometry_router::spatial_index::IndexedSegment> {
+        dynamic.query_bbox(bbox).into_iter().cloned().collect()
+    }
+
+    /// Route with entity exemptions to prevent start/goal self-collision.
+    ///
+    /// When routing from a pad, the router should not detect the pad itself
+    /// as an obstacle. This method shifts the ray origin outward by 1nm to
+    /// clear the pad boundary before projecting search rays.
+    pub fn route_with_exemptions(
+        &self,
+        start: Point3D,
+        target: Point3D,
+        obstacles: &DynamicSpatialIndex,
+        board_bounds: &BoundingBox,
+        exempt_net_ids: &[usize],
+    ) -> Option<TopologicalPath> {
+        let router = TopologicalRouter {
+            trace_width_nm: self.trace_width_nm,
+            layer_prefer_horizontal: self.layer_prefer_horizontal,
+            track_pitch_nm: self.track_pitch_nm,
+            min_clearance_nm: self.min_clearance_nm,
+            exempt_net_ids: exempt_net_ids.to_vec(),
+        };
+
+        // Shift ray origins outward by 1nm to clear pad boundaries
+        let escape_nm = 1;
+        let start_shifted = Point3D::new(start.x + escape_nm, start.y + escape_nm, start.z);
+        let target_shifted = Point3D::new(target.x - escape_nm, target.y - escape_nm, target.z);
+
+        // Try routing with shifted origins first
+        if let Some(path) = router.route(start_shifted, target_shifted, obstacles, board_bounds) {
+            // Restore original start/target in the path
+            let mut waypoints = path.waypoints;
+            if let Some(first) = waypoints.first_mut() {
+                *first = start;
+            }
+            if let Some(last) = waypoints.last_mut() {
+                *last = target;
+            }
+            return Some(TopologicalPath {
+                waypoints,
+                total_length: path.total_length,
+            });
+        }
+
+        // Fallback: try with original positions
+        router.route(start, target, obstacles, board_bounds)
     }
 
     /// Route from start to target using topological line-search.
@@ -120,7 +191,13 @@ impl TopologicalRouter {
                     }
                     // Build path: start -> bend_point_start -> meeting -> bend_point_target -> target
                     if let Some(path) = self.build_path_from_rays(
-                        start, target, s_ray, t_ray, meeting, obstacles, board_bounds,
+                        start,
+                        target,
+                        s_ray,
+                        t_ray,
+                        meeting,
+                        obstacles,
+                        board_bounds,
                     ) {
                         // eprintln!("[DEBUG TOPO] Found intersection path with length {}", path.total_length);
                         if path.total_length < best_length {
@@ -159,10 +236,202 @@ impl TopologicalRouter {
                     if self.point_in_obstacle(meeting, obstacles) {
                         continue;
                     }
-                    if let Some(path) = self.build_z_path(start, target, meeting, obstacles, board_bounds) {
+                    if let Some(path) =
+                        self.build_z_path(start, target, meeting, obstacles, board_bounds)
+                    {
                         if path.total_length < best_length {
                             best_length = path.total_length;
                             best_path = Some(path);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Try parallel ray pairs to find 2-bend (Z-shape) paths
+        if best_path.is_none() {
+            let inflate = self.trace_width_nm / 2 + self.min_clearance_nm;
+            for s_ray in &start_rays {
+                for t_ray in &target_rays {
+                    if s_ray.direction.is_horizontal() == t_ray.direction.is_horizontal() {
+                        // Parallel rays!
+                        if s_ray.direction.is_horizontal() {
+                            // Both are horizontal (East/West)
+                            // s_ray is at Y = s_ray.origin.y
+                            // t_ray is at Y = t_ray.origin.y
+                            if s_ray.origin.y == t_ray.origin.y {
+                                continue;
+                            }
+                            
+                            // Find the valid X-range where both horizontal rays overlap
+                            let s_min_x = if s_ray.direction == RayDirection::East {
+                                s_ray.origin.x
+                            } else {
+                                s_ray.origin.x - s_ray.max_distance
+                            };
+                            let s_max_x = if s_ray.direction == RayDirection::East {
+                                s_ray.origin.x + s_ray.max_distance
+                            } else {
+                                s_ray.origin.x
+                            };
+                            
+                            let t_min_x = if t_ray.direction == RayDirection::East {
+                                t_ray.origin.x
+                            } else {
+                                t_ray.origin.x - t_ray.max_distance
+                            };
+                            let t_max_x = if t_ray.direction == RayDirection::East {
+                                t_ray.origin.x + t_ray.max_distance
+                            } else {
+                                t_ray.origin.x
+                            };
+                            
+                            let overlap_min_x = s_min_x.max(t_min_x).max(board_bounds.min.x);
+                            let overlap_max_x = s_max_x.min(t_max_x).min(board_bounds.max.x);
+                            
+                            if overlap_min_x <= overlap_max_x {
+                                // Collect candidate X coordinates
+                                let mut candidates = vec![start.x, target.x];
+                                
+                                // Also collect X coordinates from obstacles (with inflation)
+                                let query_box = BoundingBox {
+                                    min: Point3D::new(overlap_min_x, start.y.min(target.y), start.z),
+                                    max: Point3D::new(overlap_max_x, start.y.max(target.y), start.z),
+                                };
+                                for seg in self.query_all_obstacles(&query_box, obstacles) {
+                                    if self.exempt_net_ids.contains(&seg.net_id) {
+                                        continue;
+                                    }
+                                    let obs_min_x = seg.start.x.min(seg.end.x) - seg.width_nm / 2;
+                                    let obs_max_x = seg.start.x.max(seg.end.x) + seg.width_nm / 2;
+                                    candidates.push(obs_min_x - inflate);
+                                    candidates.push(obs_max_x + inflate);
+                                }
+                                
+                                // De-duplicate candidates and filter to overlap range
+                                candidates.retain(|&x| x >= overlap_min_x && x <= overlap_max_x);
+                                candidates.sort_unstable();
+                                candidates.dedup();
+                                
+                                for x in candidates {
+                                    let p1 = Point3D::new(x, start.y, start.z);
+                                    let p2 = Point3D::new(x, target.y, start.z);
+                                    
+                                    // Check if meeting points are inside obstacles
+                                    if self.point_in_obstacle(p1, obstacles) || self.point_in_obstacle(p2, obstacles) {
+                                        continue;
+                                    }
+                                    
+                                    // Check all three segments for collisions
+                                    if !self.segment_intersects_obstacle(start, p1, obstacles)
+                                        && !self.segment_intersects_obstacle(p1, p2, obstacles)
+                                        && !self.segment_intersects_obstacle(p2, target, obstacles)
+                                    {
+                                        let waypoints = vec![start, p1, p2, target];
+                                        let total_length: i64 = waypoints.windows(2)
+                                            .map(|w| w[0].manhattan_distance(&w[1]))
+                                            .sum();
+                                            
+                                        if total_length < best_length {
+                                            best_length = total_length;
+                                            best_path = Some(TopologicalPath {
+                                                waypoints,
+                                                total_length,
+                                            });
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            // Both are vertical (North/South)
+                            // s_ray is at X = s_ray.origin.x
+                            // t_ray is at X = t_ray.origin.x
+                            if s_ray.origin.x == t_ray.origin.x {
+                                continue;
+                            }
+                            
+                            // Find the valid Y-range where both vertical rays overlap
+                            let s_min_y = if s_ray.direction == RayDirection::North {
+                                s_ray.origin.y
+                            } else {
+                                s_ray.origin.y - s_ray.max_distance
+                            };
+                            let s_max_y = if s_ray.direction == RayDirection::North {
+                                s_ray.origin.y + s_ray.max_distance
+                            } else {
+                                s_ray.origin.y
+                            };
+                            
+                            let t_min_y = if t_ray.direction == RayDirection::North {
+                                t_ray.origin.y
+                            } else {
+                                t_ray.origin.y - t_ray.max_distance
+                            };
+                            let t_max_y = if t_ray.direction == RayDirection::North {
+                                t_ray.origin.y + t_ray.max_distance
+                            } else {
+                                t_ray.origin.y
+                            };
+                            
+                            let overlap_min_y = s_min_y.max(t_min_y).max(board_bounds.min.y);
+                            let overlap_max_y = s_max_y.min(t_max_y).min(board_bounds.max.y);
+                            
+                            if overlap_min_y <= overlap_max_y {
+                                // Collect candidate Y coordinates
+                                let mut candidates = vec![start.y, target.y];
+                                
+                                // Also collect Y coordinates from obstacles (with inflation)
+                                let query_box = BoundingBox {
+                                    min: Point3D::new(start.x.min(target.x), overlap_min_y, start.z),
+                                    max: Point3D::new(start.x.max(target.x), overlap_max_y, start.z),
+                                };
+                                for seg in self.query_all_obstacles(&query_box, obstacles) {
+                                    if self.exempt_net_ids.contains(&seg.net_id) {
+                                        continue;
+                                    }
+                                    let obs_min_y = seg.start.y.min(seg.end.y) - seg.width_nm / 2;
+                                    let obs_max_y = seg.start.y.max(seg.end.y) + seg.width_nm / 2;
+                                    // +1 / -1 to step just off the inflated boundary.
+                                    // The collision checker uses <= so a candidate AT the boundary
+                                    // always counts as a collision — we must be strictly outside.
+                                    candidates.push(obs_min_y - inflate - 1);
+                                    candidates.push(obs_max_y + inflate + 1);
+                                }
+                                
+                                // De-duplicate candidates and filter to overlap range
+                                candidates.retain(|&y| y >= overlap_min_y && y <= overlap_max_y);
+                                candidates.sort_unstable();
+                                candidates.dedup();
+                                
+                                for y in candidates {
+                                    let p1 = Point3D::new(start.x, y, start.z);
+                                    let p2 = Point3D::new(target.x, y, start.z);
+                                    
+                                    // Check if meeting points are inside obstacles
+                                    if self.point_in_obstacle(p1, obstacles) || self.point_in_obstacle(p2, obstacles) {
+                                        continue;
+                                    }
+                                    
+                                    // Check all three segments for collisions
+                                    if !self.segment_intersects_obstacle(start, p1, obstacles)
+                                        && !self.segment_intersects_obstacle(p1, p2, obstacles)
+                                        && !self.segment_intersects_obstacle(p2, target, obstacles)
+                                    {
+                                        let waypoints = vec![start, p1, p2, target];
+                                        let total_length: i64 = waypoints.windows(2)
+                                            .map(|w| w[0].manhattan_distance(&w[1]))
+                                            .sum();
+                                            
+                                        if total_length < best_length {
+                                            best_length = total_length;
+                                            best_path = Some(TopologicalPath {
+                                                waypoints,
+                                                total_length,
+                                            });
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -185,7 +454,10 @@ impl TopologicalRouter {
             let waypoints = vec![start, target];
             if !self.segment_intersects_obstacle(start, target, obstacles) {
                 let total_length = start.manhattan_distance(&target);
-                return Some(TopologicalPath { waypoints, total_length });
+                return Some(TopologicalPath {
+                    waypoints,
+                    total_length,
+                });
             }
         }
 
@@ -259,21 +531,26 @@ impl TopologicalRouter {
 
         // Build a bounding box along the ray path for the spatial query
         let ray_bbox = self.ray_bbox(origin, direction, max_dist);
-        let candidates = obstacles.query_bbox(&ray_bbox);
+        let candidates = self.query_all_obstacles(&ray_bbox, obstacles);
 
         let mut closest: Option<RayIntersection> = None;
         let mut min_dist = max_dist;
+        let inflate = self.trace_width_nm / 2 + self.min_clearance_nm;
 
         for seg in candidates {
+            // Skip segments belonging to exempt nets
+            if self.exempt_net_ids.contains(&seg.net_id) {
+                continue;
+            }
             let seg_bbox = BoundingBox {
                 min: Point3D::new(
-                    seg.start.x.min(seg.end.x) - seg.width_nm / 2,
-                    seg.start.y.min(seg.end.y) - seg.width_nm / 2,
+                    seg.start.x.min(seg.end.x) - seg.width_nm / 2 - inflate,
+                    seg.start.y.min(seg.end.y) - seg.width_nm / 2 - inflate,
                     seg.start.z.min(seg.end.z),
                 ),
                 max: Point3D::new(
-                    seg.start.x.max(seg.end.x) + seg.width_nm / 2,
-                    seg.start.y.max(seg.end.y) + seg.width_nm / 2,
+                    seg.start.x.max(seg.end.x) + seg.width_nm / 2 + inflate,
+                    seg.start.y.max(seg.end.y) + seg.width_nm / 2 + inflate,
                     seg.start.z.max(seg.end.z),
                 ),
             };
@@ -421,10 +698,18 @@ impl TopologicalRouter {
             if toward_target {
                 let offset = self.trace_width_nm * 3;
                 return match dir {
-                    RayDirection::North => Point3D::new(stepped_back.x, stepped_back.y + offset, stepped_back.z),
-                    RayDirection::South => Point3D::new(stepped_back.x, stepped_back.y - offset, stepped_back.z),
-                    RayDirection::East => Point3D::new(stepped_back.x + offset, stepped_back.y, stepped_back.z),
-                    RayDirection::West => Point3D::new(stepped_back.x - offset, stepped_back.y, stepped_back.z),
+                    RayDirection::North => {
+                        Point3D::new(stepped_back.x, stepped_back.y + offset, stepped_back.z)
+                    }
+                    RayDirection::South => {
+                        Point3D::new(stepped_back.x, stepped_back.y - offset, stepped_back.z)
+                    }
+                    RayDirection::East => {
+                        Point3D::new(stepped_back.x + offset, stepped_back.y, stepped_back.z)
+                    }
+                    RayDirection::West => {
+                        Point3D::new(stepped_back.x - offset, stepped_back.y, stepped_back.z)
+                    }
                 };
             }
         }
@@ -433,10 +718,18 @@ impl TopologicalRouter {
         let dir = perp_dirs[0];
         let offset = self.trace_width_nm * 3;
         match dir {
-            RayDirection::North => Point3D::new(stepped_back.x, stepped_back.y + offset, stepped_back.z),
-            RayDirection::South => Point3D::new(stepped_back.x, stepped_back.y - offset, stepped_back.z),
-            RayDirection::East => Point3D::new(stepped_back.x + offset, stepped_back.y, stepped_back.z),
-            RayDirection::West => Point3D::new(stepped_back.x - offset, stepped_back.y, stepped_back.z),
+            RayDirection::North => {
+                Point3D::new(stepped_back.x, stepped_back.y + offset, stepped_back.z)
+            }
+            RayDirection::South => {
+                Point3D::new(stepped_back.x, stepped_back.y - offset, stepped_back.z)
+            }
+            RayDirection::East => {
+                Point3D::new(stepped_back.x + offset, stepped_back.y, stepped_back.z)
+            }
+            RayDirection::West => {
+                Point3D::new(stepped_back.x - offset, stepped_back.y, stepped_back.z)
+            }
         }
     }
 
@@ -480,13 +773,21 @@ impl TopologicalRouter {
         if h_dist > horiz_ray.max_distance || v_dist > vert_ray.max_distance {
             // Check bounds more carefully based on direction
             let h_ok = match horiz_ray.direction {
-                RayDirection::East => meeting.x >= horiz_ray.origin.x && h_dist <= horiz_ray.max_distance,
-                RayDirection::West => meeting.x <= horiz_ray.origin.x && h_dist <= horiz_ray.max_distance,
+                RayDirection::East => {
+                    meeting.x >= horiz_ray.origin.x && h_dist <= horiz_ray.max_distance
+                }
+                RayDirection::West => {
+                    meeting.x <= horiz_ray.origin.x && h_dist <= horiz_ray.max_distance
+                }
                 _ => false,
             };
             let v_ok = match vert_ray.direction {
-                RayDirection::North => meeting.y >= vert_ray.origin.y && v_dist <= vert_ray.max_distance,
-                RayDirection::South => meeting.y <= vert_ray.origin.y && v_dist <= vert_ray.max_distance,
+                RayDirection::North => {
+                    meeting.y >= vert_ray.origin.y && v_dist <= vert_ray.max_distance
+                }
+                RayDirection::South => {
+                    meeting.y <= vert_ray.origin.y && v_dist <= vert_ray.max_distance
+                }
                 _ => false,
             };
             if !h_ok || !v_ok {
@@ -591,9 +892,14 @@ impl TopologicalRouter {
 
     /// Check if a point is inside any obstacle.
     fn point_in_obstacle(&self, point: Point3D, obstacles: &DynamicSpatialIndex) -> bool {
-        let bbox = BoundingBox::from_point(point, 1);
-        let candidates = obstacles.query_bbox(&bbox);
+        let inflate = self.trace_width_nm / 2 + self.min_clearance_nm;
+        let bbox = BoundingBox::from_point(point, inflate);
+        let candidates = self.query_all_obstacles(&bbox, obstacles);
         for seg in candidates {
+            // Skip segments belonging to exempt nets
+            if self.exempt_net_ids.contains(&seg.net_id) {
+                continue;
+            }
             let seg_bbox = BoundingBox {
                 min: Point3D::new(
                     seg.start.x.min(seg.end.x) - seg.width_nm / 2,
@@ -614,51 +920,102 @@ impl TopologicalRouter {
     }
 
     /// Check if a segment between two points intersects any obstacle.
+    /// Uses Minkowski sum inflation: inflate_by = trace_width_nm / 2 + min_clearance_nm
+    /// v0.1.9: Added proper Z-axis collision detection for 2.5D routing
     fn segment_intersects_obstacle(
         &self,
         a: Point3D,
         b: Point3D,
         obstacles: &DynamicSpatialIndex,
     ) -> bool {
+        let inflate = self.trace_width_nm / 2 + self.min_clearance_nm;
+        
+        // v0.1.9 CRITICAL FIX: The spatial index is 2D (X-Y only), so we need to:
+        // 1. Query with a 2D bbox (Z is ignored by the R-tree)
+        // 2. Manually filter results by Z-range overlap
+        let route_z_min = a.z.min(b.z);
+        let route_z_max = a.z.max(b.z);
+        
         let bbox = BoundingBox {
-            min: Point3D::new(
-                a.x.min(b.x) - self.trace_width_nm,
-                a.y.min(b.y) - self.trace_width_nm,
-                a.z.min(b.z),
-            ),
-            max: Point3D::new(
-                a.x.max(b.x) + self.trace_width_nm,
-                a.y.max(b.y) + self.trace_width_nm,
-                a.z.max(b.z),
-            ),
+            min: Point3D::new(a.x.min(b.x) - inflate, a.y.min(b.y) - inflate, route_z_min),
+            max: Point3D::new(a.x.max(b.x) + inflate, a.y.max(b.y) + inflate, route_z_max),
         };
 
-        let candidates = obstacles.query_bbox(&bbox);
-        for seg in candidates {
+        eprintln!(
+            "[TOPO COLLISION] Checking segment ({},{},{}) to ({},{},{}) with inflate={}nm",
+            a.x, a.y, a.z, b.x, b.y, b.z, inflate
+        );
+        eprintln!(
+            "[TOPO COLLISION] Query bbox: ({},{},{}) to ({},{},{})",
+            bbox.min.x, bbox.min.y, bbox.min.z, bbox.max.x, bbox.max.y, bbox.max.z
+        );
+
+        let candidates = self.query_all_obstacles(&bbox, obstacles);
+        // eprintln!("[TOPO COLLISION] Found {} candidate obstacles (2D query, will filter by Z)", candidates.len());
+        
+        for (idx, seg) in candidates.iter().enumerate() {
+            // Skip segments belonging to exempt nets
+            if self.exempt_net_ids.contains(&seg.net_id) {
+                eprintln!("[TOPO COLLISION]   Obstacle {}: SKIPPED (exempt net_id={})", idx, seg.net_id);
+                continue;
+            }
+            
+            // v0.1.9: CRITICAL FIX - Check Z-axis overlap FIRST (before building seg_bbox)
+            // The obstacle's Z-range is stored directly in seg.start.z and seg.end.z
+            let obs_z_min = seg.start.z.min(seg.end.z);
+            let obs_z_max = seg.start.z.max(seg.end.z);
+            
+            // Z-range intersection test: ranges overlap if (start1 <= end2) AND (start2 <= end1)
+            let z_overlaps = route_z_min <= obs_z_max && obs_z_min <= route_z_max;
+            eprintln!(
+                "[TOPO COLLISION]   Obstacle {}: net_id={}, Z-check: route_z=[{},{}], obs_z=[{},{}], overlaps={}",
+                idx, seg.net_id, route_z_min, route_z_max, obs_z_min, obs_z_max, z_overlaps
+            );
+            if !z_overlaps {
+                // eprintln!("[TOPO COLLISION]   SKIPPED (no Z-overlap)");
+                continue; // No Z-overlap, skip this obstacle
+            }
+            
             let seg_bbox = BoundingBox {
                 min: Point3D::new(
-                    seg.start.x.min(seg.end.x) - seg.width_nm / 2 - self.trace_width_nm,
-                    seg.start.y.min(seg.end.y) - seg.width_nm / 2 - self.trace_width_nm,
-                    seg.start.z.min(seg.end.z),
+                    seg.start.x.min(seg.end.x) - seg.width_nm / 2 - inflate,
+                    seg.start.y.min(seg.end.y) - seg.width_nm / 2 - inflate,
+                    obs_z_min,
                 ),
                 max: Point3D::new(
-                    seg.start.x.max(seg.end.x) + seg.width_nm / 2 + self.trace_width_nm,
-                    seg.start.y.max(seg.end.y) + seg.width_nm / 2 + self.trace_width_nm,
-                    seg.start.z.max(seg.end.z),
+                    seg.start.x.max(seg.end.x) + seg.width_nm / 2 + inflate,
+                    seg.start.y.max(seg.end.y) + seg.width_nm / 2 + inflate,
+                    obs_z_max,
                 ),
             };
 
-            // Axis-aligned segment intersection check
+            eprintln!(
+                "[TOPO COLLISION]   Obstacle {}: bbox=({},{},{}) to ({},{},{})",
+                idx,
+                seg_bbox.min.x, seg_bbox.min.y, seg_bbox.min.z,
+                seg_bbox.max.x, seg_bbox.max.y, seg_bbox.max.z
+            );
+
+            // Axis-aligned segment intersection check (X-Y plane)
             if a.y == b.y {
                 // Horizontal segment
                 let seg_y_min = seg_bbox.min.y;
                 let seg_y_max = seg_bbox.max.y;
+                eprintln!(
+                    "[TOPO COLLISION]   Horizontal route at Y={}, obstacle Y=[{},{}]",
+                    a.y, seg_y_min, seg_y_max
+                );
                 if a.y >= seg_y_min && a.y <= seg_y_max {
                     let seg_x_min = seg_bbox.min.x;
                     let seg_x_max = seg_bbox.max.x;
                     let route_x_min = a.x.min(b.x);
                     let route_x_max = a.x.max(b.x);
+                    eprintln!(
+                        "[TOPO COLLISION]   Y-overlap! route_x=[{},{}], obs_x=[{},{}]",
+                        route_x_min, route_x_max, seg_x_min, seg_x_max
+                    );
                     if route_x_max >= seg_x_min && route_x_min <= seg_x_max {
+                        // eprintln!("[TOPO COLLISION]   ❌ COLLISION DETECTED!");
                         return true;
                     }
                 }
@@ -666,23 +1023,38 @@ impl TopologicalRouter {
                 // Vertical segment
                 let seg_x_min = seg_bbox.min.x;
                 let seg_x_max = seg_bbox.max.x;
+                eprintln!(
+                    "[TOPO COLLISION]   Vertical route at X={}, obstacle X=[{},{}]",
+                    a.x, seg_x_min, seg_x_max
+                );
                 if a.x >= seg_x_min && a.x <= seg_x_max {
                     let seg_y_min = seg_bbox.min.y;
                     let seg_y_max = seg_bbox.max.y;
                     let route_y_min = a.y.min(b.y);
                     let route_y_max = a.y.max(b.y);
+                    eprintln!(
+                        "[TOPO COLLISION]   X-overlap! route_y=[{},{}], obs_y=[{},{}]",
+                        route_y_min, route_y_max, seg_y_min, seg_y_max
+                    );
                     if route_y_max >= seg_y_min && route_y_min <= seg_y_max {
+                        // eprintln!("[TOPO COLLISION]   ❌ COLLISION DETECTED!");
                         return true;
                     }
                 }
             }
         }
 
+        // eprintln!("[TOPO COLLISION] ✅ No collisions detected");
         false
     }
 
     /// Compute maximum ray distance before hitting board bounds.
-    fn max_ray_distance(&self, origin: Point3D, direction: RayDirection, board_bounds: &BoundingBox) -> i64 {
+    fn max_ray_distance(
+        &self,
+        origin: Point3D,
+        direction: RayDirection,
+        board_bounds: &BoundingBox,
+    ) -> i64 {
         match direction {
             RayDirection::North => (board_bounds.max.y - origin.y).max(0),
             RayDirection::South => (origin.y - board_bounds.min.y).max(0),
@@ -722,9 +1094,10 @@ pub fn expand_from_point(
     obstacles: &DynamicSpatialIndex,
     board_bounds: &BoundingBox,
     trace_width_nm: i64,
+    min_clearance_nm: i64,
 ) -> FxHashMap<RayDirection, Point3D> {
     let mut result = FxHashMap::default();
-    let router = TopologicalRouter::new(trace_width_nm, trace_width_nm);
+    let router = TopologicalRouter::new(trace_width_nm, trace_width_nm, min_clearance_nm);
 
     let directions = [
         RayDirection::North,
@@ -750,10 +1123,18 @@ pub fn expand_from_point(
                 // Step back from obstacle
                 let margin = trace_width_nm;
                 match dir {
-                    RayDirection::North => Point3D::new(origin.x, intersection.point.y - margin, origin.z),
-                    RayDirection::South => Point3D::new(origin.x, intersection.point.y + margin, origin.z),
-                    RayDirection::East => Point3D::new(intersection.point.x - margin, origin.y, origin.z),
-                    RayDirection::West => Point3D::new(intersection.point.x + margin, origin.y, origin.z),
+                    RayDirection::North => {
+                        Point3D::new(origin.x, intersection.point.y - margin, origin.z)
+                    }
+                    RayDirection::South => {
+                        Point3D::new(origin.x, intersection.point.y + margin, origin.z)
+                    }
+                    RayDirection::East => {
+                        Point3D::new(intersection.point.x - margin, origin.y, origin.z)
+                    }
+                    RayDirection::West => {
+                        Point3D::new(intersection.point.x + margin, origin.y, origin.z)
+                    }
                 }
             }
             None => match dir {

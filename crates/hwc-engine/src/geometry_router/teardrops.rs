@@ -133,7 +133,6 @@ impl TeardropEngine {
         // The TopologicalRouter uses DynamicSpatialIndex for obstacle detection.
         // Analytic trace primitives handle teardrop geometry at export time.
     }
-
 }
 
 #[cfg(test)]

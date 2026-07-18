@@ -261,16 +261,8 @@ pub fn export(
                     .unwrap_or_else(|| "0".into());
 
                 // Extract parameters (already in micrometers from device extractor)
-                let w_um = device
-                    .parameters
-                    .get("W")
-                    .copied()
-                    .unwrap_or(1.0);
-                let l_um = device
-                    .parameters
-                    .get("L")
-                    .copied()
-                    .unwrap_or(1.0);
+                let w_um = device.parameters.get("W").copied().unwrap_or(1.0);
+                let l_um = device.parameters.get("L").copied().unwrap_or(1.0);
 
                 // Write MOSFET line: M<name> <drain> <gate> <source> <bulk> <model> W=<w>u L=<l>u
                 netlist_str.push_str(&format!(

@@ -2,8 +2,8 @@
 
 use crate::constraint_manager::{ClearanceZone, LayerDirection, RouteConstraints};
 use crate::geometry_router::stackup_slicing::RoutableMode;
-use crate::netlist::NetId;
 use crate::geometry_router::EntityGraph;
+use crate::netlist::NetId;
 
 use compact_str::CompactString;
 
@@ -22,7 +22,6 @@ pub struct RoutingParams<'a> {
     pub is_high_speed_net: bool,
 
     // ── v0.1.8: Physical Synthesis Guardrails ──
-
     /// v0.1.9: Z-coordinate to RoutableMode mapping for dynamic per-node checking (Fix #2).
     /// Keys are layer Z-centers (in nm), values are routability modes.
     /// This allows the pathfinder to check routability dynamically as it explores different layers.
@@ -48,7 +47,6 @@ pub struct RoutingParams<'a> {
     pub component_keepouts: &'a [(i64, i64, i64, i64, i64, i64)],
 
     // ── v0.1.8: Routing Heuristic Weights (from PDK profile) ──
-
     /// Base cost for any single grid movement. Default: 1.
     pub base_cost: i64,
     /// Penalty for via transitions (layer changes). Default: 50.

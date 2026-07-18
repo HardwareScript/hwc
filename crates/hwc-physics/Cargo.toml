@@ -11,10 +11,8 @@ thiserror = { workspace = true }
 hwc-materials = { workspace = true }
 hwc-parser = { workspace = true }
 hwc-diagnostics = { workspace = true }
-rayon = { workspace = true }
 rustc-hash = { workspace = true }
 compact_str = { workspace = true }
-rstar = { workspace = true }
 
 [dev-dependencies]
 hwc-parser = { workspace = true }

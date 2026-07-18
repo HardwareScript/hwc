@@ -38,7 +38,11 @@ pub fn unroll_component(
 
     // Substitute loop variable in position
     // Note: 'last' keyword is preserved and will be resolved during constraint solving
-    let position = substitute_in_coordinate(&component.position, variable, value)?;
+    let position = component
+        .position
+        .as_ref()
+        .map(|p| substitute_in_coordinate(p, variable, value))
+        .transpose()?;
 
     // Substitute loop variable in net bindings (v0.1.6 Item #13)
     let pin_net_bindings = component
@@ -83,6 +87,7 @@ pub fn unroll_component(
         array_config: component.array_config.clone(),
         pin_net_bindings,
         waivers: component.waivers.clone(), // v0.1.7: Preserve unified waivers
+        relational_constraints: component.relational_constraints.clone(), // v0.1.9: Preserve relational constraints
         span: component.span,
     })
 }
@@ -155,6 +160,7 @@ pub fn unroll_pour(
         device: pour.device.clone(),
         thermal_relief: pour.thermal_relief,
         waivers: pour.waivers.clone(), // v0.1.7: Preserve unified waivers
+        relational_constraints: pour.relational_constraints.clone(),
         span: pour.span,
     })
 }
@@ -231,12 +237,14 @@ pub fn unroll_plane(
     Ok(PlanePlacement {
         material: plane.material.clone(),
         name,
+        shape: plane.shape.clone(),
         elevation,
         thickness,
         from,
         to,
         net,
         cutouts,
+        relational_constraints: plane.relational_constraints.clone(),
         span: plane.span,
     })
 }
@@ -456,9 +464,16 @@ pub fn substitute_in_net_name(
             _ => substituted_index,
         };
 
-        Ok(hwc_parser::NetName::indexed(net_name.base.clone(), evaluated_index, net_name.span))
+        Ok(hwc_parser::NetName::indexed(
+            net_name.base.clone(),
+            evaluated_index,
+            net_name.span,
+        ))
     } else {
-        Ok(hwc_parser::NetName::simple(net_name.base.clone(), net_name.span))
+        Ok(hwc_parser::NetName::simple(
+            net_name.base.clone(),
+            net_name.span,
+        ))
     }
 }
 

@@ -280,11 +280,8 @@ impl ParasiticExtractor {
         )?;
 
         // Calculate surface area from trace dimensions
-        let surface_area_nm2 = Self::calculate_surface_area(
-            params.length_nm,
-            params.width_nm,
-            params.thickness_nm,
-        );
+        let surface_area_nm2 =
+            Self::calculate_surface_area(params.length_nm, params.width_nm, params.thickness_nm);
 
         // Extract capacitance
         let capacitance_pf = self.extract_trace_capacitance(

@@ -14,7 +14,7 @@
 
 use crate::physical_z::{board_z_extent, is_on_board_face, z_mm};
 use compact_str::CompactString;
-use hwc_engine::{HardwareSpace, placement::PadShape};
+use hwc_engine::{placement::PadShape, HardwareSpace};
 use std::path::Path;
 
 /// Solder mask expansion in nanometers (0.075mm = 75µm)

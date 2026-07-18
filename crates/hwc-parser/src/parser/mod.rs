@@ -16,15 +16,11 @@ mod helpers;
 mod logic;
 mod routing;
 
-pub use error::ParseError;
 pub use context_errors::{
-    ContextErrorGenerator, 
-    ParsingContext, 
-    PlacementParseState,
-    RouteParseState,
-    PourParseState,
+    ContextErrorGenerator, ParsingContext, PlacementParseState, PourParseState, RouteParseState,
     SpaceParseState,
 };
+pub use error::ParseError;
 
 use crate::ast::*;
 use crate::lexer::SpannedToken;
@@ -40,8 +36,8 @@ pub struct Parser {
 impl Parser {
     /// Create a new parser from a token stream
     pub fn new(tokens: Vec<SpannedToken>) -> Self {
-        Self { 
-            tokens, 
+        Self {
+            tokens,
             current: 0,
             error_context: ContextErrorGenerator::new(),
         }

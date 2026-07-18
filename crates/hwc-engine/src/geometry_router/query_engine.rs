@@ -214,18 +214,11 @@ impl QueryStore {
     /// returns the cached result. Otherwise, executes the compute function,
     /// stores the result, and records dependencies.
     #[inline]
-    pub fn execute_query<F>(
-        &mut self,
-        query_id: QueryId,
-        compute: F,
-    ) -> &QueryResult
+    pub fn execute_query<F>(&mut self, query_id: QueryId, compute: F) -> &QueryResult
     where
         F: FnOnce() -> QueryResult,
     {
-        let needs_compute = self
-            .results
-            .get(&query_id)
-            .is_none();
+        let needs_compute = self.results.get(&query_id).is_none();
 
         if needs_compute {
             self.current_time += 1;
@@ -253,8 +246,7 @@ impl QueryStore {
     #[inline]
     pub fn invalidate_input(&mut self, query_id: QueryId) {
         self.current_time += 1;
-        self.invalidation_times
-            .insert(query_id, self.current_time);
+        self.invalidation_times.insert(query_id, self.current_time);
         self.mark_stale(query_id);
     }
 
@@ -306,10 +298,7 @@ impl QueryStore {
     /// Record multiple dependencies for a query.
     #[inline]
     pub fn record_dependencies(&mut self, query_id: QueryId, deps: Vec<QueryId>) {
-        self.dependencies
-            .entry(query_id)
-            .or_default()
-            .extend(deps);
+        self.dependencies.entry(query_id).or_default().extend(deps);
     }
 
     /// Get a reference to a stored result if it exists and is fresh.
@@ -547,11 +536,7 @@ impl QueryStore {
     ///
     /// When a boundary port moves at position (gx, gy), only the two G-cells
     /// sharing that boundary are invalidated. All other G-cells remain cached.
-    pub fn invalidate_boundary_port(
-        &mut self,
-        file_id: u64,
-        adjacent_cell_ids: (u32, u32),
-    ) {
+    pub fn invalidate_boundary_port(&mut self, file_id: u64, adjacent_cell_ids: (u32, u32)) {
         self.current_time += 1;
         let now = self.current_time;
 
@@ -807,23 +792,35 @@ mod tests {
     #[test]
     fn test_compute_query_id_deterministic() {
         let qid1 = compute_query_id(
-            QueryId { type_hash: 1, input_hash: 0 },
+            QueryId {
+                type_hash: 1,
+                input_hash: 0,
+            },
             42,
             &[100, 200],
         );
         let qid2 = compute_query_id(
-            QueryId { type_hash: 1, input_hash: 0 },
+            QueryId {
+                type_hash: 1,
+                input_hash: 0,
+            },
             42,
             &[100, 200],
         );
         assert_eq!(qid1, qid2, "Same inputs must produce same QueryId");
 
         let qid3 = compute_query_id(
-            QueryId { type_hash: 1, input_hash: 0 },
+            QueryId {
+                type_hash: 1,
+                input_hash: 0,
+            },
             42,
             &[100, 201],
         );
-        assert_ne!(qid1, qid3, "Different params must produce different QueryId");
+        assert_ne!(
+            qid1, qid3,
+            "Different params must produce different QueryId"
+        );
     }
 
     #[test]

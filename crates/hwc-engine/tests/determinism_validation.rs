@@ -10,8 +10,8 @@ use hwc_engine::geometry_router::deterministic_export::{
     sort_traces_deterministic, verify_export_deterministic,
 };
 use hwc_engine::geometry_router::export_isolation::{BomEntry, SpiceParams};
-use hwc_engine::geometry_router::geometry_refinement::{refine_layer, RefinedContour};
 use hwc_engine::geometry_router::gcell_sweep::find_overlaps;
+use hwc_engine::geometry_router::geometry_refinement::{refine_layer, RefinedContour};
 use hwc_engine::geometry_router::spatial_index::IndexedSegment;
 
 // ---------------------------------------------------------------------------
@@ -91,7 +91,12 @@ fn make_determinism_test_segments() -> Vec<IndexedSegment> {
 fn make_test_contours() -> Vec<RefinedContour> {
     vec![
         RefinedContour {
-            outer: vec![(0, 0), (2_000_000, 0), (2_000_000, 2_000_000), (0, 2_000_000)],
+            outer: vec![
+                (0, 0),
+                (2_000_000, 0),
+                (2_000_000, 2_000_000),
+                (0, 2_000_000),
+            ],
             holes: Vec::new(),
             area: 4_000_000_000_000,
         },
@@ -138,10 +143,7 @@ fn test_dxf_export_byte_identical_10_runs() {
 
     let reference = &outputs[0];
     for (i, output) in outputs.iter().enumerate().skip(1) {
-        assert_eq!(
-            reference, output,
-            "DXF output differs on run {i}"
-        );
+        assert_eq!(reference, output, "DXF output differs on run {i}");
     }
 
     let hash = content_hash(reference.as_bytes());
@@ -205,10 +207,7 @@ fn test_spice_export_byte_identical_10_runs() {
 
     let reference = &outputs[0];
     for (i, output) in outputs.iter().enumerate().skip(1) {
-        assert_eq!(
-            reference, output,
-            "SPICE output differs on run {i}"
-        );
+        assert_eq!(reference, output, "SPICE output differs on run {i}");
     }
 }
 
@@ -274,9 +273,8 @@ fn test_spice_export_deterministic_function() {
         trace_thickness_m: 35e-6,
     };
 
-    let result = verify_export_deterministic(|| {
-        export_spice_deterministic(&traces, &params).into_bytes()
-    });
+    let result =
+        verify_export_deterministic(|| export_spice_deterministic(&traces, &params).into_bytes());
     assert!(result, "SPICE export must pass deterministic verification");
 }
 
@@ -313,10 +311,7 @@ fn test_csv_bom_byte_identical_10_runs() {
 
     let reference = &outputs[0];
     for (i, output) in outputs.iter().enumerate().skip(1) {
-        assert_eq!(
-            reference, output,
-            "CSV BOM output differs on run {i}"
-        );
+        assert_eq!(reference, output, "CSV BOM output differs on run {i}");
     }
 }
 
@@ -353,19 +348,20 @@ fn test_csv_bom_sorted_deterministic() {
 
 #[test]
 fn test_csv_bom_deterministic_function() {
-    let entries = vec![
-        BomEntry {
-            ref_des: "R1".to_string(),
-            value: "10k".to_string(),
-            footprint: "0402".to_string(),
-            quantity: 1,
-        },
-    ];
+    let entries = vec![BomEntry {
+        ref_des: "R1".to_string(),
+        value: "10k".to_string(),
+        footprint: "0402".to_string(),
+        quantity: 1,
+    }];
 
     let result = verify_export_deterministic(|| {
         export_csv_bom_deterministic(&mut entries.clone()).into_bytes()
     });
-    assert!(result, "CSV BOM export must pass deterministic verification");
+    assert!(
+        result,
+        "CSV BOM export must pass deterministic verification"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -378,10 +374,7 @@ fn test_content_hash_deterministic_across_runs() {
     let hashes: Vec<[u8; 32]> = (0..100).map(|_| content_hash(data)).collect();
 
     for (i, hash) in hashes.iter().enumerate().skip(1) {
-        assert_eq!(
-            hashes[0], *hash,
-            "Content hash differs on iteration {i}"
-        );
+        assert_eq!(hashes[0], *hash, "Content hash differs on iteration {i}");
     }
 }
 
@@ -391,7 +384,10 @@ fn test_content_hash_different_inputs() {
     let data2 = b"input B";
     let hash1 = content_hash(data1);
     let hash2 = content_hash(data2);
-    assert_ne!(hash1, hash2, "Different inputs must produce different hashes");
+    assert_ne!(
+        hash1, hash2,
+        "Different inputs must produce different hashes"
+    );
 }
 
 #[test]
@@ -470,7 +466,10 @@ fn test_overlap_detection_deterministic() {
 
     let overlaps1 = find_overlaps(&segs);
     let overlaps2 = find_overlaps(&segs);
-    assert_eq!(overlaps1, overlaps2, "Overlap detection must be deterministic");
+    assert_eq!(
+        overlaps1, overlaps2,
+        "Overlap detection must be deterministic"
+    );
 }
 
 #[test]
@@ -622,14 +621,12 @@ fn test_all_exports_simultaneously_deterministic() {
         (1, vec![(0, 0), (2_000_000, 0)]),
         (2, vec![(5_000_000, 5_000_000), (7_000_000, 5_000_000)]),
     ];
-    let mut bom_entries = vec![
-        BomEntry {
-            ref_des: "R1".to_string(),
-            value: "10k".to_string(),
-            footprint: "0402".to_string(),
-            quantity: 1,
-        },
-    ];
+    let mut bom_entries = vec![BomEntry {
+        ref_des: "R1".to_string(),
+        value: "10k".to_string(),
+        footprint: "0402".to_string(),
+        quantity: 1,
+    }];
 
     // Run all exports 5 times
     for run in 0..5 {

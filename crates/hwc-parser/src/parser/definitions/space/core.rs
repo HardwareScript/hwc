@@ -10,13 +10,14 @@ impl crate::parser::Parser {
         collector: &crate::DiagnosticCollector,
     ) -> Option<SpaceDefinition> {
         // Enter space context
-        self.error_context.enter_context(crate::parser::ParsingContext::SpaceDefinition);
-        
+        self.error_context
+            .enter_context(crate::parser::ParsingContext::SpaceDefinition);
+
         let result = self.parse_space_impl(collector);
-        
+
         // Exit context
         self.error_context.exit_context();
-        
+
         result
     }
 
@@ -375,9 +376,22 @@ mod tests {
         let mut parser = Parser::new(tokens);
         let collector = DiagnosticCollector::new(source, 100);
         let program = parser.parse(&collector);
-        assert!(!collector.has_errors(), "Parse errors: {}", collector.summary());
-        assert_eq!(program.definitions.len(), 1, "Expected exactly one definition");
-        match program.definitions.into_iter().next().expect("Expected definition") {
+        assert!(
+            !collector.has_errors(),
+            "Parse errors: {}",
+            collector.summary()
+        );
+        assert_eq!(
+            program.definitions.len(),
+            1,
+            "Expected exactly one definition"
+        );
+        match program
+            .definitions
+            .into_iter()
+            .next()
+            .expect("Expected definition")
+        {
             crate::ast::Definition::Space(s) => s,
             other => panic!("Expected space definition, got {:?}", other),
         }
@@ -429,7 +443,10 @@ mod tests {
         let space = parse_space(source);
         assert_eq!(space.routes.len(), 1, "Should have one route");
         let route = space.routes.into_iter().next().expect("route present");
-        assert!(route.current_limit_ac.is_some(), "current_limit_ac should be parsed");
+        assert!(
+            route.current_limit_ac.is_some(),
+            "current_limit_ac should be parsed"
+        );
         // Verify route parsed without error — exact expression values depend on parser internals
     }
 
@@ -442,6 +459,9 @@ mod tests {
         let space = parse_space(source);
         assert_eq!(space.routes.len(), 1, "Should have one route");
         let route = space.routes.into_iter().next().expect("route present");
-        assert!(route.current_limit_ac.is_some(), "current_limit_ac should parse single value");
+        assert!(
+            route.current_limit_ac.is_some(),
+            "current_limit_ac should parse single value"
+        );
     }
 }

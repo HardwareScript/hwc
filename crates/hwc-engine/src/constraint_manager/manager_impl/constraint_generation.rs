@@ -5,7 +5,7 @@
 
 use super::impedance::{calculate_trace_impedance, determine_target_impedance};
 use super::symbol_table::{extract_dielectric_strength, SymbolTableTrait};
-use crate::constraint_manager::clearance::{calculate_clearance_nm};
+use crate::constraint_manager::clearance::calculate_clearance_nm;
 use crate::constraint_manager::trace_width::calculate_trace_width_nm;
 use crate::constraint_manager::types::{ClearanceZone, FabricationConstraints, RouteConstraints};
 use crate::netlist::{NetData, NetId};

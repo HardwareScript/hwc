@@ -84,10 +84,8 @@ pub fn validate_and_register(
                         let substrate_max_z = substrate_bbox.max.z;
 
                         let component_z_layer = (component_min_z / space.resolution_nm) as usize;
-                        let substrate_min_layer =
-                            (substrate_min_z / space.resolution_nm) as usize;
-                        let substrate_max_layer =
-                            (substrate_max_z / space.resolution_nm) as usize;
+                        let substrate_min_layer = (substrate_min_z / space.resolution_nm) as usize;
+                        let substrate_max_layer = (substrate_max_z / space.resolution_nm) as usize;
 
                         let source = ctx.collector.source.as_str();
                         let original_line = source
@@ -165,28 +163,27 @@ pub fn validate_and_register(
                                 let ir_x_mm = vp.untransformed_origin.x as f64 / 1_000_000.0;
                                 let ir_y_mm = vp.untransformed_origin.y as f64 / 1_000_000.0;
                                 let ir_z_mm = vp.untransformed_origin.z as f64 / 1_000_000.0;
-                                ctx.collector
-                                    .report(IrError::ComponentBuriedInSubstrate(Box::new(
-                                        ComponentBuriedInSubstrateDetails {
-                                            component: pd.name.clone().into(),
-                                            component_z_layer,
-                                            component_z_mm: component_min_z as f64 / 1_000_000.0,
-                                            substrate_min_layer,
-                                            substrate_min_mm: substrate_min_z as f64 / 1_000_000.0,
-                                            substrate_max_layer,
-                                            substrate_max_mm: substrate_max_z as f64 / 1_000_000.0,
-                                            gap_mm,
-                                            x_mm: ir_x_mm,
-                                            y_mm: ir_y_mm,
-                                            z_mm: ir_z_mm,
-                                            span: (
-                                                pd.component.span.start,
-                                                pd.component.span.end - pd.component.span.start,
-                                            )
-                                                .into(),
-                                            suggestion,
-                                        },
-                                    )));
+                                ctx.collector.report(IrError::ComponentBuriedInSubstrate(
+                                    Box::new(ComponentBuriedInSubstrateDetails {
+                                        component: pd.name.clone().into(),
+                                        component_z_layer,
+                                        component_z_mm: component_min_z as f64 / 1_000_000.0,
+                                        substrate_min_layer,
+                                        substrate_min_mm: substrate_min_z as f64 / 1_000_000.0,
+                                        substrate_max_layer,
+                                        substrate_max_mm: substrate_max_z as f64 / 1_000_000.0,
+                                        gap_mm,
+                                        x_mm: ir_x_mm,
+                                        y_mm: ir_y_mm,
+                                        z_mm: ir_z_mm,
+                                        span: (
+                                            pd.component.span.start,
+                                            pd.component.span.end - pd.component.span.start,
+                                        )
+                                            .into(),
+                                        suggestion,
+                                    }),
+                                ));
                                 ctx.collector.report_violation(
                                     "P44",
                                     "buried below substrate base",
@@ -340,9 +337,12 @@ pub fn validate_and_register(
                         )
                     };
 
-                    let material_id = space.material_registry.get_id("Component").ok_or_else(|| {
-                        IrError::UndeclaredMaterial { material: "Component".into() }
-                    })?;
+                    let material_id =
+                        space.material_registry.get_id("Component").ok_or_else(|| {
+                            IrError::UndeclaredMaterial {
+                                material: "Component".into(),
+                            }
+                        })?;
                     space.register_component_bbox(
                         pd.name.clone().into(),
                         engine_bbox,

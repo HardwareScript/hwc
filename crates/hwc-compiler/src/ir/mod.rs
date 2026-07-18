@@ -26,6 +26,8 @@ pub mod logic;
 pub mod meander_injection; // v0.1.8: Post-route meander injection (two-phase physical synthesis)
 pub mod parametric_unroller; // Sprint 3.4: Parametric unrolling
 pub mod placement;
+pub mod query_engine; // v0.1.9: Salsa query engine for incremental computation
+pub mod relational_resolver; // v0.1.9: Relational constraint resolver (align, above, below, right_of, left_of)
 pub mod routing;
 pub mod space_builder;
 pub mod spatial_dependency_graph; // Gap 7: Spatial dependency graph
@@ -44,6 +46,19 @@ use hwc_engine::HardwareSpace;
 use hwc_parser::Program;
 use rustc_hash::FxHashMap;
 
+/// Placement item in the unified statement stream (v0.1.7)
+///
+/// This enum is used by the topological sort and placement pipeline.
+#[derive(Debug, Clone)]
+pub enum PlacementItem {
+    Substrate(hwc_parser::SubstratePlacement),
+    Component(Box<hwc_parser::ComponentPlacement>),
+    Pour(hwc_parser::PourPlacement),
+    Plane(hwc_parser::PlanePlacement),
+    Contact(hwc_parser::ContactPlacement),
+    Route(hwc_parser::Route),
+}
+
 /// Compile a single space definition into a HardwareSpace.
 ///
 /// This is the shared implementation used by both `program_to_space` and `program_to_spaces`.
@@ -60,7 +75,14 @@ fn compile_single_space(
     _source_content: Option<&str>,
     force_reroute: bool,
     query_store: Option<hwc_engine::geometry_router::query_engine::QueryStore>,
-) -> Result<(HardwareSpace, Option<hwc_engine::geometry_router::query_engine::QueryStore>, bool), IrError> {
+) -> Result<
+    (
+        HardwareSpace,
+        Option<hwc_engine::geometry_router::query_engine::QueryStore>,
+        bool,
+    ),
+    IrError,
+> {
     // Sprint 3.8: Process statements in textual order to support anchor references
     //
     // Physical Reality: When element B references element A's position, A must be placed first.
@@ -70,15 +92,6 @@ fn compile_single_space(
     // eprintln!($3"[DEBUG program_to_space] Processing {} statements in textual order...", space_def.statements.len());
 
     // Unroll all statements while preserving textual order
-    #[derive(Debug, Clone)]
-    enum PlacementItem {
-        Substrate(hwc_parser::SubstratePlacement),
-        Component(Box<hwc_parser::ComponentPlacement>),
-        Pour(hwc_parser::PourPlacement),
-        Plane(hwc_parser::PlanePlacement),
-        Contact(hwc_parser::ContactPlacement),
-        Route(hwc_parser::Route),
-    }
 
     let mut placement_items = Vec::new();
 
@@ -194,7 +207,8 @@ fn compile_single_space(
             reason: e.to_string(),
         })?
         .ok_or_else(|| IrError::MissingAsicConstraint {
-            message: "PDK missing required 'manufacturing.solder_mask_thickness' constraint.".into(),
+            message: "PDK missing required 'manufacturing.solder_mask_thickness' constraint."
+                .into(),
             hint: "Add 'manufacturing: { solder_mask_thickness: <value> }' to your profile.".into(),
         })?;
 
@@ -223,7 +237,9 @@ fn compile_single_space(
     // declares how thick each layer is. Both are needed for physics calculations.
     if let Some(stackup) = profile.as_ref().and_then(|p| p.stackup.as_ref()) {
         for layer in &stackup.layers {
-            if let Ok(thickness_nm) = crate::ir::conversions::evaluate_expression_to_nm(&layer.thickness, symbol_table) {
+            if let Ok(thickness_nm) =
+                crate::ir::conversions::evaluate_expression_to_nm(&layer.thickness, symbol_table)
+            {
                 if let Some(mat_id) = space.material_registry.get_id(&layer.material) {
                     let existing = space.material_registry.get_physical_props(mat_id);
                     space.material_registry.set_physical_props(
@@ -266,10 +282,10 @@ fn compile_single_space(
     // In v0.1.6 Gap 7, we build a dependency graph and sort them, allowing forward references.
 
     let mut graph = spatial_dependency_graph::SpatialDependencyGraph::new();
-    let mut item_map = rustc_hash::FxHashMap::default();
     let mut last_component_name: Option<compact_str::CompactString> = None;
 
-    // 1. Build the dependency graph and item map (Pass 1: Register all items)
+    // 1. Build the dependency graph (Pass 1: Register all items)
+    // Note: item_map is deferred until after relational resolution to avoid borrow conflicts
     for (i, item) in placement_items.iter().enumerate() {
         let item_id = match item {
             PlacementItem::Substrate(_) => format!("__substrate_{}", i).into(),
@@ -289,7 +305,6 @@ fn compile_single_space(
         };
 
         graph.add_component(item_id.clone());
-        item_map.insert(item_id, item);
     }
 
     // Pass 2: Extract dependencies now that all components are registered in the graph
@@ -325,11 +340,32 @@ fn compile_single_space(
                 );
             }
             PlacementItem::Component(c) => {
-                graph.extract_dependencies_from_coord(
-                    &item_id,
-                    &c.position,
-                    last_component_name.as_ref(),
-                );
+                if let Some(position) = &c.position {
+                    graph.extract_dependencies_from_coord(
+                        &item_id,
+                        position,
+                        last_component_name.as_ref(),
+                    );
+                }
+                // v0.1.9: Also extract dependencies from relational constraints
+                for constraint in &c.relational_constraints {
+                    match constraint {
+                        hwc_parser::RelationalConstraint::Align { target, .. } => {
+                            graph.add_dependency(item_id.clone(), target.base.clone());
+                        }
+                        hwc_parser::RelationalConstraint::Directional(dir) => {
+                            let target = match dir {
+                                hwc_parser::DirectionalConstraint::Above { target, .. }
+                                | hwc_parser::DirectionalConstraint::Below { target, .. }
+                                | hwc_parser::DirectionalConstraint::RightOf { target, .. }
+                                | hwc_parser::DirectionalConstraint::LeftOf { target, .. } => {
+                                    target
+                                }
+                            };
+                            graph.add_dependency(item_id.clone(), target.base.clone());
+                        }
+                    }
+                }
                 // Update 'last' pointer ONLY for components (as per spec)
                 last_component_name = Some(item_id);
             }
@@ -389,36 +425,41 @@ fn compile_single_space(
             PlacementItem::Route(r) => {
                 // Routes depend on the components they connect
                 // Must resolve component_index (e.g. J0[0]) to match item_map keys
-                let resolve_name = |endpoint: &hwc_parser::RouteEndpointSpec| -> compact_str::CompactString {
-                    match endpoint {
-                        hwc_parser::RouteEndpointSpec::ComponentPin {
-                            component_name,
-                            component_index,
-                            ..
-                        } => {
-                            if let Some(idx) = component_index {
-                                if let Ok(val) = crate::ir::routing::evaluate_index_expression(idx) {
-                                    format!("{}[{}]", component_name, val).into()
+                let resolve_name =
+                    |endpoint: &hwc_parser::RouteEndpointSpec| -> compact_str::CompactString {
+                        match endpoint {
+                            hwc_parser::RouteEndpointSpec::ComponentPin {
+                                component_name,
+                                component_index,
+                                ..
+                            } => {
+                                if let Some(idx) = component_index {
+                                    if let Ok(val) =
+                                        crate::ir::routing::evaluate_index_expression(idx)
+                                    {
+                                        format!("{}[{}]", component_name, val).into()
+                                    } else {
+                                        component_name.clone()
+                                    }
                                 } else {
                                     component_name.clone()
                                 }
-                            } else {
-                                component_name.clone()
                             }
-                        }
-                        hwc_parser::RouteEndpointSpec::SpaceEntity { name, index, .. } => {
-                            if let Some(idx) = index {
-                                if let Ok(val) = crate::ir::routing::evaluate_index_expression(idx) {
-                                    format!("{}[{}]", name, val).into()
+                            hwc_parser::RouteEndpointSpec::SpaceEntity { name, index, .. } => {
+                                if let Some(idx) = index {
+                                    if let Ok(val) =
+                                        crate::ir::routing::evaluate_index_expression(idx)
+                                    {
+                                        format!("{}[{}]", name, val).into()
+                                    } else {
+                                        name.clone()
+                                    }
                                 } else {
                                     name.clone()
                                 }
-                            } else {
-                                name.clone()
                             }
                         }
-                    }
-                };
+                    };
                 let from_name = resolve_name(&r.from);
                 let to_name = resolve_name(&r.to);
                 graph.add_dependency(item_id.clone(), from_name);
@@ -472,16 +513,19 @@ fn compile_single_space(
         let stackup_height_nm = stackup_manager.board_thickness_nm();
 
         // Check if user already added solder mask layers to prevent duplicates
-        let has_solder_mask = space
-            .entity_graph
-            .get_substrate_layers()
-            .iter()
-            .any(|l| l.layer_type == hwc_engine::geometry_router::substrate_types::SubstrateLayerType::SolderMask);
+        let has_solder_mask = space.entity_graph.get_substrate_layers().iter().any(|l| {
+            l.layer_type
+                == hwc_engine::geometry_router::substrate_types::SubstrateLayerType::SolderMask
+        });
 
         if !has_solder_mask {
-            let mask_material_id = space.material_registry.get_id("SolderMask").ok_or_else(|| {
-                IrError::UndeclaredMaterial { material: "SolderMask".into() }
-            })?;
+            let mask_material_id =
+                space
+                    .material_registry
+                    .get_id("SolderMask")
+                    .ok_or_else(|| IrError::UndeclaredMaterial {
+                        material: "SolderMask".into(),
+                    })?;
 
             // Top solder mask: sits directly ON TOP of the top copper layer
             let top_mask_bbox = hwc_engine::geometry::BoundingBox::new(
@@ -513,11 +557,39 @@ fn compile_single_space(
         }
     }
 
+    // v0.1.9: Relational constraints are now resolved incrementally during placement
+    // (moved inside the placement loop below, so targets are available in bbox_tracker)
+
+    // Rebuild item_map after preparation (was deferred to avoid borrow conflicts)
+    let mut item_map = rustc_hash::FxHashMap::default();
+    for (i, item) in placement_items.iter().enumerate() {
+        let item_id = match item {
+            PlacementItem::Substrate(_) => format!("__substrate_{}", i).into(),
+            PlacementItem::Component(c) => c
+                .name
+                .as_ref()
+                .map(|n| n.to_string())
+                .unwrap_or_else(|| format!("__comp_{}", i).into()),
+            PlacementItem::Pour(p) => p.name.to_string(),
+            PlacementItem::Plane(p) => p.name.to_string(),
+            PlacementItem::Contact(c) => c
+                .name
+                .as_ref()
+                .map(|n| n.to_string())
+                .unwrap_or_else(|| format!("__contact_{}", i).into()),
+            PlacementItem::Route(_) => format!("__route_{}", i).into(),
+        };
+        item_map.insert(item_id, item);
+    }
+
     let mut total_placement_time = std::time::Duration::ZERO;
     let mut component_count = 0;
 
-    eprintln!("[DEBUG] Starting placement loop with {} sorted items", sorted_ids.len());
-    
+    eprintln!(
+        "[DEBUG] Starting placement loop with {} sorted items",
+        sorted_ids.len()
+    );
+
     for id in sorted_ids.iter() {
         let item = item_map.get(id).unwrap();
         let item_start = std::time::Instant::now();
@@ -539,11 +611,31 @@ fn compile_single_space(
             PlacementItem::Pour(pour) => {
                 eprintln!("[DEBUG] Placing pour: {}", pour.name);
                 placement::place_pour(&mut space, pour, &mut bbox_tracker, &place_ctx)?;
-                eprintln!("[DEBUG] Pour placed successfully, entity count: {}", space.entity_graph.iter_entity_ids().count());
+                eprintln!(
+                    "[DEBUG] Pour placed successfully, entity count: {}",
+                    space.entity_graph.iter_entity_ids().count()
+                );
             }
             PlacementItem::Plane(plane) => {
                 eprintln!("[DEBUG] Placing plane: {}", plane.name);
-                placement::place_plane(&mut space, plane, &mut bbox_tracker, &place_ctx)?;
+
+                // v0.1.9: Resolve relational constraints for this plane if needed
+                let mut resolved_plane = plane.clone();
+                if resolved_plane.from.is_none()
+                    && !resolved_plane.relational_constraints.is_empty()
+                {
+                    // Compute position from relational constraints now that dependencies are placed
+                    let resolved_position = relational_resolver::compute_position_from_constraints(
+                        &resolved_plane.relational_constraints,
+                        &Some(resolved_plane.name.clone()),
+                        &bbox_tracker,
+                        symbol_table,
+                        &eval_context,
+                    )?;
+                    resolved_plane.from = Some(resolved_position);
+                }
+
+                placement::place_plane(&mut space, &resolved_plane, &mut bbox_tracker, &place_ctx)?;
             }
             PlacementItem::Contact(contact) => {
                 eprintln!("[DEBUG] Placing contact");
@@ -560,9 +652,26 @@ fn compile_single_space(
             PlacementItem::Component(component) => {
                 eprintln!("[DEBUG] Placing component: {:?}", component.name);
                 component_count += 1;
+
+                // v0.1.9: Resolve relational constraints for this component if needed
+                let mut resolved_component = component.clone();
+                if resolved_component.position.is_none()
+                    && !resolved_component.relational_constraints.is_empty()
+                {
+                    // Compute position from relational constraints now that dependencies are placed
+                    let resolved_position = relational_resolver::compute_position_from_constraints(
+                        &resolved_component.relational_constraints,
+                        &resolved_component.name,
+                        &bbox_tracker,
+                        symbol_table,
+                        &eval_context,
+                    )?;
+                    resolved_component.position = Some(resolved_position);
+                }
+
                 placement::place_component(
                     &mut space,
-                    component,
+                    &resolved_component,
                     &space_def.layouts,
                     &mut bbox_tracker,
                     &place_ctx,
@@ -580,12 +689,10 @@ fn compile_single_space(
 
     // Pass 1.5: Static Geometry Guard (Fail-Fast Before Routing)
     // Detects coplanar short circuits between different-net conductors
-    // before the expensive A* routing phase begins.
+    // before the expensive topological routing phase begins.
     {
-        let guard_violations = hwc_engine::geometry_router::check_static_shorts(
-            &space.entity_graph,
-            &space.netlist,
-        );
+        let guard_violations =
+            hwc_engine::geometry_router::check_static_shorts(&space.entity_graph, &space.netlist);
         if !guard_violations.is_empty() {
             for v in &guard_violations {
                 eprintln!("[STATIC GUARD] P42: {}", v);
@@ -608,19 +715,19 @@ fn compile_single_space(
     // Phase 1: Manual Realization (process routes with path:)
     // Phase 2: Obstacle Blitting (Implicit - registered components + manual traces)
     // Phase 3: Auto-Routing (Deferred batch process)
-    
+
     // Phase 0: Try to load routes from lockfile BEFORE any routing
     let mut routes_loaded_from_lock = false;
     if let Some(path) = lockfile_path {
         if !force_reroute {
-            let current_fingerprint = hwc_engine::geometry_router::compute_fingerprint_from_space(&space);
+            let current_fingerprint =
+                hwc_engine::geometry_router::compute_fingerprint_from_space(&space);
 
             match hwc_engine::geometry_router::load_lockfile(path) {
                 Ok(loaded) => {
                     if hwc_engine::geometry_router::is_valid(&loaded, &current_fingerprint) {
-                        let layer_z_map = hwc_engine::geometry_router::build_layer_z_map(
-                            &space.entity_graph,
-                        );
+                        let layer_z_map =
+                            hwc_engine::geometry_router::build_layer_z_map(&space.entity_graph);
                         match hwc_engine::geometry_router::lockfile_to_traces(
                             &loaded,
                             &space.netlist,
@@ -630,25 +737,29 @@ fn compile_single_space(
                             Ok(cached_traces) => {
                                 // Load cached routes into entity graph and analytic routes
                                 for trace in cached_traces {
-                                    let trace_segments: Vec<hwc_engine::geometry::TraceSegment> = trace
-                                        .segments
-                                        .iter()
-                                        .map(|line_seg| {
-                                            hwc_engine::geometry::TraceSegment::new(
-                                                line_seg.start,
-                                                line_seg.end,
-                                                trace.width_nm,
-                                                trace.material as u8,
-                                            )
-                                        })
-                                        .collect();
-                                    
-                                    space.entity_graph.register_trace_segments(trace.net_id, trace_segments);
+                                    let trace_segments: Vec<hwc_engine::geometry::TraceSegment> =
+                                        trace
+                                            .segments
+                                            .iter()
+                                            .map(|line_seg| {
+                                                hwc_engine::geometry::TraceSegment::new(
+                                                    line_seg.start,
+                                                    line_seg.end,
+                                                    trace.width_nm,
+                                                    trace.material as u8,
+                                                )
+                                            })
+                                            .collect();
+
+                                    space
+                                        .entity_graph
+                                        .register_trace_segments(trace.net_id, trace_segments);
                                     space.add_analytic_route(trace);
                                 }
-                                
-                                space.entity_graph.rebuild_spatial_index(&space.material_registry);
-                                
+
+                                // NOTE: entity_graph's spatial index is no longer used.
+                                // space.entity_graph.rebuild_spatial_index(&space.material_registry); // REMOVED
+
                                 eprintln!(
                                     "[LOCK] Valid lockfile loaded for '{}'. Skipping all routing (manual + auto).",
                                     space.name
@@ -656,7 +767,10 @@ fn compile_single_space(
                                 routes_loaded_from_lock = true;
                             }
                             Err(e) => {
-                                eprintln!("[LOCK] Lockfile load failed: {}. Will compute routes fresh.", e);
+                                eprintln!(
+                                    "[LOCK] Lockfile load failed: {}. Will compute routes fresh.",
+                                    e
+                                );
                             }
                         }
                     } else {
@@ -676,13 +790,15 @@ fn compile_single_space(
             );
         }
     }
-    
+
     let mut auto_routes = Vec::new();
 
     // v0.1.8: Collect route net policies from `route net:` statements.
     // These map net names -> RoutingPattern for pattern-guided auto routing.
-    let mut route_net_policies: rustc_hash::FxHashMap<hwc_engine::netlist::NetId, hwc_engine::RoutingPattern> =
-        rustc_hash::FxHashMap::default();
+    let mut route_net_policies: rustc_hash::FxHashMap<
+        hwc_engine::netlist::NetId,
+        hwc_engine::RoutingPattern,
+    > = rustc_hash::FxHashMap::default();
 
     // Only process routing if lockfile wasn't loaded
     if !routes_loaded_from_lock {
@@ -691,7 +807,8 @@ fn compile_single_space(
                 match routing::instantiate_pattern(pattern_inst, symbol_table) {
                     Ok(pattern) => {
                         // Resolve net name to NetId
-                        if let Some(net_id) = space.netlist.get_net_by_name(policy.net_id.as_str()) {
+                        if let Some(net_id) = space.netlist.get_net_by_name(policy.net_id.as_str())
+                        {
                             route_net_policies.insert(net_id, pattern);
                         } else {
                             eprintln!(
@@ -718,16 +835,28 @@ fn compile_single_space(
 
     // Only process routes if lockfile wasn't loaded
     if !routes_loaded_from_lock {
-        eprintln!("[DEBUG] Starting route processing, entity count: {}", space.entity_graph.iter_entity_ids().count());
+        eprintln!(
+            "[DEBUG] Starting route processing, entity count: {}",
+            space.entity_graph.iter_entity_ids().count()
+        );
         let mut _seg_id = 0;
         for id in sorted_ids.iter() {
             if let Some(PlacementItem::Route(route)) = item_map.get(id) {
-                eprintln!("[DEBUG] Processing route: {} to {}", 
+                eprintln!(
+                    "[DEBUG] Processing route: {} to {}",
                     routing::helpers::endpoint_label(&route.from),
-                    routing::helpers::endpoint_label(&route.to));
+                    routing::helpers::endpoint_label(&route.to)
+                );
                 // v0.1.7: Register net connectivity in the netlist for all routes
                 // This ensures both manual and automatic routes are represented in the logical netlist.
-                routing::register_net_for_route(&mut space, route, symbol_table, &stackup_manager, profile)?;
+                routing::register_net_for_route(
+                    &mut space,
+                    route,
+                    symbol_table,
+                    &stackup_manager,
+                    profile,
+                    Some(space_def),
+                )?;
 
                 if !routing::needs_automatic_routing(route) {
                     // Phase 1: Manual Route (Absolute Control)
@@ -763,7 +892,10 @@ fn compile_single_space(
 
     // v0.1.8: Batch-route all automatic routes using AutoRouter
     if !auto_routes.is_empty() {
-        eprintln!("[ROUTER] Processing {} automatic routes using AutoRouter", auto_routes.len());
+        eprintln!(
+            "[ROUTER] Processing {} automatic routes using AutoRouter",
+            auto_routes.len()
+        );
         let mut auto_router = routing::AutoRouter::new(
             &mut space,
             symbol_table,
@@ -773,10 +905,10 @@ fn compile_single_space(
             auto_routes.clone(),
             FxHashMap::default(), // route_net_policies
         );
-        
+
         // Invoke the batch router
         auto_router.route_all_nets()?;
-        
+
         eprintln!("[ROUTER] Automatic routing complete");
     }
 
@@ -809,29 +941,65 @@ fn compile_single_space(
 
     // v0.1.8: REBUILD SPATIAL INDEX (The Master Database)
     // This ensures that the R*-tree in the EntityGraph is perfectly synchronized
-    // with all placed components, substrate layers, and routed segments.
-    // This is the source of truth for all DRC checks.
-    space.entity_graph.rebuild_spatial_index(&space.material_registry);
+    // NOTE: entity_graph's spatial index is no longer maintained or used.
+    // Each routing operation builds its own independent spatial index.
+    // space.entity_graph.rebuild_spatial_index(&space.material_registry); // REMOVED
 
     let _commit_start2 = std::time::Instant::now();
 
-    // v0.1.7 DFM: Dummy metal fill (thieving) for manufacturing density balance
+    // v0.1.9 DFM: Profile-controlled dummy metal fill (thieving) for manufacturing density balance
+    // ZERO-MAGIC: Only runs if explicitly enabled in the profile's manufacturing constraints.
+    // No defaults, no fallbacks. If the profile doesn't declare dummy_fill: true, it doesn't run.
     {
-        let dummy_fill_config = hwc_engine::DummyFillConfig {
-            enabled: true,
-            target_density_pct: 45,
-            ..hwc_engine::DummyFillConfig::default()
+        let profile_def = if let Some(ref profile_name) = space_def.profile {
+            symbol_table.get_profile(profile_name.as_str()).ok()
+        } else {
+            None
         };
-        let mut dummy_fill_engine = hwc_engine::DummyFillEngine::new();
-        let fill_stats = dummy_fill_engine.run(&mut space.entity_graph, &dummy_fill_config);
-        if fill_stats.zones_filled > 0 {
-            eprintln!(
-                "[DFM] Dummy fill: {} zones analyzed, {} zones filled, {} dummies placed (avg density before: {:.1}%)",
-                fill_stats.zones_analyzed,
-                fill_stats.zones_filled,
-                fill_stats.total_dummies_placed,
-                fill_stats.average_density_before,
-            );
+
+        // Only proceed if profile exists AND has manufacturing constraints AND dummy_fill is explicitly true
+        if let Some(profile) = profile_def {
+            if let Some(ref manufacturing) = profile.manufacturing {
+                if manufacturing.dummy_fill == Some(true) {
+                    // All parameters must be explicitly declared - no fallbacks
+                    let target_density_pct = manufacturing
+                        .dummy_fill_density
+                        .map(|d| (d * 100.0) as u8)
+                        .expect("dummy_fill enabled but dummy_fill_density not declared in profile");
+                    
+                    let dummy_size_nm = manufacturing
+                        .dummy_fill_size
+                        .as_ref()
+                        .map(|m| symbol_table.measurement_to_nm(m).expect("Failed to convert dummy_fill_size to nanometers"))
+                        .expect("dummy_fill enabled but dummy_fill_size not declared in profile");
+                    
+                    let dummy_spacing_nm = manufacturing
+                        .dummy_fill_spacing
+                        .as_ref()
+                        .map(|m| symbol_table.measurement_to_nm(m).expect("Failed to convert dummy_fill_spacing to nanometers"))
+                        .expect("dummy_fill enabled but dummy_fill_spacing not declared in profile");
+
+                    let dummy_fill_config = hwc_engine::DummyFillConfig {
+                        enabled: true,
+                        target_density_pct,
+                        dummy_size_nm,
+                        dummy_spacing_nm,
+                        ..hwc_engine::DummyFillConfig::default() // clearance_nm and target_z_nm can use engine defaults
+                    };
+
+                    let mut dummy_fill_engine = hwc_engine::DummyFillEngine::new();
+                    let fill_stats = dummy_fill_engine.run(&mut space.entity_graph, &dummy_fill_config);
+                    if fill_stats.zones_filled > 0 {
+                        eprintln!(
+                            "[DFM] Dummy fill: {} zones analyzed, {} zones filled, {} dummies placed (avg density before: {:.1}%)",
+                            fill_stats.zones_analyzed,
+                            fill_stats.zones_filled,
+                            fill_stats.total_dummies_placed,
+                            fill_stats.average_density_before,
+                        );
+                    }
+                }
+            }
         }
     }
 
@@ -870,7 +1038,8 @@ pub fn program_to_space(
         })
         .ok_or(IrError::NoSpaceDefinition)?;
 
-    let (space, _qs, _from_cache) = compile_single_space(space_def, symbol_table, collector, None, None, false, None)?;
+    let (space, _qs, _from_cache) =
+        compile_single_space(space_def, symbol_table, collector, None, None, false, None)?;
     Ok(space)
 }
 
@@ -928,14 +1097,14 @@ pub fn program_to_spaces_with_lockfile(
             force_reroute,
             shared_qs.take(),
         )?;
-        
+
         // v0.1.9: LOCKFILE DETERMINISM FIX
         // Lockfile saving has been moved to build_cmd AFTER validation passes.
         // This ensures we never save a lockfile for a build that fails validation,
         // preventing corruption of previously-working cached routes.
         // The from_cache flag is still tracked to avoid overwriting lockfiles
         // when routes were loaded from cache (no new routing was performed).
-        
+
         shared_qs = qs;
         spaces.insert(space_name, space);
     }
@@ -944,7 +1113,7 @@ pub fn program_to_spaces_with_lockfile(
 }
 
 /// Save routes from a HardwareSpace to a rkyv binary lockfile (v0.1.7).
-/// 
+///
 /// v0.1.9: This function is now public and called from build_cmd AFTER validation
 /// passes, ensuring lockfiles are only created for successfully validated builds.
 pub fn save_routes_to_lockfile(
@@ -953,7 +1122,8 @@ pub fn save_routes_to_lockfile(
     _source_content: &str,
 ) {
     let fingerprint = hwc_engine::geometry_router::compute_fingerprint_from_space(space);
-    let binary_lockfile = match hwc_engine::geometry_router::traces_to_lockfile(space, fingerprint) {
+    let binary_lockfile = match hwc_engine::geometry_router::traces_to_lockfile(space, fingerprint)
+    {
         Ok(lockfile) => lockfile,
         Err(e) => {
             eprintln!("[LOCK] FATAL: failed to build lockfile: {}", e);
@@ -973,5 +1143,3 @@ pub fn save_routes_to_lockfile(
         );
     }
 }
-
-

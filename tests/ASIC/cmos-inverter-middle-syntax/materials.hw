@@ -1,0 +1,172 @@
+# Materials Library for CMOS 250nm (0.25um) physical synthesis
+# Copied from cmos-inverter-auto for isolation testing
+import * from @std/primitives/units
+
+# Conductors
+material Aluminum:
+    category: conductor
+    symbol: "Al"
+    description: "Metal interconnect layer"
+    properties:
+        color: "#C0C0C0"
+        metallic: 0.9
+        roughness: 0.15
+        opacity: 1.0
+        resistivity: 2.82e-8ohm_m
+        thermal_conductivity: 237.0W_mK
+        density: 2700.0kg_m3
+        max_current_density: 500.0A_mm2
+        melting_point: 660.0C
+        ior: 1.5
+        clearcoat: 0.1
+        clearcoat_roughness: 0.1
+        subsurface: 0.0
+
+material Polysilicon:
+    category: conductor
+    symbol: "Poly"
+    description: "Gate electrode material"
+    properties:
+        color: "#708090"
+        metallic: 0.4
+        roughness: 0.5
+        opacity: 1.0
+        resistivity: 1.0e-3ohm_m
+        thermal_conductivity: 30.0W_mK
+        density: 2330.0kg_m3
+        max_current_density: 1000.0A_mm2
+        melting_point: 1414.0C
+        ior: 3.4
+        clearcoat: 0.0
+        clearcoat_roughness: 0.0
+        subsurface: 0.0
+
+material Tungsten:
+    category: conductor
+    symbol: "W"
+    description: "Via fill plug material"
+    properties:
+        color: "#5C5C5C"
+        metallic: 1.0
+        roughness: 0.3
+        opacity: 1.0
+        resistivity: 5.6e-8ohm_m
+        thermal_conductivity: 173.0W_mK
+        density: 19300.0kg_m3
+        max_current_density: 500.0A_mm2
+        melting_point: 3422.0C
+        ior: 1.5
+        clearcoat: 0.0
+        clearcoat_roughness: 0.0
+        subsurface: 0.0
+
+material Titanium_Silicide:
+    category: conductor
+    symbol: "TiSi2"
+    description: "Low-resistance ohmic contact layer"
+    properties:
+        color: "#4A4D55"
+        metallic: 0.8
+        roughness: 0.4
+        opacity: 1.0
+        resistivity: 1.3e-7ohm_m
+        thermal_conductivity: 20.0W_mK
+        density: 4250.0kg_m3
+        max_current_density: 500.0A_mm2
+        melting_point: 1540.0C
+        ior: 1.5
+        clearcoat: 0.0
+        clearcoat_roughness: 0.0
+        subsurface: 0.0
+
+# Semiconductors
+material Silicon_P:
+    category: semiconductor
+    symbol: "Si_P"
+    description: "P-doped substrate"
+    properties:
+        color: "#445544"
+        metallic: 0.0
+        roughness: 0.6
+        opacity: 1.0
+        band_gap: 1.12eV
+        electron_mobility: 1400.0cm2_Vs
+        hole_mobility: 450.0cm2_Vs
+        resistivity: 1.0ohm_m
+        thermal_conductivity: 150.0W_mK
+        density: 2330.0kg_m3
+        doping_type: "p-type"
+        bias_requirement: "ground"
+        ior: 3.8
+        clearcoat: 0.0
+        clearcoat_roughness: 0.0
+        subsurface: 0.1
+
+material Silicon_N:
+    category: semiconductor
+    symbol: "Si_N"
+    description: "N-doped active region"
+    properties:
+        color: "#3F4F3F"
+        metallic: 0.0
+        roughness: 0.6
+        opacity: 1.0
+        band_gap: 1.12eV
+        electron_mobility: 1400.0cm2_Vs
+        hole_mobility: 450.0cm2_Vs
+        resistivity: 0.5ohm_m
+        thermal_conductivity: 150.0W_mK
+        density: 2330.0kg_m3
+        doping_type: "n-type"
+        bias_requirement: "power"
+        ior: 3.8
+        clearcoat: 0.0
+        clearcoat_roughness: 0.0
+        subsurface: 0.1
+
+# Insulators
+material SiO2:
+    category: insulator
+    symbol: "SiO2"
+    description: "Oxide dielectric isolation"
+    properties:
+        color: "#E5F6FF"
+        metallic: 0.0
+        roughness: 0.2
+        opacity: 0.3
+        dielectric_strength: 10000.0kV_mm
+        relative_permittivity: 3.9
+        thermal_conductivity: 1.4W_mK
+        density: 2200.0kg_m3
+        ior: 1.45
+        clearcoat: 0.0
+        clearcoat_roughness: 0.0
+        subsurface: 0.2
+
+material Component:
+    category: insulator
+    description: "Component body encapsulation"
+    properties:
+        color: "#151515"
+        metallic: 0.0
+        roughness: 0.8
+        opacity: 1.0
+        dielectric_strength: 15.0kV_mm
+        relative_permittivity: 3.0
+        thermal_conductivity: 0.2W_mK
+        density: 1200.0kg_m3
+        ior: 1.5
+
+material Epoxy:
+    category: insulator
+    description: "Enclosures / filler material"
+    properties:
+        color: "#7F7F7F"
+        metallic: 0.0
+        roughness: 0.5
+        opacity: 1.0
+        dielectric_strength: 20.0kV_mm
+        relative_permittivity: 3.5
+        thermal_conductivity: 0.5W_mK
+        density: 1500.0kg_m3
+        ior: 1.5

@@ -60,9 +60,7 @@ pub fn validate_alignment(
             // println!($3"[DEBUG] Realizing {} analytic routes for geometric analysis...",
             //    space.analytic_routes.len()
             // );
-            let realize_start = std::time::Instant::now();
-            space.realize_analytic_routes();
-            let _realize_duration = realize_start.elapsed();
+
             // println!($3"[DEBUG] Geometric realization complete in {:.6}s",
             //    realize_duration.as_secs_f64()
             //  );
@@ -149,14 +147,20 @@ pub fn validate_alignment(
                 &physics_route_segments,
                 config,
                 start_time,
-            ).map_err(|e| miette::miette!("Physical continuity validation error: {}", e))?;
+            )
+            .map_err(|e| miette::miette!("Physical continuity validation error: {}", e))?;
 
             if !continuity_errors.is_empty() {
                 println!(
                     "\n❌ PHYSICAL CONTINUITY VIOLATIONS - Cannot proceed to parameter validation:"
                 );
                 for error in &continuity_errors {
-                    println!("   {} ({}): {}", error.code, error.message, error.suggestion.as_ref().unwrap_or(&"No suggestion".into()));
+                    println!(
+                        "   {} ({}): {}",
+                        error.code,
+                        error.message,
+                        error.suggestion.as_ref().unwrap_or(&"No suggestion".into())
+                    );
                 }
 
                 // Task 5.3: Respect --force-export flag

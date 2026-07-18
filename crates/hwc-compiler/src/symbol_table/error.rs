@@ -113,11 +113,7 @@ impl SymbolError {
     }
 
     /// Construct a CircularAlias with (start, end) tuple span.
-    pub fn circular(
-        name: CompactString,
-        target: CompactString,
-        span: (usize, usize),
-    ) -> Self {
+    pub fn circular(name: CompactString, target: CompactString, span: (usize, usize)) -> Self {
         Self::CircularAlias {
             name,
             target,

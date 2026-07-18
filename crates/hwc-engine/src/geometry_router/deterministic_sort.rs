@@ -85,15 +85,8 @@ pub fn verify_deterministic_order(order1: &[u64], order2: &[u64]) -> bool {
 }
 
 /// Verify that every node appears after all its dependencies in the order.
-pub fn verify_all_dependencies_satisfied(
-    order: &[u64],
-    deps: &[(u64, Vec<u64>)],
-) -> bool {
-    let positions: HashMap<u64, usize> = order
-        .iter()
-        .enumerate()
-        .map(|(i, &id)| (id, i))
-        .collect();
+pub fn verify_all_dependencies_satisfied(order: &[u64], deps: &[(u64, Vec<u64>)]) -> bool {
+    let positions: HashMap<u64, usize> = order.iter().enumerate().map(|(i, &id)| (id, i)).collect();
 
     for &(id, ref dep_ids) in deps {
         if let Some(&pos) = positions.get(&id) {
@@ -158,12 +151,7 @@ mod tests {
 
     #[test]
     fn test_dependencies_satisfied() {
-        let nodes = vec![
-            (4, vec![2, 3]),
-            (3, vec![1]),
-            (2, vec![1]),
-            (1, vec![]),
-        ];
+        let nodes = vec![(4, vec![2, 3]), (3, vec![1]), (2, vec![1]), (1, vec![])];
         let order = deterministic_toposort(&nodes).unwrap();
         assert!(verify_all_dependencies_satisfied(&order, &nodes));
     }
@@ -235,12 +223,7 @@ mod tests {
 
     #[test]
     fn test_diamond_dag() {
-        let nodes = vec![
-            (4, vec![2, 3]),
-            (3, vec![1]),
-            (2, vec![1]),
-            (1, vec![]),
-        ];
+        let nodes = vec![(4, vec![2, 3]), (3, vec![1]), (2, vec![1]), (1, vec![])];
         let order = deterministic_toposort(&nodes).unwrap();
         assert_eq!(order[0], 1);
         assert_eq!(order[3], 4);

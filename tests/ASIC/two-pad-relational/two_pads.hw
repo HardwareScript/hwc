@@ -1,0 +1,88 @@
+# Two-Pad Relational — Middle-Level Syntax Demo
+#
+# PURPOSE: Demonstrate relational placement (Section 1 of Spatial Synthesis spec).
+#   The second pad is placed relative to the first using directional constraints —
+#   no manual coordinate arithmetic required.
+#
+# KEY SYNTAX DEMONSTRATED:
+#   - Parameterized shapes: shape Pad(w: Measurement, h: Measurement)
+#   - Shape instantiation: shape: Pad(w: 600nm, h: 600nm)
+#   - align: center_y with Pad_A      →  same vertical midpoint, zero Y math
+#   - right_of Pad_A with spacing: X  →  automatic X offset from Pad_A's right edge
+
+import * from @std/primitives/units
+import * from @std/primitives/math
+import * from materials
+import Silicon_180nm from foundry_pdk
+
+# ============================================================================
+# 1. LOGICAL SCHEMATIC
+#    Declares two signal nets and the connection intent.
+# ============================================================================
+module Two_Pad_Connection:
+    pins: [input SIG_IN, output SIG_OUT]
+    route SIG_IN to SIG_OUT
+
+# ============================================================================
+# 2. PARAMETERIZED SHAPE DEFINITION (PCell)
+#    A reusable rectangular pad shape with parameterized dimensions.
+#    w and h are Measurement parameters passed at instantiation time.
+# ============================================================================
+shape Pad(w: Measurement, h: Measurement):
+    geometry:
+        Rectangle(width: w, height: h)
+
+# ============================================================================
+# 3. PHYSICAL SPACE (implements the Two_Pad_Connection schematic)
+# ============================================================================
+space Two_Pad_Layout implements Two_Pad_Connection:
+    dimensions: 5um by 3um by 1.36um
+    resolution: 1nm
+    origin: bl by b
+    profile: Silicon_180nm
+
+    # Net electrical properties — mandatory under ASIC Zero Magic rules
+    nets:
+        SIG_IN:  { classification: signal, potential: 0V, current: 0.1uA }
+        SIG_OUT: { classification: signal, potential: 0V, current: 0.1uA }
+
+    # ------------------------------------------------------------------
+    # STEP A: Place Pad_A at a fixed reference point.
+    #   This is the single anchor the rest of the design references.
+    # ------------------------------------------------------------------
+    add plane(Aluminum) named Pad_A on layer: metal1:
+        shape: Pad(w: 600nm, h: 600nm)
+        at: [x: 300nm, y: 1200nm]
+        net: SIG_IN
+
+    # ------------------------------------------------------------------
+    # STEP B: Place Pad_B RELATIVE to Pad_A using two relational constraints.
+    #
+    #   align: center_y with Pad_A
+    #       → The compiler queries Pad_A's bounding box from the EntityGraph,
+    #         computes its Y midpoint, and locks Pad_B's Y origin to that value.
+    #         No Y coordinate arithmetic by the designer.
+    #
+    #   right_of Pad_A with spacing: 1500nm
+    #       → Pad_B's X origin = Pad_A.right + 1500nm.
+    #         The relational resolver evaluates this in 128-bit integer arithmetic.
+    #
+    # The relational resolver runs before the main placement loop, producing
+    # a concrete Coordinate that feeds the standard placement pipeline.
+    # ------------------------------------------------------------------
+    add plane(Aluminum) named Pad_B align: center_y with Pad_A right_of Pad_A with spacing: 1500nm on layer: metal1:
+        shape: Pad(w: 600nm, h: 600nm)
+        net: SIG_OUT
+
+    # ------------------------------------------------------------------
+    # STEP C: Route the signal between the two pads.
+    #   exit: East  → trace exits Pad_A from its right boundary face
+    #   enter: West → trace enters Pad_B at its left boundary face
+    #   The pathfinder calculates the straight aluminium segment automatically.
+    # ------------------------------------------------------------------
+    route Pad_A to Pad_B:
+        width: 250nm
+        layer: metal1
+        exit:  East
+        enter: West
+        current_limit_ac: { rms: 0.5uA, peak: 1.0uA }

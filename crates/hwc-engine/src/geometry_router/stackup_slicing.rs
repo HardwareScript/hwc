@@ -49,8 +49,12 @@ impl StackupManager {
     /// Layers are sorted by `z_min_nm` ascending.
     pub fn new(mut layers: Vec<StackupLayer>) -> Self {
         layers.sort_by_key(|l| l.z_min_nm);
-        let z_intervals: Vec<(i64, i64)> = layers.iter().map(|l| (l.z_min_nm, l.z_max_nm)).collect();
-        Self { layers, z_intervals }
+        let z_intervals: Vec<(i64, i64)> =
+            layers.iter().map(|l| (l.z_min_nm, l.z_max_nm)).collect();
+        Self {
+            layers,
+            z_intervals,
+        }
     }
 
     /// Returns sorted Z-intervals `(z_min, z_max)`.
@@ -63,7 +67,10 @@ impl StackupManager {
     #[inline]
     pub fn find_layer_at_z(&self, z_nm: i64) -> Option<&StackupLayer> {
         // Binary search: find the last layer whose z_min <= z_nm.
-        let idx = match self.z_intervals.binary_search_by(|(z_min, _)| z_min.cmp(&z_nm)) {
+        let idx = match self
+            .z_intervals
+            .binary_search_by(|(z_min, _)| z_min.cmp(&z_nm))
+        {
             Ok(i) => i,
             Err(i) => i.wrapping_sub(1), // insertion point minus one
         };
@@ -142,7 +149,9 @@ pub fn slice_entity_to_layers(bbox: &BoundingBox, stackup: &StackupManager) -> V
         let clipped_z_max = z_hi.min(*z_max);
 
         // Find the matching layer for the material_id.
-        let layer_id = stackup.layers.iter()
+        let layer_id = stackup
+            .layers
+            .iter()
             .find(|l| l.z_min_nm == *z_min && l.z_max_nm == *z_max)
             .map_or(0, |l| l.material_id);
 
@@ -207,9 +216,27 @@ mod tests {
 
     fn make_stackup() -> StackupManager {
         StackupManager::new(vec![
-            StackupLayer { name: "M1".into(), z_min_nm: 0, z_max_nm: 100_000, material_id: 0, routable: None },
-            StackupLayer { name: "M2".into(), z_min_nm: 100_000, z_max_nm: 200_000, material_id: 1, routable: None },
-            StackupLayer { name: "M3".into(), z_min_nm: 200_000, z_max_nm: 300_000, material_id: 2, routable: None },
+            StackupLayer {
+                name: "M1".into(),
+                z_min_nm: 0,
+                z_max_nm: 100_000,
+                material_id: 0,
+                routable: None,
+            },
+            StackupLayer {
+                name: "M2".into(),
+                z_min_nm: 100_000,
+                z_max_nm: 200_000,
+                material_id: 1,
+                routable: None,
+            },
+            StackupLayer {
+                name: "M3".into(),
+                z_min_nm: 200_000,
+                z_max_nm: 300_000,
+                material_id: 2,
+                routable: None,
+            },
         ])
     }
 
@@ -218,12 +245,24 @@ mod tests {
         let stackup = make_stackup();
 
         // Exact z_min should find the layer.
-        assert_eq!(stackup.find_layer_at_z(0).map(|l| l.name.as_str()), Some("M1"));
-        assert_eq!(stackup.find_layer_at_z(100_000).map(|l| l.name.as_str()), Some("M2"));
-        assert_eq!(stackup.find_layer_at_z(200_000).map(|l| l.name.as_str()), Some("M3"));
+        assert_eq!(
+            stackup.find_layer_at_z(0).map(|l| l.name.as_str()),
+            Some("M1")
+        );
+        assert_eq!(
+            stackup.find_layer_at_z(100_000).map(|l| l.name.as_str()),
+            Some("M2")
+        );
+        assert_eq!(
+            stackup.find_layer_at_z(200_000).map(|l| l.name.as_str()),
+            Some("M3")
+        );
 
         // Midpoint.
-        assert_eq!(stackup.find_layer_at_z(150_000).map(|l| l.name.as_str()), Some("M2"));
+        assert_eq!(
+            stackup.find_layer_at_z(150_000).map(|l| l.name.as_str()),
+            Some("M2")
+        );
 
         // z_max is exclusive.
         assert_eq!(stackup.find_layer_at_z(300_000), None);
@@ -265,7 +304,10 @@ mod tests {
         assert_eq!(slices[0].z_min_nm, 120_000);
         assert_eq!(slices[0].z_max_nm, 180_000);
         // Verify XY polygon matches bbox.
-        assert_eq!(slices[0].polygon_2d, vec![(100, 200), (500, 200), (500, 600), (100, 600)]);
+        assert_eq!(
+            slices[0].polygon_2d,
+            vec![(100, 200), (500, 200), (500, 600), (100, 600)]
+        );
     }
 
     #[test]
@@ -297,7 +339,10 @@ mod tests {
     fn ordered_z_intervals() {
         let stackup = make_stackup();
         let intervals = stackup.get_ordered_z_intervals();
-        assert_eq!(intervals, &[(0, 100_000), (100_000, 200_000), (200_000, 300_000)]);
+        assert_eq!(
+            intervals,
+            &[(0, 100_000), (100_000, 200_000), (200_000, 300_000)]
+        );
     }
 
     #[test]

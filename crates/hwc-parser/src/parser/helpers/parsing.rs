@@ -39,7 +39,9 @@ impl Parser {
     /// Parse route endpoint: Component.Pin, Component[i].Pin, or SpaceEntity
     ///
     /// v0.1.8: Distinguishes between ComponentPin and SpaceEntity based on presence of '.'
-    pub(crate) fn parse_route_endpoint(&mut self) -> Result<crate::ast::RouteEndpointSpec, ParseError> {
+    pub(crate) fn parse_route_endpoint(
+        &mut self,
+    ) -> Result<crate::ast::RouteEndpointSpec, ParseError> {
         let start_pos = self.current_span().start;
         let first = self.expect_identifier_string()?;
 

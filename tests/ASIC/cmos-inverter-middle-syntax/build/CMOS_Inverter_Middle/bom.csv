@@ -1,0 +1,17 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,0.00x0.01x0.00mm,,,,,1
+INV1,CMOS_Inverter_Cell,,,,,,1
+
+# MATERIAL USAGE (Fabrication)
+Reference,Type,Material,Layer_Z_nm,Area_nm2,Volume_nm3
+INV1_NMOS_Active,Pour,Silicon_N,z:100,375000,75000000
+INV1_PMOS_Active,Pour,Silicon_P,z:100,1125000,225000000
+INV1_Shared_Gate,Pour,Polysilicon,z:305,850000,127500000
+INV1_N_Well,Pour,Silicon_P,z:0,3465000,346500000
+INV1_GND_Rail,Pour,Aluminum,z:955,1800000,720000000
+INV1_VDD_Rail,Pour,Aluminum,z:955,1800000,720000000
+INV1_Shared_Drain,Pour,Aluminum,z:955,1125000,450000000
+INV1_NMOS_Source_Pad,Pour,Aluminum,z:955,312500,125000000
+INV1_PMOS_Source_Pad,Pour,Aluminum,z:955,375000,150000000
+INV1_NMOS_Bulk_Pad,Pour,Aluminum,z:955,312500,125000000
+INV1_PMOS_Bulk_Pad,Pour,Aluminum,z:955,375000,150000000

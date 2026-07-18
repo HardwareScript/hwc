@@ -14,8 +14,7 @@ fn test_crosstalk_detection_multilayer_pcb() {
 
     let mut data_bus_traces: Vec<Vec<(i64, i64, i64)>> = Vec::new();
     for bus_line in 0..8 {
-        let trace: Vec<(i64, i64, i64)> =
-            (0..500).map(|x| (x, 12 + bus_line * 2, 0)).collect();
+        let trace: Vec<(i64, i64, i64)> = (0..500).map(|x| (x, 12 + bus_line * 2, 0)).collect();
         data_bus_traces.push(trace);
     }
 
@@ -81,10 +80,8 @@ fn test_crosstalk_detection_differential_pairs() {
     let diff_n: Vec<(i64, i64, i64)> = (0..500).map(|x| (x, 11, 0)).collect();
     let other_signal: Vec<(i64, i64, i64)> = (0..500).map(|x| (x, 15, 0)).collect();
 
-    let result_pair = analyzer.validate_crosstalk_overlap(
-        "USB_DP", "USB_DN", &diff_p, &diff_n,
-        50_000_000,
-    );
+    let result_pair =
+        analyzer.validate_crosstalk_overlap("USB_DP", "USB_DN", &diff_p, &diff_n, 50_000_000);
 
     assert!(
         result_pair.is_ok(),
@@ -112,8 +109,7 @@ fn test_crosstalk_detection_bus_routing() {
     let mut bus_traces: Vec<Vec<(i64, i64, i64)>> = Vec::new();
 
     for bit in 0..32 {
-        let trace: Vec<(i64, i64, i64)> =
-            (0..1000).map(|x| (x, bit * 2, 0)).collect();
+        let trace: Vec<(i64, i64, i64)> = (0..1000).map(|x| (x, bit * 2, 0)).collect();
         bus_traces.push(trace);
     }
 

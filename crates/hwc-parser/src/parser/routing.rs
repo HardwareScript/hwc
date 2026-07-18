@@ -180,21 +180,25 @@ impl super::Parser {
     /// or `route From.Pin to To.Pin:` with `path:` and optional `strategy:` (v0.1.7)
     pub(super) fn parse_route(&mut self) -> Result<Route, ParseError> {
         // Enter route context for better error messages
-        self.error_context.enter_context(crate::parser::ParsingContext::RouteStatement);
-        
+        self.error_context
+            .enter_context(crate::parser::ParsingContext::RouteStatement);
+
         // Track parsing state
         let mut state = crate::parser::RouteParseState::default();
-        
+
         let result = self.parse_route_impl(&mut state);
-        
+
         // Exit context
         self.error_context.exit_context();
-        
+
         result
     }
 
     /// Internal route parsing with state tracking
-    fn parse_route_impl(&mut self, state: &mut crate::parser::RouteParseState) -> Result<Route, ParseError> {
+    fn parse_route_impl(
+        &mut self,
+        state: &mut crate::parser::RouteParseState,
+    ) -> Result<Route, ParseError> {
         let start_pos = self.current_span().start;
         self.expect(&Token::Route)?;
 
@@ -340,10 +344,12 @@ impl super::Parser {
                                 }
                                 self.expect(&close_token)?;
 
-                                let rms_expr =
-                                    rms.ok_or_else(|| self.error("current_limit missing 'rms' field"))?;
-                                let peak_expr =
-                                    peak.ok_or_else(|| self.error("current_limit missing 'peak' field"))?;
+                                let rms_expr = rms.ok_or_else(|| {
+                                    self.error("current_limit missing 'rms' field")
+                                })?;
+                                let peak_expr = peak.ok_or_else(|| {
+                                    self.error("current_limit missing 'peak' field")
+                                })?;
 
                                 let cl_span = Span::new(key_span.start, self.previous_span().end);
                                 current_limit_ac = Some(CurrentLimitAc {
@@ -607,8 +613,6 @@ impl super::Parser {
             Err(self.error("Expected edge offset"))
         }
     }
-
-
 
     /// Parse waypoints: list of coordinates in path block
     /// Empty path block is allowed for automatic routing

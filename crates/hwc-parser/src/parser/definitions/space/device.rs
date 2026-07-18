@@ -101,9 +101,13 @@ impl crate::parser::Parser {
                                     let value = m.value;
                                     use crate::lexer::units::{Unit as LexerUnit, VoltageUnit};
                                     potential_mv = Some(match m.unit {
-                                        LexerUnit::Voltage(VoltageUnit::Volts) => (value * 1000.0) as i64,
+                                        LexerUnit::Voltage(VoltageUnit::Volts) => {
+                                            (value * 1000.0) as i64
+                                        }
                                         LexerUnit::Voltage(VoltageUnit::Millivolts) => value as i64,
-                                        _ => return Err(self.error("Expected V or mV for potential")),
+                                        _ => {
+                                            return Err(self.error("Expected V or mV for potential"))
+                                        }
                                     });
                                     self.advance();
                                 }
@@ -113,12 +117,18 @@ impl crate::parser::Parser {
                             if let Some(token) = self.current() {
                                 if let Token::Measurement(m) = &token.token {
                                     let value = m.value;
-                                    use crate::lexer::units::{Unit as LexerUnit, CurrentUnit};
+                                    use crate::lexer::units::{CurrentUnit, Unit as LexerUnit};
                                     current_ma = Some(match m.unit {
                                         LexerUnit::Current(CurrentUnit::Amperes) => value * 1000.0,
                                         LexerUnit::Current(CurrentUnit::Milliamperes) => value,
-                                        LexerUnit::Current(CurrentUnit::Microamperes) => value / 1000.0,
-                                        _ => return Err(self.error("Expected A, mA, or uA for current")),
+                                        LexerUnit::Current(CurrentUnit::Microamperes) => {
+                                            value / 1000.0
+                                        }
+                                        _ => {
+                                            return Err(
+                                                self.error("Expected A, mA, or uA for current")
+                                            )
+                                        }
                                     });
                                     self.advance();
                                 }
@@ -132,17 +142,27 @@ impl crate::parser::Parser {
                                     frequency_hz = Some(match m.unit {
                                         LexerUnit::Custom(ref s) if s == "Hz" => value,
                                         LexerUnit::Custom(ref s) if s == "kHz" => value * 1_000.0,
-                                        LexerUnit::Custom(ref s) if s == "MHz" => value * 1_000_000.0,
-                                        LexerUnit::Custom(ref s) if s == "GHz" => value * 1_000_000_000.0,
-                                        _ => return Err(self.error("Expected Hz, kHz, MHz, or GHz")),
+                                        LexerUnit::Custom(ref s) if s == "MHz" => {
+                                            value * 1_000_000.0
+                                        }
+                                        LexerUnit::Custom(ref s) if s == "GHz" => {
+                                            value * 1_000_000_000.0
+                                        }
+                                        _ => {
+                                            return Err(self.error("Expected Hz, kHz, MHz, or GHz"))
+                                        }
                                     });
                                     self.advance();
                                 }
                             }
                         }
-                        _ => { self.advance(); } // Skip unknown
+                        _ => {
+                            self.advance();
+                        } // Skip unknown
                     }
-                    if self.check(&Token::Comma) { self.advance(); }
+                    if self.check(&Token::Comma) {
+                        self.advance();
+                    }
                 }
                 self.expect(&Token::CloseBrace)?;
             } else {
@@ -171,7 +191,9 @@ impl crate::parser::Parser {
                                     LexerUnit::Custom(ref s) if s == "Hz" => value,
                                     LexerUnit::Custom(ref s) if s == "kHz" => value * 1_000.0,
                                     LexerUnit::Custom(ref s) if s == "MHz" => value * 1_000_000.0,
-                                    LexerUnit::Custom(ref s) if s == "GHz" => value * 1_000_000_000.0,
+                                    LexerUnit::Custom(ref s) if s == "GHz" => {
+                                        value * 1_000_000_000.0
+                                    }
                                     _ => return Err(self.error("Invalid frequency unit")),
                                 });
                                 self.advance();

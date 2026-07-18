@@ -1,16 +1,17 @@
-use crate::geometry::BoundingBox;
 use crate::geometry::entity_ids::*;
+use crate::geometry::BoundingBox;
 use crate::geometry_router::scene_graph::SceneGraph;
 use crate::geometry_router::spatial_index::{DynamicSpatialIndex, IndexedSegment};
 use crate::geometry_router::substrate_types::{
-    ComponentMetadata, ComponentPin, MaterialId,
-    SubstrateLayer, SubstrateLayerShape,
+    ComponentMetadata, ComponentPin, MaterialId, SubstrateLayer, SubstrateLayerShape,
 };
 use crate::netlist::{ComponentId, NetId, NetlistArena};
 use rustc_hash::FxHashMap;
 
 // Re-export substrate types
-pub use crate::geometry_router::substrate_types::{CapType, LinerStack, TSVParams, SubstrateLayerType};
+pub use crate::geometry_router::substrate_types::{
+    CapType, LinerStack, SubstrateLayerType, TSVParams,
+};
 
 /// Type of entity in the Entity Graph (v0.1.8)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
@@ -96,7 +97,10 @@ impl EntityGraph {
         net_id: Option<NetId>,
     ) -> EntityId {
         let id = EntityId::from_str(&format!("pin:{}:{}", component_name, pin_name));
-        eprintln!("[DEBUG register_component_pin] Registering '{}.{}' with EntityId: {}, net_id: {:?}", component_name, pin_name, id, net_id);
+        eprintln!(
+            "[DEBUG register_component_pin] Registering '{}.{}' with EntityId: {}, net_id: {:?}",
+            component_name, pin_name, id, net_id
+        );
         self.entity_registry.insert(
             id,
             EntityData {
@@ -119,7 +123,10 @@ impl EntityGraph {
         layer_z: i64,
     ) -> EntityId {
         let id = EntityId::from_str(&format!("space:{}", name));
-        eprintln!("[DEBUG register_space_entity] Registering '{}' with EntityId: {}, net_id: {:?}", name, id, net_id);
+        eprintln!(
+            "[DEBUG register_space_entity] Registering '{}' with EntityId: {}, net_id: {:?}",
+            name, id, net_id
+        );
         self.entity_registry.insert(
             id,
             EntityData {
@@ -136,14 +143,22 @@ impl EntityGraph {
     /// Get bounding box for a space entity by name (v0.1.9.1)
     pub fn get_space_entity_bbox(&self, name: &str) -> Option<BoundingBox> {
         let entity_id = EntityId::from_str(&format!("space:{}", name));
-        self.entity_registry.get(&entity_id).map(|entity_data| entity_data.bbox)
+        self.entity_registry
+            .get(&entity_id)
+            .map(|entity_data| entity_data.bbox)
     }
 
     /// Get the bounding box for a component pin (v0.1.9.1)
     /// Looks up the pin directly in the entity registry
-    pub fn get_component_pin_bbox(&self, component_name: &str, pin_name: &str) -> Option<BoundingBox> {
+    pub fn get_component_pin_bbox(
+        &self,
+        component_name: &str,
+        pin_name: &str,
+    ) -> Option<BoundingBox> {
         let entity_id = EntityId::from_str(&format!("pin:{}:{}", component_name, pin_name));
-        self.entity_registry.get(&entity_id).map(|entity_data| entity_data.bbox)
+        self.entity_registry
+            .get(&entity_id)
+            .map(|entity_data| entity_data.bbox)
     }
 
     /// Update net assignment for an entity (v0.1.8)
@@ -164,7 +179,11 @@ impl EntityGraph {
     pub fn get_entity_data(&self, id: EntityId) -> Result<&EntityData, String> {
         let result = self.entity_registry.get(&id);
         if result.is_none() {
-            eprintln!("[DEBUG get_entity_data] EntityId {} NOT FOUND in registry (size: {})", id, self.entity_registry.len());
+            eprintln!(
+                "[DEBUG get_entity_data] EntityId {} NOT FOUND in registry (size: {})",
+                id,
+                self.entity_registry.len()
+            );
         }
         result.ok_or_else(|| format!("EntityId {} not found in registry", id))
     }
@@ -247,92 +266,15 @@ impl EntityGraph {
         false
     }
 
-    /// Build the spatial index from all component instances, substrate layers, and routes.
-    /// This is a GOD-TIER unified indexing pass (v0.1.8).
-    pub fn rebuild_spatial_index(&mut self, materials: &crate::material::MaterialRegistry) {
-        self.spatial.clear();
-
-        // 1. Index substrate layers (Pours, Contacts, etc.)
-        for (idx, layer) in self.substrate_layers.iter().enumerate() {
-            let bbox = &layer.bbox;
-            let segment = IndexedSegment {
-                source: hwc_physics::spatial_index::SpatialEntitySource::SubstrateLayer { index: idx },
-                segment_id: idx,
-                net_id: layer.net as usize,
-                width_nm: bbox.max.x - bbox.min.x,
-                thickness_nm: bbox.max.z - bbox.min.z,
-                start: bbox.min,
-                end: bbox.max,
-                layer: bbox.min.z,
-            };
-            self.spatial.insert(segment);
-        }
-
-        // 2. Index component instances from the scene graph
-        for inst in self.scene.instances() {
-            let bbox = &inst.global_bbox;
-            let thickness_nm = bbox.max.z - bbox.min.z;
-            let segment = IndexedSegment {
-                source: hwc_physics::spatial_index::SpatialEntitySource::ComponentInstance {
-                    instance_id: inst.instance_id,
-                },
-                segment_id: inst.instance_id,
-                net_id: inst.net_bindings.first().copied().unwrap_or(0),
-                width_nm: bbox.max.x - bbox.min.x,
-                thickness_nm,
-                start: bbox.min,
-                end: bbox.max,
-                layer: bbox.min.z,
-            };
-            self.spatial.insert(segment);
-        }
-
-        // 3. Index routed segments with DATA-DRIVEN thickness
-        eprintln!("[SPATIAL INDEX] Indexing {} nets with routed segments", self.routed_segments.len());
-        eprintln!("[SPATIAL INDEX DEBUG] routed_segments vector address: {:p}", &self.routed_segments);
-        eprintln!("[SPATIAL INDEX DEBUG] Total entries in routed_segments: {}", self.routed_segments.len());
-        for (net_idx, (net_id, segments)) in self.routed_segments.iter().enumerate() {
-            eprintln!("[SPATIAL INDEX] Net {} (id={}): {} segments", net_idx, net_id.raw(), segments.len());
-            for (seg_idx, seg) in segments.iter().enumerate() {
-                eprintln!("  seg[{}]: start=({},{},{}), end=({},{},{}), width={}, material={}", 
-                    seg_idx, seg.start.x, seg.start.y, seg.start.z, seg.end.x, seg.end.y, seg.end.z, seg.width_nm, seg.material_id);
-                
-                let thickness_nm = if seg.start.z != seg.end.z {
-                    (seg.start.z - seg.end.z).abs()
-                } else {
-                    let material_props = materials.get_material(seg.material_id)
-                        .unwrap_or_else(|| {
-                            panic!(
-                                "FATAL: Route segment net={} seg={} references unregistered material_id={}",
-                                net_id.raw(), seg_idx, seg.material_id
-                            )
-                        });
-                    assert!(
-                        material_props.thickness_nm > 0,
-                        "FATAL: Material id={} has zero thickness — must be declared in PDK",
-                        seg.material_id
-                    );
-                    material_props.thickness_nm
-                };
-
-                let segment = IndexedSegment {
-                    source: hwc_physics::spatial_index::SpatialEntitySource::RouteSegment {
-                        net_idx,
-                        seg_idx,
-                    },
-                    segment_id: seg_idx,
-                    net_id: net_id.raw() as usize,
-                    width_nm: seg.width_nm,
-                    thickness_nm,
-                    start: seg.start,
-                    end: seg.end,
-                    layer: seg.start.z,
-                };
-                self.spatial.insert(segment);
-            }
-        }
+    /// Configure physical layer Z-ranges on the spatial index for layered queries.
+    ///
+    /// Call this once after stackup parsing. Segments inserted via
+    /// `rebuild_spatial_index` will be placed in the correct layer bucket.
+    pub fn set_spatial_layer_z_ranges(&mut self, z_ranges: &[(i64, i64)]) {
+        self.spatial.set_layer_z_ranges(z_ranges);
     }
 
+    /// Build the spatial index from all component instances, substrate layers, and routes.
     /// Get a reference to all component metadata.
     pub fn get_component_metadata(&self) -> &[ComponentMetadata] {
         &self.component_metadata
@@ -365,7 +307,7 @@ impl EntityGraph {
 
     /// Add a full SubstrateLayer.
     /// Add a substrate layer with optional clearance validation.
-    /// 
+    ///
     /// # Arguments
     /// * `min_clearance_nm` - If Some(distance), validates that this pour maintains
     ///   at least `distance` nm clearance from all existing pours on different nets.
@@ -382,11 +324,11 @@ impl EntityGraph {
     }
 
     /// Add a substrate layer with clearance validation (v0.1.9).
-    /// 
+    ///
     /// Validates that the new pour maintains required clearance from existing
     /// pours on different nets. Returns Ok(()) if valid, Err with details if
     /// clearance is violated.
-    /// 
+    ///
     /// This should be used during IR construction to catch design rule violations
     /// early, rather than waiting until final DRC.
     pub fn add_substrate_layer_checked(
@@ -398,16 +340,17 @@ impl EntityGraph {
         min_clearance_nm: i64,
     ) -> Result<(), String> {
         // Check clearance against existing substrate layers on different nets
-        if net != 0 {  // Skip clearance check for unconnected geometry (net_id=0)
+        if net != 0 {
+            // Skip clearance check for unconnected geometry (net_id=0)
             for existing in &self.substrate_layers {
                 // Skip if same net (same-net overlap is allowed for junctions)
                 if existing.net == 0 || existing.net == net {
                     continue;
                 }
-                
+
                 // Calculate clearance
                 let distance = bbox.distance_to(&existing.bbox);
-                
+
                 if distance < min_clearance_nm {
                     return Err(format!(
                         "Clearance violation: Pour on net {} at {:?} is {}nm from net {} (required: {}nm)",
@@ -420,7 +363,7 @@ impl EntityGraph {
                 }
             }
         }
-        
+
         // If validation passed, add the layer
         let layer = SubstrateLayer::new(material, net, bbox, layer_type);
         self.substrate_layers.push(layer);
@@ -504,13 +447,13 @@ impl EntityGraph {
                 // IF we had the stackup. Since we don't, we'll rely on the fact that
                 // get_all_elements_for_net is used for topological connectivity and
                 // this specific method is used for layer-to-layer bridging.
-                
+
                 // For now, we'll implement a heuristic: if the layer's Z-range is within
                 // reasonable bounds. This is still not perfect.
-                
+
                 // WAIT! I have a better way. The caller (ViaResolver) already knows
                 // the Z-range of the layers.
-                
+
                 elements.push(layer.clone());
             }
         }
@@ -534,10 +477,10 @@ impl EntityGraph {
         // v0.1.8: Filter by layer. We need a way to know which layer an element belongs to.
         // For now, we'll just return all elements and let the caller filter if needed,
         // BUT the caller (ViaResolver) expects this method to do the filtering.
-        
+
         // Actually, the best fix is to pass the layer's Z-range to this method.
         // But for now, let's at least fix the material ID bug.
-        
+
         elements
     }
 
@@ -555,7 +498,10 @@ impl EntityGraph {
                         results.push(layer.clone());
                     }
                 }
-                hwc_physics::spatial_index::SpatialEntitySource::RouteSegment { net_idx, seg_idx } => {
+                hwc_physics::spatial_index::SpatialEntitySource::RouteSegment {
+                    net_idx,
+                    seg_idx,
+                } => {
                     if let Some((net_id, segments)) = self.routed_segments.get(net_idx) {
                         if let Some(seg) = segments.get(seg_idx) {
                             let seg_bbox = BoundingBox::new(seg.start, seg.end);
@@ -613,7 +559,9 @@ impl EntityGraph {
         _rotation_deg: i64,
     ) {
         let mut layer = SubstrateLayer::new(material, net, bbox, SubstrateLayerType::Pour);
-        layer.shape = SubstrateLayerShape::Circle { radius: diameter_nm / 2 };
+        layer.shape = SubstrateLayerShape::Circle {
+            radius: diameter_nm / 2,
+        };
         // Note: SubstrateLayerShape::Circle doesn't store segments, but Polygon would.
         // For now we use Circle as defined in substrate_types.rs
         self.substrate_layers.push(layer);
@@ -694,11 +642,17 @@ impl EntityGraph {
     }
 
     /// Get the bounding box of a pour associated with a pin.
-    pub fn get_pour_bbox_for_pin(&self, component_name: &str, pin_name: &str) -> Option<BoundingBox> {
+    pub fn get_pour_bbox_for_pin(
+        &self,
+        component_name: &str,
+        pin_name: &str,
+    ) -> Option<BoundingBox> {
         // This is a simplified implementation. Real one might need more logic.
         self.component_pins
             .iter()
-            .find(|p| p.component_name.as_str() == component_name && p.pin_name.as_str() == pin_name)
+            .find(|p| {
+                p.component_name.as_str() == component_name && p.pin_name.as_str() == pin_name
+            })
             .and_then(|p| self.get_pour_bbox_at_position(p.x_nm, p.y_nm, p.z_nm))
     }
 
@@ -740,14 +694,16 @@ impl EntityGraph {
         for layer in &mut self.substrate_layers {
             let z_intersects = |layer: &SubstrateLayer| -> bool {
                 if layer.regions.is_empty() {
-                    layer.bbox.min.z <= hole_bbox.max.z && layer.bbox.max.z >= hole_bbox.min.z
+                    layer.bbox.min.z <= hole_bbox.max.z
+                        && layer.bbox.max.z >= hole_bbox.min.z
                         && layer.bbox.min.x < hole_bbox.max.x
                         && layer.bbox.max.x > hole_bbox.min.x
                         && layer.bbox.min.y < hole_bbox.max.y
                         && layer.bbox.max.y > hole_bbox.min.y
                 } else {
                     layer.regions.iter().any(|r| {
-                        r.min.z <= hole_bbox.max.z && r.max.z >= hole_bbox.min.z
+                        r.min.z <= hole_bbox.max.z
+                            && r.max.z >= hole_bbox.min.z
                             && r.min.x < hole_bbox.max.x
                             && r.max.x > hole_bbox.min.x
                             && r.min.y < hole_bbox.max.y
@@ -905,7 +861,7 @@ impl EntityGraph {
             .map(|w| {
                 let start = w[0];
                 let end = w[1];
-                
+
                 // Determine segment material based on its Z coordinate
                 // For horizontal segments (start.z == end.z), use that Z layer's material
                 // For vertical segments, use the routing material (via/transition material)
@@ -920,7 +876,7 @@ impl EntityGraph {
                     // Vertical segment - use routing material (vias, transitions)
                     default_material_id
                 };
-                
+
                 crate::geometry::TraceSegment::new(start, end, width_nm, seg_material_id)
             })
             .collect();
@@ -930,7 +886,11 @@ impl EntityGraph {
         }
 
         // Append to existing net entry instead of creating duplicates
-        if let Some(entry) = self.routed_segments.iter_mut().find(|(id, _)| *id == net_id) {
+        if let Some(entry) = self
+            .routed_segments
+            .iter_mut()
+            .find(|(id, _)| *id == net_id)
+        {
             entry.1.extend(segments);
         } else {
             self.routed_segments.push((net_id, segments));
@@ -948,9 +908,13 @@ impl EntityGraph {
         if segments.is_empty() {
             return;
         }
-        
+
         // v0.1.9.1: Append to existing net entry instead of creating duplicates
-        if let Some(entry) = self.routed_segments.iter_mut().find(|(id, _)| *id == net_id) {
+        if let Some(entry) = self
+            .routed_segments
+            .iter_mut()
+            .find(|(id, _)| *id == net_id)
+        {
             entry.1.extend(segments);
         } else {
             self.routed_segments.push((net_id, segments));
@@ -975,7 +939,11 @@ impl EntityGraph {
         material: MaterialId,
     ) {
         let segment = crate::geometry::TraceSegment::new(point, point, 0, material);
-        if let Some(entry) = self.routed_segments.iter_mut().find(|(id, _)| *id == net_id) {
+        if let Some(entry) = self
+            .routed_segments
+            .iter_mut()
+            .find(|(id, _)| *id == net_id)
+        {
             entry.1.push(segment);
         } else {
             self.routed_segments.push((net_id, vec![segment]));
@@ -1002,7 +970,9 @@ impl EntityGraph {
                 }
                 let combined = bboxes.iter().fold(layer.bbox, |acc, b| acc.union(b));
                 IndexedSegment {
-                    source: hwc_physics::spatial_index::SpatialEntitySource::SubstrateLayer { index: i },
+                    source: hwc_physics::spatial_index::SpatialEntitySource::SubstrateLayer {
+                        index: i,
+                    },
                     segment_id: i,
                     net_id: layer.net as usize,
                     width_nm: combined.max.x - combined.min.x,
@@ -1014,7 +984,6 @@ impl EntityGraph {
             })
             .collect()
     }
-
 }
 
 impl Default for EntityGraph {

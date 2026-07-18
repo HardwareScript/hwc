@@ -170,6 +170,7 @@ impl crate::parser::Parser {
             device,
             thermal_relief,
             waivers,
+            relational_constraints: smallvec::SmallVec::new(),
             span: Span::new(start_pos, end_pos),
         })
     }
@@ -461,8 +462,8 @@ impl crate::parser::Parser {
 
     /// Parse plane placement: `add plane(Copper) named GND_Plane on layer: l1:`
     ///
-    /// New syntax for conductive sheets (replaces generic `pour` for planes).
-    /// Supports: `spanning layer: X to Y`, `net:`, `cutouts:` block with shape definitions.
+    /// v0.1.9: Supports shape references and relational constraints
+    /// New syntax: `add plane(Aluminum) named Pad_A: shape: Pad(1um, 1um) on layer: metal1 at: [x: 500nm, y: 500nm]`
     pub(in crate::parser) fn parse_plane(&mut self) -> Result<PlanePlacement, ParseError> {
         let start_pos = self.current_span().start;
 
@@ -474,6 +475,109 @@ impl crate::parser::Parser {
 
         self.expect(&Token::Named)?;
         let name = self.parse_component_name()?;
+
+        // v0.1.9: Parse relational constraints (align, above, below, right_of, left_of)
+        let mut relational_constraints = smallvec::smallvec![];
+
+        // Parse align constraint: align: <axis> with <target>
+        if self.check(&Token::Align) {
+            self.advance(); // consume 'align'
+            self.expect(&Token::Colon)?;
+            let axis_str = self.expect_identifier_string()?;
+            let axis = match axis_str.as_str() {
+                "center_x" => crate::ast::AlignmentAxis::CenterX,
+                "center_y" => crate::ast::AlignmentAxis::CenterY,
+                "center_z" => crate::ast::AlignmentAxis::CenterZ,
+                "top" => crate::ast::AlignmentAxis::Top,
+                "bottom" => crate::ast::AlignmentAxis::Bottom,
+                "left" => crate::ast::AlignmentAxis::Left,
+                "right" => crate::ast::AlignmentAxis::Right,
+                _ => {
+                    return Err(self.error(&format!(
+                        "Invalid alignment axis '{}'. Expected: center_x, center_y, center_z, top, bottom, left, or right",
+                        axis_str
+                    )))
+                }
+            };
+            self.expect(&Token::With)?;
+            let target = self.parse_component_name()?;
+            let span = Span::new(start_pos, self.previous_span().end);
+            relational_constraints.push(crate::ast::RelationalConstraint::Align {
+                axis,
+                target,
+                span,
+            });
+        }
+
+        // Parse directional constraints
+        loop {
+            if self.check(&Token::Above)
+                || self.check(&Token::Below)
+                || self.check(&Token::RightOf)
+                || self.check(&Token::LeftOf)
+            {
+                let constraint = if self.check(&Token::Above) {
+                    self.advance();
+                    let target = self.parse_component_name()?;
+                    let spacing = if self.check(&Token::With) {
+                        self.advance();
+                        self.expect_identifier()?;
+                        self.expect(&Token::Colon)?;
+                        Some(self.parse_expression()?)
+                    } else {
+                        None
+                    };
+                    crate::ast::RelationalConstraint::Directional(
+                        crate::ast::DirectionalConstraint::Above { target, spacing },
+                    )
+                } else if self.check(&Token::Below) {
+                    self.advance();
+                    let target = self.parse_component_name()?;
+                    let spacing = if self.check(&Token::With) {
+                        self.advance();
+                        self.expect_identifier()?;
+                        self.expect(&Token::Colon)?;
+                        Some(self.parse_expression()?)
+                    } else {
+                        None
+                    };
+                    crate::ast::RelationalConstraint::Directional(
+                        crate::ast::DirectionalConstraint::Below { target, spacing },
+                    )
+                } else if self.check(&Token::RightOf) {
+                    self.advance();
+                    let target = self.parse_component_name()?;
+                    let spacing = if self.check(&Token::With) {
+                        self.advance();
+                        self.expect_identifier()?;
+                        self.expect(&Token::Colon)?;
+                        Some(self.parse_expression()?)
+                    } else {
+                        None
+                    };
+                    crate::ast::RelationalConstraint::Directional(
+                        crate::ast::DirectionalConstraint::RightOf { target, spacing },
+                    )
+                } else {
+                    self.advance(); // consume 'left_of'
+                    let target = self.parse_component_name()?;
+                    let spacing = if self.check(&Token::With) {
+                        self.advance();
+                        self.expect_identifier()?;
+                        self.expect(&Token::Colon)?;
+                        Some(self.parse_expression()?)
+                    } else {
+                        None
+                    };
+                    crate::ast::RelationalConstraint::Directional(
+                        crate::ast::DirectionalConstraint::LeftOf { target, spacing },
+                    )
+                };
+                relational_constraints.push(constraint);
+            } else {
+                break;
+            }
+        }
 
         self.expect(&Token::On)?;
 
@@ -520,6 +624,7 @@ impl crate::parser::Parser {
         let mut net = None;
         let mut thickness = None;
         let mut cutouts = Vec::new();
+        let mut shape = None;
 
         while !self.is_at_end() && !self.check(&Token::Dedent) {
             if self.check(&Token::Newline) {
@@ -531,6 +636,67 @@ impl crate::parser::Parser {
             self.expect(&Token::Colon)?;
 
             match field_name.as_str() {
+                "shape" => {
+                    // shape: Pad(w: 600nm, h: 600nm)
+                    let shape_start = self.current_span().start;
+                    let shape_name = self.expect_identifier_string()?;
+                    let mut parameters = smallvec::smallvec![];
+
+                    if self.check(&Token::OpenParen) {
+                        self.advance();
+                        while !self.check(&Token::CloseParen) && !self.is_at_end() {
+                            // Parse keyword parameter: name: value
+                            let name = self.expect_identifier_string()?;
+                            self.expect(&Token::Colon)?;
+
+                            // Parse the value as a measurement expression
+                            let expr = self.parse_expression()?;
+                            let value = match expr {
+                                crate::ast::Expression::Measurement { value, unit, .. } => {
+                                    crate::ast::ParameterValue::Measurement(
+                                        crate::ast::Measurement {
+                                            value,
+                                            unit,
+                                            span: crate::lexer::Span { start: 0, end: 0 },
+                                        },
+                                    )
+                                }
+                                crate::ast::Expression::Literal { value, .. } => {
+                                    crate::ast::ParameterValue::Number(value as f64)
+                                }
+                                crate::ast::Expression::FloatLiteral { value, .. } => {
+                                    crate::ast::ParameterValue::Number(value)
+                                }
+                                _ => {
+                                    return Err(self.error(
+                                        "Expected measurement or number for shape parameter",
+                                    ));
+                                }
+                            };
+
+                            let param = crate::ast::Parameter::Keyword {
+                                name: name.into(),
+                                value,
+                            };
+                            parameters.push(param);
+
+                            if self.check(&Token::Comma) {
+                                self.advance();
+                            }
+                        }
+                        self.expect(&Token::CloseParen)?;
+                    }
+
+                    let shape_end = self.previous_span().end;
+                    shape = Some(crate::ast::ShapeInstance {
+                        shape_name: shape_name.into(),
+                        parameters,
+                        span: Span::new(shape_start, shape_end),
+                    });
+                }
+                "at" => {
+                    from = Some(self.parse_coordinate_optional_z()?);
+                }
                 "spanning" => {
                     // spanning layer: X to Y  OR  spanning [from] to [to]
                     if self.check(&Token::Identifier("layer".into())) {
@@ -590,9 +756,9 @@ impl crate::parser::Parser {
                             let at = self.parse_coordinate_optional_z()?;
                             CutoutShape::Circle { radius, at }
                         } else {
-                            return Err(self.error(
-                                "Expected 'Rectangle' or 'Circle' for cutout shape",
-                            ));
+                            return Err(
+                                self.error("Expected 'Rectangle' or 'Circle' for cutout shape")
+                            );
                         };
 
                         cutouts.push(shape);
@@ -602,10 +768,7 @@ impl crate::parser::Parser {
                     self.expect(&Token::Dedent)?;
                 }
                 _ => {
-                    return Err(self.error(&format!(
-                        "Unknown plane property: '{}'",
-                        field_name
-                    )));
+                    return Err(self.error(&format!("Unknown plane property: '{}'", field_name)));
                 }
             }
 
@@ -619,12 +782,14 @@ impl crate::parser::Parser {
         Ok(PlanePlacement {
             material: material.into(),
             name,
+            shape,
             elevation,
             thickness,
             from,
             to,
             net,
             cutouts,
+            relational_constraints,
             span: Span::new(start_pos, end_pos),
         })
     }

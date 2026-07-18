@@ -64,7 +64,7 @@ pub fn calculate_trace_width_nm(current_ma: i64, temp_rise_c: i64, _is_external:
     // Area = (Current / (k * TempRise^b))^(1/c)
     // k = 0.048 for outer layers, 0.024 for inner layers
     // b = 0.44, c = 0.725
-    
+
     // For ASIC development, we typically use the PDK's max_current_density
     // directly instead of temp rise, but we maintain the IPC fallback for PCB.
     let k = 0.024;
@@ -82,5 +82,3 @@ pub fn calculate_trace_width_nm(current_ma: i64, temp_rise_c: i64, _is_external:
     let thickness_nm = 1000.0;
     (area_nm2 / thickness_nm) as i64
 }
-
-

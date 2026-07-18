@@ -96,36 +96,37 @@ pub fn export(
     // Add material usage section for ASIC/fabrication tracking
     bom.push_str("\n# MATERIAL USAGE (Fabrication)\n");
     bom.push_str("Reference,Type,Material,Layer_Z_nm,Area_nm2,Volume_nm3\n");
-    
+
     // Track pours from space.pours metadata
     let material_count = space.pours.len();
     for pour in &space.pours {
         let layer_info = format!("z:{}", pour.z_bottom_nm);
-        
+
         // Calculate volume if bbox available
-        let volume_nm3 = if let Some(bbox) = &pour.bbox {
-            let width = (bbox.max.x - bbox.min.x) as u64;
-            let height = (bbox.max.y - bbox.min.y) as u64;
-            let depth = (bbox.max.z - bbox.min.z) as u64;
-            width * height * depth
+        let volume_nm3: u64 = if let Some(bbox) = &pour.bbox {
+            let width = (bbox.max.x - bbox.min.x).unsigned_abs() as u128;
+            let height = (bbox.max.y - bbox.min.y).unsigned_abs() as u128;
+            let depth = (bbox.max.z - bbox.min.z).unsigned_abs() as u128;
+            (width * height * depth).min(u64::MAX as u128) as u64
         } else {
             0
         };
 
         bom.push_str(&format!(
             "{},Pour,{},{},{},{}\n",
-            pour.name,
-            pour.material_name,
-            layer_info,
-            pour.area_nm2,
-            volume_nm3
+            pour.name, pour.material_name, layer_info, pour.area_nm2, volume_nm3
         ));
     }
 
     std::fs::write(&path, bom)?;
 
     let _total_items = 1 + discrete_count + material_count; // substrate + discrete components + materials
-    println!("   ✅ BOM: {} ({} discrete items, {} material items)", path.display(), discrete_count, material_count);
+    println!(
+        "   ✅ BOM: {} ({} discrete items, {} material items)",
+        path.display(),
+        discrete_count,
+        material_count
+    );
 
     Ok(())
 }

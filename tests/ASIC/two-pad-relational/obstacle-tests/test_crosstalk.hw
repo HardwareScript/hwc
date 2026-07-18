@@ -1,0 +1,58 @@
+# Test 2: Multi-Net Crosstalk Avoidance
+# Objective: Verify that parallel traces maintain PDK-specified clearances
+
+import * from @std/primitives/units
+import * from @std/primitives/math
+import * from ../materials
+import Silicon_180nm from ../foundry_pdk
+
+module Parallel_Routes:
+    pins: [input A1, output B1, input A2, output B2]
+    route A1 to B1
+    route A2 to B2
+
+shape CubicPad(w: Measurement, h: Measurement):
+    geometry:
+        Rectangle(width: w, height: h)
+
+space Crosstalk_Demo implements Parallel_Routes:
+    dimensions: 1.2mm by 800um by 136um
+    resolution: 100nm
+    origin: bl by b
+    profile: Silicon_180nm
+
+    nets:
+        A1: { classification: signal, potential: 0V, current: 0.1uA }
+        B1: { classification: signal, potential: 0V, current: 0.1uA }
+        A2: { classification: signal, potential: 0V, current: 0.1uA }
+        B2: { classification: signal, potential: 0V, current: 0.1uA }
+
+    # First pair - bottom row
+    add plane(Aluminum) named Pad_A1 on layer: metal1:
+        shape: CubicPad(w: 150um, h: 150um)
+        at: [x: 100um, y: 200um]
+        net: A1
+
+    add plane(Aluminum) named Pad_B1 align: center_y with Pad_A1 right_of Pad_A1 with spacing: 800um on layer: metal1:
+        shape: CubicPad(w: 150um, h: 150um)
+        net: B1
+
+    # Second pair - top row (parallel route)
+    add plane(Aluminum) named Pad_A2 above Pad_A1 with spacing: 200um on layer: metal1:
+        shape: CubicPad(w: 150um, h: 150um)
+        net: A2
+
+    add plane(Aluminum) named Pad_B2 align: center_y with Pad_A2 right_of Pad_A2 with spacing: 800um on layer: metal1:
+        shape: CubicPad(w: 150um, h: 150um)
+        net: B2
+
+    # Two parallel horizontal traces - should maintain clearance
+    route Pad_A1 to Pad_B1:
+        width: 40um
+        layer: metal1
+        current_limit_ac: { rms: 0.5uA, peak: 1.0uA }
+
+    route Pad_A2 to Pad_B2:
+        width: 40um
+        layer: metal1
+        current_limit_ac: { rms: 0.5uA, peak: 1.0uA }

@@ -105,12 +105,7 @@ pub fn check_static_shorts(
                     continue;
                 }
 
-                if let Some(z) = z_overlap(
-                    a.bbox.min.z,
-                    a.bbox.max.z,
-                    b.bbox.min.z,
-                    b.bbox.max.z,
-                ) {
+                if let Some(z) = z_overlap(a.bbox.min.z, a.bbox.max.z, b.bbox.min.z, b.bbox.max.z) {
                     let intersect_min = BoundingBox {
                         min: crate::geometry::Point3D::new(
                             a.bbox.min.x.max(b.bbox.min.x),

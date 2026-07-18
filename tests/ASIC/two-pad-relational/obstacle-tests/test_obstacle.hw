@@ -1,0 +1,48 @@
+# Test 1: Obstacle Detour & 45° Miter Verification
+# Objective: Verify Axis-Aligned Slab Method detects collisions and Miter Engine chamfers corners
+
+import * from @std/primitives/units
+import * from @std/primitives/math
+import * from ../materials
+import Silicon_180nm from ../foundry_pdk
+
+module Obstacle_Connection:
+    pins: [input A, output B]
+    route A to B
+
+shape CubicPad(w: Measurement, h: Measurement):
+    geometry:
+        Rectangle(width: w, height: h)
+
+space Obstacle_Demo implements Obstacle_Connection:
+    dimensions: 1.2mm by 800um by 136um
+    resolution: 100nm
+    origin: bl by b
+    profile: Silicon_180nm
+
+    nets:
+        A: { classification: signal, potential: 0V, current: 0.1uA }
+        B: { classification: signal, potential: 0V, current: 0.1uA }
+
+    # Start Pad
+    add plane(Aluminum) named Pad_A on layer: metal1:
+        shape: CubicPad(w: 200um, h: 200um)
+        at: [x: 100um, y: 300um]
+        net: A
+
+    # Intervening Obstacle (Placed directly in the path at X = 500um)
+    add plane(Aluminum) named Keepout_Block on layer: metal1:
+        shape: CubicPad(w: 150um, h: 300um) # Tall block blocking horizontal path
+        at: [x: 500um, y: 250um]
+        # No net assigned (hard obstacle)
+
+    # Goal Pad
+    add plane(Aluminum) named Pad_B align: center_y with Pad_A right_of Pad_A with spacing: 700um on layer: metal1:
+        shape: CubicPad(w: 200um, h: 200um)
+        net: B
+
+    # Wide trace must route around Keepout_Block
+    route Pad_A to Pad_B:
+        width: 50um
+        layer: metal1
+        current_limit_ac: { rms: 0.5uA, peak: 1.0uA }

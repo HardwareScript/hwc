@@ -211,7 +211,8 @@ impl GeometryRouter {
                             // polygons via add_polygon_substrate_layer(), not rasterized
                             // into grid cells. See thermal_relief.rs for full rationale.
                             let pad_radius = via.diameter_nm / 2;
-                            let center = crate::geometry::Point2D::new(via.position.0, via.position.1);
+                            let center =
+                                crate::geometry::Point2D::new(via.position.0, via.position.1);
                             generator.generate_for_circular_pad(
                                 center,
                                 pad_radius,
@@ -332,7 +333,7 @@ impl GeometryRouter {
                     diameter_nm,
                     net_id,
                     self.routing_material_id, // Use the active routing material context
-                    ViaType::Buried, // Intermediate vias in ASIC towers are buried
+                    ViaType::Buried,          // Intermediate vias in ASIC towers are buried
                     annular_ring,
                 ));
 

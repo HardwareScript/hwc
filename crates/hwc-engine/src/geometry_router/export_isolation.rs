@@ -11,9 +11,7 @@
 
 use std::collections::HashMap;
 
-use crate::geometry_router::geometry_refinement::{
-    self, RefinedContour,
-};
+use crate::geometry_router::geometry_refinement::{self, RefinedContour};
 
 // ---------------------------------------------------------------------------
 // Format enum
@@ -175,7 +173,10 @@ pub fn export_glb(contours: &[RefinedContour], extrude_height_nm: i64) -> Vec<u8
     // Side faces: connect corresponding edges of bottom and top
     // For simplicity, add degenerate side triangles from the triangle edges
     for tri in &triangles_2d {
-        let tri_idx = triangles_2d.iter().position(|t| std::ptr::eq(t, tri)).unwrap_or(0);
+        let tri_idx = triangles_2d
+            .iter()
+            .position(|t| std::ptr::eq(t, tri))
+            .unwrap_or(0);
         let bottom_base = tri_idx as u32 * 3;
         let top_base = top_offset + tri_idx as u32 * 3;
         // Emit 6 side triangles (2 per edge of the triangle)
@@ -223,7 +224,12 @@ fn build_glb(vertices: &[f32], indices: &[u32]) -> Vec<u8> {
     out.extend_from_slice(&(total_length as u32).to_le_bytes());
 
     // JSON chunk
-    let json = build_glb_json(vertex_count, index_count, vertex_data.len(), index_data.len());
+    let json = build_glb_json(
+        vertex_count,
+        index_count,
+        vertex_data.len(),
+        index_data.len(),
+    );
     out.extend_from_slice(&(json.len() as u32).to_le_bytes());
     out.extend_from_slice(&0x4E4F534Au32.to_le_bytes()); // "JSON"
     out.extend_from_slice(json.as_bytes());
@@ -354,10 +360,7 @@ pub struct SpiceParams {
 /// Each trace segment is modeled as an R/C element with geometry-based values.
 /// Trace resistance: R = ρ * L / (W * T)
 /// Trace capacitance: C = ε0 * εr * L * W / d
-pub fn export_spice_netlist(
-    traces: &[(u32, Vec<(i64, i64)>)],
-    params: &SpiceParams,
-) -> String {
+pub fn export_spice_netlist(traces: &[(u32, Vec<(i64, i64)>)], params: &SpiceParams) -> String {
     let mut out = String::with_capacity(2048);
     let e0 = 8.854_187_812_8e-12; // vacuum permittivity
 
@@ -550,7 +553,7 @@ mod tests {
         assert_eq!(glb[1], 0x6C); // 'l'
         assert_eq!(glb[2], 0x54); // 'T'
         assert_eq!(glb[3], 0x46); // 'F'
-        // Version: 2
+                                  // Version: 2
         assert_eq!(glb[4], 2);
         assert_eq!(glb[5], 0);
         assert_eq!(glb[6], 0);
@@ -589,7 +592,13 @@ mod tests {
 
     #[test]
     fn test_export_spice_empty_traces() {
-        let spice = export_spice_netlist(&[], &SpiceParams { substrate_er: 4.5, trace_thickness_m: 35e-6 });
+        let spice = export_spice_netlist(
+            &[],
+            &SpiceParams {
+                substrate_er: 4.5,
+                trace_thickness_m: 35e-6,
+            },
+        );
         assert!(spice.contains(".SUBCKT PCB_BOARD"));
         assert!(spice.contains(".ENDS PCB_BOARD"));
     }

@@ -1,5 +1,5 @@
-use compact_str::CompactString;
 use crate::geometry::{BoundingBox, Point3D};
+use compact_str::CompactString;
 
 /// A Planar Island represents a continuous copper region on a single layer.
 ///

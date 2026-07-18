@@ -32,7 +32,9 @@ pub fn synthesize_and_place_logic(
     // The synthesizer mutates space in-place, returns only warnings
     let warnings = synthesizer
         .synthesize_logic_block(collector, logic_block, module_pins)
-        .map_err(|e| IrError::LogicSynthesisFailed { message: e.to_string() })?;
+        .map_err(|e| IrError::LogicSynthesisFailed {
+            message: e.to_string(),
+        })?;
 
     // Report warnings to user
     for warning in warnings {
@@ -41,7 +43,9 @@ pub fn synthesize_and_place_logic(
 
     // Check for synthesis errors in collector
     if collector.has_errors() {
-        return Err(IrError::LogicSynthesisFailed { message: "Logic synthesis failed".into() });
+        return Err(IrError::LogicSynthesisFailed {
+            message: "Logic synthesis failed".into(),
+        });
     }
 
     // Done - space has been mutated directly, nothing to return

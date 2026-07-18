@@ -1,0 +1,185 @@
+# Material definitions for CMOS Inverter
+# Physically verified materials library for CMOS and PCB physical synthesis
+
+# ============================================================================
+# Conductors
+# ============================================================================
+
+material Copper:
+    category: conductor
+    symbol: "Cu"
+    description: "Chip-level routing, heat sinks"
+    properties:
+        color: "#B87333"
+        metallic: 1.0
+        roughness: 0.2
+        opacity: 1.0
+        resistivity: 1.68e-8ohm_m
+        thermal_conductivity: 401.0W_mK
+        density: 8960.0kg_m3
+        max_current_density: 35.0A_mm2
+        melting_point: 1085.0C
+
+material Aluminum:
+    category: conductor
+    symbol: "Al"
+    description: "Chip-level routing, heat sinks"
+    properties:
+        color: "#C0C0C0"
+        metallic: 0.9
+        roughness: 0.3
+        opacity: 1.0
+        resistivity: 2.82e-8ohm_m
+        thermal_conductivity: 237.0W_mK
+        density: 2700.0kg_m3
+        max_current_density: 20.0A_mm2
+        melting_point: 660.0C
+
+material Polysilicon:
+    category: conductor
+    symbol: "Poly"
+    description: "Gate electrode material"
+    properties:
+        color: "#708090"
+        metallic: 0.4
+        roughness: 0.6
+        opacity: 1.0
+        resistivity: 1.0e-3ohm_m
+        thermal_conductivity: 30.0W_mK
+        density: 2330.0kg_m3
+        max_current_density: 1000.0A_mm2
+        melting_point: 1414.0C
+
+# ============================================================================
+# Semiconductors (Doped)
+# ============================================================================
+
+material Silicon_P:
+    category: semiconductor
+    symbol: "Si_P"
+    description: "P-type doped silicon substrate"
+    properties:
+        color: "#90A090"
+        metallic: 0.1
+        roughness: 0.7
+        opacity: 1.0
+        band_gap: 1.12eV
+        electron_mobility: 1400.0cm2_Vs
+        hole_mobility: 450.0cm2_Vs
+        resistivity: 1.0ohm_m
+        thermal_conductivity: 150.0W_mK
+        density: 2330.0kg_m3
+        doping_type: "p-type"
+        bias_requirement: "ground"
+
+material Silicon_N:
+    category: semiconductor
+    symbol: "Si_N"
+    description: "N-type doped silicon substrate"
+    properties:
+        color: "#809080"
+        metallic: 0.1
+        roughness: 0.7
+        opacity: 1.0
+        band_gap: 1.12eV
+        electron_mobility: 1400.0cm2_Vs
+        hole_mobility: 450.0cm2_Vs
+        resistivity: 0.5ohm_m
+        thermal_conductivity: 150.0W_mK
+        density: 2330.0kg_m3
+        doping_type: "n-type"
+        bias_requirement: "power"
+
+# ============================================================================
+# Insulators
+# ============================================================================
+
+material SiO2:
+    category: insulator
+    symbol: "SiO2"
+    description: "Gate oxide, isolation dielectric"
+    properties:
+        color: "#F0F0F0"
+        metallic: 0.0
+        roughness: 0.4
+        opacity: 0.9
+        dielectric_strength: 10000.0kV_mm
+        relative_permittivity: 3.9
+        thermal_conductivity: 1.4W_mK
+        density: 2200.0kg_m3
+
+material FR4:
+    category: insulator
+    symbol: "FR4"
+    description: "Standard PCB substrate (fiberglass epoxy)"
+    properties:
+        color: "#2E7D32"
+        metallic: 0.0
+        roughness: 0.8
+        opacity: 1.0
+        dielectric_strength: 20.0kV_mm
+        relative_permittivity: 4.5
+        thermal_conductivity: 0.3W_mK
+        density: 1800.0kg_m3
+        glass_transition_temp: 130.0C
+
+material Tungsten:
+    category: conductor
+    symbol: "W"
+    description: "Via fill material for CMOS contact/via plugs"
+    properties:
+        color: "#707070"
+        metallic: 1.0
+        roughness: 0.3
+        opacity: 1.0
+        resistivity: 5.6e-8ohm_m
+        thermal_conductivity: 173.0W_mK
+        density: 19300.0kg_m3
+        max_current_density: 10.0A_mm2
+        melting_point: 3422.0C
+
+material Titanium_Silicide:
+    category: conductor
+    symbol: "TiSi2"
+    description: "Silicide interface for silicon-to-metal contacts"
+    properties:
+        color: "#505060"
+        metallic: 0.8
+        roughness: 0.4
+        opacity: 1.0
+        resistivity: 1.3e-7ohm_m
+        thermal_conductivity: 20.0W_mK
+        density: 4250.0kg_m3
+        max_current_density: 15.0A_mm2
+
+# ============================================================================
+# Compiler Internal Materials
+# Used by the compiler for component bodies, solder mask, and via filling
+# ============================================================================
+
+material Component:
+    category: insulator
+    description: "Internal material for component body bounding boxes"
+    properties:
+        color: "#1A1A1A"
+        metallic: 0.0
+        roughness: 0.5
+        opacity: 1.0
+
+material SolderMask:
+    category: insulator
+    description: "Solder mask layer - green protective coating"
+    properties:
+        color: "#006400"
+        metallic: 0.0
+        roughness: 0.5
+        opacity: 0.8
+
+material Epoxy:
+    category: insulator
+    description: "Non-conductive epoxy fill for filled vias"
+    properties:
+        color: "#808080"
+        metallic: 0.0
+        roughness: 0.6
+        opacity: 1.0

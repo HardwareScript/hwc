@@ -10,13 +10,15 @@
 //! - `conversions.rs`: Unit conversions and coordinate transformations  
 //! - `space_builder.rs`: Hardware space creation
 //! - `placement.rs`: Component and substrate placement
-//! - `routing/`: Trace routing (automatic A* and manual waypoint)
+//! - `routing/`: Trace routing (automatic topological and manual waypoint)
 //! - `tests.rs`: Integration tests
 //!
 //! This file serves as the public API entry point, re-exporting from the modular implementation.
 
 // Re-export from the modular ir implementation
-pub use crate::ir::{program_to_space, program_to_spaces, program_to_spaces_with_lockfile, IrError};
+pub use crate::ir::{
+    program_to_space, program_to_spaces, program_to_spaces_with_lockfile, IrError,
+};
 
 // Additional re-exports for convenience
 pub use crate::ir::{create_hardware_space, route_trace};

@@ -13,16 +13,25 @@ pub fn resolve_position(
     bbox_tracker: &mut BoundingBoxTracker,
     eval_context: &EvaluationContext,
 ) -> Result<Coordinate, IrError> {
-    if component.position.is_relative() {
+    let position =
+        component
+            .position
+            .as_ref()
+            .ok_or_else(|| IrError::CoordinateResolutionFailed {
+                coordinate_str: "component position".into(),
+                reason: "Component has no explicit position and unresolved relational constraints"
+                    .into(),
+            })?;
+    if position.is_relative() {
         let solver = crate::constraint_solver::ConstraintSolver::new(bbox_tracker, eval_context);
-        solver.resolve_position(&component.position).map_err(|e| {
-            IrError::CoordinateResolutionFailed {
+        solver
+            .resolve_position(position)
+            .map_err(|e| IrError::CoordinateResolutionFailed {
                 coordinate_str: "relative position".into(),
                 reason: e.to_string(),
-            }
-        })
+            })
     } else {
-        Ok(component.position.clone())
+        Ok(position.clone())
     }
 }
 
@@ -63,11 +72,12 @@ pub fn calculate_untransformed_origin(
             reason: e.to_string(),
         })?
     } else {
-        evaluate_expression_to_nm(x_expr, ctx.symbol_table)
-            .map_err(|e| IrError::CoordinateResolutionFailed {
+        evaluate_expression_to_nm(x_expr, ctx.symbol_table).map_err(|e| {
+            IrError::CoordinateResolutionFailed {
                 coordinate_str: "X coordinate".into(),
                 reason: e.to_string(),
-            })?
+            }
+        })?
     };
 
     let y_nm = if let Ok(hwc_parser::Value::Percentage(pct)) = y_expr.evaluate(ctx.eval_context) {
@@ -85,11 +95,12 @@ pub fn calculate_untransformed_origin(
             reason: e.to_string(),
         })?
     } else {
-        evaluate_expression_to_nm(y_expr, ctx.symbol_table)
-            .map_err(|e| IrError::CoordinateResolutionFailed {
+        evaluate_expression_to_nm(y_expr, ctx.symbol_table).map_err(|e| {
+            IrError::CoordinateResolutionFailed {
                 coordinate_str: "Y coordinate".into(),
                 reason: e.to_string(),
-            })?
+            }
+        })?
     };
 
     let z_ctx = CoordinateContext {
@@ -101,11 +112,12 @@ pub fn calculate_untransformed_origin(
         stackup_manager: ctx.stackup_manager,
         profile: ctx.profile,
     };
-    let z_nm = resolve_coordinate_z_nm(z_expr, &z_ctx, has_anchor_refs)
-        .map_err(|e| IrError::CoordinateResolutionFailed {
+    let z_nm = resolve_coordinate_z_nm(z_expr, &z_ctx, has_anchor_refs).map_err(|e| {
+        IrError::CoordinateResolutionFailed {
             coordinate_str: "Z coordinate".into(),
             reason: e.to_string(),
-        })?;
+        }
+    })?;
 
     if z_nm < 0 {
         let z_span = z_expr.span();
@@ -117,4 +129,3 @@ pub fn calculate_untransformed_origin(
 
     Ok(Point3D::new(x_nm, y_nm, z_nm))
 }
-

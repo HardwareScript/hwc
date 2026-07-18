@@ -6,16 +6,14 @@
 //! - Flat active-interval sweep (no BST, no pointer chasing)
 //! - Unified overlap dispatch (same-net, different-net, no-overlap)
 //! - SIMD-style 4-wide batched AABB overlap
-//! - Rayon parallelism across G-cells
+//! - std::thread::scope parallelism across G-cells
 
-use crate::geometry::{BoundingBox, Point3D};
 use crate::geometry::transform::BoundingBox2D;
+use crate::geometry::{BoundingBox, Point3D};
 use crate::geometry_router::partition::PartitionGrid;
-use crate::geometry_router::spatial_index::{DynamicSpatialIndex, IndexedSegment};
 use crate::geometry_router::route_decomposition::VirtualJunction;
+use crate::geometry_router::spatial_index::{DynamicSpatialIndex, IndexedSegment};
 use crate::material::{MaterialConductivity, MaterialId, MaterialRegistry};
-
-use rayon::prelude::*;
 
 /// A lightweight DRC violation for the sweep engine.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -101,10 +99,7 @@ impl GhostRegistry {
     ///
     /// A segment is a ghost if its center is outside the unexpanded cell
     /// but was included because it falls within the halo-expanded query region.
-    pub fn from_segments(
-        segments: &[IndexedSegment],
-        cell_bounds: &BoundingBox,
-    ) -> Self {
+    pub fn from_segments(segments: &[IndexedSegment], cell_bounds: &BoundingBox) -> Self {
         let mut registry = Self::new();
         for (i, seg) in segments.iter().enumerate() {
             let center = seg.center();
@@ -319,10 +314,7 @@ pub fn find_overlaps(segments: &[IndexedSegment]) -> Vec<(usize, usize)> {
 /// this uses bitwise `&` on boolean results for branchless evaluation.
 /// Falls back to scalar for the remainder (handled by the loop itself).
 #[inline]
-pub fn batch_aabb_overlap(
-    boxes_a: &[BoundingBox2D; 4],
-    boxes_b: &[BoundingBox2D; 4],
-) -> [bool; 4] {
+pub fn batch_aabb_overlap(boxes_a: &[BoundingBox2D; 4], boxes_b: &[BoundingBox2D; 4]) -> [bool; 4] {
     let mut results = [false; 4];
 
     for i in 0..4 {
@@ -489,7 +481,11 @@ pub fn classify_overlap(
 
 /// Check if a junction position lies within the combined envelope of two segments.
 #[inline]
-fn is_point_in_overlap_envelope(point: Point3D, seg_a: &IndexedSegment, seg_b: &IndexedSegment) -> bool {
+fn is_point_in_overlap_envelope(
+    point: Point3D,
+    seg_a: &IndexedSegment,
+    seg_b: &IndexedSegment,
+) -> bool {
     let a = segment_bbox(seg_a);
     let b = segment_bbox(seg_b);
 
@@ -638,11 +634,11 @@ struct GCellSweepContext {
 // Main Entry Point
 // ============================================================================
 
-/// Verify all G-cells using Rayon parallelism.
+/// Verify all G-cells using std::thread::scope parallelism.
 ///
-/// Each G-cell is processed on a separate thread via `par_iter()`.
-/// No global memory locks — each thread collects violations locally.
-/// Returns a merged `Vec<SweepViolation>` of all DRC violations found.
+/// Each G-cell is processed on a separate thread via coarse-grained chunks
+/// across CPU cores. No global memory locks — each thread collects violations
+/// locally. Returns a merged `Vec<SweepViolation>` of all DRC violations found.
 ///
 /// # Arguments
 /// * `grid` - G-cell partition grid
@@ -682,19 +678,34 @@ pub fn verify_gcell_sweep(
         })
         .collect();
 
-    let violation_results: Vec<Vec<SweepViolation>> = contexts
-        .par_iter()
-        .map(|ctx| {
-            verify_single_gcell(
-                ctx,
-                junctions,
-                default_clearance_nm,
-                layer_to_material,
-                material_registry,
-                bridge_table,
-            )
-        })
-        .collect();
+    let cpu_cores = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(1);
+    let chunk_size = (contexts.len() + cpu_cores - 1).max(1);
+
+    let violation_results: Vec<Vec<SweepViolation>> = std::thread::scope(|s| {
+        let mut handles = Vec::new();
+
+        for chunk in contexts.chunks(chunk_size) {
+            let handle = s.spawn(move || {
+                let mut local_violations: Vec<SweepViolation> = Vec::new();
+                for ctx in chunk {
+                    local_violations.extend(verify_single_gcell(
+                        ctx,
+                        junctions,
+                        default_clearance_nm,
+                        layer_to_material,
+                        material_registry,
+                        bridge_table,
+                    ));
+                }
+                local_violations
+            });
+            handles.push(handle);
+        }
+
+        handles.into_iter().map(|h| h.join().unwrap()).collect()
+    });
 
     violation_results.into_iter().flatten().collect()
 }
@@ -763,10 +774,7 @@ fn verify_single_gcell(
 
         let center_a = seg_a.center();
         let center_b = seg_b.center();
-        let midpoint = (
-            (center_a.x + center_b.x) / 2,
-            (center_a.y + center_b.y) / 2,
-        );
+        let midpoint = ((center_a.x + center_b.x) / 2, (center_a.y + center_b.y) / 2);
 
         match result {
             OverlapResult::DifferentNet {
@@ -937,7 +945,10 @@ mod tests {
         ];
 
         let registry = GhostRegistry::from_segments(&segments, &cell_bounds);
-        assert!(!registry.is_ghost(0), "Segment inside cell should not be ghost");
+        assert!(
+            !registry.is_ghost(0),
+            "Segment inside cell should not be ghost"
+        );
         assert!(registry.is_ghost(1), "Segment outside cell should be ghost");
     }
 
@@ -1131,7 +1142,16 @@ mod tests {
             layer: 1,
         };
 
-        match classify_overlap(&seg_a, &seg_b, &[], 500_000, None, None, &MaterialRegistry::new(), &BridgeTable::default()) {
+        match classify_overlap(
+            &seg_a,
+            &seg_b,
+            &[],
+            500_000,
+            None,
+            None,
+            &MaterialRegistry::new(),
+            &BridgeTable::default(),
+        ) {
             OverlapResult::DifferentNet { net_a, net_b, .. } => {
                 assert_eq!(net_a, 1);
                 assert_eq!(net_b, 2);
@@ -1161,7 +1181,16 @@ mod tests {
             layer: 1,
         };
 
-        match classify_overlap(&seg_a, &seg_b, &[], 500_000, None, None, &MaterialRegistry::new(), &BridgeTable::default()) {
+        match classify_overlap(
+            &seg_a,
+            &seg_b,
+            &[],
+            500_000,
+            None,
+            None,
+            &MaterialRegistry::new(),
+            &BridgeTable::default(),
+        ) {
             OverlapResult::SameNet {
                 net_id,
                 is_valid_junction,
@@ -1203,7 +1232,16 @@ mod tests {
             inductance_nh: 0.0,
         }];
 
-        match classify_overlap(&seg_a, &seg_b, &junctions, 500_000, None, None, &MaterialRegistry::new(), &BridgeTable::default()) {
+        match classify_overlap(
+            &seg_a,
+            &seg_b,
+            &junctions,
+            500_000,
+            None,
+            None,
+            &MaterialRegistry::new(),
+            &BridgeTable::default(),
+        ) {
             OverlapResult::SameNet {
                 is_valid_junction, ..
             } => {
@@ -1234,7 +1272,16 @@ mod tests {
             layer: 1,
         };
 
-        match classify_overlap(&seg_a, &seg_b, &[], 500_000, None, None, &MaterialRegistry::new(), &BridgeTable::default()) {
+        match classify_overlap(
+            &seg_a,
+            &seg_b,
+            &[],
+            500_000,
+            None,
+            None,
+            &MaterialRegistry::new(),
+            &BridgeTable::default(),
+        ) {
             OverlapResult::NoOverlap => {}
             other => panic!("Expected NoOverlap, got {:?}", other),
         }
@@ -1291,7 +1338,10 @@ mod tests {
         };
 
         let clearance = compute_actual_clearance(&seg_a, &seg_b);
-        assert_eq!(clearance, 1_000_000, "2mm center spacing - 1mm width = 1mm clearance");
+        assert_eq!(
+            clearance, 1_000_000,
+            "2mm center spacing - 1mm width = 1mm clearance"
+        );
     }
 
     // ------------------------------------------------------------------

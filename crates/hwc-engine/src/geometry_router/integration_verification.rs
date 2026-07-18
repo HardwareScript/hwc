@@ -14,7 +14,15 @@ mod tests {
     // 1. rstar Integration
     // -----------------------------------------------------------------------
 
-    fn make_segment(id: usize, net: usize, x1: i64, y1: i64, x2: i64, y2: i64, w: i64) -> IndexedSegment {
+    fn make_segment(
+        id: usize,
+        net: usize,
+        x1: i64,
+        y1: i64,
+        x2: i64,
+        y2: i64,
+        w: i64,
+    ) -> IndexedSegment {
         IndexedSegment {
             segment_id: id,
             net_id: net,
@@ -32,7 +40,9 @@ mod tests {
         // Use mm-scale coordinates (1mm = 1_000_000nm)
         idx.insert(make_segment(0, 1, 0, 0, 2_000_000, 0, 200_000));
         idx.insert(make_segment(1, 1, 10_000_000, 0, 12_000_000, 0, 200_000));
-        idx.insert(make_segment(2, 2, 50_000_000, 50_000_000, 52_000_000, 50_000_000, 200_000));
+        idx.insert(make_segment(
+            2, 2, 50_000_000, 50_000_000, 52_000_000, 50_000_000, 200_000,
+        ));
         assert_eq!(idx.len(), 3);
 
         // Query box from (-1mm, -1mm) to (15mm, 15mm)
@@ -49,7 +59,9 @@ mod tests {
         let mut idx = DynamicSpatialIndex::new();
         // Segments far apart: one at origin, one 50mm away
         idx.insert(make_segment(0, 1, 0, 0, 1_000_000, 0, 100_000));
-        idx.insert(make_segment(1, 1, 50_000_000, 50_000_000, 51_000_000, 50_000_000, 100_000));
+        idx.insert(make_segment(
+            1, 1, 50_000_000, 50_000_000, 51_000_000, 50_000_000, 100_000,
+        ));
 
         // Query near origin with 5mm radius — only segment 0 should be found
         let results = idx.query_radius(0, 0, 5_000_000);
@@ -164,10 +176,7 @@ mod tests {
     fn clipper2_empty_input() {
         let subjects: Paths64 = Vec::<Path64>::new().into_iter().collect();
         let result = union_subjects_64(&subjects, FillRule::NonZero);
-        assert!(
-            result.is_empty(),
-            "union of empty input should be empty"
-        );
+        assert!(result.is_empty(), "union of empty input should be empty");
     }
 
     #[test]
@@ -182,7 +191,11 @@ mod tests {
             "single polygon should pass through unchanged"
         );
         // Verify the single output has 4 points (rectangle)
-        assert_eq!(result[0].len(), 4, "output should be a rectangle with 4 points");
+        assert_eq!(
+            result[0].len(),
+            4,
+            "output should be a rectangle with 4 points"
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -279,8 +292,7 @@ mod tests {
         };
 
         // Serialize
-        let bytes: rkyv::AlignedVec =
-            rkyv::to_bytes::<_, 1_048_576>(&lockfile).expect("serialize");
+        let bytes: rkyv::AlignedVec = rkyv::to_bytes::<_, 1_048_576>(&lockfile).expect("serialize");
 
         // Write to temp file, mmap, and validate
         let dir = tempfile::tempdir().expect("tempdir");
@@ -365,7 +377,7 @@ mod tests {
         // A simple rectangle: 4 vertices
         // earcutr should produce exactly 2 triangles for a convex quad
         let vertices = vec![
-            0.0, 0.0,   // bottom-left
+            0.0, 0.0, // bottom-left
             1000.0, 0.0, // bottom-right
             1000.0, 1000.0, // top-right
             0.0, 1000.0, // top-left
@@ -374,7 +386,11 @@ mod tests {
         let indices = earcutr::earcut(&vertices, &hole_indices, 2)
             .expect("earcutr should succeed for simple rectangle");
         // A rectangle → 2 triangles → 6 indices
-        assert_eq!(indices.len(), 6, "rectangle should produce 2 triangles (6 indices)");
+        assert_eq!(
+            indices.len(),
+            6,
+            "rectangle should produce 2 triangles (6 indices)"
+        );
         // Verify all indices are in range [0, 3]
         for &idx in &indices {
             assert!(idx < 4, "index {idx} out of range for 4-vertex polygon");
@@ -387,15 +403,9 @@ mod tests {
         // Hole: 200×200 square centered at (500, 500)
         let vertices = vec![
             // Outer ring (CCW)
-            0.0, 0.0,
-            1000.0, 0.0,
-            1000.0, 1000.0,
-            0.0, 1000.0,
+            0.0, 0.0, 1000.0, 0.0, 1000.0, 1000.0, 0.0, 1000.0,
             // Hole ring (CW — smaller winding)
-            400.0, 400.0,
-            400.0, 600.0,
-            600.0, 600.0,
-            600.0, 400.0,
+            400.0, 400.0, 400.0, 600.0, 600.0, 600.0, 600.0, 400.0,
         ];
         let hole_indices = vec![4]; // hole starts at vertex index 4
 
@@ -430,10 +440,7 @@ mod tests {
         // We verify indirectly: all types used here are from our own crate
         // or from approved libraries (rstar, clipper2, sha2, rkyv, earcutr).
         let _point = Point3D::new(0, 0, 0);
-        let _bbox = BoundingBox::new(
-            Point3D::new(0, 0, 0),
-            Point3D::new(1000, 1000, 1000),
-        );
+        let _bbox = BoundingBox::new(Point3D::new(0, 0, 0), Point3D::new(1000, 1000, 1000));
         // No glam types used anywhere in this module — verified at compile time.
     }
 
@@ -449,7 +456,9 @@ mod tests {
         let mut idx = DynamicSpatialIndex::new();
         idx.insert(make_segment(0, 1, 0, 0, 2_000_000, 0, 200_000));
         idx.insert(make_segment(1, 1, 1_000_000, 0, 3_000_000, 0, 200_000));
-        idx.insert(make_segment(2, 2, 50_000_000, 50_000_000, 52_000_000, 50_000_000, 200_000));
+        idx.insert(make_segment(
+            2, 2, 50_000_000, 50_000_000, 52_000_000, 50_000_000, 200_000,
+        ));
 
         // Query box that captures segments 0 and 1 (both net 1)
         let bbox = BoundingBox {
@@ -457,7 +466,11 @@ mod tests {
             max: Point3D::new(5_000_000, 5_000_000, 1),
         };
         let results = idx.query_bbox(&bbox);
-        assert!(results.len() >= 2, "rstar query must find at least 2 segments, got {}", results.len());
+        assert!(
+            results.len() >= 2,
+            "rstar query must find at least 2 segments, got {}",
+            results.len()
+        );
 
         // Step 2: Convert query results to clipper2 polygons (bounding boxes)
         let paths: Vec<Path64> = results
@@ -481,7 +494,10 @@ mod tests {
 
         let subjects: Paths64 = paths.into_iter().collect();
         let union_result = union_subjects_64(&subjects, FillRule::NonZero);
-        assert!(!union_result.is_empty(), "clipper2 union must produce output");
+        assert!(
+            !union_result.is_empty(),
+            "clipper2 union must produce output"
+        );
 
         // Step 3: Triangulate the union result
         for polygon in &union_result {
@@ -513,14 +529,20 @@ mod tests {
         let seg = make_segment(0, 1, 2_000_000, 3_000_000, 8_000_000, 9_000_000, 100_000);
         idx.insert(seg);
         let found = idx.query_radius(5_000_000, 6_000_000, 5_000_000);
-        assert!(!found.is_empty(), "rstar must find segment via radius query");
+        assert!(
+            !found.is_empty(),
+            "rstar must find segment via radius query"
+        );
 
         // clipper2: polygon with i64 coordinates
         let rect = make_rect_path(1_000_000, 1_000_000, 5_000_000, 5_000_000);
         let subjects: Paths64 = vec![rect].into_iter().collect();
         let result = union_subjects_64(&subjects, FillRule::NonZero);
         assert_eq!(result.len(), 1);
-        assert!(!result[0].is_empty(), "clipper2 must return non-empty polygon");
+        assert!(
+            !result[0].is_empty(),
+            "clipper2 must return non-empty polygon"
+        );
 
         // rkyv: serialize/deserialize i64 values
         let lockfile = CompactLockfileBinary {
@@ -543,8 +565,7 @@ mod tests {
         };
 
         // Serialize
-        let bytes: rkyv::AlignedVec =
-            rkyv::to_bytes::<_, 1_048_576>(&lockfile).expect("serialize");
+        let bytes: rkyv::AlignedVec = rkyv::to_bytes::<_, 1_048_576>(&lockfile).expect("serialize");
         let archived =
             rkyv::validation::validators::check_archived_root::<CompactLockfileBinary>(&bytes)
                 .expect("validate");

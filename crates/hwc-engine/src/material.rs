@@ -213,13 +213,19 @@ impl MaterialRegistry {
     /// Check if a material is a semiconductor.
     #[inline]
     pub fn is_semiconductor(&self, id: MaterialId) -> bool {
-        matches!(self.get_conductivity(id), Some(MaterialConductivity::Semiconductor))
+        matches!(
+            self.get_conductivity(id),
+            Some(MaterialConductivity::Semiconductor)
+        )
     }
 
     /// Check if a material is an insulator.
     #[inline]
     pub fn is_insulator(&self, id: MaterialId) -> bool {
-        matches!(self.get_conductivity(id), Some(MaterialConductivity::Insulator))
+        matches!(
+            self.get_conductivity(id),
+            Some(MaterialConductivity::Insulator)
+        )
     }
 
     /// Store physical properties (resistivity, thermal conductivity, thickness) for a material.

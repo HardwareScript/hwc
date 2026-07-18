@@ -34,9 +34,9 @@
 //!     dummy_fill_pattern: DotGrid(size: 2um, spacing: 4um)
 //! ```
 
-use crate::geometry_router::EntityGraph;
-use crate::geometry_router::substrate_types::SubstrateLayerType;
 use crate::geometry::{BoundingBox, Point3D};
+use crate::geometry_router::substrate_types::SubstrateLayerType;
+use crate::geometry_router::EntityGraph;
 
 /// Configuration for dummy metal fill (thieving).
 ///
@@ -154,7 +154,11 @@ impl DummyFillEngine {
     ///
     /// # Returns
     /// Statistics about the dummy fill operation.
-    pub fn run(&mut self, entity_graph: &mut EntityGraph, config: &DummyFillConfig) -> DummyFillStats {
+    pub fn run(
+        &mut self,
+        entity_graph: &mut EntityGraph,
+        config: &DummyFillConfig,
+    ) -> DummyFillStats {
         if !config.enabled {
             return DummyFillStats {
                 zones_analyzed: 0,
@@ -168,13 +172,15 @@ impl DummyFillEngine {
         // v0.1.8: Use bounding box dimensions directly in nanometers
         let board_bbox = match entity_graph.total_bounding_box() {
             Some(bbox) => bbox,
-            None => return DummyFillStats {
-                zones_analyzed: 0,
-                zones_filled: 0,
-                total_dummies_placed: 0,
-                average_density_before: 0.0,
-                average_density_after: 0.0,
-            },
+            None => {
+                return DummyFillStats {
+                    zones_analyzed: 0,
+                    zones_filled: 0,
+                    total_dummies_placed: 0,
+                    average_density_before: 0.0,
+                    average_density_after: 0.0,
+                }
+            }
         };
 
         let board_width_nm = board_bbox.max.x - board_bbox.min.x;
@@ -224,8 +230,8 @@ impl DummyFillEngine {
                     let zone_max_x = (zone_min_x + coarse_cell_nm).min(board_bbox.max.x);
                     let zone_max_y = (zone_min_y + coarse_cell_nm).min(board_bbox.max.y);
 
-                    let zone_area_nm2 = (zone_max_x - zone_min_x) as i128
-                        * (zone_max_y - zone_min_y) as i128;
+                    let zone_area_nm2 =
+                        (zone_max_x - zone_min_x) as i128 * (zone_max_y - zone_min_y) as i128;
 
                     // v0.1.8: R*-tree bbox query instead of grid point sampling
                     let (occupied_area, zone_bbox) = self.sample_zone(
@@ -473,10 +479,10 @@ pub struct DummyFillStats {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::geometry::{BoundingBox, Point3D};
-    use crate::geometry_router::substrate_types::SubstrateLayerType;
-    use crate::geometry_router::scene_graph::ComponentStamp;
     use crate::geometry::transform::FixedTransform2D;
+    use crate::geometry::{BoundingBox, Point3D};
+    use crate::geometry_router::scene_graph::ComponentStamp;
+    use crate::geometry_router::substrate_types::SubstrateLayerType;
 
     /// Test that an empty board with substrate layers gets dummy fill.
     #[test]
@@ -532,12 +538,8 @@ mod tests {
             SubstrateLayerType::Pour,
         );
 
-        let stamp = ComponentStamp::rectangle(
-            0,
-            "fill_block".to_string(),
-            board_size_nm,
-            board_size_nm,
-        );
+        let stamp =
+            ComponentStamp::rectangle(0, "fill_block".to_string(), board_size_nm, board_size_nm);
         let stamp_id = grid.scene_mut().register_stamp(stamp);
         let identity = FixedTransform2D::identity();
         grid.scene_mut().place_instance(stamp_id, identity, vec![]);

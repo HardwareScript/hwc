@@ -2,6 +2,7 @@ use crate::geometry::BoundingBox;
 
 use super::spatial_index::IndexedSegment;
 
+#[derive(Clone)]
 pub struct StaticLayerIndex {
     segments: Vec<IndexedSegment>,
     sorted_by_x_min: Vec<usize>,

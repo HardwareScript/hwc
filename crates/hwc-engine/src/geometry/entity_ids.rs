@@ -9,7 +9,9 @@ use std::fmt;
 
 /// A stable, unique identifier for any entity in the design (v0.1.8)
 /// Generated via cryptographic hash of semantic path + type, truncated to u64.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub struct EntityId(pub u64);
 
 impl EntityId {
@@ -72,40 +74,66 @@ pub struct JunctionGraphId(pub EntityId);
 
 impl ComponentGraphId {
     pub fn generate(component_type: &str, placement_path: &str) -> Self {
-        Self(EntityId::from_str(&format!("comp:{}:{}", component_type, placement_path)))
+        Self(EntityId::from_str(&format!(
+            "comp:{}:{}",
+            component_type, placement_path
+        )))
     }
 }
 
 impl PinGraphId {
     pub fn generate(component_path: &str, pin_name: &str) -> Self {
-        Self(EntityId::from_str(&format!("pin:{}:{}", component_path, pin_name)))
+        Self(EntityId::from_str(&format!(
+            "pin:{}:{}",
+            component_path, pin_name
+        )))
     }
 
     pub fn generate_from_parent(pin_name: &str, component_id: &EntityId) -> Self {
-        Self(EntityId::from_str(&format!("pin:{}:{}", component_id.to_hex(), pin_name)))
+        Self(EntityId::from_str(&format!(
+            "pin:{}:{}",
+            component_id.to_hex(),
+            pin_name
+        )))
     }
 }
 
 impl NetGraphId {
     pub fn generate(net_name: &str, parent: &EntityId) -> Self {
-        Self(EntityId::from_str(&format!("net:{}:{}", parent.to_hex(), net_name)))
+        Self(EntityId::from_str(&format!(
+            "net:{}:{}",
+            parent.to_hex(),
+            net_name
+        )))
     }
 }
 
 impl RouteGraphId {
     pub fn generate(from_pin: &EntityId, to_pin: &EntityId) -> Self {
-        Self(EntityId::from_str(&format!("route:{}:{}", from_pin.to_hex(), to_pin.to_hex())))
+        Self(EntityId::from_str(&format!(
+            "route:{}:{}",
+            from_pin.to_hex(),
+            to_pin.to_hex()
+        )))
     }
 }
 
 impl GeometryGraphId {
     pub fn generate(route_id: &EntityId, layer: i64) -> Self {
-        Self(EntityId::from_str(&format!("geom:{}:layer:{}", route_id.to_hex(), layer)))
+        Self(EntityId::from_str(&format!(
+            "geom:{}:layer:{}",
+            route_id.to_hex(),
+            layer
+        )))
     }
 }
 
 impl JunctionGraphId {
     pub fn generate(route_a: &EntityId, route_b: &EntityId) -> Self {
-        Self(EntityId::from_str(&format!("junction:{}:{}", route_a.to_hex(), route_b.to_hex())))
+        Self(EntityId::from_str(&format!(
+            "junction:{}:{}",
+            route_a.to_hex(),
+            route_b.to_hex()
+        )))
     }
 }

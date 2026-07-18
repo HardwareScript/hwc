@@ -96,18 +96,86 @@ pub enum MountingSide {
     Embedded,
 }
 
+/// Alignment axis for relational constraints (v0.1.9)
+///
+/// Specifies which axis or edge to align with a target component.
+/// Used in: `align: center_y with Pad_A`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AlignmentAxis {
+    CenterX,
+    CenterY,
+    CenterZ,
+    Top,
+    Bottom,
+    Left,
+    Right,
+}
+
+/// Directional relational constraint (v0.1.9)
+///
+/// Positions a component relative to another using directional prepositions.
+/// Examples:
+/// - `above Pad_A`
+/// - `below Pad_B with spacing: 2.0um`
+/// - `right_of Pad_C`
+/// - `left_of Pad_D`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum DirectionalConstraint {
+    Above {
+        target: ComponentName,
+        spacing: Option<super::Expression>,
+    },
+    Below {
+        target: ComponentName,
+        spacing: Option<super::Expression>,
+    },
+    RightOf {
+        target: ComponentName,
+        spacing: Option<super::Expression>,
+    },
+    LeftOf {
+        target: ComponentName,
+        spacing: Option<super::Expression>,
+    },
+}
+
+/// Relational placement constraint (v0.1.9)
+///
+/// Constrains a component's position relative to another component.
+/// These constraints are resolved during the compiler's relational resolving phase,
+/// converting relative descriptions to absolute picometer coordinates.
+///
+/// Examples:
+/// - `align: center_y with Pad_A`
+/// - `above Pad_B with spacing: 1.0mm`
+/// - `right_of Pad_C`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum RelationalConstraint {
+    /// Co-planar axis alignment: `align: <axis> with <target>`
+    Align {
+        axis: AlignmentAxis,
+        target: ComponentName,
+        span: Span,
+    },
+    /// Directional offset: `above|below|right_of|left_of <target> [with spacing: <expr>]`
+    Directional(DirectionalConstraint),
+}
+
 /// Component placement: `add Type (params) named Instance at [X,Y,Z] rotated angle`
 /// v0.1.6 Sprint 3.2: Supports array syntax: `add Type[count] named ArrayName`
 /// v0.1.6 Sprint 3.4: Supports indexed names in loops: `named Adder[i]`
 /// v0.1.6 GAP2: Supports `allow_substrate_overlap` attribute for embedded components
 /// v0.1.6 Sprint 3.2: Supports `skip_collision_check` for merged arrays
 /// v0.1.6 Item #13: Supports `net:` block for pin-to-net binding
+/// v0.1.9: Supports relational constraints (align, above, below, right_of, left_of)
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ComponentPlacement {
     pub component_type: Identifier,
     pub parameters: SmallVec<[Parameter; 4]>,
     pub name: Option<ComponentName>,
-    pub position: Coordinate,
+    /// Position coordinate (optional when relational constraints are present).
+    /// v0.1.9: When relational constraints define the position, this can be `None`.
+    pub position: Option<Coordinate>,
     pub rotation: Option<Rotation>,
     /// Z elevation (v0.1.7): either physical `z: 150um` or semantic `layer: l1`
     pub elevation: Option<super::space::Elevation>,
@@ -118,14 +186,11 @@ pub struct ComponentPlacement {
     /// Array configuration (v0.1.6 Sprint 3.2)
     pub array_config: Option<ArrayConfig>,
     /// Pin-to-net bindings (v0.1.6 Item #13)
-    /// Maps component pin names to net names
-    /// Example: {"a": "A[i]", "b": "B[i]", "carry_in": "Carry[i-1]"}
     pub pin_net_bindings: FxHashMap<CompactString, NetBinding>,
     /// Intentional design waivers (v0.1.6 Sprint 8)
-    ///
-    /// Replaces legacy `allow_substrate_overlap` and `skip_collision_check` flags.
-    /// Acts as the central "Intent" registry for this component instance.
     pub waivers: super::common::Waivers,
+    /// v0.1.9: Relational placement constraints (align, directional)
+    pub relational_constraints: SmallVec<[RelationalConstraint; 2]>,
     pub span: Span,
 }
 

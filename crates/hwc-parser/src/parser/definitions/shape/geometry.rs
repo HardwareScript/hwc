@@ -91,12 +91,18 @@ impl crate::parser::Parser {
                             continue;
                         }
                     }
-                    return Err(self.error("Expected 'let', 'Point', or generator call in for loop body"));
+                    return Err(
+                        self.error("Expected 'let', 'Point', or generator call in for loop body")
+                    );
                 } else {
-                    return Err(self.error("Expected 'let', 'Point', or generator call in for loop body"));
+                    return Err(
+                        self.error("Expected 'let', 'Point', or generator call in for loop body")
+                    );
                 }
             } else {
-                return Err(self.error("Expected 'let', 'Point', or generator call in for loop body"));
+                return Err(
+                    self.error("Expected 'let', 'Point', or generator call in for loop body")
+                );
             }
         }
 

@@ -58,24 +58,28 @@ pub struct RoutingConstraints {
     /// component bounding box, the pathfinder rejects the segment.
     /// Default: 10µm (10_000 nm).
     pub max_local_route_length: Option<Measurement>,
-    /// A* pathfinder: cost per grid step (base movement cost).
+    /// Minimum segment length when collapsing a pathfinder path to segments.
+    /// Required — no compiler default. Short collinear stubs below this length
+    /// are dropped; real turns at or above it are preserved.
+    pub min_segment_length: Option<Measurement>,
+    /// Topological router: cost per grid step (base movement cost).
     pub base_cost: Option<i64>,
-    /// A* pathfinder: penalty for via transitions (layer changes).
+    /// Topological router: penalty for via transitions (layer changes).
     /// Higher values discourage vias. Default: 50.
     pub via_penalty: Option<i64>,
-    /// A* pathfinder: penalty for moving against preferred layer direction.
+    /// Topological router: penalty for moving against preferred layer direction.
     /// Higher values enforce stricter direction adherence. Default: 10.
     pub direction_penalty: Option<i64>,
-    /// A* pathfinder: penalty when clearance is tight.
+    /// Topological router: penalty when clearance is tight.
     /// Applied when min_clearance < 2 * min_trace_width. Default: 2.
     pub tight_clearance_penalty: Option<i64>,
-    /// A* pathfinder: penalty for crosstalk risk (long parallel runs).
+    /// Topological router: penalty for crosstalk risk (long parallel runs).
     /// Applied when max_parallel_length < 10 * min_trace_width. Default: 3.
     pub crosstalk_penalty: Option<i64>,
-    /// A* pathfinder: penalty for impedance-controlled nets.
+    /// Topological router: penalty for impedance-controlled nets.
     /// Default: 1.
     pub impedance_penalty: Option<i64>,
-    /// A* pathfinder: extreme penalty for crossing reference-plane voids.
+    /// Topological router: extreme penalty for crossing reference-plane voids.
     /// Applied to high-speed nets. Default: 5_000_000.
     pub reference_void_penalty: Option<i64>,
     /// Net routing priorities from PDK profile.

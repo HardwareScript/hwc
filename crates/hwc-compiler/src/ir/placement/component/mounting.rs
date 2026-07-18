@@ -24,16 +24,22 @@ pub fn resolve_mounting_and_elevation(
 ) -> Result<MountingResult, IrError> {
     // Check if we're in ASIC mode (strict validation)
     let is_asic = space.fabrication_constraints.as_ref().map_or(false, |c| {
-        c.technology.as_ref().map_or(false, |t| t.to_lowercase() == "asic")
+        c.technology
+            .as_ref()
+            .map_or(false, |t| t.to_lowercase() == "asic")
     });
 
     // v0.1.7: Component Mounting Abstraction
     let mount_side = component.mount.ok_or_else(|| {
         if is_asic {
-            IrError::MissingAsicConstraint {
+            IrError::MissingAsicConstraintWithSpan {
                 message: format!("Component '{}' missing required 'mount:' property (top|bottom|embedded)", 
                     component.name.as_ref().map(|n| n.as_str()).unwrap_or("unnamed")),
                 hint: "Under ASIC technology, add 'mount: top', 'mount: bottom', or 'mount: embedded' to the component placement.".into(),
+                span: miette::SourceSpan::new(
+                    component.span.start.into(),
+                    (component.span.end - component.span.start).into(),
+                ),
             }
         } else {
             IrError::PlacementError(format!("Component '{}' missing required 'mount:' property", 
@@ -52,21 +58,32 @@ pub fn resolve_mounting_and_elevation(
         position.z = final_z;
     } else {
         return Err(if is_asic {
-            IrError::MissingAsicConstraint {
+            IrError::MissingAsicConstraintWithSpan {
                 message: format!("Component '{}' missing required 'on layer:' or 'on z:' elevation.",
                     component.name.as_ref().map(|n| n.as_str()).unwrap_or("unnamed")),
                 hint: "Under ASIC technology, add 'on layer: <LayerName>' or 'on z: <Value>' to the component placement.".into(),
+                span: miette::SourceSpan::new(
+                    component.span.start.into(),
+                    (component.span.end - component.span.start).into(),
+                ),
             }
         } else {
-            IrError::PlacementError(format!("Component '{}' missing required 'on layer:' or 'on z:' elevation.",
-                component.name.as_ref().map(|n| n.as_str()).unwrap_or("unnamed")))
+            IrError::PlacementError(format!(
+                "Component '{}' missing required 'on layer:' or 'on z:' elevation.",
+                component
+                    .name
+                    .as_ref()
+                    .map(|n| n.as_str())
+                    .unwrap_or("unnamed")
+            ))
         });
     }
 
     // v0.1.7: Component Mounting Abstraction - Calculate body bounds
-    let component_height_nm =
-        if let Ok(component_def) = symbol_table.get_component(component.component_type.as_str()) {
-            component_def
+    let component_height_nm = if let Ok(component_def) =
+        symbol_table.get_component(component.component_type.as_str())
+    {
+        component_def
                 .layout
                 .as_ref()
                 .and_then(|l| l.shape.as_ref())
@@ -74,12 +91,16 @@ pub fn resolve_mounting_and_elevation(
                 .map(|(_, _, d)| d)
                 .ok_or_else(|| {
                     if is_asic {
-                        IrError::MissingAsicConstraint {
+                        IrError::MissingAsicConstraintWithSpan {
                             message: format!(
                                 "Component '{}' has no explicit height in its layout definition.",
                                 component.component_type
                             ),
                             hint: "Under ASIC technology, add 'shape: Rectangle(w, h, d)' to the component's layout definition.".into(),
+                            span: miette::SourceSpan::new(
+                                component.span.start.into(),
+                                (component.span.end - component.span.start).into(),
+                            ),
                         }
                     } else {
                         IrError::PlacementError(format!(
@@ -88,31 +109,35 @@ pub fn resolve_mounting_and_elevation(
                         ))
                     }
                 })?
-        } else {
-            return Err(if is_asic {
-                IrError::MissingAsicConstraint {
+    } else {
+        return Err(if is_asic {
+            IrError::MissingAsicConstraintWithSpan {
                     message: format!(
                         "Component type '{}' is not declared in the symbol table.",
                         component.component_type
                     ),
                     hint: "Under ASIC technology, declare the component type with a layout definition before using it.".into(),
+                    span: miette::SourceSpan::new(
+                        component.span.start.into(),
+                        (component.span.end - component.span.start).into(),
+                    ),
                 }
-            } else {
-                IrError::PlacementError(format!(
-                    "Component type '{}' is not declared in the symbol table.",
-                    component.component_type
-                ))
-            });
-        };
+        } else {
+            IrError::PlacementError(format!(
+                "Component type '{}' is not declared in the symbol table.",
+                component.component_type
+            ))
+        });
+    };
 
     // v0.1.7: Resolve standoff height
     let standoff_nm = match &component.standoff {
-        Some(expr) => {
-            evaluate_expression_to_nm(expr, symbol_table).map_err(|e| IrError::CoordinateResolutionFailed {
+        Some(expr) => evaluate_expression_to_nm(expr, symbol_table).map_err(|e| {
+            IrError::CoordinateResolutionFailed {
                 coordinate_str: "standoff height".into(),
                 reason: e.to_string(),
-            })?
-        }
+            }
+        })?,
         None => {
             // Fallback to component definition's standoff
             if let Ok(comp_def) = symbol_table.get_component(component.component_type.as_str()) {
@@ -128,10 +153,14 @@ pub fn resolve_mounting_and_elevation(
                     })?
                     .ok_or_else(|| {
                         if is_asic {
-                            IrError::MissingAsicConstraint {
+                            IrError::MissingAsicConstraintWithSpan {
                                 message: format!("Component '{}' missing required 'standoff' property in placement or definition.", 
                                     component.component_type),
                                 hint: "Under ASIC technology, add 'standoff: <Value>' to the component placement or its layout definition.".into(),
+                                span: miette::SourceSpan::new(
+                                    component.span.start.into(),
+                                    (component.span.end - component.span.start).into(),
+                                ),
                             }
                         } else {
                             IrError::PlacementError(format!("Component '{}' missing required 'standoff' property in placement or definition.", 
@@ -140,12 +169,23 @@ pub fn resolve_mounting_and_elevation(
                     })?
             } else {
                 return Err(if is_asic {
-                    IrError::MissingAsicConstraint {
-                        message: format!("Component type '{}' not found in symbol table.", component.component_type),
-                        hint: "Under ASIC technology, declare the component type before using it.".into(),
+                    IrError::MissingAsicConstraintWithSpan {
+                        message: format!(
+                            "Component type '{}' not found in symbol table.",
+                            component.component_type
+                        ),
+                        hint: "Under ASIC technology, declare the component type before using it."
+                            .into(),
+                        span: miette::SourceSpan::new(
+                            component.span.start.into(),
+                            (component.span.end - component.span.start).into(),
+                        ),
                     }
                 } else {
-                    IrError::PlacementError(format!("Component type '{}' not found in symbol table.", component.component_type))
+                    IrError::PlacementError(format!(
+                        "Component type '{}' not found in symbol table.",
+                        component.component_type
+                    ))
                 });
             }
         }
