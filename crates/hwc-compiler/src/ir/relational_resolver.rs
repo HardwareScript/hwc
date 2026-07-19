@@ -27,6 +27,7 @@ pub fn resolve_relational_constraints(
     bbox_tracker: &BoundingBoxTracker,
     symbol_table: &crate::SymbolTable,
     eval_context: &hwc_parser::EvaluationContext,
+    origin: hwc_parser::OriginPoint,
 ) -> Result<(), IrError> {
     for item in placement_items.iter_mut() {
         match item {
@@ -41,6 +42,7 @@ pub fn resolve_relational_constraints(
                     bbox_tracker,
                     symbol_table,
                     eval_context,
+                    origin,
                 )?;
 
                 component.position = Some(resolved);
@@ -57,6 +59,7 @@ pub fn resolve_relational_constraints(
                     bbox_tracker,
                     symbol_table,
                     eval_context,
+                    origin,
                 )?;
 
                 plane.from = Some(resolved);
@@ -71,6 +74,11 @@ pub fn resolve_relational_constraints(
 ///
 /// Evaluates alignment and directional constraints against the BoundingBoxTracker
 /// to produce a concrete `Coordinate::Declarative` position.
+///
+/// **ORIGIN-AWARE COORDINATE SYSTEM**: This function dynamically adapts to the
+/// space's declared origin (TL, BL, TR, BR) by computing axis-direction multipliers.
+/// This ensures that directional operators (above, below, right_of, left_of) work
+/// correctly regardless of whether Y increases upward (BL) or downward (TL).
 ///
 /// **CENTER ALIGNMENT SEMANTICS**: For center alignment (center_x, center_y, center_z),
 /// this function returns the CENTER coordinate of the target object. The caller is
@@ -88,7 +96,18 @@ pub fn compute_position_from_constraints(
     bbox_tracker: &BoundingBoxTracker,
     symbol_table: &crate::SymbolTable,
     _eval_context: &hwc_parser::EvaluationContext,
+    origin: hwc_parser::OriginPoint,
 ) -> Result<Coordinate, IrError> {
+    // Derive axis-direction multipliers from the declared origin
+    // This ensures physical directions (UP, DOWN, LEFT, RIGHT) map correctly
+    // to coordinate deltas regardless of the coordinate system orientation
+    let (x_multiplier, y_multiplier) = match origin.xy {
+        hwc_parser::OriginXY::BL => (1, 1),   // Bottom-Left: +X right, +Y up
+        hwc_parser::OriginXY::TL => (1, -1),  // Top-Left: +X right, +Y down
+        hwc_parser::OriginXY::BR => (-1, 1),  // Bottom-Right: +X left, +Y up
+        hwc_parser::OriginXY::TR => (-1, -1), // Top-Right: +X left, +Y down
+    };
+
     let mut x_nm: Option<i64> = None;
     let mut y_nm: Option<i64> = None;
     let mut z_nm: Option<i64> = None;
@@ -146,23 +165,68 @@ pub fn compute_position_from_constraints(
 
                 match dir {
                     DirectionalConstraint::Above { .. } => {
-                        // Place above target: Y = target.min.y - self_height - spacing
-                        // Since we don't know self height yet, place at target.min.y - spacing
-                        // (The placement engine will handle the rest)
-                        y_nm = Some(target_bbox.min.y - spacing_nm);
+                        // Physical UP: Move away from ground in the physical world
+                        // In BL (y_multiplier=1): UP means +Y → target.max.y + spacing
+                        // In TL (y_multiplier=-1): UP means -Y → target.min.y - spacing
+                        if y_multiplier > 0 {
+                            // Bottom-Left or Bottom-Right: Y increases upward
+                            y_nm = Some(target_bbox.max.y + spacing_nm);
+                        } else {
+                            // Top-Left or Top-Right: Y decreases upward (toward origin)
+                            y_nm = Some(target_bbox.min.y - spacing_nm);
+                        }
+                        // Inherit X-center alignment from target to preserve vertical stacking
+                        if x_nm.is_none() {
+                            x_nm = Some((target_bbox.min.x + target_bbox.max.x) / 2);
+                        }
                     }
                     DirectionalConstraint::Below { .. } => {
-                        // Place below target: Y = target.max.y + spacing
-                        y_nm = Some(target_bbox.max.y + spacing_nm);
+                        // Physical DOWN: Move toward ground in the physical world
+                        // In BL (y_multiplier=1): DOWN means -Y → target.min.y - spacing
+                        // In TL (y_multiplier=-1): DOWN means +Y → target.max.y + spacing
+                        if y_multiplier > 0 {
+                            // Bottom-Left or Bottom-Right: Y decreases downward
+                            y_nm = Some(target_bbox.min.y - spacing_nm);
+                        } else {
+                            // Top-Left or Top-Right: Y increases downward (away from origin)
+                            y_nm = Some(target_bbox.max.y + spacing_nm);
+                        }
+                        // Inherit X-center alignment from target to preserve vertical stacking
+                        if x_nm.is_none() {
+                            x_nm = Some((target_bbox.min.x + target_bbox.max.x) / 2);
+                        }
                     }
                     DirectionalConstraint::RightOf { .. } => {
-                        // Place to the right of target: X = target.max.x + spacing
-                        x_nm = Some(target_bbox.max.x + spacing_nm);
+                        // Physical RIGHT: Move to the right in the physical world
+                        // In BL/TL (x_multiplier=1): RIGHT means +X → target.max.x + spacing
+                        // In BR/TR (x_multiplier=-1): RIGHT means -X → target.min.x - spacing
+                        if x_multiplier > 0 {
+                            // Left-origin: X increases to the right
+                            x_nm = Some(target_bbox.max.x + spacing_nm);
+                        } else {
+                            // Right-origin: X decreases to the right (toward origin)
+                            x_nm = Some(target_bbox.min.x - spacing_nm);
+                        }
+                        // Inherit Y-center alignment from target to preserve horizontal alignment
+                        if y_nm.is_none() {
+                            y_nm = Some((target_bbox.min.y + target_bbox.max.y) / 2);
+                        }
                     }
                     DirectionalConstraint::LeftOf { .. } => {
-                        // Place to the left of target: X = target.min.x - self_width - spacing
-                        // Since we don't know self width yet, place at target.min.x - spacing
-                        x_nm = Some(target_bbox.min.x - spacing_nm);
+                        // Physical LEFT: Move to the left in the physical world
+                        // In BL/TL (x_multiplier=1): LEFT means -X → target.min.x - spacing
+                        // In BR/TR (x_multiplier=-1): LEFT means +X → target.max.x + spacing
+                        if x_multiplier > 0 {
+                            // Left-origin: X decreases to the left
+                            x_nm = Some(target_bbox.min.x - spacing_nm);
+                        } else {
+                            // Right-origin: X increases to the left (away from origin)
+                            x_nm = Some(target_bbox.max.x + spacing_nm);
+                        }
+                        // Inherit Y-center alignment from target to preserve horizontal alignment
+                        if y_nm.is_none() {
+                            y_nm = Some((target_bbox.min.y + target_bbox.max.y) / 2);
+                        }
                     }
                 }
             }

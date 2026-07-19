@@ -1,0 +1,21 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,1.50x1.80x0.14mm,,,,,1
+Pad_A1,Plane(Aluminum),,,,,,1
+Pad_A2,Plane(Aluminum),,,,,,1
+Pad_A3,Plane(Aluminum),,,,,,1
+Pad_A4,Plane(Aluminum),,,,,,1
+Pad_B1,Plane(Aluminum),,,,,,1
+Pad_B2,Plane(Aluminum),,,,,,1
+Pad_B3,Plane(Aluminum),,,,,,1
+Pad_B4,Plane(Aluminum),,,,,,1
+
+# MATERIAL USAGE (Fabrication)
+Reference,Type,Material,Layer_Z_nm,Area_nm2,Volume_nm3
+Pad_A1,Pour,Aluminum,z:960,10000000000,4000000000000
+Pad_A2,Pour,Aluminum,z:960,10000000000,4000000000000
+Pad_A3,Pour,Aluminum,z:960,10000000000,4000000000000
+Pad_A4,Pour,Aluminum,z:960,10000000000,4000000000000
+Pad_B1,Pour,Aluminum,z:960,10000000000,4000000000000
+Pad_B2,Pour,Aluminum,z:960,10000000000,4000000000000
+Pad_B3,Pour,Aluminum,z:960,10000000000,4000000000000
+Pad_B4,Pour,Aluminum,z:960,10000000000,4000000000000

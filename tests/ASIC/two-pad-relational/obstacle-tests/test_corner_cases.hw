@@ -25,30 +25,32 @@ space Corner_Demo implements Corner_Cases:
     profile: Silicon_180nm
 
     nets:
-        Edge_Net: { classification: signal, potential: 0V, current: 0.1uA }
-        Tight_Net: { classification: signal, potential: 0V, current: 0.1uA }
+        Edge_A: { classification: signal, potential: 0V, current: 0.1uA }
+        Edge_B: { classification: signal, potential: 0V, current: 0.1uA }
+        Tight_A: { classification: signal, potential: 0V, current: 0.1uA }
+        Tight_B: { classification: signal, potential: 0V, current: 0.1uA }
 
     # Test 1: Pads near board edges
-    add plane(Aluminum) named Edge_A on layer: metal1:
+    add plane(Aluminum) named Pad_Edge_A on layer: metal1:
         shape: CubicPad(w: 150um, h: 150um)
         at: [x: 50um, y: 50um]  # Near bottom-left corner
-        net: Edge_Net
+        net: Edge_A
 
-    add plane(Aluminum) named Edge_B on layer: metal1:
+    add plane(Aluminum) named Pad_Edge_B on layer: metal1:
         shape: CubicPad(w: 150um, h: 150um)
         at: [x: 800um, y: 400um]  # Near top-right corner
-        net: Edge_Net
+        net: Edge_B
 
     # Test 2: Tight squeeze through narrow gap
-    add plane(Aluminum) named Tight_A on layer: metal1:
+    add plane(Aluminum) named Pad_Tight_A on layer: metal1:
         shape: CubicPad(w: 100um, h: 100um)
         at: [x: 300um, y: 250um]
-        net: Tight_Net
+        net: Tight_A
 
-    add plane(Aluminum) named Tight_B on layer: metal1:
+    add plane(Aluminum) named Pad_Tight_B on layer: metal1:
         shape: CubicPad(w: 100um, h: 100um)
         at: [x: 600um, y: 250um]
-        net: Tight_Net
+        net: Tight_B
 
     # Narrow obstacle creating a tight channel
     add plane(Aluminum) named Squeeze_Block on layer: metal1:
@@ -57,12 +59,12 @@ space Corner_Demo implements Corner_Cases:
         # No net (obstacle)
 
     # Route through tight spaces
-    route Edge_A to Edge_B:
+    route Pad_Edge_A to Pad_Edge_B:
         width: 30um
         layer: metal1
         current_limit_ac: { rms: 0.5uA, peak: 1.0uA }
 
-    route Tight_A to Tight_B:
+    route Pad_Tight_A to Pad_Tight_B:
         width: 25um  # Narrow trace to fit through gap
         layer: metal1
         current_limit_ac: { rms: 0.5uA, peak: 1.0uA }

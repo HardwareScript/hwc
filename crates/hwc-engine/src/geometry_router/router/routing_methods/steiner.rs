@@ -46,6 +46,19 @@ impl GeometryRouter {
         // Check if this net has a routing pattern policy for length matching
         let has_pattern = self.route_net_policies.contains_key(&net_id);
 
+        // v0.1.9: Get trace width for this net (needed for port escape clearance calculation)
+        let trace_width = self.net_trace_widths.get(&net_id).copied().ok_or_else(|| {
+            RoutingError::MissingFabricationConstraints {
+                net_id,
+                message: format!(
+                    "No trace width declared for net_id={}. Every route must have an explicit \
+                     'width:' parameter or the space must provide a default trace width.",
+                    net_id.raw()
+                )
+                .into(),
+            }
+        })?;
+
         for (_i, segment) in decomposed.segments.iter().enumerate() {
             // v0.1.8: Use the exact anchor point positions from the pin metadata
             // for Steiner decomposition. These are the physical connection points.
@@ -53,8 +66,8 @@ impl GeometryRouter {
             let goal_coord = segment.to_pin.position;
 
             // Resolve boundary docking ports on-demand using global-space coordinate checks
-            let start_port = self.resolve_boundary_port(start_coord, goal_coord);
-            let goal_port = self.resolve_boundary_port(goal_coord, start_coord);
+            let start_port = self.resolve_boundary_port(start_coord, goal_coord, trace_width);
+            let goal_port = self.resolve_boundary_port(goal_coord, start_coord, trace_width);
 
             // v0.1.8: Ensure ports are on the same Z layer.
             // In a vector-first system, traces must be coplanar with the pad anchor.

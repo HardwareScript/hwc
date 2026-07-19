@@ -1,5 +1,5 @@
 M48
-; DRILL file {Obstacle_Demo} date 2026-07-19
+; DRILL file {Corner_Demo} date 2026-07-19
 ; v0.1.7 physical Z (mm) recorded per tool pass where applicable
 ; FORMAT={-:-/ absolute / inch / decimal}
 FMAT,2

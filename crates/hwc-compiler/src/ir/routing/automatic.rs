@@ -357,8 +357,17 @@ pub fn route_automatic(
             idx.insert(trace_seg);
         }
         
-        // Add component metadata
+        // Add component metadata (excluding start and goal components)
         for meta in space.entity_graph.get_component_metadata() {
+            // EXEMPTION GUARD: Skip the start and goal components to allow routing from/to them
+            if meta.name == from_component_name || meta.name == to_component_name {
+                eprintln!(
+                    "[AUTO ROUTE INDEX] Skipping component '{}' (is start or goal)",
+                    meta.name
+                );
+                continue;
+            }
+            
             let width = meta.bbox.max.x - meta.bbox.min.x;
             let height = meta.bbox.max.y - meta.bbox.min.y;
             let trace_seg = hwc_engine::geometry_router::IndexedSegment {
@@ -378,6 +387,7 @@ pub fn route_automatic(
         idx
     };
 
+    // v0.1.9: Use route() without exemptions since we already excluded components from spatial index
     let mut path = topo_router
         .route(start_pos, goal_pos, &spatial_index, &board_bounds)
         .ok_or_else(|| IrError::NoPathFound {

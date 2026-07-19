@@ -145,7 +145,7 @@ pub fn calculate_rect_escape(
     port: CardinalPort,
     offset: EdgeOffset,
     trace_width_nm: i64,
-    clearance_nm: i64,
+    _clearance_nm: i64, // No longer used - boundary is at pad edge
     z: i64,
     board_bounds: Option<&BoundingBox>,
 ) -> EscapePoint {
@@ -177,10 +177,10 @@ pub fn calculate_rect_escape(
         let coordinate = center + clamped_offset;
         return EscapePoint {
             point: match port {
-                CardinalPort::North => Point3D::new(coordinate, bbox.max.y + clearance_nm, z),
-                CardinalPort::South => Point3D::new(coordinate, bbox.min.y - clearance_nm, z),
-                CardinalPort::East => Point3D::new(bbox.max.x + clearance_nm, coordinate, z),
-                CardinalPort::West => Point3D::new(bbox.min.x - clearance_nm, coordinate, z),
+                CardinalPort::North => Point3D::new(coordinate, bbox.max.y, z),
+                CardinalPort::South => Point3D::new(coordinate, bbox.min.y, z),
+                CardinalPort::East => Point3D::new(bbox.max.x, coordinate, z),
+                CardinalPort::West => Point3D::new(bbox.min.x, coordinate, z),
             },
             direction,
             port,
@@ -193,12 +193,14 @@ pub fn calculate_rect_escape(
     // Calculate the coordinate along the edge
     let coordinate = edge_min + ((edge_max - edge_min) as f64 * ratio) as i64;
 
-    // Calculate the escape point with clearance
+    // Calculate the escape point at pad boundary (no clearance offset)
+    // The boundary point is exactly at the pad edge. Clearance is enforced
+    // by the router's collision detection, not by shifting the docking point.
     let mut point = match port {
-        CardinalPort::North => Point3D::new(coordinate, bbox.max.y + clearance_nm, z),
-        CardinalPort::South => Point3D::new(coordinate, bbox.min.y - clearance_nm, z),
-        CardinalPort::East => Point3D::new(bbox.max.x + clearance_nm, coordinate, z),
-        CardinalPort::West => Point3D::new(bbox.min.x - clearance_nm, coordinate, z),
+        CardinalPort::North => Point3D::new(coordinate, bbox.max.y, z),
+        CardinalPort::South => Point3D::new(coordinate, bbox.min.y, z),
+        CardinalPort::East => Point3D::new(bbox.max.x, coordinate, z),
+        CardinalPort::West => Point3D::new(bbox.min.x, coordinate, z),
     };
 
     // v0.1.9: CLAMP to physical wafer boundaries to prevent out-of-bounds routing

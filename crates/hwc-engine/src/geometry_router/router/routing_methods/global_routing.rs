@@ -11,15 +11,25 @@ impl GeometryRouter {
     /// Computes the best N/S/E/W boundary port on the pad's outer edge
     /// and returns an escape point exactly at the profile-defined clearance.
     /// All coordinates are calculated as absolute integer values — no magic numbers.
-    pub fn resolve_boundary_port(&self, pin: Point3D, target: Point3D) -> Point3D {
+    ///
+    /// # Arguments
+    /// * `pin` - The pin location (center of pad)
+    /// * `target` - The target location to route toward
+    /// * `trace_width_nm` - Width of the routing trace (needed for proper clearance calculation)
+    pub fn resolve_boundary_port(&self, pin: Point3D, target: Point3D, trace_width_nm: i64) -> Point3D {
         // Read clearance in nanometers directly from fabrication constraints (zero-magic)
         // No fallback - if constraints are missing, this will panic with a clear error.
-        let clearance_nm = self
+        let min_clearance_nm = self
             .constraints
             .fabrication
             .as_ref()
             .expect("BUG: Fabrication constraints required for boundary port resolution")
             .min_trace_spacing_nm;
+        
+        // v0.1.9: Match obstacle inflation formula used in navigable space extraction.
+        // Obstacles are inflated by (trace_width/2) + min_clearance, so the port escape
+        // must be placed at the same distance to avoid "StartPointOutsideSpace" errors.
+        let port_escape_clearance = (trace_width_nm / 2) + min_clearance_nm;
 
         // Try 1: component_metadata lookup (fast, exact)
         let maybe_bbox = self
@@ -70,7 +80,7 @@ impl GeometryRouter {
         let dx = target.x - bbox_center_x;
         let dy = target.y - bbox_center_y;
 
-        let port = if dy.abs() >= clearance_nm && dy.abs() > dx.abs() / 4 {
+        let port = if dy.abs() >= port_escape_clearance && dy.abs() > dx.abs() / 4 {
             if dy >= 0 {
                 crate::geometry_router::port_escape::CardinalPort::North
             } else {
@@ -94,8 +104,8 @@ impl GeometryRouter {
             &bbox,
             port,
             crate::geometry_router::port_escape::EdgeOffset::Center,
-            0,
-            clearance_nm, // BUG FIX: Don't add resolution_nm - clearance is already applied inside calculate_rect_escape
+            trace_width_nm, // v0.1.9: Pass trace width for smart corner clamping
+            port_escape_clearance, // v0.1.9: Match obstacle inflation formula
             escape_z,
             None, // v0.1.9: No board bounds available in legacy global routing context
         );
@@ -164,121 +174,21 @@ impl GeometryRouter {
 
         // Try fast topological routing first (Tier 0-1)
         let topo_router = TopologicalRouter::new(trace_width, track_pitch, fabrication.min_trace_spacing_nm);
-        let path = match topo_router.route(start, goal, &spatial_index, &board_bounds) {
+        
+        // v0.1.9: Use route_with_exemptions to allow routing from/to pads without self-collision
+        // Exempt the active net_id so start/goal pads are not treated as obstacles
+        let exempt_net_ids = vec![route.net_id.raw() as usize];
+        
+        // v0.1.9: TopologicalRouter is the single authoritative routing engine
+        // NO FALLBACK - if TopologicalRouter can't find a path, the route fails
+        let path = match topo_router.route_with_exemptions(start, goal, &spatial_index, &board_bounds, &exempt_net_ids) {
             Some(topo_path) if topo_path.waypoints.len() >= 2 => topo_path.waypoints,
             _ => {
-                // Tier 1 failed - try Tier 2: Navigable Space Extraction
-                eprintln!(
-                    "[ROUTE_NET_GLOBAL] Topological routing failed, trying navigable space extraction for net {}",
-                    route.net_id.raw()
-                );
-                
-                // Collect obstacles from spatial index
-                let query_box = board_bounds.clone();
-                let obstacles: Vec<_> = spatial_index
-                    .query_bbox(&query_box)
-                    .iter()
-                    .map(|seg| {
-                        BoundingBox::new(
-                            Point3D::new(
-                                seg.start.x.min(seg.end.x) - seg.width_nm / 2,
-                                seg.start.y.min(seg.end.y) - seg.width_nm / 2,
-                                seg.start.z.min(seg.end.z),
-                            ),
-                            Point3D::new(
-                                seg.start.x.max(seg.end.x) + seg.width_nm / 2,
-                                seg.start.y.max(seg.end.y) + seg.width_nm / 2,
-                                seg.start.z.max(seg.end.z),
-                            ),
-                        )
-                    })
-                    .collect();
-
-                // Use the navigable space extractor (Minkowski-inflated C-Space)
-                use crate::geometry_router::navigable_space::SpatialDecomposer;
-                
-                // For obstacle avoidance, we need clearance = trace_width/2 (physical extent)
-                // plus a small safety margin (use min_spacing as the safety margin)
-                // The SpatialDecomposer will inflate obstacles by (trace_width/2) + min_clearance
-                let min_clearance = fabrication.min_trace_spacing_nm;
-                
-                eprintln!("[ROUTE_NET_GLOBAL] Preparing to create SpatialDecomposer:");
-                eprintln!("  obstacles.len() = {}", obstacles.len());
-                for (i, obs) in obstacles.iter().enumerate() {
-                    eprintln!("  obstacle[{}]: ({},{},{}) to ({},{},{})", 
-                        i, obs.min.x, obs.min.y, obs.min.z, obs.max.x, obs.max.y, obs.max.z);
-                }
-                eprintln!("  trace_width = {} nm", trace_width);
-                eprintln!("  min_clearance (from min_trace_spacing) = {} nm", min_clearance);
-                
-                let decomposer = match SpatialDecomposer::new(
-                    obstacles,
-                    trace_width,
-                    min_clearance,
-                ) {
-                    Ok(d) => d,
-                    Err(e) => {
-                        eprintln!(
-                            "[ROUTE_NET_GLOBAL ERROR] Failed to create spatial decomposer: {}",
-                            e
-                        );
-                        return Err(RoutingError::NoPathFound {
-                            net_id: route.net_id,
-                            start: route.start,
-                            goal: route.goal,
-                        });
-                    }
-                };
-
-                // Decompose the free space (Configuration Space with Minkowski inflation)
-                let cells = decomposer.decompose(&board_bounds, start.z);
-                
-                eprintln!("[NAVIGABLE SPACE] Generated {} free cells from decomposition", cells.len());
-                
-                // Extract corridor through the navigable space
-                match decomposer.extract_corridor(start, goal, &cells) {
-                    Ok(corridor) => {
-                        // Convert corridor cells to waypoints
-                        let waypoints = decomposer.corridor_to_waypoints(&corridor, &cells);
-                        if waypoints.len() >= 2 {
-                            eprintln!(
-                                "[ROUTE_NET_GLOBAL] Successfully routed via navigable space: {} waypoints",
-                                waypoints.len()
-                            );
-                            // Ensure path starts at original start and ends at original goal
-                            let mut complete_path = vec![start];
-                            complete_path.extend(waypoints);
-                            complete_path.push(goal);
-                            
-                            eprintln!("[ROUTE_NET_GLOBAL] Final complete path ({} points):", complete_path.len());
-                            for (i, pt) in complete_path.iter().enumerate() {
-                                eprintln!("  path[{}] = ({}, {}, {})", i, pt.x, pt.y, pt.z);
-                            }
-                            
-                            complete_path
-                        } else {
-                            eprintln!(
-                                "[ROUTE_NET_GLOBAL ERROR] Navigable space extraction returned insufficient waypoints"
-                            );
-                            return Err(RoutingError::NoPathFound {
-                                net_id: route.net_id,
-                                start: route.start,
-                                goal: route.goal,
-                            });
-                        }
-                    }
-                    Err(e) => {
-                        eprintln!(
-                            "[ROUTE_NET_GLOBAL ERROR] Navigable space extraction failed: {:?}",
-                            e
-                        );
-                        return Err(RoutingError::NoPathFound {
-                            net_id: route.net_id,
-                            start: route.start,
-                            goal: route.goal,
-                        });
-                    }
-                }
+                return Err(RoutingError::NoPathFound {
+                    net_id: route.net_id,
+                    start: route.start,
+                    goal: route.goal,
+                });
             }
         };
 

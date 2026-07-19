@@ -103,9 +103,10 @@ impl TopologicalRouter {
 
     /// Route with entity exemptions to prevent start/goal self-collision.
     ///
-    /// When routing from a pad, the router should not detect the pad itself
-    /// as an obstacle. This method shifts the ray origin outward by 1nm to
-    /// clear the pad boundary before projecting search rays.
+    /// v0.1.9/v0.1.10: Uses native EntityId exemption instead of coordinate shifting.
+    /// The exempt_net_ids are passed to the router and used to skip collision checks
+    /// for obstacles belonging to the start/goal nets, completely eliminating the need
+    /// for the legacy 1nm coordinate-shifting hack.
     pub fn route_with_exemptions(
         &self,
         start: Point3D,
@@ -114,6 +115,8 @@ impl TopologicalRouter {
         board_bounds: &BoundingBox,
         exempt_net_ids: &[usize],
     ) -> Option<TopologicalPath> {
+        // v0.1.9 FIX: Pass raw, unshifted coordinates directly to the router.
+        // Rely on exempt_net_ids to bypass self-collisions safely.
         let router = TopologicalRouter {
             trace_width_nm: self.trace_width_nm,
             layer_prefer_horizontal: self.layer_prefer_horizontal,
@@ -122,28 +125,7 @@ impl TopologicalRouter {
             exempt_net_ids: exempt_net_ids.to_vec(),
         };
 
-        // Shift ray origins outward by 1nm to clear pad boundaries
-        let escape_nm = 1;
-        let start_shifted = Point3D::new(start.x + escape_nm, start.y + escape_nm, start.z);
-        let target_shifted = Point3D::new(target.x - escape_nm, target.y - escape_nm, target.z);
-
-        // Try routing with shifted origins first
-        if let Some(path) = router.route(start_shifted, target_shifted, obstacles, board_bounds) {
-            // Restore original start/target in the path
-            let mut waypoints = path.waypoints;
-            if let Some(first) = waypoints.first_mut() {
-                *first = start;
-            }
-            if let Some(last) = waypoints.last_mut() {
-                *last = target;
-            }
-            return Some(TopologicalPath {
-                waypoints,
-                total_length: path.total_length,
-            });
-        }
-
-        // Fallback: try with original positions
+        // Call route directly using clean, raw coordinates
         router.route(start, target, obstacles, board_bounds)
     }
 
@@ -449,11 +431,17 @@ impl TopologicalRouter {
         obstacles: &DynamicSpatialIndex,
         _board_bounds: &BoundingBox,
     ) -> Option<TopologicalPath> {
+        eprintln!("[TOPO try_direct_path] Attempting direct paths from ({},{},{}) to ({},{},{})",
+            start.x, start.y, start.z, target.x, target.y, target.z);
+        
         // Straight line (same X or same Y)
         if start.x == target.x || start.y == target.y {
             let waypoints = vec![start, target];
-            if !self.segment_intersects_obstacle(start, target, obstacles) {
+            let collides = self.segment_intersects_obstacle(start, target, obstacles);
+            eprintln!("[TOPO try_direct_path] Straight line: collides={}", collides);
+            if !collides {
                 let total_length = start.manhattan_distance(&target);
+                eprintln!("[TOPO try_direct_path] ✅ Returning straight path");
                 return Some(TopologicalPath {
                     waypoints,
                     total_length,
@@ -463,10 +451,13 @@ impl TopologicalRouter {
 
         // L-shape: horizontal then vertical
         let bend_hv = Point3D::new(target.x, start.y, start.z);
-        if !self.segment_intersects_obstacle(start, bend_hv, obstacles)
-            && !self.segment_intersects_obstacle(bend_hv, target, obstacles)
-        {
+        let hv_seg1_collides = self.segment_intersects_obstacle(start, bend_hv, obstacles);
+        let hv_seg2_collides = self.segment_intersects_obstacle(bend_hv, target, obstacles);
+        eprintln!("[TOPO try_direct_path] L-shape (H then V): bend=({},{},{}), seg1_collides={}, seg2_collides={}",
+            bend_hv.x, bend_hv.y, bend_hv.z, hv_seg1_collides, hv_seg2_collides);
+        if !hv_seg1_collides && !hv_seg2_collides {
             let total_length = start.manhattan_distance(&target);
+            eprintln!("[TOPO try_direct_path] ✅ Returning L-shape (H then V)");
             return Some(TopologicalPath {
                 waypoints: vec![start, bend_hv, target],
                 total_length,
@@ -475,16 +466,20 @@ impl TopologicalRouter {
 
         // L-shape: vertical then horizontal
         let bend_vh = Point3D::new(start.x, target.y, start.z);
-        if !self.segment_intersects_obstacle(start, bend_vh, obstacles)
-            && !self.segment_intersects_obstacle(bend_vh, target, obstacles)
-        {
+        let vh_seg1_collides = self.segment_intersects_obstacle(start, bend_vh, obstacles);
+        let vh_seg2_collides = self.segment_intersects_obstacle(bend_vh, target, obstacles);
+        eprintln!("[TOPO try_direct_path] L-shape (V then H): bend=({},{},{}), seg1_collides={}, seg2_collides={}",
+            bend_vh.x, bend_vh.y, bend_vh.z, vh_seg1_collides, vh_seg2_collides);
+        if !vh_seg1_collides && !vh_seg2_collides {
             let total_length = start.manhattan_distance(&target);
+            eprintln!("[TOPO try_direct_path] ✅ Returning L-shape (V then H)");
             return Some(TopologicalPath {
                 waypoints: vec![start, bend_vh, target],
                 total_length,
             });
         }
 
+        eprintln!("[TOPO try_direct_path] ❌ No direct path found, returning None");
         None
     }
 
@@ -921,7 +916,10 @@ impl TopologicalRouter {
 
     /// Check if a segment between two points intersects any obstacle.
     /// Uses Minkowski sum inflation: inflate_by = trace_width_nm / 2 + min_clearance_nm
-    /// v0.1.9: Added proper Z-axis collision detection for 2.5D routing
+    /// Check if a routed segment intersects any obstacle using 3D bounding box overlap.
+    /// Uses Minkowski sum inflation: inflate_by = trace_width_nm / 2 + min_clearance_nm
+    /// v0.1.9: Uses continuous bbox overlap instead of fragile coordinate equality checks
+    /// v0.1.10: Removes 1nm diagonal collision bypass bug
     fn segment_intersects_obstacle(
         &self,
         a: Point3D,
@@ -930,121 +928,88 @@ impl TopologicalRouter {
     ) -> bool {
         let inflate = self.trace_width_nm / 2 + self.min_clearance_nm;
         
-        // v0.1.9 CRITICAL FIX: The spatial index is 2D (X-Y only), so we need to:
-        // 1. Query with a 2D bbox (Z is ignored by the R-tree)
-        // 2. Manually filter results by Z-range overlap
         let route_z_min = a.z.min(b.z);
         let route_z_max = a.z.max(b.z);
         
-        let bbox = BoundingBox {
-            min: Point3D::new(a.x.min(b.x) - inflate, a.y.min(b.y) - inflate, route_z_min),
-            max: Point3D::new(a.x.max(b.x) + inflate, a.y.max(b.y) + inflate, route_z_max),
+        // Build the segment's bounding box
+        let segment_bbox = BoundingBox {
+            min: Point3D::new(a.x.min(b.x), a.y.min(b.y), route_z_min),
+            max: Point3D::new(a.x.max(b.x), a.y.max(b.y), route_z_max),
         };
+        
+        // Query with inflated bbox for clearance
+        let query_bbox = segment_bbox.expand(inflate);
 
         eprintln!(
             "[TOPO COLLISION] Checking segment ({},{},{}) to ({},{},{}) with inflate={}nm",
             a.x, a.y, a.z, b.x, b.y, b.z, inflate
         );
         eprintln!(
-            "[TOPO COLLISION] Query bbox: ({},{},{}) to ({},{},{})",
-            bbox.min.x, bbox.min.y, bbox.min.z, bbox.max.x, bbox.max.y, bbox.max.z
+            "[TOPO COLLISION] Segment bbox: ({},{},{}) to ({},{},{})",
+            segment_bbox.min.x, segment_bbox.min.y, segment_bbox.min.z,
+            segment_bbox.max.x, segment_bbox.max.y, segment_bbox.max.z
         );
 
-        let candidates = self.query_all_obstacles(&bbox, obstacles);
-        // eprintln!("[TOPO COLLISION] Found {} candidate obstacles (2D query, will filter by Z)", candidates.len());
+        let candidates = self.query_all_obstacles(&query_bbox, obstacles);
         
         for (idx, seg) in candidates.iter().enumerate() {
-            // Skip segments belonging to exempt nets
+            // 1. Skip if this obstacle belongs to an exempt net (start/goal)
             if self.exempt_net_ids.contains(&seg.net_id) {
                 eprintln!("[TOPO COLLISION]   Obstacle {}: SKIPPED (exempt net_id={})", idx, seg.net_id);
                 continue;
             }
             
-            // v0.1.9: CRITICAL FIX - Check Z-axis overlap FIRST (before building seg_bbox)
-            // The obstacle's Z-range is stored directly in seg.start.z and seg.end.z
             let obs_z_min = seg.start.z.min(seg.end.z);
             let obs_z_max = seg.start.z.max(seg.end.z);
             
-            // Z-range intersection test: ranges overlap if (start1 <= end2) AND (start2 <= end1)
-            let z_overlaps = route_z_min <= obs_z_max && obs_z_min <= route_z_max;
-            eprintln!(
-                "[TOPO COLLISION]   Obstacle {}: net_id={}, Z-check: route_z=[{},{}], obs_z=[{},{}], overlaps={}",
-                idx, seg.net_id, route_z_min, route_z_max, obs_z_min, obs_z_max, z_overlaps
-            );
-            if !z_overlaps {
-                // eprintln!("[TOPO COLLISION]   SKIPPED (no Z-overlap)");
-                continue; // No Z-overlap, skip this obstacle
+            // Z-range overlap check
+            if route_z_min > obs_z_max || obs_z_min > route_z_max {
+                continue;
             }
             
-            let seg_bbox = BoundingBox {
+            let obs_bbox = BoundingBox {
                 min: Point3D::new(
-                    seg.start.x.min(seg.end.x) - seg.width_nm / 2 - inflate,
-                    seg.start.y.min(seg.end.y) - seg.width_nm / 2 - inflate,
+                    seg.start.x.min(seg.end.x) - seg.width_nm / 2,
+                    seg.start.y.min(seg.end.y) - seg.width_nm / 2,
                     obs_z_min,
                 ),
                 max: Point3D::new(
-                    seg.start.x.max(seg.end.x) + seg.width_nm / 2 + inflate,
-                    seg.start.y.max(seg.end.y) + seg.width_nm / 2 + inflate,
+                    seg.start.x.max(seg.end.x) + seg.width_nm / 2,
+                    seg.start.y.max(seg.end.y) + seg.width_nm / 2,
                     obs_z_max,
                 ),
             };
 
             eprintln!(
-                "[TOPO COLLISION]   Obstacle {}: bbox=({},{},{}) to ({},{},{})",
-                idx,
-                seg_bbox.min.x, seg_bbox.min.y, seg_bbox.min.z,
-                seg_bbox.max.x, seg_bbox.max.y, seg_bbox.max.z
+                "[TOPO COLLISION]   Obstacle {}: net_id={}, bbox=({},{},{}) to ({},{},{})",
+                idx, seg.net_id,
+                obs_bbox.min.x, obs_bbox.min.y, obs_bbox.min.z,
+                obs_bbox.max.x, obs_bbox.max.y, obs_bbox.max.z
             );
 
-            // Axis-aligned segment intersection check (X-Y plane)
-            if a.y == b.y {
-                // Horizontal segment
-                let seg_y_min = seg_bbox.min.y;
-                let seg_y_max = seg_bbox.max.y;
-                eprintln!(
-                    "[TOPO COLLISION]   Horizontal route at Y={}, obstacle Y=[{},{}]",
-                    a.y, seg_y_min, seg_y_max
-                );
-                if a.y >= seg_y_min && a.y <= seg_y_max {
-                    let seg_x_min = seg_bbox.min.x;
-                    let seg_x_max = seg_bbox.max.x;
-                    let route_x_min = a.x.min(b.x);
-                    let route_x_max = a.x.max(b.x);
-                    eprintln!(
-                        "[TOPO COLLISION]   Y-overlap! route_x=[{},{}], obs_x=[{},{}]",
-                        route_x_min, route_x_max, seg_x_min, seg_x_max
-                    );
-                    if route_x_max >= seg_x_min && route_x_min <= seg_x_max {
-                        // eprintln!("[TOPO COLLISION]   ❌ COLLISION DETECTED!");
-                        return true;
-                    }
-                }
-            } else if a.x == b.x {
-                // Vertical segment
-                let seg_x_min = seg_bbox.min.x;
-                let seg_x_max = seg_bbox.max.x;
-                eprintln!(
-                    "[TOPO COLLISION]   Vertical route at X={}, obstacle X=[{},{}]",
-                    a.x, seg_x_min, seg_x_max
-                );
-                if a.x >= seg_x_min && a.x <= seg_x_max {
-                    let seg_y_min = seg_bbox.min.y;
-                    let seg_y_max = seg_bbox.max.y;
-                    let route_y_min = a.y.min(b.y);
-                    let route_y_max = a.y.max(b.y);
-                    eprintln!(
-                        "[TOPO COLLISION]   X-overlap! route_y=[{},{}], obs_y=[{},{}]",
-                        route_y_min, route_y_max, seg_y_min, seg_y_max
-                    );
-                    if route_y_max >= seg_y_min && route_y_min <= seg_y_max {
-                        // eprintln!("[TOPO COLLISION]   ❌ COLLISION DETECTED!");
-                        return true;
-                    }
-                }
+            // 2. Continuous 3D Intersection Check:
+            //    Check if the segment bbox (inflated by trace clearance) overlaps the obstacle.
+            //    This handles all orientations without coordinate-snag issues!
+            let inflated_segment = segment_bbox.expand(inflate);
+            
+            // 3D AABB overlap test: boxes overlap if they overlap on ALL three axes
+            let x_overlaps = inflated_segment.min.x <= obs_bbox.max.x && 
+                             inflated_segment.max.x >= obs_bbox.min.x;
+            let y_overlaps = inflated_segment.min.y <= obs_bbox.max.y && 
+                             inflated_segment.max.y >= obs_bbox.min.y;
+            let z_overlaps = inflated_segment.min.z <= obs_bbox.max.z && 
+                             inflated_segment.max.z >= obs_bbox.min.z;
+            
+            if x_overlaps && y_overlaps && z_overlaps {
+                eprintln!("[TOPO COLLISION]   ❌ COLLISION DETECTED with Obstacle {}", idx);
+                eprintln!("[TOPO COLLISION]      Inflated segment: ({},{},{}) to ({},{},{})",
+                    inflated_segment.min.x, inflated_segment.min.y, inflated_segment.min.z,
+                    inflated_segment.max.x, inflated_segment.max.y, inflated_segment.max.z);
+                return true;
             }
         }
 
-        // eprintln!("[TOPO COLLISION] ✅ No collisions detected");
+        eprintln!("[TOPO COLLISION] ✅ No collisions detected");
         false
     }
 

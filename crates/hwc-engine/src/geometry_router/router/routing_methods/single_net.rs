@@ -278,22 +278,21 @@ impl GeometryRouter {
         } else {
             // v0.1.9: Use TopologicalRouter as the single authoritative routing engine
             let topo_router = TopologicalRouter::new(trace_width, track_pitch, fabrication.min_trace_spacing_nm);
-            match topo_router.route(start, goal, &spatial_index, &board_bounds) {
+            
+            // v0.1.9: Use route_with_exemptions to allow routing from/to pads without self-collision
+            // Exempt the active net_id so start/goal pads are not treated as obstacles
+            let exempt_net_ids = vec![route.net_id.raw() as usize];
+            
+            // v0.1.9: TopologicalRouter is the single authoritative routing engine
+            // NO FALLBACK - if TopologicalRouter can't find a path, the route fails
+            match topo_router.route_with_exemptions(start, goal, &spatial_index, &board_bounds, &exempt_net_ids) {
                 Some(topo_path) if topo_path.waypoints.len() >= 2 => topo_path.waypoints,
                 _ => {
-                    // --- FALLBACK: Try Localized Legalization Window ---
-                    let collision_window = BoundingBox::new(start, goal);
-                    if let Ok(legalized_coords) =
-                        self.legalize_local_window(&collision_window, route)
-                    {
-                        legalized_coords
-                    } else {
-                        return Err(RoutingError::NoPathFound {
-                            net_id: route.net_id,
-                            start: route.start,
-                            goal: route.goal,
-                        });
-                    }
+                    return Err(RoutingError::NoPathFound {
+                        net_id: route.net_id,
+                        start: route.start,
+                        goal: route.goal,
+                    });
                 }
             }
         };
@@ -474,11 +473,15 @@ impl GeometryRouter {
             min_clearance,
         );
 
-        match topo_router.route(
+        // v0.1.9: Use route_with_exemptions to allow routing from/to pads without self-collision
+        let exempt_net_ids = vec![route.net_id.raw() as usize];
+
+        match topo_router.route_with_exemptions(
             route.start,
             route.goal,
             &updated_spatial_index,
             &board_bounds,
+            &exempt_net_ids,
         ) {
             Some(topo_path) if topo_path.waypoints.len() >= 2 => Ok(topo_path.waypoints),
             _ => {
@@ -523,7 +526,10 @@ impl GeometryRouter {
         let spatial_index = self.build_routing_spatial_index(route);
         let topo_router = TopologicalRouter::new(trace_width, track_pitch, fabrication.min_trace_spacing_nm);
 
-        let path = match topo_router.route(route.start, route.goal, &spatial_index, &board_bounds) {
+        // v0.1.9: Use route_with_exemptions to allow routing from/to pads without self-collision
+        let exempt_net_ids = vec![route.net_id.raw() as usize];
+
+        let path = match topo_router.route_with_exemptions(route.start, route.goal, &spatial_index, &board_bounds, &exempt_net_ids) {
             Some(topo_path) if topo_path.waypoints.len() >= 2 => topo_path.waypoints,
             _ => {
                 let collision_window = BoundingBox::new(route.start, route.goal);

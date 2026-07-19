@@ -28,11 +28,6 @@ pub struct AutoRouter<'a> {
     route_net_policies: FxHashMap<NetId, hwc_engine::RoutingPattern>,
 }
 
-#[derive(Debug, Clone)]
-struct PinInfo {
-    position: Point3D,
-}
-
 impl<'a> AutoRouter<'a> {
     /// Create a new global automatic router.
     pub fn new(
@@ -146,13 +141,11 @@ impl<'a> AutoRouter<'a> {
     pub fn route_all_nets(&mut self) -> Result<(), IrError> {
         use hwc_engine::geometry::BoundingBox;
 
-        // Phase 1: Build the nets HashMap required by GeometryRouter::route_space()
-        // v0.1.7 Chain-Link Logic: If explicit 'route' statements exist, we route them
-        // as individual segments to preserve the user's intended topology.
-        let mut geo_nets: FxHashMap<NetId, Vec<Point3D>> = FxHashMap::default();
-        let mut explicit_segments: Vec<(NetId, Vec<Point3D>)> = Vec::new();
+        // Phase 1: Build resolved routes using EntityIds (single source of truth).
+        // v0.1.9: Replaces raw coordinate tuples with stable EntityId references.
+        // Coordinates are resolved from the EntityGraph only at routing time.
+        let mut resolved_routes: Vec<crate::ir::routing::types::ResolvedRoute> = Vec::new();
         let mut net_id_to_name: FxHashMap<NetId, CompactString> = FxHashMap::default();
-        let mut route_segments: Vec<(NetId, Vec<Point3D>)> = Vec::new();
         // v0.1.8: Track which nets have a layer override for vertical transition segments.
         // Keyed by net name (stable across Chain-Link ID remapping).
         let mut net_layer_targets: FxHashMap<CompactString, i64> = FxHashMap::default();
@@ -395,13 +388,55 @@ impl<'a> AutoRouter<'a> {
                     min_width
                 };
 
-                match crate::ir::routing::calculate_boundary_points(
-                    self.space,
-                    &modified_route,
-                    route_width_nm, // Use actual route width, not PDK minimum
-                ) {
-                    Ok((start, goal, _, _)) => {
-                        route_segments.push((actual_net_id, vec![start, goal]));
+                // v0.1.9: Resolve endpoint EntityIds from the route spec.
+                // These are stable identifiers — coordinates are NOT resolved here.
+                match crate::ir::routing::resolve_endpoint_entity_ids(&modified_route) {
+                    Ok((from_id, to_id)) => {
+                        // Convert parser escape specs to our escape specs
+                        let convert_escape = |esc: &Option<hwc_parser::RouteEscape>| -> crate::ir::routing::types::EscapeSpec {
+                            match esc {
+                                Some(e) => {
+                                    let port = match e.port {
+                                        hwc_parser::CardinalDirection::North => crate::ir::routing::types::CardinalDirection::North,
+                                        hwc_parser::CardinalDirection::South => crate::ir::routing::types::CardinalDirection::South,
+                                        hwc_parser::CardinalDirection::East => crate::ir::routing::types::CardinalDirection::East,
+                                        hwc_parser::CardinalDirection::West => crate::ir::routing::types::CardinalDirection::West,
+                                    };
+                                    let offset = match &e.offset {
+                                        Some(hwc_parser::EdgeOffsetSpec::Named(hwc_parser::NamedPosition::Top)) => crate::ir::routing::types::EdgeOffset::Percentage(1.0),
+                                        Some(hwc_parser::EdgeOffsetSpec::Named(hwc_parser::NamedPosition::Bottom)) => crate::ir::routing::types::EdgeOffset::Percentage(0.0),
+                                        Some(hwc_parser::EdgeOffsetSpec::Named(hwc_parser::NamedPosition::Center)) => crate::ir::routing::types::EdgeOffset::Center,
+                                        Some(hwc_parser::EdgeOffsetSpec::Percentage(p)) => crate::ir::routing::types::EdgeOffset::Percentage(*p),
+                                        Some(hwc_parser::EdgeOffsetSpec::Measurement(m)) => {
+                                            // Measurement is already in nanometers
+                                            crate::ir::routing::types::EdgeOffset::MeasurementNm(*m)
+                                        }
+                                        None => crate::ir::routing::types::EdgeOffset::Center,
+                                    };
+                                    crate::ir::routing::types::EscapeSpec { port, offset }
+                                }
+                                None => crate::ir::routing::types::EscapeSpec::default(),
+                            }
+                        };
+
+                        let resolved = crate::ir::routing::types::ResolvedRoute::new(
+                            actual_net_id,
+                            from_id,
+                            to_id,
+                            route_width_nm,
+                            net_name.clone(),
+                        )
+                        .with_escapes(
+                            convert_escape(&modified_route.exit_escape),
+                            convert_escape(&modified_route.enter_escape),
+                        );
+
+                        eprintln!(
+                            "[GLOBAL.RS DEBUG] Built ResolvedRoute for net_id={}: from={:?}, to={:?}",
+                            actual_net_id.raw(), from_id, to_id
+                        );
+
+                        resolved_routes.push(resolved);
                         net_id_to_name.insert(actual_net_id, net_name.clone());
                         // v0.1.8: Track layer override for vertical transition segments
                         if let Some(ref layer_id) = route.layer {
@@ -437,66 +472,43 @@ impl<'a> AutoRouter<'a> {
                         }
                     }
                     Err(e) => {
-                        eprintln!("[ROUTER WARNING] Failed to calculate boundary points for route on net '{}': {:?} - skipping", net_name, e);
+                        eprintln!("[ROUTER WARNING] Failed to resolve endpoint EntityIds for route on net '{}': {:?} - skipping", net_name, e);
                     }
                 }
             }
         }
 
-        // If no explicit routes, fallback to netlist pin grouping (Legacy mode)
-        if route_segments.is_empty() {
-            let net_pins = self.analyze_nets()?;
-            for (net_name, pins) in &net_pins {
-                if pins.len() < 2 {
-                    continue;
-                }
-                let net_id = self.find_net_id_for_name(net_name)?;
-                let coords: Vec<Point3D> = pins.iter().map(|p| p.position).collect();
-                geo_nets.insert(net_id, coords);
-                net_id_to_name.insert(net_id, net_name.clone());
+        // v0.1.9: No fallback mode. All routes must be explicit.
+        // The EntityGraph is the single source of truth for spatial data.
+        if resolved_routes.is_empty() {
+            return Err(IrError::RoutingError(
+                "No explicit route statements found. The legacy netlist fallback mode has been removed. \
+                 All nets must have explicit 'route X to Y' statements. \
+                 The EntityGraph is the single source of truth for all spatial coordinates."
+                    .into(),
+            ));
+        }
 
-                // v0.1.8: Pull current from netlist for legacy/auto-nets
-                if let Some(net_data) = self.space.netlist.get_net(net_id) {
-                    if let Some(c) = net_data.current_ma {
-                        net_currents_ma.insert(net_data.name.clone(), c);
-                    }
-                }
-            }
-        } else {
-            // v0.1.7: Unified Net IDs for Chain-Link mode.
-            // By using the same logical NetId for all segments, the engine's
-            // same-net collision bypass and crosstalk-exemption logic kicks in.
-            // This ensures traces from the same pad don't "bump" away from each other.
-            explicit_segments = route_segments.clone();
+        // v0.1.8: Pull current from netlist for explicit routes
+        for resolved in &resolved_routes {
+            let name = net_id_to_name
+                .entry(resolved.net_id)
+                .or_insert_with(|| {
+                    compact_str::CompactString::from(format!("chain_net_{}", resolved.net_id.raw()))
+                })
+                .clone();
 
-            // v0.1.8: We no longer populate geo_nets with explicit segments here.
-            // Doing so causes the Adaptive Router to route them a second time
-            // (once via Chain-Link and once via Steiner/Hierarchical), creating
-            // redundant parallel traces. The "0 nets routed" log is preferred
-            // over physically incorrect redundant copper.
-            for (net_id, _points) in &route_segments {
-                let name = net_id_to_name
-                    .entry(*net_id)
-                    .or_insert_with(|| {
-                        compact_str::CompactString::from(format!("chain_net_{}", net_id.raw()))
-                    })
-                    .clone();
-
-                // v0.1.8: Pull current from netlist for explicit routes
-                if let Some(net_data) = self.space.netlist.get_net(*net_id) {
-                    if let Some(c) = net_data.current_ma {
-                        net_currents_ma.entry(name).or_insert(c);
-                    }
+            if let Some(net_data) = self.space.netlist.get_net(resolved.net_id) {
+                if let Some(c) = net_data.current_ma {
+                    net_currents_ma.entry(name).or_insert(c);
                 }
             }
         }
 
-        if geo_nets.is_empty() && explicit_segments.is_empty() {
+        if resolved_routes.is_empty() {
             eprintln!(
-                "[ROUTER WARNING] No nets to route! geo_nets and explicit_segments are both empty"
+                "[ROUTER WARNING] No nets to route! resolved_routes is empty"
             );
-            eprintln!("  route_segments.len() = {}", route_segments.len());
-            eprintln!("  auto_routes.len() = {}", self.auto_routes.len());
             return Ok(());
         }
 
@@ -767,23 +779,16 @@ impl<'a> AutoRouter<'a> {
         // physical obstacle to appear twice in the spatial index with different segment_ids,
         // resulting in spurious duplicate collision detections during routing.
         for pin in self.space.entity_graph.get_component_pins() {
-            // v0.1.8: We no longer add component pins explicitly here if they are already
-            // part of the geo_nets/explicit_segments map, as the GeometryRouter handles
-            // docking automatically during route_space(). Adding them twice can cause
-            // the global planner to create zero-length segments that confuse the local router.
-            if !geo_nets
-                .values()
-                .any(|pts| pts.contains(&Point3D::new(pin.x_nm, pin.y_nm, pin.z_nm)))
-            {
-                geo_router.add_component_pin(
-                    pin.x_nm,
-                    pin.y_nm,
-                    pin.z_nm,
-                    pin.component_name.clone(),
-                    pin.pin_name.clone(),
-                    pin.net.clone(),
-                );
-            }
+            // v0.1.8: Component pins are added to the GeometryRouter for docking.
+            // The GeometryRouter handles docking automatically during route_space().
+            geo_router.add_component_pin(
+                pin.x_nm,
+                pin.y_nm,
+                pin.z_nm,
+                pin.component_name.clone(),
+                pin.pin_name.clone(),
+                pin.net.clone(),
+            );
         }
 
         // Phase 5: Route all nets via GeometryRouter (adaptive mode selection)
@@ -813,20 +818,51 @@ impl<'a> AutoRouter<'a> {
             eprintln!("  net_id={}: width={} nm", net_id.raw(), width);
         }
 
-        // eprintln!("[ROUTER DEBUG] About to call route_space:");
-        // eprintln!("  geo_nets.len() = {}", geo_nets.len());
-        // eprintln!("  explicit_segments.len() = {}", explicit_segments.len());
-        // eprintln!("  obstacle_bboxes.len() = {}", obstacle_bboxes.len());
-        // eprintln!("  has_substrate = {}", has_substrate);
+        // v0.1.9: UNIFIED ENDPOINT RESOLUTION
+        // Resolve ResolvedRoutes → coordinates at the LAST MOMENT before routing.
+        // This is the ONLY place coordinates are computed. The EntityGraph is the
+        // single source of truth — no coordinates are stored on ResolvedRoute.
+        let explicit_segments: Vec<(NetId, Vec<Point3D>)> = resolved_routes
+            .iter()
+            .filter_map(|resolved| {
+                match crate::ir::routing::resolve_route_boundary_points(
+                    self.space,
+                    resolved,
+                    resolved.width_nm,
+                ) {
+                    Ok((start, goal)) => {
+                        eprintln!(
+                            "[GLOBAL.RS DEBUG] Resolved boundary for net_id={}: start=({},{},{}), goal=({},{},{})",
+                            resolved.net_id.raw(), start.x, start.y, start.z, goal.x, goal.y, goal.z
+                        );
+                        Some((resolved.net_id, vec![start, goal]))
+                    }
+                    Err(e) => {
+                        eprintln!(
+                            "[ROUTER WARNING] Failed to resolve boundary points for net '{}': {:?} - skipping",
+                            resolved.net_name, e
+                        );
+                        None
+                    }
+                }
+            })
+            .collect();
+
+        // No fallback: all routes must resolve successfully.
+        if explicit_segments.is_empty() {
+            return Err(IrError::RoutingError(
+                "No routes could be resolved from EntityGraph. \
+                 All route endpoints must have valid EntityId registrations."
+                    .into(),
+            ));
+        }
+
+        eprintln!("[ROUTER] Processing {} automatic routes using AutoRouter", explicit_segments.len());
 
         match geo_router.route_space(
             &grid_bbox,
-            &geo_nets,
-            if explicit_segments.is_empty() {
-                None
-            } else {
-                Some(&explicit_segments)
-            },
+            &FxHashMap::default(), // v0.1.9: No Steiner nets in explicit mode
+            Some(&explicit_segments),
             &obstacle_bboxes,
             if has_substrate {
                 Some(substrate_layers)
@@ -1282,53 +1318,6 @@ impl<'a> AutoRouter<'a> {
         self.query_store = geo_router.query_store.take();
 
         Ok(())
-    }
-
-    fn analyze_nets(&self) -> Result<FxHashMap<CompactString, Vec<PinInfo>>, IrError> {
-        let mut net_pins: FxHashMap<CompactString, Vec<PinInfo>> = FxHashMap::default();
-
-        // v0.1.8: In v0.1.8, physical connectivity is driven by the EntityGraph's
-        // component pins. To prevent "Pad Pouches" and redundant routing to logical
-        // origins (corners), we deduplicate pins per component.
-        // If a component has both an "anchor" pin (physical) and a logical pin,
-        // we strictly prefer the anchor.
-        let component_pins = self.space.entity_graph.get_component_pins();
-
-        // Group pins by (component_name, net_name)
-        let mut grouped_pins: FxHashMap<
-            (CompactString, CompactString),
-            Vec<&hwc_engine::ComponentPin>,
-        > = FxHashMap::default();
-        for pin in component_pins {
-            if let Some(net_name) = &pin.net {
-                grouped_pins
-                    .entry((pin.component_name.clone(), net_name.clone()))
-                    .or_default()
-                    .push(pin);
-            }
-        }
-
-        for ((_comp_name, net_name), pins) in grouped_pins {
-            let entry = net_pins.entry(net_name).or_default();
-
-            // Prefer "anchor" pins if they exist
-            if let Some(anchor) = pins.iter().find(|p| p.pin_name == "anchor") {
-                let pos = Point3D::new(anchor.x_nm, anchor.y_nm, anchor.z_nm);
-                if !entry.iter().any(|p| p.position == pos) {
-                    entry.push(PinInfo { position: pos });
-                }
-            } else {
-                // Otherwise, use all unique positions (fallback)
-                for pin in pins {
-                    let pos = Point3D::new(pin.x_nm, pin.y_nm, pin.z_nm);
-                    if !entry.iter().any(|p| p.position == pos) {
-                        entry.push(PinInfo { position: pos });
-                    }
-                }
-            }
-        }
-
-        Ok(net_pins)
     }
 
     fn find_net_id_for_name(&mut self, name: &str) -> Result<NetId, IrError> {

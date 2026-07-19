@@ -33,7 +33,7 @@ profile Silicon_180nm:
 
     trace:
         min_width: 180nm
-        min_spacing: 50um
+        min_spacing: 180nm
 
     via:
         min_diameter: 220nm

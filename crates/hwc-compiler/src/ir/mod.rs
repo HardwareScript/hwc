@@ -631,6 +631,7 @@ fn compile_single_space(
                         &bbox_tracker,
                         symbol_table,
                         &eval_context,
+                        origin,
                     )?;
                     resolved_plane.from = Some(resolved_position);
                 }
@@ -665,6 +666,7 @@ fn compile_single_space(
                         &bbox_tracker,
                         symbol_table,
                         &eval_context,
+                        origin,
                     )?;
                     resolved_component.position = Some(resolved_position);
                 }
@@ -832,6 +834,14 @@ fn compile_single_space(
         .as_ref()
         .map(|c| c.mode)
         .unwrap_or(hwc_parser::RoutingMode::Mixed);
+
+    // =========================================================================
+    // PHYSICAL ROUTING PHASE (uses resolved coordinates from EntityGraph)
+    // =========================================================================
+    // The router now queries entity_graph.component_pins directly for resolved
+    // global coordinates. The EntityGraph is the single source of truth, and the
+    // netlist's position_nm fields are deprecated/stale.
+    // =========================================================================
 
     // Only process routes if lockfile wasn't loaded
     if !routes_loaded_from_lock {

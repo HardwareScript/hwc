@@ -139,7 +139,6 @@ impl DynamicSpatialIndex {
     /// Find all layer indices whose Z-range overlaps [z_min, z_max].
     fn layers_for_z_range(&self, z_min: i64, z_max: i64) -> Vec<usize> {
         if !self.layers_configured {
-            eprintln!("[LAYERED INDEX] layers_for_z_range: Layers NOT configured, using fallback");
             return vec![0];
         }
         let mut result = Vec::new();
@@ -150,10 +149,7 @@ impl DynamicSpatialIndex {
             }
         }
         if result.is_empty() {
-            eprintln!("[LAYERED INDEX] layers_for_z_range({}, {}): No matching layers, using fallback", z_min, z_max);
             result.push(0); // fallback
-        } else {
-            eprintln!("[LAYERED INDEX] layers_for_z_range({}, {}): Found layers {:?}", z_min, z_max, result);
         }
         result
     }
@@ -166,9 +162,6 @@ impl DynamicSpatialIndex {
         let z_min = segment.start.z.min(segment.end.z);
         let z_max = segment.start.z.max(segment.end.z);
         let layer_indices = self.layers_for_z_range(z_min, z_max);
-
-        eprintln!("[LAYERED INDEX] Inserting segment: start={:?}, end={:?}, z_range=[{}, {}], into layers {:?}",
-            segment.start, segment.end, z_min, z_max, layer_indices);
 
         for layer_idx in layer_indices {
             if layer_idx < self.layer_segments.len() {
@@ -219,7 +212,6 @@ impl DynamicSpatialIndex {
 
     /// Clear all segments from the index.
     pub fn clear(&mut self) {
-        eprintln!("[LAYERED INDEX] clear() called - clearing segments but preserving layer structure");
         for bucket in &mut self.layer_segments {
             bucket.clear();
         }
@@ -263,10 +255,8 @@ impl DynamicSpatialIndex {
                 continue;
             }
             let bucket = &self.layer_segments[layer_idx];
-            eprintln!("[LAYERED INDEX] Searching layer bucket {}: {} segments", layer_idx, bucket.len());
             self.query_bucket(bucket, bbox, &mut results, &mut seen_segment_ids);
         }
-        eprintln!("[LAYERED INDEX] query_bbox: returning {} results", results.len());
         results
     }
 
@@ -300,22 +290,14 @@ impl DynamicSpatialIndex {
             }
             // Deduplicate by segment_id (segments spanning multiple Z-layers appear in multiple buckets)
             let was_new = seen_segment_ids.insert(seg.segment_id);
-            eprintln!("[DEDUP CHECK] segment_id={}, was_new={}, bbox=({},{},{}) to ({},{},{})",
-                seg.segment_id, was_new,
-                seg.start.x.min(seg.end.x), seg.start.y.min(seg.end.y), seg.start.z,
-                seg.start.x.max(seg.end.x), seg.start.y.max(seg.end.y), seg.end.z);
             if !was_new {
-                eprintln!("[DEDUP CHECK]   ↳ SKIPPED (duplicate)");
                 continue; // Already returned this segment from a different layer bucket
             }
             // Y overlap check
             let seg_min_y = seg.start.y.min(seg.end.y) - seg.width_nm / 2;
             let seg_max_y = seg.start.y.max(seg.end.y) + seg.width_nm / 2;
             if seg_min_y <= max_y && seg_max_y >= min_y {
-                eprintln!("[DEDUP CHECK]   ↳ ADDED to results");
                 results.push(seg);
-            } else {
-                eprintln!("[DEDUP CHECK]   ↳ SKIPPED (Y out of range)");
             }
         }
     }
