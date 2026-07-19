@@ -17,7 +17,7 @@ impl GeometryRouter {
         active_route: &NetRoute,
     ) -> DynamicSpatialIndex {
         let mut spatial_index = DynamicSpatialIndex::new();
-        
+
         eprintln!("[SPATIAL INDEX DEBUG] build_routing_spatial_index: Creating NEW spatial index for net {}", active_route.net_id.raw());
 
         // Configure layer Z-ranges from the stackup for layered queries
@@ -88,28 +88,28 @@ impl GeometryRouter {
         // 2. Insert substrate layers (pours) as hard obstacles.
         // Pours belong to specific nets; routes must not pass through pours of other nets.
         // v0.1.9: Planes without nets (net_id = 0) are keepout zones and MUST be obstacles.
-        
+
         // v0.1.9: Use self.substrate_layers (populated by route_space) instead of
         // entity_graph.get_substrate_layers() which is empty during routing.
         let substrate_layer_count = self.substrate_layers.as_ref().map(|v| v.len()).unwrap_or(0);
-        
+
         eprintln!(
             "[SPATIAL INDEX DEBUG] build_routing_spatial_index called for net_id={}, found {} substrate layers",
             active_route.net_id.raw(),
             substrate_layer_count
         );
-        
+
         if let Some(substrate_layers) = &self.substrate_layers {
             for (substrate_idx, sub_layer) in substrate_layers.iter().enumerate() {
                 let sub_net_id = sub_layer.net;
-                
+
                 eprintln!(
                     "[SPATIAL INDEX DEBUG] Checking substrate layer: net={}, bbox=({},{},{}) to ({},{},{})",
                     sub_net_id,
                     sub_layer.bbox.min.x, sub_layer.bbox.min.y, sub_layer.bbox.min.z,
                     sub_layer.bbox.max.x, sub_layer.bbox.max.y, sub_layer.bbox.max.z
                 );
-                
+
                 // Same-net pours are not obstacles (we can route over our own pours)
                 // BUT: net_id = 0 pours (keepout zones) are ALWAYS obstacles
                 if sub_net_id != 0 && crate::netlist::NetId(sub_net_id) == active_route.net_id {
@@ -130,18 +130,24 @@ impl GeometryRouter {
                     let goal = active_route.goal;
                     let bbox = &sub_layer.bbox;
                     // Expanded bbox by proximity margin on all XY sides (Z uses raw bounds)
-                    if goal.x >= bbox.min.x - proximity && goal.x <= bbox.max.x + proximity
-                        && goal.y >= bbox.min.y - proximity && goal.y <= bbox.max.y + proximity
-                        && goal.z >= bbox.min.z && goal.z <= bbox.max.z
+                    if goal.x >= bbox.min.x - proximity
+                        && goal.x <= bbox.max.x + proximity
+                        && goal.y >= bbox.min.y - proximity
+                        && goal.y <= bbox.max.y + proximity
+                        && goal.z >= bbox.min.z
+                        && goal.z <= bbox.max.z
                     {
                         eprintln!("[SPATIAL INDEX DEBUG]   ❌ Skipped (destination pad — goal docks into boundary of this layer)");
                         continue;
                     }
                     // Also exempt if the start point is docking into this pad (different net-id source)
                     let start = active_route.start;
-                    if start.x >= bbox.min.x - proximity && start.x <= bbox.max.x + proximity
-                        && start.y >= bbox.min.y - proximity && start.y <= bbox.max.y + proximity
-                        && start.z >= bbox.min.z && start.z <= bbox.max.z
+                    if start.x >= bbox.min.x - proximity
+                        && start.x <= bbox.max.x + proximity
+                        && start.y >= bbox.min.y - proximity
+                        && start.y <= bbox.max.y + proximity
+                        && start.z >= bbox.min.z
+                        && start.z <= bbox.max.z
                     {
                         eprintln!("[SPATIAL INDEX DEBUG]   ❌ Skipped (source pad — start docks into boundary of this layer)");
                         continue;
@@ -149,17 +155,17 @@ impl GeometryRouter {
                 }
                 let width = sub_layer.bbox.max.x - sub_layer.bbox.min.x;
                 let height = sub_layer.bbox.max.y - sub_layer.bbox.min.y;
-                
+
                 eprintln!(
                     "[SPATIAL INDEX DEBUG]   ✅ Adding as obstacle (width={}, height={})",
                     width, height
                 );
-                
+
                 // Use a stable segment_id based on the substrate layer index
                 // This ensures the SAME physical substrate layer always gets the SAME segment_id
                 // across multiple builds of the spatial index
                 let stable_segment_id = 1_000_000 + substrate_idx;
-                
+
                 spatial_index.insert(IndexedSegment {
                     source: hwc_physics::spatial_index::SpatialEntitySource::SubstrateLayer {
                         index: substrate_idx,
@@ -277,15 +283,22 @@ impl GeometryRouter {
             vec![start, goal]
         } else {
             // v0.1.9: Use TopologicalRouter as the single authoritative routing engine
-            let topo_router = TopologicalRouter::new(trace_width, track_pitch, fabrication.min_trace_spacing_nm);
-            
+            let topo_router =
+                TopologicalRouter::new(trace_width, track_pitch, fabrication.min_trace_spacing_nm);
+
             // v0.1.9: Use route_with_exemptions to allow routing from/to pads without self-collision
             // Exempt the active net_id so start/goal pads are not treated as obstacles
             let exempt_net_ids = vec![route.net_id.raw() as usize];
-            
+
             // v0.1.9: TopologicalRouter is the single authoritative routing engine
             // NO FALLBACK - if TopologicalRouter can't find a path, the route fails
-            match topo_router.route_with_exemptions(start, goal, &spatial_index, &board_bounds, &exempt_net_ids) {
+            match topo_router.route_with_exemptions(
+                start,
+                goal,
+                &spatial_index,
+                &board_bounds,
+                &exempt_net_ids,
+            ) {
                 Some(topo_path) if topo_path.waypoints.len() >= 2 => topo_path.waypoints,
                 _ => {
                     return Err(RoutingError::NoPathFound {
@@ -524,12 +537,19 @@ impl GeometryRouter {
         );
 
         let spatial_index = self.build_routing_spatial_index(route);
-        let topo_router = TopologicalRouter::new(trace_width, track_pitch, fabrication.min_trace_spacing_nm);
+        let topo_router =
+            TopologicalRouter::new(trace_width, track_pitch, fabrication.min_trace_spacing_nm);
 
         // v0.1.9: Use route_with_exemptions to allow routing from/to pads without self-collision
         let exempt_net_ids = vec![route.net_id.raw() as usize];
 
-        let path = match topo_router.route_with_exemptions(route.start, route.goal, &spatial_index, &board_bounds, &exempt_net_ids) {
+        let path = match topo_router.route_with_exemptions(
+            route.start,
+            route.goal,
+            &spatial_index,
+            &board_bounds,
+            &exempt_net_ids,
+        ) {
             Some(topo_path) if topo_path.waypoints.len() >= 2 => topo_path.waypoints,
             _ => {
                 let collision_window = BoundingBox::new(route.start, route.goal);
@@ -548,7 +568,8 @@ impl GeometryRouter {
         // v0.1.9: If a pattern is provided and the straight path is shorter than
         // the target, inject meander at the midpoint of the longest straight segment.
         let final_path = if let Some(pat) = pattern {
-            let straight_length: i64 = path.windows(2)
+            let straight_length: i64 = path
+                .windows(2)
                 .map(|w| {
                     let dx = (w[0].x - w[1].x).abs();
                     let dy = (w[0].y - w[1].y).abs();
@@ -585,7 +606,11 @@ impl GeometryRouter {
 
                     // Determine heading from segment direction
                     let heading = if (p_a.x - p_b.x).abs() > (p_a.y - p_b.y).abs() {
-                        if p_b.x > p_a.x { 0i64 } else { 180i64 }
+                        if p_b.x > p_a.x {
+                            0i64
+                        } else {
+                            180i64
+                        }
                     } else if p_b.y > p_a.y {
                         90i64
                     } else {
@@ -598,7 +623,8 @@ impl GeometryRouter {
 
                     if meander_points.len() > 2 {
                         // Calculate how much length the meander actually adds
-                        let meander_length: i64 = meander_points.windows(2)
+                        let meander_length: i64 = meander_points
+                            .windows(2)
                             .map(|w| {
                                 let dx = (w[0].x - w[1].x).abs();
                                 let dy = (w[0].y - w[1].y).abs();
@@ -616,10 +642,12 @@ impl GeometryRouter {
                         if (scale - 1.0).abs() > 0.1 {
                             // Re-generate with scaled step size
                             let scaled_step = (step_size as f64 * scale) as i64;
-                            let scaled_meander = pat.generate_moves(mid, heading, scaled_step.max(trace_width));
+                            let scaled_meander =
+                                pat.generate_moves(mid, heading, scaled_step.max(trace_width));
 
                             // Splice the meander into the path
-                            let mut new_path = Vec::with_capacity(path.len() + scaled_meander.len());
+                            let mut new_path =
+                                Vec::with_capacity(path.len() + scaled_meander.len());
                             new_path.extend_from_slice(&path[..=best_seg_idx]);
                             // Skip first point of meander (it's the same as mid)
                             for pt in scaled_meander.iter().skip(1) {
@@ -629,7 +657,8 @@ impl GeometryRouter {
                             new_path
                         } else {
                             // Meander length is close enough, splice it directly
-                            let mut new_path = Vec::with_capacity(path.len() + meander_points.len());
+                            let mut new_path =
+                                Vec::with_capacity(path.len() + meander_points.len());
                             new_path.extend_from_slice(&path[..=best_seg_idx]);
                             for pt in meander_points.iter().skip(1) {
                                 new_path.push(*pt);

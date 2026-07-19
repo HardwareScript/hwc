@@ -34,11 +34,9 @@ impl ConnectivityGraph {
 
     /// Add an undirected edge between two graph node indices.
     pub fn add_edge(&mut self, u: usize, v: usize) {
-        if u < self.adj.len() && v < self.adj.len() && u != v {
-            if !self.adj[u].contains(&v) {
-                self.adj[u].push(v);
-                self.adj[v].push(u);
-            }
+        if u < self.adj.len() && v < self.adj.len() && u != v && !self.adj[u].contains(&v) {
+            self.adj[u].push(v);
+            self.adj[v].push(u);
         }
     }
 
@@ -114,77 +112,65 @@ impl ConnectivityGraph {
             return Vec::new();
         }
 
-        let mut index_counter = 0;
-        let mut stack = Vec::new();
-        let mut on_stack = vec![false; n];
-        let mut indices = vec![-1i32; n];
-        let mut lowlinks = vec![-1i32; n];
-        let mut sccs = Vec::new();
-
-        fn strongconnect(
-            v: usize,
-            adj: &[Vec<usize>],
-            index_counter: &mut i32,
-            stack: &mut Vec<usize>,
-            on_stack: &mut [bool],
-            indices: &mut [i32],
-            lowlinks: &mut [i32],
-            sccs: &mut Vec<Vec<usize>>,
-        ) {
-            indices[v] = *index_counter;
-            lowlinks[v] = *index_counter;
-            *index_counter += 1;
-            stack.push(v);
-            on_stack[v] = true;
-
-            for &w in &adj[v] {
-                if indices[w] == -1 {
-                    strongconnect(
-                        w,
-                        adj,
-                        index_counter,
-                        stack,
-                        on_stack,
-                        indices,
-                        lowlinks,
-                        sccs,
-                    );
-                    lowlinks[v] = lowlinks[v].min(lowlinks[w]);
-                } else if on_stack[w] {
-                    lowlinks[v] = lowlinks[v].min(indices[w]);
-                }
-            }
-
-            if lowlinks[v] == indices[v] {
-                let mut scc = Vec::new();
-                loop {
-                    let w = stack.pop().expect("stack should not be empty");
-                    on_stack[w] = false;
-                    scc.push(w);
-                    if w == v {
-                        break;
-                    }
-                }
-                sccs.push(scc);
-            }
-        }
+        let mut state = TarjanState {
+            adj: &self.adj,
+            index_counter: 0,
+            stack: Vec::new(),
+            on_stack: vec![false; n],
+            indices: vec![-1i32; n],
+            lowlinks: vec![-1i32; n],
+            sccs: Vec::new(),
+        };
 
         for v in 0..n {
-            if indices[v] == -1 {
-                strongconnect(
-                    v,
-                    &self.adj,
-                    &mut index_counter,
-                    &mut stack,
-                    &mut on_stack,
-                    &mut indices,
-                    &mut lowlinks,
-                    &mut sccs,
-                );
+            if state.indices[v] == -1 {
+                state.strongconnect(v);
             }
         }
 
-        sccs
+        state.sccs
+    }
+}
+
+struct TarjanState<'a> {
+    adj: &'a [Vec<usize>],
+    index_counter: i32,
+    stack: Vec<usize>,
+    on_stack: Vec<bool>,
+    indices: Vec<i32>,
+    lowlinks: Vec<i32>,
+    sccs: Vec<Vec<usize>>,
+}
+
+impl TarjanState<'_> {
+    fn strongconnect(&mut self, v: usize) {
+        self.indices[v] = self.index_counter;
+        self.lowlinks[v] = self.index_counter;
+        self.index_counter += 1;
+        self.stack.push(v);
+        self.on_stack[v] = true;
+
+        for &w in &self.adj[v] {
+            if self.indices[w] == -1 {
+                self.strongconnect(w);
+                self.lowlinks[v] = self.lowlinks[v].min(self.lowlinks[w]);
+            } else if self.on_stack[w] {
+                self.lowlinks[v] = self.lowlinks[v].min(self.indices[w]);
+            }
+        }
+
+        if self.lowlinks[v] == self.indices[v] {
+            let mut scc = Vec::new();
+            loop {
+                let w = self.stack.pop().expect("stack should not be empty");
+                self.on_stack[w] = false;
+                scc.push(w);
+                if w == v {
+                    break;
+                }
+            }
+            self.sccs.push(scc);
+        }
     }
 }
 

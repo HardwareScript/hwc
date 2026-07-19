@@ -23,10 +23,10 @@ pub fn resolve_mounting_and_elevation(
     origin: hwc_parser::OriginPoint,
 ) -> Result<MountingResult, IrError> {
     // Check if we're in ASIC mode (strict validation)
-    let is_asic = space.fabrication_constraints.as_ref().map_or(false, |c| {
+    let is_asic = space.fabrication_constraints.as_ref().is_some_and(|c| {
         c.technology
             .as_ref()
-            .map_or(false, |t| t.to_lowercase() == "asic")
+            .is_some_and(|t| t.to_lowercase() == "asic")
     });
 
     // v0.1.7: Component Mounting Abstraction

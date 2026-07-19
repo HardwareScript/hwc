@@ -365,8 +365,7 @@ pub fn place_plane(
 
     // v0.1.8: Register plane in EntityGraph for O(1) resolution
     let net_id = if let Some(net_name) = &plane.net {
-        let _min_width_nm = space.fabrication_constraints.as_ref()
-            .and_then(|c| Some(c.trace.min_width_nm))
+        let _min_width_nm = space.fabrication_constraints.as_ref().map(|c| c.trace.min_width_nm)
             .ok_or_else(|| IrError::MissingAsicConstraint {
                 message: "PDK missing required 'trace.min_width_nm' constraint".into(),
                 hint: "Add a 'trace:' block to your profile with explicit min_width.\n\nExample:\n  trace:\n    min_width: 180nm".into(),

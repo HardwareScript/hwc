@@ -24,11 +24,11 @@ pub fn create_hardware_space(
     // Convert dimensions to nanometers using the symbol table (supports custom units!)
     let dims = Dimensions {
         width_nm: measurement_to_nm(&dimensions.width, symbol_table)
-            .map_err(|e| IrError::InvalidExpression(e))?,
+            .map_err(IrError::InvalidExpression)?,
         height_nm: measurement_to_nm(&dimensions.height, symbol_table)
-            .map_err(|e| IrError::InvalidExpression(e))?,
+            .map_err(IrError::InvalidExpression)?,
         depth_nm: measurement_to_nm(&dimensions.depth, symbol_table)
-            .map_err(|e| IrError::InvalidExpression(e))?,
+            .map_err(IrError::InvalidExpression)?,
     };
 
     // Determine resolution for coordinate snapping
@@ -36,8 +36,7 @@ pub fn create_hardware_space(
         .resolution
         .as_ref()
         .map(|res_measurement| {
-            measurement_to_nm(res_measurement, symbol_table)
-                .map_err(|e| IrError::InvalidExpression(e))
+            measurement_to_nm(res_measurement, symbol_table).map_err(IrError::InvalidExpression)
         })
         .transpose()?
         .ok_or_else(|| IrError::MissingGrid)?;
@@ -174,7 +173,7 @@ pub fn create_hardware_space(
         // Look up profile in symbol table
         let profile_def = symbol_table.get_profile(&profile_name.name).map_err(|_e| {
             IrError::ProfileNotFound {
-                name: profile_name.name.clone().into(),
+                name: profile_name.name.clone(),
             }
         })?;
 
@@ -199,10 +198,10 @@ pub fn create_hardware_space(
         };
         space.set_net_classification(net_decl.name.clone(), classification);
 
-        let is_asic = space.fabrication_constraints.as_ref().map_or(false, |c| {
+        let is_asic = space.fabrication_constraints.as_ref().is_some_and(|c| {
             c.technology
                 .as_ref()
-                .map_or(false, |t| t.to_lowercase() == "asic")
+                .is_some_and(|t| t.to_lowercase() == "asic")
         });
         let min_width = space.fabrication_constraints.as_ref()
             .map(|c| c.trace.min_width_nm)
@@ -249,7 +248,7 @@ pub fn validate_asic_constraints(
         || space_def
             .profile
             .as_ref()
-            .map_or(false, |p| p.name.to_lowercase().contains("asic"));
+            .is_some_and(|p| p.name.to_lowercase().contains("asic"));
 
     if !is_asic {
         return Ok(()); // PCB builds allow implicit defaults
@@ -326,13 +325,13 @@ pub fn validate_asic_constraints(
     // Rule 3: Every material used in pours must have physical properties declared
     let declared_materials: Vec<String> = symbol_table
         .materials()
-        .iter()
-        .map(|(name, _)| name.to_string())
+        .keys()
+        .map(|name| name.to_string())
         .collect();
 
     for statement in &space_def.statements {
         if let hwc_parser::SpaceTopLevelStatement::Pour(pour) = statement {
-            if !declared_materials.iter().any(|m| m == &pour.material) {
+            if !declared_materials.iter().any(|m| m == pour.material) {
                 return Err(IrError::MissingAsicConstraint {
                     message: format!(
                         "ASIC pour '{}' references undeclared material '{}'.",

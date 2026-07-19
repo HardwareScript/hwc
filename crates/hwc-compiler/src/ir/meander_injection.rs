@@ -64,7 +64,7 @@ impl<'a> MeanderInjector<'a> {
     }
 
     /// Inject meanders into the paths of a single net.
-    fn inject_into_paths(&self, paths: &mut Vec<Vec<Point3D>>, pattern: &RoutingPattern) {
+    fn inject_into_paths(&self, paths: &mut [Vec<Point3D>], pattern: &RoutingPattern) {
         // Find the longest straight segment across all paths for this net
         let mut best_path_idx = 0;
         let mut best_seg_idx = 0;
@@ -157,14 +157,14 @@ impl<'a> MeanderInjector<'a> {
         // Build the replacement segment list:
         // [seg_start ... meander_points ... seg_end]
         let mut new_path = Vec::with_capacity(path.len() + meander_points.len());
-        for i in 0..=best_seg_idx {
-            new_path.push(path[i]);
+        for pt in &path[..=best_seg_idx] {
+            new_path.push(*pt);
         }
         for pt in &meander_points {
             new_path.push(*pt);
         }
-        for i in (best_seg_idx + 1)..path.len() {
-            new_path.push(path[i]);
+        for pt in &path[best_seg_idx + 1..] {
+            new_path.push(*pt);
         }
 
         // eprintln!(

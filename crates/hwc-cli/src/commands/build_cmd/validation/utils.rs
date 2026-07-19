@@ -86,8 +86,8 @@ pub fn convert_metadata_to_physics(
     // Vertical routes (where start.x == end.x and start.y == end.y) are treated
     // as vertical bridges (contacts). Horizontal routes are treated as planar segments.
     for trace in &space.analytic_routes {
-        let half_w = trace.width_nm / 2;
-        let half_t = trace.thickness_nm / 2;
+        let half_w = trace.cross_section.width_nm / 2;
+        let half_t = trace.cross_section.thickness_nm / 2;
 
         for seg in &trace.segments {
             let is_vertical = seg.start.x == seg.end.x && seg.start.y == seg.end.y;

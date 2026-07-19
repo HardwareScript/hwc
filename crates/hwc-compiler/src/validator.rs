@@ -493,19 +493,19 @@ impl Validator {
             let from_pin = pin_label(&route.from);
             let to_pin = pin_label(&route.to);
 
-            connected_pins.insert(from_pin.clone().into());
-            connected_pins.insert(to_pin.clone().into());
+            connected_pins.insert(from_pin.clone());
+            connected_pins.insert(to_pin.clone());
 
             // Validate that referenced pins exist
             if !all_pins.contains(from_pin.as_str()) {
                 collector.report(ValidationError::UnconnectedPin {
-                    pin: from_pin.into(),
+                    pin: from_pin,
                     reason: "Pin referenced in route but component not found".into(),
                 });
             }
             if !all_pins.contains(to_pin.as_str()) {
                 collector.report(ValidationError::UnconnectedPin {
-                    pin: to_pin.into(),
+                    pin: to_pin,
                     reason: "Pin referenced in route but component not found".into(),
                 });
             }
@@ -571,8 +571,8 @@ impl Validator {
             // Add both pins to the net
             nets.entry(net_id.clone())
                 .or_default()
-                .push(from_pin.clone().into());
-            nets.entry(net_id).or_default().push(to_pin.clone().into());
+                .push(from_pin.clone());
+            nets.entry(net_id).or_default().push(to_pin.clone());
         }
 
         // Check each net for multiple output drivers

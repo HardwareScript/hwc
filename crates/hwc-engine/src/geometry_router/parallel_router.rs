@@ -76,9 +76,13 @@ impl ParallelRouter {
             BoundingBox::new(Point3D::new(0, 0, 0), Point3D::new(width, height, depth));
 
         let mut spatial_index = DynamicSpatialIndex::new();
-        let mut seg_id = 0usize;
 
-        for meta in domain.local_grid.get_component_metadata() {
+        for (seg_id, meta) in domain
+            .local_grid
+            .get_component_metadata()
+            .iter()
+            .enumerate()
+        {
             let w = meta.bbox.max.x - meta.bbox.min.x;
             let h = meta.bbox.max.y - meta.bbox.min.y;
             let trace_seg =
@@ -97,7 +101,6 @@ impl ParallelRouter {
                 end: trace_seg.end,
                 layer: meta.bbox.min.z,
             });
-            seg_id += 1;
         }
 
         let fab = _constraints.fabrication.as_ref().expect(

@@ -5,6 +5,17 @@ mod shape_eval;
 
 pub use shape_eval::{evaluate_geometry_blocks, evaluate_shape_points};
 
+/// Parameters describing a single physical via stack to insert.
+#[derive(Debug, Clone)]
+pub struct ViaStackRequest {
+    pub x: i64,
+    pub y: i64,
+    pub from_layer: usize,
+    pub to_layer: usize,
+    pub from_material: CompactString,
+    pub to_material: CompactString,
+}
+
 use crate::ir::errors::IrError;
 use clipper2_rust::Path64;
 use compact_str::CompactString;
@@ -26,33 +37,36 @@ pub struct ViaType {
     pub contour: Path64,
 }
 
+/// Parameters for constructing a [`ViaType`].
+#[derive(Debug, Clone)]
+pub struct ViaTypeSpec {
+    pub name: CompactString,
+    pub material: CompactString,
+    pub from_material: CompactString,
+    pub to_material: CompactString,
+    pub from_layer: usize,
+    pub to_layer: usize,
+    pub diameter_mm: f64,
+    pub min_enclosure_mm: f64,
+    pub z_start_nm: i64,
+    pub z_end_nm: i64,
+    pub contour: Path64,
+}
+
 impl ViaType {
-    #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        name: CompactString,
-        material: CompactString,
-        from_material: CompactString,
-        to_material: CompactString,
-        from_layer: usize,
-        to_layer: usize,
-        diameter_mm: f64,
-        min_enclosure_mm: f64,
-        z_start_nm: i64,
-        z_end_nm: i64,
-        contour: Path64,
-    ) -> Self {
+    pub fn new(spec: ViaTypeSpec) -> Self {
         Self {
-            name,
-            material,
-            from_material,
-            to_material,
-            from_layer,
-            to_layer,
-            diameter_mm,
-            min_enclosure_mm,
-            z_start_nm,
-            z_end_nm,
-            contour,
+            name: spec.name,
+            material: spec.material,
+            from_material: spec.from_material,
+            to_material: spec.to_material,
+            from_layer: spec.from_layer,
+            to_layer: spec.to_layer,
+            diameter_mm: spec.diameter_mm,
+            min_enclosure_mm: spec.min_enclosure_mm,
+            z_start_nm: spec.z_start_nm,
+            z_end_nm: spec.z_end_nm,
+            contour: spec.contour,
         }
     }
 }
@@ -247,19 +261,19 @@ impl ViaLibrary {
                             );
                             println!("        Z range: {} to {}", from_bottom_z, to_top_z);
 
-                            vias.push(ViaType::new(
-                                via_name.into(),
-                                stack.fill_material.clone(),
-                                from_material.into(),
-                                to_material.into(),
-                                from_idx,
-                                to_idx,
-                                min_diameter_mm,
-                                0.0, // enclosure handled by annular ring
-                                from_bottom_z,
-                                to_top_z,
-                                default_contour.clone(),
-                            ));
+                            vias.push(ViaType::new(ViaTypeSpec {
+                                name: via_name.into(),
+                                material: stack.fill_material.clone(),
+                                from_material: from_material.into(),
+                                to_material: to_material.into(),
+                                from_layer: from_idx,
+                                to_layer: to_idx,
+                                diameter_mm: min_diameter_mm,
+                                min_enclosure_mm: 0.0, // enclosure handled by annular ring
+                                z_start_nm: from_bottom_z,
+                                z_end_nm: to_top_z,
+                                contour: default_contour.clone(),
+                            }));
                         }
                     }
                 }

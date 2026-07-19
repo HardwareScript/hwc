@@ -80,10 +80,10 @@ pub fn place_component(
     let rotation_deg = component.rotation.as_ref()
         .map(|r| r.angle)
         .ok_or_else(|| {
-            let is_asic = space.fabrication_constraints.as_ref().map_or(false, |c| {
-                c.technology.as_ref().map_or(false, |t| t.to_lowercase() == "asic")
+            let is_asic = space.fabrication_constraints.as_ref().is_some_and(|c| {
+                c.technology.as_ref().is_some_and(|t| t.to_lowercase() == "asic")
             });
-            
+
             if is_asic {
                 IrError::MissingAsicConstraintWithSpan {
                     message: format!("Component '{}' missing required rotation.",
@@ -191,7 +191,7 @@ pub fn place_component(
                                 Point3D::new(max_x, max_y, untransformed_origin.z + depth_nm),
                             )
                         };
-                        bbox_tracker.register(name.clone().into(), bbox, untransformed_origin);
+                        bbox_tracker.register(name.clone(), bbox, untransformed_origin);
                     }
                 }
             }

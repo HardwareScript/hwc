@@ -496,7 +496,6 @@ pub enum IrError {
     // =====================================================================
     // v0.1.9 Salsa Constraint Solver Errors
     // =====================================================================
-
     /// R31: Corridor extraction failed - no valid path through C-space.
     #[error("No corridor found from ({start_x}, {start_y}, {start_z}) to ({end_x}, {end_y}, {end_z}) in G-cell {gcell_id}")]
     #[diagnostic(
@@ -606,10 +605,7 @@ pub enum IrError {
               {reason}"
         )
     )]
-    NavigableSpaceFailed {
-        gcell_id: u32,
-        reason: String,
-    },
+    NavigableSpaceFailed { gcell_id: u32, reason: String },
 
     /// R37: Constraint validation found hard violations that cannot be resolved.
     #[error("Hard constraint violation for net {net_id}: {description}")]
@@ -621,10 +617,7 @@ pub enum IrError {
               {description}"
         )
     )]
-    HardConstraintViolation {
-        net_id: u32,
-        description: String,
-    },
+    HardConstraintViolation { net_id: u32, description: String },
 }
 
 #[derive(Debug, Clone)]

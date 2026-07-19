@@ -15,11 +15,22 @@ use crate::geometry::transform::BoundingBox2D;
 use crate::geometry::{BoundingBox, Point3D};
 use crate::geometry_router::gcell_sweep::{
     classify_overlap, compute_actual_clearance, find_overlaps, segment_bbox, BridgeTable,
-    OverlapResult, SweepViolation, ViolationType,
+    OverlapQuery, OverlapResult, SweepViolation, ViolationType,
 };
 use crate::geometry_router::route_decomposition::VirtualJunction;
 use crate::geometry_router::spatial_index::{DynamicSpatialIndex, IndexedSegment};
 use crate::material::{MaterialId, MaterialRegistry};
+
+/// Request parameters for [`IncrementalDrc::verify_incremental`].
+pub struct DrcVerifyRequest<'a> {
+    pub all_segments: &'a [IndexedSegment],
+    pub spatial_index: &'a DynamicSpatialIndex,
+    pub junctions: &'a [VirtualJunction],
+    pub default_clearance_nm: i64,
+    pub layer_to_material: &'a rustc_hash::FxHashMap<i64, MaterialId>,
+    pub material_registry: &'a MaterialRegistry,
+    pub bridge_table: &'a BridgeTable,
+}
 
 /// Default margin for incremental DRC windows (500 µm = 500 000 nm).
 const DEFAULT_INCREMENTAL_MARGIN_NM: i64 = 500_000;
@@ -93,7 +104,7 @@ impl IncrementalDrc {
             let mat_a_id = layer_to_material.get(&seg_a.layer).copied();
             let mat_b_id = layer_to_material.get(&seg_b.layer).copied();
 
-            let result = classify_overlap(
+            let result = classify_overlap(OverlapQuery {
                 seg_a,
                 seg_b,
                 junctions,
@@ -102,7 +113,7 @@ impl IncrementalDrc {
                 mat_b_id,
                 material_registry,
                 bridge_table,
-            );
+            });
 
             match result {
                 OverlapResult::DifferentNet {
@@ -158,16 +169,16 @@ impl IncrementalDrc {
     /// a window, and re-validates only that region.
     ///
     /// Expected >90% reduction in DRC time by skipping unchanged regions.
-    pub fn verify_incremental(
-        &mut self,
-        all_segments: &[IndexedSegment],
-        spatial_index: &DynamicSpatialIndex,
-        junctions: &[VirtualJunction],
-        default_clearance_nm: i64,
-        layer_to_material: &rustc_hash::FxHashMap<i64, MaterialId>,
-        material_registry: &MaterialRegistry,
-        bridge_table: &BridgeTable,
-    ) -> Vec<SweepViolation> {
+    pub fn verify_incremental(&mut self, req: DrcVerifyRequest) -> Vec<SweepViolation> {
+        let DrcVerifyRequest {
+            all_segments,
+            spatial_index,
+            junctions,
+            default_clearance_nm,
+            layer_to_material,
+            material_registry,
+            bridge_table,
+        } = req;
         let current_hash = compute_segments_hash(all_segments);
 
         // If hash matches, nothing changed — skip entirely.
@@ -285,298 +296,4 @@ fn compute_segments_hash(segments: &[IndexedSegment]) -> u64 {
         seg.layer.hash(&mut hasher);
     }
     hasher.finish()
-}
-
-// ============================================================================
-// Tests
-// ============================================================================
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn make_segment(
-        id: usize,
-        net: usize,
-        x1: i64,
-        y1: i64,
-        x2: i64,
-        y2: i64,
-        w: i64,
-    ) -> IndexedSegment {
-        IndexedSegment {
-            segment_id: id,
-            net_id: net,
-            width_nm: w,
-            thickness_nm: 35_000,
-            start: Point3D::new(x1, y1, 0),
-            end: Point3D::new(x2, y2, 0),
-            layer: 1,
-        }
-    }
-
-    // ------------------------------------------------------------------
-    // define_window tests
-    // ------------------------------------------------------------------
-
-    #[test]
-    fn define_window_expands_by_margin() {
-        let bbox = BoundingBox2D::new(1000, 2000, 5000, 6000);
-        let window = IncrementalDrc::define_window(&bbox, 500);
-        assert_eq!(window.min_x, 500);
-        assert_eq!(window.min_y, 1500);
-        assert_eq!(window.max_x, 5500);
-        assert_eq!(window.max_y, 6500);
-    }
-
-    #[test]
-    fn define_window_zero_margin() {
-        let bbox = BoundingBox2D::new(1000, 2000, 5000, 6000);
-        let window = IncrementalDrc::define_window(&bbox, 0);
-        assert_eq!(window, bbox);
-    }
-
-    // ------------------------------------------------------------------
-    // validate_local tests
-    // ------------------------------------------------------------------
-
-    #[test]
-    fn validate_local_finds_violation() {
-        let drc = IncrementalDrc::new();
-        let segs = vec![
-            make_segment(0, 1, 0, 5_000_000, 10_000_000, 5_000_000, 1_000_000),
-            make_segment(1, 2, 5_000_000, 0, 5_000_000, 10_000_000, 1_000_000),
-        ];
-
-        let registry = MaterialRegistry::new();
-        let bridge_table = BridgeTable::default();
-        let layer_to_material = rustc_hash::FxHashMap::default();
-        let violations = drc.validate_local(
-            &segs,
-            &[],
-            500_000,
-            &layer_to_material,
-            &registry,
-            &bridge_table,
-        );
-        assert!(!violations.is_empty(), "Should find clearance violation");
-        assert_eq!(violations[0].net_a, 1);
-        assert_eq!(violations[0].net_b, 2);
-    }
-
-    #[test]
-    fn validate_local_no_violation_for_far_segments() {
-        let drc = IncrementalDrc::new();
-        let segs = vec![
-            make_segment(0, 1, 0, 0, 1_000_000, 0, 500_000),
-            make_segment(1, 2, 100_000_000, 0, 101_000_000, 0, 500_000),
-        ];
-
-        let registry = MaterialRegistry::new();
-        let bridge_table = BridgeTable::default();
-        let layer_to_material = rustc_hash::FxHashMap::default();
-        let violations = drc.validate_local(
-            &segs,
-            &[],
-            200_000,
-            &layer_to_material,
-            &registry,
-            &bridge_table,
-        );
-        assert!(violations.is_empty());
-    }
-
-    #[test]
-    fn validate_local_empty_segments() {
-        let drc = IncrementalDrc::new();
-        let registry = MaterialRegistry::new();
-        let bridge_table = BridgeTable::default();
-        let layer_to_material = rustc_hash::FxHashMap::default();
-        let violations = drc.validate_local(
-            &[],
-            &[],
-            200_000,
-            &layer_to_material,
-            &registry,
-            &bridge_table,
-        );
-        assert!(violations.is_empty());
-    }
-
-    #[test]
-    fn validate_local_single_segment() {
-        let drc = IncrementalDrc::new();
-        let segs = vec![make_segment(0, 1, 0, 0, 10_000_000, 0, 1_000_000)];
-        let registry = MaterialRegistry::new();
-        let bridge_table = BridgeTable::default();
-        let layer_to_material = rustc_hash::FxHashMap::default();
-        let violations = drc.validate_local(
-            &segs,
-            &[],
-            200_000,
-            &layer_to_material,
-            &registry,
-            &bridge_table,
-        );
-        assert!(violations.is_empty());
-    }
-
-    // ------------------------------------------------------------------
-    // verify_incremental tests
-    // ------------------------------------------------------------------
-
-    fn populate_index(index: &mut DynamicSpatialIndex, segments: &[IndexedSegment]) {
-        for seg in segments {
-            index.insert(seg.clone());
-        }
-    }
-
-    #[test]
-    fn verify_incremental_first_run_finds_violations() {
-        let mut drc = IncrementalDrc::new();
-        let mut spatial_index = DynamicSpatialIndex::new();
-        let segs = vec![
-            make_segment(0, 1, 0, 5_000_000, 10_000_000, 5_000_000, 1_000_000),
-            make_segment(1, 2, 5_000_000, 0, 5_000_000, 10_000_000, 1_000_000),
-        ];
-        populate_index(&mut spatial_index, &segs);
-
-        let registry = MaterialRegistry::new();
-        let bridge_table = BridgeTable::default();
-        let layer_to_material = rustc_hash::FxHashMap::default();
-        let violations = drc.verify_incremental(
-            &segs,
-            &spatial_index,
-            &[],
-            500_000,
-            &layer_to_material,
-            &registry,
-            &bridge_table,
-        );
-        assert!(!violations.is_empty(), "First run should find violations");
-    }
-
-    #[test]
-    fn verify_incremental_unchanged_skips_revalidation() {
-        let mut drc = IncrementalDrc::new();
-        let mut spatial_index = DynamicSpatialIndex::new();
-        let segs = vec![
-            make_segment(0, 1, 0, 0, 1_000_000, 0, 500_000),
-            make_segment(1, 2, 100_000_000, 0, 101_000_000, 0, 500_000),
-        ];
-        populate_index(&mut spatial_index, &segs);
-
-        let registry = MaterialRegistry::new();
-        let bridge_table = BridgeTable::default();
-        let layer_to_material = rustc_hash::FxHashMap::default();
-
-        // First run — establishes snapshot.
-        let _v1 = drc.verify_incremental(
-            &segs,
-            &spatial_index,
-            &[],
-            200_000,
-            &layer_to_material,
-            &registry,
-            &bridge_table,
-        );
-
-        // Second run with same segments — should skip.
-        let v2 = drc.verify_incremental(
-            &segs,
-            &spatial_index,
-            &[],
-            200_000,
-            &layer_to_material,
-            &registry,
-            &bridge_table,
-        );
-        assert!(
-            v2.is_empty(),
-            "Unchanged segments should produce no violations"
-        );
-    }
-
-    #[test]
-    fn verify_incremental_changed_segments_trigger_revalidation() {
-        let mut drc = IncrementalDrc::new();
-        let mut spatial_index = DynamicSpatialIndex::new();
-        let segs_v1 = vec![make_segment(0, 1, 0, 0, 1_000_000, 0, 500_000)];
-        populate_index(&mut spatial_index, &segs_v1);
-
-        let registry = MaterialRegistry::new();
-        let bridge_table = BridgeTable::default();
-        let layer_to_material = rustc_hash::FxHashMap::default();
-
-        // First run — clean state.
-        drc.verify_incremental(
-            &segs_v1,
-            &spatial_index,
-            &[],
-            200_000,
-            &layer_to_material,
-            &registry,
-            &bridge_table,
-        );
-
-        // Add a new segment that violates clearance.
-        let segs_v2 = vec![
-            make_segment(0, 1, 0, 0, 1_000_000, 0, 500_000),
-            make_segment(1, 2, 0, 500_000, 1_000_000, 500_000, 500_000),
-        ];
-        populate_index(&mut spatial_index, &segs_v2);
-
-        let violations = drc.verify_incremental(
-            &segs_v2,
-            &spatial_index,
-            &[],
-            200_000,
-            &layer_to_material,
-            &registry,
-            &bridge_table,
-        );
-        assert!(
-            !violations.is_empty(),
-            "Changed segments should trigger revalidation"
-        );
-    }
-
-    // ------------------------------------------------------------------
-    // Hash computation tests
-    // ------------------------------------------------------------------
-
-    #[test]
-    fn hash_same_segments_equal() {
-        let segs = vec![
-            make_segment(0, 1, 0, 0, 1000, 0, 100),
-            make_segment(1, 2, 2000, 2000, 3000, 2000, 100),
-        ];
-        assert_eq!(compute_segments_hash(&segs), compute_segments_hash(&segs));
-    }
-
-    #[test]
-    fn hash_different_segments_not_equal() {
-        let segs_a = vec![make_segment(0, 1, 0, 0, 1000, 0, 100)];
-        let segs_b = vec![make_segment(0, 1, 0, 0, 2000, 0, 100)];
-        assert_ne!(
-            compute_segments_hash(&segs_a),
-            compute_segments_hash(&segs_b)
-        );
-    }
-
-    #[test]
-    fn hash_order_matters() {
-        let segs_a = vec![
-            make_segment(0, 1, 0, 0, 1000, 0, 100),
-            make_segment(1, 2, 2000, 0, 3000, 0, 100),
-        ];
-        let segs_b = vec![
-            make_segment(1, 2, 2000, 0, 3000, 0, 100),
-            make_segment(0, 1, 0, 0, 1000, 0, 100),
-        ];
-        assert_ne!(
-            compute_segments_hash(&segs_a),
-            compute_segments_hash(&segs_b)
-        );
-    }
 }

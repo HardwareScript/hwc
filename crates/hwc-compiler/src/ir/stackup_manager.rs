@@ -72,7 +72,7 @@ impl StackupManager {
             for layer in &stackup.layers {
                 let thickness_nm = evaluate_expression_to_nm(&layer.thickness, symbol_table)
                     .map_err(|e| IrError::StackupResolutionFailed {
-                        layer_name: layer.name.name.clone().into(),
+                        layer_name: layer.name.name.clone(),
                         reason: format!("Failed to evaluate thickness: {}", e),
                     })?;
 

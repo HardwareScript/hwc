@@ -197,9 +197,8 @@ impl<'a> PivbSolver<'a> {
 
         // Merge groups into single Planar Islands
         let mut welded = Vec::new();
-        let mut welded_id = 0;
 
-        for (_root, member_indices) in groups {
+        for (welded_id, (_root, member_indices)) in groups.into_iter().enumerate() {
             let first = &islands[member_indices[0]];
             let mut merged_bbox = first.bbox;
             let mut min_z = first.z_min;
@@ -241,8 +240,6 @@ impl<'a> PivbSolver<'a> {
                 net_id: first.net_id,
                 material: first.material,
             });
-
-            welded_id += 1;
         }
 
         welded

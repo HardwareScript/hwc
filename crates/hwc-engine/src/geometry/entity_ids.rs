@@ -26,7 +26,7 @@ impl EntityId {
     }
 
     /// Compute a stable EntityId from a semantic string
-    pub fn from_str(s: &str) -> Self {
+    pub fn from_semantic(s: &str) -> Self {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
         let mut hasher = DefaultHasher::new();
@@ -74,7 +74,7 @@ pub struct JunctionGraphId(pub EntityId);
 
 impl ComponentGraphId {
     pub fn generate(component_type: &str, placement_path: &str) -> Self {
-        Self(EntityId::from_str(&format!(
+        Self(EntityId::from_semantic(&format!(
             "comp:{}:{}",
             component_type, placement_path
         )))
@@ -83,14 +83,14 @@ impl ComponentGraphId {
 
 impl PinGraphId {
     pub fn generate(component_path: &str, pin_name: &str) -> Self {
-        Self(EntityId::from_str(&format!(
+        Self(EntityId::from_semantic(&format!(
             "pin:{}:{}",
             component_path, pin_name
         )))
     }
 
     pub fn generate_from_parent(pin_name: &str, component_id: &EntityId) -> Self {
-        Self(EntityId::from_str(&format!(
+        Self(EntityId::from_semantic(&format!(
             "pin:{}:{}",
             component_id.to_hex(),
             pin_name
@@ -100,7 +100,7 @@ impl PinGraphId {
 
 impl NetGraphId {
     pub fn generate(net_name: &str, parent: &EntityId) -> Self {
-        Self(EntityId::from_str(&format!(
+        Self(EntityId::from_semantic(&format!(
             "net:{}:{}",
             parent.to_hex(),
             net_name
@@ -110,7 +110,7 @@ impl NetGraphId {
 
 impl RouteGraphId {
     pub fn generate(from_pin: &EntityId, to_pin: &EntityId) -> Self {
-        Self(EntityId::from_str(&format!(
+        Self(EntityId::from_semantic(&format!(
             "route:{}:{}",
             from_pin.to_hex(),
             to_pin.to_hex()
@@ -120,7 +120,7 @@ impl RouteGraphId {
 
 impl GeometryGraphId {
     pub fn generate(route_id: &EntityId, layer: i64) -> Self {
-        Self(EntityId::from_str(&format!(
+        Self(EntityId::from_semantic(&format!(
             "geom:{}:layer:{}",
             route_id.to_hex(),
             layer
@@ -130,7 +130,7 @@ impl GeometryGraphId {
 
 impl JunctionGraphId {
     pub fn generate(route_a: &EntityId, route_b: &EntityId) -> Self {
-        Self(EntityId::from_str(&format!(
+        Self(EntityId::from_semantic(&format!(
             "junction:{}:{}",
             route_a.to_hex(),
             route_b.to_hex()

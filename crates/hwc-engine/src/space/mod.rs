@@ -185,8 +185,6 @@ impl HardwareSpace {
             .drill_hole(hole_bbox, diameter_nm, drill_net.raw());
     }
 
-
-
     /// **v0.1.7: Synchronize net names from pins to bound pours**
     pub fn synchronize_nets(&mut self) {
         let mut updates = Vec::new();

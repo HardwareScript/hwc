@@ -10,6 +10,9 @@ use clipper2_rust::core::{FillRule, Path64, Paths64, Point64};
 
 use crate::placement::PadShape;
 
+/// A copper shape: `(net_id, material_id, polygons)`.
+pub type CopperShape = (u32, u8, Vec<Vec<(i64, i64)>>);
+
 /// A bucket grouping copper geometries by net and material.
 #[derive(Debug, Clone)]
 pub struct CopperBucket {
@@ -40,9 +43,7 @@ fn from_clipper_path(path: &Path64) -> Vec<(i64, i64)> {
 }
 
 /// Bucket input shapes by `(net_id, material_id)`.
-pub fn bucket_copper(
-    shapes: &[(u32, u8, Vec<Vec<(i64, i64)>>)],
-) -> HashMap<(u32, u8), CopperBucket> {
+pub fn bucket_copper(shapes: &[CopperShape]) -> HashMap<(u32, u8), CopperBucket> {
     let mut map: HashMap<(u32, u8), CopperBucket> = HashMap::new();
 
     for &(net_id, material_id, ref polygons) in shapes {
@@ -235,14 +236,14 @@ pub fn union_polygons(polygons: Vec<Vec<(i64, i64)>>) -> Vec<Vec<(i64, i64)>> {
 
     let result = union_subjects_64(&subject_paths, FillRule::NonZero);
 
-    result.iter().map(|p| from_clipper_path(p)).collect()
+    result.iter().map(from_clipper_path).collect()
 }
 
 /// Complete copper weld pipeline for a layer.
 ///
 /// Buckets shapes by (net_id, material_id), performs union per bucket,
 /// separates outer contours from holes using winding direction.
-pub fn weld_layer_copper(shapes: Vec<(u32, u8, Vec<Vec<(i64, i64)>>)>) -> Vec<WeldedLayer> {
+pub fn weld_layer_copper(shapes: Vec<CopperShape>) -> Vec<WeldedLayer> {
     let buckets = bucket_copper(&shapes);
 
     buckets

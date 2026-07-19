@@ -256,12 +256,6 @@ impl super::super::Parser {
         Ok(terminals)
     }
 
-    /// Parse material mappings block:
-    /// ```
-    /// gate: Polysilicon
-    /// source: Silicon_N
-    /// gate: [Polysilicon, Aluminum]  # Multiple allowed materials
-    /// ```
     fn parse_material_mappings(
         &mut self,
     ) -> Result<FxHashMap<CompactString, SmallVec<[CompactString; 2]>>, ParseError> {
@@ -339,12 +333,6 @@ impl super::super::Parser {
         Ok(mappings)
     }
 
-    /// Parse tolerance mappings block:
-    /// ```
-    /// W: 1%
-    /// L: 1%
-    /// AS: 5%
-    /// ```
     fn parse_tolerance_mappings(&mut self) -> Result<FxHashMap<CompactString, f64>, ParseError> {
         let mut mappings = FxHashMap::default();
 

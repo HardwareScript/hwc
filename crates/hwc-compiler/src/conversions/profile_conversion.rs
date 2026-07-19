@@ -77,7 +77,7 @@ pub fn profile_to_constraints(
         .manufacturing
         .as_ref()
         .and_then(|m| m.solder_mask_expansion.as_ref())
-        .map(|m| measurement_to_nm(m));
+        .map(measurement_to_nm);
 
     let _low_voltage_threshold_v = profile
         .clearance
@@ -175,7 +175,7 @@ pub fn profile_to_constraints(
                     hwc_parser::RoutableMode::False => RoutableMode::False,
                     hwc_parser::RoutableMode::LocalOnly => RoutableMode::LocalOnly,
                 };
-                layer_routability.insert(layer.name.name.clone().into(), mode_cm);
+                layer_routability.insert(layer.name.name.clone(), mode_cm);
             }
         }
     }

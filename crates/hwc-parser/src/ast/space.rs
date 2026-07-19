@@ -139,9 +139,9 @@ pub enum SpaceTopLevelStatement {
     /// Component placement: `add ComponentType ...`
     Component(Box<ComponentPlacement>),
     /// Pour placement: `add pour(Material) ...`
-    Pour(PourPlacement),
+    Pour(Box<PourPlacement>),
     /// Plane placement: `add plane(Material) ...` (conductive sheet)
-    Plane(PlanePlacement),
+    Plane(Box<PlanePlacement>),
     /// Polygon placement: `add polygon(Material) ...`
     Polygon(PolygonPlacement),
     /// Contact/via placement: `add contact(Material) ...`
@@ -202,9 +202,9 @@ pub enum SpaceStatement {
     /// Component placement
     Component(Box<ComponentPlacement>),
     /// Pour placement
-    Pour(PourPlacement),
+    Pour(Box<PourPlacement>),
     /// Plane placement
-    Plane(PlanePlacement),
+    Plane(Box<PlanePlacement>),
     /// Contact placement
     Contact(ContactPlacement),
     /// Route
@@ -657,7 +657,7 @@ impl SpaceDefinition {
             .iter()
             .filter_map(|s| {
                 if let SpaceTopLevelStatement::Pour(p) = s {
-                    Some(p.clone())
+                    Some((**p).clone())
                 } else {
                     None
                 }
@@ -669,7 +669,7 @@ impl SpaceDefinition {
             .iter()
             .filter_map(|s| {
                 if let SpaceTopLevelStatement::Plane(p) = s {
-                    Some(p.clone())
+                    Some((**p).clone())
                 } else {
                     None
                 }

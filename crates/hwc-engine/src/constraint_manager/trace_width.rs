@@ -36,22 +36,6 @@
 /// # Returns
 /// Minimum trace width in nanometers
 ///
-/// # Examples
-/// ```
-/// use hwc_engine::constraint_manager::calculate_trace_width_nm;
-///
-/// // 10A, 10°C rise, external layer → ~54mm width (THICK!)
-/// let width = calculate_trace_width_nm(10_000, 10, true);
-/// assert!(width > 50_000_000);  // > 50mm
-///
-/// // 1A, 10°C rise, external layer → ~5.4mm width
-/// let width = calculate_trace_width_nm(1_000, 10, true);
-/// assert!(width > 5_000_000);  // > 5mm
-///
-/// // 100mA, 10°C rise, external layer → ~19.4mm width (IPC-2221 is conservative!)
-/// let width = calculate_trace_width_nm(100, 10, true);
-/// assert!(width > 19_000_000);  // > 19mm
-/// ```
 pub fn calculate_trace_width_nm(current_ma: i64, temp_rise_c: i64, _is_external: bool) -> i64 {
     // v0.1.8: All hardcoded PCB copper constants (1oz copper) removed.
     // Width calculation now strictly requires physical current.

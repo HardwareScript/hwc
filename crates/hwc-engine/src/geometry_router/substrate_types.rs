@@ -347,19 +347,19 @@ impl SubstrateLayer {
     }
 
     /// Create a new tube (plated hole) substrate layer.
-    #[allow(clippy::too_many_arguments)]
-    pub fn new_tube(
-        material: MaterialId,
-        net: NetId,
-        bbox: BoundingBox,
-        outer_diameter: u32,
-        inner_diameter: u32,
-        pad_diameter: u32,
-        segments: u32,
-        top_cap: CapType,
-        bottom_cap: CapType,
-        bottom_outer_diameter: Option<u32>,
-    ) -> Self {
+    pub fn new_tube(spec: TubeSpec) -> Self {
+        let TubeSpec {
+            material,
+            net,
+            bbox,
+            outer_diameter,
+            inner_diameter,
+            pad_diameter,
+            segments,
+            top_cap,
+            bottom_cap,
+            bottom_outer_diameter,
+        } = spec;
         Self {
             material,
             net,
@@ -436,16 +436,14 @@ impl SubstrateLayer {
             if !in_any_region {
                 return false;
             }
-        } else {
-            if !(x >= self.bbox.min.x
-                && x <= self.bbox.max.x
-                && y >= self.bbox.min.y
-                && y <= self.bbox.max.y
-                && z >= self.bbox.min.z
-                && z <= self.bbox.max.z)
-            {
-                return false;
-            }
+        } else if !(x >= self.bbox.min.x
+            && x <= self.bbox.max.x
+            && y >= self.bbox.min.y
+            && y <= self.bbox.max.y
+            && z >= self.bbox.min.z
+            && z <= self.bbox.max.z)
+        {
+            return false;
         }
 
         match &self.shape {
@@ -686,6 +684,20 @@ pub(super) fn point_in_polygon(px: i64, py: i64, contour: &Path64) -> bool {
         j = i;
     }
     inside
+}
+
+/// Parameters for constructing a tube (plated hole) substrate layer.
+pub struct TubeSpec {
+    pub material: MaterialId,
+    pub net: NetId,
+    pub bbox: BoundingBox,
+    pub outer_diameter: u32,
+    pub inner_diameter: u32,
+    pub pad_diameter: u32,
+    pub segments: u32,
+    pub top_cap: CapType,
+    pub bottom_cap: CapType,
+    pub bottom_outer_diameter: Option<u32>,
 }
 
 /// Component pin for physical continuity validation.

@@ -3,6 +3,9 @@
 //! Compresses Manhattan-routed traces into dense direction-magnitude strings.
 //! Coordinates are i64 nanometers. No f64 in core path.
 
+/// A decoded trace: `(net_id, points)`.
+pub type DecodedTrace = (u32, Vec<(i64, i64)>);
+
 /// Direction of movement along Manhattan axes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Direction {
@@ -237,9 +240,7 @@ pub fn encode_all_traces(traces: &[(u32, Vec<(i64, i64)>)]) -> Vec<(u32, String)
 }
 
 /// Decode a batch of `(net_id, rlc_string)` pairs back to traces.
-pub fn decode_all_traces(
-    encoded: &[(u32, String)],
-) -> Result<Vec<(u32, Vec<(i64, i64)>)>, RlcError> {
+pub fn decode_all_traces(encoded: &[(u32, String)]) -> Result<Vec<DecodedTrace>, RlcError> {
     let mut out = Vec::with_capacity(encoded.len());
     for (net_id, rlc) in encoded {
         let trace = decode_rlc(rlc)?;

@@ -289,10 +289,10 @@ pub fn place_contact(
     // Resolve net name to net ID for connectivity checking
     let net_id = if let Some(net_name) = &contact.net {
         // v0.1.8: Use technology-aware net creation to prevent "Giant Pillar" scaling bugs
-        let is_asic = space.fabrication_constraints.as_ref().map_or(false, |c| {
+        let is_asic = space.fabrication_constraints.as_ref().is_some_and(|c| {
             c.technology
                 .as_ref()
-                .map_or(false, |t| t.to_lowercase() == "asic")
+                .is_some_and(|t| t.to_lowercase() == "asic")
         });
         let min_width = space
             .fabrication_constraints
@@ -371,17 +371,17 @@ pub fn place_contact(
     let board_max_z_nm = space.dimensions.depth_nm;
     let via_net_id = hwc_engine::netlist::NetId::new(net_id);
 
-    let via = hwc_engine::geometry_router::Via::new(
-        (xy_point.x, xy_point.y),
-        start_z,
-        end_z,
+    let via = hwc_engine::geometry_router::Via::new(hwc_engine::geometry_router::ViaSpec {
+        position: (xy_point.x, xy_point.y),
+        from_z_nm: start_z,
+        to_z_nm: end_z,
         diameter_nm,
-        via_net_id,
+        net_id: via_net_id,
         material_id,
-        0,              // min_z
-        board_max_z_nm, // max_z
         annular_ring_nm,
-    );
+        board_min_z_nm: 0, // min_z
+        board_max_z_nm,    // max_z
+    });
     space.add_vias(vec![via]);
 
     // v0.1.7: Read solder mask properties (needed by all process branches and ContactMetadata)
@@ -558,13 +558,15 @@ pub fn place_contact(
             // We use drill_via_hole to ensure we carve the substrate, OTHER-NET pours,
             // and solder mask layers while maintaining connectivity to target net pours.
             space.entity_graph.drill_via_hole(
-                contact_bbox,
-                diameter_nm,
-                net_id,
-                clearance_nm,
-                is_tented,
-                pad_diameter_nm,
-                solder_mask_expansion_nm,
+                hwc_engine::geometry_router::entity_graph::ViaHoleSpec {
+                    hole_bbox: contact_bbox,
+                    diameter_nm,
+                    via_net: net_id,
+                    clearance_nm,
+                    is_tented,
+                    pad_diameter_nm,
+                    solder_mask_expansion_nm,
+                },
             );
 
             // 3. ACTION: Calculate remaining Unified Via parameters (Plating)
@@ -641,16 +643,18 @@ pub fn place_contact(
                 contact_bbox.min.x, contact_bbox.min.y, contact_bbox.max.x, contact_bbox.max.y,
                 diameter_nm, inner_diameter_nm, pad_diameter_nm, top_cap, bottom_cap);
             space.entity_graph.add_tube_substrate_layer(
-                material_id,
-                net_id,
-                pad_bbox,
-                diameter_nm as u32,       // Outer Plating Dia
-                inner_diameter_nm as u32, // Void Hole Dia
-                pad_diameter_nm as u32,   // Flange/Pad Dia
-                64,                       // segments
-                top_cap,
-                bottom_cap,
-                bottom_diameter_nm.map(|d| d as u32),
+                hwc_engine::geometry_router::entity_graph::TubeLayerSpec::new(
+                    material_id,
+                    net_id,
+                    pad_bbox,
+                    diameter_nm as u32,       // Outer Plating Dia
+                    inner_diameter_nm as u32, // Void Hole Dia
+                    pad_diameter_nm as u32,   // Flange/Pad Dia
+                    64,                       // segments
+                    top_cap,
+                    bottom_cap,
+                    bottom_diameter_nm.map(|d| d as u32),
+                ),
             );
 
             // 5. ACTION: Handle Filled Vias (v0.1.9: VIPPO)
@@ -712,13 +716,15 @@ pub fn place_contact(
             // 1. ACTION: Auto-Drill (NPTH logic: Net 0 always drills everything)
             // Etched vias are NPTH - no solder mask opening needed (is_tented=true for NPTH)
             space.entity_graph.drill_via_hole(
-                contact_bbox,
-                diameter_nm,
-                0,
-                clearance_nm,
-                true,
-                diameter_nm,
-                75_000,
+                hwc_engine::geometry_router::entity_graph::ViaHoleSpec {
+                    hole_bbox: contact_bbox,
+                    diameter_nm,
+                    via_net: 0,
+                    clearance_nm,
+                    is_tented: true,
+                    pad_diameter_nm: diameter_nm,
+                    solder_mask_expansion_nm: 75_000,
+                },
             );
 
             // NO cylinder/tube is added. The space remains empty (Void).
@@ -740,13 +746,15 @@ pub fn place_contact(
                 contact_bbox.min.x, contact_bbox.min.y, contact_bbox.max.x, contact_bbox.max.y,
                 diameter_nm);
             space.entity_graph.drill_via_hole(
-                contact_bbox,
-                diameter_nm,
-                net_id,
-                clearance_nm,
-                is_tented,
-                diameter_nm,
-                solder_mask_expansion_nm,
+                hwc_engine::geometry_router::entity_graph::ViaHoleSpec {
+                    hole_bbox: contact_bbox,
+                    diameter_nm,
+                    via_net: net_id,
+                    clearance_nm,
+                    is_tented,
+                    pad_diameter_nm: diameter_nm,
+                    solder_mask_expansion_nm,
+                },
             );
 
             // Simple via - use contour-aware placement (deposited, not drilled)

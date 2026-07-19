@@ -191,7 +191,7 @@ impl<'a> AutoRouter<'a> {
                 // Resolve pin positions to boundary points (GOD-TIER ALIGNMENT)
                 let min_width = self.space.fabrication_constraints.as_ref().map(|c| c.trace.min_width_nm)
                     .ok_or_else(|| IrError::MissingAsicConstraint {
-                        message: format!("Route requires trace width constraint but none are loaded."),
+                        message: "Route requires trace width constraint but none are loaded.".to_string(),
                         hint: "Ensure a profile with 'trace:' constraints is declared in the space definition.".into(),
                     })?;
 
@@ -236,12 +236,10 @@ impl<'a> AutoRouter<'a> {
                             } else {
                                 hwc_engine::geometry_router::port_escape::CardinalPort::South
                             }
+                        } else if dx > 0 {
+                            hwc_engine::geometry_router::port_escape::CardinalPort::East
                         } else {
-                            if dx > 0 {
-                                hwc_engine::geometry_router::port_escape::CardinalPort::East
-                            } else {
-                                hwc_engine::geometry_router::port_escape::CardinalPort::West
-                            }
+                            hwc_engine::geometry_router::port_escape::CardinalPort::West
                         };
 
                         // v0.1.7: Flow-Through Preference
@@ -314,12 +312,10 @@ impl<'a> AutoRouter<'a> {
                             } else {
                                 hwc_engine::geometry_router::port_escape::CardinalPort::North
                             }
+                        } else if dx > 0 {
+                            hwc_engine::geometry_router::port_escape::CardinalPort::West
                         } else {
-                            if dx > 0 {
-                                hwc_engine::geometry_router::port_escape::CardinalPort::West
-                            } else {
-                                hwc_engine::geometry_router::port_escape::CardinalPort::East
-                            }
+                            hwc_engine::geometry_router::port_escape::CardinalPort::East
                         };
 
                         if let Some(used) = used_ports.get(&to_key) {
@@ -506,9 +502,7 @@ impl<'a> AutoRouter<'a> {
         }
 
         if resolved_routes.is_empty() {
-            eprintln!(
-                "[ROUTER WARNING] No nets to route! resolved_routes is empty"
-            );
+            eprintln!("[ROUTER WARNING] No nets to route! resolved_routes is empty");
             return Ok(());
         }
 
@@ -517,12 +511,12 @@ impl<'a> AutoRouter<'a> {
         for metadata in self.space.entity_graph.get_component_metadata() {
             obstacle_bboxes.push(metadata.bbox);
         }
-        
+
         // v0.1.9: Also collect planes without net assignments as obstacles
         // These are keepout zones, mechanical structures, or non-conductive features
         // eprintln!("[OBSTACLE DEBUG] Collecting substrate layers as obstacles...");
         // eprintln!("[OBSTACLE DEBUG] Total substrate layers: {}", self.space.entity_graph.get_substrate_layers().len());
-        for (_idx, layer) in self.space.entity_graph.get_substrate_layers().iter().enumerate() {
+        for layer in self.space.entity_graph.get_substrate_layers().iter() {
             // eprintln!(
             //     "[OBSTACLE DEBUG] Layer {}: net={}, layer_type={:?}, bbox=({},{},{}) to ({},{},{})",
             //     idx,
@@ -531,18 +525,21 @@ impl<'a> AutoRouter<'a> {
             //     layer.bbox.min.x, layer.bbox.min.y, layer.bbox.min.z,
             //     layer.bbox.max.x, layer.bbox.max.y, layer.bbox.max.z
             // );
-            if layer.net == 0 && layer.layer_type == hwc_engine::geometry_router::entity_graph::SubstrateLayerType::Pour {
+            if layer.net == 0
+                && layer.layer_type
+                    == hwc_engine::geometry_router::entity_graph::SubstrateLayerType::Pour
+            {
                 // eprintln!("[OBSTACLE DEBUG] ✓ Adding layer {} as obstacle", idx);
                 obstacle_bboxes.push(layer.bbox);
             } else {
                 // eprintln!("[OBSTACLE DEBUG] ✗ Skipping layer {} (net={}, type={:?})", idx, layer.net, layer.layer_type);
             }
         }
-        
+
         // Also register manual analytic traces as obstacles
         for trace in &self.space.analytic_routes {
             for segment in &trace.segments {
-                obstacle_bboxes.push(segment.to_bounding_box(trace.width_nm));
+                obstacle_bboxes.push(segment.to_bounding_box(trace.cross_section.width_nm));
             }
         }
 
@@ -628,8 +625,11 @@ impl<'a> AutoRouter<'a> {
                         expression: "routing material".into(),
                         reason: e.to_string(),
                     })?;
-            eprintln!("[COMPILER] Setting routing context: trace_width={} nm (from {} declared routes)", 
-                trace_width, net_declared_widths.len());
+            eprintln!(
+                "[COMPILER] Setting routing context: trace_width={} nm (from {} declared routes)",
+                trace_width,
+                net_declared_widths.len()
+            );
             geo_router.set_routing_context(routing_copper_id, trace_width);
         }
 
@@ -799,13 +799,17 @@ impl<'a> AutoRouter<'a> {
         // v0.1.9: Convert net_declared_widths (keyed by name) to NetId-keyed map
         let mut net_trace_widths_by_id = FxHashMap::default();
         for (net_name, &width_nm) in &net_declared_widths {
-            if let Some(&net_id) = net_id_to_name.iter().find_map(|(id, name)| {
-                if name == net_name {
-                    Some(id)
-                } else {
-                    None
-                }
-            }) {
+            if let Some(&net_id) =
+                net_id_to_name.iter().find_map(
+                    |(id, name)| {
+                        if name == net_name {
+                            Some(id)
+                        } else {
+                            None
+                        }
+                    },
+                )
+            {
                 net_trace_widths_by_id.insert(net_id, width_nm);
             }
         }
@@ -857,21 +861,24 @@ impl<'a> AutoRouter<'a> {
             ));
         }
 
-        eprintln!("[ROUTER] Processing {} automatic routes using AutoRouter", explicit_segments.len());
+        eprintln!(
+            "[ROUTER] Processing {} automatic routes using AutoRouter",
+            explicit_segments.len()
+        );
 
-        match geo_router.route_space(
-            &grid_bbox,
-            &FxHashMap::default(), // v0.1.9: No Steiner nets in explicit mode
-            Some(&explicit_segments),
-            &obstacle_bboxes,
-            if has_substrate {
+        match geo_router.route_space(hwc_engine::geometry_router::RouteSpaceRequest {
+            grid_bbox: &grid_bbox,
+            nets: &FxHashMap::default(), // v0.1.9: No Steiner nets in explicit mode
+            explicit_segments: Some(&explicit_segments),
+            obstacle_bboxes: &obstacle_bboxes,
+            substrate_layers: if has_substrate {
                 Some(substrate_layers)
             } else {
                 None
             },
-            &self.net_frequencies,
-            &net_trace_widths_by_id,
-        ) {
+            net_frequencies: &self.net_frequencies,
+            net_trace_widths: &net_trace_widths_by_id,
+        }) {
             Ok(result) => {
                 // eprintln!(
                 //     "[ROUTER] GeometryRouter complete: {} nets routed, {} vias placed ({}ms)",
@@ -1115,7 +1122,7 @@ impl<'a> AutoRouter<'a> {
                         // v0.1.8: Enforce current declaration for ASICs. No hardcoded defaults.
                         let current_ma = net_currents_ma.get::<str>(net_name.as_ref()).copied()
                             .ok_or_else(|| {
-                                let is_asic = self.profile.as_ref().map_or(false, |p| p.is_asic());
+                                let is_asic = self.profile.as_ref().is_some_and(|p| p.is_asic());
                                 if is_asic {
                                     IrError::MissingAsicConstraint {
                                         message: format!("Net '{}' has no current_limit or net current declaration.", net_name),
@@ -1134,7 +1141,7 @@ impl<'a> AutoRouter<'a> {
                         let current_ma = match current_ma {
                             Ok(c) => c,
                             Err(e) => {
-                                if self.profile.as_ref().map_or(false, |p| p.is_asic()) {
+                                if self.profile.as_ref().is_some_and(|p| p.is_asic()) {
                                     return Err(e);
                                 } else {
                                     0.0
@@ -1235,7 +1242,8 @@ impl<'a> AutoRouter<'a> {
             if !profile_layers.is_empty() {
                 let mut z_ranges = Vec::with_capacity(profile_layers.len());
                 for i in 0..profile_layers.len() {
-                    let z_min = self.stackup_manager
+                    let z_min = self
+                        .stackup_manager
                         .get_layer_start_z(&profile_layers[i])
                         .unwrap_or(0);
                     let z_max = if i + 1 < profile_layers.len() {
@@ -1247,8 +1255,13 @@ impl<'a> AutoRouter<'a> {
                     };
                     z_ranges.push((z_min, z_max));
                 }
-                eprintln!("[COMPILER] Configuring entity_graph spatial index with {} layer Z-ranges", z_ranges.len());
-                self.space.entity_graph.set_spatial_layer_z_ranges(&z_ranges);
+                eprintln!(
+                    "[COMPILER] Configuring entity_graph spatial index with {} layer Z-ranges",
+                    z_ranges.len()
+                );
+                self.space
+                    .entity_graph
+                    .set_spatial_layer_z_ranges(&z_ranges);
             }
         }
 
@@ -1271,7 +1284,7 @@ impl<'a> AutoRouter<'a> {
                     .space
                     .netlist
                     .get_net(*net_id)
-                    .map(|n| n.name.clone().into())
+                    .map(|n| n.name.clone())
                     .unwrap_or_else(|| format!("net_{}", net_id.raw()).into());
 
                 let width_nm = segments.first().map(|s| s.width_nm).unwrap_or(250);
@@ -1301,13 +1314,11 @@ impl<'a> AutoRouter<'a> {
 
                 new_analytic_routes.push(hwc_engine::AnalyticTrace {
                     net_id: *net_id,
-                    width_nm,
-                    thickness_nm,
+                    cross_section: hwc_engine::space::CrossSection::new(width_nm, thickness_nm),
                     segments: line_segments,
                     material,
                     net_name,
-                    current_ma,
-                    current_limit_ma,
+                    current: hwc_engine::space::CurrentRating::new(current_ma, current_limit_ma),
                 });
             }
             self.space.analytic_routes = new_analytic_routes;
@@ -1325,10 +1336,10 @@ impl<'a> AutoRouter<'a> {
             .space
             .fabrication_constraints
             .as_ref()
-            .map_or(false, |c| {
+            .is_some_and(|c| {
                 c.technology
                     .as_ref()
-                    .map_or(false, |t| t.to_lowercase() == "asic")
+                    .is_some_and(|t| t.to_lowercase() == "asic")
             });
         let min_width = self
             .space
@@ -1442,13 +1453,11 @@ impl<'a> AutoRouter<'a> {
 
         let trace = AnalyticTrace::new(
             net_id,
-            trace_width_nm,
-            thickness_nm,
+            hwc_engine::space::CrossSection::new(trace_width_nm, thickness_nm),
             segments,
             copper_id,
             net_name.into(),
-            net_actual_current_ma, // Actual operating current from net
-            current_limit_ma,      // Route's declared capability
+            hwc_engine::space::CurrentRating::new(net_actual_current_ma, current_limit_ma),
         );
 
         self.space.analytic_routes.push(trace);

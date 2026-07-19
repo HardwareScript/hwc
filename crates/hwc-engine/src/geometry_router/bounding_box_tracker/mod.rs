@@ -1,5 +1,5 @@
 mod tracker;
 mod types;
 
-pub use tracker::BoundingBoxTracker;
+pub use tracker::{BoundingBoxTracker, ViaObstacleParams};
 pub use types::TrackedObstacle;

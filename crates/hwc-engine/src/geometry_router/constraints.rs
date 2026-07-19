@@ -142,8 +142,10 @@ impl RouteMetrics {
     /// This is a pure function - same inputs always produce same output.
     /// Electrical properties are NOT computed here; they belong to the physics engine.
     pub fn compute(path: &[Point3D]) -> Self {
-        let mut metrics = Self::default();
-        metrics.waypoints = path.to_vec();
+        let mut metrics = Self {
+            waypoints: path.to_vec(),
+            ..Default::default()
+        };
 
         if path.is_empty() {
             return metrics;
@@ -156,10 +158,7 @@ impl RouteMetrics {
             .sum();
 
         // Count via transitions (Z-axis changes)
-        metrics.via_count = path
-            .windows(2)
-            .filter(|w| w[0].z != w[1].z)
-            .count();
+        metrics.via_count = path.windows(2).filter(|w| w[0].z != w[1].z).count();
 
         // Count bend angles (direction changes)
         for window in path.windows(3) {
@@ -169,10 +168,11 @@ impl RouteMetrics {
             let d2y = window[2].y - window[1].y;
 
             // Manhattan routing: bends are direction changes
-            if (d1x != 0 || d1y != 0) && (d2x != 0 || d2y != 0) {
-                if d1x.signum() != d2x.signum() || d1y.signum() != d2y.signum() {
-                    metrics.bend_count += 1;
-                }
+            if (d1x != 0 || d1y != 0)
+                && (d2x != 0 || d2y != 0)
+                && (d1x.signum() != d2x.signum() || d1y.signum() != d2y.signum())
+            {
+                metrics.bend_count += 1;
             }
         }
 
@@ -234,20 +234,11 @@ pub enum Violation {
         limit: usize,
     },
     /// Hard constraint: path on non-routable layer.
-    HardNonRoutableLayer {
-        net_id: NetId,
-        layer_name: String,
-    },
+    HardNonRoutableLayer { net_id: NetId, layer_name: String },
     /// Soft constraint: length deficit (needs more length).
-    SoftLengthDeficit {
-        net_id: NetId,
-        deficit_nm: i64,
-    },
+    SoftLengthDeficit { net_id: NetId, deficit_nm: i64 },
     /// Soft constraint: length excess (too long).
-    SoftLengthExcess {
-        net_id: NetId,
-        excess_nm: i64,
-    },
+    SoftLengthExcess { net_id: NetId, excess_nm: i64 },
     /// Soft constraint: impedance mismatch.
     SoftImpedanceMismatch {
         net_id: NetId,
@@ -318,14 +309,32 @@ impl Violation {
     /// Describe the violation in human-readable form for error messages.
     pub fn describe(&self) -> String {
         match self {
-            Violation::HardClearanceViolation { net_id, actual_nm, required_nm, .. } => {
-                format!("Net {}: clearance {} nm is less than required {} nm", net_id.0, actual_nm, required_nm)
+            Violation::HardClearanceViolation {
+                net_id,
+                actual_nm,
+                required_nm,
+                ..
+            } => {
+                format!(
+                    "Net {}: clearance {} nm is less than required {} nm",
+                    net_id.0, actual_nm, required_nm
+                )
             }
-            Violation::HardViaCountExceeded { net_id, actual, limit } => {
-                format!("Net {}: via count {} exceeds limit {}", net_id.0, actual, limit)
+            Violation::HardViaCountExceeded {
+                net_id,
+                actual,
+                limit,
+            } => {
+                format!(
+                    "Net {}: via count {} exceeds limit {}",
+                    net_id.0, actual, limit
+                )
             }
             Violation::HardNonRoutableLayer { net_id, layer_name } => {
-                format!("Net {}: placed on non-routable layer '{}'", net_id.0, layer_name)
+                format!(
+                    "Net {}: placed on non-routable layer '{}'",
+                    net_id.0, layer_name
+                )
             }
             Violation::SoftLengthDeficit { net_id, deficit_nm } => {
                 format!("Net {}: length deficit of {} nm", net_id.0, deficit_nm)
@@ -333,14 +342,36 @@ impl Violation {
             Violation::SoftLengthExcess { net_id, excess_nm } => {
                 format!("Net {}: length excess of {} nm", net_id.0, excess_nm)
             }
-            Violation::SoftImpedanceMismatch { net_id, actual_ohm, target_ohm } => {
-                format!("Net {}: impedance {} ohm differs from target {} ohm", net_id.0, actual_ohm, target_ohm)
+            Violation::SoftImpedanceMismatch {
+                net_id,
+                actual_ohm,
+                target_ohm,
+            } => {
+                format!(
+                    "Net {}: impedance {} ohm differs from target {} ohm",
+                    net_id.0, actual_ohm, target_ohm
+                )
             }
-            Violation::SoftExcessiveBends { net_id, actual, target } => {
-                format!("Net {}: {} bends exceeds target {}", net_id.0, actual, target)
+            Violation::SoftExcessiveBends {
+                net_id,
+                actual,
+                target,
+            } => {
+                format!(
+                    "Net {}: {} bends exceeds target {}",
+                    net_id.0, actual, target
+                )
             }
-            Violation::SoftCrosstalkViolation { net_id, adjacent_net_id, coupling_coefficient, max_coefficient } => {
-                format!("Net {} to net {}: coupling {} exceeds max {}", net_id.0, adjacent_net_id.0, coupling_coefficient, max_coefficient)
+            Violation::SoftCrosstalkViolation {
+                net_id,
+                adjacent_net_id,
+                coupling_coefficient,
+                max_coefficient,
+            } => {
+                format!(
+                    "Net {} to net {}: coupling {} exceeds max {}",
+                    net_id.0, adjacent_net_id.0, coupling_coefficient, max_coefficient
+                )
             }
         }
     }
@@ -407,33 +438,6 @@ mod tests {
             Point3D::new(1000, 1000, 0),
         ];
 
-        let constraints = NetConstraints {
-            net_id: NetId::new(1),
-            hard: HardConstraints {
-                min_clearance_nm: 100,
-                max_via_count: 10,
-                min_bend_radius_nm: 50,
-                allowed_layers: vec![],
-            },
-            soft: SoftConstraints {
-                target_length_nm: None,
-                length_tolerance_nm: None,
-                target_impedance_ohm: None,
-                impedance_tolerance_ohm: None,
-                preferred_layer: None,
-                max_delay_ps: None,
-                max_coupling: 0.0,
-                penalty_weights: PenaltyWeights {
-                    length_per_nm: 1,
-                    impedance_per_ohm: 1,
-                    crosstalk_per_unit: 1,
-                    bends_per_bend: 1,
-                },
-            },
-            trace_width_nm: 100,
-            material_id: 0,
-        };
-
         let metrics = RouteMetrics::compute(&path);
         assert_eq!(metrics.total_length_nm, 2000);
         assert_eq!(metrics.via_count, 0);
@@ -442,10 +446,7 @@ mod tests {
 
     #[test]
     fn test_soft_penalty_computation() {
-        let path = vec![
-            Point3D::new(0, 0, 0),
-            Point3D::new(1000, 0, 0),
-        ];
+        let path = vec![Point3D::new(0, 0, 0), Point3D::new(1000, 0, 0)];
 
         let constraints = NetConstraints {
             net_id: NetId::new(1),
@@ -476,7 +477,7 @@ mod tests {
 
         let metrics = RouteMetrics::compute(&path);
         let penalty = metrics.compute_soft_penalty(&constraints);
-        
+
         // 1000 - 500 = 500 deficit, tolerance 100, so 400 over tolerance
         // 400 * 10 = 4000 penalty
         assert_eq!(penalty, 4000);

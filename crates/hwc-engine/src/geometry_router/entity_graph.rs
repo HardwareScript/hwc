@@ -69,6 +69,62 @@ pub struct EntityGraph {
     pub(crate) routed_segments: Vec<(NetId, Vec<crate::geometry::TraceSegment>)>,
 }
 
+/// Builder-style specification for [`EntityGraph::add_tube_substrate_layer`].
+#[derive(Clone, Debug)]
+pub struct TubeLayerSpec {
+    pub material: MaterialId,
+    pub net: u32,
+    pub bbox: BoundingBox,
+    pub outer_diameter: u32,
+    pub inner_diameter: u32,
+    pub pad_diameter: u32,
+    pub segments: u32,
+    pub top_cap: CapType,
+    pub bottom_cap: CapType,
+    pub bottom_outer_diameter: Option<u32>,
+}
+
+impl TubeLayerSpec {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        material: MaterialId,
+        net: u32,
+        bbox: BoundingBox,
+        outer_diameter: u32,
+        inner_diameter: u32,
+        pad_diameter: u32,
+        segments: u32,
+        top_cap: CapType,
+        bottom_cap: CapType,
+        bottom_outer_diameter: Option<u32>,
+    ) -> Self {
+        Self {
+            material,
+            net,
+            bbox,
+            outer_diameter,
+            inner_diameter,
+            pad_diameter,
+            segments,
+            top_cap,
+            bottom_cap,
+            bottom_outer_diameter,
+        }
+    }
+}
+
+/// Specification for [`EntityGraph::drill_via_hole`].
+#[derive(Clone, Copy, Debug)]
+pub struct ViaHoleSpec {
+    pub hole_bbox: BoundingBox,
+    pub diameter_nm: i64,
+    pub via_net: u32,
+    pub clearance_nm: i64,
+    pub is_tented: bool,
+    pub pad_diameter_nm: i64,
+    pub solder_mask_expansion_nm: i64,
+}
+
 impl EntityGraph {
     /// Create a new empty Entity Graph.
     pub fn new() -> Self {
@@ -96,7 +152,7 @@ impl EntityGraph {
         bbox: BoundingBox,
         net_id: Option<NetId>,
     ) -> EntityId {
-        let id = EntityId::from_str(&format!("pin:{}:{}", component_name, pin_name));
+        let id = EntityId::from_semantic(&format!("pin:{}:{}", component_name, pin_name));
         eprintln!(
             "[DEBUG register_component_pin] Registering '{}.{}' with EntityId: {}, net_id: {:?}",
             component_name, pin_name, id, net_id
@@ -122,7 +178,7 @@ impl EntityGraph {
         net_id: Option<NetId>,
         layer_z: i64,
     ) -> EntityId {
-        let id = EntityId::from_str(&format!("space:{}", name));
+        let id = EntityId::from_semantic(&format!("space:{}", name));
         eprintln!(
             "[DEBUG register_space_entity] Registering '{}' with EntityId: {}, net_id: {:?}",
             name, id, net_id
@@ -142,7 +198,7 @@ impl EntityGraph {
 
     /// Get bounding box for a space entity by name (v0.1.9.1)
     pub fn get_space_entity_bbox(&self, name: &str) -> Option<BoundingBox> {
-        let entity_id = EntityId::from_str(&format!("space:{}", name));
+        let entity_id = EntityId::from_semantic(&format!("space:{}", name));
         self.entity_registry
             .get(&entity_id)
             .map(|entity_data| entity_data.bbox)
@@ -155,7 +211,7 @@ impl EntityGraph {
         component_name: &str,
         pin_name: &str,
     ) -> Option<BoundingBox> {
-        let entity_id = EntityId::from_str(&format!("pin:{}:{}", component_name, pin_name));
+        let entity_id = EntityId::from_semantic(&format!("pin:{}:{}", component_name, pin_name));
         self.entity_registry
             .get(&entity_id)
             .map(|entity_data| entity_data.bbox)
@@ -568,19 +624,19 @@ impl EntityGraph {
     }
 
     /// Add a tube substrate layer (e.g. plated through-hole wall).
-    pub fn add_tube_substrate_layer(
-        &mut self,
-        material: MaterialId,
-        net: u32,
-        bbox: BoundingBox,
-        outer_diameter: u32,
-        inner_diameter: u32,
-        pad_diameter: u32,
-        segments: u32,
-        top_cap: CapType,
-        bottom_cap: CapType,
-        bottom_outer_diameter: Option<u32>,
-    ) {
+    pub fn add_tube_substrate_layer(&mut self, spec: TubeLayerSpec) {
+        let TubeLayerSpec {
+            material,
+            net,
+            bbox,
+            outer_diameter,
+            inner_diameter,
+            pad_diameter,
+            segments,
+            top_cap,
+            bottom_cap,
+            bottom_outer_diameter,
+        } = spec;
         let mut layer = SubstrateLayer::new(material, net, bbox, SubstrateLayerType::Contact);
         layer.shape = SubstrateLayerShape::Tube {
             outer_diameter,
@@ -670,7 +726,7 @@ impl EntityGraph {
         outer_diameter: u32,
         inner_diameter: u32,
     ) {
-        self.add_tube_substrate_layer(
+        self.add_tube_substrate_layer(TubeLayerSpec::new(
             material,
             net,
             bbox,
@@ -681,7 +737,7 @@ impl EntityGraph {
             crate::geometry_router::substrate_types::CapType::Solid,
             crate::geometry_router::substrate_types::CapType::Solid,
             None,
-        );
+        ));
     }
 
     /// Drill a hole through all substrate layers that intersect the given bbox.
@@ -730,16 +786,16 @@ impl EntityGraph {
     }
 
     /// Drill a hole for a via, respecting net connectivity.
-    pub fn drill_via_hole(
-        &mut self,
-        hole_bbox: BoundingBox,
-        diameter_nm: i64,
-        via_net: u32,
-        clearance_nm: i64,
-        is_tented: bool,
-        pad_diameter_nm: i64,
-        solder_mask_expansion_nm: i64,
-    ) {
+    pub fn drill_via_hole(&mut self, spec: ViaHoleSpec) {
+        let ViaHoleSpec {
+            hole_bbox,
+            diameter_nm,
+            via_net,
+            clearance_nm,
+            is_tented,
+            pad_diameter_nm,
+            solder_mask_expansion_nm,
+        } = spec;
         for layer in &mut self.substrate_layers {
             let intersects = if layer.regions.is_empty() {
                 let xy = layer.bbox.min.x < hole_bbox.max.x

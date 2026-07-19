@@ -7,20 +7,6 @@ use std::collections::HashSet;
 use super::DeviceExtractor;
 
 impl<'a> DeviceExtractor<'a> {
-    /// Build terminal-to-net mapping from module route statements
-    ///
-    /// This extracts the SOURCE OF TRUTH for net assignments from the module's
-    /// route statements, which override any hardcoded net names in component definitions.
-    ///
-    /// This function builds a net equivalence graph where all connected terminals
-    /// share the same net name. For example:
-    /// ```
-    /// route M1.gate to STAGE1_IN
-    /// route M5.drain to M1.gate
-    /// ```
-    /// Creates a single net "STAGE1_IN" that includes both M1.gate and M5.drain.
-    ///
-    /// Returns: (terminal_to_net_mapping, all_net_names)
     pub(super) fn build_terminal_to_net_mapping(
         &self,
         module: &ModuleDefinition,

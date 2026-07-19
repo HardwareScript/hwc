@@ -127,7 +127,7 @@ impl<K: Hash + Eq + Ord> Default for StableHashSet<K> {
 }
 
 #[cfg(test)]
-#[allow(unwrap_used, expect_used)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
 

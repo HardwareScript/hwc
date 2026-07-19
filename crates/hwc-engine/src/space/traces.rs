@@ -90,6 +90,48 @@ impl LineSegment {
     }
 }
 
+/// Physical cross-section of a trace.
+///
+/// Groups the two geometry dimensions that fully describe the swept
+/// rectangular volume of a Manhattan-routed wire.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CrossSection {
+    /// Trace width in nanometers
+    pub width_nm: i64,
+    /// Trace thickness in nanometers (v0.1.7: Physical Layer Truth)
+    pub thickness_nm: i64,
+}
+
+impl CrossSection {
+    pub fn new(width_nm: i64, thickness_nm: i64) -> Self {
+        Self {
+            width_nm,
+            thickness_nm,
+        }
+    }
+}
+
+/// Electrical current rating of a trace.
+///
+/// Pairs the actual operating current with the route-declared capacity so
+/// both can be carried together and reasoned about as a single unit.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CurrentRating {
+    /// Actual operating current in milliamps (from net declaration)
+    pub actual_ma: f64,
+    /// Maximum current capacity in milliamps (from `current_limit_ac.peak`)
+    pub limit_ma: f64,
+}
+
+impl CurrentRating {
+    pub fn new(actual_ma: f64, limit_ma: f64) -> Self {
+        Self {
+            actual_ma,
+            limit_ma,
+        }
+    }
+}
+
 /// **v0.1.7: ANALYTIC TRACE (GOD-TIER ARCHITECTURE)**
 ///
 /// Represents a routed trace as a mathematical primitive (swept volume).
@@ -105,11 +147,8 @@ pub struct AnalyticTrace {
     /// Net this trace belongs to
     pub net_id: NetId,
 
-    /// Trace width in nanometers
-    pub width_nm: i64,
-
-    /// Trace thickness in nanometers (v0.1.7: Physical Layer Truth)
-    pub thickness_nm: i64,
+    /// Physical cross-section of the trace (width + thickness)
+    pub cross_section: CrossSection,
 
     /// Manhattan segments forming the trace
     pub segments: Vec<LineSegment>,
@@ -120,33 +159,26 @@ pub struct AnalyticTrace {
     /// Net name for debugging and export
     pub net_name: CompactString,
 
-    /// Actual operating current in milliamps (from net declaration)
-    pub current_ma: f64,
-
-    /// Maximum current capacity in milliamps (from route current_limit_ac.peak declaration)
-    pub current_limit_ma: f64,
+    /// Current rating (operating current + declared capacity)
+    pub current: CurrentRating,
 }
 
 impl AnalyticTrace {
     pub fn new(
         net_id: NetId,
-        width_nm: i64,
-        thickness_nm: i64,
+        cross_section: CrossSection,
         segments: Vec<LineSegment>,
         material: MaterialId,
         net_name: CompactString,
-        current_ma: f64,
-        current_limit_ma: f64,
+        current: CurrentRating,
     ) -> Self {
         Self {
             net_id,
-            width_nm,
-            thickness_nm,
+            cross_section,
             segments,
             material,
             net_name,
-            current_ma,
-            current_limit_ma,
+            current,
         }
     }
 
@@ -161,7 +193,7 @@ impl AnalyticTrace {
             return BoundingBox::new(Point3D::new(0, 0, 0), Point3D::new(0, 0, 0));
         }
 
-        let half_w = self.width_nm / 2;
+        let half_w = self.cross_section.width_nm / 2;
 
         let mut min_x = i64::MAX;
         let mut min_y = i64::MAX;
@@ -188,7 +220,7 @@ impl AnalyticTrace {
     /// Check clearance to a component bounding box (analytic DRC)
     /// Returns true if clearance is satisfied
     pub fn check_clearance(&self, bbox: &BoundingBox, required_clearance_nm: i64) -> bool {
-        let half_w = self.width_nm / 2;
+        let half_w = self.cross_section.width_nm / 2;
 
         for seg in &self.segments {
             let dist = seg.distance_to_bbox(bbox);

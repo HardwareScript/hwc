@@ -24,9 +24,9 @@ pub fn validate_clearances(
 
     // BUG DETECTION: Check for out-of-bounds entities
     let (space_x, space_y, space_z) = (
-        space.dimensions.width_nm as i64,
-        space.dimensions.height_nm as i64,
-        space.dimensions.depth_nm as i64,
+        space.dimensions.width_nm,
+        space.dimensions.height_nm,
+        space.dimensions.depth_nm,
     );
 
     eprintln!(

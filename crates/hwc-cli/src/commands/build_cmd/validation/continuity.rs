@@ -49,7 +49,7 @@ pub fn run_physical_continuity_check(
                 y: layer.bbox.center().y,
                 z_min: layer.bbox.min.z,
                 z_max: layer.bbox.max.z,
-                net_name: layer.net_name.as_ref().map(|n| n.clone().into()),
+                net_name: layer.net_name.clone(),
                 material: layer.material,
                 bbox: Some(layer.bbox),
             });

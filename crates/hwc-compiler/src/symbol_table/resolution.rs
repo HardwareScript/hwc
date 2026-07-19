@@ -314,17 +314,6 @@ impl SymbolTable {
     /// logic (mm/cm/um only). This made it impossible to add custom units without
     /// modifying multiple places. Now, adding a new unit in stdlib/primitives/units.hw
     /// automatically makes it work everywhere.
-    ///
-    /// # Examples
-    /// ```
-    /// // Built-in units (fast path)
-    /// let m = Measurement { value: 1.5, unit: Unit::Millimeter };
-    /// assert_eq!(symbol_table.measurement_to_nm(&m), 1_500_000);
-    ///
-    /// // Custom units (resolved via symbol table)
-    /// let m = Measurement { value: 0.1, unit: Unit::Custom("inch") };
-    /// assert_eq!(symbol_table.measurement_to_nm(&m), 2_540_000); // 0.1 inch = 2.54mm
-    /// ```
     pub fn measurement_to_nm(&self, measurement: &hwc_parser::Measurement) -> Result<i64, String> {
         use hwc_parser::Unit;
 

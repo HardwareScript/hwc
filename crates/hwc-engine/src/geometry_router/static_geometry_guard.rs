@@ -91,7 +91,7 @@ pub fn check_static_shorts(
         }
     }
 
-    for (_mat_id, entries) in &by_material {
+    for entries in by_material.values() {
         for i in 0..entries.len() {
             for j in (i + 1)..entries.len() {
                 let a = &entries[i];

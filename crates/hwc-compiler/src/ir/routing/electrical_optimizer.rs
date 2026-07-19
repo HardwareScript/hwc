@@ -20,11 +20,11 @@ use miette::Diagnostic;
 use thiserror::Error;
 
 use hwc_engine::geometry::Point3D;
-use hwc_engine::netlist::NetId;
 use hwc_engine::geometry_router::constraints::{
     check_constraints, NetConstraints, RouteMetrics, Violation,
 };
 use hwc_engine::geometry_router::partition::GCellId;
+use hwc_engine::netlist::NetId;
 
 use crate::ir::errors::IrError;
 
@@ -146,11 +146,7 @@ impl RepairHistory {
             .iter()
             .filter(|(key, _)| key.gcell_id == gcell_id)
             .any(|(_, attempts)| {
-                attempts
-                    .iter()
-                    .filter(|a| !a.success)
-                    .count()
-                    >= failure_threshold
+                attempts.iter().filter(|a| !a.success).count() >= failure_threshold
             })
     }
 
@@ -243,10 +239,7 @@ pub fn run_optimization_loop(
 ) -> Result<OptimizationResult, IrError> {
     // Check if we've exhausted repair attempts
     if repair_history.is_exhausted(net_id, gcell_id, config.max_repair_attempts) {
-        let violations = check_constraints(
-            &RouteMetrics::compute(&initial_path),
-            constraints,
-        );
+        let violations = check_constraints(&RouteMetrics::compute(&initial_path), constraints);
         return Ok(OptimizationResult::RequiresRepair(violations));
     }
 
@@ -260,13 +253,7 @@ pub fn run_optimization_loop(
         let violations = check_constraints(&metrics, constraints);
 
         if violations.is_empty() {
-            repair_history.record_attempt(
-                net_id,
-                gcell_id,
-                Vec::new(),
-                current_path.clone(),
-                true,
-            );
+            repair_history.record_attempt(net_id, gcell_id, Vec::new(), current_path.clone(), true);
             return Ok(OptimizationResult::Converged(Arc::new(current_path)));
         }
 
@@ -284,7 +271,9 @@ pub fn run_optimization_loop(
         }
 
         // Compute current score (soft penalties - geometry only)
-        let current_score = constraints.soft.target_length_nm
+        let current_score = constraints
+            .soft
+            .target_length_nm
             .map(|target| (metrics.total_length_nm - target).abs())
             .unwrap_or(0);
 
@@ -339,13 +328,7 @@ pub fn run_optimization_loop(
     let final_violations = check_constraints(&final_metrics, constraints);
 
     if final_violations.is_empty() {
-        repair_history.record_attempt(
-            net_id,
-            gcell_id,
-            Vec::new(),
-            best_path.clone(),
-            true,
-        );
+        repair_history.record_attempt(net_id, gcell_id, Vec::new(), best_path.clone(), true);
         Ok(OptimizationResult::Converged(Arc::new(best_path)))
     } else {
         repair_history.record_attempt(
@@ -360,7 +343,11 @@ pub fn run_optimization_loop(
 }
 
 /// Inject meanders into a path to increase length.
-fn inject_meanders(path: &[Point3D], deficit_nm: i64, _obstacles: &[hwc_engine::geometry::BoundingBox]) -> Vec<Point3D> {
+fn inject_meanders(
+    path: &[Point3D],
+    deficit_nm: i64,
+    _obstacles: &[hwc_engine::geometry::BoundingBox],
+) -> Vec<Point3D> {
     if deficit_nm <= 0 || path.len() < 2 {
         return path.to_vec();
     }
@@ -384,11 +371,7 @@ fn inject_meanders(path: &[Point3D], deficit_nm: i64, _obstacles: &[hwc_engine::
 
     let start = result[best_seg_idx];
     let end = result[best_seg_idx + 1];
-    let mid = Point3D::new(
-        (start.x + end.x) / 2,
-        (start.y + end.y) / 2,
-        start.z,
-    );
+    let mid = Point3D::new((start.x + end.x) / 2, (start.y + end.y) / 2, start.z);
 
     let meander_height = deficit_nm / 4;
     let meander_width = deficit_nm / 2;
@@ -508,10 +491,7 @@ mod tests {
 
     #[test]
     fn test_optimization_converges_for_short_path() {
-        let path = Arc::new(vec![
-            Point3D::new(0, 0, 0),
-            Point3D::new(500, 0, 0),
-        ]);
+        let path = Arc::new(vec![Point3D::new(0, 0, 0), Point3D::new(500, 0, 0)]);
 
         let constraints = test_constraints();
         let config = test_config();
@@ -534,10 +514,7 @@ mod tests {
 
     #[test]
     fn test_repair_history_tracking() {
-        let path = Arc::new(vec![
-            Point3D::new(0, 0, 0),
-            Point3D::new(500, 0, 0),
-        ]);
+        let path = Arc::new(vec![Point3D::new(0, 0, 0), Point3D::new(500, 0, 0)]);
 
         let constraints = test_constraints();
         let config = test_config();
@@ -554,15 +531,16 @@ mod tests {
             );
         }
 
-        assert!(repair_history.is_exhausted(NetId::new(1), GCellId::new(0), config.max_repair_attempts));
+        assert!(repair_history.is_exhausted(
+            NetId::new(1),
+            GCellId::new(0),
+            config.max_repair_attempts
+        ));
     }
 
     #[test]
     fn test_inject_meanders() {
-        let path = vec![
-            Point3D::new(0, 0, 0),
-            Point3D::new(10000, 0, 0),
-        ];
+        let path = vec![Point3D::new(0, 0, 0), Point3D::new(10000, 0, 0)];
 
         let result = inject_meanders(&path, 1000, &[]);
         assert!(result.len() > path.len());

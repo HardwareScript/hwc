@@ -146,7 +146,7 @@ pub fn normalize_winding(polygon: &[(i64, i64)]) -> Vec<(i64, i64)> {
 
 /// Ensure all hole contours are CW (negative signed area).
 #[inline]
-pub fn normalize_holes(holes: &mut Vec<Vec<(i64, i64)>>) {
+pub fn normalize_holes(holes: &mut [Vec<(i64, i64)>]) {
     for hole in holes.iter_mut() {
         if hole.len() < 3 {
             continue;

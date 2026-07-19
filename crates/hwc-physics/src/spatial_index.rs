@@ -226,7 +226,12 @@ impl DynamicSpatialIndex {
         if self.layer_z_ranges.is_empty() {
             None
         } else {
-            Some(self.layer_z_ranges.iter().map(|e| (e.z_min, e.z_max)).collect())
+            Some(
+                self.layer_z_ranges
+                    .iter()
+                    .map(|e| (e.z_min, e.z_max))
+                    .collect(),
+            )
         }
     }
 
@@ -234,22 +239,24 @@ impl DynamicSpatialIndex {
     ///
     /// Uses binary search on per-layer sorted arrays. Only searches layers
     /// whose Z-range overlaps the query bbox's Z-range.
-    /// 
+    ///
     /// NOTE: Segments that span multiple Z-layers are stored in multiple buckets.
     /// We deduplicate by segment_id to avoid returning the same physical entity
     /// multiple times.
     pub fn query_bbox(&self, bbox: &BoundingBox) -> Vec<&IndexedSegment> {
         let z_min = bbox.min.z;
         let z_max = bbox.max.z;
-        eprintln!("[LAYERED INDEX] query_bbox: bbox.min={:?}, bbox.max={:?}, z_range=[{}, {}]",
-            bbox.min, bbox.max, z_min, z_max);
-        
+        eprintln!(
+            "[LAYERED INDEX] query_bbox: bbox.min={:?}, bbox.max={:?}, z_range=[{}, {}]",
+            bbox.min, bbox.max, z_min, z_max
+        );
+
         let layer_indices = self.layers_for_z_range(z_min, z_max);
 
         let mut results = Vec::new();
         use rustc_hash::FxHashSet;
         let mut seen_segment_ids = FxHashSet::default();
-        
+
         for layer_idx in layer_indices {
             if layer_idx >= self.layer_segments.len() {
                 continue;

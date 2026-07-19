@@ -183,8 +183,7 @@ pub fn place_pour(
 
     // v0.1.8: Register pour in EntityGraph for O(1) resolution
     let net_id = if let Some(net_name) = &pour.net {
-        let _min_width_nm = space.fabrication_constraints.as_ref()
-            .and_then(|c| Some(c.trace.min_width_nm))
+        let _min_width_nm = space.fabrication_constraints.as_ref().map(|c| c.trace.min_width_nm)
             .ok_or_else(|| IrError::MissingAsicConstraint {
                 message: "PDK missing required 'trace.min_width_nm' constraint".into(),
                 hint: "Add a 'trace:' block to your profile with explicit min_width.\n\nExample:\n  trace:\n    min_width: 180nm".into(),
@@ -395,7 +394,7 @@ pub fn place_pour(
         let comp_name_for_pin = if let Some(binding) = &pour.device {
             binding.device_name.clone()
         } else {
-            pour.name.to_string().into()
+            pour.name.to_string()
         };
 
         space.entity_graph.add_component_pin(
@@ -451,7 +450,7 @@ pub fn place_pour(
         ) {
             return Err(IrError::ClearanceViolation {
                 entity_type: "pour".into(),
-                entity_name: pour.name.to_string().into(),
+                entity_name: pour.name.to_string(),
                 reason: format!(
                     "{}\nRequired spacing: {}nm (from profile trace.min_spacing)\n\
                      Adjust the pour boundary to maintain clearance from other nets.",

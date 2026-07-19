@@ -218,7 +218,7 @@ impl QueryStore {
     where
         F: FnOnce() -> QueryResult,
     {
-        let needs_compute = self.results.get(&query_id).is_none();
+        let needs_compute = !self.results.contains_key(&query_id);
 
         if needs_compute {
             self.current_time += 1;

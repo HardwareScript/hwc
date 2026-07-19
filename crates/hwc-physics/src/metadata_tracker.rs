@@ -109,21 +109,6 @@ impl MetadataHashes {
 ///
 /// # Usage
 ///
-/// ```rust,ignore
-/// let mut tracker = MetadataTracker::new();
-///
-/// // On every compile, check for metadata changes
-/// let changes = tracker.check_metadata_changed(
-///     &materials,
-///     &profile,
-///     &manufacturing,
-///     &stackup,
-/// );
-///
-/// if changes.needs_electrical_revalidation() {
-///     // Re-run electrical validation
-/// }
-/// ```
 pub struct MetadataTracker {
     /// Previous metadata hashes
     previous_hashes: MetadataHashes,

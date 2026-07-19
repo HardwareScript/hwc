@@ -136,7 +136,7 @@ impl MiterEngine {
     /// Apply miter pass to all paths in a route result.
     ///
     /// Mutates the paths in-place, replacing 90° corners with 45° chamfers.
-    pub fn apply_to_paths(&self, paths: &mut Vec<Vec<Point3D>>) {
+    pub fn apply_to_paths(&self, paths: &mut [Vec<Point3D>]) {
         for path in paths.iter_mut() {
             if path.len() >= 3 {
                 *path = self.apply_miter_pass(path);

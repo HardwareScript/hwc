@@ -216,8 +216,6 @@ pub fn execute(
             continue;
         }
 
-
-
         // Export all formats
         export::export_all(export::ExportParams {
             space,

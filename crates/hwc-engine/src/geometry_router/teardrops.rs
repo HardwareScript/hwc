@@ -99,35 +99,33 @@ impl TeardropConfig {
 /// pad/trace junctions against mechanical stress.
 pub struct TeardropEngine;
 
+/// Parameters for applying teardrops at the endpoints of a routed path.
+pub struct TeardropRequest<'a> {
+    /// The EntityGraph containing the routed trace.
+    pub entity_graph: &'a EntityGraph,
+    /// The routed path in nanometers.
+    pub path: &'a [Point3D],
+    /// The start pin position (center of pad).
+    pub start_pin: Point3D,
+    /// The goal pin position (center of pad).
+    pub goal_pin: Point3D,
+    /// Width of the trace being routed.
+    pub trace_width_nm: i64,
+    /// Teardrop configuration.
+    pub config: &'a TeardropConfig,
+    /// Resolution in nanometers.
+    pub resolution_nm: i64,
+    /// Net handle for the trace.
+    pub net_handle: crate::netlist::NetHandle,
+}
+
 impl TeardropEngine {
-    /// Apply teardrops at the endpoints of a routed path.
     ///
     /// Modifies the EntityGraph to create wider, filleted transitions
     /// where the trace meets its start/goal pads.
-    ///
-    /// # Arguments
-    /// * `entity_graph` - The EntityGraph containing the routed trace.
-    /// * `path` - The routed path in nanometers.
-    /// * `start_pin` - The start pin position (center of pad).
-    /// * `goal_pin` - The goal pin position (center of pad).
-    /// * `trace_width_nm` - Width of the trace being routed.
-    /// * `config` - Teardrop configuration.
-    /// * `resolution_nm` - Resolution in nanometers.
-    /// * `net_handle` - Net handle for the trace.
-    #[allow(clippy::too_many_arguments)]
-    pub fn apply_teardrops(
-        _entity_graph: &EntityGraph,
-        path: &[Point3D],
-        _start_pin: Point3D,
-        _goal_pin: Point3D,
-        _trace_width_nm: i64,
-        config: &TeardropConfig,
-        _resolution_nm: i64,
-        _net_handle: crate::netlist::NetHandle,
-    ) {
-        if !config.enabled || path.len() < 2 {
-            return;
-        }
+    pub fn apply_teardrops(req: TeardropRequest) {
+        let TeardropRequest { path, config, .. } = req;
+        if !config.enabled || path.len() < 2 {}
 
         // Teardrop stamping is removed in the EntityGraph migration.
         // The TopologicalRouter uses DynamicSpatialIndex for obstacle detection.
@@ -155,16 +153,16 @@ mod tests {
         let start_pin = Point3D::new(5_000_000, 5_000_000, 0);
         let goal_pin = Point3D::new(5_000_000, 15_000_000, 0);
 
-        TeardropEngine::apply_teardrops(
-            &entity_graph,
-            &path,
+        TeardropEngine::apply_teardrops(TeardropRequest {
+            entity_graph: &entity_graph,
+            path: &path,
             start_pin,
             goal_pin,
-            200_000,
-            &config,
-            100_000,
-            NetHandle::new(1),
-        );
+            trace_width_nm: 200_000,
+            config: &config,
+            resolution_nm: 100_000,
+            net_handle: NetHandle::new(1),
+        });
     }
 
     /// Test disabled config does nothing.
@@ -178,16 +176,16 @@ mod tests {
 
         let path = vec![Point3D::new(0, 0, 0), Point3D::new(1_000_000, 0, 0)];
 
-        TeardropEngine::apply_teardrops(
-            &entity_graph,
-            &path,
-            Point3D::new(0, 0, 0),
-            Point3D::new(1_000_000, 0, 0),
-            200_000,
-            &config,
-            100_000,
-            NetHandle::new(1),
-        );
+        TeardropEngine::apply_teardrops(TeardropRequest {
+            entity_graph: &entity_graph,
+            path: &path,
+            start_pin: Point3D::new(0, 0, 0),
+            goal_pin: Point3D::new(1_000_000, 0, 0),
+            trace_width_nm: 200_000,
+            config: &config,
+            resolution_nm: 100_000,
+            net_handle: NetHandle::new(1),
+        });
     }
 
     /// Test that Class 3 config produces wider teardrops.

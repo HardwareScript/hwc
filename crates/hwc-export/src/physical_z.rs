@@ -106,8 +106,66 @@ mod tests {
 
     #[test]
     fn dxf_layer_name_uses_mm() {
+        use hwc_compiler::ir::stackup_manager::StackupManager;
+        use hwc_compiler::SymbolTable;
+        use hwc_parser::ast::profile::{LayerStackup, StackupLayer};
+        use hwc_parser::ast::Expression;
+        use hwc_parser::ast::OriginZ;
+        use hwc_parser::ast::{Identifier, MaterialCategory, MaterialDefinition, Span};
+
+        // Build a 5-layer stackup (bottom-up) where INNER4 spans [300mm, 400mm).
+        // 350mm therefore resolves to the internal (non-top, non-bottom) layer "INNER4".
+        let copper = MaterialDefinition {
+            name: Identifier::new("Copper".into(), Span::new(0, 0)),
+            category: MaterialCategory::Conductor,
+            process: Default::default(),
+            symbol: None,
+            description: None,
+            properties: vec![],
+            span: Span::new(0, 0),
+            color: None,
+            opacity: None,
+            outline_opacity: None,
+            roughness: None,
+            metallic: None,
+            ior: None,
+            clearcoat: None,
+            clearcoat_roughness: None,
+            subsurface: None,
+            anisotropy: None,
+            anisotropy_rotation: None,
+            texture: None,
+        };
+
+        let mut symbol_table = SymbolTable::new();
+        symbol_table.register_prelude_material(copper).unwrap();
+
+        let layer = |name: &str, _start_mm: i64, thickness_mm: i64| StackupLayer {
+            name: Identifier::new(name.into(), Span::new(0, 0)),
+            material: "Copper".into(),
+            thickness: Expression::Measurement {
+                value: thickness_mm as f64,
+                unit: hwc_parser::ast::Unit::Millimeter,
+                span: Span::new(0, 0),
+            },
+            routable: None,
+        };
+
+        let stackup = LayerStackup {
+            layers: vec![
+                layer("BOTTOM", 0, 100),
+                layer("INNER1", 0, 100),
+                layer("INNER2", 0, 100),
+                layer("INNER4", 0, 100),
+                layer("TOP", 0, 100),
+            ],
+        };
+
+        let manager =
+            StackupManager::new(Some(&stackup), &symbol_table, 0, OriginZ::Bottom, 0).unwrap();
+
         assert_eq!(
-            dxf_layer_name(350_000_000, "Copper", 0, 1_000_000_000, None),
+            dxf_layer_name(350_000_000, "Copper", &manager).unwrap(),
             "INNER4_COPPER"
         );
     }

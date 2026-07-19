@@ -161,18 +161,6 @@ impl Parser {
     /// Mistake pattern avoided: "We'll support the old way just during transition" — this debt accumulated.
     /// Always enforce canonical syntax from the start in 0.x; update all tests/examples at once.
     ///
-    /// # Arguments
-    /// * `item_parser` - Function to parse a single list item
-    ///
-    /// # Returns
-    /// * `Ok(Vec<T>)` - Parsed list items
-    /// * `Err(ParseError)` - If not starting with `[` or other parse failure
-    ///
-    /// # Examples
-    /// ```ignore
-    /// // Parse pin list: [VCC, GND, SDA]
-    /// let pins = self.parse_list(|p| p.expect_identifier_string())?;
-    /// ```
     pub(crate) fn parse_list<T, F>(&mut self, item_parser: F) -> Result<Vec<T>, ParseError>
     where
         F: FnMut(&mut Self) -> Result<T, ParseError>,
@@ -225,33 +213,6 @@ impl Parser {
         Ok(items)
     }
 
-    /// Parse a declarative property block (uses `:` for key-value pairs).
-    ///
-    /// This is the universal property parser for v0.1.6's "Boundary Law":
-    /// - Declarative contexts (properties) use `:` (colon)
-    /// - Behavioral contexts (logic) use `=` (equals)
-    ///
-    /// This parser is used for:
-    /// - Component property blocks: `electrical:`, `mechanical:`, `thermal:`
-    /// - Material properties
-    /// - Profile constraints
-    /// - Any other declarative key-value configuration
-    ///
-    /// # Format
-    /// ```ignore
-    /// electrical:
-    ///     resistance: 10kΩ
-    ///     tolerance: 5%
-    ///     power: 0.125W
-    /// ```
-    ///
-    /// # Returns
-    /// * `Ok(HashMap<String, String>)` - Successfully parsed properties
-    /// * `Err(ParseError)` - Failed to parse (with context-aware error message.into())
-    ///
-    /// # Error Messages
-    /// If `=` is found instead of `:`, the error message teaches the boundary rule:
-    /// "Expected ':' in property block (use '=' only in logic blocks)"
     pub(crate) fn parse_property_block(
         &mut self,
     ) -> Result<rustc_hash::FxHashMap<CompactString, String>, ParseError> {

@@ -53,6 +53,17 @@ pub struct TopologicalPath {
     pub total_length: i64,
 }
 
+/// Parameters for [`TopologicalRouter::build_path_from_rays`].
+struct RayPathQuery<'a> {
+    start: Point3D,
+    target: Point3D,
+    s_ray: &'a SearchRay,
+    t_ray: &'a SearchRay,
+    meeting: Point3D,
+    obstacles: &'a DynamicSpatialIndex,
+    board_bounds: &'a BoundingBox,
+}
+
 /// The Topological Line-Search Router.
 ///
 /// Projects orthogonal search rays from start and target ports.
@@ -172,7 +183,7 @@ impl TopologicalRouter {
                         continue;
                     }
                     // Build path: start -> bend_point_start -> meeting -> bend_point_target -> target
-                    if let Some(path) = self.build_path_from_rays(
+                    if let Some(path) = self.build_path_from_rays(RayPathQuery {
                         start,
                         target,
                         s_ray,
@@ -180,7 +191,7 @@ impl TopologicalRouter {
                         meeting,
                         obstacles,
                         board_bounds,
-                    ) {
+                    }) {
                         // eprintln!("[DEBUG TOPO] Found intersection path with length {}", path.total_length);
                         if path.total_length < best_length {
                             best_length = path.total_length;
@@ -244,7 +255,7 @@ impl TopologicalRouter {
                             if s_ray.origin.y == t_ray.origin.y {
                                 continue;
                             }
-                            
+
                             // Find the valid X-range where both horizontal rays overlap
                             let s_min_x = if s_ray.direction == RayDirection::East {
                                 s_ray.origin.x
@@ -256,7 +267,7 @@ impl TopologicalRouter {
                             } else {
                                 s_ray.origin.x
                             };
-                            
+
                             let t_min_x = if t_ray.direction == RayDirection::East {
                                 t_ray.origin.x
                             } else {
@@ -267,18 +278,26 @@ impl TopologicalRouter {
                             } else {
                                 t_ray.origin.x
                             };
-                            
+
                             let overlap_min_x = s_min_x.max(t_min_x).max(board_bounds.min.x);
                             let overlap_max_x = s_max_x.min(t_max_x).min(board_bounds.max.x);
-                            
+
                             if overlap_min_x <= overlap_max_x {
                                 // Collect candidate X coordinates
                                 let mut candidates = vec![start.x, target.x];
-                                
+
                                 // Also collect X coordinates from obstacles (with inflation)
                                 let query_box = BoundingBox {
-                                    min: Point3D::new(overlap_min_x, start.y.min(target.y), start.z),
-                                    max: Point3D::new(overlap_max_x, start.y.max(target.y), start.z),
+                                    min: Point3D::new(
+                                        overlap_min_x,
+                                        start.y.min(target.y),
+                                        start.z,
+                                    ),
+                                    max: Point3D::new(
+                                        overlap_max_x,
+                                        start.y.max(target.y),
+                                        start.z,
+                                    ),
                                 };
                                 for seg in self.query_all_obstacles(&query_box, obstacles) {
                                     if self.exempt_net_ids.contains(&seg.net_id) {
@@ -289,31 +308,34 @@ impl TopologicalRouter {
                                     candidates.push(obs_min_x - inflate);
                                     candidates.push(obs_max_x + inflate);
                                 }
-                                
+
                                 // De-duplicate candidates and filter to overlap range
                                 candidates.retain(|&x| x >= overlap_min_x && x <= overlap_max_x);
                                 candidates.sort_unstable();
                                 candidates.dedup();
-                                
+
                                 for x in candidates {
                                     let p1 = Point3D::new(x, start.y, start.z);
                                     let p2 = Point3D::new(x, target.y, start.z);
-                                    
+
                                     // Check if meeting points are inside obstacles
-                                    if self.point_in_obstacle(p1, obstacles) || self.point_in_obstacle(p2, obstacles) {
+                                    if self.point_in_obstacle(p1, obstacles)
+                                        || self.point_in_obstacle(p2, obstacles)
+                                    {
                                         continue;
                                     }
-                                    
+
                                     // Check all three segments for collisions
                                     if !self.segment_intersects_obstacle(start, p1, obstacles)
                                         && !self.segment_intersects_obstacle(p1, p2, obstacles)
                                         && !self.segment_intersects_obstacle(p2, target, obstacles)
                                     {
                                         let waypoints = vec![start, p1, p2, target];
-                                        let total_length: i64 = waypoints.windows(2)
+                                        let total_length: i64 = waypoints
+                                            .windows(2)
                                             .map(|w| w[0].manhattan_distance(&w[1]))
                                             .sum();
-                                            
+
                                         if total_length < best_length {
                                             best_length = total_length;
                                             best_path = Some(TopologicalPath {
@@ -331,7 +353,7 @@ impl TopologicalRouter {
                             if s_ray.origin.x == t_ray.origin.x {
                                 continue;
                             }
-                            
+
                             // Find the valid Y-range where both vertical rays overlap
                             let s_min_y = if s_ray.direction == RayDirection::North {
                                 s_ray.origin.y
@@ -343,7 +365,7 @@ impl TopologicalRouter {
                             } else {
                                 s_ray.origin.y
                             };
-                            
+
                             let t_min_y = if t_ray.direction == RayDirection::North {
                                 t_ray.origin.y
                             } else {
@@ -354,18 +376,26 @@ impl TopologicalRouter {
                             } else {
                                 t_ray.origin.y
                             };
-                            
+
                             let overlap_min_y = s_min_y.max(t_min_y).max(board_bounds.min.y);
                             let overlap_max_y = s_max_y.min(t_max_y).min(board_bounds.max.y);
-                            
+
                             if overlap_min_y <= overlap_max_y {
                                 // Collect candidate Y coordinates
                                 let mut candidates = vec![start.y, target.y];
-                                
+
                                 // Also collect Y coordinates from obstacles (with inflation)
                                 let query_box = BoundingBox {
-                                    min: Point3D::new(start.x.min(target.x), overlap_min_y, start.z),
-                                    max: Point3D::new(start.x.max(target.x), overlap_max_y, start.z),
+                                    min: Point3D::new(
+                                        start.x.min(target.x),
+                                        overlap_min_y,
+                                        start.z,
+                                    ),
+                                    max: Point3D::new(
+                                        start.x.max(target.x),
+                                        overlap_max_y,
+                                        start.z,
+                                    ),
                                 };
                                 for seg in self.query_all_obstacles(&query_box, obstacles) {
                                     if self.exempt_net_ids.contains(&seg.net_id) {
@@ -379,31 +409,34 @@ impl TopologicalRouter {
                                     candidates.push(obs_min_y - inflate - 1);
                                     candidates.push(obs_max_y + inflate + 1);
                                 }
-                                
+
                                 // De-duplicate candidates and filter to overlap range
                                 candidates.retain(|&y| y >= overlap_min_y && y <= overlap_max_y);
                                 candidates.sort_unstable();
                                 candidates.dedup();
-                                
+
                                 for y in candidates {
                                     let p1 = Point3D::new(start.x, y, start.z);
                                     let p2 = Point3D::new(target.x, y, start.z);
-                                    
+
                                     // Check if meeting points are inside obstacles
-                                    if self.point_in_obstacle(p1, obstacles) || self.point_in_obstacle(p2, obstacles) {
+                                    if self.point_in_obstacle(p1, obstacles)
+                                        || self.point_in_obstacle(p2, obstacles)
+                                    {
                                         continue;
                                     }
-                                    
+
                                     // Check all three segments for collisions
                                     if !self.segment_intersects_obstacle(start, p1, obstacles)
                                         && !self.segment_intersects_obstacle(p1, p2, obstacles)
                                         && !self.segment_intersects_obstacle(p2, target, obstacles)
                                     {
                                         let waypoints = vec![start, p1, p2, target];
-                                        let total_length: i64 = waypoints.windows(2)
+                                        let total_length: i64 = waypoints
+                                            .windows(2)
                                             .map(|w| w[0].manhattan_distance(&w[1]))
                                             .sum();
-                                            
+
                                         if total_length < best_length {
                                             best_length = total_length;
                                             best_path = Some(TopologicalPath {
@@ -431,14 +464,19 @@ impl TopologicalRouter {
         obstacles: &DynamicSpatialIndex,
         _board_bounds: &BoundingBox,
     ) -> Option<TopologicalPath> {
-        eprintln!("[TOPO try_direct_path] Attempting direct paths from ({},{},{}) to ({},{},{})",
-            start.x, start.y, start.z, target.x, target.y, target.z);
-        
+        eprintln!(
+            "[TOPO try_direct_path] Attempting direct paths from ({},{},{}) to ({},{},{})",
+            start.x, start.y, start.z, target.x, target.y, target.z
+        );
+
         // Straight line (same X or same Y)
         if start.x == target.x || start.y == target.y {
             let waypoints = vec![start, target];
             let collides = self.segment_intersects_obstacle(start, target, obstacles);
-            eprintln!("[TOPO try_direct_path] Straight line: collides={}", collides);
+            eprintln!(
+                "[TOPO try_direct_path] Straight line: collides={}",
+                collides
+            );
             if !collides {
                 let total_length = start.manhattan_distance(&target);
                 eprintln!("[TOPO try_direct_path] ✅ Returning straight path");
@@ -830,16 +868,16 @@ impl TopologicalRouter {
     }
 
     /// Build a path from start to target using rays from both endpoints.
-    fn build_path_from_rays(
-        &self,
-        start: Point3D,
-        target: Point3D,
-        s_ray: &SearchRay,
-        t_ray: &SearchRay,
-        meeting: Point3D,
-        obstacles: &DynamicSpatialIndex,
-        _board_bounds: &BoundingBox,
-    ) -> Option<TopologicalPath> {
+    fn build_path_from_rays(&self, q: RayPathQuery) -> Option<TopologicalPath> {
+        let RayPathQuery {
+            start,
+            target,
+            s_ray,
+            t_ray,
+            meeting,
+            obstacles,
+            board_bounds: _board_bounds,
+        } = q;
         let mut waypoints = Vec::new();
         waypoints.push(start);
 
@@ -927,16 +965,16 @@ impl TopologicalRouter {
         obstacles: &DynamicSpatialIndex,
     ) -> bool {
         let inflate = self.trace_width_nm / 2 + self.min_clearance_nm;
-        
+
         let route_z_min = a.z.min(b.z);
         let route_z_max = a.z.max(b.z);
-        
+
         // Build the segment's bounding box
         let segment_bbox = BoundingBox {
             min: Point3D::new(a.x.min(b.x), a.y.min(b.y), route_z_min),
             max: Point3D::new(a.x.max(b.x), a.y.max(b.y), route_z_max),
         };
-        
+
         // Query with inflated bbox for clearance
         let query_bbox = segment_bbox.expand(inflate);
 
@@ -946,27 +984,34 @@ impl TopologicalRouter {
         );
         eprintln!(
             "[TOPO COLLISION] Segment bbox: ({},{},{}) to ({},{},{})",
-            segment_bbox.min.x, segment_bbox.min.y, segment_bbox.min.z,
-            segment_bbox.max.x, segment_bbox.max.y, segment_bbox.max.z
+            segment_bbox.min.x,
+            segment_bbox.min.y,
+            segment_bbox.min.z,
+            segment_bbox.max.x,
+            segment_bbox.max.y,
+            segment_bbox.max.z
         );
 
         let candidates = self.query_all_obstacles(&query_bbox, obstacles);
-        
+
         for (idx, seg) in candidates.iter().enumerate() {
             // 1. Skip if this obstacle belongs to an exempt net (start/goal)
             if self.exempt_net_ids.contains(&seg.net_id) {
-                eprintln!("[TOPO COLLISION]   Obstacle {}: SKIPPED (exempt net_id={})", idx, seg.net_id);
+                eprintln!(
+                    "[TOPO COLLISION]   Obstacle {}: SKIPPED (exempt net_id={})",
+                    idx, seg.net_id
+                );
                 continue;
             }
-            
+
             let obs_z_min = seg.start.z.min(seg.end.z);
             let obs_z_max = seg.start.z.max(seg.end.z);
-            
+
             // Z-range overlap check
             if route_z_min > obs_z_max || obs_z_min > route_z_max {
                 continue;
             }
-            
+
             let obs_bbox = BoundingBox {
                 min: Point3D::new(
                     seg.start.x.min(seg.end.x) - seg.width_nm / 2,
@@ -982,29 +1027,43 @@ impl TopologicalRouter {
 
             eprintln!(
                 "[TOPO COLLISION]   Obstacle {}: net_id={}, bbox=({},{},{}) to ({},{},{})",
-                idx, seg.net_id,
-                obs_bbox.min.x, obs_bbox.min.y, obs_bbox.min.z,
-                obs_bbox.max.x, obs_bbox.max.y, obs_bbox.max.z
+                idx,
+                seg.net_id,
+                obs_bbox.min.x,
+                obs_bbox.min.y,
+                obs_bbox.min.z,
+                obs_bbox.max.x,
+                obs_bbox.max.y,
+                obs_bbox.max.z
             );
 
             // 2. Continuous 3D Intersection Check:
             //    Check if the segment bbox (inflated by trace clearance) overlaps the obstacle.
             //    This handles all orientations without coordinate-snag issues!
             let inflated_segment = segment_bbox.expand(inflate);
-            
+
             // 3D AABB overlap test: boxes overlap if they overlap on ALL three axes
-            let x_overlaps = inflated_segment.min.x <= obs_bbox.max.x && 
-                             inflated_segment.max.x >= obs_bbox.min.x;
-            let y_overlaps = inflated_segment.min.y <= obs_bbox.max.y && 
-                             inflated_segment.max.y >= obs_bbox.min.y;
-            let z_overlaps = inflated_segment.min.z <= obs_bbox.max.z && 
-                             inflated_segment.max.z >= obs_bbox.min.z;
-            
+            let x_overlaps = inflated_segment.min.x <= obs_bbox.max.x
+                && inflated_segment.max.x >= obs_bbox.min.x;
+            let y_overlaps = inflated_segment.min.y <= obs_bbox.max.y
+                && inflated_segment.max.y >= obs_bbox.min.y;
+            let z_overlaps = inflated_segment.min.z <= obs_bbox.max.z
+                && inflated_segment.max.z >= obs_bbox.min.z;
+
             if x_overlaps && y_overlaps && z_overlaps {
-                eprintln!("[TOPO COLLISION]   ❌ COLLISION DETECTED with Obstacle {}", idx);
-                eprintln!("[TOPO COLLISION]      Inflated segment: ({},{},{}) to ({},{},{})",
-                    inflated_segment.min.x, inflated_segment.min.y, inflated_segment.min.z,
-                    inflated_segment.max.x, inflated_segment.max.y, inflated_segment.max.z);
+                eprintln!(
+                    "[TOPO COLLISION]   ❌ COLLISION DETECTED with Obstacle {}",
+                    idx
+                );
+                eprintln!(
+                    "[TOPO COLLISION]      Inflated segment: ({},{},{}) to ({},{},{})",
+                    inflated_segment.min.x,
+                    inflated_segment.min.y,
+                    inflated_segment.min.z,
+                    inflated_segment.max.x,
+                    inflated_segment.max.y,
+                    inflated_segment.max.z
+                );
                 return true;
             }
         }

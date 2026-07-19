@@ -50,10 +50,10 @@ pub fn export(
     // 2. TABLES (Layer Definitions with Color and Transparency)
     writeln!(w, "  0\nSECTION\n  2\nTABLES\n  0\nTABLE\n  2\nLAYER")?;
 
-    let is_asic = space.fabrication_constraints.as_ref().map_or(false, |c| {
+    let is_asic = space.fabrication_constraints.as_ref().is_some_and(|c| {
         c.technology
             .as_ref()
-            .map_or(false, |t| t.to_lowercase() == "asic")
+            .is_some_and(|t| t.to_lowercase() == "asic")
     });
 
     if is_asic {
@@ -87,60 +87,103 @@ pub fn export(
     // --- PURE VECTOR PATH OFFSETTING: The Font-Engine Exporter ---
     // This uses Clipper2's native path stroking engine to generate perfect mitered traces
     // directly from waypoint sequences, eliminating segment-by-segment welding artifacts.
-    
+
     let mut analytic_copper_pools: FxHashMap<
-        (i64, i64, hwc_engine::geometry_router::substrate_types::MaterialId, u32),
+        (
+            i64,
+            i64,
+            hwc_engine::geometry_router::substrate_types::MaterialId,
+            u32,
+        ),
         Paths64,
     > = FxHashMap::default();
-    
+
     // Gather trace paths from analytic routes using native path offsetting
     for route in &space.analytic_routes {
-        let half_t = route.thickness_nm / 2;
-        
-        let z_min = route.segments.iter().map(|s| s.start.z.min(s.end.z)).min().unwrap_or(0) - half_t;
-        let z_max = route.segments.iter().map(|s| s.start.z.max(s.end.z)).max().unwrap_or(0) + half_t;
-        
+        let half_t = route.cross_section.thickness_nm / 2;
+
+        let z_min = route
+            .segments
+            .iter()
+            .map(|s| s.start.z.min(s.end.z))
+            .min()
+            .unwrap_or(0)
+            - half_t;
+        let z_max = route
+            .segments
+            .iter()
+            .map(|s| s.start.z.max(s.end.z))
+            .max()
+            .unwrap_or(0)
+            + half_t;
+
         // Use the shared stroke_route_segments function to generate perfect mitered outlines
-        let trace_outline = stroke_route_segments(&route.segments, route.width_nm);
-        
+        let trace_outline = stroke_route_segments(&route.segments, route.cross_section.width_nm);
+
         let key = (z_min, z_max, route.material, route.net_id.raw());
-        analytic_copper_pools.entry(key).or_default().extend(trace_outline);
+        analytic_copper_pools
+            .entry(key)
+            .or_default()
+            .extend(trace_outline);
     }
-    
+
     // Add via pads to analytic pools
     for via in &space.vias {
         let z_start = via.from_z_nm.min(via.to_z_nm);
         let z_end = via.from_z_nm.max(via.to_z_nm);
         let pad_radius = via.diameter_nm / 2 + via.annular_ring_nm.max(via.diameter_nm / 4);
         let copper_thickness = 35_000;
-        
-        let copper_material_id = space.material_registry
+
+        let copper_material_id = space
+            .material_registry
             .all_materials()
             .into_iter()
-            .find(|(_, name)| name.contains("Copper") || name.contains("Aluminum") || name.contains("Metal"))
+            .find(|(_, name)| {
+                name.contains("Copper") || name.contains("Aluminum") || name.contains("Metal")
+            })
             .map(|(id, _)| id)
             .unwrap_or(space.substrate_material_id);
-        
+
         // Top pad
-        let top_key = (z_end - copper_thickness, z_end, copper_material_id, via.net_id.raw());
+        let top_key = (
+            z_end - copper_thickness,
+            z_end,
+            copper_material_id,
+            via.net_id.raw(),
+        );
         analytic_copper_pools
             .entry(top_key)
             .or_default()
-            .push(circle_to_path(via.position.0, via.position.1, pad_radius, 64));
-        
+            .push(circle_to_path(
+                via.position.0,
+                via.position.1,
+                pad_radius,
+                64,
+            ));
+
         // Bottom pad
-        let bottom_key = (z_start, z_start + copper_thickness, copper_material_id, via.net_id.raw());
+        let bottom_key = (
+            z_start,
+            z_start + copper_thickness,
+            copper_material_id,
+            via.net_id.raw(),
+        );
         analytic_copper_pools
             .entry(bottom_key)
             .or_default()
-            .push(circle_to_path(via.position.0, via.position.1, pad_radius, 64));
+            .push(circle_to_path(
+                via.position.0,
+                via.position.1,
+                pad_radius,
+                64,
+            ));
     }
-    
+
     // 3. THE COPPER WELDER: We run the Boolean Union ONLY to merge
     //    the completed trace outlines with the circular pad/via outlines!
     let mut sorted_keys: Vec<_> = analytic_copper_pools.keys().cloned().collect();
     sorted_keys.sort();
-    
+
     for key in &sorted_keys {
         let (z_min_nm, _z_max_nm, material_id, _net_raw) = key;
         let paths = &analytic_copper_pools[key];
@@ -194,11 +237,12 @@ pub fn export(
         if mat_name.to_lowercase() == "void" || mat_name.to_lowercase() == "air" {
             continue;
         }
-        
+
         // Export substrate base and pours (pads are Pour type)
         // Skip Contact type (vias) since they're already exported as part of analytic routes
-        if layer.layer_type != SubstrateLayerType::Substrate 
-            && layer.layer_type != SubstrateLayerType::Pour {
+        if layer.layer_type != SubstrateLayerType::Substrate
+            && layer.layer_type != SubstrateLayerType::Pour
+        {
             continue;
         }
 

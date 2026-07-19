@@ -5,7 +5,7 @@ use super::super::pour::place_pour;
 use crate::bounding_box_tracker::BoundingBoxTracker;
 use hwc_engine::{
     geometry::{BoundingBox, Point3D},
-    geometry_router::Via,
+    geometry_router::{Via, ViaSpec},
     netlist::NetId,
     space::ContactMetadata,
     HardwareSpace,
@@ -232,7 +232,7 @@ pub fn unroll_internal_features(
                             .fabrication_constraints
                             .as_ref()
                             .and_then(|c| c.technology.as_ref())
-                            .map_or(false, |t| t.to_lowercase() == "asic");
+                            .is_some_and(|t| t.to_lowercase() == "asic");
 
                         if is_asic {
                             // For ASIC: pads are already handled by internal pours (e.g., metal1 landing pads)
@@ -315,16 +315,18 @@ pub fn unroll_internal_features(
                             let pad_diameter_nm = drill_diameter_nm + (2 * min_annular_ring_nm);
 
                             space.entity_graph.add_tube_substrate_layer(
-                                copper_material_id,
-                                via_net_id.raw(),
-                                hole_bbox,
-                                outer_diameter_nm as u32,
-                                inner_diameter_nm as u32,
-                                pad_diameter_nm as u32,
-                                16,
-                                hwc_engine::geometry_router::entity_graph::CapType::Annular,
-                                hwc_engine::geometry_router::entity_graph::CapType::Annular,
-                                None,
+                                hwc_engine::geometry_router::entity_graph::TubeLayerSpec::new(
+                                    copper_material_id,
+                                    via_net_id.raw(),
+                                    hole_bbox,
+                                    outer_diameter_nm as u32,
+                                    inner_diameter_nm as u32,
+                                    pad_diameter_nm as u32,
+                                    16,
+                                    hwc_engine::geometry_router::entity_graph::CapType::Annular,
+                                    hwc_engine::geometry_router::entity_graph::CapType::Annular,
+                                    None,
+                                ),
                             );
 
                             let pad_half_nm = pad_diameter_nm / 2;
@@ -377,17 +379,17 @@ pub fn unroll_internal_features(
                             let board_max_z_nm = (space.dimensions.depth_nm / space.resolution_nm)
                                 .saturating_sub(1)
                                 * space.resolution_nm;
-                            let via = Via::new(
-                                (absolute_x_nm, absolute_y_nm),
-                                substrate_bbox.min.z,
+                            let via = Via::new(ViaSpec {
+                                position: (absolute_x_nm, absolute_y_nm),
+                                from_z_nm: substrate_bbox.min.z,
+                                to_z_nm: board_max_z_nm,
+                                diameter_nm: drill_diameter_nm,
+                                net_id: via_net_id,
+                                material_id: copper_material_id,
+                                annular_ring_nm: min_annular_ring_nm,
+                                board_min_z_nm: 0,
                                 board_max_z_nm,
-                                drill_diameter_nm,
-                                via_net_id,
-                                copper_material_id,
-                                0,
-                                board_max_z_nm,
-                                min_annular_ring_nm,
-                            );
+                            });
                             space.add_vias(vec![via]);
 
                             let resolved_material_name: compact_str::CompactString = (|| -> Option<compact_str::CompactString> {
@@ -407,7 +409,7 @@ pub fn unroll_internal_features(
 
                             space.contacts.push(ContactMetadata {
                                 name: format!("{}_{}_via", pd.name, pin_name).into(),
-                                material_name: resolved_material_name.into(),
+                                material_name: resolved_material_name,
                                 z_start_nm: substrate_bbox.min.z,
                                 z_end_nm: substrate_bbox.max.z,
                                 net: net_assignment.clone(),

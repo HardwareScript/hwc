@@ -22,16 +22,18 @@ pub enum TechNode {
     AsicLayerLocal,
 }
 
-impl TechNode {
+impl std::str::FromStr for TechNode {
+    type Err = std::convert::Infallible;
+
     /// Map a profile `technology:` string to a `TechNode`.
     ///
     /// "pcb" or "pcb_ipc_class3" → `PcbIpcClass3`
     /// "asic" or "asic_layer_local" → `AsicLayerLocal`
     /// Anything else defaults to `PcbIpcClass3`.
-    pub fn from_str(s: &str) -> Self {
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
-            "asic" | "asic_layer_local" => TechNode::AsicLayerLocal,
-            _ => TechNode::PcbIpcClass3,
+            "asic" | "asic_layer_local" => Ok(TechNode::AsicLayerLocal),
+            _ => Ok(TechNode::PcbIpcClass3),
         }
     }
 }

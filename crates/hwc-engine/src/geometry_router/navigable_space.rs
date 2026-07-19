@@ -74,30 +74,46 @@ impl SpatialDecomposer {
     /// * `raw_obstacles` - Original obstacle bounding boxes
     /// * `trace_width_nm` - Width of the routing trace
     /// * `min_clearance_nm` - Minimum clearance from obstacles
-    pub fn new(raw_obstacles: Vec<BoundingBox>, trace_width_nm: i64, min_clearance_nm: i64) -> Result<Self, SpatialDecompositionError> {
+    pub fn new(
+        raw_obstacles: Vec<BoundingBox>,
+        trace_width_nm: i64,
+        min_clearance_nm: i64,
+    ) -> Result<Self, SpatialDecompositionError> {
         if trace_width_nm <= 0 {
             return Err(SpatialDecompositionError::InvalidTraceWidth(trace_width_nm));
         }
 
         // STEP 1: Minkowski Inflation FIRST (C-Space creation)
         let inflation = (trace_width_nm / 2) + min_clearance_nm;
-        
+
         eprintln!("[NAVIGABLE SPACE] Creating spatial decomposer:");
         eprintln!("  trace_width_nm = {}", trace_width_nm);
         eprintln!("  min_clearance_nm = {}", min_clearance_nm);
-        eprintln!("  calculated inflation = (trace_width/2) + min_clearance = ({}/2) + {} = {} nm", 
-            trace_width_nm, min_clearance_nm, inflation);
+        eprintln!(
+            "  calculated inflation = (trace_width/2) + min_clearance = ({}/2) + {} = {} nm",
+            trace_width_nm, min_clearance_nm, inflation
+        );
         eprintln!("  raw obstacles count = {}", raw_obstacles.len());
-        
+
         let inflated_obstacles: Vec<BoundingBox> = raw_obstacles
             .iter()
             .enumerate()
             .map(|(i, obs)| {
                 let inflated = obs.expand(inflation);
-                eprintln!("  [Obstacle {}] BEFORE inflation: ({},{},{}) to ({},{},{})", 
-                    i, obs.min.x, obs.min.y, obs.min.z, obs.max.x, obs.max.y, obs.max.z);
-                eprintln!("  [Obstacle {}] AFTER inflation: ({},{},{}) to ({},{},{})", 
-                    i, inflated.min.x, inflated.min.y, inflated.min.z, inflated.max.x, inflated.max.y, inflated.max.z);
+                eprintln!(
+                    "  [Obstacle {}] BEFORE inflation: ({},{},{}) to ({},{},{})",
+                    i, obs.min.x, obs.min.y, obs.min.z, obs.max.x, obs.max.y, obs.max.z
+                );
+                eprintln!(
+                    "  [Obstacle {}] AFTER inflation: ({},{},{}) to ({},{},{})",
+                    i,
+                    inflated.min.x,
+                    inflated.min.y,
+                    inflated.min.z,
+                    inflated.max.x,
+                    inflated.max.y,
+                    inflated.max.z
+                );
                 inflated
             })
             .collect();
@@ -164,10 +180,8 @@ impl SpatialDecomposer {
                 let y_min = y_window[0];
                 let y_max = y_window[1];
 
-                let cell_bbox = BoundingBox::new(
-                    Point3D::new(x_min, y_min, z),
-                    Point3D::new(x_max, y_max, z),
-                );
+                let cell_bbox =
+                    BoundingBox::new(Point3D::new(x_min, y_min, z), Point3D::new(x_max, y_max, z));
 
                 // Check if this cell overlaps any inflated obstacle
                 if !self.cell_overlaps_obstacle(&cell_bbox) {
@@ -198,7 +212,7 @@ impl SpatialDecomposer {
     }
 
     /// Build adjacency graph between cells.
-    fn build_adjacency(&self, cells: &mut Vec<FreeCell>) {
+    fn build_adjacency(&self, cells: &mut [FreeCell]) {
         let n = cells.len();
         for i in 0..n {
             for j in (i + 1)..n {
@@ -232,14 +246,20 @@ impl SpatialDecomposer {
         end: Point3D,
         cells: &[FreeCell],
     ) -> Result<Vec<usize>, SpatialDecompositionError> {
-        let start_cell = self.find_cell_containing(start, cells)
-            .ok_or_else(|| SpatialDecompositionError::StartPointOutsideSpace {
-                x: start.x, y: start.y, z: start.z,
-            })?;
-        let end_cell = self.find_cell_containing(end, cells)
-            .ok_or_else(|| SpatialDecompositionError::EndPointOutsideSpace {
-                x: end.x, y: end.y, z: end.z,
-            })?;
+        let start_cell = self.find_cell_containing(start, cells).ok_or({
+            SpatialDecompositionError::StartPointOutsideSpace {
+                x: start.x,
+                y: start.y,
+                z: start.z,
+            }
+        })?;
+        let end_cell = self.find_cell_containing(end, cells).ok_or({
+            SpatialDecompositionError::EndPointOutsideSpace {
+                x: end.x,
+                y: end.y,
+                z: end.z,
+            }
+        })?;
 
         // BFS from start to end
         let mut visited = vec![false; cells.len()];
@@ -301,7 +321,7 @@ impl SpatialDecomposer {
 
         eprintln!("[NAVIGABLE SPACE] Converting corridor to waypoints:");
         eprintln!("  corridor length = {} cells", corridor.len());
-        
+
         for (i, &cell_idx) in corridor.iter().enumerate() {
             let cell = &cells[cell_idx];
             // Use center of cell as waypoint
@@ -310,10 +330,17 @@ impl SpatialDecomposer {
                 (cell.bbox.min.y + cell.bbox.max.y) / 2,
                 cell.z,
             );
-            eprintln!("  waypoint[{}] cell_bbox=({},{}) to ({},{}), center=({},{})", 
-                i, cell.bbox.min.x, cell.bbox.min.y, cell.bbox.max.x, cell.bbox.max.y, 
-                center.x, center.y);
-            
+            eprintln!(
+                "  waypoint[{}] cell_bbox=({},{}) to ({},{}), center=({},{})",
+                i,
+                cell.bbox.min.x,
+                cell.bbox.min.y,
+                cell.bbox.max.x,
+                cell.bbox.max.y,
+                center.x,
+                center.y
+            );
+
             waypoints.push(center);
         }
 
@@ -328,7 +355,7 @@ impl SpatialDecomposer {
                 } else {
                     0
                 };
-                
+
                 let min_dist_y = if wp.y < obs.min.y {
                     obs.min.y - wp.y
                 } else if wp.y > obs.max.y {
@@ -336,7 +363,7 @@ impl SpatialDecomposer {
                 } else {
                     0
                 };
-                
+
                 let dist = if min_dist_x > 0 && min_dist_y > 0 {
                     // Point is outside in both axes - use Euclidean distance to corner
                     ((min_dist_x * min_dist_x + min_dist_y * min_dist_y) as f64).sqrt() as i64
@@ -344,13 +371,19 @@ impl SpatialDecomposer {
                     // Point is aligned with obstacle in at least one axis
                     min_dist_x.max(min_dist_y)
                 };
-                
-                eprintln!("  waypoint[{}]=({},{}) to inflated_obs[{}]: distance={} nm", 
-                    w_idx, wp.x, wp.y, o_idx, dist);
-                    
+
+                eprintln!(
+                    "  waypoint[{}]=({},{}) to inflated_obs[{}]: distance={} nm",
+                    w_idx, wp.x, wp.y, o_idx, dist
+                );
+
                 if dist < (self.trace_width_nm / 2) {
-                    eprintln!("  ⚠️ WARNING: waypoint[{}] distance {} is less than trace radius {} nm!", 
-                        w_idx, dist, self.trace_width_nm / 2);
+                    eprintln!(
+                        "  ⚠️ WARNING: waypoint[{}] distance {} is less than trace radius {} nm!",
+                        w_idx,
+                        dist,
+                        self.trace_width_nm / 2
+                    );
                 }
             }
         }
@@ -426,13 +459,10 @@ mod tests {
 
     #[test]
     fn test_cspace_inflation() {
-        let obstacle = BoundingBox::new(
-            Point3D::new(1000, 1000, 0),
-            Point3D::new(2000, 2000, 0),
-        );
+        let obstacle = BoundingBox::new(Point3D::new(1000, 1000, 0), Point3D::new(2000, 2000, 0));
 
         let decomposer = SpatialDecomposer::new(vec![obstacle], 100, 50).unwrap();
-        
+
         // Inflation = (100/2) + 50 = 100
         assert_eq!(decomposer.inflated_obstacles.len(), 1);
         let inflated = &decomposer.inflated_obstacles[0];
@@ -444,10 +474,7 @@ mod tests {
 
     #[test]
     fn test_cell_creation() {
-        let board_bounds = BoundingBox::new(
-            Point3D::new(0, 0, 0),
-            Point3D::new(10000, 10000, 0),
-        );
+        let board_bounds = BoundingBox::new(Point3D::new(0, 0, 0), Point3D::new(10000, 10000, 0));
 
         let decomposer = SpatialDecomposer::new(vec![], 100, 50).unwrap();
         let cells = decomposer.decompose(&board_bounds, 0);
@@ -458,10 +485,7 @@ mod tests {
 
     #[test]
     fn test_corridor_extraction() {
-        let board_bounds = BoundingBox::new(
-            Point3D::new(0, 0, 0),
-            Point3D::new(10000, 10000, 0),
-        );
+        let board_bounds = BoundingBox::new(Point3D::new(0, 0, 0), Point3D::new(10000, 10000, 0));
 
         let decomposer = SpatialDecomposer::new(vec![], 100, 50).unwrap();
         let cells = decomposer.decompose(&board_bounds, 0);
@@ -479,10 +503,7 @@ mod tests {
 
     #[test]
     fn test_corridor_width_validation() {
-        let board_bounds = BoundingBox::new(
-            Point3D::new(0, 0, 0),
-            Point3D::new(10000, 10000, 0),
-        );
+        let board_bounds = BoundingBox::new(Point3D::new(0, 0, 0), Point3D::new(10000, 10000, 0));
 
         let decomposer = SpatialDecomposer::new(vec![], 100, 50).unwrap();
         let cells = decomposer.decompose(&board_bounds, 0);
@@ -495,10 +516,7 @@ mod tests {
 
     #[test]
     fn test_corridor_sufficient_check() {
-        let board_bounds = BoundingBox::new(
-            Point3D::new(0, 0, 0),
-            Point3D::new(10000, 10000, 0),
-        );
+        let board_bounds = BoundingBox::new(Point3D::new(0, 0, 0), Point3D::new(10000, 10000, 0));
 
         let decomposer = SpatialDecomposer::new(vec![], 100, 50).unwrap();
         let cells = decomposer.decompose(&board_bounds, 0);
@@ -526,10 +544,7 @@ mod tests {
 
     #[test]
     fn test_point_outside_space() {
-        let board_bounds = BoundingBox::new(
-            Point3D::new(0, 0, 0),
-            Point3D::new(10000, 10000, 0),
-        );
+        let board_bounds = BoundingBox::new(Point3D::new(0, 0, 0), Point3D::new(10000, 10000, 0));
 
         let decomposer = SpatialDecomposer::new(vec![], 100, 50).unwrap();
         let cells = decomposer.decompose(&board_bounds, 0);

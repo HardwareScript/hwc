@@ -40,16 +40,7 @@ impl crate::parser::Parser {
         })
     }
 
-    /// Parse nets block for net classifications (v0.1.6)
-    ///
-    /// Syntax:
-    /// ```
-    /// nets:
-    ///     GND: ground
-    ///     VDD: power
-    ///     CLK: signal
-    ///     DATA: signal, frequency: 5GHz
-    /// ```
+    /// Parse net
     pub(in crate::parser) fn parse_nets_block(
         &mut self,
     ) -> Result<Vec<NetDeclaration>, ParseError> {

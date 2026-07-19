@@ -20,9 +20,9 @@
 use std::sync::Arc;
 
 use hwc_engine::geometry::{BoundingBox, Point3D};
-use hwc_engine::netlist::NetId;
 use hwc_engine::geometry_router::constraints::NetConstraints;
 use hwc_engine::geometry_router::partition::GCellId;
+use hwc_engine::netlist::NetId;
 
 use crate::ir::errors::IrError;
 
@@ -164,11 +164,7 @@ pub trait RoutingDatabase: salsa::Database {
     ) -> Result<CorridorResult, IrError>;
 
     /// Compute route metrics for a path.
-    fn compute_route_metrics(
-        &self,
-        path: &[Point3D],
-        net_id: NetId,
-    ) -> MetricsResult;
+    fn compute_route_metrics(&self, path: &[Point3D], net_id: NetId) -> MetricsResult;
 }
 
 // ============================================================================
@@ -206,7 +202,8 @@ pub fn extract_corridor_impl(
     let cells = decomposer.decompose(&context.board_bounds, entry_port.z);
 
     // Extract corridor
-    let corridor = decomposer.extract_corridor(entry_port, exit_port, &cells)
+    let corridor = decomposer
+        .extract_corridor(entry_port, exit_port, &cells)
         .map_err(|_| IrError::CorridorExtractionFailed {
             gcell_id: context.gcell_id.0,
             start_x: entry_port.x,
@@ -226,22 +223,19 @@ pub fn extract_corridor_impl(
                 .chain(adjacent_obstacles.iter())
                 .cloned()
                 .collect();
-            let expanded_decomposer = SpatialDecomposer::new(
-                combined,
-                context.trace_width_nm,
-                context.min_clearance_nm,
-            )
-            .map_err(|e| IrError::NavigableSpaceFailed {
-                gcell_id: context.gcell_id.0,
-                reason: e.to_string(),
-            })?;
+            let expanded_decomposer =
+                SpatialDecomposer::new(combined, context.trace_width_nm, context.min_clearance_nm)
+                    .map_err(|e| IrError::NavigableSpaceFailed {
+                        gcell_id: context.gcell_id.0,
+                        reason: e.to_string(),
+                    })?;
             let expanded_cells = expanded_decomposer.decompose(&context.board_bounds, entry_port.z);
             if let Ok(expanded_corridor) =
                 expanded_decomposer.extract_corridor(entry_port, exit_port, &expanded_cells)
             {
                 if expanded_decomposer.is_corridor_sufficient(&expanded_corridor, &expanded_cells) {
-                    let waypoints =
-                        expanded_decomposer.corridor_to_waypoints(&expanded_corridor, &expanded_cells);
+                    let waypoints = expanded_decomposer
+                        .corridor_to_waypoints(&expanded_corridor, &expanded_cells);
                     let adjusted = apply_penalties_to_waypoints(&waypoints, penalties);
                     let total_length = adjusted
                         .windows(2)
@@ -319,10 +313,7 @@ fn apply_penalties_to_waypoints(
 }
 
 /// Compute route metrics for a path.
-pub fn compute_metrics_impl(
-    path: &[Point3D],
-    _constraints: &NetConstraints,
-) -> MetricsResult {
+pub fn compute_metrics_impl(path: &[Point3D], _constraints: &NetConstraints) -> MetricsResult {
     use hwc_engine::geometry_router::constraints::RouteMetrics;
 
     let metrics = RouteMetrics::compute(path);

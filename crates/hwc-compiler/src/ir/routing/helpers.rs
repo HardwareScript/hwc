@@ -24,8 +24,7 @@ pub fn require_min_segment_length_nm(
         .to_picometers_i64()
         .ok_or_else(|| IrError::MissingRoutingHeuristics {
             field: "min_segment_length".into(),
-            hint: "routing.min_segment_length must be a distance unit (nm, um, mm, ...)."
-                .into(),
+            hint: "routing.min_segment_length must be a distance unit (nm, um, mm, ...).".into(),
         })?;
     Ok(pm / 1000)
 }
@@ -271,37 +270,41 @@ pub fn get_pin_positions(
 ) -> Result<(Point3D, Point3D), IrError> {
     // Query the EntityGraph (single source of truth) for resolved positions
     // Construct EntityIds directly from route endpoints
-    
-    let resolve_entity_position = |endpoint: &hwc_parser::RouteEndpointSpec| -> Result<Point3D, IrError> {
-        let entity_name = construct_entity_name(endpoint)?;
-        
-        let entity_id = match endpoint {
-            hwc_parser::RouteEndpointSpec::ComponentPin { .. } => {
-                let full_comp_name = construct_entity_name(endpoint)?;
-                let pin_name = match endpoint {
-                    hwc_parser::RouteEndpointSpec::ComponentPin {
-                        pin_name,
-                        pin_index,
-                        ..
-                    } => {
-                        if let Some(ref idx) = pin_index {
-                            let val = evaluate_index_expression(idx)?;
-                            format!("{}[{}]", pin_name, val)
-                        } else {
-                            pin_name.to_string()
+
+    let resolve_entity_position =
+        |endpoint: &hwc_parser::RouteEndpointSpec| -> Result<Point3D, IrError> {
+            let entity_name = construct_entity_name(endpoint)?;
+
+            let entity_id = match endpoint {
+                hwc_parser::RouteEndpointSpec::ComponentPin { .. } => {
+                    let full_comp_name = construct_entity_name(endpoint)?;
+                    let pin_name = match endpoint {
+                        hwc_parser::RouteEndpointSpec::ComponentPin {
+                            pin_name,
+                            pin_index,
+                            ..
+                        } => {
+                            if let Some(ref idx) = pin_index {
+                                let val = evaluate_index_expression(idx)?;
+                                format!("{}[{}]", pin_name, val)
+                            } else {
+                                pin_name.to_string()
+                            }
                         }
-                    }
-                    _ => unreachable!(),
-                };
-                hwc_engine::geometry::EntityId::from_str(&format!("pin:{}:{}", full_comp_name, pin_name))
-            }
-            hwc_parser::RouteEndpointSpec::SpaceEntity { .. } => {
-                hwc_engine::geometry::EntityId::from_str(&format!("space:{}", entity_name))
-            }
-        };
-        
-        // Get entity data from EntityGraph (authoritative source)
-        let entity_data = space
+                        _ => unreachable!(),
+                    };
+                    hwc_engine::geometry::EntityId::from_semantic(&format!(
+                        "pin:{}:{}",
+                        full_comp_name, pin_name
+                    ))
+                }
+                hwc_parser::RouteEndpointSpec::SpaceEntity { .. } => {
+                    hwc_engine::geometry::EntityId::from_semantic(&format!("space:{}", entity_name))
+                }
+            };
+
+            // Get entity data from EntityGraph (authoritative source)
+            let entity_data = space
             .entity_graph
             .get_entity_data(entity_id)
             .map_err(|_| {
@@ -312,23 +315,31 @@ pub fn get_pin_positions(
                     help_message: format!("Verify that the component, pin, or space pour/pad exists and is correctly named.{}", available),
                 }
             })?;
-        
-        // Calculate center point from resolved bbox (EntityGraph is single source of truth)
-        let pos = Point3D::new(
-            (entity_data.bbox.min.x + entity_data.bbox.max.x) / 2,
-            (entity_data.bbox.min.y + entity_data.bbox.max.y) / 2,
-            (entity_data.bbox.min.z + entity_data.bbox.max.z) / 2,
-        );
-        
-        Ok(pos)
-    };
-    
+
+            // Calculate center point from resolved bbox (EntityGraph is single source of truth)
+            let pos = Point3D::new(
+                (entity_data.bbox.min.x + entity_data.bbox.max.x) / 2,
+                (entity_data.bbox.min.y + entity_data.bbox.max.y) / 2,
+                (entity_data.bbox.min.z + entity_data.bbox.max.z) / 2,
+            );
+
+            Ok(pos)
+        };
+
     let start_pos = resolve_entity_position(&route.from)?;
     let goal_pos = resolve_entity_position(&route.to)?;
-    
-    eprintln!("[get_pin_positions] Queried EntityGraph: {} = ({}, {}, {}), {} = ({}, {}, {})",
-        endpoint_label(&route.from), start_pos.x, start_pos.y, start_pos.z,
-        endpoint_label(&route.to), goal_pos.x, goal_pos.y, goal_pos.z);
+
+    eprintln!(
+        "[get_pin_positions] Queried EntityGraph: {} = ({}, {}, {}), {} = ({}, {}, {})",
+        endpoint_label(&route.from),
+        start_pos.x,
+        start_pos.y,
+        start_pos.z,
+        endpoint_label(&route.to),
+        goal_pos.x,
+        goal_pos.y,
+        goal_pos.z
+    );
 
     Ok((start_pos, goal_pos))
 }
@@ -366,7 +377,7 @@ pub fn get_pin_ids(
                         }
                         _ => unreachable!(),
                     };
-                    hwc_engine::geometry::EntityId::from_str(&format!(
+                    hwc_engine::geometry::EntityId::from_semantic(&format!(
                         "pin:{}:{}",
                         full_comp_name, pin_name
                     ))
@@ -377,7 +388,7 @@ pub fn get_pin_ids(
                         "[DEBUG] Constructing EntityId for space entity: space:{}",
                         entity_name
                     );
-                    hwc_engine::geometry::EntityId::from_str(&format!("space:{}", entity_name))
+                    hwc_engine::geometry::EntityId::from_semantic(&format!("space:{}", entity_name))
                 }
             };
 
@@ -437,7 +448,7 @@ pub fn get_pin_ids(
                 pins.iter()
                     .find(|&&pid| {
                         if let Some(pin) = space.netlist.get_pin(pid) {
-                            pin.name == entity_data.name.split('.').last().unwrap_or("")
+                            pin.name == entity_data.name.split('.').next_back().unwrap_or("")
                         } else {
                             false
                         }
@@ -598,17 +609,9 @@ pub fn register_net_for_route(
                             for stmt in &module_def.statements {
                                 if let hwc_parser::ModuleStatement::Route(module_route) = stmt {
                                     // Extract net names from module route
-                                    let logical_from = if module_route.from.component.is_empty() {
-                                        module_route.from.pin.as_str()
-                                    } else {
-                                        module_route.from.pin.as_str()
-                                    };
+                                    let logical_from = module_route.from.pin.as_str();
 
-                                    let logical_to = if module_route.to.component.is_empty() {
-                                        module_route.to.pin.as_str()
-                                    } else {
-                                        module_route.to.pin.as_str()
-                                    };
+                                    let logical_to = module_route.to.pin.as_str();
 
                                     // Check if this physical route matches the module declaration
                                     // Allow bidirectional matching (A->B or B->A)
@@ -728,7 +731,13 @@ pub fn register_net_for_route(
 /// Returns: (from_entity_id, to_entity_id)
 pub fn resolve_endpoint_entity_ids(
     route: &hwc_parser::Route,
-) -> Result<(hwc_engine::geometry::EntityId, hwc_engine::geometry::EntityId), IrError> {
+) -> Result<
+    (
+        hwc_engine::geometry::EntityId,
+        hwc_engine::geometry::EntityId,
+    ),
+    IrError,
+> {
     let resolve_entity_id = |endpoint: &hwc_parser::RouteEndpointSpec| -> Result<hwc_engine::geometry::EntityId, IrError> {
         match endpoint {
             hwc_parser::RouteEndpointSpec::ComponentPin {
@@ -745,7 +754,7 @@ pub fn resolve_endpoint_entity_ids(
                 } else {
                     component_name.to_string()
                 };
-                
+
                 // Build full pin name with array index if present
                 let full_pin_name = if let Some(ref idx_expr) = pin_index {
                     let idx_val = evaluate_index_expression(idx_expr)?;
@@ -753,10 +762,10 @@ pub fn resolve_endpoint_entity_ids(
                 } else {
                     pin_name.to_string()
                 };
-                
+
                 // Generate stable EntityId for this component pin
                 // Format: "pin:ComponentName:pin_name"
-                Ok(hwc_engine::geometry::EntityId::from_str(&format!(
+                Ok(hwc_engine::geometry::EntityId::from_semantic(&format!(
                     "pin:{}:{}",
                     full_comp_name, full_pin_name
                 )))
@@ -769,20 +778,20 @@ pub fn resolve_endpoint_entity_ids(
                 } else {
                     name.to_string()
                 };
-                
+
                 // Generate stable EntityId for this space entity (pad, pour, etc.)
                 // Format: "space:EntityName"
-                Ok(hwc_engine::geometry::EntityId::from_str(&format!(
+                Ok(hwc_engine::geometry::EntityId::from_semantic(&format!(
                     "space:{}",
                     full_name
                 )))
             }
         }
     };
-    
+
     let from_id = resolve_entity_id(&route.from)?;
     let to_id = resolve_entity_id(&route.to)?;
-    
+
     Ok((from_id, to_id))
 }
 
@@ -823,17 +832,15 @@ pub fn resolve_route_boundary_points(
         space
             .entity_graph
             .get_entity_data(entity_id)
-            .map(|d| d.bbox.clone())
-            .map_err(|_| {
-                IrError::UnresolvedEndpoint {
-                    endpoint: format!("Entity {:?} ({})", entity_id, label),
-                    span: miette::SourceSpan::from(0),
-                    help_message: format!(
-                        "EntityId {:?} not found in EntityGraph. \
+            .map(|d| d.bbox)
+            .map_err(|_| IrError::UnresolvedEndpoint {
+                endpoint: format!("Entity {:?} ({})", entity_id, label),
+                span: miette::SourceSpan::from(0),
+                help_message: format!(
+                    "EntityId {:?} not found in EntityGraph. \
                          Ensure the entity is registered before routing.",
-                        entity_id
-                    ),
-                }
+                    entity_id
+                ),
             })
     };
 

@@ -23,7 +23,7 @@ use crate::ir::errors::IrError;
 /// Components must be processed in dependency order (topological sort ensures
 /// this) so that referenced targets have their bounding boxes available.
 pub fn resolve_relational_constraints(
-    placement_items: &mut Vec<crate::ir::PlacementItem>,
+    placement_items: &mut [crate::ir::PlacementItem],
     bbox_tracker: &BoundingBoxTracker,
     symbol_table: &crate::SymbolTable,
     eval_context: &hwc_parser::EvaluationContext,
@@ -102,9 +102,9 @@ pub fn compute_position_from_constraints(
     // This ensures physical directions (UP, DOWN, LEFT, RIGHT) map correctly
     // to coordinate deltas regardless of the coordinate system orientation
     let (x_multiplier, y_multiplier) = match origin.xy {
-        hwc_parser::OriginXY::BL => (1, 1),   // Bottom-Left: +X right, +Y up
-        hwc_parser::OriginXY::TL => (1, -1),  // Top-Left: +X right, +Y down
-        hwc_parser::OriginXY::BR => (-1, 1),  // Bottom-Right: +X left, +Y up
+        hwc_parser::OriginXY::BL => (1, 1), // Bottom-Left: +X right, +Y up
+        hwc_parser::OriginXY::TL => (1, -1), // Top-Left: +X right, +Y down
+        hwc_parser::OriginXY::BR => (-1, 1), // Bottom-Right: +X left, +Y up
         hwc_parser::OriginXY::TR => (-1, -1), // Top-Right: +X left, +Y down
     };
 

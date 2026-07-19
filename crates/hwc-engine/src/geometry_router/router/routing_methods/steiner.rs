@@ -54,12 +54,11 @@ impl GeometryRouter {
                     "No trace width declared for net_id={}. Every route must have an explicit \
                      'width:' parameter or the space must provide a default trace width.",
                     net_id.raw()
-                )
-                .into(),
+                ),
             }
         })?;
 
-        for (_i, segment) in decomposed.segments.iter().enumerate() {
+        for segment in decomposed.segments.iter() {
             // v0.1.8: Use the exact anchor point positions from the pin metadata
             // for Steiner decomposition. These are the physical connection points.
             let start_coord = segment.from_pin.position;

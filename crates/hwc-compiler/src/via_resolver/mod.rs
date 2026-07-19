@@ -8,8 +8,20 @@ pub mod library;
 
 use crate::ir::errors::IrError;
 use crate::ir::stackup_manager::StackupManager;
-use hwc_engine::{HardwareSpace, Point3D};
-use library::{ViaLibrary, ViaType};
+use hwc_engine::{geometry_router::Via, HardwareSpace, Point3D};
+use library::{ViaLibrary, ViaStackRequest, ViaType};
+
+/// Shared context for a single net's layer-bridging operation.
+///
+/// Carries the parameters that are constant across every layer transition
+/// for one net, so `bridge_layers` / `insert_via_stack` only receive the
+/// per-transition values.
+struct ViaBridgeContext<'a> {
+    space: &'a HardwareSpace,
+    net_id: hwc_engine::netlist::NetId,
+    net_name: &'a str,
+    stackup_manager: &'a StackupManager,
+}
 
 /// The ViaResolver is responsible for ensuring physical continuity between
 /// conductive layers by inserting vias or contacts where nets transition Z-layers.
@@ -99,15 +111,14 @@ impl ViaResolver {
                 let from_layer = window[0];
                 let to_layer = window[1];
 
-                self.bridge_layers(
+                let ctx = ViaBridgeContext {
                     space,
                     net_id,
-                    &net_name,
-                    from_layer,
-                    to_layer,
+                    net_name: &net_name,
                     stackup_manager,
-                    &mut new_vias,
-                )?;
+                };
+
+                self.bridge_layers(&ctx, from_layer, to_layer, &mut new_vias)?;
             }
         }
 
@@ -119,14 +130,17 @@ impl ViaResolver {
 
     fn bridge_layers(
         &self,
-        space: &HardwareSpace,
-        net_id: hwc_engine::netlist::NetId,
-        net_name: &str,
+        ctx: &ViaBridgeContext,
         from_layer: usize,
         to_layer: usize,
-        stackup_manager: &StackupManager,
-        new_vias: &mut Vec<hwc_engine::geometry_router::Via>,
+        new_vias: &mut Vec<Via>,
     ) -> Result<(), IrError> {
+        let ViaBridgeContext {
+            space,
+            net_id,
+            net_name,
+            stackup_manager,
+        } = *ctx;
         println!(
             "\n🔍 [VIA RESOLVER] bridge_layers called for net '{}'",
             net_name
@@ -194,16 +208,15 @@ impl ViaResolver {
                         .to_string();
 
                     self.insert_via_stack(
-                        space,
-                        center_x,
-                        center_y,
-                        from_layer,
-                        to_layer,
-                        &from_material,
-                        &to_material,
-                        net_id,
-                        net_name,
-                        stackup_manager,
+                        ctx,
+                        ViaStackRequest {
+                            x: center_x,
+                            y: center_y,
+                            from_layer,
+                            to_layer,
+                            from_material: from_material.into(),
+                            to_material: to_material.into(),
+                        },
                         new_vias,
                     )?;
                 }
@@ -215,28 +228,33 @@ impl ViaResolver {
 
     fn insert_via_stack(
         &self,
-        _space: &HardwareSpace,
-        x: i64,
-        y: i64,
-        from_layer: usize,
-        to_layer: usize,
-        from_material: &str,
-        to_material: &str,
-        net_id: hwc_engine::netlist::NetId,
-        _net_name: &str,
-        stackup_manager: &StackupManager,
-        new_vias: &mut Vec<hwc_engine::geometry_router::Via>,
+        ctx: &ViaBridgeContext,
+        request: ViaStackRequest,
+        new_vias: &mut Vec<Via>,
     ) -> Result<(), IrError> {
+        let ViaStackRequest {
+            x,
+            y,
+            from_layer,
+            to_layer,
+            from_material,
+            to_material,
+        } = request;
         eprintln!("\n🔍 [VIA RESOLVER] Attempting to bridge:");
         eprintln!("   From: {} (Layer {})", from_material, from_layer);
         eprintln!("   To: {} (Layer {})", to_material, to_layer);
         eprintln!("   Available vias in library: {}", self.library.vias.len());
 
+        let ViaBridgeContext {
+            net_id,
+            stackup_manager,
+            ..
+        } = *ctx;
         let via_def = self.library.find_via(
             from_layer,
             to_layer,
-            from_material,
-            to_material,
+            &from_material,
+            &to_material,
             stackup_manager,
         )?;
 
@@ -245,17 +263,17 @@ impl ViaResolver {
             via_def.from_material, via_def.to_material, via_def.from_layer, via_def.to_layer
         );
 
-        let via = hwc_engine::geometry_router::Via::new(
-            (x, y),
-            via_def.z_start_nm,
-            via_def.z_end_nm,
-            (via_def.diameter_mm * 1_000_000.0) as i64,
+        let via = hwc_engine::geometry_router::Via::new(hwc_engine::geometry_router::ViaSpec {
+            position: (x, y),
+            from_z_nm: via_def.z_start_nm,
+            to_z_nm: via_def.z_end_nm,
+            diameter_nm: (via_def.diameter_mm * 1_000_000.0) as i64,
             net_id,
-            0, // material_id will be filled in by the engine
-            via_def.z_start_nm,
-            via_def.z_end_nm,
-            0,
-        );
+            material_id: 0, // material_id will be filled in by the engine
+            annular_ring_nm: 0,
+            board_min_z_nm: via_def.z_start_nm,
+            board_max_z_nm: via_def.z_end_nm,
+        });
         new_vias.push(via);
 
         Ok(())

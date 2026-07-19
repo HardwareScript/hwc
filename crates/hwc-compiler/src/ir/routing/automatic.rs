@@ -7,6 +7,10 @@ use hwc_engine::netlist::NetId;
 use hwc_engine::{HardwareSpace, Point3D};
 use rustc_hash::FxHashMap;
 
+/// Result of boundary-point calculation: two 3D points (entry/exit) plus the
+/// two escape directions expressed as integer (dx, dy) offsets.
+type BoundaryPoints = Result<(Point3D, Point3D, (i64, i64), (i64, i64)), IrError>;
+
 /// Resolve the conductor material for a trace at the given Z position.
 /// Looks up the stackup layer at that Z and returns the material ID from the registry.
 fn resolve_material_for_z(
@@ -72,12 +76,13 @@ pub fn route_automatic(
                 expression: "current_limit_ac.rms".into(),
                 reason: e.to_string(),
             })?;
-        let peak = crate::ir::conversions::evaluate_expression_to_ma(&ac.peak, symbol_table)
-            .map_err(|e| IrError::InvalidRouteExpression {
+
+        crate::ir::conversions::evaluate_expression_to_ma(&ac.peak, symbol_table).map_err(|e| {
+            IrError::InvalidRouteExpression {
                 expression: "current_limit_ac.peak".into(),
                 reason: e.to_string(),
-            })?;
-        peak
+            }
+        })?
     } else {
         return Err(IrError::MissingAsicConstraint {
             message:
@@ -312,8 +317,11 @@ pub fn route_automatic(
 
     // v0.1.9: Use TopologicalRouter as the single authoritative routing engine
     // Obstacles are queried via the DynamicSpatialIndex (per-layer sorted vectors, i64 nm)
-    let topo_router =
-        hwc_engine::geometry_router::TopologicalRouter::new(trace_width_nm, space.resolution_nm, min_clearance_nm);
+    let topo_router = hwc_engine::geometry_router::TopologicalRouter::new(
+        trace_width_nm,
+        space.resolution_nm,
+        min_clearance_nm,
+    );
 
     let board_bounds = hwc_engine::BoundingBox::new(
         hwc_engine::Point3D::new(0, 0, 0),
@@ -331,7 +339,7 @@ pub fn route_automatic(
         if let Some(z_ranges) = space.entity_graph.spatial().layer_z_ranges() {
             idx.set_layer_z_ranges(&z_ranges);
         }
-        
+
         // Add substrate layers (pours, contacts, etc.) — CRITICAL for obstacle detection!
         for (layer_idx, layer) in space.entity_graph.get_substrate_layers().iter().enumerate() {
             let width = layer.bbox.max.x - layer.bbox.min.x;
@@ -350,13 +358,13 @@ pub fn route_automatic(
             };
             eprintln!(
                 "[AUTO ROUTE INDEX] Adding substrate layer {}: net_id={}, bbox=({},{},{}) to ({},{},{})",
-                layer_idx, layer.net, 
+                layer_idx, layer.net,
                 layer.bbox.min.x, layer.bbox.min.y, layer.bbox.min.z,
                 layer.bbox.max.x, layer.bbox.max.y, layer.bbox.max.z
             );
             idx.insert(trace_seg);
         }
-        
+
         // Add component metadata (excluding start and goal components)
         for meta in space.entity_graph.get_component_metadata() {
             // EXEMPTION GUARD: Skip the start and goal components to allow routing from/to them
@@ -367,7 +375,7 @@ pub fn route_automatic(
                 );
                 continue;
             }
-            
+
             let width = meta.bbox.max.x - meta.bbox.min.x;
             let height = meta.bbox.max.y - meta.bbox.min.y;
             let trace_seg = hwc_engine::geometry_router::IndexedSegment {
@@ -502,7 +510,7 @@ pub fn route_automatic(
                 refined_path.len()
             );
             */
-            for (_i, point) in refined_path.iter_mut().enumerate() {
+            for point in refined_path.iter_mut() {
                 let _old_z = point.z;
                 // 1. Identify which PHYSICAL layer this point is in (v0.1.7 Fix: Use StackupManager, not grid math)
                 if let Some(layer_idx) = stackup_manager.get_layer_index_at_z(point.z) {
@@ -629,16 +637,16 @@ pub fn route_automatic(
     // v0.1.7 DFM: Teardrops strengthen pad/trace junctions for manufacturing reliability
     {
         let teardrop_config = hwc_engine::TeardropConfig::class2(trace_width_nm);
-        hwc_engine::TeardropEngine::apply_teardrops(
-            &space.entity_graph,
-            &refined_path,
-            start_boundary,
-            goal_boundary,
+        hwc_engine::TeardropEngine::apply_teardrops(hwc_engine::geometry_router::TeardropRequest {
+            entity_graph: &space.entity_graph,
+            path: &refined_path,
+            start_pin: start_boundary,
+            goal_pin: goal_boundary,
             trace_width_nm,
-            &teardrop_config,
-            space.resolution_nm,
-            hwc_engine::netlist::NetHandle::new(net_id.raw() as u32),
-        );
+            config: &teardrop_config,
+            resolution_nm: space.resolution_nm,
+            net_handle: hwc_engine::netlist::NetHandle::new(net_id.raw() as u32),
+        });
     }
 
     // Register main trace as analytic primitive
@@ -650,13 +658,11 @@ pub fn route_automatic(
 
     let analytic_trace = hwc_engine::AnalyticTrace::new(
         net_id,
-        trace_width_nm,
-        trace_thickness_nm, // v0.1.7: Exact physical thickness
+        hwc_engine::space::CrossSection::new(trace_width_nm, trace_thickness_nm),
         segments,
         copper_id,
         net_name.clone(),
-        net_actual_current_ma, // Actual operating current from net declaration
-        current_ma,            // Route's declared capability from current_limit_ac.peak
+        hwc_engine::space::CurrentRating::new(net_actual_current_ma, current_ma),
     );
 
     eprintln!(
@@ -710,7 +716,7 @@ pub fn route_automatic(
                     },
                 segment_id: i,
                 net_id: net_id.raw() as usize,
-                width_nm: analytic_trace.width_nm,
+                width_nm: analytic_trace.cross_section.width_nm,
                 thickness_nm: trace_thickness_nm,
                 start: seg.start,
                 end: seg.end,
@@ -840,7 +846,7 @@ pub fn route_automatic(
 
         if !current_route.check_clearance(comp_bbox, min_clearance_nm) {
             // Calculate actual clearance for error reporting
-            let half_w = current_route.width_nm / 2;
+            let half_w = current_route.cross_section.width_nm / 2;
             let mut min_dist = i64::MAX;
 
             for seg in &current_route.segments {
@@ -887,7 +893,7 @@ pub fn calculate_boundary_points(
     space: &HardwareSpace,
     route: &hwc_parser::Route,
     trace_width_nm: i64,
-) -> Result<(Point3D, Point3D, (i64, i64), (i64, i64)), IrError> {
+) -> BoundaryPoints {
     use hwc_engine::geometry_router::port_escape::{
         calculate_rect_escape, CardinalPort, EdgeOffset, NamedPosition,
     };
@@ -958,12 +964,10 @@ pub fn calculate_boundary_points(
         } else {
             CardinalPort::East
         }
+    } else if dy > 0 {
+        CardinalPort::South
     } else {
-        if dy > 0 {
-            CardinalPort::South
-        } else {
-            CardinalPort::North
-        }
+        CardinalPort::North
     };
 
     // Helper to resolve a port+offset spec to an EscapePoint
@@ -1131,8 +1135,8 @@ pub fn re_register_resolved_routes(space: &mut HardwareSpace) -> Result<(), IrEr
                 hwc_engine::geometry::TraceSegment::new(
                     line_seg.start,
                     line_seg.end,
-                    route_trace.width_nm,
-                    route_trace.material as u8,
+                    route_trace.cross_section.width_nm,
+                    route_trace.material,
                 )
             })
             .collect();

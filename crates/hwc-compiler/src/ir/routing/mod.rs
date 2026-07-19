@@ -84,7 +84,7 @@ pub fn instantiate_pattern(
         let angle_deg = evaluate_with_ctx(&step.angle, &eval_ctx, symbol_table)?;
         steps.push(PatternStep {
             distance_nm: dist_nm,
-            angle_deg: angle_deg,
+            angle_deg,
         });
     }
 

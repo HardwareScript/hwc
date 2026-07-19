@@ -20,15 +20,7 @@ use rustc_hash::FxHashMap;
 /// "crust" (typically ~50nm) at the interface. The rest of the via is
 /// filled with a different material (e.g., Tungsten).
 ///
-/// Example:
-/// ```
-/// Layer 3 (Metal)     ┌─────────────┐
-///                     │   Tungsten  │  ← Via fill material
-///                     │   Tungsten  │
-/// Layer 2 (ILD)       │   Tungsten  │
-///                     │  Silicide   │  ← Bridge interface
-/// Layer 1 (Silicon)   └─────────────┘
-/// ```
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct BridgeStack {
     /// The bridge interface material (e.g., "Titanium_Silicide")

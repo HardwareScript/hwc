@@ -31,11 +31,3 @@ hwc-compiler = { workspace = true }
 hwc-export = { workspace = true }
 tempfile = "3.13"
 criterion = { version = "0.5", features = ["html_reports"] }
-
-[[bench]]
-name = "allocation_bench"
-harness = false
-
-[[bench]]
-name = "hwc_engine_bench"
-harness = false

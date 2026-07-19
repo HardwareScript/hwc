@@ -4,7 +4,7 @@
 //! the automatic routing process.
 
 mod circular_operations;
-mod core;
+pub mod core;
 pub mod global_router;
 mod routing_methods;
 mod via_operations;

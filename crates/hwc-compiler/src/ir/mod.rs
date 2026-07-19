@@ -54,7 +54,7 @@ pub enum PlacementItem {
     Substrate(hwc_parser::SubstratePlacement),
     Component(Box<hwc_parser::ComponentPlacement>),
     Pour(hwc_parser::PourPlacement),
-    Plane(hwc_parser::PlanePlacement),
+    Plane(Box<hwc_parser::PlanePlacement>),
     Contact(hwc_parser::ContactPlacement),
     Route(hwc_parser::Route),
 }
@@ -109,10 +109,10 @@ fn compile_single_space(
             hwc_parser::SpaceTopLevelStatement::Pour(pour) => {
                 // eprintln!($3"[DEBUG program_to_space]   Statement {}/{}: Pour '{}'",
                 // i + 1, space_def.statements.len(), pour.name);
-                placement_items.push(PlacementItem::Pour(pour.clone()));
+                placement_items.push(PlacementItem::Pour((**pour).clone()));
             }
             hwc_parser::SpaceTopLevelStatement::Plane(plane) => {
-                placement_items.push(PlacementItem::Plane(plane.clone()));
+                placement_items.push(PlacementItem::Plane(Box::new((**plane).clone())));
             }
             hwc_parser::SpaceTopLevelStatement::Contact(contact) => {
                 // eprintln!($3"[DEBUG program_to_space]   Statement {}/{}: Contact",
@@ -134,7 +134,7 @@ fn compile_single_space(
                     placement_items.push(PlacementItem::Pour(pour));
                 }
                 for plane in unrolled.planes {
-                    placement_items.push(PlacementItem::Plane(plane));
+                    placement_items.push(PlacementItem::Plane(Box::new(plane)));
                 }
                 for contact in unrolled.contacts {
                     placement_items.push(PlacementItem::Contact(contact));
@@ -747,8 +747,8 @@ fn compile_single_space(
                                                 hwc_engine::geometry::TraceSegment::new(
                                                     line_seg.start,
                                                     line_seg.end,
-                                                    trace.width_nm,
-                                                    trace.material as u8,
+                                                    trace.cross_section.width_nm,
+                                                    trace.material,
                                                 )
                                             })
                                             .collect();
@@ -975,19 +975,31 @@ fn compile_single_space(
                     let target_density_pct = manufacturing
                         .dummy_fill_density
                         .map(|d| (d * 100.0) as u8)
-                        .expect("dummy_fill enabled but dummy_fill_density not declared in profile");
-                    
+                        .expect(
+                            "dummy_fill enabled but dummy_fill_density not declared in profile",
+                        );
+
                     let dummy_size_nm = manufacturing
                         .dummy_fill_size
                         .as_ref()
-                        .map(|m| symbol_table.measurement_to_nm(m).expect("Failed to convert dummy_fill_size to nanometers"))
+                        .map(|m| {
+                            symbol_table
+                                .measurement_to_nm(m)
+                                .expect("Failed to convert dummy_fill_size to nanometers")
+                        })
                         .expect("dummy_fill enabled but dummy_fill_size not declared in profile");
-                    
+
                     let dummy_spacing_nm = manufacturing
                         .dummy_fill_spacing
                         .as_ref()
-                        .map(|m| symbol_table.measurement_to_nm(m).expect("Failed to convert dummy_fill_spacing to nanometers"))
-                        .expect("dummy_fill enabled but dummy_fill_spacing not declared in profile");
+                        .map(|m| {
+                            symbol_table
+                                .measurement_to_nm(m)
+                                .expect("Failed to convert dummy_fill_spacing to nanometers")
+                        })
+                        .expect(
+                            "dummy_fill enabled but dummy_fill_spacing not declared in profile",
+                        );
 
                     let dummy_fill_config = hwc_engine::DummyFillConfig {
                         enabled: true,
@@ -998,7 +1010,8 @@ fn compile_single_space(
                     };
 
                     let mut dummy_fill_engine = hwc_engine::DummyFillEngine::new();
-                    let fill_stats = dummy_fill_engine.run(&mut space.entity_graph, &dummy_fill_config);
+                    let fill_stats =
+                        dummy_fill_engine.run(&mut space.entity_graph, &dummy_fill_config);
                     if fill_stats.zones_filled > 0 {
                         eprintln!(
                             "[DFM] Dummy fill: {} zones analyzed, {} zones filled, {} dummies placed (avg density before: {:.1}%)",

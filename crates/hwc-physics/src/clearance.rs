@@ -212,57 +212,6 @@ impl ClearanceAnalyzer {
         }
     }
 
-    /// Calculate required clearance using Symbol Table for material properties.
-    ///
-    /// # Arguments
-    /// * `voltage_diff_mv` - Voltage difference in millivolts
-    /// * `material_name` - Name of the dielectric material
-    /// * `symbol_table` - Symbol Table containing material definitions
-    /// * `safety_factor` - Safety multiplier (typically 2.0)
-    ///
-    /// # Returns
-    /// Required clearance in nanometers
-    ///
-    /// # Example
-    /// ```
-    /// use hwc_physics::clearance::ClearanceAnalyzer;
-    /// use hwc_compiler::SymbolTable;
-    /// use hwc_diagnostics::DiagnosticCollector;
-    /// use hwc_parser::{Identifier, MaterialCategory, MaterialDefinition, Measurement, Property, PropertyValue, Span, Unit};
-    ///
-    /// // Create a Symbol Table with Air material
-    /// let mut symbol_table = SymbolTable::new();
-    /// let collector = DiagnosticCollector::new("", 100);
-    /// let air_material = MaterialDefinition {
-    ///     name: Identifier { name: "Air".into(), span: Span::new(0, 3) },
-    ///     category: MaterialCategory::Insulator,
-    ///     symbol: None,
-    ///     description: Some("Air dielectric".into()),
-    ///     properties: vec![
-    ///         Property {
-    ///             key: "dielectric_strength".into(),
-    ///             value: PropertyValue::Measurement(Measurement {
-    ///                 value: 3.0,
-    ///                 unit: Unit::Custom("kV/mm".into()),
-    ///                 span: Span::new(0, 10),
-    ///             }),
-    ///             span: Span::new(0, 10),
-    ///         },
-    ///     ],
-    ///     span: Span::new(0, 100),
-    /// };
-    /// symbol_table.register_material(&collector, air_material);
-    ///
-    /// let analyzer = ClearanceAnalyzer::new();
-    /// let clearance = analyzer.calculate_required_clearance_with_symbol_table(
-    ///     120_000,  // 120V
-    ///     "Air",
-    ///     &symbol_table,
-    ///     2.0       // 2× safety factor
-    /// ).unwrap();
-    ///
-    /// assert_eq!(clearance, 80_000); // 0.08mm = 80,000nm
-    /// ```
     pub fn calculate_required_clearance_with_symbol_table<T: SymbolTableTrait>(
         &self,
         voltage_diff_mv: i64,

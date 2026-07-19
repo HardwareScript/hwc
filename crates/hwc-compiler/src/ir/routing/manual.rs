@@ -181,7 +181,7 @@ pub fn route_manual(
         .material_registry
         .get_id(&material_name)
         .ok_or_else(|| IrError::UndeclaredMaterial {
-            material: material_name.clone().into(),
+            material: material_name.clone(),
         })?;
 
     // v0.1.7: Create analytic trace for substrate layer realization
@@ -262,12 +262,13 @@ pub fn route_manual(
                 expression: "current_limit_ac.rms".into(),
                 reason: e.to_string(),
             })?;
-        let peak = crate::ir::conversions::evaluate_expression_to_ma(&ac.peak, symbol_table)
-            .map_err(|e| IrError::InvalidRouteExpression {
+
+        crate::ir::conversions::evaluate_expression_to_ma(&ac.peak, symbol_table).map_err(|e| {
+            IrError::InvalidRouteExpression {
                 expression: "current_limit_ac.peak".into(),
                 reason: e.to_string(),
-            })?;
-        peak
+            }
+        })?
     } else {
         return Err(IrError::MissingAsicConstraint {
             message: "Route missing required 'current_limit_ac' property.".into(),
@@ -284,13 +285,11 @@ pub fn route_manual(
 
     let analytic_trace = hwc_engine::AnalyticTrace::new(
         net_id,
-        trace_width_nm,
-        thickness_nm,
+        hwc_engine::space::CrossSection::new(trace_width_nm, thickness_nm),
         segments,
         copper_id,
         net_name,
-        net_actual_current_ma, // Actual operating current from net
-        current_ma,            // Route's declared capability
+        hwc_engine::space::CurrentRating::new(net_actual_current_ma, current_ma),
     );
 
     space.add_analytic_route(analytic_trace);

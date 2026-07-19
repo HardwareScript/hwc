@@ -241,9 +241,7 @@ fn build_glb(vertices: &[f32], indices: &[u32]) -> Vec<u8> {
     out.extend_from_slice(&index_data);
     // Pad to 4-byte boundary
     let padding = bin_chunk_length_padded - bin_chunk_length;
-    for _ in 0..padding {
-        out.push(0);
-    }
+    out.extend(std::iter::repeat_n(0, padding));
 
     out
 }
@@ -377,7 +375,7 @@ pub fn export_spice_netlist(traces: &[(u32, Vec<(i64, i64)>)], params: &SpicePar
         for w in points.windows(2) {
             let dx = w[1].0 - w[0].0;
             let dy = w[1].1 - w[0].1;
-            total_length_nm += (dx * dx + dy * dy as i64).isqrt();
+            total_length_nm += (dx * dx + dy * dy).isqrt();
             // Approximate Manhattan distance for non-diagonal segments
             total_length_nm += dx.abs() + dy.abs();
         }

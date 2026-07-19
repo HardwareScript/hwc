@@ -13,7 +13,7 @@
 //!
 //! **This is a pre-release full transition (no backward compatibility).**
 
-use super::super::types::{Via, ViaType};
+use super::super::types::{Via, ViaSpec, ViaType};
 use super::core::GeometryRouter;
 use crate::geometry::Point3D;
 use crate::netlist::NetId;
@@ -88,21 +88,22 @@ impl GeometryRouter {
                     .map(|f| f.min_via_diameter_nm)
                     .unwrap_or(300_000);
 
-                let via = Via::new(
-                    (x, y),
-                    from_z.min(to_z),
-                    from_z.max(to_z),
+                let via = Via::new(ViaSpec {
+                    position: (x, y),
+                    from_z_nm: from_z.min(to_z),
+                    to_z_nm: from_z.max(to_z),
                     diameter_nm,
                     net_id,
-                    self.routing_material_id, // Use the active routing material context
-                    board_min_z_nm,
-                    board_max_z_nm,
-                    self.constraints
+                    material_id: self.routing_material_id, // Use the active routing material context
+                    annular_ring_nm: self
+                        .constraints
                         .fabrication
                         .as_ref()
                         .map(|f| f.min_annular_ring_nm)
                         .unwrap_or(0),
-                );
+                    board_min_z_nm,
+                    board_max_z_nm,
+                });
 
                 vias.push(via);
             }
@@ -327,14 +328,18 @@ impl GeometryRouter {
                 let to_z = self.layer_z_positions[next_idx];
 
                 via_tower.push(Via::new_with_type(
-                    pos,
-                    from_z,
-                    to_z,
-                    diameter_nm,
-                    net_id,
-                    self.routing_material_id, // Use the active routing material context
-                    ViaType::Buried,          // Intermediate vias in ASIC towers are buried
-                    annular_ring,
+                    ViaSpec {
+                        position: pos,
+                        from_z_nm: from_z,
+                        to_z_nm: to_z,
+                        diameter_nm,
+                        net_id,
+                        material_id: self.routing_material_id, // Use the active routing material context
+                        annular_ring_nm: annular_ring,
+                        board_min_z_nm: 0,
+                        board_max_z_nm: self.bounds.depth_nm,
+                    },
+                    ViaType::Buried, // Intermediate vias in ASIC towers are buried
                 ));
 
                 current_idx = next_idx as isize;
@@ -345,14 +350,18 @@ impl GeometryRouter {
             let to_z = self.layer_z_positions[end_layer_idx];
 
             via_tower.push(Via::new_with_type(
-                pos,
-                from_z,
-                to_z,
-                diameter_nm,
-                net_id,
-                self.routing_material_id, // Use the active routing material context
+                ViaSpec {
+                    position: pos,
+                    from_z_nm: from_z,
+                    to_z_nm: to_z,
+                    diameter_nm,
+                    net_id,
+                    material_id: self.routing_material_id, // Use the active routing material context
+                    annular_ring_nm: annular_ring,
+                    board_min_z_nm: 0,
+                    board_max_z_nm: self.bounds.depth_nm,
+                },
                 ViaType::ThroughHole,
-                annular_ring,
             ));
         }
 

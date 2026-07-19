@@ -38,6 +38,7 @@ pub mod lockfile;
 pub mod manufacturing_check;
 pub mod miter_pass;
 pub mod multi_net_manager;
+pub mod navigable_space;
 mod neighbor_generation;
 mod parallel_router;
 pub mod parasitic_extraction;
@@ -47,10 +48,9 @@ mod pathfinding;
 pub mod port_escape;
 mod priority;
 pub mod query_engine;
-pub mod navigable_space;
 pub mod route_decomposition;
 pub mod route_persistence;
-mod router;
+pub mod router;
 mod routing_patterns;
 pub mod scene_graph;
 pub mod soft_corridor;
@@ -67,11 +67,11 @@ pub mod topological_router;
 mod types;
 
 // Re-export public API
-pub use bounding_box_tracker::{BoundingBoxTracker, TrackedObstacle};
+pub use bounding_box_tracker::{BoundingBoxTracker, TrackedObstacle, ViaObstacleParams};
+pub use compaction::{CompactionMove, Compactor, SignalConstraints};
 pub use constraints::{
     check_constraints, HardConstraints, NetConstraints, RouteMetrics, SoftConstraints, Violation,
 };
-pub use compaction::{CompactionMove, Compactor, SignalConstraints};
 pub use dummy_fill::{DummyFillConfig, DummyFillEngine, DummyFillStats};
 pub use em_thermal_check::{
     current_limit_ac_to_declaration, current_limit_dc, verify_em_thermal, AcCurrent,
@@ -110,6 +110,7 @@ pub use route_decomposition::{
     collect_pin_nodes, decompose_net, detect_junctions, distance_matrix, prim_mst, DecomposedNet,
     PinNode, RouteSegment, VirtualJunction,
 };
+pub use router::core::RouteSpaceRequest;
 pub use router::GeometryRouter;
 pub use routing_patterns::{
     LengthMatchingEngine, PatternStep, RoutedTrace, RoutingPattern, StandardPatterns,
@@ -127,11 +128,13 @@ pub use stamp_parser::{
 };
 pub use static_geometry_guard::{check_static_shorts, StaticViolation};
 pub use substrate_types::CompactionStats;
-pub use teardrops::{IpcClass, TeardropConfig, TeardropEngine};
+pub use teardrops::{IpcClass, TeardropConfig, TeardropEngine, TeardropRequest};
 pub use thermal_relief::{
     RectangularPadParams, ThermalReliefConfig, ThermalReliefGenerator, ThermalReliefType,
 };
 pub use topological_router::{
     RayDirection, RayIntersection, SearchRay, TopologicalPath, TopologicalRouter,
 };
-pub use types::{NetRoute, RouteResult, RoutedNet, RoutingError, RoutingHeuristics, Via, ViaType};
+pub use types::{
+    NetRoute, RouteResult, RoutedNet, RoutingError, RoutingHeuristics, Via, ViaSpec, ViaType,
+};

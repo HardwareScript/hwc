@@ -7,7 +7,7 @@
 mod tests {
     use crate::geometry::{BoundingBox, Point3D};
     use crate::geometry_router::spatial_index::{
-        query_overlapping_segments, DynamicSpatialIndex, IndexedSegment,
+        query_overlapping_segments, DynamicSpatialIndex, IndexedSegment, SpatialEntitySource,
     };
 
     // -----------------------------------------------------------------------
@@ -24,6 +24,10 @@ mod tests {
         w: i64,
     ) -> IndexedSegment {
         IndexedSegment {
+            source: SpatialEntitySource::RouteSegment {
+                net_idx: 0,
+                seg_idx: 0,
+            },
             segment_id: id,
             net_id: net,
             width_nm: w,
@@ -221,6 +225,8 @@ mod tests {
                     y1: 2_000_000,
                     x2: 3_000_000,
                     y2: 4_000_000,
+                    z1: 0,
+                    z2: 0,
                     thickness_nm: 35_000,
                     material_name: "Copper".to_string(),
                     current_ma: 20_000,
@@ -233,6 +239,8 @@ mod tests {
                     y1: 6_000_000,
                     x2: 7_000_000,
                     y2: 8_000_000,
+                    z1: 0,
+                    z2: 0,
                     thickness_nm: 35_000,
                     material_name: "Copper".to_string(),
                     current_ma: 20_000,
@@ -284,6 +292,8 @@ mod tests {
                 y1: 0,
                 x2: 1_000_000,
                 y2: 0,
+                z1: 0,
+                z2: 0,
                 thickness_nm: 35_000,
                 material_name: "Copper".to_string(),
                 current_ma: 20_000,
@@ -557,6 +567,8 @@ mod tests {
                 y1: 3_000_000,
                 x2: 8_000_000,
                 y2: 9_000_000,
+                z1: 0,
+                z2: 0,
                 thickness_nm: 35_000,
                 material_name: "Copper".to_string(),
                 current_ma: 20_000,

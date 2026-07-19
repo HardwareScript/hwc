@@ -104,7 +104,7 @@ pub fn verify_all_dependencies_satisfied(order: &[u64], deps: &[(u64, Vec<u64>)]
 }
 
 #[cfg(test)]
-#[allow(unwrap_used, expect_used)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
 

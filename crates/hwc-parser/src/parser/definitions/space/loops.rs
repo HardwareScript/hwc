@@ -47,11 +47,11 @@ impl crate::parser::Parser {
                     match &next_token.token {
                         Token::Pour => {
                             let pour = self.parse_pour()?;
-                            body.push(SpaceStatement::Pour(pour));
+                            body.push(SpaceStatement::Pour(Box::new(pour)));
                         }
                         Token::Plane => {
                             let plane = self.parse_plane()?;
-                            body.push(SpaceStatement::Plane(plane));
+                            body.push(SpaceStatement::Plane(Box::new(plane)));
                         }
                         Token::Contact => {
                             let contact = self.parse_contact()?;

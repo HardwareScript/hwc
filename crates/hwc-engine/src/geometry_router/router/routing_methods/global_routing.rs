@@ -16,7 +16,12 @@ impl GeometryRouter {
     /// * `pin` - The pin location (center of pad)
     /// * `target` - The target location to route toward
     /// * `trace_width_nm` - Width of the routing trace (needed for proper clearance calculation)
-    pub fn resolve_boundary_port(&self, pin: Point3D, target: Point3D, trace_width_nm: i64) -> Point3D {
+    pub fn resolve_boundary_port(
+        &self,
+        pin: Point3D,
+        target: Point3D,
+        trace_width_nm: i64,
+    ) -> Point3D {
         // Read clearance in nanometers directly from fabrication constraints (zero-magic)
         // No fallback - if constraints are missing, this will panic with a clear error.
         let min_clearance_nm = self
@@ -25,7 +30,7 @@ impl GeometryRouter {
             .as_ref()
             .expect("BUG: Fabrication constraints required for boundary port resolution")
             .min_trace_spacing_nm;
-        
+
         // v0.1.9: Match obstacle inflation formula used in navigable space extraction.
         // Obstacles are inflated by (trace_width/2) + min_clearance, so the port escape
         // must be placed at the same distance to avoid "StartPointOutsideSpace" errors.
@@ -92,12 +97,10 @@ impl GeometryRouter {
             } else {
                 crate::geometry_router::port_escape::CardinalPort::West
             }
+        } else if dy >= 0 {
+            crate::geometry_router::port_escape::CardinalPort::North
         } else {
-            if dy >= 0 {
-                crate::geometry_router::port_escape::CardinalPort::North
-            } else {
-                crate::geometry_router::port_escape::CardinalPort::South
-            }
+            crate::geometry_router::port_escape::CardinalPort::South
         };
 
         let escape = crate::geometry_router::port_escape::calculate_rect_escape(
@@ -123,17 +126,18 @@ impl GeometryRouter {
         // v0.1.9: Fail-Fast — trace width MUST be declared for this net.
         // No fallbacks to PDK minimum. The compiler is responsible for ensuring
         // every route has an explicit width or a valid default.
-        let trace_width = self.net_trace_widths.get(&route.net_id).copied().ok_or_else(|| {
-            RoutingError::MissingFabricationConstraints {
+        let trace_width = self
+            .net_trace_widths
+            .get(&route.net_id)
+            .copied()
+            .ok_or_else(|| RoutingError::MissingFabricationConstraints {
                 net_id: route.net_id,
                 message: format!(
                     "No trace width declared for net_id={}. Every route must have an explicit \
                      'width:' parameter or the space must provide a default trace width.",
                     route.net_id.raw()
-                )
-                .into(),
-            }
-        })?;
+                ),
+            })?;
 
         // v0.1.9: Fabrication constraints still required for clearance rules
         let fabrication = self.constraints.fabrication.as_ref().ok_or_else(|| {
@@ -173,15 +177,22 @@ impl GeometryRouter {
         let track_pitch = self.resolution_nm; // Use snap-resolution for pitch
 
         // Try fast topological routing first (Tier 0-1)
-        let topo_router = TopologicalRouter::new(trace_width, track_pitch, fabrication.min_trace_spacing_nm);
-        
+        let topo_router =
+            TopologicalRouter::new(trace_width, track_pitch, fabrication.min_trace_spacing_nm);
+
         // v0.1.9: Use route_with_exemptions to allow routing from/to pads without self-collision
         // Exempt the active net_id so start/goal pads are not treated as obstacles
         let exempt_net_ids = vec![route.net_id.raw() as usize];
-        
+
         // v0.1.9: TopologicalRouter is the single authoritative routing engine
         // NO FALLBACK - if TopologicalRouter can't find a path, the route fails
-        let path = match topo_router.route_with_exemptions(start, goal, &spatial_index, &board_bounds, &exempt_net_ids) {
+        let path = match topo_router.route_with_exemptions(
+            start,
+            goal,
+            &spatial_index,
+            &board_bounds,
+            &exempt_net_ids,
+        ) {
             Some(topo_path) if topo_path.waypoints.len() >= 2 => topo_path.waypoints,
             _ => {
                 return Err(RoutingError::NoPathFound {

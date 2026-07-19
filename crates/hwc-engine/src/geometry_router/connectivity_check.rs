@@ -260,7 +260,7 @@ mod tests {
     use super::*;
     use crate::geometry::Point3D;
     use crate::geometry_router::route_decomposition::VirtualJunction;
-    use crate::geometry_router::spatial_index::IndexedSegment;
+    use crate::geometry_router::spatial_index::{IndexedSegment, SpatialEntitySource};
     use crate::netlist::NetId;
 
     fn make_segment(
@@ -270,6 +270,10 @@ mod tests {
         end: Point3D,
     ) -> IndexedSegment {
         IndexedSegment {
+            source: SpatialEntitySource::RouteSegment {
+                net_idx: 0,
+                seg_idx: 0,
+            },
             segment_id,
             net_id,
             width_nm: 200_000,

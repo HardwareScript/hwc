@@ -48,24 +48,6 @@ impl BoundingBoxTracker {
         }
     }
 
-    /// Register a bounding box and origin for a named entity (component or pour)
-    ///
-    /// # Arguments
-    /// * `name` - Name of the component or pour
-    /// * `bbox` - Bounding box in nanometers
-    /// * `origin` - Original placement point (the point specified by the user)
-    ///
-    /// # Example
-    /// ```ignore
-    /// tracker.register(
-    ///     "M1",
-    ///     BoundingBox::new(
-    ///         Point3D::new(0, 0, 0),
-    ///         Point3D::new(1_000_000, 2_000_000, 500_000)
-    ///     ),
-    ///     Point3D::new(0, 0, 0)  // Original placement point
-    /// );
-    /// ```
     pub fn register(&mut self, name: CompactString, bbox: BoundingBox, origin: Point3D) {
         self.last_registered_name = Some(name.clone());
         self.metadata

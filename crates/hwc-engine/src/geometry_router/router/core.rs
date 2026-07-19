@@ -6,6 +6,17 @@ use crate::constraint_manager::{ConstraintRulebook, LayerDirection};
 use crate::geometry::Point3D;
 use rustc_hash::FxHashMap;
 
+/// Request parameters for [`GeometryRouter::route_space`].
+pub struct RouteSpaceRequest<'a> {
+    pub grid_bbox: &'a crate::geometry::BoundingBox,
+    pub nets: &'a FxHashMap<crate::netlist::NetId, Vec<crate::geometry::Point3D>>,
+    pub explicit_segments: Option<&'a [(crate::netlist::NetId, Vec<Point3D>)]>,
+    pub obstacle_bboxes: &'a [crate::geometry::BoundingBox],
+    pub substrate_layers: Option<&'a [crate::geometry_router::substrate_types::SubstrateLayer]>,
+    pub net_frequencies: &'a FxHashMap<crate::netlist::NetId, f64>,
+    pub net_trace_widths: &'a FxHashMap<crate::netlist::NetId, i64>,
+}
+
 /// Geometry Router: Main routing engine.
 ///
 /// Orchestrates the automatic routing process using topological ray-casting
@@ -154,17 +165,6 @@ impl GeometryRouter {
     /// # Arguments
     /// * `bounds` - Grid bounds for routing
     /// * `constraints` - Constraint rulebook from constraint manager
-    ///
-    /// # Examples
-    /// ```
-    /// use hwc_engine::geometry_router::{GeometryRouter, GridBounds};
-    /// use hwc_engine::constraint_manager::ConstraintRulebook;
-    ///
-    /// let bounds = GridBounds::new(50_000_000, 50_000_000, 10_000_000);
-    /// let constraints = ConstraintRulebook::new(500_000);
-    ///
-    /// let router = GeometryRouter::new(bounds, constraints);
-    /// ```
     pub fn new(
         bounds: GridBounds,
         constraints: ConstraintRulebook,
@@ -323,7 +323,7 @@ impl GeometryRouter {
     pub fn is_high_speed_net(&self, net_id: crate::netlist::NetId) -> bool {
         self.net_frequencies
             .get(&net_id)
-            .map_or(false, |&freq| freq >= 1_000_000_000.0)
+            .is_some_and(|&freq| freq >= 1_000_000_000.0)
     }
 
     /// Register a component obstacle with Minkowski inflation into the BoundingBoxTracker.
@@ -423,10 +423,7 @@ impl GeometryRouter {
     ///
     /// This method is called once after all routing is complete, before
     /// the RouteResult is returned to the compiler.
-    fn apply_refinement_pipeline(
-        &self,
-        result: &mut super::super::types::RouteResult,
-    ) {
+    fn apply_refinement_pipeline(&self, result: &mut super::super::types::RouteResult) {
         use crate::geometry::TraceSegment;
         use crate::geometry_router::compaction::Compactor;
         use crate::geometry_router::legalizer::Legalizer;
@@ -473,7 +470,8 @@ impl GeometryRouter {
 
             // --- Stage 2: Compaction ---
             let compactor = Compactor::new(min_clearance_nm);
-            let moves = compactor.compact(&legalized_segments, &legalized_net_ids, &Default::default());
+            let moves =
+                compactor.compact(&legalized_segments, &legalized_net_ids, &Default::default());
             let compacted_segments = Compactor::apply_moves(&legalized_segments, &moves);
 
             // --- Stage 3: Miter Pass ---
@@ -486,9 +484,9 @@ impl GeometryRouter {
                 let entry = refined_paths.entry(net_id).or_default();
 
                 // Find or create a path that continues from seg.start
-                let continued = entry.iter_mut().find(|path| {
-                    path.last().map_or(false, |last| *last == seg.start)
-                });
+                let continued = entry
+                    .iter_mut()
+                    .find(|path| path.last().is_some_and(|last| *last == seg.start));
 
                 if let Some(path) = continued {
                     path.push(seg.end);
@@ -562,14 +560,17 @@ impl GeometryRouter {
     /// Unified `RouteResult` containing all paths and vias, or a `RoutingError`.
     pub fn route_space(
         &mut self,
-        grid_bbox: &crate::geometry::BoundingBox,
-        nets: &FxHashMap<crate::netlist::NetId, Vec<crate::geometry::Point3D>>,
-        explicit_segments: Option<&[(crate::netlist::NetId, Vec<Point3D>)]>,
-        obstacle_bboxes: &[crate::geometry::BoundingBox],
-        substrate_layers: Option<&[crate::geometry_router::substrate_types::SubstrateLayer]>,
-        net_frequencies: &FxHashMap<crate::netlist::NetId, f64>,
-        net_trace_widths: &FxHashMap<crate::netlist::NetId, i64>,
+        req: RouteSpaceRequest,
     ) -> Result<super::super::types::RouteResult, super::super::types::RoutingError> {
+        let RouteSpaceRequest {
+            grid_bbox,
+            nets,
+            explicit_segments,
+            obstacle_bboxes,
+            substrate_layers,
+            net_frequencies,
+            net_trace_widths,
+        } = req;
         // Store substrate context on self so route_net/route_net_global can access it
         if let Some(sl) = substrate_layers {
             self.substrate_layers = Some(sl.to_vec());
@@ -820,13 +821,7 @@ impl GeometryRouter {
 
             // Phase 3b: Merge results sequentially into final_result
             for (net_id, result) in cross_results {
-                let routed = result.map_err(|e| {
-                    // eprintln!(
-                    //     "[ADAPTIVE ROUTER] Cross-cell net {:?} routing failed: {:?}",
-                    //     net_id, e
-                    // );
-                    e
-                })?;
+                let routed = result?;
 
                 // Record routed segments canonically in the EntityGraph for subsequent nets
                 for segment in &routed.paths {

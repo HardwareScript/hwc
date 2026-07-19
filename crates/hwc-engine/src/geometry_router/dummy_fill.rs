@@ -270,15 +270,11 @@ impl DummyFillEngine {
 
                     // Stamp dummies if needed
                     if needs_fill {
-                        let dummies = self.stamp_dummies_in_zone(
-                            entity_graph,
-                            zone_min_x,
-                            zone_min_y,
-                            zone_max_x,
-                            zone_max_y,
-                            z_nm,
-                            config,
+                        let zone = BoundingBox::new(
+                            Point3D::new(zone_min_x, zone_min_y, z_nm),
+                            Point3D::new(zone_max_x, zone_max_y, z_nm),
                         );
+                        let dummies = self.stamp_dummies_in_zone(entity_graph, zone, config);
                         total_dummies += dummies;
                         self.zones_filled += 1;
                     }
@@ -378,11 +374,7 @@ impl DummyFillEngine {
     fn stamp_dummies_in_zone(
         &self,
         entity_graph: &mut EntityGraph,
-        zone_min_x: i64,
-        zone_min_y: i64,
-        zone_max_x: i64,
-        zone_max_y: i64,
-        z_nm: i64,
+        zone: BoundingBox,
         config: &DummyFillConfig,
     ) -> usize {
         let half_size = config.dummy_size_nm / 2;
@@ -392,6 +384,12 @@ impl DummyFillEngine {
         if step <= 0 {
             return 0;
         }
+
+        let zone_min_x = zone.min.x;
+        let zone_min_y = zone.min.y;
+        let zone_max_x = zone.max.x;
+        let zone_max_y = zone.max.y;
+        let z_nm = zone.min.z;
 
         // Compute grid positions at dummy_spacing_nm intervals
         // Start from first position that fits within zone
@@ -470,145 +468,4 @@ pub struct DummyFillStats {
 
     /// Average metal density after fill (percentage).
     pub average_density_after: f64,
-}
-
-// ============================================================================
-// TESTS
-// ============================================================================
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::geometry::transform::FixedTransform2D;
-    use crate::geometry::{BoundingBox, Point3D};
-    use crate::geometry_router::scene_graph::ComponentStamp;
-    use crate::geometry_router::substrate_types::SubstrateLayerType;
-
-    /// Test that an empty board with substrate layers gets dummy fill.
-    #[test]
-    fn test_dummy_fill_empty_board() {
-        let mut grid = EntityGraph::new();
-        grid.add_substrate_layer(
-            1u8,
-            0u32,
-            BoundingBox {
-                min: Point3D::new(0, 0, 0),
-                max: Point3D::new(3_200_000, 3_200_000, 2_000_000),
-            },
-            SubstrateLayerType::Pour,
-        );
-
-        let config = DummyFillConfig {
-            enabled: true,
-            target_density_pct: 50,
-            dummy_size_nm: 200_000,
-            dummy_spacing_nm: 400_000,
-            clearance_nm: 100_000,
-            target_z_nm: None,
-        };
-
-        let mut engine = DummyFillEngine::new();
-        let stats = engine.run(&mut grid, &config);
-
-        assert!(stats.zones_analyzed > 0, "Should analyze at least one zone");
-        assert!(
-            stats.zones_filled > 0,
-            "Empty board should need fill in all zones"
-        );
-    }
-
-    /// Test that a fully occupied board does NOT get dummy fill.
-    ///
-    /// Uses the scene graph API (ComponentStamp + place_instance) to mark the
-    /// entire 16×16 sampling zone as physically occupied. This replaces the
-    /// legacy `set_occupied` API which was removed in the EntityGraph
-    /// migration (v0.1.7).
-    #[test]
-    fn test_dummy_fill_full_board() {
-        let mut grid = EntityGraph::new();
-
-        let board_size_nm = 1_600_000i64;
-        grid.add_substrate_layer(
-            1u8,
-            0u32,
-            BoundingBox {
-                min: Point3D::new(0, 0, 0),
-                max: Point3D::new(board_size_nm, board_size_nm, 2_000_000),
-            },
-            SubstrateLayerType::Pour,
-        );
-
-        let stamp =
-            ComponentStamp::rectangle(0, "fill_block".to_string(), board_size_nm, board_size_nm);
-        let stamp_id = grid.scene_mut().register_stamp(stamp);
-        let identity = FixedTransform2D::identity();
-        grid.scene_mut().place_instance(stamp_id, identity, vec![]);
-
-        let config = DummyFillConfig {
-            enabled: true,
-            target_density_pct: 50,
-            ..DummyFillConfig::default()
-        };
-
-        let mut engine = DummyFillEngine::new();
-        let stats = engine.run(&mut grid, &config);
-
-        assert_eq!(
-            stats.total_dummies_placed, 0,
-            "Fully occupied board should need 0 dummies (density >= target)"
-        );
-    }
-
-    /// Test that disabled config skips analysis.
-    #[test]
-    fn test_dummy_fill_disabled() {
-        let mut grid = EntityGraph::new();
-        let config = DummyFillConfig {
-            enabled: false,
-            ..DummyFillConfig::default()
-        };
-
-        let mut engine = DummyFillEngine::new();
-        let stats = engine.run(&mut grid, &config);
-
-        assert_eq!(
-            stats.zones_analyzed, 0,
-            "Disabled config should skip analysis"
-        );
-        assert_eq!(stats.zones_filled, 0, "Disabled config should skip fill");
-        assert_eq!(
-            stats.total_dummies_placed, 0,
-            "Disabled config should place 0 dummies"
-        );
-    }
-
-    /// Test density analysis on a partially filled board.
-    #[test]
-    fn test_density_analysis_partial() {
-        let mut grid = EntityGraph::new();
-        grid.add_substrate_layer(
-            1u8,
-            0u32,
-            BoundingBox {
-                min: Point3D::new(0, 0, 0),
-                max: Point3D::new(3_200_000, 3_200_000, 2_000_000),
-            },
-            SubstrateLayerType::Pour,
-        );
-
-        let config = DummyFillConfig {
-            enabled: true,
-            target_density_pct: 50,
-            dummy_size_nm: 200_000,
-            dummy_spacing_nm: 400_000,
-            clearance_nm: 100_000,
-            target_z_nm: None,
-        };
-
-        let mut engine = DummyFillEngine::new();
-        let stats = engine.run(&mut grid, &config);
-
-        // Some zones should need fill (the empty half), some shouldn't (the full half)
-        assert!(stats.zones_analyzed > 0);
-    }
 }

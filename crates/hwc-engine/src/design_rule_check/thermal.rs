@@ -37,15 +37,16 @@ pub fn validate_current_density(
                 let mut local_violations: Vec<DrcViolation> = Vec::new();
                 for route in chunk {
                     // Skip routes with no current limit declared (Artist Mode)
-                    if route.current_limit_ma <= 0.0 {
+                    if route.current.limit_ma <= 0.0 {
                         continue;
                     }
 
-                    let area_nm2 = route.width_nm as f64 * route.thickness_nm as f64;
+                    let area_nm2 = route.cross_section.width_nm as f64
+                        * route.cross_section.thickness_nm as f64;
                     if area_nm2 <= 0.0 {
                         return Err(format!(
                             "[DRC] FATAL: trace on net '{}' has zero cross-sectional area (width={}nm, thickness={}nm).",
-                            route.net_name, route.width_nm, route.thickness_nm
+                            route.net_name, route.cross_section.width_nm, route.cross_section.thickness_nm
                         ));
                     }
 
@@ -67,7 +68,7 @@ pub fn validate_current_density(
                     };
 
                     // CHECK 1: Does actual operating current exceed the route's declared capability?
-                    if route.current_ma > route.current_limit_ma {
+                    if route.current.actual_ma > route.current.limit_ma {
                         let location = route
                             .segments
                             .first()
@@ -76,8 +77,8 @@ pub fn validate_current_density(
 
                         local_violations.push(DrcViolation::CurrentDensityViolation {
                             net: route.net_name.clone(),
-                            actual_density_a_mm2: route.current_ma,
-                            max_density_a_mm2: route.current_limit_ma,
+                            actual_density_a_mm2: route.current.actual_ma,
+                            max_density_a_mm2: route.current.limit_ma,
                             location,
                         });
                         continue;
@@ -85,7 +86,7 @@ pub fn validate_current_density(
 
                     // CHECK 2: Does the route's declared capability exceed the material's physical limit?
                     // Calculate maximum current the geometry can physically handle
-                    let current_limit_a = route.current_limit_ma / 1000.0;
+                    let current_limit_a = route.current.limit_ma / 1000.0;
                     let area_m2 = area_nm2 * 1e-18; // nm² → m²
                     let capability_density_a_m2 = current_limit_a / area_m2;
                     let capability_density_a_mm2 = capability_density_a_m2 / 1e6;
@@ -103,7 +104,7 @@ pub fn validate_current_density(
                         local_violations.push(DrcViolation::CurrentDensityViolation {
                             net: route.net_name.clone(),
                             actual_density_a_mm2: capability_density_a_mm2,
-                            max_density_a_mm2: max_density_a_mm2,
+                            max_density_a_mm2,
                             location,
                         });
                     }

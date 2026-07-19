@@ -111,8 +111,8 @@ fn resolve_z_to_layer_index(
         let z_max = layer.bbox.max.z;
         let z_mid = (z_min + z_max) / 2;
 
-        if !z_to_layer.contains_key(&z_mid) {
-            z_to_layer.insert(z_mid, next_idx);
+        if let std::collections::hash_map::Entry::Vacant(e) = z_to_layer.entry(z_mid) {
+            e.insert(next_idx);
             next_idx = next_idx.wrapping_add(1);
         }
     }
@@ -145,8 +145,8 @@ pub fn build_layer_z_map(
         let z_max = layer.bbox.max.z;
         let z_mid = (z_min + z_max) / 2;
 
-        if !z_to_layer.contains_key(&z_mid) {
-            z_to_layer.insert(z_mid, next_idx);
+        if let std::collections::hash_map::Entry::Vacant(e) = z_to_layer.entry(z_mid) {
+            e.insert(next_idx);
             next_idx = next_idx.wrapping_add(1);
         }
     }
@@ -201,10 +201,8 @@ impl LockfileData {
 /// Uses `check_archived_root` for validated zero-copy access.
 pub fn load_lockfile(path: &Path) -> io::Result<LockfileData> {
     let file = fs::File::open(path)?;
-    let mmap = unsafe {
-        memmap2::Mmap::map(&file)
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("mmap: {e}")))?
-    };
+    let mmap =
+        unsafe { memmap2::Mmap::map(&file).map_err(|e| io::Error::other(format!("mmap: {e}")))? };
 
     // Validate the archived data with check_bytes
     let archived = rkyv::validation::validators::check_archived_root::<CompactLockfileBinary>(
@@ -384,8 +382,8 @@ fn reconstruct_path_topology(
 pub fn compute_fingerprint_from_space(space: &crate::space::HardwareSpace) -> [u8; 32] {
     let mut component_bounds: Vec<(i64, i64, i64, i64)> = space
         .component_bboxes
-        .iter()
-        .map(|(_name, bbox)| (bbox.min.x, bbox.min.y, bbox.max.x, bbox.max.y))
+        .values()
+        .map(|bbox| (bbox.min.x, bbox.min.y, bbox.max.x, bbox.max.y))
         .collect();
     component_bounds.sort();
 
@@ -498,16 +496,16 @@ pub fn traces_to_lockfile(
             arcs.push(ArchivedArcSegment {
                 net_id: trace.net_id.raw(),
                 layer: layer_idx,
-                width_nm: trace.width_nm,
+                width_nm: trace.cross_section.width_nm,
                 x1: seg.start.x,
                 y1: seg.start.y,
                 z1: seg.start.z,
                 x2: seg.end.x,
                 y2: seg.end.y,
                 z2: seg.end.z,
-                thickness_nm: trace.thickness_nm,
+                thickness_nm: trace.cross_section.thickness_nm,
                 material_name,
-                current_ma: (trace.current_ma * 1000.0) as i64,
+                current_ma: (trace.current.actual_ma * 1000.0) as i64,
             });
         }
     }
@@ -625,13 +623,11 @@ pub fn lockfile_to_traces(
 
         traces.push(crate::space::AnalyticTrace::new(
             net_id,
-            width_nm,
-            thickness_nm,
+            crate::space::CrossSection::new(width_nm, thickness_nm),
             segments,
             material_id,
             net_name,
-            net_actual_current_ma, // Actual operating current from net
-            current_ma,            // Route's capability from lockfile
+            crate::space::CurrentRating::new(net_actual_current_ma, current_ma),
         ));
     }
 

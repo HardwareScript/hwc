@@ -196,29 +196,19 @@ impl BoundingBoxTracker {
 
     /// Register a via as an obstacle (blocks on all layers it passes through).
     ///
-    /// # Arguments
-    /// * `x_nm` - X coordinate of via center.
-    /// * `y_nm` - Y coordinate of via center.
-    /// * `from_z_nm` - Bottom Z of via span.
-    /// * `to_z_nm` - Top Z of via span.
-    /// * `diameter_nm` - Via drill diameter.
-    /// * `annular_ring_nm` - Copper pad around the drill hole.
-    /// * `trace_width_nm` - Width of trace being routed (for inflation).
-    /// * `clearance_nm` - Clearance for inflation.
-    /// * `net_name` - Net name.
-    #[allow(clippy::too_many_arguments)]
-    pub fn register_via(
-        &mut self,
-        x_nm: i64,
-        y_nm: i64,
-        from_z_nm: i64,
-        to_z_nm: i64,
-        diameter_nm: i64,
-        annular_ring_nm: i64,
-        trace_width_nm: i64,
-        clearance_nm: i64,
-        net_name: CompactString,
-    ) -> i64 {
+    /// See [`ViaObstacleParams`] for the parameters.
+    pub fn register_via(&mut self, params: ViaObstacleParams) -> i64 {
+        let ViaObstacleParams {
+            x_nm,
+            y_nm,
+            from_z_nm,
+            to_z_nm,
+            diameter_nm,
+            annular_ring_nm,
+            trace_width_nm,
+            clearance_nm,
+            net_name,
+        } = params;
         let radius = diameter_nm / 2 + annular_ring_nm;
         let bbox = BoundingBox {
             min: Point3D::new(x_nm - radius, y_nm - radius, from_z_nm.min(to_z_nm)),
@@ -377,6 +367,28 @@ impl BoundingBoxTracker {
     pub fn layer_count(&self) -> usize {
         self.by_layer.len()
     }
+}
+
+/// Parameters describing a via obstacle to register.
+pub struct ViaObstacleParams {
+    /// X coordinate of via center.
+    pub x_nm: i64,
+    /// Y coordinate of via center.
+    pub y_nm: i64,
+    /// Bottom Z of via span.
+    pub from_z_nm: i64,
+    /// Top Z of via span.
+    pub to_z_nm: i64,
+    /// Via drill diameter.
+    pub diameter_nm: i64,
+    /// Copper pad around the drill hole.
+    pub annular_ring_nm: i64,
+    /// Width of trace being routed (for inflation).
+    pub trace_width_nm: i64,
+    /// Clearance for inflation.
+    pub clearance_nm: i64,
+    /// Net name.
+    pub net_name: CompactString,
 }
 
 impl Default for BoundingBoxTracker {
@@ -551,17 +563,17 @@ mod tests {
     fn test_via_registration() {
         let mut tracker = BoundingBoxTracker::new();
 
-        tracker.register_via(
-            5_000_000,
-            5_000_000,
-            0,
-            1_000_000,
-            300_000,
-            100_000,
-            200_000,
-            150_000,
-            "NET_VIA".into(),
-        );
+        tracker.register_via(ViaObstacleParams {
+            x_nm: 5_000_000,
+            y_nm: 5_000_000,
+            from_z_nm: 0,
+            to_z_nm: 1_000_000,
+            diameter_nm: 300_000,
+            annular_ring_nm: 100_000,
+            trace_width_nm: 200_000,
+            clearance_nm: 150_000,
+            net_name: "NET_VIA".into(),
+        });
 
         let obstacles = tracker.query_layer(0);
         assert_eq!(obstacles.len(), 1);
@@ -647,29 +659,29 @@ mod tests {
     fn test_z_range_query() {
         let mut tracker = BoundingBoxTracker::new();
 
-        tracker.register_via(
-            1_000_000,
-            1_000_000,
-            0,
-            100_000,
-            200_000,
-            50_000,
-            200_000,
-            100_000,
-            "VIA_TOP".into(),
-        );
+        tracker.register_via(ViaObstacleParams {
+            x_nm: 1_000_000,
+            y_nm: 1_000_000,
+            from_z_nm: 0,
+            to_z_nm: 100_000,
+            diameter_nm: 200_000,
+            annular_ring_nm: 50_000,
+            trace_width_nm: 200_000,
+            clearance_nm: 100_000,
+            net_name: "VIA_TOP".into(),
+        });
 
-        tracker.register_via(
-            2_000_000,
-            2_000_000,
-            0,
-            1_000_000,
-            300_000,
-            100_000,
-            200_000,
-            100_000,
-            "VIA_THROUGH".into(),
-        );
+        tracker.register_via(ViaObstacleParams {
+            x_nm: 2_000_000,
+            y_nm: 2_000_000,
+            from_z_nm: 0,
+            to_z_nm: 1_000_000,
+            diameter_nm: 300_000,
+            annular_ring_nm: 100_000,
+            trace_width_nm: 200_000,
+            clearance_nm: 100_000,
+            net_name: "VIA_THROUGH".into(),
+        });
 
         let middle = tracker.query_z_range(200_000, 800_000);
         assert_eq!(

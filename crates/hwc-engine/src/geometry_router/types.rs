@@ -115,61 +115,57 @@ pub struct Via {
     pub properties: FxHashMap<String, Expression>,
 }
 
+/// Geometric specification for constructing a [`Via`].
+#[derive(Clone, Debug)]
+pub struct ViaSpec {
+    pub position: (i64, i64),
+    pub from_z_nm: i64,
+    pub to_z_nm: i64,
+    pub diameter_nm: i64,
+    pub net_id: NetId,
+    pub material_id: u8,
+    pub annular_ring_nm: i64,
+    /// Board bottom Z, used to auto-classify the via type.
+    pub board_min_z_nm: i64,
+    /// Board top Z, used to auto-classify the via type.
+    pub board_max_z_nm: i64,
+}
+
 impl Via {
     /// Create a new via with automatic type classification from physical Z extents.
-    #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        position: (i64, i64),
-        from_z_nm: i64,
-        to_z_nm: i64,
-        diameter_nm: i64,
-        net_id: NetId,
-        material_id: u8,
-        board_min_z_nm: i64,
-        board_max_z_nm: i64,
-        annular_ring_nm: i64,
-    ) -> Self {
+    pub fn new(spec: ViaSpec) -> Self {
         let via_type = Self::classify_via_type(
-            from_z_nm,
-            to_z_nm,
-            diameter_nm,
-            board_min_z_nm,
-            board_max_z_nm,
+            spec.from_z_nm,
+            spec.to_z_nm,
+            spec.diameter_nm,
+            spec.board_min_z_nm,
+            spec.board_max_z_nm,
         );
 
         Self {
-            position,
-            from_z_nm,
-            to_z_nm,
-            diameter_nm,
-            net_id,
-            material_id,
+            position: spec.position,
+            from_z_nm: spec.from_z_nm,
+            to_z_nm: spec.to_z_nm,
+            diameter_nm: spec.diameter_nm,
+            net_id: spec.net_id,
+            material_id: spec.material_id,
             via_type,
-            annular_ring_nm,
+            annular_ring_nm: spec.annular_ring_nm,
             properties: FxHashMap::default(),
         }
     }
 
     /// Create a new via with explicit type.
-    pub fn new_with_type(
-        position: (i64, i64),
-        from_z_nm: i64,
-        to_z_nm: i64,
-        diameter_nm: i64,
-        net_id: NetId,
-        material_id: u8,
-        via_type: ViaType,
-        annular_ring_nm: i64,
-    ) -> Self {
+    pub fn new_with_type(spec: ViaSpec, via_type: ViaType) -> Self {
         Self {
-            position,
-            from_z_nm,
-            to_z_nm,
-            diameter_nm,
-            net_id,
-            material_id,
+            position: spec.position,
+            from_z_nm: spec.from_z_nm,
+            to_z_nm: spec.to_z_nm,
+            diameter_nm: spec.diameter_nm,
+            net_id: spec.net_id,
+            material_id: spec.material_id,
             via_type,
-            annular_ring_nm,
+            annular_ring_nm: spec.annular_ring_nm,
             properties: FxHashMap::default(),
         }
     }

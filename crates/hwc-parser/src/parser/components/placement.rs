@@ -258,16 +258,14 @@ impl crate::parser::Parser {
             // Look ahead to see if there's an 'on' keyword coming
             let saved_pos = self.current;
             self.advance(); // skip 'rotated'
-            if let Ok(_) = self.parse_rotation() {
-                if self.check(&Token::On) {
-                    // Yep, they put rotated before on layer
-                    self.current = saved_pos; // restore position
-                    return Err(self.error_context.unexpected_token_error(
-                        &Token::Rotated,
-                        &self.current_span(),
-                        Some(state),
-                    ));
-                }
+            if self.parse_rotation().is_ok() && self.check(&Token::On) {
+                // Yep, they put rotated before on layer
+                self.current = saved_pos; // restore position
+                return Err(self.error_context.unexpected_token_error(
+                    &Token::Rotated,
+                    &self.current_span(),
+                    Some(state),
+                ));
             }
             self.current = saved_pos; // restore position
         }
@@ -416,23 +414,25 @@ impl crate::parser::Parser {
             // If array_count was provided but no layout/pitch block was found
             // (e.g. the config block only had 'net:', 'mount:', etc.), create
             // a default array_config so the array is still properly expanded.
-            if array_count.is_some() && array_config.is_none() {
-                array_config = Some(crate::ast::ArrayConfig {
-                    count: array_count.unwrap(),
-                    layout: crate::ast::ArrayLayout::HorizontalStack,
-                    pitch: crate::ast::Measurement {
-                        value: 1.0,
-                        unit: crate::ast::Unit::Millimeter,
-                        span: Span::new(0, 0),
-                    },
-                    merge_terminals: SmallVec::new(),
-                    span: Span::new(start_pos, self.previous_span().end),
-                });
+            if let Some(count) = array_count {
+                if array_config.is_none() {
+                    array_config = Some(crate::ast::ArrayConfig {
+                        count,
+                        layout: crate::ast::ArrayLayout::HorizontalStack,
+                        pitch: crate::ast::Measurement {
+                            value: 1.0,
+                            unit: crate::ast::Unit::Millimeter,
+                            span: Span::new(0, 0),
+                        },
+                        merge_terminals: SmallVec::new(),
+                        span: Span::new(start_pos, self.previous_span().end),
+                    });
+                }
             }
-        } else if array_count.is_some() {
+        } else if let Some(count) = array_count {
             // Array syntax without config block - use defaults
             array_config = Some(crate::ast::ArrayConfig {
-                count: array_count.unwrap(),
+                count,
                 layout: crate::ast::ArrayLayout::HorizontalStack,
                 pitch: crate::ast::Measurement {
                     value: 1.0,

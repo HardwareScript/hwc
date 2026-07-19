@@ -157,37 +157,33 @@ impl ContextErrorGenerator {
         if let Some(state) = state {
             // Check for common ordering mistakes
             if matches!(found, Token::On) && state.has_rotation && !state.has_elevation {
-                return format!(
-                    "Placement syntax error: 'on layer:' must come BEFORE 'rotated'.\n\n\
+                return "Placement syntax error: 'on layer:' must come BEFORE 'rotated'.\n\n\
                     Current (incorrect): add Type named N at [...] rotated 0deg on layer: L\n\
                     Correct syntax:      add Type named N at [...] on layer: L rotated 0deg:\n\n\
                     Expected order: at [position] on layer: <L> rotated <A>:"
-                );
+                    .to_string();
             }
 
             if matches!(found, Token::Rotated) && !state.has_elevation {
-                return format!(
-                    "Placement syntax error: 'rotated' must come AFTER 'on layer:' or 'on z:'.\n\n\
+                return "Placement syntax error: 'rotated' must come AFTER 'on layer:' or 'on z:'.\n\n\
                     Current (incorrect): add Type named N at [...] rotated 0deg on layer: L\n\
                     Correct syntax:      add Type named N at [...] on layer: L rotated 0deg:\n\n\
                     Expected order: at [position] on layer: <L> rotated <A>:"
-                );
+                    .to_string();
             }
 
             if matches!(found, Token::Colon) && !state.has_elevation {
-                return format!(
-                    "Component placement missing required 'on layer:' or 'on z:' elevation.\n\n\
+                return "Component placement missing required 'on layer:' or 'on z:' elevation.\n\n\
                     Syntax: add Type named N at [x: 1mm, y: 2mm] on layer: metal1 rotated 0deg:\n\
                     Or:     add Type named N at [x: 1mm, y: 2mm] on z: 1mm rotated 0deg:"
-                );
+                    .to_string();
             }
 
             if !state.has_rotation && (state.has_config_block || matches!(found, Token::Colon)) {
-                return format!(
-                    "Component placement missing required rotation.\n\n\
+                return "Component placement missing required rotation.\n\n\
                     Syntax: add Type named N at [...] on layer: L rotated 0deg:\n\
                     Use 'rotated 0deg' if no rotation is needed."
-                );
+                    .to_string();
             }
         }
 
@@ -248,22 +244,20 @@ impl ContextErrorGenerator {
     fn route_statement_error(&self, found: &Token, state: Option<&RouteParseState>) -> String {
         if let Some(state) = state {
             if !state.has_from && !state.has_to {
-                return format!(
-                    "Route statement incomplete. Expected: route <from> to <to>\n\
+                return "Route statement incomplete. Expected: route <from> to <to>\n\
                      Examples:\n\
                      - route M1.gate to VIN_Pad\n\
                      - route Pad1 to Pad2\n\
                      - route Component1.pin1 to Component2.pin2"
-                );
+                    .to_string();
             }
 
             if state.has_from && !state.has_to && !matches!(found, Token::To) {
-                return format!(
-                    "Route statement missing 'to' keyword.\n\
+                return "Route statement missing 'to' keyword.\n\
                      Syntax: route <from> to <to>:\n\
                          width: <value>\n\
                          layer: <layer>"
-                );
+                    .to_string();
             }
         }
 
@@ -283,19 +277,17 @@ impl ContextErrorGenerator {
     fn pour_statement_error(&self, found: &Token, state: Option<&PourParseState>) -> String {
         if let Some(state) = state {
             if !state.has_material {
-                return format!(
-                    "Pour statement missing material specification.\n\
+                return "Pour statement missing material specification.\n\
                      Syntax: add pour(<Material>) named <Name> on layer: <layer>:\n\
                          boundary: [x: X1, y: Y1] to [x: X2, y: Y2]"
-                );
+                    .to_string();
             }
 
             if state.has_material && !state.has_layer {
-                return format!(
-                    "Pour statement missing 'on layer:' clause.\n\
+                return "Pour statement missing 'on layer:' clause.\n\
                      Syntax: add pour(<Material>) named <Name> on layer: <layer>:\n\
                          boundary: [x: X1, y: Y1] to [x: X2, y: Y2]"
-                );
+                    .to_string();
             }
         }
 
