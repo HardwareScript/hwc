@@ -709,6 +709,9 @@ impl From<crate::conversions::ConversionError> for IrError {
             crate::conversions::ConversionError::MissingProperty { material, property } => {
                 IrError::MissingPhysicalProperty { material, property }
             }
+            crate::conversions::ConversionError::InvalidProfileConstraint(field) => {
+                IrError::MissingProfileConstraint { field }
+            }
             crate::conversions::ConversionError::InvalidUnit(msg) => {
                 IrError::PlacementError(format!("Invalid unit: {}", msg))
             }

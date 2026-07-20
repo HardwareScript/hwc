@@ -79,6 +79,25 @@ pub fn profile_to_constraints(
         .and_then(|m| m.solder_mask_expansion.as_ref())
         .map(measurement_to_nm);
 
+    let circle_segments: u32 = profile
+        .manufacturing
+        .as_ref()
+        .and_then(|m| m.circle_segments)
+        .map(|n| {
+            if n == 0 {
+                Err(ConversionError::InvalidProfileConstraint(
+                    "manufacturing.circle_segments must be a positive integer".into(),
+                ))
+            } else {
+                Ok(n as u32)
+            }
+        })
+        .unwrap_or_else(|| {
+            Err(ConversionError::MissingProfileConstraint(
+                "manufacturing.circle_segments".into(),
+            ))
+        })?;
+
     let _low_voltage_threshold_v = profile
         .clearance
         .as_ref()
@@ -198,6 +217,7 @@ pub fn profile_to_constraints(
         stackup,
         bridges,
         solder_mask_expansion_nm,
+        circle_segments,
         technology: profile.technology.clone(),
         layer_routability,
         max_local_route_length_nm,

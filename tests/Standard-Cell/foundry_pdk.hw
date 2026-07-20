@@ -39,6 +39,7 @@ profile Silicon_180nm:
 
     manufacturing:
         copper_thickness: 400nm
+        circle_segments: 64
 
     clearance:
         high_voltage: 500nm

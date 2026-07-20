@@ -1,0 +1,271 @@
+//! Substrate layer management methods for EntityGraph.
+
+use crate::geometry::BoundingBox;
+use crate::geometry_router::spatial_index::IndexedSegment;
+use crate::geometry_router::substrate_types::{
+    ComponentMetadata, MaterialId, SubstrateLayer, SubstrateLayerShape, SubstrateLayerType,
+};
+use crate::netlist::NetId;
+
+use super::{EntityGraph, TubeLayerSpec};
+
+impl EntityGraph {
+    /// Add a substrate layer with optional clearance validation.
+    pub fn add_substrate_layer(
+        &mut self,
+        material: MaterialId,
+        net: u32,
+        bbox: BoundingBox,
+        layer_type: SubstrateLayerType,
+    ) {
+        let layer = SubstrateLayer::new(material, net, bbox, layer_type);
+        self.substrate_layers.push(layer);
+    }
+
+    /// Add a substrate layer with clearance validation (v0.1.9).
+    pub fn add_substrate_layer_checked(
+        &mut self,
+        material: MaterialId,
+        net: u32,
+        bbox: BoundingBox,
+        layer_type: SubstrateLayerType,
+        min_clearance_nm: i64,
+    ) -> Result<(), String> {
+        if net != 0 {
+            for existing in &self.substrate_layers {
+                if existing.net == 0 || existing.net == net {
+                    continue;
+                }
+                let distance = bbox.distance_to(&existing.bbox);
+                if distance < min_clearance_nm {
+                    return Err(format!(
+                        "Clearance violation: Pour on net {} at {:?} is {}nm from net {} (required: {}nm)",
+                        net, bbox, distance, existing.net, min_clearance_nm
+                    ));
+                }
+            }
+        }
+        let layer = SubstrateLayer::new(material, net, bbox, layer_type);
+        self.substrate_layers.push(layer);
+        Ok(())
+    }
+
+    /// Get a reference to all substrate layers.
+    pub fn get_substrate_layers(&self) -> &[SubstrateLayer] {
+        &self.substrate_layers
+    }
+
+    /// Get a mutable reference to all substrate layers.
+    pub fn get_substrate_layers_mut(&mut self) -> &mut Vec<SubstrateLayer> {
+        &mut self.substrate_layers
+    }
+
+    /// Add component metadata.
+    pub fn add_component_metadata(
+        &mut self,
+        bbox: BoundingBox,
+        material: MaterialId,
+        name: compact_str::CompactString,
+        component_type: compact_str::CompactString,
+        blocked_z_ranges: smallvec::SmallVec<[(i64, i64); 2]>,
+    ) {
+        let mut component = ComponentMetadata::new(material, bbox, name, component_type);
+        component.blocked_z_ranges = blocked_z_ranges;
+        self.component_metadata.push(component);
+    }
+
+    /// Get all elements (pours and routes) for a specific net across all layers.
+    pub fn get_all_elements_for_net(&self, net_id: NetId) -> Vec<SubstrateLayer> {
+        let mut elements = Vec::new();
+        let net_raw = net_id.raw();
+
+        for layer in &self.substrate_layers {
+            if layer.net == net_raw {
+                elements.push(layer.clone());
+            }
+        }
+
+        for (seg_net_id, segments) in &self.routed_segments {
+            if *seg_net_id == net_id {
+                for seg in segments {
+                    let bbox = BoundingBox::new(seg.start, seg.end);
+                    let layer = SubstrateLayer::new(
+                        seg.material_id,
+                        net_raw,
+                        bbox,
+                        SubstrateLayerType::Pour,
+                    );
+                    elements.push(layer);
+                }
+            }
+        }
+
+        elements
+    }
+
+    /// Get elements (pours and routes) for a specific net on a specific layer.
+    pub fn get_elements_for_net_on_layer(
+        &self,
+        net_id: NetId,
+        _layer_idx: usize,
+    ) -> Vec<SubstrateLayer> {
+        let mut elements = Vec::new();
+        let net_raw = net_id.raw();
+
+        for layer in &self.substrate_layers {
+            if layer.net == net_raw {
+                elements.push(layer.clone());
+            }
+        }
+
+        for (seg_net_id, segments) in &self.routed_segments {
+            if *seg_net_id == net_id {
+                for seg in segments {
+                    let bbox = BoundingBox::new(seg.start, seg.end);
+                    let layer = SubstrateLayer::new(
+                        seg.material_id,
+                        net_raw,
+                        bbox,
+                        SubstrateLayerType::Pour,
+                    );
+                    elements.push(layer);
+                }
+            }
+        }
+
+        elements
+    }
+
+    /// Add a cylindrical substrate layer (e.g. via pad).
+    pub fn add_cylinder_substrate_layer(
+        &mut self,
+        material: MaterialId,
+        net: u32,
+        bbox: BoundingBox,
+        diameter_nm: i64,
+        _segments: u32,
+        _rotation_deg: i64,
+    ) {
+        let mut layer = SubstrateLayer::new(material, net, bbox, SubstrateLayerType::Pour);
+        layer.shape = SubstrateLayerShape::Circle {
+            radius: diameter_nm / 2,
+        };
+        self.substrate_layers.push(layer);
+    }
+
+    /// Add a tube substrate layer (e.g. plated through-hole wall).
+    pub fn add_tube_substrate_layer(&mut self, spec: TubeLayerSpec) {
+        let TubeLayerSpec {
+            material,
+            net,
+            bbox,
+            outer_diameter,
+            inner_diameter,
+            pad_diameter,
+            segments,
+            top_cap,
+            bottom_cap,
+            bottom_outer_diameter,
+        } = spec;
+        let mut layer = SubstrateLayer::new(material, net, bbox, SubstrateLayerType::Contact);
+        layer.shape = SubstrateLayerShape::Tube {
+            outer_diameter,
+            inner_diameter,
+            pad_diameter,
+            segments,
+            top_cap,
+            bottom_cap,
+            bottom_outer_diameter,
+        };
+        self.substrate_layers.push(layer);
+    }
+
+    /// Add a polygonal substrate layer.
+    pub fn add_polygon_substrate_layer(
+        &mut self,
+        material: MaterialId,
+        net: u32,
+        bbox: BoundingBox,
+        polygon: crate::geometry::Polygon,
+    ) {
+        let mut outer_contour = clipper2_rust::Path64::new();
+        for p in &polygon.points {
+            outer_contour.push(clipper2_rust::Point64::new(p.x, p.y));
+        }
+
+        let mut layer = SubstrateLayer::new(material, net, bbox, SubstrateLayerType::Pour);
+        layer.shape = SubstrateLayerShape::Polygon {
+            outer_contour,
+            holes: clipper2_rust::Paths64::new(),
+            segments: 32,
+        };
+        self.substrate_layers.push(layer);
+    }
+
+    /// Add a circular substrate layer (alias for add_cylinder_substrate_layer).
+    pub fn add_circle_substrate_layer(
+        &mut self,
+        material: MaterialId,
+        net: u32,
+        bbox: BoundingBox,
+        radius_nm: i64,
+    ) {
+        self.add_cylinder_substrate_layer(material, net, bbox, radius_nm * 2, 32, 0);
+    }
+
+    /// Add a TSV (Through Silicon Via) stack.
+    pub fn add_tsv_stack(
+        &mut self,
+        material: MaterialId,
+        net: u32,
+        bbox: BoundingBox,
+        outer_diameter: u32,
+        inner_diameter: u32,
+        circle_segments: u32,
+    ) {
+        self.add_tube_substrate_layer(
+            TubeLayerSpec::builder(material, net, bbox, circle_segments)
+                .outer_diameter(outer_diameter)
+                .inner_diameter(inner_diameter)
+                .pad_diameter(outer_diameter)
+                .top_cap(crate::geometry_router::substrate_types::CapType::Solid)
+                .bottom_cap(crate::geometry_router::substrate_types::CapType::Solid)
+                .build(),
+        );
+    }
+
+    /// Copy component metadata and pins from another EntityGraph.
+    pub fn copy_metadata_from(&mut self, other: &EntityGraph) {
+        self.component_metadata = other.component_metadata.clone();
+        self.component_pins = other.component_pins.clone();
+        self.substrate_layers = other.substrate_layers.clone();
+        self.routed_segments = other.routed_segments.clone();
+    }
+
+    /// Convert substrate layers into IndexedSegments for spatial index insertion.
+    pub fn get_substrate_layers_as_segments(&self) -> Vec<IndexedSegment> {
+        self.substrate_layers
+            .iter()
+            .enumerate()
+            .map(|(i, layer)| {
+                let mut bboxes = vec![layer.bbox];
+                for region in &layer.regions {
+                    bboxes.push(*region);
+                }
+                let combined = bboxes.iter().fold(layer.bbox, |acc, b| acc.union(b));
+                IndexedSegment {
+                    source: hwc_physics::spatial_index::SpatialEntitySource::SubstrateLayer {
+                        index: i,
+                    },
+                    segment_id: i,
+                    net_id: layer.net as usize,
+                    width_nm: combined.max.x - combined.min.x,
+                    thickness_nm: combined.max.z - combined.min.z,
+                    start: combined.min,
+                    end: combined.max,
+                    layer: combined.min.z,
+                }
+            })
+            .collect()
+    }
+}

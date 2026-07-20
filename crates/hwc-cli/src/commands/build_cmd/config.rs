@@ -5,8 +5,7 @@ pub struct BuildConfig {
     pub skip_drc: bool,
     pub skip_physics: bool,
     pub skip_connectivity_check: bool,
-    #[allow(dead_code)]
-    pub skip_alignment: bool, // Sprint 4.1: Skip Alignment Layer validation
+
     pub skip_physical_continuity: bool, // Task 4.3: Skip physical continuity check (P41/P42/P43)
     pub skip_bulk_validation: bool,     // Task 4.3: Skip bulk connection validation
     pub no_lockfile: bool,

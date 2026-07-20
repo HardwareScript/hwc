@@ -1,14 +1,14 @@
 //! Routing module for trace routing between pins.
 
-mod automatic;
+pub(crate) mod automatic;
 pub mod electrical_optimizer;
-mod global;
+pub mod global;
 pub(crate) mod helpers;
 mod manual;
 pub mod types;
 
 pub use automatic::{calculate_boundary_points, route_automatic};
-pub use global::AutoRouter;
+pub use global::{AutoRouter, RouterConfig};
 pub use helpers::{
     evaluate_index_expression, get_pin_positions, needs_automatic_routing, register_net_for_route,
     resolve_endpoint_entity_ids, resolve_route_boundary_points, resolve_route_pin_centers,

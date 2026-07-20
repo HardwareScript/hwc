@@ -1,19 +1,32 @@
 use crate::scene_graph::types::{Face, MeshNode, Vertex};
 use hwc_engine::SpaceView;
 
+/// Parameters for [`create_tube_mesh`].
+pub struct TubeMeshParams {
+    pub name: String,
+    pub center: (f64, f64, f64),
+    pub outer_diameter: f64,
+    pub inner_diameter: f64,
+    pub height: f64,
+    pub segments: u32,
+    pub caps: bool,
+    pub material_name: String,
+    pub view: SpaceView,
+}
+
 /// Create a tube (hollow cylinder) mesh (v0.1.7 Limitation 7)
-#[allow(clippy::too_many_arguments)]
-pub fn create_tube_mesh(
-    name: &str,
-    center: (f64, f64, f64),
-    outer_diameter: f64,
-    inner_diameter: f64,
-    height: f64,
-    segments: u32,
-    caps: bool, // v0.1.7: Option to enable/disable top/bottom rings
-    material_name: &str,
-    view: SpaceView,
-) -> MeshNode {
+pub fn create_tube_mesh(params: TubeMeshParams) -> MeshNode {
+    let TubeMeshParams {
+        name,
+        center,
+        outer_diameter,
+        inner_diameter,
+        height,
+        segments,
+        caps,
+        material_name,
+        view,
+    } = params;
     let (cx, cy, mut cz) = center;
     let mut actual_height = height;
 
@@ -46,7 +59,7 @@ pub fn create_tube_mesh(
     };
 
     // Generate vertices for outer and inner cylinders
-    let actual_segments = if segments == 16 { 64 } else { segments };
+    let actual_segments = segments.max(3);
 
     for i in 0..actual_segments as usize {
         let angle = (i as f64 / actual_segments as f64) * 2.0 * std::f64::consts::PI;

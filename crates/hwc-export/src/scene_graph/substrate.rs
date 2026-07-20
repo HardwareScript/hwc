@@ -1,6 +1,6 @@
 //! Substrate layer processing and net-aware clustering
 
-use super::mesh_generation::{create_box_with_holes_mesh, create_via_mesh};
+use super::mesh_generation::{create_box_with_holes_mesh, create_via_mesh, ViaMeshParams};
 use super::types::{BoxParams, MaterialNode, MeshNode};
 use crate::geometry_union::{circle_to_path, rect_to_path, stroke_route_segments};
 use crate::mesh_extrusion::extrude_polygon_mesh;
@@ -194,20 +194,20 @@ pub fn add_substrate(
             .get_name(space.substrate_material_id)
             .unwrap_or("Copper");
 
-        meshes.push(create_via_mesh(
-            &format!("Analytic_Via_Barrel_{}", via_idx),
-            (center_x_mm, center_y_mm, z_min_mm),
-            outer_dia_mm,
-            pad_dia_mm,
-            barrel_thickness_mm,
-            depth_mm,
-            32,
-            CapType::None,
-            CapType::None,
-            None,
-            material_name,
-            space.view,
-        ));
+        meshes.push(create_via_mesh(ViaMeshParams {
+            name: format!("Analytic_Via_Barrel_{}", via_idx),
+            center: (center_x_mm, center_y_mm, z_min_mm),
+            drill_dia: outer_dia_mm,
+            pad_dia: pad_dia_mm,
+            plating_thickness: barrel_thickness_mm,
+            height: depth_mm,
+            segments: 32,
+            top_cap: CapType::None,
+            bottom_cap: CapType::None,
+            bottom_drill_dia: None,
+            material_name: material_name.to_string(),
+            view: space.view,
+        }));
     }
 
     // Legacy substrate layer system removed - using pure analytic routes only

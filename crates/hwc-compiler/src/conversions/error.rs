@@ -13,4 +13,7 @@ pub enum ConversionError {
 
     #[error("Missing profile constraint: {0}")]
     MissingProfileConstraint(String),
+
+    #[error("Invalid profile constraint: {0}")]
+    InvalidProfileConstraint(String),
 }

@@ -41,6 +41,7 @@ profile JLCPCB_HDI_4Layer_1_2_1:
     
     manufacturing:
         copper_thickness: 18µm
+        circle_segments: 64                # Circular geometry fidelity (vias, pads, tubes, TSVs)
         ipc2221_k_external: 0.048
         ipc2221_k_internal: 0.024
     
@@ -82,6 +83,7 @@ profile JLCPCB_HDI_6Layer_1_4_1:
     
     manufacturing:
         copper_thickness: 18µm
+        circle_segments: 64                # Circular geometry fidelity (vias, pads, tubes, TSVs)
         ipc2221_k_external: 0.048
         ipc2221_k_internal: 0.024
     
@@ -127,6 +129,7 @@ profile JLCPCB_HDI_8Layer_2_4_2:
     
     manufacturing:
         copper_thickness: 18µm
+        circle_segments: 64                # Circular geometry fidelity (vias, pads, tubes, TSVs)
         ipc2221_k_external: 0.048
         ipc2221_k_internal: 0.024
     
@@ -180,6 +183,7 @@ profile PCBWay_HDI_4Layer_Standard:
     
     manufacturing:
         copper_thickness: 18µm
+        circle_segments: 64                # Circular geometry fidelity (vias, pads, tubes, TSVs)
         ipc2221_k_external: 0.048
         ipc2221_k_internal: 0.024
     
@@ -221,6 +225,7 @@ profile PCBWay_HDI_6Layer_Advanced:
     
     manufacturing:
         copper_thickness: 12µm
+        circle_segments: 64                # Circular geometry fidelity (vias, pads, tubes, TSVs)
         ipc2221_k_external: 0.048
         ipc2221_k_internal: 0.024
     
@@ -270,6 +275,7 @@ profile HDI_Extreme_Microvia:
     
     manufacturing:
         copper_thickness: 9µm
+        circle_segments: 64                # Circular geometry fidelity (vias, pads, tubes, TSVs)
         ipc2221_k_external: 0.048
         ipc2221_k_internal: 0.024
     
@@ -311,6 +317,7 @@ profile HDI_Any_Layer_Via:
     
     manufacturing:
         copper_thickness: 18µm
+        circle_segments: 64                # Circular geometry fidelity (vias, pads, tubes, TSVs)
         ipc2221_k_external: 0.048
         ipc2221_k_internal: 0.024
     
@@ -364,6 +371,7 @@ profile HDI_Ultra_Fine_Pitch:
     
     manufacturing:
         copper_thickness: 12µm
+        circle_segments: 64                # Circular geometry fidelity (vias, pads, tubes, TSVs)
         ipc2221_k_external: 0.048
         ipc2221_k_internal: 0.024
     
@@ -413,6 +421,7 @@ profile HDI_Extreme_Density:
     
     manufacturing:
         copper_thickness: 9µm
+        circle_segments: 64                # Circular geometry fidelity (vias, pads, tubes, TSVs)
         ipc2221_k_external: 0.048
         ipc2221_k_internal: 0.024
     
@@ -470,6 +479,7 @@ profile HDI_Mobile_Device:
     
     manufacturing:
         copper_thickness: 12µm
+        circle_segments: 64                # Circular geometry fidelity (vias, pads, tubes, TSVs)
         ipc2221_k_external: 0.048
         ipc2221_k_internal: 0.024
     

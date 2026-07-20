@@ -49,10 +49,6 @@ enum Commands {
         #[arg(long)]
         skip_connectivity_check: bool,
 
-        /// Skip Alignment Layer validation (faster iteration, not recommended for production)
-        #[arg(long)]
-        skip_alignment: bool,
-
         /// Skip physical continuity check (P41/P42/P43 - for testing individual stages)
         #[arg(long)]
         skip_physical_continuity: bool,
@@ -247,7 +243,6 @@ fn run() -> Result<()> {
             skip_drc,
             skip_physics,
             skip_connectivity_check,
-            skip_alignment,
             skip_physical_continuity,
             skip_bulk_validation,
             no_lockfile,
@@ -268,7 +263,6 @@ fn run() -> Result<()> {
                 skip_drc,
                 skip_physics,
                 skip_connectivity_check,
-                skip_alignment,
                 skip_physical_continuity,
                 skip_bulk_validation,
                 no_lockfile,

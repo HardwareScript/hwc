@@ -12,24 +12,15 @@
 * Net: A1 (width=180nm, material=Tungsten)
 *   Connected pins:
 *     - Pad_A1.__virtual_Pad_A1
-*     - Pad_A1.__virtual_Pad_A1
-*     - Pad_B1.__virtual_Pad_B1
-*     - Pad_A1.__virtual_Pad_A1
-*     - Pad_B1.__virtual_Pad_B1
 * Net: B1 (width=180nm, material=Tungsten)
 *   Connected pins:
 *     - Pad_B1.__virtual_Pad_B1
 * Net: A2 (width=180nm, material=Tungsten)
 *   Connected pins:
 *     - Pad_A2.__virtual_Pad_A2
-*     - Pad_A2.__virtual_Pad_A2
-*     - Pad_B2.__virtual_Pad_B2
-*     - Pad_A2.__virtual_Pad_A2
-*     - Pad_B2.__virtual_Pad_B2
 * Net: B2 (width=180nm, material=Tungsten)
 *   Connected pins:
 *     - Pad_B2.__virtual_Pad_B2
-* Net: TEMP_NET (width=180nm, material=Tungsten)
 
 * ========================================
 * AUTOMATIC STIMULUS & MODELS

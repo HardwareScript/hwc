@@ -104,6 +104,7 @@ profile Generic:
     
     manufacturing:
         copper_thickness: 35um                # 1oz copper
+        circle_segments: 64                # Circular geometry fidelity (vias, pads, tubes, TSVs)
         ipc2221_k_external: 0.048             # IPC-2221 constants
         ipc2221_k_internal: 0.024
     
@@ -276,6 +277,7 @@ profile Generic_PCB:
     
     manufacturing:
         copper_thickness: 35um                # 1oz copper
+        circle_segments: 64                # Circular geometry fidelity (vias, pads, tubes, TSVs)
     
     stackup:
         top: [material: Copper, thickness: 35um]

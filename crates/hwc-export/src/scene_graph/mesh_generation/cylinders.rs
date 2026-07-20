@@ -1,18 +1,30 @@
 use crate::scene_graph::types::{Face, FaceCulling, MeshNode, Vertex};
 use hwc_engine::SpaceView;
 
+/// Parameters for [`create_cylinder_mesh`].
+pub struct CylinderMeshParams {
+    pub name: String,
+    pub center: (f64, f64, f64),
+    pub diameter: f64,
+    pub height: f64,
+    pub segments: u32,
+    pub material_name: String,
+    pub view: SpaceView,
+    pub culling: FaceCulling,
+}
+
 /// Create a cylindrical mesh with fully triangulated top/bottom solid caps
-#[allow(clippy::too_many_arguments)]
-pub fn create_cylinder_mesh(
-    name: &str,
-    center: (f64, f64, f64),
-    diameter: f64,
-    height: f64,
-    segments: u32,
-    material_name: &str,
-    view: SpaceView,
-    culling: FaceCulling,
-) -> MeshNode {
+pub fn create_cylinder_mesh(params: CylinderMeshParams) -> MeshNode {
+    let CylinderMeshParams {
+        name,
+        center,
+        diameter,
+        height,
+        segments,
+        material_name,
+        view,
+        culling,
+    } = params;
     let (cx, cy, cz) = center;
     let radius = diameter / 2.0;
     let mut vertices = Vec::new();
@@ -34,7 +46,7 @@ pub fn create_cylinder_mesh(
         }
     };
 
-    let actual_segments = if segments == 16 { 64 } else { segments };
+    let actual_segments = segments.max(3);
 
     // 1. Generate vertices for top and bottom rings
     for i in 0..actual_segments {

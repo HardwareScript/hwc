@@ -7,7 +7,6 @@ mod config;
 mod error;
 mod export;
 mod parsing;
-mod source_context;
 mod validation;
 
 pub use error::BuildError;

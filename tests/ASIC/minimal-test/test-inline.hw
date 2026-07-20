@@ -22,6 +22,7 @@ profile Minimal_PDK:
     
     manufacturing:
         copper_thickness: 400nm
+        circle_segments: 64
     
     clearance:
         high_voltage: 500nm

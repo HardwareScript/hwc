@@ -1,0 +1,164 @@
+use super::elevation::RoutingConfig;
+use super::layout::ModuleLayoutBlock;
+use super::nets::NetDeclaration;
+use super::placements::{ContactPlacement, PlanePlacement, PolygonPlacement, PourPlacement};
+use super::routes::{Expose, Route};
+use super::substrate::SubstratePlacement;
+use crate::ast::component::ComponentPlacement;
+use crate::lexer::Span;
+use compact_str::CompactString;
+use serde::{Deserialize, Serialize};
+
+/// Space definition: `space Name:` (v0.1.6)
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SpaceDefinition {
+    pub name: crate::ast::common::Identifier,
+    pub implements_module: Option<CompactString>,
+    pub dimensions: Option<crate::ast::common::Dimensions>,
+    pub resolution: Option<crate::ast::common::Measurement>,
+    pub origin: Option<crate::ast::common::OriginPoint>,
+    pub profile: Option<crate::ast::common::Identifier>,
+    pub mechanical: Option<crate::ast::common::Identifier>,
+    pub substrate: Option<SubstratePlacement>,
+    pub render: Option<crate::ast::component::RenderBlock>,
+    pub routing_config: Option<RoutingConfig>,
+    pub statements: Vec<SpaceTopLevelStatement>,
+    pub layouts: Vec<ModuleLayoutBlock>,
+    pub routes: Vec<Route>,
+    pub exposes: Vec<Expose>,
+    pub nets: Vec<NetDeclaration>,
+    pub span: Span,
+}
+
+/// Top-level statement in a space block (v0.1.7)
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum SpaceTopLevelStatement {
+    Substrate(SubstratePlacement),
+    Component(Box<ComponentPlacement>),
+    Pour(Box<PourPlacement>),
+    Plane(Box<PlanePlacement>),
+    Polygon(PolygonPlacement),
+    Contact(ContactPlacement),
+    ForLoop(SpaceForLoop),
+    Route(Route),
+    Expose(Expose),
+    RouteNetPolicy(RouteNetPolicy),
+}
+
+/// v0.1.8: Prescriptive net-scoped route policy
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RouteNetPolicy {
+    pub net_id: crate::ast::common::Identifier,
+    pub target_layer: Option<crate::ast::common::Identifier>,
+    pub pattern: Option<crate::ast::pattern::PatternInstantiation>,
+    pub strategy: Option<crate::ast::common::Identifier>,
+    pub span: Span,
+}
+
+/// For loop in space block (Sprint 3.4: Parametric Unrolling)
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SpaceForLoop {
+    pub variable: CompactString,
+    pub start: usize,
+    pub end: usize,
+    pub body: Vec<SpaceStatement>,
+    pub span: Span,
+}
+
+/// Statement inside a space for loop
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum SpaceStatement {
+    Component(Box<ComponentPlacement>),
+    Pour(Box<PourPlacement>),
+    Plane(Box<PlanePlacement>),
+    Contact(ContactPlacement),
+    Route(Route),
+    ForLoop(Box<SpaceForLoop>),
+}
+
+impl SpaceDefinition {
+    pub fn components(&self) -> Vec<ComponentPlacement> {
+        self.statements
+            .iter()
+            .filter_map(|s| {
+                if let SpaceTopLevelStatement::Component(c) = s {
+                    Some((**c).clone())
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+    pub fn pours(&self) -> Vec<PourPlacement> {
+        self.statements
+            .iter()
+            .filter_map(|s| {
+                if let SpaceTopLevelStatement::Pour(p) = s {
+                    Some((**p).clone())
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+    pub fn planes(&self) -> Vec<PlanePlacement> {
+        self.statements
+            .iter()
+            .filter_map(|s| {
+                if let SpaceTopLevelStatement::Plane(p) = s {
+                    Some((**p).clone())
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+    pub fn polygons(&self) -> Vec<PolygonPlacement> {
+        self.statements
+            .iter()
+            .filter_map(|s| {
+                if let SpaceTopLevelStatement::Polygon(p) = s {
+                    Some(p.clone())
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+    pub fn contacts(&self) -> Vec<ContactPlacement> {
+        self.statements
+            .iter()
+            .filter_map(|s| {
+                if let SpaceTopLevelStatement::Contact(c) = s {
+                    Some(c.clone())
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+    pub fn for_loops(&self) -> Vec<SpaceForLoop> {
+        self.statements
+            .iter()
+            .filter_map(|s| {
+                if let SpaceTopLevelStatement::ForLoop(f) = s {
+                    Some(f.clone())
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+    pub fn route_net_policies(&self) -> Vec<RouteNetPolicy> {
+        self.statements
+            .iter()
+            .filter_map(|s| {
+                if let SpaceTopLevelStatement::RouteNetPolicy(p) = s {
+                    Some(p.clone())
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+}

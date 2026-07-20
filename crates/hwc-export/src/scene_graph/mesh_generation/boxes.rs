@@ -1,6 +1,34 @@
 use crate::scene_graph::types::{BoxParams, Face, FaceCulling, MeshNode, Vertex};
 use hwc_engine::SpaceView;
 
+/// Parameters for [`subdivide_rect`].
+struct SubdivideRectParams {
+    x1: f64,
+    y1: f64,
+    x2: f64,
+    y2: f64,
+    z_min: f64,
+    depth: f64,
+    cutouts: Vec<CutoutParams>,
+    material_name: String,
+    view: SpaceView,
+    base_culling: FaceCulling,
+}
+
+/// Parameters for [`render_hole_zone`].
+struct HoleZoneParams<'a> {
+    x1: f64,
+    y1: f64,
+    x2: f64,
+    y2: f64,
+    z_min: f64,
+    depth: f64,
+    hx: f64,
+    hy: f64,
+    hr: f64,
+    map_vertex: &'a dyn Fn(f64, f64, f64) -> Vertex,
+}
+
 /// Create a standard box mesh for components and other primitives.
 pub fn create_box_mesh(
     name: &str,
@@ -349,16 +377,18 @@ pub fn create_box_with_holes_mesh(
 
     subdivide_rect(
         &mut root_mesh,
-        params.x,
-        params.y,
-        params.x + params.width,
-        params.y + params.height,
-        params.z,
-        params.depth,
-        &cutouts,
-        material_name,
-        view,
-        culling,
+        SubdivideRectParams {
+            x1: params.x,
+            y1: params.y,
+            x2: params.x + params.width,
+            y2: params.y + params.height,
+            z_min: params.z,
+            depth: params.depth,
+            cutouts,
+            material_name: material_name.to_string(),
+            view,
+            base_culling: culling,
+        },
     );
 
     root_mesh
@@ -374,20 +404,21 @@ fn add_to_mesh(root: &mut MeshNode, sub_verts: Vec<Vertex>, sub_faces: Vec<Face>
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-fn subdivide_rect(
-    root_mesh: &mut MeshNode,
-    x1: f64,
-    y1: f64,
-    x2: f64,
-    y2: f64,
-    z_min: f64,
-    depth: f64,
-    cutouts: &[CutoutParams],
-    material_name: &str,
-    view: SpaceView,
-    base_culling: FaceCulling,
-) {
+fn subdivide_rect(root_mesh: &mut MeshNode, params: SubdivideRectParams) {
+    let SubdivideRectParams {
+        x1,
+        y1,
+        x2,
+        y2,
+        z_min,
+        depth,
+        cutouts,
+        material_name,
+        view,
+        base_culling,
+    } = params;
+
+    let mut culling = base_culling;
     // v0.1.7: Epsilon Guard (Prevent sliver polygons and mesh tearing)
     // If a region is smaller than 100nm, we don't render it.
     if (x2 - x1).abs() < 1e-4 || (y2 - y1).abs() < 1e-4 {
@@ -417,7 +448,6 @@ fn subdivide_rect(
     // Filter cutouts that intersect this rectangle
     let local_cutouts: Vec<_> = cutouts
         .iter()
-        .copied()
         .filter(|c| match c {
             CutoutParams::Cylinder { cx, cy, .. } => {
                 *cx >= x1 - 1e-7 && *cx <= x2 + 1e-7 && *cy >= y1 - 1e-7 && *cy <= y2 + 1e-7
@@ -432,37 +462,36 @@ fn subdivide_rect(
                 !(*rx1 >= x2 - 1e-7 || *rx2 <= x1 + 1e-7 || *ry1 >= y2 - 1e-7 || *ry2 <= y1 + 1e-7)
             }
         })
+        .copied()
         .collect();
 
-    if local_cutouts.is_empty() {
-        let mut culling = base_culling;
-        // Check for surface-touching cutouts that cover this entire region
-        for cutout in cutouts {
-            if let CutoutParams::Rect {
-                x1: rx1,
-                y1: ry1,
-                x2: rx2,
-                y2: ry2,
-                z_min: rz_min,
-                z_max: rz_max,
-            } = cutout
-            {
-                if *rx1 <= x1 + 1e-7 && *rx2 >= x2 - 1e-7 && *ry1 <= y1 + 1e-7 && *ry2 >= y2 - 1e-7
-                {
-                    // This cutout covers the entire region XY-wise
-                    // Check for Z-surface contact (Manifold Rule)
-                    if (*rz_min - (z_min + depth)).abs() < 1e-6 {
-                        culling.top = true;
-                    }
-                    if (*rz_max - z_min).abs() < 1e-6 {
-                        culling.bottom = true;
-                    }
+    // Check for surface-touching cutouts that cover this entire region
+    for cutout in cutouts {
+        if let CutoutParams::Rect {
+            x1: rx1,
+            y1: ry1,
+            x2: rx2,
+            y2: ry2,
+            z_min: rz_min,
+            z_max: rz_max,
+        } = cutout
+        {
+            if rx1 <= x1 + 1e-7 && rx2 >= x2 - 1e-7 && ry1 <= y1 + 1e-7 && ry2 >= y2 - 1e-7 {
+                // This cutout covers the entire region XY-wise
+                // Check for Z-surface contact (Manifold Rule)
+                if (rz_min - (z_min + depth)).abs() < 1e-6 {
+                    culling.top = true;
+                }
+                if (rz_max - z_min).abs() < 1e-6 {
+                    culling.bottom = true;
                 }
             }
         }
+    }
 
+    if culling.top && culling.bottom {
         let sub_params = BoxParams::new(x1, y1, z_min, x2 - x1, y2 - y1, depth);
-        let sub_mesh = create_box_mesh("zone", sub_params, material_name, view, culling);
+        let sub_mesh = create_box_mesh("zone", sub_params, &material_name, view, culling);
         add_to_mesh(root_mesh, sub_mesh.vertices, sub_mesh.faces);
         return;
     }
@@ -506,7 +535,7 @@ fn subdivide_rect(
     if hx1 >= hx2 - 1e-6 || hy1 >= hy2 - 1e-6 {
         // Cutout doesn't effectively intersect this region anymore
         let sub_params = BoxParams::new(x1, y1, z_min, x2 - x1, y2 - y1, depth);
-        let sub_mesh = create_box_mesh("zone", sub_params, material_name, view, base_culling);
+        let sub_mesh = create_box_mesh("zone", sub_params, &material_name, view, base_culling);
         add_to_mesh(root_mesh, sub_mesh.vertices, sub_mesh.faces);
         return;
     }
@@ -527,16 +556,18 @@ fn subdivide_rect(
                     // Hole zone: render the circle inside [cx1, cx2] x [cy1, cy2]
                     render_hole_zone(
                         root_mesh,
-                        cx1,
-                        cy1,
-                        cx2,
-                        cy2,
-                        z_min,
-                        depth,
-                        hx,
-                        hy,
-                        hr,
-                        &map_vertex,
+                        HoleZoneParams {
+                            x1: cx1,
+                            y1: cy1,
+                            x2: cx2,
+                            y2: cy2,
+                            z_min,
+                            depth,
+                            hx,
+                            hy,
+                            hr,
+                            map_vertex: &map_vertex,
+                        },
                     );
                 } else {
                     // Rectangular hole: render nothing here (punched out)
@@ -545,36 +576,37 @@ fn subdivide_rect(
                 // Recursively subdivide this sub-region
                 subdivide_rect(
                     root_mesh,
-                    cx1,
-                    cy1,
-                    cx2,
-                    cy2,
-                    z_min,
-                    depth,
-                    &local_cutouts,
-                    material_name,
-                    view,
-                    base_culling,
+                    SubdivideRectParams {
+                        x1: cx1,
+                        y1: cy1,
+                        x2: cx2,
+                        y2: cy2,
+                        z_min,
+                        depth,
+                        cutouts: local_cutouts.to_vec(),
+                        material_name: material_name.clone(),
+                        view,
+                        base_culling,
+                    },
                 );
             }
         }
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-fn render_hole_zone(
-    root: &mut MeshNode,
-    x1: f64,
-    y1: f64,
-    x2: f64,
-    y2: f64,
-    z_min: f64,
-    depth: f64,
-    hx: f64,
-    hy: f64,
-    hr: f64,
-    map_vertex: &impl Fn(f64, f64, f64) -> Vertex,
-) {
+fn render_hole_zone(root: &mut MeshNode, params: HoleZoneParams) {
+    let HoleZoneParams {
+        x1,
+        y1,
+        x2,
+        y2,
+        z_min,
+        depth,
+        hx,
+        hy,
+        hr,
+        map_vertex,
+    } = params;
     let segments = 64usize;
     let mut hz_verts = Vec::new();
     let mut hz_faces = Vec::new();

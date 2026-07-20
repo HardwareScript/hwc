@@ -88,14 +88,6 @@ struct RepairKey {
 /// Track of repair attempts for a specific net/G-cell.
 #[derive(Debug, Clone)]
 struct RepairAttempt {
-    /// The violations that triggered this repair.
-    /// Stored for diagnostic purposes; currently not read back.
-    #[allow(dead_code)]
-    pub(crate) violations: Vec<Violation>,
-    /// The path after repair attempt.
-    /// Stored for diagnostic purposes; currently not read back.
-    #[allow(dead_code)]
-    pub(crate) path: Vec<Point3D>,
     /// Whether this repair was successful.
     pub(crate) success: bool,
 }
@@ -114,20 +106,9 @@ impl RepairHistory {
     }
 
     /// Record a repair attempt.
-    pub fn record_attempt(
-        &mut self,
-        net_id: NetId,
-        gcell_id: GCellId,
-        violations: Vec<Violation>,
-        path: Vec<Point3D>,
-        success: bool,
-    ) {
+    pub fn record_attempt(&mut self, net_id: NetId, gcell_id: GCellId, success: bool) {
         let key = RepairKey { net_id, gcell_id };
-        let attempt = RepairAttempt {
-            violations,
-            path,
-            success,
-        };
+        let attempt = RepairAttempt { success };
         self.attempts.entry(key).or_default().push(attempt);
     }
 
@@ -253,20 +234,14 @@ pub fn run_optimization_loop(
         let violations = check_constraints(&metrics, constraints);
 
         if violations.is_empty() {
-            repair_history.record_attempt(net_id, gcell_id, Vec::new(), current_path.clone(), true);
+            repair_history.record_attempt(net_id, gcell_id, true);
             return Ok(OptimizationResult::Converged(Arc::new(current_path)));
         }
 
         // Check for hard constraint violations - cannot optimize further
         let hard_violations: Vec<_> = violations.iter().filter(|v| v.is_hard()).collect();
         if !hard_violations.is_empty() {
-            repair_history.record_attempt(
-                net_id,
-                gcell_id,
-                violations.clone(),
-                current_path.clone(),
-                false,
-            );
+            repair_history.record_attempt(net_id, gcell_id, false);
             return Ok(OptimizationResult::RequiresRepair(violations));
         }
 
@@ -279,13 +254,7 @@ pub fn run_optimization_loop(
 
         // Check for oscillation
         if current_score >= best_score {
-            repair_history.record_attempt(
-                net_id,
-                gcell_id,
-                violations.clone(),
-                best_path.clone(),
-                false,
-            );
+            repair_history.record_attempt(net_id, gcell_id, false);
             return Err(IrError::OptimizationStalled {
                 net_id: net_id.0,
                 gcell_id: gcell_id.0,
@@ -328,16 +297,10 @@ pub fn run_optimization_loop(
     let final_violations = check_constraints(&final_metrics, constraints);
 
     if final_violations.is_empty() {
-        repair_history.record_attempt(net_id, gcell_id, Vec::new(), best_path.clone(), true);
+        repair_history.record_attempt(net_id, gcell_id, true);
         Ok(OptimizationResult::Converged(Arc::new(best_path)))
     } else {
-        repair_history.record_attempt(
-            net_id,
-            gcell_id,
-            final_violations.clone(),
-            best_path.clone(),
-            false,
-        );
+        repair_history.record_attempt(net_id, gcell_id, false);
         Ok(OptimizationResult::RequiresRepair(final_violations))
     }
 }

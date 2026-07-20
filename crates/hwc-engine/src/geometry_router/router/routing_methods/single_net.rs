@@ -21,12 +21,12 @@ impl GeometryRouter {
         eprintln!("[SPATIAL INDEX DEBUG] build_routing_spatial_index: Creating NEW spatial index for net {}", active_route.net_id.raw());
 
         // Configure layer Z-ranges from the stackup for layered queries
-        if self.layer_z_positions.len() >= 2 {
-            let mut z_ranges = Vec::with_capacity(self.layer_z_positions.len());
-            for i in 0..self.layer_z_positions.len() {
-                let z_min = self.layer_z_positions[i];
-                let z_max = if i + 1 < self.layer_z_positions.len() {
-                    self.layer_z_positions[i + 1]
+        if self.config.layer_z_positions.len() >= 2 {
+            let mut z_ranges = Vec::with_capacity(self.config.layer_z_positions.len());
+            for i in 0..self.config.layer_z_positions.len() {
+                let z_min = self.config.layer_z_positions[i];
+                let z_max = if i + 1 < self.config.layer_z_positions.len() {
+                    self.config.layer_z_positions[i + 1]
                 } else {
                     self.bounds.depth_nm
                 };

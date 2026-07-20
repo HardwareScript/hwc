@@ -314,19 +314,35 @@ pub fn unroll_internal_features(
 
                             let pad_diameter_nm = drill_diameter_nm + (2 * min_annular_ring_nm);
 
+                            let circle_segments = space
+                                .fabrication_constraints
+                                .as_ref()
+                                .map(|c| c.circle_segments)
+                                .ok_or_else(|| {
+                                    IrError::PlacementError(
+                                        "PDK profile is missing 'manufacturing.circle_segments' \
+                                         for via pad generation."
+                                            .into(),
+                                    )
+                                })?;
+
                             space.entity_graph.add_tube_substrate_layer(
-                                hwc_engine::geometry_router::entity_graph::TubeLayerSpec::new(
+                                hwc_engine::geometry_router::entity_graph::TubeLayerSpec::builder(
                                     copper_material_id,
                                     via_net_id.raw(),
                                     hole_bbox,
-                                    outer_diameter_nm as u32,
-                                    inner_diameter_nm as u32,
-                                    pad_diameter_nm as u32,
-                                    16,
+                                    circle_segments,
+                                )
+                                .outer_diameter(outer_diameter_nm as u32)
+                                .inner_diameter(inner_diameter_nm as u32)
+                                .pad_diameter(pad_diameter_nm as u32)
+                                .top_cap(
                                     hwc_engine::geometry_router::entity_graph::CapType::Annular,
+                                )
+                                .bottom_cap(
                                     hwc_engine::geometry_router::entity_graph::CapType::Annular,
-                                    None,
-                                ),
+                                )
+                                .build(),
                             );
 
                             let pad_half_nm = pad_diameter_nm / 2;

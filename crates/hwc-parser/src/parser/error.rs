@@ -198,28 +198,6 @@ pub enum ParseError {
         span: SourceSpan,
     },
 
-    #[error("Expected '=' in logic block")]
-    #[diagnostic(
-        code(S21),
-        url("https://docs.hw-script.org/errors/S21"),
-        help("The Boundary Law: Use '=' for assignments and comparisons in logic blocks.\nExample: count = count + 1")
-    )]
-    ExpectedEqualsInLogic {
-        #[label("Use '=' here (not ':')")]
-        span: SourceSpan,
-    },
-
-    #[error("Use single '=' for comparison")]
-    #[diagnostic(
-        code(S22),
-        url("https://docs.hw-script.org/errors/S22"),
-        help("Hardware Script uses single '=' for both assignment and comparison.\nContext determines meaning: standalone = assignment, after if/match = comparison.\nExample: if count = 0:")
-    )]
-    UsesSingleEqualsForComparison {
-        #[label("Replace '==' with '='")]
-        span: SourceSpan,
-    },
-
     #[error("Expected identifier (no quotes needed)")]
     #[diagnostic(
         code(S23),
@@ -239,28 +217,6 @@ pub enum ParseError {
     )]
     DefineKeywordRemoved {
         #[label("Remove 'define' keyword")]
-        span: SourceSpan,
-    },
-
-    #[error("Register primitive is now lowercase")]
-    #[diagnostic(
-        code(S25),
-        url("https://docs.hw-script.org/errors/S25"),
-        help("v0.1.6 uses lowercase 'reg' for the register primitive.\nExample: reg(clock: Clk, reset: Rst, init: 0)")
-    )]
-    RegisterPrimitiveIsLowercase {
-        #[label("Use 'reg' (not 'Reg')")]
-        span: SourceSpan,
-    },
-
-    #[error("The 'fields:' keyword was removed")]
-    #[diagnostic(
-        code(S26),
-        url("https://docs.hw-script.org/errors/S26"),
-        help("v0.1.6 structs list fields directly without 'fields:' keyword.\nExample:\nstruct Instruction:\n    opcode[4]\n    operand[8]")
-    )]
-    FieldsKeywordRemoved {
-        #[label("Remove 'fields:' keyword")]
         span: SourceSpan,
     },
 
@@ -290,22 +246,6 @@ pub(crate) fn error_expected_colon_in_property(span: &Span) -> ParseError {
     }
 }
 
-/// Create error for ':' found in logic block (should be '=')
-#[allow(dead_code)] // Will be used when we detect ':' in logic blocks
-pub(crate) fn error_expected_equals_in_logic(span: &Span) -> ParseError {
-    ParseError::ExpectedEqualsInLogic {
-        span: span_to_source_span(span),
-    }
-}
-
-/// Create error for '==' found (should be single '=')
-#[allow(dead_code)] // Will be used when we detect '==' operator
-pub(crate) fn error_single_equals_for_comparison(span: &Span) -> ParseError {
-    ParseError::UsesSingleEqualsForComparison {
-        span: span_to_source_span(span),
-    }
-}
-
 /// Create error for quoted identifier (should be bare identifier)
 pub(crate) fn error_expected_identifier_not_string(span: &Span) -> ParseError {
     ParseError::ExpectedIdentifierNotString {
@@ -316,22 +256,6 @@ pub(crate) fn error_expected_identifier_not_string(span: &Span) -> ParseError {
 /// Create error for 'define' keyword (removed in v0.1.6)
 pub(crate) fn error_define_keyword_removed(span: &Span) -> ParseError {
     ParseError::DefineKeywordRemoved {
-        span: span_to_source_span(span),
-    }
-}
-
-/// Create error for uppercase 'Reg' (should be lowercase 'reg')
-#[allow(dead_code)] // Will be used when we detect uppercase 'Reg'
-pub(crate) fn error_register_primitive_is_lowercase(span: &Span) -> ParseError {
-    ParseError::RegisterPrimitiveIsLowercase {
-        span: span_to_source_span(span),
-    }
-}
-
-/// Create error for 'fields:' keyword (removed in v0.1.6)
-#[allow(dead_code)] // Will be used when we detect 'fields:' in struct definitions
-pub(crate) fn error_fields_keyword_removed(span: &Span) -> ParseError {
-    ParseError::FieldsKeywordRemoved {
         span: span_to_source_span(span),
     }
 }

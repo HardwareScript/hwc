@@ -40,6 +40,7 @@ profile TSMC_180nm:
     
     manufacturing:
         copper_thickness: 500nm
+        circle_segments: 64                # Circular geometry fidelity (vias, pads, tubes, TSVs)
         ipc2221_k_external: 0.024
         ipc2221_k_internal: 0.012
     
@@ -86,6 +87,7 @@ profile TSMC_90nm:
     
     manufacturing:
         copper_thickness: 300nm
+        circle_segments: 64                # Circular geometry fidelity (vias, pads, tubes, TSVs)
         ipc2221_k_external: 0.024
         ipc2221_k_internal: 0.012
     
@@ -136,6 +138,7 @@ profile TSMC_28nm:
     
     manufacturing:
         copper_thickness: 150nm
+        circle_segments: 64                # Circular geometry fidelity (vias, pads, tubes, TSVs)
         ipc2221_k_external: 0.024
         ipc2221_k_internal: 0.012
     
@@ -190,6 +193,7 @@ profile TSMC_16nm_FinFET:
     
     manufacturing:
         copper_thickness: 100nm
+        circle_segments: 64                # Circular geometry fidelity (vias, pads, tubes, TSVs)
         ipc2221_k_external: 0.024
         ipc2221_k_internal: 0.012
     
@@ -248,6 +252,7 @@ profile TSMC_7nm:
     
     manufacturing:
         copper_thickness: 50nm
+        circle_segments: 64                # Circular geometry fidelity (vias, pads, tubes, TSVs)
         ipc2221_k_external: 0.024
         ipc2221_k_internal: 0.012
     
@@ -312,6 +317,7 @@ profile TSMC_5nm:
     
     manufacturing:
         copper_thickness: 30nm
+        circle_segments: 64                # Circular geometry fidelity (vias, pads, tubes, TSVs)
         ipc2221_k_external: 0.024
         ipc2221_k_internal: 0.012
     
@@ -376,6 +382,7 @@ profile TSMC_3nm:
     
     manufacturing:
         copper_thickness: 20nm
+        circle_segments: 64                # Circular geometry fidelity (vias, pads, tubes, TSVs)
         ipc2221_k_external: 0.024
         ipc2221_k_internal: 0.012
     
@@ -450,6 +457,7 @@ profile Intel_22nm:
     
     manufacturing:
         copper_thickness: 120nm
+        circle_segments: 64                # Circular geometry fidelity (vias, pads, tubes, TSVs)
         ipc2221_k_external: 0.024
         ipc2221_k_internal: 0.012
     
@@ -506,6 +514,7 @@ profile Intel_10nm:
     
     manufacturing:
         copper_thickness: 60nm
+        circle_segments: 64                # Circular geometry fidelity (vias, pads, tubes, TSVs)
         ipc2221_k_external: 0.024
         ipc2221_k_internal: 0.012
     
@@ -566,6 +575,7 @@ profile Intel_7nm:
     
     manufacturing:
         copper_thickness: 50nm
+        circle_segments: 64                # Circular geometry fidelity (vias, pads, tubes, TSVs)
         ipc2221_k_external: 0.024
         ipc2221_k_internal: 0.012
     
@@ -634,6 +644,7 @@ profile Samsung_14nm:
     
     manufacturing:
         copper_thickness: 80nm
+        circle_segments: 64                # Circular geometry fidelity (vias, pads, tubes, TSVs)
         ipc2221_k_external: 0.024
         ipc2221_k_internal: 0.012
     
@@ -692,6 +703,7 @@ profile Samsung_5nm:
     
     manufacturing:
         copper_thickness: 30nm
+        circle_segments: 64                # Circular geometry fidelity (vias, pads, tubes, TSVs)
         ipc2221_k_external: 0.024
         ipc2221_k_internal: 0.012
     
@@ -760,6 +772,7 @@ profile Silicon_Extreme_1nm:
     
     manufacturing:
         copper_thickness: 10nm
+        circle_segments: 64                # Circular geometry fidelity (vias, pads, tubes, TSVs)
         ipc2221_k_external: 0.024
         ipc2221_k_internal: 0.012
     
@@ -834,6 +847,7 @@ profile Silicon_Picometer_Test:
     
     manufacturing:
         copper_thickness: 1nm
+        circle_segments: 64                # Circular geometry fidelity (vias, pads, tubes, TSVs)
         ipc2221_k_external: 0.024
         ipc2221_k_internal: 0.012
     
@@ -888,6 +902,7 @@ profile Silicon_Mixed_Scale:
     
     manufacturing:
         copper_thickness: 30nm
+        circle_segments: 64                # Circular geometry fidelity (vias, pads, tubes, TSVs)
         ipc2221_k_external: 0.048
         ipc2221_k_internal: 0.024
     

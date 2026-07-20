@@ -90,6 +90,10 @@ pub struct ConstraintSet {
     pub bridges: Vec<BridgeRule>, // v0.1.7: Multi-material bridges
     /// Solder mask expansion in nanometers (v0.1.7)
     pub solder_mask_expansion_nm: Option<i64>,
+    /// Number of segments used to approximate circular geometry (vias, pads,
+    /// tubes, TSVs). Sourced from `manufacturing.circle_segments` in the PDK
+    /// profile. No compiler default — must be declared.
+    pub circle_segments: u32,
     /// Technology node string (e.g. "PCB", "ASIC") for manufacturing checks.
     pub technology: Option<String>,
     /// Per-layer routability map (v0.1.8 Physical Synthesis Guardrails).

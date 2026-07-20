@@ -1,0 +1,183 @@
+use crate::ir::errors::IrError;
+use crate::ir::placement_item::PlacementItem;
+
+/// Build the dependency graph from placement items and return topologically sorted IDs.
+pub fn build_and_sort(
+    placement_items: &[PlacementItem],
+    _symbol_table: &crate::SymbolTable,
+) -> Result<Vec<compact_str::CompactString>, IrError> {
+    let mut graph = crate::ir::spatial_dependency_graph::SpatialDependencyGraph::new();
+    let mut last_component_name: Option<compact_str::CompactString> = None;
+
+    // Pass 1: Register all items
+    for (i, item) in placement_items.iter().enumerate() {
+        let item_id = item.item_id(i);
+        graph.add_component(item_id);
+    }
+
+    // Pass 2: Extract dependencies
+    for (i, item) in placement_items.iter().enumerate() {
+        let item_id = item.item_id(i);
+
+        match item {
+            PlacementItem::Substrate(s) => {
+                graph.extract_dependencies_from_coord(
+                    &item_id,
+                    &s.from,
+                    last_component_name.as_ref(),
+                );
+                graph.extract_dependencies_from_coord(
+                    &item_id,
+                    &s.to,
+                    last_component_name.as_ref(),
+                );
+            }
+            PlacementItem::Component(c) => {
+                if let Some(position) = &c.position {
+                    graph.extract_dependencies_from_coord(
+                        &item_id,
+                        position,
+                        last_component_name.as_ref(),
+                    );
+                }
+                for constraint in &c.relational_constraints {
+                    match constraint {
+                        hwc_parser::RelationalConstraint::Align { target, .. } => {
+                            graph.add_dependency(item_id.clone(), target.base.clone());
+                        }
+                        hwc_parser::RelationalConstraint::Directional(dir) => {
+                            let target = match dir {
+                                hwc_parser::DirectionalConstraint::Above { target, .. }
+                                | hwc_parser::DirectionalConstraint::Below { target, .. }
+                                | hwc_parser::DirectionalConstraint::RightOf { target, .. }
+                                | hwc_parser::DirectionalConstraint::LeftOf { target, .. } => {
+                                    target
+                                }
+                            };
+                            graph.add_dependency(item_id.clone(), target.base.clone());
+                        }
+                    }
+                }
+                last_component_name = Some(item_id);
+            }
+            PlacementItem::Pour(p) => {
+                if let Some(boundary) = &p.boundary {
+                    match boundary {
+                        hwc_parser::PourBoundary::Rect(from, to) => {
+                            graph.extract_dependencies_from_coord(
+                                &item_id,
+                                from,
+                                last_component_name.as_ref(),
+                            );
+                            graph.extract_dependencies_from_coord(
+                                &item_id,
+                                to,
+                                last_component_name.as_ref(),
+                            );
+                        }
+                        hwc_parser::PourBoundary::Circle { center, radius } => {
+                            graph.extract_dependencies_from_coord(
+                                &item_id,
+                                center,
+                                last_component_name.as_ref(),
+                            );
+                            graph.extract_dependencies_from_expr(
+                                &item_id,
+                                radius,
+                                last_component_name.as_ref(),
+                            );
+                        }
+                    }
+                }
+            }
+            PlacementItem::Plane(p) => {
+                if let Some(from) = &p.from {
+                    graph.extract_dependencies_from_coord(
+                        &item_id,
+                        from,
+                        last_component_name.as_ref(),
+                    );
+                }
+                if let Some(to) = &p.to {
+                    graph.extract_dependencies_from_coord(
+                        &item_id,
+                        to,
+                        last_component_name.as_ref(),
+                    );
+                }
+            }
+            PlacementItem::Contact(c) => {
+                graph.extract_dependencies_from_coord(
+                    &item_id,
+                    &c.position,
+                    last_component_name.as_ref(),
+                );
+            }
+            PlacementItem::Route(r) => {
+                let resolve_name =
+                    |endpoint: &hwc_parser::RouteEndpointSpec| -> compact_str::CompactString {
+                        match endpoint {
+                            hwc_parser::RouteEndpointSpec::ComponentPin {
+                                component_name,
+                                component_index,
+                                ..
+                            } => {
+                                if let Some(idx) = component_index {
+                                    if let Ok(val) =
+                                        crate::ir::routing::evaluate_index_expression(idx)
+                                    {
+                                        format!("{}[{}]", component_name, val).into()
+                                    } else {
+                                        component_name.clone()
+                                    }
+                                } else {
+                                    component_name.clone()
+                                }
+                            }
+                            hwc_parser::RouteEndpointSpec::SpaceEntity { name, index, .. } => {
+                                if let Some(idx) = index {
+                                    if let Ok(val) =
+                                        crate::ir::routing::evaluate_index_expression(idx)
+                                    {
+                                        format!("{}[{}]", name, val).into()
+                                    } else {
+                                        name.clone()
+                                    }
+                                } else {
+                                    name.clone()
+                                }
+                            }
+                        }
+                    };
+                let from_name = resolve_name(&r.from);
+                let to_name = resolve_name(&r.to);
+                graph.add_dependency(item_id.clone(), from_name);
+                graph.add_dependency(item_id.clone(), to_name);
+
+                if let Some(w) = &r.width {
+                    graph.extract_dependencies_from_expr(&item_id, w, last_component_name.as_ref());
+                }
+
+                for (_, expr) in &r.strategy_params {
+                    graph.extract_dependencies_from_expr(
+                        &item_id,
+                        expr,
+                        last_component_name.as_ref(),
+                    );
+                }
+
+                if let Some(path) = &r.path {
+                    for wp in path {
+                        graph.extract_dependencies_from_coord(
+                            &item_id,
+                            wp,
+                            last_component_name.as_ref(),
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    graph.topological_sort()
+}

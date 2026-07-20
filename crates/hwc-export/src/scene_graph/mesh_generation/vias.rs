@@ -2,23 +2,40 @@ use crate::scene_graph::types::{Face, MeshNode, Vertex};
 use hwc_engine::geometry_router::entity_graph::CapType;
 use hwc_engine::SpaceView;
 
+/// Parameters for [`create_via_mesh`].
+pub struct ViaMeshParams {
+    pub name: String,
+    pub center: (f64, f64, f64),
+    pub drill_dia: f64,
+    pub pad_dia: f64,
+    pub plating_thickness: f64,
+    pub height: f64,
+    pub segments: u32,
+    pub top_cap: CapType,
+    pub bottom_cap: CapType,
+    /// Tapered microvia support: distinct bottom drill diameter.
+    pub bottom_drill_dia: Option<f64>,
+    pub material_name: String,
+    pub view: SpaceView,
+}
+
 /// Create a unified plated-through-hole mesh (Limitation 7 Fix)
 /// This creates a single mesh containing the inner tube and the top/bottom pads.
-#[allow(clippy::too_many_arguments)]
-pub fn create_via_mesh(
-    name: &str,
-    center: (f64, f64, f64),
-    drill_dia: f64,
-    pad_dia: f64,
-    plating_thickness: f64,
-    height: f64,
-    segments: u32,
-    top_cap: CapType,
-    bottom_cap: CapType,
-    bottom_drill_dia: Option<f64>, // NEW v0.1.7: Tapered Microvia support
-    material_name: &str,
-    view: SpaceView,
-) -> MeshNode {
+pub fn create_via_mesh(params: ViaMeshParams) -> MeshNode {
+    let ViaMeshParams {
+        name,
+        center,
+        drill_dia,
+        pad_dia,
+        plating_thickness,
+        height,
+        segments,
+        top_cap,
+        bottom_cap,
+        bottom_drill_dia,
+        material_name,
+        view,
+    } = params;
     let (cx, cy, cz) = center;
     let actual_height = height;
 
@@ -29,7 +46,7 @@ pub fn create_via_mesh(
     let r_bottom_plating = bottom_drill_dia.unwrap_or(drill_dia) / 2.0;
     let r_bottom_inner = r_bottom_plating - plating_thickness;
 
-    let actual_segments = if segments == 16 { 64 } else { segments };
+    let actual_segments = segments.max(3);
 
     let mut vertices = Vec::new();
     let mut faces = Vec::new();

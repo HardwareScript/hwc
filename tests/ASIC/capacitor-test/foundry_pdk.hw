@@ -22,6 +22,7 @@ profile Capacitor_PDK:
     
     manufacturing:
         copper_thickness: 100nm
+        circle_segments: 64
     
     clearance:
         high_voltage: 500nm

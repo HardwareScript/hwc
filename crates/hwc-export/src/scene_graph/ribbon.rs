@@ -107,26 +107,30 @@ pub fn create_extruded_ribbon(
                     let (px, py) = calculate_perpendicular(path, i);
                     add_cross_section(
                         &mut vertices,
-                        path[i],
-                        px,
-                        py,
-                        half_width,
-                        z_base,
-                        height,
-                        view,
+                        CrossSectionParams {
+                            p: path[i],
+                            px,
+                            py,
+                            hw: half_width,
+                            z: z_base,
+                            h: height,
+                            view,
+                        },
                     );
                 }
             } else {
                 let (px, py) = calculate_perpendicular(path, i);
                 add_cross_section(
                     &mut vertices,
-                    path[i],
-                    px,
-                    py,
-                    half_width,
-                    z_base,
-                    height,
-                    view,
+                    CrossSectionParams {
+                        p: path[i],
+                        px,
+                        py,
+                        hw: half_width,
+                        z: z_base,
+                        h: height,
+                        view,
+                    },
                 );
             }
         }
@@ -170,10 +174,8 @@ pub fn create_extruded_ribbon(
     })
 }
 
-/// Helper: Adds a straight cross-section with axis-swapping support
-#[allow(clippy::too_many_arguments)]
-fn add_cross_section(
-    verts: &mut Vec<Vertex>,
+/// Helper parameters for [`add_cross_section`].
+struct CrossSectionParams {
     p: (f64, f64),
     px: f64,
     py: f64,
@@ -181,7 +183,19 @@ fn add_cross_section(
     z: f64,
     h: f64,
     view: SpaceView,
-) {
+}
+
+/// Helper: Adds a straight cross-section with axis-swapping support
+fn add_cross_section(verts: &mut Vec<Vertex>, params: CrossSectionParams) {
+    let CrossSectionParams {
+        p,
+        px,
+        py,
+        hw,
+        z,
+        h,
+        view,
+    } = params;
     let pts = [
         (p.0 + px * hw, p.1 + py * hw, z),     // Bottom Left
         (p.0 - px * hw, p.1 - py * hw, z),     // Bottom Right
@@ -216,13 +230,15 @@ fn add_arc_sections(verts: &mut Vec<Vertex>, params: ArcParams, view: SpaceView)
         let angle = params.start + params.sweep * t;
         add_cross_section(
             verts,
-            params.center,
-            angle.cos(),
-            angle.sin(),
-            params.r,
-            params.z,
-            params.h,
-            view,
+            CrossSectionParams {
+                p: params.center,
+                px: angle.cos(),
+                py: angle.sin(),
+                hw: params.r,
+                z: params.z,
+                h: params.h,
+                view,
+            },
         );
     }
 }
@@ -256,13 +272,15 @@ fn add_joint_fillet(verts: &mut Vec<Vertex>, params: FilletParams, view: SpaceVi
         let a = start + diff * t;
         add_cross_section(
             verts,
-            params.c,
-            a.cos(),
-            a.sin(),
-            params.hw,
-            params.z,
-            params.h,
-            view,
+            CrossSectionParams {
+                p: params.c,
+                px: a.cos(),
+                py: a.sin(),
+                hw: params.hw,
+                z: params.z,
+                h: params.h,
+                view,
+            },
         );
     }
 }

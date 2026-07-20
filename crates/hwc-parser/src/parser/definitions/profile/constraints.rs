@@ -289,6 +289,7 @@ impl super::super::super::Parser {
         let mut min_feature_size = None;
         let mut solder_mask_expansion = None;
         let mut solder_mask_thickness = None;
+        let mut circle_segments = None;
         // v0.1.7 ASIC Extensions
         let mut track_pitch = None;
         let mut grid_snapping = None;
@@ -330,6 +331,10 @@ impl super::super::super::Parser {
                 }
                 "solder_mask_thickness" => {
                     solder_mask_thickness = Some(self.parse_measurement()?);
+                    self.skip_whitespace();
+                }
+                "circle_segments" => {
+                    circle_segments = Some(self.expect_integer()?);
                     self.skip_whitespace();
                 }
                 // v0.1.7 ASIC Extensions
@@ -375,6 +380,7 @@ impl super::super::super::Parser {
             min_feature_size,
             solder_mask_expansion,
             solder_mask_thickness,
+            circle_segments,
             track_pitch,
             grid_snapping,
             dummy_fill,

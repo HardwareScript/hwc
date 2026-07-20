@@ -206,6 +206,11 @@ pub struct ManufacturingConstraints {
     /// Solder mask thickness (default: 20µm). Applied on outer surfaces.
     /// Components mounted on top/bottom sit on the mask, not on copper.
     pub solder_mask_thickness: Option<Measurement>,
+    /// Number of segments used to approximate circular geometry (vias, pads,
+    /// tubes, TSVs). Declared in the PDK profile — no compiler default. This
+    /// is the single source of truth consumed by both geometry generation and
+    /// mesh export so the two never disagree on circle fidelity.
+    pub circle_segments: Option<usize>,
     // v0.1.7 ASIC Extensions
     /// Track pitch for gridded routing (ASIC only). Snaps traces to manufacturing grid.
     pub track_pitch: Option<Measurement>,

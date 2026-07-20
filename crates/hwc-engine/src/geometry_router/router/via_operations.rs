@@ -66,10 +66,10 @@ impl GeometryRouter {
             // versus sub-layer noise. Falls back to resolution_nm/2 only when
             // layer_z_positions is empty (no stackup defined).
             let z_delta = (to_z - from_z).abs();
-            let z_threshold = if self.layer_z_positions.len() >= 2 {
+            let z_threshold = if self.config.layer_z_positions.len() >= 2 {
                 // Compute minimum gap between any two adjacent layers
                 let mut min_gap = i64::MAX;
-                for w in self.layer_z_positions.windows(2) {
+                for w in self.config.layer_z_positions.windows(2) {
                     let gap = (w[1] - w[0]).abs();
                     if gap > 0 && gap < min_gap {
                         min_gap = gap;
@@ -143,7 +143,7 @@ impl GeometryRouter {
             properties: rustc_hash::FxHashMap::default(),
         };
 
-        for z_nm in via.z_planes_between(&self.layer_z_positions, 0, self.bounds.depth_nm) {
+        for z_nm in via.z_planes_between(&self.config.layer_z_positions, 0, self.bounds.depth_nm) {
             if !self.is_circular_area_clear(position, total_radius, z_nm) {
                 return false;
             }
@@ -168,7 +168,7 @@ impl GeometryRouter {
         let annular_ring = fabrication.min_annular_ring_nm;
         let total_radius = (via.diameter_nm + 2 * annular_ring) / 2;
 
-        for z_nm in via.z_planes_between(&self.layer_z_positions, 0, self.bounds.depth_nm) {
+        for z_nm in via.z_planes_between(&self.config.layer_z_positions, 0, self.bounds.depth_nm) {
             self.mark_circular_area_occupied(via.position, total_radius, z_nm, via.net_id);
         }
 
@@ -191,7 +191,7 @@ impl GeometryRouter {
         let clearance = fabrication.min_trace_spacing_nm;
         let antipad_radius = (via.diameter_nm + 2 * clearance) / 2;
 
-        for z_nm in via.z_planes_between(&self.layer_z_positions, 0, self.bounds.depth_nm) {
+        for z_nm in via.z_planes_between(&self.config.layer_z_positions, 0, self.bounds.depth_nm) {
             for pour in &self.copper_pours.clone() {
                 if pour.z_bottom_nm == z_nm {
                     if pour.net_id != via.net_id {
@@ -241,7 +241,7 @@ impl GeometryRouter {
             v.position != via.position || v.from_z_nm != via.from_z_nm || v.to_z_nm != via.to_z_nm
         });
 
-        for z_nm in via.z_planes_between(&self.layer_z_positions, 0, self.bounds.depth_nm) {
+        for z_nm in via.z_planes_between(&self.config.layer_z_positions, 0, self.bounds.depth_nm) {
             self.remove_circular_area(via.position, via.diameter_nm, z_nm);
         }
     }
@@ -289,7 +289,7 @@ impl GeometryRouter {
         // v0.1.8: Fail fast — no legacy fallback. Layer Z positions must
         // be populated from the stackup before any via unrolling.
         assert!(
-            !self.layer_z_positions.is_empty(),
+            !self.config.layer_z_positions.is_empty(),
             "FATAL: unroll_via_tower called with empty layer_z_positions. \
              Stackup must be parsed and layer Z positions populated before routing."
         );
@@ -324,8 +324,8 @@ impl GeometryRouter {
                 // v0.1.8: Use actual Z positions from the stackup (layer_z_positions).
                 // Bounds-checked — indices are validated against layer_z_positions.len()
                 // because the caller derives them from profile_layers which is parallel.
-                let from_z = self.layer_z_positions[current_idx as usize];
-                let to_z = self.layer_z_positions[next_idx];
+                let from_z = self.config.layer_z_positions[current_idx as usize];
+                let to_z = self.config.layer_z_positions[next_idx];
 
                 via_tower.push(Via::new_with_type(
                     ViaSpec {
@@ -346,8 +346,8 @@ impl GeometryRouter {
             }
         } else {
             // PCB: emit a single through-hole via spanning the full depth
-            let from_z = self.layer_z_positions[start_layer_idx];
-            let to_z = self.layer_z_positions[end_layer_idx];
+            let from_z = self.config.layer_z_positions[start_layer_idx];
+            let to_z = self.config.layer_z_positions[end_layer_idx];
 
             via_tower.push(Via::new_with_type(
                 ViaSpec {
@@ -396,7 +396,8 @@ impl GeometryRouter {
 
         for via in via_tower {
             // For each intermediate Z plane (not the first or last), stamp a landing pad
-            let z_planes = via.z_planes_between(&self.layer_z_positions, 0, self.bounds.depth_nm);
+            let z_planes =
+                via.z_planes_between(&self.config.layer_z_positions, 0, self.bounds.depth_nm);
             for (i, &z_nm) in z_planes.iter().enumerate() {
                 if i == 0 || i == z_planes.len() - 1 {
                     continue; // Skip the start and end layers (already have pads from the via)
@@ -417,11 +418,11 @@ impl GeometryRouter {
     /// Returns the index of the layer whose Z range contains `z_nm`.
     /// If `z_nm` is between layers, returns the index of the closest layer below.
     pub fn find_layer_index_at_z(&self, z_nm: i64) -> Option<usize> {
-        if self.layer_z_positions.is_empty() {
+        if self.config.layer_z_positions.is_empty() {
             return None;
         }
         // Find the last layer whose start Z is <= z_nm
-        for (i, &layer_z) in self.layer_z_positions.iter().enumerate().rev() {
+        for (i, &layer_z) in self.config.layer_z_positions.iter().enumerate().rev() {
             if z_nm >= layer_z {
                 return Some(i);
             }
@@ -442,7 +443,7 @@ impl GeometryRouter {
     /// `layer_z_positions` directly from the stackup. No legacy fallbacks.
     /// If profile layer info is not available, returns the original via unchanged.
     pub fn unroll_detected_via(&self, via: &Via) -> Vec<Via> {
-        if self.profile_layers.is_empty() || self.layer_z_positions.is_empty() {
+        if self.config.profile_layers.is_empty() || self.config.layer_z_positions.is_empty() {
             return vec![via.clone()];
         }
 
@@ -452,7 +453,7 @@ impl GeometryRouter {
         let start_idx = self.find_layer_index_at_z(min_z).unwrap_or(0);
         let end_idx = self
             .find_layer_index_at_z(max_z)
-            .unwrap_or(self.profile_layers.len() - 1);
+            .unwrap_or(self.config.profile_layers.len() - 1);
 
         // If the via only spans one layer, no unrolling needed
         if start_idx == end_idx {
@@ -463,9 +464,9 @@ impl GeometryRouter {
             via.position,
             start_idx,
             end_idx,
-            &self.profile_layers,
+            &self.config.profile_layers,
             via.net_id,
-            self.is_manhattan,
+            self.config.is_manhattan,
         )
     }
 }

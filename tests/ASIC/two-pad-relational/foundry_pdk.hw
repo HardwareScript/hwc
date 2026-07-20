@@ -44,6 +44,7 @@ profile Silicon_180nm:
 
     manufacturing:
         copper_thickness: 400nm
+        circle_segments: 64
         solder_mask_thickness: 0nm
 
     clearance:

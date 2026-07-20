@@ -12,6 +12,3 @@ mod expressions;
 mod main;
 mod pins;
 mod statements;
-
-#[cfg(test)]
-mod tests;

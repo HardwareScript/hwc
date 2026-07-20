@@ -50,6 +50,7 @@ profile Silicon_250nm:
 
     manufacturing:
         copper_thickness: 400nm
+        circle_segments: 64
         solder_mask_expansion: 75um
 
     clearance:
