@@ -22,7 +22,12 @@ impl<'a> AutoRouter<'a> {
             hwc_engine::RoutingPattern,
         >,
     ) -> Self {
-        let config = RouterConfig::new(net_frequencies, auto_routes, route_net_policies);
+        let config = RouterConfig::new(
+            net_frequencies,
+            auto_routes,
+            route_net_policies,
+            rustc_hash::FxHashMap::default(),
+        );
         Self {
             space,
             stackup_manager,

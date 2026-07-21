@@ -17,6 +17,8 @@ use compact_str::CompactString;
 use miette::Diagnostic;
 use thiserror::Error;
 
+use crate::routing_intent::RoutingIntent;
+
 #[derive(Error, Diagnostic, Debug)]
 pub enum ConstraintError {
     #[error("Constraint profile not found: {0}")]
@@ -103,6 +105,9 @@ pub struct ConstraintSet {
     /// Maximum route length for `local_only` layers in nanometers (v0.1.8).
     /// Default: 10_000 nm (10µm).
     pub max_local_route_length_nm: Option<i64>,
+    /// User-declared routing intents (CIR Phase 2.2).
+    /// Replaces hardcoded `RoutingIntent::clock()` etc. with table-driven lookup.
+    pub intents: Vec<RoutingIntent>,
 }
 
 /// Stackup constraints for impedance-controlled routing

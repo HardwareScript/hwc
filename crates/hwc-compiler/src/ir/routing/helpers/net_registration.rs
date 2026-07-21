@@ -176,23 +176,37 @@ pub fn register_net_for_route(
     space.netlist.connect_pin(start_pin_id, net_id);
     space.netlist.connect_pin(goal_pin_id, net_id);
 
-    let actual_net_name = space
-        .netlist
-        .get_net(net_id)
-        .map(|n| n.name.clone())
-        .unwrap_or(net_name);
-
-    if existing_net.is_none() || goal_net.is_none() || existing_net != goal_net {
-        let start_name = construct_entity_name(&route.from)?;
-        let goal_name = construct_entity_name(&route.to)?;
-
-        space
-            .entity_graph
-            .set_entity_net(&start_name, actual_net_name.as_str());
-        space
-            .entity_graph
-            .set_entity_net(&goal_name, actual_net_name.as_str());
-    }
+    // v0.1.9.1 BUG FIX: Do NOT call set_entity_net here!
+    //
+    // PROBLEM: When pads/planes are placed with explicit `net:` declarations,
+    // they already have their net_id assigned in the EntityGraph. Calling
+    // set_entity_net() here would OVERWRITE those assignments, causing all
+    // pads on different nets to be merged into a single net.
+    //
+    // EXAMPLE BUG (before fix):
+    //   nets: { A1: {...}, B1: {...}, A2: {...}, B2: {...} }  ← 4 nets declared
+    //   Pad_A1 net: A1  ← NetId(1)
+    //   Pad_B1 net: B1  ← NetId(2)
+    //   route Pad_A1 to Pad_B1
+    //     → set_entity_net("Pad_A1", "A1")  ← NetId(1)
+    //     → set_entity_net("Pad_B1", "A1")  ← NetId(1) WRONG! Was NetId(2)
+    //   Pad_A2 net: A2  ← NetId(3)
+    //   Pad_B2 net: B2  ← NetId(4)
+    //   route Pad_A2 to Pad_B2
+    //     → set_entity_net("Pad_A2", "A2")  ← NetId(1) WRONG! Was NetId(3)
+    //     → set_entity_net("Pad_B2", "A2")  ← NetId(1) WRONG! Was NetId(4)
+    //   Result: All 4 pads end up on NetId(1), causing crosstalk test to fail
+    //
+    // CORRECT BEHAVIOR:
+    // - EntityGraph tracks which net each physical pad belongs to (set during placement)
+    // - Netlist tracks which pins are electrically connected (merged during routing)
+    // - Routing creates physical traces between pads, but doesn't change which nets they're on
+    // - The netlist merger (lines 117-149) already handles net connectivity correctly
+    //
+    // WHEN TO UPDATE ENTITY NET:
+    // Only update entity net assignments when routing between component pins that had NO
+    // pre-existing net assignment (i.e., auto-generated NET_foo_to_bar names).
+    // Planes/pads with explicit `net:` declarations should keep their original net_id.
 
     Ok(net_id)
 }

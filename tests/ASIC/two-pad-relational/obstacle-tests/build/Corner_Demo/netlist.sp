@@ -9,27 +9,27 @@
 * Net: Edge_B (pour: Pad_Edge_B, material: Aluminum, z: 0.0010mm)
 * Net: Tight_A (pour: Pad_Tight_A, material: Aluminum, z: 0.0010mm)
 * Net: Tight_B (pour: Pad_Tight_B, material: Aluminum, z: 0.0010mm)
-* Net: Edge_A (width=180nm, material=Tungsten)
+* Net: Edge_A (width=200000nm, material=Tungsten)
 *   Connected pins:
 *     - Pad_Edge_A.__virtual_Pad_Edge_A
 *     - Pad_Edge_A.__virtual_Pad_Edge_A
 *     - Pad_Edge_B.__virtual_Pad_Edge_B
 *     - Pad_Edge_A.__virtual_Pad_Edge_A
 *     - Pad_Edge_B.__virtual_Pad_Edge_B
-* Net: Edge_B (width=180nm, material=Tungsten)
+* Net: Edge_B (width=200000nm, material=Tungsten)
 *   Connected pins:
 *     - Pad_Edge_B.__virtual_Pad_Edge_B
-* Net: Tight_A (width=180nm, material=Tungsten)
+* Net: Tight_A (width=200000nm, material=Tungsten)
 *   Connected pins:
 *     - Pad_Tight_A.__virtual_Pad_Tight_A
 *     - Pad_Tight_A.__virtual_Pad_Tight_A
 *     - Pad_Tight_B.__virtual_Pad_Tight_B
 *     - Pad_Tight_A.__virtual_Pad_Tight_A
 *     - Pad_Tight_B.__virtual_Pad_Tight_B
-* Net: Tight_B (width=180nm, material=Tungsten)
+* Net: Tight_B (width=200000nm, material=Tungsten)
 *   Connected pins:
 *     - Pad_Tight_B.__virtual_Pad_Tight_B
-* Net: TEMP_NET (width=180nm, material=Tungsten)
+* Net: TEMP_NET (width=200000nm, material=Tungsten)
 
 * ========================================
 * AUTOMATIC STIMULUS & MODELS

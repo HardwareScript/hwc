@@ -216,6 +216,9 @@ pub enum Token {
     #[token("signal_group")]
     SignalGroup,
 
+    #[token("net_type")]
+    NetType,
+
     // Note: 'pattern' and 'strategy' are handled as identifiers in most contexts
     // and only recognized as definition types after 'define' keyword
 
@@ -624,6 +627,7 @@ impl fmt::Display for Token {
             Token::Unit => write!(f, "the 'unit' keyword"),
             Token::Device => write!(f, "the 'device' keyword"),
             Token::SignalGroup => write!(f, "the 'signal_group' keyword"),
+            Token::NetType => write!(f, "the 'net_type' keyword"),
             Token::Logic => write!(f, "the 'logic' keyword"),
             Token::Enum => write!(f, "the 'enum' keyword"),
             Token::Struct => write!(f, "the 'struct' keyword"),

@@ -14,6 +14,8 @@
 //! - `ROADMAP/v0.1.4/Gap3.md` (Hierarchical Parallel Routing)
 
 mod bounding_box_tracker;
+pub mod connection_candidate;
+pub mod connection_interface;
 pub mod constraints;
 pub mod copper_welder;
 
@@ -27,11 +29,13 @@ pub mod em_thermal_check;
 pub mod entity_graph;
 pub mod export_isolation;
 pub mod gcell_sweep;
+pub mod geometry_math;
 pub mod geometry_refinement;
 mod htree;
 pub mod i128_transforms;
 pub mod incremental_drc;
 pub mod integration_verification;
+pub mod interface_escape;
 mod layer_direction;
 pub mod legalizer;
 pub mod lockfile;
@@ -51,6 +55,7 @@ pub mod query_engine;
 pub mod route_decomposition;
 pub mod route_persistence;
 pub mod router;
+pub mod routing_intent;
 mod routing_patterns;
 pub mod scene_graph;
 pub mod soft_corridor;
@@ -69,6 +74,11 @@ mod types;
 // Re-export public API
 pub use bounding_box_tracker::{BoundingBoxTracker, TrackedObstacle, ViaObstacleParams};
 pub use compaction::{CompactionMove, Compactor, SignalConstraints};
+pub use connection_candidate::{select_connection_candidates, ConnectionCandidate};
+pub use connection_interface::{
+    AccessRegion, DefaultRoutingDatabase, DerivedConstraint, InterfaceCapability,
+    InterfaceGeometry, InterfaceId, Normal2D, Orientation, PhysicalInterface, RoutingDatabase,
+};
 pub use constraints::{
     check_constraints, HardConstraints, NetConstraints, RouteMetrics, SoftConstraints, Violation,
 };
@@ -78,6 +88,7 @@ pub use em_thermal_check::{
     CurrentDeclaration, DrcViolation as EmThermalViolation, EmParams, ThermalParams,
 };
 pub use entity_graph::EntityGraph;
+pub use pathfinding::{CostComposer, CostEvaluator};
 
 pub use geometry_refinement::{
     canonicalize_contours, refine_geometry, refine_layer, RefinedContour,
@@ -112,6 +123,7 @@ pub use route_decomposition::{
 };
 pub use router::core::RouteSpaceRequest;
 pub use router::GeometryRouter;
+pub use routing_intent::{IntentCostWeights, RoutingIntent};
 pub use routing_patterns::{
     LengthMatchingEngine, PatternStep, RoutedTrace, RoutingPattern, StandardPatterns,
 };

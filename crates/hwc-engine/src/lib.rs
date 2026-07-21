@@ -40,6 +40,7 @@ pub use geometry_router::miter_pass::MiterEngine;
 pub use geometry_router::scene_graph::{
     ComponentInstance, ComponentStamp, OrientedBoundingBox, SceneGraph,
 };
+pub use geometry_router::select_connection_candidates;
 pub use geometry_router::spatial_index::{
     query_overlapping_segments, DynamicSpatialIndex, IndexedSegment,
 };
@@ -56,6 +57,11 @@ pub use geometry_router::{
     SoftCorridor,
 };
 pub use geometry_router::{decompose_net, DecomposedNet, PinNode, RouteSegment, VirtualJunction};
+pub use geometry_router::{
+    AccessRegion, ConnectionCandidate, CostComposer, CostEvaluator, DefaultRoutingDatabase,
+    DerivedConstraint, IntentCostWeights, InterfaceCapability, InterfaceGeometry, InterfaceId,
+    Normal2D, Orientation, PhysicalInterface, RoutingDatabase, RoutingIntent,
+};
 pub use geometry_router::{ClearanceViolation, LegalizationWindow, Legalizer};
 pub use geometry_router::{CompactionMove, Compactor, SignalConstraints};
 pub use geometry_router::{DagConstraint, DagSolver, QpSolution, QpSolver};

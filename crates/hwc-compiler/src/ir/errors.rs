@@ -618,6 +618,20 @@ pub enum IrError {
         )
     )]
     HardConstraintViolation { net_id: u32, description: String },
+
+    /// CIR1: Interface capability constraint violated during routing.
+    #[error("Interface capability constraint violated: trace width {actual_nm}nm < required {required_nm}nm")]
+    #[diagnostic(
+        code(CIR1),
+        url("https://docs.hw-script.org/errors/CIR1"),
+        help("Increase the trace width or reduce the current requirement on this interface")
+    )]
+    InterfaceConstraintViolation {
+        actual_nm: i64,
+        required_nm: i64,
+        #[label("interface capability requires wider trace")]
+        span: miette::SourceSpan,
+    },
 }
 
 #[derive(Debug, Clone)]

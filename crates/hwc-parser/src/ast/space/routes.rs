@@ -47,6 +47,11 @@ pub struct Route {
     pub exit_escape: Option<RouteEscape>,
     pub enter_escape: Option<RouteEscape>,
     pub current_limit_ac: Option<CurrentLimitAc>,
+    pub intent: Option<CompactString>,
+    /// Local override for perpendicular escape stub length (v0.1.9).
+    /// Takes highest priority in the authority hierarchy:
+    /// Profile Default → Net Type Intent → Route Override
+    pub escape_stub: Option<Expression>,
     pub span: Span,
 }
 

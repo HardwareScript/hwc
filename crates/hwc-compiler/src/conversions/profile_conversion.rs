@@ -1,7 +1,7 @@
 use crate::symbol_table::SymbolTable;
 use hwc_materials::{
-    ClearanceConstraints, ConstraintSet, LayerConstraints, RoutableMode, TraceConstraints,
-    ViaConstraints,
+    ClearanceConstraints, ConstraintSet, IntentCostWeights, LayerConstraints, RoutableMode,
+    RoutingIntent, TraceConstraints, ViaConstraints,
 };
 use hwc_parser::ProfileDefinition;
 
@@ -206,6 +206,29 @@ pub fn profile_to_constraints(
         .and_then(|r| r.max_local_route_length.as_ref())
         .map(measurement_to_nm);
 
+    // CIR Phase 2.2: Convert user-declared profile intents to RoutingIntent.
+    // This replaces hardcoded RoutingIntent::clock() etc. with a table-driven approach.
+    let intents: Vec<RoutingIntent> = profile
+        .intents
+        .iter()
+        .map(|pi| {
+            let cost_weights = pi.cost_weights.as_ref().map(|cw| IntentCostWeights {
+                base_cost: cw.base,
+                via_penalty: cw.via_penalty,
+                direction_penalty: cw.direction_penalty,
+                tight_clearance_penalty: cw.tight_clearance_penalty,
+                crosstalk_penalty: cw.crosstalk_penalty,
+                impedance_penalty: cw.impedance_penalty,
+                reference_void_penalty: cw.reference_void_penalty,
+            });
+            RoutingIntent::from_profile_data(
+                &pi.name.name,
+                pi.routing_style.as_ref().map(|s| s.name.as_str()),
+                cost_weights.as_ref(),
+            )
+        })
+        .collect();
+
     Ok(ConstraintSet {
         name: profile.name.to_string().into(),
         description: profile.description.clone().unwrap_or_default(),
@@ -221,5 +244,6 @@ pub fn profile_to_constraints(
         technology: profile.technology.clone(),
         layer_routability,
         max_local_route_length_nm,
+        intents,
     })
 }

@@ -80,18 +80,22 @@ space Dense_Demo implements Dense_Grid:
         width: 25um
         layer: metal1
         current_limit_ac: { rms: 0.5uA, peak: 1.0uA }
+        escape_stub: 10um  # v0.1.9: Force perpendicular escape before routing
 
     route Pad_A2 to Pad_B3:
         width: 25um
         layer: metal1
         current_limit_ac: { rms: 0.5uA, peak: 1.0uA }
+        escape_stub: 10um  # v0.1.9: Force perpendicular escape before routing
 
     route Pad_A3 to Pad_B2:
         width: 25um
         layer: metal1
         current_limit_ac: { rms: 0.5uA, peak: 1.0uA }
+        escape_stub: 10um  # v0.1.9: Force perpendicular escape before routing
 
     route Pad_A4 to Pad_B1:
         width: 25um
         layer: metal1
         current_limit_ac: { rms: 0.5uA, peak: 1.0uA }
+        escape_stub: 10um  # v0.1.9: Force perpendicular escape before routing

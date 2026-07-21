@@ -184,22 +184,50 @@ impl GeometryRouter {
         // Exempt the active net_id so start/goal pads are not treated as obstacles
         let exempt_net_ids = vec![route.net_id.raw() as usize];
 
-        // v0.1.9: TopologicalRouter is the single authoritative routing engine
-        // NO FALLBACK - if TopologicalRouter can't find a path, the route fails
-        let path = match topo_router.route_with_exemptions(
-            start,
-            goal,
-            &spatial_index,
-            &board_bounds,
-            &exempt_net_ids,
-        ) {
-            Some(topo_path) if topo_path.waypoints.len() >= 2 => topo_path.waypoints,
-            _ => {
-                return Err(RoutingError::NoPathFound {
-                    net_id: route.net_id,
-                    start: route.start,
-                    goal: route.goal,
-                });
+        // v0.1.9: Check if perpendicular escape routing is required
+        let path = if let Some(&(start_normal, goal_normal)) = self.net_normals.get(&route.net_id) {
+            let escape_stub_nm = self.net_escape_stubs.get(&route.net_id).copied().unwrap_or(0);
+            
+            eprintln!("[GLOBAL ROUTING] Net {} using perpendicular escape: stub={}nm", route.net_id.raw(), escape_stub_nm);
+            
+            // Use perpendicular escape routing with Normal2D directly
+            match topo_router.route_with_perpendicular_escape(
+                start,
+                goal,
+                start_normal,
+                goal_normal,
+                escape_stub_nm,
+                &spatial_index,
+                &board_bounds,
+                &exempt_net_ids,
+            ) {
+                Some(topo_path) if topo_path.waypoints.len() >= 2 => topo_path.waypoints,
+                _ => {
+                    return Err(RoutingError::NoPathFound {
+                        net_id: route.net_id,
+                        start: route.start,
+                        goal: route.goal,
+                    });
+                }
+            }
+        } else {
+            // v0.1.9: TopologicalRouter is the single authoritative routing engine
+            // NO FALLBACK - if TopologicalRouter can't find a path, the route fails
+            match topo_router.route_with_exemptions(
+                start,
+                goal,
+                &spatial_index,
+                &board_bounds,
+                &exempt_net_ids,
+            ) {
+                Some(topo_path) if topo_path.waypoints.len() >= 2 => topo_path.waypoints,
+                _ => {
+                    return Err(RoutingError::NoPathFound {
+                        net_id: route.net_id,
+                        start: route.start,
+                        goal: route.goal,
+                    });
+                }
             }
         };
 

@@ -5,6 +5,7 @@ use crate::geometry::Point3D;
 use crate::geometry_router::bounding_box_tracker::BoundingBoxTracker;
 use crate::geometry_router::neighbor_generation::GridBounds;
 use crate::geometry_router::partition::PartitionGrid;
+use crate::geometry_router::pathfinding::CostComposer;
 use crate::geometry_router::query_engine::QueryStore;
 use crate::geometry_router::routing_patterns::RoutingPattern;
 use crate::geometry_router::substrate_types::SubstrateLayer;
@@ -21,6 +22,10 @@ pub struct RouteSpaceRequest<'a> {
     pub substrate_layers: Option<&'a [SubstrateLayer]>,
     pub net_frequencies: &'a FxHashMap<crate::netlist::NetId, f64>,
     pub net_trace_widths: &'a FxHashMap<crate::netlist::NetId, i64>,
+    /// v0.1.9: Per-net start/goal normals for perpendicular escape routing.
+    pub net_normals: Option<&'a FxHashMap<crate::netlist::NetId, (crate::geometry_router::connection_interface::Normal2D, crate::geometry_router::connection_interface::Normal2D)>>,
+    /// v0.1.9: Per-net escape stub distances in nanometers.
+    pub net_escape_stubs: Option<&'a FxHashMap<crate::netlist::NetId, i64>>,
 }
 
 /// Copper pour definition for anti-pad generation.
@@ -115,4 +120,16 @@ pub struct GeometryRouter {
 
     /// v0.1.9: Per-net trace widths in nanometers.
     pub(crate) net_trace_widths: FxHashMap<crate::netlist::NetId, i64>,
+
+    /// v0.1.9: Per-net start/goal normals for perpendicular escape routing.
+    pub(crate) net_normals: FxHashMap<crate::netlist::NetId, (crate::geometry_router::connection_interface::Normal2D, crate::geometry_router::connection_interface::Normal2D)>,
+
+    /// v0.1.9: Per-net escape stub distances for perpendicular escape routing.
+    pub(crate) net_escape_stubs: FxHashMap<crate::netlist::NetId, i64>,
+
+    /// v0.1.9: Cost composer for intent-aware cost evaluation.
+    pub(crate) cost_composer: CostComposer,
+
+    /// v0.1.9: Per-net cost composers keyed by intent name.
+    pub(crate) intent_composers: rustc_hash::FxHashMap<compact_str::CompactString, CostComposer>,
 }

@@ -64,8 +64,43 @@ impl IndexedSegment {
 
     /// The minimum X coordinate of this segment's bounding box (for sorted-array indexing).
     #[inline]
-    fn min_x(&self) -> i64 {
-        self.start.x.min(self.end.x) - self.width_nm / 2
+    pub fn min_x(&self) -> i64 {
+        let half_w = if matches!(self.source, SpatialEntitySource::RouteSegment { .. }) {
+            self.width_nm / 2
+        } else {
+            0
+        };
+        self.start.x.min(self.end.x) - half_w
+    }
+
+    #[inline]
+    pub fn max_x(&self) -> i64 {
+        let half_w = if matches!(self.source, SpatialEntitySource::RouteSegment { .. }) {
+            self.width_nm / 2
+        } else {
+            0
+        };
+        self.start.x.max(self.end.x) + half_w
+    }
+
+    #[inline]
+    pub fn min_y(&self) -> i64 {
+        let half_w = if matches!(self.source, SpatialEntitySource::RouteSegment { .. }) {
+            self.width_nm / 2
+        } else {
+            0
+        };
+        self.start.y.min(self.end.y) - half_w
+    }
+
+    #[inline]
+    pub fn max_y(&self) -> i64 {
+        let half_w = if matches!(self.source, SpatialEntitySource::RouteSegment { .. }) {
+            self.width_nm / 2
+        } else {
+            0
+        };
+        self.start.y.max(self.end.y) + half_w
     }
 }
 
@@ -97,6 +132,8 @@ pub struct DynamicSpatialIndex {
     all_segments: Vec<IndexedSegment>,
     /// Whether layer Z-ranges have been configured.
     layers_configured: bool,
+    /// Maximum bounding box X-span (max_x - min_x) of any segment in the index.
+    max_span: i64,
 }
 
 impl DynamicSpatialIndex {
@@ -106,6 +143,7 @@ impl DynamicSpatialIndex {
             layer_z_ranges: Vec::new(),
             all_segments: Vec::new(),
             layers_configured: false,
+            max_span: 0,
         }
     }
 
@@ -159,6 +197,11 @@ impl DynamicSpatialIndex {
     /// The segment is placed into all layers whose Z-range overlaps the segment's
     /// Z-extent. If no layer Z-ranges are configured, it goes into the fallback bucket.
     pub fn insert(&mut self, segment: IndexedSegment) {
+        let span = segment.max_x() - segment.min_x();
+        if span > self.max_span {
+            self.max_span = span;
+        }
+
         let z_min = segment.start.z.min(segment.end.z);
         let z_max = segment.start.z.max(segment.end.z);
         let layer_indices = self.layers_for_z_range(z_min, z_max);
@@ -216,6 +259,7 @@ impl DynamicSpatialIndex {
             bucket.clear();
         }
         self.all_segments.clear();
+        self.max_span = 0;
         // NOTE: We do NOT reset layers_configured or layer_z_ranges here.
         // The layer configuration should persist across clear() calls.
         // If you need to fully reset the index, create a new instance.
@@ -287,13 +331,19 @@ impl DynamicSpatialIndex {
         let min_y = bbox.min.y;
         let max_y = bbox.max.y;
 
-        // Binary search: find first segment whose min_x >= bbox.min.x
-        let start_idx = bucket.partition_point(|s| s.min_x() < min_x);
+        // Binary search: search for first segment whose min_x could overlap [min_x, max_x].
+        // Since max_x <= min_x + max_span, any segment with min_x < (min_x - max_span)
+        // cannot have max_x >= min_x.
+        let search_min_x = min_x - self.max_span;
+        let start_idx = bucket.partition_point(|s| s.min_x() < search_min_x);
 
         // Linear scan from start_idx, break when min_x > bbox.max.x
         for seg in &bucket[start_idx..] {
             if seg.min_x() > max_x {
                 break;
+            }
+            if seg.max_x() < min_x {
+                continue;
             }
             // Deduplicate by segment_id (segments spanning multiple Z-layers appear in multiple buckets)
             let was_new = seen_segment_ids.insert(seg.segment_id);
@@ -301,9 +351,7 @@ impl DynamicSpatialIndex {
                 continue; // Already returned this segment from a different layer bucket
             }
             // Y overlap check
-            let seg_min_y = seg.start.y.min(seg.end.y) - seg.width_nm / 2;
-            let seg_max_y = seg.start.y.max(seg.end.y) + seg.width_nm / 2;
-            if seg_min_y <= max_y && seg_max_y >= min_y {
+            if seg.min_y() <= max_y && seg.max_y() >= min_y {
                 results.push(seg);
             }
         }

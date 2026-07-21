@@ -86,6 +86,67 @@ pub struct RoutingConstraints {
     /// Maps net name to priority (higher = routed first).
     /// v0.1.8 ZERO-MAGIC: Priority must be declared here, not guessed from names.
     pub net_priorities: rustc_hash::FxHashMap<String, u8>,
+    /// Default perpendicular escape stub length (v0.1.9 Declarative Escape Policies).
+    /// Distance the trace must travel perpendicular to the pad edge before turning.
+    /// - 0nm: Turn immediately (flush with pad edge)
+    /// - >0nm: Enforces perpendicular escape segment
+    /// Can be overridden by net_type intent or individual route declarations.
+    pub escape_stub: Option<Measurement>,
+    pub span: Span,
+}
+
+/// A user-declared routing intent (CIR Phase 2.2).
+///
+/// Syntax in profile:
+/// ```hw
+/// intent Clock:
+///     routing_style: straight
+///     cost_weights:
+///         base: 10
+///         via_penalty: 500
+/// ```
+///
+/// This replaces the old hardcoded `RoutingIntent::clock()` with a
+/// table-driven approach: users declare intents in their PDK profile,
+/// and the compiler looks them up by name at routing time.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ProfileIntent {
+    /// Intent name (e.g., "Clock", "Power", "Signal").
+    pub name: Identifier,
+    /// Routing style preference for this intent.
+    /// Known styles: "straight", "manhattan", "auto".
+    pub routing_style: Option<Identifier>,
+    /// Cost weight overrides for this intent.
+    /// If not specified, the global routing cost weights are used.
+    pub cost_weights: Option<CostWeights>,
+    /// Escape stub override for this intent (v0.1.9).
+    /// Overrides the global routing.escape_stub for nets with this intent.
+    pub escape_stub: Option<Measurement>,
+    pub span: Span,
+}
+
+/// Cost weight overrides for a routing intent.
+///
+/// Syntax in profile (inside `intent` block):
+/// ```hw
+/// cost_weights:
+///     base: 10
+///     via_penalty: 500
+///     direction_penalty: 20
+///     tight_clearance_penalty: 5
+///     crosstalk_penalty: 10
+///     impedance_penalty: 3
+///     reference_void_penalty: 10000000
+/// ```
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CostWeights {
+    pub base: Option<i64>,
+    pub via_penalty: Option<i64>,
+    pub direction_penalty: Option<i64>,
+    pub tight_clearance_penalty: Option<i64>,
+    pub crosstalk_penalty: Option<i64>,
+    pub impedance_penalty: Option<i64>,
+    pub reference_void_penalty: Option<i64>,
     pub span: Span,
 }
 
@@ -107,6 +168,9 @@ pub struct ProfileDefinition {
     pub export: Option<ExportConstraints>, // v0.1.6: Export & visualization rules
     /// Routing constraints (v0.1.7): layer direction preferences for ASIC gridded routing.
     pub routing: Option<RoutingConstraints>,
+    /// User-declared routing intents (CIR Phase 2.2).
+    /// Replaces hardcoded `RoutingIntent::clock()` etc. with a table-driven approach.
+    pub intents: Vec<ProfileIntent>,
     /// Bridge rules for material transitions (Phase 1 - BRIDGE-IMPLEMENTATION.md)
     /// Syntax: `bridge FromMaterial to ToMaterial: BridgeMaterial`
     pub bridges: Vec<BridgeRule>,

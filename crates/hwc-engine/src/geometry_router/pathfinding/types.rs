@@ -1,6 +1,8 @@
 //! Type definitions for pathfinding
 
 use crate::constraint_manager::{ClearanceZone, LayerDirection, RouteConstraints};
+use crate::geometry_router::connection_interface::DerivedConstraint;
+use crate::geometry_router::routing_intent::RoutingIntent;
 use crate::geometry_router::stackup_slicing::RoutableMode;
 use crate::geometry_router::EntityGraph;
 use crate::netlist::NetId;
@@ -61,4 +63,10 @@ pub struct RoutingParams<'a> {
     pub impedance_penalty: i64,
     /// Extreme penalty for crossing reference-plane voids. Default: 5_000_000.
     pub reference_void_penalty: i64,
+
+    // ── v0.1.9: Connection Interface Routing (CIR) ──
+    /// Derived constraints from interface capabilities (e.g., minimum trace width).
+    pub interface_constraints: &'a [DerivedConstraint],
+    /// Routing intent for this net (applies cost weight overrides).
+    pub routing_intent: Option<&'a RoutingIntent>,
 }

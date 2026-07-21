@@ -14,6 +14,9 @@ pub struct ConstraintResult {
     pub current_ma: f64,
     /// Resolved trace width (nm).
     pub trace_width_nm: i64,
+    /// Resolved perpendicular escape stub length (nm) - v0.1.9 Declarative Escape Policies.
+    /// Authority hierarchy: Profile Default → Net Type Intent → Route Override
+    pub escape_stub_nm: i64,
 }
 
 /// Resolve the conductor material for a trace at the given Z position.
@@ -132,10 +135,82 @@ pub fn evaluate_constraints(
         );
     }
 
+    // v0.1.9: Resolve escape_stub with authority hierarchy:
+    // 1. Route-level override (highest priority)
+    // 2. Net type intent override
+    // 3. Profile default (required - no fallback)
+    let escape_stub_nm = if let Some(ref stub_expr) = route.escape_stub {
+        // Route-level override (highest authority)
+        crate::ir::conversions::evaluate_expression_to_nm(stub_expr, symbol_table)
+            .map_err(|e| IrError::InvalidRouteExpression {
+                expression: "escape_stub".into(),
+                reason: e.to_string(),
+            })?
+    } else if let Some(ref intent_name) = route.intent {
+        // Net type intent override
+        if let Some(intent) = profile
+            .and_then(|p| p.intents.iter().find(|i| i.name.name == intent_name.as_str()))
+        {
+            if let Some(ref stub_meas) = intent.escape_stub {
+                crate::ir::conversions::measurement_to_nm(stub_meas, symbol_table)
+                    .map_err(|e| IrError::InvalidRouteExpression {
+                        expression: format!("intent '{}' escape_stub", intent_name),
+                        reason: e.to_string(),
+                    })?
+            } else {
+                // Intent doesn't override - fall through to profile default
+                profile
+                    .and_then(|p| p.routing.as_ref())
+                    .and_then(|r| r.escape_stub.as_ref())
+                    .map(|m| crate::ir::conversions::measurement_to_nm(m, symbol_table))
+                    .transpose()
+                    .map_err(|e| IrError::InvalidRouteExpression {
+                        expression: "profile routing.escape_stub".into(),
+                        reason: e.to_string(),
+                    })?
+                    .ok_or_else(|| IrError::MissingAsicConstraint {
+                        message: "Route requires 'escape_stub' but it is not declared in the profile.".into(),
+                        hint: "Add 'escape_stub: <value>' to the 'routing:' block in your profile.\n\nExample:\n  routing:\n    min_segment_length: 180nm\n    escape_stub: 0nm  # for immediate turns, or >0nm for perpendicular escape".into(),
+                    })?
+            }
+        } else {
+            // Intent not found - fall through to profile default
+            profile
+                .and_then(|p| p.routing.as_ref())
+                .and_then(|r| r.escape_stub.as_ref())
+                .map(|m| crate::ir::conversions::measurement_to_nm(m, symbol_table))
+                .transpose()
+                .map_err(|e| IrError::InvalidRouteExpression {
+                    expression: "profile routing.escape_stub".into(),
+                    reason: e.to_string(),
+                })?
+                .ok_or_else(|| IrError::MissingAsicConstraint {
+                    message: "Route requires 'escape_stub' but it is not declared in the profile.".into(),
+                    hint: "Add 'escape_stub: <value>' to the 'routing:' block in your profile.\n\nExample:\n  routing:\n    min_segment_length: 180nm\n    escape_stub: 0nm  # for immediate turns, or >0nm for perpendicular escape".into(),
+                })?
+        }
+    } else {
+        // No route override, no intent - use profile default (REQUIRED)
+        profile
+            .and_then(|p| p.routing.as_ref())
+            .and_then(|r| r.escape_stub.as_ref())
+            .map(|m| crate::ir::conversions::measurement_to_nm(m, symbol_table))
+            .transpose()
+            .map_err(|e| IrError::InvalidRouteExpression {
+                expression: "profile routing.escape_stub".into(),
+                reason: e.to_string(),
+            })?
+            .ok_or_else(|| IrError::MissingAsicConstraint {
+                message: "Route requires 'escape_stub' but it is not declared in the profile.".into(),
+                hint: "Add 'escape_stub: <value>' to the 'routing:' block in your profile.\n\nExample:\n  routing:\n    min_segment_length: 180nm\n    escape_stub: 0nm  # for immediate turns, or >0nm for perpendicular escape".into(),
+            })?
+    };
+
     Ok(ConstraintResult {
         min_clearance_nm,
         current_ma,
         trace_width_nm,
+        escape_stub_nm,
     })
 }
 

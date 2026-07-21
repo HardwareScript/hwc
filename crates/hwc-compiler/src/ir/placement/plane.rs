@@ -379,6 +379,90 @@ pub fn place_plane(
         .entity_graph
         .register_space_entity(&plane.name.base, bbox, net_id, z_start_nm);
 
+    // v0.1.9 CIR: Register PhysicalInterface for this plane/pad
+    // This enables the router to query AccessRegions and avoid pad penetration
+    //
+    // v0.1.9.1: Use middle Z for interface geometry to align with routing queries
+    {
+        use hwc_engine::geometry_router::connection_interface::{InterfaceGeometry, PhysicalInterface};
+        use hwc_engine::geometry_router::routing_intent::RoutingIntent;
+        use hwc_engine::netlist::ComponentId;
+        use smallvec::smallvec;
+
+        // Require fabrication constraints - no fallbacks
+        let constraints = space.fabrication_constraints.as_ref()
+            .ok_or_else(|| IrError::MissingAsicConstraint {
+                message: "Fabrication constraints required for interface generation".into(),
+                hint: "Add a 'trace:' block to your profile with min_width and min_spacing".into(),
+            })?;
+        
+        let trace_width_nm = constraints.trace.min_width_nm;
+        let clearance_nm = constraints.trace.min_spacing_nm;
+
+        // v0.1.9.1 CRITICAL: Calculate middle Z for Zero-Gap Z Lock alignment.
+        //
+        // PROBLEM: Previously used bbox.min.z (bottom Z = 960nm) for interface vertices.
+        // But routing queries occur at the trace centerline (middle Z = 1160nm).
+        // This Z mismatch caused:
+        //   1. AccessRegion escape points at wrong Z (960nm instead of 1160nm)
+        //   2. Boundary resolution creating routes with Z discontinuities
+        //   3. Spatial index queries missing obstacles (query at 1160, obstacles at 960)
+        //
+        // SOLUTION: Register interface geometry at middle Z to match where routing occurs.
+        // This ensures perfect Z alignment between placement and routing phases.
+        let middle_z_nm = (bbox.min.z + bbox.max.z) / 2;
+
+        // Register a Polygon interface with all four edges
+        // The vertex winding order depends on the space's coordinate system origin.
+        // For BL/BR (Y increases upward), use CCW winding.
+        // For TL/TR (Y increases downward), use CW winding.
+        
+        use hwc_parser::OriginXY;
+        let is_y_upward = matches!(ctx.origin.xy, OriginXY::BL | OriginXY::BR);
+        
+        let geometry = if is_y_upward {
+            // CCW winding for Y-up coordinate systems (BL, BR) - using middle_z_nm
+            InterfaceGeometry::Polygon(vec![
+                Point3D::new(bbox.min.x, bbox.min.y, middle_z_nm),  // bottom-left
+                Point3D::new(bbox.max.x, bbox.min.y, middle_z_nm),  // bottom-right
+                Point3D::new(bbox.max.x, bbox.max.y, middle_z_nm),  // top-right
+                Point3D::new(bbox.min.x, bbox.max.y, middle_z_nm),  // top-left
+            ])
+        } else {
+            // CW winding for Y-down coordinate systems (TL, TR) - using middle_z_nm
+            InterfaceGeometry::Polygon(vec![
+                Point3D::new(bbox.min.x, bbox.min.y, middle_z_nm),  // top-left
+                Point3D::new(bbox.min.x, bbox.max.y, middle_z_nm),  // bottom-left
+                Point3D::new(bbox.max.x, bbox.max.y, middle_z_nm),  // bottom-right
+                Point3D::new(bbox.max.x, bbox.min.y, middle_z_nm),  // top-right
+            ])
+        };
+        
+        let interface_id = space.entity_graph.allocate_interface_id();
+        let intent = RoutingIntent::new("Default");
+        let db = hwc_engine::geometry_router::connection_interface::DefaultRoutingDatabase::default();
+        let pseudo_component_id = ComponentId::new(0xFFFF_0000 + interface_id.raw());
+        
+        // Planes always use Derived orientation because the polygon winding (determined by
+        // space origin) encodes the correct outward direction.
+        let interface = PhysicalInterface::new(
+            interface_id,
+            pseudo_component_id,
+            geometry,
+            smallvec![],
+            intent,
+            hwc_engine::geometry_router::connection_interface::Orientation::Derived,
+            &db,
+            trace_width_nm,
+            clearance_nm * 2,
+        );
+        
+        space.entity_graph.register_space_entity_interface(
+            plane.name.base.clone(),
+            interface,
+        );
+    }
+
     // Note: Substrate layer registration happens after netlist processing (see below)
     // to ensure we have the correct resolved net_id
 

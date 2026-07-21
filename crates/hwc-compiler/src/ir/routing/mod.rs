@@ -214,6 +214,7 @@ mod tests {
             enter_escape: None,
             exit_escape: None,
             current_limit_ac: None,
+            intent: None,
             span: hwc_parser::Span::new(0, 0),
         };
 
@@ -248,6 +249,7 @@ mod tests {
             enter_escape: None,
             exit_escape: None,
             current_limit_ac: None,
+            intent: None,
             span: hwc_parser::Span::new(0, 0),
         };
 

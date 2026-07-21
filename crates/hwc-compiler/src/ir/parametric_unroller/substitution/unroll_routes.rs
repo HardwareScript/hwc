@@ -44,6 +44,8 @@ pub fn unroll_route(route: &Route, variable: &str, value: usize) -> Result<Route
         exit_escape: route.exit_escape.clone(),
         enter_escape: route.enter_escape.clone(),
         current_limit_ac: route.current_limit_ac.clone(),
+        intent: route.intent.clone(),
+        escape_stub: route.escape_stub.clone(), // v0.1.9
         span: route.span,
     })
 }

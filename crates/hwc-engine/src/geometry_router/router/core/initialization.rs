@@ -4,6 +4,7 @@ use super::types::{GeometryRouter, RouterConfig};
 use crate::constraint_manager::ConstraintRulebook;
 use crate::geometry_router::bounding_box_tracker::BoundingBoxTracker;
 use crate::geometry_router::neighbor_generation::GridBounds;
+use crate::geometry_router::pathfinding::CostComposer;
 use crate::geometry_router::EntityGraph;
 use crate::material::MaterialRegistry;
 use rustc_hash::FxHashMap;
@@ -50,9 +51,37 @@ impl GeometryRouter {
             partition_grid: None,
             query_store: None,
             route_net_policies: FxHashMap::default(),
-            routing_material_id: 0,
-            trace_width_nm: 100_000,
+            // v0.1.9 NOTE: These global routing context values are initialization placeholders.
+            // The compiler MUST call set_routing_context() with proper values from the stackup
+            // before invoking route_space(). Per-net trace widths override these in v0.1.9.
+            routing_material_id: 0, // Placeholder - will be set by compiler from stackup
+            trace_width_nm: 100_000, // Placeholder - will be set by compiler (max width)
             net_trace_widths: FxHashMap::default(),
+            net_normals: FxHashMap::default(),
+            net_escape_stubs: FxHashMap::default(),
+            cost_composer: CostComposer::default(),
+            intent_composers: FxHashMap::default(),
         }
+    }
+
+    /// v0.1.9: Register a cost composer for a named routing intent.
+    pub fn register_intent_composer(
+        &mut self,
+        name: compact_str::CompactString,
+        composer: CostComposer,
+    ) {
+        self.intent_composers.insert(name, composer);
+    }
+
+    /// v0.1.9: Get the cost composer for a named routing intent, falling back to default.
+    pub fn get_intent_composer(&self, name: &str) -> &CostComposer {
+        self.intent_composers
+            .get(name)
+            .unwrap_or(&self.cost_composer)
+    }
+
+    /// v0.1.9: Check if a named routing intent composer is registered.
+    pub fn has_intent_composer(&self, name: &str) -> bool {
+        self.intent_composers.contains_key(name)
     }
 }

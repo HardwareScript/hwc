@@ -36,6 +36,40 @@ pub fn build_spatial_index(
     {
         let width = layer.bbox.max.x - layer.bbox.min.x;
         let height = layer.bbox.max.y - layer.bbox.min.y;
+        
+        // v0.1.9.1 NATIVE FIX: Align spatial index layer Z with middle of pad's thickness.
+        //
+        // PROBLEM: Previously registered obstacles at layer.bbox.min.z (bottom Z = 960nm),
+        // but ray queries happen at the trace centerline Z (middle Z = 1160nm). The R*-tree
+        // envelope mismatch caused queries to completely miss obstacles.
+        //
+        // EXAMPLE BUG:
+        //   Squeeze_Block registered at Z=960nm (bottom)
+        //   Ray cast from Pad_Tight_A at Z=1160nm (middle)
+        //   R*-tree query at Z=1160 returns NO candidates
+        //   Result: Ray reports 950µm clearance (false positive), selects East port
+        //   Route collides with Squeeze_Block → R16 error
+        //
+        // SOLUTION: Register obstacles at middle Z to match where routing queries occur.
+        // Both the layer field AND start/end points must use middle Z for correct collision detection.
+        let middle_z = (layer.bbox.min.z + layer.bbox.max.z) / 2;
+        
+        let start_point = hwc_engine::geometry::Point3D::new(
+            layer.bbox.min.x, 
+            layer.bbox.min.y, 
+            middle_z
+        );
+        let end_point = hwc_engine::geometry::Point3D::new(
+            layer.bbox.max.x, 
+            layer.bbox.max.y, 
+            middle_z
+        );
+        
+        eprintln!(
+            "[GEOMETRY.RS FIX] Layer {}: original Z=[{}, {}], middle_z={}, start.z={}, end.z={}",
+            layer_idx, layer.bbox.min.z, layer.bbox.max.z, middle_z, start_point.z, end_point.z
+        );
+        
         let trace_seg = hwc_engine::geometry_router::IndexedSegment {
             source:
                 hwc_engine::geometry_router::spatial_index::SpatialEntitySource::SubstrateLayer {
@@ -45,9 +79,9 @@ pub fn build_spatial_index(
             net_id: layer.net as usize,
             width_nm: width.max(height),
             thickness_nm: layer.bbox.max.z - layer.bbox.min.z,
-            start: layer.bbox.min,
-            end: layer.bbox.max,
-            layer: layer.bbox.min.z,
+            start: start_point,
+            end: end_point,
+            layer: middle_z,  // Use middle Z instead of bottom Z
         };
         eprintln!(
             "[AUTO ROUTE INDEX] Adding substrate layer {}: net_id={}, bbox=({},{},{}) to ({},{},{})",

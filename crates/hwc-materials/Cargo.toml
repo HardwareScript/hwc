@@ -10,3 +10,4 @@ thiserror = { workspace = true }
 miette = { workspace = true }
 rustc-hash = { workspace = true }
 compact_str = { workspace = true }
+serde = { version = "1.0", features = ["derive"] }

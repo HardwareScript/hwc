@@ -4,6 +4,7 @@ use super::types::{GeometryRouter, RouteSpaceRequest};
 use crate::geometry::Point3D;
 use crate::geometry_router::bounding_box_tracker::BoundingBoxTracker;
 use crate::geometry_router::neighbor_generation::GridBounds;
+use crate::geometry_router::pathfinding::CostComposer;
 use crate::geometry_router::types::{RouteResult, RoutedNet, RoutingError};
 use rustc_hash::FxHashMap;
 
@@ -18,6 +19,8 @@ impl GeometryRouter {
             substrate_layers,
             net_frequencies,
             net_trace_widths,
+            net_normals,
+            net_escape_stubs,
         } = req;
 
         if let Some(sl) = substrate_layers {
@@ -25,6 +28,14 @@ impl GeometryRouter {
         }
         self.net_frequencies = net_frequencies.clone();
         self.net_trace_widths = net_trace_widths.clone();
+        
+        // v0.1.9: Store per-net normals and escape stubs for perpendicular escape routing
+        if let Some(normals) = net_normals {
+            self.net_normals = normals.clone();
+        }
+        if let Some(escape_stubs) = net_escape_stubs {
+            self.net_escape_stubs = escape_stubs.clone();
+        }
 
         self.build_entity_graph();
 
@@ -187,6 +198,10 @@ impl GeometryRouter {
                                 routing_material_id,
                                 trace_width_nm,
                                 net_trace_widths,
+                                net_normals: FxHashMap::default(),
+                                net_escape_stubs: FxHashMap::default(),
+                                cost_composer: CostComposer::default(),
+                                intent_composers: FxHashMap::default(),
                             };
 
                             let result = isolated.decompose_net_steiner(net_id, pins);
@@ -285,6 +300,10 @@ impl GeometryRouter {
                         routing_material_id: self.routing_material_id,
                         trace_width_nm: self.trace_width_nm,
                         net_trace_widths: self.net_trace_widths.clone(),
+                        net_normals: FxHashMap::default(),
+                        net_escape_stubs: FxHashMap::default(),
+                        cost_composer: CostComposer::default(),
+                        intent_composers: FxHashMap::default(),
                     };
 
                     let local_nets: FxHashMap<
@@ -445,6 +464,10 @@ impl GeometryRouter {
                                     routing_material_id,
                                     trace_width_nm,
                                     net_trace_widths,
+                                    net_normals: FxHashMap::default(),
+                                    net_escape_stubs: FxHashMap::default(),
+                                    cost_composer: CostComposer::default(),
+                                    intent_composers: FxHashMap::default(),
                                 };
 
                                 cell_router.net_frequencies = net_frequencies_clone;

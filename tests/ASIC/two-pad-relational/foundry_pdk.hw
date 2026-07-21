@@ -65,6 +65,7 @@ profile Silicon_180nm:
     routing:
         max_local_route_length: 10um
         min_segment_length: 180nm
+        escape_stub: 0nm              # v0.1.9: Global default - immediate turns allowed
         base_cost: 1
         via_penalty: 50
         direction_penalty: 10
@@ -74,3 +75,23 @@ profile Silicon_180nm:
         reference_void_penalty: 5000000
         net_priority_VDD: 5
         net_priority_GND: 5
+
+    # CIR Phase 2.2: User-declared net types (routing intents)
+    net_type Clock:
+        routing_style: straight
+        escape_stub: 50um             # v0.1.9: Clock nets need long perpendicular escapes for signal integrity
+        cost_weights:
+            via_penalty: 50000
+            direction_penalty: 5
+            crosstalk_penalty: 100
+
+    net_type PowerRail:
+        routing_style: manhattan
+        escape_stub: 0nm              # v0.1.9: Power rails can turn immediately (no impedance concerns)
+        cost_weights:
+            via_penalty: 10
+            tight_clearance_penalty: 5
+
+    net_type Signal:
+        routing_style: auto
+        escape_stub: 10um             # v0.1.9: Standard signal traces get modest perpendicular escape

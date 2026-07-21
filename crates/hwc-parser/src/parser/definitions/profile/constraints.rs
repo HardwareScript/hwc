@@ -495,6 +495,7 @@ impl super::super::super::Parser {
         let mut impedance_penalty = None;
         let mut reference_void_penalty = None;
         let mut net_priorities = rustc_hash::FxHashMap::default();
+        let mut escape_stub = None; // v0.1.9: Declarative Escape Policies
 
         while !self.check(&Token::Dedent) && !self.is_at_end() {
             self.skip_whitespace();
@@ -515,6 +516,11 @@ impl super::super::super::Parser {
                 }
                 "min_segment_length" => {
                     min_segment_length = Some(self.parse_measurement()?);
+                    self.skip_whitespace();
+                    continue;
+                }
+                "escape_stub" => {
+                    escape_stub = Some(self.parse_measurement()?);
                     self.skip_whitespace();
                     continue;
                 }
@@ -599,6 +605,7 @@ impl super::super::super::Parser {
             impedance_penalty,
             reference_void_penalty,
             net_priorities,
+            escape_stub, // v0.1.9
             span: Span::new(start_pos, end_pos),
         })
     }

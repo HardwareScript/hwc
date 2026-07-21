@@ -53,6 +53,19 @@ pub struct LayoutBlock {
     pub internal_pours: Vec<super::space::PourPlacement>,
     /// Default stand-off height for the package (v0.1.7)
     pub standoff: Option<super::Expression>,
+    
+    // TODO(v0.1.10): Add orientation field for Connection Interface Routing (CIR)
+    // pub orientation: Option<Orientation>,  // north, south, east, west
+    //
+    // This allows components to declare preferred routing exit directions:
+    //   component USB_C:
+    //     layout:
+    //       orientation: north  # Traces should exit from the north side
+    //       pin_positions: { ... }
+    //
+    // When None, the system auto-derives from geometry winding.
+    // See: hwc-compiler/src/ir/placement/component/mod.rs for usage
+    
     pub span: Span,
 }
 

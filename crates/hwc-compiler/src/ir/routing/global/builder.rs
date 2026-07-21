@@ -12,6 +12,7 @@ pub struct RoutingData {
     pub net_declared_widths: FxHashMap<CompactString, i64>,
     pub net_currents_ma: FxHashMap<CompactString, f64>,
     pub obstacle_bboxes: Vec<BoundingBox>,
+    pub net_intents: FxHashMap<CompactString, CompactString>,
 }
 
 impl<'a> AutoRouter<'a> {
@@ -21,6 +22,7 @@ impl<'a> AutoRouter<'a> {
         let mut net_layer_targets = FxHashMap::default();
         let mut net_declared_widths = FxHashMap::default();
         let mut net_currents_ma = FxHashMap::default();
+        let mut net_intents = FxHashMap::default();
 
         if !self.config.auto_routes.is_empty() {
             let auto_routes = self.config.auto_routes.clone();
@@ -104,7 +106,10 @@ impl<'a> AutoRouter<'a> {
                                 &crate::SymbolTable::new(),
                             )
                             .unwrap_or(rms);
-                            net_currents_ma.insert(net_name, peak);
+                            net_currents_ma.insert(net_name.clone(), peak);
+                        }
+                        if let Some(ref intent_name) = route.intent {
+                            net_intents.insert(net_name.clone(), intent_name.clone());
                         }
                     }
                     Err(e) => {
@@ -153,6 +158,7 @@ impl<'a> AutoRouter<'a> {
             net_declared_widths,
             net_currents_ma,
             obstacle_bboxes,
+            net_intents,
         })
     }
 

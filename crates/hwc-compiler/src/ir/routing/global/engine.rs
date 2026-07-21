@@ -29,17 +29,125 @@ impl<'a> AutoRouter<'a> {
 
         self.configure_geo_router(&mut geo_router, data)?;
 
-        let explicit_segments: Vec<(NetId, Vec<Point3D>)> = data.resolved_routes.iter()
-            .filter_map(|resolved| {
-                match crate::ir::routing::resolve_route_boundary_points(self.space, resolved, resolved.width_nm) {
-                    Ok((start, goal)) => Some((resolved.net_id, vec![start, goal])),
-                    Err(e) => {
-                        eprintln!("[ROUTER WARNING] Failed to resolve boundary points for net '{}': {:?} - skipping", resolved.net_name, e);
-                        None
-                    }
-                }
+        for intent_name in data.net_intents.values() {
+            if !geo_router.has_intent_composer(intent_name.as_str()) {
+                // CIR Phase 2.2: Look up intent from profile-declared intents.
+                // No hardcoded intents — everything comes from user-facing .hw files.
+                let intent = self
+                    .profile
+                    .and_then(|p| p.intents.iter().find(|pi| pi.name.name == *intent_name))
+                    .map(|pi| {
+                        let cost_weights =
+                            pi.cost_weights
+                                .as_ref()
+                                .map(|cw| hwc_engine::IntentCostWeights {
+                                    base_cost: cw.base,
+                                    via_penalty: cw.via_penalty,
+                                    direction_penalty: cw.direction_penalty,
+                                    tight_clearance_penalty: cw.tight_clearance_penalty,
+                                    crosstalk_penalty: cw.crosstalk_penalty,
+                                    impedance_penalty: cw.impedance_penalty,
+                                    reference_void_penalty: cw.reference_void_penalty,
+                                });
+                        hwc_engine::RoutingIntent::from_profile_data(
+                            &pi.name.name,
+                            pi.routing_style.as_ref().map(|s| s.name.as_str()),
+                            cost_weights.as_ref(),
+                        )
+                    })
+                    .unwrap_or_else(|| hwc_engine::RoutingIntent::new(intent_name));
+
+                let via_penalty = self
+                    .profile
+                    .and_then(|p| p.routing.as_ref())
+                    .and_then(|r| r.via_penalty)
+                    .unwrap_or(50);
+                let direction_penalty = self
+                    .profile
+                    .and_then(|p| p.routing.as_ref())
+                    .and_then(|r| r.direction_penalty)
+                    .unwrap_or(10);
+                let crosstalk_penalty = self
+                    .profile
+                    .and_then(|p| p.routing.as_ref())
+                    .and_then(|r| r.crosstalk_penalty)
+                    .unwrap_or(3);
+                let reference_void_penalty = self
+                    .profile
+                    .and_then(|p| p.routing.as_ref())
+                    .and_then(|r| r.reference_void_penalty)
+                    .unwrap_or(5_000_000);
+                geo_router.register_intent_composer(
+                    intent_name.clone(),
+                    hwc_engine::CostComposer::from_intent_overrides(
+                        intent
+                            .cost_weights
+                            .as_ref()
+                            .and_then(|w| w.via_penalty)
+                            .unwrap_or(via_penalty),
+                        intent
+                            .cost_weights
+                            .as_ref()
+                            .and_then(|w| w.direction_penalty)
+                            .unwrap_or(direction_penalty),
+                        intent
+                            .cost_weights
+                            .as_ref()
+                            .and_then(|w| w.crosstalk_penalty)
+                            .unwrap_or(crosstalk_penalty),
+                        intent
+                            .cost_weights
+                            .as_ref()
+                            .and_then(|w| w.reference_void_penalty)
+                            .unwrap_or(reference_void_penalty),
+                    ),
+                );
+            }
+        }
+
+        // v0.1.9: Extract explicit segments WITH normals for perpendicular escape
+        let mut explicit_segments: Vec<(NetId, Vec<Point3D>)> = Vec::new();
+        let mut net_normals: FxHashMap<NetId, (hwc_engine::geometry_router::connection_interface::Normal2D, hwc_engine::geometry_router::connection_interface::Normal2D)> = FxHashMap::default();
+        let mut net_escape_stubs: FxHashMap<NetId, i64> = FxHashMap::default();
+
+        // v0.1.9: Build a map from route index to escape_stub from original parser routes
+        let route_escape_stubs: Vec<Option<i64>> = self.config.auto_routes
+            .iter()
+            .map(|route| {
+                route.escape_stub.as_ref().and_then(|expr| {
+                    self.evaluate_escape_stub_expression(expr).ok()
+                })
             })
             .collect();
+
+        for (idx, resolved) in data.resolved_routes.iter().enumerate() {
+            match crate::ir::routing::resolve_route_boundary_points(self.space, resolved, resolved.width_nm) {
+                Ok((start, goal, start_normal, goal_normal)) => {
+                    explicit_segments.push((resolved.net_id, vec![start, goal]));
+                    
+                    // Convert Point3D normals (i64) to Normal2D (i32) - safe for unit vectors scaled by 10^9
+                    let start_normal_2d = hwc_engine::geometry_router::connection_interface::Normal2D {
+                        x: start_normal.x as i32,
+                        y: start_normal.y as i32,
+                    };
+                    let goal_normal_2d = hwc_engine::geometry_router::connection_interface::Normal2D {
+                        x: goal_normal.x as i32,
+                        y: goal_normal.y as i32,
+                    };
+                    net_normals.insert(resolved.net_id, (start_normal_2d, goal_normal_2d));
+                    
+                    // v0.1.9: Look up escape_stub by route index (matches auto_routes order)
+                    if let Some(Some(escape_stub_nm)) = route_escape_stubs.get(idx) {
+                        net_escape_stubs.insert(resolved.net_id, *escape_stub_nm);
+                        eprintln!("[PERPENDICULAR ESCAPE] Net '{}' (id={}) has escape_stub: {} nm", 
+                            resolved.net_name, resolved.net_id.raw(), escape_stub_nm);
+                    }
+                }
+                Err(e) => {
+                    eprintln!("[ROUTER WARNING] Failed to resolve boundary points for net '{}': {:?} - skipping", resolved.net_name, e);
+                }
+            }
+        }
 
         if explicit_segments.is_empty() {
             return Err(IrError::RoutingError(
@@ -71,6 +179,8 @@ impl<'a> AutoRouter<'a> {
                 },
                 net_frequencies: &self.config.net_frequencies,
                 net_trace_widths: &net_trace_widths_by_id,
+                net_normals: if !net_normals.is_empty() { Some(&net_normals) } else { None },
+                net_escape_stubs: if !net_escape_stubs.is_empty() { Some(&net_escape_stubs) } else { None },
             })
             .map_err(|_| IrError::NoPathFound {
                 net: "batch".into(),
@@ -263,5 +373,64 @@ impl<'a> AutoRouter<'a> {
             }
         }
         net_trace_widths_by_id
+    }
+}
+
+impl<'a> AutoRouter<'a> {
+    /// v0.1.9: Helper to evaluate escape_stub expression to nanometers
+    fn evaluate_escape_stub_expression(&self, expr: &hwc_parser::Expression) -> Result<i64, IrError> {
+        match expr {
+            hwc_parser::Expression::Literal { value, .. } => Ok(*value),
+            hwc_parser::Expression::FloatLiteral { value, .. } => Ok(*value as i64),
+            hwc_parser::Expression::Measurement { value, unit, .. } => {
+                let nm = match unit {
+                    hwc_parser::Unit::Nanometer => *value as i64,
+                    hwc_parser::Unit::Micrometer => (*value * 1000.0) as i64,
+                    hwc_parser::Unit::Millimeter => (*value * 1_000_000.0) as i64,
+                    hwc_parser::Unit::Centimeter => (*value * 10_000_000.0) as i64,
+                    _ => return Err(IrError::InvalidRouteExpression {
+                        expression: format!("{:?}", expr),
+                        reason: format!("Invalid unit {:?} for escape_stub - must be a distance unit (nm, um, mm, cm)", unit),
+                    }),
+                };
+                Ok(nm)
+            },
+            _ => Err(IrError::InvalidRouteExpression {
+                expression: format!("{:?}", expr),
+                reason: "escape_stub must be a measurement expression (e.g., '500nm', '1um')".into(),
+            }),
+        }
+    }
+
+    /// v0.1.9: Helper to convert route endpoint to string for net name lookup
+    fn endpoint_to_string(endpoint: &hwc_parser::RouteEndpointSpec) -> String {
+        match endpoint {
+            hwc_parser::RouteEndpointSpec::ComponentPin {
+                component_name,
+                component_index,
+                pin_name,
+                pin_index,
+                ..
+            } => {
+                let comp = if let Some(idx) = component_index {
+                    format!("{}[{:?}]", component_name, idx)
+                } else {
+                    component_name.to_string()
+                };
+                let pin = if let Some(idx) = pin_index {
+                    format!("{}[{:?}]", pin_name, idx)
+                } else {
+                    pin_name.to_string()
+                };
+                format!("{}.{}", comp, pin)
+            },
+            hwc_parser::RouteEndpointSpec::SpaceEntity { name, index, .. } => {
+                if let Some(idx) = index {
+                    format!("{}[{:?}]", name, idx)
+                } else {
+                    name.to_string()
+                }
+            },
+        }
     }
 }

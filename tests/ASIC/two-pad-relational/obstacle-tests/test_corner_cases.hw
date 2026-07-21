@@ -63,8 +63,10 @@ space Corner_Demo implements Corner_Cases:
         width: 30um
         layer: metal1
         current_limit_ac: { rms: 0.5uA, peak: 1.0uA }
+        escape_stub: 50um  # v0.1.9: Force 50µm perpendicular escape before turning
 
     route Pad_Tight_A to Pad_Tight_B:
         width: 25um  # Narrow trace to fit through gap
         layer: metal1
         current_limit_ac: { rms: 0.5uA, peak: 1.0uA }
+        escape_stub: 30um  # v0.1.9: Moderate perpendicular escape for clearance

@@ -2,6 +2,7 @@ pub mod constraints;
 pub mod database;
 pub mod error_codes;
 pub mod material;
+pub mod routing_intent;
 pub mod stackup;
 
 pub use constraints::{
@@ -13,4 +14,5 @@ pub use material::{
     BiasRequirement, ConductorProperties, DopingType, InsulatorProperties, ManufacturingProcess,
     MaterialMetadata, NetClassification, SemiconductorProperties,
 };
+pub use routing_intent::{IntentCostWeights, RoutingIntent};
 pub use stackup::{BoardSpecification, ImpedanceParameters, Layer, StackupError, StackupProfile};

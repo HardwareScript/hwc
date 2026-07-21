@@ -63,6 +63,7 @@ impl super::super::Parser {
         let mut routing = None; // v0.1.7: Routing constraints (layer directions)
         let mut bridges = Vec::new(); // Phase 1: Bridge rules
         let mut vias_list = Vec::new(); // v0.1.7: Explicit via definitions
+        let mut intents = Vec::new(); // CIR Phase 2.2: User-declared routing intents
         let mut technology = None;
         let mut other = rustc_hash::FxHashMap::default(); // v0.1.6: Custom fields
 
@@ -90,6 +91,18 @@ impl super::super::Parser {
                     Ok(rule) => bridges.push(rule),
                     Err(e) => {
                         collector.report(e);
+                        self.sync_to_next_definition();
+                    }
+                }
+                continue;
+            }
+
+            // CIR Phase 2.2: User-declared net types (routing intents)
+            if self.check(&Token::NetType) {
+                match self.parse_profile_net_type(collector) {
+                    Some(net_type) => intents.push(net_type),
+                    None => {
+                        // Error already reported by parse_profile_net_type
                         self.sync_to_next_definition();
                     }
                 }
@@ -217,6 +230,19 @@ impl super::super::Parser {
                     continue;
                 }
             };
+
+            // Check for deprecated 'intent' keyword before expecting colon
+            if field_name.as_str() == "intent" {
+                let err = crate::parser::error::ParseError::DeprecatedSyntax {
+                    span: crate::parser::error::span_to_source_span(&field_name.span),
+                    message:
+                        "The 'intent' keyword has been renamed to 'net_type'. Use: net_type Signal:"
+                            .into(),
+                };
+                collector.report(err);
+                self.sync_to_next_definition();
+                continue;
+            }
 
             if let Err(e) = self.expect(&Token::Colon) {
                 collector.report(e);
@@ -376,10 +402,227 @@ impl super::super::Parser {
             stackup,
             export,
             routing,
+            intents,
             bridges,
             vias: vias_list,
             technology,
             other,
+            span: Span::new(start_pos, end_pos),
+        })
+    }
+
+    // ========================================================================
+    // Profile Net Type Parsing (CIR Phase 2.2)
+    // ========================================================================
+
+    /// Parse a net type declaration block: `net_type <Name>:`
+    ///
+    /// Syntax:
+    /// ```hw
+    /// net_type Clock:
+    ///     routing_style: straight
+    ///     cost_weights:
+    ///         base: 10
+    ///         via_penalty: 500
+    /// ```
+    fn parse_profile_net_type(
+        &mut self,
+        collector: &crate::DiagnosticCollector,
+    ) -> Option<ProfileIntent> {
+        let start_pos = self.current_span().start;
+
+        // Consume 'net_type' keyword
+        if let Err(e) = self.expect(&Token::NetType) {
+            collector.report(e);
+            return None;
+        }
+
+        let name = match self.expect_identifier() {
+            Ok(id) => id,
+            Err(e) => {
+                collector.report(e);
+                return None;
+            }
+        };
+
+        if let Err(e) = self.expect(&Token::Colon) {
+            collector.report(e);
+            return None;
+        }
+
+        if let Err(e) = self.expect(&Token::Newline) {
+            collector.report(e);
+            return None;
+        }
+
+        if let Err(e) = self.expect(&Token::Indent) {
+            collector.report(e);
+            return None;
+        }
+
+        let mut routing_style = None;
+        let mut cost_weights = None;
+        let mut escape_stub = None; // v0.1.9: Declarative Escape Policies
+
+        while !self.check(&Token::Dedent) && !self.is_at_end() {
+            self.skip_whitespace();
+            if self.check(&Token::Dedent) || self.is_at_end() {
+                break;
+            }
+
+            let field_name = match self.expect_identifier() {
+                Ok(id) => id,
+                Err(e) => {
+                    collector.report(e);
+                    self.sync_to_next_definition();
+                    continue;
+                }
+            };
+
+            if let Err(e) = self.expect(&Token::Colon) {
+                collector.report(e);
+                self.sync_to_next_definition();
+                continue;
+            }
+
+            match field_name.as_str() {
+                "routing_style" => {
+                    routing_style = self.expect_identifier().ok();
+                    self.skip_whitespace();
+                }
+                "escape_stub" => {
+                    escape_stub = self.parse_measurement().ok();
+                    self.skip_whitespace();
+                }
+                "cost_weights" => {
+                    if let Err(e) = self.expect(&Token::Newline) {
+                        collector.report(e);
+                        self.sync_to_next_definition();
+                        continue;
+                    }
+                    if let Err(e) = self.expect(&Token::Indent) {
+                        collector.report(e);
+                        self.sync_to_next_definition();
+                        continue;
+                    }
+                    cost_weights = self.parse_cost_weights(collector);
+                    if self.check(&Token::Dedent) {
+                        self.advance();
+                    }
+                }
+                _ => {
+                    // Skip unknown fields
+                    self.skip_whitespace();
+                }
+            }
+        }
+
+        if self.check(&Token::Dedent) {
+            self.advance();
+        }
+
+        Some(ProfileIntent {
+            name,
+            routing_style,
+            cost_weights,
+            escape_stub, // v0.1.9
+            span: Span::new(start_pos, self.previous_span().end),
+        })
+    }
+
+    /// Parse cost weights block inside a net_type declaration.
+    ///
+    /// Syntax:
+    /// ```hw
+    /// cost_weights:
+    ///     base: 10
+    ///     via_penalty: 500
+    ///     direction_penalty: 20
+    ///     tight_clearance_penalty: 5
+    ///     crosstalk_penalty: 10
+    ///     impedance_penalty: 3
+    ///     reference_void_penalty: 10000000
+    /// ```
+    fn parse_cost_weights(
+        &mut self,
+        collector: &crate::DiagnosticCollector,
+    ) -> Option<CostWeights> {
+        let start_pos = self.current_span().start;
+
+        let mut base = None;
+        let mut via_penalty = None;
+        let mut direction_penalty = None;
+        let mut tight_clearance_penalty = None;
+        let mut crosstalk_penalty = None;
+        let mut impedance_penalty = None;
+        let mut reference_void_penalty = None;
+
+        while !self.check(&Token::Dedent) && !self.is_at_end() {
+            self.skip_whitespace();
+            if self.check(&Token::Dedent) || self.is_at_end() {
+                break;
+            }
+
+            let field_name = match self.expect_identifier() {
+                Ok(id) => id,
+                Err(e) => {
+                    collector.report(e);
+                    self.sync_to_next_definition();
+                    continue;
+                }
+            };
+
+            if let Err(e) = self.expect(&Token::Colon) {
+                collector.report(e);
+                self.sync_to_next_definition();
+                continue;
+            }
+
+            match field_name.as_str() {
+                "base" => {
+                    base = self.expect_integer().ok().map(|v| v as i64);
+                    self.skip_whitespace();
+                }
+                "via_penalty" => {
+                    via_penalty = self.expect_integer().ok().map(|v| v as i64);
+                    self.skip_whitespace();
+                }
+                "direction_penalty" => {
+                    direction_penalty = self.expect_integer().ok().map(|v| v as i64);
+                    self.skip_whitespace();
+                }
+                "tight_clearance_penalty" => {
+                    tight_clearance_penalty = self.expect_integer().ok().map(|v| v as i64);
+                    self.skip_whitespace();
+                }
+                "crosstalk_penalty" => {
+                    crosstalk_penalty = self.expect_integer().ok().map(|v| v as i64);
+                    self.skip_whitespace();
+                }
+                "impedance_penalty" => {
+                    impedance_penalty = self.expect_integer().ok().map(|v| v as i64);
+                    self.skip_whitespace();
+                }
+                "reference_void_penalty" => {
+                    reference_void_penalty = self.expect_integer().ok().map(|v| v as i64);
+                    self.skip_whitespace();
+                }
+                _ => {
+                    self.skip_whitespace();
+                }
+            }
+        }
+
+        let end_pos = self.previous_span().end;
+
+        Some(CostWeights {
+            base,
+            via_penalty,
+            direction_penalty,
+            tight_clearance_penalty,
+            crosstalk_penalty,
+            impedance_penalty,
+            reference_void_penalty,
             span: Span::new(start_pos, end_pos),
         })
     }

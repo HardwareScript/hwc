@@ -429,6 +429,8 @@ pub fn place_module_instance(
                 exit_escape: None,
                 enter_escape: None,
                 current_limit_ac: None,
+                intent: None,
+                escape_stub: None, // v0.1.9: Use profile default
                 span: module_route.span,
             };
 

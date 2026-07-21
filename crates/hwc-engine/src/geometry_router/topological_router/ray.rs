@@ -37,6 +37,22 @@ impl TopologicalRouter {
 
     /// Project a ray from origin in the given direction.
     /// Returns the first obstacle intersection using the Slab Method.
+    ///
+    /// v0.1.9.1 BUG FIX: Type-aware bounding box calculation for obstacles.
+    /// 
+    /// PROBLEM: Previously, all obstacles had `width_nm / 2` subtracted from their
+    /// min coordinates and added to max coordinates. This is correct for routed traces
+    /// (where start/end are centerline points), but WRONG for solid pours/pads/planes
+    /// (where start/end are already the outer boundaries). This caused obstacles to
+    /// appear twice as large, creating false-positive collisions.
+    ///
+    /// EXAMPLE BUG:
+    ///   Squeeze_Block: bbox=(430000,235000) to (550000,315000), width_nm=120000
+    ///   Old calculation: min.x = 430000 - 60000 = 370000 (WRONG!)
+    ///   Result: Ray at X=412500 reports instant collision (distance=0)
+    ///   
+    /// SOLUTION: Only apply width_nm/2 offset to actual routed trace segments.
+    /// Substrate layers, planes, and component bboxes use absolute boundaries.
     pub fn project_ray(
         &self,
         origin: Point3D,
@@ -57,18 +73,35 @@ impl TopologicalRouter {
             if self.exempt_net_ids.contains(&seg.net_id) {
                 continue;
             }
+            
+            // v0.1.9.1 NATIVE FIX: Type-aware bounding box calculation
+            // Only apply width_nm/2 shift to actual routed trace segments.
+            // Substrate layers, planes, and component bboxes already represent
+            // absolute physical boundaries and should NOT be shifted.
+            let is_trace = matches!(
+                seg.source,
+                crate::geometry_router::spatial_index::SpatialEntitySource::RouteSegment { .. }
+            );
+            
+            let half_width = if is_trace {
+                seg.width_nm / 2
+            } else {
+                0 // No shift for solid rectangular pours/pads
+            };
+            
             let seg_bbox = BoundingBox {
                 min: Point3D::new(
-                    seg.start.x.min(seg.end.x) - seg.width_nm / 2 - inflate,
-                    seg.start.y.min(seg.end.y) - seg.width_nm / 2 - inflate,
+                    seg.start.x.min(seg.end.x) - half_width - inflate,
+                    seg.start.y.min(seg.end.y) - half_width - inflate,
                     seg.start.z.min(seg.end.z),
                 ),
                 max: Point3D::new(
-                    seg.start.x.max(seg.end.x) + seg.width_nm / 2 + inflate,
-                    seg.start.y.max(seg.end.y) + seg.width_nm / 2 + inflate,
+                    seg.start.x.max(seg.end.x) + half_width + inflate,
+                    seg.start.y.max(seg.end.y) + half_width + inflate,
                     seg.start.z.max(seg.end.z),
                 ),
             };
+            
             if let Some(dist) = self.slab_intersect(origin, direction, &seg_bbox) {
                 if dist >= 0 && dist < min_dist {
                     min_dist = dist;

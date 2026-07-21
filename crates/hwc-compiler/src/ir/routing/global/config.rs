@@ -10,6 +10,8 @@ pub struct RouterConfig {
     pub auto_routes: Vec<hwc_parser::Route>,
     /// v0.1.8: Per-net routing pattern policies.
     pub route_net_policies: FxHashMap<NetId, hwc_engine::RoutingPattern>,
+    /// v0.1.9: Per-net routing intents.
+    pub net_intents: FxHashMap<compact_str::CompactString, compact_str::CompactString>,
 }
 
 impl RouterConfig {
@@ -17,11 +19,13 @@ impl RouterConfig {
         net_frequencies: FxHashMap<NetId, f64>,
         auto_routes: Vec<hwc_parser::Route>,
         route_net_policies: FxHashMap<NetId, hwc_engine::RoutingPattern>,
+        net_intents: FxHashMap<compact_str::CompactString, compact_str::CompactString>,
     ) -> Self {
         Self {
             net_frequencies,
             auto_routes,
             route_net_policies,
+            net_intents,
         }
     }
 }

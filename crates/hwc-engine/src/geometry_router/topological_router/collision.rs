@@ -14,13 +14,18 @@ impl TopologicalRouter {
     }
 
     /// Check if a point is inside any obstacle.
+    /// v0.1.9.1 FIX: Only inflate X/Y for 2D routing, not Z.
     pub(crate) fn point_in_obstacle(
         &self,
         point: Point3D,
         obstacles: &DynamicSpatialIndex,
     ) -> bool {
         let inflate = self.trace_width_nm / 2 + self.min_clearance_nm;
-        let bbox = BoundingBox::from_point(point, inflate);
+        // v0.1.9.1 FIX: Only expand X/Y, not Z
+        let bbox = BoundingBox {
+            min: Point3D::new(point.x - inflate, point.y - inflate, point.z),
+            max: Point3D::new(point.x + inflate, point.y + inflate, point.z),
+        };
         let candidates = self.query_all_obstacles(&bbox, obstacles);
         for seg in candidates {
             if self.exempt_net_ids.contains(&seg.net_id) {
@@ -47,6 +52,7 @@ impl TopologicalRouter {
 
     /// Check if a segment between two points intersects any obstacle.
     /// Uses Minkowski sum inflation: inflate_by = trace_width_nm / 2 + min_clearance_nm
+    /// NOTE: For single-layer 2D routing, we only inflate X/Y dimensions, not Z.
     pub(crate) fn segment_intersects_obstacle(
         &self,
         a: Point3D,
@@ -63,7 +69,21 @@ impl TopologicalRouter {
             max: Point3D::new(a.x.max(b.x), a.y.max(b.y), route_z_max),
         };
 
-        let query_bbox = segment_bbox.expand(inflate);
+        // v0.1.9.1 FIX: Only expand X/Y for query, not Z.
+        // For single-layer 2D routing, all traces and obstacles are at the same Z (middle_z).
+        // Expanding Z by inflate causes false collisions with obstacles at different layers.
+        let query_bbox = BoundingBox {
+            min: Point3D::new(
+                segment_bbox.min.x - inflate,
+                segment_bbox.min.y - inflate,
+                segment_bbox.min.z,  // Don't inflate Z
+            ),
+            max: Point3D::new(
+                segment_bbox.max.x + inflate,
+                segment_bbox.max.y + inflate,
+                segment_bbox.max.z,  // Don't inflate Z
+            ),
+        };
 
         eprintln!(
             "[TOPO COLLISION] Checking segment ({},{},{}) to ({},{},{}) with inflate={}nm",
@@ -122,7 +142,19 @@ impl TopologicalRouter {
                 obs_bbox.max.z
             );
 
-            let inflated_segment = segment_bbox.expand(inflate);
+            // v0.1.9.1 FIX: Only inflate X/Y, not Z, for single-layer 2D routing
+            let inflated_segment = BoundingBox {
+                min: Point3D::new(
+                    segment_bbox.min.x - inflate,
+                    segment_bbox.min.y - inflate,
+                    segment_bbox.min.z,  // Don't inflate Z
+                ),
+                max: Point3D::new(
+                    segment_bbox.max.x + inflate,
+                    segment_bbox.max.y + inflate,
+                    segment_bbox.max.z,  // Don't inflate Z
+                ),
+            };
 
             let x_overlaps = inflated_segment.min.x <= obs_bbox.max.x
                 && inflated_segment.max.x >= obs_bbox.min.x;

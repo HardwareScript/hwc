@@ -7,17 +7,17 @@
 * ========================================
 * Net: A (pour: Pad_A, material: Aluminum, z: 0.0010mm)
 * Net: B (pour: Pad_B, material: Aluminum, z: 0.0010mm)
-* Net: A (width=180nm, material=Tungsten)
+* Net: A (width=200000nm, material=Tungsten)
 *   Connected pins:
 *     - Pad_A.__virtual_Pad_A
 *     - Pad_A.__virtual_Pad_A
 *     - Pad_B.__virtual_Pad_B
 *     - Pad_A.__virtual_Pad_A
 *     - Pad_B.__virtual_Pad_B
-* Net: B (width=180nm, material=Tungsten)
+* Net: B (width=200000nm, material=Tungsten)
 *   Connected pins:
 *     - Pad_B.__virtual_Pad_B
-* Net: TEMP_NET (width=180nm, material=Tungsten)
+* Net: TEMP_NET (width=200000nm, material=Tungsten)
 
 * ========================================
 * AUTOMATIC STIMULUS & MODELS

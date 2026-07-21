@@ -11,6 +11,7 @@
 //! - `Violation`: Constraint violations detected during verification
 
 use crate::geometry::Point3D;
+use crate::geometry_router::connection_interface::DerivedConstraint;
 use crate::netlist::NetId;
 
 /// Wrapper distinguishing hard constraints from soft constraints.
@@ -406,6 +407,50 @@ pub fn check_constraints(metrics: &RouteMetrics, constraints: &NetConstraints) -
     }
 
     violations
+}
+
+/// v0.1.9: Validate interface-derived constraints against routing parameters.
+/// Returns violations for any interface capability constraints that cannot be satisfied.
+pub fn check_interface_constraints(
+    constraints: &[DerivedConstraint],
+    trace_width_nm: i64,
+    trace_length_nm: Option<i64>,
+) -> Vec<InterfaceViolation> {
+    let mut violations = Vec::new();
+    for constraint in constraints {
+        match constraint {
+            DerivedConstraint::MinimumTraceWidth(min_width) => {
+                if trace_width_nm < *min_width {
+                    violations.push(InterfaceViolation::TraceWidthTooNarrow {
+                        actual_nm: trace_width_nm,
+                        required_nm: *min_width,
+                    });
+                }
+            }
+            DerivedConstraint::MaximumTraceLength(max_length) => {
+                if let Some(length) = trace_length_nm {
+                    if length > *max_length {
+                        violations.push(InterfaceViolation::TraceTooLong {
+                            actual_nm: length,
+                            max_nm: *max_length,
+                        });
+                    }
+                }
+            }
+            DerivedConstraint::ThermalViaRequired => {
+                // Thermal via is a recommendation, not a hard constraint
+            }
+            DerivedConstraint::None => {}
+        }
+    }
+    violations
+}
+
+/// Violation of an interface capability constraint.
+#[derive(Debug, Clone)]
+pub enum InterfaceViolation {
+    TraceWidthTooNarrow { actual_nm: i64, required_nm: i64 },
+    TraceTooLong { actual_nm: i64, max_nm: i64 },
 }
 
 #[cfg(test)]

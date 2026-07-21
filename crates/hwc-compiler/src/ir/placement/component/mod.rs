@@ -131,6 +131,92 @@ pub fn place_component(
         }
     }
 
+    // v0.1.9: Register physical interfaces for each component pin.
+    // Each pin gets a Point-geometry interface for CIR candidate selection.
+    if let Ok(component_def) = ctx
+        .symbol_table
+        .get_component(component.component_type.as_str())
+    {
+        use hwc_engine::geometry_router::connection_interface::{
+            DefaultRoutingDatabase, InterfaceGeometry,
+        };
+        use hwc_engine::geometry_router::routing_intent::RoutingIntent;
+        use smallvec::smallvec;
+
+        let db = DefaultRoutingDatabase::default();
+        // v0.1.9 CIR: Require fabrication constraints - no fallbacks
+        let trace_width_nm = space
+            .fabrication_constraints
+            .as_ref()
+            .ok_or_else(|| IrError::MissingAsicConstraint {
+                message: "Fabrication constraints required for interface generation".into(),
+                hint: "Add a 'trace:' block to your profile with min_width".into(),
+            })?
+            .trace
+            .min_width_nm;
+
+        for pin_name in &component_def.pins {
+            let pin_pos = component_def
+                .layout
+                .as_ref()
+                .and_then(|l| l.pin_positions.get(pin_name.as_str()))
+                .map(|pp| {
+                    let x_nm = (pp.x * 1_000_000.0) as i64;
+                    let y_nm = (pp.y * 1_000_000.0) as i64;
+                    let z_nm = pp.z.map(|z| (z * 1_000_000.0) as i64).unwrap_or(0);
+                    hwc_engine::geometry::Point3D::new(
+                        position.x + x_nm,
+                        position.y + y_nm,
+                        position.z + z_nm,
+                    )
+                })
+                .unwrap_or(position);
+
+            let geometry = InterfaceGeometry::Point(pin_pos);
+            let id = space.entity_graph.allocate_interface_id();
+            let intent = RoutingIntent::new("Default");
+
+            // TODO(v0.1.10): Add orientation lookup from component definition
+            // 
+            // Components should support explicit orientation declaration in their layout block:
+            // 
+            //   component MyIC:
+            //     layout:
+            //       orientation: north  # Optional: north, south, east, west
+            //       shape: Rectangle(...)
+            //       pin_positions: { VCC: ..., GND: ... }
+            // 
+            // Implementation steps:
+            // 1. Add `orientation: Option<Orientation>` field to LayoutBlock in parser/ast/component.rs
+            // 2. Parse orientation keyword in parser (north/south/east/west → Orientation enum)
+            // 3. Here: Read component_def.layout.orientation and use if Some(), else:
+            //    - Point geometry → Orientation::None (radial, no preference)
+            //    - Edge/Polygon geometry → Orientation::Derived (from vertex winding)
+            // 
+            // For now: Point geometry always uses None (correct for ball/via contacts)
+            let orientation = hwc_engine::geometry_router::connection_interface::Orientation::None;
+            
+            let interface =
+                hwc_engine::geometry_router::connection_interface::PhysicalInterface::new(
+                    id,
+                    component_id,
+                    geometry,
+                    smallvec![],
+                    intent,
+                    orientation,
+                    &db,
+                    trace_width_nm,
+                    trace_width_nm * 2,
+                );
+
+            space.entity_graph.register_interface_with_pin(
+                component_id,
+                pin_name.clone(),
+                interface,
+            );
+        }
+    }
+
     if let Ok(component_def) = ctx
         .symbol_table
         .get_component(component.component_type.as_str())

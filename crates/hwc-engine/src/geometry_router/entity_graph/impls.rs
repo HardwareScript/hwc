@@ -38,6 +38,11 @@ impl Clone for EntityGraph {
             component_metadata: self.component_metadata.clone(),
             component_pins: self.component_pins.clone(),
             routed_segments: self.routed_segments.clone(),
+            interface_database: self.interface_database.clone(),
+            entity_interface_map: self.entity_interface_map.clone(),
+            next_interface_id: self.next_interface_id,
+            component_interfaces: self.component_interfaces.clone(),
+            pin_interface_map: self.pin_interface_map.clone(),
         }
     }
 }

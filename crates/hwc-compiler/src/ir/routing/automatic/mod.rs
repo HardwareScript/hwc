@@ -12,6 +12,6 @@ mod pipeline;
 mod re_register;
 mod verification;
 
-pub use boundary::calculate_boundary_points;
+pub use boundary::{calculate_boundary_points, select_routable_port_from_resolution};
 pub use pipeline::route_automatic;
 pub use re_register::re_register_resolved_routes;

@@ -30,6 +30,7 @@ pub fn route_automatic(
     let min_clearance_nm = constraints.min_clearance_nm;
     let current_ma = constraints.current_ma;
     let trace_width_nm = constraints.trace_width_nm;
+    let escape_stub_nm = constraints.escape_stub_nm; // v0.1.9: Declarative Escape Policies
 
     // Boundary point calculation
     let (start_boundary, goal_boundary, start_dir, goal_dir) =
@@ -45,38 +46,30 @@ pub fn route_automatic(
         goal_boundary.x, goal_boundary.y, goal_boundary.z
     );
 
+    // v0.1.9: Extract normals from interfaces for perpendicular escape routing
+    let (start_normal, goal_normal) = {
+        // Convert direction tuples to Normal2D
+        const SCALE: i32 = 1_000_000_000;
+        let start_n = hwc_engine::geometry_router::connection_interface::Normal2D::new(
+            (start_dir.0 * SCALE as i64) as i32,
+            (start_dir.1 * SCALE as i64) as i32,
+        );
+        let goal_n = hwc_engine::geometry_router::connection_interface::Normal2D::new(
+            (goal_dir.0 * SCALE as i64) as i32,
+            (goal_dir.1 * SCALE as i64) as i32,
+        );
+        (start_n, goal_n)
+    };
+
     // Resolve target layer override
     let target_z_nm =
         super::constraints::resolve_target_layer(route, stackup_manager, start_boundary)?;
 
-    // External seeding
-    let resolution_nm = space.resolution_nm;
-    let mut start_pos = Point3D::new(
-        start_boundary.x + (start_dir.0 * resolution_nm),
-        start_boundary.y + (start_dir.1 * resolution_nm),
-        start_boundary.z,
-    );
-    let mut goal_pos = Point3D::new(
-        goal_boundary.x + (goal_dir.0 * resolution_nm),
-        goal_boundary.y + (goal_dir.1 * resolution_nm),
-        goal_boundary.z,
-    );
-
-    // Seed alignment
-    if start_dir.0 != 0 {
-        start_pos.y = start_boundary.y;
-    } else if start_dir.1 != 0 {
-        start_pos.x = start_boundary.x;
-    }
-    if goal_dir.0 != 0 {
-        goal_pos.y = goal_boundary.y;
-    } else if goal_dir.1 != 0 {
-        goal_pos.x = goal_boundary.x;
-    }
-    if let Some(z) = target_z_nm {
-        start_pos.z = z;
-        goal_pos.z = z;
-    }
+    eprintln!("[ROUTING] Using perpendicular escape routing with Zero-Gap Contact Lock");
+    eprintln!("[ROUTING]   start_boundary: ({},{},{})", start_boundary.x, start_boundary.y, start_boundary.z);
+    eprintln!("[ROUTING]   goal_boundary: ({},{},{})", goal_boundary.x, goal_boundary.y, goal_boundary.z);
+    eprintln!("[ROUTING]   start_normal: ({},{})", start_normal.x, start_normal.y);
+    eprintln!("[ROUTING]   goal_normal: ({},{})", goal_normal.x, goal_normal.y);
 
     // PHASE 2: GEOMETRY ROUTER - Net registration
     let net_id = crate::ir::routing::helpers::register_net_for_route(
@@ -99,26 +92,18 @@ pub fn route_automatic(
 
     eprintln!("[BOX-MODEL-DEBUG] Net: {}", net_name);
     eprintln!(
-        "[BOX-MODEL-DEBUG]   Start Boundary: ({}, {}, {})",
+        "[BOX-MODEL-DEBUG]   Start Boundary (Contact Point): ({}, {}, {})",
         start_boundary.x, start_boundary.y, start_boundary.z
     );
-    eprintln!("[BOX-MODEL-DEBUG]   Start Dir: {:?}", start_dir);
+    eprintln!("[BOX-MODEL-DEBUG]   Start Normal: ({}, {})", start_normal.x, start_normal.y);
     eprintln!(
-        "[BOX-MODEL-DEBUG]   Start Seed (Router Start): ({}, {}, {})",
-        start_pos.x, start_pos.y, start_pos.z
-    );
-    eprintln!(
-        "[BOX-MODEL-DEBUG]   Goal Boundary: ({}, {}, {})",
+        "[BOX-MODEL-DEBUG]   Goal Boundary (Contact Point): ({}, {}, {})",
         goal_boundary.x, goal_boundary.y, goal_boundary.z
     );
-    eprintln!("[BOX-MODEL-DEBUG]   Goal Dir: {:?}", goal_dir);
-    eprintln!(
-        "[BOX-MODEL-DEBUG]   Goal Seed (Router Goal): ({}, {}, {})",
-        goal_pos.x, goal_pos.y, goal_pos.z
-    );
+    eprintln!("[BOX-MODEL-DEBUG]   Goal Normal: ({}, {})", goal_normal.x, goal_normal.y);
 
     // Resolve material
-    let route_z = target_z_nm.unwrap_or(start_pos.z);
+    let route_z = target_z_nm.unwrap_or(start_boundary.z);
     let copper_id = super::constraints::resolve_material_for_z(
         route_z,
         stackup_manager,
@@ -151,8 +136,22 @@ pub fn route_automatic(
             to_component_name: to_component_name.clone(),
         });
 
+    // v0.1.9: Use route_with_perpendicular_escape for Zero-Gap Contact Lock + Mandatory Perpendicular Escape
+    let exempt_net_ids = vec![net_id.raw() as usize];
+    
+    eprintln!("[ROUTING] Calling router with escape_stub={}nm", escape_stub_nm);
+    
     let mut path = topo_router
-        .route(start_pos, goal_pos, &spatial_index, &board_bounds)
+        .route_with_perpendicular_escape(
+            start_boundary,
+            goal_boundary,
+            start_normal,
+            goal_normal,
+            escape_stub_nm,
+            &spatial_index,
+            &board_bounds,
+            &exempt_net_ids,
+        )
         .ok_or_else(|| IrError::NoPathFound {
             net: format!(
                 "{} -> {}",
@@ -165,7 +164,32 @@ pub fn route_automatic(
         })?
         .waypoints;
 
-    // Boundary stitching
+    eprintln!("[PERPENDICULAR ESCAPE DEBUG] Routed path has {} waypoints", path.len());
+    for (i, wp) in path.iter().enumerate().take(4) {
+        eprintln!("  path[{}]: ({},{},{})", i, wp.x, wp.y, wp.z);
+    }
+    if path.len() > 4 {
+        eprintln!("  ... and {} more waypoints", path.len() - 4);
+    }
+
+    // Note: The perpendicular escape router already includes start_boundary and goal_boundary
+    // in the path, so we don't need boundary stitching here.
+    // However, the existing pipeline expects to do its own stitching, so we need to
+    // remove the router's boundary points and let the pipeline add them back.
+    // This maintains compatibility with downstream processing.
+    if path.len() >= 2 {
+        // Remove first and last (they're the boundary points added by perpendicular escape)
+        let intermediate_path: Vec<Point3D> = if path.len() == 2 {
+            // Direct connection - keep both points
+            path.clone()
+        } else {
+            // Multi-segment path - extract intermediate points
+            path[1..path.len()-1].to_vec()
+        };
+        path = intermediate_path;
+    }
+
+    // Boundary stitching (as before)
     path.insert(0, start_boundary);
     path.push(goal_boundary);
 
@@ -193,12 +217,12 @@ pub fn route_automatic(
     let mut trace_thickness_nm = space.resolution_nm;
 
     if refined_path.len() >= 2 {
-        let fixed_z = target_z_nm.or(Some(start_pos.z));
+        let fixed_z = target_z_nm.or(Some(start_boundary.z));
         (refined_path, trace_thickness_nm) = super::geometry::refine_path_z(
             refined_path,
             stackup_manager,
             fixed_z,
-            start_pos.z,
+            start_boundary.z,
             space.resolution_nm,
         )?;
     }

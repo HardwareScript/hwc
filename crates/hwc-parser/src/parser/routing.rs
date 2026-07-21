@@ -223,6 +223,8 @@ impl super::Parser {
         let mut exit_escape = None;
         let mut enter_escape = None;
         let mut current_limit_ac = None;
+        let mut net_type = None;
+        let mut escape_stub = None; // v0.1.9: Declarative Escape Policies
 
         // Check if this has a properties block (starts with colon)
         if self.check(&Token::Colon) {
@@ -368,6 +370,12 @@ impl super::Parser {
                                 });
                             }
                         }
+                        "net_type" => {
+                            net_type = Some(self.expect_identifier_string()?.into());
+                        }
+                        "escape_stub" => {
+                            escape_stub = Some(self.parse_expression()?);
+                        }
                         _ => {
                             // Pattern parameter
                             let value = self.parse_expression()?;
@@ -399,6 +407,8 @@ impl super::Parser {
             exit_escape,
             enter_escape,
             current_limit_ac,
+            intent: net_type,
+            escape_stub, // v0.1.9
             span: Span::new(start_pos, end_pos),
         })
     }
