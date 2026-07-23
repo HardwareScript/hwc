@@ -249,6 +249,7 @@ impl super::super::super::Parser {
             thermal_relief,
             waivers: crate::ast::Waivers::default(), // Internal pours use default waivers (no intentional overlaps by default)
             relational_constraints,
+            inside_region: None, // Internal component pours don't belong to regions
             span: Span::new(start_pos, end_pos),
         })
     }

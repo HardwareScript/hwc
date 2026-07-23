@@ -25,50 +25,47 @@ impl crate::parser::Parser {
         &mut self,
         z_optional: bool,
     ) -> Result<Coordinate, ParseError> {
-        // Check for relative positioning syntax: AnchorName.edge + offset or last.edge + offset
-        // This does NOT start with '[', so check before expecting bracket
-        if let Some(token) = self.current() {
-            // Check for 'last' keyword (special anchor for loop iterations)
-            if matches!(token.token, Token::Last) {
-                return self.parse_relative_coordinate();
-            }
+        // Relative positioning syntax: AnchorName.edge + offset or last.edge + offset
+        // Relative positioning ONLY occurs when the current token does NOT start with '['
+        if !self.check(&Token::OpenBracket) {
+            if let Some(token) = self.current() {
+                // Check for 'last' or 'substrate' keyword (special anchors)
+                if matches!(token.token, Token::Last | Token::Substrate) {
+                    return self.parse_relative_coordinate();
+                }
 
-            if matches!(token.token, Token::Identifier(_)) {
-                // Quick check: is the NEXT token a dot or open bracket?
-                // This avoids expensive lookahead in the common case
-                if let Some(next_token) = self.tokens.get(self.current + 1) {
-                    match &next_token.token {
-                        Token::Dot => {
-                            // Simple case: Anchor.edge
-                            return self.parse_relative_coordinate();
-                        }
-                        Token::OpenBracket => {
-                            // Possible array syntax: Name[...].edge
-                            // Only do expensive lookahead if we see a bracket
-                            let mut lookahead_pos = self.current + 2; // Skip past identifier and '['
-                            let mut bracket_depth = 1;
+                if matches!(token.token, Token::Identifier(_)) {
+                    // Quick check: is the NEXT token a dot or open bracket?
+                    if let Some(next_token) = self.tokens.get(self.current + 1) {
+                        match &next_token.token {
+                            Token::Dot => {
+                                // Simple case: Anchor.edge
+                                return self.parse_relative_coordinate();
+                            }
+                            Token::OpenBracket => {
+                                // Possible array syntax: Name[...].edge
+                                let mut lookahead_pos = self.current + 2;
+                                let mut bracket_depth = 1;
 
-                            // Find the matching close bracket
-                            while bracket_depth > 0 && lookahead_pos < self.tokens.len() {
-                                if let Some(t) = self.tokens.get(lookahead_pos) {
-                                    match t.token {
-                                        Token::OpenBracket => bracket_depth += 1,
-                                        Token::CloseBracket => bracket_depth -= 1,
-                                        _ => {}
+                                while bracket_depth > 0 && lookahead_pos < self.tokens.len() {
+                                    if let Some(t) = self.tokens.get(lookahead_pos) {
+                                        match t.token {
+                                            Token::OpenBracket => bracket_depth += 1,
+                                            Token::CloseBracket => bracket_depth -= 1,
+                                            _ => {}
+                                        }
+                                    }
+                                    lookahead_pos += 1;
+                                }
+
+                                if let Some(after_bracket) = self.tokens.get(lookahead_pos) {
+                                    if matches!(after_bracket.token, Token::Dot) {
+                                        return self.parse_relative_coordinate();
                                     }
                                 }
-                                lookahead_pos += 1;
                             }
-
-                            // Now check if there's a dot after the closing bracket
-                            if let Some(after_bracket) = self.tokens.get(lookahead_pos) {
-                                if matches!(after_bracket.token, Token::Dot) {
-                                    // This is relative positioning with array syntax
-                                    return self.parse_relative_coordinate();
-                                }
-                            }
+                            _ => {}
                         }
-                        _ => {}
                     }
                 }
             }
@@ -91,7 +88,7 @@ impl crate::parser::Parser {
         if is_declarative {
             self.parse_declarative_coordinate_impl(z_optional)
         } else {
-            self.parse_positional_coordinate()
+            self.parse_positional_coordinate(z_optional)
         }
     }
 
@@ -132,9 +129,14 @@ impl crate::parser::Parser {
             "back" => Edge::Back,
             "min_z" => Edge::MinZ,
             "max_z" => Edge::MaxZ,
+            "top_left" => Edge::TopLeft,
+            "top_right" => Edge::TopRight,
+            "bottom_left" => Edge::BottomLeft,
+            "bottom_right" => Edge::BottomRight,
+            "center" => Edge::Center,
             _ => {
                 return Err(self.error(&format!(
-                    "Invalid edge '{}'. Expected: left, right, top, bottom, front, back, min_z, or max_z",
+                    "Invalid edge '{}'. Expected: left, right, top, bottom, front, back, min_z, max_z, top_left, top_right, bottom_left, bottom_right, or center",
                     edge_str
                 )))
             }
@@ -144,16 +146,26 @@ impl crate::parser::Parser {
         let offset = if self.check(&Token::Plus) {
             self.advance(); // consume '+'
 
-            // Parse offset: either single measurement or vector [x, y, z]
+            // Parse offset: either single measurement or vector [x, y, z] or [x, y]
             if self.check(&Token::OpenBracket) {
-                // Vector offset: [x, y, z]
+                // Vector offset: [x, y, z] or [x, y]
                 self.advance(); // consume '['
 
                 let x = self.parse_expression()?;
                 self.expect(&Token::Comma)?;
                 let y = self.parse_expression()?;
-                self.expect(&Token::Comma)?;
-                let z = self.parse_expression()?;
+
+                let z = if self.check(&Token::Comma) {
+                    self.advance(); // consume ','
+                    self.parse_expression()?
+                } else {
+                    let end_pos = self.current_span().start;
+                    Expression::Measurement {
+                        value: 0.0,
+                        unit: crate::ast::Unit::Millimeter,
+                        span: Span::new(end_pos, end_pos),
+                    }
+                };
 
                 self.expect(&Token::CloseBracket)?;
 
@@ -265,14 +277,28 @@ impl crate::parser::Parser {
         }
     }
 
-    /// Parse positional coordinate: [X, Y, Z]
-    fn parse_positional_coordinate(&mut self) -> Result<Coordinate, ParseError> {
+    /// Parse positional coordinate: [X, Y, Z] (or [X, Y] if z_optional)
+    fn parse_positional_coordinate(
+        &mut self,
+        z_optional: bool,
+    ) -> Result<Coordinate, ParseError> {
         let start_pos = self.current_span().start;
         let x = self.parse_expression()?; // X first
         self.expect(&Token::Comma)?;
         let y = self.parse_expression()?; // Y second
-        self.expect(&Token::Comma)?;
-        let z = self.parse_expression()?; // Z third
+
+        let z = if z_optional && self.check(&Token::CloseBracket) {
+            let end_pos = self.current_span().start;
+            Expression::Measurement {
+                value: 0.0,
+                unit: crate::ast::Unit::Millimeter,
+                span: Span::new(end_pos, end_pos),
+            }
+        } else {
+            self.expect(&Token::Comma)?;
+            self.parse_expression()? // Z third
+        };
+
         self.expect(&Token::CloseBracket)?;
         let end_pos = self.previous_span().end;
 

@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 
 use super::common::{Coordinate, Identifier, Measurement, Rotation};
+use super::expression::Expression;
 use crate::lexer::Span;
 use compact_str::CompactString;
 use rustc_hash::FxHashMap;
@@ -318,13 +319,15 @@ pub enum ParameterValue {
     Measurement(Measurement),
     String(String),
     Number(f64),
+    Expression(Expression), // v0.2.0: Support variables and expressions
 }
 
 /// Parameter in component instantiation
 /// v0.1.6: Only keyword arguments supported
+/// v0.2.0: Added Expression support for let bindings
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Parameter {
-    /// Keyword parameter: `(val: 10kΩ)` or `(color: "Red")` or `(count: 8)`
+    /// Keyword parameter: `(val: 10kΩ)` or `(color: "Red")` or `(count: 8)` or `(w: pad_width)`
     Keyword {
         name: CompactString,
         value: ParameterValue,

@@ -20,6 +20,7 @@ pub struct PourPlacement {
     pub thermal_relief: bool,
     pub waivers: crate::ast::common::Waivers,
     pub relational_constraints: SmallVec<[crate::RelationalConstraint; 2]>,
+    pub inside_region: Option<crate::ast::common::Identifier>, // v0.2.0: Region containment
     pub span: Span,
 }
 
@@ -68,6 +69,7 @@ pub struct PlanePlacement {
     pub net: Option<NetName>,
     pub cutouts: Vec<CutoutShape>,
     pub relational_constraints: SmallVec<[crate::RelationalConstraint; 2]>,
+    pub inside_region: Option<crate::ast::common::Identifier>, // v0.2.0: Region containment
     pub span: Span,
 }
 

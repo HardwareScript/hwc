@@ -404,7 +404,7 @@ impl super::super::super::Parser {
         // INCLUSIVE range (Ruby-style): start..end includes both endpoints
         for i in range_start..=range_end {
             let mut context: EvaluationContext = rustc_hash::FxHashMap::default();
-            context.insert(variable.clone().into(), i as i64);
+            context.insert(variable.clone().into(), Value::Number(i as i64));
 
             for template in &templates {
                 // Substitute variable in pin name: D[i] → D[0], P[i] → P[0], etc.

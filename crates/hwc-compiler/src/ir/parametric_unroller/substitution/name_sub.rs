@@ -64,7 +64,7 @@ pub fn substitute_in_net_binding(
             else_net,
         } => {
             let mut context = rustc_hash::FxHashMap::default();
-            context.insert(variable.into(), value as i64);
+            context.insert(variable.into(), hwc_parser::Value::Number(value as i64));
 
             let condition_result = condition.evaluate(&context).map_err(|e| {
                 IrError::InvalidExpression(format!(

@@ -12,7 +12,8 @@ impl<'a> AutoRouter<'a> {
     /// Create a new global automatic router.
     pub fn new(
         space: &'a mut hwc_engine::HardwareSpace,
-        _symbol_table: &'a crate::SymbolTable,
+        symbol_table: &'a crate::SymbolTable,
+        eval_context: &'a hwc_parser::EvaluationContext,
         stackup_manager: &'a crate::ir::stackup_manager::StackupManager,
         profile: Option<&'a hwc_parser::ProfileDefinition>,
         net_frequencies: rustc_hash::FxHashMap<hwc_engine::netlist::NetId, f64>,
@@ -30,6 +31,8 @@ impl<'a> AutoRouter<'a> {
         );
         Self {
             space,
+            symbol_table,
+            eval_context,
             stackup_manager,
             profile,
             config,

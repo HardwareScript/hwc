@@ -60,6 +60,7 @@ pub fn evaluate_constraints(
     space: &HardwareSpace,
     route: &hwc_parser::Route,
     symbol_table: &crate::SymbolTable,
+    eval_context: &hwc_parser::EvaluationContext,
     profile: Option<&hwc_parser::ProfileDefinition>,
 ) -> Result<ConstraintResult, IrError> {
     let min_clearance_nm = space.fabrication_constraints.as_ref()
@@ -110,11 +111,11 @@ pub fn evaluate_constraints(
     );
 
     let trace_width_nm = if let Some(width_expr) = &route.width {
-        crate::ir::conversions::evaluate_expression_to_nm(width_expr, symbol_table)
+        crate::ir::conversions::evaluate_expression_to_nm(width_expr, symbol_table, eval_context)
             .map_err(IrError::InvalidExpression)?
     } else {
         profile.and_then(|p| p.trace.as_ref())
-            .map(|t| crate::ir::conversions::measurement_to_nm(&t.min_width, symbol_table))
+            .map(|t| crate::ir::conversions::measurement_to_nm(&t.min_width, symbol_table, eval_context))
             .transpose()
             .map_err(|e| IrError::InvalidRouteExpression {
                 expression: "profile trace width".into(),
@@ -141,7 +142,7 @@ pub fn evaluate_constraints(
     // 3. Profile default (required - no fallback)
     let escape_stub_nm = if let Some(ref stub_expr) = route.escape_stub {
         // Route-level override (highest authority)
-        crate::ir::conversions::evaluate_expression_to_nm(stub_expr, symbol_table)
+        crate::ir::conversions::evaluate_expression_to_nm(stub_expr, symbol_table, eval_context)
             .map_err(|e| IrError::InvalidRouteExpression {
                 expression: "escape_stub".into(),
                 reason: e.to_string(),
@@ -152,7 +153,7 @@ pub fn evaluate_constraints(
             .and_then(|p| p.intents.iter().find(|i| i.name.name == intent_name.as_str()))
         {
             if let Some(ref stub_meas) = intent.escape_stub {
-                crate::ir::conversions::measurement_to_nm(stub_meas, symbol_table)
+                crate::ir::conversions::measurement_to_nm(stub_meas, symbol_table, eval_context)
                     .map_err(|e| IrError::InvalidRouteExpression {
                         expression: format!("intent '{}' escape_stub", intent_name),
                         reason: e.to_string(),
@@ -162,7 +163,7 @@ pub fn evaluate_constraints(
                 profile
                     .and_then(|p| p.routing.as_ref())
                     .and_then(|r| r.escape_stub.as_ref())
-                    .map(|m| crate::ir::conversions::measurement_to_nm(m, symbol_table))
+                    .map(|m| crate::ir::conversions::measurement_to_nm(m, symbol_table, eval_context))
                     .transpose()
                     .map_err(|e| IrError::InvalidRouteExpression {
                         expression: "profile routing.escape_stub".into(),
@@ -178,7 +179,7 @@ pub fn evaluate_constraints(
             profile
                 .and_then(|p| p.routing.as_ref())
                 .and_then(|r| r.escape_stub.as_ref())
-                .map(|m| crate::ir::conversions::measurement_to_nm(m, symbol_table))
+                .map(|m| crate::ir::conversions::measurement_to_nm(m, symbol_table, eval_context))
                 .transpose()
                 .map_err(|e| IrError::InvalidRouteExpression {
                     expression: "profile routing.escape_stub".into(),
@@ -194,7 +195,7 @@ pub fn evaluate_constraints(
         profile
             .and_then(|p| p.routing.as_ref())
             .and_then(|r| r.escape_stub.as_ref())
-            .map(|m| crate::ir::conversions::measurement_to_nm(m, symbol_table))
+            .map(|m| crate::ir::conversions::measurement_to_nm(m, symbol_table, eval_context))
             .transpose()
             .map_err(|e| IrError::InvalidRouteExpression {
                 expression: "profile routing.escape_stub".into(),

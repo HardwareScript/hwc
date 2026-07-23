@@ -55,6 +55,7 @@ impl StackupManager {
     pub fn new(
         stackup_opt: Option<&LayerStackup>,
         symbol_table: &SymbolTable,
+        eval_context: &hwc_parser::EvaluationContext,
         _resolution_nm: i64,
         origin_z: hwc_parser::OriginZ,
         solder_mask_thickness_nm: i64,
@@ -70,7 +71,7 @@ impl StackupManager {
             let mut resolved: Vec<(String, i64, bool, String)> = Vec::new();
 
             for layer in &stackup.layers {
-                let thickness_nm = evaluate_expression_to_nm(&layer.thickness, symbol_table)
+                let thickness_nm = evaluate_expression_to_nm(&layer.thickness, symbol_table, eval_context)
                     .map_err(|e| IrError::StackupResolutionFailed {
                         layer_name: layer.name.name.clone(),
                         reason: format!("Failed to evaluate thickness: {}", e),
@@ -259,8 +260,9 @@ impl StackupManager {
         &self,
         elevation: &Elevation,
         symbol_table: &SymbolTable,
+        eval_context: &hwc_parser::EvaluationContext,
     ) -> Result<i64, IrError> {
-        self.resolve_elevation_bottom(elevation, symbol_table, 0)
+        self.resolve_elevation_bottom(elevation, symbol_table, eval_context, 0)
     }
 
     /// Returns the thickness in nm for a semantic layer (useful for via/contact spanning).
@@ -273,10 +275,11 @@ impl StackupManager {
         &self,
         elevation: &Elevation,
         symbol_table: &SymbolTable,
+        eval_context: &hwc_parser::EvaluationContext,
         _resolution_nm: i64,
     ) -> Result<i64, IrError> {
         match elevation {
-            Elevation::Physical { start, .. } => evaluate_expression_to_nm(start, symbol_table)
+            Elevation::Physical { start, .. } => evaluate_expression_to_nm(start, symbol_table, eval_context)
                 .map_err(|e| IrError::CoordinateResolutionFailed {
                     coordinate_str: "physical Z expression".into(),
                     reason: e.to_string(),
@@ -298,8 +301,9 @@ impl StackupManager {
         &self,
         elevation: &Elevation,
         symbol_table: &SymbolTable,
+        eval_context: &hwc_parser::EvaluationContext,
     ) -> Result<i64, IrError> {
-        let bottom = self.resolve_elevation_bottom(elevation, symbol_table, 0)?;
+        let bottom = self.resolve_elevation_bottom(elevation, symbol_table, eval_context, 0)?;
         let thickness = match elevation {
             Elevation::Semantic(ident) => self
                 .get_layer_thickness(ident.name.as_ref())
@@ -309,7 +313,7 @@ impl StackupManager {
                 })?,
             Elevation::Physical { end, .. } => {
                 if let Some(end_expr) = end {
-                    let top = evaluate_expression_to_nm(end_expr, symbol_table).map_err(|e| {
+                    let top = evaluate_expression_to_nm(end_expr, symbol_table, eval_context).map_err(|e| {
                         IrError::CoordinateResolutionFailed {
                             coordinate_str: "physical Z-end expression".into(),
                             reason: e.to_string(),
@@ -460,6 +464,7 @@ impl StackupManager {
         &self,
         z_expr: &Expression,
         symbol_table: &SymbolTable,
+        eval_context: &hwc_parser::EvaluationContext,
     ) -> Result<i64, IrError> {
         match z_expr {
             Expression::Variable { name, .. } => {
@@ -467,14 +472,14 @@ impl StackupManager {
                     return Ok(z);
                 }
                 // Not a known semantic layer — treat as physical expression
-                evaluate_expression_to_nm(z_expr, symbol_table).map_err(|e| {
+                evaluate_expression_to_nm(z_expr, symbol_table, eval_context).map_err(|e| {
                     IrError::CoordinateResolutionFailed {
                         coordinate_str: format!("Z variable '{}'", name),
                         reason: e.to_string(),
                     }
                 })
             }
-            _ => evaluate_expression_to_nm(z_expr, symbol_table).map_err(|e| {
+            _ => evaluate_expression_to_nm(z_expr, symbol_table, eval_context).map_err(|e| {
                 IrError::CoordinateResolutionFailed {
                     coordinate_str: "Z expression".into(),
                     reason: e.to_string(),

@@ -34,6 +34,7 @@ profile Silicon_180nm:
     trace:
         min_width: 180nm
         min_spacing: 180nm
+        edge_clearance: 50um          # Minimum clearance from die edge for wire-bonding and seal-ring
 
     via:
         min_diameter: 220nm
@@ -94,4 +95,4 @@ profile Silicon_180nm:
 
     net_type Signal:
         routing_style: auto
-        escape_stub: 10um             # v0.1.9: Standard signal traces get modest perpendicular escape
+        escape_stub: 50um             # v0.1.10: Increased to accommodate 45° miter chamfers (1.5×30µm = 45µm)

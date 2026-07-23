@@ -58,23 +58,26 @@ pub fn compile_single_space(
 > {
     let placement_items = placement_items::collect_placement_items(space_def, symbol_table)?;
 
-    let mut space = space_setup::create_space(space_def, symbol_table)?;
+    let eval_context_initial = space_setup::build_eval_context(symbol_table, None, space_def);
+
+    let mut space = space_setup::create_space(space_def, symbol_table, &eval_context_initial)?;
 
     let (profile, solder_mask_thickness_nm) =
-        space_setup::resolve_solder_mask_thickness(space_def, symbol_table)?;
+        space_setup::resolve_solder_mask_thickness(space_def, symbol_table, &eval_context_initial)?;
 
     let origin = space_def.origin.unwrap_or_default();
+
+    let eval_context = space_setup::build_eval_context(symbol_table, profile.as_ref(), space_def);
 
     let stackup_manager = space_setup::create_stackup_and_materials(
         profile.as_ref(),
         symbol_table,
+        &eval_context,
         space.resolution_nm,
         origin.z,
         solder_mask_thickness_nm,
     )?;
-    space_setup::populate_material_registry(&mut space, profile.as_ref(), symbol_table);
-
-    let eval_context = space_setup::build_eval_context(symbol_table);
+    space_setup::populate_material_registry(&mut space, profile.as_ref(), symbol_table, &eval_context);
     let sorted_ids = dependency_graph::build_and_sort(&placement_items, symbol_table)?;
 
     space_setup::generate_solder_mask(&mut space, solder_mask_thickness_nm, &stackup_manager)?;
@@ -92,10 +95,30 @@ pub fn compile_single_space(
         space_def,
         collector,
     };
+    // Register 'space' as a special anchor representing the space boundaries
+    // The 'space' anchor represents the absolute coordinate system of the design space.
+    // Its bounding box is always from (0,0,0) to (width, height, depth) in internal coordinates.
+    // User-facing origin configuration (bl, tl, etc.) is applied during coordinate transformation,
+    // but does not affect the space anchor's internal representation.
+    let mut bbox_tracker = crate::bounding_box_tracker::BoundingBoxTracker::new();
+    let space_bbox = hwc_engine::geometry::BoundingBox {
+        min: hwc_engine::geometry::Point3D { x: 0, y: 0, z: 0 },
+        max: hwc_engine::geometry::Point3D {
+            x: space.dimensions.width_nm,
+            y: space.dimensions.height_nm,
+            z: space.dimensions.depth_nm,
+        },
+    };
+    bbox_tracker.register(
+        "space".into(),
+        space_bbox,
+        hwc_engine::geometry::Point3D { x: 0, y: 0, z: 0 },
+    );
+
     placement_loop::execute_placement(
         &mut space,
         &compile_ctx,
-        &mut crate::bounding_box_tracker::BoundingBoxTracker::new(),
+        &mut bbox_tracker,
     )?;
 
     placement_loop::check_static_shorts(&space)?;
@@ -111,7 +134,7 @@ pub fn compile_single_space(
 
     if !routes_loaded_from_lock {
         let _route_net_policies =
-            routing_phase::collect_route_net_policies(&space, space_def, symbol_table);
+            routing_phase::collect_route_net_policies(&space, space_def, symbol_table, &eval_context);
 
         let auto_routes = routing_phase::process_routes(&mut space, &compile_ctx, routing_mode)?;
 
@@ -119,6 +142,7 @@ pub fn compile_single_space(
             &mut space,
             auto_routes,
             symbol_table,
+            &eval_context,
             &stackup_manager,
             profile.as_ref(),
         )?;
@@ -131,6 +155,7 @@ pub fn compile_single_space(
         symbol_table,
         collector,
         space_def,
+        &eval_context,
     )?;
 
     Ok((space, query_store, routes_loaded_from_lock))

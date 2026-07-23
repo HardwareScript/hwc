@@ -27,6 +27,13 @@ pub struct IndexedSegment {
     pub layer: i64,
 }
 
+impl IndexedSegment {
+    /// Semantic constant: width_nm for bounding box obstacles (not line segments)
+    /// When start/end define a rectangular volume, width_nm is zero to indicate
+    /// full bbox blocking rather than line segment with cylindrical inflation
+    pub const BBOX_OBSTACLE_WIDTH: i64 = 0;
+}
+
 impl PartialEq for IndexedSegment {
     fn eq(&self, other: &Self) -> bool {
         self.source == other.source && self.segment_id == other.segment_id
@@ -290,10 +297,7 @@ impl DynamicSpatialIndex {
     pub fn query_bbox(&self, bbox: &BoundingBox) -> Vec<&IndexedSegment> {
         let z_min = bbox.min.z;
         let z_max = bbox.max.z;
-        eprintln!(
-            "[LAYERED INDEX] query_bbox: bbox.min={:?}, bbox.max={:?}, z_range=[{}, {}]",
-            bbox.min, bbox.max, z_min, z_max
-        );
+        
 
         let layer_indices = self.layers_for_z_range(z_min, z_max);
 

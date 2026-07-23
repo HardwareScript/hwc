@@ -36,6 +36,7 @@ impl ViaResolver {
         profile: Option<&hwc_parser::ProfileDefinition>,
         stackup_manager: &StackupManager,
         symbol_table: &crate::SymbolTable,
+        eval_context: &hwc_parser::EvaluationContext,
     ) -> Result<Self, IrError> {
         let bridge_table = if let Some(p) = profile {
             crate::bridge_resolver::BridgeTable::from_profile(p)
@@ -54,7 +55,7 @@ impl ViaResolver {
         let min_spacing_nm = profile
             .and_then(|p| p.via.as_ref())
             .and_then(|v| v.min_spacing.as_ref())
-            .and_then(|m| crate::ir::conversions::measurement_to_nm(m, symbol_table).ok())
+            .and_then(|m| crate::ir::conversions::measurement_to_nm(m, symbol_table, eval_context).ok())
             .unwrap_or(200_000);
 
         Ok(Self {

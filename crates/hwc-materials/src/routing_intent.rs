@@ -24,6 +24,10 @@ pub struct RoutingIntent {
     pub target_impedance_milliohms: u32,
     /// Cost weights override (None = use profile defaults)
     pub cost_weights: Option<IntentCostWeights>,
+    /// Perpendicular escape stub length in nanometers (v0.1.9)
+    /// Distance the trace must travel perpendicular to pad edge before turning
+    /// None = use profile's global routing.escape_stub default
+    pub escape_stub_nm: Option<i64>,
 }
 
 /// Cost weight overrides for a routing intent.
@@ -55,6 +59,7 @@ impl Default for RoutingIntent {
             is_critical_path: false,
             target_impedance_milliohms: 0,
             cost_weights: None,
+            escape_stub_nm: None,
         }
     }
 }
@@ -67,6 +72,7 @@ impl RoutingIntent {
             is_critical_path: false,
             target_impedance_milliohms: 0,
             cost_weights: None,
+            escape_stub_nm: None,
         }
     }
 
@@ -96,6 +102,7 @@ impl RoutingIntent {
         name: &str,
         routing_style: Option<&str>,
         cost_weights: Option<&IntentCostWeights>,
+        escape_stub_nm: Option<i64>,
     ) -> Self {
         let mut intent = Self::new(name);
 
@@ -121,6 +128,9 @@ impl RoutingIntent {
         if let Some(pw) = cost_weights {
             intent.cost_weights = Some(pw.clone());
         }
+        
+        // Set escape stub if provided
+        intent.escape_stub_nm = escape_stub_nm;
 
         intent
     }

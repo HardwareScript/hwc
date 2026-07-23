@@ -31,7 +31,7 @@ pub fn place_pour(
     };
 
     let thickness_nm = if let Some(t_expr) = &pour.thickness {
-        crate::ir::conversions::evaluate_expression_to_nm(t_expr, ctx.symbol_table).map_err(
+        crate::ir::conversions::evaluate_expression_to_nm(t_expr, ctx.symbol_table, ctx.eval_context).map_err(
             |e| IrError::CoordinateResolutionFailed {
                 coordinate_str: format!("pour '{}' thickness", pour.name),
                 reason: e.to_string(),
@@ -41,7 +41,7 @@ pub fn place_pour(
         ctx.profile
             .and_then(|p| p.get_layer_thickness(&layer_name))
             .and_then(|t_expr| {
-                crate::ir::conversions::evaluate_expression_to_nm(t_expr, ctx.symbol_table).ok()
+                crate::ir::conversions::evaluate_expression_to_nm(t_expr, ctx.symbol_table, ctx.eval_context).ok()
             })
             .unwrap_or_else(|| {
                 ctx.stackup_manager
@@ -63,7 +63,7 @@ pub fn place_pour(
 
     let z_start_nm = ctx
         .stackup_manager
-        .resolve_elevation(&pour.elevation, ctx.symbol_table)?;
+        .resolve_elevation(&pour.elevation, ctx.symbol_table, ctx.eval_context)?;
     let z_end_nm = z_start_nm + thickness_nm;
 
     /*
@@ -89,72 +89,71 @@ pub fn place_pour(
     let (start, end, area_nm2) = match boundary {
         hwc_parser::PourBoundary::Rect(from_raw, to_raw) => {
             let from = if from_raw.is_relative() {
-                solver.resolve_position(from_raw).map_err(|e| {
+                let intent = solver.resolve_position(from_raw).map_err(|e| {
                     IrError::CoordinateResolutionFailed {
                         coordinate_str: format!("pour '{}' from position", pour.name),
                         reason: e.to_string(),
                     }
-                })?
+                })?;
+                intent.point()
             } else {
-                (**from_raw).clone()
+                spanning_coordinate_to_point(from_raw, &coord_ctx, false).map_err(|e| {
+                    IrError::CoordinateResolutionFailed {
+                        coordinate_str: format!("pour '{}' from", pour.name),
+                        reason: e,
+                    }
+                })?
             };
 
             let to = if to_raw.is_relative() {
-                solver.resolve_position(to_raw).map_err(|e| {
+                let intent = solver.resolve_position(to_raw).map_err(|e| {
                     IrError::CoordinateResolutionFailed {
                         coordinate_str: format!("pour '{}' to position", pour.name),
                         reason: e.to_string(),
                     }
-                })?
+                })?;
+                intent.point()
             } else {
-                (**to_raw).clone()
+                spanning_coordinate_to_point(to_raw, &coord_ctx, true).map_err(|e| {
+                    IrError::CoordinateResolutionFailed {
+                        coordinate_str: format!("pour '{}' to", pour.name),
+                        reason: e,
+                    }
+                })?
             };
 
-            let s = spanning_coordinate_to_point(&from, &coord_ctx, false).map_err(|e| {
-                IrError::CoordinateResolutionFailed {
-                    coordinate_str: format!("pour '{}' from", pour.name),
-                    reason: e,
-                }
-            })?;
-            let e = spanning_coordinate_to_point(&to, &coord_ctx, true).map_err(|e| {
-                IrError::CoordinateResolutionFailed {
-                    coordinate_str: format!("pour '{}' to", pour.name),
-                    reason: e,
-                }
-            })?;
-
-            let w = (e.x - s.x).abs();
-            let h = (e.y - s.y).abs();
-            (s, e, w * h)
+            let w = (to.x - from.x).abs();
+            let h = (to.y - from.y).abs();
+            (from, to, w * h)
         }
         hwc_parser::PourBoundary::Circle {
             center: center_raw,
             radius,
         } => {
             let radius_nm =
-                crate::ir::conversions::evaluate_expression_to_nm(radius, ctx.symbol_table)
+                crate::ir::conversions::evaluate_expression_to_nm(radius, ctx.symbol_table, ctx.eval_context)
                     .map_err(|e| IrError::CoordinateResolutionFailed {
                         coordinate_str: format!("pour '{}' circle radius", pour.name),
                         reason: e.to_string(),
                     })?;
             circle_radius_nm = Some(radius_nm);
 
-            let center_resolved = if center_raw.is_relative() {
-                solver.resolve_position(center_raw).map_err(|e| {
+            let center_pt = if center_raw.is_relative() {
+                let intent = solver.resolve_position(center_raw).map_err(|e| {
                     IrError::CoordinateResolutionFailed {
                         coordinate_str: format!("pour '{}' circle center", pour.name),
                         reason: e.to_string(),
                     }
-                })?
-            } else {
-                *center_raw.clone()
-            };
-
-            let center_pt = spanning_coordinate_to_point(&center_resolved, &coord_ctx, false)
-                .map_err(|e| IrError::CoordinateResolutionFailed {
-                    coordinate_str: format!("pour '{}' circle center", pour.name),
-                    reason: e,
                 })?;
+                intent.point()
+            } else {
+                spanning_coordinate_to_point(center_raw, &coord_ctx, false).map_err(|e| {
+                    IrError::CoordinateResolutionFailed {
+                        coordinate_str: format!("pour '{}' circle center", pour.name),
+                        reason: e,
+                    }
+                })?
+            };
 
             let radius_nm_f = radius_nm as f64;
             let s = Point3D::new(

@@ -42,7 +42,7 @@ impl crate::parser::Parser {
         })
     }
 
-    /// Parse a parameter value: Measurement, String, or Number
+    /// Parse a parameter value: Expression (including variables), String, or literal values
     fn parse_parameter_value(&mut self) -> Result<crate::ast::ParameterValue, ParseError> {
         if let Some(spanned) = self.current() {
             match &spanned.token {
@@ -52,23 +52,11 @@ impl crate::parser::Parser {
                     self.advance();
                     Ok(crate::ast::ParameterValue::String(val))
                 }
-                // Measurement: 10kΩ, 5V, 100mm
-                Token::Measurement(_) => {
-                    let measurement = self.parse_measurement()?;
-                    Ok(crate::ast::ParameterValue::Measurement(measurement))
+                // Try to parse as an expression (covers measurements, numbers, variables, operations)
+                _ => {
+                    let expr = self.parse_expression()?;
+                    Ok(crate::ast::ParameterValue::Expression(expr))
                 }
-                // Plain number: 42, 3.14
-                Token::Integer(n) => {
-                    let val = *n as f64;
-                    self.advance();
-                    Ok(crate::ast::ParameterValue::Number(val))
-                }
-                Token::Float(f) => {
-                    let val = *f;
-                    self.advance();
-                    Ok(crate::ast::ParameterValue::Number(val))
-                }
-                _ => Err(self.error("Expected parameter value (measurement, string, or number)")),
             }
         } else {
             Err(self.error("Expected parameter value"))

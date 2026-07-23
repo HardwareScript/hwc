@@ -2,6 +2,7 @@ mod elevation;
 mod layout;
 mod nets;
 mod placements;
+mod region;
 mod routes;
 mod space_def;
 mod substrate;
@@ -13,11 +14,15 @@ pub use placements::{
     CapType, ContactPlacement, CutoutShape, DeviceBinding, PlanePlacement, PolygonPlacement,
     PourBoundary, PourPlacement, ShapeInstance,
 };
+pub use region::{
+    RegionAnchor, RegionBoundary, RegionConstraint, RegionConstraintType, RegionDefinition,
+};
 pub use routes::{
     CardinalDirection, CurrentLimitAc, EdgeOffsetSpec, Expose, NamedPosition, NetName, Route,
     RouteEndpointSpec, RouteEscape,
 };
 pub use space_def::{
-    RouteNetPolicy, SpaceDefinition, SpaceForLoop, SpaceStatement, SpaceTopLevelStatement,
+    LetBinding, RouteNetPolicy, SpaceDefinition, SpaceForLoop, SpaceStatement,
+    SpaceTopLevelStatement,
 };
 pub use substrate::{CoordinatePair, SubstratePlacement};

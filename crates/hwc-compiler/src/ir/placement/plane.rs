@@ -4,6 +4,25 @@ use super::context::PlacementContext;
 use hwc_engine::space::PourMetadata;
 use hwc_engine::{HardwareSpace, Point3D};
 
+/// Check if a coordinate uses a .center edge reference
+fn matches_center_edge(coord: &hwc_parser::Coordinate) -> bool {
+    use hwc_parser::{Coordinate, Expression, Edge};
+    
+    let check_expr = |expr: &Expression| -> bool {
+        match expr {
+            Expression::AnchorReference { edge, .. } => matches!(edge, Edge::Center),
+            _ => false,
+        }
+    };
+    
+    match coord {
+        Coordinate::Positional { x, y, z, .. } | Coordinate::Declarative { x, y, z, .. } => {
+            check_expr(x) || check_expr(y) || check_expr(z)
+        }
+        Coordinate::Relative(_) => false,
+    }
+}
+
 struct ResolvedCutout {
     at_pt: Point3D,
     width_nm: Option<i64>,
@@ -15,9 +34,11 @@ struct ResolvedCutout {
 ///
 /// This function extracts width and height from the shape instance parameters.
 /// The shape instance contains the actual parameter values passed when instantiating the shape.
+/// v0.1.10: Now supports expressions (including variables) in parameters
 fn resolve_shape_dimensions(
     shape_inst: &hwc_parser::ShapeInstance,
     symbol_table: &crate::SymbolTable,
+    eval_context: &hwc_parser::EvaluationContext,
 ) -> Result<(i64, i64), IrError> {
     // Look up the shape definition to verify it exists
     let _shape_def = symbol_table
@@ -53,13 +74,27 @@ fn resolve_shape_dimensions(
                         reason: format!("Parameter '{}' has non-distance unit", name),
                     })?;
                 let nm = pm / 1000; // Convert picometers to nanometers
-                eprintln!("[SHAPE DEBUG] Converted {}pm to {}nm", pm, nm);
+                eprintln!("[SHAPE DEBUG] Converted literal {}pm to {}nm", pm, nm);
+                nm
+            }
+            hwc_parser::ParameterValue::Expression(expr) => {
+                // Evaluate the expression using the evaluation context (supports variables!)
+                let nm = crate::ir::conversions::evaluate_expression_to_nm(
+                    expr,
+                    symbol_table,
+                    eval_context,
+                )
+                .map_err(|e| IrError::ShapeResolutionFailed {
+                    shape: shape_inst.shape_name.clone(),
+                    reason: format!("Failed to evaluate parameter '{}': {}", name, e),
+                })?;
+                eprintln!("[SHAPE DEBUG] Evaluated expression to {}nm", nm);
                 nm
             }
             _ => {
                 return Err(IrError::ShapeResolutionFailed {
                     shape: shape_inst.shape_name.clone(),
-                    reason: format!("Parameter '{}' must be a Measurement", name),
+                    reason: format!("Parameter '{}' must be a Measurement or Expression", name),
                 });
             }
         };
@@ -118,7 +153,7 @@ pub fn place_plane(
     };
 
     let thickness_nm = if let Some(t_expr) = &plane.thickness {
-        crate::ir::conversions::evaluate_expression_to_nm(t_expr, ctx.symbol_table).map_err(
+        crate::ir::conversions::evaluate_expression_to_nm(t_expr, ctx.symbol_table, ctx.eval_context).map_err(
             |e| IrError::CoordinateResolutionFailed {
                 coordinate_str: format!("plane '{}' thickness", plane.name),
                 reason: e.to_string(),
@@ -128,7 +163,7 @@ pub fn place_plane(
         ctx.profile
             .and_then(|p| p.get_layer_thickness(&layer_name))
             .and_then(|t_expr| {
-                crate::ir::conversions::evaluate_expression_to_nm(t_expr, ctx.symbol_table).ok()
+                crate::ir::conversions::evaluate_expression_to_nm(t_expr, ctx.symbol_table, ctx.eval_context).ok()
             })
             .unwrap_or_else(|| {
                 ctx.stackup_manager
@@ -150,7 +185,7 @@ pub fn place_plane(
 
     let z_start_nm = ctx
         .stackup_manager
-        .resolve_elevation(&plane.elevation, ctx.symbol_table)?;
+        .resolve_elevation(&plane.elevation, ctx.symbol_table, ctx.eval_context)?;
     let z_end_nm = z_start_nm + thickness_nm;
 
     let coord_ctx = CoordinateContext {
@@ -168,26 +203,26 @@ pub fn place_plane(
     // v0.1.9: Handle shape-based planes with parameterized geometry
     let (start, end, area_nm2) = if let Some(shape_inst) = &plane.shape {
         // Resolve shape parameters to get dimensions
-        let (width_nm, height_nm) = resolve_shape_dimensions(shape_inst, ctx.symbol_table)?;
+        let (width_nm, height_nm) = resolve_shape_dimensions(shape_inst, ctx.symbol_table, ctx.eval_context)?;
 
         // Get position from `at:` field or relational constraints
         let mut position = if let Some(from_coord) = &plane.from {
-            let from = if from_coord.is_relative() {
-                solver.resolve_position(from_coord).map_err(|e| {
+            if from_coord.is_relative() {
+                let intent = solver.resolve_position(from_coord).map_err(|e| {
                     IrError::CoordinateResolutionFailed {
                         coordinate_str: format!("plane '{}' position", plane.name),
                         reason: e.to_string(),
                     }
-                })?
+                })?;
+                intent.point()
             } else {
-                from_coord.clone()
-            };
-            spanning_coordinate_to_point(&from, &coord_ctx, false).map_err(|e| {
-                IrError::CoordinateResolutionFailed {
-                    coordinate_str: format!("plane '{}' position", plane.name),
-                    reason: e,
-                }
-            })?
+                spanning_coordinate_to_point(from_coord, &coord_ctx, false).map_err(|e| {
+                    IrError::CoordinateResolutionFailed {
+                        coordinate_str: format!("plane '{}' position", plane.name),
+                        reason: e,
+                    }
+                })?
+            }
         } else {
             return Err(IrError::PlacementConstraint {
                 message: format!(
@@ -200,17 +235,30 @@ pub fn place_plane(
 
         // v0.1.9: Adjust for center alignment [Spatial_Synthesis_Abstraction.md §1.4.1]
         //
-        // CENTER ALIGNMENT SEMANTICS: The relational resolver returns the CENTER coordinate
-        // of the target object when `align: center_x/center_y/center_z` is used. To achieve
-        // true center-to-center alignment, we must:
-        //   1. Take the target's center coordinate (from resolver)
+        // CENTER ALIGNMENT SEMANTICS: When positioning at a center point (either via
+        // relational `align: center` or direct `.center` anchor reference), we must:
+        //   1. Take the target's center coordinate
         //   2. Subtract half of THIS object's dimensions
         //   3. Result: bottom-left corner position that centers this object
         //
-        // Example: Pad_A center_y = 300µm, Pad_B height = 200µm
-        //   - Resolver returns: Y = 300µm (Pad_A's center)
-        //   - We adjust: Y = 300µm - (200µm / 2) = 200µm (Pad_B's bottom-left)
-        //   - Result: Pad_B spans Y:200-400µm, center at 300µm ✓ ALIGNED
+        // Example: Region center = (460µm, 300µm), Shape = 120µm x 80µm
+        //   - Coordinate resolver returns: (460µm, 300µm)
+        //   - We adjust: X = 460µm - 60µm = 400µm, Y = 300µm - 40µm = 260µm
+        //   - Result: Shape spans X:400-520µm, Y:260-340µm, center at (460,300) ✓ CENTERED
+        
+        // Check if the coordinate uses .center edge reference
+        let uses_center_anchor = if let Some(from_coord) = &plane.from {
+            matches_center_edge(from_coord)
+        } else {
+            false
+        };
+        
+        // Apply centering for both direct .center anchors and relational align constraints
+        if uses_center_anchor {
+            position.x -= width_nm / 2;
+            position.y -= height_nm / 2;
+        }
+        
         for constraint in &plane.relational_constraints {
             if let hwc_parser::RelationalConstraint::Align { axis, .. } = constraint {
                 match axis {
@@ -236,43 +284,42 @@ pub fn place_plane(
         match (&plane.from, &plane.to) {
             (Some(from_raw), Some(to_raw)) => {
                 let from = if from_raw.is_relative() {
-                    solver.resolve_position(from_raw).map_err(|e| {
+                    let intent = solver.resolve_position(from_raw).map_err(|e| {
                         IrError::CoordinateResolutionFailed {
                             coordinate_str: format!("plane '{}' from position", plane.name),
                             reason: e.to_string(),
                         }
-                    })?
+                    })?;
+                    intent.point()
                 } else {
-                    from_raw.clone()
+                    spanning_coordinate_to_point(from_raw, &coord_ctx, false).map_err(|e| {
+                        IrError::CoordinateResolutionFailed {
+                            coordinate_str: format!("plane '{}' from", plane.name),
+                            reason: e,
+                        }
+                    })?
                 };
 
                 let to = if to_raw.is_relative() {
-                    solver.resolve_position(to_raw).map_err(|e| {
+                    let intent = solver.resolve_position(to_raw).map_err(|e| {
                         IrError::CoordinateResolutionFailed {
                             coordinate_str: format!("plane '{}' to position", plane.name),
                             reason: e.to_string(),
                         }
-                    })?
+                    })?;
+                    intent.point()
                 } else {
-                    to_raw.clone()
+                    spanning_coordinate_to_point(to_raw, &coord_ctx, true).map_err(|e| {
+                        IrError::CoordinateResolutionFailed {
+                            coordinate_str: format!("plane '{}' to", plane.name),
+                            reason: e,
+                        }
+                    })?
                 };
 
-                let s = spanning_coordinate_to_point(&from, &coord_ctx, false).map_err(|e| {
-                    IrError::CoordinateResolutionFailed {
-                        coordinate_str: format!("plane '{}' from", plane.name),
-                        reason: e,
-                    }
-                })?;
-                let e = spanning_coordinate_to_point(&to, &coord_ctx, true).map_err(|e| {
-                    IrError::CoordinateResolutionFailed {
-                        coordinate_str: format!("plane '{}' to", plane.name),
-                        reason: e,
-                    }
-                })?;
-
-                let w = (e.x - s.x).abs();
-                let h = (e.y - s.y).abs();
-                (s, e, w * h)
+                let w = (to.x - from.x).abs();
+                let h = (to.y - from.y).abs();
+                (from, to, w * h)
             }
             _ => {
                 return Err(IrError::PlacementConstraint {
@@ -296,26 +343,27 @@ pub fn place_plane(
         };
 
         let at_resolved = if at_raw.is_relative() {
-            solver
+            let intent = solver
                 .resolve_position(at_raw)
                 .map_err(|e| IrError::CoordinateResolutionFailed {
                     coordinate_str: format!("cutout position for plane '{}'", plane.name),
                     reason: e.to_string(),
-                })?
+                })?;
+            intent.point()
         } else {
-            at_raw.clone()
+            spanning_coordinate_to_point(at_raw, &coord_ctx, false).map_err(|e| {
+                IrError::CoordinateResolutionFailed {
+                    coordinate_str: format!("cutout position for plane '{}'", plane.name),
+                    reason: e,
+                }
+            })?
         };
 
-        let at_pt = spanning_coordinate_to_point(&at_resolved, &coord_ctx, false).map_err(|e| {
-            IrError::CoordinateResolutionFailed {
-                coordinate_str: format!("cutout position for plane '{}'", plane.name),
-                reason: e,
-            }
-        })?;
+        let at_pt = at_resolved;
 
         let width_nm = w_expr
             .map(|e| {
-                crate::ir::conversions::evaluate_expression_to_nm(e, ctx.symbol_table).map_err(
+                crate::ir::conversions::evaluate_expression_to_nm(e, ctx.symbol_table, ctx.eval_context).map_err(
                     |err| IrError::CoordinateResolutionFailed {
                         coordinate_str: format!("cutout width for plane '{}'", plane.name),
                         reason: err.to_string(),
@@ -326,7 +374,7 @@ pub fn place_plane(
 
         let height_nm = h_expr
             .map(|e| {
-                crate::ir::conversions::evaluate_expression_to_nm(e, ctx.symbol_table).map_err(
+                crate::ir::conversions::evaluate_expression_to_nm(e, ctx.symbol_table, ctx.eval_context).map_err(
                     |err| IrError::CoordinateResolutionFailed {
                         coordinate_str: format!("cutout height for plane '{}'", plane.name),
                         reason: err.to_string(),
@@ -337,7 +385,7 @@ pub fn place_plane(
 
         let radius_nm = r_expr
             .map(|e| {
-                crate::ir::conversions::evaluate_expression_to_nm(e, ctx.symbol_table).map_err(
+                crate::ir::conversions::evaluate_expression_to_nm(e, ctx.symbol_table, ctx.eval_context).map_err(
                     |err| IrError::CoordinateResolutionFailed {
                         coordinate_str: format!("cutout radius for plane '{}'", plane.name),
                         reason: err.to_string(),

@@ -221,10 +221,13 @@ pub fn profile_to_constraints(
                 impedance_penalty: cw.impedance_penalty,
                 reference_void_penalty: cw.reference_void_penalty,
             });
+            // NATIVE FIX: Extract escape_stub from profile intent  
+            let escape_stub_nm = pi.escape_stub.as_ref().map(measurement_to_nm);
             RoutingIntent::from_profile_data(
                 &pi.name.name,
                 pi.routing_style.as_ref().map(|s| s.name.as_str()),
                 cost_weights.as_ref(),
+                escape_stub_nm,
             )
         })
         .collect();

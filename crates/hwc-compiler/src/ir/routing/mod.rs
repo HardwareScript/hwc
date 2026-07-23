@@ -33,7 +33,7 @@ pub fn route_trace(
     profile: Option<&hwc_parser::ProfileDefinition>,
 ) -> Result<(), IrError> {
     if needs_automatic_routing(route) {
-        route_automatic(space, route, symbol_table, stackup_manager, profile)
+        route_automatic(space, route, symbol_table, eval_context, stackup_manager, profile)
     } else {
         route_manual(
             space,
@@ -55,6 +55,7 @@ pub fn route_trace(
 pub fn instantiate_pattern(
     instantiation: &hwc_parser::PatternInstantiation,
     symbol_table: &crate::SymbolTable,
+    eval_context: &hwc_parser::EvaluationContext,
 ) -> Result<hwc_engine::RoutingPattern, IrError> {
     use hwc_engine::{PatternStep, RoutingPattern};
 
@@ -69,7 +70,7 @@ pub fn instantiate_pattern(
     let mut eval_ctx: rustc_hash::FxHashMap<compact_str::CompactString, f64> =
         rustc_hash::FxHashMap::default();
     for arg in &instantiation.arguments {
-        let val_nm = crate::ir::conversions::evaluate_expression_to_nm(&arg.value, symbol_table)
+        let val_nm = crate::ir::conversions::evaluate_expression_to_nm(&arg.value, symbol_table, eval_context)
             .map_err(|e| IrError::InvalidRouteExpression {
                 expression: format!("pattern argument '{}'", arg.name),
                 reason: format!("Failed to evaluate pattern argument '{}': {}", arg.name, e),

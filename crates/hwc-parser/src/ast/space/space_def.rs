@@ -2,12 +2,23 @@ use super::elevation::RoutingConfig;
 use super::layout::ModuleLayoutBlock;
 use super::nets::NetDeclaration;
 use super::placements::{ContactPlacement, PlanePlacement, PolygonPlacement, PourPlacement};
+use super::region::RegionDefinition;
 use super::routes::{Expose, Route};
 use super::substrate::SubstratePlacement;
 use crate::ast::component::ComponentPlacement;
+use crate::ast::expression::Expression;
 use crate::lexer::Span;
 use compact_str::CompactString;
 use serde::{Deserialize, Serialize};
+
+/// Local variable binding in space block (v0.2.0)
+/// Example: `let edge_pad_w = 150um`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LetBinding {
+    pub name: CompactString,
+    pub value: Expression,
+    pub span: Span,
+}
 
 /// Space definition: `space Name:` (v0.1.6)
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -27,6 +38,7 @@ pub struct SpaceDefinition {
     pub routes: Vec<Route>,
     pub exposes: Vec<Expose>,
     pub nets: Vec<NetDeclaration>,
+    pub regions: Vec<RegionDefinition>, // v0.2.0: Region declarations
     pub span: Span,
 }
 
@@ -43,6 +55,8 @@ pub enum SpaceTopLevelStatement {
     Route(Route),
     Expose(Expose),
     RouteNetPolicy(RouteNetPolicy),
+    Region(RegionDefinition), // v0.2.0: Region declaration
+    Let(LetBinding),           // v0.2.0: Local variable binding
 }
 
 /// v0.1.8: Prescriptive net-scoped route policy
@@ -155,6 +169,18 @@ impl SpaceDefinition {
             .filter_map(|s| {
                 if let SpaceTopLevelStatement::RouteNetPolicy(p) = s {
                     Some(p.clone())
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+    pub fn regions_from_statements(&self) -> Vec<RegionDefinition> {
+        self.statements
+            .iter()
+            .filter_map(|s| {
+                if let SpaceTopLevelStatement::Region(r) = s {
+                    Some(r.clone())
                 } else {
                     None
                 }

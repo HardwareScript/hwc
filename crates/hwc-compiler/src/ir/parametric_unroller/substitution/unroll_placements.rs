@@ -132,6 +132,7 @@ pub fn unroll_pour(
         thermal_relief: pour.thermal_relief,
         waivers: pour.waivers.clone(),
         relational_constraints: pour.relational_constraints.clone(),
+        inside_region: pour.inside_region.clone(),
         span: pour.span,
     })
 }
@@ -215,6 +216,7 @@ pub fn unroll_plane(
         net,
         cutouts,
         relational_constraints: plane.relational_constraints.clone(),
+        inside_region: plane.inside_region.clone(),
         span: plane.span,
     })
 }

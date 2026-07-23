@@ -11,12 +11,18 @@ impl super::super::super::Parser {
         let mut min_spacing = None;
         let mut max_width = None;
         let mut max_length = None;
+        let mut edge_clearance = None;
 
         while !self.check(&Token::Dedent) && !self.is_at_end() {
             self.skip_whitespace();
 
             if self.check(&Token::Dedent) || self.is_at_end() {
                 break;
+            }
+
+            if self.check(&Token::Newline) {
+                self.advance();
+                continue;
             }
 
             let field_name = self.expect_identifier()?;
@@ -37,6 +43,10 @@ impl super::super::super::Parser {
                 }
                 "max_length" => {
                     max_length = Some(self.parse_measurement()?);
+                    self.skip_whitespace();
+                }
+                "edge_clearance" => {
+                    edge_clearance = Some(self.parse_measurement()?);
                     self.skip_whitespace();
                 }
                 _ => {
@@ -63,6 +73,7 @@ impl super::super::super::Parser {
             min_spacing,
             max_width,
             max_length,
+            edge_clearance,
             span: Span::new(start_pos, end_pos),
         })
     }

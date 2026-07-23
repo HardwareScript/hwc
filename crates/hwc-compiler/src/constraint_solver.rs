@@ -11,9 +11,10 @@
 use compact_str::CompactString;
 use hwc_engine::geometry::Point3D;
 use hwc_parser::ast::{Coordinate, Expression, Measurement, RelativeOffset, RelativePosition};
-use hwc_parser::{Span, Unit, Value};
+use hwc_parser::{Unit, Value};
 
 use crate::bounding_box_tracker::BoundingBoxTracker;
+use crate::ir::placement::intent::PlacementIntent;
 use crate::symbol_table::SymbolTable;
 
 /// Constraint solver for relative positioning
@@ -54,31 +55,65 @@ impl<'a> ConstraintSolver<'a> {
 
     /// Build a universal evaluation context from the symbol table.
     ///
+    /// **CRITICAL ARCHITECTURE NOTE:**
+    /// This context stores strongly-typed `Value` enums to preserve unit information:
+    /// 1. **Dimensionless constants** (PI, e, etc.) - stored as `Value::Number`
+    /// 2. **PDK constants** (pdk.edge_clearance, etc.) - added later as `Value::Measurement`
+    ///
+    /// This method ONLY handles (1). PDK constants (2) are added by build_eval_context()
+    /// in space_setup.rs after profile resolution.
+    ///
     /// This should be called ONCE at the space level, then the context is passed
     /// to the ConstraintSolver constructor.
     ///
-    /// PHYSICAL CORRECTNESS: The value of PI, e, or 1mm does not change between
-    /// the first transistor and the last one. Building this dictionary once
-    /// reflects the stability of physical laws.
+    /// PHYSICAL CORRECTNESS: The value of PI, e, or dimensionless constants does not
+    /// change between the first transistor and the last one. Building this dictionary
+    /// once reflects the stability of physical laws.
     pub fn build_eval_context(symbol_table: &SymbolTable) -> hwc_parser::EvaluationContext {
         let mut eval_context = hwc_parser::EvaluationContext::default();
+        // Only add dimensionless constants (PI, e, etc.) as Value::Number
+        // PDK constants with units will be added later as Value::Measurement
         for (name, value) in symbol_table.get_all_constants() {
-            eval_context.insert(name, value as i64);
+            eval_context.insert(name, Value::Number(value as i64));
         }
         eval_context
     }
 
-    /// Resolve a coordinate to absolute form
+    /// Resolve a coordinate to absolute form with explicit placement semantics
+    ///
+    /// Returns `PlacementIntent` instead of `Coordinate` to preserve whether
+    /// the resolved point represents a corner or center placement.
     ///
     /// # Errors
     /// - Returns error if anchor doesn't exist
     /// - Returns error if circular dependency detected
     /// - Returns error if offset units are invalid
-    pub fn resolve_position(&self, coord: &Coordinate) -> Result<Coordinate, String> {
+    pub fn resolve_position(&self, coord: &Coordinate) -> Result<PlacementIntent, String> {
         match coord {
-            Coordinate::Positional { .. } | Coordinate::Declarative { .. } => Ok(coord.clone()),
+            // Assembly tier: absolute coordinates -> Corner intent
+            Coordinate::Positional { .. } | Coordinate::Declarative { .. } => {
+                let point = self.declarative_to_point(coord)?;
+                Ok(PlacementIntent::Corner(point))
+            }
+            // Middle tier: relative positioning -> preserve edge semantics
             Coordinate::Relative(rel_pos) => self.resolve_relative_position(rel_pos),
         }
+    }
+
+    /// Convert an absolute coordinate (Positional/Declarative) to a Point3D.
+    fn declarative_to_point(&self, coord: &Coordinate) -> Result<Point3D, String> {
+        let (x_expr, y_expr, z_expr) = match coord {
+            Coordinate::Positional { x, y, z, .. } | Coordinate::Declarative { x, y, z, .. } => {
+                (x, y, z)
+            }
+            Coordinate::Relative(_) => {
+                return Err("Cannot convert relative coordinate directly".into())
+            }
+        };
+        let x_nm = self.expression_to_nm(x_expr)?;
+        let y_nm = self.expression_to_nm(y_expr)?;
+        let z_nm = self.expression_to_nm(z_expr)?;
+        Ok(Point3D::new(x_nm, y_nm, z_nm))
     }
 
     /// Resolve a relative position with circular dependency detection
@@ -86,7 +121,7 @@ impl<'a> ConstraintSolver<'a> {
     /// **v0.1.6**: Supports `last` keyword for space-global component reference
     /// - `last` resolves to the most recently placed component in the space
     /// - This allows chaining across loop boundaries (God-Tier feature!)
-    fn resolve_relative_position(&self, rel_pos: &RelativePosition) -> Result<Coordinate, String> {
+    fn resolve_relative_position(&self, rel_pos: &RelativePosition) -> Result<PlacementIntent, String> {
         let anchor_name = &rel_pos.anchor.name;
 
         // Handle 'last' keyword - resolve to the most recently placed component
@@ -128,12 +163,36 @@ impl<'a> ConstraintSolver<'a> {
             .borrow_mut()
             .push(resolved_anchor_name.clone());
 
-        // Convert parser Edge to engine Edge
-        let engine_edge = self.convert_edge(rel_pos.edge);
-
-        // GAP1 FIX: Now that bounding boxes are in user coordinate space,
-        // edge_point() returns the correct coordinates directly
-        let edge_point = anchor_bbox.edge_point(engine_edge);
+        // BUG FIX: Handle compound edges (TopLeft, TopRight, BottomLeft, BottomRight) correctly
+        // These need to return corner points, not edge midpoints
+        let edge_point = match rel_pos.edge {
+            hwc_parser::Edge::Center => {
+                // Calculate the center point of the bounding box
+                Point3D::new(
+                    (anchor_bbox.min.x + anchor_bbox.max.x) / 2,
+                    (anchor_bbox.min.y + anchor_bbox.max.y) / 2,
+                    (anchor_bbox.min.z + anchor_bbox.max.z) / 2,
+                )
+            }
+            hwc_parser::Edge::TopLeft => {
+                Point3D::new(anchor_bbox.min.x, anchor_bbox.max.y, anchor_bbox.min.z)
+            }
+            hwc_parser::Edge::TopRight => {
+                Point3D::new(anchor_bbox.max.x, anchor_bbox.max.y, anchor_bbox.min.z)
+            }
+            hwc_parser::Edge::BottomLeft => {
+                Point3D::new(anchor_bbox.min.x, anchor_bbox.min.y, anchor_bbox.min.z)
+            }
+            hwc_parser::Edge::BottomRight => {
+                Point3D::new(anchor_bbox.max.x, anchor_bbox.min.y, anchor_bbox.min.z)
+            }
+            _ => {
+                // For simple edges (Left, Right, Top, Bottom, Front, Back, MinZ, MaxZ),
+                // use the engine's edge_point which returns the midpoint of that face
+                let engine_edge = self.convert_edge(rel_pos.edge);
+                anchor_bbox.edge_point(engine_edge)
+            }
+        };
 
         // GAP1 DEBUG: Log edge point calculation
         // eprintln!($3"[DEBUG GAP1] Anchor '{}' edge {:?} → edge_point=({:.3}, {:.3}, {:.3})",
@@ -144,7 +203,7 @@ impl<'a> ConstraintSolver<'a> {
         // edge_point.z as f64 / 1_000_000.0,
         // );
 
-        let final_point = self.apply_offset(edge_point, &rel_pos.offset, engine_edge)?;
+        let final_point = self.apply_offset(edge_point, &rel_pos.offset, rel_pos.edge)?;
 
         // GAP1 DEBUG: Log final resolved point
         // eprintln!($3"[DEBUG GAP1] After offset → final=({:.3}, {:.3}, {:.3})",
@@ -156,7 +215,11 @@ impl<'a> ConstraintSolver<'a> {
         // Remove from resolution stack
         self.resolution_stack.borrow_mut().pop();
 
-        Ok(self.point_to_coordinate(final_point, rel_pos.span))
+        // NATIVE FIX: Preserve edge semantics in placement intent
+        match rel_pos.edge {
+            hwc_parser::Edge::Center => Ok(PlacementIntent::Center(final_point)),
+            _ => Ok(PlacementIntent::Corner(final_point)),
+        }
     }
 
     /// Format a helpful error message for circular dependencies
@@ -288,14 +351,19 @@ impl<'a> ConstraintSolver<'a> {
 
     fn convert_edge(&self, edge: hwc_parser::Edge) -> hwc_engine::geometry::Edge {
         match edge {
-            hwc_parser::Edge::Left => hwc_engine::geometry::Edge::Left,
-            hwc_parser::Edge::Right => hwc_engine::geometry::Edge::Right,
+            hwc_parser::Edge::Left | hwc_parser::Edge::TopLeft | hwc_parser::Edge::BottomLeft => {
+                hwc_engine::geometry::Edge::Left
+            }
+            hwc_parser::Edge::Right | hwc_parser::Edge::TopRight | hwc_parser::Edge::BottomRight => {
+                hwc_engine::geometry::Edge::Right
+            }
             hwc_parser::Edge::Top => hwc_engine::geometry::Edge::Top,
             hwc_parser::Edge::Bottom => hwc_engine::geometry::Edge::Bottom,
             hwc_parser::Edge::Front => hwc_engine::geometry::Edge::Front,
             hwc_parser::Edge::Back => hwc_engine::geometry::Edge::Back,
             hwc_parser::Edge::MinZ => hwc_engine::geometry::Edge::MinZ,
             hwc_parser::Edge::MaxZ => hwc_engine::geometry::Edge::MaxZ,
+            hwc_parser::Edge::Center => hwc_engine::geometry::Edge::Left,
         }
     }
 
@@ -303,8 +371,11 @@ impl<'a> ConstraintSolver<'a> {
         &self,
         base_point: Point3D,
         offset: &RelativeOffset,
-        edge: hwc_engine::geometry::Edge,
+        edge: hwc_parser::Edge,  // Parser edge, not engine edge
     ) -> Result<Point3D, String> {
+        eprintln!("[APPLY_OFFSET] base_point=({}, {}, {}), edge={:?}", 
+            base_point.x, base_point.y, base_point.z, edge);
+        
         match offset {
             RelativeOffset::Single(measurement) => {
                 // GAP1 FIX: Coordinate Inheritance for Single-Direction Offsets
@@ -314,7 +385,7 @@ impl<'a> ConstraintSolver<'a> {
                 //
                 // Physical Reality: "Place this next to the last one" means:
                 // - Move in the specified direction (e.g., +X for right)
-                // - INHERIT the other coordinates from the anchor (Y and Z stay the same)
+                // - INHERIT the other coordinates from the anchor (Y and Z stays the same)
                 //
                 // Before this fix:
                 // - Adder[0] at y: 5mm → Adder[1] at y: 40mm (WRONG - teleported!)
@@ -322,7 +393,22 @@ impl<'a> ConstraintSolver<'a> {
                 // After this fix:
                 // - Adder[0] at y: 5mm → Adder[1] at y: 5mm (CORRECT - stayed in line)
                 let offset_nm = self.measurement_to_nm(measurement)?;
-                let (dx, dy, dz) = edge.direction_vector();
+                
+                // Special case: Center edge with zero offset is valid (just use center point)
+                if edge == hwc_parser::Edge::Center && offset_nm == 0 {
+                    return Ok(base_point);
+                }
+                
+                // But non-zero single offsets from center are invalid (which direction to move?)
+                if edge == hwc_parser::Edge::Center {
+                    return Err(
+                        "Cannot use single-value offset from center anchor. \
+                         Use vector offset like: space.center + [x, y, z]".to_string()
+                    );
+                }
+                
+                let engine_edge = self.convert_edge(edge);
+                let (dx, dy, dz) = engine_edge.direction_vector();
 
                 // Only apply offset in the edge's direction
                 // The direction_vector returns (1,0,0) for right, (0,1,0) for top, etc.
@@ -339,6 +425,11 @@ impl<'a> ConstraintSolver<'a> {
                 let dx_nm = self.expression_to_nm(x)?;
                 let dy_nm = self.expression_to_nm(y)?;
                 let dz_nm = self.expression_to_nm(z)?;
+                
+                eprintln!("[APPLY_OFFSET] Vector offset: dx={}, dy={}, dz={}", dx_nm, dy_nm, dz_nm);
+                eprintln!("[APPLY_OFFSET] Result: ({}, {}, {})", 
+                    base_point.x + dx_nm, base_point.y + dy_nm, base_point.z + dz_nm);
+                
                 Ok(Point3D::new(
                     base_point.x + dx_nm,
                     base_point.y + dy_nm,
@@ -375,7 +466,12 @@ impl<'a> ConstraintSolver<'a> {
     /// - After: Single HashMap lookup (O(1) per call)
     fn expression_to_nm(&self, expr: &Expression) -> Result<i64, String> {
         // NATIVE FIX: Use the pre-built context instead of rebuilding it
+        eprintln!("[EXPR_TO_NM DEBUG] Evaluating expression: {:?}", expr);
+        eprintln!("[EXPR_TO_NM DEBUG] eval_context has {} entries", self.eval_context.len());
+        
         let value = expr.evaluate(self.eval_context)?;
+        
+        eprintln!("[EXPR_TO_NM DEBUG] Expression evaluated to: {:?}", value);
 
         match value {
             Value::Number(n) => Ok(n),
@@ -396,31 +492,6 @@ impl<'a> ConstraintSolver<'a> {
                 Ok(nm)
             }
             Value::Percentage(p) => Err(format!("Position offset cannot be a percentage: {}%", p)),
-        }
-    }
-
-    fn point_to_coordinate(&self, point: Point3D, span: Span) -> Coordinate {
-        let x_mm = point.x as f64 / 1_000_000.0;
-        let y_mm = point.y as f64 / 1_000_000.0;
-        let z_mm = point.z as f64 / 1_000_000.0;
-
-        Coordinate::Declarative {
-            x: Expression::Measurement {
-                value: x_mm,
-                unit: Unit::Millimeter,
-                span,
-            },
-            y: Expression::Measurement {
-                value: y_mm,
-                unit: Unit::Millimeter,
-                span,
-            },
-            z: Expression::Measurement {
-                value: z_mm,
-                unit: Unit::Millimeter,
-                span,
-            },
-            span,
         }
     }
 }

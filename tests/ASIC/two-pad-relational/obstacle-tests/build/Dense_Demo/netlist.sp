@@ -13,47 +13,47 @@
 * Net: B2 (pour: Pad_B2, material: Aluminum, z: 0.0010mm)
 * Net: B3 (pour: Pad_B3, material: Aluminum, z: 0.0010mm)
 * Net: B4 (pour: Pad_B4, material: Aluminum, z: 0.0010mm)
-* Net: A1 (width=200000nm, material=Tungsten)
+* Net: A1 (width=180nm, material=Tungsten)
 *   Connected pins:
 *     - Pad_A1.__virtual_Pad_A1
 *     - Pad_A1.__virtual_Pad_A1
 *     - Pad_B4.__virtual_Pad_B4
 *     - Pad_A1.__virtual_Pad_A1
 *     - Pad_B4.__virtual_Pad_B4
-* Net: B1 (width=200000nm, material=Tungsten)
+* Net: B1 (width=180nm, material=Tungsten)
 *   Connected pins:
 *     - Pad_B1.__virtual_Pad_B1
-* Net: A2 (width=200000nm, material=Tungsten)
+* Net: A2 (width=180nm, material=Tungsten)
 *   Connected pins:
 *     - Pad_A2.__virtual_Pad_A2
 *     - Pad_A2.__virtual_Pad_A2
 *     - Pad_B3.__virtual_Pad_B3
 *     - Pad_A2.__virtual_Pad_A2
 *     - Pad_B3.__virtual_Pad_B3
-* Net: B2 (width=200000nm, material=Tungsten)
+* Net: B2 (width=180nm, material=Tungsten)
 *   Connected pins:
 *     - Pad_B2.__virtual_Pad_B2
-* Net: A3 (width=200000nm, material=Tungsten)
+* Net: A3 (width=180nm, material=Tungsten)
 *   Connected pins:
 *     - Pad_A3.__virtual_Pad_A3
 *     - Pad_A3.__virtual_Pad_A3
 *     - Pad_B2.__virtual_Pad_B2
 *     - Pad_A3.__virtual_Pad_A3
 *     - Pad_B2.__virtual_Pad_B2
-* Net: B3 (width=200000nm, material=Tungsten)
+* Net: B3 (width=180nm, material=Tungsten)
 *   Connected pins:
 *     - Pad_B3.__virtual_Pad_B3
-* Net: A4 (width=200000nm, material=Tungsten)
+* Net: A4 (width=180nm, material=Tungsten)
 *   Connected pins:
 *     - Pad_A4.__virtual_Pad_A4
 *     - Pad_A4.__virtual_Pad_A4
 *     - Pad_B1.__virtual_Pad_B1
 *     - Pad_A4.__virtual_Pad_A4
 *     - Pad_B1.__virtual_Pad_B1
-* Net: B4 (width=200000nm, material=Tungsten)
+* Net: B4 (width=180nm, material=Tungsten)
 *   Connected pins:
 *     - Pad_B4.__virtual_Pad_B4
-* Net: TEMP_NET (width=200000nm, material=Tungsten)
+* Net: TEMP_NET (width=180nm, material=Tungsten)
 
 * ========================================
 * AUTOMATIC STIMULUS & MODELS

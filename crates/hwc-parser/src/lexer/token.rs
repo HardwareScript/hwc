@@ -134,6 +134,13 @@ pub enum Token {
     #[token("left_of")]
     LeftOf,
 
+    // v0.2.0: Region floorplanning keyword
+    #[token("region")]
+    Region,
+
+    #[token("inside")]
+    Inside,
+
     // ========================================================================
     // BLOCK KEYS - Property names (strictly lowercase)
     // ========================================================================
@@ -605,6 +612,8 @@ impl fmt::Display for Token {
             Token::Below => write!(f, "the 'below' keyword"),
             Token::RightOf => write!(f, "the 'right_of' keyword"),
             Token::LeftOf => write!(f, "the 'left_of' keyword"),
+            Token::Region => write!(f, "the 'region' keyword"),
+            Token::Inside => write!(f, "the 'inside' keyword"),
             Token::Dimensions => write!(f, "the 'dimensions' keyword"),
             Token::Grid => write!(f, "the 'grid' keyword"),
             Token::Resolution => write!(f, "the 'resolution' keyword"),

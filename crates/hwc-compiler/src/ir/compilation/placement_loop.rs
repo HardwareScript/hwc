@@ -13,7 +13,7 @@ pub fn build_item_map(
     item_map
 }
 
-/// Execute the placement loop (Pass 1): place all non-route items.
+/// Execute the placement loop: place all non-route items.
 pub fn execute_placement(
     space: &mut hwc_engine::HardwareSpace,
     ctx: &super::CompilationContext,
@@ -40,6 +40,19 @@ pub fn execute_placement(
         };
 
         match item {
+            PlacementItem::Region(region) => {
+                eprintln!("[DEBUG] Registering region: {}", region.name);
+                crate::ir::placement::register_region(
+                    region,
+                    bbox_tracker,
+                    ctx.symbol_table,
+                    ctx.eval_context,
+                    ctx.origin,
+                    &space.dimensions,
+                    ctx.stackup_manager,
+                    ctx.profile,
+                )?;
+            }
             PlacementItem::Substrate(sub) => {
                 eprintln!("[DEBUG] Placing substrate");
                 crate::ir::placement::place_substrate(space, sub, bbox_tracker, &place_ctx)?;

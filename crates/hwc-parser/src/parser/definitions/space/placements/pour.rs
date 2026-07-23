@@ -3,7 +3,7 @@ use crate::lexer::{Span, Token};
 use crate::parser::error::ParseError;
 
 impl crate::parser::Parser {
-    /// Parse pour placement: `add pour(Copper) named GND_Plane on z:2:`
+    /// Parse pour placement: `add pour(Copper) named GND_Plane inside: RegionName on z:2:`
     /// Supports namespaced materials: `add pour(Metals.Copper) named Trace1 on z:1:`
     pub(in crate::parser) fn parse_pour(&mut self) -> Result<PourPlacement, ParseError> {
         let start_pos = self.current_span().start;
@@ -17,40 +17,51 @@ impl crate::parser::Parser {
         self.expect(&Token::Named)?;
         let name = self.parse_component_name()?;
 
-        self.expect(&Token::On)?;
-
-        // v0.1.7 Z-Axis Abstraction: support both physical (z:) and semantic (layer:)
-        let elevation = if self.check(&Token::Identifier("layer".into())) {
-            self.advance(); // consume "layer"
+        // v0.2.0: Optional inside: RegionName
+        let inside_region = if self.check(&Token::Inside) {
+            self.advance();
             self.expect(&Token::Colon)?;
-            let layer_name = self.expect_identifier()?;
-            if layer_name.as_str() == "self" {
-                Elevation::Relative
+            Some(self.expect_identifier()?)
+        } else {
+            None
+        };
+
+        let elevation = if self.check(&Token::On) {
+            self.advance();
+
+            if self.check(&Token::Identifier("layer".into())) {
+                self.advance(); // consume "layer"
+                self.expect(&Token::Colon)?;
+                let layer_name = self.expect_identifier()?;
+                if layer_name.as_str() == "self" {
+                    Elevation::Relative
+                } else {
+                    Elevation::Semantic(layer_name)
+                }
             } else {
-                Elevation::Semantic(layer_name)
+                let coord_name = self.expect_identifier()?;
+                if coord_name.as_str() != "z" {
+                    return Err(self.error("Expected 'z' or 'layer' for pour elevation"));
+                }
+                self.expect(&Token::Colon)?;
+
+                if self.check(&Token::Identifier("relative".into())) {
+                    self.advance();
+                    Elevation::Relative
+                } else {
+                    let start = self.parse_expression()?;
+
+                    let mut end = None;
+                    if self.check(&Token::To) {
+                        self.advance(); // consume "to"
+                        end = Some(self.parse_expression()?);
+                    }
+
+                    Elevation::Physical { start, end }
+                }
             }
         } else {
-            // Physical: `on z: <expr>` or `on z: <expr> to <expr>`
-            let coord_name = self.expect_identifier()?;
-            if coord_name.as_str() != "z" {
-                return Err(self.error("Expected 'z' or 'layer' for pour elevation"));
-            }
-            self.expect(&Token::Colon)?;
-
-            if self.check(&Token::Identifier("relative".into())) {
-                self.advance();
-                Elevation::Relative
-            } else {
-                let start = self.parse_expression()?;
-
-                let mut end = None;
-                if self.check(&Token::To) {
-                    self.advance(); // consume "to"
-                    end = Some(self.parse_expression()?);
-                }
-
-                Elevation::Physical { start, end }
-            }
+            Elevation::Relative
         };
 
         self.expect(&Token::Colon)?;
@@ -169,6 +180,7 @@ impl crate::parser::Parser {
             thermal_relief,
             waivers,
             relational_constraints: smallvec::SmallVec::new(),
+            inside_region, // v0.2.0: Region containment
             span: Span::new(start_pos, end_pos),
         })
     }

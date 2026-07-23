@@ -35,11 +35,11 @@ fn offset_declarative_coord(
     match coord {
         hwc_parser::Coordinate::Declarative { x, y, z, span } => {
             let x_nm =
-                crate::ir::conversions::evaluate_expression_to_nm(x, ctx.symbol_table).unwrap_or(0);
+                crate::ir::conversions::evaluate_expression_to_nm(x, ctx.symbol_table, ctx.eval_context).unwrap_or(0);
             let y_nm =
-                crate::ir::conversions::evaluate_expression_to_nm(y, ctx.symbol_table).unwrap_or(0);
+                crate::ir::conversions::evaluate_expression_to_nm(y, ctx.symbol_table, ctx.eval_context).unwrap_or(0);
             let z_nm =
-                crate::ir::conversions::evaluate_expression_to_nm(z, ctx.symbol_table).unwrap_or(0);
+                crate::ir::conversions::evaluate_expression_to_nm(z, ctx.symbol_table, ctx.eval_context).unwrap_or(0);
             hwc_parser::Coordinate::Positional {
                 x: hwc_parser::Expression::Measurement {
                     value: (position.x + x_nm) as f64 / 1_000_000.0,
@@ -503,6 +503,7 @@ pub fn unroll_internal_features(
                                     crate::ir::conversions::evaluate_expression_to_nm(
                                         t_expr,
                                         ctx.symbol_table,
+                                        ctx.eval_context,
                                     )
                                     .map_err(|e| {
                                         IrError::PlacementError(format!(

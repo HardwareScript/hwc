@@ -239,8 +239,31 @@ impl super::Parser {
                     break;
                 }
 
-                // v0.1.7: Check for exit/enter escape keywords
-                if self.check(&Token::Exit) {
+                // v0.1.7/v0.2.0: Check for exit/enter escape keywords (with optional prefer/require prefix)
+                let is_prefer_or_require = if let Some(tok) = self.current() {
+                    if let Token::Identifier(ref name) = tok.token {
+                        name == "prefer" || name == "require"
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                };
+
+                if is_prefer_or_require {
+                    self.advance(); // consume 'prefer' or 'require'
+                    if self.check(&Token::Exit) {
+                        self.advance(); // consume 'exit'
+                        self.expect(&Token::Colon)?;
+                        exit_escape = Some(self.parse_route_escape()?);
+                    } else if self.check(&Token::Enter) {
+                        self.advance(); // consume 'enter'
+                        self.expect(&Token::Colon)?;
+                        enter_escape = Some(self.parse_route_escape()?);
+                    } else {
+                        return Err(self.error("Expected 'exit' or 'enter' after 'prefer'/'require'"));
+                    }
+                } else if self.check(&Token::Exit) {
                     self.advance(); // consume 'exit'
                     self.expect(&Token::Colon)?;
                     exit_escape = Some(self.parse_route_escape()?);
@@ -370,7 +393,8 @@ impl super::Parser {
                                 });
                             }
                         }
-                        "net_type" => {
+                        "net_type" | "intent" => {
+                            // v0.1.9: Support both 'net_type' and 'intent' keywords
                             net_type = Some(self.expect_identifier_string()?.into());
                         }
                         "escape_stub" => {

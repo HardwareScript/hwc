@@ -73,6 +73,8 @@ impl Parser {
                 Token::Below => Some("below".into()),
                 Token::RightOf => Some("right_of".into()),
                 Token::LeftOf => Some("left_of".into()),
+                Token::Inside => Some("inside".into()),
+                Token::Region => Some("region".into()),
                 _ => None,
             };
 

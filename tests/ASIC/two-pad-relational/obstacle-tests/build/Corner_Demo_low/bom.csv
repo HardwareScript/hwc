@@ -1,0 +1,14 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,1.00x0.60x0.14mm,,,,,1
+Pad_Edge_A,Plane(Aluminum),,,,,,1
+Pad_Edge_B,Plane(Aluminum),,,,,,1
+Pad_Tight_A,Plane(Aluminum),,,,,,1
+Pad_Tight_B,Plane(Aluminum),,,,,,1
+
+# MATERIAL USAGE (Fabrication)
+Reference,Type,Material,Layer_Z_nm,Area_nm2,Volume_nm3
+Pad_Edge_A,Pour,Aluminum,z:960,22500000000,9000000000000
+Pad_Edge_B,Pour,Aluminum,z:960,22500000000,9000000000000
+Pad_Tight_A,Pour,Aluminum,z:960,10000000000,4000000000000
+Pad_Tight_B,Pour,Aluminum,z:960,10000000000,4000000000000
+Squeeze_Block,Pour,Aluminum,z:960,9600000000,3840000000000

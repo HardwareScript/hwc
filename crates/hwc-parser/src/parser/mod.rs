@@ -244,8 +244,19 @@ impl Parser {
             }
 
             match &token.token {
+                crate::lexer::Token::Space => {
+                    // Only stop if followed by an identifier (space SpaceName), not a dot (space.anchor)
+                    if let Some(next) = self.peek_ahead(1) {
+                        if matches!(next.token, crate::lexer::Token::Identifier(_)) {
+                            break;
+                        } else {
+                            self.advance();
+                        }
+                    } else {
+                        break;
+                    }
+                }
                 crate::lexer::Token::Component
-                | crate::lexer::Token::Space
                 | crate::lexer::Token::Material
                 | crate::lexer::Token::Profile
                 | crate::lexer::Token::Module

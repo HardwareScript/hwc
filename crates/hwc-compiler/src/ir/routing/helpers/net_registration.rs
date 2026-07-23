@@ -10,6 +10,7 @@ pub fn register_net_for_route(
     space: &mut HardwareSpace,
     route: &hwc_parser::Route,
     symbol_table: &crate::SymbolTable,
+    eval_context: &hwc_parser::EvaluationContext,
     stackup_manager: &crate::ir::stackup_manager::StackupManager,
     profile: Option<&hwc_parser::ProfileDefinition>,
     space_def: Option<&hwc_parser::SpaceDefinition>,
@@ -21,7 +22,7 @@ pub fn register_net_for_route(
     let net_name: CompactString = format!("NET_{}_to_{}", from_name, to_name).into();
 
     let width_nm = if let Some(w_expr) = &route.width {
-        crate::ir::conversions::evaluate_expression_to_nm(w_expr, symbol_table).map_err(|e| {
+        crate::ir::conversions::evaluate_expression_to_nm(w_expr, symbol_table, eval_context).map_err(|e| {
             IrError::InvalidRouteExpression {
                 expression: "trace width".into(),
                 reason: e.to_string(),
@@ -29,7 +30,7 @@ pub fn register_net_for_route(
         })?
     } else {
         profile.and_then(|p| p.trace.as_ref())
-            .map(|t| crate::ir::conversions::measurement_to_nm(&t.min_width, symbol_table))
+            .map(|t| crate::ir::conversions::measurement_to_nm(&t.min_width, symbol_table, eval_context))
             .transpose()
             .map_err(|e| IrError::InvalidRouteExpression {
                 expression: "profile trace width".into(),

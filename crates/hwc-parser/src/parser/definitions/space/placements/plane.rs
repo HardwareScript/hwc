@@ -3,7 +3,7 @@ use crate::lexer::{Span, Token};
 use crate::parser::error::ParseError;
 
 impl crate::parser::Parser {
-    /// Parse plane placement: `add plane(Copper) named GND_Plane on layer: l1:`
+    /// Parse plane placement: `add plane(Copper) named GND_Plane inside: RegionName on layer: l1:`
     pub(in crate::parser) fn parse_plane(&mut self) -> Result<PlanePlacement, ParseError> {
         let start_pos = self.current_span().start;
 
@@ -16,15 +16,39 @@ impl crate::parser::Parser {
         self.expect(&Token::Named)?;
         let name = self.parse_component_name()?;
 
+        // v0.2.0: Optional inside: RegionName
+        let inside_region = if self.check(&Token::Inside) {
+            self.advance();
+            self.expect(&Token::Colon)?;
+            let region_id = self.expect_identifier()?;
+            eprintln!("[DBG plane] after inside: {:?} | next tok: {:?}", region_id.as_str(), self.current().map(|t| format!("{:?}", t.token)));
+            Some(region_id)
+        } else {
+            None
+        };
+
+        eprintln!("[DBG plane] before relational_constraints | current tok: {:?}", self.current().map(|t| format!("{:?}", t.token)));
         let relational_constraints = self.parse_relational_constraints(start_pos)?;
+        eprintln!("[DBG plane] after relational_constraints | current tok: {:?}", self.current().map(|t| format!("{:?}", t.token)));
 
-        self.expect(&Token::On)?;
+        let elevation = if self.check(&Token::On) {
+            self.advance();
+            let elev = self.parse_elevation("plane")?;
+            eprintln!("[DBG plane] elevation parsed, expecting block colon | next tok: {:?}", self.current().map(|t| format!("{:?}", t.token)));
+            self.expect(&Token::Colon)?;
+            elev
+        } else {
+            eprintln!("[DBG plane] no 'on', expecting block colon | current tok: {:?}", self.current().map(|t| format!("{:?}", t.token)));
+            self.expect(&Token::Colon)?;
+            eprintln!("[DBG plane] consumed block colon | current tok: {:?}", self.current().map(|t| format!("{:?}", t.token)));
+            Elevation::Relative
+        };
 
-        let elevation = self.parse_elevation("plane")?;
-
-        self.expect(&Token::Colon)?;
+        eprintln!("[DBG plane] before newline | current tok: {:?}", self.current().map(|t| format!("{:?}", t.token)));
         self.expect(&Token::Newline)?;
+        eprintln!("[DBG plane] before indent | current tok: {:?}", self.current().map(|t| format!("{:?}", t.token)));
         self.expect(&Token::Indent)?;
+        eprintln!("[DBG plane] entered body | current tok: {:?}", self.current().map(|t| format!("{:?}", t.token)));
 
         let mut from = None;
         let mut to = None;
@@ -39,6 +63,7 @@ impl crate::parser::Parser {
                 continue;
             }
 
+            eprintln!("[DBG plane] body loop | current tok: {:?}", self.current().map(|t| format!("{:?}", t.token)));
             let field_name = self.expect_identifier_or_keyword_string()?;
             self.expect(&Token::Colon)?;
 
@@ -139,6 +164,7 @@ impl crate::parser::Parser {
             net,
             cutouts,
             relational_constraints,
+            inside_region, // v0.2.0: Region containment
             span: Span::new(start_pos, end_pos),
         })
     }
@@ -294,21 +320,9 @@ impl crate::parser::Parser {
             while !self.check(&Token::CloseParen) && !self.is_at_end() {
                 let name = self.expect_identifier_string()?;
                 self.expect(&Token::Colon)?;
+                // v0.1.10: Parse full expression (supports variables, operations, literals)
                 let expr = self.parse_expression()?;
-                let value = match expr {
-                    Expression::Measurement { value, unit, .. } => {
-                        ParameterValue::Measurement(Measurement {
-                            value,
-                            unit,
-                            span: Span { start: 0, end: 0 },
-                        })
-                    }
-                    Expression::Literal { value, .. } => ParameterValue::Number(value as f64),
-                    Expression::FloatLiteral { value, .. } => ParameterValue::Number(value),
-                    _ => {
-                        return Err(self.error("Expected measurement or number for shape parameter"))
-                    }
-                };
+                let value = ParameterValue::Expression(expr);
                 parameters.push(Parameter::Keyword {
                     name: name.into(),
                     value,

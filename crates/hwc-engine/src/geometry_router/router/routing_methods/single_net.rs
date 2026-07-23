@@ -1,6 +1,6 @@
 use super::super::super::types::{NetRoute, RoutedNet, RoutingError};
 use super::super::core::GeometryRouter;
-use crate::geometry::{BoundingBox, TraceSegment};
+use crate::geometry::BoundingBox;
 use crate::geometry_router::spatial_index::{DynamicSpatialIndex, IndexedSegment};
 use crate::geometry_router::topological_router::TopologicalRouter;
 use rustc_hash::FxHashMap;
@@ -18,7 +18,7 @@ impl GeometryRouter {
     ) -> DynamicSpatialIndex {
         let mut spatial_index = DynamicSpatialIndex::new();
 
-        eprintln!("[SPATIAL INDEX DEBUG] build_routing_spatial_index: Creating NEW spatial index for net {}", active_route.net_id.raw());
+       
 
         // Configure layer Z-ranges from the stackup for layered queries
         if self.config.layer_z_positions.len() >= 2 {
@@ -49,7 +49,8 @@ impl GeometryRouter {
             active_route.goal.z,
         );
 
-        // 1. Insert component boundaries as hard obstacles (Net ID 0 / unconnected)
+        // 1. Insert component boundaries as layer-aware keepout obstacles
+        // Reference: Docs/v0.1.9/13-PHYSICAL-SYNTHESIS-GUARDRAILS.md (Interior Lockout Rule)
         for meta in self.entity_graph.get_component_metadata() {
             // EXEMPTION GUARD: Only exclude the start and goal components of the active route.
             // Even if other components are on the same net, they are physical obstacles
@@ -60,29 +61,38 @@ impl GeometryRouter {
                 continue;
             }
 
-            let width = meta.bbox.max.x - meta.bbox.min.x;
-            let height = meta.bbox.max.y - meta.bbox.min.y;
-            let trace_seg = TraceSegment::new(
-                meta.bbox.min,
-                meta.bbox.max,
-                width.max(height),
-                meta.material,
-            );
-            let thickness_nm = meta.bbox.max.z - meta.bbox.min.z;
-            let component_net_id = meta.net_bindings.values().next().copied().unwrap_or(0) as usize;
-            spatial_index.insert(IndexedSegment {
-                source: hwc_physics::spatial_index::SpatialEntitySource::ComponentInstance {
-                    instance_id: seg_id,
-                },
-                segment_id: seg_id,
-                net_id: component_net_id,
-                width_nm: 0,
-                thickness_nm,
-                start: trace_seg.start,
-                end: trace_seg.end,
-                layer: meta.bbox.min.z,
-            });
-            seg_id += 1;
+            // LAYER-AWARE KEEPOUT: Components only block routing on layers where they have physical material
+            // If blocked_z_ranges is empty, the component blocks its entire bbox Z-range (legacy behavior)
+            let z_ranges_to_block: Vec<(i64, i64)> = if meta.blocked_z_ranges.is_empty() {
+                // No explicit layer blocking - use full component Z extent
+                vec![(meta.bbox.min.z, meta.bbox.max.z)]
+            } else {
+                // Use explicit layer-aware blocking ranges
+                meta.blocked_z_ranges.iter().copied().collect()
+            };
+
+            // Insert one obstacle segment per Z-range where component has material
+            for (z_min, z_max) in z_ranges_to_block {
+                // Component keepout semantics:
+                // - start/end define the rectangular physical boundary  
+                // - width_nm = 0 means "no additional inflation" (raw bbox)
+                // - Router applies clearance via route segment inflation, not obstacle inflation
+                // - This prevents traces from penetrating component interior while maintaining
+                //   proper clearance via the routing algorithm's Minkowski sum
+                spatial_index.insert(IndexedSegment {
+                    source: hwc_physics::spatial_index::SpatialEntitySource::ComponentInstance {
+                        instance_id: seg_id,
+                    },
+                    segment_id: seg_id,
+                    net_id: crate::netlist::NetId::UNCONNECTED.raw() as usize,
+                    width_nm: hwc_physics::spatial_index::IndexedSegment::BBOX_OBSTACLE_WIDTH,
+                    thickness_nm: z_max - z_min,
+                    start: hwc_physics::geometry::Point3D::new(meta.bbox.min.x, meta.bbox.min.y, z_min),
+                    end: hwc_physics::geometry::Point3D::new(meta.bbox.max.x, meta.bbox.max.y, z_max),
+                    layer: z_min,
+                });
+                seg_id += 1;
+            }
         }
 
         // 2. Insert substrate layers (pours) as hard obstacles.
@@ -91,29 +101,15 @@ impl GeometryRouter {
 
         // v0.1.9: Use self.substrate_layers (populated by route_space) instead of
         // entity_graph.get_substrate_layers() which is empty during routing.
-        let substrate_layer_count = self.substrate_layers.as_ref().map(|v| v.len()).unwrap_or(0);
-
-        eprintln!(
-            "[SPATIAL INDEX DEBUG] build_routing_spatial_index called for net_id={}, found {} substrate layers",
-            active_route.net_id.raw(),
-            substrate_layer_count
-        );
-
         if let Some(substrate_layers) = &self.substrate_layers {
             for (substrate_idx, sub_layer) in substrate_layers.iter().enumerate() {
                 let sub_net_id = sub_layer.net;
 
-                eprintln!(
-                    "[SPATIAL INDEX DEBUG] Checking substrate layer: net={}, bbox=({},{},{}) to ({},{},{})",
-                    sub_net_id,
-                    sub_layer.bbox.min.x, sub_layer.bbox.min.y, sub_layer.bbox.min.z,
-                    sub_layer.bbox.max.x, sub_layer.bbox.max.y, sub_layer.bbox.max.z
-                );
-
+              
                 // Same-net pours are not obstacles (we can route over our own pours)
                 // BUT: net_id = 0 pours (keepout zones) are ALWAYS obstacles
                 if sub_net_id != 0 && crate::netlist::NetId(sub_net_id) == active_route.net_id {
-                    eprintln!("[SPATIAL INDEX DEBUG]   ❌ Skipped (same net as active route)");
+                  
                     continue;
                 }
 
@@ -137,7 +133,7 @@ impl GeometryRouter {
                         && goal.z >= bbox.min.z
                         && goal.z <= bbox.max.z
                     {
-                        eprintln!("[SPATIAL INDEX DEBUG]   ❌ Skipped (destination pad — goal docks into boundary of this layer)");
+                       
                         continue;
                     }
                     // Also exempt if the start point is docking into this pad (different net-id source)
@@ -149,17 +145,10 @@ impl GeometryRouter {
                         && start.z >= bbox.min.z
                         && start.z <= bbox.max.z
                     {
-                        eprintln!("[SPATIAL INDEX DEBUG]   ❌ Skipped (source pad — start docks into boundary of this layer)");
+                       
                         continue;
                     }
                 }
-                let width = sub_layer.bbox.max.x - sub_layer.bbox.min.x;
-                let height = sub_layer.bbox.max.y - sub_layer.bbox.min.y;
-
-                eprintln!(
-                    "[SPATIAL INDEX DEBUG]   ✅ Adding as obstacle (width={}, height={})",
-                    width, height
-                );
 
                 // Use a stable segment_id based on the substrate layer index
                 // This ensures the SAME physical substrate layer always gets the SAME segment_id

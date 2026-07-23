@@ -17,79 +17,26 @@ pub struct CoordinateContext<'a> {
     pub profile: Option<&'a hwc_parser::ProfileDefinition>,
 }
 
-/// GAP 2 FIX: Smart Expression Evaluator with Unit Normalization
+/// GAP 2 FIX: Smart Expression Evaluator with Unit Preservation
+///
+/// **SINGLE SOURCE OF TRUTH ARCHITECTURE:**
+/// All variable lookups go through eval_context, which now stores strongly-typed `Value` enums:
+/// 1. Dimensionless constants (PI, e) - as `Value::Number`
+/// 2. PDK constants (pdk.*) - as `Value::Measurement` with units preserved
+///
+/// This eliminates the "dual brain" problem and the nanometer assumption hack.
+/// Physical quantities maintain their unit metadata until this final conversion step.
 pub fn evaluate_expression_to_nm(
     expr: &Expression,
-    symbol_table: &crate::SymbolTable,
+    _symbol_table: &crate::SymbolTable,
+    eval_context: &hwc_parser::EvaluationContext,
 ) -> Result<i64, String> {
-    match expr {
-        Expression::Literal { value, .. } => Ok(*value),
-        Expression::FloatLiteral { value, .. } => Ok(*value as i64),
-        Expression::Measurement { value, unit, .. } => match unit {
-            Unit::Millimeter => Ok((value * 1_000_000.0) as i64),
-            Unit::Centimeter => Ok((value * 10_000_000.0) as i64),
-            Unit::Micrometer => Ok((value * 1_000.0) as i64),
-            Unit::Nanometer => Ok(*value as i64),
-            Unit::Custom(symbol) => {
-                if let Some(unit_def) = symbol_table.resolve_unit_symbol(symbol) {
-                    let multiplier = unit_def.multiplier.unwrap_or(1.0);
-                    Ok((value * multiplier * 1_000_000_000.0) as i64)
-                } else {
-                    Err(format!("Unknown unit symbol: '{}'", symbol))
-                }
-            }
-            _ => Err(format!("Cannot convert {:?} to nanometers", unit)),
-        },
-        Expression::Variable { name, .. } => {
-            if let Some(const_value) = symbol_table.get_all_constants().get(name) {
-                Ok(*const_value as i64)
-            } else {
-                Err(format!("Unknown constant: '{}'", name))
-            }
-        }
-        Expression::Binary {
-            left,
-            operator,
-            right,
-            ..
-        } => {
-            let left_nm = evaluate_expression_to_nm(left, symbol_table)?;
-            let right_nm = evaluate_expression_to_nm(right, symbol_table)?;
-            use hwc_parser::BinaryOperator;
-            match operator {
-                BinaryOperator::Add => Ok(left_nm + right_nm),
-                BinaryOperator::Subtract => Ok(left_nm - right_nm),
-                BinaryOperator::Multiply => Ok(left_nm * right_nm),
-                BinaryOperator::Divide => {
-                    if right_nm == 0 {
-                        Err("Division by zero".into())
-                    } else {
-                        Ok(left_nm / right_nm)
-                    }
-                }
-                BinaryOperator::Modulo => Ok(left_nm % right_nm),
-            }
-        }
-        Expression::Unary {
-            operator, operand, ..
-        } => {
-            let operand_nm = evaluate_expression_to_nm(operand, symbol_table)?;
-            use hwc_parser::UnaryOperator;
-            match operator {
-                UnaryOperator::Negate => Ok(-operand_nm),
-                UnaryOperator::Plus => Ok(operand_nm),
-            }
-        }
-        Expression::Grouped { expression, .. } => {
-            evaluate_expression_to_nm(expression, symbol_table)
-        }
-        Expression::Percentage { .. } => {
-            Err("Percentages cannot be evaluated without reference dimension".into())
-        }
-        Expression::AnchorReference { .. } => {
-            Err("Anchor references cannot be evaluated without bounding box tracker.".into())
-        }
-    }
+    // First, evaluate the expression using the parser's strongly-typed evaluator
+    // This handles all arithmetic with proper dimensional analysis
+    let value = expr.evaluate(eval_context)?;
+    
+    // Now convert the resulting Value to nanometers
+    value.to_nanometers()
 }
 
 /// Evaluate an expression to milliamps (mA).
@@ -162,13 +109,25 @@ pub fn evaluate_expression_to_ma(
 pub fn measurement_to_nm(
     measurement: &Measurement,
     symbol_table: &crate::SymbolTable,
+    eval_context: &hwc_parser::EvaluationContext,
 ) -> Result<i64, String> {
     let expr = Expression::Measurement {
         value: measurement.value,
         unit: measurement.unit.clone(),
         span: hwc_parser::Span::new(0, 0),
     };
-    evaluate_expression_to_nm(&expr, symbol_table)
+    evaluate_expression_to_nm(&expr, symbol_table, eval_context)
+}
+
+/// Wrapper for measurement_to_nm that uses an empty eval_context.
+/// Use this ONLY for measurements that don't contain PDK variable references.
+/// For measurements that may reference pdk.* variables, use measurement_to_nm directly.
+pub fn measurement_to_nm_simple(
+    measurement: &Measurement,
+    symbol_table: &crate::SymbolTable,
+) -> Result<i64, String> {
+    let empty_ctx = hwc_parser::EvaluationContext::default();
+    measurement_to_nm(measurement, symbol_table, &empty_ctx)
 }
 
 pub(crate) fn z_expr_is_physical(z_expr: &Expression) -> bool {
@@ -228,6 +187,7 @@ pub fn resolve_coordinate_z_nm(
         let result = super::placement::coordinate_evaluation::evaluate_coordinate_with_anchors(
             z_expr,
             ctx.symbol_table,
+            ctx.eval_context,
             tracker,
             super::placement::coordinate_evaluation::CoordinateAxis::Z,
             ctx.origin.z,
@@ -244,7 +204,7 @@ pub fn resolve_coordinate_z_nm(
         return Err(DIMENSIONLESS_Z_ERROR.to_string());
     }
 
-    let z_nm = evaluate_expression_to_nm(z_expr, ctx.symbol_table)?;
+    let z_nm = evaluate_expression_to_nm(z_expr, ctx.symbol_table, ctx.eval_context)?;
     let final_z = apply_z_origin_physical(z_nm, ctx.origin.z, ctx.space_dimensions.depth_nm);
 
     let expr_summary = match z_expr {
@@ -277,13 +237,14 @@ pub fn coordinate_to_point(coord: &Coordinate, ctx: &CoordinateContext) -> Resul
         super::placement::coordinate_evaluation::evaluate_coordinate_with_anchors(
             x_expr,
             ctx.symbol_table,
+            ctx.eval_context,
             tracker,
             CoordinateAxis::X,
             ctx.origin.z,
         )
         .map_err(|e| e.to_string())?
     } else {
-        evaluate_expression_to_nm(x_expr, ctx.symbol_table)?
+        evaluate_expression_to_nm(x_expr, ctx.symbol_table, ctx.eval_context)?
     };
 
     let y_nm = if let Ok(Value::Percentage(pct)) = y_expr.evaluate(ctx.eval_context) {
@@ -293,13 +254,14 @@ pub fn coordinate_to_point(coord: &Coordinate, ctx: &CoordinateContext) -> Resul
         super::placement::coordinate_evaluation::evaluate_coordinate_with_anchors(
             y_expr,
             ctx.symbol_table,
+            ctx.eval_context,
             tracker,
             CoordinateAxis::Y,
             ctx.origin.z,
         )
         .map_err(|e| e.to_string())?
     } else {
-        evaluate_expression_to_nm(y_expr, ctx.symbol_table)?
+        evaluate_expression_to_nm(y_expr, ctx.symbol_table, ctx.eval_context)?
     };
 
     let z_nm = resolve_coordinate_z_nm(z_expr, ctx, has_anchor_refs)?;
@@ -335,8 +297,8 @@ pub fn spanning_coordinate_to_point(
         || y_expr.contains_anchor_reference()
         || z_expr.contains_anchor_reference();
 
-    let x_nm = evaluate_expression_to_nm(x_expr, ctx.symbol_table)?;
-    let y_nm = evaluate_expression_to_nm(y_expr, ctx.symbol_table)?;
+    let x_nm = evaluate_expression_to_nm(x_expr, ctx.symbol_table, ctx.eval_context)?;
+    let y_nm = evaluate_expression_to_nm(y_expr, ctx.symbol_table, ctx.eval_context)?;
     let z_nm = resolve_coordinate_z_nm(z_expr, ctx, has_anchor_refs)?;
 
     use hwc_parser::OriginXY;

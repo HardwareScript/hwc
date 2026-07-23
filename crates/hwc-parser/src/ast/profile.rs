@@ -298,6 +298,7 @@ pub struct TraceConstraints {
     pub min_spacing: Measurement,
     pub max_width: Option<Measurement>,
     pub max_length: Option<Measurement>,
+    pub edge_clearance: Option<Measurement>,
     pub span: Span,
 }
 

@@ -1,0 +1,119 @@
+# Test 4: Corner Cases & Boundary Conditions
+# Objective: Verify router handles edge cases (tight spaces, board edges, minimal clearance)
+# Uses pure declarative middle-end syntax with relational placement and intent-based routing
+
+import * from @std/primitives/units
+import * from @std/primitives/math
+import * from ../materials
+import Silicon_180nm from ../foundry_pdk
+
+module Corner_Cases:
+    pins: [
+        input Edge_A, output Edge_B,
+        input Tight_A, output Tight_B
+    ]
+    route Edge_A to Edge_B
+    route Tight_A to Tight_B
+
+shape CubicPad(w: Measurement, h: Measurement):
+    geometry:
+        Rectangle(width: w, height: h)
+
+space Corner_Demo_mid implements Corner_Cases:
+    dimensions: 1mm by 600um by 136um
+    resolution: 100nm
+    origin: bl by b
+    profile: Silicon_180nm
+
+    nets:
+        Edge_A: { classification: signal, potential: 0V, current: 0.1uA }
+        Edge_B: { classification: signal, potential: 0V, current: 0.1uA }
+        Tight_A: { classification: signal, potential: 0V, current: 0.1uA }
+        Tight_B: { classification: signal, potential: 0V, current: 0.1uA }
+
+    # ========================================================================
+    # Explicit dimension variables to ensure single-pass, compile-time safety
+    # ========================================================================
+    let edge_pad_w = 150um
+    let edge_pad_h = 150um
+    let tight_pad_w = 100um
+    let tight_pad_h = 100um
+    let obstacle_w = 120um
+    let obstacle_h = 80um
+
+    # ========================================================================
+    # 1. FLOORPLANNING REGIONS (Declarative Placement Intent)
+    # ========================================================================
+    region EdgeRegionA:
+        at: space.bottom_left + [pdk.edge_clearance, pdk.edge_clearance]
+        boundary: [width: edge_pad_w, height: edge_pad_h]
+
+    region EdgeRegionB:
+        at: space.top_right - [pdk.edge_clearance + 200um, pdk.edge_clearance + 200um]
+        boundary: [width: edge_pad_w, height: edge_pad_h]
+
+    region TightRegionA:
+        at: space.center - [250um, 50um]
+        boundary: [width: tight_pad_w, height: tight_pad_h]
+
+    # Obstacle is placed 50µm right of TightRegionA
+    region ObstacleRegion:
+        right_of: TightRegionA with spacing: 50um
+        align: center_y with TightRegionA
+        boundary: [width: obstacle_w, height: obstacle_h]
+
+    # TightRegionB is placed 200µm right of TightRegionA (past the 120µm obstacle!)
+    region TightRegionB:
+        right_of: TightRegionA with spacing: 200um
+        align: center_y with TightRegionA
+        boundary: [width: tight_pad_w, height: tight_pad_h]
+
+    # ========================================================================
+    # 2. RELATIONAL COMPONENT PLACEMENT (No absolute coordinates)
+    # ========================================================================
+    
+    # Test 1: Pads near board edges
+    add plane(Aluminum) named Pad_Edge_A inside: EdgeRegionA on layer: metal1:
+        shape: CubicPad(w: edge_pad_w, h: edge_pad_h)
+        at: EdgeRegionA.center
+        net: Edge_A
+
+    add plane(Aluminum) named Pad_Edge_B inside: EdgeRegionB on layer: metal1:
+        shape: CubicPad(w: edge_pad_w, h: edge_pad_h)
+        at: EdgeRegionB.center
+        net: Edge_B
+
+    # Test 2: Tight squeeze through narrow gap
+    add plane(Aluminum) named Pad_Tight_A inside: TightRegionA on layer: metal1:
+        shape: CubicPad(w: tight_pad_w, h: tight_pad_h)
+        at: TightRegionA.center
+        net: Tight_A
+
+    add plane(Aluminum) named Pad_Tight_B inside: TightRegionB on layer: metal1:
+        shape: CubicPad(w: tight_pad_w, h: tight_pad_h)
+        at: TightRegionB.center
+        net: Tight_B
+
+    # Narrow obstacle creating a tight channel
+    add plane(Aluminum) named Squeeze_Block inside: ObstacleRegion on layer: metal1:
+        shape: CubicPad(w: obstacle_w, h: obstacle_h)
+        at: ObstacleRegion.center
+        # No net (obstacle)
+
+    # ========================================================================
+    # 3. ROUTING INTENT (CIR Synthesis)
+    #    Explicit widths required for ASIC technology.
+    # ========================================================================
+    route Pad_Edge_A to Pad_Edge_B:
+        width: 30um
+        layer: metal1
+        intent: Signal
+        prefer exit: East
+        current_limit_ac: { rms: 0.5uA, peak: 1.0uA }
+
+    route Pad_Tight_A to Pad_Tight_B:
+        width: 25um
+        layer: metal1
+        intent: Signal
+        prefer exit: East
+        current_limit_ac: { rms: 0.5uA, peak: 1.0uA }

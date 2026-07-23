@@ -30,6 +30,7 @@ impl Validator {
         collector: &DiagnosticCollector,
         program: &Program,
         symbol_table: &crate::SymbolTable,
+        eval_context: &hwc_parser::EvaluationContext,
     ) {
         // Check for space definition
         let space = match program.definitions.iter().find_map(|def| match def {
@@ -46,7 +47,7 @@ impl Validator {
         self.check_physical_z_in_coordinates(collector, space);
 
         // Check for overlapping components
-        self.check_collisions(collector, &space.components(), space, symbol_table);
+        self.check_collisions(collector, &space.components(), space, symbol_table, eval_context);
 
         // Check for unconnected pins
         self.check_connectivity(collector, space, program);
@@ -316,6 +317,7 @@ impl Validator {
         components: &[ComponentPlacement],
         space: &SpaceDefinition,
         symbol_table: &crate::SymbolTable,
+        eval_context: &hwc_parser::EvaluationContext,
     ) {
         // Get space dimensions for percentage calculations
         let dimensions = match space.dimensions.as_ref() {
@@ -356,6 +358,7 @@ impl Validator {
                 position,
                 dimensions_nm,
                 symbol_table,
+                eval_context,
                 hwc_parser::OriginZ::Bottom,
                 1,
             );
@@ -387,12 +390,14 @@ impl Validator {
         position: &Coordinate,
         space_dimensions_nm: (i64, i64, i64),
         symbol_table: &crate::SymbolTable,
+        eval_context: &hwc_parser::EvaluationContext,
         origin_z: hwc_parser::OriginZ,
         grid_z_layers: usize,
     ) -> BoundingBox {
         let (x_nm, y_nm, z_nm) = self.coordinate_to_nm(
             position,
             symbol_table,
+            eval_context,
             space_dimensions_nm,
             origin_z,
             grid_z_layers,
@@ -414,6 +419,7 @@ impl Validator {
         &self,
         coord: &Coordinate,
         symbol_table: &crate::SymbolTable,
+        eval_context: &hwc_parser::EvaluationContext,
         space_dimensions_nm: (i64, i64, i64),
         _origin_z: hwc_parser::OriginZ,
         _grid_z_layers: usize,
@@ -432,7 +438,7 @@ impl Validator {
         let z_nm = if matches!(coord, Coordinate::Relative(_)) {
             0
         } else {
-            crate::ir::conversions::evaluate_expression_to_nm(coord.z(), symbol_table).unwrap_or(0)
+            crate::ir::conversions::evaluate_expression_to_nm(coord.z(), symbol_table, eval_context).unwrap_or(0)
         };
 
         (x_nm, y_nm, z_nm)

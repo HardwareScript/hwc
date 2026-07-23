@@ -186,7 +186,10 @@ impl GeometryRouter {
 
         // v0.1.9: Check if perpendicular escape routing is required
         let path = if let Some(&(start_normal, goal_normal)) = self.net_normals.get(&route.net_id) {
-            let escape_stub_nm = self.net_escape_stubs.get(&route.net_id).copied().unwrap_or(0);
+            // NATIVE FIX: If normals exist, escape_stub MUST exist (no fallback)
+            // This is guaranteed by the compiler - if we have normals, we have escape_stub
+            let escape_stub_nm = self.net_escape_stubs.get(&route.net_id).copied()
+                .expect("COMPILER BUG: Net has normals but no escape_stub. This should never happen - the compiler must populate net_escape_stubs for all nets with normals.");
             
             eprintln!("[GLOBAL ROUTING] Net {} using perpendicular escape: stub={}nm", route.net_id.raw(), escape_stub_nm);
             

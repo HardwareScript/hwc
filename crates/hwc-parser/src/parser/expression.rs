@@ -57,7 +57,7 @@ impl Parser {
     }
 
     /// Parse a prefix expression (unary operators, literals, variables, grouped expressions)
-    fn parse_prefix_expression(&mut self) -> Result<Expression, ParseError> {
+    pub(super) fn parse_prefix_expression(&mut self) -> Result<Expression, ParseError> {
         let start_pos = self.current_span().start;
 
         match self.current() {
@@ -133,15 +133,40 @@ impl Parser {
                 // Identifier or variable
                 Token::Identifier(_name) => {
                     // Check if this is an anchor reference: ComponentName.edge or ComponentName[i].edge
-                    // We need to look ahead to see if there's a dot OR a bracket followed by a dot
+                    // We need to look ahead to see if there's a dot followed by a valid spatial edge name
                     let is_anchor = if let Some(next) = self.peek_ahead(1) {
                         match &next.token {
-                            Token::Dot => true,
+                            Token::Dot => {
+                                if let Some(edge_token) = self.peek_ahead(2) {
+                                    if let Token::Identifier(edge_name) = &edge_token.token {
+                                        matches!(
+                                            edge_name.as_str(),
+                                            "left"
+                                                | "right"
+                                                | "top"
+                                                | "bottom"
+                                                | "front"
+                                                | "back"
+                                                | "min_z"
+                                                | "max_z"
+                                                | "top_left"
+                                                | "top_right"
+                                                | "bottom_left"
+                                                | "bottom_right"
+                                                | "center"
+                                        )
+                                    } else {
+                                        false
+                                    }
+                                } else {
+                                    false
+                                }
+                            }
                             Token::OpenBracket => {
                                 // Array syntax: Name[...].edge
                                 let mut lookahead = 1;
                                 let mut depth = 0;
-                                let mut found_dot = false;
+                                let mut found_anchor = false;
                                 while let Some(t) = self.tokens.get(self.current + lookahead) {
                                     match &t.token {
                                         Token::OpenBracket => depth += 1,
@@ -152,7 +177,30 @@ impl Parser {
                                                     self.tokens.get(self.current + lookahead + 1)
                                                 {
                                                     if matches!(after.token, Token::Dot) {
-                                                        found_dot = true;
+                                                        if let Some(edge_tok) =
+                                                            self.tokens.get(self.current + lookahead + 2)
+                                                        {
+                                                            if let Token::Identifier(edge_name) =
+                                                                &edge_tok.token
+                                                            {
+                                                                found_anchor = matches!(
+                                                                    edge_name.as_str(),
+                                                                    "left"
+                                                                        | "right"
+                                                                        | "top"
+                                                                        | "bottom"
+                                                                        | "front"
+                                                                        | "back"
+                                                                        | "min_z"
+                                                                        | "max_z"
+                                                                        | "top_left"
+                                                                        | "top_right"
+                                                                        | "bottom_left"
+                                                                        | "bottom_right"
+                                                                        | "center"
+                                                                );
+                                                            }
+                                                        }
                                                     }
                                                 }
                                                 break;
@@ -162,7 +210,7 @@ impl Parser {
                                     }
                                     lookahead += 1;
                                 }
-                                found_dot
+                                found_anchor
                             }
                             _ => false,
                         }
@@ -187,6 +235,11 @@ impl Parser {
                             "back" => crate::ast::Edge::Back,
                             "min_z" => crate::ast::Edge::MinZ,
                             "max_z" => crate::ast::Edge::MaxZ,
+                            "top_left" => crate::ast::Edge::TopLeft,
+                            "top_right" => crate::ast::Edge::TopRight,
+                            "bottom_left" => crate::ast::Edge::BottomLeft,
+                            "bottom_right" => crate::ast::Edge::BottomRight,
+                            "center" => crate::ast::Edge::Center,
                             _ => {
                                 return Err(self.error(&format!(
                                     "Invalid edge '{}'. Expected: left, right, top, bottom, front, back, min_z, or max_z",
@@ -205,8 +258,8 @@ impl Parser {
                             span: Span::new(start_pos, end_pos),
                         })
                     } else {
-                        // Just a variable reference
-                        let name = self.expect_identifier_string()?;
+                        // Just a variable reference (supports namespaced member access like pdk.edge_clearance)
+                        let name = self.expect_namespaced_identifier_string()?;
                         let span = self.previous_span();
                         Ok(Expression::Variable {
                             name: name.into(),
@@ -251,6 +304,48 @@ impl Parser {
                         span: Span::new(start_pos, end_pos),
                     })
                 }
+                // v0.2.0: Handle 'space' keyword as a special anchor reference: space.bottom_left
+                Token::Space => {
+                    let span = token.span;
+                    self.advance();
+
+                    // Expect dot
+                    self.expect(&Token::Dot)?;
+
+                    // Parse edge name
+                    let edge_str = self.expect_identifier_string()?;
+                    let edge = match edge_str.as_str() {
+                        "left" => crate::ast::Edge::Left,
+                        "right" => crate::ast::Edge::Right,
+                        "top" => crate::ast::Edge::Top,
+                        "bottom" => crate::ast::Edge::Bottom,
+                        "front" => crate::ast::Edge::Front,
+                        "back" => crate::ast::Edge::Back,
+                        "min_z" => crate::ast::Edge::MinZ,
+                        "max_z" => crate::ast::Edge::MaxZ,
+                        "top_left" => crate::ast::Edge::TopLeft,
+                        "top_right" => crate::ast::Edge::TopRight,
+                        "bottom_left" => crate::ast::Edge::BottomLeft,
+                        "bottom_right" => crate::ast::Edge::BottomRight,
+                        "center" => crate::ast::Edge::Center,
+                        _ => {
+                            return Err(self.error(&format!(
+                            "Invalid space anchor '{}'. Expected: left, right, top, bottom, top_left, top_right, bottom_left, bottom_right, center",
+                            edge_str
+                        )))
+                        }
+                    };
+
+                    let end_pos = self.previous_span().end;
+                    Ok(Expression::AnchorReference {
+                        anchor: crate::ast::AnchorReference {
+                            name: "space".into(),
+                            span,
+                        },
+                        edge,
+                        span: Span::new(start_pos, end_pos),
+                    })
+                }
                 // Anchor reference with 'substrate' keyword: substrate.edge
                 Token::Substrate => {
                     let span = token.span;
@@ -270,6 +365,11 @@ impl Parser {
                         "back" => crate::ast::Edge::Back,
                         "min_z" => crate::ast::Edge::MinZ,
                         "max_z" => crate::ast::Edge::MaxZ,
+                        "top_left" => crate::ast::Edge::TopLeft,
+                        "top_right" => crate::ast::Edge::TopRight,
+                        "bottom_left" => crate::ast::Edge::BottomLeft,
+                        "bottom_right" => crate::ast::Edge::BottomRight,
+                        "center" => crate::ast::Edge::Center,
                         _ => {
                             return Err(self.error(&format!(
                             "Invalid edge '{}'. Expected: left, right, top, bottom, front, back, min_z, or max_z",

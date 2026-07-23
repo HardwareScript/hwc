@@ -56,10 +56,12 @@ pub fn parse_rectangle_dimensions(
 /// Resolve parameterized shape string by substituting parameter values
 /// For example: "Rectangle(w, h, 0nm)" with parameters {w: 600nm, h: 600nm}
 /// becomes "Rectangle(600nm, 600nm, 0nm)"
+/// v0.1.10: Now supports expressions (including variables) in parameters
 pub fn resolve_parameterized_shape(
     shape_str: &str,
     parameters: &[hwc_parser::Parameter],
     symbol_table: &crate::SymbolTable,
+    eval_context: &hwc_parser::EvaluationContext,
 ) -> Option<String> {
     use hwc_parser::ParameterValue;
 
@@ -72,6 +74,16 @@ pub fn resolve_parameterized_shape(
             ParameterValue::Measurement(m) => {
                 let nm = symbol_table.measurement_to_nm(m).ok()?;
                 // Convert back to a string with nm suffix
+                format!("{}nm", nm)
+            }
+            ParameterValue::Expression(expr) => {
+                // Evaluate the expression using the evaluation context (supports variables!)
+                let nm = crate::ir::conversions::evaluate_expression_to_nm(
+                    expr,
+                    symbol_table,
+                    eval_context,
+                )
+                .ok()?;
                 format!("{}nm", nm)
             }
             ParameterValue::String(s) => s.to_string(),

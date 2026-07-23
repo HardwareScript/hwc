@@ -66,7 +66,7 @@ pub fn place_contact(
             profile
                 .and_then(|p| p.via.as_ref())
                 .and_then(|v| v.default_diameter.as_ref())
-                .and_then(|d| crate::ir::conversions::measurement_to_nm(d, symbol_table).ok())
+                .and_then(|d| crate::ir::conversions::measurement_to_nm(d, symbol_table, eval_context).ok())
         })
         .ok_or_else(|| IrError::MissingAsicConstraint {
             message: format!(
@@ -80,16 +80,18 @@ pub fn place_contact(
     let from_bottom_nm = stackup_manager.resolve_elevation_bottom(
         &contact.from_elevation,
         symbol_table,
+        eval_context,
         space.resolution_nm,
     )?;
     let to_bottom_nm = stackup_manager.resolve_elevation_bottom(
         &contact.to_elevation,
         symbol_table,
+        eval_context,
         space.resolution_nm,
     )?;
     let from_top_nm =
-        stackup_manager.resolve_elevation_top(&contact.from_elevation, symbol_table)?;
-    let to_top_nm = stackup_manager.resolve_elevation_top(&contact.to_elevation, symbol_table)?;
+        stackup_manager.resolve_elevation_top(&contact.from_elevation, symbol_table, eval_context)?;
+    let to_top_nm = stackup_manager.resolve_elevation_top(&contact.to_elevation, symbol_table, eval_context)?;
 
     let contact_name_debug = contact
         .name

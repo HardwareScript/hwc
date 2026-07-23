@@ -10,6 +10,7 @@ use crate::SymbolTable;
 pub fn evaluate_coordinate_to_nm(
     expr: &hwc_parser::Expression,
     symbol_table: &SymbolTable,
+    eval_context: &hwc_parser::EvaluationContext,
 ) -> Result<i64, IrError> {
     use hwc_parser::{BinaryOperator, Expression, UnaryOperator, Unit};
 
@@ -53,7 +54,13 @@ pub fn evaluate_coordinate_to_nm(
             Ok(nm)
         }
         Expression::Variable { name, .. } => {
-            if let Some(const_value) = symbol_table.get_all_constants().get(name) {
+            if let Some(value) = eval_context.get(name) {
+                // Convert the strongly-typed Value to nanometers
+                value.to_nanometers().map_err(|e| IrError::CoordinateResolutionFailed {
+                    coordinate_str: format!("variable '{}'", name),
+                    reason: e,
+                })
+            } else if let Some(const_value) = symbol_table.get_all_constants().get(name) {
                 Ok(*const_value as i64)
             } else {
                 Err(IrError::CoordinateResolutionFailed {
@@ -68,8 +75,8 @@ pub fn evaluate_coordinate_to_nm(
             right,
             ..
         } => {
-            let left_nm = evaluate_coordinate_to_nm(left, symbol_table)?;
-            let right_nm = evaluate_coordinate_to_nm(right, symbol_table)?;
+            let left_nm = evaluate_coordinate_to_nm(left, symbol_table, eval_context)?;
+            let right_nm = evaluate_coordinate_to_nm(right, symbol_table, eval_context)?;
             let result = match operator {
                 BinaryOperator::Add => left_nm + right_nm,
                 BinaryOperator::Subtract => left_nm - right_nm,
@@ -90,7 +97,7 @@ pub fn evaluate_coordinate_to_nm(
         Expression::Unary {
             operator, operand, ..
         } => {
-            let operand_nm = evaluate_coordinate_to_nm(operand, symbol_table)?;
+            let operand_nm = evaluate_coordinate_to_nm(operand, symbol_table, eval_context)?;
             let result = match operator {
                 UnaryOperator::Negate => -operand_nm,
                 UnaryOperator::Plus => operand_nm,
@@ -98,7 +105,7 @@ pub fn evaluate_coordinate_to_nm(
             Ok(result)
         }
         Expression::Grouped { expression, .. } => {
-            evaluate_coordinate_to_nm(expression, symbol_table)
+            evaluate_coordinate_to_nm(expression, symbol_table, eval_context)
         }
         Expression::Percentage { .. } => Err(IrError::CoordinateResolutionFailed {
             coordinate_str: "percentage expression".into(),
@@ -115,13 +122,14 @@ pub fn evaluate_coordinate_to_nm(
 pub fn evaluate_measurement_to_nm(
     measurement: &hwc_parser::Measurement,
     symbol_table: &SymbolTable,
+    eval_context: &hwc_parser::EvaluationContext,
 ) -> Result<i64, IrError> {
     let expr = hwc_parser::Expression::Measurement {
         value: measurement.value,
         unit: measurement.unit.clone(),
         span: measurement.span,
     };
-    evaluate_coordinate_to_nm(&expr, symbol_table)
+    evaluate_coordinate_to_nm(&expr, symbol_table, eval_context)
 }
 
 /// Axis context for coordinate evaluation
@@ -136,6 +144,7 @@ pub enum CoordinateAxis {
 pub fn evaluate_coordinate_with_anchors(
     expr: &hwc_parser::Expression,
     symbol_table: &SymbolTable,
+    eval_context: &hwc_parser::EvaluationContext,
     bbox_tracker: &crate::bounding_box_tracker::BoundingBoxTracker,
     context_axis: CoordinateAxis,
     origin_z: hwc_parser::OriginZ,
@@ -164,14 +173,19 @@ pub fn evaluate_coordinate_with_anchors(
             })?;
 
             let engine_edge = match edge {
-                hwc_parser::Edge::Left => hwc_engine::geometry::Edge::Left,
-                hwc_parser::Edge::Right => hwc_engine::geometry::Edge::Right,
+                hwc_parser::Edge::Left | hwc_parser::Edge::TopLeft | hwc_parser::Edge::BottomLeft => {
+                    hwc_engine::geometry::Edge::Left
+                }
+                hwc_parser::Edge::Right | hwc_parser::Edge::TopRight | hwc_parser::Edge::BottomRight => {
+                    hwc_engine::geometry::Edge::Right
+                }
                 hwc_parser::Edge::Top => hwc_engine::geometry::Edge::Top,
                 hwc_parser::Edge::Bottom => hwc_engine::geometry::Edge::Bottom,
                 hwc_parser::Edge::Front => hwc_engine::geometry::Edge::Front,
                 hwc_parser::Edge::Back => hwc_engine::geometry::Edge::Back,
                 hwc_parser::Edge::MinZ => hwc_engine::geometry::Edge::MinZ,
                 hwc_parser::Edge::MaxZ => hwc_engine::geometry::Edge::MaxZ,
+                hwc_parser::Edge::Center => hwc_engine::geometry::Edge::Left,
             };
 
             let edge_point = anchor_bbox.edge_point(engine_edge);
@@ -207,6 +221,33 @@ pub fn evaluate_coordinate_with_anchors(
                         _ => edge_point.y,
                     }
                 }
+                hwc_parser::Edge::TopLeft | hwc_parser::Edge::BottomLeft => match context_axis {
+                    CoordinateAxis::X => anchor_bbox.min.x,
+                    CoordinateAxis::Y => {
+                        if *edge == hwc_parser::Edge::TopLeft {
+                            anchor_bbox.max.y
+                        } else {
+                            anchor_bbox.min.y
+                        }
+                    }
+                    CoordinateAxis::Z => anchor_bbox.min.z,
+                },
+                hwc_parser::Edge::TopRight | hwc_parser::Edge::BottomRight => match context_axis {
+                    CoordinateAxis::X => anchor_bbox.max.x,
+                    CoordinateAxis::Y => {
+                        if *edge == hwc_parser::Edge::TopRight {
+                            anchor_bbox.max.y
+                        } else {
+                            anchor_bbox.min.y
+                        }
+                    }
+                    CoordinateAxis::Z => anchor_bbox.min.z,
+                },
+                hwc_parser::Edge::Center => match context_axis {
+                    CoordinateAxis::X => (anchor_bbox.min.x + anchor_bbox.max.x) / 2,
+                    CoordinateAxis::Y => (anchor_bbox.min.y + anchor_bbox.max.y) / 2,
+                    CoordinateAxis::Z => (anchor_bbox.min.z + anchor_bbox.max.z) / 2,
+                },
                 hwc_parser::Edge::Front
                 | hwc_parser::Edge::Back
                 | hwc_parser::Edge::MinZ
@@ -225,6 +266,7 @@ pub fn evaluate_coordinate_with_anchors(
             let left_nm = evaluate_coordinate_with_anchors(
                 left,
                 symbol_table,
+                eval_context,
                 bbox_tracker,
                 context_axis,
                 origin_z,
@@ -232,6 +274,7 @@ pub fn evaluate_coordinate_with_anchors(
             let right_nm = evaluate_coordinate_with_anchors(
                 right,
                 symbol_table,
+                eval_context,
                 bbox_tracker,
                 context_axis,
                 origin_z,
@@ -260,6 +303,7 @@ pub fn evaluate_coordinate_with_anchors(
             let operand_nm = evaluate_coordinate_with_anchors(
                 operand,
                 symbol_table,
+                eval_context,
                 bbox_tracker,
                 context_axis,
                 origin_z,
@@ -274,11 +318,12 @@ pub fn evaluate_coordinate_with_anchors(
         Expression::Grouped { expression, .. } => evaluate_coordinate_with_anchors(
             expression,
             symbol_table,
+            eval_context,
             bbox_tracker,
             context_axis,
             origin_z,
         ),
 
-        _ => evaluate_coordinate_to_nm(expr, symbol_table),
+        _ => evaluate_coordinate_to_nm(expr, symbol_table, eval_context),
     }
 }

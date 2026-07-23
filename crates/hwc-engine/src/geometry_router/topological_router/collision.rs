@@ -85,28 +85,13 @@ impl TopologicalRouter {
             ),
         };
 
-        eprintln!(
-            "[TOPO COLLISION] Checking segment ({},{},{}) to ({},{},{}) with inflate={}nm",
-            a.x, a.y, a.z, b.x, b.y, b.z, inflate
-        );
-        eprintln!(
-            "[TOPO COLLISION] Segment bbox: ({},{},{}) to ({},{},{})",
-            segment_bbox.min.x,
-            segment_bbox.min.y,
-            segment_bbox.min.z,
-            segment_bbox.max.x,
-            segment_bbox.max.y,
-            segment_bbox.max.z
-        );
+       
 
         let candidates = self.query_all_obstacles(&query_bbox, obstacles);
 
-        for (idx, seg) in candidates.iter().enumerate() {
+        for seg in candidates.iter() {
             if self.exempt_net_ids.contains(&seg.net_id) {
-                eprintln!(
-                    "[TOPO COLLISION]   Obstacle {}: SKIPPED (exempt net_id={})",
-                    idx, seg.net_id
-                );
+               
                 continue;
             }
 
@@ -130,17 +115,7 @@ impl TopologicalRouter {
                 ),
             };
 
-            eprintln!(
-                "[TOPO COLLISION]   Obstacle {}: net_id={}, bbox=({},{},{}) to ({},{},{})",
-                idx,
-                seg.net_id,
-                obs_bbox.min.x,
-                obs_bbox.min.y,
-                obs_bbox.min.z,
-                obs_bbox.max.x,
-                obs_bbox.max.y,
-                obs_bbox.max.z
-            );
+           
 
             // v0.1.9.1 FIX: Only inflate X/Y, not Z, for single-layer 2D routing
             let inflated_segment = BoundingBox {
@@ -164,24 +139,12 @@ impl TopologicalRouter {
                 && inflated_segment.max.z >= obs_bbox.min.z;
 
             if x_overlaps && y_overlaps && z_overlaps {
-                eprintln!(
-                    "[TOPO COLLISION]   COLLISION DETECTED with Obstacle {}",
-                    idx
-                );
-                eprintln!(
-                    "[TOPO COLLISION]      Inflated segment: ({},{},{}) to ({},{},{})",
-                    inflated_segment.min.x,
-                    inflated_segment.min.y,
-                    inflated_segment.min.z,
-                    inflated_segment.max.x,
-                    inflated_segment.max.y,
-                    inflated_segment.max.z
-                );
+              
                 return true;
             }
         }
 
-        eprintln!("[TOPO COLLISION] No collisions detected");
+       
         false
     }
 }

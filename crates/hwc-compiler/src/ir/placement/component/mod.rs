@@ -3,7 +3,6 @@ pub mod mounting;
 pub mod unrolling;
 pub mod validation;
 
-use super::super::conversions::{coordinate_to_point, CoordinateContext};
 use super::super::errors::IrError;
 use super::context::PlacementContext;
 use super::helpers::parse_rectangle_dimensions;
@@ -36,29 +35,17 @@ pub fn place_component(
         return place_module_instance(space, component, layouts, bbox_tracker, ctx);
     }
 
-    let resolved_position =
+    let placement_intent =
         coordinates::resolve_position(component, bbox_tracker, ctx.eval_context)?;
 
-    let coord_ctx = CoordinateContext {
-        origin: ctx.origin,
-        space_dimensions: &space.dimensions,
-        symbol_table: ctx.symbol_table,
-        eval_context: ctx.eval_context,
-        bbox_tracker: Some(bbox_tracker),
-        stackup_manager: ctx.stackup_manager,
-        profile: ctx.profile,
-    };
-    let mut position = coordinate_to_point(&resolved_position, &coord_ctx).map_err(|e| {
-        IrError::CoordinateResolutionFailed {
-            coordinate_str: "component position".into(),
-            reason: e,
-        }
-    })?;
+    // Use raw point for mounting/elevation (semantics don't matter here)
+    let mut position = placement_intent.point();
 
     let mut mounting_res = mounting::resolve_mounting_and_elevation(
         space,
         component,
         ctx.symbol_table,
+        ctx.eval_context,
         ctx.stackup_manager,
         position,
         ctx.origin,
@@ -70,8 +57,41 @@ pub fn place_component(
         mounting_res.position = position;
     }
 
-    let mut untransformed_origin =
-        coordinates::calculate_untransformed_origin(&resolved_position, space, ctx, bbox_tracker)?;
+    // Get component dimensions for bounding box and centering calculation
+    let (width_nm, height_nm, depth_nm) = if let Ok(component_def) = ctx
+        .symbol_table
+        .get_component(component.component_type.as_str())
+    {
+        if let Some(layout) = &component_def.layout {
+            if let Some(shape_str) = &layout.shape {
+                let resolved_shape = super::helpers::resolve_parameterized_shape(
+                    shape_str,
+                    &component.parameters,
+                    ctx.symbol_table,
+                    ctx.eval_context,
+                );
+                if let Some(resolved) = resolved_shape {
+                    if let Some(dims) = parse_rectangle_dimensions(&resolved, ctx.symbol_table) {
+                        dims
+                    } else {
+                        (0, 0, 0)
+                    }
+                } else {
+                    (0, 0, 0)
+                }
+            } else {
+                (0, 0, 0)
+            }
+        } else {
+            (0, 0, 0)
+        }
+    } else {
+        (0, 0, 0)
+    };
+
+    // NATIVE FIX: Calculate actual origin using placement intent
+    // This is where centering happens - in ONE place, cleanly
+    let mut untransformed_origin = placement_intent.calculate_origin(width_nm, height_nm, depth_nm);
 
     if component.elevation.is_some() || component.waivers.snap_to_surface {
         untransformed_origin.z = position.z;
@@ -217,71 +237,52 @@ pub fn place_component(
         }
     }
 
-    if let Ok(component_def) = ctx
-        .symbol_table
-        .get_component(component.component_type.as_str())
-    {
-        if let Some(layout) = &component_def.layout {
-            if let Some(shape_str) = &layout.shape {
-                // Resolve parameterized shape by substituting parameter values
-                let resolved_shape = super::helpers::resolve_parameterized_shape(
-                    shape_str,
-                    &component.parameters,
-                    ctx.symbol_table,
-                );
-
-                if let Some(resolved) = resolved_shape {
-                    if let Some(dims) = parse_rectangle_dimensions(&resolved, ctx.symbol_table) {
-                        let (width_nm, height_nm, depth_nm) = dims;
-                        let bbox = if rotation_deg.abs() < 0.001 {
-                            BoundingBox::new(
-                                Point3D::new(
-                                    untransformed_origin.x,
-                                    untransformed_origin.y,
-                                    untransformed_origin.z,
-                                ),
-                                Point3D::new(
-                                    untransformed_origin.x + width_nm,
-                                    untransformed_origin.y + height_nm,
-                                    untransformed_origin.z + depth_nm,
-                                ),
-                            )
-                        } else {
-                            let center_x = untransformed_origin.x + width_nm / 2;
-                            let center_y = untransformed_origin.y + height_nm / 2;
-                            let half_w = width_nm / 2;
-                            let half_h = height_nm / 2;
-                            let corners = [
-                                (-half_w, -half_h),
-                                (half_w, -half_h),
-                                (half_w, half_h),
-                                (-half_w, half_h),
-                            ];
-                            let angle_rad = rotation_deg.to_radians();
-                            let cos_theta = angle_rad.cos();
-                            let sin_theta = angle_rad.sin();
-                            let mut min_x = i64::MAX;
-                            let mut max_x = i64::MIN;
-                            let mut min_y = i64::MAX;
-                            let mut max_y = i64::MIN;
-                            for (cx, cy) in corners.iter() {
-                                let rx = (*cx as f64 * cos_theta - *cy as f64 * sin_theta) as i64;
-                                let ry = (*cx as f64 * sin_theta + *cy as f64 * cos_theta) as i64;
-                                min_x = min_x.min(center_x + rx);
-                                max_x = max_x.max(center_x + rx);
-                                min_y = min_y.min(center_y + ry);
-                                max_y = max_y.max(center_y + ry);
-                            }
-                            BoundingBox::new(
-                                Point3D::new(min_x, min_y, untransformed_origin.z),
-                                Point3D::new(max_x, max_y, untransformed_origin.z + depth_nm),
-                            )
-                        };
-                        bbox_tracker.register(name.clone(), bbox, untransformed_origin);
-                    }
-                }
+    if width_nm > 0 && height_nm > 0 {
+        let bbox = if rotation_deg.abs() < 0.001 {
+            BoundingBox::new(
+                Point3D::new(
+                    untransformed_origin.x,
+                    untransformed_origin.y,
+                    untransformed_origin.z,
+                ),
+                Point3D::new(
+                    untransformed_origin.x + width_nm,
+                    untransformed_origin.y + height_nm,
+                    untransformed_origin.z + depth_nm,
+                ),
+            )
+        } else {
+            let center_x = untransformed_origin.x + width_nm / 2;
+            let center_y = untransformed_origin.y + height_nm / 2;
+            let half_w = width_nm / 2;
+            let half_h = height_nm / 2;
+            let corners = [
+                (-half_w, -half_h),
+                (half_w, -half_h),
+                (half_w, half_h),
+                (-half_w, half_h),
+            ];
+            let angle_rad = rotation_deg.to_radians();
+            let cos_theta = angle_rad.cos();
+            let sin_theta = angle_rad.sin();
+            let mut min_x = i64::MAX;
+            let mut max_x = i64::MIN;
+            let mut min_y = i64::MAX;
+            let mut max_y = i64::MIN;
+            for (cx, cy) in corners.iter() {
+                let rx = (*cx as f64 * cos_theta - *cy as f64 * sin_theta) as i64;
+                let ry = (*cx as f64 * sin_theta + *cy as f64 * cos_theta) as i64;
+                min_x = min_x.min(center_x + rx);
+                max_x = max_x.max(center_x + rx);
+                min_y = min_y.min(center_y + ry);
+                max_y = max_y.max(center_y + ry);
             }
-        }
+            BoundingBox::new(
+                Point3D::new(min_x, min_y, untransformed_origin.z),
+                Point3D::new(max_x, max_y, untransformed_origin.z + depth_nm),
+            )
+        };
+        bbox_tracker.register(name.clone(), bbox, untransformed_origin);
     }
 
     unrolling::unroll_internal_features(

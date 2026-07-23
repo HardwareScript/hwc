@@ -1,5 +1,6 @@
 use crate::ir::errors::IrError;
 use crate::ir::placement_item::PlacementItem;
+use compact_str::CompactString;
 
 /// Build the dependency graph from placement items and return topologically sorted IDs.
 pub fn build_and_sort(
@@ -20,6 +21,47 @@ pub fn build_and_sort(
         let item_id = item.item_id(i);
 
         match item {
+            PlacementItem::Region(r) => {
+                // v0.2.0: Process region dependencies
+                if let Some(anchor) = &r.anchor {
+                    match anchor {
+                        hwc_parser::RegionAnchor::Absolute(_) => {
+                            // No dependencies for absolute positioning
+                        }
+                        hwc_parser::RegionAnchor::Expression(expr) => {
+                            graph.extract_dependencies_from_expr(
+                                &item_id,
+                                expr,
+                                last_component_name.as_ref(),
+                            );
+                        }
+                        hwc_parser::RegionAnchor::Offset { base, offset, .. } => {
+                            graph.extract_dependencies_from_expr(
+                                &item_id,
+                                base,
+                                last_component_name.as_ref(),
+                            );
+                            graph.extract_dependencies_from_coord(
+                                &item_id,
+                                offset,
+                                last_component_name.as_ref(),
+                            );
+                        }
+                    }
+                }
+                // Process relational constraints
+                for constraint in &r.constraints {
+                    let target_name = CompactString::from(constraint.target.as_str());
+                    graph.add_dependency(item_id.clone(), target_name);
+                    if let Some(spacing) = &constraint.spacing {
+                        graph.extract_dependencies_from_expr(
+                            &item_id,
+                            spacing,
+                            last_component_name.as_ref(),
+                        );
+                    }
+                }
+            }
             PlacementItem::Substrate(s) => {
                 graph.extract_dependencies_from_coord(
                     &item_id,

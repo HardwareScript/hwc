@@ -10,6 +10,7 @@ use hwc_parser::SpaceDefinition;
 pub fn create_hardware_space(
     space_def: &SpaceDefinition,
     symbol_table: &crate::SymbolTable,
+    eval_context: &hwc_parser::EvaluationContext,
 ) -> Result<HardwareSpace, IrError> {
     let dimensions = space_def
         .dimensions
@@ -23,11 +24,11 @@ pub fn create_hardware_space(
 
     // Convert dimensions to nanometers using the symbol table (supports custom units!)
     let dims = Dimensions {
-        width_nm: measurement_to_nm(&dimensions.width, symbol_table)
+        width_nm: measurement_to_nm(&dimensions.width, symbol_table, eval_context)
             .map_err(IrError::InvalidExpression)?,
-        height_nm: measurement_to_nm(&dimensions.height, symbol_table)
+        height_nm: measurement_to_nm(&dimensions.height, symbol_table, eval_context)
             .map_err(IrError::InvalidExpression)?,
-        depth_nm: measurement_to_nm(&dimensions.depth, symbol_table)
+        depth_nm: measurement_to_nm(&dimensions.depth, symbol_table, eval_context)
             .map_err(IrError::InvalidExpression)?,
     };
 
@@ -36,7 +37,7 @@ pub fn create_hardware_space(
         .resolution
         .as_ref()
         .map(|res_measurement| {
-            measurement_to_nm(res_measurement, symbol_table).map_err(IrError::InvalidExpression)
+            measurement_to_nm(res_measurement, symbol_table, eval_context).map_err(IrError::InvalidExpression)
         })
         .transpose()?
         .ok_or_else(|| IrError::MissingGrid)?;
@@ -99,7 +100,7 @@ pub fn create_hardware_space(
                 "thickness" => {
                     thickness_nm = match &prop.value {
                         hwc_parser::PropertyValue::Measurement(m) => {
-                            measurement_to_nm(m, symbol_table)
+                            measurement_to_nm(m, symbol_table, eval_context)
                                 .unwrap_or((m.value * 1_000_000.0) as i64)
                         }
                         hwc_parser::PropertyValue::Number(v) => (*v * 1_000_000.0) as i64,
@@ -237,6 +238,7 @@ pub fn create_hardware_space(
 pub fn validate_asic_constraints(
     space_def: &SpaceDefinition,
     symbol_table: &crate::SymbolTable,
+    eval_context: &hwc_parser::EvaluationContext,
 ) -> Result<(), IrError> {
     // Check if this is an ASIC build
     let profile = space_def
@@ -292,7 +294,7 @@ pub fn validate_asic_constraints(
     let pdk_min_width_nm = profile
         .as_ref()
         .and_then(|p| p.trace.as_ref())
-        .and_then(|t| measurement_to_nm(&t.min_width, symbol_table).ok())
+        .and_then(|t| measurement_to_nm(&t.min_width, symbol_table, eval_context).ok())
         .unwrap_or(0);
 
     if pdk_min_width_nm > 0 {
@@ -300,7 +302,7 @@ pub fn validate_asic_constraints(
             if let hwc_parser::SpaceTopLevelStatement::Route(route) = statement {
                 if let Some(w_expr) = &route.width {
                     if let Ok(width_nm) =
-                        crate::ir::conversions::evaluate_expression_to_nm(w_expr, symbol_table)
+                        crate::ir::conversions::evaluate_expression_to_nm(w_expr, symbol_table, eval_context)
                     {
                         if width_nm < pdk_min_width_nm {
                             return Err(IrError::MissingAsicConstraint {
@@ -396,7 +398,7 @@ mod tests {
         let space_def = get_space(&program);
         let symbol_table = crate::SymbolTable::new();
 
-        let space = create_hardware_space(space_def, &symbol_table).unwrap();
+        let space = create_hardware_space(space_def, &symbol_table, &hwc_parser::EvaluationContext::default()).unwrap();
         assert_eq!(space.name, "Test");
         assert_eq!(space.dimensions.width_nm, 50_000_000);
         // Resolution is 100um (100_000 nm)

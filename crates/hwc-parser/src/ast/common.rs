@@ -205,6 +205,11 @@ pub enum Edge {
     Back,
     MinZ,
     MaxZ,
+    TopLeft,
+    TopRight,
+    BottomLeft,
+    BottomRight,
+    Center,
 }
 
 /// Unified Merge Waiver (v0.1.7)

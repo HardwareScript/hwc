@@ -1,0 +1,56 @@
+# DETERMINISM TEST: Low-Level Syntax (Absolute Coordinates)
+# Objective: Verify that low-level absolute positioning produces deterministic output
+# This test uses explicit coordinates for all placements
+
+import * from @std/primitives/units
+import * from @std/primitives/math
+import * from ../materials
+import Silicon_180nm from ../foundry_pdk
+
+module Simple_TwoPad:
+    pins: [input A, output B]
+    route A to B
+
+shape Pad(w: Measurement, h: Measurement):
+    geometry:
+        Rectangle(width: w, height: h)
+
+space Determinism_Low implements Simple_TwoPad:
+    dimensions: 800um by 400um by 136um
+    resolution: 100nm
+    origin: bl by b
+    profile: Silicon_180nm
+
+    nets:
+        A: { classification: signal, potential: 0V, current: 0.1uA }
+        B: { classification: signal, potential: 0V, current: 0.1uA }
+
+    # ========================================================================
+    # LOW-LEVEL SYNTAX: Absolute coordinate placement
+    # All positions are explicitly calculated and hardcoded
+    # ========================================================================
+
+    # Left pad at absolute position
+    add plane(Aluminum) named Pad_A on layer: metal1:
+        shape: Pad(w: 100um, h: 100um)
+        at: [x: 150um, y: 150um]  # Absolute bottom-left corner
+        net: A
+
+    # Right pad at absolute position
+    add plane(Aluminum) named Pad_B on layer: metal1:
+        shape: Pad(w: 100um, h: 100um)
+        at: [x: 550um, y: 150um]  # Absolute bottom-left corner (400µm spacing from Pad_A)
+        net: B
+
+    # Obstacle between pads at absolute position
+    add plane(Aluminum) named Obstacle on layer: metal1:
+        shape: Pad(w: 80um, h: 60um)
+        at: [x: 360um, y: 170um]  # Absolute bottom-left corner
+        # No net (obstacle)
+
+    # Route with explicit parameters and intent-based routing
+    route Pad_A to Pad_B:
+        width: 20um
+        layer: metal1
+        intent: Signal  # Enables escape_stub: 50um from PDK, producing mitered corners
+        current_limit_ac: { rms: 0.5uA, peak: 1.0uA }

@@ -149,6 +149,7 @@ pub fn route_manual(
         space,
         route,
         symbol_table,
+        eval_context,
         stackup_manager,
         profile,
         None,
@@ -187,14 +188,14 @@ pub fn route_manual(
     // v0.1.7: Create analytic trace for substrate layer realization
     // (manual routes must use the same analytic → substrate pipeline as auto routes)
     let trace_width_nm = if let Some(width_expr) = &route.width {
-        super::super::conversions::evaluate_expression_to_nm(width_expr, symbol_table).map_err(
+        super::super::conversions::evaluate_expression_to_nm(width_expr, symbol_table, eval_context).map_err(
             |e| IrError::InvalidRouteExpression {
                 expression: "route width".into(),
                 reason: e.to_string(),
             },
         )?
     } else if let Some(trace) = profile.and_then(|p| p.trace.as_ref()) {
-        super::super::conversions::measurement_to_nm(&trace.min_width, symbol_table).map_err(
+        super::super::conversions::measurement_to_nm(&trace.min_width, symbol_table, eval_context).map_err(
             |e| IrError::InvalidRouteExpression {
                 expression: "route width from profile".into(),
                 reason: e.to_string(),

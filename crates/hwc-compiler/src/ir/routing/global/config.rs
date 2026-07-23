@@ -37,6 +37,10 @@ pub struct AutoRouter<'a> {
     pub stackup_manager: &'a crate::ir::stackup_manager::StackupManager,
     /// Active profile definition (for ASIC detection and layer info)
     pub profile: Option<&'a hwc_parser::ProfileDefinition>,
+    /// Symbol table for constant lookups
+    pub symbol_table: &'a crate::SymbolTable,
+    /// Evaluation context for expression evaluation
+    pub eval_context: &'a hwc_parser::EvaluationContext,
     /// Configuration for the router.
     pub config: RouterConfig,
     /// v0.1.8: Salsa-style memoized query store for per-G-cell routing cache.

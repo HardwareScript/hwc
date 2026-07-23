@@ -18,6 +18,7 @@ pub fn resolve_mounting_and_elevation(
     space: &HardwareSpace,
     component: &hwc_parser::ComponentPlacement,
     symbol_table: &SymbolTable,
+    eval_context: &hwc_parser::EvaluationContext,
     stackup_manager: &StackupManager,
     mut position: Point3D,
     origin: hwc_parser::OriginPoint,
@@ -49,7 +50,7 @@ pub fn resolve_mounting_and_elevation(
 
     // v0.1.7: Resolve elevation from 'on layer:' or 'on z:' prepositional syntax
     if let Some(elevation) = &component.elevation {
-        let z_user_nm = stackup_manager.resolve_elevation(elevation, symbol_table)?;
+        let z_user_nm = stackup_manager.resolve_elevation(elevation, symbol_table, eval_context)?;
         let final_z = crate::ir::conversions::apply_z_origin_physical(
             z_user_nm,
             origin.z,
@@ -132,7 +133,7 @@ pub fn resolve_mounting_and_elevation(
 
     // v0.1.7: Resolve standoff height
     let standoff_nm = match &component.standoff {
-        Some(expr) => evaluate_expression_to_nm(expr, symbol_table).map_err(|e| {
+        Some(expr) => evaluate_expression_to_nm(expr, symbol_table, eval_context).map_err(|e| {
             IrError::CoordinateResolutionFailed {
                 coordinate_str: "standoff height".into(),
                 reason: e.to_string(),
@@ -145,7 +146,7 @@ pub fn resolve_mounting_and_elevation(
                     .layout
                     .as_ref()
                     .and_then(|l| l.standoff.as_ref())
-                    .map(|expr| evaluate_expression_to_nm(expr, symbol_table))
+                    .map(|expr| evaluate_expression_to_nm(expr, symbol_table, eval_context))
                     .transpose()
                     .map_err(|e| IrError::CoordinateResolutionFailed {
                         coordinate_str: "component definition standoff".into(),

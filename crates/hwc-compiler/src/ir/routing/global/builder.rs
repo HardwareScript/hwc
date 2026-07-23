@@ -33,7 +33,8 @@ impl<'a> AutoRouter<'a> {
                 let actual_net_id = crate::ir::routing::register_net_for_route(
                     self.space,
                     route,
-                    &crate::SymbolTable::new(),
+                    self.symbol_table,
+                    self.eval_context,
                     self.stackup_manager,
                     self.profile,
                     None,
@@ -60,7 +61,8 @@ impl<'a> AutoRouter<'a> {
                 let route_width_nm = if let Some(ref width_expr) = route.width {
                     crate::ir::conversions::evaluate_expression_to_nm(
                         width_expr,
-                        &crate::SymbolTable::new(),
+                        self.symbol_table,
+                        self.eval_context,
                     )
                     .unwrap_or(min_width)
                 } else {
@@ -90,7 +92,8 @@ impl<'a> AutoRouter<'a> {
                         if let Some(ref width_expr) = route.width {
                             if let Ok(w_nm) = crate::ir::conversions::evaluate_expression_to_nm(
                                 width_expr,
-                                &crate::SymbolTable::new(),
+                                self.symbol_table,
+                                self.eval_context,
                             ) {
                                 net_declared_widths.insert(net_name.clone(), w_nm);
                             }
@@ -98,18 +101,23 @@ impl<'a> AutoRouter<'a> {
                         if let Some(ref ac) = route.current_limit_ac {
                             let rms = crate::ir::conversions::evaluate_expression_to_ma(
                                 &ac.rms,
-                                &crate::SymbolTable::new(),
+                                self.symbol_table,
                             )
                             .unwrap_or(0.0);
                             let peak = crate::ir::conversions::evaluate_expression_to_ma(
                                 &ac.peak,
-                                &crate::SymbolTable::new(),
+                                self.symbol_table,
                             )
                             .unwrap_or(rms);
                             net_currents_ma.insert(net_name.clone(), peak);
                         }
                         if let Some(ref intent_name) = route.intent {
+                            eprintln!("[ROUTING BUILDER] Route from {:?} to {:?} has intent: '{}' for net '{}'", 
+                                route.from, route.to, intent_name, net_name);
                             net_intents.insert(net_name.clone(), intent_name.clone());
+                        } else {
+                            eprintln!("[ROUTING BUILDER] Route from {:?} to {:?} has NO intent for net '{}'", 
+                                route.from, route.to, net_name);
                         }
                     }
                     Err(e) => {

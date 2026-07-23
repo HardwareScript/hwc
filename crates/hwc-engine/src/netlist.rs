@@ -59,6 +59,10 @@ impl PinId {
 pub struct NetId(pub u32);
 
 impl NetId {
+    /// Semantic constant for unconnected/keepout zones
+    /// Components and pours with this net ID block all routing
+    pub const UNCONNECTED: NetId = NetId(0);
+
     /// Create a new net ID.
     #[inline]
     pub const fn new(id: u32) -> Self {
@@ -69,6 +73,12 @@ impl NetId {
     #[inline]
     pub const fn raw(self) -> u32 {
         self.0
+    }
+
+    /// Check if this is an unconnected/keepout zone
+    #[inline]
+    pub const fn is_unconnected(self) -> bool {
+        self.0 == 0
     }
 }
 

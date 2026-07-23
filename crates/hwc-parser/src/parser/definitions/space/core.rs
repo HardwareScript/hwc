@@ -92,6 +92,7 @@ impl crate::parser::Parser {
         let mut routes = Vec::new();
         let mut exposes = Vec::new();
         let mut nets = Vec::new();
+        let mut regions = Vec::new(); // v0.2.0: Region declarations
 
         // Parse space body
         let mut loop_iterations = 0;
@@ -124,6 +125,31 @@ impl crate::parser::Parser {
                 resolution = self.parse_resolution().ok();
             } else if self.check(&Token::Origin) {
                 origin = self.parse_origin().ok();
+            } else if self.check(&Token::Let) {
+                // v0.2.0: Parse local variable binding: `let pad_w = 150um`
+                match self.parse_space_let_binding() {
+                    Ok(let_binding) => {
+                        statements.push(SpaceTopLevelStatement::Let(let_binding));
+                    }
+                    Err(err) => {
+                        collector.report(err);
+                        self.sync_to_next_definition();
+                        continue;
+                    }
+                }
+            } else if self.check(&Token::Region) {
+                // v0.2.0: Parse region declaration
+                match self.parse_region() {
+                    Ok(region) => {
+                        statements.push(SpaceTopLevelStatement::Region(region.clone()));
+                        regions.push(region);
+                    }
+                    Err(err) => {
+                        collector.report(err);
+                        self.sync_to_next_definition();
+                        continue;
+                    }
+                }
             } else if self.check(&Token::Add) {
                 // Check if it's a substrate, pour, polygon, contact, or component
                 let next_pos = self.current + 1;
@@ -353,7 +379,34 @@ impl crate::parser::Parser {
             routes,
             exposes,
             nets,
+            regions, // v0.2.0: Region declarations
             span: Span::new(start_pos, end_pos),
+        })
+    }
+
+    /// Parse local variable binding in space block (v0.2.0)
+    /// Example: `let edge_pad_w = 150um`
+    pub(in crate::parser) fn parse_space_let_binding(
+        &mut self,
+    ) -> Result<crate::ast::LetBinding, crate::ParseError> {
+        let start = self.current_span();
+
+        self.expect(&Token::Let)?;
+
+        let name = self.expect_identifier_string()?;
+
+        self.expect(&Token::Equals)?;
+
+        let value = self.parse_expression()?;
+
+        self.skip_whitespace();
+
+        let span = Span::new(start.start, self.previous_span().end);
+
+        Ok(crate::ast::LetBinding {
+            name: name.into(),
+            value,
+            span,
         })
     }
 }

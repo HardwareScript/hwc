@@ -1,0 +1,92 @@
+# DETERMINISM TEST: Middle-Level Syntax (Relational Placement)
+# Objective: Verify that middle-level relational placement produces IDENTICAL output to low-level
+# This test uses regions and relational constraints that should resolve to the same coordinates
+
+import * from @std/primitives/units
+import * from @std/primitives/math
+import * from ../materials
+import Silicon_180nm from ../foundry_pdk
+
+module Simple_TwoPad:
+    pins: [input A, output B]
+    route A to B
+
+shape Pad(w: Measurement, h: Measurement):
+    geometry:
+        Rectangle(width: w, height: h)
+
+space Determinism_Mid implements Simple_TwoPad:
+    dimensions: 800um by 400um by 136um
+    resolution: 100nm
+    origin: bl by b
+    profile: Silicon_180nm
+
+    nets:
+        A: { classification: signal, potential: 0V, current: 0.1uA }
+        B: { classification: signal, potential: 0V, current: 0.1uA }
+
+    # ========================================================================
+    # MIDDLE-LEVEL SYNTAX: Relational placement with regions
+    # These constraints should resolve to IDENTICAL coordinates as low-level
+    # ========================================================================
+
+    # Dimension variables (single-pass compilation)
+    let pad_width = 100um
+    let pad_height = 100um
+    let obstacle_width = 80um
+    let obstacle_height = 60um
+
+    # Region for left pad
+    # Low-level equivalent: at: [x: 150um, y: 150um]
+    region RegionA:
+        at: [x: 150um, y: 150um, z: 0nm]
+        boundary: [width: pad_width, height: pad_height]
+
+    # Region for right pad
+    # Low-level equivalent: bottom-left at [x: 550um, y: 150um]
+    # Spacing = clear gap between regions = 550um (target) - 250um (RegionA end) = 300um
+    region RegionB:
+        right_of: RegionA with spacing: 300um
+        align: center_y with RegionA
+        boundary: [width: pad_width, height: pad_height]
+
+    # Region for obstacle
+    # Low-level equivalent: bottom-left at [x: 360um, y: 170um]
+    # Spacing = clear gap = 360um (target) - 250um (RegionA end) = 110um
+    # Y-offset from center alignment: obstacle center_y should be +20um from pad center_y
+    region ObstacleRegion:
+        right_of: RegionA with spacing: 110um
+        align: center_y with RegionA
+        boundary: [width: obstacle_width, height: obstacle_height]
+
+    # ========================================================================
+    # COMPONENT PLACEMENT: Using region anchors
+    # ========================================================================
+
+    # Left pad - placed at region bottom-left (matching low-level semantics)
+    add plane(Aluminum) named Pad_A inside: RegionA on layer: metal1:
+        shape: Pad(w: pad_width, h: pad_height)
+        at: RegionA.bottom_left
+        net: A
+
+    # Right pad - placed at region bottom-left (matching low-level semantics)
+    add plane(Aluminum) named Pad_B inside: RegionB on layer: metal1:
+        shape: Pad(w: pad_width, h: pad_height)
+        at: RegionB.bottom_left
+        net: B
+
+    # Obstacle - placed at region bottom-left (matching low-level semantics)
+    add plane(Aluminum) named Obstacle inside: ObstacleRegion on layer: metal1:
+        shape: Pad(w: obstacle_width, h: obstacle_height)
+        at: ObstacleRegion.bottom_left
+        # No net (obstacle)
+
+    # ========================================================================
+    # ROUTING: Identical parameters to low-level
+    # ========================================================================
+
+    route Pad_A to Pad_B:
+        width: 20um
+        layer: metal1
+        intent: Signal
+        current_limit_ac: { rms: 0.5uA, peak: 1.0uA }

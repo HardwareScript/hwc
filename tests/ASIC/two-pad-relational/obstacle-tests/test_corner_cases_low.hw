@@ -18,7 +18,7 @@ shape CubicPad(w: Measurement, h: Measurement):
     geometry:
         Rectangle(width: w, height: h)
 
-space Corner_Demo implements Corner_Cases:
+space Corner_Demo_low implements Corner_Cases:
     dimensions: 1mm by 600um by 136um
     resolution: 100nm
     origin: bl by b
@@ -55,7 +55,7 @@ space Corner_Demo implements Corner_Cases:
     # Narrow obstacle creating a tight channel
     add plane(Aluminum) named Squeeze_Block on layer: metal1:
         shape: CubicPad(w: 120um, h: 80um)
-        at: [x: 430um, y: 235um]
+        at: [x: 430um, y: 260um]  # Fixed: Aligned with pads (center_y = 300µm, bottom = 300 - 40 = 260µm)
         # No net (obstacle)
 
     # Route through tight spaces

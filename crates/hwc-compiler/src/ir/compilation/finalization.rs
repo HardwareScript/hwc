@@ -9,6 +9,7 @@ pub fn finalize(
     symbol_table: &SymbolTable,
     collector: &hwc_diagnostics::DiagnosticCollector,
     space_def: &hwc_parser::SpaceDefinition,
+    eval_context: &hwc_parser::EvaluationContext,
 ) -> Result<(), IrError> {
     // P45 Forbidden Junction Detection (Assembly Level)
     crate::ir::bridge_validator::validate_bridges(space, profile.as_ref())?;
@@ -22,6 +23,7 @@ pub fn finalize(
             profile.as_ref(),
             stackup_manager,
             symbol_table,
+            eval_context,
         )?;
         via_resolver.resolve_connectivity(space, stackup_manager)?;
     }

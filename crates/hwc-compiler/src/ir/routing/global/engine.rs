@@ -49,10 +49,22 @@ impl<'a> AutoRouter<'a> {
                                     impedance_penalty: cw.impedance_penalty,
                                     reference_void_penalty: cw.reference_void_penalty,
                                 });
+                        // NATIVE FIX: Extract escape_stub from profile intent
+                        let escape_stub_nm = pi.escape_stub.as_ref().map(|m| {
+                            // Simple unit conversion - profile measurements are literals
+                            match m.unit {
+                                hwc_parser::Unit::Nanometer => m.value as i64,
+                                hwc_parser::Unit::Micrometer => (m.value * 1_000.0) as i64,
+                                hwc_parser::Unit::Millimeter => (m.value * 1_000_000.0) as i64,
+                                hwc_parser::Unit::Centimeter => (m.value * 10_000_000.0) as i64,
+                                _ => panic!("Invalid unit for escape_stub: {:?}", m.unit),
+                            }
+                        });
                         hwc_engine::RoutingIntent::from_profile_data(
                             &pi.name.name,
                             pi.routing_style.as_ref().map(|s| s.name.as_str()),
                             cost_weights.as_ref(),
+                            escape_stub_nm,
                         )
                     })
                     .unwrap_or_else(|| hwc_engine::RoutingIntent::new(intent_name));
@@ -119,6 +131,26 @@ impl<'a> AutoRouter<'a> {
                 })
             })
             .collect();
+        
+        // NATIVE FIX: Get global default escape_stub from profile (REQUIRED)
+        // Profile measurements don't contain pdk.* references, so we can use simple conversion
+        let global_escape_stub_nm = self
+            .profile
+            .and_then(|p| p.routing.as_ref())
+            .and_then(|r| r.escape_stub.as_ref())
+            .map(|m| {
+                // Simple unit conversion - profile measurements are literals
+                match m.unit {
+                    hwc_parser::Unit::Nanometer => m.value as i64,
+                    hwc_parser::Unit::Micrometer => (m.value * 1_000.0) as i64,
+                    hwc_parser::Unit::Millimeter => (m.value * 1_000_000.0) as i64,
+                    hwc_parser::Unit::Centimeter => (m.value * 10_000_000.0) as i64,
+                    _ => panic!("Invalid unit for escape_stub: {:?}", m.unit),
+                }
+            })
+            .ok_or_else(|| IrError::MissingProfileConstraint {
+                field: "routing.escape_stub".into(),
+            })?;
 
         for (idx, resolved) in data.resolved_routes.iter().enumerate() {
             match crate::ir::routing::resolve_route_boundary_points(self.space, resolved, resolved.width_nm) {
@@ -136,12 +168,48 @@ impl<'a> AutoRouter<'a> {
                     };
                     net_normals.insert(resolved.net_id, (start_normal_2d, goal_normal_2d));
                     
-                    // v0.1.9: Look up escape_stub by route index (matches auto_routes order)
-                    if let Some(Some(escape_stub_nm)) = route_escape_stubs.get(idx) {
-                        net_escape_stubs.insert(resolved.net_id, *escape_stub_nm);
-                        eprintln!("[PERPENDICULAR ESCAPE] Net '{}' (id={}) has escape_stub: {} nm", 
-                            resolved.net_name, resolved.net_id.raw(), escape_stub_nm);
-                    }
+                    // v0.1.9 NATIVE FIX: Resolve escape_stub with proper authority hierarchy:
+                    // 1. Route-specific override (highest priority)
+                    // 2. Intent-based override (from net_type)
+                    // 3. Profile global default (required, no fallback)
+                    let escape_stub_nm = if let Some(Some(route_override)) = route_escape_stubs.get(idx) {
+                        // Route-specific escape_stub takes highest priority
+                        eprintln!("[ESCAPE STUB] Net '{}' using route override: {} nm", resolved.net_name, route_override);
+                        *route_override
+                    } else if let Some(intent_name) = data.net_intents.get(&resolved.net_name) {
+                        eprintln!("[ESCAPE STUB] Net '{}' has intent: '{}'", resolved.net_name, intent_name);
+                        // Look up intent's escape_stub
+                        self.profile
+                            .and_then(|p| p.intents.iter().find(|pi| pi.name.name == *intent_name))
+                            .and_then(|pi| {
+                                eprintln!("[ESCAPE STUB] Found intent '{}' in profile", intent_name);
+                                pi.escape_stub.as_ref()
+                            })
+                            .map(|m| {
+                                // Simple unit conversion - profile measurements are literals
+                                let nm = match m.unit {
+                                    hwc_parser::Unit::Nanometer => m.value as i64,
+                                    hwc_parser::Unit::Micrometer => (m.value * 1_000.0) as i64,
+                                    hwc_parser::Unit::Millimeter => (m.value * 1_000_000.0) as i64,
+                                    hwc_parser::Unit::Centimeter => (m.value * 10_000_000.0) as i64,
+                                    _ => panic!("Invalid unit for escape_stub: {:?}", m.unit),
+                                };
+                                eprintln!("[ESCAPE STUB] Intent '{}' has escape_stub: {} nm", intent_name, nm);
+                                nm
+                            })
+                            .unwrap_or_else(|| {
+                                eprintln!("[ESCAPE STUB] Intent '{}' found but no escape_stub, using global: {} nm", intent_name, global_escape_stub_nm);
+                                global_escape_stub_nm
+                            })
+                    } else {
+                        // No route override, no intent -> use global (which is required to exist)
+                        eprintln!("[ESCAPE STUB] Net '{}' has NO intent, using global: {} nm", resolved.net_name, global_escape_stub_nm);
+                        global_escape_stub_nm
+                    };
+                    
+                    net_escape_stubs.insert(resolved.net_id, escape_stub_nm);
+                    eprintln!("[PERPENDICULAR ESCAPE] Net '{}' (id={}) escape_stub: {} nm", 
+                        resolved.net_name, resolved.net_id.raw(), escape_stub_nm);
                 }
                 Err(e) => {
                     eprintln!("[ROUTER WARNING] Failed to resolve boundary points for net '{}': {:?} - skipping", resolved.net_name, e);
@@ -402,35 +470,4 @@ impl<'a> AutoRouter<'a> {
         }
     }
 
-    /// v0.1.9: Helper to convert route endpoint to string for net name lookup
-    fn endpoint_to_string(endpoint: &hwc_parser::RouteEndpointSpec) -> String {
-        match endpoint {
-            hwc_parser::RouteEndpointSpec::ComponentPin {
-                component_name,
-                component_index,
-                pin_name,
-                pin_index,
-                ..
-            } => {
-                let comp = if let Some(idx) = component_index {
-                    format!("{}[{:?}]", component_name, idx)
-                } else {
-                    component_name.to_string()
-                };
-                let pin = if let Some(idx) = pin_index {
-                    format!("{}[{:?}]", pin_name, idx)
-                } else {
-                    pin_name.to_string()
-                };
-                format!("{}.{}", comp, pin)
-            },
-            hwc_parser::RouteEndpointSpec::SpaceEntity { name, index, .. } => {
-                if let Some(idx) = index {
-                    format!("{}[{:?}]", name, idx)
-                } else {
-                    name.to_string()
-                }
-            },
-        }
-    }
 }

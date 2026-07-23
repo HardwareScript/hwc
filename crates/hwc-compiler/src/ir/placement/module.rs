@@ -45,6 +45,7 @@ pub fn place_module_instance(
                 end: None,
             },
             ctx.symbol_table,
+            ctx.eval_context,
         )
         .unwrap_or(0);
 
@@ -119,7 +120,7 @@ pub fn place_module_instance(
             };
             let resolved_z = ctx
                 .stackup_manager
-                .resolve_z_expression(z_expr, ctx.symbol_table)
+                .resolve_z_expression(z_expr, ctx.symbol_table, ctx.eval_context)
                 .unwrap_or(0);
             let mut position = coordinate_to_point(&mapping.position, &coord_ctx).map_err(|e| {
                 IrError::CoordinateResolutionFailed {

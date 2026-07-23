@@ -79,12 +79,13 @@ pub fn collect_route_net_policies(
     space: &hwc_engine::HardwareSpace,
     space_def: &hwc_parser::SpaceDefinition,
     symbol_table: &SymbolTable,
+    eval_context: &hwc_parser::EvaluationContext,
 ) -> rustc_hash::FxHashMap<hwc_engine::netlist::NetId, hwc_engine::RoutingPattern> {
     let mut route_net_policies = rustc_hash::FxHashMap::default();
 
     for policy in &space_def.route_net_policies() {
         if let Some(ref pattern_inst) = policy.pattern {
-            match crate::ir::routing::instantiate_pattern(pattern_inst, symbol_table) {
+            match crate::ir::routing::instantiate_pattern(pattern_inst, symbol_table, eval_context) {
                 Ok(pattern) => {
                     if let Some(net_id) = space.netlist.get_net_by_name(policy.net_id.as_str()) {
                         route_net_policies.insert(net_id, pattern);
@@ -136,6 +137,7 @@ pub fn process_routes(
                 space,
                 route,
                 ctx.symbol_table,
+                ctx.eval_context,
                 ctx.stackup_manager,
                 ctx.profile,
                 Some(ctx.space_def),
@@ -172,6 +174,7 @@ pub fn auto_route(
     space: &mut hwc_engine::HardwareSpace,
     auto_routes: Vec<hwc_parser::Route>,
     symbol_table: &SymbolTable,
+    eval_context: &hwc_parser::EvaluationContext,
     stackup_manager: &crate::ir::stackup_manager::StackupManager,
     profile: Option<&hwc_parser::ProfileDefinition>,
 ) -> Result<(), IrError> {
@@ -186,6 +189,7 @@ pub fn auto_route(
     let mut auto_router = crate::ir::routing::AutoRouter::new(
         space,
         symbol_table,
+        eval_context,
         stackup_manager,
         profile,
         rustc_hash::FxHashMap::default(),

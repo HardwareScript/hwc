@@ -18,6 +18,7 @@ pub fn route_automatic(
     space: &mut HardwareSpace,
     route: &hwc_parser::Route,
     symbol_table: &crate::SymbolTable,
+    eval_context: &hwc_parser::EvaluationContext,
     stackup_manager: &crate::ir::stackup_manager::StackupManager,
     profile: Option<&hwc_parser::ProfileDefinition>,
 ) -> Result<(), IrError> {
@@ -26,7 +27,7 @@ pub fn route_automatic(
 
     // PHASE 1: CONSTRAINT MANAGER
     let constraints =
-        super::constraints::evaluate_constraints(space, route, symbol_table, profile)?;
+        super::constraints::evaluate_constraints(space, route, symbol_table, eval_context, profile)?;
     let min_clearance_nm = constraints.min_clearance_nm;
     let current_ma = constraints.current_ma;
     let trace_width_nm = constraints.trace_width_nm;
@@ -76,6 +77,7 @@ pub fn route_automatic(
         space,
         route,
         symbol_table,
+        eval_context,
         stackup_manager,
         profile,
         None,

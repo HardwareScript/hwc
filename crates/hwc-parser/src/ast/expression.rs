@@ -165,6 +165,23 @@ use rustc_hash::FxHashMap;
 use std::fmt;
 
 /// Result of evaluating an expression
+///
+/// ## Type System Invariant: Preserve Unit Information Throughout Compilation
+///
+/// The compiler maintains strict dimensional correctness by storing typed values:
+/// - **`Value::Number`**: Dimensionless integers (loop indices, multipliers, counts)
+/// - **`Value::Float`**: Dimensionless floating-point numbers (ratios, scaling factors)
+/// - **`Value::Measurement`**: Physical quantities with explicit units (50µm, 200nm, 1mm)
+/// - **`Value::Percentage`**: Relative positioning values (50%, 25%)
+///
+/// PDK constants like `pdk.edge_clearance` are stored as `Value::Measurement` with
+/// their original units preserved. This ensures expressions like `pdk.edge_clearance + 200µm`
+/// are evaluated with full dimensional analysis, preventing mathematically invalid operations
+/// like adding bare scalars to physical distances.
+///
+/// Final conversion to absolute nanometer coordinates happens in `conversions.rs` via
+/// `to_nanometers()`, maintaining a clean separation between the parser (AST/evaluation)
+/// and the physical engine (coordinate resolution).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Value {
     /// Integer value (grid index or dimensionless number)
@@ -291,8 +308,19 @@ impl Value {
     }
 }
 
-/// Context for evaluating expressions (variable bindings)
-pub type EvaluationContext = FxHashMap<CompactString, i64>;
+/// Context for evaluating expressions with strongly-typed variable bindings
+///
+/// ## Architectural Principle: Preserve Unit Information Throughout Compilation
+///
+/// This context stores `Value` enums (not bare `i64`) to maintain dimensional correctness:
+/// - **Value::Number**: Dimensionless scalars (loop counters, array indices, multipliers)
+/// - **Value::Measurement**: Physical quantities with units (50µm, 200nm, pdk.edge_clearance)
+/// - **Value::Percentage**: Relative positioning (50%, 25%)
+///
+/// This ensures the type system prevents mathematically invalid operations like
+/// adding a bare scalar to a physical distance, and keeps unit metadata intact
+/// throughout the entire compilation pipeline until final coordinate resolution.
+pub type EvaluationContext = FxHashMap<CompactString, Value>;
 
 impl Expression {
     /// Evaluate this expression to a concrete value (number, measurement, or percentage)
@@ -314,8 +342,7 @@ impl Expression {
                 } else {
                     context
                         .get(name)
-                        .copied()
-                        .map(Value::Number)
+                        .cloned()
                         .ok_or_else(|| format!("Undefined variable '{}' in expression", name))
                 }
             }
@@ -346,47 +373,14 @@ impl Expression {
                         // Float op Integer: promote to float
                         apply_op_f64(*l, *r as f64, operator).map(Value::Float)
                     }
-                    (Value::Measurement { value: lv, unit: lu }, Value::Number(r)) => {
-                        // Measurement op Number: apply to measurement value
-                        let result = apply_op_f64(*lv, *r as f64, operator)?;
-                        Ok(Value::Measurement {
-                            value: result,
-                            unit: lu.clone(),
-                        })
-                    }
-                    (Value::Measurement { value: lv, unit: lu }, Value::Float(r)) => {
-                        // Measurement op Float: apply to measurement value
-                        let result = apply_op_f64(*lv, *r, operator)?;
-                        Ok(Value::Measurement {
-                            value: result,
-                            unit: lu.clone(),
-                        })
-                    }
-                    (Value::Number(l), Value::Measurement { value: rv, unit: ru }) => {
-                        // Number op Measurement: apply to measurement value
-                        let result = apply_op_f64(*l as f64, *rv, operator)?;
-                        Ok(Value::Measurement {
-                            value: result,
-                            unit: ru.clone(),
-                        })
-                    }
-                    (Value::Float(l), Value::Measurement { value: rv, unit: ru }) => {
-                        // Float op Measurement: apply to measurement value
-                        let result = apply_op_f64(*l, *rv, operator)?;
-                        Ok(Value::Measurement {
-                            value: result,
-                            unit: ru.clone(),
-                        })
-                    }
                     (
                         Value::Measurement { value: lv, unit: lu },
                         Value::Measurement { value: rv, unit: ru },
                     ) => {
-                        // GAP 2 FIX: Physics-Correct Math (Unit Normalization)
+                        // CLEAN ARCHITECTURE: Physics-Correct Math (Unit Normalization)
+                        // Both operands are measurements with units preserved
                         // For measurements with MATCHING units, perform arithmetic directly
-                        // For measurements with DIFFERENT units, we CANNOT normalize here
-                        // because Custom units need the compiler's symbol table.
-                        // The compiler will handle unit normalization in conversions.rs
+                        // For measurements with DIFFERENT units, normalize to nanometers
                         if lu == ru {
                             // Same units: safe to perform arithmetic
                             let result = apply_op_f64(*lv, *rv, operator)?;
@@ -395,12 +389,86 @@ impl Expression {
                                 unit: lu.clone(),
                             })
                         } else {
-                            // Different units: preserve as expression for compiler to resolve
-                            // For now, return an error - the compiler will need to handle this
-                            Err(format!(
-                                "Cannot perform arithmetic on measurements with different units in parser: {:?} and {:?}. Unit normalization requires compiler symbol table.",
-                                lu, ru
-                            ))
+                            // Different units: normalize both to nanometers
+                            let l_nm = Value::Measurement { value: *lv, unit: lu.clone() }.to_nanometers()?;
+                            let r_nm = Value::Measurement { value: *rv, unit: ru.clone() }.to_nanometers()?;
+                            let result_nm = operator.apply(l_nm, r_nm)?;
+                            // Return result in nanometers (normalized unit)
+                            Ok(Value::Measurement {
+                                value: result_nm as f64,
+                                unit: super::Unit::Nanometer,
+                            })
+                        }
+                    }
+                    (Value::Measurement { value: lv, unit: lu }, Value::Number(r)) => {
+                        // ARCHITECTURAL ERROR: Mixing physical measurements with bare scalars
+                        // This is mathematically invalid unless the scalar represents a multiplier
+                        match operator {
+                            BinaryOperator::Multiply | BinaryOperator::Divide => {
+                                // Scaling operations are valid: 50µm * 2 = 100µm
+                                let result = apply_op_f64(*lv, *r as f64, operator)?;
+                                Ok(Value::Measurement {
+                                    value: result,
+                                    unit: lu.clone(),
+                                })
+                            }
+                            _ => Err(format!(
+                                "Cannot perform {:?} between measurement ({:?}) and dimensionless number ({}). \
+                                 This operation is mathematically invalid. Did you mean to use a measurement unit?",
+                                operator, lu, r
+                            )),
+                        }
+                    }
+                    (Value::Number(l), Value::Measurement { value: rv, unit: ru }) => {
+                        // ARCHITECTURAL ERROR: Same as above, but reversed operands
+                        match operator {
+                            BinaryOperator::Multiply => {
+                                // Scaling is valid: 2 * 50µm = 100µm
+                                let result = apply_op_f64(*l as f64, *rv, operator)?;
+                                Ok(Value::Measurement {
+                                    value: result,
+                                    unit: ru.clone(),
+                                })
+                            }
+                            _ => Err(format!(
+                                "Cannot perform {:?} between dimensionless number ({}) and measurement ({:?}). \
+                                 This operation is mathematically invalid. Did you mean to use a measurement unit?",
+                                operator, l, ru
+                            )),
+                        }
+                    }
+                    (Value::Measurement { value: lv, unit: lu }, Value::Float(r)) => {
+                        // Measurement op Float: treat Float as a multiplier/divisor
+                        match operator {
+                            BinaryOperator::Multiply | BinaryOperator::Divide => {
+                                let result = apply_op_f64(*lv, *r, operator)?;
+                                Ok(Value::Measurement {
+                                    value: result,
+                                    unit: lu.clone(),
+                                })
+                            }
+                            _ => Err(format!(
+                                "Cannot perform {:?} between measurement ({:?}) and dimensionless float ({}). \
+                                 This operation is mathematically invalid. Did you mean to use a measurement unit?",
+                                operator, lu, r
+                            )),
+                        }
+                    }
+                    (Value::Float(l), Value::Measurement { value: rv, unit: ru }) => {
+                        // Float op Measurement: treat Float as a multiplier
+                        match operator {
+                            BinaryOperator::Multiply => {
+                                let result = apply_op_f64(*l, *rv, operator)?;
+                                Ok(Value::Measurement {
+                                    value: result,
+                                    unit: ru.clone(),
+                                })
+                            }
+                            _ => Err(format!(
+                                "Cannot perform {:?} between dimensionless float ({}) and measurement ({:?}). \
+                                 This operation is mathematically invalid. Did you mean to use a measurement unit?",
+                                operator, l, ru
+                            )),
                         }
                     }
                     (Value::Percentage(l), Value::Number(r)) => {
@@ -549,6 +617,11 @@ impl fmt::Display for Expression {
                     super::Edge::Back => "back",
                     super::Edge::MinZ => "min_z",
                     super::Edge::MaxZ => "max_z",
+                    super::Edge::TopLeft => "top_left",
+                    super::Edge::TopRight => "top_right",
+                    super::Edge::BottomLeft => "bottom_left",
+                    super::Edge::BottomRight => "bottom_right",
+                    super::Edge::Center => "center",
                 };
                 write!(f, "{}.{}", anchor.name, edge_str)
             }
@@ -610,7 +683,7 @@ mod eval_tests {
         };
 
         let mut context = FxHashMap::default();
-        context.insert("i".into(), 5);
+        context.insert("i".into(), Value::Number(5));
         assert_eq!(expr.evaluate(&context).unwrap(), Value::Number(30)); // 20 + (5 * 2) = 30
     }
 
