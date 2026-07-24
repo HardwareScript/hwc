@@ -17,6 +17,7 @@ impl Parser {
     pub(super) fn parse_signal_group_definition(
         &mut self,
         collector: &crate::DiagnosticCollector,
+        is_exported: bool,
     ) -> Option<SignalGroupDefinition> {
         let start_pos = self.current_span().start;
 
@@ -256,6 +257,7 @@ impl Parser {
 
         Some(SignalGroupDefinition {
             name,
+            is_exported,
             group_type,
             properties,
             span: Span::new(start_pos, end_pos),

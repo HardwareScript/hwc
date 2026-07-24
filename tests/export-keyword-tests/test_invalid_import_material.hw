@@ -1,0 +1,36 @@
+# test_invalid_import_material.hw
+# ERROR: _InternalCopper is not exported by materials.hw
+
+import * from @std/primitives/units
+import * from @std/primitives/math
+import Aluminum, _InternalCopper from materials  # ERROR: private symbol!
+import Silicon_180nm from foundry_pdk
+
+module SimpleTwoPad:
+  pins: [input A, output B]
+  route A to B
+
+space InvalidMaterialTest implements SimpleTwoPad:
+  dimensions: 500um by 500um by 136um
+  resolution: 100nm
+  origin: bl by b
+  profile: Silicon_180nm
+  
+  nets:
+    A: { classification: signal, potential: 0V, current: 0.1uA }
+    B: { classification: signal, potential: 0V, current: 0.1uA }
+  
+  add plane(_InternalCopper) named PadA on layer: metal1:
+    shape: Rectangle(width: 100um, height: 100um)
+    at: [x: 100um, y: 200um]
+    net: A
+  
+  add plane(Aluminum) named PadB on layer: metal1:
+    shape: Rectangle(width: 100um, height: 100um)
+    at: [x: 300um, y: 200um]
+    net: B
+  
+  route PadA to PadB:
+    width: 20um
+    layer: metal1
+    current_limit_ac: { rms: 0.5uA, peak: 1.0uA }

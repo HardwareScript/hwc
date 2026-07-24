@@ -15,6 +15,7 @@ impl Parser {
     pub(super) fn parse_const(
         &mut self,
         collector: &crate::DiagnosticCollector,
+        is_exported: bool,
     ) -> Option<ConstDefinition> {
         let start = self.current_span().start;
 
@@ -69,6 +70,7 @@ impl Parser {
 
         Some(ConstDefinition {
             name: name.name,
+            is_exported,
             value,
             span: crate::lexer::Span::new(start, end),
         })

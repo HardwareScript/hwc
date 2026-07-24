@@ -23,6 +23,7 @@ impl super::super::Parser {
     pub(in super::super) fn parse_device(
         &mut self,
         collector: &crate::DiagnosticCollector,
+        is_exported: bool,
     ) -> Option<DeviceDefinition> {
         let start_pos = self.current_span().start;
 
@@ -207,6 +208,7 @@ impl super::super::Parser {
 
         Some(DeviceDefinition {
             name,
+            is_exported,
             terminals,
             materials,
             tolerance,

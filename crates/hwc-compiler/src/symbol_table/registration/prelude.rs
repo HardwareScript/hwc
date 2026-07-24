@@ -33,6 +33,7 @@ impl SymbolTable {
         let const_def = ConstDefinition {
             name: name.clone(),
             value,
+            is_exported: false, // Prelude constants are not exported
             span: Span::new(0, 0), // Prelude constants don't have source spans
         };
         self.prelude.constants.insert(name, const_def);

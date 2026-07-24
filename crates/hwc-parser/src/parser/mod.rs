@@ -81,6 +81,7 @@ impl Parser {
         };
 
         let mut imports = Vec::new();
+        let mut re_exports = Vec::new();
         let mut definitions = Vec::new();
 
         // Skip any leading whitespace and comments
@@ -102,13 +103,59 @@ impl Parser {
                 break;
             }
 
-            // v0.1.6: Check for import, type keywords (component.into(), space, etc.), enum, or struct
+            // v0.1.6: Check for import, type keywords (component, space, etc.), enum, or struct
+            // v0.2.0: Check for 'export' at top level (can be re-export or definition)
             if self.check(&crate::lexer::Token::Import) {
                 // eprintln!("[DEBUG] Parsing import statement");
                 match self.parse_import() {
                     Ok(import) => imports.push(import),
                     Err(e) => {
                         collector.report(e);
+                        self.sync_to_next_definition();
+                    }
+                }
+            } else if self.check(&crate::lexer::Token::Export) {
+                // v0.2.0: 'export' can be either:
+                // 1. Re-export: `export SymbolName` (standalone line)
+                // 2. Exported definition: `export material Name:` (definition follows)
+                
+                let export_start = self.current;
+                self.advance(); // consume 'export'
+                
+                // Check what comes after 'export'
+                let is_reexport = if let Some(current) = self.current() {
+                    // Check if this is just an identifier (re-export) vs definition keyword
+                    matches!(current.token, crate::lexer::Token::Identifier(_))
+                        && {
+                            // Peek ahead - if there's no colon next, it's a re-export
+                            let next_idx = self.current + 1;
+                            next_idx >= self.tokens.len() 
+                                || !matches!(self.tokens.get(next_idx).map(|t| &t.token), Some(crate::lexer::Token::Colon))
+                        }
+                } else {
+                    false
+                };
+                
+                if is_reexport {
+                    // This is a re-export: `export SymbolName`
+                    if let Ok(ident) = self.expect_identifier() {
+                        let end_pos = self.previous_span().end;
+                        re_exports.push(ReExport {
+                            symbol: ident,
+                            span: crate::lexer::Span::new(export_start, end_pos),
+                        });
+                    } else {
+                        collector.report(self.error("Expected identifier after 'export' for re-export"));
+                        self.sync_to_next_definition();
+                    }
+                } else {
+                    // This is an exported definition: `export material Name:`, etc.
+                    // Reset position to before 'export' and let parse_definition handle it
+                    self.current = export_start;
+                    
+                    if let Some(def) = self.parse_definition(collector) {
+                        definitions.push(def);
+                    } else {
                         self.sync_to_next_definition();
                     }
                 }
@@ -126,36 +173,18 @@ impl Parser {
                 || self.check(&crate::lexer::Token::SignalGroup)
                 || self.check(&crate::lexer::Token::Shape)
                 || self.check(&crate::lexer::Token::Logic)
+                || self.check(&crate::lexer::Token::Enum)
+                || self.check(&crate::lexer::Token::Struct)
+                || self.check(&crate::lexer::Token::Export)
             {
                 // eprintln!("[DEBUG] Parsing definition: {:?}", self.current().map(|s| &s.token));
-                // Parse definition with error recovery
+                // Parse definition with error recovery (handles export keyword internally)
                 if let Some(def) = self.parse_definition(collector) {
                     // eprintln!("[DEBUG] Definition parsed successfully");
                     definitions.push(def);
                 } else {
                     // eprintln!("[DEBUG] Definition parse failed, syncing to next");
                     self.sync_to_next_definition();
-                }
-            } else if self.check(&crate::lexer::Token::Enum) {
-            } else if self.check(&crate::lexer::Token::Enum) {
-                // eprintln!("[DEBUG] Parsing enum");
-                // Parse enum definition (v0.4.0 logic synthesis)
-                match self.parse_enum() {
-                    Ok(enum_def) => definitions.push(Definition::Enum(enum_def)),
-                    Err(e) => {
-                        collector.report(e);
-                        self.sync_to_next_definition();
-                    }
-                }
-            } else if self.check(&crate::lexer::Token::Struct) {
-                // eprintln!("[DEBUG] Parsing struct");
-                // Parse struct definition (v0.4.0 logic synthesis)
-                match self.parse_struct() {
-                    Ok(struct_def) => definitions.push(Definition::Struct(struct_def)),
-                    Err(e) => {
-                        collector.report(e);
-                        self.sync_to_next_definition();
-                    }
                 }
             } else if let Some(current) = self.current() {
                 // eprintln!("[DEBUG] Checking for pattern/strategy or unrecognized token");
@@ -210,6 +239,7 @@ impl Parser {
 
         Program {
             imports,
+            re_exports,
             definitions,
             span: crate::lexer::Span::new(start_pos, end_pos),
         }

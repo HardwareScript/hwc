@@ -8,6 +8,7 @@ use hwc_parser::{
 
 impl SymbolTable {
     /// Register an imported material alias (in HPM layer)
+    /// v0.2.0: Stores ALL definitions (exported and private) for proper scoped resolution
     pub fn register_import_material_alias(&mut self, def: MaterialAliasDefinition) {
         let name_str = def.name.as_str().to_string();
 
@@ -16,7 +17,7 @@ impl SymbolTable {
             self.hpm.push(super::super::layer::SymbolLayer::new());
         }
 
-        // Add to the current (last) HPM layer
+        // Add to the current (last) HPM layer - stores both exported and private
         self.hpm
             .last_mut()
             .unwrap()
@@ -25,6 +26,7 @@ impl SymbolTable {
     }
 
     /// Register an imported unit definition (in HPM layer)
+    /// v0.2.0: Stores ALL definitions (exported and private) for proper scoped resolution
     pub fn register_import_unit(&mut self, def: UnitDefinition) {
         let symbol = def.symbol.clone();
         if self.hpm.is_empty() {
@@ -34,6 +36,7 @@ impl SymbolTable {
     }
 
     /// Register an imported device definition (in HPM layer)
+    /// v0.2.0: Stores ALL definitions (exported and private) for proper scoped resolution
     pub fn register_import_device(&mut self, def: hwc_parser::DeviceDefinition) {
         let name = def.name.as_str().to_string();
         if self.hpm.is_empty() {
@@ -47,6 +50,7 @@ impl SymbolTable {
     }
 
     /// Register an imported constant (in HPM layer)
+    /// v0.2.0: Stores ALL definitions (exported and private) for proper scoped resolution
     pub fn register_import_constant(&mut self, def: hwc_parser::ConstDefinition) {
         let name = def.name.clone();
         if self.hpm.is_empty() {
@@ -56,6 +60,7 @@ impl SymbolTable {
     }
 
     /// Register an imported shape definition (in HPM layer)
+    /// v0.2.0: Stores ALL definitions (exported and private) for proper scoped resolution
     pub fn register_import_shape(&mut self, def: ShapeDefinition) {
         let name_str = def.name.as_str().to_string();
         if self.hpm.is_empty() {
@@ -72,6 +77,9 @@ impl SymbolTable {
     ///
     /// This is used by the ModuleResolver when processing import statements.
     /// Imported materials go into the HPM layer, not the local layer.
+    /// 
+    /// v0.2.0: Stores ALL definitions (exported and private) for proper scoped resolution.
+    /// Export filtering happens during name resolution, not during registration.
     pub fn register_import_material(&mut self, def: MaterialDefinition) {
         let name_str = def.name.as_str().to_string();
 
@@ -80,7 +88,7 @@ impl SymbolTable {
             self.hpm.push(super::super::layer::SymbolLayer::new());
         }
 
-        // Add to the current (last) HPM layer
+        // Add to the current (last) HPM layer - stores both exported and private
         self.hpm
             .last_mut()
             .unwrap()
@@ -89,6 +97,7 @@ impl SymbolTable {
     }
 
     /// Register an imported profile definition (in HPM layer)
+    /// v0.2.0: Stores ALL definitions (exported and private) for proper scoped resolution
     pub fn register_import_profile(&mut self, def: ProfileDefinition) {
         let name_str = def.name.as_str().to_string();
         if self.hpm.is_empty() {
@@ -104,6 +113,7 @@ impl SymbolTable {
     /// Register an imported component definition (in HPM layer)
     ///
     /// v0.1.6 SEMANTIC BAKING: Also bakes imported components for performance.
+    /// v0.2.0: Stores ALL definitions (exported and private) for proper scoped resolution
     pub fn register_import_component(&mut self, def: ComponentDefinition) {
         let name_str = def.name.as_str().to_string();
         if self.hpm.is_empty() {
@@ -130,6 +140,7 @@ impl SymbolTable {
     }
 
     /// Register an imported module definition (in HPM layer)
+    /// v0.2.0: Stores ALL definitions (exported and private) for proper scoped resolution
     pub fn register_import_module(&mut self, def: ModuleDefinition) {
         let name_str = def.name.as_str().to_string();
         if self.hpm.is_empty() {
@@ -143,6 +154,7 @@ impl SymbolTable {
     }
 
     /// Register an imported mechanical definition (in HPM layer)
+    /// v0.2.0: Stores ALL definitions (exported and private) for proper scoped resolution
     pub fn register_import_mechanical(&mut self, def: MechanicalDefinition) {
         let name_str = def.name.as_str().to_string();
         if self.hpm.is_empty() {
@@ -156,6 +168,7 @@ impl SymbolTable {
     }
 
     /// Register an imported interface definition (in HPM layer)
+    /// v0.2.0: Stores ALL definitions (exported and private) for proper scoped resolution
     pub fn register_import_interface(&mut self, def: InterfaceDefinition) {
         let name_str = def.name.as_str().to_string();
         if self.hpm.is_empty() {
@@ -169,6 +182,7 @@ impl SymbolTable {
     }
 
     /// Register an imported signal group definition (in HPM layer)
+    /// v0.2.0: Stores ALL definitions (exported and private) for proper scoped resolution
     pub fn register_import_signal_group(&mut self, def: SignalGroupDefinition) {
         let name_str = def.name.as_str().to_string();
         if self.hpm.is_empty() {
@@ -182,6 +196,7 @@ impl SymbolTable {
     }
 
     /// Register an imported pattern definition (in HPM layer)
+    /// v0.2.0: Stores ALL definitions (exported and private) for proper scoped resolution
     pub fn register_import_pattern(&mut self, def: PatternDefinition) {
         let name_str = def.name.as_str().to_string();
         if self.hpm.is_empty() {
@@ -195,6 +210,7 @@ impl SymbolTable {
     }
 
     /// Register an imported strategy definition (in HPM layer)
+    /// v0.2.0: Stores ALL definitions (exported and private) for proper scoped resolution
     pub fn register_import_strategy(&mut self, def: StrategyDefinition) {
         let name_str = def.name.as_str().to_string();
         if self.hpm.is_empty() {
@@ -208,6 +224,7 @@ impl SymbolTable {
     }
 
     /// Register an imported logic block definition (in HPM layer)
+    /// v0.2.0: Stores ALL definitions (exported and private) for proper scoped resolution
     pub fn register_import_logic(&mut self, def: LogicDefinition) {
         let name_str = def.name.as_str().to_string();
         if self.hpm.is_empty() {
@@ -221,6 +238,7 @@ impl SymbolTable {
     }
 
     /// Register an imported enum definition (in HPM layer)
+    /// v0.2.0: Stores ALL definitions (exported and private) for proper scoped resolution
     pub fn register_import_enum(&mut self, def: EnumDefinition) {
         let name_str = def.name.as_str().to_string();
         if self.hpm.is_empty() {
@@ -234,6 +252,7 @@ impl SymbolTable {
     }
 
     /// Register an imported struct definition (in HPM layer)
+    /// v0.2.0: Stores ALL definitions (exported and private) for proper scoped resolution
     pub fn register_import_struct(&mut self, def: StructDefinition) {
         let name_str = def.name.as_str().to_string();
         if self.hpm.is_empty() {
@@ -247,6 +266,7 @@ impl SymbolTable {
     }
 
     /// Register an imported test definition (in HPM layer)
+    /// v0.2.0: Stores ALL definitions (exported and private) for proper scoped resolution
     pub fn register_import_test(&mut self, def: TestDefinition) {
         let name_str = def.name.as_str().to_string();
         if self.hpm.is_empty() {

@@ -6,9 +6,11 @@ use super::common::{Coordinate, Dimensions, Identifier, Measurement};
 use crate::lexer::Span;
 
 /// Mechanical definition: `mechanical Name:` (v0.1.6)
+/// v0.2.0: Supports optional `export` keyword for visibility control
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MechanicalDefinition {
     pub name: Identifier,
+    pub is_exported: bool, // v0.2.0: Access control
     pub dimensions: Option<Dimensions>,
     pub mounting_holes: Vec<MountingHole>,
     pub keepouts: Vec<Keepout>,

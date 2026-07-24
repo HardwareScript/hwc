@@ -13,6 +13,7 @@ impl super::super::Parser {
     pub(in super::super) fn parse_mechanical(
         &mut self,
         collector: &crate::DiagnosticCollector,
+        is_exported: bool,
     ) -> Option<MechanicalDefinition> {
         let start_pos = self.current_span().start;
 
@@ -122,6 +123,7 @@ impl super::super::Parser {
 
         Some(MechanicalDefinition {
             name,
+            is_exported,
             dimensions,
             mounting_holes,
             keepouts,

@@ -12,6 +12,8 @@ use rustc_hash::FxHashMap;
 
 /// Signal group definition (v0.1.6)
 ///
+/// v0.2.0: Supports optional `export` keyword for visibility control
+///
 /// Example:
 /// ```hw
 /// signal_group USB_Data:
@@ -22,6 +24,7 @@ use rustc_hash::FxHashMap;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SignalGroupDefinition {
     pub name: Identifier,
+    pub is_exported: bool, // v0.2.0: Access control
     pub group_type: SignalGroupType,
     pub properties: FxHashMap<CompactString, SignalGroupProperty>,
     pub span: Span,

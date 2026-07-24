@@ -13,6 +13,7 @@ impl super::super::Parser {
     pub(in super::super) fn parse_interface(
         &mut self,
         collector: &crate::DiagnosticCollector,
+        is_exported: bool,
     ) -> Option<InterfaceDefinition> {
         let start_pos = self.current_span().start;
 
@@ -147,6 +148,7 @@ impl super::super::Parser {
 
         Some(InterfaceDefinition {
             name,
+            is_exported,
             target,
             bindings,
             protocols,

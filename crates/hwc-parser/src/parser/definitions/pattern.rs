@@ -77,6 +77,7 @@ impl super::super::Parser {
 
         Ok(PatternDefinition {
             name,
+            is_exported: false,
             params,
             strategy_goal,
             steps,
@@ -281,6 +282,7 @@ impl super::super::Parser {
 
         Ok(StrategyDefinition {
             name,
+            is_exported: false,
             target,
             tolerance,
             pattern,

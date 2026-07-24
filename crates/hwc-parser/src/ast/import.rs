@@ -1,4 +1,4 @@
-//! Import statement types
+//! Import and re-export statement types
 
 use serde::{Deserialize, Serialize};
 
@@ -17,6 +17,25 @@ pub struct Import {
     pub targets: ImportTargets,
     pub path: ModulePath,
     pub alias: Option<Identifier>,
+    pub span: Span,
+}
+
+/// Re-export statement: `export X` (v0.2.0 Explicit Re-Exports)
+///
+/// Rust-style explicit re-export of imported symbols.
+/// Makes an imported symbol available to downstream importers.
+///
+/// Example:
+/// ```hw
+/// import PublicSilicon, Aluminum from materials
+/// 
+/// # Re-export these materials so they're part of this file's public API
+/// export PublicSilicon
+/// export Aluminum
+/// ```
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ReExport {
+    pub symbol: Identifier,
     pub span: Span,
 }
 

@@ -21,9 +21,11 @@ pub struct LetBinding {
 }
 
 /// Space definition: `space Name:` (v0.1.6)
+/// v0.2.0: Supports optional `export` keyword for visibility control
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SpaceDefinition {
     pub name: crate::ast::common::Identifier,
+    pub is_exported: bool, // v0.2.0: Access control
     pub implements_module: Option<CompactString>,
     pub dimensions: Option<crate::ast::common::Dimensions>,
     pub resolution: Option<crate::ast::common::Measurement>,

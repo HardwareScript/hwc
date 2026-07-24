@@ -1,0 +1,52 @@
+# test_valid_import.hw
+# Valid design - uses only exported symbols and static region boundaries
+
+import * from @std/primitives/units
+import * from @std/primitives/math
+import PublicCopper, PublicPad from materials
+
+# v0.2.0: EXPLICIT IMPORTS
+# Must import BOTH the profile AND the re-exported materials it uses
+import Silicon_180nm, Aluminum from foundry_pdk
+
+module SimpleTwoPad:
+  pins: [input A, output B]
+  route A to B
+
+space ValidDesign implements SimpleTwoPad:
+  dimensions: 500um by 500um by 136um
+  resolution: 100nm
+  origin: bl by b
+  profile: Silicon_180nm  # Profile uses Aluminum, which we explicitly imported
+  
+  nets:
+    A: { classification: signal, potential: 0V, current: 0.1uA }
+    B: { classification: signal, potential: 0V, current: 0.1uA }
+  
+  let pad_w = 100um
+  let pad_h = 100um
+  
+  region RegionA:
+    at: [x: 100um, y: 200um, z: 0nm]
+    boundary: [width: pad_w, height: pad_h]
+  
+  region RegionB:
+    at: [x: 300um, y: 200um, z: 0nm]
+    boundary: [width: pad_w, height: pad_h]
+  
+  # Use the materials we explicitly imported
+  add plane(Aluminum) named PadA inside: RegionA on layer: metal1:
+    shape: PublicPad(w: pad_w, h: pad_h)
+    at: RegionA.bottom_left
+    net: A
+  
+  add plane(PublicCopper) named PadB inside: RegionB on layer: metal1:
+    shape: PublicPad(w: pad_w, h: pad_h)
+    at: RegionB.bottom_left
+    net: B
+  
+  route PadA to PadB:
+    width: 20um
+    layer: metal1
+    intent: Signal
+    current_limit_ac: { rms: 0.5uA, peak: 1.0uA }

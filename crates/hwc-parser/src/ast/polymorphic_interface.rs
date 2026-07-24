@@ -43,12 +43,17 @@ use crate::lexer::Span;
 
 /// Polymorphic interface definition: `interface InterfaceName:` (v0.1.6)
 ///
+/// v0.2.0: Supports optional `export` keyword for visibility control
+///
 /// Specifies required pins and their types for duck-typed compatibility.
 /// Components that implement this interface must have all required pins.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PolymorphicInterfaceDefinition {
     /// Interface name (e.g., I2S_DAC, SPI_Flash, UART_Device)
     pub name: Identifier,
+
+    /// v0.2.0: Access control
+    pub is_exported: bool,
 
     /// Description of the interface (optional)
     pub description: Option<CompactString>,

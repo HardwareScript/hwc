@@ -8,9 +8,11 @@ use crate::lexer::Span;
 use compact_str::CompactString;
 
 /// Pattern definition: `pattern Name (params):` (v0.1.6)
+/// v0.2.0: Supports optional `export` keyword for visibility control
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PatternDefinition {
     pub name: Identifier,
+    pub is_exported: bool, // v0.2.0: Access control
     pub params: Vec<PatternParameter>,
     pub strategy_goal: Option<CompactString>,
     pub steps: Vec<PatternStep>,
@@ -42,9 +44,11 @@ pub struct PatternStep {
 }
 
 /// Strategy definition: `strategy Name:` (v0.1.6)
+/// v0.2.0: Supports optional `export` keyword for visibility control
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct StrategyDefinition {
     pub name: Identifier,
+    pub is_exported: bool, // v0.2.0: Access control
     pub target: Option<StrategyTarget>,
     pub tolerance: Option<Measurement>,
     pub pattern: Option<PatternInstantiation>,

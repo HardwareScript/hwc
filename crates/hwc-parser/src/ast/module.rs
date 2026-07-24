@@ -13,11 +13,14 @@ use compact_str::CompactString;
 
 /// Module definition: `module Name:` (v0.1.6 + v0.1.7 Physical Macros)
 ///
+/// v0.2.0: Supports optional `export` keyword for visibility control
+///
 /// Modules now support intrinsic physical layout (relative only) for Physical Macros.
 /// This cures the "Physical Pile" where logical modules instantiated sub-components at [0,0,0].
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ModuleDefinition {
     pub name: Identifier,
+    pub is_exported: bool, // v0.2.0: Access control
     pub pins: Vec<PinDeclaration>,
     pub statements: Vec<ModuleStatement>,
     pub logic: Option<super::logic::LogicBlock>, // NEW: Logic synthesis support (v0.3.0)

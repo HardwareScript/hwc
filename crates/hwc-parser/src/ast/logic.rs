@@ -12,17 +12,21 @@ use super::common::Identifier;
 use super::Span;
 
 /// Logic definition: `logic name:` (v0.1.6)
+/// v0.2.0: Supports optional `export` keyword for visibility control
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LogicDefinition {
     pub name: Identifier,
+    pub is_exported: bool, // v0.2.0: Access control
     pub logic_block: LogicBlock,
     pub span: Span,
 }
 
 /// Enum definition: `enum Name: Value1, Value2 = 0x1` (v0.1.6)
+/// v0.2.0: Supports optional `export` keyword for visibility control
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EnumDefinition {
     pub name: Identifier,
+    pub is_exported: bool, // v0.2.0: Access control
     pub variants: Vec<EnumVariant>,
     pub span: Span,
 }
@@ -36,9 +40,11 @@ pub struct EnumVariant {
 }
 
 /// Struct definition: `struct Name: field1[8], field2[4]` (v0.1.6)
+/// v0.2.0: Supports optional `export` keyword for visibility control
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct StructDefinition {
     pub name: Identifier,
+    pub is_exported: bool, // v0.2.0: Access control
     pub fields: Vec<StructField>,
     pub span: Span,
 }

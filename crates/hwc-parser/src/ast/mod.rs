@@ -53,9 +53,12 @@ pub use crate::lexer::Span;
 use serde::{Deserialize, Serialize};
 
 /// Root AST node representing a complete Hardware Script file (v0.1.4)
+///
+/// v0.2.0: Adds re_exports for explicit symbol re-exporting (Rust-style pub use)
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Program {
     pub imports: Vec<Import>,
+    pub re_exports: Vec<ReExport>,
     pub definitions: Vec<Definition>,
     pub span: Span,
 }

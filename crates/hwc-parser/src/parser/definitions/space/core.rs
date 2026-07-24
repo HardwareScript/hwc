@@ -8,12 +8,13 @@ impl crate::parser::Parser {
     pub(in crate::parser) fn parse_space(
         &mut self,
         collector: &crate::DiagnosticCollector,
+        is_exported: bool,
     ) -> Option<SpaceDefinition> {
         // Enter space context
         self.error_context
             .enter_context(crate::parser::ParsingContext::SpaceDefinition);
 
-        let result = self.parse_space_impl(collector);
+        let result = self.parse_space_impl(collector, is_exported);
 
         // Exit context
         self.error_context.exit_context();
@@ -25,6 +26,7 @@ impl crate::parser::Parser {
     fn parse_space_impl(
         &mut self,
         collector: &crate::DiagnosticCollector,
+        is_exported: bool,
     ) -> Option<SpaceDefinition> {
         let start_pos = self.current_span().start;
 
@@ -365,6 +367,7 @@ impl crate::parser::Parser {
 
         Some(SpaceDefinition {
             name,
+            is_exported,
             implements_module: implements_module.map(|s: String| s.into()),
             dimensions,
             resolution,

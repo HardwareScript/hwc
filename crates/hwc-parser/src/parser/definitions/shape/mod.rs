@@ -23,6 +23,7 @@ impl crate::parser::Parser {
     pub(super) fn parse_shape(
         &mut self,
         collector: &crate::DiagnosticCollector,
+        is_exported: bool,
     ) -> Option<ShapeDefinition> {
         let start_pos = self.current_span().start;
 
@@ -225,6 +226,7 @@ impl crate::parser::Parser {
 
         Some(ShapeDefinition {
             name,
+            is_exported,
             parameters,
             points,
             generator,

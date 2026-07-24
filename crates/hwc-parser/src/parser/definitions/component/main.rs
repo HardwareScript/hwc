@@ -10,6 +10,7 @@ impl super::super::super::Parser {
     pub(in super::super::super) fn parse_component_def(
         &mut self,
         collector: &crate::DiagnosticCollector,
+        is_exported: bool,
     ) -> Option<ComponentDefinition> {
         let start_pos = self.current_span().start;
 
@@ -331,6 +332,7 @@ impl super::super::super::Parser {
 
         Some(ComponentDefinition {
             name,
+            is_exported,
             parameters,
             metadata,
             pins,

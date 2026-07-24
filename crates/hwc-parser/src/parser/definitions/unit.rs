@@ -90,6 +90,7 @@ impl super::super::Parser {
     pub(in super::super) fn parse_unit(
         &mut self,
         collector: &crate::DiagnosticCollector,
+        is_exported: bool,
     ) -> Option<UnitDefinition> {
         let start_pos = self.current_span().start;
 
@@ -296,6 +297,7 @@ impl super::super::Parser {
 
         Some(UnitDefinition {
             name,
+            is_exported,
             symbol: symbol
                 .map(|s: String| s.into())
                 .unwrap_or_else(|| "".into()),

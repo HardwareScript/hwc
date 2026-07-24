@@ -10,6 +10,8 @@ use rustc_hash::FxHashMap;
 
 /// Device definition: `device NMOS:` (v0.1.6)
 ///
+/// v0.2.0: Supports optional `export` keyword for visibility control
+///
 /// Defines the physical contract for a foundry primitive (transistor, diode, etc.)
 /// Specifies required terminals and expected materials for each terminal.
 ///
@@ -18,6 +20,7 @@ use rustc_hash::FxHashMap;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DeviceDefinition {
     pub name: Identifier,
+    pub is_exported: bool, // v0.2.0: Access control
     pub terminals: SmallVec<[CompactString; 4]>,
     /// Terminal materials: terminal_name -> allowed material(s)
     /// Can be single material or list of alternatives

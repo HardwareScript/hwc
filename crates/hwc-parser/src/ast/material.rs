@@ -7,9 +7,11 @@ use crate::lexer::Span;
 use compact_str::CompactString;
 
 /// Material definition: `material Name:` (v0.1.6)
+/// v0.2.0: Supports optional `export` keyword for visibility control
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MaterialDefinition {
     pub name: Identifier,
+    pub is_exported: bool, // v0.2.0: Access control
     pub category: MaterialCategory,
     pub process: ManufacturingProcess, // v0.1.7: Physical process behavior
     pub symbol: Option<CompactString>,
@@ -46,9 +48,11 @@ pub enum ManufacturingProcess {
 }
 
 /// Material alias definition: `material_alias Name: Target` (v0.1.6)
+/// v0.2.0: Supports optional `export` keyword for visibility control
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MaterialAliasDefinition {
     pub name: Identifier,
+    pub is_exported: bool, // v0.2.0: Access control
     pub target: Identifier,
     pub span: Span,
 }

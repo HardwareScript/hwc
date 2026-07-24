@@ -7,9 +7,11 @@ use crate::lexer::Span;
 use compact_str::CompactString;
 
 /// Unit definition from standard library (units.hw) - v0.1.6
+/// v0.2.0: Supports optional `export` keyword for visibility control
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct UnitDefinition {
     pub name: Identifier,
+    pub is_exported: bool, // v0.2.0: Access control
     pub symbol: CompactString,
     pub aliases: Vec<CompactString>,
     pub base_si: Option<CompactString>,

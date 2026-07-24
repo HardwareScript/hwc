@@ -10,9 +10,11 @@ use compact_str::CompactString;
 use rustc_hash::FxHashMap;
 
 /// Component definition: `component Name:` (v0.1.6)
+/// v0.2.0: Supports optional `export` keyword for visibility control
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ComponentDefinition {
     pub name: Identifier,
+    pub is_exported: bool, // v0.2.0: Access control
     pub parameters: SmallVec<[ComponentParameter; 4]>,
     pub metadata: Option<ComponentMetadata>,
     pub pins: SmallVec<[CompactString; 4]>,

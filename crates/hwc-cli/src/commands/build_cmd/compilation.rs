@@ -138,9 +138,20 @@ fn build_symbol_table(
 
     // Process imports
     for import in &ast.imports {
-        resolver
-            .resolve_import(import, input, &mut symbol_table)
-            .map_err(|e| miette::miette!("Import resolution failed: {}", e))?;
+        if let Err(e) = resolver.resolve_import(import, input, &mut symbol_table) {
+            // Add source code for better error display
+            let e_with_src = e.with_source(
+                collector.source.to_string(),
+                collector.file_name.to_string()
+            );
+            collector.report(e_with_src);
+        }
+    }
+
+    // Check for import errors before continuing
+    if collector.has_errors() {
+        collector.print_all();
+        return Err(miette::miette!("Import resolution failed"));
     }
 
     // Register local definitions

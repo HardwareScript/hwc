@@ -22,6 +22,13 @@ impl SymbolTable {
     /// 1. If `full_name` contains a dot (e.g., "Metals.Copper"), resolve via namespace
     /// 2. Otherwise, use regular authority stack resolution (Local > HPM > Prelude > Core)
     ///
+    /// # v0.2.0: Export Filtering
+    /// - HPM layers contain ALL definitions (exported AND private) from imported files
+    /// - When resolving from HPM layers, we ONLY return definitions that are exported
+    /// - This allows private definitions to be accessible for scoped resolution within
+    ///   their home module (e.g., a profile resolving its private material)
+    /// - Local, Prelude, and Core layers don't have export restrictions (always accessible)
+    ///
     /// # Returns:
     /// A reference to the definition, avoiding clones and maintaining zero-cost abstraction
     ///
@@ -34,36 +41,118 @@ impl SymbolTable {
         &'a self,
         full_name: &str,
         lookup_fn: impl Fn(&'a SymbolLayer, &str) -> Option<&'a T>,
+        is_exported_fn: impl Fn(&T) -> bool,
     ) -> Option<&'a T> {
+        eprintln!("[RESOLVE_DEBUG] Looking for symbol: {}", full_name);
+        eprintln!("[RESOLVE_DEBUG] HPM layers count: {}", self.hpm.len());
+        
         // Check for namespaced lookup first (e.g., "Metals.Copper")
         if let Some((layer_index, identifier)) = self.resolve_namespace(full_name) {
+            eprintln!("[RESOLVE_DEBUG] Namespaced lookup detected: layer={}, identifier={}", layer_index, identifier);
             // NAMESPACED LOOKUP: Go straight to the aliased HPM layer
-            return self
-                .hpm
-                .get(layer_index)
-                .and_then(|layer| lookup_fn(layer, identifier));
+            // v0.2.0: For HPM layers, filter by export status
+            return self.hpm.get(layer_index).and_then(|layer| {
+                lookup_fn(layer, identifier).filter(|def| is_exported_fn(def))
+            });
         }
 
         // REGULAR LOOKUP: Search local -> hpm (rev) -> prelude -> core
-        // Local layer (highest priority)
+        // Local layer (highest priority) - no export filtering needed
         if let Some(def) = lookup_fn(&self.local, full_name) {
+            eprintln!("[RESOLVE_DEBUG] Found in local layer");
             return Some(def);
         }
 
         // HPM layers in reverse order (last import wins)
-        for layer in self.hpm.iter().rev() {
+        // v0.2.0: ONLY return exported definitions from HPM layers
+        for (i, layer) in self.hpm.iter().rev().enumerate() {
             if let Some(def) = lookup_fn(layer, full_name) {
-                return Some(def);
+                let is_exported = is_exported_fn(def);
+                eprintln!("[RESOLVE_DEBUG] Found in HPM layer {} (reversed index), is_exported={}", i, is_exported);
+                if is_exported {
+                    return Some(def);
+                } else {
+                    eprintln!("[RESOLVE_DEBUG] Symbol found but NOT exported, skipping");
+                }
             }
         }
 
-        // Prelude layer
+        // Prelude layer - no export filtering needed
         if let Some(def) = lookup_fn(&self.prelude, full_name) {
+            eprintln!("[RESOLVE_DEBUG] Found in prelude layer");
             return Some(def);
         }
 
-        // Core layer (lowest priority)
-        lookup_fn(&self.core, full_name)
+        // Core layer (lowest priority) - no export filtering needed
+        let result = lookup_fn(&self.core, full_name);
+        if result.is_some() {
+            eprintln!("[RESOLVE_DEBUG] Found in core layer");
+        } else {
+            eprintln!("[RESOLVE_DEBUG] NOT FOUND in any layer");
+        }
+        result
+    }
+
+    /// Resolve a material within the same HPM layer as a given profile (v0.2.0)
+    ///
+    /// **Critical for Export Keyword Feature:**
+    /// When a profile references materials in its stackup (e.g., `material: _InternalSilicon`),
+    /// those materials should be resolvable even if they're private, AS LONG AS they're defined
+    /// in the same file as the profile.
+    ///
+    /// This method finds which HPM layer contains the given profile, then searches ONLY that
+    /// layer for the material WITHOUT export filtering. This allows exported profiles to use
+    /// private materials from their home module.
+    ///
+    /// # Search order (within the profile's home layer):
+    /// 1. Look for direct material definition
+    /// 2. If not found, check material aliases
+    /// 3. If still not found, fall back to regular cross-layer resolution
+    ///
+    /// # Example:
+    /// ```hw
+    /// // File: pdk_library.hw
+    /// material _InternalSilicon: ...  // Private
+    /// export profile PublicPDK:
+    ///     stackup:
+    ///         layer l1: material: _InternalSilicon  // Should resolve!
+    /// ```
+    pub fn resolve_material_in_profile_context(
+        &self,
+        profile_name: &str,
+        material_name: &str,
+    ) -> Result<&MaterialDefinition, SymbolError> {
+        // First, find which layer contains this profile
+        let profile_layer_index = self
+            .hpm
+            .iter()
+            .enumerate()
+            .rev() // Search in reverse (last import wins)
+            .find(|(_idx, layer)| layer.profiles.contains_key(profile_name))
+            .map(|(idx, _)| idx);
+
+        // If profile is in an HPM layer, try to resolve material in that same layer first
+        if let Some(layer_idx) = profile_layer_index {
+            if let Some(layer) = self.hpm.get(layer_idx) {
+                // Try direct material lookup (NO export filtering - same file context)
+                if let Some(mat) = layer.materials.get(material_name) {
+                    return Ok(mat);
+                }
+
+                // Try material alias lookup (NO export filtering)
+                if let Some(alias) = layer.material_aliases.get(material_name) {
+                    let target_name = alias.target.as_str();
+                    // Recursively resolve the alias target within the same layer
+                    if let Some(mat) = layer.materials.get(target_name) {
+                        return Ok(mat);
+                    }
+                }
+            }
+        }
+
+        // Profile not found in HPM layers, or material not in profile's home layer
+        // Fall back to regular cross-layer resolution (with export filtering)
+        self.get_material(material_name)
     }
 
     /// Get a material definition by name (searches all layers: Local > HPM > Prelude > Core)
@@ -71,6 +160,8 @@ impl SymbolTable {
     ///
     /// v0.1.6: Supports material aliases (e.g. "M1" -> "Copper").
     /// Alias resolution is recursive and detects circular dependencies.
+    /// 
+    /// v0.2.0: Only returns exported materials from HPM layers
     pub fn get_material(&self, name: &str) -> Result<&MaterialDefinition, SymbolError> {
         let mut current_name = name;
         let mut visited = rustc_hash::FxHashSet::default();
@@ -79,16 +170,20 @@ impl SymbolTable {
         // Recursive alias resolution
         loop {
             // Try to find as a material first
-            if let Some(mat) =
-                self.resolve_namespaced_symbol(current_name, |layer, n| layer.materials.get(n))
-            {
+            if let Some(mat) = self.resolve_namespaced_symbol(
+                current_name,
+                |layer, n| layer.materials.get(n),
+                |mat| mat.is_exported,
+            ) {
                 return Ok(mat);
             }
 
             // If not a material, check if it's an alias
-            if let Some(alias) = self
-                .resolve_namespaced_symbol(current_name, |layer, n| layer.material_aliases.get(n))
-            {
+            if let Some(alias) = self.resolve_namespaced_symbol(
+                current_name,
+                |layer, n| layer.material_aliases.get(n),
+                |alias| alias.is_exported,
+            ) {
                 let next_name = alias.target.as_str();
 
                 // Detect circular aliases
@@ -124,86 +219,146 @@ impl SymbolTable {
 
     /// Get a profile definition by name (searches all layers: Local > HPM > Prelude > Core)
     /// Supports namespaced lookups: "Foundry.TSMC_180nm"
+    /// v0.2.0: Only returns exported profiles from HPM layers
     pub fn get_profile(&self, name: &str) -> Result<&ProfileDefinition, SymbolError> {
-        self.resolve_namespaced_symbol(name, |layer, n| layer.profiles.get(n))
-            .ok_or_else(|| SymbolError::undefined(name.to_string().into(), "profile", None))
+        self.resolve_namespaced_symbol(
+            name,
+            |layer, n| layer.profiles.get(n),
+            |prof| prof.is_exported,
+        )
+        .ok_or_else(|| SymbolError::undefined(name.to_string().into(), "profile", None))
     }
 
     /// Get a component definition by name (searches all layers: Local > HPM > Prelude > Core)
     /// Supports namespaced lookups: "Parts.MCU"
+    /// v0.2.0: Only returns exported components from HPM layers
     pub fn get_component(&self, name: &str) -> Result<&ComponentDefinition, SymbolError> {
-        self.resolve_namespaced_symbol(name, |layer, n| layer.components.get(n))
-            .ok_or_else(|| SymbolError::undefined(name.to_string().into(), "component", None))
+        self.resolve_namespaced_symbol(
+            name,
+            |layer, n| layer.components.get(n),
+            |comp| comp.is_exported,
+        )
+        .ok_or_else(|| SymbolError::undefined(name.to_string().into(), "component", None))
     }
 
     /// Get a module definition by name (searches all layers: Local > HPM > Prelude > Core)
     /// Supports namespaced lookups: "Logic.Adder64"
+    /// v0.2.0: Only returns exported modules from HPM layers
     pub fn get_module(&self, name: &str) -> Result<&ModuleDefinition, SymbolError> {
-        self.resolve_namespaced_symbol(name, |layer, n| layer.modules.get(n))
-            .ok_or_else(|| SymbolError::undefined(name.to_string().into(), "module", None))
+        self.resolve_namespaced_symbol(
+            name,
+            |layer, n| layer.modules.get(n),
+            |mod_def| mod_def.is_exported,
+        )
+        .ok_or_else(|| SymbolError::undefined(name.to_string().into(), "module", None))
     }
 
     /// Get a mechanical definition by name (searches all layers: Local > HPM > Prelude > Core)
     /// Supports namespaced lookups: "Enclosures.StandardCase"
+    /// v0.2.0: Only returns exported mechanicals from HPM layers
     pub fn get_mechanical(&self, name: &str) -> Result<&MechanicalDefinition, SymbolError> {
-        self.resolve_namespaced_symbol(name, |layer, n| layer.mechanicals.get(n))
-            .ok_or_else(|| SymbolError::undefined(name.to_string().into(), "mechanical", None))
+        self.resolve_namespaced_symbol(
+            name,
+            |layer, n| layer.mechanicals.get(n),
+            |mech| mech.is_exported,
+        )
+        .ok_or_else(|| SymbolError::undefined(name.to_string().into(), "mechanical", None))
     }
 
     /// Get an interface definition by name (searches all layers: Local > HPM > Prelude > Core)
     /// Supports namespaced lookups: "Protocols.SPI"
+    /// v0.2.0: Only returns exported interfaces from HPM layers
     pub fn get_interface(&self, name: &str) -> Result<&InterfaceDefinition, SymbolError> {
-        self.resolve_namespaced_symbol(name, |layer, n| layer.interfaces.get(n))
-            .ok_or_else(|| SymbolError::undefined(name.to_string().into(), "interface", None))
+        self.resolve_namespaced_symbol(
+            name,
+            |layer, n| layer.interfaces.get(n),
+            |iface| iface.is_exported,
+        )
+        .ok_or_else(|| SymbolError::undefined(name.to_string().into(), "interface", None))
     }
 
     /// Get a test definition by name (searches all layers: Local > HPM > Prelude > Core)
     /// Supports namespaced lookups: "TestSuites.UnitTests"
+    /// v0.2.0: Only returns exported tests from HPM layers
     pub fn get_test(&self, name: &str) -> Result<&TestDefinition, SymbolError> {
-        self.resolve_namespaced_symbol(name, |layer, n| layer.tests.get(n))
-            .ok_or_else(|| SymbolError::undefined(name.to_string().into(), "test", None))
+        self.resolve_namespaced_symbol(
+            name,
+            |layer, n| layer.tests.get(n),
+            |test| test.is_exported,
+        )
+        .ok_or_else(|| SymbolError::undefined(name.to_string().into(), "test", None))
     }
 
     /// Get a signal group definition by name (searches all layers: Local > HPM > Prelude > Core)
     /// Supports namespaced lookups: "Buses.DataBus"
+    /// v0.2.0: Only returns exported signal groups from HPM layers
     pub fn get_signal_group(&self, name: &str) -> Result<&SignalGroupDefinition, SymbolError> {
-        self.resolve_namespaced_symbol(name, |layer, n| layer.signal_groups.get(n))
-            .ok_or_else(|| SymbolError::undefined(name.to_string().into(), "signal_group", None))
+        self.resolve_namespaced_symbol(
+            name,
+            |layer, n| layer.signal_groups.get(n),
+            |sg| sg.is_exported,
+        )
+        .ok_or_else(|| SymbolError::undefined(name.to_string().into(), "signal_group", None))
     }
 
     /// Get a pattern definition by name (searches all layers: Local > HPM > Prelude > Core)
     /// Supports namespaced lookups: "Layouts.GridPattern"
+    /// v0.2.0: Only returns exported patterns from HPM layers
     pub fn get_pattern(&self, name: &str) -> Result<&PatternDefinition, SymbolError> {
-        self.resolve_namespaced_symbol(name, |layer, n| layer.patterns.get(n))
-            .ok_or_else(|| SymbolError::undefined(name.to_string().into(), "pattern", None))
+        self.resolve_namespaced_symbol(
+            name,
+            |layer, n| layer.patterns.get(n),
+            |pat| pat.is_exported,
+        )
+        .ok_or_else(|| SymbolError::undefined(name.to_string().into(), "pattern", None))
     }
 
     /// Get a strategy definition by name (searches all layers: Local > HPM > Prelude > Core)
     /// Supports namespaced lookups: "Routing.ManhattanStrategy"
+    /// v0.2.0: Only returns exported strategies from HPM layers
     pub fn get_strategy(&self, name: &str) -> Result<&StrategyDefinition, SymbolError> {
-        self.resolve_namespaced_symbol(name, |layer, n| layer.strategies.get(n))
-            .ok_or_else(|| SymbolError::undefined(name.to_string().into(), "strategy", None))
+        self.resolve_namespaced_symbol(
+            name,
+            |layer, n| layer.strategies.get(n),
+            |strat| strat.is_exported,
+        )
+        .ok_or_else(|| SymbolError::undefined(name.to_string().into(), "strategy", None))
     }
 
     /// Get a logic block definition by name (searches all layers: Local > HPM > Prelude > Core)
     /// Supports namespaced lookups: "CPU.ALU"
+    /// v0.2.0: Only returns exported logic blocks from HPM layers
     pub fn get_logic(&self, name: &str) -> Result<&LogicDefinition, SymbolError> {
-        self.resolve_namespaced_symbol(name, |layer, n| layer.logic_blocks.get(n))
-            .ok_or_else(|| SymbolError::undefined(name.to_string().into(), "logic", None))
+        self.resolve_namespaced_symbol(
+            name,
+            |layer, n| layer.logic_blocks.get(n),
+            |logic| logic.is_exported,
+        )
+        .ok_or_else(|| SymbolError::undefined(name.to_string().into(), "logic", None))
     }
 
     /// Get an enum definition by name (searches all layers: Local > HPM > Prelude > Core)
     /// Supports namespaced lookups: "Types.State"
+    /// v0.2.0: Only returns exported enums from HPM layers
     pub fn get_enum(&self, name: &str) -> Result<&EnumDefinition, SymbolError> {
-        self.resolve_namespaced_symbol(name, |layer, n| layer.enums.get(n))
-            .ok_or_else(|| SymbolError::undefined(name.to_string().into(), "enum", None))
+        self.resolve_namespaced_symbol(
+            name,
+            |layer, n| layer.enums.get(n),
+            |enum_def| enum_def.is_exported,
+        )
+        .ok_or_else(|| SymbolError::undefined(name.to_string().into(), "enum", None))
     }
 
     /// Get a struct definition by name (searches all layers: Local > HPM > Prelude > Core)
     /// Supports namespaced lookups: "CPU.Instruction"
+    /// v0.2.0: Only returns exported structs from HPM layers
     pub fn get_struct(&self, name: &str) -> Result<&StructDefinition, SymbolError> {
-        self.resolve_namespaced_symbol(name, |layer, n| layer.structs.get(n))
-            .ok_or_else(|| SymbolError::undefined(name.to_string().into(), "struct", None))
+        self.resolve_namespaced_symbol(
+            name,
+            |layer, n| layer.structs.get(n),
+            |struct_def| struct_def.is_exported,
+        )
+        .ok_or_else(|| SymbolError::undefined(name.to_string().into(), "struct", None))
     }
 
     /// Get a device definition by name (searches all layers: Local > HPM > Prelude > Core)
@@ -211,9 +366,14 @@ impl SymbolTable {
     ///
     /// Device definitions specify the physical contract for foundry primitives (transistors, diodes, etc.)
     /// including required terminals and expected materials for each terminal.
+    /// v0.2.0: Only returns exported devices from HPM layers
     pub fn get_device(&self, name: &str) -> Result<&DeviceDefinition, SymbolError> {
-        self.resolve_namespaced_symbol(name, |layer, n| layer.devices.get(n))
-            .ok_or_else(|| SymbolError::undefined(name.to_string().into(), "device", None))
+        self.resolve_namespaced_symbol(
+            name,
+            |layer, n| layer.devices.get(n),
+            |dev| dev.is_exported,
+        )
+        .ok_or_else(|| SymbolError::undefined(name.to_string().into(), "device", None))
     }
 
     /// Native v0.1.6 Unit Resolution

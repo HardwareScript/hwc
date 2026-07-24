@@ -94,9 +94,11 @@ pub enum GeometryBlock {
 }
 
 /// A shape definition — defines a 2D polygon cross-section for vias
+/// v0.2.0: Supports optional `export` keyword for visibility control
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ShapeDefinition {
     pub name: Identifier,
+    pub is_exported: bool, // v0.2.0: Access control
     pub parameters: Vec<ShapeParameter>,
     pub points: Vec<ShapePoint>,
     pub generator: Option<ShapeGenerator>,

@@ -63,6 +63,9 @@ pub enum Token {
     #[token("import")]
     Import,
 
+    #[token("export")]
+    Export,
+
     #[token("add")]
     Add,
 
@@ -590,6 +593,7 @@ impl fmt::Display for Token {
 
             // Format keywords clearly
             Token::Import => write!(f, "the 'import' keyword"),
+            Token::Export => write!(f, "the 'export' keyword"),
             Token::Add => write!(f, "the 'add' keyword"),
             Token::Route => write!(f, "the 'route' keyword"),
             Token::Expose => write!(f, "the 'expose' keyword"),

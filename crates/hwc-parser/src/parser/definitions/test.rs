@@ -13,6 +13,7 @@ impl super::super::Parser {
     pub(in super::super) fn parse_test(
         &mut self,
         collector: &crate::DiagnosticCollector,
+        is_exported: bool,
     ) -> Option<TestDefinition> {
         let start_pos = self.current_span().start;
 
@@ -135,6 +136,7 @@ impl super::super::Parser {
 
         Some(TestDefinition {
             name,
+            is_exported,
             setup,
             execute,
             assertions,

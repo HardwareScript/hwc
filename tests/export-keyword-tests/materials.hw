@@ -1,0 +1,109 @@
+# materials.hw
+
+import * from @std/primitives/units
+
+# ============================================================================
+# PUBLIC SYMBOLS (Exported - available to importing files)
+# ============================================================================
+
+export material PublicSilicon:
+  category: semiconductor
+  symbol: "Si"
+  description: "Public silicon substrate for general use"
+  properties:
+    color: "#505050"
+    metallic: 0.1
+    roughness: 0.7
+    opacity: 1.0
+    band_gap: 1.12eV
+    electron_mobility: 1400.0cm2_Vs
+    hole_mobility: 450.0cm2_Vs
+    resistivity: 1.0ohm_m
+    thermal_conductivity: 150.0W_mK
+    density: 2330.0kg_m3
+
+export material Aluminum:
+  category: conductor
+  symbol: "Al"
+  description: "Public aluminum routing metal"
+  properties:
+    color: "#C0C0C0"
+    metallic: 0.9
+    roughness: 0.3
+    opacity: 1.0
+    resistivity: 2.82e-8ohm_m
+    thermal_conductivity: 237.0W_mK
+    density: 2700.0kg_m3
+    max_current_density: 20.0A_mm2
+    melting_point: 660.0C
+
+export material SiO2:
+  category: conductor
+  symbol: "Al"
+  description: "Public aluminum routing metal"
+  properties:
+    color: "#C0C0C0"
+    metallic: 0.9
+    roughness: 0.3
+    opacity: 1.0
+    resistivity: 2.82e-8ohm_m
+    thermal_conductivity: 237.0W_mK
+    density: 2700.0kg_m3
+    max_current_density: 20.0A_mm2
+    melting_point: 660.0C
+
+export material SiO2:
+  category: insulator
+  symbol: "SiO2"
+  description: "Public silicon dioxide dielectric"
+  properties:
+    color: "#F0F0F0"
+    metallic: 0.0
+    roughness: 0.4
+    opacity: 0.9
+    dielectric_strength: 10000.0kV_mm
+    relative_permittivity: 3.9
+    thermal_conductivity: 1.4W_mK
+    density: 2200.0kg_m3
+
+export material PublicCopper:
+  category: conductor
+  symbol: "Cu"
+  description: "Public copper material"
+  properties:
+    color: "#B87333"
+    metallic: 1.0
+    roughness: 0.2
+    opacity: 1.0
+    resistivity: 1.68e-8ohm_m
+    thermal_conductivity: 401.0W_mK
+    density: 8960.0kg_m3
+    max_current_density: 35.0A_mm2
+    melting_point: 1085.0C
+
+export shape PublicPad(w: Measurement, h: Measurement):
+  geometry:
+    Rectangle(width: w, height: h)
+
+# ============================================================================
+# PRIVATE SYMBOLS (Not exported - internal use only)
+# ============================================================================
+
+material _InternalCopper:
+  category: conductor
+  symbol: "Cu_Int"
+  description: "Internal copper variant - DO NOT USE EXTERNALLY"
+  properties:
+    color: "#A86323"
+    metallic: 1.0
+    roughness: 0.15
+    opacity: 1.0
+    resistivity: 1.72e-8ohm_m
+    thermal_conductivity: 395.0W_mK
+    density: 8900.0kg_m3
+    max_current_density: 30.0A_mm2
+    melting_point: 1085.0C
+
+shape _PrivatePad(w: Measurement, h: Measurement):
+  geometry:
+    Rectangle(width: w, height: h)

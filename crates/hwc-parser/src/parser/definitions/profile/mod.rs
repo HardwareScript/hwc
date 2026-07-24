@@ -17,6 +17,7 @@ impl super::super::Parser {
     pub(in super::super) fn parse_profile(
         &mut self,
         collector: &crate::DiagnosticCollector,
+        is_exported: bool,
     ) -> Option<ProfileDefinition> {
         let start_pos = self.current_span().start;
 
@@ -392,6 +393,7 @@ impl super::super::Parser {
 
         Some(ProfileDefinition {
             name,
+            is_exported,
             description: description.map(|s: String| s.into()),
             trace,
             via,

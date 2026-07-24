@@ -9,12 +9,13 @@ impl super::super::Parser {
     // Material Definition Parsing
     // ========================================================================
 
-    /// Parse material definition: `material Copper:`
+    /// Parse material definition: `material Copper:` or `export material Copper:`
     ///
     /// Reports errors to collector and returns None if parsing fails.
     pub(in super::super) fn parse_material(
         &mut self,
         collector: &crate::DiagnosticCollector,
+        is_exported: bool,
     ) -> Option<MaterialDefinition> {
         let start_pos = self.current_span().start;
 
@@ -427,6 +428,7 @@ impl super::super::Parser {
 
         Some(MaterialDefinition {
             name,
+            is_exported, // v0.2.0: Access control
             category,
             process, // v0.1.7
             symbol: symbol.map(|s: String| s.into()),
@@ -460,11 +462,13 @@ impl super::super::Parser {
         }
     }
 
-    /// Parse material alias: `material_alias M1: Copper`
+    /// Parse material alias: `material_alias M1: Copper` or `export material_alias M1: Copper`
     pub(in super::super) fn parse_material_alias(
         &mut self,
     ) -> Result<MaterialAliasDefinition, ParseError> {
         let start_pos = self.previous_span().start; // already advanced past "material_alias"
+
+        // Note: export keyword already consumed by parse_definition dispatcher
 
         let name = self.expect_identifier()?;
         self.expect(&Token::Colon)?;
@@ -474,6 +478,7 @@ impl super::super::Parser {
 
         Ok(MaterialAliasDefinition {
             name,
+            is_exported: false, // Will be set by caller if export was present
             target,
             span: Span::new(start_pos, self.previous_span().end),
         })

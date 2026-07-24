@@ -25,6 +25,8 @@ pub mod compiler {
     pub const CIRCULAR_DEPENDENCY: &str = "C22";
     pub const VERSION_CONFLICT: &str = "C23";
     pub const IMPORT_PATH_NOT_FOUND: &str = "C24";
+    pub const SYMBOL_NOT_FOUND: &str = "C25";
+    pub const PRIVATE_SYMBOL_ACCESS: &str = "C26";
 
     // C30-C39: Space definition errors (multiple spaces, missing dimensions)
     pub const MULTIPLE_SPACES: &str = "C31";

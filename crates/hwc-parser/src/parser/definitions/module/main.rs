@@ -20,6 +20,7 @@ impl Parser {
     pub fn parse_module(
         &mut self,
         collector: &crate::DiagnosticCollector,
+        is_exported: bool,
     ) -> Option<ModuleDefinition> {
         let start = self.current_span();
 
@@ -206,6 +207,7 @@ impl Parser {
 
         Some(ModuleDefinition {
             name,
+            is_exported,
             pins,
             statements,
             logic,

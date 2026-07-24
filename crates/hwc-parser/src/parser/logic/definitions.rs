@@ -3,9 +3,10 @@ use crate::lexer::{Span, Token};
 use crate::parser::{ParseError, Parser};
 
 impl Parser {
-    pub fn parse_logic_definition(&mut self) -> Result<LogicDefinition, ParseError> {
+    pub fn parse_logic_definition(&mut self, is_exported: bool) -> Result<LogicDefinition, ParseError> {
         let start = self.current_span();
 
+        self.expect(&Token::Logic)?;
         let name = self.expect_identifier()?;
         self.expect(&Token::Colon)?;
         self.expect(&Token::Newline)?;
@@ -35,12 +36,13 @@ impl Parser {
 
         Ok(LogicDefinition {
             name,
+            is_exported,
             logic_block,
             span,
         })
     }
 
-    pub fn parse_enum(&mut self) -> Result<EnumDefinition, ParseError> {
+    pub fn parse_enum(&mut self, is_exported: bool) -> Result<EnumDefinition, ParseError> {
         let start = self.current_span();
 
         self.expect(&Token::Enum)?;
@@ -95,12 +97,13 @@ impl Parser {
 
         Ok(EnumDefinition {
             name,
+            is_exported,
             variants,
             span,
         })
     }
 
-    pub fn parse_struct(&mut self) -> Result<StructDefinition, ParseError> {
+    pub fn parse_struct(&mut self, is_exported: bool) -> Result<StructDefinition, ParseError> {
         let start = self.current_span();
 
         self.expect(&Token::Struct)?;
@@ -140,6 +143,11 @@ impl Parser {
 
         let span = Span::new(start.start, self.previous_span().end);
 
-        Ok(StructDefinition { name, fields, span })
+        Ok(StructDefinition {
+            name,
+            is_exported,
+            fields,
+            span,
+        })
     }
 }
