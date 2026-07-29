@@ -309,8 +309,14 @@ pub fn unroll_internal_features(
                             let min_annular_ring_nm = space
                                 .fabrication_constraints
                                 .as_ref()
-                                .map(|c| c.via.min_annular_ring_nm)
-                                .unwrap_or(150_000);
+                                .ok_or_else(|| {
+                                    IrError::PlacementError(
+                                        "PDK profile is missing 'fabrication_constraints' \
+                                         for via pad generation. Ensure the profile defines 'via.min_annular_ring'."
+                                            .into(),
+                                    )
+                                })?
+                                .via.min_annular_ring_nm;
 
                             let pad_diameter_nm = drill_diameter_nm + (2 * min_annular_ring_nm);
 
@@ -329,7 +335,7 @@ pub fn unroll_internal_features(
                             space.entity_graph.add_tube_substrate_layer(
                                 hwc_engine::geometry_router::entity_graph::TubeLayerSpec::builder(
                                     copper_material_id,
-                                    via_net_id.raw(),
+                                    via_net_id,
                                     hole_bbox,
                                     circle_segments,
                                 )
@@ -362,7 +368,7 @@ pub fn unroll_internal_features(
                             );
                             space.entity_graph.add_cylinder_substrate_layer(
                                 copper_material_id,
-                                via_net_id.raw(),
+                                via_net_id,
                                 pad_bbox_start,
                                 pad_diameter_nm,
                                 16,
@@ -385,7 +391,7 @@ pub fn unroll_internal_features(
                             );
                             space.entity_graph.add_cylinder_substrate_layer(
                                 copper_material_id,
-                                via_net_id.raw(),
+                                via_net_id,
                                 pad_bbox_end,
                                 pad_diameter_nm,
                                 16,

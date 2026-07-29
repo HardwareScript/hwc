@@ -95,7 +95,7 @@ pub fn traces_to_lockfile(
 pub fn lockfile_to_traces(
     data: &LockfileData,
     netlist: &crate::netlist::NetlistArena,
-    layer_z_positions: &[(u16, i64)],
+    stackup_layers: &[crate::space::StackupLayer],
     material_registry: &crate::material::MaterialRegistry,
 ) -> Result<Vec<crate::space::AnalyticTrace>, String> {
     use rustc_hash::FxHashMap;
@@ -105,8 +105,6 @@ pub fn lockfile_to_traces(
     let mut net_widths: FxHashMap<u32, i64> = FxHashMap::default();
     let mut net_material_names: FxHashMap<u32, String> = FxHashMap::default();
     let mut net_currents: FxHashMap<u32, i64> = FxHashMap::default();
-
-    let _layer_to_z: FxHashMap<u16, i64> = layer_z_positions.iter().copied().collect();
 
     for arc in d.arcs.iter() {
         per_net
@@ -176,13 +174,54 @@ pub fn lockfile_to_traces(
             .and_then(|n| n.current_ma)
             .unwrap_or(0.0);
 
-        traces.push(crate::space::AnalyticTrace::new(
+        // Compute layer_z_range directly from the canonical stackup table.
+        // This mirrors the logic in every other routing path (manual, auto, global).
+        let layer_z_range = {
+            let is_horizontal = segments
+                .iter()
+                .all(|s| s.start.z == s.end.z)
+                && segments
+                    .windows(2)
+                    .all(|w| w[0].start.z == w[1].start.z);
+
+            if is_horizontal {
+                let centerline_z = segments.first().map(|s| s.start.z).unwrap_or(0);
+                let count = stackup_layers.len();
+                let layer = stackup_layers
+                    .iter()
+                    .enumerate()
+                    .find(|&(idx, l)| {
+                        let is_top = idx == count - 1;
+                        if is_top {
+                            centerline_z >= l.z_bottom && centerline_z <= l.z_top
+                        } else {
+                            centerline_z >= l.z_bottom && centerline_z < l.z_top
+                        }
+                    })
+                    .map(|(_, l)| l)
+                    .ok_or_else(|| {
+                        format!(
+                            "[LOCK] FATAL: net {} has a horizontal segment at Z={}nm \
+                             that does not match any layer in the stackup. \
+                             Delete the lockfile and rebuild.",
+                            net_id_raw, centerline_z
+                        )
+                    })?;
+                Some((layer.z_bottom, layer.z_top))
+            } else {
+                // Via or multi-layer trace: Z span encoded in segment start/end.
+                None
+            }
+        };
+
+        traces.push(crate::space::AnalyticTrace::with_layer_z_range(
             net_id,
             crate::space::CrossSection::new(width_nm, thickness_nm),
             segments,
             material_id,
             net_name,
             crate::space::CurrentRating::new(net_actual_current_ma, current_ma),
+            layer_z_range,
         ));
     }
 

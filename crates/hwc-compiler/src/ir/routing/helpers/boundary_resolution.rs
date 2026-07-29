@@ -66,6 +66,9 @@ fn select_access_region_by_port<'a>(
 /// v0.1.9: Now uses the Connection Interface Routing (CIR) system with
 /// PhysicalInterface → AccessRegions → Boundary Points.
 ///
+/// v0.2.0: Contact-Aware Routing - if an explicit contact exists on a pad,
+/// use its position as the routing point instead of the pad boundary edge.
+///
 /// This function applies **Dynamic Boundary Resolution** with Zero-Gap Contact Lock
 /// to correct for trace width mismatch between cached AccessRegions (computed with
 /// PDK min_width) and actual routed trace widths.
@@ -76,13 +79,8 @@ pub fn resolve_route_boundary_points(
     route: &super::super::types::ResolvedRoute,
     trace_width_nm: i64,
 ) -> Result<(Point3D, Point3D, hwc_engine::geometry_router::connection_interface::Normal2D, hwc_engine::geometry_router::connection_interface::Normal2D), IrError> {
-    eprintln!(
-        "[BOUNDARY RESOLUTION] Resolving boundary points for net '{}' (width={}nm)",
-        route.net_name, trace_width_nm
-    );
-    eprintln!("  from EntityId: {:?}", route.from);
-    eprintln!("  to EntityId: {:?}", route.to);
-
+   
+   
     // Query entity names from EntityGraph
     let from_entity_data = space
         .entity_graph
@@ -138,9 +136,7 @@ pub fn resolve_route_boundary_points(
             ),
         })?;
 
-    eprintln!("  from_interface: {:?}", from_interface);
-    eprintln!("  to_interface: {:?}", to_interface);
-
+   
     // Access the pre-computed AccessRegions
     if from_interface.access_regions.is_empty() {
         return Err(IrError::InvalidRouteExpression {
@@ -232,10 +228,7 @@ pub fn resolve_route_boundary_points(
         "destination"
     )?;
 
-    eprintln!("  from_region entry_point: {:?}", from_region.entry_point);
-    eprintln!("  from_region corridor: {:?}", from_region.corridor);
-    eprintln!("  to_region entry_point: {:?}", to_region.entry_point);
-    eprintln!("  to_region corridor: {:?}", to_region.corridor);
+   
 
     // DYNAMIC BOUNDARY RESOLUTION WITH ZERO-GAP CONTACT LOCK:
     // The cached entry_point was computed with PDK min_width during AccessRegion creation.
@@ -274,12 +267,37 @@ pub fn resolve_route_boundary_points(
         trace_width_nm,
     );
 
-    eprintln!("  ✅ Zero-Gap Contact Lock start: ({},{},{})", start_point.x, start_point.y, start_point.z);
-    eprintln!("  ✅ Zero-Gap Contact Lock goal: ({},{},{})", goal_point.x, goal_point.y, goal_point.z);
-    eprintln!("  ✅ Start normal: ({},{})", from_region.normal.x, from_region.normal.y);
-    eprintln!("  ✅ Goal normal: ({},{})", to_region.normal.x, to_region.normal.y);
+   
+    // v0.2.0: Contact-Aware Routing Override
+    // If an explicit contact exists on the pad that connects to the target layer,
+    // use the contact's position instead of the pad boundary edge.
+    // This prevents the router from creating duplicate vias at the wrong location.
+    
+    let final_start_point = if let Some((contact_x, contact_y)) = find_contact_on_pad(
+        space,
+        &from_entity_data.bbox,
+        start_point.z, // Use the routing layer Z
+        from_net_id,
+    ) {
+        eprintln!("  🔧 CONTACT OVERRIDE: Using explicit contact at ({},{}) instead of pad edge", contact_x, contact_y);
+        Point3D::new(contact_x, contact_y, start_point.z)
+    } else {
+        start_point
+    };
+    
+    let final_goal_point = if let Some((contact_x, contact_y)) = find_contact_on_pad(
+        space,
+        &to_entity_data.bbox,
+        goal_point.z, // Use the routing layer Z
+        to_net_id,
+    ) {
+        eprintln!("  🔧 CONTACT OVERRIDE: Using explicit contact at ({},{}) instead of pad edge", contact_x, contact_y);
+        Point3D::new(contact_x, contact_y, goal_point.z)
+    } else {
+        goal_point
+    };
 
-    Ok((start_point, goal_point, from_region.normal, to_region.normal))
+    Ok((final_start_point, final_goal_point, from_region.normal, to_region.normal))
 }
 
 /// Apply dynamic boundary offset scaling with Zero-Gap Contact Lock.
@@ -310,11 +328,7 @@ fn resolve_boundary_entry(
     let corrected_x = edge_x + (normal.x as i64 * actual_half_width) / SCALE;
     let corrected_y = edge_y + (normal.y as i64 * actual_half_width) / SCALE;
     
-    eprintln!("    [resolve_boundary_entry] entry=({},{}) normal=({},{}) default_w={} actual_w={}",
-        entry_point.x, entry_point.y, normal.x, normal.y, default_width_nm, actual_width_nm);
-    eprintln!("      pad_edge=({},{}) trace_centerline=({},{})",
-        edge_x, edge_y, corrected_x, corrected_y);
-    eprintln!("      trace_outer_edge will be at pad_edge (0nm gap)");
+    
     
     Point3D::new(corrected_x, corrected_y, entry_point.z)
 }
@@ -344,4 +358,66 @@ pub fn resolve_route_pin_centers(
     let start = resolve_center(route.from)?;
     let goal = resolve_center(route.to)?;
     Ok((start, goal))
+}
+
+/// Find an explicit circular contact (via) on a pad that spans to a target Z layer.
+///
+/// v0.2.0: Contact-Aware Routing - checks if the user has placed an explicit
+/// contact on a pad that already provides the layer transition. If found, returns
+/// the contact's XY center position so the router can use it instead of creating
+/// a new via at the pad edge.
+///
+/// Returns: Some((x, y)) if a contact exists, None otherwise
+fn find_contact_on_pad(
+    space: &HardwareSpace,
+    pad_bbox: &hwc_engine::geometry::BoundingBox,
+    target_z: i64,
+    net_id: Option<hwc_engine::netlist::NetId>,
+) -> Option<(i64, i64)> {
+    use hwc_engine::geometry_router::substrate_types::SubstrateLayerShape;
+    
+    let net_id = net_id?; // Return None if no net_id provided
+    let net_raw = net_id.raw();
+    
+    
+    
+    // Search all substrate layers for circular contacts that:
+    // 1. Are on the same net
+    // 2. Have XY center within the pad's XY bbox
+    // 3. Span vertically to include the target Z layer
+    for (idx, layer) in space.entity_graph.get_substrate_layers().iter().enumerate() {
+        // Must be on the same net
+        if layer.net != hwc_engine::NetId::new(net_raw) {
+            continue;
+        }
+        
+        // Must be circular (contact shape, not rectangular pour)
+        let is_circular = matches!(layer.shape, SubstrateLayerShape::Circle { .. });
+        if !is_circular {
+            continue;
+        }
+        
+        let layer_center_x = (layer.bbox.min.x + layer.bbox.max.x) / 2;
+        let layer_center_y = (layer.bbox.min.y + layer.bbox.max.y) / 2;
+        
+        // Check if contact center is within pad's XY bounds
+        let within_pad_x = layer_center_x >= pad_bbox.min.x && layer_center_x <= pad_bbox.max.x;
+        let within_pad_y = layer_center_y >= pad_bbox.min.y && layer_center_y <= pad_bbox.max.y;
+        
+        if !within_pad_x || !within_pad_y {
+            continue;
+        }
+        
+        // Check if contact spans to the target Z layer (with tolerance)
+        let contact_spans_target = layer.bbox.min.z <= target_z && layer.bbox.max.z >= target_z;
+        
+        if contact_spans_target {
+            eprintln!("[CONTACT FOUND] Layer {} at ({},{}) Z={}→{}nm spans target Z={}nm",
+                idx, layer_center_x, layer_center_y, layer.bbox.min.z, layer.bbox.max.z, target_z);
+            return Some((layer_center_x, layer_center_y));
+        }
+    }
+    
+    
+    None
 }

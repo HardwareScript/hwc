@@ -1,0 +1,52 @@
+# gate_isolation_test.hw
+# Testing 3D Z-Layer Insulation: Active Area crossed by a Polysilicon Gate.
+# Verifies that overlapping boundaries on different layers are successfully
+# recognized as insulated, yielding zero short-circuit (P42) violations.
+
+import * from @std/primitives/units
+import * from "./minimal_pdk"
+
+# Define the logical schematic (Two separate nets, no routes required)
+module GateIsolation:
+    pins: [input In, output Out]
+
+shape ActiveArea(w: Measurement, h: Measurement):
+    geometry:
+        Rectangle(width: w, height: h)
+
+shape GatePoly(w: Measurement, h: Measurement):
+    geometry:
+        Rectangle(width: w, height: h)
+
+space Gate_Isolation_Space implements GateIsolation:
+    # A tiny 2.0um x 2.0um space, flattened to 50nm depth
+    dimensions: 2.0um by 2.0um by 50nm
+    resolution: 10nm
+    origin: bl by b
+    profile: ASIC_Flattened
+
+    nets:
+        In:  { classification: signal, potential: 1.8V, current: 0.1uA }
+        Out: { classification: signal, potential: 1.8V, current: 0.1uA }
+
+    # ========================================================================
+    # GEOMETRIC PLACEMENTS (Overlapping on XY, insulated in Z)
+    # ========================================================================
+    
+    # 1. Bottom Layer: Silicon active area (Z: 0nm to 10nm)
+    # Net: Out
+    add plane(Silicon_N) named PMOS_Active inside: space on layer: active:
+        shape: ActiveArea(w: 1.2um, h: 600nm)
+        at: [400nm, 700nm]  # Placed in the center
+        net: Out
+
+    # 2. Middle Layer: Polysilicon Gate crossing exactly over the center (Z: 15nm to 25nm)
+    # Net: In
+    #
+    # Since gate_oxide (Z: 10nm to 15nm) sits between active and poly, they do not touch in Z.
+    # The compiler's 3D DRC sweep must recognize they are insulated, 
+    # resulting in a clean pass with no P42 static shorts.
+    add plane(Polysilicon) named Gate_Strip inside: space on layer: poly:
+        shape: GatePoly(w: 200nm, h: 1.2um)
+        at: [900nm, 400nm]  # Aligned vertically to cross the center of PMOS_Active
+        net: In

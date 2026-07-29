@@ -1,5 +1,5 @@
 use crate::bridge_resolver::{resolve_bridge, BridgeTable};
-use crate::IrError;
+use crate::{IrError, SymbolTable};
 use hwc_engine::{geometry::BoundingBox, HardwareSpace};
 use hwc_parser::ProfileDefinition;
 
@@ -8,8 +8,13 @@ use hwc_parser::ProfileDefinition;
 pub fn validate_bridges(
     space: &HardwareSpace,
     profile: Option<&ProfileDefinition>,
+    symbol_table: Option<&SymbolTable>,
 ) -> Result<(), IrError> {
-    let profile_bridge_table = profile.map(BridgeTable::from_profile);
+    // v0.2.0: Use from_profile_and_symbol_table to load bridges from both sources
+    let profile_bridge_table = Some(BridgeTable::from_profile_and_symbol_table(
+        profile,
+        symbol_table,
+    ));
 
     // Check every contact
     for contact in &space.contacts {

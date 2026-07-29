@@ -14,7 +14,7 @@ use super::unit_conversion::{measurement_to_celsius, measurement_to_nm, measurem
 /// Reference: ROUTING-AND-PHYSICS.md - Translation 1 & 2
 pub fn profile_to_constraints(
     profile: &ProfileDefinition,
-    _symbol_table: &SymbolTable,
+    symbol_table: &SymbolTable,
 ) -> Result<ConstraintSet, ConversionError> {
     let trace = if let Some(trace_def) = &profile.trace {
         TraceConstraints {
@@ -169,10 +169,28 @@ pub fn profile_to_constraints(
 
     let stackup: Option<hwc_materials::StackupConstraints> = None;
 
-    let bridges = profile
-        .bridges
-        .iter()
-        .map(|b| hwc_materials::BridgeRule {
+    // v0.2.0: NATIVE WIRE FIX - Query SymbolTable for first-class top-level bridge definitions
+    // This connects the new top-level bridge syntax to the physical synthesis engine.
+    // We load bridges from the SymbolTable (highest priority) and merge with any nested
+    // profile bridges (legacy syntax) to maintain backward compatibility.
+    let mut bridges: Vec<hwc_materials::BridgeRule> = Vec::new();
+
+    // Step 1: Load top-level bridges from the SymbolTable (v0.2.0 first-class syntax)
+    for bridge_def in symbol_table.get_all_bridges() {
+        bridges.push(hwc_materials::BridgeRule {
+            from_material: bridge_def.from.clone(),
+            to_material: bridge_def.to.clone(),
+            interface_material: bridge_def.interface_material.clone(),
+            fill_material: bridge_def
+                .fill_material
+                .clone()
+                .unwrap_or_else(|| bridge_def.interface_material.clone()),
+        });
+    }
+
+    // Step 2: Add any nested profile bridges (legacy syntax for backward compatibility)
+    for b in &profile.bridges {
+        bridges.push(hwc_materials::BridgeRule {
             from_material: b.from.clone(),
             to_material: b.to.clone(),
             interface_material: b.interface_material.clone(),
@@ -180,8 +198,8 @@ pub fn profile_to_constraints(
                 .fill_material
                 .clone()
                 .unwrap_or_else(|| b.interface_material.clone()),
-        })
-        .collect();
+        });
+    }
 
     // v0.1.8: Propagate per-layer routability from the stackup to the constraint set.
     // Table-driven: each stackup layer's `routable` field becomes a lookup entry.

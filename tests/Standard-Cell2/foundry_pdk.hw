@@ -1,0 +1,102 @@
+# foundry_pdk.hw
+# PDK library that imports and re-exports materials for use in profiles
+
+import * from @std/primitives/units
+import Silicon_P, Silicon_N, Polysilicon, Aluminum, SiO2, Titanium_Silicide, Tungsten from materials
+
+# v0.2.0: EXPLICIT RE-EXPORTS (Rust-style pub use)
+# Re-export materials so downstream files can import them
+export Silicon_P
+export Silicon_N
+export Polysilicon
+export Aluminum  
+export SiO2
+
+# Private substrate material - NOT re-exported
+material _PDK_Silicon_N:
+  category: semiconductor
+  symbol: "Si_N"
+  description: "Private N-type silicon substrate - internal use only"
+  properties:
+    color: "#8090A0"
+    metallic: 0.1
+    roughness: 0.7
+    opacity: 1.0
+    band_gap: 1.12eV
+    electron_mobility: 1400.0cm2_Vs
+    hole_mobility: 450.0cm2_Vs
+    resistivity: 10.0ohm_m
+    thermal_conductivity: 150.0W_mK
+    density: 2330.0kg_m3
+
+# ============================================================================
+# PROFILE WITH EMBEDDED BRIDGES
+# ============================================================================
+export profile Silicon_180nm:
+  technology: "ASIC"
+  stackup:
+    substrate:  [material: Silicon_P, thickness: 100nm, routable: false]
+    active:     [material: Silicon_N, thickness: 200nm, routable: false]
+    gate_oxide: [material: SiO2, thickness: 10nm, routable: false]
+    poly:       [material: Polysilicon, thickness: 180nm, routable: local_only]
+    d1:         [material: SiO2, thickness: 400nm, routable: false]
+    metal1:     [material: Aluminum, thickness: 400nm, routable: true]
+
+  # Bridge declarations for material transitions
+  bridge Silicon_N to Aluminum:
+    interface: Titanium_Silicide
+    thickness: 50nm
+    fill: Tungsten
+
+  bridge Silicon_P to Aluminum:
+    interface: Titanium_Silicide
+    thickness: 50nm
+    fill: Tungsten
+
+  bridge Polysilicon to Aluminum:
+    interface: Titanium_Silicide
+    thickness: 50nm
+    fill: Tungsten
+
+  trace:
+    min_width: 180nm
+    min_spacing: 0nm
+    edge_clearance: 50um
+  via:
+    min_diameter: 220nm
+    min_annular_ring: 100nm
+    min_spacing: 300nm
+    shape: cylinder
+  manufacturing:
+    copper_thickness: 400nm
+    circle_segments: 64
+    solder_mask_thickness: 0nm
+    solder_mask_expansion: 0nm
+  clearance:
+    high_voltage: 500nm
+    safety_factor: 2.0
+  thermal:
+    ambient_temp: 25C
+    max_operating_temp: 125C
+    max_temp_rise: 50C
+    clustering_threshold: 10um
+  layer:
+    min_thickness: 100nm
+    allowed_conductors: [Aluminum, Polysilicon, Silicon_N, Silicon_P]
+    allowed_dielectrics: [SiO2]
+  routing:
+    max_local_route_length: 10um
+    min_segment_length: 180nm
+    escape_stub: 0nm
+    base_cost: 1
+    via_penalty: 50
+    direction_penalty: 10
+    tight_clearance_penalty: 2
+    crosstalk_penalty: 3
+    impedance_penalty: 1
+    reference_void_penalty: 5000000
+    net_priority_VDD: 5
+    net_priority_GND: 5
+  net_type Signal:
+    routing_style: auto
+    escape_stub: 0nm  # v0.2.0: ASIC designs use zero escape stub for tight routing

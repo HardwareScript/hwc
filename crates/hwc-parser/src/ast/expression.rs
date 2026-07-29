@@ -45,6 +45,13 @@ pub enum Expression {
         edge: super::Edge,
         span: Span,
     },
+    /// Coordinate literal as an expression (v0.2.0)
+    /// Allows coordinate math: PMOS_Region.center - [200nm, 0nm]
+    /// Example: at: anchor.center + [1mm, 2mm, 0mm]
+    Coordinate {
+        coord: Box<super::Coordinate>,
+        span: Span,
+    },
 }
 
 /// Binary operators for expressions
@@ -76,7 +83,8 @@ impl Expression {
             | Expression::Binary { span, .. }
             | Expression::Unary { span, .. }
             | Expression::Grouped { span, .. }
-            | Expression::AnchorReference { span, .. } => *span,
+            | Expression::AnchorReference { span, .. }
+            | Expression::Coordinate { span, .. } => *span,
         }
     }
 
@@ -100,6 +108,22 @@ impl Expression {
     pub fn contains_anchor_reference(&self) -> bool {
         match self {
             Expression::AnchorReference { .. } => true,
+            Expression::Coordinate { coord, .. } => {
+                // Check if the coordinate itself contains anchor references
+                match coord.as_ref() {
+                    super::Coordinate::Relative(_) => true,
+                    super::Coordinate::Positional { x, y, z, .. } => {
+                        x.contains_anchor_reference()
+                            || y.contains_anchor_reference()
+                            || z.contains_anchor_reference()
+                    }
+                    super::Coordinate::Declarative { x, y, z, .. } => {
+                        x.contains_anchor_reference()
+                            || y.contains_anchor_reference()
+                            || z.contains_anchor_reference()
+                    }
+                }
+            }
             Expression::Binary { left, right, .. } => {
                 left.contains_anchor_reference() || right.contains_anchor_reference()
             }
@@ -542,6 +566,12 @@ impl Expression {
                 Err("Anchor references require constraint solver context and cannot be evaluated in the parser. \
                      This expression should be evaluated by the compiler using evaluate_coordinate_with_anchors.".into())
             }
+            Expression::Coordinate { .. } => {
+                // Coordinate literals cannot be evaluated to a single value
+                // They must be handled by the coordinate evaluation system
+                Err("Coordinate literals cannot be evaluated to a single value. \
+                     They must be resolved by the coordinate evaluation system.".into())
+            }
         }
     }
 
@@ -624,6 +654,9 @@ impl fmt::Display for Expression {
                     super::Edge::Center => "center",
                 };
                 write!(f, "{}.{}", anchor.name, edge_str)
+            }
+            Expression::Coordinate { coord, .. } => {
+                write!(f, "{:?}", coord) // Use debug format for coordinate
             }
         }
     }

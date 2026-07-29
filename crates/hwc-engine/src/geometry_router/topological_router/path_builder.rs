@@ -102,21 +102,15 @@ impl TopologicalRouter {
         obstacles: &DynamicSpatialIndex,
         _board_bounds: &BoundingBox,
     ) -> Option<TopologicalPath> {
-        eprintln!(
-            "[TOPO try_direct_path] Attempting direct paths from ({},{},{}) to ({},{},{})",
-            start.x, start.y, start.z, target.x, target.y, target.z
-        );
+       
 
         if start.x == target.x || start.y == target.y {
             let waypoints = vec![start, target];
             let collides = self.segment_intersects_obstacle(start, target, obstacles);
-            eprintln!(
-                "[TOPO try_direct_path] Straight line: collides={}",
-                collides
-            );
+            
             if !collides {
                 let total_length = start.manhattan_distance(&target);
-                eprintln!("[TOPO try_direct_path] Returning straight path");
+               
                 return Some(TopologicalPath {
                     waypoints,
                     total_length,
@@ -127,11 +121,10 @@ impl TopologicalRouter {
         let bend_hv = Point3D::new(target.x, start.y, start.z);
         let hv_seg1_collides = self.segment_intersects_obstacle(start, bend_hv, obstacles);
         let hv_seg2_collides = self.segment_intersects_obstacle(bend_hv, target, obstacles);
-        eprintln!("[TOPO try_direct_path] L-shape (H then V): bend=({},{},{}), seg1_collides={}, seg2_collides={}",
-            bend_hv.x, bend_hv.y, bend_hv.z, hv_seg1_collides, hv_seg2_collides);
+       
         if !hv_seg1_collides && !hv_seg2_collides {
             let total_length = start.manhattan_distance(&target);
-            eprintln!("[TOPO try_direct_path] Returning L-shape (H then V)");
+         
             return Some(TopologicalPath {
                 waypoints: vec![start, bend_hv, target],
                 total_length,
@@ -141,18 +134,18 @@ impl TopologicalRouter {
         let bend_vh = Point3D::new(start.x, target.y, start.z);
         let vh_seg1_collides = self.segment_intersects_obstacle(start, bend_vh, obstacles);
         let vh_seg2_collides = self.segment_intersects_obstacle(bend_vh, target, obstacles);
-        eprintln!("[TOPO try_direct_path] L-shape (V then H): bend=({},{},{}), seg1_collides={}, seg2_collides={}",
-            bend_vh.x, bend_vh.y, bend_vh.z, vh_seg1_collides, vh_seg2_collides);
+        
+            
         if !vh_seg1_collides && !vh_seg2_collides {
             let total_length = start.manhattan_distance(&target);
-            eprintln!("[TOPO try_direct_path] Returning L-shape (V then H)");
+           
             return Some(TopologicalPath {
                 waypoints: vec![start, bend_vh, target],
                 total_length,
             });
         }
 
-        eprintln!("[TOPO try_direct_path] No direct path found, returning None");
+       
         None
     }
 
@@ -208,7 +201,7 @@ impl TopologicalRouter {
             max: Point3D::new(overlap_max_x, start.y.max(target.y), start.z),
         };
         for seg in self.query_all_obstacles(&query_box, obstacles) {
-            if self.exempt_net_ids.contains(&seg.net_id) {
+            if self.exempt_net_ids.contains(&(seg.net_id.raw() as usize)) {
                 continue;
             }
             let obs_min_x = seg.start.x.min(seg.end.x) - seg.width_nm / 2;
@@ -301,7 +294,7 @@ impl TopologicalRouter {
             max: Point3D::new(start.x.max(target.x), overlap_max_y, start.z),
         };
         for seg in self.query_all_obstacles(&query_box, obstacles) {
-            if self.exempt_net_ids.contains(&seg.net_id) {
+            if self.exempt_net_ids.contains(&(seg.net_id.raw() as usize)) {
                 continue;
             }
             let obs_min_y = seg.start.y.min(seg.end.y) - seg.width_nm / 2;

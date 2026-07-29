@@ -75,7 +75,7 @@ pub fn classify_overlap(q: OverlapQuery) -> OverlapResult {
     } = q;
     if seg_a.net_id == seg_b.net_id {
         let is_valid_junction = junctions.iter().any(|j| {
-            j.net_id.0 == seg_a.net_id as u32
+            j.net_id.0 == seg_a.net_id.raw()
                 && is_point_in_overlap_envelope(j.position, seg_a, seg_b)
         });
 
@@ -104,7 +104,7 @@ pub fn classify_overlap(q: OverlapQuery) -> OverlapResult {
                             }
                         }
                         JunctionClassification::Allowed => OverlapResult::SameNetIntersection {
-                            net_id: seg_a.net_id as u32,
+                            net_id: seg_a.net_id.raw(),
                             mat_a: ma,
                             mat_b: mb,
                             intersection_area,
@@ -135,7 +135,7 @@ pub fn classify_overlap(q: OverlapQuery) -> OverlapResult {
         }
 
         OverlapResult::SameNet {
-            net_id: seg_a.net_id as u32,
+            net_id: seg_a.net_id.raw(),
             is_valid_junction,
         }
     } else {
@@ -143,8 +143,8 @@ pub fn classify_overlap(q: OverlapQuery) -> OverlapResult {
 
         if actual_clearance < default_clearance_nm {
             OverlapResult::DifferentNet {
-                net_a: seg_a.net_id as u32,
-                net_b: seg_b.net_id as u32,
+                net_a: seg_a.net_id.raw(),
+                net_b: seg_b.net_id.raw(),
                 overlap_area: compute_overlap_area(seg_a, seg_b),
                 required_clearance: default_clearance_nm,
             }

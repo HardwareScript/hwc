@@ -42,7 +42,16 @@ impl<'a> AutoRouter<'a> {
                     self.refine_path_z(mitered_path, trace_thickness_nm)?;
 
                 let mut final_path = refined_path;
-                self.add_vertical_transitions(&mut final_path, &net_name, data);
+                
+                // STRUCTURAL FIX: Only add vertical transitions if the path doesn't already have them
+                // The new routing engine (v0.2.0) already includes vertical transitions in the path
+                let has_z_transitions = final_path.windows(2).any(|w| w[0].z != w[1].z);
+                if !has_z_transitions {
+                    eprintln!("[POST_PROCESS] Path is planar - adding vertical transitions");
+                    self.add_vertical_transitions(&mut final_path, &net_name, data);
+                } else {
+                    eprintln!("[POST_PROCESS] Path already has Z transitions - skipping add_vertical_transitions");
+                }
 
                 let declared_width = data
                     .net_declared_widths
@@ -145,6 +154,25 @@ impl<'a> AutoRouter<'a> {
         mut path: Vec<Point3D>,
         default_thickness: i64,
     ) -> Result<(Vec<Point3D>, i64), IrError> {
+        // STRUCTURAL FIX: Check if path already has Z transitions BEFORE refining
+        let has_z_transitions = path.windows(2).any(|w| w[0].z != w[1].z);
+        
+        if has_z_transitions {
+            
+            // Path already has vertical transitions from the new router
+            // Don't flatten the Z coordinates - just determine the thickness
+            let first_z = path.first().map(|p| p.z).unwrap_or(0);
+            let first_layer = self.stackup_manager.get_layer_index_at_z(first_z);
+            let actual_thickness = if let Some(layer_idx) = first_layer {
+                self.stackup_manager.get_thickness_for_layer_index(layer_idx)?
+            } else {
+                default_thickness
+            };
+            return Ok((path, actual_thickness));
+        }
+        
+       
+        
         let first_z = path.first().map(|p| p.z).unwrap_or(0);
         let last_z = path.last().map(|p| p.z).unwrap_or(0);
         let first_layer = self.stackup_manager.get_layer_index_at_z(first_z);
@@ -331,7 +359,7 @@ impl<'a> AutoRouter<'a> {
                 .get_material(material)
                 .map(|m| m.thickness_nm)
                 .unwrap_or(400);
-            let line_segments = segments
+            let line_segments: Vec<hwc_engine::LineSegment> = segments
                 .iter()
                 .map(|seg| hwc_engine::LineSegment {
                     start: seg.start,
@@ -344,14 +372,56 @@ impl<'a> AutoRouter<'a> {
                 .get_net(*net_id)
                 .and_then(|n| n.current_ma)
                 .unwrap_or(0.0);
-            new_analytic_routes.push(hwc_engine::AnalyticTrace {
-                net_id: *net_id,
-                cross_section: hwc_engine::space::CrossSection::new(width_nm, thickness_nm),
-                segments: line_segments,
+
+            // **v0.2.0 STRUCTURAL FIX: Look up physical layer Z-range from HardwareSpace stackup**
+            // For routes with horizontal segments, populate layer_z_range for proper mesh extrusion.
+            // Even if the route also has vertical segments (vias), the horizontal parts need layer info.
+            let layer_z_range = if let Some(_first_seg) = line_segments.first() {
+                // Find any horizontal segment to determine the routing layer
+                let horizontal_z = line_segments
+                    .iter()
+                    .find(|s| s.start.z == s.end.z)
+                    .map(|s| s.start.z);
+
+                if let Some(centerline_z) = horizontal_z {
+                    
+                    for (idx, sl) in self.space.stackup_layers.iter().enumerate() {
+                    }
+                    
+                    // Look up the layer from HardwareSpace's stackup (single source of truth)
+                    let layer = self
+                        .space
+                        .find_layer_at_z(centerline_z)
+                        .ok_or_else(|| IrError::StackupResolutionFailed {
+                            layer_name: format!("Z={}", centerline_z).into(),
+                            reason: format!(
+                                "No stackup layer found at Z={}nm for net '{}'. \
+                                 Trace centerline does not match any layer in the stackup. \
+                                 Check your profile's stackup definition.",
+                                centerline_z, net_name
+                            ),
+                        })?;
+
+               
+                    Some((layer.z_bottom, layer.z_top))
+                } else {
+                   
+                    // Pure via (no horizontal segments): segments encode their own Z spans
+                    None
+                }
+            } else {
+                None
+            };
+
+            new_analytic_routes.push(hwc_engine::AnalyticTrace::with_layer_z_range(
+                *net_id,
+                hwc_engine::space::CrossSection::new(width_nm, thickness_nm),
+                line_segments,
                 material,
                 net_name,
-                current: hwc_engine::space::CurrentRating::new(current_ma, 0.0),
-            });
+                hwc_engine::space::CurrentRating::new(current_ma, 0.0),
+                layer_z_range,
+            ));
         }
         self.space.analytic_routes = new_analytic_routes;
         Ok(())

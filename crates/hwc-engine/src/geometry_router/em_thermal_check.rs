@@ -134,7 +134,7 @@ pub fn check_electromigration(segment: &IndexedSegment, params: &EmParams) -> Op
         };
 
         Some(EmViolation {
-            net_id: segment.net_id,
+            net_id: segment.net_id.raw() as usize,
             location: (segment.center().x, segment.center().y),
             current_density,
             limit: params.j_limit,
@@ -165,7 +165,7 @@ pub fn check_temperature_rise(
 
     if delta_t > params.max_temp_rise_c {
         Some(ThermalViolation {
-            net_id: segment.net_id,
+            net_id: segment.net_id.raw() as usize,
             location: (segment.center().x, segment.center().y),
             temp_rise_c: delta_t,
             max_allowed_c: params.max_temp_rise_c,

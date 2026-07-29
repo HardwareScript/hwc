@@ -146,7 +146,7 @@ impl Legalizer {
                 };
 
                 // Skip same-net overlaps (these are legal T-junctions or taps)
-                if neighbor.net_id == seg_net_id {
+                if neighbor.net_id.raw() as usize == seg_net_id {
                     continue;
                 }
 
@@ -161,7 +161,7 @@ impl Legalizer {
                     violator_id: idx,
                     victim_id: neighbor.segment_id,
                     violator_net: NetId(seg_net_id as u32),
-                    victim_net: NetId(neighbor.net_id as u32),
+                    victim_net: NetId::new(neighbor.net_id.raw()),
                     overlap_bbox: overlap,
                     required_shift_nm: shift,
                 });
@@ -328,10 +328,8 @@ impl Legalizer {
         let mut spatial = DynamicSpatialIndex::new();
 
         for (idx, seg) in current.iter().enumerate() {
-            let net_id = current_net_ids
-                .get(idx)
-                .map(|n| n.raw() as usize)
-                .unwrap_or(0);
+            let net_id = current_net_ids.get(idx).copied().unwrap_or(NetId::UNCONNECTED);
+            let net_idx = net_id.raw() as usize;
             // Look up thickness from material registry using segment's material_id
             let thickness_nm = material_registry
                 .get_material(seg.material_id)
@@ -345,7 +343,7 @@ impl Legalizer {
                 });
             spatial.insert(crate::geometry_router::spatial_index::IndexedSegment::new(
                 hwc_physics::spatial_index::SpatialEntitySource::RouteSegment {
-                    net_idx: net_id,
+                    net_idx,
                     seg_idx: idx,
                 },
                 idx,
@@ -405,10 +403,8 @@ impl Legalizer {
 
             spatial = DynamicSpatialIndex::new();
             for (idx, seg) in current.iter().enumerate() {
-                let net_id = current_net_ids
-                    .get(idx)
-                    .map(|n| n.raw() as usize)
-                    .unwrap_or(0);
+                let net_id = current_net_ids.get(idx).copied().unwrap_or(NetId::UNCONNECTED);
+                let net_idx = net_id.raw() as usize;
                 let thickness_nm = material_registry
                     .get_material(seg.material_id)
                     .map(|m| m.thickness_nm)
@@ -420,7 +416,7 @@ impl Legalizer {
                     });
                 spatial.insert(crate::geometry_router::spatial_index::IndexedSegment::new(
                     hwc_physics::spatial_index::SpatialEntitySource::RouteSegment {
-                        net_idx: net_id,
+                        net_idx,
                         seg_idx: idx,
                     },
                     idx,

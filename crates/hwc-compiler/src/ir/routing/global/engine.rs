@@ -174,15 +174,15 @@ impl<'a> AutoRouter<'a> {
                     // 3. Profile global default (required, no fallback)
                     let escape_stub_nm = if let Some(Some(route_override)) = route_escape_stubs.get(idx) {
                         // Route-specific escape_stub takes highest priority
-                        eprintln!("[ESCAPE STUB] Net '{}' using route override: {} nm", resolved.net_name, route_override);
+                       
                         *route_override
                     } else if let Some(intent_name) = data.net_intents.get(&resolved.net_name) {
-                        eprintln!("[ESCAPE STUB] Net '{}' has intent: '{}'", resolved.net_name, intent_name);
+                       
                         // Look up intent's escape_stub
                         self.profile
                             .and_then(|p| p.intents.iter().find(|pi| pi.name.name == *intent_name))
                             .and_then(|pi| {
-                                eprintln!("[ESCAPE STUB] Found intent '{}' in profile", intent_name);
+                               
                                 pi.escape_stub.as_ref()
                             })
                             .map(|m| {
@@ -194,22 +194,21 @@ impl<'a> AutoRouter<'a> {
                                     hwc_parser::Unit::Centimeter => (m.value * 10_000_000.0) as i64,
                                     _ => panic!("Invalid unit for escape_stub: {:?}", m.unit),
                                 };
-                                eprintln!("[ESCAPE STUB] Intent '{}' has escape_stub: {} nm", intent_name, nm);
+                               
                                 nm
                             })
                             .unwrap_or_else(|| {
-                                eprintln!("[ESCAPE STUB] Intent '{}' found but no escape_stub, using global: {} nm", intent_name, global_escape_stub_nm);
+                                
                                 global_escape_stub_nm
                             })
                     } else {
                         // No route override, no intent -> use global (which is required to exist)
-                        eprintln!("[ESCAPE STUB] Net '{}' has NO intent, using global: {} nm", resolved.net_name, global_escape_stub_nm);
+                       
                         global_escape_stub_nm
                     };
                     
                     net_escape_stubs.insert(resolved.net_id, escape_stub_nm);
-                    eprintln!("[PERPENDICULAR ESCAPE] Net '{}' (id={}) escape_stub: {} nm", 
-                        resolved.net_name, resolved.net_id.raw(), escape_stub_nm);
+                   
                 }
                 Err(e) => {
                     eprintln!("[ROUTER WARNING] Failed to resolve boundary points for net '{}': {:?} - skipping", resolved.net_name, e);
@@ -249,6 +248,7 @@ impl<'a> AutoRouter<'a> {
                 net_trace_widths: &net_trace_widths_by_id,
                 net_normals: if !net_normals.is_empty() { Some(&net_normals) } else { None },
                 net_escape_stubs: if !net_escape_stubs.is_empty() { Some(&net_escape_stubs) } else { None },
+                net_layer_targets: if !data.net_layer_targets_by_id.is_empty() { Some(&data.net_layer_targets_by_id) } else { None },
             })
             .map_err(|_| IrError::NoPathFound {
                 net: "batch".into(),

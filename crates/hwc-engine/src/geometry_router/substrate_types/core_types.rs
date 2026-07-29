@@ -2,8 +2,7 @@ use crate::geometry::BoundingBox;
 use compact_str::CompactString;
 
 pub use crate::material::MaterialId;
-
-pub type NetId = u32;
+pub use crate::netlist::NetId; // Use the strongly-typed NetId struct, not a raw u32 alias
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Terminal {

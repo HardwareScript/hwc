@@ -108,6 +108,13 @@ pub fn substitute_in_expression(
                 span: *span,
             })
         }
+        Expression::Coordinate { coord, span } => {
+            let coord_sub = substitute_in_coordinate(coord, variable, value)?;
+            Ok(Expression::Coordinate {
+                coord: Box::new(coord_sub),
+                span: *span,
+            })
+        }
     }
 }
 

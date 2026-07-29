@@ -53,6 +53,7 @@ pub enum SpaceTopLevelStatement {
     Plane(Box<PlanePlacement>),
     Polygon(PolygonPlacement),
     Contact(ContactPlacement),
+    SpaceInstance(Box<super::placements::SpaceInstancePlacement>), // v0.2.1: Hierarchical space composition
     ForLoop(SpaceForLoop),
     Route(Route),
     Expose(Expose),
@@ -88,6 +89,7 @@ pub enum SpaceStatement {
     Pour(Box<PourPlacement>),
     Plane(Box<PlanePlacement>),
     Contact(ContactPlacement),
+    SpaceInstance(Box<super::placements::SpaceInstancePlacement>), // v0.2.1: Hierarchical space composition
     Route(Route),
     ForLoop(Box<SpaceForLoop>),
 }

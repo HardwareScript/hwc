@@ -157,6 +157,9 @@ fn build_symbol_table(
     // Register local definitions
     for definition in &ast.definitions {
         match definition {
+            hwc_parser::Definition::Bridge(bridge) => {
+                symbol_table.register_bridge(collector, bridge.clone());
+            }
             hwc_parser::Definition::Unit(unit) => {
                 symbol_table.register_unit(collector, unit.clone());
             }

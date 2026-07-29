@@ -24,12 +24,15 @@ pub fn add_substrate(
     // Generate meshes directly from topological router output using Clipper2's native
     // path stroking engine. This preserves pristine 45° miters and arbitrary angles.
 
+    // KEY STRUCTURE: (z_min, z_max, material_id, net_id)
+    // **TYPE-SAFE KEY**: Uses official NetId and MaterialId structs to prevent silent type mismatches
+    // This enforces compile-time safety - no more u32 → NetId conversion bugs
     let mut analytic_copper_pools: FxHashMap<
         (
-            i64,
-            i64,
-            hwc_engine::geometry_router::substrate_types::MaterialId,
-            u32,
+            i64,        // z_min
+            i64,        // z_max
+            hwc_engine::MaterialId, // Type-safe MaterialId (u8)
+            hwc_engine::netlist::NetId, // Type-safe NetId struct
         ),
         Vec<clipper2_rust::Path64>,
     > = FxHashMap::default();
@@ -37,122 +40,155 @@ pub fn add_substrate(
     // Add substrate layer pads (Pad_A, Pad_B, obstacles, etc.) to the pools
     use hwc_engine::geometry_router::substrate_types::SubstrateLayerShape;
 
+    eprintln!("[MESH SUBSTRATE DEBUG] Processing {} substrate layers", substrate_layers.len());
+    
     for layer in substrate_layers {
-        if layer.layer_type == hwc_engine::geometry_router::entity_graph::SubstrateLayerType::Pour {
+        if layer.layer_type == hwc_engine::geometry_router::entity_graph::SubstrateLayerType::Pour
+            || layer.layer_type == hwc_engine::geometry_router::entity_graph::SubstrateLayerType::Contact
+        {
+            let material_name = space
+                .material_registry
+                .get_name(layer.material)
+                .expect(&format!("Material ID {:?} not found in registry for substrate layer", layer.material));
+            
+            // Use the substrate layer's NetId directly (it's already strongly typed)
             let key = (
                 layer.bbox.min.z,
                 layer.bbox.max.z,
                 layer.material,
                 layer.net,
             );
+            
+            eprintln!(
+                "[SUBSTRATE POOL KEY] net={:?} type={:?} material={} Z={}→{}nm → key=(z_min={}, z_max={}, mat={:?}, net={:?}) ADDING PATH",
+                layer.net,
+                layer.layer_type,
+                material_name,
+                layer.bbox.min.z,
+                layer.bbox.max.z,
+                key.0,
+                key.1,
+                key.2,
+                key.3
+            );
 
-            let path = match layer.shape {
+            let path = match &layer.shape {
                 SubstrateLayerShape::Rect => rect_to_path(&layer.bbox),
                 SubstrateLayerShape::Circle { radius } => {
                     let cx = (layer.bbox.min.x + layer.bbox.max.x) / 2;
                     let cy = (layer.bbox.min.y + layer.bbox.max.y) / 2;
-                    circle_to_path(cx, cy, radius, 64)
+                    circle_to_path(cx, cy, *radius, 64)
+                }
+                SubstrateLayerShape::Polygon { outer_contour, .. } => {
+                    // Polygon points are now stored in world space, use directly
+                    outer_contour.clone()
                 }
                 _ => continue,
             };
 
+            let current_count = analytic_copper_pools.get(&key).map(|v| v.len()).unwrap_or(0);
             analytic_copper_pools.entry(key).or_default().push(path);
+            eprintln!(
+                "[SUBSTRATE POOL ACCUMULATE] key=({},{},{:?},{:?}) now has {} paths (was {})",
+                key.0, key.1, key.2, key.3,
+                analytic_copper_pools.get(&key).unwrap().len(),
+                current_count
+            );
         }
     }
 
     // Gather trace paths from analytic routes using native path offsetting
     for route in &space.analytic_routes {
-        let half_t = route.cross_section.thickness_nm / 2;
-
-        let z_min = route
-            .segments
-            .iter()
-            .map(|s| s.start.z.min(s.end.z))
-            .min()
-            .unwrap_or(0)
-            - half_t;
-        let z_max = route
-            .segments
-            .iter()
-            .map(|s| s.start.z.max(s.end.z))
-            .max()
-            .unwrap_or(0)
-            + half_t;
-
+        // **CRITICAL FIX**: Stroke the ENTIRE route as a continuous path, not segment-by-segment.
+        // This matches the DXF exporter behavior and produces smooth, properly mitered geometry.
+        // Processing segments individually causes jagged spikes when they're unioned.
+        
         // Use the shared stroke_route_segments function to generate perfect mitered outlines
+        // from the complete waypoint sequence
         let trace_outline = stroke_route_segments(&route.segments, route.cross_section.width_nm);
-
-        let key = (z_min, z_max, route.material, route.net_id.raw());
+        
+        let (z_min, z_max) = if let Some(range) = route.layer_z_range {
+            range
+        } else {
+            let half_t = route.cross_section.thickness_nm / 2;
+            let z_min = route
+                .segments
+                .iter()
+                .map(|s| s.start.z.min(s.end.z))
+                .min()
+                .expect(&format!("Route '{}' has no segments - cannot determine Z range", route.net_name))
+                - half_t;
+            let z_max = route
+                .segments
+                .iter()
+                .map(|s| s.start.z.max(s.end.z))
+                .max()
+                .expect(&format!("Route '{}' has no segments - cannot determine Z range", route.net_name))
+                + half_t;
+            (z_min, z_max)
+        };
+        
+        let key = (z_min, z_max, route.material, route.net_id);
+        
+        eprintln!(
+            "[TRACE POOL KEY] net={} material={} Z={}→{}nm → key=(z_min={}, z_max={}, mat={:?}, net={:?}) ADDING {} PATHS",
+            route.net_name,
+            space.material_registry.get_name(route.material).expect(&format!("Material ID {:?} not found in registry for route {}", route.material, route.net_name)),
+            z_min,
+            z_max,
+            key.0,
+            key.1,
+            key.2,
+            key.3,
+            trace_outline.len()
+        );
+        
+        let current_count = analytic_copper_pools.get(&key).map(|v| v.len()).unwrap_or(0);
         analytic_copper_pools
             .entry(key)
             .or_default()
             .extend(trace_outline);
+        eprintln!(
+            "[TRACE POOL ACCUMULATE] key=({},{},{:?},{:?}) now has {} paths (was {})",
+            key.0, key.1, key.2, key.3,
+            analytic_copper_pools.get(&key).unwrap().len(),
+            current_count
+        );
     }
 
-    // Add via pads to analytic copper pools
-    for via in &space.vias {
-        let z_start = via.from_z_nm.min(via.to_z_nm);
-        let z_end = via.from_z_nm.max(via.to_z_nm);
-        let pad_radius = via.diameter_nm / 2 + via.annular_ring_nm.max(via.diameter_nm / 4);
-        let copper_thickness = 35_000;
-
-        let copper_material_id = space
-            .material_registry
-            .all_materials()
-            .into_iter()
-            .find(|(_, name)| {
-                name.contains("Copper") || name.contains("Aluminum") || name.contains("Metal")
-            })
-            .map(|(id, _)| id)
-            .unwrap_or(space.substrate_material_id);
-
-        // Top pad
-        let top_key = (
-            z_end - copper_thickness,
-            z_end,
-            copper_material_id,
-            via.net_id.raw(),
-        );
-        analytic_copper_pools
-            .entry(top_key)
-            .or_default()
-            .push(circle_to_path(
-                via.position.0,
-                via.position.1,
-                pad_radius,
-                64,
-            ));
-
-        // Bottom pad
-        let bottom_key = (
-            z_start,
-            z_start + copper_thickness,
-            copper_material_id,
-            via.net_id.raw(),
-        );
-        analytic_copper_pools
-            .entry(bottom_key)
-            .or_default()
-            .push(circle_to_path(
-                via.position.0,
-                via.position.1,
-                pad_radius,
-                64,
-            ));
-    }
+    // Via pads are now derived natively from the substrate layer geometry (Contact type)
 
     // Union and extrude analytic trace segments with proper welding
-    for ((z_min_nm, z_max_nm, material_id, net_raw), paths) in analytic_copper_pools {
+    eprintln!("[MESH TRACE DEBUG] Processing {} unique trace pools", analytic_copper_pools.len());
+    
+    for ((z_min_nm, z_max_nm, material_id, net_id), paths) in analytic_copper_pools {
         let material_name = space
             .material_registry
             .get_name(material_id)
-            .unwrap_or("Copper");
+            .expect(&format!("Material ID {:?} not found in registry for copper pool", material_id));
+
+        eprintln!(
+            "[UNION POOL] key=(z_min={}, z_max={}, mat={:?}, net={:?}) → material='{}' ({} paths before union)",
+            z_min_nm,
+            z_max_nm,
+            material_id,
+            net_id,
+            material_name,
+            paths.len()
+        );
 
         // Perform 2D Boolean Union to weld overlapping rectangles
         let unioned = clipper2_rust::union_64(&paths, &vec![], FillRule::NonZero);
 
         let z_min_mm = z_min_nm as f64 / 1_000_000.0;
         let depth_mm = (z_max_nm - z_min_nm) as f64 / 1_000_000.0;
+        
+        eprintln!(
+            "[MESH TRACE DEBUG]     Extruding {} contours at Z={}mm depth={}mm",
+            unioned.len(),
+            z_min_mm,
+            depth_mm
+        );
 
         for (c_idx, path) in unioned.iter().enumerate() {
             if path.len() >= 3 {
@@ -162,7 +198,7 @@ pub fn add_substrate(
                     .collect();
 
                 meshes.push(extrude_polygon_mesh(
-                    &format!("Analytic_Route_Net_{}_Contour_{}", net_raw, c_idx),
+                    &format!("Analytic_Route_Net_{}_Contour_{}", net_id.raw(), c_idx),
                     &outer_points,
                     &[],
                     z_min_mm,
@@ -174,7 +210,8 @@ pub fn add_substrate(
         }
     }
 
-    // Render via barrel tubes
+    // Render via barrel tubes (ONLY for drilled/plated PCB vias)
+    // IC vias (deposited) are already handled natively via Contact substrate layers in the copper pool
     for (via_idx, via) in space.vias.iter().enumerate() {
         let z_start = via.from_z_nm.min(via.to_z_nm);
         let z_end = via.from_z_nm.max(via.to_z_nm);
@@ -184,18 +221,34 @@ pub fn add_substrate(
         let center_x_mm = via.position.0 as f64 / 1_000_000.0;
         let center_y_mm = via.position.1 as f64 / 1_000_000.0;
         let outer_dia_mm = via.diameter_nm as f64 / 1_000_000.0;
+        
+        let material_name = space
+            .material_registry
+            .get_name(via.material_id)
+            .expect(&format!("Material ID {:?} not found in registry for via {}", via.material_id, via_idx));
+        
+        // Query the material registry for the manufacturing process
+        let is_ic_via = space
+            .material_registry
+            .get_process(via.material_id)
+            .map(|process| process == hwc_engine::ManufacturingProcess::Deposited)
+            .unwrap_or(false);
+        
+        if is_ic_via {
+            // SKIP: IC vias are fully represented by SubstrateLayerType::Contact in the entity graph,
+            // which we already extruded natively via analytic_copper_pools.
+            continue;
+        }
+
+        eprintln!("[EXPORT] Via {} uses plated material '{}' - rendering as PCB via with pads", via_idx, material_name);
+        // PCB via: Plated through-hole with annular pads
         let pad_dia_mm = (via.diameter_nm + 2 * via.annular_ring_nm.max(via.diameter_nm / 4))
             as f64
             / 1_000_000.0;
         let barrel_thickness_mm = outer_dia_mm;
 
-        let material_name = space
-            .material_registry
-            .get_name(space.substrate_material_id)
-            .unwrap_or("Copper");
-
         meshes.push(create_via_mesh(ViaMeshParams {
-            name: format!("Analytic_Via_Barrel_{}", via_idx),
+            name: format!("PCB_Via_{}", via_idx),
             center: (center_x_mm, center_y_mm, z_min_mm),
             drill_dia: outer_dia_mm,
             pad_dia: pad_dia_mm,
@@ -223,7 +276,7 @@ pub fn add_substrate(
         let material_name = space
             .material_registry
             .get_name(layer.material)
-            .unwrap_or("Unknown");
+            .expect(&format!("Material ID {:?} not found in registry for substrate base layer {}", layer.material, idx));
 
         if material_name == "Void" || material_name == "Air" {
             continue;

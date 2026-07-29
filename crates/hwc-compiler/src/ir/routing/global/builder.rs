@@ -9,6 +9,7 @@ pub struct RoutingData {
     pub resolved_routes: Vec<crate::ir::routing::types::ResolvedRoute>,
     pub net_id_to_name: FxHashMap<NetId, CompactString>,
     pub net_layer_targets: FxHashMap<CompactString, i64>,
+    pub net_layer_targets_by_id: FxHashMap<NetId, i64>,
     pub net_declared_widths: FxHashMap<CompactString, i64>,
     pub net_currents_ma: FxHashMap<CompactString, f64>,
     pub obstacle_bboxes: Vec<BoundingBox>,
@@ -20,6 +21,7 @@ impl<'a> AutoRouter<'a> {
         let mut resolved_routes = Vec::new();
         let mut net_id_to_name = FxHashMap::default();
         let mut net_layer_targets = FxHashMap::default();
+        let mut net_layer_targets_by_id = FxHashMap::default();
         let mut net_declared_widths = FxHashMap::default();
         let mut net_currents_ma = FxHashMap::default();
         let mut net_intents = FxHashMap::default();
@@ -87,6 +89,9 @@ impl<'a> AutoRouter<'a> {
                                 self.stackup_manager.get_layer_start_z(&layer_id.name)
                             {
                                 net_layer_targets.insert(net_name.clone(), target_z);
+                                net_layer_targets_by_id.insert(actual_net_id, target_z);
+                                eprintln!("[ROUTING BUILDER] Route for net '{}' (id={}) has explicit layer '{}' at Z={}nm", 
+                                    net_name, actual_net_id.raw(), layer_id.name, target_z);
                             }
                         }
                         if let Some(ref width_expr) = route.width {
@@ -146,7 +151,7 @@ impl<'a> AutoRouter<'a> {
             obstacle_bboxes.push(metadata.bbox);
         }
         for layer in self.space.entity_graph.get_substrate_layers().iter() {
-            if layer.net == 0
+            if layer.net == hwc_engine::NetId::UNCONNECTED
                 && layer.layer_type
                     == hwc_engine::geometry_router::entity_graph::SubstrateLayerType::Pour
             {
@@ -163,6 +168,7 @@ impl<'a> AutoRouter<'a> {
             resolved_routes,
             net_id_to_name,
             net_layer_targets,
+            net_layer_targets_by_id,
             net_declared_widths,
             net_currents_ma,
             obstacle_bboxes,

@@ -1,4 +1,4 @@
-mod csg_eval;
+pub mod csg_eval;
 mod eval_env;
 mod math_parser;
 mod shape_eval;
@@ -28,6 +28,7 @@ pub struct ViaType {
     pub material: CompactString,
     pub from_material: CompactString,
     pub to_material: CompactString,
+    pub interface_material: Option<CompactString>, // NEW: Track bridge interface material
     pub from_layer: usize,
     pub to_layer: usize,
     pub diameter_mm: f64,
@@ -44,6 +45,7 @@ pub struct ViaTypeSpec {
     pub material: CompactString,
     pub from_material: CompactString,
     pub to_material: CompactString,
+    pub interface_material: Option<CompactString>, // NEW: Track bridge interface material
     pub from_layer: usize,
     pub to_layer: usize,
     pub diameter_mm: f64,
@@ -60,6 +62,7 @@ impl ViaType {
             material: spec.material,
             from_material: spec.from_material,
             to_material: spec.to_material,
+            interface_material: spec.interface_material,
             from_layer: spec.from_layer,
             to_layer: spec.to_layer,
             diameter_mm: spec.diameter_mm,
@@ -266,6 +269,7 @@ impl ViaLibrary {
                                 material: stack.fill_material.clone(),
                                 from_material: from_material.into(),
                                 to_material: to_material.into(),
+                                interface_material: Some(stack.interface_material.clone()), // Store the interface material!
                                 from_layer: from_idx,
                                 to_layer: to_idx,
                                 diameter_mm: min_diameter_mm,
@@ -351,8 +355,12 @@ impl ViaLibrary {
         let material_match = layer_candidates
             .iter()
             .filter(|v| {
-                // Exact material match
-                v.from_material == from_material && v.to_material == to_material
+                // Check for exact material match OR interface material match
+                let from_matches = v.from_material == from_material;
+                let to_matches = v.to_material == to_material
+                    || v.interface_material.as_ref().map(|i| i.as_str()) == Some(to_material);
+                
+                from_matches && to_matches
             })
             .max_by_key(|v| v.to_layer); // Prefer via that goes furthest (closest to target)
 

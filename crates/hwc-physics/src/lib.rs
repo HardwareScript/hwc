@@ -49,7 +49,7 @@ pub struct BridgeRule {
 /// Vector-first route segment metadata for continuity checking.
 #[derive(Debug, Clone)]
 pub struct RouteSegmentMetadata {
-    pub net: u32,
+    pub net: hwc_types::NetId,
     pub net_name: Option<CompactString>,
     pub material: u8,
     pub bbox: BoundingBox,

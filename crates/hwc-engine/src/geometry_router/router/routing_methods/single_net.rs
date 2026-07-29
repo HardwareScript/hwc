@@ -1,3 +1,4 @@
+use crate::netlist::NetId;
 use super::super::super::types::{NetRoute, RoutedNet, RoutingError};
 use super::super::core::GeometryRouter;
 use crate::geometry::BoundingBox;
@@ -84,7 +85,7 @@ impl GeometryRouter {
                         instance_id: seg_id,
                     },
                     segment_id: seg_id,
-                    net_id: crate::netlist::NetId::UNCONNECTED.raw() as usize,
+                    net_id: crate::netlist::NetId::UNCONNECTED,
                     width_nm: hwc_physics::spatial_index::IndexedSegment::BBOX_OBSTACLE_WIDTH,
                     thickness_nm: z_max - z_min,
                     start: hwc_physics::geometry::Point3D::new(meta.bbox.min.x, meta.bbox.min.y, z_min),
@@ -108,7 +109,7 @@ impl GeometryRouter {
               
                 // Same-net pours are not obstacles (we can route over our own pours)
                 // BUT: net_id = 0 pours (keepout zones) are ALWAYS obstacles
-                if sub_net_id != 0 && crate::netlist::NetId(sub_net_id) == active_route.net_id {
+                if sub_net_id != NetId::UNCONNECTED && sub_net_id == active_route.net_id {
                   
                     continue;
                 }
@@ -121,7 +122,7 @@ impl GeometryRouter {
                 // within that margin of the bbox boundary, this layer is an endpoint pad and
                 // must be exempted from the obstacle list.
                 // Only keepout zones (net_id = 0) are always obstacles regardless.
-                if sub_net_id != 0 {
+                if sub_net_id != NetId::UNCONNECTED {
                     let proximity = self.trace_width_nm / 2;
                     let goal = active_route.goal;
                     let bbox = &sub_layer.bbox;
@@ -160,7 +161,7 @@ impl GeometryRouter {
                         index: substrate_idx,
                     },
                     segment_id: stable_segment_id,
-                    net_id: sub_net_id as usize,
+                    net_id: sub_net_id,
                     width_nm: 0,
                     thickness_nm: sub_layer.bbox.max.z - sub_layer.bbox.min.z,
                     start: sub_layer.bbox.min,
@@ -196,7 +197,7 @@ impl GeometryRouter {
                         seg_idx,
                     },
                     segment_id: seg_idx,
-                    net_id: (*net_id).raw() as usize,
+                    net_id: *net_id,
                     width_nm: segment.width_nm,
                     thickness_nm: {
                         let mat_props = self

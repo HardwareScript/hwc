@@ -1,6 +1,7 @@
 use super::types::DrcViolation;
 use crate::constraint_manager::ConstraintRulebook;
 use crate::geometry::BoundingBox;
+use crate::netlist::NetId;
 use crate::space::HardwareSpace;
 use rustc_hash::FxHashSet;
 
@@ -55,7 +56,7 @@ pub fn validate_clearances(
                 // Only show first 5
                 eprintln!("[DRC BUG] OUT-OF-BOUNDS entity #{}:", oob_count);
                 eprintln!(
-                    "  net_id={}, start=({},{},{}), end=({},{},{})",
+                    "  net_id={:?}, start=({},{},{}), end=({},{},{})",
                     entity.net_id,
                     entity.start.x,
                     entity.start.y,
@@ -78,7 +79,7 @@ pub fn validate_clearances(
     // v0.1.8: Simplified Category A - Geometric Clearance Check
     // Iterate over all entities in the spatial index (pours, routes, components)
     for entity in space.entity_graph.spatial().iter() {
-        if entity.net_id == 0 {
+        if entity.net_id == NetId::UNCONNECTED {
             continue; // Skip unconnected geometry for clearance (keepouts handle this)
         }
 
@@ -93,14 +94,14 @@ pub fn validate_clearances(
 
         for cand in candidates {
             // 5. If any returned element belongs to a different NetId, flag a violation
-            if cand.net_id == 0 || cand.net_id == entity.net_id {
+            if cand.net_id == NetId::UNCONNECTED || cand.net_id == entity.net_id {
                 continue;
             }
 
             let (net_a, net_b) = if entity.net_id < cand.net_id {
-                (entity.net_id as u32, cand.net_id as u32)
+                (entity.net_id.raw(), cand.net_id.raw())
             } else {
-                (cand.net_id as u32, entity.net_id as u32)
+                (cand.net_id.raw(), entity.net_id.raw())
             };
             let pair_key = (net_a, net_b);
             if !checked.insert(pair_key) {

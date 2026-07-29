@@ -70,8 +70,14 @@ pub fn add_materials_from_symbol_table(
         let mut opacity = material_def.get_opacity() as f32;
 
         // v0.1.7: Force components and semiconductor bodies to be Opaque
-        if material_def.category == hwc_parser::MaterialCategory::Semiconductor
-            || name.to_lowercase().contains("body")
+        // DISABLED: Allow semiconductors to be transparent for visualization
+        // if material_def.category == hwc_parser::MaterialCategory::Semiconductor
+        //     || name.to_lowercase().contains("body")
+        //     || name.to_lowercase().contains("component")
+        // {
+        //     opacity = 1.0;
+        // }
+        if name.to_lowercase().contains("body")
             || name.to_lowercase().contains("component")
         {
             opacity = 1.0;

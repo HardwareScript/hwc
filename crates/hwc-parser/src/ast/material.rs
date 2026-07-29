@@ -36,12 +36,12 @@ pub struct MaterialDefinition {
 }
 
 /// Manufacturing process behavior for Z-axis placement (v0.1.7)
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+/// MUST be explicitly declared - no defaults permitted
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ManufacturingProcess {
     /// Drilled and plated through the substrate (PCB style)
     DrilledPlated,
     /// Deposited/Plotted into the grid (CMOS/3D-Print style)
-    #[default]
     Deposited,
     /// Etched away from existing material (MEMS style)
     Etched,

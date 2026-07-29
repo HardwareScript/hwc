@@ -127,7 +127,7 @@ impl MultiNetManager {
         // but for point occupancy we check at the point itself (zero radius).
         let nearby = entity_graph.spatial().query_radius(point.x, point.y, 1);
         for segment in &nearby {
-            if segment.net_id != net_id.raw() as usize {
+            if segment.net_id.raw() as usize != net_id.raw() as usize {
                 return true; // Different net — conflict
             }
         }

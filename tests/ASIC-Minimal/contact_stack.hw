@@ -1,0 +1,48 @@
+# contact_stack.hw
+# The absolute simplest 3D IC building block: A vertical contact stack.
+# No routing. No pathfinders. Just raw vertical connectivity.
+
+import * from @std/primitives/units
+import * from "./minimal_pdk"
+
+# 1. Define the logical contract (Single pin, no route)
+module ContactStack:
+    pins: [ A ]
+
+shape SquarePad(width: Measurement, height: Measurement):
+    geometry:
+        Rectangle(width: width, height: height)
+
+space Contact_Stack_Space implements ContactStack:
+    # A tiny 1um x 1um space, flattened to 50nm depth
+    dimensions: 1.0um by 1.0um by 50nm
+    resolution: 10nm
+    origin: bl by b
+    profile: ASIC_Flattened
+
+    nets:
+        A: { classification: signal, potential: 1.8V, current: 0.1uA }
+
+    # ========================================================================
+    # VERTICAL SANDWICH PLACEMENT
+    # All three elements are placed at the exact same XY center coordinate [500nm, 500nm]
+    # ========================================================================
+
+    # 1. Bottom Layer: Active Silicon Pad (Z: 0nm to 10nm)
+    add plane(Silicon_N) named Active_Pad inside: space on layer: active:
+        shape: SquarePad(width: 400nm, height: 400nm)
+        at: [300nm, 300nm]  # Placed so center is exactly [500nm, 500nm]
+        net: A
+
+    # 2. Middle Layer: Solid Tungsten Square Plug (Z: 10nm to 20nm)
+    # The compiler automatically unrolls this to bridge active to metal1
+    add contact(Tungsten) named Tungsten_Plug at [x: 500nm, y: 500nm] spanning layer: active to metal1:
+        net: A
+        diameter: 200nm
+        plating_thickness: 5nm
+
+    # 3. Top Layer: Metal 1 Aluminum Pad (Z: 20nm to 30nm)
+    add plane(Aluminum) named Metal_Pad inside: space on layer: metal1:
+        shape: SquarePad(width: 400nm, height: 400nm)
+        at: [300nm, 300nm]  # Placed so center is exactly [500nm, 500nm]
+        net: A

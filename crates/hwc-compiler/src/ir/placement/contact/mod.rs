@@ -7,6 +7,7 @@ mod resolve;
 use crate::ir::errors::IrError;
 use crate::ir::stackup_manager::StackupManager;
 use hwc_engine::{HardwareSpace, Point3D};
+use hwc_physics::geometry::Point2D;
 
 use helpers::*;
 use netlist_ops::*;
@@ -20,6 +21,7 @@ pub fn place_contact(
     eval_context: &hwc_parser::EvaluationContext,
     stackup_manager: &StackupManager,
     profile: Option<&hwc_parser::ProfileDefinition>,
+    bbox_tracker: &crate::BoundingBoxTracker, // v0.2.0: Added for relational anchor resolution
 ) -> Result<(), IrError> {
     let material_id = space
         .material_registry
@@ -28,37 +30,50 @@ pub fn place_contact(
             material: contact.material.clone(),
         })?;
 
-    let (_x_expr, _y_expr) = match &contact.position {
-        hwc_parser::Coordinate::Positional { x, y, .. }
-        | hwc_parser::Coordinate::Declarative { x, y, .. } => (x, y),
-        hwc_parser::Coordinate::Relative(_) => {
-            return Err(IrError::PlacementConstraint {
-                message: "Relative coordinates are not supported for contact placement".into(),
-                component: contact
-                    .name
-                    .as_ref()
-                    .map(|n| n.as_str().to_string())
-                    .unwrap_or_else(|| "unnamed".to_string()),
-            });
-        }
-    };
+    // v0.2.0: Resolve position from either absolute coordinates or relational anchor
+    let xy_point = if let Some(ref anchor) = contact.relational_anchor {
+        // Resolve relational anchor (e.g., Region.center) - returns 2D point
+        resolve_relational_anchor(anchor, bbox_tracker, &contact.name)?
+    } else if let Some(ref position) = contact.position {
+        // Absolute coordinates - returns 3D point, we extract x,y
+        let (_x_expr, _y_expr) = match position {
+            hwc_parser::Coordinate::Positional { x, y, .. }
+            | hwc_parser::Coordinate::Declarative { x, y, .. } => (x, y),
+            hwc_parser::Coordinate::Relative(_) => {
+                return Err(IrError::PlacementConstraint {
+                    message: "Relative coordinates are not supported for contact placement".into(),
+                    component: contact.name.base.to_string(),
+                });
+            }
+        };
 
-    let ctx = crate::ir::conversions::CoordinateContext {
-        origin,
-        space_dimensions: &space.dimensions,
-        symbol_table,
-        eval_context,
-        bbox_tracker: None,
-        stackup_manager,
-        profile,
-    };
-    let xy_point =
-        crate::ir::conversions::coordinate_to_point(&contact.position, &ctx).map_err(|e| {
+        let ctx = crate::ir::conversions::CoordinateContext {
+            origin,
+            space_dimensions: &space.dimensions,
+            symbol_table,
+            eval_context,
+            bbox_tracker: None,
+            stackup_manager,
+            profile,
+        };
+        let point_3d = crate::ir::conversions::coordinate_to_point(position, &ctx).map_err(|e| {
             IrError::CoordinateResolutionFailed {
-                coordinate_str: "contact position".into(),
+                coordinate_str: format!("contact '{}' position", contact.name.base.as_str()),
                 reason: e,
             }
         })?;
+        // Extract 2D point from 3D
+        Point2D::new(point_3d.x, point_3d.y)
+    } else {
+        return Err(IrError::PlacementConstraint {
+            message: "Contact must specify either absolute position or relational anchor".into(),
+            component: contact.name.base.to_string(),
+        });
+    };
+    
+    println!("[PLACE_CONTACT_DEBUG] Resolved xy_point for '{}': x={}, y={}", 
+        contact.name.base.as_str(),
+        xy_point.x, xy_point.y);
 
     let diameter_nm = get_prop_nm(contact, "drill_diameter", symbol_table, eval_context)
         .or_else(|| get_prop_nm(contact, "diameter", symbol_table, eval_context))
@@ -71,7 +86,7 @@ pub fn place_contact(
         .ok_or_else(|| IrError::MissingAsicConstraint {
             message: format!(
                 "Contact '{}' has no explicit diameter and no profile default via diameter.",
-                contact.name.as_ref().map(|n| n.to_string()).unwrap_or_else(|| "unnamed".into())
+                contact.name.as_str()
             ),
             hint: "Add 'diameter: <value>' to the contact, or declare 'via: default_diameter: <value>' in the profile.".into(),
         })?;
@@ -93,11 +108,7 @@ pub fn place_contact(
         stackup_manager.resolve_elevation_top(&contact.from_elevation, symbol_table, eval_context)?;
     let to_top_nm = stackup_manager.resolve_elevation_top(&contact.to_elevation, symbol_table, eval_context)?;
 
-    let contact_name_debug = contact
-        .name
-        .as_ref()
-        .map(|n| n.to_string())
-        .unwrap_or_else(|| "<unnamed>".into());
+    let contact_name_debug = contact.name.base.as_str();
     println!("[PLACE_CONTACT] '{}' material='{}' dia={}nm from_z={}nm to_z={}nm from_top={}nm to_top={}nm",
         contact_name_debug, contact.material, diameter_nm,
         from_bottom_nm, to_bottom_nm, from_top_nm, to_top_nm);
@@ -134,6 +145,12 @@ pub fn place_contact(
             start_z.max(end_z),
         ),
     );
+    
+    println!("[PLACE_CONTACT_DEBUG] '{}' contact_bbox calculated: min=({},{},{}) max=({},{},{}), radius={}nm",
+        contact_name_debug,
+        contact_bbox.min.x, contact_bbox.min.y, contact_bbox.min.z,
+        contact_bbox.max.x, contact_bbox.max.y, contact_bbox.max.z,
+        radius_nm);
 
     check_material_collisions(space, contact, &contact_bbox, from_bottom_nm, to_bottom_nm)?;
 
@@ -153,7 +170,7 @@ pub fn place_contact(
         None
     };
 
-    let contour = resolve_shape(contact, eval_context, symbol_table, diameter_nm);
+    let contour = resolve_shape(contact, eval_context, symbol_table, diameter_nm, profile)?;
 
     let annular_ring_nm = resolve_annular_ring(space, contact, symbol_table, eval_context)?;
 
@@ -207,7 +224,7 @@ pub fn place_contact(
                 contour,
                 symbol_table,
                 eval_context,
-                contact_name_debug: contact_name_debug.clone(),
+                contact_name_debug: contact_name_debug.into(),
                 is_tented,
                 clearance_nm,
                 resolution_nm: space.resolution_nm,
@@ -230,7 +247,7 @@ pub fn place_contact(
                 contour,
                 symbol_table,
                 eval_context,
-                contact_name_debug: contact_name_debug.clone(),
+                contact_name_debug: contact_name_debug.into(),
                 is_tented,
                 clearance_nm,
                 resolution_nm: space.resolution_nm,
@@ -238,20 +255,24 @@ pub fn place_contact(
             bridge_mat,
         )?;
     } else {
-        let mut process = hwc_engine::ManufacturingProcess::Deposited;
-        if let Some(material_def) = symbol_table.materials().get(&contact.material) {
-            process = match material_def.process {
-                hwc_parser::ManufacturingProcess::DrilledPlated => {
-                    hwc_engine::ManufacturingProcess::DrilledPlated
-                }
-                hwc_parser::ManufacturingProcess::Etched => {
-                    hwc_engine::ManufacturingProcess::Etched
-                }
-                hwc_parser::ManufacturingProcess::Deposited => {
-                    hwc_engine::ManufacturingProcess::Deposited
-                }
-            };
-        }
+        // NO DEFAULTS: Material MUST have an explicit process declaration
+        let material_def = symbol_table.get_material(&contact.material)
+            .map_err(|_| IrError::UndeclaredMaterial {
+                material: contact.material.clone(),
+            })?;
+        
+        // Process is now a required field (not Option), validated at parse time
+        let process = match material_def.process {
+            hwc_parser::ManufacturingProcess::DrilledPlated => {
+                hwc_engine::ManufacturingProcess::DrilledPlated
+            }
+            hwc_parser::ManufacturingProcess::Etched => {
+                hwc_engine::ManufacturingProcess::Etched
+            }
+            hwc_parser::ManufacturingProcess::Deposited => {
+                hwc_engine::ManufacturingProcess::Deposited
+            }
+        };
 
         space.material_registry.set_process(material_id, process);
 
@@ -300,7 +321,7 @@ pub fn place_contact(
                     contour,
                     symbol_table,
                     eval_context,
-                    contact_name_debug: contact_name_debug.clone(),
+                    contact_name_debug: contact_name_debug.into(),
                     is_tented,
                     clearance_nm,
                     resolution_nm: space.resolution_nm,
@@ -312,11 +333,9 @@ pub fn place_contact(
     register_contact_in_netlist(netlist_ops::NetlistRegistration {
         space,
         contact,
-        from_bottom_nm,
-        to_bottom_nm,
         diameter_nm,
         material_id,
-        xy_point,
+        xy_point: Point3D::new(xy_point.x, xy_point.y, 0), // Convert Point2D to Point3D
         start_z,
         end_z,
         symbol_table,
@@ -336,6 +355,83 @@ pub fn place_contact(
         symbol_table,
         eval_context,
     });
+
+    // v0.2.0: Register contact as a routable entity
+    let contact_name_str = contact.name.base.as_str();
+    let net_id = contact.net.as_ref().and_then(|net| {
+        space.netlist.get_net_by_name(net.base.as_str())
+    });
+    
+    space.entity_graph.register_space_entity(
+        contact_name_str,
+        contact_bbox,
+        net_id,
+        (start_z + end_z) / 2, // Use mid-point z coordinate
+    );
+
+    // v0.2.0 CIR: Register PhysicalInterface for this contact
+    {
+        use hwc_engine::geometry_router::connection_interface::{InterfaceGeometry, PhysicalInterface};
+        use hwc_engine::geometry_router::routing_intent::RoutingIntent;
+        use hwc_engine::netlist::ComponentId;
+        use smallvec::smallvec;
+
+        let constraints = space.fabrication_constraints.as_ref()
+            .ok_or_else(|| IrError::MissingAsicConstraint {
+                message: "Fabrication constraints required for contact interface generation".into(),
+                hint: "Add a 'trace:' block to your profile with min_width and min_spacing".into(),
+            })?;
+
+        let trace_width_nm = constraints.trace.min_width_nm;
+        let clearance_nm = constraints.trace.min_spacing_nm;
+        let middle_z_nm = (contact_bbox.min.z + contact_bbox.max.z) / 2;
+
+        use hwc_parser::OriginXY;
+        let is_y_upward = matches!(origin.xy, OriginXY::BL | OriginXY::BR);
+
+        let geometry = if is_y_upward {
+            InterfaceGeometry::Polygon(vec![
+                Point3D::new(contact_bbox.min.x, contact_bbox.min.y, middle_z_nm),
+                Point3D::new(contact_bbox.max.x, contact_bbox.min.y, middle_z_nm),
+                Point3D::new(contact_bbox.max.x, contact_bbox.max.y, middle_z_nm),
+                Point3D::new(contact_bbox.min.x, contact_bbox.max.y, middle_z_nm),
+            ])
+        } else {
+            InterfaceGeometry::Polygon(vec![
+                Point3D::new(contact_bbox.min.x, contact_bbox.min.y, middle_z_nm),
+                Point3D::new(contact_bbox.min.x, contact_bbox.max.y, middle_z_nm),
+                Point3D::new(contact_bbox.max.x, contact_bbox.max.y, middle_z_nm),
+                Point3D::new(contact_bbox.max.x, contact_bbox.min.y, middle_z_nm),
+            ])
+        };
+
+        let interface_id = space.entity_graph.allocate_interface_id();
+        let intent = RoutingIntent::new("Default");
+        let db = hwc_engine::geometry_router::connection_interface::DefaultRoutingDatabase::default();
+        let pseudo_component_id = ComponentId::new(0xFFFF_0000 + interface_id.raw());
+
+        let interface = PhysicalInterface::new(
+            interface_id,
+            pseudo_component_id,
+            geometry,
+            smallvec![],
+            intent,
+            hwc_engine::geometry_router::connection_interface::Orientation::Derived,
+            &db,
+            trace_width_nm,
+            clearance_nm * 2,
+        );
+
+        space.entity_graph.register_space_entity_interface(
+            contact.name.base.clone(),
+            interface,
+        );
+    }
+    
+    println!(
+        "[DEBUG] Registered contact '{}' as routing endpoint with net_id={:?}",
+        contact_name_str, net_id
+    );
 
     Ok(())
 }

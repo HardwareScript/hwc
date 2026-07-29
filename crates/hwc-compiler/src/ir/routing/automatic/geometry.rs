@@ -36,39 +36,11 @@ pub fn build_spatial_index(
     {
         let width = layer.bbox.max.x - layer.bbox.min.x;
         let height = layer.bbox.max.y - layer.bbox.min.y;
+        let depth = layer.bbox.max.z - layer.bbox.min.z;
         
-        // v0.1.9.1 NATIVE FIX: Align spatial index layer Z with middle of pad's thickness.
-        //
-        // PROBLEM: Previously registered obstacles at layer.bbox.min.z (bottom Z = 960nm),
-        // but ray queries happen at the trace centerline Z (middle Z = 1160nm). The R*-tree
-        // envelope mismatch caused queries to completely miss obstacles.
-        //
-        // EXAMPLE BUG:
-        //   Squeeze_Block registered at Z=960nm (bottom)
-        //   Ray cast from Pad_Tight_A at Z=1160nm (middle)
-        //   R*-tree query at Z=1160 returns NO candidates
-        //   Result: Ray reports 950µm clearance (false positive), selects East port
-        //   Route collides with Squeeze_Block → R16 error
-        //
-        // SOLUTION: Register obstacles at middle Z to match where routing queries occur.
-        // Both the layer field AND start/end points must use middle Z for correct collision detection.
-        let middle_z = (layer.bbox.min.z + layer.bbox.max.z) / 2;
-        
-        let start_point = hwc_engine::geometry::Point3D::new(
-            layer.bbox.min.x, 
-            layer.bbox.min.y, 
-            middle_z
-        );
-        let end_point = hwc_engine::geometry::Point3D::new(
-            layer.bbox.max.x, 
-            layer.bbox.max.y, 
-            middle_z
-        );
-        
-        eprintln!(
-            "[GEOMETRY.RS FIX] Layer {}: original Z=[{}, {}], middle_z={}, start.z={}, end.z={}",
-            layer_idx, layer.bbox.min.z, layer.bbox.max.z, middle_z, start_point.z, end_point.z
-        );
+        // v0.2.0: Preserve 3D structure for substrate layers.
+        // Register obstacles with their full 3D bounding boxes to maintain physical correctness.
+        // The spatial index and collision detection will handle Z-coordinate filtering properly.
         
         let trace_seg = hwc_engine::geometry_router::IndexedSegment {
             source:
@@ -76,28 +48,20 @@ pub fn build_spatial_index(
                     index: layer_idx,
                 },
             segment_id: layer_idx,
-            net_id: layer.net as usize,
+            net_id: layer.net,
             width_nm: width.max(height),
-            thickness_nm: layer.bbox.max.z - layer.bbox.min.z,
-            start: start_point,
-            end: end_point,
-            layer: middle_z,  // Use middle Z instead of bottom Z
+            thickness_nm: depth,  // Preserve original Z thickness
+            start: layer.bbox.min,  // Original 3D start point
+            end: layer.bbox.max,    // Original 3D end point
+            layer: layer.bbox.min.z,  // Bottom Z coordinate
         };
-        eprintln!(
-            "[AUTO ROUTE INDEX] Adding substrate layer {}: net_id={}, bbox=({},{},{}) to ({},{},{})",
-            layer_idx, layer.net,
-            layer.bbox.min.x, layer.bbox.min.y, layer.bbox.min.z,
-            layer.bbox.max.x, layer.bbox.max.y, layer.bbox.max.z
-        );
+       
         idx.insert(trace_seg);
     }
 
     for meta in config.space.entity_graph.get_component_metadata() {
         if meta.name == config.from_component_name || meta.name == config.to_component_name {
-            eprintln!(
-                "[AUTO ROUTE INDEX] Skipping component '{}' (is start or goal)",
-                meta.name
-            );
+           
             continue;
         }
 
@@ -109,7 +73,7 @@ pub fn build_spatial_index(
                     instance_id: 0,
                 },
             segment_id: 0,
-            net_id: 0,
+            net_id: hwc_engine::NetId::UNCONNECTED,
             width_nm: width.max(height),
             thickness_nm: meta.bbox.max.z - meta.bbox.min.z,
             start: meta.bbox.min,
@@ -167,6 +131,16 @@ pub fn create_segments(
     _trace_width_nm: i64,
     profile: Option<&hwc_parser::ProfileDefinition>,
 ) -> Result<Vec<LineSegment>, IrError> {
+    eprintln!("[CREATE_SEGMENTS DEBUG] Called with {} waypoints:", refined_path.len());
+    for (i, wp) in refined_path.iter().enumerate() {
+        eprintln!("[CREATE_SEGMENTS DEBUG]   refined_path[{}]: ({},{},{})", i, wp.x, wp.y, wp.z);
+    }
+    eprintln!("[CREATE_SEGMENTS DEBUG] start_boundary: ({},{},{})", 
+        start_boundary.x, start_boundary.y, start_boundary.z);
+    eprintln!("[CREATE_SEGMENTS DEBUG] goal_boundary: ({},{},{})", 
+        goal_boundary.x, goal_boundary.y, goal_boundary.z);
+    eprintln!("[CREATE_SEGMENTS DEBUG] target_z_nm: {:?}", target_z_nm);
+    
     let mut segs = Vec::new();
 
     if let Some(target_z) = target_z_nm {
@@ -192,10 +166,37 @@ pub fn create_segments(
 
     if refined_path.len() >= 2 {
         let min_seg_len_nm = crate::ir::routing::helpers::require_min_segment_length_nm(profile)?;
-        segs.extend(crate::ir::routing::helpers::manhattan_path_to_segments(
-            refined_path,
-            min_seg_len_nm,
-        ));
+        eprintln!("[CREATE_SEGMENTS DEBUG] Calling manhattan_path_to_segments with min_seg_len={}nm", min_seg_len_nm);
+        
+        // STRUCTURAL FIX: For 3D paths with Z transitions, create segments directly from waypoints
+        // instead of using manhattan_path_to_segments which has buggy collinear logic for 3D
+        let has_z_transitions = refined_path.windows(2).any(|w| w[0].z != w[1].z);
+        
+        if has_z_transitions {
+            eprintln!("[CREATE_SEGMENTS DEBUG] Path has Z transitions - creating segments directly");
+            for i in 0..refined_path.len() - 1 {
+                segs.push(hwc_engine::LineSegment::new(refined_path[i], refined_path[i + 1]));
+            }
+            eprintln!("[CREATE_SEGMENTS DEBUG] Created {} segments directly from waypoints", segs.len());
+        } else {
+            eprintln!("[CREATE_SEGMENTS DEBUG] Path is planar - using manhattan_path_to_segments");
+            let path_segs = crate::ir::routing::helpers::manhattan_path_to_segments(
+                refined_path,
+                min_seg_len_nm,
+            );
+            eprintln!("[CREATE_SEGMENTS DEBUG] manhattan_path_to_segments returned {} segments:", path_segs.len());
+            for (i, seg) in path_segs.iter().enumerate() {
+                eprintln!("[CREATE_SEGMENTS DEBUG]   seg[{}]: ({},{},{}) -> ({},{},{})", 
+                    i, seg.start.x, seg.start.y, seg.start.z, seg.end.x, seg.end.y, seg.end.z);
+            }
+            segs.extend(path_segs);
+        }
+        
+        eprintln!("[CREATE_SEGMENTS DEBUG] Final segment count: {}", segs.len());
+        for (i, seg) in segs.iter().enumerate() {
+            eprintln!("[CREATE_SEGMENTS DEBUG]   final_seg[{}]: ({},{},{}) -> ({},{},{})", 
+                i, seg.start.x, seg.start.y, seg.start.z, seg.end.x, seg.end.y, seg.end.z);
+        }
     }
 
     if let Some(target_z) = target_z_nm {
@@ -221,16 +222,29 @@ pub fn create_segments(
 
 /// Check non-routable layers in the path.
 ///
-/// The topological router skips non-routable layers, but this post-route check
-/// catches edge cases where the router may have slipped through.
+/// The topological router skips non-routable layers for horizontal routing, but allows
+/// vertical via transitions through non-routable dielectric/oxide layers.
+/// This post-route check validates that horizontal segments don't cross non-routable layers,
+/// while permitting vertical transitions.
 pub fn check_non_routable_layers(
     path: &[Point3D],
     stackup_manager: &crate::ir::stackup_manager::StackupManager,
     profile: Option<&hwc_parser::ProfileDefinition>,
 ) -> Result<(), IrError> {
     if let Some(stackup) = profile.and_then(|p| p.stackup.as_ref()) {
-        for point in path {
-            if let Some(layer_name) = stackup_manager.get_layer_name_at_z(point.z) {
+        // Check each segment (not just points) to distinguish horizontal vs vertical
+        for window in path.windows(2) {
+            let start = window[0];
+            let end = window[1];
+            
+            // If this is a vertical segment (via transition), skip layer routability check
+            // Vias MUST pass through non-routable dielectric layers by definition
+            if start.z != end.z {
+                continue; // Vertical via - exempt from layer routability
+            }
+            
+            // For horizontal segments, enforce layer routability at the segment's Z coordinate
+            if let Some(layer_name) = stackup_manager.get_layer_name_at_z(start.z) {
                 if let Some(layer_def) = stackup.layers.iter().find(|l| l.name.name == layer_name) {
                     if let Some(hwc_parser::RoutableMode::False) = layer_def.routable {
                         let material = layer_def.material.clone();

@@ -11,8 +11,9 @@ pub use elevation::{Elevation, RoutingConfig, RoutingMode};
 pub use layout::{LayoutStatement, ModuleInternalPlacement, ModuleLayoutBlock};
 pub use nets::{NetClassification, NetDeclaration};
 pub use placements::{
-    CapType, ContactPlacement, CutoutShape, DeviceBinding, PlanePlacement, PolygonPlacement,
-    PourBoundary, PourPlacement, ShapeInstance,
+    AnchorPoint, CapType, ContactPlacement, CutoutShape, DeviceBinding, PlanePlacement,
+    PolygonPlacement, PourBoundary, PourPlacement, RelationalAnchor, ShapeInstance,
+    SpaceInstancePlacement, // v0.2.1: Hierarchical space composition
 };
 pub use region::{
     RegionAnchor, RegionBoundary, RegionConstraint, RegionConstraintType, RegionDefinition,

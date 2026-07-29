@@ -284,13 +284,35 @@ pub fn route_manual(
         .and_then(|n| n.current_ma)
         .unwrap_or(0.0);
 
-    let analytic_trace = hwc_engine::AnalyticTrace::new(
+    // **v0.2.0 STRUCTURAL FIX: Compute layer_z_range for horizontal traces**
+    let layer_z_range = if let Some(first_seg) = segments.first() {
+        // Check if this is a horizontal trace (all segments at same Z)
+        let is_horizontal = segments
+            .iter()
+            .all(|s| s.start.z == first_seg.start.z && s.end.z == first_seg.start.z);
+
+        if is_horizontal {
+            let centerline_z = first_seg.start.z;
+            // Look up the layer from HardwareSpace's stackup (single source of truth)
+            space
+                .find_layer_at_z(centerline_z)
+                .map(|layer| (layer.z_bottom, layer.z_top))
+        } else {
+            // Via or multi-layer trace: segments encode their own Z spans
+            None
+        }
+    } else {
+        None
+    };
+
+    let analytic_trace = hwc_engine::AnalyticTrace::with_layer_z_range(
         net_id,
         hwc_engine::space::CrossSection::new(trace_width_nm, thickness_nm),
         segments,
         copper_id,
         net_name,
         hwc_engine::space::CurrentRating::new(net_actual_current_ma, current_ma),
+        layer_z_range,
     );
 
     space.add_analytic_route(analytic_trace);

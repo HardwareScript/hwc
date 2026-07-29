@@ -21,6 +21,7 @@ impl GeometryRouter {
             net_trace_widths,
             net_normals,
             net_escape_stubs,
+            net_layer_targets,
         } = req;
 
         if let Some(sl) = substrate_layers {
@@ -36,6 +37,15 @@ impl GeometryRouter {
         if let Some(escape_stubs) = net_escape_stubs {
             self.net_escape_stubs = escape_stubs.clone();
         }
+        
+        // v0.2.0: Store per-net layer targets for explicit layer routing
+        if let Some(layer_targets) = net_layer_targets {
+            self.net_layer_targets = layer_targets.clone();
+            for (net_id, target_z) in layer_targets {
+                eprintln!("[ROUTER ENGINE] Net {} has explicit layer target at Z={}nm", 
+                    net_id.raw(), target_z);
+            }
+        }
 
         self.build_entity_graph();
 
@@ -44,8 +54,9 @@ impl GeometryRouter {
             .constraints
             .fabrication
             .as_ref()
-            .map(|fab| fab.min_trace_spacing_nm)
-            .unwrap_or(200_000);
+            .expect("BUG: Fabrication constraints required for routing partition grid. \
+                     Ensure the profile defines 'trace.min_spacing'.")
+            .min_trace_spacing_nm;
         let partition = crate::geometry_router::partition::PartitionGrid::new(
             *grid_bbox,
             10_000_000,
@@ -202,6 +213,7 @@ impl GeometryRouter {
                                 net_escape_stubs: FxHashMap::default(),
                                 cost_composer: CostComposer::default(),
                                 intent_composers: FxHashMap::default(),
+                                net_layer_targets: FxHashMap::default(),
                             };
 
                             let result = isolated.decompose_net_steiner(net_id, pins);
@@ -304,6 +316,7 @@ impl GeometryRouter {
                         net_escape_stubs: FxHashMap::default(),
                         cost_composer: CostComposer::default(),
                         intent_composers: FxHashMap::default(),
+                        net_layer_targets: FxHashMap::default(),
                     };
 
                     let local_nets: FxHashMap<
@@ -468,6 +481,7 @@ impl GeometryRouter {
                                     net_escape_stubs: FxHashMap::default(),
                                     cost_composer: CostComposer::default(),
                                     intent_composers: FxHashMap::default(),
+                                    net_layer_targets: FxHashMap::default(),
                                 };
 
                                 cell_router.net_frequencies = net_frequencies_clone;

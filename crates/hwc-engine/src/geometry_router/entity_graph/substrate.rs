@@ -14,7 +14,7 @@ impl EntityGraph {
     pub fn add_substrate_layer(
         &mut self,
         material: MaterialId,
-        net: u32,
+        net: NetId,
         bbox: BoundingBox,
         layer_type: SubstrateLayerType,
     ) {
@@ -26,21 +26,21 @@ impl EntityGraph {
     pub fn add_substrate_layer_checked(
         &mut self,
         material: MaterialId,
-        net: u32,
+        net: NetId,
         bbox: BoundingBox,
         layer_type: SubstrateLayerType,
         min_clearance_nm: i64,
     ) -> Result<(), String> {
-        if net != 0 {
+        if net != NetId::UNCONNECTED {
             for existing in &self.substrate_layers {
-                if existing.net == 0 || existing.net == net {
+                if existing.net == NetId::UNCONNECTED || existing.net == net {
                     continue;
                 }
                 let distance = bbox.distance_to(&existing.bbox);
                 if distance < min_clearance_nm {
                     return Err(format!(
                         "Clearance violation: Pour on net {} at {:?} is {}nm from net {} (required: {}nm)",
-                        net, bbox, distance, existing.net, min_clearance_nm
+                        net.raw(), bbox, distance, existing.net.raw(), min_clearance_nm
                     ));
                 }
             }
@@ -77,10 +77,9 @@ impl EntityGraph {
     /// Get all elements (pours and routes) for a specific net across all layers.
     pub fn get_all_elements_for_net(&self, net_id: NetId) -> Vec<SubstrateLayer> {
         let mut elements = Vec::new();
-        let net_raw = net_id.raw();
 
         for layer in &self.substrate_layers {
-            if layer.net == net_raw {
+            if layer.net == net_id {
                 elements.push(layer.clone());
             }
         }
@@ -91,7 +90,7 @@ impl EntityGraph {
                     let bbox = BoundingBox::new(seg.start, seg.end);
                     let layer = SubstrateLayer::new(
                         seg.material_id,
-                        net_raw,
+                        net_id,
                         bbox,
                         SubstrateLayerType::Pour,
                     );
@@ -110,10 +109,9 @@ impl EntityGraph {
         _layer_idx: usize,
     ) -> Vec<SubstrateLayer> {
         let mut elements = Vec::new();
-        let net_raw = net_id.raw();
 
         for layer in &self.substrate_layers {
-            if layer.net == net_raw {
+            if layer.net == net_id {
                 elements.push(layer.clone());
             }
         }
@@ -124,7 +122,7 @@ impl EntityGraph {
                     let bbox = BoundingBox::new(seg.start, seg.end);
                     let layer = SubstrateLayer::new(
                         seg.material_id,
-                        net_raw,
+                        net_id,
                         bbox,
                         SubstrateLayerType::Pour,
                     );
@@ -140,7 +138,7 @@ impl EntityGraph {
     pub fn add_cylinder_substrate_layer(
         &mut self,
         material: MaterialId,
-        net: u32,
+        net: NetId,
         bbox: BoundingBox,
         diameter_nm: i64,
         _segments: u32,
@@ -184,7 +182,7 @@ impl EntityGraph {
     pub fn add_polygon_substrate_layer(
         &mut self,
         material: MaterialId,
-        net: u32,
+        net: NetId,
         bbox: BoundingBox,
         polygon: crate::geometry::Polygon,
     ) {
@@ -206,7 +204,7 @@ impl EntityGraph {
     pub fn add_circle_substrate_layer(
         &mut self,
         material: MaterialId,
-        net: u32,
+        net: NetId,
         bbox: BoundingBox,
         radius_nm: i64,
     ) {
@@ -217,7 +215,7 @@ impl EntityGraph {
     pub fn add_tsv_stack(
         &mut self,
         material: MaterialId,
-        net: u32,
+        net: NetId,
         bbox: BoundingBox,
         outer_diameter: u32,
         inner_diameter: u32,
@@ -258,7 +256,7 @@ impl EntityGraph {
                         index: i,
                     },
                     segment_id: i,
-                    net_id: layer.net as usize,
+                    net_id: layer.net,
                     width_nm: combined.max.x - combined.min.x,
                     thickness_nm: combined.max.z - combined.min.z,
                     start: combined.min,

@@ -1,0 +1,19 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,0.00x0.00x0.00mm,,,,,1
+
+# MATERIAL USAGE (Fabrication)
+Reference,Type,Material,Layer_Z_nm,Area_nm2,Volume_nm3
+VDD_Rail,Pour,Aluminum,z:890,1125000,450000000
+GND_Rail,Pour,Aluminum,z:890,1125000,450000000
+PMOS_Source,Pour,Silicon_N,z:100,562500,112500000
+PMOS_Drain,Pour,Silicon_N,z:100,562500,112500000
+NMOS_Source,Pour,Silicon_P,z:100,187500,37500000
+NMOS_Drain,Pour,Silicon_P,z:100,187500,37500000
+Gate_Vertical,Pour,Polysilicon,z:310,750000,135000000
+Gate_Horizontal,Pour,Polysilicon,z:310,250000,45000000
+Gate_Pad,Pour,Polysilicon,z:310,250000,45000000
+M1_PMOS_Source,Pour,Aluminum,z:890,1000000,400000000
+M1_NMOS_Source,Pour,Aluminum,z:890,625000,250000000
+M1_Drain_Tie,Pour,Aluminum,z:890,1250000,500000000
+M1_Out_Pin,Pour,Aluminum,z:890,125000,50000000
+M1_In_Pad,Pour,Aluminum,z:890,250000,100000000

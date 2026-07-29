@@ -19,7 +19,7 @@ pub enum SpatialEntitySource {
 pub struct IndexedSegment {
     pub source: SpatialEntitySource,
     pub segment_id: usize,
-    pub net_id: usize,
+    pub net_id: hwc_types::NetId,
     pub width_nm: i64,
     pub thickness_nm: i64,
     pub start: Point3D,
@@ -44,7 +44,7 @@ impl IndexedSegment {
     pub fn new(
         source: SpatialEntitySource,
         segment_id: usize,
-        net_id: usize,
+        net_id: hwc_types::NetId,
         segment: &TraceSegment,
         layer: i64,
         thickness_nm: i64,
@@ -384,7 +384,7 @@ impl DynamicSpatialIndex {
             index.insert(IndexedSegment {
                 source: SpatialEntitySource::SubstrateLayer { index: idx },
                 segment_id: idx,
-                net_id: layer.net as usize,
+                net_id: layer.net,
                 width_nm: 0,
                 thickness_nm: thickness,
                 start: bbox.min,
@@ -403,7 +403,7 @@ impl DynamicSpatialIndex {
                     seg_idx: idx,
                 },
                 segment_id: idx,
-                net_id: seg.net as usize,
+                net_id: seg.net,
                 width_nm: width,
                 thickness_nm: thickness,
                 start: bbox.min,

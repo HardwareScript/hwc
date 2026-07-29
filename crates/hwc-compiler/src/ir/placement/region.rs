@@ -142,8 +142,8 @@ fn resolve_region_from_constraints(
     eval_context: &hwc_parser::EvaluationContext,
     origin: OriginPoint,
     space_dimensions: &hwc_engine::Dimensions,
-    stackup_manager: &crate::ir::stackup_manager::StackupManager,
-    profile: Option<&hwc_parser::ProfileDefinition>,
+    _stackup_manager: &crate::ir::stackup_manager::StackupManager,
+    _profile: Option<&hwc_parser::ProfileDefinition>,
 ) -> Result<Point3D, IrError> {
     let mut x_nm: Option<i64> = None;
     let mut y_nm: Option<i64> = None;
@@ -175,6 +175,18 @@ fn resolve_region_from_constraints(
         (0, 0)
     };
     
+    // Derive origin-direction multipliers. These drive the unified formula lookup.
+    let (x_multiplier, y_multiplier) = match origin.xy {
+        hwc_parser::OriginXY::BL => (1i64, 1i64),
+        hwc_parser::OriginXY::TL => (1, -1),
+        hwc_parser::OriginXY::BR => (-1, 1),
+        hwc_parser::OriginXY::TR => (-1, -1),
+    };
+
+    use crate::ir::relational_resolver::{
+        RelationalPlacementFormula, SpatialRelation, target_bbox_to_user_ranges,
+    };
+
     for constraint in &region.constraints {
         // Get target region's bounding box
         let target_name = CompactString::from(constraint.target.as_str());
@@ -183,25 +195,33 @@ fn resolve_region_from_constraints(
                 coordinate_str: format!("region {} constraint", region.name),
                 reason: format!("Target region '{}' not found", constraint.target),
             })?;
+
+        // Convert the stored physical bbox into user-space ranges.
+        // This is the single source of truth for directional math and prevents
+        // the double-coordinate-conversion bug (computing in physical space then
+        // calling coordinate_to_point which flips again for non-BL origins).
+        let (tx_min, tx_max, ty_min, ty_max) =
+            target_bbox_to_user_ranges(target_bbox, space_dimensions, origin.xy);
         
         // Evaluate spacing expression if present
         let spacing_nm = if let Some(spacing_expr) = &constraint.spacing {
             // Evaluate the expression with the evaluation context (supports pdk.* variables)
             match spacing_expr.evaluate(eval_context) {
                 Ok(hwc_parser::Value::Measurement { value, unit }) => {
-                    // Convert measurement to nm based on unit
-                    match unit {
-                        hwc_parser::Unit::Nanometer => value as i64,
-                        hwc_parser::Unit::Micrometer => (value * 1_000.0) as i64,
-                        hwc_parser::Unit::Millimeter => (value * 1_000_000.0) as i64,
-                        hwc_parser::Unit::Centimeter => (value * 10_000_000.0) as i64,
+                    // Convert measurement to nm based on unit using a lookup table
+                    let multiplier: f64 = match unit {
+                        hwc_parser::Unit::Nanometer  => 1.0,
+                        hwc_parser::Unit::Micrometer => 1_000.0,
+                        hwc_parser::Unit::Millimeter => 1_000_000.0,
+                        hwc_parser::Unit::Centimeter => 10_000_000.0,
                         _ => {
                             return Err(IrError::CoordinateResolutionFailed {
                                 coordinate_str: format!("{:?}", spacing_expr),
                                 reason: format!("Invalid unit for spacing: {:?}", unit),
                             });
                         }
-                    }
+                    };
+                    (value * multiplier) as i64
                 }
                 Ok(hwc_parser::Value::Number(n)) => n, // Assume already in nm if unitless
                 Ok(other) => {
@@ -221,112 +241,107 @@ fn resolve_region_from_constraints(
             0
         };
         
-        // Apply constraint based on type
+        // Apply constraint based on type using the unified formula lookup.
+        // All math is performed in USER SPACE (tx_min/tx_max/ty_min/ty_max).
         use hwc_parser::RegionConstraintType;
         match constraint.constraint_type {
             RegionConstraintType::RightOf => {
-                // Position region's LEFT EDGE at target's RIGHT EDGE + spacing
-                // This is EDGE-TO-EDGE spacing semantics, consistent with physical layout
-                x_nm = Some(target_bbox.max.x + spacing_nm);
-                // For Y-axis: align centers by default (maintains consistency with other directionals)
+                let formula = RelationalPlacementFormula::get(
+                    SpatialRelation::RightOf, x_multiplier, y_multiplier,
+                );
+                x_nm = Some(formula.resolve(tx_min, tx_max, spacing_nm, region_width));
                 if y_nm.is_none() {
-                    // Calculate target's center Y
-                    let target_center_y = (target_bbox.min.y + target_bbox.max.y) / 2;
-                    // Position this region's center at target's center
-                    // Note: If this region has center_y alignment constraint, it will override this
-                    y_nm = Some(target_center_y - (region_height / 2));
+                    let formula_cy = RelationalPlacementFormula::get(
+                        SpatialRelation::AlignCenterY, x_multiplier, y_multiplier,
+                    );
+                    y_nm = Some(formula_cy.resolve(ty_min, ty_max, 0, region_height));
                 }
             }
             RegionConstraintType::LeftOf => {
-                // Position region's RIGHT EDGE at target's LEFT EDGE - spacing
-                // For regions with explicit width, we calculate where the LEFT edge should be
-                x_nm = Some(target_bbox.min.x - spacing_nm - region_width);
+                let formula = RelationalPlacementFormula::get(
+                    SpatialRelation::LeftOf, x_multiplier, y_multiplier,
+                );
+                x_nm = Some(formula.resolve(tx_min, tx_max, spacing_nm, region_width));
                 if y_nm.is_none() {
-                    let target_center_y = (target_bbox.min.y + target_bbox.max.y) / 2;
-                    y_nm = Some(target_center_y - (region_height / 2));
+                    let formula_cy = RelationalPlacementFormula::get(
+                        SpatialRelation::AlignCenterY, x_multiplier, y_multiplier,
+                    );
+                    y_nm = Some(formula_cy.resolve(ty_min, ty_max, 0, region_height));
                 }
             }
             RegionConstraintType::Above => {
-                // Position region's BOTTOM EDGE at target's TOP EDGE - spacing
-                y_nm = Some(target_bbox.min.y - spacing_nm - region_height);
+                // "above" means physically higher — start at target's high edge + spacing
+                let formula = RelationalPlacementFormula::get(
+                    SpatialRelation::Above, x_multiplier, y_multiplier,
+                );
+                y_nm = Some(formula.resolve(ty_min, ty_max, spacing_nm, region_height));
                 if x_nm.is_none() {
-                    let target_center_x = (target_bbox.min.x + target_bbox.max.x) / 2;
-                    x_nm = Some(target_center_x - (region_width / 2));
+                    let formula_cx = RelationalPlacementFormula::get(
+                        SpatialRelation::AlignCenterX, x_multiplier, y_multiplier,
+                    );
+                    x_nm = Some(formula_cx.resolve(tx_min, tx_max, 0, region_width));
                 }
             }
             RegionConstraintType::Below => {
-                // Position region's TOP EDGE at target's BOTTOM EDGE + spacing
-                y_nm = Some(target_bbox.max.y + spacing_nm);
+                let formula = RelationalPlacementFormula::get(
+                    SpatialRelation::Below, x_multiplier, y_multiplier,
+                );
+                y_nm = Some(formula.resolve(ty_min, ty_max, spacing_nm, region_height));
                 if x_nm.is_none() {
-                    let target_center_x = (target_bbox.min.x + target_bbox.max.x) / 2;
-                    x_nm = Some(target_center_x - (region_width / 2));
+                    let formula_cx = RelationalPlacementFormula::get(
+                        SpatialRelation::AlignCenterX, x_multiplier, y_multiplier,
+                    );
+                    x_nm = Some(formula_cx.resolve(tx_min, tx_max, 0, region_width));
                 }
             }
             RegionConstraintType::AlignCenterX => {
-                // NATIVE FIX: Calculate center-to-center alignment
-                // Instead of assigning target center to our min corner, compute the offset
-                let target_center_x = (target_bbox.min.x + target_bbox.max.x) / 2;
-                x_nm = Some(target_center_x - (region_width / 2));
+                let formula = RelationalPlacementFormula::get(
+                    SpatialRelation::AlignCenterX, x_multiplier, y_multiplier,
+                );
+                x_nm = Some(formula.resolve(tx_min, tx_max, 0, region_width));
             }
             RegionConstraintType::AlignCenterY => {
-                // NATIVE FIX: Calculate center-to-center alignment
-                // Instead of assigning target center to our min corner, compute the offset
-                let target_center_y = (target_bbox.min.y + target_bbox.max.y) / 2;
-                y_nm = Some(target_center_y - (region_height / 2));
+                let formula = RelationalPlacementFormula::get(
+                    SpatialRelation::AlignCenterY, x_multiplier, y_multiplier,
+                );
+                y_nm = Some(formula.resolve(ty_min, ty_max, 0, region_height));
             }
             RegionConstraintType::AlignLeft => {
-                x_nm = Some(target_bbox.min.x);
+                let formula = RelationalPlacementFormula::get(
+                    SpatialRelation::AlignLeft, x_multiplier, y_multiplier,
+                );
+                x_nm = Some(formula.resolve(tx_min, tx_max, 0, region_width));
             }
             RegionConstraintType::AlignRight => {
-                x_nm = Some(target_bbox.max.x);
+                let formula = RelationalPlacementFormula::get(
+                    SpatialRelation::AlignRight, x_multiplier, y_multiplier,
+                );
+                x_nm = Some(formula.resolve(tx_min, tx_max, 0, region_width));
             }
             RegionConstraintType::AlignTop => {
-                y_nm = Some(target_bbox.min.y);
+                let formula = RelationalPlacementFormula::get(
+                    SpatialRelation::AlignTop, x_multiplier, y_multiplier,
+                );
+                y_nm = Some(formula.resolve(ty_min, ty_max, 0, region_height));
             }
             RegionConstraintType::AlignBottom => {
-                y_nm = Some(target_bbox.max.y);
+                let formula = RelationalPlacementFormula::get(
+                    SpatialRelation::AlignBottom, x_multiplier, y_multiplier,
+                );
+                y_nm = Some(formula.resolve(ty_min, ty_max, 0, region_height));
             }
         }
     }
     
-    // Build coordinate from resolved values
-    // Note: We use Measurement expressions with Nanometer units instead of bare literals
-    // to satisfy the coordinate conversion requirement for physical units
-    let coord = hwc_parser::Coordinate::Declarative {
-        x: hwc_parser::Expression::Measurement {
-            value: x_nm.unwrap_or(0) as f64,
-            unit: hwc_parser::Unit::Nanometer,
-            span: region.span,
-        },
-        y: hwc_parser::Expression::Measurement {
-            value: y_nm.unwrap_or(0) as f64,
-            unit: hwc_parser::Unit::Nanometer,
-            span: region.span,
-        },
-        z: hwc_parser::Expression::Measurement {
-            value: z_nm as f64,
-            unit: hwc_parser::Unit::Nanometer,
-            span: region.span,
-        },
-        span: region.span,
-    };
-    
-    // Convert to Point3D with proper origin handling
-    let coord_ctx = crate::ir::conversions::CoordinateContext {
-        origin,
-        space_dimensions,
-        symbol_table,
-        eval_context,
-        bbox_tracker: Some(bbox_tracker),
-        stackup_manager,
-        profile,
-    };
-    
-    crate::ir::conversions::coordinate_to_point(&coord, &coord_ctx)
-        .map_err(|e| IrError::CoordinateResolutionFailed {
-            coordinate_str: format!("region {} constraints", region.name),
-            reason: e,
-        })
+    // The resolved values are in USER SPACE (matching the declared origin).
+    // Emit them directly as a Point3D — NO secondary coordinate_to_point call,
+    // which would incorrectly apply the origin flip a second time.
+    // The caller (register_region) constructs the BoundingBox directly from this point.
+    Ok(Point3D {
+        x: x_nm.unwrap_or(0),
+        y: y_nm.unwrap_or(0),
+        z: z_nm,
+    })
 }
 
 /// Resolve a region anchor to a concrete placement intent

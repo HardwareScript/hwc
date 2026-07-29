@@ -7,6 +7,12 @@ use compact_str::CompactString;
 ///
 /// A line segment in 3D space representing a Manhattan-routed trace segment.
 /// This is the "Mathematical Truth" of a wire, not a pixelated approximation.
+///
+/// **CRITICAL Z-AXIS SEMANTICS:**
+/// - `start.z` and `end.z` represent the **routing centerline Z-coordinate** (topological)
+/// - Physical layer bounds (bottom, top) are derived from the layer's stackup definition
+/// - For horizontal traces: start.z == end.z == layer_centerline_z
+/// - For vertical vias: start.z and end.z span multiple layers
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LineSegment {
     pub start: Point3D,
@@ -88,6 +94,61 @@ impl LineSegment {
             ),
         )
     }
+
+    /// Classify this segment's routing topology
+    pub fn segment_type(&self) -> SegmentType {
+        let dx = (self.end.x - self.start.x).abs();
+        let dy = (self.end.y - self.start.y).abs();
+        let dz = (self.end.z - self.start.z).abs();
+
+        if dx == 0 && dy == 0 && dz == 0 {
+            SegmentType::Point
+        } else if dz > 0 && dx == 0 && dy == 0 {
+            SegmentType::Via
+        } else if dz == 0 {
+            SegmentType::HorizontalTrace
+        } else {
+            SegmentType::Invalid
+        }
+    }
+
+    /// Compute physical Z-bounds for this segment given its layer thickness.
+    /// 
+    /// **Z-Axis Semantics:**
+    /// - For horizontal traces: centerline_z ± thickness/2 gives physical bounds
+    /// - For vias: start.z and end.z already span the physical range
+    /// - For point segments: returns None (degenerate, should be filtered)
+    pub fn physical_z_range(&self, thickness_nm: i64) -> Option<(i64, i64)> {
+        match self.segment_type() {
+            SegmentType::Point => None, // Degenerate segment
+            SegmentType::HorizontalTrace => {
+                // Horizontal trace sits on a single layer
+                // The segment.z is the layer's centerline
+                // Physical bounds: [centerline - thickness/2, centerline + thickness/2]
+                let centerline_z = self.start.z;
+                let half_thickness = thickness_nm / 2;
+                Some((centerline_z - half_thickness, centerline_z + half_thickness))
+            }
+            SegmentType::Via => {
+                // Via spans layers - start.z and end.z are already physical bounds
+                Some((self.start.z.min(self.end.z), self.start.z.max(self.end.z)))
+            }
+            SegmentType::Invalid => None,
+        }
+    }
+}
+
+/// Classification of segment routing topology
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SegmentType {
+    /// Zero-length degenerate segment (should be filtered)
+    Point,
+    /// Horizontal planar trace on a single layer (dz == 0)
+    HorizontalTrace,
+    /// Vertical via spanning multiple layers (dz > 0, dx == 0, dy == 0)
+    Via,
+    /// Invalid segment (diagonal in Z, non-Manhattan)
+    Invalid,
 }
 
 /// Physical cross-section of a trace.
@@ -136,41 +197,40 @@ impl CurrentRating {
 ///
 /// Represents a routed trace as a mathematical primitive (swept volume).
 /// This is stored in HardwareSpace.analytic_routes during the build phase.
-///
-/// **Why this is revolutionary:**
-/// - A 2mm trace is ONE AnalyticTrace (not 2,000 grid cells)
-/// - DRC checks analytic geometry (not grid scanning)
-/// - Exporters receive clean primitives (not pixelated reconstruction)
-/// - Memory: 1KB per trace (not 5MB of grid chunks)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct AnalyticTrace {
-    /// Net this trace belongs to
+    /// Net ID this trace belongs to
     pub net_id: NetId,
-
-    /// Physical cross-section of the trace (width + thickness)
+    /// Physical cross-section (width and thickness)
     pub cross_section: CrossSection,
-
-    /// Manhattan segments forming the trace
+    /// Ordered list of line segments forming the trace path
     pub segments: Vec<LineSegment>,
-
-    /// Material (typically Copper)
+    /// Material ID (e.g., Copper, Aluminum)
     pub material: MaterialId,
-
-    /// Net name for debugging and export
+    /// Human-readable net name
     pub net_name: CompactString,
-
-    /// Current rating (operating current + declared capacity)
+    /// Current rating information
     pub current: CurrentRating,
+    /// Physical Z-range for horizontal segments (from stackup layer definition)
+    /// Format: (z_min, z_max) in nanometers
+    /// This represents the actual physical bounds of the copper layer
+    pub layer_z_range: Option<(i64, i64)>,
 }
 
 impl AnalyticTrace {
-    pub fn new(
+    /// Create a new analytic trace with explicit layer Z-range.
+    ///
+    /// **v0.2.0 CRITICAL CHANGE:**
+    /// `layer_z_range` must be provided for horizontal traces to correctly
+    /// extrude them to their physical layer thickness (from stackup definition).
+    pub fn with_layer_z_range(
         net_id: NetId,
         cross_section: CrossSection,
         segments: Vec<LineSegment>,
         material: MaterialId,
         net_name: CompactString,
         current: CurrentRating,
+        layer_z_range: Option<(i64, i64)>,
     ) -> Self {
         Self {
             net_id,
@@ -179,6 +239,7 @@ impl AnalyticTrace {
             material,
             net_name,
             current,
+            layer_z_range,
         }
     }
 

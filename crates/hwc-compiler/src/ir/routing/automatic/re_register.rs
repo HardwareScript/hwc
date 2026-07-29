@@ -15,6 +15,20 @@ use rustc_hash::FxHashMap;
 /// in the physical database, preventing "Double-Registration" bugs where the original
 /// straight-line path and the detour path coexist (causing Clipper2 to weld them into a solid sheet).
 pub fn re_register_resolved_routes(space: &mut HardwareSpace) -> Result<(), IrError> {
+    eprintln!("[RE-REGISTER DEBUG] space.analytic_routes has {} routes:", space.analytic_routes.len());
+    for (idx, trace) in space.analytic_routes.iter().enumerate() {
+        eprintln!(
+            "[RE-REGISTER DEBUG]   Route {} - net_name='{}', net_id={:?}, segments_count={}",
+            idx, trace.net_name, trace.net_id, trace.segments.len()
+        );
+        for (seg_idx, seg) in trace.segments.iter().enumerate() {
+            eprintln!(
+                "[RE-REGISTER DEBUG]     seg {}: ({},{},{}) -> ({},{},{})",
+                seg_idx, seg.start.x, seg.start.y, seg.start.z, seg.end.x, seg.end.y, seg.end.z
+            );
+        }
+    }
+
     let net_ids_to_clear: Vec<_> = space
         .entity_graph
         .get_all_routes()
@@ -34,12 +48,7 @@ pub fn re_register_resolved_routes(space: &mut HardwareSpace) -> Result<(), IrEr
             }
             std::collections::hash_map::Entry::Occupied(mut e) => {
                 if trace.segments.len() > e.get().segments.len() {
-                    eprintln!(
-                        "[AUTO-ROUTER RE-REGISTER] Replacing route for net_id={} ({} segments) with detour ({} segments)",
-                        trace.net_id.raw(),
-                        e.get().segments.len(),
-                        trace.segments.len()
-                    );
+                    
                     e.insert(trace.clone());
                 } else {
                     eprintln!(
@@ -54,12 +63,7 @@ pub fn re_register_resolved_routes(space: &mut HardwareSpace) -> Result<(), IrEr
     }
 
     for (net_id, route_trace) in unique_routes {
-        eprintln!(
-            "[AUTO-ROUTER RE-REGISTER] net_id={}, {} segments from analytic_routes",
-            net_id.raw(),
-            route_trace.segments.len()
-        );
-
+        
         let trace_segments: Vec<hwc_engine::geometry::TraceSegment> = route_trace
             .segments
             .iter()

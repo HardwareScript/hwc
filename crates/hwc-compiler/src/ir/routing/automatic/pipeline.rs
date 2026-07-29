@@ -254,18 +254,11 @@ pub fn route_automatic(
         profile,
     )?;
 
-    eprintln!(
-        "[SEGMENT DEBUG] Created {} segments from path:",
-        segments.len()
-    );
-    for (i, seg) in segments.iter().enumerate().take(4) {
-        eprintln!(
-            "  seg[{}]: ({},{},{}) -> ({},{},{})",
-            i, seg.start.x, seg.start.y, seg.start.z, seg.end.x, seg.end.y, seg.end.z
-        );
-    }
-    if segments.len() > 4 {
-        eprintln!("  ... and {} more segments", segments.len() - 4);
+    eprintln!("🔍 [PIPELINE SEGMENTS] Created {} segments from refined_path with {} points", 
+        segments.len(), refined_path.len());
+    for (i, seg) in segments.iter().enumerate() {
+        eprintln!("🔍   Segment[{}]: ({},{},{}) -> ({},{},{})", 
+            i, seg.start.x, seg.start.y, seg.start.z, seg.end.x, seg.end.y, seg.end.z);
     }
 
     // Teardrops
@@ -290,13 +283,35 @@ pub fn route_automatic(
         .and_then(|n| n.current_ma)
         .unwrap_or(0.0);
 
-    let analytic_trace = hwc_engine::AnalyticTrace::new(
+    // **v0.2.0 STRUCTURAL FIX: Compute layer_z_range for horizontal traces**
+    let layer_z_range = if let Some(first_seg) = segments.first() {
+        // Check if this is a horizontal trace (all segments at same Z)
+        let is_horizontal = segments
+            .iter()
+            .all(|s| s.start.z == first_seg.start.z && s.end.z == first_seg.start.z);
+
+        if is_horizontal {
+            let centerline_z = first_seg.start.z;
+            // Look up the layer from HardwareSpace's stackup (single source of truth)
+            space
+                .find_layer_at_z(centerline_z)
+                .map(|layer| (layer.z_bottom, layer.z_top))
+        } else {
+            // Via or multi-layer trace: segments encode their own Z spans
+            None
+        }
+    } else {
+        None
+    };
+
+    let analytic_trace = hwc_engine::AnalyticTrace::with_layer_z_range(
         net_id,
         hwc_engine::space::CrossSection::new(trace_width_nm, trace_thickness_nm),
         segments.clone(),
         copper_id,
         net_name.clone(),
         hwc_engine::space::CurrentRating::new(net_actual_current_ma, current_ma),
+        layer_z_range,
     );
 
     eprintln!(

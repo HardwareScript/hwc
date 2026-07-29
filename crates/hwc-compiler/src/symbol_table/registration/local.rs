@@ -3,9 +3,10 @@ use compact_str::CompactString;
 use hwc_diagnostics::DiagnosticCollector;
 use hwc_parser::{
     logic::{EnumDefinition, LogicDefinition, StructDefinition},
-    ComponentDefinition, InterfaceDefinition, MaterialAliasDefinition, MaterialDefinition,
-    MechanicalDefinition, ModuleDefinition, PatternDefinition, ProfileDefinition, ShapeDefinition,
-    SignalGroupDefinition, StrategyDefinition, TestDefinition, UnitDefinition,
+    BridgeDefinition, ComponentDefinition, InterfaceDefinition, MaterialAliasDefinition,
+    MaterialDefinition, MechanicalDefinition, ModuleDefinition, PatternDefinition,
+    ProfileDefinition, ShapeDefinition, SignalGroupDefinition, StrategyDefinition,
+    TestDefinition, UnitDefinition,
 };
 
 impl SymbolTable {
@@ -504,5 +505,22 @@ impl SymbolTable {
         }
 
         self.local.units.insert(symbol, def);
+    }
+
+    /// Register a bridge definition (in local layer) (v0.2.0)
+    ///
+    /// Bridges define physical material transitions for via generation.
+    /// Multiple bridges for the same material pair are allowed (e.g., different
+    /// interface/fill combinations for different process nodes).
+    ///
+    /// The via resolver will query all registered bridges and select the most
+    /// appropriate one based on the stackup and manufacturing constraints.
+    pub fn register_bridge(&mut self, _collector: &DiagnosticCollector, def: BridgeDefinition) {
+        let key = CompactString::from(format!("{}_{}", def.from, def.to));
+        
+        // Note: Multiple bridges for the same material pair are allowed
+        // The via resolver handles priority/selection logic
+        // Last registration wins for same key (consistent with other definitions)
+        self.local.bridges.insert(key, def);
     }
 }

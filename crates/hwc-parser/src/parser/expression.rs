@@ -95,6 +95,16 @@ impl Parser {
                         span: Span::new(start_pos, end_pos),
                     })
                 }
+                // Coordinate literal: [x, y, z] or [x, y]
+                // v0.2.0: Coordinates are now first-class expressions
+                Token::OpenBracket => {
+                    let coord = self.parse_coordinate_optional_z()?;
+                    let end_pos = self.previous_span().end;
+                    Ok(Expression::Coordinate {
+                        coord: Box::new(coord),
+                        span: Span::new(start_pos, end_pos),
+                    })
+                }
                 // Integer literal
                 Token::Integer(value) => {
                     let value = *value;

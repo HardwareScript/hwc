@@ -1,0 +1,165 @@
+# minimal_pdk.hw
+import * from @std/primitives/units
+import Silicon_N, Silicon_P, Polysilicon, Aluminum, Tungsten, Titanium_Silicide, Air from "./materials"
+
+export Silicon_N
+export Silicon_P
+export Aluminum
+export Polysilicon
+export Tungsten
+export Titanium_Silicide
+export Air
+
+# 1. Define the ASIC-style Square Tungsten Plug
+export shape SquareContact(width: Measurement):
+    geometry:
+        Rectangle(width: width, height: width)
+
+# 2. Define the Ohmic Bridge (Silicon to Metal uses Silicide + Tungsten)
+export bridge Silicon_N to Aluminum:
+    interface: Titanium_Silicide
+    thickness: 5nm
+    fill: Tungsten
+
+export bridge Silicon_P to Aluminum:
+    interface: Titanium_Silicide
+    thickness: 5nm
+    fill: Tungsten
+
+export bridge Polysilicon to Aluminum:
+    interface: Titanium_Silicide
+    thickness: 5nm
+    fill: Tungsten
+
+# 3. Define the Flattened Profile with FULL ASIC constraints
+export profile ASIC_Flattened:
+    technology: "ASIC"
+    
+    stackup:
+        active:     [material: Silicon_N,     thickness: 10nm, routable: false]
+        gate_oxide: [material: Air,           thickness: 5nm,  routable: false]
+        poly:       [material: Polysilicon,   thickness: 10nm, routable: local_only]
+        d1:         [material: Air,           thickness: 10nm, routable: false]
+        metal1:     [material: Aluminum,      thickness: 10nm, routable: true]
+
+    via:
+        min_diameter: 200nm
+        min_annular_ring: 0nm
+        min_spacing: 300nm
+        shape: SquareContact   # <--- THE FIX: Use our custom square shape!
+
+    trace:
+        min_width: 200nm
+        min_spacing: 0nm
+        edge_clearance: 50um
+
+    manufacturing:
+        copper_thickness: 10nm
+        circle_segments: 64
+        solder_mask_thickness: 0nm
+        solder_mask_expansion: 0nm
+
+    clearance:
+        high_voltage: 500nm
+        safety_factor: 2.0
+
+    thermal:
+        ambient_temp: 25C
+        max_operating_temp: 125C
+        max_temp_rise: 50C
+        clustering_threshold: 10um
+
+    layer:
+        min_thickness: 5nm
+        allowed_conductors: [Aluminum, Polysilicon, Silicon_N, Silicon_P]
+        allowed_dielectrics: [Air]
+
+    routing:
+        max_local_route_length: 10um
+        min_segment_length: 200nm
+        escape_stub: 0nm
+        base_cost: 1
+        via_penalty: 50
+        direction_penalty: 10
+        tight_clearance_penalty: 2
+        crosstalk_penalty: 3
+        impedance_penalty: 1
+        reference_void_penalty: 5000000
+        net_priority_VDD: 5
+        net_priority_GND: 5
+
+    net_type Signal:
+        routing_style: auto
+        escape_stub: 0nm
+
+    net_type PowerRail:
+        routing_style: auto
+        escape_stub: 0nm
+
+
+
+# 4. Define the Silicon_180nm Profile with Realistic Layer Thicknesses
+# This profile uses 400nm thick layers for dramatic vertical separation
+export profile Silicon_180nm:
+    technology: "ASIC"
+    
+    stackup:
+        active:     [material: Silicon_N,     thickness: 400nm, routable: false]
+        gate_oxide: [material: Air,           thickness: 50nm,  routable: false]
+        poly:       [material: Polysilicon,   thickness: 400nm, routable: local_only]
+        d1:         [material: Air,           thickness: 400nm, routable: false]
+        metal1:     [material: Aluminum,      thickness: 400nm, routable: true]
+
+    via:
+        min_diameter: 200nm
+        min_annular_ring: 0nm
+        min_spacing: 300nm
+        shape: SquareContact
+
+    trace:
+        min_width: 200nm
+        min_spacing: 0nm
+        edge_clearance: 50um
+
+    manufacturing:
+        copper_thickness: 400nm
+        circle_segments: 64
+        solder_mask_thickness: 0nm
+        solder_mask_expansion: 0nm
+
+    clearance:
+        high_voltage: 500nm
+        safety_factor: 2.0
+
+    thermal:
+        ambient_temp: 25C
+        max_operating_temp: 125C
+        max_temp_rise: 50C
+        clustering_threshold: 10um
+
+    layer:
+        min_thickness: 50nm
+        allowed_conductors: [Aluminum, Polysilicon, Silicon_N, Silicon_P]
+        allowed_dielectrics: [Air]
+
+    routing:
+        max_local_route_length: 10um
+        min_segment_length: 200nm
+        escape_stub: 0nm
+        base_cost: 1
+        via_penalty: 50
+        direction_penalty: 10
+        tight_clearance_penalty: 2
+        crosstalk_penalty: 3
+        impedance_penalty: 1
+        reference_void_penalty: 5000000
+        net_priority_VDD: 5
+        net_priority_GND: 5
+
+    net_type Signal:
+        routing_style: auto
+        escape_stub: 0nm
+
+    net_type PowerRail:
+        routing_style: auto
+        escape_stub: 0nm

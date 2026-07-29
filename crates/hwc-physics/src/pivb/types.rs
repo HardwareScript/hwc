@@ -26,8 +26,8 @@ pub struct PlanarIsland {
     pub center: Point3D,
     /// Net name this island belongs to
     pub net_name: CompactString,
-    /// Net ID (numeric)
-    pub net_id: u32,
+    /// Net ID (strongly-typed)
+    pub net_id: hwc_types::NetId,
     /// Material ID
     pub material: u8,
 }

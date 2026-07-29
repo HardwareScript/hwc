@@ -1,6 +1,7 @@
 //! Definition parsing module
 //!
 //! This module is organized into logical submodules by definition type:
+//! - `bridge`: Bridge definitions (v0.2.0: First-class material transitions)
 //! - `material`: Material definitions
 //! - `profile`: Profile definitions (trace, via, layer, clearance constraints)
 //! - `component`: Component definitions (metadata, pins, layout, electrical, render)
@@ -10,6 +11,7 @@
 //! - `space`: Space definitions (dimensions, grid, origin, components, routes)
 //! - `unit`: Unit definitions and measurement parsing
 
+mod bridge;
 mod component; // Now a modular subfolder with main, metadata, pins, layout, electrical, render, internal_pour
 mod const_def;
 mod device;
@@ -111,6 +113,10 @@ impl super::Parser {
         }
 
         let result = match self.current().map(|t| &t.token) {
+            Some(Token::Bridge) => {
+                // // eprintln!("[DEBUG] Dispatching to parse_bridge");
+                self.parse_bridge(collector, is_exported).map(Definition::Bridge)
+            }
             Some(Token::Material) => {
                 // // eprintln!("[DEBUG] Dispatching to parse_material");
                 self.parse_material(collector, is_exported).map(Definition::Material)
@@ -200,7 +206,7 @@ impl super::Parser {
             _ => {
                 // // eprintln!("[DEBUG] Unexpected token in parse_definition");
                 collector.report(self.error(
-                    "Expected definition type (material, profile, component, module, mechanical, interface, test, unit, device, const, signal_group, shape, logic, pattern, strategy, or space)",
+                    "Expected definition type (bridge, material, profile, component, module, mechanical, interface, test, unit, device, const, signal_group, shape, logic, pattern, strategy, or space)",
                 ));
                 None
             }

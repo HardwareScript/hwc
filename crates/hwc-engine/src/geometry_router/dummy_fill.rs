@@ -34,6 +34,7 @@
 //!     dummy_fill_pattern: DotGrid(size: 2um, spacing: 4um)
 //! ```
 
+use crate::netlist::NetId;
 use crate::geometry::{BoundingBox, Point3D};
 use crate::geometry_router::substrate_types::SubstrateLayerType;
 use crate::geometry_router::EntityGraph;
@@ -333,7 +334,7 @@ impl DummyFillEngine {
         for layer in &overlapping {
             // v0.1.8: Skip base substrate and UNCONNECTED (net_id=0) layers.
             // Only layers with net_id > 0 represent routing metal for density purposes.
-            if layer.net == 0 {
+            if layer.net == NetId::UNCONNECTED {
                 continue;
             }
             // Only count layers that match the target Z
@@ -416,7 +417,7 @@ impl DummyFillEngine {
                 let nearby = entity_graph.query_bbox(&clearance_bbox);
                 let has_conflict = nearby.iter().any(|layer| {
                     // Skip UNCONNECTED (net_id=0) dummies — we don't clear from our own fill
-                    if layer.net == 0 {
+                    if layer.net == NetId::UNCONNECTED {
                         return false;
                     }
                     // Check if this layer actually overlaps the clearance zone
@@ -429,7 +430,7 @@ impl DummyFillEngine {
                     // v0.1.8: Register dummy as native SubstrateLayer (Pour, net_id=0)
                     entity_graph.add_substrate_layer(
                         0u8, // material placeholder — will be resolved by stackup
-                        0,   // net_id = 0 (UNCONNECTED)
+                        NetId::UNCONNECTED,   // net_id = 0 (UNCONNECTED)
                         dummy_bbox,
                         SubstrateLayerType::Pour,
                     );

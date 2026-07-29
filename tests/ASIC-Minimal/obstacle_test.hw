@@ -1,0 +1,65 @@
+# obstacle_test.hw
+# Testing 2D Obstacle Avoidance: Pathfinder-driven ray-casting detour.
+# Verifies that the router can navigate around physical barriers on a single layer.
+
+import * from @std/primitives/units
+import * from "./minimal_pdk"
+
+module ObstacleTest:
+    pins: [ input In, output Out ]
+    route In to Out
+
+shape Pad(width: Measurement):
+    geometry:
+        Rectangle(width: width, height: width)
+
+shape Barrier(width: Measurement, height: Measurement):
+    geometry:
+        Rectangle(width: width, height: height)
+
+space Obstacle_Space implements ObstacleTest:
+    # A 3.0um x 1.5um space, tightly bounded
+    dimensions: 3.0um by 1.5um by 50nm
+    resolution: 10nm
+    origin: bl by b
+    profile: ASIC_Flattened
+
+    nets:
+        In:  { classification: signal, potential: 1.8V, current: 0.1uA }
+        Out: { classification: signal, potential: 0.0V, current: 0.1uA }
+
+    # ========================================================================
+    # GEOMETRIC PLACEMENTS
+    # ========================================================================
+
+    # 1. Pad A (Source - Net In) on Left
+    add plane(Aluminum) named Pad_A inside: space on layer: metal1:
+        shape: Pad(width: 400nm)
+        at: [300nm, 550nm]  # Centered vertically at Y=750nm
+        net: In
+
+    # 2. Pad B (Destination - Net In) on Right
+    # Net In to match module route
+    add plane(Aluminum) named Pad_B inside: space on layer: metal1:
+        shape: Pad(width: 400nm)
+        at: [2300nm, 550nm]  # Centered vertically at Y=750nm
+        net: In
+
+    # 3. The Barrier (Keep-out Obstacle - Net Out) in Center
+    # Spans X: 1300nm to 1700nm. Spans Y: 350nm to 1150nm.
+    # This completely blocks the horizontal centerline at Y=750nm.
+    add plane(Aluminum) named Central_Barrier inside: space on layer: metal1:
+        shape: Barrier(width: 400nm, height: 800nm)
+        at: [1300nm, 350nm]
+        net: Out
+
+    # ========================================================================
+    # DETOUR ROUTING (Topological Pathfinder)
+    # ========================================================================
+    # The router wants to draw a straight line from Pad_A (X=700) to Pad_B (X=2300).
+    # Since the Central_Barrier blocks the way, it must detect the collision,
+    # route up over the barrier (above Y=1150nm), and come back down.
+    route Pad_A to Pad_B:
+        layer: metal1
+        width: 200nm
+        intent: Signal

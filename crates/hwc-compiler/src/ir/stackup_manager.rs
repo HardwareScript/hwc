@@ -230,6 +230,36 @@ impl StackupManager {
         &self.ordered_layers
     }
 
+    /// **v0.2.0: Export stackup metadata for HardwareSpace**
+    /// 
+    /// Converts the StackupManager's layer information into a format suitable for
+    /// embedding in HardwareSpace. This provides a single source of truth for layer
+    /// Z-coordinates accessible during export and validation without needing the full
+    /// StackupManager.
+    /// 
+    /// # Panics
+    /// Never panics - returns an empty Vec if stackup is empty.
+    pub fn export_stackup_layers(&self) -> Vec<hwc_engine::space::StackupLayer> {
+        self.ordered_layers
+            .iter()
+            .filter_map(|name| {
+                let z_bottom = self.layer_start_z_nm.get(name)?;
+                let thickness = self.layer_thickness_nm.get(name)?;
+                let material_name = self.layer_materials.get(name)?;
+                let is_routable = self.conductive_layers.contains(name);
+
+                Some(hwc_engine::space::StackupLayer::new(
+                    name.as_str().into(),
+                    *z_bottom,
+                    z_bottom + thickness,
+                    *thickness,
+                    material_name.as_str().into(),
+                    is_routable,
+                ))
+            })
+            .collect()
+    }
+
     /// Returns the material name for a layer by its index.
     pub fn get_material_for_layer_index(&self, index: usize) -> Option<String> {
         let name = self.ordered_layers.get(index)?;

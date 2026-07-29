@@ -8,6 +8,7 @@ license.workspace = true
 [dependencies]
 serde = { workspace = true }
 thiserror = { workspace = true }
+hwc-types = { workspace = true }
 hwc-materials = { workspace = true }
 hwc-parser = { workspace = true }
 hwc-diagnostics = { workspace = true }

@@ -88,7 +88,7 @@ pub(super) fn place_tsv(
 
         space.entity_graph.add_tsv_stack(
             ctx.material_id,
-            ctx.net_id,
+            hwc_engine::NetId::new(ctx.net_id),
             ctx.contact_bbox,
             ctx.diameter_nm as u32,
             (ctx.diameter_nm / 2) as u32,
@@ -108,22 +108,26 @@ pub(super) fn place_compound_via(
     let _interface_end_point = Point3D::new(ctx.end_point.x, ctx.end_point.y, interface_end_z);
     let _fill_start_point = Point3D::new(ctx.start_point.x, ctx.start_point.y, interface_end_z);
 
+    // Transform contour from local space to world space if present
+    let cx = (ctx.contact_bbox.min.x + ctx.contact_bbox.max.x) / 2;
+    let cy = (ctx.contact_bbox.min.y + ctx.contact_bbox.max.y) / 2;
+
     if let Some(ref contour) = ctx.contour {
         let points = contour
             .iter()
-            .map(|p| hwc_engine::geometry::Point2D::new(p.x, p.y))
+            .map(|p| hwc_engine::geometry::Point2D::new(p.x + cx, p.y + cy))
             .collect();
         let polygon = hwc_engine::geometry::Polygon::new(points);
         space.entity_graph.add_polygon_substrate_layer(
             bridge_material_id,
-            ctx.net_id,
+            hwc_engine::NetId::new(ctx.net_id),
             ctx.contact_bbox,
             polygon,
         );
     } else {
         space.entity_graph.add_cylinder_substrate_layer(
             bridge_material_id,
-            ctx.net_id,
+            hwc_engine::NetId::new(ctx.net_id),
             ctx.contact_bbox,
             ctx.diameter_nm,
             32,
@@ -135,19 +139,19 @@ pub(super) fn place_compound_via(
         if let Some(ref contour) = ctx.contour {
             let points = contour
                 .iter()
-                .map(|p| hwc_engine::geometry::Point2D::new(p.x, p.y))
+                .map(|p| hwc_engine::geometry::Point2D::new(p.x + cx, p.y + cy))
                 .collect();
             let polygon = hwc_engine::geometry::Polygon::new(points);
             space.entity_graph.add_polygon_substrate_layer(
                 ctx.material_id,
-                ctx.net_id,
+                hwc_engine::NetId::new(ctx.net_id),
                 ctx.contact_bbox,
                 polygon,
             );
         } else {
             space.entity_graph.add_cylinder_substrate_layer(
                 ctx.material_id,
-                ctx.net_id,
+                hwc_engine::NetId::new(ctx.net_id),
                 ctx.contact_bbox,
                 ctx.diameter_nm,
                 32,
@@ -170,7 +174,7 @@ pub(super) fn place_etched_via(
         .drill_via_hole(hwc_engine::geometry_router::entity_graph::ViaHoleSpec {
             hole_bbox: contact_bbox,
             diameter_nm,
-            via_net: 0,
+            via_net: hwc_engine::NetId::UNCONNECTED,
             clearance_nm,
             is_tented: true,
             pad_diameter_nm: diameter_nm,
@@ -201,7 +205,7 @@ pub(super) fn place_deposited_via(
         .drill_via_hole(hwc_engine::geometry_router::entity_graph::ViaHoleSpec {
             hole_bbox: ctx.contact_bbox,
             diameter_nm: ctx.diameter_nm,
-            via_net: ctx.net_id,
+            via_net: hwc_engine::NetId::new(ctx.net_id),
             clearance_nm: ctx.clearance_nm,
             is_tented: ctx.is_tented,
             pad_diameter_nm: ctx.diameter_nm,
@@ -214,15 +218,34 @@ pub(super) fn place_deposited_via(
             ctx.start_point.x, ctx.start_point.y, ctx.start_point.z,
             ctx.end_point.x, ctx.end_point.y, ctx.end_point.z, ctx.diameter_nm);
 
-        let points = path
+        // DEBUG: Show original polygon points from shape definition
+        println!("[PLACE_CONTACT_DEBUG] '{}' Original polygon points (local space):", contact_name_debug);
+        for (i, p) in path.iter().enumerate() {
+            println!("  Point {}: ({}, {})", i, p.x, p.y);
+        }
+
+        // Transform polygon points from local space to world space
+        // The shape definition generates points centered at (0,0), but the via is placed at xy_point
+        let cx = (ctx.contact_bbox.min.x + ctx.contact_bbox.max.x) / 2;
+        let cy = (ctx.contact_bbox.min.y + ctx.contact_bbox.max.y) / 2;
+        
+        println!("[PLACE_CONTACT_DEBUG] '{}' Translating by center: ({}, {})", contact_name_debug, cx, cy);
+        
+        let world_space_points: Vec<hwc_engine::geometry::Point2D> = path
             .iter()
-            .map(|p| hwc_engine::geometry::Point2D::new(p.x, p.y))
+            .map(|p| hwc_engine::geometry::Point2D::new(p.x + cx, p.y + cy))
             .collect();
-        let polygon = hwc_engine::geometry::Polygon::new(points);
+        
+        println!("[PLACE_CONTACT_DEBUG] '{}' Transformed polygon points (world space):", contact_name_debug);
+        for (i, p) in world_space_points.iter().enumerate() {
+            println!("  Point {}: ({}, {})", i, p.x, p.y);
+        }
+        
+        let polygon = hwc_engine::geometry::Polygon::new(world_space_points);
 
         space.entity_graph.add_polygon_substrate_layer(
             ctx.material_id,
-            ctx.net_id,
+            hwc_engine::NetId::new(ctx.net_id),
             ctx.contact_bbox,
             polygon,
         );
@@ -233,7 +256,7 @@ pub(super) fn place_deposited_via(
             ctx.end_point.x, ctx.end_point.y, ctx.end_point.z, ctx.diameter_nm);
         space.entity_graph.add_cylinder_substrate_layer(
             ctx.material_id,
-            ctx.net_id,
+            hwc_engine::NetId::new(ctx.net_id),
             ctx.contact_bbox,
             ctx.diameter_nm,
             32,

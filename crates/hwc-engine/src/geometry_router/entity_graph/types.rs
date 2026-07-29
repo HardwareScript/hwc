@@ -32,7 +32,7 @@ pub struct EntityData {
 #[derive(Clone, Debug)]
 pub struct TubeLayerSpec {
     pub material: MaterialId,
-    pub net: u32,
+    pub net: NetId,
     pub bbox: BoundingBox,
     pub outer_diameter: u32,
     pub inner_diameter: u32,
@@ -51,7 +51,7 @@ impl TubeLayerSpec {
     /// defaulted so geometry generation and mesh export never disagree.
     pub fn builder(
         material: MaterialId,
-        net: u32,
+        net: NetId,
         bbox: BoundingBox,
         circle_segments: u32,
     ) -> TubeLayerSpecBuilder {
@@ -73,7 +73,7 @@ impl TubeLayerSpec {
 /// Builder for [`TubeLayerSpec`].
 pub struct TubeLayerSpecBuilder {
     material: MaterialId,
-    net: u32,
+    net: NetId,
     bbox: BoundingBox,
     outer_diameter: u32,
     inner_diameter: u32,
@@ -141,7 +141,7 @@ impl TubeLayerSpecBuilder {
 pub struct ViaHoleSpec {
     pub hole_bbox: BoundingBox,
     pub diameter_nm: i64,
-    pub via_net: u32,
+    pub via_net: NetId,
     pub clearance_nm: i64,
     pub is_tented: bool,
     pub pad_diameter_nm: i64,

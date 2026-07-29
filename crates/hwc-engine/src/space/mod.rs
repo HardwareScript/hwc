@@ -16,6 +16,56 @@ use crate::netlist::{NetId, NetlistArena};
 use compact_str::CompactString;
 use rustc_hash::FxHashMap;
 
+/// **v0.2.0: Stackup layer information (single source of truth)**
+/// 
+/// Minimal stackup metadata embedded in HardwareSpace so export and validation
+/// code can resolve layer Z-coordinates without needing the full StackupManager.
+#[derive(Debug, Clone)]
+pub struct StackupLayer {
+    /// Layer name (e.g., "metal1", "poly", "active")
+    pub name: CompactString,
+    /// Physical bottom Z in nanometers (from Z=0 reference)
+    pub z_bottom: i64,
+    /// Physical top Z in nanometers
+    pub z_top: i64,
+    /// Layer thickness in nanometers
+    pub thickness: i64,
+    /// Material name for this layer
+    pub material_name: CompactString,
+    /// Whether this layer is routable (conductive)
+    pub is_routable: bool,
+}
+
+impl StackupLayer {
+    pub fn new(
+        name: CompactString,
+        z_bottom: i64,
+        z_top: i64,
+        thickness: i64,
+        material_name: CompactString,
+        is_routable: bool,
+    ) -> Self {
+        Self {
+            name,
+            z_bottom,
+            z_top,
+            thickness,
+            material_name,
+            is_routable,
+        }
+    }
+
+    /// Get the centerline Z coordinate of this layer
+    pub fn centerline_z(&self) -> i64 {
+        (self.z_bottom + self.z_top) / 2
+    }
+
+    /// Check if a Z coordinate falls within this layer's physical bounds
+    pub fn contains_z(&self, z: i64) -> bool {
+        z >= self.z_bottom && z <= self.z_top
+    }
+}
+
 /// Complete hardware space with entity graph and connectivity.
 ///
 /// This structure combines:
@@ -83,6 +133,11 @@ pub struct HardwareSpace {
 
     /// **v0.1.8: Coordinate snapping resolution in nanometers.**
     pub resolution_nm: i64,
+
+    /// **v0.2.0: Stackup layer metadata (single source of truth)**
+    /// Ordered list of layers from bottom to top with physical Z-coordinates.
+    /// Populated during compilation from the StackupManager.
+    pub stackup_layers: Vec<StackupLayer>,
 }
 
 impl HardwareSpace {
@@ -116,7 +171,33 @@ impl HardwareSpace {
             fabrication_constraints: None,
             keep_out_zones: Vec::new(),
             resolution_nm,
+            stackup_layers: Vec::new(),
         }
+    }
+
+    /// **v0.2.0: Find the stackup layer containing a given Z coordinate**
+    /// Returns None if Z is outside all layer bounds (air gap or out of bounds).
+    pub fn find_layer_at_z(&self, z: i64) -> Option<&StackupLayer> {
+        let count = self.stackup_layers.len();
+        for (idx, layer) in self.stackup_layers.iter().enumerate() {
+            let is_top = idx == count - 1;
+            let contains = if is_top {
+                z >= layer.z_bottom && z <= layer.z_top
+            } else {
+                z >= layer.z_bottom && z < layer.z_top
+            };
+            if contains {
+                return Some(layer);
+            }
+        }
+        None
+    }
+
+    /// **v0.2.0: Get layer by name**
+    pub fn get_layer_by_name(&self, name: &str) -> Option<&StackupLayer> {
+        self.stackup_layers
+            .iter()
+            .find(|layer| layer.name.as_str() == name)
     }
 
     /// Register a component bbox and its metadata in the entity graph.
@@ -182,7 +263,7 @@ impl HardwareSpace {
         drill_net: NetId,
     ) {
         self.entity_graph
-            .drill_hole(hole_bbox, diameter_nm, drill_net.raw());
+            .drill_hole(hole_bbox, diameter_nm, drill_net);
     }
 
     /// **v0.1.7: Synchronize net names from pins to bound pours**
@@ -237,7 +318,7 @@ impl HardwareSpace {
                         && layer.material == material_id
                         && layer.bbox == pour_bbox
                     {
-                        layer.net = net_id.raw();
+                        layer.net = net_id;
                     }
                 }
             }
@@ -255,7 +336,7 @@ impl HardwareSpace {
                         });
                         for layer in self.entity_graph.get_substrate_layers_mut() {
                             if layer.material == material_id && layer.bbox == contact_bbox {
-                                layer.net = net_id.raw();
+                                layer.net = net_id;
                             }
                         }
                     }

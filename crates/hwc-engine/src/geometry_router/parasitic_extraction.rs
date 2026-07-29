@@ -176,7 +176,7 @@ pub fn extract_parasitics(
     let mut net_ids: Vec<u32> = Vec::new();
 
     for seg in segments {
-        let net = seg.net_id as u32;
+        let net = seg.net_id.raw();
         if let Some(idx) = net_ids.iter().position(|&n| n == net) {
             net_segments[idx].push(seg);
         } else {
@@ -191,7 +191,7 @@ pub fn extract_parasitics(
             nm_to_m(
                 segments
                     .iter()
-                    .find(|s| s.net_id as u32 == net_id)
+                    .find(|s| s.net_id.raw() == net_id)
                     .map_or(200_000, |s| s.width_nm),
             ),
             params.substrate_height_m,

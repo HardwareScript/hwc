@@ -6,6 +6,7 @@ authors.workspace = true
 license.workspace = true
 
 [dependencies]
+hwc-types = { workspace = true }
 thiserror = { workspace = true }
 miette = { workspace = true }
 rustc-hash = { workspace = true }

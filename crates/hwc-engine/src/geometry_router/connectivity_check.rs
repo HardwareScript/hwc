@@ -95,7 +95,7 @@ pub fn build_connectivity_graph(
     let mut next_id: u32 = 0;
 
     for seg in segments {
-        let net = seg.net_id as u32;
+        let net = seg.net_id.raw();
         let start_id = quantize_node_id(seg.start, net, &mut node_map, &mut next_id);
         let end_id = quantize_node_id(seg.end, net, &mut node_map, &mut next_id);
 
@@ -121,7 +121,7 @@ pub fn build_connectivity_graph(
 
         for &seg_id in &junc.connected_segments {
             if let Some(seg) = segments.get(seg_id) {
-                if seg.net_id as u32 == net {
+                if seg.net_id.raw() == net {
                     let start_id = quantize_node_id(seg.start, net, &mut node_map, &mut next_id);
                     let end_id = quantize_node_id(seg.end, net, &mut node_map, &mut next_id);
                     adjacency.entry(junc_id).or_default().insert(start_id);

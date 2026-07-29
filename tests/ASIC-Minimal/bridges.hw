@@ -1,0 +1,7 @@
+# bridges.hw - Bridge definitions for ASIC materials
+import Silicon_N, Aluminum, Tungsten, Titanium_Silicide from "./materials"
+
+export bridge Silicon_N to Aluminum:
+    interface: Titanium_Silicide
+    thickness: 5nm
+    fill: Tungsten

@@ -17,14 +17,19 @@ pub fn construct_entity_name(
         hwc_parser::RouteEndpointSpec::ComponentPin {
             component_name,
             component_index,
+            pin_name,
             ..
         } => {
-            if let Some(ref index_expr) = component_index {
+            // v0.2.1: Check if this is actually a hierarchical space reference
+            // Format: "InstanceName.EntityName" where EntityName is the space pour/pad
+            // This gets parsed as ComponentPin but should be treated as SpaceEntity
+            let full_name = if let Some(ref index_expr) = component_index {
                 let index_value = evaluate_index_expression(index_expr)?;
-                Ok(format!("{}[{}]", component_name, index_value).into())
+                format!("{}", component_name)  
             } else {
-                Ok(component_name.clone())
-            }
+                format!("{}.{}", component_name, pin_name)
+            };
+            Ok(full_name.into())
         }
         hwc_parser::RouteEndpointSpec::SpaceEntity { name, index, .. } => {
             if let Some(ref index_expr) = index {
@@ -91,7 +96,7 @@ pub fn evaluate_index_expression(expr: &hwc_parser::Expression) -> Result<i64, I
     }
 }
 
-/// Resolve EntityIds for route endpoints from the EntityGraph (v0.1.9).
+/// Resolve EntityIds for route endpoints from the EntityGraph (v0.1.9 / v0.2.1).
 pub fn resolve_endpoint_entity_ids(
     route: &hwc_parser::Route,
 ) -> Result<
@@ -124,10 +129,36 @@ pub fn resolve_endpoint_entity_ids(
                     pin_name.to_string()
                 };
 
-                Ok(hwc_engine::geometry::EntityId::from_semantic(&format!(
-                    "pin:{}:{}",
-                    full_comp_name, full_pin_name
-                )))
+                // v0.2.1: Hierarchical cross-instance routing fix.
+                //
+                // The parser emits "route PMOS_Inst.Out_Pad to NMOS_Inst.Out_Pad" as
+                // ComponentPin { component_name: "PMOS_Inst", pin_name: "Out_Pad" }.
+                //
+                // However, transform_entity_registry() registers the flattened child
+                // entity under the key "space:PMOS_Inst.Out_Pad" (SpacePour type),
+                // NOT "pin:PMOS_Inst:Out_Pad".
+                //
+                // So when the component has no index expression and there is a non-empty
+                // pin_name, interpret this as a hierarchical space-entity reference:
+                //   "space:InstanceName.EntityName"
+                //
+                // This is correct because:
+                //   - Real intra-space pin routes use `pin_name` that refers to a local
+                //     pin (e.g. ComponentPin inside child space), not a space-entity.
+                //   - Cross-instance parent routes use ComponentPin syntax but target
+                //     entities registered as SpacePour in the parent EntityGraph.
+                if component_index.is_none() && !full_pin_name.is_empty() {
+                    // Treat as "space:InstanceName.EntityName"
+                    Ok(hwc_engine::geometry::EntityId::from_semantic(&format!(
+                        "space:{}.{}",
+                        full_comp_name, full_pin_name
+                    )))
+                } else {
+                    Ok(hwc_engine::geometry::EntityId::from_semantic(&format!(
+                        "pin:{}:{}",
+                        full_comp_name, full_pin_name
+                    )))
+                }
             }
             hwc_parser::RouteEndpointSpec::SpaceEntity { name, index, .. } => {
                 let full_name = if let Some(ref idx_expr) = index {

@@ -28,7 +28,7 @@ impl TopologicalRouter {
         };
         let candidates = self.query_all_obstacles(&bbox, obstacles);
         for seg in candidates {
-            if self.exempt_net_ids.contains(&seg.net_id) {
+            if self.exempt_net_ids.contains(&(seg.net_id.raw() as usize)) {
                 continue;
             }
             let seg_bbox = BoundingBox {
@@ -53,6 +53,11 @@ impl TopologicalRouter {
     /// Check if a segment between two points intersects any obstacle.
     /// Uses Minkowski sum inflation: inflate_by = trace_width_nm / 2 + min_clearance_nm
     /// NOTE: For single-layer 2D routing, we only inflate X/Y dimensions, not Z.
+    /// 
+    /// VERTICAL VIA EXEMPTION (v0.2.0):
+    /// If the segment is vertical (start.z != end.z), it represents a via transition.
+    /// Vias are exempt from collision checks with obstacles on intermediate Z layers,
+    /// as they must pass through non-routable dielectric layers by definition.
     pub(crate) fn segment_intersects_obstacle(
         &self,
         a: Point3D,
@@ -63,6 +68,9 @@ impl TopologicalRouter {
 
         let route_z_min = a.z.min(b.z);
         let route_z_max = a.z.max(b.z);
+
+        // VERTICAL VIA EXEMPTION: Check if this is a vertical via
+        let is_vertical_via = a.z != b.z;
 
         let segment_bbox = BoundingBox {
             min: Point3D::new(a.x.min(b.x), a.y.min(b.y), route_z_min),
@@ -90,7 +98,7 @@ impl TopologicalRouter {
         let candidates = self.query_all_obstacles(&query_bbox, obstacles);
 
         for seg in candidates.iter() {
-            if self.exempt_net_ids.contains(&seg.net_id) {
+            if self.exempt_net_ids.contains(&(seg.net_id.raw() as usize)) {
                
                 continue;
             }
@@ -100,6 +108,19 @@ impl TopologicalRouter {
 
             if route_z_min > obs_z_max || obs_z_min > route_z_max {
                 continue;
+            }
+
+            // VERTICAL VIA EXEMPTION: If this is a vertical via and the obstacle is on
+            // an intermediate layer (not at the via endpoints), skip collision check.
+            // This allows vias to pass through non-routable dielectric layers.
+            if is_vertical_via {
+                let _is_intermediate_layer = (obs_z_min > route_z_min && obs_z_max < route_z_max)
+                    || (obs_z_min >= route_z_min && obs_z_max <= route_z_max && obs_z_min != route_z_min && obs_z_max != route_z_max);
+                
+                // Only check collision if obstacle is on the same layer as via endpoints
+                if obs_z_min != route_z_min && obs_z_max != route_z_max {
+                    continue; // Skip intermediate layer obstacles
+                }
             }
 
             let obs_bbox = BoundingBox {

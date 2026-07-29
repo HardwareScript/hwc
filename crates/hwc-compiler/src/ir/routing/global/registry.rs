@@ -98,10 +98,25 @@ impl<'a> AutoRouter<'a> {
 
         let trace_width_nm = declared_width_nm.unwrap_or(min_width_nm);
 
-        let min_seg_len_nm =
-            crate::ir::routing::helpers::require_min_segment_length_nm(self.profile)?;
-        let segments =
-            crate::ir::routing::helpers::manhattan_path_to_segments(&path, min_seg_len_nm);
+        // STRUCTURAL FIX: For 3D paths with Z transitions, create segments directly from waypoints
+        // instead of using manhattan_path_to_segments which has buggy collinear logic for 3D
+        let has_z_transitions = path.windows(2).any(|w| w[0].z != w[1].z);
+        
+        let segments = if has_z_transitions {
+            eprintln!("[REGISTRY] Path has Z transitions - creating segments directly from {} waypoints", path.len());
+            let mut segs = Vec::new();
+            for i in 0..path.len() - 1 {
+                segs.push(hwc_engine::LineSegment::new(path[i], path[i + 1]));
+            }
+            eprintln!("[REGISTRY] Created {} segments directly", segs.len());
+            segs
+        } else {
+            eprintln!("[REGISTRY] Path is planar - using manhattan_path_to_segments");
+            let min_seg_len_nm =
+                crate::ir::routing::helpers::require_min_segment_length_nm(self.profile)?;
+            crate::ir::routing::helpers::manhattan_path_to_segments(&path, min_seg_len_nm)
+        };
+        
         if segments.is_empty() {
             return Err(IrError::EmptyRoute {
                 net: net_name.into(),
@@ -145,13 +160,35 @@ impl<'a> AutoRouter<'a> {
             .and_then(|n| n.current_ma)
             .unwrap_or(0.0);
 
-        let trace = AnalyticTrace::new(
+        // **v0.2.0 STRUCTURAL FIX: Compute layer_z_range for horizontal traces**
+        let layer_z_range = if let Some(first_seg) = segments.first() {
+            // Check if this is a horizontal trace (all segments at same Z)
+            let is_horizontal = segments
+                .iter()
+                .all(|s| s.start.z == first_seg.start.z && s.end.z == first_seg.start.z);
+
+            if is_horizontal {
+                let centerline_z = first_seg.start.z;
+                // Look up the layer from HardwareSpace's stackup (single source of truth)
+                self.space
+                    .find_layer_at_z(centerline_z)
+                    .map(|layer| (layer.z_bottom, layer.z_top))
+            } else {
+                // Via or multi-layer trace: segments encode their own Z spans
+                None
+            }
+        } else {
+            None
+        };
+
+        let trace = AnalyticTrace::with_layer_z_range(
             net_id,
             hwc_engine::space::CrossSection::new(trace_width_nm, thickness_nm),
             segments,
             copper_id,
             net_name.into(),
             hwc_engine::space::CurrentRating::new(net_actual_current_ma, current_limit_ma),
+            layer_z_range,
         );
 
         self.space.analytic_routes.push(trace);

@@ -227,4 +227,33 @@ impl EntityGraph {
     pub fn interface_count(&self) -> usize {
         self.interface_database.len()
     }
+
+    /// Get read-only access to routed segments.
+    #[inline]
+    pub fn routed_segments(&self) -> &[(NetId, Vec<crate::geometry::TraceSegment>)] {
+        &self.routed_segments
+    }
+
+    /// Get the count of routed segment groups.
+    #[inline]
+    pub fn routed_segment_count(&self) -> usize {
+        self.routed_segments.len()
+    }
+
+    /// Get mutable access to routed segments.
+    #[inline]
+    pub fn routed_segments_mut(&mut self) -> &mut Vec<(NetId, Vec<crate::geometry::TraceSegment>)> {
+        &mut self.routed_segments
+    }
+
+    /// Iterate over routed segments (net ID and segment list pairs).
+    #[inline]
+    pub fn iter_routed_segments(&self) -> impl Iterator<Item = (&NetId, &Vec<crate::geometry::TraceSegment>)> {
+        self.routed_segments.iter().map(|(net_id, segments)| (net_id, segments))
+    }
+
+    /// Add routed segments for a net.
+    pub fn add_routed_segments(&mut self, net_id: NetId, segments: Vec<crate::geometry::TraceSegment>) {
+        self.routed_segments.push((net_id, segments));
+    }
 }

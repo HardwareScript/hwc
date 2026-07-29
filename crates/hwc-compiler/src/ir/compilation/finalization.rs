@@ -12,7 +12,7 @@ pub fn finalize(
     eval_context: &hwc_parser::EvaluationContext,
 ) -> Result<(), IrError> {
     // P45 Forbidden Junction Detection (Assembly Level)
-    crate::ir::bridge_validator::validate_bridges(space, profile.as_ref())?;
+    crate::ir::bridge_validator::validate_bridges(space, profile.as_ref(), Some(symbol_table))?;
 
     // Synchronize net names from pins to bound pours
     space.synchronize_nets();

@@ -74,25 +74,46 @@ impl SpatialDecomposer {
     /// * `raw_obstacles` - Original obstacle bounding boxes
     /// * `trace_width_nm` - Width of the routing trace
     /// * `min_clearance_nm` - Minimum clearance from obstacles
+    /// * `min_annular_ring_nm` - Minimum annular ring (0 for ASIC, >0 for PCB)
     pub fn new(
         raw_obstacles: Vec<BoundingBox>,
         trace_width_nm: i64,
         min_clearance_nm: i64,
+        min_annular_ring_nm: i64,
     ) -> Result<Self, SpatialDecompositionError> {
+        use crate::geometry_router::technology_strategy::TechnologyStrategy;
+        use crate::constraint_manager::FabricationConstraints;
+
         if trace_width_nm <= 0 {
             return Err(SpatialDecompositionError::InvalidTraceWidth(trace_width_nm));
         }
 
-        // STEP 1: Minkowski Inflation FIRST (C-Space creation)
-        let inflation = (trace_width_nm / 2) + min_clearance_nm;
+        // v0.2.0: Technology Strategy Pattern
+        // Create a minimal FabricationConstraints just for strategy determination
+        let temp_fab = FabricationConstraints {
+            min_trace_width_nm: trace_width_nm,
+            min_trace_spacing_nm: min_clearance_nm,
+            min_via_diameter_nm: 0,
+            default_via_diameter_nm: 0,
+            min_annular_ring_nm,
+            min_spacing_nm: 0,
+            low_voltage_clearance_nm: 0,
+            medium_voltage_clearance_nm: 0,
+            high_voltage_clearance_nm: 0,
+            safety_factor: 2.0,
+            stackup: None,
+            solder_mask_expansion_nm: None,
+            technology: None,
+        };
+        let strategy = TechnologyStrategy::from_constraints(&temp_fab);
+        let inflation = strategy.calculate_obstacle_inflation(trace_width_nm, min_clearance_nm);
 
         eprintln!("[NAVIGABLE SPACE] Creating spatial decomposer:");
         eprintln!("  trace_width_nm = {}", trace_width_nm);
         eprintln!("  min_clearance_nm = {}", min_clearance_nm);
-        eprintln!(
-            "  calculated inflation = (trace_width/2) + min_clearance = ({}/2) + {} = {} nm",
-            trace_width_nm, min_clearance_nm, inflation
-        );
+        eprintln!("  min_annular_ring_nm = {}", min_annular_ring_nm);
+        eprintln!("  technology = {}", strategy.name());
+        eprintln!("  calculated inflation = {} nm", inflation);
         eprintln!("  raw obstacles count = {}", raw_obstacles.len());
 
         let inflated_obstacles: Vec<BoundingBox> = raw_obstacles
@@ -461,7 +482,7 @@ mod tests {
     fn test_cspace_inflation() {
         let obstacle = BoundingBox::new(Point3D::new(1000, 1000, 0), Point3D::new(2000, 2000, 0));
 
-        let decomposer = SpatialDecomposer::new(vec![obstacle], 100, 50).unwrap();
+        let decomposer = SpatialDecomposer::new(vec![obstacle], 100, 50, 0).unwrap(); // ASIC mode for test
 
         // Inflation = (100/2) + 50 = 100
         assert_eq!(decomposer.inflated_obstacles.len(), 1);
@@ -476,7 +497,7 @@ mod tests {
     fn test_cell_creation() {
         let board_bounds = BoundingBox::new(Point3D::new(0, 0, 0), Point3D::new(10000, 10000, 0));
 
-        let decomposer = SpatialDecomposer::new(vec![], 100, 50).unwrap();
+        let decomposer = SpatialDecomposer::new(vec![], 100, 50, 0).unwrap();
         let cells = decomposer.decompose(&board_bounds, 0);
 
         // With no obstacles, should have at least one cell
@@ -487,7 +508,7 @@ mod tests {
     fn test_corridor_extraction() {
         let board_bounds = BoundingBox::new(Point3D::new(0, 0, 0), Point3D::new(10000, 10000, 0));
 
-        let decomposer = SpatialDecomposer::new(vec![], 100, 50).unwrap();
+        let decomposer = SpatialDecomposer::new(vec![], 100, 50, 0).unwrap();
         let cells = decomposer.decompose(&board_bounds, 0);
 
         let start = Point3D::new(1000, 1000, 0);
@@ -505,7 +526,7 @@ mod tests {
     fn test_corridor_width_validation() {
         let board_bounds = BoundingBox::new(Point3D::new(0, 0, 0), Point3D::new(10000, 10000, 0));
 
-        let decomposer = SpatialDecomposer::new(vec![], 100, 50).unwrap();
+        let decomposer = SpatialDecomposer::new(vec![], 100, 50, 0).unwrap();
         let cells = decomposer.decompose(&board_bounds, 0);
 
         // With no obstacles, cells should be wide enough
@@ -518,7 +539,7 @@ mod tests {
     fn test_corridor_sufficient_check() {
         let board_bounds = BoundingBox::new(Point3D::new(0, 0, 0), Point3D::new(10000, 10000, 0));
 
-        let decomposer = SpatialDecomposer::new(vec![], 100, 50).unwrap();
+        let decomposer = SpatialDecomposer::new(vec![], 100, 50, 0).unwrap();
         let cells = decomposer.decompose(&board_bounds, 0);
 
         let start = Point3D::new(1000, 1000, 0);
@@ -534,7 +555,7 @@ mod tests {
 
     #[test]
     fn test_invalid_trace_width() {
-        let result = SpatialDecomposer::new(vec![], 0, 50);
+        let result = SpatialDecomposer::new(vec![], 0, 50, 0);
         assert!(result.is_err());
         match result.unwrap_err() {
             SpatialDecompositionError::InvalidTraceWidth(w) => assert_eq!(w, 0),
@@ -546,7 +567,7 @@ mod tests {
     fn test_point_outside_space() {
         let board_bounds = BoundingBox::new(Point3D::new(0, 0, 0), Point3D::new(10000, 10000, 0));
 
-        let decomposer = SpatialDecomposer::new(vec![], 100, 50).unwrap();
+        let decomposer = SpatialDecomposer::new(vec![], 100, 50, 0).unwrap();
         let cells = decomposer.decompose(&board_bounds, 0);
 
         let start = Point3D::new(-1000, -1000, 0);

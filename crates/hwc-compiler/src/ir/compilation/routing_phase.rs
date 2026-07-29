@@ -27,11 +27,10 @@ pub fn try_load_lockfile(
                 );
                 return Ok(false);
             }
-            let layer_z_map = hwc_engine::geometry_router::build_layer_z_map(&space.entity_graph);
             match hwc_engine::geometry_router::lockfile_to_traces(
                 &loaded,
                 &space.netlist,
-                &layer_z_map,
+                &space.stackup_layers,
                 &space.material_registry,
             ) {
                 Ok(cached_traces) => {
@@ -117,21 +116,13 @@ pub fn process_routes(
 ) -> Result<Vec<hwc_parser::Route>, IrError> {
     let mut auto_routes = Vec::new();
 
-    eprintln!(
-        "[DEBUG] Starting route processing, entity count: {}",
-        space.entity_graph.iter_entity_ids().count()
-    );
-
+    
     for id in ctx.sorted_ids.iter() {
         let &item_idx = ctx.item_map.get(id).unwrap();
         let item = &ctx.placement_items[item_idx];
 
         if let PlacementItem::Route(route) = item {
-            eprintln!(
-                "[DEBUG] Processing route: {} to {}",
-                crate::ir::routing::helpers::endpoint_label(&route.from),
-                crate::ir::routing::helpers::endpoint_label(&route.to)
-            );
+           
 
             crate::ir::routing::register_net_for_route(
                 space,
@@ -198,6 +189,6 @@ pub fn auto_route(
     );
 
     auto_router.route_all_nets()?;
-    eprintln!("[ROUTER] Automatic routing complete");
+    
     Ok(())
 }

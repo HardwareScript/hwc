@@ -26,6 +26,8 @@ pub struct RouteSpaceRequest<'a> {
     pub net_normals: Option<&'a FxHashMap<crate::netlist::NetId, (crate::geometry_router::connection_interface::Normal2D, crate::geometry_router::connection_interface::Normal2D)>>,
     /// v0.1.9: Per-net escape stub distances in nanometers.
     pub net_escape_stubs: Option<&'a FxHashMap<crate::netlist::NetId, i64>>,
+    /// v0.2.0: Per-net target Z-layer for explicit layer routing (layer: metal1).
+    pub net_layer_targets: Option<&'a FxHashMap<crate::netlist::NetId, i64>>,
 }
 
 /// Copper pour definition for anti-pad generation.
@@ -132,4 +134,7 @@ pub struct GeometryRouter {
 
     /// v0.1.9: Per-net cost composers keyed by intent name.
     pub(crate) intent_composers: rustc_hash::FxHashMap<compact_str::CompactString, CostComposer>,
+
+    /// v0.2.0: Per-net target Z-layer for explicit layer routing.
+    pub(crate) net_layer_targets: FxHashMap<crate::netlist::NetId, i64>,
 }

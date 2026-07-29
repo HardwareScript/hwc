@@ -33,7 +33,7 @@ pub enum SubstrateLayerType {
 #[derive(Debug, Clone)]
 pub struct SubstrateLayerMetadata {
     pub material: u8,
-    pub net: u32,
+    pub net: hwc_types::NetId,
     pub net_name: Option<CompactString>, // Resolved net name for easier lookup
     pub bbox: BoundingBox,
     pub layer_type: SubstrateLayerType,

@@ -226,10 +226,7 @@ pub fn unroll_contact(
     variable: &str,
     value: usize,
 ) -> Result<ContactPlacement, IrError> {
-    let name = contact
-        .name
-        .as_ref()
-        .map(|n| substitute_in_component_name(n, variable, value));
+    let name = substitute_in_component_name(&contact.name, variable, value);
 
     let net = contact
         .net
@@ -237,7 +234,11 @@ pub fn unroll_contact(
         .map(|n| substitute_in_net_name(n, variable, value))
         .transpose()?;
 
-    let position = substitute_in_coordinate(&contact.position, variable, value)?;
+    let position = contact
+        .position
+        .as_ref()
+        .map(|p| substitute_in_coordinate(p, variable, value))
+        .transpose()?;
 
     let from_elevation = match &contact.from_elevation {
         hwc_parser::Elevation::Physical { start, end } => hwc_parser::Elevation::Physical {
@@ -274,11 +275,64 @@ pub fn unroll_contact(
         material: contact.material.clone(),
         name,
         position,
+        relational_anchor: contact.relational_anchor.clone(), // v0.2.0: Preserve relational anchor
         from_elevation,
         to_elevation,
         net,
         properties,
         contour: contact.contour.clone(),
         span: contact.span,
+    })
+}
+
+/// Unroll space instance placement in for-loop (v0.2.1)
+/// CRITICAL: All fields must be substituted - no defaults, no fallbacks
+pub fn unroll_space_instance(
+    space_inst: &hwc_parser::SpaceInstancePlacement,
+    variable: &str,
+    value: usize,
+) -> Result<hwc_parser::SpaceInstancePlacement, IrError> {
+    // Substitute instance name (e.g., "Cell_{{i}}" -> "Cell_0")
+    let instance_name = substitute_in_component_name(&space_inst.instance_name, variable, value);
+
+    // Substitute position coordinates - x(), y(), z() are methods on Coordinate
+    let position = substitute_in_coordinate(&space_inst.position, variable, value)?;
+
+    // Rotation MUST be present (required for space instances)
+    if space_inst.rotation.is_none() {
+        return Err(IrError::CompilationAborted {
+            error_count: 1,
+        });
+    }
+
+    // Substitute net map entries
+    let mut net_map = rustc_hash::FxHashMap::default();
+    for (child_net, parent_net) in &space_inst.net_map {
+        // Substitute parent net name (child net names are typically not parameterized)
+        // Example: net_map: [VDD_Rail: VDD_{{i}}]
+        let parent_net_str = parent_net.as_str();
+        let substituted_parent = if parent_net_str.contains(&format!("{{{{{}}}}}", variable)) {
+            parent_net_str.replace(&format!("{{{{{}}}}}", variable), &value.to_string())
+        } else {
+            parent_net_str.to_string()
+        };
+        
+        net_map.insert(child_net.clone(), substituted_parent.into());
+    }
+
+    // Net map MUST NOT be empty after substitution
+    if net_map.is_empty() {
+        return Err(IrError::CompilationAborted {
+            error_count: 1,
+        });
+    }
+
+    Ok(hwc_parser::SpaceInstancePlacement {
+        space_name: space_inst.space_name.clone(), // Space name is never parameterized
+        instance_name,
+        position,
+        rotation: space_inst.rotation.clone(), // Rotation is not parameterized (structural property)
+        net_map,
+        span: space_inst.span,
     })
 }

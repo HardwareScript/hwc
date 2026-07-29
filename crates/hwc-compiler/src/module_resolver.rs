@@ -240,13 +240,11 @@ impl ModuleResolver {
         source_file: &Path,
         symbol_table: &mut SymbolTable,
     ) -> Result<(), ResolverError> {
-        eprintln!("[IMPORT_DEBUG] Resolving import from source: {}", source_file.display());
-        eprintln!("[IMPORT_DEBUG] Import path: {:?}", import.path);
-        eprintln!("[IMPORT_DEBUG] Import targets: {:?}", import.targets);
+        
         
         let file_path = self.resolve_path(&import.path, source_file)?;
         
-        eprintln!("[IMPORT_DEBUG] Resolved to file path: {}", file_path.display());
+       
 
         // 1. Circular Import Detection
         if self.resolution_stack.contains(&file_path) {
@@ -309,17 +307,17 @@ impl ModuleResolver {
         match targets {
             hwc_parser::ImportTargets::Star => {
                 // Wildcard import: register all EXPORTED definitions
-                eprintln!("[IMPORT_DEBUG] Registering all exported definitions from {}", file_path.display());
+                
                 for definition in &program.definitions {
                     if self.is_exported(definition) {
-                        eprintln!("[IMPORT_DEBUG]   - Registering: {}", self.def_name(definition));
+                        
                         self.register_definition(definition, symbol_table)?;
                     }
                 }
             }
             hwc_parser::ImportTargets::List(names) => {
                 // Selective import: register only requested symbols
-                eprintln!("[IMPORT_DEBUG] Selective import for names: {:?}", names);
+                
                 
                 for name in names {
                     let name_str = name.as_str();
@@ -341,7 +339,7 @@ impl ModuleResolver {
                             });
                         }
                         
-                        eprintln!("[IMPORT_DEBUG]   - Found and registering: {}", name_str);
+                        
                         self.register_definition(definition, symbol_table)?;
                     } else {
                         // Not found in definitions - check if it's re-exported
@@ -352,7 +350,7 @@ impl ModuleResolver {
                             // This symbol was imported by this module and re-exported
                             // It should already be in the symbol table from when we recursively
                             // resolved this module's imports (step 4 above)
-                            eprintln!("[IMPORT_DEBUG]   - Symbol '{}' is re-exported (already registered from sub-imports)", name_str);
+                         
                             // No action needed - symbol is already in the table
                         } else {
                             return Err(ResolverError::SymbolNotFound {
@@ -381,6 +379,7 @@ impl ModuleResolver {
     /// Check if a definition is exported
     fn is_exported(&self, definition: &Definition) -> bool {
         match definition {
+            Definition::Bridge(b) => b.is_exported,
             Definition::Material(m) => m.is_exported,
             Definition::Profile(p) => p.is_exported,
             Definition::Component(c) => c.is_exported,
@@ -399,14 +398,15 @@ impl ModuleResolver {
             Definition::Const(c) => c.is_exported,
             Definition::Shape(s) => s.is_exported,
             Definition::MaterialAlias(a) => a.is_exported,
+            Definition::Space(s) => s.is_exported, // v0.2.1: Hierarchical Space Composition
             Definition::PolymorphicInterface(_) => true, // TODO: add is_exported field
-            Definition::Space(_) => false, // Spaces are never exported
         }
     }
 
     /// Check if a definition matches a name
     fn def_matches_name(&self, definition: &Definition, name: &str) -> bool {
         match definition {
+            Definition::Bridge(b) => b.name.as_str() == name,
             Definition::Material(m) => m.name.as_str() == name,
             Definition::Profile(p) => p.name.as_str() == name,
             Definition::Component(c) => c.name.as_str() == name,
@@ -426,13 +426,14 @@ impl ModuleResolver {
             Definition::Shape(s) => s.name.as_str() == name,
             Definition::MaterialAlias(a) => a.name.as_str() == name,
             Definition::PolymorphicInterface(pi) => pi.name.as_str() == name,
-            Definition::Space(_) => false,
+            Definition::Space(s) => s.name.as_str() == name, // v0.2.1: Hierarchical Space Composition
         }
     }
 
     /// Get a definition's name for debug output
-    fn def_name(&self, definition: &Definition) -> String {
+    fn _def_name(&self, definition: &Definition) -> String {
         match definition {
+            Definition::Bridge(b) => format!("Bridge({})", b.name),
             Definition::Material(m) => format!("Material({})", m.name),
             Definition::Profile(p) => format!("Profile({})", p.name),
             Definition::Component(c) => format!("Component({})", c.name),
@@ -536,6 +537,10 @@ impl ModuleResolver {
         // CRITICAL: Imported definitions go into the HPM layer, not the local layer
         // This enables the Authority Stack (Local > HPM > Prelude > Core)
         match definition {
+            Definition::Bridge(bridge) => {
+                symbol_table.register_import_bridge(bridge.clone());
+                Ok(())
+            }
             Definition::Material(mat) => {
                 symbol_table.register_import_material(mat.clone());
                 Ok(())
@@ -612,8 +617,9 @@ impl ModuleResolver {
                 symbol_table.register_import_material_alias(alias.clone());
                 Ok(())
             }
-            Definition::Space(_) => {
-                // Space definitions in imported files are ignored
+            Definition::Space(space_def) => {
+                // v0.2.1: Register imported space definitions for hierarchical composition
+                symbol_table.register_import_space(space_def.clone());
                 Ok(())
             }
         }

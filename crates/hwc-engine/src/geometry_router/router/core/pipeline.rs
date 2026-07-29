@@ -17,8 +17,9 @@ impl GeometryRouter {
             .constraints
             .fabrication
             .as_ref()
-            .map(|fab| fab.min_trace_spacing_nm)
-            .unwrap_or(200_000);
+            .expect("BUG: Fabrication constraints required for route refinement pipeline. \
+                     Ensure the profile defines 'trace.min_spacing'.")
+            .min_trace_spacing_nm;
 
         // --- Stage 1: Legalization ---
         let mut all_segments: Vec<TraceSegment> = Vec::new();

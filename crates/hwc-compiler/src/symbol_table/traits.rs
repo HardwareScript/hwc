@@ -1,7 +1,17 @@
 //! Trait implementations for external crate integration
 
-use super::layer::SymbolTable;
+use super::layer::{SymbolLayer, SymbolTable};
 use hwc_parser::{MaterialDefinition, ProfileDefinition};
+
+// ========== Internal layered lookup trait ==========
+
+/// Trait for extracting values from a SymbolLayer
+/// 
+/// This enables clean, type-safe lookups across the layer hierarchy
+/// without repetitive or_else chains.
+pub(super) trait _LayerLookup<T> {
+    fn get_from_layer(&self, layer: &SymbolLayer) -> Option<&T>;
+}
 
 // ========== hwc-engine trait implementations ==========
 

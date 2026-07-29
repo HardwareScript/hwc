@@ -8,6 +8,9 @@ mod handle;
 
 pub use handle::{NetHandle, NetLookupTable};
 
+// Re-export NetId from hwc-types for backward compatibility
+pub use hwc_types::NetId;
+
 use compact_str::CompactString;
 use rustc_hash::FxHashMap;
 use smallvec::SmallVec;
@@ -52,35 +55,7 @@ impl PinId {
     }
 }
 
-/// Strongly-typed net ID (newtype wrapper around u32).
-///
-/// Zero memory overhead - compiles to a raw u32.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
-pub struct NetId(pub u32);
 
-impl NetId {
-    /// Semantic constant for unconnected/keepout zones
-    /// Components and pours with this net ID block all routing
-    pub const UNCONNECTED: NetId = NetId(0);
-
-    /// Create a new net ID.
-    #[inline]
-    pub const fn new(id: u32) -> Self {
-        Self(id)
-    }
-
-    /// Get the raw ID value.
-    #[inline]
-    pub const fn raw(self) -> u32 {
-        self.0
-    }
-
-    /// Check if this is an unconnected/keepout zone
-    #[inline]
-    pub const fn is_unconnected(self) -> bool {
-        self.0 == 0
-    }
-}
 
 /// Component data stored in the arena.
 #[derive(Clone, Debug)]

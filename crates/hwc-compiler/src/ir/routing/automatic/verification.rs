@@ -45,7 +45,7 @@ pub fn verify_em_thermal(params: &EmVerificationParams) -> Result<(), IrError> {
                 seg_idx: i,
             },
             segment_id: i,
-            net_id: params.net_id.raw() as usize,
+            net_id: params.net_id,
             width_nm: params.trace_width_nm,
             thickness_nm: params.trace_thickness_nm,
             start: seg.start,

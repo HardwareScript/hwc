@@ -61,6 +61,7 @@ impl GeometryRouter {
             net_escape_stubs: FxHashMap::default(),
             cost_composer: CostComposer::default(),
             intent_composers: FxHashMap::default(),
+            net_layer_targets: FxHashMap::default(),
         }
     }
 

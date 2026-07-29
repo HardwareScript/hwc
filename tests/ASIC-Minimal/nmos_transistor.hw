@@ -1,0 +1,91 @@
+# nmos_transistor.hw
+# Full Physical Synthesis of an Active NMOS Transistor
+# Uses N-type silicon diffusions (Silicon_N) connected to Ground.
+
+import * from @std/primitives/units
+import * from "./minimal_pdk"
+
+export module NMOSTransistor:
+    pins: [input In, output Out, ground GND]
+    route Out to GND
+
+shape ActiveArea(w: Measurement, h: Measurement):
+    geometry:
+        Rectangle(width: w, height: h)
+
+shape GatePoly(w: Measurement, h: Measurement):
+    geometry:
+        Rectangle(width: w, height: h)
+
+shape GroundRail(w: Measurement, h: Measurement):
+    geometry:
+        Rectangle(width: w, height: h)
+
+export space NMOS_Cell implements NMOSTransistor:
+    # 2.0um wide, 3.0um high, 2.0um depth for proper 3D aspect ratio with thick layers
+    dimensions: 2.0um by 3.0um by 2.0um
+    resolution: 10nm
+    origin: bl by b
+    profile: Silicon_180nm
+
+    nets:
+        In:  { classification: signal, potential: 1.8V, current: 0.1uA }
+        Out: { classification: signal, potential: 1.8V, current: 0.1uA }
+        GND: { classification: ground, potential: 0.0V, current: 10.0mA }
+
+    # 1. GND Power Rail (Metal 1) - Positioned at the bottom for NMOS
+    add pour(Aluminum) named GND_Rail on layer: metal1:
+        net: GND
+        boundary: [x: 0nm, y: 100nm] to [x: 2000nm, y: 700nm]
+
+    # 2. Output Landing Pad (Metal 1) - Positioned at the top for NMOS
+    add pour(Aluminum) named Out_Pad on layer: metal1:
+        net: Out
+        boundary: [x: 1200nm, y: 2600nm] to [x: 1800nm, y: 3000nm]
+
+    # 3. NMOS Source (N-type active diffusion - net GND)
+    add pour(Silicon_N) named NMOS_Source on layer: active:
+        net: GND
+        boundary: [x: 400nm, y: 1700nm] to [x: 900nm, y: 2300nm]
+
+    # 4. NMOS Drain (N-type active diffusion - net Out)
+    add pour(Silicon_N) named NMOS_Drain on layer: active:
+        net: Out
+        boundary: [x: 1100nm, y: 1700nm] to [x: 1600nm, y: 2300nm]
+
+    # 5. NMOS Gate (Vertical Polysilicon strip - net In)
+    # Bisects the Source and Drain perfectly. Spans X: 900nm to 1100nm.
+    add pour(Polysilicon) named Gate_Strip on layer: poly:
+        net: In
+        boundary: [x: 900nm, y: 1400nm] to [x: 1100nm, y: 2600nm]
+
+    # 6. Physical Ohmic Contacts (Silicide interface + Tungsten fill)
+    # Centered exactly inside their respective active diffusion regions
+    # Uses Titanium_Silicide interface to match bridge rules
+    add contact(Titanium_Silicide) named Via_Source at [x: 650nm, y: 2000nm] spanning layer: active to metal1:
+        net: GND
+        diameter: 200nm
+        plating_thickness: 5nm
+
+    add contact(Titanium_Silicide) named Via_Drain at [x: 1350nm, y: 2000nm] spanning layer: active to metal1:
+        net: Out
+        diameter: 200nm
+        plating_thickness: 5nm
+
+    # ========================================================================
+    # PHYSICAL INTERCONNECTS (Metal 1 Routing)
+    # ========================================================================
+
+    # Ground Strap: Connects NMOS Source down to GND Rail (Vertical line)
+    route Via_Source to GND_Rail:
+        net: GND
+        width: 200nm
+        layer: metal1
+        intent: PowerRail
+
+    # Signal Interconnect: Connects NMOS Drain up to Out Pad (Mitered detour)
+    route Via_Drain to Out_Pad:
+        net: Out
+        width: 200nm
+        layer: metal1
+        intent: Signal

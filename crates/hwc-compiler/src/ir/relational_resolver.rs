@@ -9,11 +9,281 @@
 use compact_str::CompactString;
 use hwc_parser::{
     AlignmentAxis, ComponentName, Coordinate, DirectionalConstraint, Expression,
-    RelationalConstraint, Unit,
+    RelationalConstraint, Unit, OriginXY,
 };
 
 use crate::bounding_box_tracker::BoundingBoxTracker;
 use crate::ir::errors::IrError;
+
+/// Unified spatial relation (directional or alignment)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SpatialRelation {
+    // Directional
+    Above,
+    Below,
+    LeftOf,
+    RightOf,
+    // Alignment
+    AlignTop,
+    AlignBottom,
+    AlignLeft,
+    AlignRight,
+    AlignCenterX,
+    AlignCenterY,
+}
+
+/// A formula for calculating the user-coordinate offset.
+///
+/// Contains all parameters needed to compute the position along the axis.
+pub struct RelationalPlacementFormula {
+    /// True if the relationship acts on the Y axis, false if X axis
+    pub is_y_axis: bool,
+    /// Which target edge to reference (Min or Max user coordinate)
+    /// Represented as a boolean: true for max, false for min.
+    pub use_target_max: bool,
+    /// Multiplier for the spacing (1, -1, or 0)
+    pub spacing_multiplier: i64,
+    /// Multiplier for the new item's own dimension (1, -1, or 0)
+    pub self_dimension_multiplier: i64,
+    /// True if this is center alignment (requires special center-to-center offset)
+    pub is_center_alignment: bool,
+}
+
+impl RelationalPlacementFormula {
+    /// Get the formula parameters for a given relation and origin multipliers
+    pub fn get(relation: SpatialRelation, x_multiplier: i64, y_multiplier: i64) -> Self {
+        match relation {
+            SpatialRelation::RightOf => {
+                if x_multiplier > 0 {
+                    // BL/TL: +X right. target_max.x + spacing
+                    Self {
+                        is_y_axis: false,
+                        use_target_max: true,
+                        spacing_multiplier: 1,
+                        self_dimension_multiplier: 0,
+                        is_center_alignment: false,
+                    }
+                } else {
+                    // BR/TR: -X right. target_min.x - spacing
+                    Self {
+                        is_y_axis: false,
+                        use_target_max: false,
+                        spacing_multiplier: -1,
+                        self_dimension_multiplier: 0,
+                        is_center_alignment: false,
+                    }
+                }
+            }
+            SpatialRelation::LeftOf => {
+                if x_multiplier > 0 {
+                    // BL/TL: -X left. target_min.x - spacing - self_width
+                    Self {
+                        is_y_axis: false,
+                        use_target_max: false,
+                        spacing_multiplier: -1,
+                        self_dimension_multiplier: -1,
+                        is_center_alignment: false,
+                    }
+                } else {
+                    // BR/TR: +X left. target_max.x + spacing
+                    Self {
+                        is_y_axis: false,
+                        use_target_max: true,
+                        spacing_multiplier: 1,
+                        self_dimension_multiplier: 0,
+                        is_center_alignment: false,
+                    }
+                }
+            }
+            SpatialRelation::Above => {
+                if y_multiplier > 0 {
+                    // BL/BR: +Y up. target_max.y + spacing
+                    Self {
+                        is_y_axis: true,
+                        use_target_max: true,
+                        spacing_multiplier: 1,
+                        self_dimension_multiplier: 0,
+                        is_center_alignment: false,
+                    }
+                } else {
+                    // TL/TR: -Y up. target_min.y - spacing - self_height
+                    Self {
+                        is_y_axis: true,
+                        use_target_max: false,
+                        spacing_multiplier: -1,
+                        self_dimension_multiplier: -1,
+                        is_center_alignment: false,
+                    }
+                }
+            }
+            SpatialRelation::Below => {
+                if y_multiplier > 0 {
+                    // BL/BR: -Y down. target_min.y - spacing - self_height
+                    Self {
+                        is_y_axis: true,
+                        use_target_max: false,
+                        spacing_multiplier: -1,
+                        self_dimension_multiplier: -1,
+                        is_center_alignment: false,
+                    }
+                } else {
+                    // TL/TR: +Y down. target_max.y + spacing
+                    Self {
+                        is_y_axis: true,
+                        use_target_max: true,
+                        spacing_multiplier: 1,
+                        self_dimension_multiplier: 0,
+                        is_center_alignment: false,
+                    }
+                }
+            }
+            SpatialRelation::AlignTop => {
+                if y_multiplier > 0 {
+                    // BL/BR: physical top is user max. A's user Y + height = B's user max
+                    Self {
+                        is_y_axis: true,
+                        use_target_max: true,
+                        spacing_multiplier: 0,
+                        self_dimension_multiplier: -1,
+                        is_center_alignment: false,
+                    }
+                } else {
+                    // TL/TR: physical top is user min. A's user Y = B's user min
+                    Self {
+                        is_y_axis: true,
+                        use_target_max: false,
+                        spacing_multiplier: 0,
+                        self_dimension_multiplier: 0,
+                        is_center_alignment: false,
+                    }
+                }
+            }
+            SpatialRelation::AlignBottom => {
+                if y_multiplier > 0 {
+                    // BL/BR: physical bottom is user min. A's user Y = B's user min
+                    Self {
+                        is_y_axis: true,
+                        use_target_max: false,
+                        spacing_multiplier: 0,
+                        self_dimension_multiplier: 0,
+                        is_center_alignment: false,
+                    }
+                } else {
+                    // TL/TR: physical bottom is user max. A's user Y + height = B's user max
+                    Self {
+                        is_y_axis: true,
+                        use_target_max: true,
+                        spacing_multiplier: 0,
+                        self_dimension_multiplier: -1,
+                        is_center_alignment: false,
+                    }
+                }
+            }
+            SpatialRelation::AlignLeft => {
+                if x_multiplier > 0 {
+                    // BL/TL: physical left is user min. A's user X = B's user min
+                    Self {
+                        is_y_axis: false,
+                        use_target_max: false,
+                        spacing_multiplier: 0,
+                        self_dimension_multiplier: 0,
+                        is_center_alignment: false,
+                    }
+                } else {
+                    // BR/TR: physical left is user max. A's user X + width = B's user max
+                    Self {
+                        is_y_axis: false,
+                        use_target_max: true,
+                        spacing_multiplier: 0,
+                        self_dimension_multiplier: -1,
+                        is_center_alignment: false,
+                    }
+                }
+            }
+            SpatialRelation::AlignRight => {
+                if x_multiplier > 0 {
+                    // BL/TL: physical right is user max. A's user X + width = B's user max
+                    Self {
+                        is_y_axis: false,
+                        use_target_max: true,
+                        spacing_multiplier: 0,
+                        self_dimension_multiplier: -1,
+                        is_center_alignment: false,
+                    }
+                } else {
+                    // BR/TR: physical right is user min. A's user X = B's user min
+                    Self {
+                        is_y_axis: false,
+                        use_target_max: false,
+                        spacing_multiplier: 0,
+                        self_dimension_multiplier: 0,
+                        is_center_alignment: false,
+                    }
+                }
+            }
+            SpatialRelation::AlignCenterX => {
+                Self {
+                    is_y_axis: false,
+                    use_target_max: false,
+                    spacing_multiplier: 0,
+                    self_dimension_multiplier: 0,
+                    is_center_alignment: true,
+                }
+            }
+            SpatialRelation::AlignCenterY => {
+                Self {
+                    is_y_axis: true,
+                    use_target_max: false,
+                    spacing_multiplier: 0,
+                    self_dimension_multiplier: 0,
+                    is_center_alignment: true,
+                }
+            }
+        }
+    }
+
+    /// Resolve the position using the formula
+    pub fn resolve(
+        &self,
+        t_min: i64,
+        t_max: i64,
+        spacing_nm: i64,
+        self_dimension_nm: i64,
+    ) -> i64 {
+        if self.is_center_alignment {
+            let center = (t_min + t_max) / 2;
+            center - (self_dimension_nm / 2)
+        } else {
+            let base_edge = if self.use_target_max { t_max } else { t_min };
+            base_edge 
+                + (self.spacing_multiplier * spacing_nm) 
+                + (self.self_dimension_multiplier * self_dimension_nm)
+        }
+    }
+}
+
+/// Convert physical BoundingBox coordinates to User Space coordinates based on Origin.
+pub fn target_bbox_to_user_ranges(
+    target_bbox: &hwc_engine::geometry::BoundingBox,
+    space_dimensions: &hwc_engine::Dimensions,
+    origin_xy: hwc_parser::OriginXY,
+) -> (i64, i64, i64, i64) {
+    let (tx_min, tx_max) = match origin_xy {
+        OriginXY::TL | OriginXY::BL => (target_bbox.min.x, target_bbox.max.x),
+        OriginXY::TR | OriginXY::BR => (
+            space_dimensions.width_nm - target_bbox.max.x,
+            space_dimensions.width_nm - target_bbox.min.x,
+        ),
+    };
+    let (ty_min, ty_max) = match origin_xy {
+        OriginXY::BL | OriginXY::BR => (target_bbox.min.y, target_bbox.max.y),
+        OriginXY::TL | OriginXY::TR => (
+            space_dimensions.height_nm - target_bbox.max.y,
+            space_dimensions.height_nm - target_bbox.min.y,
+        ),
+    };
+    (tx_min, tx_max, ty_min, ty_max)
+}
 
 /// Resolve relational constraints for all components in the placement list.
 ///
@@ -28,6 +298,7 @@ pub fn resolve_relational_constraints(
     symbol_table: &crate::SymbolTable,
     eval_context: &hwc_parser::EvaluationContext,
     origin: hwc_parser::OriginPoint,
+    space_dimensions: &hwc_engine::Dimensions,
 ) -> Result<(), IrError> {
     for item in placement_items.iter_mut() {
         match item {
@@ -43,6 +314,7 @@ pub fn resolve_relational_constraints(
                     symbol_table,
                     eval_context,
                     origin,
+                    space_dimensions,
                 )?;
 
                 component.position = Some(resolved);
@@ -60,6 +332,7 @@ pub fn resolve_relational_constraints(
                     symbol_table,
                     eval_context,
                     origin,
+                    space_dimensions,
                 )?;
 
                 plane.from = Some(resolved);
@@ -97,6 +370,7 @@ pub fn compute_position_from_constraints(
     symbol_table: &crate::SymbolTable,
     _eval_context: &hwc_parser::EvaluationContext,
     origin: hwc_parser::OriginPoint,
+    space_dimensions: &hwc_engine::Dimensions,
 ) -> Result<Coordinate, IrError> {
     // Derive axis-direction multipliers from the declared origin
     // This ensures physical directions (UP, DOWN, LEFT, RIGHT) map correctly
@@ -116,117 +390,63 @@ pub fn compute_position_from_constraints(
         match constraint {
             RelationalConstraint::Align { axis, target, .. } => {
                 let target_bbox = resolve_target_bbox(target, bbox_tracker)?;
+                let (tx_min, tx_max, ty_min, ty_max) = target_bbox_to_user_ranges(&target_bbox, space_dimensions, origin.xy);
 
                 match axis {
                     AlignmentAxis::CenterX => {
-                        let center = (target_bbox.min.x + target_bbox.max.x) / 2;
-                        x_nm = Some(center);
+                        x_nm = Some((tx_min + tx_max) / 2);
                     }
                     AlignmentAxis::CenterY => {
-                        let center = (target_bbox.min.y + target_bbox.max.y) / 2;
-                        y_nm = Some(center);
+                        y_nm = Some((ty_min + ty_max) / 2);
                     }
                     AlignmentAxis::CenterZ => {
                         let center = (target_bbox.min.z + target_bbox.max.z) / 2;
                         z_nm = Some(center);
                     }
                     AlignmentAxis::Top => {
-                        // Align to top edge of target (min Y in screen coords)
-                        y_nm = Some(target_bbox.min.y);
+                        let formula = RelationalPlacementFormula::get(SpatialRelation::AlignTop, x_multiplier, y_multiplier);
+                        y_nm = Some(formula.resolve(ty_min, ty_max, 0, 0));
                     }
                     AlignmentAxis::Bottom => {
-                        // Align to bottom edge of target (max Y in screen coords)
-                        y_nm = Some(target_bbox.max.y);
+                        let formula = RelationalPlacementFormula::get(SpatialRelation::AlignBottom, x_multiplier, y_multiplier);
+                        y_nm = Some(formula.resolve(ty_min, ty_max, 0, 0));
                     }
                     AlignmentAxis::Left => {
-                        // Align to left edge of target
-                        x_nm = Some(target_bbox.min.x);
+                        let formula = RelationalPlacementFormula::get(SpatialRelation::AlignLeft, x_multiplier, y_multiplier);
+                        x_nm = Some(formula.resolve(tx_min, tx_max, 0, 0));
                     }
                     AlignmentAxis::Right => {
-                        // Align to right edge of target
-                        x_nm = Some(target_bbox.max.x);
+                        let formula = RelationalPlacementFormula::get(SpatialRelation::AlignRight, x_multiplier, y_multiplier);
+                        x_nm = Some(formula.resolve(tx_min, tx_max, 0, 0));
                     }
                 }
             }
             RelationalConstraint::Directional(dir) => {
-                let (target, spacing_expr) = match dir {
-                    DirectionalConstraint::Above { target, spacing } => (target, spacing),
-                    DirectionalConstraint::Below { target, spacing } => (target, spacing),
-                    DirectionalConstraint::RightOf { target, spacing } => (target, spacing),
-                    DirectionalConstraint::LeftOf { target, spacing } => (target, spacing),
+                let (target, spacing_expr, relation) = match dir {
+                    DirectionalConstraint::Above { target, spacing } => (target, spacing, SpatialRelation::Above),
+                    DirectionalConstraint::Below { target, spacing } => (target, spacing, SpatialRelation::Below),
+                    DirectionalConstraint::RightOf { target, spacing } => (target, spacing, SpatialRelation::RightOf),
+                    DirectionalConstraint::LeftOf { target, spacing } => (target, spacing, SpatialRelation::LeftOf),
                 };
 
                 let target_bbox = resolve_target_bbox(target, bbox_tracker)?;
+                let (tx_min, tx_max, ty_min, ty_max) = target_bbox_to_user_ranges(&target_bbox, space_dimensions, origin.xy);
                 let spacing_nm = if let Some(expr) = spacing_expr {
                     evaluate_expression_to_nm(expr, symbol_table)?
                 } else {
                     0
                 };
 
-                match dir {
-                    DirectionalConstraint::Above { .. } => {
-                        // Physical UP: Move away from ground in the physical world
-                        // In BL (y_multiplier=1): UP means +Y → target.max.y + spacing
-                        // In TL (y_multiplier=-1): UP means -Y → target.min.y - spacing
-                        if y_multiplier > 0 {
-                            // Bottom-Left or Bottom-Right: Y increases upward
-                            y_nm = Some(target_bbox.max.y + spacing_nm);
-                        } else {
-                            // Top-Left or Top-Right: Y decreases upward (toward origin)
-                            y_nm = Some(target_bbox.min.y - spacing_nm);
-                        }
-                        // Inherit X-center alignment from target to preserve vertical stacking
-                        if x_nm.is_none() {
-                            x_nm = Some((target_bbox.min.x + target_bbox.max.x) / 2);
-                        }
+                let formula = RelationalPlacementFormula::get(relation, x_multiplier, y_multiplier);
+                if formula.is_y_axis {
+                    y_nm = Some(formula.resolve(ty_min, ty_max, spacing_nm, 0));
+                    if x_nm.is_none() {
+                        x_nm = Some((tx_min + tx_max) / 2);
                     }
-                    DirectionalConstraint::Below { .. } => {
-                        // Physical DOWN: Move toward ground in the physical world
-                        // In BL (y_multiplier=1): DOWN means -Y → target.min.y - spacing
-                        // In TL (y_multiplier=-1): DOWN means +Y → target.max.y + spacing
-                        if y_multiplier > 0 {
-                            // Bottom-Left or Bottom-Right: Y decreases downward
-                            y_nm = Some(target_bbox.min.y - spacing_nm);
-                        } else {
-                            // Top-Left or Top-Right: Y increases downward (away from origin)
-                            y_nm = Some(target_bbox.max.y + spacing_nm);
-                        }
-                        // Inherit X-center alignment from target to preserve vertical stacking
-                        if x_nm.is_none() {
-                            x_nm = Some((target_bbox.min.x + target_bbox.max.x) / 2);
-                        }
-                    }
-                    DirectionalConstraint::RightOf { .. } => {
-                        // Physical RIGHT: Move to the right in the physical world
-                        // In BL/TL (x_multiplier=1): RIGHT means +X → target.max.x + spacing
-                        // In BR/TR (x_multiplier=-1): RIGHT means -X → target.min.x - spacing
-                        if x_multiplier > 0 {
-                            // Left-origin: X increases to the right
-                            x_nm = Some(target_bbox.max.x + spacing_nm);
-                        } else {
-                            // Right-origin: X decreases to the right (toward origin)
-                            x_nm = Some(target_bbox.min.x - spacing_nm);
-                        }
-                        // Inherit Y-center alignment from target to preserve horizontal alignment
-                        if y_nm.is_none() {
-                            y_nm = Some((target_bbox.min.y + target_bbox.max.y) / 2);
-                        }
-                    }
-                    DirectionalConstraint::LeftOf { .. } => {
-                        // Physical LEFT: Move to the left in the physical world
-                        // In BL/TL (x_multiplier=1): LEFT means -X → target.min.x - spacing
-                        // In BR/TR (x_multiplier=-1): LEFT means +X → target.max.x + spacing
-                        if x_multiplier > 0 {
-                            // Left-origin: X decreases to the left
-                            x_nm = Some(target_bbox.min.x - spacing_nm);
-                        } else {
-                            // Right-origin: X increases to the left (away from origin)
-                            x_nm = Some(target_bbox.max.x + spacing_nm);
-                        }
-                        // Inherit Y-center alignment from target to preserve horizontal alignment
-                        if y_nm.is_none() {
-                            y_nm = Some((target_bbox.min.y + target_bbox.max.y) / 2);
-                        }
+                } else {
+                    x_nm = Some(formula.resolve(tx_min, tx_max, spacing_nm, 0));
+                    if y_nm.is_none() {
+                        y_nm = Some((ty_min + ty_max) / 2);
                     }
                 }
             }

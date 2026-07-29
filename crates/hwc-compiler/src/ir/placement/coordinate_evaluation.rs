@@ -115,6 +115,10 @@ pub fn evaluate_coordinate_to_nm(
             coordinate_str: "anchor reference".into(),
             reason: "Anchor references require evaluate_coordinate_with_anchors".into(),
         }),
+        Expression::Coordinate { .. } => Err(IrError::CoordinateResolutionFailed {
+            coordinate_str: "coordinate literal".into(),
+            reason: "Coordinate literals cannot be evaluated to a single nanometer value".into(),
+        }),
     }
 }
 

@@ -1,12 +1,56 @@
 use super::super::layer::SymbolTable;
 use hwc_parser::{
     logic::{EnumDefinition, LogicDefinition, StructDefinition},
-    ComponentDefinition, InterfaceDefinition, MaterialAliasDefinition, MaterialDefinition,
-    MechanicalDefinition, ModuleDefinition, PatternDefinition, ProfileDefinition, ShapeDefinition,
-    SignalGroupDefinition, StrategyDefinition, TestDefinition, UnitDefinition,
+    BridgeDefinition, ComponentDefinition, InterfaceDefinition, MaterialAliasDefinition,
+    MaterialDefinition, MechanicalDefinition, ModuleDefinition, PatternDefinition,
+    ProfileDefinition, ShapeDefinition, SignalGroupDefinition, SpaceDefinition,
+    StrategyDefinition, TestDefinition, UnitDefinition,
 };
 
 impl SymbolTable {
+    /// Register an imported space definition (in HPM layer) (v0.2.1)
+    /// 
+    /// v0.2.1: Hierarchical Space Composition support
+    /// Stores ALL definitions (exported and private) for proper scoped resolution
+    pub fn register_import_space(&mut self, def: SpaceDefinition) {
+        let name_str = def.name.as_str().to_string();
+
+        eprintln!("[DEBUG] register_import_space called for space: {}", name_str);
+
+        // Ensure we have at least one HPM layer
+        if self.hpm.is_empty() {
+            eprintln!("[DEBUG] HPM is empty, creating new layer");
+            self.hpm.push(super::super::layer::SymbolLayer::new());
+        }
+
+        // Add to the current (last) HPM layer
+        self.hpm
+            .last_mut()
+            .unwrap()
+            .spaces
+            .insert(name_str.clone().into(), def);
+        
+        eprintln!("[DEBUG] Space '{}' registered in HPM layer. Total HPM layers: {}", name_str, self.hpm.len());
+    }
+
+    /// Register an imported bridge definition (in HPM layer) (v0.2.0)
+    /// v0.2.0: Stores ALL definitions (exported and private) for proper scoped resolution
+    pub fn register_import_bridge(&mut self, def: BridgeDefinition) {
+        let key = format!("{}_{}", def.from, def.to);
+
+        // Ensure we have at least one HPM layer
+        if self.hpm.is_empty() {
+            self.hpm.push(super::super::layer::SymbolLayer::new());
+        }
+
+        // Add to the current (last) HPM layer - stores both exported and private
+        self.hpm
+            .last_mut()
+            .unwrap()
+            .bridges
+            .insert(key.into(), def);
+    }
+
     /// Register an imported material alias (in HPM layer)
     /// v0.2.0: Stores ALL definitions (exported and private) for proper scoped resolution
     pub fn register_import_material_alias(&mut self, def: MaterialAliasDefinition) {

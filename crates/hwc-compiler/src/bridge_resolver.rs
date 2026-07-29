@@ -57,47 +57,108 @@ impl BridgeTable {
         }
     }
 
-    /// Build a bridge table from a profile definition
-    pub fn from_profile(profile: &ProfileDefinition) -> Self {
+    /// Build a bridge table from a profile definition and global symbol table (v0.2.0)
+    ///
+    /// v0.2.0: Bridge elevation - bridges can now be defined as top-level definitions
+    /// and queried from the symbol table. Profile-nested bridges are still supported
+    /// for backward compatibility but are deprecated.
+    ///
+    /// Priority: Symbol table bridges > Profile-nested bridges
+    pub fn from_profile_and_symbol_table(
+        profile: Option<&ProfileDefinition>,
+        symbol_table: Option<&crate::SymbolTable>,
+    ) -> Self {
         let mut table = Self::new();
 
-        table.default_via_fill = profile
-            .via
-            .as_ref()
-            .and_then(|v| v.default_via_fill.as_ref())
-            .map(|id| id.name.clone());
-
-        for bridge_rule in &profile.bridges {
-            let key = Self::make_key(&bridge_rule.from, &bridge_rule.to);
-
-            // Extract interface thickness (default to 50nm if not specified)
-            let interface_thickness_nm = bridge_rule
-                .interface_thickness
+        // Extract default via fill from profile
+        if let Some(p) = profile {
+            table.default_via_fill = p
+                .via
                 .as_ref()
-                .map(|m| match m.unit {
-                    hwc_parser::Unit::Millimeter => m.value * 1_000_000.0,
-                    hwc_parser::Unit::Micrometer => m.value * 1_000.0,
-                    hwc_parser::Unit::Centimeter => m.value * 10_000_000.0,
-                    _ => m.value,
-                })
-                .unwrap_or(50.0);
+                .and_then(|v| v.default_via_fill.as_ref())
+                .map(|id| id.name.clone());
+        }
 
-            // Extract fill material (default to interface material if not specified)
-            let fill_material = bridge_rule
-                .fill_material
-                .clone()
-                .unwrap_or_else(|| bridge_rule.interface_material.clone());
+        // v0.2.0: Load bridges from global symbol table (highest priority)
+        if let Some(st) = symbol_table {
+            for bridge_def in st.get_all_bridges() {
+                let key = Self::make_key(&bridge_def.from, &bridge_def.to);
 
-            let stack = BridgeStack {
-                interface_material: bridge_rule.interface_material.clone(),
-                interface_thickness_nm,
-                fill_material,
-            };
+                // Extract interface thickness (default to 50nm if not specified)
+                let interface_thickness_nm = bridge_def
+                    .interface_thickness
+                    .as_ref()
+                    .map(|m| match m.unit {
+                        hwc_parser::Unit::Millimeter => m.value * 1_000_000.0,
+                        hwc_parser::Unit::Micrometer => m.value * 1_000.0,
+                        hwc_parser::Unit::Centimeter => m.value * 10_000_000.0,
+                        _ => m.value,
+                    })
+                    .unwrap_or(50.0);
 
-            table.rules.insert(key, stack);
+                // Extract fill material (default to interface material if not specified)
+                let fill_material = bridge_def
+                    .fill_material
+                    .clone()
+                    .unwrap_or_else(|| bridge_def.interface_material.clone());
+
+                let stack = BridgeStack {
+                    interface_material: bridge_def.interface_material.clone(),
+                    interface_thickness_nm,
+                    fill_material,
+                };
+
+                table.rules.insert(key, stack);
+            }
+        }
+
+        // Legacy: Load bridges from profile (backward compatibility, lower priority)
+        // Only add if not already present from symbol table
+        if let Some(p) = profile {
+            for bridge_rule in &p.bridges {
+                let key = Self::make_key(&bridge_rule.from, &bridge_rule.to);
+
+                // Skip if already defined by symbol table
+                if table.rules.contains_key(&key) {
+                    continue;
+                }
+
+                // Extract interface thickness (default to 50nm if not specified)
+                let interface_thickness_nm = bridge_rule
+                    .interface_thickness
+                    .as_ref()
+                    .map(|m| match m.unit {
+                        hwc_parser::Unit::Millimeter => m.value * 1_000_000.0,
+                        hwc_parser::Unit::Micrometer => m.value * 1_000.0,
+                        hwc_parser::Unit::Centimeter => m.value * 10_000_000.0,
+                        _ => m.value,
+                    })
+                    .unwrap_or(50.0);
+
+                // Extract fill material (default to interface material if not specified)
+                let fill_material = bridge_rule
+                    .fill_material
+                    .clone()
+                    .unwrap_or_else(|| bridge_rule.interface_material.clone());
+
+                let stack = BridgeStack {
+                    interface_material: bridge_rule.interface_material.clone(),
+                    interface_thickness_nm,
+                    fill_material,
+                };
+
+                table.rules.insert(key, stack);
+            }
         }
 
         table
+    }
+
+    /// Build a bridge table from a profile definition (legacy method for backward compat)
+    ///
+    /// Deprecated: Use `from_profile_and_symbol_table` instead
+    pub fn from_profile(profile: &ProfileDefinition) -> Self {
+        Self::from_profile_and_symbol_table(Some(profile), None)
     }
 
     /// Look up a bridge stack for a material transition

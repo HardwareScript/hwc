@@ -6,16 +6,17 @@
 use compact_str::CompactString;
 use hwc_parser::{
     logic::{EnumDefinition, LogicDefinition, StructDefinition},
-    ComponentDefinition, ConstDefinition, DeviceDefinition, InterfaceDefinition,
-    MaterialAliasDefinition, MaterialDefinition, MechanicalDefinition, ModuleDefinition,
-    PatternDefinition, ProfileDefinition, ShapeDefinition, SignalGroupDefinition,
-    StrategyDefinition, TestDefinition, UnitDefinition,
+    BridgeDefinition, ComponentDefinition, ConstDefinition, DeviceDefinition,
+    InterfaceDefinition, MaterialAliasDefinition, MaterialDefinition, MechanicalDefinition,
+    ModuleDefinition, PatternDefinition, ProfileDefinition, ShapeDefinition,
+    SignalGroupDefinition, StrategyDefinition, TestDefinition, UnitDefinition,
 };
 use rustc_hash::FxHashMap;
 
 /// A single layer in the authority stack
 #[derive(Debug, Clone)]
 pub struct SymbolLayer {
+    pub(super) bridges: FxHashMap<CompactString, BridgeDefinition>,
     pub(super) materials: FxHashMap<CompactString, MaterialDefinition>,
     pub(super) material_aliases: FxHashMap<CompactString, MaterialAliasDefinition>,
     pub(super) profiles: FxHashMap<CompactString, ProfileDefinition>,
@@ -34,11 +35,14 @@ pub struct SymbolLayer {
     pub(super) devices: FxHashMap<CompactString, DeviceDefinition>,
     pub(super) constants: FxHashMap<CompactString, ConstDefinition>,
     pub(super) shapes: FxHashMap<CompactString, ShapeDefinition>,
+    /// v0.2.1: Space definitions for hierarchical composition
+    pub(super) spaces: FxHashMap<CompactString, hwc_parser::SpaceDefinition>,
 }
 
 impl SymbolLayer {
     pub fn new() -> Self {
         Self {
+            bridges: FxHashMap::default(),
             materials: FxHashMap::default(),
             material_aliases: FxHashMap::default(),
             profiles: FxHashMap::default(),
@@ -57,6 +61,7 @@ impl SymbolLayer {
             devices: FxHashMap::default(),
             constants: FxHashMap::default(),
             shapes: FxHashMap::default(),
+            spaces: FxHashMap::default(),
         }
     }
 }
@@ -381,7 +386,8 @@ impl SymbolTable {
     /// Count total definitions across all layers
     pub fn definition_count(&self) -> usize {
         let count_layer = |layer: &SymbolLayer| {
-            layer.materials.len()
+            layer.bridges.len()
+                + layer.materials.len()
                 + layer.profiles.len()
                 + layer.components.len()
                 + layer.modules.len()
@@ -397,6 +403,7 @@ impl SymbolTable {
                 + layer.units.len()
                 + layer.constants.len()
                 + layer.shapes.len()
+                + layer.spaces.len()
         };
 
         count_layer(&self.local)
@@ -406,6 +413,7 @@ impl SymbolTable {
     }
 
     /// Get all materials (for database population) - collects from all layers
+    /// WARNING: This clones all materials. Use get_material() for lookups instead.
     pub fn materials(&self) -> FxHashMap<CompactString, MaterialDefinition> {
         let mut all_materials = FxHashMap::default();
 
@@ -424,6 +432,79 @@ impl SymbolTable {
         all_materials.extend(self.local.materials.clone());
 
         all_materials
+    }
+
+    /// Get all bridges (for via resolver) - collects from all layers (v0.2.0)
+    ///
+    /// Priority: local > hpm (last wins) > prelude > core
+    /// Multiple bridges for the same material pair are allowed; the via resolver
+    /// will pick the most appropriate one based on context.
+    pub fn get_all_bridges(&self) -> Vec<BridgeDefinition> {
+        let mut bridges = Vec::new();
+
+        // Collect from all layers in reverse priority order (so later additions override)
+        // Core (lowest priority)
+        bridges.extend(self.core.bridges.values().cloned());
+
+        // Prelude
+        bridges.extend(self.prelude.bridges.values().cloned());
+
+        // HPM layers (in order, so last import wins)
+        for layer in &self.hpm {
+            bridges.extend(layer.bridges.values().cloned());
+        }
+
+        // Local (highest priority)
+        bridges.extend(self.local.bridges.values().cloned());
+
+        bridges
+    }
+
+    /// Look up a space definition by name (v0.2.1 - Hierarchical Space Composition)
+    ///
+    /// Searches all layers in priority order: local > hpm (last wins) > prelude > core
+    /// Returns the first match found.
+    /// 
+    /// Uses clean layered lookup logic - no repetitive or_else chains.
+    pub fn get_space(&self, name: &str) -> Option<&hwc_parser::SpaceDefinition> {
+        // Check for namespaced lookup first
+        if let Some((layer_index, identifier)) = self.resolve_namespace(name) {
+            return self
+                .hpm
+                .get(layer_index)
+                .and_then(|layer| layer.spaces.get(identifier));
+        }
+
+        // Search layers in priority order: local > hpm (reverse) > prelude > core
+        self.local
+            .spaces
+            .get(name)
+            .or_else(|| {
+                self.hpm
+                    .iter()
+                    .rev()
+                    .find_map(|layer| layer.spaces.get(name))
+            })
+            .or_else(|| self.prelude.spaces.get(name))
+            .or_else(|| self.core.spaces.get(name))
+    }
+
+    /// DEBUG: List all space names in local layer
+    pub fn list_local_spaces(&self) -> Vec<String> {
+        self.local.spaces.keys().map(|k| k.to_string()).collect()
+    }
+
+    /// DEBUG: List all space names in HPM layers
+    pub fn list_hpm_spaces(&self) -> Vec<Vec<String>> {
+        self.hpm
+            .iter()
+            .map(|layer| layer.spaces.keys().map(|k| k.to_string()).collect())
+            .collect()
+    }
+
+    /// Check if a space exists in any layer (v0.2.1)
+    pub fn has_space(&self, name: &str) -> bool {
+        self.get_space(name).is_some()
     }
 }
 

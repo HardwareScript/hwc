@@ -91,7 +91,7 @@ impl TopologicalRouter {
 
         // If escape_stub is 0, no perpendicular escape required - route directly
         if escape_stub_nm == 0 {
-            eprintln!("[PERPENDICULAR ESCAPE] escape_stub=0nm - routing with immediate turns allowed");
+           
             let router = TopologicalRouter {
                 trace_width_nm: self.trace_width_nm,
                 layer_prefer_horizontal: self.layer_prefer_horizontal,
@@ -102,9 +102,7 @@ impl TopologicalRouter {
             return router.route(start, target, obstacles, board_bounds);
         }
 
-        eprintln!("[PERPENDICULAR ESCAPE] escape_stub={}nm (user-declared)", escape_stub_nm);
-        eprintln!("  start=({},{},{}) normal=({},{})", start.x, start.y, start.z, start_normal.x, start_normal.y);
-        eprintln!("  target=({},{},{}) normal=({},{})", target.x, target.y, target.z, target_normal.x, target_normal.y);
+       
 
         // Generate mandatory start escape point
         let start_escape = Point3D::new(
@@ -120,8 +118,7 @@ impl TopologicalRouter {
             target.z,
         );
 
-        eprintln!("  start_escape=({},{},{})", start_escape.x, start_escape.y, start_escape.z);
-        eprintln!("  target_escape=({},{},{})", target_escape.x, target_escape.y, target_escape.z);
+       
 
         // Create a router with exemptions
         let router = TopologicalRouter {

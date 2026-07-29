@@ -103,6 +103,9 @@ pub fn evaluate_expression_to_ma(
         Expression::AnchorReference { .. } => {
             Err("Anchor references cannot be evaluated as current".into())
         }
+        Expression::Coordinate { .. } => {
+            Err("Coordinate literals cannot be evaluated as current".into())
+        }
     }
 }
 
@@ -142,6 +145,7 @@ pub(crate) fn z_expr_is_physical(z_expr: &Expression) -> bool {
         Expression::Variable { .. } => true,
         Expression::Percentage { .. } => false,
         Expression::AnchorReference { .. } => true, // Anchor references resolve to physical coordinates
+        Expression::Coordinate { .. } => true, // Coordinate literals are physical
     }
 }
 

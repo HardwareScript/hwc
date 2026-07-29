@@ -1,6 +1,7 @@
 //! Hole and via drilling methods for EntityGraph.
 
 use crate::geometry::BoundingBox;
+use crate::netlist::NetId;
 
 use super::{EntityGraph, ViaHoleSpec};
 use crate::geometry_router::substrate_types::SubstrateLayerType;
@@ -11,7 +12,7 @@ impl EntityGraph {
         &mut self,
         hole_bbox: BoundingBox,
         diameter_nm: Option<i64>,
-        _drill_net: u32,
+        _drill_net: NetId,
     ) {
         for layer in &mut self.substrate_layers {
             let z_intersects =

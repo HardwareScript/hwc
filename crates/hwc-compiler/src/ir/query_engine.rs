@@ -60,6 +60,8 @@ pub struct RoutingContextInput {
     pub trace_width_nm: i64,
     /// Minimum clearance in nanometers.
     pub min_clearance_nm: i64,
+    /// Minimum annular ring in nanometers (0 for ASIC, >0 for PCB).
+    pub min_annular_ring_nm: i64,
     /// Board bounding box in nanometers.
     pub board_bounds: BoundingBox,
 }
@@ -192,6 +194,7 @@ pub fn extract_corridor_impl(
         obstacles.to_vec(),
         context.trace_width_nm,
         context.min_clearance_nm,
+        context.min_annular_ring_nm,
     )
     .map_err(|e| IrError::NavigableSpaceFailed {
         gcell_id: context.gcell_id.0,
@@ -224,7 +227,7 @@ pub fn extract_corridor_impl(
                 .cloned()
                 .collect();
             let expanded_decomposer =
-                SpatialDecomposer::new(combined, context.trace_width_nm, context.min_clearance_nm)
+                SpatialDecomposer::new(combined, context.trace_width_nm, context.min_clearance_nm, context.min_annular_ring_nm)
                     .map_err(|e| IrError::NavigableSpaceFailed {
                         gcell_id: context.gcell_id.0,
                         reason: e.to_string(),
@@ -341,6 +344,7 @@ mod tests {
             }),
             trace_width_nm: 100,
             min_clearance_nm: 50,
+            min_annular_ring_nm: 0, // ASIC mode for test
             board_bounds: BoundingBox::new(
                 Point3D::new(0, 0, 0),
                 Point3D::new(100_000, 100_000, 0),
@@ -363,6 +367,7 @@ mod tests {
             }),
             trace_width_nm: 100,
             min_clearance_nm: 50,
+            min_annular_ring_nm: 0, // ASIC mode for test
             board_bounds: BoundingBox::new(
                 Point3D::new(0, 0, 0),
                 Point3D::new(100_000, 100_000, 0),

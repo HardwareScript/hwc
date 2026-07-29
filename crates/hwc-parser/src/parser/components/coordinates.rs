@@ -142,9 +142,10 @@ impl crate::parser::Parser {
             }
         };
 
-        // Optional: Expect '+' and offset
-        let offset = if self.check(&Token::Plus) {
-            self.advance(); // consume '+'
+        // Optional: Expect '+' or '-' and offset
+        let offset = if self.check(&Token::Plus) || self.check(&Token::Hyphen) {
+            let is_subtraction = self.check(&Token::Hyphen);
+            self.advance(); // consume '+' or '-'
 
             // Parse offset: either single measurement or vector [x, y, z] or [x, y]
             if self.check(&Token::OpenBracket) {
@@ -169,11 +170,43 @@ impl crate::parser::Parser {
 
                 self.expect(&Token::CloseBracket)?;
 
+                // If subtraction, negate the values
+                let (x, y, z) = if is_subtraction {
+                    (
+                        Expression::Unary {
+                            operator: UnaryOperator::Negate,
+                            operand: Box::new(x),
+                            span: Span::new(start_pos, self.previous_span().end),
+                        },
+                        Expression::Unary {
+                            operator: UnaryOperator::Negate,
+                            operand: Box::new(y),
+                            span: Span::new(start_pos, self.previous_span().end),
+                        },
+                        Expression::Unary {
+                            operator: UnaryOperator::Negate,
+                            operand: Box::new(z),
+                            span: Span::new(start_pos, self.previous_span().end),
+                        },
+                    )
+                } else {
+                    (x, y, z)
+                };
+
                 RelativeOffset::Vector { x, y, z }
             } else {
                 // Single measurement offset
                 let measurement = self.parse_measurement()?;
-                RelativeOffset::Single(measurement)
+                if is_subtraction {
+                    // Negate single measurement
+                    RelativeOffset::Single(crate::ast::Measurement {
+                        value: -measurement.value,
+                        unit: measurement.unit,
+                        span: measurement.span,
+                    })
+                } else {
+                    RelativeOffset::Single(measurement)
+                }
             }
         } else {
             // Default to zero offset

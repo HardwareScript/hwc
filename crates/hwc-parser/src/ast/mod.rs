@@ -3,6 +3,7 @@
 //! Based on v0.1.3 specification with indentation-based syntax.
 //! See `grammar/hardware.grammar` for complete syntax rules.
 
+mod bridge;
 mod common;
 mod component;
 mod const_def;
@@ -26,6 +27,7 @@ mod test;
 mod unit;
 
 // Re-export all public types
+pub use bridge::*;
 pub use common::*;
 pub use component::*;
 pub use const_def::*;
@@ -64,8 +66,10 @@ pub struct Program {
 }
 
 /// Top-level definition (v0.1.4 unified syntax)
+/// v0.2.0: Adds Bridge as first-class definition
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Definition {
+    Bridge(BridgeDefinition), // NEW v0.2.0: First-class bridge definitions
     Material(MaterialDefinition),
     Profile(Box<ProfileDefinition>),
     Component(ComponentDefinition),

@@ -22,6 +22,10 @@ impl GeometryRouter {
     /// Extract vias from a routed path by detecting Z changes.
     /// Coalesces consecutive Z-changes into single layer-transition vias
     /// instead of creating one via per Z-layer boundary.
+    ///
+    /// v0.2.0: Filters out Z-transitions that already have explicit contacts
+    /// placed by the user. This prevents duplicate vias at the same position
+    /// (Bug Fix: Edge-Drop Router Issue).
     pub(super) fn extract_vias_from_path(&self, path: &[Point3D], net_id: NetId) -> Vec<Via> {
         let mut vias = Vec::new();
         let board_min_z_nm = 0;
@@ -81,12 +85,14 @@ impl GeometryRouter {
                 self.resolution_nm / 2
             };
             if to_z != from_z && z_delta > z_threshold {
-                let diameter_nm = self
+                let fabrication = self
                     .constraints
                     .fabrication
                     .as_ref()
-                    .map(|f| f.min_via_diameter_nm)
-                    .unwrap_or(300_000);
+                    .expect("FATAL: Fabrication constraints required for via extraction. Ensure a profile with 'trace:' and 'via:' constraints is declared in the space definition.");
+                
+                let diameter_nm = fabrication.min_via_diameter_nm;
+                let annular_ring_nm = fabrication.min_annular_ring_nm;
 
                 let via = Via::new(ViaSpec {
                     position: (x, y),
@@ -95,12 +101,7 @@ impl GeometryRouter {
                     diameter_nm,
                     net_id,
                     material_id: self.routing_material_id, // Use the active routing material context
-                    annular_ring_nm: self
-                        .constraints
-                        .fabrication
-                        .as_ref()
-                        .map(|f| f.min_annular_ring_nm)
-                        .unwrap_or(0),
+                    annular_ring_nm,
                     board_min_z_nm,
                     board_max_z_nm,
                 });
@@ -111,7 +112,111 @@ impl GeometryRouter {
             i = j;
         }
 
+        // v0.2.0: Filter out vias that overlap with existing explicit contacts.
+        // This prevents the router from creating duplicate vias when the user
+        // has already placed contacts at specific locations (Bug Fix: Edge-Drop Issue).
+       
+        let initial_via_count = vias.len();
+        vias.retain(|via| {
+            let keep = !self.has_existing_contact_at(via.position, via.from_z_nm, via.to_z_nm, net_id);
+            if !keep {
+                
+            }
+            keep
+        });
+       
+
         vias
+    }
+
+    /// Check if an explicit contact already exists at the given position and Z range.
+    ///
+    /// v0.2.0: Queries substrate layers to detect user-placed contacts that span
+    /// the same vertical transition as a router-generated via. Used to prevent
+    /// duplicate vias when explicit contacts exist (Bug Fix: Edge-Drop Router Issue).
+    ///
+    /// Returns true if a cylindrical substrate layer (Circle shape) exists on the
+    /// same net that overlaps both the XY position and Z range of the via.
+    fn has_existing_contact_at(
+        &self,
+        position: (i64, i64),
+        from_z: i64,
+        to_z: i64,
+        net_id: NetId,
+    ) -> bool {
+        use crate::geometry_router::substrate_types::SubstrateLayerShape;
+        
+        let min_z = from_z.min(to_z);
+        let max_z = from_z.max(to_z);
+        let net_raw = net_id.raw();
+        
+        // STRUCTURAL FIX: Use self.substrate_layers (populated by route_space) instead of
+        // entity_graph.get_substrate_layers() (which only contains component obstacles, not substrate layers).
+        // substrate_layers are passed from the space and stored during route_space() initialization.
+        let substrate_layers = match &self.substrate_layers {
+            Some(layers) => layers,
+            None => return false, // No substrate context available, cannot deduplicate
+        };
+       
+        // Check all substrate layers for existing cylindrical contacts
+        for (idx, layer) in substrate_layers.iter().enumerate() {
+            // Must be on the same net
+            if layer.net != net_id {
+                continue;
+            }
+            
+           
+            // Only check Circle-shaped layers (contacts/vias)
+            // This filters out rectangular pours and pads
+            let is_circular = matches!(layer.shape, SubstrateLayerShape::Circle { .. });
+            if !is_circular {
+                continue;
+            }
+            
+            // Check if the contact's Z range overlaps with the via's Z range
+            let layer_min_z = layer.bbox.min.z;
+            let layer_max_z = layer.bbox.max.z;
+            
+            // Significant Z overlap required (>50% of via height)
+            let via_height = (max_z - min_z).max(1);
+            let overlap_z = layer_max_z.min(max_z) - layer_min_z.max(min_z);
+            if overlap_z < via_height / 2 {
+                continue; // No significant Z overlap
+            }
+            
+            // Check if the contact's XY position overlaps with the via position
+            // Use the contact's radius from its shape definition
+            let tolerance = if let SubstrateLayerShape::Circle { radius } = layer.shape {
+                radius
+            } else {
+                // This should never happen since we filtered for Circle shape above,
+                // but panic with a clear message if it does
+                panic!(
+                    "BUG: Layer passed Circle shape check but is not Circle: shape={:?}",
+                    layer.shape
+                );
+            };
+                
+            let layer_center_x = (layer.bbox.min.x + layer.bbox.max.x) / 2;
+            let layer_center_y = (layer.bbox.min.y + layer.bbox.max.y) / 2;
+            let dx = layer_center_x - position.0;
+            let dy = layer_center_y - position.1;
+            let distance_sq = dx * dx + dy * dy;
+            let tolerance_sq = tolerance * tolerance;
+            
+            if distance_sq <= tolerance_sq {
+                println!(
+                    "[VIA DEDUP] Skipping auto-generated via at ({},{}) Z={}→{}nm - \
+                     explicit cylindrical contact exists at ({},{}) Z={}→{}nm (distance={}nm, tolerance={}nm)",
+                    position.0, position.1, min_z, max_z,
+                    layer_center_x, layer_center_y, layer_min_z, layer_max_z,
+                    (distance_sq as f64).sqrt() as i64, tolerance
+                );
+                return true;
+            }
+        }
+        
+        false
     }
 
     /// Check if a via can be placed at the given position and Z span.
@@ -219,7 +324,7 @@ impl GeometryRouter {
                                 pad_radius,
                                 z_nm,
                                 self.routing_material_id,
-                                via.net_id.raw(),
+                                via.net_id,
                                 &mut self.entity_graph,
                             );
                         }
@@ -295,19 +400,15 @@ impl GeometryRouter {
         );
 
         let mut via_tower = Vec::new();
-        let diameter_nm = self
+        
+        let fabrication = self
             .constraints
             .fabrication
             .as_ref()
-            .map(|f| f.min_via_diameter_nm)
-            .unwrap_or(300_000);
-
-        let annular_ring = self
-            .constraints
-            .fabrication
-            .as_ref()
-            .map(|f| f.min_annular_ring_nm)
-            .unwrap_or(0);
+            .expect("FATAL: Fabrication constraints required for via tower unrolling. Ensure a profile with 'via:' constraints is declared in the space definition.");
+        
+        let diameter_nm = fabrication.min_via_diameter_nm;
+        let annular_ring = fabrication.min_annular_ring_nm;
 
         if is_manhattan {
             // ASIC: step one layer at a time, emit a Via per adjacent layer pair

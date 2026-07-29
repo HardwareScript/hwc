@@ -27,7 +27,13 @@ pub fn run_physical_continuity_check(
 
     // Convert physics_route_segments to SubstrateLayerMetadata for PIVB Pass 1
     let mut all_substrate_layers = physics_substrate_layers.to_vec();
+    eprintln!("[PIVB DEBUG] Starting with {} substrate layers", all_substrate_layers.len());
+    eprintln!("[PIVB DEBUG] Converting {} route segments to substrate layers", physics_route_segments.len());
+    
     for route in physics_route_segments {
+        eprintln!("[PIVB DEBUG]   Route net={:?} bbox=({},{},{}) -> ({},{},{})",
+            route.net, route.bbox.min.x, route.bbox.min.y, route.bbox.min.z,
+            route.bbox.max.x, route.bbox.max.y, route.bbox.max.z);
         all_substrate_layers.push(hwc_physics::connectivity::SubstrateLayerMetadata {
             material: route.material,
             net: route.net,
@@ -36,6 +42,8 @@ pub fn run_physical_continuity_check(
             layer_type: hwc_physics::connectivity::SubstrateLayerType::Pour, // Routes are planar pours
         });
     }
+    
+    eprintln!("[PIVB DEBUG] Total substrate layers after route conversion: {}", all_substrate_layers.len());
 
     // Prepare ContactPlacement for PIVB Pass 2
     let mut contact_placements = Vec::new();

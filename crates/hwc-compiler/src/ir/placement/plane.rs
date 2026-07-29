@@ -41,7 +41,7 @@ fn resolve_shape_dimensions(
     eval_context: &hwc_parser::EvaluationContext,
 ) -> Result<(i64, i64), IrError> {
     // Look up the shape definition to verify it exists
-    let _shape_def = symbol_table
+    let shape_def = symbol_table
         .get_shape(&shape_inst.shape_name)
         .ok_or_else(|| IrError::UndeclaredShape {
             shape: shape_inst.shape_name.clone(),
@@ -56,8 +56,7 @@ fn resolve_shape_dimensions(
         shape_inst.parameters.len()
     );
 
-    // Extract width and height from the shape instance parameters
-    // Example: Pad(w: 600nm, h: 600nm) becomes parameters with keyword arguments
+    let mut eval_params: Vec<(String, i64)> = Vec::new();
     let mut width_nm = None;
     let mut height_nm = None;
 
@@ -78,7 +77,6 @@ fn resolve_shape_dimensions(
                 nm
             }
             hwc_parser::ParameterValue::Expression(expr) => {
-                // Evaluate the expression using the evaluation context (supports variables!)
                 let nm = crate::ir::conversions::evaluate_expression_to_nm(
                     expr,
                     symbol_table,
@@ -99,8 +97,8 @@ fn resolve_shape_dimensions(
             }
         };
 
-        // Map parameter names to width/height
-        // Common conventions: w/width for width, h/height for height
+        eval_params.push((name.to_string(), value_nm));
+
         match name.as_str() {
             "w" | "width" => {
                 eprintln!("[SHAPE DEBUG] Setting width = {}nm", value_nm);
@@ -110,8 +108,39 @@ fn resolve_shape_dimensions(
                 eprintln!("[SHAPE DEBUG] Setting height = {}nm", value_nm);
                 height_nm = Some(value_nm);
             }
-            _ => {
-                eprintln!("[SHAPE DEBUG] Ignoring unknown parameter: {}", name);
+            _ => {}
+        }
+    }
+
+    // Evaluate shape CSG geometry AST if dimensions are incomplete from explicit instance call parameters
+    if width_nm.is_none() || height_nm.is_none() {
+        if let Some(ref csg_expr) = shape_def.csg {
+            let param_refs: Vec<(&str, i64)> = eval_params
+                .iter()
+                .map(|(k, v)| (k.as_str(), *v))
+                .collect();
+            let contour =
+                crate::via_resolver::library::csg_eval::evaluate_csg_expression(csg_expr, &param_refs);
+            if !contour.is_empty() {
+                let min_x = contour.iter().map(|p| p.x).min().unwrap_or(0);
+                let max_x = contour.iter().map(|p| p.x).max().unwrap_or(0);
+                let min_y = contour.iter().map(|p| p.y).min().unwrap_or(0);
+                let max_y = contour.iter().map(|p| p.y).max().unwrap_or(0);
+
+                let evaluated_w = (max_x - min_x).abs();
+                let evaluated_h = (max_y - min_y).abs();
+                if evaluated_w > 0 && evaluated_h > 0 {
+                    eprintln!(
+                        "[SHAPE DEBUG] Evaluated CSG geometry dimensions: {}nm x {}nm",
+                        evaluated_w, evaluated_h
+                    );
+                    if width_nm.is_none() {
+                        width_nm = Some(evaluated_w);
+                    }
+                    if height_nm.is_none() {
+                        height_nm = Some(evaluated_h);
+                    }
+                }
             }
         }
     }
@@ -128,8 +157,10 @@ fn resolve_shape_dimensions(
         }
         _ => Err(IrError::ShapeResolutionFailed {
             shape: shape_inst.shape_name.clone(),
-            reason: "Shape instance must provide 'w'/'width' and 'h'/'height' parameters for plane geometry"
-                .into(),
+            reason: format!(
+                "Could not evaluate width and height for shape '{}' from its definition or instance parameters",
+                shape_inst.shape_name
+            ),
         }),
     }
 }
@@ -487,7 +518,46 @@ pub fn place_plane(
         };
         
         let interface_id = space.entity_graph.allocate_interface_id();
-        let intent = RoutingIntent::new("Default");
+        
+        // Routing intent must come from profile net_type declarations
+        // No hardcoded defaults - explicit declarations enforce design intent
+        let profile_def = ctx.profile.ok_or_else(|| IrError::MissingAsicConstraint {
+            message: "Cannot register routing interface without a profile".into(),
+            hint: "Ensure the space has a profile declaration".into(),
+        })?;
+        
+        // Build intent lookup table from profile
+        let profile_intents: Vec<RoutingIntent> = profile_def
+            .intents
+            .iter()
+            .map(|pi| {
+                RoutingIntent::from_profile_data(
+                    pi.name.as_str(),
+                    pi.routing_style.as_ref().map(|id| id.as_str()),
+                    pi.cost_weights.as_ref().map(|cw| hwc_materials::IntentCostWeights {
+                        base_cost: cw.base,
+                        via_penalty: cw.via_penalty,
+                        direction_penalty: cw.direction_penalty,
+                        tight_clearance_penalty: cw.tight_clearance_penalty,
+                        crosstalk_penalty: cw.crosstalk_penalty,
+                        impedance_penalty: cw.impedance_penalty,
+                        reference_void_penalty: cw.reference_void_penalty,
+                    }).as_ref(),
+                    pi.escape_stub.as_ref().and_then(|meas| {
+                        meas.to_picometers_i64().map(|pm| pm / 1000)
+                    }),
+                )
+            })
+            .collect();
+        
+        // Require explicit "Signal" intent declaration - no fallbacks
+        let intent = RoutingIntent::lookup("Signal", &profile_intents)
+            .ok_or_else(|| IrError::MissingAsicConstraint {
+                message: "Profile missing required 'Signal' net_type declaration".into(),
+                hint: "Add routing intent to your profile:\n\n\
+                       net_type Signal:\n    routing_style: auto\n    escape_stub: 0nm".into(),
+            })?;
+        
         let db = hwc_engine::geometry_router::connection_interface::DefaultRoutingDatabase::default();
         let pseudo_component_id = ComponentId::new(0xFFFF_0000 + interface_id.raw());
         
@@ -546,7 +616,7 @@ pub fn place_plane(
                 };
                 space
                     .entity_graph
-                    .drill_hole(bbox, None, plane_net_id.raw());
+                    .drill_hole(bbox, None, plane_net_id);
                 println!(
                     "   ├─ Auto-carved substrate for plane '{}' ({})",
                     plane.name, plane.material
@@ -670,7 +740,7 @@ pub fn place_plane(
     );
     space.entity_graph.add_substrate_layer(
         material_id,
-        net_id,
+        hwc_engine::NetId::new(net_id),
         bbox,
         hwc_engine::geometry_router::entity_graph::SubstrateLayerType::Pour,
     );
@@ -680,7 +750,7 @@ pub fn place_plane(
             let cutout_start = Point3D::new(rc.at_pt.x, rc.at_pt.y, z_start_nm);
             let cutout_end = Point3D::new(rc.at_pt.x + w, rc.at_pt.y + h, z_end_nm);
             let cutout_bbox = hwc_engine::geometry::BoundingBox::new(cutout_start, cutout_end);
-            space.entity_graph.drill_hole(cutout_bbox, None, 0);
+            space.entity_graph.drill_hole(cutout_bbox, None, hwc_engine::NetId::UNCONNECTED);
         } else if let Some(r) = rc.radius_nm {
             let rf = r as f64;
             let cutout_start =
@@ -689,7 +759,7 @@ pub fn place_plane(
             let cutout_bbox = hwc_engine::geometry::BoundingBox::new(cutout_start, cutout_end);
             space
                 .entity_graph
-                .add_circle_substrate_layer(0, 0, cutout_bbox, r);
+                .add_circle_substrate_layer(0, hwc_engine::NetId::UNCONNECTED, cutout_bbox, r);
         }
     }
 

@@ -78,7 +78,23 @@ impl GeometryRouter {
             }
         }
 
-        // 2. Check substrate layers (via pads, pours, contacts, etc.)
+        // 2. Check substrate layers from space (explicit contacts, pours, pads)
+        if let Some(substrate_layers) = &self.substrate_layers {
+            for layer in substrate_layers {
+                if !layer.bbox.intersects(&bbox) {
+                    continue;
+                }
+                let closest_x = center.0.clamp(layer.bbox.min.x, layer.bbox.max.x);
+                let closest_y = center.1.clamp(layer.bbox.min.y, layer.bbox.max.y);
+                let dx = center.0 - closest_x;
+                let dy = center.1 - closest_y;
+                if dx * dx + dy * dy < radius_nm * radius_nm {
+                    return false;
+                }
+            }
+        }
+        
+        // 3. Check router-generated substrate layers (vias created during this routing session)
         for layer in self.entity_graph.get_substrate_layers() {
             if !layer.bbox.intersects(&bbox) {
                 continue;
@@ -92,7 +108,7 @@ impl GeometryRouter {
             }
         }
 
-        // 3. Check routed segments (traces registered via register_route)
+        // 4. Check routed segments (traces registered via register_route)
         for (_net_id, segments) in self.entity_graph.get_all_routes() {
             for seg in segments {
                 let seg_bbox = BoundingBox::new(seg.start, seg.end);
@@ -144,7 +160,7 @@ impl GeometryRouter {
 
         self.entity_graph.add_cylinder_substrate_layer(
             self.routing_material_id,
-            net_id.raw(),
+            net_id,
             bbox,
             radius_nm * 2, // diameter
             32,            // tessellation segments (matches entity_graph defaults)

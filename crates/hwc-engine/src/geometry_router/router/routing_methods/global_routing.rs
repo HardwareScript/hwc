@@ -22,19 +22,22 @@ impl GeometryRouter {
         target: Point3D,
         trace_width_nm: i64,
     ) -> Point3D {
-        // Read clearance in nanometers directly from fabrication constraints (zero-magic)
-        // No fallback - if constraints are missing, this will panic with a clear error.
-        let min_clearance_nm = self
+        use crate::geometry_router::technology_strategy::TechnologyStrategy;
+
+        // Read fabrication constraints (zero-magic - no fallbacks)
+        let fabrication = self
             .constraints
             .fabrication
             .as_ref()
-            .expect("BUG: Fabrication constraints required for boundary port resolution")
-            .min_trace_spacing_nm;
+            .expect("BUG: Fabrication constraints required for boundary port resolution");
 
-        // v0.1.9: Match obstacle inflation formula used in navigable space extraction.
-        // Obstacles are inflated by (trace_width/2) + min_clearance, so the port escape
-        // must be placed at the same distance to avoid "StartPointOutsideSpace" errors.
-        let port_escape_clearance = (trace_width_nm / 2) + min_clearance_nm;
+        // v0.2.0: Technology Strategy Pattern
+        // Determine PCB vs ASIC routing behavior from min_annular_ring
+        let strategy = TechnologyStrategy::from_constraints(fabrication);
+        let port_escape_clearance = strategy.calculate_port_escape_clearance(
+            trace_width_nm,
+            fabrication.min_trace_spacing_nm,
+        );
 
         // Try 1: component_metadata lookup (fast, exact)
         let maybe_bbox = self
@@ -160,8 +163,28 @@ impl GeometryRouter {
                 p.z.min(max_valid_z).max(0),
             )
         };
+        
+        // v0.2.0: PhysicalTruth - Structural Solution (Path Stitching Pattern)
+        // In ASIC mode, "layer:" is a routing preference, NOT a coordinate override.
+        // We route on the preferred layer and stitch vertical segments to connect the pins.
         let start = clamp_coords(route.start);
         let goal = clamp_coords(route.goal);
+        let target_z_preference = self.net_layer_targets.get(&route.net_id).copied();
+        
+       
+        // Determine the search points for routing
+        // If we have a layer preference, route on that layer, otherwise route at pin heights
+        let (search_start, search_goal) = if let Some(target_z) = target_z_preference {
+            eprintln!("  Routing Layer (preferred): Z={}nm", target_z);
+            eprintln!("  Strategy: Route on Z={}, then stitch vertical segments to pins", target_z);
+            (
+                Point3D::new(start.x, start.y, target_z),
+                Point3D::new(goal.x, goal.y, target_z),
+            )
+        } else {
+            eprintln!("  No layer preference - routing at pin heights");
+            (start, goal)
+        };
 
         let board_bounds = BoundingBox::new(
             Point3D::new(0, 0, 0),
@@ -173,30 +196,21 @@ impl GeometryRouter {
         );
 
         let spatial_index = self.build_routing_spatial_index(route);
-
-        let track_pitch = self.resolution_nm; // Use snap-resolution for pitch
-
-        // Try fast topological routing first (Tier 0-1)
+        let track_pitch = self.resolution_nm;
         let topo_router =
             TopologicalRouter::new(trace_width, track_pitch, fabrication.min_trace_spacing_nm);
-
-        // v0.1.9: Use route_with_exemptions to allow routing from/to pads without self-collision
-        // Exempt the active net_id so start/goal pads are not treated as obstacles
         let exempt_net_ids = vec![route.net_id.raw() as usize];
 
-        // v0.1.9: Check if perpendicular escape routing is required
-        let path = if let Some(&(start_normal, goal_normal)) = self.net_normals.get(&route.net_id) {
-            // NATIVE FIX: If normals exist, escape_stub MUST exist (no fallback)
-            // This is guaranteed by the compiler - if we have normals, we have escape_stub
+        // Route on the search layer (either pin heights or preferred routing layer)
+        let routing_path = if let Some(&(start_normal, goal_normal)) = self.net_normals.get(&route.net_id) {
             let escape_stub_nm = self.net_escape_stubs.get(&route.net_id).copied()
-                .expect("COMPILER BUG: Net has normals but no escape_stub. This should never happen - the compiler must populate net_escape_stubs for all nets with normals.");
+                .expect("COMPILER BUG: Net has normals but no escape_stub");
             
             eprintln!("[GLOBAL ROUTING] Net {} using perpendicular escape: stub={}nm", route.net_id.raw(), escape_stub_nm);
             
-            // Use perpendicular escape routing with Normal2D directly
             match topo_router.route_with_perpendicular_escape(
-                start,
-                goal,
+                search_start,
+                search_goal,
                 start_normal,
                 goal_normal,
                 escape_stub_nm,
@@ -214,11 +228,9 @@ impl GeometryRouter {
                 }
             }
         } else {
-            // v0.1.9: TopologicalRouter is the single authoritative routing engine
-            // NO FALLBACK - if TopologicalRouter can't find a path, the route fails
             match topo_router.route_with_exemptions(
-                start,
-                goal,
+                search_start,
+                search_goal,
                 &spatial_index,
                 &board_bounds,
                 &exempt_net_ids,
@@ -234,12 +246,37 @@ impl GeometryRouter {
             }
         };
 
-        let detected_vias = self.extract_vias_from_path(&path, route.net_id);
+        // v0.2.0: PATH STITCHING - Build the 3D path with vertical segments
+        // Structure: [Physical Pin Start] -> [Routing Layer] -> ... -> [Routing Layer] -> [Physical Pin Goal]
+        let mut final_path = Vec::new();
+        
+        // Add entry vertical segment if start pin is not on routing layer
+        if start.z != search_start.z {
+            final_path.push(start);
+            
+        }
+        
+        // Add the routed path on the target layer
+        final_path.extend(routing_path);
+        
+        // Add exit vertical segment if goal pin is not on routing layer
+        if goal.z != search_goal.z {
+            final_path.push(goal);
+           
+        }
+        
+       
 
+        // Extract vias from the stitched path - this will detect the Z-transitions
+        let detected_vias = self.extract_vias_from_path(&final_path, route.net_id);
+
+        // Unroll detected vias using the Native Via Resolver
         let unrolled_vias: Vec<_> = detected_vias
             .iter()
             .flat_map(|via| self.unroll_detected_via(via))
             .collect();
+
+       
 
         let mut placed_vias = Vec::new();
         for via in unrolled_vias {
@@ -250,53 +287,20 @@ impl GeometryRouter {
             }
         }
 
-        // Commit canonically to the EntityGraph.
+        // Commit the stitched path to the EntityGraph
         self.entity_graph.register_route(
             route.net_id,
-            &path,
+            &final_path,
             self.routing_material_id,
             self.trace_width_nm,
         );
 
-        let final_path = path;
-
-        eprintln!("[ROUTE_NET_GLOBAL DEBUG] Path BEFORE boundary restore:");
-        eprintln!(
-            "  route.start=({},{},{}), route.goal=({},{},{})",
-            route.start.x, route.start.y, route.start.z, route.goal.x, route.goal.y, route.goal.z
-        );
-        eprintln!("  path has {} points", final_path.len());
-        for (i, p) in final_path.iter().enumerate().take(4) {
-            eprintln!("  final_path[{}]=({},{},{})", i, p.x, p.y, p.z);
+       
+        for (i, p) in final_path.iter().enumerate().take(6) {
+            eprintln!("    [{}]: ({},{},{})", i, p.x, p.y, p.z);
         }
-        if final_path.len() > 4 {
-            eprintln!("  ... and {} more points", final_path.len() - 4);
-        }
-
-        // v0.1.9: Boundary Restore Fix
-        // DO NOT overwrite the path endpoints! The TopologicalRouter already computed
-        // the correct boundary-docked points. Overwriting with route.start/goal would
-        // reintroduce the pad penetration bug where traces extend into component interiors.
-        //
-        // Historical context: route.start and route.goal were originally the boundary
-        // escape points from calculate_boundary_points(), but when explicit_segments mode
-        // was added, these became the pad CENTER coordinates instead of boundary points.
-        //
-        // The TopologicalRouter's output waypoints are already correctly positioned at
-        // the pad boundaries, so we should trust them.
-        //
-        // REMOVED CODE:
-        // if !final_path.is_empty() {
-        //     final_path[0] = route.start;
-        //     *final_path.last_mut().unwrap() = route.goal;
-        // }
-
-        eprintln!("[ROUTE_NET_GLOBAL DEBUG] Path AFTER boundary restore:");
-        for (i, p) in final_path.iter().enumerate().take(4) {
-            eprintln!("  final_path[{}]=({},{},{})", i, p.x, p.y, p.z);
-        }
-        if final_path.len() > 4 {
-            eprintln!("  ... and {} more points", final_path.len() - 4);
+        if final_path.len() > 6 {
+            eprintln!("    ... and {} more points", final_path.len() - 6);
         }
 
         Ok(RoutedNet {
@@ -351,21 +355,12 @@ impl GeometryRouter {
                     goal: points[i + 1],
                 };
 
-                eprintln!(
-                    "[EXPLICIT DEBUG] net_id={}, start=({},{},{}), goal=({},{},{})",
-                    net_id.raw(),
-                    route.start.x,
-                    route.start.y,
-                    route.start.z,
-                    route.goal.x,
-                    route.goal.y,
-                    route.goal.z
-                );
+               
 
                 let routed = self.route_net_global(&route)?;
 
                 if let Some(path) = routed.paths.first() {
-                    eprintln!("[EXPLICIT DEBUG] Returned path ({} points):", path.len());
+                   
                     for (j, p) in path.iter().enumerate().take(4) {
                         eprintln!("  path[{}]: ({},{},{})", j, p.x, p.y, p.z);
                     }

@@ -34,6 +34,12 @@ pub fn collect_placement_items(
             hwc_parser::SpaceTopLevelStatement::Contact(contact) => {
                 placement_items.push(PlacementItem::Contact(contact.clone()));
             }
+            hwc_parser::SpaceTopLevelStatement::SpaceInstance(space_inst) => {
+                // v0.2.1: Hierarchical space composition
+                placement_items.push(PlacementItem::SpaceInstance(Box::new(
+                    (**space_inst).clone(),
+                )));
+            }
             hwc_parser::SpaceTopLevelStatement::ForLoop(for_loop) => {
                 let unrolled =
                     crate::ir::parametric_unroller::unroll_for_loop(for_loop, symbol_table)?;
@@ -49,6 +55,10 @@ pub fn collect_placement_items(
                 }
                 for contact in unrolled.contacts {
                     placement_items.push(PlacementItem::Contact(contact));
+                }
+                for space_inst in unrolled.space_instances {
+                    // v0.2.1: Space instances from for-loops
+                    placement_items.push(PlacementItem::SpaceInstance(Box::new(space_inst)));
                 }
                 for route in unrolled.routes {
                     placement_items.push(PlacementItem::Route(route));

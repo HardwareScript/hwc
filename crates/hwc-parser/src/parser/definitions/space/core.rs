@@ -153,7 +153,7 @@ impl crate::parser::Parser {
                     }
                 }
             } else if self.check(&Token::Add) {
-                // Check if it's a substrate, pour, polygon, contact, or component
+                // Check if it's a substrate, pour, polygon, contact, space instance, or component
                 let next_pos = self.current + 1;
                 if let Some(next_token) = self.tokens.get(next_pos) {
                     match &next_token.token {
@@ -164,6 +164,21 @@ impl crate::parser::Parser {
                                     if substrate.is_none() {
                                         substrate = Some(sub); // Legacy field: store first substrate
                                     }
+                                }
+                                Err(err) => {
+                                    collector.report(err);
+                                    self.sync_to_next_definition();
+                                    continue;
+                                }
+                            }
+                        }
+                        Token::Space => {
+                            // v0.2.1: Parse hierarchical space instantiation
+                            match self.parse_space_instance() {
+                                Ok(space_inst) => {
+                                    statements.push(SpaceTopLevelStatement::SpaceInstance(
+                                        Box::new(space_inst),
+                                    ));
                                 }
                                 Err(err) => {
                                     collector.report(err);

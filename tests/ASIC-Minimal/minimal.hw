@@ -1,0 +1,60 @@
+# minimal.hw
+import * from @std/primitives/units
+import * from "./minimal_pdk"
+
+module MinimalTest:
+    pins: [ A ]
+
+shape Pad(width: Measurement, height: Measurement):
+    geometry:
+        Rectangle(width: width, height: height)
+
+space Minimal_Space implements MinimalTest:
+    dimensions: 2.0um by 1.0um by 50nm
+    resolution: 10nm
+    origin: bl by b
+    profile: ASIC_Flattened
+
+    nets:
+        A: { classification: signal, potential: 0V, current: 0.1uA }
+
+    # =========================================================
+    # Middle-Level Relational Syntax
+    # =========================================================
+    region Silicon_Zone:
+        at: [200nm, 300nm]
+        boundary: [width: 400nm, height: 400nm]
+
+    region Metal_Zone:
+        right_of: Silicon_Zone with spacing: 600nm
+        align: center_y with Silicon_Zone
+        boundary: [width: 400nm, height: 400nm]
+
+    # Place Pad A on the Active layer (Silicon)
+    add plane(Silicon_N) named Pad_A inside: Silicon_Zone on layer: active:
+        shape: Pad(width: 400nm, height: 400nm)
+        at: Silicon_Zone.bottom_left
+        net: A
+
+    # NATIVE FIX: Explicitly place the contact in the center of the Silicon Zone.
+    # This bypasses the boundary-escape bug by ensuring the via is perfectly centered.
+    add contact(Tungsten) named Via_A at [x: 400nm, y: 500nm] spanning layer: active to metal1:
+        net: A
+        diameter: 200nm
+        plating_thickness: 5nm
+
+    # Place Pad B on Metal 1 (Aluminum)
+    add plane(Aluminum) named Pad_B inside: Metal_Zone on layer: metal1:
+        shape: Pad(width: 400nm, height: 400nm)
+        at: Metal_Zone.bottom_left
+        net: A
+
+    # =========================================================
+    # Single-Layer Topological Routing
+    # =========================================================
+    # Route from Pad_A to Pad_B. The Via_A contact we placed will provide
+    # the layer transition from active to metal1.
+    route Pad_A to Pad_B:
+        layer: metal1
+        width: 200nm
+        current_limit_ac: { rms: 0.1uA, peak: 0.2uA }

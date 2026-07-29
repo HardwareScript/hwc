@@ -25,7 +25,6 @@ use crate::geometry_union::{circle_to_path, stroke_route_segments};
 use clipper2_rust::{FillRule, Paths64};
 use hwc_compiler::SymbolTable;
 use hwc_engine::geometry_router::entity_graph::SubstrateLayerType;
-use hwc_engine::geometry_router::substrate_types::SubstrateLayerShape;
 use hwc_engine::{HardwareSpace, SpaceView};
 use rustc_hash::FxHashMap;
 use std::io::Write;
@@ -93,7 +92,7 @@ pub fn export(
             i64,
             i64,
             hwc_engine::geometry_router::substrate_types::MaterialId,
-            u32,
+            hwc_engine::netlist::NetId,
         ),
         Paths64,
     > = FxHashMap::default();
@@ -120,15 +119,56 @@ pub fn export(
         // Use the shared stroke_route_segments function to generate perfect mitered outlines
         let trace_outline = stroke_route_segments(&route.segments, route.cross_section.width_nm);
 
-        let key = (z_min, z_max, route.material, route.net_id.raw());
+        let key = (z_min, z_max, route.material, route.net_id);
         analytic_copper_pools
             .entry(key)
             .or_default()
             .extend(trace_outline);
     }
 
-    // Add via pads to analytic pools
+    use hwc_engine::geometry_router::substrate_types::SubstrateLayerShape;
+    for layer in substrate_layers {
+        if layer.layer_type == hwc_engine::geometry_router::entity_graph::SubstrateLayerType::Pour
+            || layer.layer_type == hwc_engine::geometry_router::entity_graph::SubstrateLayerType::Contact
+        {
+            let key = (
+                layer.bbox.min.z,
+                layer.bbox.max.z,
+                layer.material,
+                layer.net,
+            );
+
+            let path = match &layer.shape {
+                SubstrateLayerShape::Rect => crate::geometry_union::rect_to_path(&layer.bbox),
+                SubstrateLayerShape::Circle { radius } => {
+                    let cx = (layer.bbox.min.x + layer.bbox.max.x) / 2;
+                    let cy = (layer.bbox.min.y + layer.bbox.max.y) / 2;
+                    circle_to_path(cx, cy, *radius, 64)
+                }
+                SubstrateLayerShape::Polygon { outer_contour, .. } => {
+                    // Polygon points are now stored in world space, use directly
+                    outer_contour.clone()
+                }
+                _ => continue,
+            };
+
+            analytic_copper_pools.entry(key).or_default().push(path);
+        }
+    }
+
+    // Add via pads to analytic pools (ONLY for drilled/plated PCB vias)
+    // IC vias (deposited) are natively handled via Contact substrate layers in the copper pool
     for via in &space.vias {
+        let is_ic_via = space
+            .material_registry
+            .get_process(via.material_id)
+            .map(|process| process == hwc_engine::ManufacturingProcess::Deposited)
+            .unwrap_or(false);
+            
+        if is_ic_via {
+            continue;
+        }
+
         let z_start = via.from_z_nm.min(via.to_z_nm);
         let z_end = via.from_z_nm.max(via.to_z_nm);
         let pad_radius = via.diameter_nm / 2 + via.annular_ring_nm.max(via.diameter_nm / 4);
@@ -149,7 +189,7 @@ pub fn export(
             z_end - copper_thickness,
             z_end,
             copper_material_id,
-            via.net_id.raw(),
+            via.net_id,
         );
         analytic_copper_pools
             .entry(top_key)
@@ -166,7 +206,7 @@ pub fn export(
             z_start,
             z_start + copper_thickness,
             copper_material_id,
-            via.net_id.raw(),
+            via.net_id,
         );
         analytic_copper_pools
             .entry(bottom_key)
@@ -238,11 +278,9 @@ pub fn export(
             continue;
         }
 
-        // Export substrate base and pours (pads are Pour type)
-        // Skip Contact type (vias) since they're already exported as part of analytic routes
-        if layer.layer_type != SubstrateLayerType::Substrate
-            && layer.layer_type != SubstrateLayerType::Pour
-        {
+        // Export substrate base
+        // Skip Contact and Pour types since they're already exported as part of analytic routes (unioned with traces)
+        if layer.layer_type != SubstrateLayerType::Substrate {
             continue;
         }
 
@@ -306,17 +344,13 @@ pub fn export(
                 ref holes,
                 ..
             } => {
-                let center_x_nm = (layer.bbox.min.x + layer.bbox.max.x) / 2;
-                let center_y_nm = (layer.bbox.min.y + layer.bbox.max.y) / 2;
-                let cx_mm = center_x_nm as f64 / 1_000_000.0;
-                let cy_mm = center_y_nm as f64 / 1_000_000.0;
-
+                // Polygon points are now in world space, convert directly to mm
                 let outer_points: Vec<(f64, f64)> = outer_contour
                     .iter()
                     .map(|p| {
                         (
-                            p.x as f64 / 1_000_000.0 + cx_mm,
-                            p.y as f64 / 1_000_000.0 + cy_mm,
+                            p.x as f64 / 1_000_000.0,
+                            p.y as f64 / 1_000_000.0,
                         )
                     })
                     .collect();
@@ -337,12 +371,13 @@ pub fn export(
                 }
 
                 for hole in holes.iter() {
+                    // Holes are also in world space
                     let hole_points: Vec<(f64, f64)> = hole
                         .iter()
                         .map(|p| {
                             (
-                                p.x as f64 / 1_000_000.0 + cx_mm,
-                                p.y as f64 / 1_000_000.0 + cy_mm,
+                                p.x as f64 / 1_000_000.0,
+                                p.y as f64 / 1_000_000.0,
                             )
                         })
                         .collect();

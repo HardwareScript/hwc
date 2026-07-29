@@ -1,0 +1,167 @@
+# inverter.hw
+# Exact Replication of Figure 5.15 (CMOS Inverter Standard Cell)
+# Pixel-Perfect Implementation using lambda = 125nm
+
+import * from @std/primitives/units
+import Silicon_P, Silicon_N, Polysilicon, Aluminum, SiO2, Air, Tungsten from "./materials"
+import * from "./foundry_pdk"
+
+module CMOS_Inverter:
+    pins: [
+        input In,
+        output Out,
+        power VDD,
+        ground GND
+    ]
+
+space Inverter_Cell implements CMOS_Inverter:
+    # NATIVE FIX: The Z-dimension is tightly bounded to 1.5um to match the 1.29um stackup.
+    # This completely eliminates the "long pole" visual stretching in the 3D viewer.
+    dimensions: 2.25um by 4.25um by 1.5um
+    resolution: 1nm
+    origin: bl by b
+    profile: Silicon_180nm
+
+    nets:
+        In:  { classification: signal }
+        Out: { classification: signal }
+        VDD: { classification: power }
+        GND: { classification: ground }
+
+    # ========================================================================
+    # "POLYGON ART" APPROACH (lambda = 125nm)
+    # By using explicit boundary boxes, we ensure that the Source, Gate, and 
+    # Drain abut each other perfectly with NO overlaps. 
+    # ========================================================================
+
+    # 1. VDD & GND Rails (Metal 1) spans entire X axis (0 to 18 lambda)
+    add pour(Aluminum) named VDD_Rail on layer: metal1:
+        net: VDD
+        boundary: [x: 0nm, y: 3750nm] to [x: 2250nm, y: 4250nm]
+
+    add pour(Aluminum) named GND_Rail on layer: metal1:
+        net: GND
+        boundary: [x: 0nm, y: 0nm] to [x: 2250nm, y: 500nm]
+
+    # 2. PMOS Active Region (Top)
+    # Source (X: 750 to 1250), Gate (X: 1250 to 1500), Drain (X: 1500 to 2000)
+    add pour(Silicon_N) named PMOS_Source on layer: active:
+        net: VDD
+        boundary: [x: 750nm, y: 2250nm] to [x: 1250nm, y: 3375nm]
+
+    add pour(Silicon_N) named PMOS_Drain on layer: active:
+        net: Out
+        boundary: [x: 1500nm, y: 2250nm] to [x: 2000nm, y: 3375nm]
+
+    # 3. NMOS Active Region (Bottom)
+    add pour(Silicon_P) named NMOS_Source on layer: active:
+        net: GND
+        boundary: [x: 750nm, y: 875nm] to [x: 1250nm, y: 1250nm]
+
+    add pour(Silicon_P) named NMOS_Drain on layer: active:
+        net: Out
+        boundary: [x: 1500nm, y: 875nm] to [x: 2000nm, y: 1250nm]
+
+    # 4. Poly Gate (C-shape connecting PMOS and NMOS)
+    add pour(Polysilicon) named Gate_Vertical on layer: poly:
+        net: In
+        boundary: [x: 1250nm, y: 625nm] to [x: 1500nm, y: 3625nm]
+
+    add pour(Polysilicon) named Gate_Horizontal on layer: poly:
+        net: In
+        boundary: [x: 250nm, y: 1500nm] to [x: 1250nm, y: 1750nm]
+
+    add pour(Polysilicon) named Gate_Pad on layer: poly:
+        net: In
+        boundary: [x: 0nm, y: 1375nm] to [x: 500nm, y: 1875nm]
+
+    # 5. Metal 1 Interconnects
+    # VDD Tie (Straight up)
+    add pour(Aluminum) named M1_PMOS_Source on layer: metal1:
+        net: VDD
+        boundary: [x: 750nm, y: 2250nm] to [x: 1250nm, y: 4250nm]
+
+    # GND Tie (Straight down)
+    add pour(Aluminum) named M1_NMOS_Source on layer: metal1:
+        net: GND
+        boundary: [x: 750nm, y: 0nm] to [x: 1250nm, y: 1250nm]
+
+    # Output Drain Tie (Straight down connecting Drains)
+    add pour(Aluminum) named M1_Drain_Tie on layer: metal1:
+        net: Out
+        boundary: [x: 1500nm, y: 875nm] to [x: 2000nm, y: 3375nm]
+
+    # Output Pin Extension (Branches right)
+    add pour(Aluminum) named M1_Out_Pin on layer: metal1:
+        net: Out
+        boundary: [x: 2000nm, y: 1875nm] to [x: 2250nm, y: 2375nm]
+
+    # Input Pin Pad
+    add pour(Aluminum) named M1_In_Pad on layer: metal1:
+        net: In
+        boundary: [x: 0nm, y: 1375nm] to [x: 500nm, y: 1875nm]
+
+    # 6. Physical Contacts (Centered on 125nm lambda grid)
+    # With ASIC compliance properties added
+    add contact(Tungsten) named Via_In at [x: 250nm, y: 1625nm] spanning layer: poly to metal1:
+        net: In
+        diameter: 250nm
+        plating_thickness: 50nm
+        top_cap: solid
+        bottom_cap: solid
+        filled: true
+        fill_material: Tungsten
+
+    add contact(Tungsten) named Via_NS at [x: 1000nm, y: 1062nm] spanning layer: active to metal1:
+        net: GND
+        diameter: 250nm
+        plating_thickness: 50nm
+        top_cap: solid
+        bottom_cap: solid
+        filled: true
+        fill_material: Tungsten
+
+    add contact(Tungsten) named Via_ND at [x: 1750nm, y: 1062nm] spanning layer: active to metal1:
+        net: Out
+        diameter: 250nm
+        plating_thickness: 50nm
+        top_cap: solid
+        bottom_cap: solid
+        filled: true
+        fill_material: Tungsten
+
+    add contact(Tungsten) named Via_PS1 at [x: 1000nm, y: 2500nm] spanning layer: active to metal1:
+        net: VDD
+        diameter: 250nm
+        plating_thickness: 50nm
+        top_cap: solid
+        bottom_cap: solid
+        filled: true
+        fill_material: Tungsten
+
+    add contact(Tungsten) named Via_PS2 at [x: 1000nm, y: 3250nm] spanning layer: active to metal1:
+        net: VDD
+        diameter: 250nm
+        plating_thickness: 50nm
+        top_cap: solid
+        bottom_cap: solid
+        filled: true
+        fill_material: Tungsten
+
+    add contact(Tungsten) named Via_PD1 at [x: 1750nm, y: 2500nm] spanning layer: active to metal1:
+        net: Out
+        diameter: 250nm
+        plating_thickness: 50nm
+        top_cap: solid
+        bottom_cap: solid
+        filled: true
+        fill_material: Tungsten
+
+    add contact(Tungsten) named Via_PD2 at [x: 1750nm, y: 3250nm] spanning layer: active to metal1:
+        net: Out
+        diameter: 250nm
+        plating_thickness: 50nm
+        top_cap: solid
+        bottom_cap: solid
+        filled: true
+        fill_material: Tungsten

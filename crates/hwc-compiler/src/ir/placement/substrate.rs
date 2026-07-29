@@ -115,7 +115,7 @@ pub fn place_substrate(
     // Add substrate to entity graph (v0.1.8 replacement for ComponentPlacer)
     space.entity_graph.add_substrate_layer(
         material_id,
-        0, // Substrate is typically net 0
+        hwc_engine::NetId::UNCONNECTED, // Substrate is typically net 0
         physical_substrate_bbox,
         hwc_engine::geometry_router::substrate_types::SubstrateLayerType::Substrate,
     );

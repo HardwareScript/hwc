@@ -81,7 +81,7 @@ impl EntityGraph {
                             let seg_bbox = BoundingBox::new(seg.start, seg.end);
                             let layer = crate::geometry_router::substrate_types::SubstrateLayer::new(
                                 seg.material_id,
-                                net_id.raw(),
+                                *net_id,
                                 seg_bbox,
                                 crate::geometry_router::substrate_types::SubstrateLayerType::Pour,
                             );

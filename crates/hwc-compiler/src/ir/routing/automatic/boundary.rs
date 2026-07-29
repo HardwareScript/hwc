@@ -274,8 +274,7 @@ fn select_routable_port_core(
             .unwrap_or(std::cmp::Ordering::Equal)
     });
     
-    eprintln!("[OBSTACLE-AWARE PORT SELECTION] Entity: {}", entity_name);
-    eprintln!("  Target: dx={}, dy={}", dx, dy);
+   
     for analysis in &analyses {
         eprintln!(
             "  {:?}: clearance={}nm, alignment={:.2}, score={:.3}",

@@ -15,6 +15,7 @@ mod module;
 mod plane;
 mod pour;
 mod region; // v0.2.0: Region floorplanning
+mod space_instance; // v0.2.1: Hierarchical space composition
 mod substrate;
 
 // Re-export public functions
@@ -24,4 +25,5 @@ pub use intent::PlacementIntent;
 pub use plane::place_plane;
 pub use pour::place_pour;
 pub use region::register_region; // v0.2.0: Region registration
+pub use space_instance::instantiate_sub_space; // v0.2.1: Hierarchical space instantiation
 pub use substrate::place_substrate;

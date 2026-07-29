@@ -3,7 +3,9 @@ use crate::lexer::{Span, Token};
 use crate::parser::error::ParseError;
 
 impl crate::parser::Parser {
-    /// Parse contact/via placement: `add contact(Tungsten) at [x:500um, y:325um] spanning z:6 to z:8`
+    /// Parse contact/via placement: 
+    /// - Absolute: `add contact(Tungsten) at [x:500um, y:325um] spanning z:6 to z:8`
+    /// - Relational: `add contact(Tungsten) at: Region.center spanning layer: l1 to l2`
     pub(in crate::parser) fn parse_contact(&mut self) -> Result<ContactPlacement, ParseError> {
         let start_pos = self.current_span().start;
 
@@ -13,13 +15,9 @@ impl crate::parser::Parser {
         let material = self.expect_namespaced_identifier_string()?;
         self.expect(&Token::CloseParen)?;
 
-        // Optional: named Name
-        let name = if self.check(&Token::Named) {
-            self.advance();
-            Some(self.parse_component_name()?)
-        } else {
-            None
-        };
+        // v0.2.0: Named is required for contacts (no unnamed contacts)
+        self.expect(&Token::Named)?;
+        let name = self.parse_component_name()?;
 
         // Optional: net: NetName
         let net = if self.check(&Token::Identifier("net".into())) {
@@ -31,7 +29,18 @@ impl crate::parser::Parser {
         };
 
         self.expect(&Token::At)?;
-        let position = self.parse_coordinate_optional_z()?;
+        
+        // v0.2.0: Support both absolute coordinates and relational anchors
+        let (position, relational_anchor) = if self.check(&Token::Colon) {
+            // Relational syntax: `at: Region.center`
+            self.advance(); // consume ':'
+            let anchor = self.parse_region_anchor()?;
+            (None, Some(anchor))
+        } else {
+            // Absolute coordinate syntax: `at [x: ..., y: ...]`
+            let pos = self.parse_coordinate_optional_z()?;
+            (Some(pos), None)
+        };
 
         self.expect(&Token::Spanning)?;
 
@@ -163,11 +172,45 @@ impl crate::parser::Parser {
             material: material.into(),
             name,
             position,
+            relational_anchor,
             from_elevation,
             to_elevation,
             net: net.or(net_in_block),
             properties,
             contour: None,
+            span: Span::new(start_pos, end_pos),
+        })
+    }
+
+    /// Parse region anchor: `Region.center`, `Region.bottom_left`, etc.
+    fn parse_region_anchor(&mut self) -> Result<RelationalAnchor, ParseError> {
+        let start_pos = self.current_span().start;
+        let region_name = self.expect_identifier()?;
+        self.expect(&Token::Dot)?;
+        let anchor_str = self.expect_identifier_string()?;
+        
+        let anchor_point = match anchor_str.as_str() {
+            "center" => AnchorPoint::Center,
+            "bottom_left" => AnchorPoint::BottomLeft,
+            "bottom_right" => AnchorPoint::BottomRight,
+            "top_left" => AnchorPoint::TopLeft,
+            "top_right" => AnchorPoint::TopRight,
+            "center_left" => AnchorPoint::CenterLeft,
+            "center_right" => AnchorPoint::CenterRight,
+            "top_center" => AnchorPoint::TopCenter,
+            "bottom_center" => AnchorPoint::BottomCenter,
+            _ => {
+                return Err(self.error(&format!(
+                    "Invalid anchor point '{}'. Expected: center, bottom_left, bottom_right, top_left, top_right, center_left, center_right, top_center, or bottom_center",
+                    anchor_str
+                )))
+            }
+        };
+        
+        let end_pos = self.previous_span().end;
+        Ok(RelationalAnchor {
+            region_name,
+            anchor_point,
             span: Span::new(start_pos, end_pos),
         })
     }

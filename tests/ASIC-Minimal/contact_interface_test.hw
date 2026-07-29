@@ -1,0 +1,44 @@
+# contact_interface_test.hw
+# Test: Verify tungsten contact does NOT penetrate through the Silicon active layer
+# Expected behavior: Tungsten should sit ON TOP of Silicon with TiSi2 interface, not drill through it
+# 
+# Physical reality:
+# - Silicon active layer: z=0 to z=10nm (the diffusion region)
+# - TiSi2 ohmic interface: z=10nm (atomic-level bonding at the TOP surface)
+# - Tungsten plug: z=10nm to z=20nm (sits ON the silicon, doesn't penetrate)
+# - Metal1: z=20nm to z=30nm (sits ON the tungsten)
+
+import * from @std/primitives/units
+import Silicon_N, Aluminum, ASIC_Flattened, SquareContact from "./minimal_pdk"
+import Tungsten from "./materials"
+import * from "./bridges"
+
+# Define a simple square shape for the pad
+shape LargePad(width: Measurement, height: Measurement):
+    geometry:
+        Rectangle(width: width, height: height)
+
+space ContactInterfaceTest:
+    dimensions: 2.0um by 2.0um by 50nm
+    resolution: 10nm
+    origin: bl by b
+    profile: ASIC_Flattened
+
+    nets:
+        TestNet: { classification: signal, potential: 0V, current: 0.1uA }
+
+    # Large Silicon active layer pad (Source/Drain diffusion region)
+    # This is the doped silicon region - MUST NOT be penetrated by tungsten!
+    add plane(Silicon_N) named Silicon_Pad on layer: active:
+        shape: LargePad(width: 800nm, height: 800nm)
+        at: [600nm, 600nm]
+        net: TestNet
+
+    # Tungsten contact plug
+    # CRITICAL TEST: Does this penetrate THROUGH the Silicon_Pad (wrong)
+    # or does it sit ON TOP with TiSi2 interface (correct)?
+    add contact(Tungsten) named Tungsten_Contact at [x: 1000nm, y: 1000nm] spanning layer: active to metal1:
+        net: TestNet
+        diameter: 400nm
+        plating_thickness: 5nm
+

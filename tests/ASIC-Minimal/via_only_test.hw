@@ -1,0 +1,40 @@
+# via_only_test.hw
+# Test: Two boxes (pads) connected by a vertical tungsten via
+# This validates that tungsten material is used for ASIC vias, not copper
+import * from @std/primitives/units
+import Silicon_N, Aluminum, ASIC_Flattened, SquareContact from "./minimal_pdk"
+import Tungsten from "./materials"
+import * from "./bridges"
+
+# Define a simple square shape for the pads
+shape Box(width: Measurement, height: Measurement):
+    geometry:
+        Rectangle(width: width, height: height)
+
+space ViaOnlyTest:
+    dimensions: 1.0um by 1.0um by 50nm
+    resolution: 10nm
+    origin: bl by b
+    profile: ASIC_Flattened
+
+    nets:
+        TestNet: { classification: signal, potential: 0V, current: 0.1uA }
+
+    # Bottom box on active layer (Silicon)
+    add plane(Silicon_N) named Bottom_Box on layer: active:
+        shape: Box(width: 300nm, height: 300nm)
+        at: [350nm, 350nm]
+        net: TestNet
+
+    # Vertical tungsten via connecting active to metal1
+    # This is the critical component - must be tungsten, not copper!
+    add contact(Tungsten) named Tungsten_Via at [x: 500nm, y: 500nm] spanning layer: active to metal1:
+        net: TestNet
+        diameter: 200nm
+        plating_thickness: 5nm
+
+    # Top box on metal1 layer (Aluminum)
+    add plane(Aluminum) named Top_Box on layer: metal1:
+        shape: Box(width: 300nm, height: 300nm)
+        at: [350nm, 350nm]
+        net: TestNet

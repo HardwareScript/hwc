@@ -215,7 +215,7 @@ pub fn generate_solder_mask(
     );
     space.entity_graph.add_substrate_layer(
         mask_material_id,
-        0,
+        hwc_engine::NetId::UNCONNECTED,
         top_mask_bbox,
         hwc_engine::geometry_router::substrate_types::SubstrateLayerType::SolderMask,
     );
@@ -226,7 +226,7 @@ pub fn generate_solder_mask(
     );
     space.entity_graph.add_substrate_layer(
         mask_material_id,
-        0,
+        hwc_engine::NetId::UNCONNECTED,
         bottom_mask_bbox,
         hwc_engine::geometry_router::substrate_types::SubstrateLayerType::SolderMask,
     );

@@ -107,6 +107,46 @@ impl EntityGraph {
         self.entity_registry.keys()
     }
 
+    /// Iterate over all entity registry entries (v0.2.1)
+    /// Used for hierarchical space flattening
+    pub fn iter_entity_registry(&self) -> impl Iterator<Item = (&EntityId, &EntityData)> {
+        self.entity_registry.iter()
+    }
+
+    /// Iterate over all (entity_name, PhysicalInterface) entries in the interface map (v0.2.1).
+    ///
+    /// Used by the hierarchical flattener to clone and re-register interfaces
+    /// under new hierarchical names in the parent EntityGraph.
+    pub fn iter_entity_interfaces(
+        &self,
+    ) -> impl Iterator<
+        Item = (
+            &compact_str::CompactString,
+            &crate::geometry_router::connection_interface::PhysicalInterface,
+        ),
+    > {
+        self.entity_interface_map
+            .iter()
+            .filter_map(|(name, id)| self.interface_database.get(id).map(|iface| (name, iface)))
+    }
+
+    /// Register an entity from existing EntityData (v0.2.1)
+    /// Used for hierarchical space flattening with transformed entities
+    pub fn register_entity_from_data(
+        &mut self,
+        entity_id: EntityId,
+        entity_data: EntityData,
+    ) -> Result<(), String> {
+        if self.entity_registry.contains_key(&entity_id) {
+            return Err(format!(
+                "Entity {:?} already registered in entity graph",
+                entity_id
+            ));
+        }
+        self.entity_registry.insert(entity_id, entity_data);
+        Ok(())
+    }
+
     /// Query: Which component name is at this point?
     pub fn point_in_component(&self, x: i64, y: i64, z: i64) -> Option<compact_str::CompactString> {
         for meta in &self.component_metadata {

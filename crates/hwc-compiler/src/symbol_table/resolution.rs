@@ -43,13 +43,11 @@ impl SymbolTable {
         lookup_fn: impl Fn(&'a SymbolLayer, &str) -> Option<&'a T>,
         is_exported_fn: impl Fn(&T) -> bool,
     ) -> Option<&'a T> {
-        eprintln!("[RESOLVE_DEBUG] Looking for symbol: {}", full_name);
-        eprintln!("[RESOLVE_DEBUG] HPM layers count: {}", self.hpm.len());
+       
         
         // Check for namespaced lookup first (e.g., "Metals.Copper")
         if let Some((layer_index, identifier)) = self.resolve_namespace(full_name) {
-            eprintln!("[RESOLVE_DEBUG] Namespaced lookup detected: layer={}, identifier={}", layer_index, identifier);
-            // NAMESPACED LOOKUP: Go straight to the aliased HPM layer
+            
             // v0.2.0: For HPM layers, filter by export status
             return self.hpm.get(layer_index).and_then(|layer| {
                 lookup_fn(layer, identifier).filter(|def| is_exported_fn(def))
@@ -59,36 +57,36 @@ impl SymbolTable {
         // REGULAR LOOKUP: Search local -> hpm (rev) -> prelude -> core
         // Local layer (highest priority) - no export filtering needed
         if let Some(def) = lookup_fn(&self.local, full_name) {
-            eprintln!("[RESOLVE_DEBUG] Found in local layer");
+           
             return Some(def);
         }
 
         // HPM layers in reverse order (last import wins)
         // v0.2.0: ONLY return exported definitions from HPM layers
-        for (i, layer) in self.hpm.iter().rev().enumerate() {
+        for (_i, layer) in self.hpm.iter().rev().enumerate() {
             if let Some(def) = lookup_fn(layer, full_name) {
                 let is_exported = is_exported_fn(def);
-                eprintln!("[RESOLVE_DEBUG] Found in HPM layer {} (reversed index), is_exported={}", i, is_exported);
+                
                 if is_exported {
                     return Some(def);
                 } else {
-                    eprintln!("[RESOLVE_DEBUG] Symbol found but NOT exported, skipping");
+                    
                 }
             }
         }
 
         // Prelude layer - no export filtering needed
         if let Some(def) = lookup_fn(&self.prelude, full_name) {
-            eprintln!("[RESOLVE_DEBUG] Found in prelude layer");
+           
             return Some(def);
         }
 
         // Core layer (lowest priority) - no export filtering needed
         let result = lookup_fn(&self.core, full_name);
         if result.is_some() {
-            eprintln!("[RESOLVE_DEBUG] Found in core layer");
+           
         } else {
-            eprintln!("[RESOLVE_DEBUG] NOT FOUND in any layer");
+            
         }
         result
     }

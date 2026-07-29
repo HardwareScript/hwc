@@ -41,14 +41,14 @@ impl crate::parser::Parser {
                 self.advance();
                 self.expect(&Token::Colon)?;
 
-                eprintln!("[DBG region] at: branch | current tok: {:?}", self.current().map(|t| format!("{:?}", t.token)));
+                
 
                 if self.check(&Token::OpenBracket) {
                     let coord = self.parse_coordinate_optional_z()?;
                     anchor = Some(RegionAnchor::Absolute(coord));
                 } else {
                     let expr = self.parse_prefix_expression()?;
-                    eprintln!("[DBG region] parsed prefix expr: {:?} | next tok: {:?}", expr, self.current().map(|t| format!("{:?}", t.token)));
+                   
                     if self.check(&Token::Plus) || self.check(&Token::Hyphen) {
                         let op = if self.check(&Token::Plus) {
                             crate::ast::BinaryOperator::Add
@@ -56,7 +56,7 @@ impl crate::parser::Parser {
                             crate::ast::BinaryOperator::Subtract
                         };
                         self.advance();
-                        eprintln!("[DBG region] consumed op {:?} | next tok (coord): {:?}", op, self.current().map(|t| format!("{:?}", t.token)));
+                      
                         let offset = self.parse_coordinate_optional_z()?;
                         anchor = Some(RegionAnchor::Offset {
                             base: expr,

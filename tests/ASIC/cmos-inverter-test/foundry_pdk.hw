@@ -15,7 +15,7 @@ profile Silicon_250nm:
         d1:         [material: SiO2,        thickness: 500nm, routable: false]
         metal1:     [material: Aluminum,    thickness: 400nm, routable: true]
 
-    # Ohmic bridge rules at metal-semiconductor transitions
+    # Explicitly declare physical transition bridges inside the PDK profile
     bridge Silicon_N to Aluminum:
         interface: Titanium_Silicide
         thickness: 50nm

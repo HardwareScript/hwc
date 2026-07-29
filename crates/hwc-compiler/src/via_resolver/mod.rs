@@ -38,11 +38,9 @@ impl ViaResolver {
         symbol_table: &crate::SymbolTable,
         eval_context: &hwc_parser::EvaluationContext,
     ) -> Result<Self, IrError> {
-        let bridge_table = if let Some(p) = profile {
-            crate::bridge_resolver::BridgeTable::from_profile(p)
-        } else {
-            crate::bridge_resolver::BridgeTable::new()
-        };
+        // v0.2.0: Query bridges from global symbol table (first-class definitions)
+        let bridge_table =
+            crate::bridge_resolver::BridgeTable::from_profile_and_symbol_table(profile, Some(symbol_table));
 
         let library = ViaLibrary::from_profile(
             profile,
@@ -56,7 +54,11 @@ impl ViaResolver {
             .and_then(|p| p.via.as_ref())
             .and_then(|v| v.min_spacing.as_ref())
             .and_then(|m| crate::ir::conversions::measurement_to_nm(m, symbol_table, eval_context).ok())
-            .unwrap_or(200_000);
+            .ok_or_else(|| {
+                IrError::MissingProfileConstraint {
+                    field: "via.min_spacing".to_string()
+                }
+            })?;
 
         Ok(Self {
             library,
@@ -142,11 +144,7 @@ impl ViaResolver {
             net_name,
             stackup_manager,
         } = *ctx;
-        println!(
-            "\n🔍 [VIA RESOLVER] bridge_layers called for net '{}'",
-            net_name
-        );
-        println!("   Layer {} to Layer {}", from_layer, to_layer);
+        
 
         // v0.1.8: Get ALL elements for the net and filter them by layer index manually.
         // This compensates for the EntityGraph's lack of layer awareness.
@@ -241,10 +239,7 @@ impl ViaResolver {
             from_material,
             to_material,
         } = request;
-        eprintln!("\n🔍 [VIA RESOLVER] Attempting to bridge:");
-        eprintln!("   From: {} (Layer {})", from_material, from_layer);
-        eprintln!("   To: {} (Layer {})", to_material, to_layer);
-        eprintln!("   Available vias in library: {}", self.library.vias.len());
+       
 
         let ViaBridgeContext {
             net_id,
@@ -259,10 +254,7 @@ impl ViaResolver {
             stackup_manager,
         )?;
 
-        eprintln!(
-            "   ✅ Selected via: {} -> {} (Layer {} -> {})",
-            via_def.from_material, via_def.to_material, via_def.from_layer, via_def.to_layer
-        );
+       
 
         let via = hwc_engine::geometry_router::Via::new(hwc_engine::geometry_router::ViaSpec {
             position: (x, y),
@@ -307,7 +299,7 @@ impl ViaResolver {
 
         for col in collisions {
             // Ignore elements on the same net (vias can overlap their own pads/pours)
-            if col.net == net_id.raw() {
+            if col.net == net_id {
                 continue;
             }
             return true;

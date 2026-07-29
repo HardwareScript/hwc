@@ -44,7 +44,7 @@ pub(super) fn place_drilled_via(args: DrilledViaPlacement) -> Result<(), IrError
         .drill_via_hole(hwc_engine::geometry_router::entity_graph::ViaHoleSpec {
             hole_bbox: contact_bbox,
             diameter_nm,
-            via_net: net_id,
+            via_net: hwc_engine::NetId::new(net_id),
             clearance_nm,
             is_tented,
             pad_diameter_nm,
@@ -122,7 +122,7 @@ pub(super) fn place_drilled_via(args: DrilledViaPlacement) -> Result<(), IrError
     space.entity_graph.add_tube_substrate_layer(
         hwc_engine::geometry_router::entity_graph::TubeLayerSpec::builder(
             material_id,
-            net_id,
+            hwc_engine::NetId::new(net_id),
             pad_bbox,
             circle_segments,
         )
@@ -178,7 +178,7 @@ pub(super) fn place_drilled_via(args: DrilledViaPlacement) -> Result<(), IrError
 
         space.entity_graph.add_cylinder_substrate_layer(
             fill_material_id,
-            fill_net_id,
+            hwc_engine::NetId::new(fill_net_id),
             contact_bbox,
             inner_diameter_nm,
             16,

@@ -1,3 +1,4 @@
+use crate::netlist::NetId;
 use std::fmt;
 
 use rustc_hash::FxHashMap;
@@ -64,7 +65,7 @@ pub fn check_static_shorts(
         FxHashMap::default();
 
     for layer in entity_graph.get_substrate_layers() {
-        if layer.net == 0 {
+        if layer.net == NetId::UNCONNECTED {
             continue;
         }
         if !matches!(
@@ -84,7 +85,7 @@ pub fn check_static_shorts(
                 .entry(layer.material)
                 .or_default()
                 .push(LayerEntry {
-                    net: layer.net,
+                    net: layer.net.raw(),
                     material: layer.material,
                     bbox,
                 });

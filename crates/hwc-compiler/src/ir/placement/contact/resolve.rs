@@ -2,6 +2,64 @@ use super::helpers::{get_prop_nm, get_prop_string};
 use crate::ir::errors::IrError;
 use crate::ir::stackup_manager::StackupManager;
 use hwc_engine::HardwareSpace;
+use hwc_physics::geometry::Point2D;
+
+/// Resolve relational anchor (e.g., Region.center) to absolute coordinates (v0.2.0)
+pub(super) fn resolve_relational_anchor(
+    anchor: &hwc_parser::RelationalAnchor,
+    bbox_tracker: &crate::BoundingBoxTracker,
+    contact_name: &hwc_parser::ComponentName,
+) -> Result<Point2D, IrError> {
+    let region_name = anchor.region_name.as_str();
+    
+    // Look up the region's bounding box
+    let region_bbox = bbox_tracker
+        .get(region_name)
+        .ok_or_else(|| IrError::PlacementConstraint {
+            message: format!(
+                "Contact '{}' references unknown region '{}'",
+                contact_name.base.as_str(),
+                region_name
+            ),
+            component: contact_name.base.as_str().to_string(),
+        })?;
+    
+    // Calculate anchor point based on region bounding box
+    let (x_nm, y_nm) = match anchor.anchor_point {
+        hwc_parser::AnchorPoint::Center => {
+            let center_x = (region_bbox.min.x + region_bbox.max.x) / 2;
+            let center_y = (region_bbox.min.y + region_bbox.max.y) / 2;
+            (center_x, center_y)
+        }
+        hwc_parser::AnchorPoint::BottomLeft => (region_bbox.min.x, region_bbox.min.y),
+        hwc_parser::AnchorPoint::BottomRight => (region_bbox.max.x, region_bbox.min.y),
+        hwc_parser::AnchorPoint::TopLeft => (region_bbox.min.x, region_bbox.max.y),
+        hwc_parser::AnchorPoint::TopRight => (region_bbox.max.x, region_bbox.max.y),
+        hwc_parser::AnchorPoint::CenterLeft => {
+            let center_y = (region_bbox.min.y + region_bbox.max.y) / 2;
+            (region_bbox.min.x, center_y)
+        }
+        hwc_parser::AnchorPoint::CenterRight => {
+            let center_y = (region_bbox.min.y + region_bbox.max.y) / 2;
+            (region_bbox.max.x, center_y)
+        }
+        hwc_parser::AnchorPoint::TopCenter => {
+            let center_x = (region_bbox.min.x + region_bbox.max.x) / 2;
+            (center_x, region_bbox.max.y)
+        }
+        hwc_parser::AnchorPoint::BottomCenter => {
+            let center_x = (region_bbox.min.x + region_bbox.max.x) / 2;
+            (center_x, region_bbox.min.y)
+        }
+    };
+    
+    println!(
+        "[RELATIONAL_ANCHOR] Resolved '{}.{:?}' to ({}, {}) for contact '{}'",
+        region_name, anchor.anchor_point, x_nm, y_nm, contact_name.base.as_str()
+    );
+    
+    Ok(Point2D::new(x_nm, y_nm))
+}
 
 pub(super) fn resolve_z_span(
     stackup_manager: &StackupManager,
@@ -15,7 +73,7 @@ pub(super) fn resolve_z_span(
         stackup_manager.get_layer_name(&contact.from_elevation),
         stackup_manager.get_layer_name(&contact.to_elevation),
     ) {
-        let (_lower_name, lower_bottom, _lower_top, _upper_name, _upper_bottom, upper_top) =
+        let (_lower_name, _lower_bottom, lower_top, _upper_name, upper_bottom, _upper_top) =
             if from_bottom_nm < to_bottom_nm {
                 (
                     from_name,
@@ -36,8 +94,11 @@ pub(super) fn resolve_z_span(
                 )
             };
 
-        let via_bottom = lower_bottom;
-        let via_top = upper_top;
+        // SEMICONDUCTOR STANDARD: Contact connects layer SURFACES, not penetrating through them
+        // - Bottom of contact: top surface of lower layer (ohmic interface)
+        // - Top of contact: bottom surface of upper layer (planar metallic contact)
+        let via_bottom = lower_top;
+        let via_top = upper_bottom;
 
         (via_bottom, via_top)
     } else {
@@ -49,8 +110,8 @@ pub(super) fn check_material_collisions(
     space: &HardwareSpace,
     contact: &hwc_parser::ContactPlacement,
     contact_bbox: &hwc_engine::geometry::BoundingBox,
-    from_bottom_nm: i64,
-    to_bottom_nm: i64,
+    _from_bottom_nm: i64,
+    _to_bottom_nm: i64,
 ) -> Result<(), IrError> {
     for existing_contact in &space.contacts {
         if let Some(existing_bbox) = &existing_contact.bbox {
@@ -59,9 +120,8 @@ pub(super) fn check_material_collisions(
             {
                 let contact_name: compact_str::CompactString = contact
                     .name
-                    .as_ref()
-                    .map(|n| n.to_string())
-                    .unwrap_or_else(|| format!("Via_{}_{}", from_bottom_nm, to_bottom_nm).into());
+                    .base
+                    .clone();
 
                 return Err(IrError::PlacementConstraint {
                     message: format!(
@@ -126,7 +186,7 @@ pub(super) fn resolve_annular_ring(
         Err(IrError::MissingAsicConstraint {
             message: format!(
                 "Contact '{}' has no explicit annular_ring and no profile via.min_annular_ring.",
-                contact.name.as_ref().map(|n| n.to_string()).unwrap_or_else(|| "unnamed".into())
+                contact.name.as_str()
             ),
             hint: "Add 'annular_ring: <value>' to the contact, or declare 'via: min_annular_ring: <value>' in the profile.".into(),
         })
@@ -138,10 +198,16 @@ pub(super) fn resolve_shape(
     eval_context: &hwc_parser::EvaluationContext,
     symbol_table: &crate::SymbolTable,
     diameter_nm: i64,
-) -> Option<clipper2_rust::Path64> {
+    profile: Option<&hwc_parser::ProfileDefinition>,
+) -> Result<Option<clipper2_rust::Path64>, crate::ir::errors::IrError> {
     let mut contour = contact.contour.clone();
     if contour.is_none() {
-        if let Some(shape_name) = get_prop_string(contact, "shape", eval_context) {
+        let shape_name_from_contact = get_prop_string(contact, "shape", eval_context);
+        let shape_name = shape_name_from_contact.or_else(|| {
+            profile.and_then(|p| p.via.as_ref()).and_then(|v| v.shape.as_ref()).map(|id| id.name.as_str().into())
+        });
+
+        if let Some(shape_name) = shape_name {
             if let Some(shape_def) = symbol_table.get_shape(shape_name.as_str()) {
                 let constants = symbol_table.get_all_constants();
                 contour = Some(crate::via_resolver::library::evaluate_shape_points(
@@ -154,10 +220,14 @@ pub(super) fn resolve_shape(
                     "[PLACE_CONTACT] Resolved shape '{}' to {} vertices",
                     shape_name, contour_len
                 );
+            } else {
+                return Err(crate::ir::errors::IrError::UndeclaredShape {
+                    shape: shape_name.clone(),
+                });
             }
         }
     }
-    contour
+    Ok(contour)
 }
 
 pub(super) fn resolve_clearance(space: &HardwareSpace) -> Result<i64, IrError> {

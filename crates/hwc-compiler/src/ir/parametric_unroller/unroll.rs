@@ -8,6 +8,7 @@ use super::collision::{
 };
 use super::substitution::{
     format_net_name, unroll_component, unroll_contact, unroll_plane, unroll_pour, unroll_route,
+    unroll_space_instance, // v0.2.1
 };
 use crate::ir::errors::IrError;
 use crate::SymbolTable;
@@ -24,6 +25,7 @@ pub struct UnrolledStatements {
     pub pours: Vec<PourPlacement>,
     pub planes: Vec<PlanePlacement>,
     pub contacts: Vec<ContactPlacement>,
+    pub space_instances: Vec<hwc_parser::SpaceInstancePlacement>, // v0.2.1: Space instances
     pub routes: Vec<Route>,
 }
 
@@ -45,6 +47,7 @@ pub fn unroll_for_loop(
     let mut pours = Vec::new();
     let mut planes = Vec::new();
     let mut contacts = Vec::new();
+    let mut space_instances = Vec::new(); // v0.2.1
     let mut routes = Vec::new();
 
     // Identity collision detection: Track nets used in each iteration
@@ -102,16 +105,31 @@ pub fn unroll_for_loop(
                                 iteration: i,
                                 net_name: net_str.clone(),
                                 object_type: "contact".into(),
-                                object_name: unrolled_contact
-                                    .name
-                                    .as_ref()
-                                    .map(|n| n.to_string())
-                                    .unwrap_or_else(|| "unnamed".into()),
+                                object_name: unrolled_contact.name.base.clone(),
                             });
                         }
                     }
 
                     contacts.push(unrolled_contact);
+                }
+                SpaceStatement::SpaceInstance(space_inst) => {
+                    // v0.2.1: Unroll space instance placement
+                    let unrolled_space = unroll_space_instance(space_inst, &for_loop.variable, i)?;
+                    
+                    // Track net usage from net_map for collision detection
+                    for (_child_net, parent_net) in &unrolled_space.net_map {
+                        let net_str: CompactString = parent_net.clone();
+                        if !nets_in_this_iteration.insert(net_str.clone()) {
+                            collision_warnings.push(CollisionWarning {
+                                iteration: i,
+                                net_name: net_str.clone(),
+                                object_type: "space_instance".into(),
+                                object_name: unrolled_space.instance_name.base.clone(),
+                            });
+                        }
+                    }
+
+                    space_instances.push(unrolled_space);
                 }
                 SpaceStatement::Route(route) => {
                     let unrolled_route = unroll_route(route, &for_loop.variable, i)?;
@@ -136,6 +154,9 @@ pub fn unroll_for_loop(
                     }
                     for contact in nested_unrolled.contacts {
                         contacts.push(unroll_contact(&contact, &for_loop.variable, i)?);
+                    }
+                    for space_inst in nested_unrolled.space_instances {
+                        space_instances.push(unroll_space_instance(&space_inst, &for_loop.variable, i)?);
                     }
                     for route in nested_unrolled.routes {
                         routes.push(unroll_route(&route, &for_loop.variable, i)?);
@@ -177,6 +198,7 @@ pub fn unroll_for_loop(
         pours,
         planes,
         contacts,
+        space_instances, // v0.2.1
         routes,
     })
 }

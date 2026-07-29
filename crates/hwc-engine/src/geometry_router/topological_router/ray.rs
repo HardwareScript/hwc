@@ -70,7 +70,7 @@ impl TopologicalRouter {
         let inflate = self.trace_width_nm / 2 + self.min_clearance_nm;
 
         for seg in candidates {
-            if self.exempt_net_ids.contains(&seg.net_id) {
+            if self.exempt_net_ids.contains(&(seg.net_id.raw() as usize)) {
                 continue;
             }
             
@@ -131,6 +131,23 @@ impl TopologicalRouter {
     }
 
     /// Axis-Aligned Slab Method for ray-AABB intersection.
+    ///
+    /// v0.1.9.3 Z-LEVEL FIX: Add Z-coordinate checking for 2.5D routing.
+    ///
+    /// PROBLEM: Ray casting was performing pure 2D collision detection without
+    /// checking if the ray and obstacle are at the same Z level. A ray at Z=825nm
+    /// would collide with an obstacle at Z=650nm because the code never compared
+    /// Z coordinates.
+    ///
+    /// EXAMPLE BUG:
+    ///   Ray from Via_Source at (850, 1000, Z=825) heading East
+    ///   Gate_Strip obstacle at bbox=(800, 300, Z=650) to (1200, 1700, Z=650)
+    ///   Old code: Collision detected (distance=0) - FALSE POSITIVE
+    ///   New code: No collision (Z=825 != Z=650)
+    ///
+    /// SOLUTION: For planar routing, rays should only collide with obstacles at
+    /// the same Z level. Since substrate layers are flattened to their middle Z,
+    /// we check if the ray's Z matches the obstacle's Z within a small tolerance.
     #[inline]
     pub fn slab_intersect(
         &self,
@@ -138,6 +155,16 @@ impl TopologicalRouter {
         direction: RayDirection,
         aabb: &BoundingBox,
     ) -> Option<i64> {
+        // Z-level check: Ray and obstacle must be at the same Z plane for collision.
+        // For flattened substrate layers, min.z == max.z (both are middle_z).
+        // Use a tolerance of 50nm to handle rounding errors.
+        const Z_TOLERANCE_NM: i64 = 50;
+        let obstacle_z = aabb.min.z; // For flattened layers, min.z == max.z
+        
+        if (origin.z - obstacle_z).abs() > Z_TOLERANCE_NM {
+            return None; // Ray and obstacle are at different Z levels - no collision
+        }
+        
         match direction {
             RayDirection::East => {
                 if origin.y < aabb.min.y || origin.y > aabb.max.y {

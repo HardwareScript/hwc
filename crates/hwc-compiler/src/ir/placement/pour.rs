@@ -196,6 +196,112 @@ pub fn place_pour(
         .entity_graph
         .register_space_entity(&pour.name.base, bbox, net_id, z_start_nm);
 
+    // Register PhysicalInterface for routing connectivity
+    // This enables the router to connect to pours as endpoints
+    {
+        use hwc_engine::geometry_router::connection_interface::{InterfaceGeometry, PhysicalInterface};
+        use hwc_engine::geometry_router::routing_intent::RoutingIntent;
+        use hwc_engine::netlist::ComponentId;
+        use smallvec::smallvec;
+
+        // Require fabrication constraints - no fallbacks
+        let constraints = space.fabrication_constraints.as_ref()
+            .ok_or_else(|| IrError::MissingAsicConstraint {
+                message: "Fabrication constraints required for interface generation".into(),
+                hint: "Add a 'trace:' block to your profile with min_width and min_spacing".into(),
+            })?;
+        
+        let trace_width_nm = constraints.trace.min_width_nm;
+        let clearance_nm = constraints.trace.min_spacing_nm;
+
+        // Calculate middle Z for alignment with routing queries
+        let middle_z_nm = (bbox.min.z + bbox.max.z) / 2;
+
+        // Determine vertex winding order based on coordinate system origin
+        use hwc_parser::OriginXY;
+        let is_y_upward = matches!(ctx.origin.xy, OriginXY::BL | OriginXY::BR);
+        
+        let geometry = if is_y_upward {
+            // CCW winding for Y-up coordinate systems (BL, BR)
+            InterfaceGeometry::Polygon(vec![
+                Point3D::new(bbox.min.x, bbox.min.y, middle_z_nm),  // bottom-left
+                Point3D::new(bbox.max.x, bbox.min.y, middle_z_nm),  // bottom-right
+                Point3D::new(bbox.max.x, bbox.max.y, middle_z_nm),  // top-right
+                Point3D::new(bbox.min.x, bbox.max.y, middle_z_nm),  // top-left
+            ])
+        } else {
+            // CW winding for Y-down coordinate systems (TL, TR)
+            InterfaceGeometry::Polygon(vec![
+                Point3D::new(bbox.min.x, bbox.min.y, middle_z_nm),  // top-left
+                Point3D::new(bbox.min.x, bbox.max.y, middle_z_nm),  // bottom-left
+                Point3D::new(bbox.max.x, bbox.max.y, middle_z_nm),  // bottom-right
+                Point3D::new(bbox.max.x, bbox.min.y, middle_z_nm),  // top-right
+            ])
+        };
+        
+        let interface_id = space.entity_graph.allocate_interface_id();
+        
+        // Routing intent must come from profile net_type declarations
+        // No hardcoded defaults - explicit declarations enforce design intent
+        let profile_def = ctx.profile.ok_or_else(|| IrError::MissingAsicConstraint {
+            message: "Cannot register routing interface without a profile".into(),
+            hint: "Ensure the space has a profile declaration".into(),
+        })?;
+        
+        // Build intent lookup table from profile
+        let profile_intents: Vec<RoutingIntent> = profile_def
+            .intents
+            .iter()
+            .map(|pi| {
+                RoutingIntent::from_profile_data(
+                    pi.name.as_str(),
+                    pi.routing_style.as_ref().map(|id| id.as_str()),
+                    pi.cost_weights.as_ref().map(|cw| hwc_materials::IntentCostWeights {
+                        base_cost: cw.base,
+                        via_penalty: cw.via_penalty,
+                        direction_penalty: cw.direction_penalty,
+                        tight_clearance_penalty: cw.tight_clearance_penalty,
+                        crosstalk_penalty: cw.crosstalk_penalty,
+                        impedance_penalty: cw.impedance_penalty,
+                        reference_void_penalty: cw.reference_void_penalty,
+                    }).as_ref(),
+                    pi.escape_stub.as_ref().and_then(|meas| {
+                        meas.to_picometers_i64().map(|pm| pm / 1000)
+                    }),
+                )
+            })
+            .collect();
+        
+        // Require explicit "Signal" intent declaration - no fallbacks
+        let intent = RoutingIntent::lookup("Signal", &profile_intents)
+            .ok_or_else(|| IrError::MissingAsicConstraint {
+                message: "Profile missing required 'Signal' net_type declaration".into(),
+                hint: "Add routing intent to your profile:\n\n\
+                       net_type Signal:\n    routing_style: auto\n    escape_stub: 0nm".into(),
+            })?;
+        
+        let db = hwc_engine::geometry_router::connection_interface::DefaultRoutingDatabase::default();
+        let pseudo_component_id = ComponentId::new(0xFFFF_0000 + interface_id.raw());
+        
+        // Pours use Derived orientation - polygon winding encodes the correct outward direction
+        let interface = PhysicalInterface::new(
+            interface_id,
+            pseudo_component_id,
+            geometry,
+            smallvec![],
+            intent,
+            hwc_engine::geometry_router::connection_interface::Orientation::Derived,
+            &db,
+            trace_width_nm,
+            clearance_nm * 2,
+        );
+        
+        space.entity_graph.register_space_entity_interface(
+            pour.name.base.clone(),
+            interface,
+        );
+    }
+
     // println!(
     //     "   ├─ Registered pour '{}' bbox: min=({:.3}, {:.3}, {:.3}) max=({:.3}, {:.3}, {:.3})",
     //     pour.name,
@@ -231,7 +337,7 @@ pub fn place_pour(
                 } else {
                     hwc_engine::netlist::NetId::new(0)
                 };
-                space.entity_graph.drill_hole(bbox, None, pour_net_id.raw());
+                space.entity_graph.drill_hole(bbox, None, pour_net_id);
                 println!(
                     "   ├─ Auto-carved substrate for pour '{}' ({})",
                     pour.name, pour.material
@@ -347,12 +453,20 @@ pub fn place_pour(
                 .netlist
                 .add_pin(pour_component_id, "anchor".into(), (0, 0, 0), None);
 
-        // v0.1.8: Also create a virtual pin for routing endpoint resolution
+        // v0.1.8: Also create a virtual pin for routing endpoint resolution.
+        //
+        // FIX: local_offset_nm must be (0, 0, 0) — NOT (center_x, center_y, center_z).
+        // The component is already placed at the center position, so the pin
+        // offset is relative to that anchor.  Using the absolute center as the
+        // offset doubles the Z coordinate: get_pin_position() = comp_pos + offset
+        // = center + center = 2 * center, producing e.g. Z=2900nm for a pour
+        // at Z=1450nm — which falls outside the stackup and causes the
+        // "No material found at Z=Xnm" error during material lookup.
         let virtual_pin_name = format!("__virtual_{}", pour.name);
         let _virtual_pin_id = space.netlist.add_pin(
             pour_component_id,
             virtual_pin_name.into(),
-            (center_x, center_y, center_z),
+            (0, 0, 0),
             None,
         );
 
@@ -437,12 +551,12 @@ pub fn place_pour(
     if let Some(radius) = circle_radius_nm {
         space
             .entity_graph
-            .add_circle_substrate_layer(material_id, net_id, bbox, radius);
+            .add_circle_substrate_layer(material_id, hwc_engine::NetId::new(net_id), bbox, radius);
     } else {
         // Use checked version to catch clearance violations early (v0.1.9)
         if let Err(msg) = space.entity_graph.add_substrate_layer_checked(
             material_id,
-            net_id,
+            hwc_engine::NetId::new(net_id),
             bbox,
             hwc_engine::geometry_router::entity_graph::SubstrateLayerType::Pour,
             min_clearance_nm,

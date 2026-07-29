@@ -32,6 +32,53 @@ pub struct CompilationContext<'a> {
     pub collector: &'a DiagnosticCollector,
 }
 
+/// Compile a space recursively for hierarchical composition (v0.2.1)
+///
+/// This function compiles a child space in isolation for use in space instantiation.
+/// Unlike `compile_single_space`, this does NOT use lockfiles or caching, and
+/// returns a simpler HardwareSpace without query stores.
+///
+/// ## NO LOCKFILE CACHING
+/// Child spaces are always compiled fresh to ensure correct net remapping.
+pub fn compile_space_recursive(
+    space_def: &SpaceDefinition,
+    symbol_table: &SymbolTable,
+    _eval_context_parent: &EvaluationContext,
+) -> Result<HardwareSpace, IrError> {
+    eprintln!(
+        "[RECURSIVE] Compiling child space '{}' (no lockfile cache)",
+        space_def.name
+    );
+
+    // Use a throwaway diagnostic collector for child compilation
+    let collector = DiagnosticCollector::new("", 100);
+
+    // Compile the space without lockfile caching or query stores
+    let (space, _, _) = compile_single_space(
+        space_def,
+        symbol_table,
+        &collector,
+        None,           // No lockfile path
+        None,           // No source content
+        true,           // Force fresh routing
+        None,           // No query store
+    )?;
+
+    // Check if any errors were collected during child compilation
+    if collector.has_errors() {
+        return Err(IrError::CompilationAborted {
+            error_count: collector.error_count(),
+        });
+    }
+
+    eprintln!(
+        "[RECURSIVE] Child space '{}' compiled successfully",
+        space_def.name
+    );
+
+    Ok(space)
+}
+
 /// Compile a single space definition into a HardwareSpace.
 ///
 /// This is the shared implementation used by both `program_to_space` and `program_to_spaces`.
@@ -77,6 +124,12 @@ pub fn compile_single_space(
         origin.z,
         solder_mask_thickness_nm,
     )?;
+
+    // **v0.2.0: Populate stackup layers in HardwareSpace (single source of truth)**
+    // Export stackup metadata so it's available during export and validation without
+    // needing to pass the full StackupManager everywhere.
+    space.stackup_layers = stackup_manager.export_stackup_layers();
+
     space_setup::populate_material_registry(&mut space, profile.as_ref(), symbol_table, &eval_context);
     let sorted_ids = dependency_graph::build_and_sort(&placement_items, symbol_table)?;
 

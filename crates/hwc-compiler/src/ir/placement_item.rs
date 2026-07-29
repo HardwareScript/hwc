@@ -8,6 +8,7 @@ pub enum PlacementItem {
     Pour(hwc_parser::PourPlacement),
     Plane(Box<hwc_parser::PlanePlacement>),
     Contact(hwc_parser::ContactPlacement),
+    SpaceInstance(Box<hwc_parser::SpaceInstancePlacement>), // v0.2.1: Hierarchical space composition
     Route(hwc_parser::Route),
     Region(hwc_parser::RegionDefinition), // v0.2.0: Region floorplanning
 }
@@ -23,11 +24,8 @@ impl PlacementItem {
                 .unwrap_or_else(|| format!("__comp_{}", index).into()),
             PlacementItem::Pour(p) => p.name.to_string(),
             PlacementItem::Plane(p) => p.name.to_string(),
-            PlacementItem::Contact(c) => c
-                .name
-                .as_ref()
-                .map(|n| n.to_string())
-                .unwrap_or_else(|| format!("__contact_{}", index).into()),
+            PlacementItem::Contact(c) => c.name.base.clone(),
+            PlacementItem::SpaceInstance(si) => si.instance_name.base.clone(), // v0.2.1: Space instance name
             PlacementItem::Route(_) => format!("__route_{}", index).into(),
             PlacementItem::Region(r) => r.name.to_string().into(), // v0.2.0: Region name
         }

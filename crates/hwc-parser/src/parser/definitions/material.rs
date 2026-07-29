@@ -231,19 +231,20 @@ impl super::super::Parser {
 
         let end_pos = self.previous_span().end;
 
-        // v0.1.7: Default process based on category if not explicitly specified
-        let process = process.unwrap_or_else(|| {
-            // Backward compatibility: Standard conductors are drilled_plated, everything else is deposited
-            if let Some(cat) = &category {
-                if *cat == MaterialCategory::Conductor {
-                    ManufacturingProcess::DrilledPlated
-                } else {
-                    ManufacturingProcess::Deposited
-                }
-            } else {
-                ManufacturingProcess::Deposited
+        // NO DEFAULTS: Process MUST be explicitly declared
+        let process = match process {
+            Some(p) => p,
+            None => {
+                collector.report(ParseError::General {
+                    span: span_to_source_span(&Span::new(start_pos, end_pos)),
+                    message: format!(
+                        "Material '{}' is missing required 'process' field. Manufacturing process must be explicitly declared - no defaults are permitted.",
+                        name.as_str()
+                    ).into(),
+                });
+                return None;
             }
-        });
+        };
 
         // Validate required fields
         let category = match category {

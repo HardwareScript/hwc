@@ -48,28 +48,32 @@ mod parallel_router;
 pub mod parasitic_extraction;
 pub mod partition;
 mod path_utils;
-mod pathfinding;
 pub mod port_escape;
-mod priority;
+pub mod priority;
 pub mod query_engine;
 pub mod route_decomposition;
 pub mod route_persistence;
 pub mod router;
 pub mod routing_intent;
-mod routing_patterns;
+pub mod routing_patterns;
 pub mod scene_graph;
 pub mod soft_corridor;
 pub mod solvers;
 pub mod spatial_index;
 pub mod stable_hash_map;
 pub mod stackup_slicing;
-pub mod stamp_parser;
+mod stamp_parser;
 pub mod static_geometry_guard;
 pub mod substrate_types;
-mod teardrops;
-mod thermal_relief;
+pub mod teardrops;
+pub mod technology_strategy; // v0.2.0: PCB/ASIC strategy pattern
+pub mod thermal_relief;
 pub mod topological_router;
-mod types;
+pub mod types;
+
+mod geo_static_index;
+pub use geo_static_index::StaticLayerIndex;
+mod pathfinding;
 
 // Re-export public API
 pub use bounding_box_tracker::{BoundingBoxTracker, TrackedObstacle, ViaObstacleParams};

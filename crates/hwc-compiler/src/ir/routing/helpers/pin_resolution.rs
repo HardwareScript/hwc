@@ -15,27 +15,40 @@ pub fn get_pin_positions(
             let entity_name = construct_entity_name(endpoint)?;
 
             let entity_id = match endpoint {
-                hwc_parser::RouteEndpointSpec::ComponentPin { .. } => {
-                    let full_comp_name = construct_entity_name(endpoint)?;
-                    let pin_name = match endpoint {
-                        hwc_parser::RouteEndpointSpec::ComponentPin {
-                            pin_name,
-                            pin_index,
-                            ..
-                        } => {
-                            if let Some(ref idx) = pin_index {
-                                let val = evaluate_index_expression(idx)?;
-                                format!("{}[{}]", pin_name, val)
-                            } else {
-                                pin_name.to_string()
+                hwc_parser::RouteEndpointSpec::ComponentPin {
+                    component_name,
+                    pin_name,
+                    ..
+                } => {
+                    // FIX v0.2.1: Check if this is a hierarchical space pour/pad first
+                    let space_id = hwc_engine::geometry::EntityId::from_semantic(&format!(
+                        "space:{}.{}",
+                        component_name, pin_name
+                    ));
+                    if space.entity_graph.get_entity_data(space_id).is_ok() {
+                        space_id
+                    } else {
+                        let full_comp_name = construct_entity_name(endpoint)?;
+                        let pin_name_str = match endpoint {
+                            hwc_parser::RouteEndpointSpec::ComponentPin {
+                                pin_name,
+                                pin_index,
+                                ..
+                            } => {
+                                if let Some(ref idx) = pin_index {
+                                    let val = evaluate_index_expression(idx)?;
+                                    format!("{}[{}]", pin_name, val)
+                                } else {
+                                    pin_name.to_string()
+                                }
                             }
-                        }
-                        _ => unreachable!(),
-                    };
-                    hwc_engine::geometry::EntityId::from_semantic(&format!(
-                        "pin:{}:{}",
-                        full_comp_name, pin_name
-                    ))
+                            _ => unreachable!(),
+                        };
+                        hwc_engine::geometry::EntityId::from_semantic(&format!(
+                            "pin:{}:{}",
+                            full_comp_name, pin_name_str
+                        ))
+                    }
                 }
                 hwc_parser::RouteEndpointSpec::SpaceEntity { .. } => {
                     hwc_engine::geometry::EntityId::from_semantic(&format!("space:{}", entity_name))
@@ -94,29 +107,44 @@ pub fn get_pin_ids(
     let resolve_endpoint =
         |endpoint: &hwc_parser::RouteEndpointSpec| -> Result<hwc_engine::netlist::PinId, IrError> {
             let entity_name = construct_entity_name(endpoint)?;
+            let mut resolved_as_space = false;
 
             let entity_id = match endpoint {
-                hwc_parser::RouteEndpointSpec::ComponentPin { .. } => {
-                    let full_comp_name = construct_entity_name(endpoint)?;
-                    let pin_name = match endpoint {
-                        hwc_parser::RouteEndpointSpec::ComponentPin {
-                            pin_name,
-                            pin_index,
-                            ..
-                        } => {
-                            if let Some(ref idx) = pin_index {
-                                let val = evaluate_index_expression(idx)?;
-                                format!("{}[{}]", pin_name, val)
-                            } else {
-                                pin_name.to_string()
+                hwc_parser::RouteEndpointSpec::ComponentPin {
+                    component_name,
+                    pin_name,
+                    ..
+                } => {
+                    // FIX v0.2.1: Check if this is a hierarchical space pour/pad first
+                    let space_id = hwc_engine::geometry::EntityId::from_semantic(&format!(
+                        "space:{}.{}",
+                        component_name, pin_name
+                    ));
+                    if space.entity_graph.get_entity_data(space_id).is_ok() {
+                        resolved_as_space = true;
+                        space_id
+                    } else {
+                        let full_comp_name = construct_entity_name(endpoint)?;
+                        let pin_name_str = match endpoint {
+                            hwc_parser::RouteEndpointSpec::ComponentPin {
+                                pin_name,
+                                pin_index,
+                                ..
+                            } => {
+                                if let Some(ref idx) = pin_index {
+                                    let val = evaluate_index_expression(idx)?;
+                                    format!("{}[{}]", pin_name, val)
+                                } else {
+                                    pin_name.to_string()
+                                }
                             }
-                        }
-                        _ => unreachable!(),
-                    };
-                    hwc_engine::geometry::EntityId::from_semantic(&format!(
-                        "pin:{}:{}",
-                        full_comp_name, pin_name
-                    ))
+                            _ => unreachable!(),
+                        };
+                        hwc_engine::geometry::EntityId::from_semantic(&format!(
+                            "pin:{}:{}",
+                            full_comp_name, pin_name_str
+                        ))
+                    }
                 }
                 hwc_parser::RouteEndpointSpec::SpaceEntity { .. } => {
                     let entity_name = construct_entity_name(endpoint)?;
@@ -124,6 +152,7 @@ pub fn get_pin_ids(
                         "[DEBUG] Constructing EntityId for space entity: space:{}",
                         entity_name
                     );
+                    resolved_as_space = true;
                     hwc_engine::geometry::EntityId::from_semantic(&format!("space:{}", entity_name))
                 }
             };
@@ -192,21 +221,41 @@ pub fn get_pin_ids(
                         pin: entity_data.name.to_string(),
                     })
             } else {
-                let virtual_pin_name = format!("__virtual_{}", entity_name);
+                // Use the actual entity name from the registry for space pours
+                let virtual_pin_name = if resolved_as_space {
+                    format!("__virtual_{}", entity_data.name)
+                } else {
+                    format!("__virtual_{}", entity_name)
+                };
+                eprintln!("[DEBUG] Looking for virtual pin: {}", virtual_pin_name);
+                eprintln!("[DEBUG] Searching through {} components", space.netlist.component_count());
                 let mut found_pin = None;
                 for cid in 0..space.netlist.component_count() {
-                    if let Some(pin_id) = space.netlist.get_pin_by_name(
-                        hwc_engine::netlist::ComponentId::new(cid as u32),
-                        &virtual_pin_name,
-                    ) {
-                        found_pin = Some(pin_id);
-                        break;
+                    let comp_id = hwc_engine::netlist::ComponentId::new(cid as u32);
+                    if let Some(comp) = space.netlist.get_component(comp_id) {
+                        eprintln!("[DEBUG] Component {}: '{}'", cid, comp.name);
+                        let pins = space.netlist.get_component_pins(comp_id);
+                        eprintln!("[DEBUG]   Has {} pins", pins.len());
+                        for &pid in pins.iter() {
+                            if let Some(pin) = space.netlist.get_pin(pid) {
+                                eprintln!("[DEBUG]     Pin: '{}'", pin.name);
+                                if pin.name == virtual_pin_name.as_str() {
+                                    found_pin = Some(pid);
+                                    eprintln!("[DEBUG] ✓ Found matching virtual pin!");
+                                    break;
+                                }
+                            }
+                        }
+                        if found_pin.is_some() {
+                            break;
+                        }
                     }
                 }
                 if let Some(pin_id) = found_pin {
                     Ok(pin_id)
                 } else {
                     let available = list_available_endpoints(space);
+                    eprintln!("[DEBUG] ✗ Virtual pin '{}' not found in any component", virtual_pin_name);
                     Err(IrError::UnresolvedEndpoint {
                     endpoint: entity_name.to_string(),
                     span: miette::SourceSpan::from((endpoint.span().start, endpoint.span().end)),

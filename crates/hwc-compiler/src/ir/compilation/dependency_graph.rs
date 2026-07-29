@@ -149,11 +149,28 @@ pub fn build_and_sort(
                 }
             }
             PlacementItem::Contact(c) => {
+                if let Some(pos) = &c.position {
+                    graph.extract_dependencies_from_coord(
+                        &item_id,
+                        pos,
+                        last_component_name.as_ref(),
+                    );
+                }
+                // v0.2.0: Handle relational anchor dependencies
+                if let Some(anchor) = &c.relational_anchor {
+                    graph.add_dependency(item_id.clone(), anchor.region_name.to_string().into());
+                }
+            }
+            PlacementItem::SpaceInstance(space_inst) => {
+                // v0.2.1: Space instances may depend on other placement items through position expressions
+                // Extract dependencies from position coordinate expressions
                 graph.extract_dependencies_from_coord(
                     &item_id,
-                    &c.position,
+                    &space_inst.position,
                     last_component_name.as_ref(),
                 );
+                
+                // Note: net_map dependencies are handled during netlist compilation, not placement
             }
             PlacementItem::Route(r) => {
                 let resolve_name =

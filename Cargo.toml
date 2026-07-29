@@ -9,6 +9,7 @@ members = [
     "crates/hwc-export",
     "crates/hwc-materials",
     "crates/hwc-stdlib",
+    "crates/hwc-types",
 ]
 resolver = "2"
 
@@ -41,6 +42,7 @@ clap = { version = "4.5", features = ["derive"] }
 anyhow = "1.0"
 
 # Internal crate dependencies
+hwc-types = { path = "crates/hwc-types" }
 hwc-diagnostics = { path = "crates/hwc-diagnostics" }
 hwc-parser = { path = "crates/hwc-parser" }
 hwc-compiler = { path = "crates/hwc-compiler" }
