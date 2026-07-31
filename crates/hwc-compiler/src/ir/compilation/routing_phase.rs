@@ -51,7 +51,15 @@ pub fn try_load_lockfile(
                         space
                             .entity_graph
                             .register_trace_segments(trace.net_id, trace_segments);
-                        space.add_analytic_route(trace);
+
+                        // v0.2.0: Register cached routes in routing database (single source of truth)
+                        let from_entity = format!("lockfile_{}_start", trace.net_name);
+                        let to_entity = format!("lockfile_{}_end", trace.net_name);
+                        space.routing_database.register_parent_route(
+                            trace,
+                            from_entity.into(),
+                            to_entity.into(),
+                        );
                     }
 
                     eprintln!(
@@ -173,6 +181,42 @@ pub fn auto_route(
         return Ok(());
     }
 
+    // v0.2.0: PRE-ROUTING VALIDATION CHECKPOINT
+    // Verify all routing layers are valid before starting routing
+    eprintln!("[VALIDATION] Checking routing layer database...");
+    if let Err(errors) = space.routing_layer_db.validate() {
+        for err in &errors {
+            eprintln!("[VALIDATION] ERROR: {}", err);
+        }
+        return Err(IrError::RoutingLayerError {
+            message: format!("{} routing layer validation errors", errors.len()),
+            hint: "Fix the stackup definition to ensure all routable layers have valid Z ranges.".into(),
+        });
+    }
+    eprintln!(
+        "[VALIDATION] Routing layer database OK: {} routable layers",
+        space.routing_layer_db.routable_layer_count()
+    );
+
+    // Verify all vias have connection points
+    eprintln!("[VALIDATION] Checking via connection points...");
+    let routing_z_map = space.routing_layer_db.routing_z_map();
+    let stackup = &space.stackup_layers;
+    if let Err(errors) = space.layer_connection_db.validate(&routing_z_map, stackup) {
+        for err in &errors {
+            eprintln!("[VALIDATION] WARNING: {}", err);
+        }
+        eprintln!(
+            "[VALIDATION] {} via connection mismatches detected (routing may produce incorrect geometry)",
+            errors.len()
+        );
+    } else {
+        eprintln!(
+            "[VALIDATION] Via connection database OK: {} connections",
+            space.layer_connection_db.connection_count()
+        );
+    }
+
     eprintln!(
         "[ROUTER] Processing {} automatic routes using AutoRouter",
         auto_routes.len()
@@ -189,6 +233,40 @@ pub fn auto_route(
     );
 
     auto_router.route_all_nets()?;
-    
+
+    // v0.2.0: POST-ROUTING VALIDATION CHECKPOINT
+    // Verify trace Z elevations are within layer bounds
+    eprintln!("[VALIDATION] Post-routing: checking trace Z elevations...");
+    let mut post_errors = Vec::new();
+    for trace in &space.analytic_routes {
+        for seg in &trace.segments {
+            if seg.start.z == seg.end.z {
+                // Horizontal segment — verify Z is within a valid layer
+                let seg_z = seg.start.z;
+                let in_valid_layer = space.stackup_layers.iter().any(|l| {
+                    l.is_routable && seg_z >= l.z_bottom && seg_z <= l.z_top
+                });
+                if !in_valid_layer {
+                    post_errors.push(format!(
+                        "Net '{}': horizontal trace at Z={}nm is not within any routing layer bounds",
+                        trace.net_name, seg_z
+                    ));
+                }
+            }
+        }
+    }
+
+    if !post_errors.is_empty() {
+        for err in &post_errors {
+            eprintln!("[VALIDATION] ERROR: {}", err);
+        }
+        return Err(IrError::PostRoutingValidationFailed {
+            net: "multiple".into(),
+            problem: format!("{} trace segments have Z coordinates outside routing layer bounds", post_errors.len()),
+            hint: "This indicates via connection Z mismatches. Check that all vias connect to the correct routing layers.".into(),
+        });
+    }
+    eprintln!("[VALIDATION] Post-routing checks passed");
+
     Ok(())
 }

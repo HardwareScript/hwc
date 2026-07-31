@@ -16,6 +16,11 @@ impl GeometryRouter {
     /// * `bounds` - Grid bounds for routing
     /// * `constraints` - Constraint rulebook from constraint manager
     /// * `material_registry` - Material registry for physical thickness lookups
+    ///
+    /// # Important (v0.2.0 Refactor)
+    /// GeometryRouter no longer owns EntityGraph. Instead, routing methods take
+    /// `&mut EntityGraph` as a parameter. The EntityGraph lives in Space and is
+    /// the single source of truth.
     pub fn new(
         bounds: GridBounds,
         constraints: ConstraintRulebook,
@@ -29,16 +34,12 @@ impl GeometryRouter {
             .map(|i| constraints.get_layer_direction(i))
             .collect();
 
-        // Create EntityGraph for spatial queries and component metadata
-        let entity_graph = EntityGraph::new();
-
         Self {
             bounds,
             constraints,
             layer_directions,
             resolution_nm,
             material_registry,
-            entity_graph,
             vias: Vec::new(),
             copper_pours: Vec::new(),
             bounding_box_tracker: BoundingBoxTracker::new(),

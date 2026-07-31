@@ -10,7 +10,7 @@ pub mod types;
 pub use automatic::{calculate_boundary_points, route_automatic};
 pub use global::{AutoRouter, RouterConfig};
 pub use helpers::{
-    evaluate_index_expression, get_pin_positions, needs_automatic_routing, register_net_for_route,
+    evaluate_index_expression, needs_automatic_routing, register_net_for_route,
     resolve_endpoint_entity_ids, resolve_route_boundary_points, resolve_route_pin_centers,
 };
 pub use manual::route_manual;

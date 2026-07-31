@@ -72,6 +72,17 @@ impl GeometryRouter {
             RouteResult::new()
         };
 
+        eprintln!("[ROUTE_SPACE DEBUG] Result BEFORE refinement pipeline:");
+        for (net_id, path_segments) in &result.paths {
+            eprintln!("[ROUTE_SPACE DEBUG]   Net {:?}: {} segments", net_id, path_segments.len());
+            for (seg_idx, segment) in path_segments.iter().enumerate() {
+                eprintln!("[ROUTE_SPACE DEBUG]     Segment {}: {} points", seg_idx, segment.len());
+                for (pt_idx, pt) in segment.iter().enumerate().take(2) {
+                    eprintln!("[ROUTE_SPACE DEBUG]       Point {}: ({},{},{})", pt_idx, pt.x, pt.y, pt.z);
+                }
+            }
+        }
+
         let width = grid_bbox.max.x - grid_bbox.min.x;
         let height = grid_bbox.max.y - grid_bbox.min.y;
         let area_nm2 = width * height;
@@ -87,6 +98,18 @@ impl GeometryRouter {
             )?;
             result.merge(steiner_result);
             self.apply_refinement_pipeline(&mut result);
+            
+            eprintln!("[ROUTE_SPACE DEBUG] Result AFTER refinement pipeline:");
+            for (net_id, path_segments) in &result.paths {
+                eprintln!("[ROUTE_SPACE DEBUG]   Net {:?}: {} segments", net_id, path_segments.len());
+                for (seg_idx, segment) in path_segments.iter().enumerate() {
+                    eprintln!("[ROUTE_SPACE DEBUG]     Segment {}: {} points", seg_idx, segment.len());
+                    for (pt_idx, pt) in segment.iter().enumerate().take(2) {
+                        eprintln!("[ROUTE_SPACE DEBUG]       Point {}: ({},{},{})", pt_idx, pt.x, pt.y, pt.z);
+                    }
+                }
+            }
+            
             Ok(result)
         } else {
             let hierarchical_result = self.route_hierarchical(
@@ -98,6 +121,18 @@ impl GeometryRouter {
             )?;
             result.merge(hierarchical_result);
             self.apply_refinement_pipeline(&mut result);
+            
+            eprintln!("[ROUTE_SPACE DEBUG] Result AFTER refinement pipeline:");
+            for (net_id, path_segments) in &result.paths {
+                eprintln!("[ROUTE_SPACE DEBUG]   Net {:?}: {} segments", net_id, path_segments.len());
+                for (seg_idx, segment) in path_segments.iter().enumerate() {
+                    eprintln!("[ROUTE_SPACE DEBUG]     Segment {}: {} points", seg_idx, segment.len());
+                    for (pt_idx, pt) in segment.iter().enumerate().take(2) {
+                        eprintln!("[ROUTE_SPACE DEBUG]       Point {}: ({},{},{})", pt_idx, pt.x, pt.y, pt.z);
+                    }
+                }
+            }
+            
             Ok(result)
         }
     }

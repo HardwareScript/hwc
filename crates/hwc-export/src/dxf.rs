@@ -9,24 +9,14 @@
 //! - Nearly impossible to get wrong
 //! - Opens in Autodesk Viewer, KiCad, AutoCAD, and virtually every CAD tool
 //!
-//! This exporter uses the "Font-Engine" stroking paradigm:
-//! - Treats routed paths as continuous 1D polylines
-//! - Uses Clipper2's native path offsetting (inflate) for perfect mitered corners
-//! - Eliminates segment-by-segment welding artifacts
-//! - Produces clean, professional-grade vector traces
-//!
-//! The approach combines:
-//! 1. Vector Stroker (ClipperOffset): Generates mitered outlines from waypoint sequences
-//! 2. Boolean Welder (union_64): Merges trace outlines with pad/via geometry
-//!
-//! This is the most reliable format for visual verification of Hardware Script output.
+//! **v0.2.2 Architecture**: DXF is now a pure reader of unified geometry.
+//! All copper contours come from the unified_geometry module (single source of truth).
+//! No geometry calculations or Boolean operations happen here.
 
-use crate::geometry_union::{circle_to_path, stroke_route_segments};
-use clipper2_rust::{FillRule, Paths64};
 use hwc_compiler::SymbolTable;
 use hwc_engine::geometry_router::entity_graph::SubstrateLayerType;
+use hwc_engine::geometry_router::substrate_types::SubstrateLayerShape;
 use hwc_engine::{HardwareSpace, SpaceView};
-use rustc_hash::FxHashMap;
 use std::io::Write;
 
 /// Export HardwareSpace to DXF format with True Color support and unioned copper contours
@@ -64,7 +54,10 @@ pub fn export(
                 let mat_name = space
                     .material_registry
                     .get_name(layer.material)
-                    .unwrap_or("Unknown");
+                    .expect(&format!(
+                        "Material ID {:?} not found in registry during DXF layer definition",
+                        layer.material
+                    ));
                 writeln!(w, "  0\nLAYER\n  2\n{}\n 70\n0\n 62\n7", mat_name)?;
             }
         }
@@ -83,169 +76,48 @@ pub fn export(
     // 3. ENTITIES (The Actual Geometry)
     writeln!(w, "  0\nSECTION\n  2\nENTITIES")?;
 
-    // --- PURE VECTOR PATH OFFSETTING: The Font-Engine Exporter ---
-    // This uses Clipper2's native path stroking engine to generate perfect mitered traces
-    // directly from waypoint sequences, eliminating segment-by-segment welding artifacts.
+    // **v0.2.2: USE UNIFIED GEOMETRY (SINGLE SOURCE OF TRUTH)**
+    // All copper contours come from the unified geometry module.
+    // DXF is now a pure reader - no geometry calculations here.
+    let copper_contours = crate::scene_graph::generate_copper_contours(space);
 
-    let mut analytic_copper_pools: FxHashMap<
-        (
-            i64,
-            i64,
-            hwc_engine::geometry_router::substrate_types::MaterialId,
-            hwc_engine::netlist::NetId,
-        ),
-        Paths64,
-    > = FxHashMap::default();
+    eprintln!("[DXF EXPORT] Received {} copper contour groups from unified geometry", copper_contours.len());
 
-    // Gather trace paths from analytic routes using native path offsetting
-    for route in &space.analytic_routes {
-        let half_t = route.cross_section.thickness_nm / 2;
-
-        let z_min = route
-            .segments
-            .iter()
-            .map(|s| s.start.z.min(s.end.z))
-            .min()
-            .unwrap_or(0)
-            - half_t;
-        let z_max = route
-            .segments
-            .iter()
-            .map(|s| s.start.z.max(s.end.z))
-            .max()
-            .unwrap_or(0)
-            + half_t;
-
-        // Use the shared stroke_route_segments function to generate perfect mitered outlines
-        let trace_outline = stroke_route_segments(&route.segments, route.cross_section.width_nm);
-
-        let key = (z_min, z_max, route.material, route.net_id);
-        analytic_copper_pools
-            .entry(key)
-            .or_default()
-            .extend(trace_outline);
-    }
-
-    use hwc_engine::geometry_router::substrate_types::SubstrateLayerShape;
-    for layer in substrate_layers {
-        if layer.layer_type == hwc_engine::geometry_router::entity_graph::SubstrateLayerType::Pour
-            || layer.layer_type == hwc_engine::geometry_router::entity_graph::SubstrateLayerType::Contact
-        {
-            let key = (
-                layer.bbox.min.z,
-                layer.bbox.max.z,
-                layer.material,
-                layer.net,
-            );
-
-            let path = match &layer.shape {
-                SubstrateLayerShape::Rect => crate::geometry_union::rect_to_path(&layer.bbox),
-                SubstrateLayerShape::Circle { radius } => {
-                    let cx = (layer.bbox.min.x + layer.bbox.max.x) / 2;
-                    let cy = (layer.bbox.min.y + layer.bbox.max.y) / 2;
-                    circle_to_path(cx, cy, *radius, 64)
-                }
-                SubstrateLayerShape::Polygon { outer_contour, .. } => {
-                    // Polygon points are now stored in world space, use directly
-                    outer_contour.clone()
-                }
-                _ => continue,
-            };
-
-            analytic_copper_pools.entry(key).or_default().push(path);
-        }
-    }
-
-    // Add via pads to analytic pools (ONLY for drilled/plated PCB vias)
-    // IC vias (deposited) are natively handled via Contact substrate layers in the copper pool
-    for via in &space.vias {
-        let is_ic_via = space
-            .material_registry
-            .get_process(via.material_id)
-            .map(|process| process == hwc_engine::ManufacturingProcess::Deposited)
-            .unwrap_or(false);
-            
-        if is_ic_via {
-            continue;
-        }
-
-        let z_start = via.from_z_nm.min(via.to_z_nm);
-        let z_end = via.from_z_nm.max(via.to_z_nm);
-        let pad_radius = via.diameter_nm / 2 + via.annular_ring_nm.max(via.diameter_nm / 4);
-        let copper_thickness = 35_000;
-
-        let copper_material_id = space
-            .material_registry
-            .all_materials()
-            .into_iter()
-            .find(|(_, name)| {
-                name.contains("Copper") || name.contains("Aluminum") || name.contains("Metal")
-            })
-            .map(|(id, _)| id)
-            .unwrap_or(space.substrate_material_id);
-
-        // Top pad
-        let top_key = (
-            z_end - copper_thickness,
-            z_end,
-            copper_material_id,
-            via.net_id,
-        );
-        analytic_copper_pools
-            .entry(top_key)
-            .or_default()
-            .push(circle_to_path(
-                via.position.0,
-                via.position.1,
-                pad_radius,
-                64,
-            ));
-
-        // Bottom pad
-        let bottom_key = (
-            z_start,
-            z_start + copper_thickness,
-            copper_material_id,
-            via.net_id,
-        );
-        analytic_copper_pools
-            .entry(bottom_key)
-            .or_default()
-            .push(circle_to_path(
-                via.position.0,
-                via.position.1,
-                pad_radius,
-                64,
-            ));
-    }
-
-    // 3. THE COPPER WELDER: We run the Boolean Union ONLY to merge
-    //    the completed trace outlines with the circular pad/via outlines!
-    let mut sorted_keys: Vec<_> = analytic_copper_pools.keys().cloned().collect();
-    sorted_keys.sort();
-
-    for key in &sorted_keys {
-        let (z_min_nm, _z_max_nm, material_id, _net_raw) = key;
-        let paths = &analytic_copper_pools[key];
+    // Export each unified copper contour pool
+    for contour_data in &copper_contours {
+        let z_min_nm = contour_data.key.z_min;
+        let material_id = contour_data.key.material;
+        
         let mat_name = space
             .material_registry
-            .get_name(*material_id)
-            .unwrap_or("Copper");
+            .get_name(material_id)
+            .expect(&format!("Material ID {:?} not found in registry during DXF copper export", material_id));
+        
         let color_hex = symbol_table
             .get_material(mat_name)
             .map(|m| m.get_color())
-            .unwrap_or_else(|_| "#B87333".into());
+            .expect(&format!("Material '{}' not found in symbol table during DXF export", mat_name));
         let true_color = parse_true_color(&color_hex);
 
-        let unioned = clipper2_rust::union_64(paths, &vec![], FillRule::NonZero);
-        if unioned.is_empty() {
-            continue;
-        }
+        eprintln!("[DXF CONTOURS] Net {:?}: {} contours", contour_data.key.net_id, contour_data.contours.len());
 
-        for path in &unioned {
+        for (idx, path) in contour_data.contours.iter().enumerate() {
+            eprintln!("[DXF CONTOUR {}] {} points", idx, path.len());
+            
             let point_count = path.len();
             if point_count < 3 {
                 continue;
+            }
+
+            // Debug: Print first few points to see the contour shape
+            if path.len() >= 4 {
+                eprintln!("[DXF CONTOUR {}] First 4 points: ({}, {}), ({}, {}), ({}, {}), ({}, {})",
+                    idx, 
+                    path[0].x, path[0].y,
+                    path[1].x, path[1].y,
+                    path[2].x, path[2].y,
+                    path[3].x, path[3].y
+                );
             }
 
             let layer_name = if is_asic { mat_name } else { "PCB_LAYERS" };
@@ -260,7 +132,7 @@ pub fn export(
                 let (x, y) = match space.view {
                     SpaceView::Horizontal => (pt.x as f64 / 1_000_000.0, pt.y as f64 / 1_000_000.0),
                     SpaceView::Vertical => {
-                        (pt.x as f64 / 1_000_000.0, *z_min_nm as f64 / 1_000_000.0)
+                        (pt.x as f64 / 1_000_000.0, z_min_nm as f64 / 1_000_000.0)
                     }
                 };
                 writeln!(w, " 10\n{:.6}\n 20\n{:.6}", x, y)?;
@@ -273,7 +145,11 @@ pub fn export(
         let mat_name = space
             .material_registry
             .get_name(layer.material)
-            .unwrap_or("Unknown");
+            .expect(&format!(
+                "Material ID {:?} not found in registry during DXF substrate export",
+                layer.material
+            ));
+        
         if mat_name.to_lowercase() == "void" || mat_name.to_lowercase() == "air" {
             continue;
         }
@@ -287,7 +163,10 @@ pub fn export(
         let color_hex = symbol_table
             .get_material(mat_name)
             .map(|m| m.get_color())
-            .unwrap_or_else(|_| "#808080".into());
+            .expect(&format!(
+                "Material '{}' not found in symbol table during DXF substrate export",
+                mat_name
+            ));
         let true_color = parse_true_color(&color_hex);
 
         let layer_name = if is_asic { mat_name } else { "PCB_LAYERS" };
@@ -442,9 +321,23 @@ pub fn export(
 }
 
 /// Parse a hex color string like "#RRGGBB" into a DXF 24-bit true color integer.
+///
+/// **NO FALLBACKS**: This function expects a valid hex color string.
+/// Invalid formats will panic with a clear error message.
 fn parse_true_color(hex: &str) -> u32 {
-    let r = u32::from_str_radix(&hex[1..3], 16).unwrap_or(128);
-    let g = u32::from_str_radix(&hex[3..5], 16).unwrap_or(128);
-    let b = u32::from_str_radix(&hex[5..7], 16).unwrap_or(128);
+    if hex.len() != 7 || !hex.starts_with('#') {
+        panic!(
+            "Invalid color format '{}'. Expected format: #RRGGBB (e.g., #FF5733)",
+            hex
+        );
+    }
+
+    let r = u32::from_str_radix(&hex[1..3], 16)
+        .expect(&format!("Invalid red component in color '{}'. Must be 00-FF", hex));
+    let g = u32::from_str_radix(&hex[3..5], 16)
+        .expect(&format!("Invalid green component in color '{}'. Must be 00-FF", hex));
+    let b = u32::from_str_radix(&hex[5..7], 16)
+        .expect(&format!("Invalid blue component in color '{}'. Must be 00-FF", hex));
+    
     (r << 16) | (g << 8) | b
 }

@@ -22,9 +22,12 @@ pub mod procedural;
 pub mod ribbon;
 pub mod scene_graph_impl;
 pub mod substrate;
+pub mod trace_geometry; // v0.2.1: Proper segment-level trace geometry engine
 pub mod types;
+pub mod unified_geometry; // v0.2.2: Single source of truth for copper contours
 
 // Re-export main types and functions for backward compatibility
 pub use materials::SceneGraphError;
 pub use scene_graph_impl::SceneGraph;
 pub use types::{BoxParams, Color, Face, MaterialNode, MeshNode, Vertex};
+pub use unified_geometry::{generate_copper_contours, CopperPoolKey, UnifiedCopperContour};

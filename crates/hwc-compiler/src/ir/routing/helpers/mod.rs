@@ -12,7 +12,7 @@ pub use net_registration::register_net_for_route;
 pub use path_utils::{
     manhattan_path_to_segments, needs_automatic_routing, require_min_segment_length_nm,
 };
-pub use pin_resolution::{get_pin_ids, get_pin_positions};
+pub use pin_resolution::get_pin_ids;
 
 #[cfg(test)]
 mod tests {

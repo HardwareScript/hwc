@@ -285,37 +285,38 @@ pub fn route_manual(
         .unwrap_or(0.0);
 
     // **v0.2.0 STRUCTURAL FIX: Compute layer_z_range for horizontal traces**
-    let layer_z_range = if let Some(first_seg) = segments.first() {
-        // Check if this is a horizontal trace (all segments at same Z)
-        let is_horizontal = segments
-            .iter()
-            .all(|s| s.start.z == first_seg.start.z && s.end.z == first_seg.start.z);
-
-        if is_horizontal {
-            let centerline_z = first_seg.start.z;
-            // Look up the layer from HardwareSpace's stackup (single source of truth)
-            space
-                .find_layer_at_z(centerline_z)
-                .map(|layer| (layer.z_bottom, layer.z_top))
-        } else {
-            // Via or multi-layer trace: segments encode their own Z spans
-            None
-        }
-    } else {
-        None
-    };
+    // Find the Z of the first horizontal segment (start.z == end.z) and look up its
+    // layer. Traces can have via-stitch segments at the start/end while still being
+    // a single-layer route, so we must not require ALL segments to share the same Z.
+    let layer_z_range = segments
+        .iter()
+        .find(|s| s.start.z == s.end.z)
+        .and_then(|s| space.find_layer_at_z(s.start.z))
+        .map(|layer| (layer.z_bottom, layer.z_top));
 
     let analytic_trace = hwc_engine::AnalyticTrace::with_layer_z_range(
         net_id,
         hwc_engine::space::CrossSection::new(trace_width_nm, thickness_nm),
         segments,
         copper_id,
-        net_name,
+        net_name.clone(),
         hwc_engine::space::CurrentRating::new(net_actual_current_ma, current_ma),
         layer_z_range,
     );
 
-    space.add_analytic_route(analytic_trace);
+    // v0.2.0: Register parent-level route in hierarchical routing database
+    // This is the single source of truth for all routing data.
+    let from_entity = format!("{}", super::helpers::endpoint_label(&route.from));
+    let to_entity = format!("{}", super::helpers::endpoint_label(&route.to));
+    
+    eprintln!("[ROUTING DB MANUAL] Registering parent route: from='{}', to='{}', net='{}', net_id={:?}",
+        from_entity, to_entity, net_name, net_id);
+    
+    space.routing_database.register_parent_route(
+        analytic_trace,
+        from_entity.into(),
+        to_entity.into(),
+    );
 
     Ok(())
 }

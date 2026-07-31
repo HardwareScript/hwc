@@ -13,6 +13,8 @@ use rustc_hash::FxHashMap;
 impl GeometryRouter {
     /// Apply post-routing refinement pipeline to a RouteResult.
     pub(crate) fn apply_refinement_pipeline(&self, result: &mut RouteResult) {
+        eprintln!("[REFINEMENT PIPELINE DEBUG] Starting refinement pipeline");
+        
         let min_clearance_nm = self
             .constraints
             .fabrication
@@ -28,6 +30,8 @@ impl GeometryRouter {
         for (&net_id, paths) in &result.paths {
             for path in paths {
                 for window in path.windows(2) {
+                    eprintln!("[REFINEMENT DEBUG] Net {:?}: Converting segment ({},{},{}) -> ({},{},{})", 
+                        net_id, window[0].x, window[0].y, window[0].z, window[1].x, window[1].y, window[1].z);
                     all_segments.push(TraceSegment::new(
                         window[0],
                         window[1],
@@ -40,7 +44,46 @@ impl GeometryRouter {
         }
 
         if !all_segments.is_empty() {
-            let spatial_index = DynamicSpatialIndex::new();
+            eprintln!("[REFINEMENT DEBUG] About to legalize {} segments", all_segments.len());
+            
+            // Build a properly configured layer-aware spatial index
+            let mut spatial_index = DynamicSpatialIndex::new();
+            
+            // Configure layer Z-ranges from the entity graph
+            if let Some(z_ranges) = self.entity_graph.spatial().layer_z_ranges() {
+                eprintln!("[REFINEMENT DEBUG] Configuring spatial index with {} layer Z-ranges", z_ranges.len());
+                spatial_index.set_layer_z_ranges(&z_ranges);
+            } else {
+                eprintln!("[REFINEMENT WARNING] No layer Z-ranges configured - all segments will be in fallback bucket!");
+            }
+            
+            // Insert segments into spatial index
+            for (idx, seg) in all_segments.iter().enumerate() {
+                let net_id = all_net_ids.get(idx).copied().unwrap_or(NetId::UNCONNECTED);
+                let net_idx = net_id.raw() as usize;
+                let thickness_nm = self.material_registry
+                    .get_material(seg.material_id)
+                    .map(|m| m.thickness_nm)
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "FATAL: Material id={} has zero thickness — must be declared in PDK",
+                            seg.material_id
+                        )
+                    });
+                
+                spatial_index.insert(crate::geometry_router::spatial_index::IndexedSegment::new(
+                    hwc_physics::spatial_index::SpatialEntitySource::RouteSegment {
+                        net_idx,
+                        seg_idx: idx,
+                    },
+                    idx,
+                    net_id,
+                    seg,
+                    seg.start.z,
+                    thickness_nm,
+                ));
+            }
+            
             let legalizer = Legalizer::new(min_clearance_nm);
             let (legalized_segments, legalized_net_ids) = legalizer.legalize(
                 &all_segments,
@@ -50,11 +93,23 @@ impl GeometryRouter {
                 10, // max iterations
             );
 
+            eprintln!("[REFINEMENT DEBUG] After legalization: {} segments", legalized_segments.len());
+            for (idx, seg) in legalized_segments.iter().enumerate().take(4) {
+                eprintln!("[REFINEMENT DEBUG]   Segment {}: ({},{},{}) -> ({},{},{})", 
+                    idx, seg.start.x, seg.start.y, seg.start.z, seg.end.x, seg.end.y, seg.end.z);
+            }
+
             // --- Stage 2: Compaction ---
             let compactor = Compactor::new(min_clearance_nm);
             let moves =
                 compactor.compact(&legalized_segments, &legalized_net_ids, &Default::default());
             let compacted_segments = Compactor::apply_moves(&legalized_segments, &moves);
+
+            eprintln!("[REFINEMENT DEBUG] After compaction: {} segments", compacted_segments.len());
+            for (idx, seg) in compacted_segments.iter().enumerate().take(4) {
+                eprintln!("[REFINEMENT DEBUG]   Segment {}: ({},{},{}) -> ({},{},{})", 
+                    idx, seg.start.x, seg.start.y, seg.start.z, seg.end.x, seg.end.y, seg.end.z);
+            }
 
             // --- Stage 3: Miter Pass ---
             let miter_engine = MiterEngine::new(self.trace_width_nm);
@@ -77,7 +132,10 @@ impl GeometryRouter {
             }
 
             for paths in refined_paths.values_mut() {
-                miter_engine.apply_to_paths(paths);
+                // v0.2.0 FIX: Miter pass is now applied in post_process.rs with via-awareness.
+                // Applying it here causes double-mitering where the second pass incorrectly
+                // identifies the first miter points as via endpoints. DISABLED.
+                // miter_engine.apply_to_paths(paths);
             }
 
             // Merge paths: combine segments that share endpoints into single paths

@@ -68,6 +68,12 @@ impl Default for RouterConfig {
 }
 
 /// Geometry Router: Main routing engine.
+/// 
+/// # Architecture Note (v0.2.0 Refactor)
+/// GeometryRouter does NOT own EntityGraph - it is passed by mutable reference.
+/// EntityGraph lives in Space and is the single source of truth for all routing data.
+/// This ensures child routes synchronized from the routing database remain visible
+/// during parent-level routing.
 pub struct GeometryRouter {
     /// Grid bounds for routing
     pub(crate) bounds: GridBounds,
@@ -83,9 +89,6 @@ pub struct GeometryRouter {
 
     /// Material registry for physical thickness lookups (v0.1.8)
     pub(crate) material_registry: crate::material::MaterialRegistry,
-
-    /// EntityGraph for component metadata, substrate layers, and spatial queries.
-    pub(crate) entity_graph: EntityGraph,
 
     /// All vias placed during routing
     pub(crate) vias: Vec<Via>,

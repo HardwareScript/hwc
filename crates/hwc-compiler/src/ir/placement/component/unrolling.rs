@@ -318,7 +318,9 @@ pub fn unroll_internal_features(
                                 })?
                                 .via.min_annular_ring_nm;
 
-                            let pad_diameter_nm = drill_diameter_nm + (2 * min_annular_ring_nm);
+                            // v0.2.0: Use technology strategy for contact expansion
+                            let effective_annular_ring = space.technology_strategy.contact_expansion(min_annular_ring_nm);
+                            let pad_diameter_nm = drill_diameter_nm + (2 * effective_annular_ring);
 
                             let circle_segments = space
                                 .fabrication_constraints

@@ -1,0 +1,46 @@
+# three_pads_test.hw
+# Testing DXF export with just three pads - no routing
+# This isolates whether the issue is with pad geometry or pad+trace merging
+
+import * from @std/primitives/units
+import * from "./minimal_pdk"
+
+module ThreePadsTest:
+    pins: [ input In, output Mid, output Out ]
+
+shape Pad(width: Measurement):
+    geometry:
+        Rectangle(width: width, height: width)
+
+shape Barrier(width: Measurement, height: Measurement):
+    geometry:
+        Rectangle(width: width, height: height)
+
+space ThreePads_Space implements ThreePadsTest:
+    dimensions: 3.0um by 1.5um by 50nm
+    resolution: 10nm
+    origin: bl by b
+    profile: ASIC_Flattened
+
+    nets:
+        In:  { classification: signal, potential: 1.8V, current: 0.1uA }
+        Mid: { classification: signal, potential: 0.9V, current: 0.1uA }
+        Out: { classification: signal, potential: 0.0V, current: 0.1uA }
+
+    # Pad A (Left - Net In)
+    add plane(Aluminum) named Pad_A inside: space on layer: metal1:
+        shape: Pad(width: 400nm)
+        at: [300nm, 550nm]
+        net: In
+
+    # Pad B (Right - Net Out)  
+    add plane(Aluminum) named Pad_B inside: space on layer: metal1:
+        shape: Pad(width: 400nm)
+        at: [2300nm, 550nm]
+        net: Out
+
+    # Central Barrier (Net Mid)
+    add plane(Aluminum) named Central_Barrier inside: space on layer: metal1:
+        shape: Barrier(width: 400nm, height: 800nm)
+        at: [1300nm, 350nm]
+        net: Mid

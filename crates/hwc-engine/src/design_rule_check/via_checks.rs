@@ -12,6 +12,7 @@
 use crate::constraint_manager::ConstraintRulebook;
 use crate::geometry::{BoundingBox, Point3D};
 use crate::ContactMetadata;
+use hwc_types::TechnologyStrategy;
 
 use super::types::{DrcReport, DrcViolation};
 
@@ -207,16 +208,30 @@ pub fn validate_drill_to_drill_clearance(
 /// overhang (annular ring) around the drill hole, based on the via's own
 /// metadata rather than searching for overlapping substrate layers.
 ///
+/// v0.2.0: Accepts `technology_strategy` to conditionally apply annular ring
+/// checks. For ASIC technology, annular ring checks are skipped entirely
+/// because ASIC contacts are flush with no overhang.
+///
 /// # Arguments
 /// * `contacts` - All via/contact metadata with bounding boxes
 /// * `constraints` - Constraint rulebook with fabrication limits
+/// * `technology_strategy` - Technology strategy (PCB or ASIC)
 ///
 /// # Returns
 /// DRC report with enclosure violations, or error if data is missing
 pub fn validate_via_enclosure_analytic(
     contacts: &[ContactMetadata],
     constraints: &ConstraintRulebook,
+    technology_strategy: TechnologyStrategy,
 ) -> Result<DrcReport, String> {
+    // v0.2.0: Skip annular ring checks for ASIC technology
+    // ASIC contacts are flush with no overhang - annular ring doesn't apply
+    if technology_strategy.is_asic() {
+        let mut report = DrcReport::new();
+        report.add_info("Annular ring checks skipped for ASIC technology".into());
+        return Ok(report);
+    }
+
     let mut report = DrcReport::new();
 
     let fabrication = constraints.fabrication.as_ref().ok_or_else(|| {

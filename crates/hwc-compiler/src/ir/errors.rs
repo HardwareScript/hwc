@@ -26,6 +26,17 @@ pub enum IrError {
         span: miette::SourceSpan,
     },
 
+    #[error("Space origin not specified for '{space_name}'")]
+    #[diagnostic(
+        code(C32),
+        url("https://docs.hw-script.org/errors/C32"),
+        help("{hint}")
+    )]
+    MissingOrigin {
+        space_name: String,
+        hint: String,
+    },
+
     #[error("Space grid not specified")]
     #[diagnostic(
         code(C33),
@@ -631,6 +642,145 @@ pub enum IrError {
         required_nm: i64,
         #[label("interface capability requires wider trace")]
         span: miette::SourceSpan,
+    },
+
+    // =====================================================================
+    // v0.2.0 Database-Driven Architecture Errors
+    // =====================================================================
+    /// No connection point found for entity on a routing layer.
+    #[error("No connection point for entity '{entity}' on routing layer '{layer}'")]
+    #[diagnostic(
+        code(R40),
+        url("https://docs.hw-script.org/errors/R40"),
+        help(
+            "Entity '{entity}' does not have a registered connection on layer '{layer}'. \
+              Check that a via or contact connects this entity to the target routing layer.\n\n\
+              {hint}"
+        )
+    )]
+    NoConnectionPoint {
+        entity: CompactString,
+        layer: CompactString,
+        hint: String,
+    },
+
+    /// Routing layer Z doesn't match connection Z (compiler bug indicator).
+    #[error("Via connection Z mismatch: entity '{entity}' connection at {connection_z}nm but routing layer '{layer}' expects {expected_z}nm")]
+    #[diagnostic(
+        code(R41),
+        url("https://docs.hw-script.org/errors/R41"),
+        help(
+            "The via connection Z coordinate ({connection_z}nm) doesn't match the routing layer Z ({expected_z}nm). \
+              This indicates a compiler bug in via registration."
+        )
+    )]
+    ConnectionZMismatch {
+        entity: CompactString,
+        connection_z: i64,
+        expected_z: i64,
+        layer: CompactString,
+    },
+
+    /// Pre-routing validation failed.
+    #[error("Pre-routing validation failed for route '{route}' on layer '{layer}'")]
+    #[diagnostic(
+        code(R42),
+        url("https://docs.hw-script.org/errors/R42"),
+        help(
+            "{problem}\n\n{hint}"
+        )
+    )]
+    PreRoutingValidationFailed {
+        route: CompactString,
+        layer: CompactString,
+        problem: String,
+        hint: String,
+    },
+
+    /// Post-routing validation failed.
+    #[error("Post-routing validation failed for net '{net}'")]
+    #[diagnostic(
+        code(R43),
+        url("https://docs.hw-script.org/errors/R43"),
+        help(
+            "{problem}\n\n{hint}"
+        )
+    )]
+    PostRoutingValidationFailed {
+        net: CompactString,
+        problem: String,
+        hint: String,
+    },
+
+    /// Invalid routing layer — not found in the routing layer database.
+    #[error("Invalid routing layer: '{layer}'")]
+    #[diagnostic(
+        code(R44),
+        url("https://docs.hw-script.org/errors/R44"),
+        help(
+            "Layer '{layer}' is not a valid routing layer.\n\n\
+              Available routing layers: {available_layers}"
+        )
+    )]
+    InvalidRoutingLayer {
+        layer: CompactString,
+        available_layers: CompactString,
+    },
+
+    /// Missing route parameter — layer must be specified.
+    #[error("Route missing required parameter: '{parameter}'")]
+    #[diagnostic(
+        code(R45),
+        url("https://docs.hw-script.org/errors/R45"),
+        help(
+            "Every route must explicitly declare which layer to use.\n\n\
+              {hint}"
+        )
+    )]
+    MissingRouteParameter {
+        parameter: CompactString,
+        route: CompactString,
+        hint: String,
+    },
+
+    /// Via connection not found for material pair.
+    #[error("No via connection defined from '{from_material}' to '{to_material}'")]
+    #[diagnostic(
+        code(R46),
+        url("https://docs.hw-script.org/errors/R46"),
+        help(
+            "No bridge rule connects material '{from_material}' to '{to_material}'.\n\n\
+              {hint}"
+        )
+    )]
+    ViaConnectionNotFound {
+        from_material: CompactString,
+        to_material: CompactString,
+        hint: String,
+    },
+
+    /// Layer connection database error.
+    #[error("Layer connection database error: {message}")]
+    #[diagnostic(
+        code(R47),
+        url("https://docs.hw-script.org/errors/R47"),
+        help("{hint}")
+    )]
+    LayerConnectionError {
+        message: String,
+        hint: String,
+    },
+
+    /// Routing layer database error.
+    #[error("Routing layer database error: {message}")]
+    #[diagnostic(
+        code(R48),
+        url("https://docs.hw-script.org/errors/R48"),
+        help("{hint}")
+    )]
+    RoutingLayerError {
+        message: String,
+        hint: String,
     },
 }
 

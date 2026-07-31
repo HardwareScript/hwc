@@ -141,7 +141,7 @@ impl ViaResolver {
         let ViaBridgeContext {
             space,
             net_id,
-            net_name,
+            net_name: _,
             stackup_manager,
         } = *ctx;
         

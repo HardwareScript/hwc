@@ -14,6 +14,7 @@ use crate::material::{MaterialId, MaterialRegistry};
 use crate::netlist::{NetId, NetlistArena};
 
 use compact_str::CompactString;
+use hwc_types::TechnologyStrategy;
 use rustc_hash::FxHashMap;
 
 /// **v0.2.0: Stackup layer information (single source of truth)**
@@ -95,6 +96,12 @@ pub struct HardwareSpace {
     pub substrate_material_id: MaterialId,
     pub view: SpaceView,
 
+    /// **v0.2.0: Coordinate system origin (PROPER ARCHITECTURE)**
+    /// Stores the user-declared coordinate system orientation (e.g., `origin: bl by b`).
+    /// Single source of truth for coordinate transformations, routing direction inference,
+    /// and geometry calculations. Eliminates hardcoded assumptions about axis orientation.
+    pub origin: hwc_parser::OriginPoint,
+
     /// Material registry for dynamic material support
     pub material_registry: MaterialRegistry,
 
@@ -138,6 +145,31 @@ pub struct HardwareSpace {
     /// Ordered list of layers from bottom to top with physical Z-coordinates.
     /// Populated during compilation from the StackupManager.
     pub stackup_layers: Vec<StackupLayer>,
+
+    /// **v0.2.0: Technology strategy determined from PDK profile**
+    /// Set once during compilation and used consistently throughout all subsystems.
+    /// No scattered conditionals - this is the single source of truth.
+    pub technology_strategy: TechnologyStrategy,
+
+    /// **v0.2.0: Hierarchical Routing Database (PROPER ARCHITECTURE)**
+    /// Maintains clear separation between child-instance routes and parent-level
+    /// interconnects. This is the single source of truth for routing connectivity
+    /// validation in hierarchical designs.
+    pub routing_database: crate::routing_database::HierarchicalRoutingDatabase,
+
+    /// **v0.2.0: Database of all routing connection points (PROPER ARCHITECTURE)**
+    /// Maps every entity to its exact layer connections with Z elevations.
+    /// Populated during placement, queried during routing.
+    pub layer_connection_db: crate::layer_connection_database::LayerConnectionDatabase,
+
+    /// **v0.2.0: Database of routing layer Z elevations (PROPER ARCHITECTURE)**
+    /// Single source of truth for which Z coordinate to route on each layer.
+    /// Built from stackup + material registry.
+    pub routing_layer_db: crate::routing_layer_database::RoutingLayerDatabase,
+
+    /// **v0.2.0: Database of via-to-layer mappings (PROPER ARCHITECTURE)**
+    /// Maps material pairs to via connection specs. Built from bridge rules + stackup.
+    pub via_layer_mapping_db: crate::via_layer_mapping_database::ViaLayerMappingDatabase,
 }
 
 impl HardwareSpace {
@@ -148,7 +180,9 @@ impl HardwareSpace {
         substrate_material_id: MaterialId,
         material_registry: MaterialRegistry,
         view: SpaceView,
+        origin: hwc_parser::OriginPoint,
         resolution_nm: i64,
+        technology_strategy: TechnologyStrategy,
     ) -> Self {
         let entity_graph = EntityGraph::new();
         let netlist = NetlistArena::new();
@@ -159,6 +193,7 @@ impl HardwareSpace {
             substrate_material_id,
             material_registry,
             view,
+            origin,
             entity_graph,
             netlist,
             vias: Vec::new(),
@@ -172,6 +207,11 @@ impl HardwareSpace {
             keep_out_zones: Vec::new(),
             resolution_nm,
             stackup_layers: Vec::new(),
+            technology_strategy,
+            routing_database: crate::routing_database::HierarchicalRoutingDatabase::new(),
+            layer_connection_db: crate::layer_connection_database::LayerConnectionDatabase::new(),
+            routing_layer_db: crate::routing_layer_database::RoutingLayerDatabase::default(),
+            via_layer_mapping_db: crate::via_layer_mapping_database::ViaLayerMappingDatabase::default(),
         }
     }
 
@@ -250,7 +290,33 @@ impl HardwareSpace {
         self.component_bboxes.iter()
     }
 
-    /// **v0.1.7: Add an analytic route (GOD-TIER NATIVE API)**
+    /// **v0.2.0: Get analytic routes (read-only view)**
+    ///
+    /// Routes are derived from the routing database. To add routes,
+    /// use `routing_database` methods directly.
+    pub fn get_analytic_routes(&self) -> &[AnalyticTrace] {
+        &self.analytic_routes
+    }
+
+    /// **v0.2.0: Rebuild analytic_routes from routing database**
+    ///
+    /// Called after routing operations complete to sync the derived view.
+    pub fn sync_analytic_routes_from_database(&mut self) {
+        eprintln!("[SYNC] sync_analytic_routes_from_database() called for space '{}'", self.name);
+        eprintln!("[SYNC]   Before sync: analytic_routes.len() = {}", self.analytic_routes.len());
+        
+        self.analytic_routes = self.routing_database.build_analytic_routes(&self.netlist, &self.stackup_layers);
+        
+        eprintln!("[SYNC]   After sync: analytic_routes.len() = {}", self.analytic_routes.len());
+        eprintln!("[SYNC]   Routing database stats:");
+        eprintln!("[SYNC]     - parent_interconnects: {}", self.routing_database.get_parent_interconnects().len());
+    }
+
+    /// **v0.2.0: Add an analytic route (GOD-TIER NATIVE API)**
+    #[deprecated(
+        since = "0.2.0",
+        note = "Use routing_database methods directly. This method will be removed in v0.3.0."
+    )]
     pub fn add_analytic_route(&mut self, route: AnalyticTrace) {
         self.analytic_routes.push(route);
     }
@@ -343,5 +409,62 @@ impl HardwareSpace {
                 }
             }
         }
+    }
+}
+
+/// **v0.2.0: MiterContext implementation for HardwareSpace**
+///
+/// Provides via/contact location queries to the miter engine, allowing it to
+/// preserve connections to via landing pads by skipping miter on terminal segments.
+impl crate::geometry_router::miter_pass::MiterContext for HardwareSpace {
+    fn is_via_endpoint(&self, point: &crate::geometry::Point3D, net_id: Option<NetId>, tolerance_nm: i64) -> bool {
+        // Query contact metadata to check if this point is a via center
+        for contact in &self.contacts {
+            // Skip if net doesn't match (when net filtering is requested)
+            if let Some(query_net) = net_id {
+                if let Some(contact_net_name) = &contact.net {
+                    if let Some(contact_net_id) = self.netlist.get_net_by_name(contact_net_name.as_str()) {
+                        if contact_net_id != query_net {
+                            continue; // Wrong net, skip this contact
+                        }
+                    }
+                }
+            }
+            
+            // Check if point is within tolerance of contact bbox center
+            if let Some(bbox) = contact.bbox {
+                let center_x = (bbox.min.x + bbox.max.x) / 2;
+                let center_y = (bbox.min.y + bbox.max.y) / 2;
+                let center_z = (bbox.min.z + bbox.max.z) / 2;
+                
+                let dx = (point.x - center_x).abs();
+                let dy = (point.y - center_y).abs();
+                let dz = (point.z - center_z).abs();
+                
+                // Check if point is within tolerance of contact center (XY plane)
+                // Z can be different (routing layer vs via center) so check Z separately
+                if dx <= tolerance_nm && dy <= tolerance_nm && dz <= bbox.max.z - bbox.min.z {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+    
+    fn get_contact_bbox(&self, point: &crate::geometry::Point3D, tolerance_nm: i64) -> Option<BoundingBox> {
+        for contact in &self.contacts {
+            if let Some(bbox) = contact.bbox {
+                let center_x = (bbox.min.x + bbox.max.x) / 2;
+                let center_y = (bbox.min.y + bbox.max.y) / 2;
+                
+                let dx = (point.x - center_x).abs();
+                let dy = (point.y - center_y).abs();
+                
+                if dx <= tolerance_nm && dy <= tolerance_nm {
+                    return Some(bbox);
+                }
+            }
+        }
+        None
     }
 }

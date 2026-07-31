@@ -302,6 +302,35 @@ pub fn place_pour(
         );
     }
 
+    // v0.2.0: Register pour surface in layer connection database
+    // Pours exist on a single Z plane, so they register as PourSurface type
+    {
+        let pour_center_x = (bbox.min.x + bbox.max.x) / 2;
+        let pour_center_y = (bbox.min.y + bbox.max.y) / 2;
+        // v0.2.0: Register pour at routing layer bottom Z, not at surface middle Z
+        // The routing layer database expects connection points at the layer's routing elevation
+        let routing_z = bbox.min.z;  // Bottom of the pour layer = routing elevation
+
+        if let Err(e) = space.layer_connection_db.register_surface(
+            &pour.name.base,
+            &layer_name,
+            routing_z,
+            (pour_center_x, pour_center_y),
+            material_id,
+            hwc_engine::layer_connection_database::ConnectionType::PourSurface,
+        ) {
+            eprintln!(
+                "[PLACE_POUR] WARNING: Failed to register pour '{}' connection: {}",
+                pour.name.base, e
+            );
+        } else {
+            eprintln!(
+                "[PLACE_POUR] Registered pour '{}' surface on layer '{}' at routing Z={}nm (layer bottom)",
+                pour.name.base, layer_name, routing_z
+            );
+        }
+    }
+
     // println!(
     //     "   ├─ Registered pour '{}' bbox: min=({:.3}, {:.3}, {:.3}) max=({:.3}, {:.3}, {:.3})",
     //     pour.name,

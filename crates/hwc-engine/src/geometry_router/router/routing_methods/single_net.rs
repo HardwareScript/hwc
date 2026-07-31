@@ -173,10 +173,29 @@ impl GeometryRouter {
         }
 
         // 3. Insert already-routed vector segments directly from the EntityGraph
+        eprintln!(
+            "[SPATIAL INDEX DEBUG] Building spatial index for net {:?}",
+            active_route.net_id
+        );
+        eprintln!(
+            "[SPATIAL INDEX DEBUG] entity_graph.get_all_routes() returned {} route groups",
+            self.entity_graph.get_all_routes().len()
+        );
+        
         for (net_id, segments) in self.entity_graph.get_all_routes() {
+            eprintln!(
+                "[SPATIAL INDEX DEBUG]   Route group: net {:?}, {} segments",
+                net_id,
+                segments.len()
+            );
+            
             // v0.1.8 Same-Net Tapping: If these segments belong to the same net,
             // they are NOT hard obstacles. We can tap into them or overlap them.
             if *net_id == active_route.net_id {
+                eprintln!(
+                    "[SPATIAL INDEX DEBUG]   Skipping net {:?} - same as active route (same-net tapping)",
+                    net_id
+                );
                 continue;
             }
 

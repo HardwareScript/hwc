@@ -1,0 +1,112 @@
+# pmos_transistor.hw
+# Full Physical Synthesis of an Active PMOS Transistor
+# Uses P-type silicon diffusions (Silicon_P) connected to VDD.
+
+import * from @std/primitives/units
+import * from "./minimal_pdk"
+
+export module PMOSTransistor:
+    pins: [input In, output Out, power VDD]
+    route Out to VDD
+
+shape ActiveArea(w: Measurement, h: Measurement):
+    geometry:
+        Rectangle(width: w, height: h)
+
+shape GatePoly(w: Measurement, h: Measurement):
+    geometry:
+        Rectangle(width: w, height: h)
+
+shape PowerRail(w: Measurement, h: Measurement):
+    geometry:
+        Rectangle(width: w, height: h)
+
+export space PMOS_Cell implements PMOSTransistor:
+    # 2.0um wide, 3.0um high, 2.0um depth for proper 3D aspect ratio with thick layers
+    dimensions: 2.0um by 3.0um by 2.0um
+    resolution: 10nm
+    origin: bl by b
+    profile: Silicon_180nm
+
+    nets:
+        In:  { classification: signal, potential: 1.8V, current: 0.1uA }
+        Out: { classification: signal, potential: 1.8V, current: 0.1uA }
+        VDD: { classification: power,  potential: 1.8V, current: 10.0mA }
+
+    # 1. VDD Power Rail (Metal 1)
+    # ALIGNED: Positioned to align with Y=1500nm routing axis
+    add pour(Aluminum) named VDD_Rail on layer: metal1:
+        net: VDD
+        boundary: [x: 0nm, y: 1700nm] to [x: 2000nm, y: 2300nm]
+
+    # 2. Output Landing Pad (Metal 1) - Aligned to center Y for horizontal routing
+    add pour(Aluminum) named Out_Pad on layer: metal1:
+        net: Out
+        boundary: [x: 1200nm, y: 1300nm] to [x: 1800nm, y: 1700nm]
+
+    # 3. PMOS Source (P-type active diffusion - net VDD)
+    # FIX: Changed to Silicon_P for true PMOS operation
+    # ALIGNED: Centered at Y=1500nm for horizontal routing
+    add pour(Silicon_P) named PMOS_Source on layer: active:
+        net: VDD
+        boundary: [x: 400nm, y: 1200nm] to [x: 900nm, y: 1800nm]
+
+    # 4. PMOS Drain (P-type active diffusion - net Out)
+    # FIX: Changed to Silicon_P for true PMOS operation
+    # ALIGNED: Centered at Y=1500nm for horizontal routing
+    add pour(Silicon_P) named PMOS_Drain on layer: active:
+        net: Out
+        boundary: [x: 1100nm, y: 1200nm] to [x: 1600nm, y: 1800nm]
+
+    # 5. PMOS Gate (Vertical Polysilicon strip - net In)
+    # Extended to overlap active diffusions by 100nm on each side
+    # Active edges: X=900nm (Source) and X=1100nm (Drain)
+    # Gate extends: X=800nm to 1200nm (100nm overlap each side)
+    # Aligned to center Y-span for horizontal routing to NMOS gate
+    add pour(Polysilicon) named Gate_Strip on layer: poly:
+        net: In
+        boundary: [x: 800nm, y: 1000nm] to [x: 1200nm, y: 2000nm]
+
+    # 5b. Gate Contact Pad (Metal 1) - Landing pad for gate connection
+    # Positioned at BOTTOM edge of cell for inter-cell routing
+    add pour(Aluminum) named Gate_Pad on layer: metal1:
+        net: In
+        boundary: [x: 900nm, y: 100nm] to [x: 1100nm, y: 300nm]
+
+    # 6. Physical Ohmic Contacts (Silicide interface + Tungsten fill)
+    # Centered exactly inside their respective active diffusion regions
+    # Uses Titanium_Silicide interface to match bridge rules
+    # ALIGNED: Placed at Y=1500nm (center of diffusions) for horizontal routing
+    add contact(Titanium_Silicide) named Via_Source at [x: 650nm, y: 1500nm] spanning layer: active to metal1:
+        net: VDD
+        diameter: 200nm
+        plating_thickness: 5nm
+
+    add contact(Titanium_Silicide) named Via_Drain at [x: 1350nm, y: 1500nm] spanning layer: active to metal1:
+        net: Out
+        diameter: 200nm
+        plating_thickness: 5nm
+
+    # Gate Contact: Connects polysilicon gate to metal1 pad for inter-cell routing
+    add contact(Titanium_Silicide) named Via_Gate at [x: 1000nm, y: 200nm] spanning layer: poly to metal1:
+        net: In
+        diameter: 200nm
+        plating_thickness: 5nm
+
+    # ========================================================================
+    # PHYSICAL INTERCONNECTS (Metal 1 Routing)
+    # ========================================================================
+
+    # Power Strap: Connects PMOS Source up to VDD Rail (Vertical line)
+    route Via_Source to VDD_Rail:
+        net: VDD
+        width: 200nm
+        layer: metal1
+        intent: PowerRail
+
+    # Signal Interconnect: Connects PMOS Drain down to Out Pad (Mitered detour)
+    route Via_Drain to Out_Pad:
+        net: Out
+        width: 200nm
+        layer: metal1
+        intent: Signal

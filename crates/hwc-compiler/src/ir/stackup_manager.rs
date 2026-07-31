@@ -184,9 +184,8 @@ impl StackupManager {
 
     /// Get the thickness of the outermost conductive layer on the specified side.
     ///
-    /// This strictly follows the user-defined stackup. If no conductive layer
-    /// is found on the requested side, it returns an error rather than falling
-    /// back to a hardcoded default (e.g. 35um).
+    /// v0.2.0: Returns an error if no conductive layer is found, rather than
+    /// silently returning 0. The old behavior masked missing stackup layers.
     pub fn outer_conductive_thickness_nm(
         &self,
         side: hwc_parser::MountingSide,
@@ -196,7 +195,12 @@ impl StackupManager {
                 // Search for the first conductive layer from the top
                 for name in self.ordered_layers.iter().rev() {
                     if self.is_layer_conductive(name) {
-                        return Ok(self.get_layer_thickness(name).unwrap_or(0));
+                        return self.get_layer_thickness(name).ok_or_else(|| {
+                            IrError::StackupResolutionFailed {
+                                layer_name: name.clone().into(),
+                                reason: "Conductive layer found but thickness is missing.".into(),
+                            }
+                        });
                     }
                 }
                 Err(IrError::StackupResolutionFailed {
@@ -208,7 +212,12 @@ impl StackupManager {
                 // Search for the first conductive layer from the bottom
                 for name in self.ordered_layers.iter() {
                     if self.is_layer_conductive(name) {
-                        return Ok(self.get_layer_thickness(name).unwrap_or(0));
+                        return self.get_layer_thickness(name).ok_or_else(|| {
+                            IrError::StackupResolutionFailed {
+                                layer_name: name.clone().into(),
+                                reason: "Conductive layer found but thickness is missing.".into(),
+                            }
+                        });
                     }
                 }
                 Err(IrError::StackupResolutionFailed {
@@ -283,6 +292,13 @@ impl StackupManager {
     /// Returns the starting Z (bottom) in nm for a semantic layer.
     pub fn get_layer_start_z(&self, layer_name: &str) -> Option<i64> {
         self.layer_start_z_nm.get(layer_name).copied()
+    }
+
+    /// Returns the centerline Z in nm for a semantic layer.
+    pub fn get_layer_centerline_z(&self, layer_name: &str) -> Option<i64> {
+        let start = self.layer_start_z_nm.get(layer_name).copied()?;
+        let thickness = self.layer_thickness_nm.get(layer_name).copied()?;
+        Some(start + thickness / 2)
     }
 
     /// Resolves any `Elevation` into an absolute Z position in nanometers.

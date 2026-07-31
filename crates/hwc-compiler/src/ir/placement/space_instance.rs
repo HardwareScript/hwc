@@ -295,7 +295,20 @@ pub fn instantiate_sub_space(
         &net_id_map,
     )?;
 
-    transform_analytic_routes(
+    // v0.2.0: Transfer layer connection database entries from child to parent
+    // This ensures that pours and vias registered in the child space are available
+    // for routing in the parent space with their correct hierarchical names
+    transfer_layer_connections(
+        &child_space,
+        parent_space,
+        &transform,
+        &placement.instance_name.base,
+    )?;
+
+    // v0.2.0: Register child routes in the hierarchical routing database
+    // This enables proper connectivity validation and provenance tracking
+    // Routes are now registered ONLY in the routing database, not in analytic_routes directly.
+    register_child_routes_in_database(
         &child_space,
         parent_space,
         &transform,
@@ -1085,8 +1098,82 @@ fn transform_vias(
     Ok(())
 }
 
-/// Transform and copy child analytic routes to the parent space (v0.2.1)
-fn transform_analytic_routes(
+/// Transfer layer connection database entries from child to parent space (v0.2.0)
+///
+/// When a child space is instantiated, all its registered connection points
+/// (from pours, vias, etc.) need to be transferred to the parent space with
+/// hierarchical naming and transformed coordinates.
+fn transfer_layer_connections(
+    child_space: &HardwareSpace,
+    parent_space: &mut HardwareSpace,
+    transform: &FixedTransform2D,
+    instance_name: &str,
+) -> Result<(), IrError> {
+    eprintln!(
+        "[HIERARCHICAL] Transferring layer connection database ({} entities)",
+        child_space.layer_connection_db.registered_entities().count()
+    );
+
+    // Iterate over all entities that have registered connections in the child
+    for entity_name in child_space.layer_connection_db.registered_entities() {
+        // Get all layers this entity connects to
+        if let Some(layers) = child_space.layer_connection_db.get_entity_connections(entity_name) {
+            for layer_name in layers {
+                // Get the connection point
+                if let Ok(conn) = child_space.layer_connection_db.get_connection_point(entity_name, layer_name) {
+                    // Transform the 2D position
+                    let (new_x, new_y, _) = transform.transform_point(
+                        conn.position_2d.0,
+                        conn.position_2d.1,
+                        0, // Z doesn't matter for 2D transform
+                    )?;
+
+                    // Transform the Z elevation
+                    let new_z = conn.z_elevation + transform.offset_z_nm;
+
+                    // Create hierarchical name
+                    let hierarchical_name = format!("{}.{}", instance_name, entity_name);
+
+                    // Register in parent space
+                    let result = parent_space.layer_connection_db.register_surface(
+                        &hierarchical_name,
+                        &conn.layer_name,
+                        new_z,
+                        (new_x, new_y),
+                        conn.material_id,
+                        conn.connection_type,
+                    );
+
+                    if let Err(e) = result {
+                        eprintln!(
+                            "[HIERARCHICAL] WARNING: Failed to transfer connection for '{}' on layer '{}': {}",
+                            hierarchical_name, conn.layer_name, e
+                        );
+                    } else {
+                        eprintln!(
+                            "[HIERARCHICAL] Transferred connection: '{}' -> '{}' on layer '{}' at Z={}nm",
+                            entity_name, hierarchical_name, conn.layer_name, new_z
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Register child instance routes in the hierarchical routing database (v0.2.0)
+///
+/// This function converts the transformed child analytic routes from the last
+/// transform_analytic_routes call into TraceSegments and registers them with
+/// provenance tracking in the parent space's routing database.
+///
+/// This enables:
+/// - Proper hierarchical connectivity validation
+/// - Clear error messages identifying which instance has routing issues  
+/// - Provenance tracking for debugging
+fn register_child_routes_in_database(
     child_space: &HardwareSpace,
     parent_space: &mut HardwareSpace,
     transform: &FixedTransform2D,
@@ -1095,30 +1182,22 @@ fn transform_analytic_routes(
     instance_name: &str,
 ) -> Result<(), IrError> {
     eprintln!(
-        "[HIERARCHICAL] Transforming {} analytic routes for instance '{}'",
+        "[ROUTING DB] Registering {} child routes for instance '{}'",
         child_space.analytic_routes.len(),
         instance_name
     );
 
-    for (idx, route) in child_space.analytic_routes.iter().enumerate() {
-        eprintln!(
-            "[HIERARCHICAL DEBUG] Route {} - net_name='{}', net_id={:?}, segments_count={}",
-            idx, route.net_name, route.net_id, route.segments.len()
-        );
-        for (seg_idx, seg) in route.segments.iter().enumerate() {
-            eprintln!(
-                "[HIERARCHICAL DEBUG]   seg {}: ({},{},{}) -> ({},{},{})",
-                seg_idx, seg.start.x, seg.start.y, seg.start.z, seg.end.x, seg.end.y, seg.end.z
-            );
-        }
-
+    for route in &child_space.analytic_routes {
         // Remap net ID
         let parent_net_id = net_id_map.get(&route.net_id).copied().ok_or_else(|| {
             IrError::PlacementError(format!(
-                "Analytic route with net {:?} has no mapping in net_map",
-                route.net_id
+                "Analytic route with net {:?} has no mapping in net_map for instance '{}'",
+                route.net_id, instance_name
             ))
         })?;
+
+        // Get original child net name for provenance
+        let original_net_name = route.net_name.clone();
 
         // Remap net name
         let parent_net_name = if let Some(parent_name) = net_map.get(&route.net_name) {
@@ -1127,37 +1206,39 @@ fn transform_analytic_routes(
             format!("{}.{}", instance_name, route.net_name).into()
         };
 
-        // Transform each line segment
-        let mut transformed_segments = Vec::with_capacity(route.segments.len());
+        // Convert LineSegments to TraceSegments
+        let mut trace_segments = Vec::with_capacity(route.segments.len());
         for seg in &route.segments {
             let (start_x, start_y, start_z) =
                 transform.transform_point(seg.start.x, seg.start.y, seg.start.z)?;
             let (end_x, end_y, end_z) =
                 transform.transform_point(seg.end.x, seg.end.y, seg.end.z)?;
 
-            transformed_segments.push(hwc_engine::LineSegment::new(
+            trace_segments.push(hwc_engine::geometry::TraceSegment::new(
                 hwc_engine::geometry::Point3D::new(start_x, start_y, start_z),
                 hwc_engine::geometry::Point3D::new(end_x, end_y, end_z),
+                route.cross_section.width_nm,
+                route.material,
             ));
         }
 
-        // Transform layer_z_range if present
-        let parent_layer_z_range = route.layer_z_range.map(|(z_min, z_max)| {
-            (z_min + transform.offset_z_nm, z_max + transform.offset_z_nm)
-        });
+        // Clone for debug print before moving
+        let original_net_name_for_print = original_net_name.clone();
+        let parent_net_name_for_print = parent_net_name.clone();
 
-        // Push transformed route
-        parent_space.analytic_routes.push(hwc_engine::AnalyticTrace::with_layer_z_range(
+        // Register in routing database
+        parent_space.routing_database.register_child_routes(
+            instance_name.into(),
             parent_net_id,
-            route.cross_section,
-            transformed_segments,
-            route.material,
-            parent_net_name,
-            route.current, // keep current rating
-            parent_layer_z_range,
-        ));
+            original_net_name,
+            trace_segments,
+        );
+
+        eprintln!(
+            "[ROUTING DB] Registered child route: instance='{}', net='{}' (parent net='{}', parent net_id={:?}), {} segments",
+            instance_name, original_net_name_for_print, parent_net_name_for_print, parent_net_id, route.segments.len()
+        );
     }
 
     Ok(())
 }
-

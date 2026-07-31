@@ -17,6 +17,7 @@ mod bounding_box_tracker;
 pub mod connection_candidate;
 pub mod connection_interface;
 pub mod constraints;
+pub mod coordinate_system;
 pub mod copper_welder;
 
 pub mod boundary_canonicalization;
@@ -66,7 +67,6 @@ mod stamp_parser;
 pub mod static_geometry_guard;
 pub mod substrate_types;
 pub mod teardrops;
-pub mod technology_strategy; // v0.2.0: PCB/ASIC strategy pattern
 pub mod thermal_relief;
 pub mod topological_router;
 pub mod types;
@@ -154,3 +154,6 @@ pub use topological_router::{
 pub use types::{
     NetRoute, RouteResult, RoutedNet, RoutingError, RoutingHeuristics, Via, ViaSpec, ViaType,
 };
+
+// v0.2.0: Re-export TechnologyStrategy from hwc-types for backward compatibility
+pub use hwc_types::TechnologyStrategy;

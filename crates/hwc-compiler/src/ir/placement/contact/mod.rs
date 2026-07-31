@@ -342,6 +342,65 @@ pub fn place_contact(
         eval_context,
     })?;
 
+    // v0.2.0: Register contact as a routable entity
+    let contact_name_str = contact.name.base.as_str();
+    let net_id = contact.net.as_ref().and_then(|net| {
+        space.netlist.get_net_by_name(net.base.as_str())
+    });
+
+    // v0.2.0: Register via connections in the layer connection database
+    // Use the via-layer mapping database to determine exact connection Z values
+    // instead of guessing from bounding box midpoints.
+    {
+        let from_mat_id = space.material_registry.get_id(&contact.material);
+        let to_mat_id = bridge_material_name.as_ref().and_then(|b| {
+            space.material_registry.get_id(b)
+        });
+
+        // Register connection points for the layers this via spans
+        // The from_elevation and to_elevation give us the semantic layer names
+        let from_layer_name = match &contact.from_elevation {
+            hwc_parser::ast::Elevation::Semantic(ident) => Some(ident.name.as_str()),
+            _ => None,
+        };
+        let to_layer_name = match &contact.to_elevation {
+            hwc_parser::ast::Elevation::Semantic(ident) => Some(ident.name.as_str()),
+            _ => None,
+        };
+
+        if let (Some(from_name), Some(to_name)) = (from_layer_name, to_layer_name) {
+            // CRITICAL FIX: Via connections are at layer interfaces, not layer bottoms
+            // Bottom connection = TOP of the FROM layer (where via exits the lower layer)
+            // Top connection = BOTTOM of the TO layer (where via enters the upper layer)
+            let bottom_connection_z = from_top_nm;  // Top of "active" layer
+            let top_connection_z = to_bottom_nm;    // Bottom of "metal1" layer
+
+            let bottom_mat = from_mat_id.unwrap_or(0);
+            let top_mat = to_mat_id.unwrap_or(from_mat_id.unwrap_or(0));
+
+            if let Err(e) = space.layer_connection_db.register_via(
+                contact_name_str,
+                from_name,
+                bottom_connection_z,
+                to_name,
+                top_connection_z,
+                (xy_point.x, xy_point.y),
+                bottom_mat,
+                top_mat,
+            ) {
+                eprintln!(
+                    "[PLACE_CONTACT] WARNING: Failed to register via connections for '{}': {}",
+                    contact_name_str, e
+                );
+            } else {
+                eprintln!(
+                    "[PLACE_CONTACT] Registered via connections for '{}': {} @ {}nm -> {} @ {}nm",
+                    contact_name_str, from_name, bottom_connection_z, to_name, top_connection_z
+                );
+            }
+        }
+    }
+
     store_contact_metadata(netlist_ops::ContactMetadataStorage {
         space,
         contact,
@@ -356,12 +415,6 @@ pub fn place_contact(
         eval_context,
     });
 
-    // v0.2.0: Register contact as a routable entity
-    let contact_name_str = contact.name.base.as_str();
-    let net_id = contact.net.as_ref().and_then(|net| {
-        space.netlist.get_net_by_name(net.base.as_str())
-    });
-    
     space.entity_graph.register_space_entity(
         contact_name_str,
         contact_bbox,
@@ -384,24 +437,40 @@ pub fn place_contact(
 
         let trace_width_nm = constraints.trace.min_width_nm;
         let clearance_nm = constraints.trace.min_spacing_nm;
-        let middle_z_nm = (contact_bbox.min.z + contact_bbox.max.z) / 2;
+
+        // v0.2.0: Query the layer connection database for the correct connection Z.
+        // This ensures we use the stackup-derived Z, not a guessed midpoint.
+        let connection_z_nm = if let Some(from_name) = match &contact.from_elevation {
+            hwc_parser::ast::Elevation::Semantic(ident) => Some(ident.name.as_str()),
+            _ => None,
+        } {
+            // Try to get the routing Z from the routing layer database
+            space.routing_layer_db
+                .get_routing_z(from_name)
+                .unwrap_or_else(|_| {
+                    // Fall back to top of via bbox if routing layer DB doesn't have this layer
+                    contact_bbox.max.z
+                })
+        } else {
+            contact_bbox.max.z
+        };
 
         use hwc_parser::OriginXY;
         let is_y_upward = matches!(origin.xy, OriginXY::BL | OriginXY::BR);
 
         let geometry = if is_y_upward {
             InterfaceGeometry::Polygon(vec![
-                Point3D::new(contact_bbox.min.x, contact_bbox.min.y, middle_z_nm),
-                Point3D::new(contact_bbox.max.x, contact_bbox.min.y, middle_z_nm),
-                Point3D::new(contact_bbox.max.x, contact_bbox.max.y, middle_z_nm),
-                Point3D::new(contact_bbox.min.x, contact_bbox.max.y, middle_z_nm),
+                Point3D::new(contact_bbox.min.x, contact_bbox.min.y, connection_z_nm),
+                Point3D::new(contact_bbox.max.x, contact_bbox.min.y, connection_z_nm),
+                Point3D::new(contact_bbox.max.x, contact_bbox.max.y, connection_z_nm),
+                Point3D::new(contact_bbox.min.x, contact_bbox.max.y, connection_z_nm),
             ])
         } else {
             InterfaceGeometry::Polygon(vec![
-                Point3D::new(contact_bbox.min.x, contact_bbox.min.y, middle_z_nm),
-                Point3D::new(contact_bbox.min.x, contact_bbox.max.y, middle_z_nm),
-                Point3D::new(contact_bbox.max.x, contact_bbox.max.y, middle_z_nm),
-                Point3D::new(contact_bbox.max.x, contact_bbox.min.y, middle_z_nm),
+                Point3D::new(contact_bbox.min.x, contact_bbox.min.y, connection_z_nm),
+                Point3D::new(contact_bbox.min.x, contact_bbox.max.y, connection_z_nm),
+                Point3D::new(contact_bbox.max.x, contact_bbox.max.y, connection_z_nm),
+                Point3D::new(contact_bbox.max.x, contact_bbox.min.y, connection_z_nm),
             ])
         };
 

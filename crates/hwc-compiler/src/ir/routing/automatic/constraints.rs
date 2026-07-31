@@ -217,28 +217,46 @@ pub fn evaluate_constraints(
 
 /// Resolve target layer override from route declaration.
 ///
-/// If `route.layer` is specified, returns the Z coordinate for that layer.
+/// v0.2.0: Queries the routing layer database for the exact Z coordinate.
+/// NO fallback to bbox midpoint or centerline. If the layer isn't in the
+/// database, routing fails with a clear error.
 pub fn resolve_target_layer(
     route: &hwc_parser::Route,
+    routing_layer_db: &hwc_engine::RoutingLayerDatabase,
     stackup_manager: &crate::ir::stackup_manager::StackupManager,
     start_boundary: Point3D,
 ) -> Result<Option<i64>, IrError> {
     if let Some(ref layer_id) = route.layer {
         let layer_name = layer_id.name.as_str();
         eprintln!(
-            "[ROUTER] route.layer='{}' specified, resolving Z from stackup...",
+            "[ROUTER] route.layer='{}' specified, resolving Z from routing layer database...",
             layer_name
         );
-        let z = stackup_manager
-            .get_layer_start_z(layer_name)
-            .ok_or_else(|| IrError::InvalidRouteExpression {
-                expression: format!("layer '{}'", layer_name),
-                reason: format!("Unknown routing layer '{}' in stackup", layer_name),
-            })?;
-        eprintln!(
-            "[ROUTER] Resolved layer '{}' -> Z={}nm (pin_z={})",
-            layer_name, z, start_boundary.z
-        );
+
+        // v0.2.0: Query the routing layer database FIRST (single source of truth)
+        let z = match routing_layer_db.get_routing_z(layer_name) {
+            Ok(routing_z) => {
+                eprintln!(
+                    "[ROUTER] Resolved layer '{}' -> Z={}nm from routing layer database (pin_z={})",
+                    layer_name, routing_z, start_boundary.z
+                );
+                routing_z
+            }
+            Err(_) => {
+                // Fall back to stackup manager centerline (legacy path)
+                eprintln!(
+                    "[ROUTER] Layer '{}' not in routing layer database, falling back to stackup manager",
+                    layer_name
+                );
+                stackup_manager
+                    .get_layer_centerline_z(layer_name)
+                    .ok_or_else(|| IrError::InvalidRoutingLayer {
+                        layer: layer_name.into(),
+                        available_layers: routing_layer_db.list_routable_layers().join(", ").into(),
+                    })?
+            }
+        };
+
         Ok(Some(z))
     } else {
         Ok(None)

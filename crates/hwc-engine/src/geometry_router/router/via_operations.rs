@@ -116,7 +116,7 @@ impl GeometryRouter {
         // This prevents the router from creating duplicate vias when the user
         // has already placed contacts at specific locations (Bug Fix: Edge-Drop Issue).
        
-        let initial_via_count = vias.len();
+        let _initial_via_count = vias.len();
         vias.retain(|via| {
             let keep = !self.has_existing_contact_at(via.position, via.from_z_nm, via.to_z_nm, net_id);
             if !keep {
@@ -148,7 +148,7 @@ impl GeometryRouter {
         
         let min_z = from_z.min(to_z);
         let max_z = from_z.max(to_z);
-        let net_raw = net_id.raw();
+        let _net_raw = net_id.raw();
         
         // STRUCTURAL FIX: Use self.substrate_layers (populated by route_space) instead of
         // entity_graph.get_substrate_layers() (which only contains component obstacles, not substrate layers).
@@ -159,7 +159,7 @@ impl GeometryRouter {
         };
        
         // Check all substrate layers for existing cylindrical contacts
-        for (idx, layer) in substrate_layers.iter().enumerate() {
+        for (_idx, layer) in substrate_layers.iter().enumerate() {
             // Must be on the same net
             if layer.net != net_id {
                 continue;

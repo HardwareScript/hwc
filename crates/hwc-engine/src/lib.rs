@@ -2,10 +2,14 @@ pub mod constraint_manager;
 pub mod design_rule_check;
 pub mod geometry;
 pub mod geometry_router;
+pub mod layer_connection_database;
 pub mod material;
 pub mod netlist;
 pub mod placement;
+pub mod routing_database;
+pub mod routing_layer_database;
 pub mod space;
+pub mod via_layer_mapping_database;
 
 // Test utilities - available for doc tests and unit tests
 pub mod test_utils;
@@ -72,8 +76,19 @@ pub use geometry_router::{TeardropConfig, TeardropEngine};
 pub use material::{
     ManufacturingProcess, MaterialConductivity, MaterialId, MaterialRegistry, AIR_MATERIAL_ID,
 };
+pub use layer_connection_database::{
+    ConnectionType, LayerConnectionDatabase, LayerConnectionError, RoutingConnectionPoint,
+};
+pub use routing_layer_database::{RoutingLayer, RoutingLayerDatabase, RoutingLayerError};
+pub use via_layer_mapping_database::{
+    BridgeRuleInput, ViaConnection, ViaLayerMappingDatabase, ViaLayerMappingError,
+};
 pub use netlist::{
     ArenaStats, ComponentData, ComponentId, NetData, NetId, NetlistArena, PinData, PinId,
+};
+pub use routing_database::{
+    ConnectivityError, HierarchicalRoutingDatabase, ProvenanceSegment, RouteId, RouteSource,
+    RoutingStatistics,
 };
 pub use space::{
     AnalyticTrace, ContactMetadata, Dimensions, HardwareSpace, KeepOutZone, LineSegment, PadShape,

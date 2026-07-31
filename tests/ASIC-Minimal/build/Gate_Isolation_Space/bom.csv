@@ -1,0 +1,9 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,0.00x0.00x0.00mm,,,,,1
+PMOS_Active,Plane(Silicon_N),,,,,,1
+Gate_Strip,Plane(Polysilicon),,,,,,1
+
+# MATERIAL USAGE (Fabrication)
+Reference,Type,Material,Layer_Z_nm,Area_nm2,Volume_nm3
+PMOS_Active,Pour,Silicon_N,z:0,720000,7200000
+Gate_Strip,Pour,Polysilicon,z:15,240000,2400000

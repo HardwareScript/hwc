@@ -5,6 +5,7 @@ use super::errors::IrError;
 use crate::conversions::profile_to_constraints;
 use hwc_engine::{Dimensions, HardwareSpace, MaterialRegistry, AIR_MATERIAL_ID};
 use hwc_parser::SpaceDefinition;
+use hwc_types::TechnologyStrategy;
 
 /// Create a hardware space from space definition.
 pub fn create_hardware_space(
@@ -159,6 +160,15 @@ pub fn create_hardware_space(
         hwc_engine::SpaceView::Horizontal
     };
 
+    // v0.2.0: Extract origin from space definition (single source of truth)
+    // REQUIRED - no fallback. User must explicitly declare coordinate system.
+    let origin = space_def.origin.ok_or_else(|| IrError::MissingOrigin {
+        space_name: space_def.name.to_string(),
+        hint: "Every space must declare a coordinate system origin.\n\
+               Add to your space definition:\n  origin: bl by b\n\n\
+               Options: bl (bottom-left), br (bottom-right), tl (top-left), tr (top-right)".into(),
+    })?;
+
     // Create hardware space
     let mut space = HardwareSpace::new(
         space_def.name.to_string().into(),
@@ -166,10 +176,13 @@ pub fn create_hardware_space(
         AIR_MATERIAL_ID, // Default substrate material, will be set if substrate specified
         material_registry,
         space_view,
+        origin,
         resolution_nm,
+        TechnologyStrategy::default(),
     );
 
     // Load fabrication constraints from profile (v0.1.6: DRC Integration)
+    // v0.2.0: Extract technology strategy from profile and set it on the space.
     if let Some(profile_name) = &space_def.profile {
         // Look up profile in symbol table
         let profile_def = symbol_table.get_profile(&profile_name.name).map_err(|_e| {
@@ -180,6 +193,10 @@ pub fn create_hardware_space(
 
         // Convert profile to constraints - preserve the actual error instead of masking it
         let constraints = profile_to_constraints(profile_def, symbol_table)?;
+
+        // v0.2.0: Determine technology strategy from annular ring constraint
+        let technology_strategy = TechnologyStrategy::from_annular_ring(constraints.via.min_annular_ring_nm);
+        space.technology_strategy = technology_strategy;
 
         space.fabrication_constraints = Some(constraints);
     }

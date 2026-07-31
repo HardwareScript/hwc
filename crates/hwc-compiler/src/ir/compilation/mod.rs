@@ -130,6 +130,26 @@ pub fn compile_single_space(
     // needing to pass the full StackupManager everywhere.
     space.stackup_layers = stackup_manager.export_stackup_layers();
 
+    // **v0.2.0: Build routing layer database from stackup (single source of truth)**
+    space.routing_layer_db = hwc_engine::RoutingLayerDatabase::from_stackup(
+        &space.stackup_layers,
+        &space.material_registry,
+    );
+    eprintln!(
+        "[DB] Routing layer database built: {} routable layers",
+        space.routing_layer_db.routable_layer_count()
+    );
+
+    // **v0.2.0: Build via-layer mapping database from stackup (single source of truth)**
+    space.via_layer_mapping_db = hwc_engine::ViaLayerMappingDatabase::from_stackup(
+        &space.stackup_layers,
+        &space.material_registry,
+    );
+    eprintln!(
+        "[DB] Via-layer mapping database built: {} connections",
+        space.via_layer_mapping_db.connection_count()
+    );
+
     space_setup::populate_material_registry(&mut space, profile.as_ref(), symbol_table, &eval_context);
     let sorted_ids = dependency_graph::build_and_sort(&placement_items, symbol_table)?;
 
@@ -175,6 +195,22 @@ pub fn compile_single_space(
     )?;
 
     placement_loop::check_static_shorts(&space)?;
+
+    // **v0.2.0: DATABASE-DRIVEN SYNCHRONIZATION**
+    // After placement completes (including hierarchical flattening), synchronize
+    // entity_graph.routed_segments from the routing database.
+    //
+    // This is CRITICAL for hierarchical designs:
+    // - Child routes are registered in routing_database during flattening
+    // - Router builds spatial index from entity_graph.routed_segments
+    // - Without sync, router sees child cell boundaries as hard obstacles
+    // - With sync, router sees child routes as same-net (can tap or route around)
+    //
+    // Architecture principle: routing_database is the source of truth,
+    // entity_graph.routed_segments is a read-only view for obstacle queries.
+    eprintln!("[COMPILATION] Synchronizing entity_graph from routing database...");
+    space.entity_graph.sync_from_routing_database(&space.routing_database);
+    eprintln!("[COMPILATION] Synchronization complete - router can now see child routes as same-net ✓");
 
     let routes_loaded_from_lock =
         routing_phase::try_load_lockfile(&mut space, lockfile_path, force_reroute)?;

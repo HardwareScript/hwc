@@ -22,7 +22,7 @@ impl GeometryRouter {
         target: Point3D,
         trace_width_nm: i64,
     ) -> Point3D {
-        use crate::geometry_router::technology_strategy::TechnologyStrategy;
+        use hwc_types::TechnologyStrategy;
 
         // Read fabrication constraints (zero-magic - no fallbacks)
         let fabrication = self
@@ -33,8 +33,8 @@ impl GeometryRouter {
 
         // v0.2.0: Technology Strategy Pattern
         // Determine PCB vs ASIC routing behavior from min_annular_ring
-        let strategy = TechnologyStrategy::from_constraints(fabrication);
-        let port_escape_clearance = strategy.calculate_port_escape_clearance(
+        let strategy = TechnologyStrategy::from_annular_ring(fabrication.min_annular_ring_nm);
+        let port_escape_clearance = strategy.port_escape_clearance(
             trace_width_nm,
             fabrication.min_trace_spacing_nm,
         );
@@ -295,12 +295,13 @@ impl GeometryRouter {
             self.trace_width_nm,
         );
 
-       
+        eprintln!("[ROUTE_NET_GLOBAL DEBUG] Completed routing for net {:?}:", route.net_id);
+        eprintln!("[ROUTE_NET_GLOBAL DEBUG]   Final path length: {}", final_path.len());
         for (i, p) in final_path.iter().enumerate().take(6) {
-            eprintln!("    [{}]: ({},{},{})", i, p.x, p.y, p.z);
+            eprintln!("[ROUTE_NET_GLOBAL DEBUG]     [{}]: ({},{},{})", i, p.x, p.y, p.z);
         }
         if final_path.len() > 6 {
-            eprintln!("    ... and {} more points", final_path.len() - 6);
+            eprintln!("[ROUTE_NET_GLOBAL DEBUG]     ... and {} more points", final_path.len() - 6);
         }
 
         Ok(RoutedNet {
@@ -359,13 +360,14 @@ impl GeometryRouter {
 
                 let routed = self.route_net_global(&route)?;
 
+                eprintln!("[EXPLICIT_GLOBAL DEBUG] Segment {}->{} routed for net {:?}", i, i+1, net_id);
                 if let Some(path) = routed.paths.first() {
-                   
+                    eprintln!("[EXPLICIT_GLOBAL DEBUG]   Returned path length: {}", path.len());
                     for (j, p) in path.iter().enumerate().take(4) {
-                        eprintln!("  path[{}]: ({},{},{})", j, p.x, p.y, p.z);
+                        eprintln!("[EXPLICIT_GLOBAL DEBUG]   path[{}]: ({},{},{})", j, p.x, p.y, p.z);
                     }
                     if path.len() > 4 {
-                        eprintln!("  ... and {} more points", path.len() - 4);
+                        eprintln!("[EXPLICIT_GLOBAL DEBUG]   ... and {} more points", path.len() - 4);
                     }
                 }
                 if let Some(path) = routed.paths.into_iter().next() {
@@ -380,6 +382,17 @@ impl GeometryRouter {
 
             result.paths.entry(*net_id).or_default().push(net_path);
             result.vias.extend(net_vias);
+        }
+
+        eprintln!("[EXPLICIT_GLOBAL DEBUG] About to return result with {} nets", result.paths.len());
+        for (net_id, path_segments) in &result.paths {
+            eprintln!("[EXPLICIT_GLOBAL DEBUG]   Net {:?}: {} segments", net_id, path_segments.len());
+            for (seg_idx, segment) in path_segments.iter().enumerate() {
+                eprintln!("[EXPLICIT_GLOBAL DEBUG]     Segment {}: {} points", seg_idx, segment.len());
+                for (pt_idx, pt) in segment.iter().enumerate().take(2) {
+                    eprintln!("[EXPLICIT_GLOBAL DEBUG]       Point {}: ({},{},{})", pt_idx, pt.x, pt.y, pt.z);
+                }
+            }
         }
 
         Ok(result)

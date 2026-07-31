@@ -134,4 +134,67 @@ impl EntityGraph {
             self.routed_segments.push((net_id, vec![segment]));
         }
     }
+
+    /// **v0.2.0: DATABASE-DRIVEN SYNCHRONIZATION**
+    ///
+    /// Synchronize routed_segments from the hierarchical routing database.
+    /// This is the ONLY way routed_segments should be populated in hierarchical designs.
+    ///
+    /// # Architecture
+    ///
+    /// - `routing_database` is the single source of truth
+    /// - `entity_graph.routed_segments` is a read-only view for obstacle queries
+    /// - This function rebuilds the view from the database
+    ///
+    /// # When to Call
+    ///
+    /// - After hierarchical flattening completes (all child routes registered)
+    /// - Before parent-level routing begins (so router sees child routes as same-net)
+    /// - After loading from lockfile (to restore routing state)
+    ///
+    /// # Guarantees
+    ///
+    /// - No hardcoded defaults
+    /// - No fallbacks
+    /// - No split-brain between database and entity_graph
+    /// - Child routes are treated as same-net obstacles (not hard obstacles)
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// // After flattening all child instances
+    /// space.entity_graph.sync_from_routing_database(&space.routing_database);
+    ///
+    /// // Now parent-level routing can see child routes as same-net
+    /// route_parent_interconnects(space)?;
+    /// ```
+    pub fn sync_from_routing_database(
+        &mut self,
+        routing_database: &crate::routing_database::HierarchicalRoutingDatabase,
+    ) {
+        eprintln!("[ENTITY_GRAPH SYNC] Synchronizing routed_segments from routing database");
+        eprintln!("[ENTITY_GRAPH SYNC]   Before sync: {} route groups", self.routed_segments.len());
+
+        // CLEAR existing routed_segments - database is source of truth
+        self.routed_segments.clear();
+
+        // REBUILD from database export
+        let database_routes = routing_database.export_as_routed_segments();
+        
+        eprintln!("[ENTITY_GRAPH SYNC]   Database provided {} route groups", database_routes.len());
+
+        for (net_id, segments) in database_routes {
+            if !segments.is_empty() {
+                eprintln!(
+                    "[ENTITY_GRAPH SYNC]   Syncing net {:?}: {} segments",
+                    net_id,
+                    segments.len()
+                );
+                self.routed_segments.push((net_id, segments));
+            }
+        }
+
+        eprintln!("[ENTITY_GRAPH SYNC]   After sync: {} route groups", self.routed_segments.len());
+        eprintln!("[ENTITY_GRAPH SYNC]   Synchronization complete ✓");
+    }
 }

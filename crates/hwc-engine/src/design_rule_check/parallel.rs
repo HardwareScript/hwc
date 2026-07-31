@@ -45,7 +45,7 @@ pub fn validate_physics_parallel(
     }
 
     // 5. Via Enclosure Validation
-    let via_enclosure_report = validate_via_enclosure_analytic(&space.contacts, constraints)?;
+    let via_enclosure_report = validate_via_enclosure_analytic(&space.contacts, constraints, space.technology_strategy)?;
     for violation in via_enclosure_report.violations {
         report.add_violation(violation);
     }

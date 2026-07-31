@@ -44,6 +44,10 @@ pub fn resolve_solder_mask_thickness(
 }
 
 /// Create the stackup manager.
+///
+/// v0.2.0: NO FALLBACK. If the stackup fails to resolve, compilation fails
+/// with a clear error. The old code created an empty StackupManager which
+/// silently produced incorrect routing geometry.
 pub fn create_stackup_and_materials(
     profile: Option<&hwc_parser::ProfileDefinition>,
     symbol_table: &SymbolTable,
@@ -59,18 +63,14 @@ pub fn create_stackup_and_materials(
         resolution_nm,
         origin_z,
         solder_mask_thickness_nm,
-    )
-    .unwrap_or_else(|_| {
-        crate::ir::stackup_manager::StackupManager::new(
-            None,
-            symbol_table,
-            eval_context,
-            resolution_nm,
-            origin_z,
-            solder_mask_thickness_nm,
-        )
-        .expect("Failed to create fallback StackupManager")
-    });
+    )?;
+
+    if stackup_manager.layer_count() == 0 {
+        return Err(IrError::MissingAsicConstraint {
+            message: "No stackup layers defined in profile".into(),
+            hint: "Add a 'stackup:' block to your profile with at least one layer definition.\n\nExample:\n  stackup:\n    active: material: Silicon, thickness: 400nm\n    metal1: material: Aluminum, thickness: 400nm".into(),
+        });
+    }
 
     Ok(stackup_manager)
 }

@@ -727,6 +727,34 @@ pub fn place_plane(
         0
     };
 
+    // v0.2.0: Register plane surface in layer connection database
+    // Planes exist on a single Z plane, so they register as PlaneSurface type
+    {
+        let plane_center_x = (start_with_z.x + end_with_z.x) / 2;
+        let plane_center_y = (start_with_z.y + end_with_z.y) / 2;
+        // Register plane at routing layer bottom Z (same as pours)
+        let routing_z = start_with_z.z;  // Bottom of the plane layer = routing elevation
+
+        if let Err(e) = space.layer_connection_db.register_surface(
+            &plane.name.base,
+            &layer_name,
+            routing_z,
+            (plane_center_x, plane_center_y),
+            material_id,
+            hwc_engine::layer_connection_database::ConnectionType::PourSurface,
+        ) {
+            eprintln!(
+                "[PLACE_PLANE] WARNING: Failed to register plane '{}' connection: {}",
+                plane.name.base, e
+            );
+        } else {
+            eprintln!(
+                "[PLACE_PLANE] Registered plane '{}' surface on layer '{}' at routing Z={}nm (layer bottom)",
+                plane.name.base, layer_name, routing_z
+            );
+        }
+    }
+
     // v0.1.9: Register as substrate layer so routing can see it as an obstacle
     // Planes with net_id are conductive pours, planes without net_id are keepout zones
     let bbox = hwc_engine::geometry::BoundingBox::new(start_with_z, end_with_z);

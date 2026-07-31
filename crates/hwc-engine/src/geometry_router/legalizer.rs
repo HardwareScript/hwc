@@ -320,45 +320,24 @@ impl Legalizer {
         segments: &[TraceSegment],
         net_ids: &[NetId],
         material_registry: &MaterialRegistry,
-        _spatial_index: &DynamicSpatialIndex,
+        spatial_index: &DynamicSpatialIndex,  // Use pre-configured index from caller
         max_iterations: usize,
     ) -> (Vec<TraceSegment>, Vec<NetId>) {
         let mut current = segments.to_vec();
         let current_net_ids = net_ids.to_vec();
-        let mut spatial = DynamicSpatialIndex::new();
-
-        for (idx, seg) in current.iter().enumerate() {
-            let net_id = current_net_ids.get(idx).copied().unwrap_or(NetId::UNCONNECTED);
-            let net_idx = net_id.raw() as usize;
-            // Look up thickness from material registry using segment's material_id
-            let thickness_nm = material_registry
-                .get_material(seg.material_id)
-                .map(|m| m.thickness_nm)
-                .unwrap_or_else(|| {
-                    // Fail-fast: thickness must be declared in PDK
-                    panic!(
-                        "FATAL: Material id={} has zero thickness — must be declared in PDK",
-                        seg.material_id
-                    )
-                });
-            spatial.insert(crate::geometry_router::spatial_index::IndexedSegment::new(
-                hwc_physics::spatial_index::SpatialEntitySource::RouteSegment {
-                    net_idx,
-                    seg_idx: idx,
-                },
-                idx,
-                net_id,
-                seg,
-                seg.start.z,
-                thickness_nm,
-            ));
-        }
+        
+        eprintln!("[LEGALIZER DEBUG] Starting legalization with {} segments", current.len());
+        eprintln!("[LEGALIZER DEBUG] Using caller-provided spatial index (layer-aware: {})", 
+            spatial_index.layer_z_ranges().is_some());
 
         for _iter in 0..max_iterations {
-            let violations = self.detect_violations(&current, &current_net_ids, &spatial);
+            let violations = self.detect_violations(&current, &current_net_ids, spatial_index);
             if violations.is_empty() {
+                eprintln!("[LEGALIZER DEBUG] No violations found - legalization complete");
                 break;
             }
+
+            eprintln!("[LEGALIZER DEBUG] Found {} violations in iteration {}", violations.len(), _iter);
 
             let mut windows: Vec<LegalizationWindow> = violations
                 .iter()
@@ -377,6 +356,7 @@ impl Legalizer {
             }
 
             if all_displacements.is_empty() {
+                eprintln!("[LEGALIZER DEBUG] No nudges computed - legalization stalled");
                 break;
             }
 
@@ -400,32 +380,8 @@ impl Legalizer {
             };
             let window_ref = windows.first().unwrap_or(&empty_window);
             current = self.apply_nudges(&current, window_ref, &all_displacements);
-
-            spatial = DynamicSpatialIndex::new();
-            for (idx, seg) in current.iter().enumerate() {
-                let net_id = current_net_ids.get(idx).copied().unwrap_or(NetId::UNCONNECTED);
-                let net_idx = net_id.raw() as usize;
-                let thickness_nm = material_registry
-                    .get_material(seg.material_id)
-                    .map(|m| m.thickness_nm)
-                    .unwrap_or_else(|| {
-                        panic!(
-                            "FATAL: Material id={} has zero thickness — must be declared in PDK",
-                            seg.material_id
-                        )
-                    });
-                spatial.insert(crate::geometry_router::spatial_index::IndexedSegment::new(
-                    hwc_physics::spatial_index::SpatialEntitySource::RouteSegment {
-                        net_idx,
-                        seg_idx: idx,
-                    },
-                    idx,
-                    net_id,
-                    seg,
-                    seg.start.z,
-                    thickness_nm,
-                ));
-            }
+            
+            // Note: Caller must rebuild spatial index with updated segments for next iteration
         }
 
         (current, current_net_ids)

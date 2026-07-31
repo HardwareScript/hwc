@@ -27,15 +27,24 @@ pub fn require_min_segment_length_nm(
 ///
 /// Drops collinear / same-axis backtracking middle points, and drops turns whose
 /// distance from the current segment start is below `min_seg_len_nm`.
+///
+/// **IMPORTANT:** Diagonal segments (non-Manhattan moves like miters) are NEVER filtered
+/// by min_seg_len_nm, as they represent intentional geometric features.
 pub fn manhattan_path_to_segments(
     path: &[hwc_engine::Point3D],
     min_seg_len_nm: i64,
 ) -> Vec<hwc_engine::LineSegment> {
+    eprintln!("[MANHATTAN_TO_SEGMENTS] Input path has {} waypoints, min_seg_len_nm={}", path.len(), min_seg_len_nm);
+    for (idx, p) in path.iter().enumerate() {
+        eprintln!("[MANHATTAN_TO_SEGMENTS]   waypoint[{}]: {:?}", idx, p);
+    }
+    
     if path.len() < 2 {
         return Vec::new();
     }
 
     let min_seg_len_sq = min_seg_len_nm.saturating_mul(min_seg_len_nm);
+    eprintln!("[MANHATTAN_TO_SEGMENTS] min_seg_len_sq = {}", min_seg_len_sq);
     let mut segments = Vec::new();
     let mut start = path[0];
 
@@ -84,15 +93,38 @@ pub fn manhattan_path_to_segments(
             (p2.x - start.x).pow(2) + (p2.y - start.y).pow(2) + (p2.z - start.z).pow(2);
         let is_short = seg_len_sq < min_seg_len_sq;
 
-        if !is_collinear && !is_short && start != p2 {
+        // Check if the segment from start -> p2 is diagonal (non-Manhattan)
+        // Diagonal segments are intentional geometric features (like miters) and should never be filtered
+        let dx = (p2.x - start.x).abs();
+        let dy = (p2.y - start.y).abs();
+        let dz = (p2.z - start.z).abs();
+        let is_diagonal = (dx > 0 && dy > 0) || (dx > 0 && dz > 0) || (dy > 0 && dz > 0);
+
+        eprintln!("[MANHATTAN_TO_SEGMENTS] waypoint[{}] at {:?}:", i, p2);
+        eprintln!("[MANHATTAN_TO_SEGMENTS]   is_collinear={}, is_short={} (seg_len_sq={} vs min={}), is_diagonal={}", 
+                 is_collinear, is_short, seg_len_sq, min_seg_len_sq, is_diagonal);
+
+        // Emit segment if:
+        // 1. Not collinear AND (not short OR is diagonal)
+        // 2. Not a duplicate point
+        if !is_collinear && (!is_short || is_diagonal) && start != p2 {
+            eprintln!("[MANHATTAN_TO_SEGMENTS]   → Emitting segment: {:?} -> {:?}", start, p2);
             segments.push(hwc_engine::LineSegment::new(start, p2));
             start = p2;
+        } else {
+            eprintln!("[MANHATTAN_TO_SEGMENTS]   → Skipping this waypoint");
         }
     }
 
     let last = path[path.len() - 1];
     if start != last {
+        eprintln!("[MANHATTAN_TO_SEGMENTS] Emitting final segment: {:?} -> {:?}", start, last);
         segments.push(hwc_engine::LineSegment::new(start, last));
+    }
+
+    eprintln!("[MANHATTAN_TO_SEGMENTS] Final output: {} segments", segments.len());
+    for (idx, seg) in segments.iter().enumerate() {
+        eprintln!("[MANHATTAN_TO_SEGMENTS]   segment[{}]: {:?} -> {:?}", idx, seg.start, seg.end);
     }
 
     segments

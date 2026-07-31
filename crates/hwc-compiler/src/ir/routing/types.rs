@@ -67,7 +67,13 @@ pub struct ResolvedRoute {
     /// Net name for debugging and error messages
     pub net_name: CompactString,
 
+    /// v0.2.0: Routing layer name (REQUIRED for database lookups)
+    /// This is the single source of truth for which layer to route on.
+    /// Database queries use this to find exact connection Z coordinates.
+    pub layer_name: CompactString,
+
     /// Optional layer override (target Z coordinate)
+    /// DEPRECATED in v0.2.0: Use layer_name + database instead
     pub target_layer_z: Option<i64>,
 
     /// Operating current capability in milliamps (from current_limit_ac.peak)
@@ -85,12 +91,15 @@ pub struct ResolvedRoute {
 
 impl ResolvedRoute {
     /// Create a new resolved route with entity endpoints.
+    /// 
+    /// v0.2.0: layer_name is now REQUIRED for database-driven routing.
     pub fn new(
         net_id: NetId,
         from: EntityId,
         to: EntityId,
         width_nm: i64,
         net_name: CompactString,
+        layer_name: CompactString,
     ) -> Self {
         Self {
             net_id,
@@ -98,6 +107,7 @@ impl ResolvedRoute {
             to,
             width_nm,
             net_name,
+            layer_name,
             target_layer_z: None,
             current_capability_ma: 0.0,
             actual_current_ma: 0.0,

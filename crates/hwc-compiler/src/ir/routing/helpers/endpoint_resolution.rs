@@ -24,7 +24,7 @@ pub fn construct_entity_name(
             // Format: "InstanceName.EntityName" where EntityName is the space pour/pad
             // This gets parsed as ComponentPin but should be treated as SpaceEntity
             let full_name = if let Some(ref index_expr) = component_index {
-                let index_value = evaluate_index_expression(index_expr)?;
+                let _index_value = evaluate_index_expression(index_expr)?;
                 format!("{}", component_name)  
             } else {
                 format!("{}.{}", component_name, pin_name)

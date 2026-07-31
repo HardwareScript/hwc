@@ -98,12 +98,20 @@ impl<'a> AutoRouter<'a> {
 
         let trace_width_nm = declared_width_nm.unwrap_or(min_width_nm);
 
-        // STRUCTURAL FIX: For 3D paths with Z transitions, create segments directly from waypoints
-        // instead of using manhattan_path_to_segments which has buggy collinear logic for 3D
+        // STRUCTURAL FIX: Detect if path contains diagonal (non-Manhattan) segments
+        // Diagonal segments indicate intentional geometric features (miters, etc.) that must be preserved exactly
         let has_z_transitions = path.windows(2).any(|w| w[0].z != w[1].z);
+        let has_diagonal_segments = path.windows(2).any(|w| {
+            let dx = (w[1].x - w[0].x).abs();
+            let dy = (w[1].y - w[0].y).abs();
+            let dz = (w[1].z - w[0].z).abs();
+            // Diagonal if moving in 2+ dimensions simultaneously
+            (dx > 0 && dy > 0) || (dx > 0 && dz > 0) || (dy > 0 && dz > 0)
+        });
         
-        let segments = if has_z_transitions {
-            eprintln!("[REGISTRY] Path has Z transitions - creating segments directly from {} waypoints", path.len());
+        let segments = if has_z_transitions || has_diagonal_segments {
+            eprintln!("[REGISTRY] Path has Z transitions or diagonals - creating segments directly from {} waypoints", path.len());
+            eprintln!("[REGISTRY]   has_z_transitions={}, has_diagonal_segments={}", has_z_transitions, has_diagonal_segments);
             let mut segs = Vec::new();
             for i in 0..path.len() - 1 {
                 segs.push(hwc_engine::LineSegment::new(path[i], path[i + 1]));
@@ -111,7 +119,7 @@ impl<'a> AutoRouter<'a> {
             eprintln!("[REGISTRY] Created {} segments directly", segs.len());
             segs
         } else {
-            eprintln!("[REGISTRY] Path is planar - using manhattan_path_to_segments");
+            eprintln!("[REGISTRY] Path is pure Manhattan - using manhattan_path_to_segments");
             let min_seg_len_nm =
                 crate::ir::routing::helpers::require_min_segment_length_nm(self.profile)?;
             crate::ir::routing::helpers::manhattan_path_to_segments(&path, min_seg_len_nm)
@@ -161,25 +169,14 @@ impl<'a> AutoRouter<'a> {
             .unwrap_or(0.0);
 
         // **v0.2.0 STRUCTURAL FIX: Compute layer_z_range for horizontal traces**
-        let layer_z_range = if let Some(first_seg) = segments.first() {
-            // Check if this is a horizontal trace (all segments at same Z)
-            let is_horizontal = segments
-                .iter()
-                .all(|s| s.start.z == first_seg.start.z && s.end.z == first_seg.start.z);
-
-            if is_horizontal {
-                let centerline_z = first_seg.start.z;
-                // Look up the layer from HardwareSpace's stackup (single source of truth)
-                self.space
-                    .find_layer_at_z(centerline_z)
-                    .map(|layer| (layer.z_bottom, layer.z_top))
-            } else {
-                // Via or multi-layer trace: segments encode their own Z spans
-                None
-            }
-        } else {
-            None
-        };
+        // Find the Z of the first horizontal segment (start.z == end.z) and look up its
+        // layer. Traces can have via-stitch segments at the start/end while still being
+        // a single-layer route, so we must not require ALL segments to share the same Z.
+        let layer_z_range = segments
+            .iter()
+            .find(|s| s.start.z == s.end.z)
+            .and_then(|s| self.space.find_layer_at_z(s.start.z))
+            .map(|layer| (layer.z_bottom, layer.z_top));
 
         let trace = AnalyticTrace::with_layer_z_range(
             net_id,
@@ -191,7 +188,16 @@ impl<'a> AutoRouter<'a> {
             layer_z_range,
         );
 
-        self.space.analytic_routes.push(trace);
+        // v0.2.0: Register directly in the routing database (single source of truth)
+        let from_entity = format!("auto_route_{}_start", net_name);
+        let to_entity = format!("auto_route_{}_end", net_name);
+
+        self.space.routing_database.register_autorouter_route(
+            trace,
+            from_entity.into(),
+            to_entity.into(),
+        ).map_err(|e| IrError::RoutingError(e))?;
+
         Ok(())
     }
 }

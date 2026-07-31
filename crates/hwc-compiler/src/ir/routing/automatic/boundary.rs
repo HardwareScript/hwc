@@ -4,7 +4,6 @@
 //! This replaces the legacy direct port_escape calls with interface-aware routing.
 
 use crate::ir::errors::IrError;
-use crate::ir::routing::helpers::get_pin_positions;
 use compact_str::CompactString;
 use hwc_engine::geometry_router::interface_escape::calculate_interface_escape;
 use hwc_engine::geometry_router::port_escape::{CardinalPort, EdgeOffset, NamedPosition};
@@ -334,10 +333,60 @@ pub fn calculate_boundary_points(
         }
     };
 
-    let (start_pin_center, goal_pin_center) = get_pin_positions(space, route)?;
+    // v0.2.0: Query layer connection database instead of using bbox center
+    // The route must declare which layer it's routing on
+    let routing_layer = route.layer.as_ref().ok_or_else(|| IrError::MissingRouteParameter {
+        parameter: "layer".into(),
+        route: format!("route from {:?} to {:?}", route.from, route.to).into(),
+        hint: "Every route must declare the routing layer explicitly.\n\
+               Example: route A to B:\n    layer: metal1".into(),
+    })?;
+    let routing_layer_str = routing_layer.as_str();
 
     let from_label = crate::ir::routing::helpers::construct_entity_name(&route.from)?;
     let to_label = crate::ir::routing::helpers::construct_entity_name(&route.to)?;
+
+    // Query database for connection points on the routing layer
+    let start_conn = space
+        .layer_connection_db
+        .get_connection_point(&from_label, routing_layer_str)
+        .map_err(|e| IrError::InvalidRouteExpression {
+            expression: format!("route from {}", from_label),
+            reason: format!(
+                "Entity '{}' has no connection point on layer '{}': {}",
+                from_label, routing_layer, e
+            ),
+        })?;
+
+    let goal_conn = space
+        .layer_connection_db
+        .get_connection_point(&to_label, routing_layer_str)
+        .map_err(|e| IrError::InvalidRouteExpression {
+            expression: format!("route to {}", to_label),
+            reason: format!(
+                "Entity '{}' has no connection point on layer '{}': {}",
+                to_label, routing_layer, e
+            ),
+        })?;
+
+    // Use connection points from database (not bbox centers!)
+    let start_pin_center = Point3D::new(
+        start_conn.position_2d.0,
+        start_conn.position_2d.1,
+        start_conn.z_elevation, // FROM DATABASE!
+    );
+
+    let goal_pin_center = Point3D::new(
+        goal_conn.position_2d.0,
+        goal_conn.position_2d.1,
+        goal_conn.z_elevation, // FROM DATABASE!
+    );
+
+    eprintln!(
+        "[CIR BOUNDARY] From database: {} = ({}, {}, {}nm), {} = ({}, {}, {}nm)",
+        from_label, start_pin_center.x, start_pin_center.y, start_pin_center.z,
+        to_label, goal_pin_center.x, goal_pin_center.y, goal_pin_center.z
+    );
 
     // v0.1.9: Obstacle-aware auto-port selection
     // Uses topological ray-casting to select escape ports with maximum clearance

@@ -155,7 +155,13 @@ impl<'a> AutoRouter<'a> {
         for (idx, resolved) in data.resolved_routes.iter().enumerate() {
             match crate::ir::routing::resolve_route_boundary_points(self.space, resolved, resolved.width_nm) {
                 Ok((start, goal, start_normal, goal_normal)) => {
+                    eprintln!("[ENGINE DEBUG] Route {} ({}): boundary resolution returned start=({},{},{}), goal=({},{},{})",
+                        idx, resolved.net_name, start.x, start.y, start.z, goal.x, goal.y, goal.z);
+                    
                     explicit_segments.push((resolved.net_id, vec![start, goal]));
+                    
+                    eprintln!("[ENGINE DEBUG] Route {} ({}): pushed to explicit_segments",
+                        idx, resolved.net_name);
                     
                     // Convert Point3D normals (i64) to Normal2D (i32) - safe for unit vectors scaled by 10^9
                     let start_normal_2d = hwc_engine::geometry_router::connection_interface::Normal2D {
@@ -232,6 +238,14 @@ impl<'a> AutoRouter<'a> {
         );
 
         let net_trace_widths_by_id = self.build_net_trace_widths(data);
+
+        eprintln!("[ENGINE DEBUG] About to call route_space with {} explicit segments:", explicit_segments.len());
+        for (i, (net_id, points)) in explicit_segments.iter().enumerate() {
+            eprintln!("[ENGINE DEBUG]   Segment {} (net {:?}): {} points", i, net_id, points.len());
+            for (j, p) in points.iter().enumerate() {
+                eprintln!("[ENGINE DEBUG]     Point {}: ({},{},{})", j, p.x, p.y, p.z);
+            }
+        }
 
         geo_router
             .route_space(RouteSpaceRequest {

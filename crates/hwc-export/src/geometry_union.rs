@@ -98,14 +98,16 @@ pub fn stroke_route_segments(
     let paths_to_offset = vec![path1d];
 
     // STROKE THE PATH: Use Clipper2's native offsetting to generate perfect mitered outlines
-    // - JoinType::Miter calculates exact angle bisectors at corners
-    // - EndType::Square provides square end caps at start/goal
+    // - JoinType::Miter calculates exact angle bisectors at corners (reduces current crowding)
+    // - EndType::Butt creates flush ends at trace endpoints
+    //   The router is responsible for generating waypoints that properly cover via/pad
+    //   landing areas, so we don't artificially extend traces here.
     // - Miter limit of 2.0 prevents infinite spikes at very sharp angles
     clipper2_rust::inflate_paths_64(
         &paths_to_offset,
         width_nm as f64 / 2.0, // Delta offset (half-width)
-        JoinType::Miter,       // Perfect mitered corners
-        EndType::Square,       // Square end caps
+        JoinType::Miter,       // Perfect mitered corners for signal integrity
+        EndType::Butt,         // Flush ends - router provides proper landing geometry
         2.0,                   // Miter limit
         0.0,                   // Precision (0.0 = auto)
     )

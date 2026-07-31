@@ -73,31 +73,32 @@ impl<'a> AutoRouter<'a> {
 
                 match crate::ir::routing::resolve_endpoint_entity_ids(&modified_route) {
                     Ok((from_id, to_id)) => {
-                        let resolved = self.create_resolved_route(
+                        match self.create_resolved_route(
                             actual_net_id,
                             from_id,
                             to_id,
                             route_width_nm,
                             &net_name,
                             &modified_route,
-                        );
-                        resolved_routes.push(resolved);
-                        net_id_to_name.insert(actual_net_id, net_name.clone());
+                        ) {
+                            Ok(resolved) => {
+                                resolved_routes.push(resolved);
+                                net_id_to_name.insert(actual_net_id, net_name.clone());
 
-                        if let Some(ref layer_id) = route.layer {
-                            if let Some(target_z) =
-                                self.stackup_manager.get_layer_start_z(&layer_id.name)
-                            {
-                                net_layer_targets.insert(net_name.clone(), target_z);
-                                net_layer_targets_by_id.insert(actual_net_id, target_z);
-                                eprintln!("[ROUTING BUILDER] Route for net '{}' (id={}) has explicit layer '{}' at Z={}nm", 
-                                    net_name, actual_net_id.raw(), layer_id.name, target_z);
-                            }
-                        }
-                        if let Some(ref width_expr) = route.width {
-                            if let Ok(w_nm) = crate::ir::conversions::evaluate_expression_to_nm(
-                                width_expr,
-                                self.symbol_table,
+                                if let Some(ref layer_id) = route.layer {
+                                    // v0.2.0: Query routing layer database for routing Z elevation
+                                    // Use the layer bottom Z (routing elevation) not the centerline
+                                    if let Ok(routing_z) = self.space.routing_layer_db.get_routing_z(&layer_id.name) {
+                                        net_layer_targets.insert(net_name.clone(), routing_z);
+                                        net_layer_targets_by_id.insert(actual_net_id, routing_z);
+                                        eprintln!("[ROUTING BUILDER] Route for net '{}' (id={}) targets layer '{}' at routing Z={}nm", 
+                                            net_name, actual_net_id.raw(), layer_id.name, routing_z);
+                                    }
+                                }
+                                if let Some(ref width_expr) = route.width {
+                                    if let Ok(w_nm) = crate::ir::conversions::evaluate_expression_to_nm(
+                                        width_expr,
+                                        self.symbol_table,
                                 self.eval_context,
                             ) {
                                 net_declared_widths.insert(net_name.clone(), w_nm);
@@ -123,6 +124,12 @@ impl<'a> AutoRouter<'a> {
                         } else {
                             eprintln!("[ROUTING BUILDER] Route from {:?} to {:?} has NO intent for net '{}'", 
                                 route.from, route.to, net_name);
+                        }
+                            }
+                            Err(e) => {
+                                eprintln!("[ROUTER ERROR] Failed to create resolved route for net '{}': {:?}", net_name, e);
+                                return Err(e);
+                            }
                         }
                     }
                     Err(e) => {
@@ -333,7 +340,7 @@ impl<'a> AutoRouter<'a> {
         width_nm: i64,
         net_name: &CompactString,
         route: &hwc_parser::Route,
-    ) -> crate::ir::routing::types::ResolvedRoute {
+    ) -> Result<crate::ir::routing::types::ResolvedRoute, IrError> {
         let convert_escape =
             |esc: &Option<hwc_parser::RouteEscape>| -> crate::ir::routing::types::EscapeSpec {
                 match esc {
@@ -376,24 +383,42 @@ impl<'a> AutoRouter<'a> {
                 }
             };
 
+        // v0.2.0 DATABASE-DRIVEN: Layer name is REQUIRED (no fallbacks)
+        let layer_name = route
+            .layer
+            .as_ref()
+            .map(|layer_id| layer_id.name.clone())
+            .ok_or_else(|| IrError::MissingRouteParameter {
+                route: format!("{:?} to {:?}", route.from, route.to).into(),
+                parameter: "layer".into(),
+                hint: "Every route MUST explicitly declare which layer to use.\n\
+                       Example:\n\
+                         route A to B:\n\
+                           layer: metal1\n\
+                           width: 200nm".into(),
+            })?;
+
         let mut resolved = crate::ir::routing::types::ResolvedRoute::new(
             net_id,
             from_id,
             to_id,
             width_nm,
             net_name.clone(),
+            layer_name,
         )
         .with_escapes(
             convert_escape(&route.exit_escape),
             convert_escape(&route.enter_escape),
         );
 
+        // DEPRECATED: target_layer_z override is no longer used
+        // Layer Z is now queried from RoutingLayerDatabase during routing
         if let Some(ref layer_id) = route.layer {
-            if let Some(target_z) = self.stackup_manager.get_layer_start_z(&layer_id.name) {
+            if let Some(target_z) = self.stackup_manager.get_layer_centerline_z(&layer_id.name) {
                 resolved = resolved.with_layer_override(target_z);
             }
         }
 
-        resolved
+        Ok(resolved)
     }
 }

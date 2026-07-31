@@ -1,0 +1,72 @@
+# cmos_inverter.hw
+# Hierarchical Integration of PMOS and NMOS Cells to form a CMOS Inverter
+# Demonstrates pure modular compilation and continuous coordinate transforms.
+
+import * from @std/primitives/units
+import * from "./minimal_pdk"
+
+# Import all exports from transistor files
+import * from "./pmos_transistor"
+import * from "./nmos_transistor"
+
+# 1. Define the Logical CMOS Inverter Schematic (RTL / Netlist)
+module CMOSInverter:
+    pins: [input In, output Out, power VDD, ground GND]
+
+    # Declare the logical connectivity
+    route In to VDD
+    route Out to GND
+
+# 2. Synthesize the Physical Inverter Space
+space Inverter_Cell implements CMOSInverter:
+    # Large enough to hold both 2.0um x 3.0um cells with 1.0um routing channel
+    dimensions: 5.0um by 3.0um by 2.0um
+    resolution: 10nm
+    origin: bl by b
+    profile: Silicon_180nm
+
+    nets:
+        In:  { classification: signal, potential: 1.8V, current: 0.1uA }
+        Out: { classification: signal, potential: 1.8V, current: 0.1uA }
+        VDD: { classification: power,  potential: 1.8V, current: 10.0mA }
+        GND: { classification: ground, potential: 0.0V, current: 10.0mA }
+
+    # ========================================================================
+    # HIERARCHICAL PHYSICAL PLACEMENT (No code duplication)
+    # ========================================================================
+
+    # Place the PMOS Cell on the left with net mapping
+    # net_map maps child net names (left) to parent net names (right)
+    add space PMOS_Cell named PMOS_Inst at [x: 0nm, y: 0nm, z: 0] rotated 0deg:
+        net_map: [
+            VDD: VDD,
+            Out: Out,
+            In: In
+        ]
+
+    # Place the NMOS Cell on the right (3.0um = 2.0um PMOS width + 1.0um spacing for routing)
+    add space NMOS_Cell named NMOS_Inst at [x: 3000nm, y: 0nm, z: 0] rotated 0deg:
+        net_map: [
+            GND: GND,
+            Out: Out,
+            In: In
+        ]
+
+    # ========================================================================
+    # GLOBAL SYSTEM ROUTING (Connecting the Sub-Cells)
+    # ========================================================================
+
+    # Connect the PMOS Output to the NMOS Output (Out net)
+    route PMOS_Inst.Out_Pad to NMOS_Inst.Out_Pad:
+        net: Out
+        width: 200nm
+        layer: metal1
+        intent: Signal
+
+    # Connect the PMOS Gate to the NMOS Gate (In net)
+    # Route on metal1 layer for inter-cell routing (via Gate_Pad landing pads)
+    route PMOS_Inst.Gate_Pad to NMOS_Inst.Gate_Pad:
+        net: In
+        width: 200nm
+        layer: metal1
+        intent: Signal

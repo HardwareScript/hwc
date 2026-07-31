@@ -88,6 +88,7 @@ mod tests {
             hwc_engine::MaterialRegistry::new(),
             SpaceView::Horizontal,
             slab_z_nm,
+            hwc_types::TechnologyStrategy::default(),
         )
     }
 

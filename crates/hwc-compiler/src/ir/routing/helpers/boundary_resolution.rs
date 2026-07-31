@@ -162,15 +162,91 @@ pub fn resolve_route_boundary_points(
     // actual obstacle geometry, then map those ports directly to AccessRegions.
     // This eliminates the split-brain bug where geometric selection overrode obstacle analysis.
     
+    // v0.2.0 DATABASE-DRIVEN: Query exact Z from layer connection database using route's declared layer.
+    // NO FALLBACK to bbox midpoint - if the connection doesn't exist, FAIL LOUDLY.
+    // This prevents silent routing errors from misaligned Z coordinates.
+    
+    // Determine the routing layer name from the route constraints
+    // (In the future, this should come from ResolvedRoute.layer_name)
+    let routing_layer = &route.layer_name;
+    
+    eprintln!("[BOUNDARY RESOLUTION] Looking up connection points for layer: '{}'", routing_layer);
+    
+    let from_z = space.layer_connection_db
+        .get_connection_point(&from_entity_data.name, routing_layer)
+        .map(|c| {
+            eprintln!("[BOUNDARY RESOLUTION]   FROM entity '{}' on layer '{}': Z={}nm", 
+                from_entity_data.name, routing_layer, c.z_elevation);
+            c.z_elevation
+        })
+        .map_err(|e| {
+            let registered = space.layer_connection_db
+                .get_entity_connections(&from_entity_data.name)
+                .map(|layers| layers.iter().map(|l| l.as_str()).collect::<Vec<_>>().join(", "))
+                .unwrap_or_else(|| "none".to_string());
+            
+            IrError::InvalidRouteExpression {
+                expression: format!("route from {} on layer {}", from_entity_data.name, routing_layer),
+                reason: format!(
+                    "Entity '{}' has no connection point on routing layer '{}'.\n\
+                     \n\
+                     Registered connections: {}\n\
+                     \n\
+                     This usually means:\n\
+                     1. The entity doesn't span to this layer (check your stackup), or\n\
+                     2. The via wasn't properly registered during placement (compiler bug).\n\
+                     \n\
+                     Database error: {}",
+                    from_entity_data.name,
+                    routing_layer,
+                    registered,
+                    e
+                ),
+            }
+        })?;
+    
+    let to_z = space.layer_connection_db
+        .get_connection_point(&to_entity_data.name, routing_layer)
+        .map(|c| {
+            eprintln!("[BOUNDARY RESOLUTION]   TO entity '{}' on layer '{}': Z={}nm", 
+                to_entity_data.name, routing_layer, c.z_elevation);
+            c.z_elevation
+        })
+        .map_err(|e| {
+            let registered = space.layer_connection_db
+                .get_entity_connections(&to_entity_data.name)
+                .map(|layers| layers.iter().map(|l| l.as_str()).collect::<Vec<_>>().join(", "))
+                .unwrap_or_else(|| "none".to_string());
+            
+            IrError::InvalidRouteExpression {
+                expression: format!("route to {} on layer {}", to_entity_data.name, routing_layer),
+                reason: format!(
+                    "Entity '{}' has no connection point on routing layer '{}'.\n\
+                     \n\
+                     Registered connections: {}\n\
+                     \n\
+                     This usually means:\n\
+                     1. The entity doesn't span to this layer (check your stackup), or\n\
+                     2. The via wasn't properly registered during placement (compiler bug).\n\
+                     \n\
+                     Database error: {}",
+                    to_entity_data.name,
+                    routing_layer,
+                    registered,
+                    e
+                ),
+            }
+        })?;
+    
     let from_center = Point3D::new(
         (from_entity_data.bbox.min.x + from_entity_data.bbox.max.x) / 2,
         (from_entity_data.bbox.min.y + from_entity_data.bbox.max.y) / 2,
-        (from_entity_data.bbox.min.z + from_entity_data.bbox.max.z) / 2,
+        from_z,
     );
     let to_center = Point3D::new(
         (to_entity_data.bbox.min.x + to_entity_data.bbox.max.x) / 2,
         (to_entity_data.bbox.min.y + to_entity_data.bbox.max.y) / 2,
-        (to_entity_data.bbox.min.z + to_entity_data.bbox.max.z) / 2,
+        to_z,
     );
     
     // Retrieve fabrication constraints for clearance calculation
@@ -253,11 +329,13 @@ pub fn resolve_route_boundary_points(
         .min_width_nm;
     
     // v0.1.9: Zero-Gap Contact Lock - no escape stub at boundary
+    // v0.2.0: Use database-queried Z values, not cached AccessRegion Z
     let start_point = resolve_boundary_entry(
         from_region.entry_point,
         from_region.normal,
         pdk_min_width_nm,
         trace_width_nm,
+        from_z, // Use database Z, not entry_point.z
     );
     
     let goal_point = resolve_boundary_entry(
@@ -265,6 +343,7 @@ pub fn resolve_route_boundary_points(
         to_region.normal,
         pdk_min_width_nm,
         trace_width_nm,
+        to_z, // Use database Z, not entry_point.z
     );
 
    
@@ -297,6 +376,10 @@ pub fn resolve_route_boundary_points(
         goal_point
     };
 
+    eprintln!("[BOUNDARY RESOLUTION DEBUG] Returning boundary points:");
+    eprintln!("[BOUNDARY RESOLUTION DEBUG]   start: ({},{},{})", final_start_point.x, final_start_point.y, final_start_point.z);
+    eprintln!("[BOUNDARY RESOLUTION DEBUG]   goal:  ({},{},{})", final_goal_point.x, final_goal_point.y, final_goal_point.z);
+
     Ok((final_start_point, final_goal_point, from_region.normal, to_region.normal))
 }
 
@@ -305,6 +388,7 @@ pub fn resolve_route_boundary_points(
 /// The entry_point was pre-computed with `default_width_nm`. This function:
 /// 1. Reverses the default shift to find the true pad edge
 /// 2. Projects outward by EXACTLY (actual_width/2) for perfect 0nm gap contact
+/// 3. Uses the database-provided Z elevation (v0.2.0) instead of cached entry_point.z
 ///
 /// This ensures the trace edge touches the pad edge exactly, with no gap and no overlap.
 fn resolve_boundary_entry(
@@ -312,6 +396,7 @@ fn resolve_boundary_entry(
     normal: hwc_engine::geometry_router::connection_interface::Normal2D,
     default_width_nm: i64,
     actual_width_nm: i64,
+    database_z: i64, // v0.2.0: Use database-queried Z, not cached AccessRegion Z
 ) -> Point3D {
     const SCALE: i64 = 1_000_000_000;
     
@@ -323,24 +408,30 @@ fn resolve_boundary_entry(
     let edge_x = entry_point.x - (normal.x as i64 * default_half_width) / SCALE;
     let edge_y = entry_point.y - (normal.y as i64 * default_half_width) / SCALE;
     
-    // 2. Project outward by EXACTLY the actual trace half-width (Zero-Gap Contact Lock)
-    //    This guarantees: trace_outer_edge = pad_edge (0nm gap)
-    let corrected_x = edge_x + (normal.x as i64 * actual_half_width) / SCALE;
-    let corrected_y = edge_y + (normal.y as i64 * actual_half_width) / SCALE;
+    // 2. Project INWARD by EXACTLY the actual trace half-width (Zero-Gap Contact Lock)
+    //    For the trace edge to touch the pad edge, the centerline must be INSIDE by half-width
+    //    Since normal points outward, we SUBTRACT to move inward
+    let corrected_x = edge_x - (normal.x as i64 * actual_half_width) / SCALE;
+    let corrected_y = edge_y - (normal.y as i64 * actual_half_width) / SCALE;
     
     
     
-    Point3D::new(corrected_x, corrected_y, entry_point.z)
+    Point3D::new(corrected_x, corrected_y, database_z) // v0.2.0: Use database Z
 }
 
 /// Resolve pin center positions from a ResolvedRoute by querying the EntityGraph.
+///
+/// v0.2.0 DATABASE-DRIVEN: Uses the layer connection database for Z coordinates.
+/// NO FALLBACK to bbox centerline - if the connection doesn't exist, FAIL LOUDLY.
 pub fn resolve_route_pin_centers(
     space: &HardwareSpace,
     route: &super::super::types::ResolvedRoute,
 ) -> Result<(Point3D, Point3D), IrError> {
     use hwc_engine::geometry::EntityId;
 
-    let resolve_center = |entity_id: EntityId| -> Result<Point3D, IrError> {
+    let routing_layer = &route.layer_name;
+
+    let resolve_center = |entity_id: EntityId, label: &str| -> Result<Point3D, IrError> {
         let data = space.entity_graph.get_entity_data(entity_id).map_err(|_| {
             IrError::UnresolvedEndpoint {
                 endpoint: format!("Entity {:?}", entity_id),
@@ -348,15 +439,33 @@ pub fn resolve_route_pin_centers(
                 help_message: "EntityId not found in EntityGraph.".into(),
             }
         })?;
+
+        // v0.2.0 DATABASE-DRIVEN: Query layer connection database using route's declared layer
+        let z = space.layer_connection_db
+            .get_connection_point(&data.name, routing_layer)
+            .map(|c| c.z_elevation)
+            .map_err(|e| IrError::InvalidRouteExpression {
+                expression: format!("route {} on layer {}", label, routing_layer),
+                reason: format!(
+                    "Entity '{}' has no connection point on routing layer '{}'.\n\
+                     Registered connections: {:?}\n\
+                     Database error: {}",
+                    data.name,
+                    routing_layer,
+                    space.layer_connection_db.get_entity_connections(&data.name),
+                    e
+                ),
+            })?;
+
         Ok(Point3D::new(
             (data.bbox.min.x + data.bbox.max.x) / 2,
             (data.bbox.min.y + data.bbox.max.y) / 2,
-            (data.bbox.min.z + data.bbox.max.z) / 2,
+            z,
         ))
     };
 
-    let start = resolve_center(route.from)?;
-    let goal = resolve_center(route.to)?;
+    let start = resolve_center(route.from, "from")?;
+    let goal = resolve_center(route.to, "to")?;
     Ok((start, goal))
 }
 

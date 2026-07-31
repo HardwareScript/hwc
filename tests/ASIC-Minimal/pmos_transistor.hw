@@ -56,10 +56,17 @@ export space PMOS_Cell implements PMOSTransistor:
         boundary: [x: 1100nm, y: 700nm] to [x: 1600nm, y: 1300nm]
 
     # 5. PMOS Gate (Vertical Polysilicon strip - net In)
-    # Bisects the Source and Drain perfectly. Spans X: 900nm to 1100nm.
+    # Extended to overlap active diffusions by 100nm on each side
+    # Active edges: X=900nm (Source) and X=1100nm (Drain)
+    # Gate extends: X=800nm to 1200nm (100nm overlap each side)
     add pour(Polysilicon) named Gate_Strip on layer: poly:
         net: In
-        boundary: [x: 900nm, y: 400nm] to [x: 1100nm, y: 1600nm]
+        boundary: [x: 800nm, y: 400nm] to [x: 1200nm, y: 1600nm]
+
+    # 5b. Gate Contact Pad (Metal 1) - Landing pad for gate connection
+    add pour(Aluminum) named Gate_Pad on layer: metal1:
+        net: In
+        boundary: [x: 800nm, y: 1700nm] to [x: 1200nm, y: 2100nm]
 
     # 6. Physical Ohmic Contacts (Silicide interface + Tungsten fill)
     # Centered exactly inside their respective active diffusion regions

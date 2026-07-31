@@ -19,6 +19,7 @@ hwc-engine = { workspace = true }
 hwc-physics = { workspace = true }
 hwc-materials = { workspace = true }
 hwc-stdlib = { workspace = true }
+hwc-types = { workspace = true }
 include_dir = "0.7"
 bincode = "1.3"
 salsa = { workspace = true }
