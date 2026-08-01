@@ -5,7 +5,6 @@ use crate::constraint_manager::ConstraintRulebook;
 use crate::geometry_router::bounding_box_tracker::BoundingBoxTracker;
 use crate::geometry_router::neighbor_generation::GridBounds;
 use crate::geometry_router::pathfinding::CostComposer;
-use crate::geometry_router::EntityGraph;
 use crate::material::MaterialRegistry;
 use rustc_hash::FxHashMap;
 

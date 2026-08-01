@@ -4,15 +4,20 @@ use super::types::GeometryRouter;
 use crate::geometry::{Point3D, TraceSegment};
 use crate::geometry_router::compaction::Compactor;
 use crate::geometry_router::legalizer::Legalizer;
-use crate::geometry_router::miter_pass::MiterEngine;
+
 use crate::geometry_router::spatial_index::DynamicSpatialIndex;
 use crate::geometry_router::types::RouteResult;
+use crate::geometry_router::EntityGraph;
 use crate::netlist::NetId;
 use rustc_hash::FxHashMap;
 
 impl GeometryRouter {
     /// Apply post-routing refinement pipeline to a RouteResult.
-    pub(crate) fn apply_refinement_pipeline(&self, result: &mut RouteResult) {
+    pub(crate) fn apply_refinement_pipeline(
+        &self,
+        entity_graph: &EntityGraph,
+        result: &mut RouteResult,
+    ) {
         eprintln!("[REFINEMENT PIPELINE DEBUG] Starting refinement pipeline");
         
         let min_clearance_nm = self
@@ -50,7 +55,7 @@ impl GeometryRouter {
             let mut spatial_index = DynamicSpatialIndex::new();
             
             // Configure layer Z-ranges from the entity graph
-            if let Some(z_ranges) = self.entity_graph.spatial().layer_z_ranges() {
+            if let Some(z_ranges) = entity_graph.spatial().layer_z_ranges() {
                 eprintln!("[REFINEMENT DEBUG] Configuring spatial index with {} layer Z-ranges", z_ranges.len());
                 spatial_index.set_layer_z_ranges(&z_ranges);
             } else {
@@ -88,7 +93,6 @@ impl GeometryRouter {
             let (legalized_segments, legalized_net_ids) = legalizer.legalize(
                 &all_segments,
                 &all_net_ids,
-                &self.material_registry,
                 &spatial_index,
                 10, // max iterations
             );
@@ -112,8 +116,6 @@ impl GeometryRouter {
             }
 
             // --- Stage 3: Miter Pass ---
-            let miter_engine = MiterEngine::new(self.trace_width_nm);
-
             // Rebuild paths from compacted segments, grouped by net
             let mut refined_paths: FxHashMap<NetId, Vec<Vec<Point3D>>> = FxHashMap::default();
             for (idx, seg) in compacted_segments.iter().enumerate() {
@@ -131,7 +133,7 @@ impl GeometryRouter {
                 }
             }
 
-            for paths in refined_paths.values_mut() {
+            for _paths in refined_paths.values_mut() {
                 // v0.2.0 FIX: Miter pass is now applied in post_process.rs with via-awareness.
                 // Applying it here causes double-mitering where the second pass incorrectly
                 // identifies the first miter points as via endpoints. DISABLED.

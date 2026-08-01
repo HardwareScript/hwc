@@ -1,0 +1,137 @@
+# thick_layer_pdk.hw
+# PDK with THICK layers (1um each) and large spacing for clear 3D visualization
+# Designed specifically for testing Z-axis stacking and relational constraints
+
+import * from @std/primitives/units
+import Silicon_N, Silicon_P, Polysilicon, Aluminum, Tungsten, Titanium_Silicide, Air from "./materials"
+
+export Silicon_N
+export Silicon_P
+export Aluminum
+export Polysilicon
+export Tungsten
+export Titanium_Silicide
+export Air
+
+# Square contact shape for vias
+export shape SquareContact(width: Measurement):
+    geometry:
+        Rectangle(width: width, height: width)
+
+# Bridges for ohmic contacts
+export bridge Silicon_N to Aluminum:
+    interface: Titanium_Silicide
+    thickness: 5nm
+    fill: Tungsten
+
+export bridge Silicon_P to Aluminum:
+    interface: Titanium_Silicide
+    thickness: 5nm
+    fill: Tungsten
+
+export bridge Polysilicon to Aluminum:
+    interface: Titanium_Silicide
+    thickness: 5nm
+    fill: Tungsten
+
+# Bridge between metal layers (via)
+export bridge Aluminum to Aluminum:
+    interface: Titanium_Silicide
+    thickness: 5nm
+    fill: Tungsten
+
+# ============================================================================
+# THICK LAYER PROFILE - For Clear 3D Visualization
+# Each layer is 1um thick with 500nm spacing between layers
+# ============================================================================
+export profile Thick_3D_Stack:
+    technology: "3D_Stack"
+    
+    stackup:
+        # Layer 0: Active silicon (0-1000nm)
+        active:  [material: Silicon_N, thickness: 1000nm, routable: false]
+        
+        # Dielectric 0 (1000-1500nm)
+        d0:      [material: Air, thickness: 500nm, routable: false]
+        
+        # Layer 1: Metal1 (1500-2500nm)
+        metal1:  [material: Aluminum, thickness: 1000nm, routable: true]
+        
+        # Dielectric 1 (2500-3000nm)
+        d1:      [material: Air, thickness: 500nm, routable: false]
+        
+        # Layer 2: Metal2 (3000-4000nm)
+        metal2:  [material: Aluminum, thickness: 1000nm, routable: true]
+        
+        # Dielectric 2 (4000-4500nm)
+        d2:      [material: Air, thickness: 500nm, routable: false]
+        
+        # Layer 3: Metal3 (4500-5500nm)
+        metal3:  [material: Aluminum, thickness: 1000nm, routable: true]
+        
+        # Dielectric 3 (5500-6000nm)
+        d3:      [material: Air, thickness: 500nm, routable: false]
+        
+        # Layer 4: Metal4 (6000-7000nm)
+        metal4:  [material: Aluminum, thickness: 1000nm, routable: true]
+        
+        # Dielectric 4 (7000-7500nm)
+        d4:      [material: Air, thickness: 500nm, routable: false]
+        
+        # Layer 5: Metal5 (7500-8500nm)
+        metal5:  [material: Aluminum, thickness: 1000nm, routable: true]
+
+    via:
+        min_diameter: 200nm
+        min_annular_ring: 0nm
+        min_spacing: 300nm
+        shape: SquareContact
+        contact_depth: 100nm
+
+    trace:
+        min_width: 200nm
+        min_spacing: 0nm
+        edge_clearance: 50um
+
+    manufacturing:
+        copper_thickness: 1000nm
+        circle_segments: 64
+        solder_mask_thickness: 0nm
+        solder_mask_expansion: 0nm
+
+    clearance:
+        high_voltage: 500nm
+        safety_factor: 2.0
+
+    thermal:
+        ambient_temp: 25C
+        max_operating_temp: 125C
+        max_temp_rise: 50C
+        clustering_threshold: 10um
+
+    layer:
+        min_thickness: 50nm
+        allowed_conductors: [Aluminum, Polysilicon, Silicon_N, Silicon_P]
+        allowed_dielectrics: [Air]
+
+    routing:
+        max_local_route_length: 10um
+        min_segment_length: 200nm
+        escape_stub: 0nm
+        base_cost: 1
+        via_penalty: 50
+        direction_penalty: 10
+        tight_clearance_penalty: 2
+        crosstalk_penalty: 3
+        impedance_penalty: 1
+        reference_void_penalty: 5000000
+        net_priority_VDD: 5
+        net_priority_GND: 5
+
+    net_type Signal:
+        routing_style: auto
+        escape_stub: 0nm
+
+    net_type PowerRail:
+        routing_style: auto
+        escape_stub: 0nm

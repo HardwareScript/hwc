@@ -353,16 +353,13 @@ pub fn resolve_relational_constraints(
 /// This ensures that directional operators (above, below, right_of, left_of) work
 /// correctly regardless of whether Y increases upward (BL) or downward (TL).
 ///
-/// **CENTER ALIGNMENT SEMANTICS**: For center alignment (center_x, center_y, center_z),
-/// this function returns the CENTER coordinate of the target object. The caller is
-/// responsible for computing the object's dimensions and adjusting the position to
-/// achieve center-to-center alignment.
+/// **IMPORTANT**: This function returns the EXACT target coordinate:
+/// - For center alignment: Returns the center point of the target
+/// - For edge alignment: Returns the edge coordinate
+/// - For directional placement: Returns the computed offset position
 ///
-/// This two-phase approach is necessary because:
-/// 1. Shape dimensions are resolved separately in the placement pipeline
-/// 2. The coordinate resolution phase doesn't have access to geometric properties
-/// 3. This matches the document spec: "The compiler's constraint manager evaluates
-///    the relative layout instructions" [Spatial_Synthesis_Abstraction.md §1.4.1]
+/// The CALLER (plane.rs/component placement) is responsible for dimension-aware
+/// adjustments (e.g., subtracting half-width for center_x alignment).
 pub fn compute_position_from_constraints(
     constraints: &[RelationalConstraint],
     _component_name: &Option<ComponentName>,
@@ -454,9 +451,18 @@ pub fn compute_position_from_constraints(
     }
 
     // Build the coordinate from resolved values
-    let x = x_nm.unwrap_or(0);
-    let y = y_nm.unwrap_or(0);
-    let z = z_nm.unwrap_or(0);
+    // v0.2.0: Fail loudly if constraints don't resolve - no silent fallbacks!
+    let x = x_nm.ok_or_else(|| IrError::CoordinateResolutionFailed {
+        coordinate_str: "X coordinate".into(),
+        reason: "No relational constraint resolved the X coordinate".into(),
+    })?;
+    let y = y_nm.ok_or_else(|| IrError::CoordinateResolutionFailed {
+        coordinate_str: "Y coordinate".into(),
+        reason: "No relational constraint resolved the Y coordinate".into(),
+    })?;
+    let z = z_nm.unwrap_or(0); // Z is optional (defaults to layer bottom)
+
+    eprintln!("[RELATIONAL_RESOLVER] Resolved position: X={}nm, Y={}nm, Z={}nm", x, y, z);
 
     Ok(Coordinate::Declarative {
         x: Expression::Measurement {
@@ -484,6 +490,9 @@ fn resolve_target_bbox(
     bbox_tracker: &BoundingBoxTracker,
 ) -> Result<hwc_engine::geometry::BoundingBox, IrError> {
     let target_name: CompactString = target.base.clone();
+
+    eprintln!("[RELATIONAL_RESOLVER DEBUG] Resolving target: '{}'", target_name);
+    eprintln!("[RELATIONAL_RESOLVER DEBUG] Available entities in bbox_tracker: {:?}", bbox_tracker.all_names());
 
     bbox_tracker
         .get(&target_name)

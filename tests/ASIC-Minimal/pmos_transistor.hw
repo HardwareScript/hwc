@@ -38,8 +38,18 @@ export space PMOS_Cell implements PMOSTransistor:
         net: VDD
         boundary: [x: 0nm, y: 2300nm] to [x: 2000nm, y: 2900nm]
 
-    # 2. Output Landing Pad (Metal 1)
-    add pour(Aluminum) named Out_Pad on layer: metal1:
+    # 1b. VDD Source Landing Pad (Metal 1) - Landing pad for source via
+    add pour(Aluminum) named VDD_Source_Pad on layer: metal1:
+        net: VDD
+        boundary: [x: 500nm, y: 850nm] to [x: 800nm, y: 1150nm]
+
+    # 2. Output Landing Pad (Metal 1) - Landing pad for drain via
+    add pour(Aluminum) named Out_Drain_Pad on layer: metal1:
+        net: Out
+        boundary: [x: 1200nm, y: 850nm] to [x: 1500nm, y: 1150nm]
+
+    # 3. Output Export Pad (Metal 1) - External connection point
+    add pour(Aluminum) named Out_Export_Pad on layer: metal1:
         net: Out
         boundary: [x: 1200nm, y: 0nm] to [x: 1800nm, y: 400nm]
 
@@ -59,9 +69,10 @@ export space PMOS_Cell implements PMOSTransistor:
     # Extended to overlap active diffusions by 100nm on each side
     # Active edges: X=900nm (Source) and X=1100nm (Drain)
     # Gate extends: X=800nm to 1200nm (100nm overlap each side)
+    # Extended upward to Y=1800nm to overlap with Gate_Pad for via connection
     add pour(Polysilicon) named Gate_Strip on layer: poly:
         net: In
-        boundary: [x: 800nm, y: 400nm] to [x: 1200nm, y: 1600nm]
+        boundary: [x: 800nm, y: 400nm] to [x: 1200nm, y: 1800nm]
 
     # 5b. Gate Contact Pad (Metal 1) - Landing pad for gate connection
     add pour(Aluminum) named Gate_Pad on layer: metal1:
@@ -81,19 +92,27 @@ export space PMOS_Cell implements PMOSTransistor:
         diameter: 200nm
         plating_thickness: 5nm
 
+    # 6b. Gate Contact Via (Poly to Metal1)
+    # Connects Gate_Strip (poly) to Gate_Pad (metal1)
+    # Centered in the overlap region between poly (Y=1700-1800) and metal1 pad (Y=1700-2100)
+    add contact(Titanium_Silicide) named Via_Gate at [x: 1000nm, y: 1750nm] spanning layer: poly to metal1:
+        net: In
+        diameter: 200nm
+        plating_thickness: 5nm
+
     # ========================================================================
     # PHYSICAL INTERCONNECTS (Metal 1 Routing)
     # ========================================================================
 
-    # Power Strap: Connects PMOS Source up to VDD Rail (Vertical line)
-    route Via_Source to VDD_Rail:
+    # Power Strap: Connects PMOS Source landing pad up to VDD Rail (Vertical line)
+    route VDD_Source_Pad to VDD_Rail:
         net: VDD
         width: 200nm
         layer: metal1
         intent: PowerRail
 
-    # Signal Interconnect: Connects PMOS Drain down to Out Pad (Mitered detour)
-    route Via_Drain to Out_Pad:
+    # Signal Interconnect: Connects PMOS Drain landing pad down to Out Export Pad
+    route Out_Drain_Pad to Out_Export_Pad:
         net: Out
         width: 200nm
         layer: metal1

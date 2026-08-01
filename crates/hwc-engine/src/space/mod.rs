@@ -170,6 +170,10 @@ pub struct HardwareSpace {
     /// **v0.2.0: Database of via-to-layer mappings (PROPER ARCHITECTURE)**
     /// Maps material pairs to via connection specs. Built from bridge rules + stackup.
     pub via_layer_mapping_db: crate::via_layer_mapping_database::ViaLayerMappingDatabase,
+
+    /// **v0.2.0: Database of explicit via/contact instances (PROPER ARCHITECTURE)**
+    /// Tracks all user-defined vias to prevent duplicate auto-insertion. Populated during placement.
+    pub via_instance_db: crate::via_instance_database::ViaInstanceDatabase,
 }
 
 impl HardwareSpace {
@@ -212,6 +216,7 @@ impl HardwareSpace {
             layer_connection_db: crate::layer_connection_database::LayerConnectionDatabase::new(),
             routing_layer_db: crate::routing_layer_database::RoutingLayerDatabase::default(),
             via_layer_mapping_db: crate::via_layer_mapping_database::ViaLayerMappingDatabase::default(),
+            via_instance_db: crate::via_instance_database::ViaInstanceDatabase::new(),
         }
     }
 

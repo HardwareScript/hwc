@@ -1,6 +1,6 @@
 use crate::geometry::{BoundingBox, Point3D, TraceSegment};
 use crate::geometry_router::spatial_index::DynamicSpatialIndex;
-use crate::material::MaterialRegistry;
+
 use crate::netlist::NetId;
 use rustc_hash::FxHashMap;
 
@@ -319,7 +319,6 @@ impl Legalizer {
         &self,
         segments: &[TraceSegment],
         net_ids: &[NetId],
-        material_registry: &MaterialRegistry,
         spatial_index: &DynamicSpatialIndex,  // Use pre-configured index from caller
         max_iterations: usize,
     ) -> (Vec<TraceSegment>, Vec<NetId>) {

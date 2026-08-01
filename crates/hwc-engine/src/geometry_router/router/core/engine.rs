@@ -6,11 +6,16 @@ use crate::geometry_router::bounding_box_tracker::BoundingBoxTracker;
 use crate::geometry_router::neighbor_generation::GridBounds;
 use crate::geometry_router::pathfinding::CostComposer;
 use crate::geometry_router::types::{RouteResult, RoutedNet, RoutingError};
+use crate::geometry_router::EntityGraph;
 use rustc_hash::FxHashMap;
 
 impl GeometryRouter {
     /// Primary entrypoint for space-level routing with adaptive mode selection.
-    pub fn route_space(&mut self, req: RouteSpaceRequest) -> Result<RouteResult, RoutingError> {
+    pub fn route_space(
+        &mut self,
+        req: RouteSpaceRequest,
+        entity_graph: &mut EntityGraph,
+    ) -> Result<RouteResult, RoutingError> {
         let RouteSpaceRequest {
             grid_bbox,
             nets,
@@ -47,7 +52,7 @@ impl GeometryRouter {
             }
         }
 
-        self.build_entity_graph();
+        self.build_entity_graph(entity_graph);
 
         let track_pitch = self.resolution_nm;
         let max_clearance = self
@@ -67,7 +72,7 @@ impl GeometryRouter {
         self.partition_grid = Some(partition);
 
         let mut result = if let Some(segments) = explicit_segments {
-            self.route_all_nets_explicit_global(segments)?
+            self.route_all_nets_explicit_global(entity_graph, segments)?
         } else {
             RouteResult::new()
         };
@@ -91,13 +96,14 @@ impl GeometryRouter {
         if area_nm2 < self.config.area_threshold_nm2 && net_count < self.config.net_count_threshold
         {
             let steiner_result = self.route_all_nets_steiner(
+                entity_graph,
                 nets,
                 obstacle_bboxes,
                 substrate_layers,
                 net_frequencies,
             )?;
             result.merge(steiner_result);
-            self.apply_refinement_pipeline(&mut result);
+            self.apply_refinement_pipeline(entity_graph, &mut result);
             
             eprintln!("[ROUTE_SPACE DEBUG] Result AFTER refinement pipeline:");
             for (net_id, path_segments) in &result.paths {
@@ -113,6 +119,7 @@ impl GeometryRouter {
             Ok(result)
         } else {
             let hierarchical_result = self.route_hierarchical(
+                entity_graph,
                 grid_bbox,
                 nets,
                 obstacle_bboxes,
@@ -120,7 +127,7 @@ impl GeometryRouter {
                 net_frequencies,
             )?;
             result.merge(hierarchical_result);
-            self.apply_refinement_pipeline(&mut result);
+            self.apply_refinement_pipeline(entity_graph, &mut result);
             
             eprintln!("[ROUTE_SPACE DEBUG] Result AFTER refinement pipeline:");
             for (net_id, path_segments) in &result.paths {
@@ -140,17 +147,19 @@ impl GeometryRouter {
     /// Pass-Through routing: routes all nets in a single pass over the entire board.
     pub fn route_all_nets_steiner(
         &mut self,
+        entity_graph: &mut EntityGraph,
         nets: &FxHashMap<crate::netlist::NetId, Vec<Point3D>>,
         _obstacle_bboxes: &[crate::geometry::BoundingBox],
         _substrate_layers: Option<&[crate::geometry_router::substrate_types::SubstrateLayer]>,
         _net_frequencies: &FxHashMap<crate::netlist::NetId, f64>,
     ) -> Result<RouteResult, RoutingError> {
-        self.route_all_nets_steiner_global(nets)
+        self.route_all_nets_steiner_global(entity_graph, nets)
     }
 
     /// Hierarchical routing: partition into G-Cells, global route, then parallel detailed routing.
     fn route_hierarchical(
         &mut self,
+        entity_graph: &mut EntityGraph,
         grid_bbox: &crate::geometry::BoundingBox,
         nets: &FxHashMap<crate::netlist::NetId, Vec<Point3D>>,
         _obstacle_bboxes: &[crate::geometry::BoundingBox],
@@ -193,7 +202,7 @@ impl GeometryRouter {
                     let mut handles = Vec::new();
 
                     for &(&net_id, pins) in &sorted_cross {
-                        let entity_graph_clone = self.entity_graph.clone();
+                        let entity_graph_clone = entity_graph.clone();
                         let bounds = self.bounds;
                         let constraints = self.constraints.clone();
                         let layer_directions = self.layer_directions.clone();
@@ -231,7 +240,6 @@ impl GeometryRouter {
                                 layer_directions,
                                 resolution_nm,
                                 material_registry,
-                                entity_graph: isolated_entity_graph,
                                 vias: Vec::new(),
                                 copper_pours,
                                 bounding_box_tracker,
@@ -251,7 +259,8 @@ impl GeometryRouter {
                                 net_layer_targets: FxHashMap::default(),
                             };
 
-                            let result = isolated.decompose_net_steiner(net_id, pins);
+                            let result = isolated
+                                .decompose_net_steiner(&mut isolated_entity_graph, net_id, pins);
                             (net_id, result)
                         });
                         handles.push(handle);
@@ -281,7 +290,7 @@ impl GeometryRouter {
                         None
                     };
 
-                    self.entity_graph.register_route_with_z_materials(
+                    entity_graph.register_route_with_z_materials(
                         net_id,
                         segment,
                         self.routing_material_id,
@@ -334,7 +343,6 @@ impl GeometryRouter {
                         layer_directions: self.layer_directions.clone(),
                         resolution_nm: self.resolution_nm,
                         material_registry: self.material_registry.clone(),
-                        entity_graph: crate::geometry_router::EntityGraph::new(),
                         vias: Vec::new(),
                         copper_pours: Vec::new(),
                         bounding_box_tracker: BoundingBoxTracker::new(),
@@ -376,11 +384,13 @@ impl GeometryRouter {
 
                     cell_router.substrate_layers = substrate_layers.map(|sl| sl.to_vec());
                     cell_router.net_frequencies = net_frequencies.clone();
-                    cell_router
-                        .entity_graph
-                        .copy_metadata_from(&self.entity_graph);
+                    let mut local_entity_graph = crate::geometry_router::EntityGraph::new();
+                    local_entity_graph.copy_metadata_from(entity_graph);
 
-                    match cell_router.route_all_nets_steiner_global(&local_nets) {
+                    match cell_router.route_all_nets_steiner_global(
+                        &mut local_entity_graph,
+                        &local_nets,
+                    ) {
                         Ok(local_result) => {
                             let mut cell_result = RouteResult::new();
                             for (net_id, local_paths) in &local_result.paths {
@@ -439,7 +449,6 @@ impl GeometryRouter {
                     }
                 }
             } else {
-                let entity_graph_ref = &self.entity_graph;
                 let intra_results: Vec<Result<RouteResult, RoutingError>> =
                     std::thread::scope(|s| {
                         let mut handles = Vec::new();
@@ -487,6 +496,7 @@ impl GeometryRouter {
                             let routing_material_id = self.routing_material_id;
                             let trace_width_nm = self.trace_width_nm;
                             let net_trace_widths = self.net_trace_widths.clone();
+                            let entity_graph_clone = entity_graph.clone();
 
                             let handle = s.spawn(move || {
                                 let mut cell_router = GeometryRouter {
@@ -499,7 +509,6 @@ impl GeometryRouter {
                                     layer_directions,
                                     resolution_nm,
                                     material_registry,
-                                    entity_graph: crate::geometry_router::EntityGraph::new(),
                                     vias: Vec::new(),
                                     copper_pours,
                                     bounding_box_tracker: BoundingBoxTracker::new(),
@@ -520,12 +529,15 @@ impl GeometryRouter {
                                 };
 
                                 cell_router.net_frequencies = net_frequencies_clone;
-                                cell_router
-                                    .entity_graph
-                                    .copy_metadata_from(entity_graph_ref);
+                                let mut local_entity_graph =
+                                    crate::geometry_router::EntityGraph::new();
+                                local_entity_graph.copy_metadata_from(&entity_graph_clone);
 
                                 let mut cell_result = RouteResult::new();
-                                match cell_router.route_all_nets_steiner_global(&local_nets) {
+                                match cell_router.route_all_nets_steiner_global(
+                                    &mut local_entity_graph,
+                                    &local_nets,
+                                ) {
                                     Ok(local_result) => {
                                         for (net_id, local_paths) in &local_result.paths {
                                             let global_paths: Vec<Vec<_>> = local_paths

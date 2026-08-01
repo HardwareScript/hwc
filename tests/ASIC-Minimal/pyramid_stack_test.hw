@@ -1,0 +1,141 @@
+# pyramid_stack_test.hw
+# Tests Z-axis stacking with centered cubes forming a pyramid
+# 10 layers: 10um, 9um, 8um, 7um, 6um, 5um, 4um, 3um, 2um, 1um
+# Each cube centered on the one below to form a pyramid shape
+
+import * from @std/primitives/units
+import * from "./minimal_pdk"
+
+module PyramidStackTest:
+    pins: [ input TestNet ]
+
+shape SquareCube(size: Measurement):
+    geometry:
+        Rectangle(width: size, height: size)
+
+space Pyramid_Stack_Space implements PyramidStackTest:
+    # Large space to fit the 10um base layer comfortably
+    dimensions: 12.0um by 12.0um by 5.0um
+    resolution: 10nm
+    origin: bl by b
+    profile: ASIC_Flattened
+
+    nets:
+        TestNet: { classification: signal, potential: 1.8V, current: 0.1uA }
+
+    # ========================================================================
+    # LAYER 1: BASE - 10um x 10um (Largest)
+    # This is the foundation - centered in space at Z=35nm (metal1 layer base)
+    # ========================================================================
+    add plane(Aluminum) named Base_10um {
+        align: center_x with space
+        align: center_y with space
+    } on layer: metal1:
+        shape: SquareCube(size: 10.0um)
+        net: TestNet
+
+    # ========================================================================
+    # LAYER 2: 9um x 9um - Centered on Base_10um, 400nm higher
+    # ========================================================================
+    add plane(Aluminum) named Layer_9um {
+        align: center_x with Base_10um
+        align: center_y with Base_10um
+        above: Base_10um by 400nm
+    } on layer: metal1:
+        shape: SquareCube(size: 9.0um)
+        net: TestNet
+
+    # ========================================================================
+    # LAYER 3: 8um x 8um - Centered on Layer_9um, 400nm higher
+    # ========================================================================
+    add plane(Aluminum) named Layer_8um {
+        align: center_x with Layer_9um
+        align: center_y with Layer_9um
+        above: Layer_9um by 400nm
+    } on layer: metal1:
+        shape: SquareCube(size: 8.0um)
+        net: TestNet
+
+    # ========================================================================
+    # LAYER 4: 7um x 7um - Centered on Layer_8um, 400nm higher
+    # ========================================================================
+    add plane(Aluminum) named Layer_7um {
+        align: center_x with Layer_8um
+        align: center_y with Layer_8um
+        above: Layer_8um by 400nm
+    } on layer: metal1:
+        shape: SquareCube(size: 7.0um)
+        net: TestNet
+
+    # ========================================================================
+    # LAYER 5: 6um x 6um - Centered on Layer_7um, 400nm higher
+    # ========================================================================
+    add plane(Aluminum) named Layer_6um {
+        align: center_x with Layer_7um
+        align: center_y with Layer_7um
+        above: Layer_7um by 400nm
+    } on layer: metal1:
+        shape: SquareCube(size: 6.0um)
+        net: TestNet
+
+    # ========================================================================
+    # LAYER 6: 5um x 5um - Centered on Layer_6um, 400nm higher
+    # ========================================================================
+    add plane(Aluminum) named Layer_5um {
+        align: center_x with Layer_6um
+        align: center_y with Layer_6um
+        above: Layer_6um by 400nm
+    } on layer: metal1:
+        shape: SquareCube(size: 5.0um)
+        net: TestNet
+
+    # ========================================================================
+    # LAYER 7: 4um x 4um - Centered on Layer_5um, 400nm higher
+    # ========================================================================
+    add plane(Aluminum) named Layer_4um {
+        align: center_x with Layer_5um
+        align: center_y with Layer_5um
+        above: Layer_5um by 400nm
+    } on layer: metal1:
+        shape: SquareCube(size: 4.0um)
+        net: TestNet
+
+    # ========================================================================
+    # LAYER 8: 3um x 3um - Centered on Layer_4um, 400nm higher
+    # ========================================================================
+    add plane(Aluminum) named Layer_3um {
+        align: center_x with Layer_4um
+        align: center_y with Layer_4um
+        above: Layer_4um by 400nm
+    } on layer: metal1:
+        shape: SquareCube(size: 3.0um)
+        net: TestNet
+
+    # ========================================================================
+    # LAYER 9: 2um x 2um - Centered on Layer_3um, 400nm higher
+    # ========================================================================
+    add plane(Aluminum) named Layer_2um {
+        align: center_x with Layer_3um
+        align: center_y with Layer_3um
+        above: Layer_3um by 400nm
+    } on layer: metal1:
+        shape: SquareCube(size: 2.0um)
+        net: TestNet
+
+    # ========================================================================
+    # LAYER 10: TOP - 1um x 1um (Smallest, pyramid peak)
+    # ========================================================================
+    add plane(Aluminum) named Top_1um {
+        align: center_x with Layer_2um
+        align: center_y with Layer_2um
+        above: Layer_2um by 400nm
+    } on layer: metal1:
+        shape: SquareCube(size: 1.0um)
+        net: TestNet
+
+    # ========================================================================
+    # CONNECTIVITY: Background pour to connect all layers
+    # ========================================================================
+    add pour(Aluminum) named Background on layer: metal1:
+        boundary: [50nm, 50nm] to [11950nm, 11950nm]
+        net: TestNet

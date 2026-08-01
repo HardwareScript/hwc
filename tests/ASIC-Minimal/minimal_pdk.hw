@@ -47,6 +47,7 @@ export profile ASIC_Flattened:
         min_annular_ring: 0nm
         min_spacing: 300nm
         shape: SquareContact   # <--- THE FIX: Use our custom square shape!
+        contact_depth: 50nm    # Via penetrates 50nm into both source and destination layers
 
     trace:
         min_width: 200nm
@@ -115,6 +116,7 @@ export profile Silicon_180nm:
         min_annular_ring: 0nm
         min_spacing: 300nm
         shape: SquareContact
+        contact_depth: 100nm   # Via penetrates 100nm into both source and destination layers
 
     trace:
         min_width: 200nm

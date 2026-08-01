@@ -14,6 +14,7 @@ impl super::super::super::Parser {
         let mut max_aspect_ratio = None;
         let mut default_via_fill = None;
         let mut shape = None;
+        let mut contact_depth = None;
         // v0.1.7 ASIC Extensions
         let mut enclosures = None;
         let mut allow_stacked_vias = None;
@@ -58,6 +59,10 @@ impl super::super::super::Parser {
                     shape = Some(self.expect_identifier()?);
                     self.skip_whitespace();
                 }
+                "contact_depth" => {
+                    contact_depth = Some(self.parse_measurement()?);
+                    self.skip_whitespace();
+                }
                 // v0.1.7 ASIC Extensions
                 "enclosures" => {
                     // Parse array: [m1: 30nm, m2: 40nm, m3: 50nm]
@@ -91,6 +96,11 @@ impl super::super::super::Parser {
             message: "Via constraints must have 'min_annular_ring' field".into(),
         })?;
 
+        let contact_depth = contact_depth.ok_or_else(|| ParseError::General {
+            span: span_to_source_span(&Span::new(start_pos, end_pos)),
+            message: "Via constraints must have 'contact_depth' field. This specifies how deep vias penetrate into conductive layers (e.g., contact_depth: 50nm)".into(),
+        })?;
+
         Ok(ViaConstraints {
             min_diameter,
             min_annular_ring,
@@ -99,6 +109,7 @@ impl super::super::super::Parser {
             max_aspect_ratio,
             default_via_fill,
             shape,
+            contact_depth,
             enclosures,
             allow_stacked_vias,
             min_stagger_offset,

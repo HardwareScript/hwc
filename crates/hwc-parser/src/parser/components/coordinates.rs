@@ -29,8 +29,8 @@ impl crate::parser::Parser {
         // Relative positioning ONLY occurs when the current token does NOT start with '['
         if !self.check(&Token::OpenBracket) {
             if let Some(token) = self.current() {
-                // Check for 'last' or 'substrate' keyword (special anchors)
-                if matches!(token.token, Token::Last | Token::Substrate) {
+                // Check for 'last', 'substrate', or 'space' keyword (special anchors)
+                if matches!(token.token, Token::Last | Token::Substrate | Token::Space) {
                     return self.parse_relative_coordinate();
                 }
 
@@ -98,18 +98,22 @@ impl crate::parser::Parser {
     /// - `M1.right + 1mm` - Single measurement offset
     /// - `M1.top + [0.5mm, 1mm, 0mm]` - Vector offset
     /// - `last.right + 1mm` - Reference to previous loop iteration (v0.1.6)
+    /// - `space.center` - Reference to space boundaries (v0.1.9)
     ///
     /// Edges: left, right, top, bottom, front, back
     fn parse_relative_coordinate(&mut self) -> Result<Coordinate, ParseError> {
         let start_pos = self.current_span().start;
 
-        // Parse anchor name (may be 'last' keyword or identifier with optional array syntax)
+        // Parse anchor name (may be 'last', 'substrate', 'space' keywords or identifier with optional array syntax)
         let anchor_name = if self.check(&Token::Last) {
             self.advance(); // consume 'last'
             "last".to_string()
         } else if self.check(&Token::Substrate) {
             self.advance(); // consume 'substrate'
             "substrate".to_string()
+        } else if self.check(&Token::Space) {
+            self.advance(); // consume 'space'
+            "space".to_string()
         } else {
             self.parse_anchor_name()?
         };

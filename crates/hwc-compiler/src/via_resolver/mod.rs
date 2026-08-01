@@ -19,7 +19,6 @@ use library::{ViaLibrary, ViaStackRequest, ViaType};
 struct ViaBridgeContext<'a> {
     space: &'a HardwareSpace,
     net_id: hwc_engine::netlist::NetId,
-    net_name: &'a str,
     stackup_manager: &'a StackupManager,
 }
 
@@ -78,11 +77,6 @@ impl ViaResolver {
         let nets_to_resolve = space.netlist.all_net_ids();
 
         for net_id in nets_to_resolve {
-            let net_name = space
-                .netlist
-                .get_net_name(net_id)
-                .unwrap_or_else(|| "unnamed".into());
-
             // 2. Query the EntityGraph for all conductive elements on this net
             let elements = space.entity_graph.get_all_elements_for_net(net_id);
             if elements.is_empty() {
@@ -117,7 +111,6 @@ impl ViaResolver {
                 let ctx = ViaBridgeContext {
                     space,
                     net_id,
-                    net_name: &net_name,
                     stackup_manager,
                 };
 
@@ -141,14 +134,29 @@ impl ViaResolver {
         let ViaBridgeContext {
             space,
             net_id,
-            net_name: _,
             stackup_manager,
         } = *ctx;
         
 
-        // v0.1.8: Get ALL elements for the net and filter them by layer index manually.
-        // This compensates for the EntityGraph's lack of layer awareness.
-        let all_elements = space.entity_graph.get_all_elements_for_net(net_id);
+        // v0.2.0 STRUCTURAL FIX: Query only routable surfaces (pours), not bridges (contacts).
+        // The EntityGraph now provides get_pours_for_net() which excludes Contact-type elements.
+        // This prevents vias that span multiple layers from triggering duplicate via insertion.
+        let all_elements = space.entity_graph.get_pours_for_net(net_id);
+
+        println!(
+            "   DEBUG: get_pours_for_net({:?}) returned {} total elements",
+            net_id,
+            all_elements.len()
+        );
+        for (idx, el) in all_elements.iter().enumerate() {
+            let mid_z = (el.bbox.min.z + el.bbox.max.z) / 2;
+            let layer_idx = stackup_manager.get_layer_index_at_z(mid_z);
+            let mat_name = space.material_registry.get_name(el.material).unwrap_or("Unknown");
+            println!(
+                "     [{}] layer_type={:?}, mid_z={}nm, layer_idx={:?}, material={}, bbox={:?}",
+                idx, el.layer_type, mid_z, layer_idx, mat_name, el.bbox
+            );
+        }
 
         let from_elements: Vec<&hwc_engine::geometry_router::substrate_types::SubstrateLayer> =
             all_elements
@@ -169,7 +177,7 @@ impl ViaResolver {
                 .collect();
 
         println!(
-            "   Found {} elements on layer {}, {} elements on layer {}",
+            "   Found {} pours on layer {}, {} pours on layer {}",
             from_elements.len(),
             from_layer,
             to_elements.len(),
@@ -178,6 +186,7 @@ impl ViaResolver {
 
         for from_el in &from_elements {
             for to_el in &to_elements {
+
                 // v0.1.8: Via placement is a 2D XY operation, per the NativeViaResolver spec
                 // (§2.2: "Pass 2 fetches all PlanarIslands (2D contours) at the transition
                 // coordinates (X, Y)"). Stackup layers always have disjoint Z-ranges by design,
@@ -188,10 +197,42 @@ impl ViaResolver {
                 let xy_y_max = from_el.bbox.max.y.min(to_el.bbox.max.y);
 
                 if xy_x_min < xy_x_max && xy_y_min < xy_y_max {
-                    // XY overlap found — place a via at the centroid of the overlap region.
+                    // XY overlap found — query ViaInstanceDatabase to check if explicit via exists.
                     let center_x = (xy_x_min + xy_x_max) / 2;
                     let center_y = (xy_y_min + xy_y_max) / 2;
 
+                    // v0.2.0 DATABASE-DRIVEN: Query ViaInstanceDatabase for existing explicit vias.
+                    let from_layer_name = &stackup_manager.ordered_layers()[from_layer];
+                    let to_layer_name = &stackup_manager.ordered_layers()[to_layer];
+                    
+                    println!(
+                        "   [VIA CHECK] XY overlap at ({}, {}) between {} (layer {}) and {} (layer {})",
+                        center_x, center_y, from_layer_name, from_layer, to_layer_name, to_layer
+                    );
+                    println!(
+                        "   [VIA CHECK] Querying ViaInstanceDatabase for net {:?}: {} -> {}",
+                        net_id, from_layer_name, to_layer_name
+                    );
+                    
+                    if space.via_instance_db.has_via_at(
+                        net_id,
+                        from_layer_name,
+                        to_layer_name,
+                        (center_x, center_y),
+                    ) {
+                        println!(
+                            "   ✓ Skipping auto-via at ({}, {}) - explicit contact already bridges {} and {}",
+                            center_x, center_y, from_layer_name, to_layer_name
+                        );
+                        continue;
+                    }
+                    
+                    println!(
+                        "   ✗ No explicit via found at ({}, {}) - will attempt auto-insertion",
+                        center_x, center_y
+                    );
+
+                    // No explicit via found — insert automatic via
                     // v0.1.8: Resolve materials for the specific elements being bridged.
                     // This ensures we use the correct bridge rule even if the layer's
                     // default material is different (e.g. Silicon_P on an 'active' layer).

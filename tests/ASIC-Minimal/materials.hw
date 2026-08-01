@@ -31,7 +31,7 @@ export material Polysilicon:
         color: "#FF6060"  # Red
         metallic: 0.3
         roughness: 0.8
-        opacity: 1.0      # Fully opaque - eliminates alpha-blending artifacts
+        opacity: 0.5      # Semi-transparent to see via penetration from below
         resistivity: 1e-4ohm_m
         thermal_conductivity: 30.0W_mK
         max_current_density: 1e9A_m2
@@ -42,6 +42,9 @@ export material Aluminum:
     process: deposited
     properties:
         color: "#C0C0C0"  # Silver
+        opacity: 0.4      # Semi-transparent to see via penetration
+        metallic: 0.8
+        roughness: 0.2
         resistivity: 2.82e-8ohm_m
         thermal_conductivity: 237.0W_mK
         max_current_density: 1e9A_m2
@@ -51,7 +54,10 @@ export material Tungsten:
     symbol: "W"
     process: deposited
     properties:
-        color: "#606060"  # Dark Grey
+        color: "#8080FF"  # Light Blue - easier to see the via
+        opacity: 0.7      # Semi-transparent to show penetration
+        metallic: 0.7
+        roughness: 0.3
         resistivity: 5.6e-8ohm_m
         thermal_conductivity: 173.0W_mK
         max_current_density: 1e10A_m2

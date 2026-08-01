@@ -102,6 +102,39 @@ impl EntityGraph {
         elements
     }
 
+    /// Get only routable surfaces (pours, traces) for a specific net, excluding vias/contacts.
+    /// 
+    /// This method is used by the ViaResolver to identify layer transitions that need bridging.
+    /// Vias/contacts are bridges themselves and should not trigger via insertion.
+    pub fn get_pours_for_net(&self, net_id: NetId) -> Vec<SubstrateLayer> {
+        let mut elements = Vec::new();
+
+        // Only include substrate layers that are Pour type (not Contact)
+        for layer in &self.substrate_layers {
+            if layer.net == net_id && layer.layer_type == SubstrateLayerType::Pour {
+                elements.push(layer.clone());
+            }
+        }
+
+        // Routed segments are always Pour type
+        for (seg_net_id, segments) in &self.routed_segments {
+            if *seg_net_id == net_id {
+                for seg in segments {
+                    let bbox = BoundingBox::new(seg.start, seg.end);
+                    let layer = SubstrateLayer::new(
+                        seg.material_id,
+                        net_id,
+                        bbox,
+                        SubstrateLayerType::Pour,
+                    );
+                    elements.push(layer);
+                }
+            }
+        }
+
+        elements
+    }
+
     /// Get elements (pours and routes) for a specific net on a specific layer.
     pub fn get_elements_for_net_on_layer(
         &self,
@@ -144,7 +177,7 @@ impl EntityGraph {
         _segments: u32,
         _rotation_deg: i64,
     ) {
-        let mut layer = SubstrateLayer::new(material, net, bbox, SubstrateLayerType::Pour);
+        let mut layer = SubstrateLayer::new(material, net, bbox, SubstrateLayerType::Contact);
         layer.shape = SubstrateLayerShape::Circle {
             radius: diameter_nm / 2,
         };
@@ -191,7 +224,7 @@ impl EntityGraph {
             outer_contour.push(clipper2_rust::Point64::new(p.x, p.y));
         }
 
-        let mut layer = SubstrateLayer::new(material, net, bbox, SubstrateLayerType::Pour);
+        let mut layer = SubstrateLayer::new(material, net, bbox, SubstrateLayerType::Contact);
         layer.shape = SubstrateLayerShape::Polygon {
             outer_contour,
             holes: clipper2_rust::Paths64::new(),

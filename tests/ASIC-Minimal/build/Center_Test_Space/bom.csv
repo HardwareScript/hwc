@@ -1,0 +1,18 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,0.01x0.00x0.00mm,,,,,1
+Center_Both,Plane(Aluminum),,,,,,1
+Large_Center,Plane(Aluminum),,,,,,1
+Corner_BL,Plane(Aluminum),,,,,,1
+Corner_BR,Plane(Aluminum),,,,,,1
+Corner_TL,Plane(Aluminum),,,,,,1
+Corner_TR,Plane(Aluminum),,,,,,1
+
+# MATERIAL USAGE (Fabrication)
+Reference,Type,Material,Layer_Z_nm,Area_nm2,Volume_nm3
+Center_Both,Pour,Aluminum,z:35,250000,2500000
+Large_Center,Pour,Aluminum,z:35,4000000,40000000
+Corner_BL,Pour,Aluminum,z:35,90000,900000
+Corner_BR,Pour,Aluminum,z:35,90000,900000
+Corner_TL,Pour,Aluminum,z:35,90000,900000
+Corner_TR,Pour,Aluminum,z:35,90000,900000
+Background,Pour,Aluminum,z:35,23010000,230100000

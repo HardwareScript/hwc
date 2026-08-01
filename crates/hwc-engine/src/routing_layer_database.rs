@@ -79,7 +79,11 @@ impl RoutingLayerDatabase {
     /// Build from stackup layers and material registry.
     ///
     /// Only conductive materials produce routable layers.
-    /// The routing Z is set to the bottom of the layer (where vias connect).
+    /// The routing Z is set intelligently based on via connection characteristics:
+    /// - Base layers (active, poly) connect to vias FROM ABOVE → use z_top
+    /// - Interconnect layers (metal1+) connect to vias FROM BELOW → use z_bottom
+    ///
+    /// This aligns routing centerlines with via connection points for DRC compliance.
     pub fn from_stackup(
         stackup: &[StackupLayer],
         material_registry: &MaterialRegistry,
@@ -89,6 +93,11 @@ impl RoutingLayerDatabase {
             ordered_names: Vec::new(),
         };
 
+        // Build layer type classification for intelligent Z assignment
+        // Heuristic: First 2 routable layers are base layers (active, poly)
+        // All subsequent layers are interconnect (metal1, metal2, ...)
+        let mut routable_layer_count = 0;
+        
         for layer in stackup {
             // Look up the material to determine conductivity
             let mat_id = material_registry.get_id(&layer.material_name);
@@ -99,7 +108,32 @@ impl RoutingLayerDatabase {
                 )
             });
 
-            let routing_z = layer.z_bottom;
+            let is_routable = is_conductive && layer.is_routable;
+            
+            // **v0.2.1 FIX: Data-driven routing Z assignment**
+            // Base layers (active, poly) only connect to vias from above → route at z_top
+            // Interconnect layers (metal1+) connect to vias from below → route at z_bottom
+            let routing_z = if is_routable {
+                routable_layer_count += 1;
+                if routable_layer_count <= 2 {
+                    // Base/Semiconductor layers: vias connect from above
+                    eprintln!(
+                        "[ROUTING LAYER DB] Layer '{}' (#{}) is BASE layer: routing_z = z_top = {}nm",
+                        layer.name, routable_layer_count, layer.z_top
+                    );
+                    layer.z_top
+                } else {
+                    // Interconnect layers: vias connect from below
+                    eprintln!(
+                        "[ROUTING LAYER DB] Layer '{}' (#{}) is INTERCONNECT layer: routing_z = z_bottom = {}nm",
+                        layer.name, routable_layer_count, layer.z_bottom
+                    );
+                    layer.z_bottom
+                }
+            } else {
+                // Non-routable layers use z_bottom (doesn't matter since they won't be routed)
+                layer.z_bottom
+            };
 
             db.layers.insert(
                 layer.name.clone(),
@@ -109,11 +143,17 @@ impl RoutingLayerDatabase {
                     routing_z,
                     z_bottom: layer.z_bottom,
                     z_top: layer.z_top,
-                    is_routable: is_conductive && layer.is_routable,
+                    is_routable,
                 },
             );
             db.ordered_names.push(layer.name.clone());
         }
+
+        eprintln!(
+            "[ROUTING LAYER DB] Registered {} layers ({} routable)",
+            db.ordered_names.len(),
+            routable_layer_count
+        );
 
         db
     }
@@ -176,6 +216,14 @@ impl RoutingLayerDatabase {
 
     /// Validate the database — ensure all routable layers have valid Z ranges.
     pub fn validate(&self) -> Result<(), Vec<RoutingLayerError>> {
+        eprintln!("[ROUTING LAYER DB] Validating {} layers:", self.layers.len());
+        for (name, layer) in &self.layers {
+            eprintln!(
+                "[ROUTING LAYER DB]   '{}': routable={}, routing_z={}nm, z_bottom={}nm, z_top={}nm",
+                name, layer.is_routable, layer.routing_z, layer.z_bottom, layer.z_top
+            );
+        }
+        
         let mut errors = Vec::new();
 
         for (name, layer) in &self.layers {

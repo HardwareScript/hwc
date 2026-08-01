@@ -165,7 +165,6 @@ impl<'a> AutoRouter<'a> {
         //
         // No action needed here - routes are already in the database.
         
-        let routing_copper_id = self.resolve_sample_copper_id()?;
         // NOTE: The loop below is now a NO-OP since we don't clear or register.
         // Keeping it commented for reference during transition.
         // for (&net_id, mutated_paths) in &result.paths {
@@ -324,16 +323,6 @@ impl<'a> AutoRouter<'a> {
     }
 
     fn run_legalization(&mut self) -> Result<(), IrError> {
-        let min_clearance = self
-            .space
-            .fabrication_constraints
-            .as_ref()
-            .map(|c| c.trace.min_spacing_nm)
-            .ok_or_else(|| IrError::MissingAsicConstraint {
-                message: "Legalization requires spacing constraints.".into(),
-                hint: "Add 'trace:' block.".into(),
-            })?;
-
         // **v0.2.0: Legalization should NOT modify entity_graph directly**
         // entity_graph.routed_segments contains child routes that must be preserved.
         // Legalization operates on PARENT routes only, which are in routing_database.

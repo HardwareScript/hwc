@@ -9,6 +9,7 @@ pub mod placement;
 pub mod routing_database;
 pub mod routing_layer_database;
 pub mod space;
+pub mod via_instance_database;
 pub mod via_layer_mapping_database;
 
 // Test utilities - available for doc tests and unit tests
@@ -80,6 +81,7 @@ pub use layer_connection_database::{
     ConnectionType, LayerConnectionDatabase, LayerConnectionError, RoutingConnectionPoint,
 };
 pub use routing_layer_database::{RoutingLayer, RoutingLayerDatabase, RoutingLayerError};
+pub use via_instance_database::{ViaInstance, ViaInstanceDatabase};
 pub use via_layer_mapping_database::{
     BridgeRuleInput, ViaConnection, ViaLayerMappingDatabase, ViaLayerMappingError,
 };

@@ -1,13 +1,18 @@
 use super::super::super::types::{NetRoute, RoutedNet, RoutingError};
 use super::super::core::GeometryRouter;
+use crate::geometry_router::EntityGraph;
 use rustc_hash::FxHashMap;
 
 impl GeometryRouter {
-    pub fn route_all_nets(&mut self, nets: &[NetRoute]) -> Result<Vec<RoutedNet>, RoutingError> {
+    pub fn route_all_nets(
+        &mut self,
+        entity_graph: &mut EntityGraph,
+        nets: &[NetRoute],
+    ) -> Result<Vec<RoutedNet>, RoutingError> {
         let mut routed_nets = Vec::with_capacity(nets.len());
 
         for net in nets {
-            let routed = self.route_net(net)?;
+            let routed = self.route_net(entity_graph, net)?;
 
             routed_nets.push(routed);
         }
@@ -21,6 +26,7 @@ impl GeometryRouter {
     /// Nets not declared in the profile get priority 0 (lowest).
     pub fn route_all_nets_with_priority(
         &mut self,
+        entity_graph: &mut EntityGraph,
         nets: &[NetRoute],
         priorities: &FxHashMap<crate::netlist::NetId, u8>,
     ) -> Result<Vec<RoutedNet>, RoutingError> {
@@ -33,7 +39,7 @@ impl GeometryRouter {
 
         let mut routed_map = FxHashMap::default();
         for net in sorted_nets {
-            let routed = self.route_net(&net)?;
+            let routed = self.route_net(entity_graph, &net)?;
             routed_map.insert(net.net_id, routed);
         }
 

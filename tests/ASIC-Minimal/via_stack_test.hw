@@ -1,0 +1,52 @@
+# via_stack_test.hw
+# Minimal test case for debugging via stacking between poly and metal1 layers
+# Tests whether vias properly overlap with both source and destination layers
+# UPDATED: Now uses middle-level relational abstraction (v0.1.9)
+
+import * from @std/primitives/units
+import * from "./minimal_pdk"
+
+export module ViaStackTest:
+    pins: [input Signal]
+
+# Define a parameterized square pad shape
+shape SquarePad(size: Measurement):
+    geometry:
+        Rectangle(width: size, height: size)
+
+export space Via_Stack_Space implements ViaStackTest:
+    # Small 1.5um x 1.5um x 2.0um space for focused debugging
+    dimensions: 1.5um by 1.5um by 2.0um
+    resolution: 10nm
+    origin: bl by b
+    profile: Silicon_180nm
+
+    nets:
+        Signal: { classification: signal, potential: 1.8V, current: 0.1uA }
+
+    # 1. Poly Layer Strip (Bottom conductor) - RELATIONAL PLACEMENT
+    # Z-range: 450-850nm per Silicon_180nm profile
+    add plane(Polysilicon) named Poly_Strip on layer: poly:
+        net: Signal
+        shape: SquarePad(size: 700nm)
+        at: space.center
+
+    # 2. Metal1 Pad (Top conductor) - RELATIONAL ALIGNMENT (Multi-line with braces)
+    # Z-range: 1250-1650nm per Silicon_180nm profile
+    add plane(Aluminum) named Metal_Pad {
+        align: center_x with Poly_Strip
+        align: center_y with Poly_Strip
+    } on layer: metal1:
+        net: Signal
+        shape: SquarePad(size: 700nm)
+
+    # 3. Via Connection (Should bridge poly to metal1) - RELATIONAL ANCHOR (Multi-line with braces)
+    # Expected behavior: Via should overlap both poly and metal1 layers
+    # Uses relational anchor instead of absolute coordinates
+    add contact(Titanium_Silicide) named Test_Via {
+        at: Poly_Strip.center
+        spanning layer: poly to metal1
+    }:
+        net: Signal
+        diameter: 200nm
+        plating_thickness: 5nm

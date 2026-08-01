@@ -247,23 +247,43 @@ impl<'a> AutoRouter<'a> {
             }
         }
 
+        // Snapshot substrate layers from the entity graph before passing a mutable
+        // borrow of the entity graph to route_space (avoids an aliasing borrow).
+        let substrate_layers_owned = self.space.entity_graph.get_substrate_layers().to_vec();
+        let substrate_layers = if substrate_layers_owned.is_empty() {
+            None
+        } else {
+            Some(substrate_layers_owned.as_slice())
+        };
+
         geo_router
-            .route_space(RouteSpaceRequest {
-                grid_bbox: &grid_bbox,
-                nets: &FxHashMap::default(),
-                explicit_segments: Some(&explicit_segments),
-                obstacle_bboxes: &data.obstacle_bboxes,
-                substrate_layers: if !self.space.entity_graph.get_substrate_layers().is_empty() {
-                    Some(self.space.entity_graph.get_substrate_layers())
-                } else {
-                    None
+            .route_space(
+                RouteSpaceRequest {
+                    grid_bbox: &grid_bbox,
+                    nets: &FxHashMap::default(),
+                    explicit_segments: Some(&explicit_segments),
+                    obstacle_bboxes: &data.obstacle_bboxes,
+                    substrate_layers,
+                    net_frequencies: &self.config.net_frequencies,
+                    net_trace_widths: &net_trace_widths_by_id,
+                    net_normals: if !net_normals.is_empty() {
+                        Some(&net_normals)
+                    } else {
+                        None
+                    },
+                    net_escape_stubs: if !net_escape_stubs.is_empty() {
+                        Some(&net_escape_stubs)
+                    } else {
+                        None
+                    },
+                    net_layer_targets: if !data.net_layer_targets_by_id.is_empty() {
+                        Some(&data.net_layer_targets_by_id)
+                    } else {
+                        None
+                    },
                 },
-                net_frequencies: &self.config.net_frequencies,
-                net_trace_widths: &net_trace_widths_by_id,
-                net_normals: if !net_normals.is_empty() { Some(&net_normals) } else { None },
-                net_escape_stubs: if !net_escape_stubs.is_empty() { Some(&net_escape_stubs) } else { None },
-                net_layer_targets: if !data.net_layer_targets_by_id.is_empty() { Some(&data.net_layer_targets_by_id) } else { None },
-            })
+                &mut self.space.entity_graph,
+            )
             .map_err(|_| IrError::NoPathFound {
                 net: "batch".into(),
                 from_pin: "batch".into(),
@@ -366,6 +386,7 @@ impl<'a> AutoRouter<'a> {
                 layer_materials.push(mat_id);
             }
             geo_router.set_profile_mode(
+                &mut self.space.entity_graph,
                 is_manhattan,
                 profile_layers.to_vec(),
                 layer_z_positions,
@@ -419,25 +440,6 @@ impl<'a> AutoRouter<'a> {
                 };
                 geo_router.set_routing_heuristics(heuristics);
             }
-        }
-
-        for metadata in self.space.entity_graph.get_component_metadata() {
-            geo_router.add_component_obstacle(
-                metadata.bbox,
-                metadata.material,
-                metadata.name.clone(),
-                metadata.component_type.clone(),
-            );
-        }
-        for pin in self.space.entity_graph.get_component_pins() {
-            geo_router.add_component_pin(
-                pin.x_nm,
-                pin.y_nm,
-                pin.z_nm,
-                pin.component_name.clone(),
-                pin.pin_name.clone(),
-                pin.net.clone(),
-            );
         }
 
         Ok(())

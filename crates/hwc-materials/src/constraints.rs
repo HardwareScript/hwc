@@ -164,6 +164,15 @@ pub struct ViaConstraints {
     /// Default via diameter in nanometers
     pub default_diameter_nm: i64,
 
+    /// Contact depth: How deep vias penetrate into conductive layers in nanometers.
+    ///
+    /// Specifies how much the via extends beyond the dielectric interface into both
+    /// the source and destination conductive layers. This ensures reliable electrical
+    /// contact per standard ASIC design rules.
+    ///
+    /// Example: 50nm means via penetrates 50nm into poly layer and 50nm into metal1 layer.
+    pub contact_depth_nm: i64,
+
     /// Via shape: "square" or "cylinder" (optional, defaults to cylinder)
     pub shape: Option<CompactString>,
 }

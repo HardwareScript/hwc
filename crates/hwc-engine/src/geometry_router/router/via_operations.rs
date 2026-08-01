@@ -16,6 +16,7 @@
 use super::super::types::{Via, ViaSpec, ViaType};
 use super::core::GeometryRouter;
 use crate::geometry::Point3D;
+use crate::geometry_router::EntityGraph;
 use crate::netlist::NetId;
 
 impl GeometryRouter {
@@ -225,7 +226,13 @@ impl GeometryRouter {
     /// — component metadata, substrate layers (via pads, pours, contacts), and
     /// routed segments — via `is_circular_area_clear()`. This replaces the legacy
     /// component-metadata-only check that missed substrate layers and routes.
-    pub(super) fn can_place_via(&self, position: (i64, i64), from_z_nm: i64, to_z_nm: i64) -> bool {
+    pub(super) fn can_place_via(
+        &self,
+        entity_graph: &EntityGraph,
+        position: (i64, i64),
+        from_z_nm: i64,
+        to_z_nm: i64,
+    ) -> bool {
         let fabrication = match &self.constraints.fabrication {
             Some(f) => f,
             None => return true,
@@ -249,7 +256,7 @@ impl GeometryRouter {
         };
 
         for z_nm in via.z_planes_between(&self.config.layer_z_positions, 0, self.bounds.depth_nm) {
-            if !self.is_circular_area_clear(position, total_radius, z_nm) {
+            if !self.is_circular_area_clear(entity_graph, position, total_radius, z_nm) {
                 return false;
             }
         }
@@ -264,7 +271,7 @@ impl GeometryRouter {
     /// via `add_cylinder_substrate_layer()`. Each Z plane gets a separate substrate
     /// layer entry, making via pads visible to all spatial queries (DRC, clearance).
     /// Also generates anti-pads for non-matching copper pours.
-    pub fn stamp_via(&mut self, via: &Via) {
+    pub fn stamp_via(&mut self, entity_graph: &mut EntityGraph, via: &Via) {
         let fabrication = match &self.constraints.fabrication {
             Some(f) => f,
             None => return,
@@ -274,10 +281,10 @@ impl GeometryRouter {
         let total_radius = (via.diameter_nm + 2 * annular_ring) / 2;
 
         for z_nm in via.z_planes_between(&self.config.layer_z_positions, 0, self.bounds.depth_nm) {
-            self.mark_circular_area_occupied(via.position, total_radius, z_nm, via.net_id);
+            self.mark_circular_area_occupied(entity_graph, via.position, total_radius, z_nm, via.net_id);
         }
 
-        self.generate_antipads(via);
+        self.generate_antipads(entity_graph, via);
     }
 
     /// Generate anti-pads for vias passing through copper pours on different nets.
@@ -287,7 +294,7 @@ impl GeometryRouter {
     /// EntityGraph and rebuilds the spatial index. For matching-net pours with
     /// thermal_relief=true, generates thermal relief spokes via the native vector
     /// `ThermalReliefGenerator` that writes directly to the EntityGraph.
-    pub(super) fn generate_antipads(&mut self, via: &Via) {
+    pub(super) fn generate_antipads(&mut self, entity_graph: &mut EntityGraph, via: &Via) {
         let fabrication = match &self.constraints.fabrication {
             Some(f) => f,
             None => return,
@@ -300,7 +307,7 @@ impl GeometryRouter {
             for pour in &self.copper_pours.clone() {
                 if pour.z_bottom_nm == z_nm {
                     if pour.net_id != via.net_id {
-                        self.remove_circular_area(via.position, antipad_radius, z_nm);
+                        self.remove_circular_area(entity_graph, via.position, antipad_radius, z_nm);
                     } else if let Some(hwc_parser::Expression::Variable { name, .. }) =
                         via.properties.get("thermal_relief")
                     {
@@ -325,7 +332,7 @@ impl GeometryRouter {
                                 z_nm,
                                 self.routing_material_id,
                                 via.net_id,
-                                &mut self.entity_graph,
+                                entity_graph,
                             );
                         }
                     }
@@ -341,13 +348,13 @@ impl GeometryRouter {
     /// matching Circle-shaped substrate layers from the EntityGraph and rebuilds
     /// the spatial index, ensuring via pads are no longer visible to DRC or
     /// clearance checks.
-    pub fn clear_via(&mut self, via: &Via) {
+    pub fn clear_via(&mut self, entity_graph: &mut EntityGraph, via: &Via) {
         self.vias.retain(|v| {
             v.position != via.position || v.from_z_nm != via.from_z_nm || v.to_z_nm != via.to_z_nm
         });
 
         for z_nm in via.z_planes_between(&self.config.layer_z_positions, 0, self.bounds.depth_nm) {
-            self.remove_circular_area(via.position, via.diameter_nm, z_nm);
+            self.remove_circular_area(entity_graph, via.position, via.diameter_nm, z_nm);
         }
     }
 
@@ -485,6 +492,7 @@ impl GeometryRouter {
     /// * `enclosures` - Per-layer enclosure sizes (layer_name → enclosure_nm)
     pub fn generate_intermediate_landing_pads(
         &mut self,
+        entity_graph: &mut EntityGraph,
         via_tower: &[Via],
         enclosures: &rustc_hash::FxHashMap<String, i64>,
     ) {
@@ -509,7 +517,7 @@ impl GeometryRouter {
                 let pad_radius = (via.diameter_nm / 2) + enclosure;
 
                 // Stamp the landing pad
-                self.mark_circular_area_occupied(via.position, pad_radius, z_nm, via.net_id);
+                self.mark_circular_area_occupied(entity_graph, via.position, pad_radius, z_nm, via.net_id);
             }
         }
     }

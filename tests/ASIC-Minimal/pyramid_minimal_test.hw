@@ -1,0 +1,57 @@
+# pyramid_minimal_test.hw
+# Minimal test for Z-axis stacking with XY centering
+# 3 cubes: 2 side-by-side at base, 1 centered on top
+
+import * from @std/primitives/units
+import * from "./minimal_pdk"
+
+module PyramidMinimalTest:
+    pins: [ input TestNet ]
+
+shape SquareCube(size: Measurement):
+    geometry:
+        Rectangle(width: size, height: size)
+
+space Pyramid_Minimal_Space implements PyramidMinimalTest:
+    dimensions: 10.0um by 10.0um by 5.0um
+    resolution: 10nm
+    origin: bl by b
+    profile: ASIC_Flattened
+
+    nets:
+        TestNet: { classification: signal, potential: 1.8V, current: 0.1uA }
+
+    # ========================================================================
+    # BASE LAYER: Two 3um cubes side by side
+    # ========================================================================
+    
+    # Left cube at (2um, 5um) - centered vertically, left side
+    add plane(Aluminum) named Base_Left on layer: metal1:
+        shape: SquareCube(size: 3.0um)
+        at: [2.0um, 5.0um]
+        net: TestNet
+
+    # Right cube at (8um, 5um) - centered vertically, right side
+    add plane(Aluminum) named Base_Right on layer: metal1:
+        shape: SquareCube(size: 3.0um)
+        at: [8.0um, 5.0um]
+        net: TestNet
+
+    # ========================================================================
+    # TOP LAYER: One 2um cube centered above both base cubes
+    # Should be at X=5um (center between 2um and 8um), Y=5um (same as base)
+    # ========================================================================
+    add plane(Aluminum) named Top_Center {
+        align: center_x with space
+        align: center_y with Base_Left
+        above Base_Left with spacing: 500nm
+    } on layer: metal1:
+        shape: SquareCube(size: 2.0um)
+        net: TestNet
+
+    # ========================================================================
+    # CONNECTIVITY: Background pour
+    # ========================================================================
+    add pour(Aluminum) named Background on layer: metal1:
+        boundary: [50nm, 50nm] to [9950nm, 9950nm]
+        net: TestNet

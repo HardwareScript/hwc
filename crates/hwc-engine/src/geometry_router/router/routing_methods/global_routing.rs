@@ -2,6 +2,7 @@ use super::super::super::types::{NetRoute, RouteResult, RoutedNet, RoutingError}
 use super::super::core::GeometryRouter;
 use crate::geometry::{BoundingBox, Point3D};
 use crate::geometry_router::topological_router::TopologicalRouter;
+use crate::geometry_router::EntityGraph;
 use crate::netlist::NetId;
 use rustc_hash::FxHashMap;
 
@@ -18,6 +19,7 @@ impl GeometryRouter {
     /// * `trace_width_nm` - Width of the routing trace (needed for proper clearance calculation)
     pub fn resolve_boundary_port(
         &self,
+        entity_graph: &EntityGraph,
         pin: Point3D,
         target: Point3D,
         trace_width_nm: i64,
@@ -40,11 +42,10 @@ impl GeometryRouter {
         );
 
         // Try 1: component_metadata lookup (fast, exact)
-        let maybe_bbox = self
-            .entity_graph
+        let maybe_bbox = entity_graph
             .point_in_component(pin.x, pin.y, pin.z)
             .and_then(|component_name| {
-                self.entity_graph
+                entity_graph
                     .get_component_metadata()
                     .iter()
                     .find(|c| c.name == component_name)
@@ -54,10 +55,7 @@ impl GeometryRouter {
         // Try 2: fallback to pour substrate layers (catches pads with no component metadata)
         let bbox = match maybe_bbox {
             Some(b) => b,
-            None => match self
-                .entity_graph
-                .get_pour_bbox_at_position(pin.x, pin.y, pin.z)
-            {
+            None => match entity_graph.get_pour_bbox_at_position(pin.x, pin.y, pin.z) {
                 Some(b) => b,
                 None => return pin,
             },
@@ -125,7 +123,11 @@ impl GeometryRouter {
     }
 
     /// Global continuous router with localized active-set optimization fallback.
-    pub fn route_net_global(&mut self, route: &NetRoute) -> Result<RoutedNet, RoutingError> {
+    pub fn route_net_global(
+        &mut self,
+        entity_graph: &mut EntityGraph,
+        route: &NetRoute,
+    ) -> Result<RoutedNet, RoutingError> {
         // v0.1.9: Fail-Fast — trace width MUST be declared for this net.
         // No fallbacks to PDK minimum. The compiler is responsible for ensuring
         // every route has an explicit width or a valid default.
@@ -195,7 +197,7 @@ impl GeometryRouter {
             ),
         );
 
-        let spatial_index = self.build_routing_spatial_index(route);
+        let spatial_index = self.build_routing_spatial_index(entity_graph, route);
         let track_pitch = self.resolution_nm;
         let topo_router =
             TopologicalRouter::new(trace_width, track_pitch, fabrication.min_trace_spacing_nm);
@@ -280,15 +282,15 @@ impl GeometryRouter {
 
         let mut placed_vias = Vec::new();
         for via in unrolled_vias {
-            if self.can_place_via(via.position, via.from_z_nm, via.to_z_nm) {
-                self.stamp_via(&via);
+            if self.can_place_via(entity_graph, via.position, via.from_z_nm, via.to_z_nm) {
+                self.stamp_via(entity_graph, &via);
                 self.vias.push(via.clone());
                 placed_vias.push(via);
             }
         }
 
         // Commit the stitched path to the EntityGraph
-        self.entity_graph.register_route(
+        entity_graph.register_route(
             route.net_id,
             &final_path,
             self.routing_material_id,
@@ -313,6 +315,7 @@ impl GeometryRouter {
 
     pub fn route_all_nets_steiner_global(
         &mut self,
+        entity_graph: &mut EntityGraph,
         nets: &FxHashMap<NetId, Vec<Point3D>>,
     ) -> Result<RouteResult, RoutingError> {
         let mut result = RouteResult::new();
@@ -327,7 +330,7 @@ impl GeometryRouter {
 
             // v0.1.8: Use the Steiner tree algorithm to decompose the net into
             // point-to-point global routes.
-            let routed = self.decompose_net_steiner(net_id, pins)?;
+            let routed = self.decompose_net_steiner(entity_graph, net_id, pins)?;
             result.paths.insert(net_id, routed.paths);
             result.vias.extend(routed.vias);
         }
@@ -337,6 +340,7 @@ impl GeometryRouter {
 
     pub fn route_all_nets_explicit_global(
         &mut self,
+        entity_graph: &mut EntityGraph,
         segments: &[(NetId, Vec<Point3D>)],
     ) -> Result<RouteResult, RoutingError> {
         let mut result = RouteResult::new();
@@ -358,7 +362,7 @@ impl GeometryRouter {
 
                
 
-                let routed = self.route_net_global(&route)?;
+                let routed = self.route_net_global(entity_graph, &route)?;
 
                 eprintln!("[EXPLICIT_GLOBAL DEBUG] Segment {}->{} routed for net {:?}", i, i+1, net_id);
                 if let Some(path) = routed.paths.first() {

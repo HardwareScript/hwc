@@ -44,11 +44,12 @@ pub fn profile_to_constraints(
                 .as_ref()
                 .map(measurement_to_nm)
                 .unwrap_or_else(|| measurement_to_nm(&via_def.min_diameter)),
+            contact_depth_nm: measurement_to_nm(&via_def.contact_depth),
             shape: via_def.shape.as_ref().map(|s| s.name.clone()),
         }
     } else {
         return Err(ConversionError::MissingProfileConstraint(
-            "via (min_diameter, min_annular_ring)".into(),
+            "via (min_diameter, min_annular_ring, contact_depth)".into(),
         ));
     };
 

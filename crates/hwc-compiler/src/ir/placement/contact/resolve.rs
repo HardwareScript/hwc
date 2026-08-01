@@ -68,6 +68,7 @@ pub(super) fn resolve_z_span(
     from_top_nm: i64,
     to_bottom_nm: i64,
     to_top_nm: i64,
+    contact_depth_nm: i64,
 ) -> (i64, i64) {
     if let (Some(from_name), Some(to_name)) = (
         stackup_manager.get_layer_name(&contact.from_elevation),
@@ -94,11 +95,17 @@ pub(super) fn resolve_z_span(
                 )
             };
 
-        // SEMICONDUCTOR STANDARD: Contact connects layer SURFACES, not penetrating through them
-        // - Bottom of contact: top surface of lower layer (ohmic interface)
-        // - Top of contact: bottom surface of upper layer (planar metallic contact)
-        let via_bottom = lower_top;
-        let via_top = upper_bottom;
+        // ASIC Via Manufacturing Standard (v0.2.0):
+        // Vias penetrate into both source and destination conductive layers to ensure
+        // reliable electrical contact per standard design rules (e.g., SCMOS min 1λ enclosure).
+        //
+        // The contact_depth parameter (from profile via.contact_depth) specifies how deep
+        // the via extends into each layer beyond the dielectric interface.
+        //
+        // Example: contact_depth=50nm means via extends from (lower_top - 50nm) to (upper_bottom + 50nm),
+        // penetrating 50nm into the lower layer and 50nm into the upper layer.
+        let via_bottom = lower_top - contact_depth_nm;
+        let via_top = upper_bottom + contact_depth_nm;
 
         (via_bottom, via_top)
     } else {

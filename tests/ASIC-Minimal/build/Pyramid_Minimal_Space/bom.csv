@@ -1,0 +1,12 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,0.01x0.01x0.01mm,,,,,1
+Base_Left,Plane(Aluminum),,,,,,1
+Base_Right,Plane(Aluminum),,,,,,1
+Top_Center,Plane(Aluminum),,,,,,1
+
+# MATERIAL USAGE (Fabrication)
+Reference,Type,Material,Layer_Z_nm,Area_nm2,Volume_nm3
+Base_Left,Pour,Aluminum,z:35,9000000,90000000
+Base_Right,Pour,Aluminum,z:35,9000000,90000000
+Top_Center,Pour,Aluminum,z:35,4000000,40000000
+Background,Pour,Aluminum,z:35,98010000,980100000

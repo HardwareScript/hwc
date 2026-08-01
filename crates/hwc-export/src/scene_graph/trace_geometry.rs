@@ -34,7 +34,7 @@
 use crate::geometry_union::stroke_route_segments;
 use crate::scene_graph::types::MeshNode;
 use clipper2_rust::{FillRule, Point64};
-use compact_str::CompactString;
+
 use hwc_engine::material::MaterialId;
 use hwc_engine::netlist::NetId;
 use hwc_engine::space::{LineSegment, SegmentType};
@@ -81,7 +81,6 @@ impl GeometrySegment {
     pub fn from_line_segment(
         segment: LineSegment,
         width_nm: i64,
-        thickness_nm: i64,
         layer_z_range: Option<(i64, i64)>,
         material: MaterialId,
         net_id: NetId,
@@ -324,7 +323,6 @@ pub fn generate_trace_geometry(
             let geom_seg = match GeometrySegment::from_line_segment(
                 segment.clone(),
                 trace.cross_section.width_nm,
-                trace.cross_section.thickness_nm,
                 trace.layer_z_range,
                 trace.material,
                 trace.net_id,
@@ -363,95 +361,6 @@ pub fn generate_trace_geometry(
     pools
 }
 
-/// Extrude a 2D polygon to create a 3D prism mesh.
-///
-/// # Parameters
-///
-/// - `name`: Mesh name
-/// - `points`: 2D polygon vertices in millimeters
-/// - `z_min_mm`: Bottom Z coordinate in millimeters
-/// - `depth_mm`: Extrusion depth in millimeters
-/// - `material_name`: Material name for the mesh
-///
-/// # Returns
-///
-/// A MeshNode with vertices and faces for the extruded prism.
-fn extrude_polygon_to_mesh(
-    name: &str,
-    points: Vec<(f64, f64)>,
-    z_min_mm: f64,
-    depth_mm: f64,
-    material_name: &str,
-) -> MeshNode {
-    use crate::scene_graph::types::{Face, Vertex};
-    
-    let n = points.len();
-    let z_max_mm = z_min_mm + depth_mm;
-
-    let mut vertices = Vec::with_capacity(n * 2);
-    let mut faces = Vec::new();
-
-    // Bottom vertices
-    for &(x, y) in &points {
-        vertices.push(Vertex {
-            x,
-            y,
-            z: z_min_mm,
-        });
-    }
-
-    // Top vertices
-    for &(x, y) in &points {
-        vertices.push(Vertex {
-            x,
-            y,
-            z: z_max_mm,
-        });
-    }
-
-    // Side faces (quads -> 2 triangles each)
-    for i in 0..n {
-        let i0 = i;
-        let i1 = (i + 1) % n;
-        let i2 = i + n;
-        let i3 = (i + 1) % n + n;
-
-        // Triangle 1: i0, i1, i2
-        faces.push(Face {
-            vertices: vec![i0, i1, i2],
-        });
-
-        // Triangle 2: i1, i3, i2
-        faces.push(Face {
-            vertices: vec![i1, i3, i2],
-        });
-    }
-
-    // Top cap (triangle fan from vertex 0)
-    if n >= 3 {
-        for i in 1..(n - 1) {
-            faces.push(Face {
-                vertices: vec![n + 0, n + i, n + i + 1],
-            });
-        }
-    }
-
-    // Bottom cap (triangle fan from vertex 0)
-    if n >= 3 {
-        for i in 1..(n - 1) {
-            faces.push(Face {
-                vertices: vec![0, i + 1, i],
-            });
-        }
-    }
-
-    MeshNode {
-        name: CompactString::from(name),
-        vertices,
-        faces,
-        material_name: CompactString::from(material_name),
-    }
-}
 
 #[cfg(test)]
 mod tests {
@@ -468,7 +377,6 @@ mod tests {
         let geom = GeometrySegment::from_line_segment(
             seg,
             200,              // width
-            400,              // thickness
             Some((1050, 1450)), // layer bounds
             MaterialId(1),
             NetId::new(1),
@@ -486,7 +394,6 @@ mod tests {
         let geom = GeometrySegment::from_line_segment(
             seg,
             200,           // width
-            400,           // thickness (ignored for vias)
             None,          // no layer bounds needed for vias
             MaterialId(1),
             NetId::new(1),
@@ -504,7 +411,6 @@ mod tests {
         let geom = GeometrySegment::from_line_segment(
             seg,
             200,
-            400,
             Some((1050, 1450)),
             MaterialId(1),
             NetId::new(1),

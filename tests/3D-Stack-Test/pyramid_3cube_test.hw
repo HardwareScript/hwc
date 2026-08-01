@@ -1,0 +1,54 @@
+# pyramid_3cube_test.hw
+# Minimal 3D stacking test: 2 cubes at base + 1 cube on top
+# Tests: XY centering + Z-axis stacking using relational constraints
+# PURE GEOMETRY MODE - No connectivity validation
+
+import * from @std/primitives/units
+import * from "./thick_layer_pdk"
+
+shape SquareCube(size: Measurement):
+    geometry:
+        Rectangle(width: size, height: size)
+
+space Pyramid_3Cube_Space:
+    dimensions: 10.0um by 10.0um by 10.0um
+    resolution: 10nm
+    origin: bl by b
+    profile: Thick_3D_Stack
+
+    nets:
+        TestNet: { classification: signal, potential: 1.8V, current: 0.1uA }
+
+    # ========================================================================
+    # BASE LAYER: Two 3um cubes side by side on metal1  
+    # Metal1 Z-range: 1500-2500nm (1um thick)
+    # ========================================================================
+    
+    # Left cube
+    add plane(Aluminum) named Base_Left on layer: metal1:
+        shape: SquareCube(size: 3.0um)
+        at: [3.5um, 5.0um]
+        net: TestNet
+
+    # Right cube - placed using relational constraint
+    add plane(Aluminum) named Base_Right {
+        right_of Base_Left
+        align: center_y with Base_Left
+    } on layer: metal1:
+        shape: SquareCube(size: 3.0um)
+        net: TestNet
+
+    # ========================================================================
+    # TOP LAYER: Calculate midpoint between the two base cubes
+    # Try using compile-time arithmetic to find center
+    # ========================================================================
+    
+    # Calculate the midpoint X coordinate
+    let midpoint_x = (Base_Left.center_x + Base_Right.center_x) / 2
+    
+    add plane(Aluminum) named Top_Center on layer: metal2:
+        shape: SquareCube(size: 2.0um)
+        at: [midpoint_x, 5.0um]
+        net: TestNet
+
+

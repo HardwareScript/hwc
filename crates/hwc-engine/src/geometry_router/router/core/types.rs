@@ -10,7 +10,6 @@ use crate::geometry_router::query_engine::QueryStore;
 use crate::geometry_router::routing_patterns::RoutingPattern;
 use crate::geometry_router::substrate_types::SubstrateLayer;
 use crate::geometry_router::types::{RoutingHeuristics, Via};
-use crate::geometry_router::EntityGraph;
 use rustc_hash::FxHashMap;
 
 /// Request parameters for [`GeometryRouter::route_space`].

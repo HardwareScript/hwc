@@ -1,6 +1,6 @@
 use crate::ir::errors::IrError;
 use compact_str::CompactString;
-use hwc_engine::HardwareSpace;
+
 
 /// Human-readable label for a route endpoint.
 pub fn endpoint_label(endpoint: &hwc_parser::RouteEndpointSpec) -> String {
@@ -182,51 +182,3 @@ pub fn resolve_endpoint_entity_ids(
     Ok((from_id, to_id))
 }
 
-/// Generate a list of available routing endpoints for error messages.
-pub(crate) fn list_available_endpoints(space: &HardwareSpace) -> String {
-    let mut endpoints = Vec::new();
-
-    let entity_count = space.entity_graph.iter_entity_ids().count();
-    eprintln!(
-        "[DEBUG list_available_endpoints] Entity count at error construction: {}",
-        entity_count
-    );
-
-    for entity_id in space.entity_graph.iter_entity_ids() {
-        if let Ok(entity_data) = space.entity_graph.get_entity_data(*entity_id) {
-            let name = entity_data.name.as_str();
-            eprintln!(
-                "[DEBUG] Entity name: {} (type: {:?})",
-                name, entity_data.entity_type
-            );
-
-            match entity_data.entity_type {
-                hwc_engine::geometry_router::entity_graph::EntityType::ComponentPin => {
-                    if let Some((comp_name, pin_name)) = name.split_once(':') {
-                        endpoints.push(format!("{}.{}", comp_name, pin_name));
-                    } else {
-                        endpoints.push(name.to_string());
-                    }
-                }
-                hwc_engine::geometry_router::entity_graph::EntityType::SpacePour => {
-                    endpoints.push(name.to_string());
-                }
-                _ => {}
-            }
-        }
-    }
-
-    eprintln!(
-        "[DEBUG] Parsed {} endpoints from {} entities",
-        endpoints.len(),
-        entity_count
-    );
-
-    if endpoints.is_empty() {
-        "\n\nAvailable endpoints: (none registered yet)".to_string()
-    } else {
-        endpoints.sort();
-        endpoints.dedup();
-        format!("\n\nAvailable endpoints:\n  {}", endpoints.join("\n  "))
-    }
-}

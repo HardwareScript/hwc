@@ -1,6 +1,7 @@
 use super::super::super::types::{NetRoute, RoutedNet, RoutingError};
 use super::super::core::GeometryRouter;
 use crate::geometry::Point3D;
+use crate::geometry_router::EntityGraph;
 use crate::netlist::NetId;
 
 impl GeometryRouter {
@@ -11,6 +12,7 @@ impl GeometryRouter {
     /// terminal docking with absolute precision.
     pub fn decompose_net_steiner(
         &mut self,
+        entity_graph: &mut EntityGraph,
         net_id: NetId,
         pins: &[Point3D],
     ) -> Result<RoutedNet, RoutingError> {
@@ -65,8 +67,8 @@ impl GeometryRouter {
             let goal_coord = segment.to_pin.position;
 
             // Resolve boundary docking ports on-demand using global-space coordinate checks
-            let start_port = self.resolve_boundary_port(start_coord, goal_coord, trace_width);
-            let goal_port = self.resolve_boundary_port(goal_coord, start_coord, trace_width);
+            let start_port = self.resolve_boundary_port(entity_graph, start_coord, goal_coord, trace_width);
+            let goal_port = self.resolve_boundary_port(entity_graph, goal_coord, start_coord, trace_width);
 
             // v0.1.8: Ensure ports are on the same Z layer.
             // In a vector-first system, traces must be coplanar with the pad anchor.
@@ -99,9 +101,14 @@ impl GeometryRouter {
                 let target_length = (final_start.x - final_goal.x).abs()
                     + (final_start.y - final_goal.y).abs()
                     + (final_start.z - final_goal.z).abs();
-                self.route_net_with_length_constraint(&route, target_length, &pattern)?
+                self.route_net_with_length_constraint(
+                    entity_graph,
+                    &route,
+                    target_length,
+                    &pattern,
+                )?
             } else {
-                self.route_net_global(&route)?
+                self.route_net_global(entity_graph, &route)?
             };
 
             // v0.1.8: Stitch the pin positions to the routed path to ensure physical

@@ -113,6 +113,19 @@ pub fn place_contact(
         contact_name_debug, contact.material, diameter_nm,
         from_bottom_nm, to_bottom_nm, from_top_nm, to_top_nm);
 
+    // Extract contact_depth from profile (REQUIRED parameter - no fallback)
+    let contact_depth_nm = space
+        .fabrication_constraints
+        .as_ref()
+        .map(|c| c.via.contact_depth_nm)
+        .ok_or_else(|| IrError::MissingAsicConstraint {
+            message: format!(
+                "Contact '{}' requires profile via.contact_depth but none is defined",
+                contact_name_debug
+            ),
+            hint: "Add 'contact_depth: 50nm' to the 'via:' section of your profile.\nThis specifies how deep vias penetrate into conductive layers for reliable contact.".into(),
+        })?;
+
     let (start_z, end_z) = resolve_z_span(
         stackup_manager,
         contact,
@@ -120,6 +133,7 @@ pub fn place_contact(
         from_top_nm,
         to_bottom_nm,
         to_top_nm,
+        contact_depth_nm,
     );
 
     println!(
@@ -398,6 +412,32 @@ pub fn place_contact(
                     contact_name_str, from_name, bottom_connection_z, to_name, top_connection_z
                 );
             }
+
+            // v0.2.0: Register via instance in ViaInstanceDatabase
+            // This prevents duplicate automatic via insertion by ViaResolver
+            if let Some(net) = net_id {
+                let xy_bbox = (
+                    contact_bbox.min.x,
+                    contact_bbox.min.y,
+                    contact_bbox.max.x,
+                    contact_bbox.max.y,
+                );
+                let z_range = (start_z, end_z);
+
+                space.via_instance_db.register(
+                    contact_name_str,
+                    net,
+                    from_name,
+                    to_name,
+                    xy_bbox,
+                    z_range,
+                );
+
+                eprintln!(
+                    "[VIA INSTANCE DB] Registered explicit via '{}' on net {:?}: {} -> {} at ({}, {})",
+                    contact_name_str, net, from_name, to_name, xy_point.x, xy_point.y
+                );
+            }
         }
     }
 
@@ -458,19 +498,24 @@ pub fn place_contact(
         use hwc_parser::OriginXY;
         let is_y_upward = matches!(origin.xy, OriginXY::BL | OriginXY::BR);
 
+        // v0.1.9.4 BUG FIX: Use pad_bbox for interface geometry instead of contact_bbox.
+        // Contact_bbox is just the drill hole, but pad_bbox includes the annular ring.
+        // This ensures escape points are calculated from the pad surface, not the drill edge.
+        let interface_bbox = pad_bbox;
+
         let geometry = if is_y_upward {
             InterfaceGeometry::Polygon(vec![
-                Point3D::new(contact_bbox.min.x, contact_bbox.min.y, connection_z_nm),
-                Point3D::new(contact_bbox.max.x, contact_bbox.min.y, connection_z_nm),
-                Point3D::new(contact_bbox.max.x, contact_bbox.max.y, connection_z_nm),
-                Point3D::new(contact_bbox.min.x, contact_bbox.max.y, connection_z_nm),
+                Point3D::new(interface_bbox.min.x, interface_bbox.min.y, connection_z_nm),
+                Point3D::new(interface_bbox.max.x, interface_bbox.min.y, connection_z_nm),
+                Point3D::new(interface_bbox.max.x, interface_bbox.max.y, connection_z_nm),
+                Point3D::new(interface_bbox.min.x, interface_bbox.max.y, connection_z_nm),
             ])
         } else {
             InterfaceGeometry::Polygon(vec![
-                Point3D::new(contact_bbox.min.x, contact_bbox.min.y, connection_z_nm),
-                Point3D::new(contact_bbox.min.x, contact_bbox.max.y, connection_z_nm),
-                Point3D::new(contact_bbox.max.x, contact_bbox.max.y, connection_z_nm),
-                Point3D::new(contact_bbox.max.x, contact_bbox.min.y, connection_z_nm),
+                Point3D::new(interface_bbox.min.x, interface_bbox.min.y, connection_z_nm),
+                Point3D::new(interface_bbox.min.x, interface_bbox.max.y, connection_z_nm),
+                Point3D::new(interface_bbox.max.x, interface_bbox.max.y, connection_z_nm),
+                Point3D::new(interface_bbox.min.x, interface_bbox.min.y, connection_z_nm),
             ])
         };
 

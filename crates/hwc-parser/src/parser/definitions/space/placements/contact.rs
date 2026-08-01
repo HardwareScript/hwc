@@ -19,7 +19,9 @@ impl crate::parser::Parser {
         self.expect(&Token::Named)?;
         let name = self.parse_component_name()?;
 
-        // Optional: net: NetName
+        self.skip_whitespace();
+
+        // Optional: net: NetName (before placement clauses)
         let net = if self.check(&Token::Identifier("net".into())) {
             self.advance(); // consume 'net'
             self.expect(&Token::Colon)?;
@@ -28,85 +30,63 @@ impl crate::parser::Parser {
             None
         };
 
-        self.expect(&Token::At)?;
-        
-        // v0.2.0: Support both absolute coordinates and relational anchors
-        let (position, relational_anchor) = if self.check(&Token::Colon) {
-            // Relational syntax: `at: Region.center`
-            self.advance(); // consume ':'
-            let anchor = self.parse_region_anchor()?;
-            (None, Some(anchor))
+        // Check for brace-grouped placement clauses or inline placement
+        let (position, relational_anchor, from_elevation, to_elevation) = if self.check(&Token::OpenBrace) {
+            // Multi-line syntax with braces: { at: ... \n spanning ... }
+            self.advance(); // consume '{'
+            self.skip_whitespace();
+            if self.check(&Token::Newline) {
+                self.advance();
+            }
+            if self.check(&Token::Indent) {
+                self.advance();
+            }
+
+            self.expect(&Token::At)?;
+            
+            let (pos, anchor) = if self.check(&Token::Colon) {
+                self.advance();
+                let anchor = self.parse_region_anchor()?;
+                (None, Some(anchor))
+            } else {
+                let pos = self.parse_coordinate_optional_z()?;
+                (Some(pos), None)
+            };
+
+            self.skip_whitespace();
+            if self.check(&Token::Newline) {
+                self.advance();
+            }
+
+            self.expect(&Token::Spanning)?;
+            let (from_elev, to_elev) = self.parse_spanning_clause()?;
+
+            self.skip_whitespace();
+            if self.check(&Token::Dedent) {
+                self.advance();
+            }
+            self.skip_whitespace();
+            self.expect(&Token::CloseBrace)?;
+            self.skip_whitespace();
+
+            (pos, anchor, from_elev, to_elev)
         } else {
-            // Absolute coordinate syntax: `at [x: ..., y: ...]`
-            let pos = self.parse_coordinate_optional_z()?;
-            (Some(pos), None)
-        };
-
-        self.expect(&Token::Spanning)?;
-
-        // v0.1.7 Z-Axis Abstraction: support both `spanning z: A to z: B` and `spanning layer: l1 to l2`
-        let (from_elevation, to_elevation) = if self.check(&Token::Identifier("layer".into())) {
-            self.advance(); // consume "layer"
-            self.expect(&Token::Colon)?;
-            let from_name = self.expect_identifier()?;
-            let from_elev = if from_name.as_str() == "self" {
-                Elevation::Relative
-            } else {
-                Elevation::Semantic(from_name)
-            };
-
-            self.expect(&Token::To)?;
-
-            // Consume optional second "layer" keyword
-            if self.check(&Token::Identifier("layer".into())) {
+            // Inline syntax: at ... spanning ...
+            self.expect(&Token::At)?;
+            
+            let (pos, anchor) = if self.check(&Token::Colon) {
                 self.advance();
-                self.expect(&Token::Colon)?;
-            }
-            let to_name = self.expect_identifier()?;
-            let to_elev = if to_name.as_str() == "self" {
-                Elevation::Relative
+                let anchor = self.parse_region_anchor()?;
+                (None, Some(anchor))
             } else {
-                Elevation::Semantic(to_name)
+                let pos = self.parse_coordinate_optional_z()?;
+                (Some(pos), None)
             };
 
-            (from_elev, to_elev)
-        } else {
-            // Physical / legacy
-            let from_coord = self.expect_identifier()?;
-            if from_coord.as_str() != "z" {
-                return Err(self.error("Expected 'z' or 'layer' for contact elevation"));
-            }
-            self.expect(&Token::Colon)?;
+            self.expect(&Token::Spanning)?;
+            let (from_elev, to_elev) = self.parse_spanning_clause()?;
 
-            let from_elev = if self.check(&Token::Identifier("relative".into())) {
-                self.advance();
-                Elevation::Relative
-            } else {
-                Elevation::Physical {
-                    start: self.parse_expression()?,
-                    end: None,
-                }
-            };
-
-            self.expect(&Token::To)?;
-
-            let to_coord = self.expect_identifier()?;
-            if to_coord.as_str() != "z" {
-                return Err(self.error("Expected 'z' or 'layer' for contact elevation"));
-            }
-            self.expect(&Token::Colon)?;
-
-            let to_elev = if self.check(&Token::Identifier("relative".into())) {
-                self.advance();
-                Elevation::Relative
-            } else {
-                Elevation::Physical {
-                    start: self.parse_expression()?,
-                    end: None,
-                }
-            };
-
-            (from_elev, to_elev)
+            (pos, anchor, from_elev, to_elev)
         };
 
         // Optional: properties block
@@ -213,5 +193,72 @@ impl crate::parser::Parser {
             anchor_point,
             span: Span::new(start_pos, end_pos),
         })
+    }
+
+    /// Parse spanning clause: `spanning layer: l1 to l2` or `spanning z: A to z: B`
+    fn parse_spanning_clause(&mut self) -> Result<(Elevation, Elevation), ParseError> {
+        if self.check(&Token::Identifier("layer".into())) {
+            self.advance(); // consume "layer"
+            self.expect(&Token::Colon)?;
+            let from_name = self.expect_identifier()?;
+            let from_elev = if from_name.as_str() == "self" {
+                Elevation::Relative
+            } else {
+                Elevation::Semantic(from_name)
+            };
+
+            self.expect(&Token::To)?;
+
+            // Consume optional second "layer" keyword
+            if self.check(&Token::Identifier("layer".into())) {
+                self.advance();
+                self.expect(&Token::Colon)?;
+            }
+            let to_name = self.expect_identifier()?;
+            let to_elev = if to_name.as_str() == "self" {
+                Elevation::Relative
+            } else {
+                Elevation::Semantic(to_name)
+            };
+
+            Ok((from_elev, to_elev))
+        } else {
+            // Physical / legacy
+            let from_coord = self.expect_identifier()?;
+            if from_coord.as_str() != "z" {
+                return Err(self.error("Expected 'z' or 'layer' for contact elevation"));
+            }
+            self.expect(&Token::Colon)?;
+
+            let from_elev = if self.check(&Token::Identifier("relative".into())) {
+                self.advance();
+                Elevation::Relative
+            } else {
+                Elevation::Physical {
+                    start: self.parse_expression()?,
+                    end: None,
+                }
+            };
+
+            self.expect(&Token::To)?;
+
+            let to_coord = self.expect_identifier()?;
+            if to_coord.as_str() != "z" {
+                return Err(self.error("Expected 'z' or 'layer' for contact elevation"));
+            }
+            self.expect(&Token::Colon)?;
+
+            let to_elev = if self.check(&Token::Identifier("relative".into())) {
+                self.advance();
+                Elevation::Relative
+            } else {
+                Elevation::Physical {
+                    start: self.parse_expression()?,
+                    end: None,
+                }
+            };
+
+            Ok((from_elev, to_elev))
+        }
     }
 }

@@ -33,6 +33,7 @@
 
 use super::core::GeometryRouter;
 use crate::geometry::{BoundingBox, Point3D};
+use crate::geometry_router::EntityGraph;
 
 impl GeometryRouter {
     /// Check if a circular area is clear at a Z elevation.
@@ -46,6 +47,7 @@ impl GeometryRouter {
     /// See module-level documentation for full rationale.
     pub(super) fn is_circular_area_clear(
         &self,
+        entity_graph: &EntityGraph,
         center: (i64, i64),
         radius_nm: i64,
         z_nm: i64,
@@ -65,7 +67,7 @@ impl GeometryRouter {
         );
 
         // 1. Check component metadata (bounding box overlap + circle distance)
-        for component in self.entity_graph.get_component_metadata() {
+        for component in entity_graph.get_component_metadata() {
             if !component.bbox.intersects(&bbox) {
                 continue;
             }
@@ -95,7 +97,7 @@ impl GeometryRouter {
         }
         
         // 3. Check router-generated substrate layers (vias created during this routing session)
-        for layer in self.entity_graph.get_substrate_layers() {
+        for layer in entity_graph.get_substrate_layers() {
             if !layer.bbox.intersects(&bbox) {
                 continue;
             }
@@ -109,7 +111,7 @@ impl GeometryRouter {
         }
 
         // 4. Check routed segments (traces registered via register_route)
-        for (_net_id, segments) in self.entity_graph.get_all_routes() {
+        for (_net_id, segments) in entity_graph.get_all_routes() {
             for seg in segments {
                 let seg_bbox = BoundingBox::new(seg.start, seg.end);
                 if !seg_bbox.intersects(&bbox) {
@@ -139,6 +141,7 @@ impl GeometryRouter {
     /// See module-level documentation for full rationale.
     pub(super) fn mark_circular_area_occupied(
         &mut self,
+        entity_graph: &mut EntityGraph,
         center: (i64, i64),
         radius_nm: i64,
         z_nm: i64,
@@ -158,7 +161,7 @@ impl GeometryRouter {
             ),
         );
 
-        self.entity_graph.add_cylinder_substrate_layer(
+        entity_graph.add_cylinder_substrate_layer(
             self.routing_material_id,
             net_id,
             bbox,
@@ -179,7 +182,13 @@ impl GeometryRouter {
     /// requests, leaving stale occupancy in the spatial index and causing
     /// phantom DRC violations during rip-up and reroute.
     /// See module-level documentation for full rationale.
-    pub(super) fn remove_circular_area(&mut self, center: (i64, i64), radius_nm: i64, z_nm: i64) {
+    pub(super) fn remove_circular_area(
+        &mut self,
+        entity_graph: &mut EntityGraph,
+        center: (i64, i64),
+        radius_nm: i64,
+        z_nm: i64,
+    ) {
         let half_thickness = self.resolution_nm / 2;
         let bbox = BoundingBox::new(
             Point3D::new(
@@ -194,7 +203,7 @@ impl GeometryRouter {
             ),
         );
 
-        self.entity_graph.substrate_layers.retain(|layer| {
+        entity_graph.substrate_layers.retain(|layer| {
             if !layer.bbox.intersects(&bbox) {
                 return true; // Keep layers that don't overlap
             }

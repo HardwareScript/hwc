@@ -4,6 +4,7 @@ use super::types::GeometryRouter;
 use crate::geometry_router::routing_patterns::RoutingPattern;
 use crate::geometry_router::substrate_types::SubstrateLayer;
 use crate::geometry_router::types::RoutingHeuristics;
+use crate::geometry_router::EntityGraph;
 use crate::netlist::NetId;
 use rustc_hash::FxHashMap;
 
@@ -40,6 +41,7 @@ impl GeometryRouter {
     /// Configure the router for ASIC (Manhattan) or PCB (Octilinear) mode.
     pub fn set_profile_mode(
         &mut self,
+        entity_graph: &mut EntityGraph,
         is_manhattan: bool,
         profile_layers: Vec<String>,
         layer_z_positions: Vec<i64>,
@@ -62,7 +64,7 @@ impl GeometryRouter {
                 };
                 z_ranges.push((z_min, z_max));
             }
-            self.entity_graph.set_spatial_layer_z_ranges(&z_ranges);
+            entity_graph.set_spatial_layer_z_ranges(&z_ranges);
         }
     }
 

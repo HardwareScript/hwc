@@ -1,6 +1,7 @@
 # obstacle_test.hw
 # Testing 2D Obstacle Avoidance: Pathfinder-driven ray-casting detour.
 # Verifies that the router can navigate around physical barriers on a single layer.
+# UPDATED: Now uses middle-level relational syntax (v0.2.0)
 
 import * from @std/primitives/units
 import * from "./minimal_pdk"
@@ -29,36 +30,40 @@ space Obstacle_Space implements ObstacleTest:
         Out: { classification: signal, potential: 0.0V, current: 0.1uA }
 
     # ========================================================================
-    # GEOMETRIC PLACEMENTS
+    # GEOMETRIC PLACEMENTS - MIDDLE-LEVEL RELATIONAL SYNTAX
     # ========================================================================
 
-    # 1. Pad A (Source - Net In) on Left
-    add plane(Aluminum) named Pad_A inside: space on layer: metal1:
+    # 1. Pad A (Source - Net In) on Left - Positioned relationally from space origin
+    add plane(Aluminum) named Pad_A on layer: metal1:
         shape: Pad(width: 400nm)
-        at: [300nm, 550nm]  # Centered vertically at Y=750nm
+        at: space.bottom_left + [300nm, 550nm]
         net: In
 
-    # 2. Pad B (Destination - Net In) on Right
-    # Net In to match module route
-    add plane(Aluminum) named Pad_B inside: space on layer: metal1:
-        shape: Pad(width: 400nm)
-        at: [2300nm, 550nm]  # Centered vertically at Y=750nm
-        net: In
-
-    # 3. The Barrier (Keep-out Obstacle - Net Out) in Center
-    # Spans X: 1300nm to 1700nm. Spans Y: 350nm to 1150nm.
-    # This completely blocks the horizontal centerline at Y=750nm.
-    add plane(Aluminum) named Central_Barrier inside: space on layer: metal1:
+    # 2. Central Barrier (Keep-out Obstacle - Net Out) - Centered in space
+    # This completely blocks the horizontal centerline between pads
+    add plane(Aluminum) named Central_Barrier {
+        align: center_x with space
+        align: center_y with space
+    } on layer: metal1:
         shape: Barrier(width: 400nm, height: 800nm)
-        at: [1300nm, 350nm]
         net: Out
+
+    # 3. Pad B (Destination - Net In) on Right - Positioned relationally relative to Pad_A
+    # Separated by 2.0um with same vertical alignment
+    add plane(Aluminum) named Pad_B {
+        align: center_y with Pad_A
+        right_of Pad_A with spacing: 2.0um
+    } on layer: metal1:
+        shape: Pad(width: 400nm)
+        net: In
 
     # ========================================================================
     # DETOUR ROUTING (Topological Pathfinder)
     # ========================================================================
-    # The router wants to draw a straight line from Pad_A (X=700) to Pad_B (X=2300).
+    # The router wants to draw a straight line from Pad_A to Pad_B.
     # Since the Central_Barrier blocks the way, it must detect the collision,
-    # route up over the barrier (above Y=1150nm), and come back down.
+    # route around the barrier (above or below), and reach the destination.
+    # No manual waypoints needed - the pathfinder handles obstacle avoidance automatically.
     route Pad_A to Pad_B:
         layer: metal1
         width: 200nm

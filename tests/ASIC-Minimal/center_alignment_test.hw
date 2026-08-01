@@ -1,0 +1,92 @@
+# center_alignment_test.hw
+# Comprehensive test for center alignment with space
+# Tests both center_x and center_y independently and together
+# NO ROUTING - just placement verification
+
+import * from @std/primitives/units
+import * from "./minimal_pdk"
+
+module CenterAlignmentTest:
+    pins: [ input TestNet ]
+
+shape SmallSquare(size: Measurement):
+    geometry:
+        Rectangle(width: size, height: size)
+
+shape TallRect(width: Measurement, height: Measurement):
+    geometry:
+        Rectangle(width: width, height: height)
+
+shape WideRect(width: Measurement, height: Measurement):
+    geometry:
+        Rectangle(width: width, height: height)
+
+space Center_Test_Space implements CenterAlignmentTest:
+    # Large 6um x 4um space for clear visual verification
+    dimensions: 6.0um by 4.0um by 50nm
+    resolution: 10nm
+    origin: bl by b
+    profile: ASIC_Flattened
+
+    nets:
+        TestNet:  { classification: signal, potential: 1.8V, current: 0.1uA }
+
+    # ========================================================================
+    # TEST 1: CENTER BOTH X AND Y (Should be dead center of space)
+    # Expected: Center at (3000nm, 2000nm) - the absolute center of 6um x 4um
+    # ========================================================================
+    add plane(Aluminum) named Center_Both {
+        align: center_x with space
+        align: center_y with space
+    } on layer: metal1:
+        shape: SmallSquare(size: 500nm)
+        net: TestNet
+
+    # ========================================================================
+    # TEST 2: LARGE CENTERED SQUARE (Easy to see if centered)
+    # Expected: 2um x 2um square centered in space
+    # ========================================================================
+    add plane(Aluminum) named Large_Center {
+        align: center_x with space
+        align: center_y with space
+    } on layer: metal1:
+        shape: SmallSquare(size: 2000nm)
+        net: TestNet
+
+    # ========================================================================
+    # TEST 3: CORNER MARKERS (for visual reference)
+    # These should be in the four corners to show space boundaries
+    # ========================================================================
+    
+    # Bottom-left corner (200nm from edges)
+    add plane(Aluminum) named Corner_BL on layer: metal1:
+        shape: SmallSquare(size: 300nm)
+        at: [200nm, 200nm]
+        net: TestNet
+
+    # Bottom-right corner (200nm from edges)
+    add plane(Aluminum) named Corner_BR on layer: metal1:
+        shape: SmallSquare(size: 300nm)
+        at: [5500nm, 200nm]
+        net: TestNet
+
+    # Top-left corner (200nm from edges)
+    add plane(Aluminum) named Corner_TL on layer: metal1:
+        shape: SmallSquare(size: 300nm)
+        at: [200nm, 3500nm]
+        net: TestNet
+
+    # Top-right corner (200nm from edges)
+    add plane(Aluminum) named Corner_TR on layer: metal1:
+        shape: SmallSquare(size: 300nm)
+        at: [5500nm, 3500nm]
+        net: TestNet
+
+    # ========================================================================
+    # CONNECTIVITY BRIDGES (to satisfy validator)
+    # ========================================================================
+    
+    # Pour covering entire space to connect all pads
+    add pour(Aluminum) named Background on layer: metal1:
+        boundary: [50nm, 50nm] to [5950nm, 3950nm]
+        net: TestNet

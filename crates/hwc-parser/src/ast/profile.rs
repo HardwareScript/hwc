@@ -320,6 +320,22 @@ pub struct ViaConstraints {
     pub default_via_fill: Option<Identifier>,
     /// Via shape: "square" or "cylinder"
     pub shape: Option<Identifier>,
+    
+    /// Contact depth: How deep the via penetrates into source and destination conductive layers.
+    /// 
+    /// In ASIC manufacturing, vias are etched through the dielectric and penetrate slightly
+    /// into both metal layers to ensure reliable electrical contact. This parameter specifies
+    /// that penetration depth.
+    ///
+    /// Example: `contact_depth: 50nm` means the via extends 50nm into both the lower and upper
+    /// conductive layers beyond the dielectric interface.
+    ///
+    /// Setting this to 0nm means the via only touches the layer surfaces (not recommended for
+    /// real designs as it violates standard design rules).
+    ///
+    /// **Required field** - no default value to ensure explicit process specification.
+    pub contact_depth: Measurement,
+    
     // v0.1.7 ASIC Extensions
     /// Per-layer enclosure (annular ring) constraints.
     /// Maps layer name to minimum enclosure distance.
