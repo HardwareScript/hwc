@@ -91,6 +91,16 @@ pub fn evaluate_coordinate_to_nm(
                     left_nm / right_nm
                 }
                 BinaryOperator::Modulo => left_nm % right_nm,
+                // Comparison operators return 1 for true, 0 for false
+                BinaryOperator::Equal => if left_nm == right_nm { 1 } else { 0 },
+                BinaryOperator::NotEqual => if left_nm != right_nm { 1 } else { 0 },
+                BinaryOperator::LessThan => if left_nm < right_nm { 1 } else { 0 },
+                BinaryOperator::GreaterThan => if left_nm > right_nm { 1 } else { 0 },
+                BinaryOperator::LessThanOrEqual => if left_nm <= right_nm { 1 } else { 0 },
+                BinaryOperator::GreaterThanOrEqual => if left_nm >= right_nm { 1 } else { 0 },
+                // Boolean operators (treat non-zero as true)
+                BinaryOperator::And => if left_nm != 0 && right_nm != 0 { 1 } else { 0 },
+                BinaryOperator::Or => if left_nm != 0 || right_nm != 0 { 1 } else { 0 },
             };
             Ok(result)
         }
@@ -101,6 +111,7 @@ pub fn evaluate_coordinate_to_nm(
             let result = match operator {
                 UnaryOperator::Negate => -operand_nm,
                 UnaryOperator::Plus => operand_nm,
+                UnaryOperator::Not => if operand_nm == 0 { 1 } else { 0 },
             };
             Ok(result)
         }
@@ -119,6 +130,20 @@ pub fn evaluate_coordinate_to_nm(
             coordinate_str: "coordinate literal".into(),
             reason: "Coordinate literals cannot be evaluated to a single nanometer value".into(),
         }),
+        Expression::FunctionCall { .. } => {
+            // Function calls need to be evaluated through the normal expression evaluator
+            // which has full context for variable resolution
+            let value = expr.evaluate(eval_context).map_err(|e| {
+                IrError::CoordinateResolutionFailed {
+                    coordinate_str: "function call".into(),
+                    reason: e,
+                }
+            })?;
+            value.to_nanometers().map_err(|e| IrError::CoordinateResolutionFailed {
+                coordinate_str: "function call result".into(),
+                reason: e,
+            })
+        }
     }
 }
 
@@ -190,6 +215,9 @@ pub fn evaluate_coordinate_with_anchors(
                 hwc_parser::Edge::MinZ => hwc_engine::geometry::Edge::MinZ,
                 hwc_parser::Edge::MaxZ => hwc_engine::geometry::Edge::MaxZ,
                 hwc_parser::Edge::Center => hwc_engine::geometry::Edge::Left,
+                hwc_parser::Edge::CenterX => hwc_engine::geometry::Edge::Left,
+                hwc_parser::Edge::CenterY => hwc_engine::geometry::Edge::Left,
+                hwc_parser::Edge::CenterZ => hwc_engine::geometry::Edge::Left,
             };
 
             let edge_point = anchor_bbox.edge_point(engine_edge);
@@ -252,6 +280,21 @@ pub fn evaluate_coordinate_with_anchors(
                     CoordinateAxis::Y => (anchor_bbox.min.y + anchor_bbox.max.y) / 2,
                     CoordinateAxis::Z => (anchor_bbox.min.z + anchor_bbox.max.z) / 2,
                 },
+                hwc_parser::Edge::CenterX => match context_axis {
+                    CoordinateAxis::X => (anchor_bbox.min.x + anchor_bbox.max.x) / 2,
+                    CoordinateAxis::Y => anchor_bbox.min.y,
+                    CoordinateAxis::Z => anchor_bbox.min.z,
+                },
+                hwc_parser::Edge::CenterY => match context_axis {
+                    CoordinateAxis::X => anchor_bbox.min.x,
+                    CoordinateAxis::Y => (anchor_bbox.min.y + anchor_bbox.max.y) / 2,
+                    CoordinateAxis::Z => anchor_bbox.min.z,
+                },
+                hwc_parser::Edge::CenterZ => match context_axis {
+                    CoordinateAxis::X => anchor_bbox.min.x,
+                    CoordinateAxis::Y => anchor_bbox.min.y,
+                    CoordinateAxis::Z => (anchor_bbox.min.z + anchor_bbox.max.z) / 2,
+                },
                 hwc_parser::Edge::Front
                 | hwc_parser::Edge::Back
                 | hwc_parser::Edge::MinZ
@@ -297,6 +340,16 @@ pub fn evaluate_coordinate_with_anchors(
                     left_nm / right_nm
                 }
                 BinaryOperator::Modulo => left_nm % right_nm,
+                // Comparison operators return 1 for true, 0 for false
+                BinaryOperator::Equal => if left_nm == right_nm { 1 } else { 0 },
+                BinaryOperator::NotEqual => if left_nm != right_nm { 1 } else { 0 },
+                BinaryOperator::LessThan => if left_nm < right_nm { 1 } else { 0 },
+                BinaryOperator::GreaterThan => if left_nm > right_nm { 1 } else { 0 },
+                BinaryOperator::LessThanOrEqual => if left_nm <= right_nm { 1 } else { 0 },
+                BinaryOperator::GreaterThanOrEqual => if left_nm >= right_nm { 1 } else { 0 },
+                // Boolean operators (treat non-zero as true)
+                BinaryOperator::And => if left_nm != 0 && right_nm != 0 { 1 } else { 0 },
+                BinaryOperator::Or => if left_nm != 0 || right_nm != 0 { 1 } else { 0 },
             };
             Ok(result)
         }
@@ -315,6 +368,7 @@ pub fn evaluate_coordinate_with_anchors(
             let result = match operator {
                 UnaryOperator::Negate => -operand_nm,
                 UnaryOperator::Plus => operand_nm,
+                UnaryOperator::Not => if operand_nm == 0 { 1 } else { 0 },
             };
             Ok(result)
         }

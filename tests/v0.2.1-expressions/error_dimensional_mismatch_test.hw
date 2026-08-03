@@ -1,0 +1,33 @@
+# error_dimensional_mismatch_test.hw
+# v0.2.1 Test: ERROR CASE - Dimensional Unit Mismatch (Should FAIL)
+# 
+# This test should FAIL with error C44: Dimensional unit mismatch
+# 
+# Demonstrates:
+# 1. Attempting to add Length (10um) + Voltage (3.3V) (incompatible units)
+# 2. Type-safe dimensional analysis at compile time
+# 3. Enforces physical correctness: can't mix meters with volts
+# 
+# Expected result: COMPILATION ERROR C44
+
+import * from @std/primitives/units
+import * from "./thick_layer_pdk"
+
+space Dimensional_Mismatch_Test:
+    dimensions: 50um by 50um by 10um
+    resolution: 10nm
+    origin: bl by b
+    profile: Thick_3D_Stack
+    
+    nets:
+        TEST: { classification: signal, potential: 3.3V }
+    
+    # ❌ ERROR: Trying to add length (10um) with voltage (3.3V)
+    # This should fail with S22: Dimensional Unit Mismatch
+    
+    let invalid_expression = 10um + 3.3V
+    
+    add plane(Copper) named Invalid_Pad on layer: metal1:
+        shape: SquareCube(size: 5um)
+        at: [invalid_expression, 25um]
+        net: TEST

@@ -10,9 +10,7 @@ impl<'a> AutoRouter<'a> {
             .fabrication_constraints
             .as_ref()
             .is_some_and(|c| {
-                c.technology
-                    .as_ref()
-                    .is_some_and(|t| t.to_lowercase() == "asic")
+                c.technology.is_asic()
             });
         let min_width = self
             .space

@@ -64,9 +64,13 @@ pub fn place_contact(
         })?;
         // Extract 2D point from 3D
         Point2D::new(point_3d.x, point_3d.y)
+    } else if !contact.relational_constraints.is_empty() {
+        // v0.2.1: Relational constraints present - will be resolved later
+        // Skip placement for now, the relational resolver will handle it
+        return Ok(());
     } else {
         return Err(IrError::PlacementConstraint {
-            message: "Contact must specify either absolute position or relational anchor".into(),
+            message: "Contact must specify either absolute position, relational anchor, or relational constraints (align:, right_of:, etc.)".into(),
             component: contact.name.base.to_string(),
         });
     };

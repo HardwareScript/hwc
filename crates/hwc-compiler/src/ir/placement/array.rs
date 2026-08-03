@@ -46,6 +46,7 @@ pub fn place_component_array(
             name: instance_name.map(|s| hwc_parser::ComponentName {
                 base: s.into(),
                 index: None,
+                template_parts: None,
                 span: component.span,
             }),
             position: Some(instance_position),
@@ -180,13 +181,24 @@ fn calculate_pour_bboxes_for_array(
     use crate::ir::conversions::spanning_coordinate_to_point;
     use hwc_engine::geometry::{BoundingBox, Point3D};
 
-    let (from, to) = match pour
-        .boundary
-        .as_ref()
-        .ok_or_else(|| IrError::PlacementConstraint {
-            message: format!("Pour '{}' missing boundary", pour.name),
+    // v0.2.1: Boundary is optional if relational constraints are provided
+    if pour.boundary.is_none() && pour.relational_constraints.is_empty() {
+        return Err(IrError::PlacementConstraint {
+            message: format!(
+                "Pour '{}' missing boundary (provide either 'boundary:' or relational constraints)",
+                pour.name
+            ),
             component: pour.name.to_string().into(),
-        })? {
+        });
+    }
+
+    // If there are relational constraints but no boundary yet, skip for now
+    // (will be handled in relational resolver)
+    if pour.boundary.is_none() {
+        return Ok(Vec::new()); // Empty bounding boxes - will be computed later
+    }
+
+    let (from, to) = match pour.boundary.as_ref().unwrap() {
         hwc_parser::PourBoundary::Rect(f, t) => ((**f).clone(), (**t).clone()),
         hwc_parser::PourBoundary::Circle { .. } => {
             return Err(IrError::PlacementConstraint {

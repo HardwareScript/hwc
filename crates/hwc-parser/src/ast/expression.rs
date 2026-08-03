@@ -52,23 +52,43 @@ pub enum Expression {
         coord: Box<super::Coordinate>,
         span: Span,
     },
+    /// Function call: sin(x), cos(angle), sqrt(value) (v0.2.1)
+    FunctionCall {
+        name: CompactString,
+        arguments: Vec<Expression>,
+        span: Span,
+    },
 }
 
 /// Binary operators for expressions
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum BinaryOperator {
+    // Arithmetic operators
     Add,      // +
     Subtract, // -
     Multiply, // *
     Divide,   // /
-    Modulo,   // %
+    Modulo,   // % (via 'mod' keyword)
+    
+    // Comparison operators (v0.2.1: for compile-time conditionals)
+    Equal,              // == (requires double equals for comparison)
+    NotEqual,           // !=
+    LessThan,           // <
+    GreaterThan,        // >
+    LessThanOrEqual,    // <=
+    GreaterThanOrEqual, // >=
+    
+    // Boolean operators (v0.2.1: for compile-time conditionals)
+    And,  // and (logical AND)
+    Or,   // or (logical OR)
 }
 
 /// Unary operators for expressions
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum UnaryOperator {
-    Negate, // -
-    Plus,   // +
+    Negate, // - (arithmetic negation)
+    Plus,   // + (arithmetic positive)
+    Not,    // not (logical NOT) (v0.2.1)
 }
 
 impl Expression {
@@ -84,7 +104,8 @@ impl Expression {
             | Expression::Unary { span, .. }
             | Expression::Grouped { span, .. }
             | Expression::AnchorReference { span, .. }
-            | Expression::Coordinate { span, .. } => *span,
+            | Expression::Coordinate { span, .. }
+            | Expression::FunctionCall { span, .. } => *span,
         }
     }
 
@@ -129,6 +150,9 @@ impl Expression {
             }
             Expression::Unary { operand, .. } => operand.contains_anchor_reference(),
             Expression::Grouped { expression, .. } => expression.contains_anchor_reference(),
+            Expression::FunctionCall { arguments, .. } => {
+                arguments.iter().any(|arg| arg.contains_anchor_reference())
+            }
             _ => false,
         }
     }
@@ -136,14 +160,34 @@ impl Expression {
 
 impl BinaryOperator {
     /// Get the precedence of this operator (higher = tighter binding)
+    /// Precedence levels (from lowest to highest):
+    /// 0: Boolean operators (or)
+    /// 1: Boolean operators (and)
+    /// 2: Comparison operators (==, !=, <, >, <=, >=)
+    /// 3: Addition and subtraction (+, -)
+    /// 4: Multiplication, division, modulo (*, /, mod)
     pub fn precedence(&self) -> u8 {
         match self {
-            BinaryOperator::Multiply | BinaryOperator::Divide | BinaryOperator::Modulo => 2,
-            BinaryOperator::Add | BinaryOperator::Subtract => 1,
+            // Boolean OR (lowest precedence - evaluates last)
+            BinaryOperator::Or => 0,
+            // Boolean AND (higher than OR)
+            BinaryOperator::And => 1,
+            // Comparison operators
+            BinaryOperator::Equal
+            | BinaryOperator::NotEqual
+            | BinaryOperator::LessThan
+            | BinaryOperator::GreaterThan
+            | BinaryOperator::LessThanOrEqual
+            | BinaryOperator::GreaterThanOrEqual => 2,
+            // Addition and subtraction
+            BinaryOperator::Add | BinaryOperator::Subtract => 3,
+            // Multiplication, division, modulo (highest precedence)
+            BinaryOperator::Multiply | BinaryOperator::Divide | BinaryOperator::Modulo => 4,
         }
     }
 
     /// Apply this operator to two values
+    /// Returns an error if the operation is invalid (overflow, division by zero, etc.)
     pub fn apply(&self, left: i64, right: i64) -> Result<i64, String> {
         match self {
             BinaryOperator::Add => left
@@ -169,6 +213,16 @@ impl BinaryOperator {
                     Ok(left % right)
                 }
             }
+            // Comparison operators return 1 for true, 0 for false
+            BinaryOperator::Equal => Ok(if left == right { 1 } else { 0 }),
+            BinaryOperator::NotEqual => Ok(if left != right { 1 } else { 0 }),
+            BinaryOperator::LessThan => Ok(if left < right { 1 } else { 0 }),
+            BinaryOperator::GreaterThan => Ok(if left > right { 1 } else { 0 }),
+            BinaryOperator::LessThanOrEqual => Ok(if left <= right { 1 } else { 0 }),
+            BinaryOperator::GreaterThanOrEqual => Ok(if left >= right { 1 } else { 0 }),
+            // Boolean operators (treat non-zero as true, zero as false)
+            BinaryOperator::And => Ok(if left != 0 && right != 0 { 1 } else { 0 }),
+            BinaryOperator::Or => Ok(if left != 0 || right != 0 { 1 } else { 0 }),
         }
         .map_err(|s| s.to_string())
     }
@@ -180,6 +234,7 @@ impl UnaryOperator {
         match self {
             UnaryOperator::Negate => value.checked_neg().ok_or("Integer overflow in negation"),
             UnaryOperator::Plus => Ok(value),
+            UnaryOperator::Not => Ok(if value == 0 { 1 } else { 0 }), // Logical NOT: !0 = 1, !non-zero = 0
         }
         .map_err(|s| s.to_string())
     }
@@ -403,8 +458,21 @@ impl Expression {
                     ) => {
                         // CLEAN ARCHITECTURE: Physics-Correct Math (Unit Normalization)
                         // Both operands are measurements with units preserved
-                        // For measurements with MATCHING units, perform arithmetic directly
-                        // For measurements with DIFFERENT units, normalize to nanometers
+                        
+                        // For comparison operators, convert to same units and return boolean (0 or 1)
+                        if matches!(operator, 
+                            BinaryOperator::Equal | BinaryOperator::NotEqual |
+                            BinaryOperator::LessThan | BinaryOperator::GreaterThan |
+                            BinaryOperator::LessThanOrEqual | BinaryOperator::GreaterThanOrEqual
+                        ) {
+                            // Normalize both to nanometers for comparison
+                            let l_nm = Value::Measurement { value: *lv, unit: lu.clone() }.to_nanometers()?;
+                            let r_nm = Value::Measurement { value: *rv, unit: ru.clone() }.to_nanometers()?;
+                            let result = operator.apply(l_nm, r_nm)?;
+                            return Ok(Value::Number(result)); // Return boolean as Number (0 or 1)
+                        }
+                        
+                        // For arithmetic operations
                         if lu == ru {
                             // Same units: safe to perform arithmetic
                             let result = apply_op_f64(*lv, *rv, operator)?;
@@ -537,25 +605,26 @@ impl Expression {
                         let result = match operator {
                             UnaryOperator::Negate => -f,
                             UnaryOperator::Plus => f,
+                            UnaryOperator::Not => if f == 0.0 { 1.0 } else { 0.0 },
                         };
                         Ok(Value::Float(result))
                     }
                     Value::Measurement { value, unit } => {
-                        let result = match operator {
-                            UnaryOperator::Negate => -value,
-                            UnaryOperator::Plus => value,
-                        };
-                        Ok(Value::Measurement {
-                            value: result,
-                            unit,
-                        })
+                        match operator {
+                            UnaryOperator::Negate => Ok(Value::Measurement {
+                                value: -value,
+                                unit,
+                            }),
+                            UnaryOperator::Plus => Ok(Value::Measurement { value, unit }),
+                            UnaryOperator::Not => Err("Logical NOT cannot be applied to measurements. Use comparison operators instead.".into()),
+                        }
                     }
                     Value::Percentage(pct) => {
-                        let result = match operator {
-                            UnaryOperator::Negate => -pct,
-                            UnaryOperator::Plus => pct,
-                        };
-                        Ok(Value::Percentage(result))
+                        match operator {
+                            UnaryOperator::Negate => Ok(Value::Percentage(-pct)),
+                            UnaryOperator::Plus => Ok(Value::Percentage(pct)),
+                            UnaryOperator::Not => Err("Logical NOT cannot be applied to percentages. Use comparison operators instead.".into()),
+                        }
                     }
                 }
             }
@@ -572,6 +641,10 @@ impl Expression {
                 Err("Coordinate literals cannot be evaluated to a single value. \
                      They must be resolved by the coordinate evaluation system.".into())
             }
+            Expression::FunctionCall { name, arguments, span } => {
+                // Evaluate function calls (sin, cos, tan, sqrt, etc.)
+                evaluate_function_call(name, arguments, context, *span)
+            }
         }
     }
 
@@ -584,6 +657,217 @@ impl Expression {
     /// Returns None if the expression contains variables
     pub fn try_evaluate_const(&self) -> Option<Value> {
         self.evaluate_const().ok()
+    }
+}
+
+/// Evaluate a function call expression
+fn evaluate_function_call(
+    name: &str,
+    arguments: &[Expression],
+    context: &EvaluationContext,
+    _span: Span,
+) -> Result<Value, String> {
+    use std::f64::consts::PI;
+    
+    match name {
+        // Trigonometric functions (expect radians)
+        "sin" => {
+            if arguments.len() != 1 {
+                return Err(format!("sin() expects 1 argument, got {}", arguments.len()));
+            }
+            let arg = arguments[0].evaluate(context)?.as_number()?;
+            Ok(Value::Float(arg.sin()))
+        }
+        "cos" => {
+            if arguments.len() != 1 {
+                return Err(format!("cos() expects 1 argument, got {}", arguments.len()));
+            }
+            let arg = arguments[0].evaluate(context)?.as_number()?;
+            Ok(Value::Float(arg.cos()))
+        }
+        "tan" => {
+            if arguments.len() != 1 {
+                return Err(format!("tan() expects 1 argument, got {}", arguments.len()));
+            }
+            let arg = arguments[0].evaluate(context)?.as_number()?;
+            Ok(Value::Float(arg.tan()))
+        }
+        "asin" => {
+            if arguments.len() != 1 {
+                return Err(format!("asin() expects 1 argument, got {}", arguments.len()));
+            }
+            let arg = arguments[0].evaluate(context)?.as_number()?;
+            if arg < -1.0 || arg > 1.0 {
+                return Err(format!("asin() argument must be in range [-1, 1], got {}", arg));
+            }
+            Ok(Value::Float(arg.asin()))
+        }
+        "acos" => {
+            if arguments.len() != 1 {
+                return Err(format!("acos() expects 1 argument, got {}", arguments.len()));
+            }
+            let arg = arguments[0].evaluate(context)?.as_number()?;
+            if arg < -1.0 || arg > 1.0 {
+                return Err(format!("acos() argument must be in range [-1, 1], got {}", arg));
+            }
+            Ok(Value::Float(arg.acos()))
+        }
+        "atan" => {
+            if arguments.len() != 1 {
+                return Err(format!("atan() expects 1 argument, got {}", arguments.len()));
+            }
+            let arg = arguments[0].evaluate(context)?.as_number()?;
+            Ok(Value::Float(arg.atan()))
+        }
+        "atan2" => {
+            if arguments.len() != 2 {
+                return Err(format!("atan2() expects 2 arguments (y, x), got {}", arguments.len()));
+            }
+            let y = arguments[0].evaluate(context)?.as_number()?;
+            let x = arguments[1].evaluate(context)?.as_number()?;
+            Ok(Value::Float(y.atan2(x)))
+        }
+        
+        // Mathematical functions
+        "sqrt" => {
+            if arguments.len() != 1 {
+                return Err(format!("sqrt() expects 1 argument, got {}", arguments.len()));
+            }
+            let arg = arguments[0].evaluate(context)?.as_number()?;
+            if arg < 0.0 {
+                return Err(format!("sqrt() argument must be non-negative, got {}", arg));
+            }
+            Ok(Value::Float(arg.sqrt()))
+        }
+        "abs" => {
+            if arguments.len() != 1 {
+                return Err(format!("abs() expects 1 argument, got {}", arguments.len()));
+            }
+            let val = arguments[0].evaluate(context)?;
+            match val {
+                Value::Number(n) => Ok(Value::Number(n.abs())),
+                Value::Float(f) => Ok(Value::Float(f.abs())),
+                Value::Measurement { value, unit } => Ok(Value::Measurement { 
+                    value: value.abs(), 
+                    unit 
+                }),
+                Value::Percentage(p) => Ok(Value::Percentage(p.abs())),
+            }
+        }
+        "pow" => {
+            if arguments.len() != 2 {
+                return Err(format!("pow() expects 2 arguments (base, exponent), got {}", arguments.len()));
+            }
+            let base = arguments[0].evaluate(context)?.as_number()?;
+            let exp = arguments[1].evaluate(context)?.as_number()?;
+            Ok(Value::Float(base.powf(exp)))
+        }
+        "exp" => {
+            if arguments.len() != 1 {
+                return Err(format!("exp() expects 1 argument, got {}", arguments.len()));
+            }
+            let arg = arguments[0].evaluate(context)?.as_number()?;
+            Ok(Value::Float(arg.exp()))
+        }
+        "ln" => {
+            if arguments.len() != 1 {
+                return Err(format!("ln() expects 1 argument, got {}", arguments.len()));
+            }
+            let arg = arguments[0].evaluate(context)?.as_number()?;
+            if arg <= 0.0 {
+                return Err(format!("ln() argument must be positive, got {}", arg));
+            }
+            Ok(Value::Float(arg.ln()))
+        }
+        "log" | "log10" => {
+            if arguments.len() != 1 {
+                return Err(format!("log10() expects 1 argument, got {}", arguments.len()));
+            }
+            let arg = arguments[0].evaluate(context)?.as_number()?;
+            if arg <= 0.0 {
+                return Err(format!("log10() argument must be positive, got {}", arg));
+            }
+            Ok(Value::Float(arg.log10()))
+        }
+        "log2" => {
+            if arguments.len() != 1 {
+                return Err(format!("log2() expects 1 argument, got {}", arguments.len()));
+            }
+            let arg = arguments[0].evaluate(context)?.as_number()?;
+            if arg <= 0.0 {
+                return Err(format!("log2() argument must be positive, got {}", arg));
+            }
+            Ok(Value::Float(arg.log2()))
+        }
+        
+        // Rounding functions
+        "floor" => {
+            if arguments.len() != 1 {
+                return Err(format!("floor() expects 1 argument, got {}", arguments.len()));
+            }
+            let arg = arguments[0].evaluate(context)?.as_number()?;
+            Ok(Value::Float(arg.floor()))
+        }
+        "ceil" => {
+            if arguments.len() != 1 {
+                return Err(format!("ceil() expects 1 argument, got {}", arguments.len()));
+            }
+            let arg = arguments[0].evaluate(context)?.as_number()?;
+            Ok(Value::Float(arg.ceil()))
+        }
+        "round" => {
+            if arguments.len() != 1 {
+                return Err(format!("round() expects 1 argument, got {}", arguments.len()));
+            }
+            let arg = arguments[0].evaluate(context)?.as_number()?;
+            Ok(Value::Float(arg.round()))
+        }
+        
+        // Utility functions
+        "min" => {
+            if arguments.len() < 2 {
+                return Err(format!("min() expects at least 2 arguments, got {}", arguments.len()));
+            }
+            let mut min = arguments[0].evaluate(context)?.as_number()?;
+            for arg in &arguments[1..] {
+                let val = arg.evaluate(context)?.as_number()?;
+                if val < min {
+                    min = val;
+                }
+            }
+            Ok(Value::Float(min))
+        }
+        "max" => {
+            if arguments.len() < 2 {
+                return Err(format!("max() expects at least 2 arguments, got {}", arguments.len()));
+            }
+            let mut max = arguments[0].evaluate(context)?.as_number()?;
+            for arg in &arguments[1..] {
+                let val = arg.evaluate(context)?.as_number()?;
+                if val > max {
+                    max = val;
+                }
+            }
+            Ok(Value::Float(max))
+        }
+        
+        // Unit conversion helper (degrees to radians)
+        "radians" | "rad" => {
+            if arguments.len() != 1 {
+                return Err(format!("radians() expects 1 argument (degrees), got {}", arguments.len()));
+            }
+            let degrees = arguments[0].evaluate(context)?.as_number()?;
+            Ok(Value::Float(degrees * PI / 180.0))
+        }
+        "degrees" | "deg" => {
+            if arguments.len() != 1 {
+                return Err(format!("degrees() expects 1 argument (radians), got {}", arguments.len()));
+            }
+            let radians = arguments[0].evaluate(context)?.as_number()?;
+            Ok(Value::Float(radians * 180.0 / PI))
+        }
+        
+        _ => Err(format!("Unknown function '{}'. Available functions: sin, cos, tan, asin, acos, atan, atan2, sqrt, abs, pow, exp, ln, log10, log2, floor, ceil, round, min, max, radians, degrees", name))
     }
 }
 
@@ -601,6 +885,16 @@ fn apply_op_f64(left: f64, right: f64, operator: &BinaryOperator) -> Result<f64,
             }
         }
         BinaryOperator::Modulo => Err("Modulo not supported for floating point values".into()),
+        // Comparison operators return 1.0 for true, 0.0 for false
+        BinaryOperator::Equal => Ok(if (left - right).abs() < f64::EPSILON { 1.0 } else { 0.0 }),
+        BinaryOperator::NotEqual => Ok(if (left - right).abs() >= f64::EPSILON { 1.0 } else { 0.0 }),
+        BinaryOperator::LessThan => Ok(if left < right { 1.0 } else { 0.0 }),
+        BinaryOperator::GreaterThan => Ok(if left > right { 1.0 } else { 0.0 }),
+        BinaryOperator::LessThanOrEqual => Ok(if left <= right { 1.0 } else { 0.0 }),
+        BinaryOperator::GreaterThanOrEqual => Ok(if left >= right { 1.0 } else { 0.0 }),
+        // Boolean operators (treat non-zero as true, zero as false)
+        BinaryOperator::And => Ok(if left != 0.0 && right != 0.0 { 1.0 } else { 0.0 }),
+        BinaryOperator::Or => Ok(if left != 0.0 || right != 0.0 { 1.0 } else { 0.0 }),
     }
 }
 
@@ -624,6 +918,14 @@ impl fmt::Display for Expression {
                     BinaryOperator::Multiply => "*",
                     BinaryOperator::Divide => "/",
                     BinaryOperator::Modulo => "%",
+                    BinaryOperator::Equal => "==",
+                    BinaryOperator::NotEqual => "!=",
+                    BinaryOperator::LessThan => "<",
+                    BinaryOperator::GreaterThan => ">",
+                    BinaryOperator::LessThanOrEqual => "<=",
+                    BinaryOperator::GreaterThanOrEqual => ">=",
+                    BinaryOperator::And => "and",
+                    BinaryOperator::Or => "or",
                 };
                 write!(f, "{} {} {}", left, op_str, right)
             }
@@ -633,6 +935,7 @@ impl fmt::Display for Expression {
                 let op_str = match operator {
                     UnaryOperator::Negate => "-",
                     UnaryOperator::Plus => "+",
+                    UnaryOperator::Not => "not ",
                 };
                 write!(f, "{}{}", op_str, operand)
             }
@@ -652,11 +955,24 @@ impl fmt::Display for Expression {
                     super::Edge::BottomLeft => "bottom_left",
                     super::Edge::BottomRight => "bottom_right",
                     super::Edge::Center => "center",
+                    super::Edge::CenterX => "center_x",
+                    super::Edge::CenterY => "center_y",
+                    super::Edge::CenterZ => "center_z",
                 };
                 write!(f, "{}.{}", anchor.name, edge_str)
             }
             Expression::Coordinate { coord, .. } => {
                 write!(f, "{:?}", coord) // Use debug format for coordinate
+            }
+            Expression::FunctionCall { name, arguments, .. } => {
+                write!(f, "{}(", name)?;
+                for (i, arg) in arguments.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", arg)?;
+                }
+                write!(f, ")")
             }
         }
     }

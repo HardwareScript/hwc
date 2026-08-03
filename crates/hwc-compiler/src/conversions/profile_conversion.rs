@@ -263,7 +263,11 @@ pub fn profile_to_constraints(
         bridges,
         solder_mask_expansion_nm,
         circle_segments,
-        technology: profile.technology.clone(),
+        technology: profile.technology.ok_or_else(|| {
+            ConversionError::MissingProfileConstraint(
+                "technology: REQUIRED field. Must be explicitly declared as either \"PCB\" or \"ASIC\"".into()
+            )
+        })?,
         layer_routability,
         max_local_route_length_nm,
         intents,

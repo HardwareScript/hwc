@@ -25,9 +25,7 @@ pub fn resolve_mounting_and_elevation(
 ) -> Result<MountingResult, IrError> {
     // Check if we're in ASIC mode (strict validation)
     let is_asic = space.fabrication_constraints.as_ref().is_some_and(|c| {
-        c.technology
-            .as_ref()
-            .is_some_and(|t| t.to_lowercase() == "asic")
+        c.technology.is_asic()
     });
 
     // v0.1.7: Component Mounting Abstraction

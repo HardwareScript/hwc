@@ -69,7 +69,7 @@ impl crate::parser::Parser {
                 }
 
                 self.skip_whitespace();
-            } else if self.check(&Token::RightOf) {
+            } else if self.check_identifier("right_of") {
                 self.advance();
                 self.expect(&Token::Colon)?;
                 let target = self.expect_identifier()?;
@@ -81,7 +81,7 @@ impl crate::parser::Parser {
                     span: self.previous_span(),
                 });
                 self.skip_whitespace();
-            } else if self.check(&Token::LeftOf) {
+            } else if self.check_identifier("left_of") {
                 self.advance();
                 self.expect(&Token::Colon)?;
                 let target = self.expect_identifier()?;
@@ -93,7 +93,7 @@ impl crate::parser::Parser {
                     span: self.previous_span(),
                 });
                 self.skip_whitespace();
-            } else if self.check(&Token::Above) {
+            } else if self.check_identifier("above") {
                 self.advance();
                 self.expect(&Token::Colon)?;
                 let target = self.expect_identifier()?;
@@ -105,7 +105,7 @@ impl crate::parser::Parser {
                     span: self.previous_span(),
                 });
                 self.skip_whitespace();
-            } else if self.check(&Token::Below) {
+            } else if self.check_identifier("below") {
                 self.advance();
                 self.expect(&Token::Colon)?;
                 let target = self.expect_identifier()?;

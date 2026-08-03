@@ -84,6 +84,17 @@ impl Parser {
                         span: Span::new(start_pos, end_pos),
                     })
                 }
+                // Unary not: not x (v0.2.1)
+                Token::Not => {
+                    self.advance();
+                    let operand = self.parse_prefix_expression()?;
+                    let end_pos = operand.span().end;
+                    Ok(Expression::Unary {
+                        operator: UnaryOperator::Not,
+                        operand: Box::new(operand),
+                        span: Span::new(start_pos, end_pos),
+                    })
+                }
                 // Grouped expression: (expr)
                 Token::OpenParen => {
                     self.advance();
@@ -142,6 +153,44 @@ impl Parser {
                 }
                 // Identifier or variable
                 Token::Identifier(_name) => {
+                    // Check if this is a function call: name(args)
+                    let is_function_call = if let Some(next) = self.peek_ahead(1) {
+                        matches!(next.token, Token::OpenParen)
+                    } else {
+                        false
+                    };
+
+                    if is_function_call {
+                        // Parse function call: sin(x), cos(angle), etc.
+                        let func_name = self.expect_identifier_string()?;
+                        let func_span = self.previous_span();
+                        
+                        self.expect(&Token::OpenParen)?;
+                        
+                        // Parse comma-separated arguments
+                        let mut arguments = Vec::new();
+                        
+                        if !self.check(&Token::CloseParen) {
+                            loop {
+                                arguments.push(self.parse_expression()?);
+                                
+                                if !self.check(&Token::Comma) {
+                                    break;
+                                }
+                                self.advance(); // consume comma
+                            }
+                        }
+                        
+                        self.expect(&Token::CloseParen)?;
+                        let end_pos = self.previous_span().end;
+                        
+                        return Ok(Expression::FunctionCall {
+                            name: func_name.into(),
+                            arguments,
+                            span: Span::new(func_span.start, end_pos),
+                        });
+                    }
+                    
                     // Check if this is an anchor reference: ComponentName.edge or ComponentName[i].edge
                     // We need to look ahead to see if there's a dot followed by a valid spatial edge name
                     let is_anchor = if let Some(next) = self.peek_ahead(1) {
@@ -164,6 +213,10 @@ impl Parser {
                                                 | "bottom_left"
                                                 | "bottom_right"
                                                 | "center"
+                                                // v0.2.1: Comptime anchor arithmetic properties
+                                                | "center_x"
+                                                | "center_y"
+                                                | "center_z"
                                         )
                                     } else {
                                         false
@@ -250,9 +303,13 @@ impl Parser {
                             "bottom_left" => crate::ast::Edge::BottomLeft,
                             "bottom_right" => crate::ast::Edge::BottomRight,
                             "center" => crate::ast::Edge::Center,
+                            // v0.2.1: Comptime anchor arithmetic properties
+                            "center_x" => crate::ast::Edge::CenterX,
+                            "center_y" => crate::ast::Edge::CenterY,
+                            "center_z" => crate::ast::Edge::CenterZ,
                             _ => {
                                 return Err(self.error(&format!(
-                                    "Invalid edge '{}'. Expected: left, right, top, bottom, front, back, min_z, or max_z",
+                                    "Invalid edge '{}'. Expected: left, right, top, bottom, front, back, min_z, max_z, top_left, top_right, bottom_left, bottom_right, center, center_x, center_y, or center_z",
                                     edge_str
                                 )))
                             }
@@ -276,43 +333,6 @@ impl Parser {
                             span,
                         })
                     }
-                }
-                // Anchor reference with 'last' keyword: last.edge
-                Token::Last => {
-                    let span = token.span;
-                    self.advance();
-
-                    // Expect dot
-                    self.expect(&Token::Dot)?;
-
-                    // Parse edge name
-                    let edge_str = self.expect_identifier_string()?;
-                    let edge = match edge_str.as_str() {
-                        "left" => crate::ast::Edge::Left,
-                        "right" => crate::ast::Edge::Right,
-                        "top" => crate::ast::Edge::Top,
-                        "bottom" => crate::ast::Edge::Bottom,
-                        "front" => crate::ast::Edge::Front,
-                        "back" => crate::ast::Edge::Back,
-                        "min_z" => crate::ast::Edge::MinZ,
-                        "max_z" => crate::ast::Edge::MaxZ,
-                        _ => {
-                            return Err(self.error(&format!(
-                            "Invalid edge '{}'. Expected: left, right, top, bottom, front, back, min_z, or max_z",
-                            edge_str
-                        )))
-                        }
-                    };
-
-                    let end_pos = self.previous_span().end;
-                    Ok(Expression::AnchorReference {
-                        anchor: crate::ast::AnchorReference {
-                            name: "last".into(),
-                            span,
-                        },
-                        edge,
-                        span: Span::new(start_pos, end_pos),
-                    })
                 }
                 // v0.2.0: Handle 'space' keyword as a special anchor reference: space.bottom_left
                 Token::Space => {
@@ -414,8 +434,19 @@ impl Parser {
             Token::Hyphen => Some(BinaryOperator::Subtract),
             Token::Asterisk => Some(BinaryOperator::Multiply),
             Token::Slash => Some(BinaryOperator::Divide),
+            Token::Mod => Some(BinaryOperator::Modulo), // v0.2.1: 'mod' keyword for modulo
             // Token::Percent is NOT a valid operator - it's only valid as a unit suffix
             // The modulo operation uses the 'mod' keyword instead
+            // v0.2.1: Comparison operators for compile-time conditionals
+            Token::DoubleEquals => Some(BinaryOperator::Equal),
+            Token::NotEquals => Some(BinaryOperator::NotEqual),
+            Token::LessThan => Some(BinaryOperator::LessThan),
+            Token::GreaterThan => Some(BinaryOperator::GreaterThan),
+            Token::LessThanOrEqual => Some(BinaryOperator::LessThanOrEqual),
+            Token::GreaterThanOrEqual => Some(BinaryOperator::GreaterThanOrEqual),
+            // v0.2.1: Boolean operators for compile-time conditionals
+            Token::And => Some(BinaryOperator::And),
+            Token::Or => Some(BinaryOperator::Or),
             _ => None,
         })
     }

@@ -29,8 +29,9 @@ impl crate::parser::Parser {
         // Relative positioning ONLY occurs when the current token does NOT start with '['
         if !self.check(&Token::OpenBracket) {
             if let Some(token) = self.current() {
-                // Check for 'last', 'substrate', or 'space' keyword (special anchors)
-                if matches!(token.token, Token::Last | Token::Substrate | Token::Space) {
+                // Check for 'substrate' or 'space' keyword (special anchors)
+                // v0.2.1: 'last' is now an identifier, handled by the Identifier branch below
+                if matches!(token.token, Token::Substrate | Token::Space) {
                     return self.parse_relative_coordinate();
                 }
 
@@ -104,8 +105,9 @@ impl crate::parser::Parser {
     fn parse_relative_coordinate(&mut self) -> Result<Coordinate, ParseError> {
         let start_pos = self.current_span().start;
 
-        // Parse anchor name (may be 'last', 'substrate', 'space' keywords or identifier with optional array syntax)
-        let anchor_name = if self.check(&Token::Last) {
+        // Parse anchor name (may be 'substrate', 'space' keywords or identifier with optional array syntax)
+        // v0.2.1: 'last' is now an identifier, matched contextually
+        let anchor_name = if self.check_identifier("last") {
             self.advance(); // consume 'last'
             "last".to_string()
         } else if self.check(&Token::Substrate) {
@@ -138,9 +140,13 @@ impl crate::parser::Parser {
             "bottom_left" => Edge::BottomLeft,
             "bottom_right" => Edge::BottomRight,
             "center" => Edge::Center,
+            // v0.2.1: Comptime anchor arithmetic properties
+            "center_x" => Edge::CenterX,
+            "center_y" => Edge::CenterY,
+            "center_z" => Edge::CenterZ,
             _ => {
                 return Err(self.error(&format!(
-                    "Invalid edge '{}'. Expected: left, right, top, bottom, front, back, min_z, max_z, top_left, top_right, bottom_left, bottom_right, or center",
+                    "Invalid edge '{}'. Expected: left, right, top, bottom, front, back, min_z, max_z, top_left, top_right, bottom_left, bottom_right, center, center_x, center_y, or center_z",
                     edge_str
                 )))
             }

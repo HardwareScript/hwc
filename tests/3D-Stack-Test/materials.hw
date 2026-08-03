@@ -9,7 +9,7 @@ export material Silicon_N:
         color: "#809080"  # Greenish
         metallic: 0.1
         roughness: 0.7
-        opacity: 1.0      # Fully opaque - eliminates alpha-blending artifacts
+      
         resistivity: 0.5ohm_m
 
 export material Silicon_P:
@@ -20,7 +20,7 @@ export material Silicon_P:
         color: "#C08080"  # Reddish
         metallic: 0.1
         roughness: 0.7
-        opacity: 1.0      # Fully opaque - eliminates alpha-blending artifacts
+        
         resistivity: 0.5ohm_m
 
 export material Polysilicon:
@@ -42,7 +42,7 @@ export material Aluminum:
     process: deposited
     properties:
         color: "#C0C0C0"  # Silver
-        opacity: 0.9      # More opaque for better visualization
+     
         metallic: 0.8
         roughness: 0.2
         resistivity: 2.82e-8ohm_m
@@ -55,7 +55,7 @@ export material Tungsten:
     process: deposited
     properties:
         color: "#8080FF"  # Light Blue - easier to see the via
-        opacity: 0.7      # Semi-transparent to show penetration
+       
         metallic: 0.7
         roughness: 0.3
         resistivity: 5.6e-8ohm_m

@@ -127,7 +127,9 @@ pub fn process_routes(
     
     for id in ctx.sorted_ids.iter() {
         let &item_idx = ctx.item_map.get(id).unwrap();
-        let item = &ctx.placement_items[item_idx];
+        let contextual_item = &ctx.placement_items[item_idx];
+        let item = &contextual_item.item;
+        let item_eval_context = &contextual_item.eval_context;
 
         if let PlacementItem::Route(route) = item {
            
@@ -136,7 +138,7 @@ pub fn process_routes(
                 space,
                 route,
                 ctx.symbol_table,
-                ctx.eval_context,
+                item_eval_context,
                 ctx.stackup_manager,
                 ctx.profile,
                 Some(ctx.space_def),
@@ -148,7 +150,7 @@ pub fn process_routes(
                     route,
                     ctx.origin,
                     ctx.symbol_table,
-                    ctx.eval_context,
+                    item_eval_context,
                     ctx.stackup_manager,
                     ctx.profile,
                 )?;

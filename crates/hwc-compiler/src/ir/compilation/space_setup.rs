@@ -119,7 +119,7 @@ pub fn build_eval_context(
     symbol_table: &SymbolTable,
     profile: Option<&hwc_parser::ProfileDefinition>,
     space_def: &hwc_parser::SpaceDefinition,
-) -> hwc_parser::EvaluationContext {
+) -> Result<hwc_parser::EvaluationContext, IrError> {
     let mut eval_context = crate::constraint_solver::ConstraintSolver::build_eval_context(symbol_table);
     
     // Register PDK profile variables as "pdk.*" for use in expressions
@@ -155,6 +155,7 @@ pub fn build_eval_context(
     
     // v0.2.0: Register local let bindings from space block
     // Example: `let edge_pad_w = 150um` becomes available in all subsequent expressions
+    // v0.2.1: DIMENSIONAL TYPE SAFETY - Fail hard on unit mismatches
     for statement in &space_def.statements {
         if let hwc_parser::SpaceTopLevelStatement::Let(let_binding) = statement {
             // Evaluate the expression in the current context
@@ -163,17 +164,55 @@ pub fn build_eval_context(
                     eval_context.insert(let_binding.name.clone(), value);
                 }
                 Err(e) => {
-                    eprintln!(
-                        "[WARN] Failed to evaluate let binding '{}': {}",
-                        let_binding.name, e
-                    );
-                    // Continue compilation - will fail later if this variable is used
+                    // Convert evaluation error to dimensional unit mismatch if it's a unit conversion error
+                    let error_msg = e.to_string();
+                    if error_msg.contains("Cannot convert") || error_msg.contains("unit") {
+                        return Err(IrError::DimensionalUnitMismatch {
+                            expression: format!("let {} = {}", let_binding.name, format!("{:?}", let_binding.value)),
+                            operation: "evaluate".to_string(),
+                            detail: format!("Expression evaluation failed: {}", error_msg),
+                        });
+                    } else {
+                        return Err(IrError::InvalidExpression(format!(
+                            "Failed to evaluate let binding '{}': {}",
+                            let_binding.name, e
+                        )));
+                    }
+                }
+            }
+        }
+    }
+
+    // v0.2.1: Register immutable constant bindings from space block
+    // Example: `const PI: 3.14159` becomes available in all subsequent expressions
+    // Constants can shadow prelude constants in the same scope
+    for statement in &space_def.statements {
+        if let hwc_parser::SpaceTopLevelStatement::Const(const_binding) = statement {
+            // Evaluate the expression in the current context
+            match const_binding.value.evaluate(&eval_context) {
+                Ok(value) => {
+                    eval_context.insert(const_binding.name.clone(), value);
+                }
+                Err(e) => {
+                    let error_msg = e.to_string();
+                    if error_msg.contains("Cannot convert") || error_msg.contains("unit") {
+                        return Err(IrError::DimensionalUnitMismatch {
+                            expression: format!("const {} = {}", const_binding.name, format!("{:?}", const_binding.value)),
+                            operation: "evaluate".to_string(),
+                            detail: format!("Expression evaluation failed: {}", error_msg),
+                        });
+                    } else {
+                        return Err(IrError::InvalidExpression(format!(
+                            "Failed to evaluate const binding '{}': {}",
+                            const_binding.name, e
+                        )));
+                    }
                 }
             }
         }
     }
     
-    eval_context
+    Ok(eval_context)
 }
 
 /// Generate solder mask layers if the profile specifies them.

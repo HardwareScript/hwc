@@ -195,6 +195,7 @@ pub enum Unit {
 use super::expression::Expression;
 
 /// Bounding box edge for relative positioning (Sprint 3, Task 3.1)
+/// v0.2.1: Added CenterX, CenterY, CenterZ for comptime anchor arithmetic
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Edge {
     Left,
@@ -210,6 +211,9 @@ pub enum Edge {
     BottomLeft,
     BottomRight,
     Center,
+    CenterX,
+    CenterY,
+    CenterZ,
 }
 
 /// Unified Merge Waiver (v0.1.7)

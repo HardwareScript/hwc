@@ -75,6 +75,16 @@ pub fn evaluate_index_expression(expr: &hwc_parser::Expression) -> Result<i64, I
                         Ok(left_val % right_val)
                     }
                 }
+                // Comparison operators return 1 for true, 0 for false
+                BinaryOperator::Equal => Ok(if left_val == right_val { 1 } else { 0 }),
+                BinaryOperator::NotEqual => Ok(if left_val != right_val { 1 } else { 0 }),
+                BinaryOperator::LessThan => Ok(if left_val < right_val { 1 } else { 0 }),
+                BinaryOperator::GreaterThan => Ok(if left_val > right_val { 1 } else { 0 }),
+                BinaryOperator::LessThanOrEqual => Ok(if left_val <= right_val { 1 } else { 0 }),
+                BinaryOperator::GreaterThanOrEqual => Ok(if left_val >= right_val { 1 } else { 0 }),
+                // Boolean operators (treat non-zero as true)
+                BinaryOperator::And => Ok(if left_val != 0 && right_val != 0 { 1 } else { 0 }),
+                BinaryOperator::Or => Ok(if left_val != 0 || right_val != 0 { 1 } else { 0 }),
             }
         }
         hwc_parser::Expression::Unary {
@@ -86,6 +96,7 @@ pub fn evaluate_index_expression(expr: &hwc_parser::Expression) -> Result<i64, I
             match operator {
                 UnaryOperator::Negate => Ok(-operand_val),
                 UnaryOperator::Plus => Ok(operand_val),
+                UnaryOperator::Not => Ok(if operand_val == 0 { 1 } else { 0 }),
             }
         }
         hwc_parser::Expression::Grouped { expression, .. } => evaluate_index_expression(expression),

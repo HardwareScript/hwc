@@ -69,11 +69,14 @@ impl crate::parser::Parser {
         self.expect(&Token::Indent)?;
 
         let mut boundary = None;
+        let mut dimensions = None;
+        let mut position = None;
         let mut net = None;
         let mut thickness = None;
         let mut device = None;
         let mut thermal_relief = false;
         let mut waivers = Waivers::default();
+        let mut relational_constraints = smallvec::SmallVec::new();
 
         while !self.is_at_end() && !self.check(&Token::Dedent) {
             if self.check(&Token::Newline) {
@@ -87,6 +90,79 @@ impl crate::parser::Parser {
             self.expect(&Token::Colon)?;
 
             match field_name.as_str() {
+                "dimensions" => {
+                    // v0.2.1: Support dimensions: WIDTHxHEIGHT format
+                    // Example: dimensions: 500nm by 600nm
+                    let width = self.parse_expression()?;
+                    self.expect(&Token::By)?;
+                    let height = self.parse_expression()?;
+                    dimensions = Some((width, height));
+                }
+                "at" => {
+                    // v0.2.1: Center position for dimension-based pours
+                    // Example: at: [x: 650nm, y: 1000nm]
+                    position = Some(self.parse_coordinate_optional_z()?);
+                }
+                "align" => {
+                    // v0.2.1: Alignment constraints
+                    let start_pos = self.current_span().start;
+                    let axis_name = self.expect_identifier()?;
+                    let axis = match axis_name.as_str() {
+                        "center_x" => AlignmentAxis::CenterX,
+                        "center_y" => AlignmentAxis::CenterY,
+                        "center_z" => AlignmentAxis::CenterZ,
+                        _ => return Err(self.error(&format!("Unknown alignment axis: {}", axis_name))),
+                    };
+
+                    self.expect(&Token::With)?;
+
+                    // Parse target (entity name or expression)
+                    let target = if self.check(&Token::OpenParen) {
+                        let expr = self.parse_expression()?;
+                        AlignmentTarget::Expression(expr)
+                    } else if self.current().map(|t| matches!(t.token, Token::Identifier(_))).unwrap_or(false) {
+                        let checkpoint = self.current;
+                        let _ = self.expect_identifier_string()?;
+                        
+                        if self.check(&Token::Dot) {
+                            // Anchor reference - parse as expression
+                            self.current = checkpoint;
+                            let expr = self.parse_expression()?;
+                            AlignmentTarget::Expression(expr)
+                        } else {
+                            // Simple entity name
+                            self.current = checkpoint;
+                            let component_name = self.parse_component_name()?;
+                            AlignmentTarget::Entity(component_name)
+                        }
+                    } else {
+                        return Err(self.error("Expected entity name or expression after 'with'"));
+                    };
+
+                    let span = Span::new(start_pos, self.previous_span().end);
+                    relational_constraints.push(RelationalConstraint::Align { axis, target, span });
+                }
+                "above" | "below" | "left_of" | "right_of" => {
+                    // v0.2.1: Directional constraints
+                    let target = self.parse_component_name()?;
+                    
+                    let spacing = if self.check(&Token::By) {
+                        self.advance();
+                        Some(self.parse_expression()?)
+                    } else {
+                        None
+                    };
+
+                    let constraint = match field_name.as_str() {
+                        "above" => DirectionalConstraint::Above { target, spacing },
+                        "below" => DirectionalConstraint::Below { target, spacing },
+                        "left_of" => DirectionalConstraint::LeftOf { target, spacing },
+                        "right_of" => DirectionalConstraint::RightOf { target, spacing },
+                        _ => unreachable!(),
+                    };
+
+                    relational_constraints.push(RelationalConstraint::Directional(constraint));
+                }
                 "boundary" => {
                     // Support both: [from] to [to] (rectangle) and Circle([x:0, y:0], radius) (circle)
                     if self.check(&Token::Identifier("Circle".into())) {
@@ -169,17 +245,158 @@ impl crate::parser::Parser {
 
         let end_pos = self.previous_span().end;
 
+        // v0.2.1: Convert dimensions + position + relational constraints to boundary
+        // If dimensions and position are provided, convert to boundary for backward compatibility
+        let final_boundary = if let Some((width, height)) = dimensions {
+            if let Some(center_pos) = position {
+                // Convert center position + dimensions to corner boundary
+                // boundary = [center.x - width/2, center.y - height/2] to [center.x + width/2, center.y + height/2]
+                let span_empty = Span::new(0, 0);
+                let from = Coordinate::Positional {
+                    x: Expression::Binary {
+                        left: Box::new(center_pos.x().clone()),
+                        operator: BinaryOperator::Subtract,
+                        right: Box::new(Expression::Binary {
+                            left: Box::new(width.clone()),
+                            operator: BinaryOperator::Divide,
+                            right: Box::new(Expression::Literal { value: 2, span: span_empty }),
+                            span: span_empty,
+                        }),
+                        span: span_empty,
+                    },
+                    y: Expression::Binary {
+                        left: Box::new(center_pos.y().clone()),
+                        operator: BinaryOperator::Subtract,
+                        right: Box::new(Expression::Binary {
+                            left: Box::new(height.clone()),
+                            operator: BinaryOperator::Divide,
+                            right: Box::new(Expression::Literal { value: 2, span: span_empty }),
+                            span: span_empty,
+                        }),
+                        span: span_empty,
+                    },
+                    z: center_pos.z().clone(),
+                    span: span_empty,
+                };
+                let to = Coordinate::Positional {
+                    x: Expression::Binary {
+                        left: Box::new(center_pos.x().clone()),
+                        operator: BinaryOperator::Add,
+                        right: Box::new(Expression::Binary {
+                            left: Box::new(width),
+                            operator: BinaryOperator::Divide,
+                            right: Box::new(Expression::Literal { value: 2, span: span_empty }),
+                            span: span_empty,
+                        }),
+                        span: span_empty,
+                    },
+                    y: Expression::Binary {
+                        left: Box::new(center_pos.y().clone()),
+                        operator: BinaryOperator::Add,
+                        right: Box::new(Expression::Binary {
+                            left: Box::new(height),
+                            operator: BinaryOperator::Divide,
+                            right: Box::new(Expression::Literal { value: 2, span: span_empty }),
+                            span: span_empty,
+                        }),
+                        span: span_empty,
+                    },
+                    z: center_pos.z().clone(),
+                    span: span_empty,
+                };
+                Some(crate::PourBoundary::Rect(Box::new(from), Box::new(to)))
+            } else {
+                // v0.2.1: dimensions without position - create symbolic boundary
+                // that will be resolved by relational constraints
+                // This ensures the boundary structure exists for the compiler to update
+                let span_empty = Span::new(0, 0);
+                
+                // Create a placeholder center at origin - will be replaced by relational resolver
+                let placeholder_center = Expression::Measurement {
+                    value: 0.0,
+                    unit: Unit::Nanometer,
+                    span: span_empty,
+                };
+                
+                let from = Coordinate::Positional {
+                    x: Expression::Binary {
+                        left: Box::new(placeholder_center.clone()),
+                        operator: BinaryOperator::Subtract,
+                        right: Box::new(Expression::Binary {
+                            left: Box::new(width.clone()),
+                            operator: BinaryOperator::Divide,
+                            right: Box::new(Expression::Literal { value: 2, span: span_empty }),
+                            span: span_empty,
+                        }),
+                        span: span_empty,
+                    },
+                    y: Expression::Binary {
+                        left: Box::new(placeholder_center.clone()),
+                        operator: BinaryOperator::Subtract,
+                        right: Box::new(Expression::Binary {
+                            left: Box::new(height.clone()),
+                            operator: BinaryOperator::Divide,
+                            right: Box::new(Expression::Literal { value: 2, span: span_empty }),
+                            span: span_empty,
+                        }),
+                        span: span_empty,
+                    },
+                    z: Expression::Measurement {
+                        value: 0.0,
+                        unit: Unit::Nanometer,
+                        span: span_empty,
+                    },
+                    span: span_empty,
+                };
+                
+                let to = Coordinate::Positional {
+                    x: Expression::Binary {
+                        left: Box::new(placeholder_center.clone()),
+                        operator: BinaryOperator::Add,
+                        right: Box::new(Expression::Binary {
+                            left: Box::new(width),
+                            operator: BinaryOperator::Divide,
+                            right: Box::new(Expression::Literal { value: 2, span: span_empty }),
+                            span: span_empty,
+                        }),
+                        span: span_empty,
+                    },
+                    y: Expression::Binary {
+                        left: Box::new(placeholder_center),
+                        operator: BinaryOperator::Add,
+                        right: Box::new(Expression::Binary {
+                            left: Box::new(height),
+                            operator: BinaryOperator::Divide,
+                            right: Box::new(Expression::Literal { value: 2, span: span_empty }),
+                            span: span_empty,
+                        }),
+                        span: span_empty,
+                    },
+                    z: Expression::Measurement {
+                        value: 0.0,
+                        unit: Unit::Nanometer,
+                        span: span_empty,
+                    },
+                    span: span_empty,
+                };
+                
+                Some(crate::PourBoundary::Rect(Box::new(from), Box::new(to)))
+            }
+        } else {
+            boundary
+        };
+
         Ok(PourPlacement {
             material: material.into(),
             name,
             elevation,
             thickness,
-            boundary,
+            boundary: final_boundary,
             net,
             device,
             thermal_relief,
             waivers,
-            relational_constraints: smallvec::SmallVec::new(),
+            relational_constraints, // v0.2.1: Pass relational constraints
             inside_region, // v0.2.0: Region containment
             span: Span::new(start_pos, end_pos),
         })

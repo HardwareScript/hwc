@@ -84,6 +84,16 @@ pub fn evaluate_expression_to_ma(
                     }
                 }
                 BinaryOperator::Modulo => Ok(left_ma % right_ma),
+                // Comparison operators return 1.0 for true, 0.0 for false
+                BinaryOperator::Equal => Ok(if (left_ma - right_ma).abs() < f64::EPSILON { 1.0 } else { 0.0 }),
+                BinaryOperator::NotEqual => Ok(if (left_ma - right_ma).abs() >= f64::EPSILON { 1.0 } else { 0.0 }),
+                BinaryOperator::LessThan => Ok(if left_ma < right_ma { 1.0 } else { 0.0 }),
+                BinaryOperator::GreaterThan => Ok(if left_ma > right_ma { 1.0 } else { 0.0 }),
+                BinaryOperator::LessThanOrEqual => Ok(if left_ma <= right_ma { 1.0 } else { 0.0 }),
+                BinaryOperator::GreaterThanOrEqual => Ok(if left_ma >= right_ma { 1.0 } else { 0.0 }),
+                // Boolean operators (treat non-zero as true)
+                BinaryOperator::And => Ok(if left_ma != 0.0 && right_ma != 0.0 { 1.0 } else { 0.0 }),
+                BinaryOperator::Or => Ok(if left_ma != 0.0 || right_ma != 0.0 { 1.0 } else { 0.0 }),
             }
         }
         Expression::Unary {
@@ -94,6 +104,7 @@ pub fn evaluate_expression_to_ma(
             match operator {
                 UnaryOperator::Negate => Ok(-operand_ma),
                 UnaryOperator::Plus => Ok(operand_ma),
+                UnaryOperator::Not => Ok(if operand_ma == 0.0 { 1.0 } else { 0.0 }),
             }
         }
         Expression::Grouped { expression, .. } => {
@@ -105,6 +116,14 @@ pub fn evaluate_expression_to_ma(
         }
         Expression::Coordinate { .. } => {
             Err("Coordinate literals cannot be evaluated as current".into())
+        }
+        Expression::FunctionCall { .. } => {
+            // Function calls can be evaluated - delegate to expression evaluator
+            let eval_context = hwc_parser::EvaluationContext::default();
+            let result = expr.evaluate(&eval_context).map_err(|e| format!("Function evaluation failed: {}", e))?;
+            
+            // Convert to mA
+            result.as_number().map_err(|e| format!("Cannot convert function result to current: {}", e))
         }
     }
 }
@@ -146,6 +165,10 @@ pub(crate) fn z_expr_is_physical(z_expr: &Expression) -> bool {
         Expression::Percentage { .. } => false,
         Expression::AnchorReference { .. } => true, // Anchor references resolve to physical coordinates
         Expression::Coordinate { .. } => true, // Coordinate literals are physical
+        Expression::FunctionCall { arguments, .. } => {
+            // Function call is physical if any argument is physical
+            arguments.iter().any(|arg| z_expr_is_physical(arg))
+        }
     }
 }
 
@@ -301,8 +324,35 @@ pub fn spanning_coordinate_to_point(
         || y_expr.contains_anchor_reference()
         || z_expr.contains_anchor_reference();
 
-    let x_nm = evaluate_expression_to_nm(x_expr, ctx.symbol_table, ctx.eval_context)?;
-    let y_nm = evaluate_expression_to_nm(y_expr, ctx.symbol_table, ctx.eval_context)?;
+    // v0.2.1: Use anchor-aware evaluation when expressions contain anchor references
+    let x_nm = if has_anchor_refs && x_expr.contains_anchor_reference() {
+        let tracker = ctx.bbox_tracker.ok_or("BoundingBoxTracker required for anchor references")?;
+        super::placement::coordinate_evaluation::evaluate_coordinate_with_anchors(
+            x_expr,
+            ctx.symbol_table,
+            ctx.eval_context,
+            tracker,
+            CoordinateAxis::X,
+            ctx.origin.z,
+        ).map_err(|e| e.to_string())?
+    } else {
+        evaluate_expression_to_nm(x_expr, ctx.symbol_table, ctx.eval_context)?
+    };
+
+    let y_nm = if has_anchor_refs && y_expr.contains_anchor_reference() {
+        let tracker = ctx.bbox_tracker.ok_or("BoundingBoxTracker required for anchor references")?;
+        super::placement::coordinate_evaluation::evaluate_coordinate_with_anchors(
+            y_expr,
+            ctx.symbol_table,
+            ctx.eval_context,
+            tracker,
+            CoordinateAxis::Y,
+            ctx.origin.z,
+        ).map_err(|e| e.to_string())?
+    } else {
+        evaluate_expression_to_nm(y_expr, ctx.symbol_table, ctx.eval_context)?
+    };
+
     let z_nm = resolve_coordinate_z_nm(z_expr, ctx, has_anchor_refs)?;
 
     use hwc_parser::OriginXY;

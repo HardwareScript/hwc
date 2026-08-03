@@ -39,11 +39,10 @@ pub fn export(
     // 2. TABLES (Layer Definitions with Color and Transparency)
     writeln!(w, "  0\nSECTION\n  2\nTABLES\n  0\nTABLE\n  2\nLAYER")?;
 
-    let is_asic = space.fabrication_constraints.as_ref().is_some_and(|c| {
-        c.technology
-            .as_ref()
-            .is_some_and(|t| t.to_lowercase() == "asic")
-    });
+    let is_asic = space
+        .fabrication_constraints
+        .as_ref()
+        .is_some_and(|c| c.technology.is_asic());
 
     if is_asic {
         // ASIC Mode: Write only the physical semiconductor mask layers from the stackup

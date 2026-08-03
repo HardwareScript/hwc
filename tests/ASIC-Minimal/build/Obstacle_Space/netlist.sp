@@ -6,8 +6,8 @@
 * NETS
 * ========================================
 * Net: In (pour: Pad_A, material: Aluminum, z: 0.0000mm)
-* Net: Out (pour: Central_Barrier, material: Aluminum, z: 0.0000mm)
 * Net: In (pour: Pad_B, material: Aluminum, z: 0.0000mm)
+* Net: Out (pour: Central_Barrier, material: Aluminum, z: 0.0000mm)
 * Net: In (width=200nm, material=Tungsten)
 *   Connected pins:
 *     - Pad_A.__virtual_Pad_A

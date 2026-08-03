@@ -1,7 +1,7 @@
 # obstacle_test.hw
 # Testing 2D Obstacle Avoidance: Pathfinder-driven ray-casting detour.
 # Verifies that the router can navigate around physical barriers on a single layer.
-# UPDATED: Now uses middle-level relational syntax (v0.2.0)
+# UPDATED: Now uses v0.2.1 anchor arithmetic for precise centering between pads
 
 import * from @std/primitives/units
 import * from "./minimal_pdk"
@@ -39,16 +39,7 @@ space Obstacle_Space implements ObstacleTest:
         at: space.bottom_left + [300nm, 550nm]
         net: In
 
-    # 2. Central Barrier (Keep-out Obstacle - Net Out) - Centered in space
-    # This completely blocks the horizontal centerline between pads
-    add plane(Aluminum) named Central_Barrier {
-        align: center_x with space
-        align: center_y with space
-    } on layer: metal1:
-        shape: Barrier(width: 400nm, height: 800nm)
-        net: Out
-
-    # 3. Pad B (Destination - Net In) on Right - Positioned relationally relative to Pad_A
+    # 2. Pad B (Destination - Net In) on Right - Positioned relationally relative to Pad_A
     # Separated by 2.0um with same vertical alignment
     add plane(Aluminum) named Pad_B {
         align: center_y with Pad_A
@@ -56,6 +47,16 @@ space Obstacle_Space implements ObstacleTest:
     } on layer: metal1:
         shape: Pad(width: 400nm)
         net: In
+
+    # 3. Central Barrier (Keep-out Obstacle - Net Out) - Centered between the two pads
+    # v0.2.1: Uses align: constraints for explicit centering (ergonomic high-level syntax)
+    # This completely blocks the horizontal centerline between pads
+    add plane(Aluminum) named Central_Barrier {
+        align: center_x with (Pad_A.center_x + Pad_B.center_x) / 2
+        align: center_y with (Pad_A.center_y + Pad_B.center_y) / 2
+    } on layer: metal1:
+        shape: Barrier(width: 400nm, height: 800nm)
+        net: Out
 
     # ========================================================================
     # DETOUR ROUTING (Topological Pathfinder)

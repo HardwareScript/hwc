@@ -40,46 +40,62 @@ export bridge Aluminum to Aluminum:
     thickness: 5nm
     fill: Tungsten
 
+# Bridges for Tungsten to other metals (v0.2.1: checkerboard test)
+export bridge Tungsten to Aluminum:
+    interface: Titanium_Silicide
+    thickness: 5nm
+    fill: Tungsten
+
+export bridge Aluminum to Tungsten:
+    interface: Titanium_Silicide
+    thickness: 5nm
+    fill: Tungsten
+
+export bridge Tungsten to Tungsten:
+    interface: Titanium_Silicide
+    thickness: 5nm
+    fill: Tungsten
+
 # ============================================================================
-# THICK LAYER PROFILE - For Clear 3D Visualization
-# Each layer is 1um thick with 500nm spacing between layers
+# SOLID STACK PROFILE - NO GAPS (For Perfect Pyramid Stacking)
+# Each layer is 1um thick with ZERO spacing between layers
 # ============================================================================
 export profile Thick_3D_Stack:
-    technology: "3D_Stack"
+    technology: "ASIC"
     
     stackup:
         # Layer 0: Active silicon (0-1000nm)
         active:  [material: Silicon_N, thickness: 1000nm, routable: false]
         
-        # Dielectric 0 (1000-1500nm)
-        d0:      [material: Air, thickness: 500nm, routable: false]
-        
-        # Layer 1: Metal1 (1500-2500nm)
+        # Layer 1: Metal1 (1000-2000nm) - starts immediately after active
         metal1:  [material: Aluminum, thickness: 1000nm, routable: true]
         
-        # Dielectric 1 (2500-3000nm)
-        d1:      [material: Air, thickness: 500nm, routable: false]
-        
-        # Layer 2: Metal2 (3000-4000nm)
+        # Layer 2: Metal2 (2000-3000nm) - starts immediately after metal1
         metal2:  [material: Aluminum, thickness: 1000nm, routable: true]
         
-        # Dielectric 2 (4000-4500nm)
-        d2:      [material: Air, thickness: 500nm, routable: false]
-        
-        # Layer 3: Metal3 (4500-5500nm)
+        # Layer 3: Metal3 (3000-4000nm)
         metal3:  [material: Aluminum, thickness: 1000nm, routable: true]
         
-        # Dielectric 3 (5500-6000nm)
-        d3:      [material: Air, thickness: 500nm, routable: false]
-        
-        # Layer 4: Metal4 (6000-7000nm)
+        # Layer 4: Metal4 (4000-5000nm)
         metal4:  [material: Aluminum, thickness: 1000nm, routable: true]
         
-        # Dielectric 4 (7000-7500nm)
-        d4:      [material: Air, thickness: 500nm, routable: false]
-        
-        # Layer 5: Metal5 (7500-8500nm)
+        # Layer 5: Metal5 (5000-6000nm)
         metal5:  [material: Aluminum, thickness: 1000nm, routable: true]
+        
+        # Layer 6: Metal6 (6000-7000nm)
+        metal6:  [material: Aluminum, thickness: 1000nm, routable: true]
+        
+        # Layer 7: Metal7 (7000-8000nm)
+        metal7:  [material: Aluminum, thickness: 1000nm, routable: true]
+        
+        # Layer 8: Metal8 (8000-9000nm)
+        metal8:  [material: Aluminum, thickness: 1000nm, routable: true]
+        
+        # Layer 9: Metal9 (9000-10000nm)
+        metal9:  [material: Aluminum, thickness: 1000nm, routable: true]
+        
+        # Layer 10: Metal10 (10000-11000nm)
+        metal10: [material: Aluminum, thickness: 1000nm, routable: true]
 
     via:
         min_diameter: 200nm

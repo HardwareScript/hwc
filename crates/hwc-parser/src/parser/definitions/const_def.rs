@@ -91,7 +91,7 @@ mod tests {
         let mut parser = Parser::new(tokens);
         let collector = DiagnosticCollector::new(input, 100);
 
-        let result = parser.parse_const(&collector);
+        let result = parser.parse_const(&collector, false);
         assert!(result.is_some(), "Should parse const with float value");
 
         let const_def = result.unwrap();
@@ -107,7 +107,7 @@ mod tests {
         let mut parser = Parser::new(tokens);
         let collector = DiagnosticCollector::new(input, 100);
 
-        let result = parser.parse_const(&collector);
+        let result = parser.parse_const(&collector, false);
         assert!(result.is_some(), "Should parse const with integer value");
 
         let const_def = result.unwrap();
@@ -123,7 +123,7 @@ mod tests {
         let mut parser = Parser::new(tokens);
         let collector = DiagnosticCollector::new(input, 100);
 
-        let result = parser.parse_const(&collector);
+        let result = parser.parse_const(&collector, false);
         assert!(
             result.is_some(),
             "Should parse const with scientific notation"

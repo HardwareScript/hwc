@@ -31,6 +31,7 @@ impl crate::parser::Parser {
         let instance_name = ComponentName {
             base: self.expect_identifier_string()?.into(),
             index: None, // Space instances don't use array indexing
+            template_parts: None, // Space instances don't use template interpolation
             span: self.previous_span(),
         };
 

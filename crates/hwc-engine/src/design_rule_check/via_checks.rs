@@ -12,7 +12,7 @@
 use crate::constraint_manager::ConstraintRulebook;
 use crate::geometry::{BoundingBox, Point3D};
 use crate::ContactMetadata;
-use hwc_types::TechnologyStrategy;
+use hwc_types::Technology;
 
 use super::types::{DrcReport, DrcViolation};
 
@@ -222,7 +222,7 @@ pub fn validate_drill_to_drill_clearance(
 pub fn validate_via_enclosure_analytic(
     contacts: &[ContactMetadata],
     constraints: &ConstraintRulebook,
-    technology_strategy: TechnologyStrategy,
+    technology_strategy: Technology,
 ) -> Result<DrcReport, String> {
     // v0.2.0: Skip annular ring checks for ASIC technology
     // ASIC contacts are flush with no overhang - annular ring doesn't apply

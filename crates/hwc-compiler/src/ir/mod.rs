@@ -20,6 +20,7 @@
 //! - **No Collision Avoidance**: Conductive pours can interpenetrate component geometry.
 //! - **Analytic Complexity**: Very large designs may require spatial index optimization.
 
+pub mod anchor_arithmetic; // v0.2.1: Comptime anchor arithmetic evaluator
 pub mod bridge_validator;
 pub mod compilation;
 pub mod conversions;

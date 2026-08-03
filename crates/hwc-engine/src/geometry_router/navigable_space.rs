@@ -14,7 +14,7 @@
 //! 100% physically legal for the trace's centerline.
 
 use crate::geometry::{BoundingBox, Point3D};
-use hwc_types::TechnologyStrategy;
+use hwc_types::Technology;
 
 /// Errors that can occur during spatial decomposition.
 #[derive(Debug, Clone, thiserror::Error)]
@@ -80,7 +80,7 @@ impl SpatialDecomposer {
         raw_obstacles: Vec<BoundingBox>,
         trace_width_nm: i64,
         min_clearance_nm: i64,
-        technology_strategy: TechnologyStrategy,
+        technology_strategy: Technology,
     ) -> Result<Self, SpatialDecompositionError> {
         if trace_width_nm <= 0 {
             return Err(SpatialDecompositionError::InvalidTraceWidth(trace_width_nm));
@@ -461,7 +461,7 @@ mod tests {
     fn test_cspace_inflation() {
         let obstacle = BoundingBox::new(Point3D::new(1000, 1000, 0), Point3D::new(2000, 2000, 0));
 
-        let decomposer = SpatialDecomposer::new(vec![obstacle], 100, 50, TechnologyStrategy::Asic).unwrap(); // ASIC mode for test
+        let decomposer = SpatialDecomposer::new(vec![obstacle], 100, 50, Technology::Asic).unwrap(); // ASIC mode for test
 
         // Inflation = (100/2) + 50 = 100
         assert_eq!(decomposer.inflated_obstacles.len(), 1);
@@ -476,7 +476,7 @@ mod tests {
     fn test_cell_creation() {
         let board_bounds = BoundingBox::new(Point3D::new(0, 0, 0), Point3D::new(10000, 10000, 0));
 
-        let decomposer = SpatialDecomposer::new(vec![], 100, 50, TechnologyStrategy::Asic).unwrap();
+        let decomposer = SpatialDecomposer::new(vec![], 100, 50, Technology::Asic).unwrap();
         let cells = decomposer.decompose(&board_bounds, 0);
 
         // With no obstacles, should have at least one cell
@@ -487,7 +487,7 @@ mod tests {
     fn test_corridor_extraction() {
         let board_bounds = BoundingBox::new(Point3D::new(0, 0, 0), Point3D::new(10000, 10000, 0));
 
-        let decomposer = SpatialDecomposer::new(vec![], 100, 50, TechnologyStrategy::Asic).unwrap();
+        let decomposer = SpatialDecomposer::new(vec![], 100, 50, Technology::Asic).unwrap();
         let cells = decomposer.decompose(&board_bounds, 0);
 
         let start = Point3D::new(1000, 1000, 0);
@@ -505,7 +505,7 @@ mod tests {
     fn test_corridor_width_validation() {
         let board_bounds = BoundingBox::new(Point3D::new(0, 0, 0), Point3D::new(10000, 10000, 0));
 
-        let decomposer = SpatialDecomposer::new(vec![], 100, 50, TechnologyStrategy::Asic).unwrap();
+        let decomposer = SpatialDecomposer::new(vec![], 100, 50, Technology::Asic).unwrap();
         let cells = decomposer.decompose(&board_bounds, 0);
 
         // With no obstacles, cells should be wide enough
@@ -518,7 +518,7 @@ mod tests {
     fn test_corridor_sufficient_check() {
         let board_bounds = BoundingBox::new(Point3D::new(0, 0, 0), Point3D::new(10000, 10000, 0));
 
-        let decomposer = SpatialDecomposer::new(vec![], 100, 50, TechnologyStrategy::Asic).unwrap();
+        let decomposer = SpatialDecomposer::new(vec![], 100, 50, Technology::Asic).unwrap();
         let cells = decomposer.decompose(&board_bounds, 0);
 
         let start = Point3D::new(1000, 1000, 0);
@@ -534,7 +534,7 @@ mod tests {
 
     #[test]
     fn test_invalid_trace_width() {
-        let result = SpatialDecomposer::new(vec![], 0, 50, TechnologyStrategy::Asic);
+        let result = SpatialDecomposer::new(vec![], 0, 50, Technology::Asic);
         assert!(result.is_err());
         match result.unwrap_err() {
             SpatialDecompositionError::InvalidTraceWidth(w) => assert_eq!(w, 0),
@@ -546,7 +546,7 @@ mod tests {
     fn test_point_outside_space() {
         let board_bounds = BoundingBox::new(Point3D::new(0, 0, 0), Point3D::new(10000, 10000, 0));
 
-        let decomposer = SpatialDecomposer::new(vec![], 100, 50, TechnologyStrategy::Asic).unwrap();
+        let decomposer = SpatialDecomposer::new(vec![], 100, 50, Technology::Asic).unwrap();
         let cells = decomposer.decompose(&board_bounds, 0);
 
         let start = Point3D::new(-1000, -1000, 0);

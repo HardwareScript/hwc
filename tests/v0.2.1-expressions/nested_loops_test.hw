@@ -1,0 +1,67 @@
+# nested_loops_test.hw
+# v0.2.1 Test: NESTED LOOPS WITH EXPRESSIONS - Multi-dimensional Iteration
+# 
+# This test demonstrates:
+# 1. Nested for loops (3 levels deep)
+# 2. Expressions using multiple loop variables: i, j, k
+# 3. 3D structure generation across multiple layers
+# 4. Layer selection based on loop index
+# 
+# Expected result: 3D grid structure with 3 layers, 3×3 blocks per layer
+
+import * from @std/primitives/units
+import * from "./thick_layer_pdk"
+
+space Nested_Loops_Test:
+    dimensions: 80um by 80um by 15um
+    resolution: 10nm
+    origin: bl by b
+    profile: Thick_3D_Stack
+    
+    nets:
+        MATRIX: { classification: signal, potential: 3.3V }
+    
+    let block_size = 6um
+    let pitch = 10um
+    let base_offset = 20um
+    
+    # ========================================================================
+    # 3-LEVEL NESTED LOOP: Layer × Row × Column
+    # Generates a 3×3×3 cube structure (27 total blocks)
+    # - k = layer index (0, 1, 2) → metal1, metal2, metal3
+    # - i = row index (0, 1, 2)
+    # - j = column index (0, 1, 2)
+    # ========================================================================
+    
+    # Layer 0: metal1
+    for i in 0..2:
+        for j in 0..2:
+            add plane(Copper) named L0_R{i}_C{j} on layer: metal1:
+                shape: SquareCube(size: block_size)
+                at: [
+                    x: base_offset + j * pitch,
+                    y: base_offset + i * pitch
+                ]
+                net: MATRIX
+    
+    # Layer 1: metal2
+    for i in 0..2:
+        for j in 0..2:
+            add plane(Aluminum) named L1_R{i}_C{j} on layer: metal2:
+                shape: SquareCube(size: block_size)
+                at: [
+                    x: base_offset + j * pitch,
+                    y: base_offset + i * pitch
+                ]
+                net: MATRIX
+    
+    # Layer 2: metal3
+    for i in 0..2:
+        for j in 0..2:
+            add plane(Tungsten) named L2_R{i}_C{j} on layer: metal3:
+                shape: SquareCube(size: block_size)
+                at: [
+                    x: base_offset + j * pitch,
+                    y: base_offset + i * pitch
+                ]
+                net: MATRIX

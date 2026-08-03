@@ -280,6 +280,7 @@ pub fn unroll_contact(
         to_elevation,
         net,
         properties,
+        relational_constraints: contact.relational_constraints.clone(), // v0.2.1: Preserve relational constraints
         contour: contact.contour.clone(),
         span: contact.span,
     })

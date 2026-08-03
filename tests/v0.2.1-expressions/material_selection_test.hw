@@ -1,0 +1,67 @@
+# material_selection_test.hw
+# v0.2.1 Test: CONDITIONAL MATERIAL SELECTION - Complex Compile-Time Logic
+# 
+# This test demonstrates:
+# 1. Multi-condition if/else chains evaluated at compile time
+# 2. Boolean operators: or, and
+# 3. Three-way material selection based on position
+# 4. Edge detection: i == 0 or i == max or j == 0 or j == max
+# 
+# Expected result: 4×4 grid with Copper edges, Gold center, Aluminum interior
+
+import * from @std/primitives/units
+import * from "./thick_layer_pdk"
+
+space Material_Selection_Test:
+    dimensions: 80um by 80um by 15um
+    resolution: 10nm
+    origin: bl by b
+    profile: Thick_3D_Stack
+    
+    nets:
+        POWER: { classification: power, potential: 5V, current: 200mA }
+    
+    let size = 6um
+    let pitch = 8um
+    let base_offset = 20um
+    
+    # ========================================================================
+    # THREE-WAY MATERIAL SELECTION GRID (4×4 = 16 blocks)
+    # Pattern:
+    # - Edge blocks (i=0, i=3, j=0, j=3): Copper (orange)
+    # - Center block (i=1, j=1): Gold (yellow)
+    # - Interior non-center blocks: Aluminum (silver)
+    # ========================================================================
+    
+    for i in 0..3:
+        for j in 0..3:
+            # COMPILE-TIME CONDITION 1: Check if on grid edge
+            if i == 0 or i == 3 or j == 0 or j == 3:
+                # Edge of grid - use Copper
+                add plane(Copper) named Block_R{i}_C{j} on layer: metal1:
+                    shape: SquareCube(size: size)
+                    at: [
+                        x: base_offset + i * pitch,
+                        y: base_offset + j * pitch
+                    ]
+                    net: POWER
+            else:
+                # COMPILE-TIME CONDITION 2: Check if center block
+                if i == 1 and j == 1:
+                    # Center block - use Gold
+                    add plane(Gold) named Block_R{i}_C{j} on layer: metal1:
+                        shape: SquareCube(size: size)
+                        at: [
+                            x: base_offset + i * pitch,
+                            y: base_offset + j * pitch
+                        ]
+                        net: POWER
+                else:
+                    # Interior non-center blocks - use Aluminum
+                    add plane(Aluminum) named Block_R{i}_C{j} on layer: metal1:
+                        shape: SquareCube(size: size)
+                        at: [
+                            x: base_offset + i * pitch,
+                            y: base_offset + j * pitch
+                        ]
+                        net: POWER

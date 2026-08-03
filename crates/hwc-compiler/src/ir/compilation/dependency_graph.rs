@@ -1,24 +1,25 @@
 use crate::ir::errors::IrError;
-use crate::ir::placement_item::PlacementItem;
+use crate::ir::placement_item::{PlacementItem, ContextualPlacementItem};
 use compact_str::CompactString;
 
 /// Build the dependency graph from placement items and return topologically sorted IDs.
 pub fn build_and_sort(
-    placement_items: &[PlacementItem],
+    placement_items: &[ContextualPlacementItem],
     _symbol_table: &crate::SymbolTable,
 ) -> Result<Vec<compact_str::CompactString>, IrError> {
     let mut graph = crate::ir::spatial_dependency_graph::SpatialDependencyGraph::new();
     let mut last_component_name: Option<compact_str::CompactString> = None;
 
     // Pass 1: Register all items
-    for (i, item) in placement_items.iter().enumerate() {
-        let item_id = item.item_id(i);
+    for (i, contextual_item) in placement_items.iter().enumerate() {
+        let item_id = contextual_item.item_id(i);
         graph.add_component(item_id);
     }
 
     // Pass 2: Extract dependencies
-    for (i, item) in placement_items.iter().enumerate() {
-        let item_id = item.item_id(i);
+    for (i, contextual_item) in placement_items.iter().enumerate() {
+        let item_id = contextual_item.item_id(i);
+        let item = &contextual_item.item;
 
         match item {
             PlacementItem::Region(r) => {
@@ -85,7 +86,20 @@ pub fn build_and_sort(
                 for constraint in &c.relational_constraints {
                     match constraint {
                         hwc_parser::RelationalConstraint::Align { target, .. } => {
-                            graph.add_dependency(item_id.clone(), target.base.clone());
+                            // v0.2.1: AlignmentTarget is now an enum (Entity or Expression)
+                            match target {
+                                hwc_parser::AlignmentTarget::Entity(entity_name) => {
+                                    graph.add_dependency(item_id.clone(), entity_name.base.clone());
+                                }
+                                hwc_parser::AlignmentTarget::Expression(expr) => {
+                                    // Extract all entity references from the expression
+                                    graph.extract_dependencies_from_expr(
+                                        &item_id,
+                                        expr,
+                                        last_component_name.as_ref(),
+                                    );
+                                }
+                            }
                         }
                         hwc_parser::RelationalConstraint::Directional(dir) => {
                             let target = match dir {

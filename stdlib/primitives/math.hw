@@ -1,58 +1,79 @@
-##[ Hardware Script Standard Library - Mathematical Constants
+##[ Hardware Script Standard Library - Physical Constants
     
-    This file defines mathematical and physical constants for the Hardware Script compiler.
-    These constants are available globally without import and are resolved at parse time.
+    This file defines fundamental physical constants for hardware design.
+    These are empirical values measured from experiments, not mathematical derivations.
     
-    The parser replaces constant names with their values during AST construction,
-    enabling compile-time constant folding and eliminating runtime lookups.
+    Constants are parsed at compiler startup and replaced with their values during
+    AST construction, enabling compile-time constant folding.
+    
+    v0.2.1: Trigonometric and mathematical functions are built-in.
+    Mathematical constants like PI, E should be added as compiler built-ins in the future.
 ]##
 
 ## ============================================================================
-## MATHEMATICAL CONSTANTS
+## FUNDAMENTAL PHYSICAL CONSTANTS
 ## ============================================================================
+## Universal constants for RF design, antenna calculations, and EM simulations.
+## These are MEASURED values, not computed mathematical constants.
 
-const PI: 3.14159265358979323846
-const E: 2.71828182845904523536
-const DEG_TO_RAD: 0.017453292519943295
-const RAD_TO_DEG: 57.29577951308232
-const SQRT2: 1.4142135623730951
-const SQRT3: 1.7320508075688772
-const TAU: 6.283185307179586
-
-## ============================================================================
-## PHYSICAL CONSTANTS
-## ============================================================================
-
-const SPEED_OF_LIGHT: 299792458  # m/s
-const VACUUM_PERMITTIVITY: 8.854187817e-12  # F/m (ε₀)
-const VACUUM_PERMEABILITY: 1.25663706212e-6  # H/m (µ₀)
-const BOLTZMANN_CONSTANT: 1.380649e-23  # J/K
+const SPEED_OF_LIGHT: 299792458              # m/s - Speed of light in vacuum (exact by definition)
+const VACUUM_PERMITTIVITY: 8.854187817e-12   # F/m - ε₀ (epsilon naught)
+const VACUUM_PERMEABILITY: 1.25663706212e-6  # H/m - μ₀ (mu naught)
+const BOLTZMANN_CONSTANT: 1.380649e-23       # J/K - Boltzmann constant
+const ELEMENTARY_CHARGE: 1.602176634e-19     # C - Elementary charge
 
 ## ============================================================================
-## NOTES FOR USERS
+## BUILT-IN FUNCTIONS (v0.2.1+)
 ## ============================================================================
+## The compiler provides these functions natively in all expression contexts:
 ##
-## HOW TO ADD A NEW CONSTANT:
-## 1. Use the format: const NAME: value
-## 2. Use UPPERCASE_WITH_UNDERSCORES for constant names
-## 3. Add a comment with units (if applicable)
-## 4. Save this file - no compiler recompilation needed!
+## TRIGONOMETRIC (input in radians):
+##   sin(x), cos(x), tan(x)
+##   asin(x), acos(x), atan(x), atan2(y, x)
 ##
-## WHAT THE COMPILER DOES WITH THIS:
-## - Parses constants at startup into the Prelude layer
-## - Replaces constant names with values during parsing
-## - Enables compile-time constant folding (e.g., PI * 2 becomes 6.28...)
-## - Constants are available globally without import
+## ANGLE CONVERSION:
+##   radians(degrees) - Convert degrees to radians
+##   degrees(radians) - Convert radians to degrees
 ##
-## EXAMPLES OF USE:
-## - impedance: 50 * PI  # Calculates at compile time
-## - wavelength: SPEED_OF_LIGHT / frequency
-## - thermal_noise: BOLTZMANN_CONSTANT * temperature
+## MATHEMATICAL:
+##   sqrt(x), abs(x)
+##   floor(x), ceil(x), round(x)
+##   min(a, b), max(a, b)
+##   pow(base, exponent) - or use ^ operator
 ##
-## WHY THESE CONSTANTS?
-## - PI, E: Universal mathematical constants
-## - SPEED_OF_LIGHT: Needed for high-speed signal timing calculations
-## - VACUUM_PERMITTIVITY: Essential for calculating capacitance
-## - VACUUM_PERMEABILITY: Essential for calculating inductance
-## - BOLTZMANN_CONSTANT: Needed for thermal noise calculations
+## EXAMPLE: Circular placement with trigonometry
+## ----------------------------------------------
+## for i in 0..7:
+##     let angle = radians(i * 45)  # 45° increments
+##     add plane(Copper) named Pad_{i} on layer: metal1:
+##         at: [
+##             x: center_x + radius * cos(angle),
+##             y: center_y + radius * sin(angle)
+##         ]
 ##
+## EXAMPLE: RF wavelength calculation
+## -----------------------------------
+## let wavelength = SPEED_OF_LIGHT / frequency_hz
+##
+## EXAMPLE: Capacitance from geometry
+## -----------------------------------
+## let capacitance = VACUUM_PERMITTIVITY * area / distance
+##
+## EXAMPLE: Thermal noise calculation
+## -----------------------------------
+## let noise_power = BOLTZMANN_CONSTANT * temperature * bandwidth
+##
+## ============================================================================
+
+## ============================================================================
+## FUTURE: MATHEMATICAL CONSTANTS
+## ============================================================================
+## Mathematical constants (PI, E, TAU, etc.) should be added as compiler
+## built-ins rather than text-file constants. Users shouldn't need to type
+## 3.14159265358979323846 when they mean PI.
+##
+## For now, if you need them, use literal values or define them in your code:
+##   let pi = 3.14159265358979323846
+##   let tau = 2 * pi
+##
+## ============================================================================

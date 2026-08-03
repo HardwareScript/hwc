@@ -1,0 +1,174 @@
+# thick_layer_pdk.hw
+# PDK with THICK layers (1um each) for clear 3D visualization
+# Used for v0.2.1 expression system tests
+
+import * from @std/primitives/units
+import Silicon_N, Silicon_P, Polysilicon, Aluminum, Tungsten, Copper, Gold, Silver, Titanium_Silicide, Air from "./materials"
+
+export Silicon_N
+export Silicon_P
+export Aluminum
+export Polysilicon
+export Tungsten
+export Copper
+export Gold
+export Silver
+export Titanium_Silicide
+export Air
+
+# Square contact shape for vias
+export shape SquareContact(width: Measurement):
+    geometry:
+        Rectangle(width: width, height: width)
+
+# Square cube shape for blocks
+export shape SquareCube(size: Measurement):
+    geometry:
+        Rectangle(width: size, height: size)
+
+# Bridges for ohmic contacts
+export bridge Silicon_N to Aluminum:
+    interface: Titanium_Silicide
+    thickness: 5nm
+    fill: Tungsten
+
+export bridge Silicon_P to Aluminum:
+    interface: Titanium_Silicide
+    thickness: 5nm
+    fill: Tungsten
+
+export bridge Polysilicon to Aluminum:
+    interface: Titanium_Silicide
+    thickness: 5nm
+    fill: Tungsten
+
+# Bridge between metal layers
+export bridge Aluminum to Aluminum:
+    interface: Titanium_Silicide
+    thickness: 5nm
+    fill: Tungsten
+
+# Bridges for multi-material tests
+export bridge Tungsten to Aluminum:
+    interface: Titanium_Silicide
+    thickness: 5nm
+    fill: Tungsten
+
+export bridge Aluminum to Tungsten:
+    interface: Titanium_Silicide
+    thickness: 5nm
+    fill: Tungsten
+
+export bridge Tungsten to Tungsten:
+    interface: Titanium_Silicide
+    thickness: 5nm
+    fill: Tungsten
+
+export bridge Copper to Copper:
+    interface: Titanium_Silicide
+    thickness: 5nm
+    fill: Tungsten
+
+export bridge Copper to Aluminum:
+    interface: Titanium_Silicide
+    thickness: 5nm
+    fill: Tungsten
+
+export bridge Aluminum to Copper:
+    interface: Titanium_Silicide
+    thickness: 5nm
+    fill: Tungsten
+
+export bridge Gold to Gold:
+    interface: Titanium_Silicide
+    thickness: 5nm
+    fill: Tungsten
+
+export bridge Gold to Aluminum:
+    interface: Titanium_Silicide
+    thickness: 5nm
+    fill: Tungsten
+
+export bridge Silver to Silver:
+    interface: Titanium_Silicide
+    thickness: 5nm
+    fill: Tungsten
+
+export bridge Silver to Aluminum:
+    interface: Titanium_Silicide
+    thickness: 5nm
+    fill: Tungsten
+
+# ============================================================================
+# THICK LAYER PROFILE - For Expression System Tests
+# ============================================================================
+export profile Thick_3D_Stack:
+    technology: "ASIC"
+    
+    stackup:
+        active:  [material: Silicon_N, thickness: 1000nm, routable: false]
+        metal1:  [material: Aluminum, thickness: 1000nm, routable: true]
+        metal2:  [material: Aluminum, thickness: 1000nm, routable: true]
+        metal3:  [material: Aluminum, thickness: 1000nm, routable: true]
+        metal4:  [material: Aluminum, thickness: 1000nm, routable: true]
+        metal5:  [material: Aluminum, thickness: 1000nm, routable: true]
+        metal6:  [material: Aluminum, thickness: 1000nm, routable: true]
+        metal7:  [material: Aluminum, thickness: 1000nm, routable: true]
+        metal8:  [material: Aluminum, thickness: 1000nm, routable: true]
+        metal9:  [material: Aluminum, thickness: 1000nm, routable: true]
+        metal10: [material: Aluminum, thickness: 1000nm, routable: true]
+
+    via:
+        min_diameter: 200nm
+        min_annular_ring: 0nm
+        min_spacing: 300nm
+        shape: SquareContact
+        contact_depth: 100nm
+
+    trace:
+        min_width: 200nm
+        min_spacing: 0nm
+        edge_clearance: 50um
+
+    manufacturing:
+        copper_thickness: 1000nm
+        circle_segments: 64
+        solder_mask_thickness: 0nm
+        solder_mask_expansion: 0nm
+
+    clearance:
+        high_voltage: 500nm
+        safety_factor: 2.0
+
+    thermal:
+        ambient_temp: 25C
+        max_operating_temp: 125C
+        max_temp_rise: 50C
+        clustering_threshold: 10um
+
+    layer:
+        min_thickness: 50nm
+        allowed_conductors: [Aluminum, Copper, Gold, Silver, Tungsten, Polysilicon, Silicon_N, Silicon_P]
+        allowed_dielectrics: [Air]
+
+    routing:
+        max_local_route_length: 10um
+        min_segment_length: 200nm
+        escape_stub: 0nm
+        base_cost: 1
+        via_penalty: 50
+        direction_penalty: 10
+        tight_clearance_penalty: 2
+        crosstalk_penalty: 3
+        impedance_penalty: 1
+        reference_void_penalty: 5000000
+        net_priority_VDD: 5
+        net_priority_GND: 5
+
+    net_type Signal:
+        routing_style: auto
+        escape_stub: 0nm
+
+    net_type PowerRail:
+        routing_style: auto
+        escape_stub: 0nm

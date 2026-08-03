@@ -102,17 +102,17 @@ impl super::super::super::Parser {
                 self.expect(&Token::With)?;
                 let target = self.parse_component_name()?;
                 let span = Span::new(start_pos, self.previous_span().end);
-                relational_constraints.push(RelationalConstraint::Align { axis, target, span });
+                relational_constraints.push(RelationalConstraint::Align { axis, target: AlignmentTarget::Entity(target), span });
                 self.skip_whitespace();
                 continue;
             }
 
-            if self.check(&Token::Above)
-                || self.check(&Token::Below)
-                || self.check(&Token::RightOf)
-                || self.check(&Token::LeftOf)
+            if self.check_identifier("above")
+                || self.check_identifier("below")
+                || self.check_identifier("right_of")
+                || self.check_identifier("left_of")
             {
-                let constraint = if self.check(&Token::Above) {
+                let constraint = if self.check_identifier("above") {
                     self.advance(); // consume 'above'
                     let target = self.parse_component_name()?;
                     let spacing = if self.check(&Token::With) {
@@ -127,7 +127,7 @@ impl super::super::super::Parser {
                         target,
                         spacing,
                     })
-                } else if self.check(&Token::Below) {
+                } else if self.check_identifier("below") {
                     self.advance(); // consume 'below'
                     let target = self.parse_component_name()?;
                     let spacing = if self.check(&Token::With) {
@@ -142,7 +142,7 @@ impl super::super::super::Parser {
                         target,
                         spacing,
                     })
-                } else if self.check(&Token::RightOf) {
+                } else if self.check_identifier("right_of") {
                     self.advance(); // consume 'right_of'
                     let target = self.parse_component_name()?;
                     let spacing = if self.check(&Token::With) {

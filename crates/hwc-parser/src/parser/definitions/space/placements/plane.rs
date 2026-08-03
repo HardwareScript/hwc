@@ -209,6 +209,7 @@ impl crate::parser::Parser {
         let mut constraints = smallvec::smallvec![];
 
         // Parse multiple align constraints (align: center_x with A align: center_y with A)
+        // v0.2.1: Now supports expressions: align: center_x with (A.center_x + B.center_x) / 2
         while self.check(&Token::Align) {
             self.advance();
             self.expect(&Token::Colon)?;
@@ -229,19 +230,44 @@ impl crate::parser::Parser {
                 }
             };
             self.expect(&Token::With)?;
-            let target = self.parse_component_name()?;
+            
+            // v0.2.1: Parse target as expression or simple entity name
+            let target = if self.check(&Token::OpenParen) {
+                // Complex expression: (A.center_x + B.center_x) / 2
+                let expr = self.parse_expression()?;
+                AlignmentTarget::Expression(expr)
+            } else if self.current().map(|t| matches!(t.token, Token::Identifier(_))).unwrap_or(false) {
+                // Check if it's a simple identifier or an anchor reference
+                let checkpoint = self.current;
+                let _ = self.expect_identifier_string()?;
+                
+                if self.check(&Token::Dot) {
+                    // It's an anchor reference like Pad_A.center_x - parse as expression
+                    self.current = checkpoint; // Backtrack
+                    let expr = self.parse_expression()?;
+                    AlignmentTarget::Expression(expr)
+                } else {
+                    // It's a simple entity name
+                    self.current = checkpoint; // Backtrack
+                    let component_name = self.parse_component_name()?;
+                    AlignmentTarget::Entity(component_name)
+                }
+            } else {
+                return Err(self.error("Expected entity name or expression after 'with'"));
+            };
+            
             let span = Span::new(start_pos, self.previous_span().end);
             constraints.push(RelationalConstraint::Align { axis, target, span });
         }
 
         // Parse multiple directional constraints (right_of A with spacing: X above B with spacing: Y)
         loop {
-            if self.check(&Token::Above)
-                || self.check(&Token::Below)
-                || self.check(&Token::RightOf)
-                || self.check(&Token::LeftOf)
+            if self.check_identifier("above")
+                || self.check_identifier("below")
+                || self.check_identifier("right_of")
+                || self.check_identifier("left_of")
             {
-                let constraint = if self.check(&Token::Above) {
+                let constraint = if self.check_identifier("above") {
                     self.advance();
                     let target = self.parse_component_name()?;
                     let spacing = if self.check(&Token::With) {
@@ -256,7 +282,7 @@ impl crate::parser::Parser {
                         target,
                         spacing,
                     })
-                } else if self.check(&Token::Below) {
+                } else if self.check_identifier("below") {
                     self.advance();
                     let target = self.parse_component_name()?;
                     let spacing = if self.check(&Token::With) {
@@ -271,7 +297,7 @@ impl crate::parser::Parser {
                         target,
                         spacing,
                     })
-                } else if self.check(&Token::RightOf) {
+                } else if self.check_identifier("right_of") {
                     self.advance();
                     let target = self.parse_component_name()?;
                     let spacing = if self.check(&Token::With) {
@@ -327,6 +353,7 @@ impl crate::parser::Parser {
             }
 
             // Parse alignment constraint: align: axis with target
+            // v0.2.1: Now supports expressions: align: center_x with (A.center_x + B.center_x) / 2
             if self.check(&Token::Align) {
                 self.advance();
                 self.expect(&Token::Colon)?;
@@ -347,7 +374,32 @@ impl crate::parser::Parser {
                     }
                 };
                 self.expect(&Token::With)?;
-                let target = self.parse_component_name()?;
+                
+                // v0.2.1: Parse target as expression or simple entity name
+                let target = if self.check(&Token::OpenParen) {
+                    // Complex expression: (A.center_x + B.center_x) / 2
+                    let expr = self.parse_expression()?;
+                    AlignmentTarget::Expression(expr)
+                } else if self.current().map(|t| matches!(t.token, Token::Identifier(_))).unwrap_or(false) {
+                    // Check if it's a simple identifier or an anchor reference
+                    let checkpoint = self.current;
+                    let _ = self.expect_identifier_string()?;
+                    
+                    if self.check(&Token::Dot) {
+                        // It's an anchor reference like Pad_A.center_x - parse as expression
+                        self.current = checkpoint; // Backtrack
+                        let expr = self.parse_expression()?;
+                        AlignmentTarget::Expression(expr)
+                    } else {
+                        // It's a simple entity name
+                        self.current = checkpoint; // Backtrack
+                        let component_name = self.parse_component_name()?;
+                        AlignmentTarget::Entity(component_name)
+                    }
+                } else {
+                    return Err(self.error("Expected entity name or expression after 'with'"));
+                };
+                
                 let span = Span::new(start_pos, self.previous_span().end);
                 constraints.push(RelationalConstraint::Align { axis, target, span });
                 self.skip_whitespace();
@@ -355,12 +407,12 @@ impl crate::parser::Parser {
             }
 
             // Parse directional constraint: above/below/right_of/left_of target [with spacing: expr]
-            if self.check(&Token::Above)
-                || self.check(&Token::Below)
-                || self.check(&Token::RightOf)
-                || self.check(&Token::LeftOf)
+            if self.check_identifier("above")
+                || self.check_identifier("below")
+                || self.check_identifier("right_of")
+                || self.check_identifier("left_of")
             {
-                let constraint = if self.check(&Token::Above) {
+                let constraint = if self.check_identifier("above") {
                     self.advance();
                     let target = self.parse_component_name()?;
                     let spacing = if self.check(&Token::With) {
@@ -375,7 +427,7 @@ impl crate::parser::Parser {
                         target,
                         spacing,
                     })
-                } else if self.check(&Token::Below) {
+                } else if self.check_identifier("below") {
                     self.advance();
                     let target = self.parse_component_name()?;
                     let spacing = if self.check(&Token::With) {
@@ -390,7 +442,7 @@ impl crate::parser::Parser {
                         target,
                         spacing,
                     })
-                } else if self.check(&Token::RightOf) {
+                } else if self.check_identifier("right_of") {
                     self.advance();
                     let target = self.parse_component_name()?;
                     let spacing = if self.check(&Token::With) {

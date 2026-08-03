@@ -115,6 +115,18 @@ pub fn substitute_in_expression(
                 span: *span,
             })
         }
+        Expression::FunctionCall { name, arguments, span } => {
+            // Substitute in all arguments
+            let mut substituted_args = Vec::new();
+            for arg in arguments {
+                substituted_args.push(substitute_in_expression(arg, variable, value)?);
+            }
+            Ok(Expression::FunctionCall {
+                name: name.clone(),
+                arguments: substituted_args,
+                span: *span,
+            })
+        }
     }
 }
 

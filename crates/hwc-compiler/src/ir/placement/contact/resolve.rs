@@ -153,9 +153,7 @@ pub(super) fn resolve_net_id(
 ) -> Result<u32, IrError> {
     if let Some(net_name) = &contact.net {
         let is_asic = space.fabrication_constraints.as_ref().is_some_and(|c| {
-            c.technology
-                .as_ref()
-                .is_some_and(|t| t.to_lowercase() == "asic")
+            c.technology.is_asic()
         });
         let min_width = space
             .fabrication_constraints

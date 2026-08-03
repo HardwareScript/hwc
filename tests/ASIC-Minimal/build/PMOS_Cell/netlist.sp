@@ -5,14 +5,14 @@
 * ========================================
 * NETS
 * ========================================
-* Net: VDD (pour: VDD_Rail, material: Aluminum, z: 0.0013mm)
-* Net: VDD (pour: VDD_Source_Pad, material: Aluminum, z: 0.0013mm)
-* Net: Out (pour: Out_Drain_Pad, material: Aluminum, z: 0.0013mm)
-* Net: Out (pour: Out_Export_Pad, material: Aluminum, z: 0.0013mm)
 * Net: VDD (pour: PMOS_Source, material: Silicon_P, z: 0.0000mm)
 * Net: Out (pour: PMOS_Drain, material: Silicon_P, z: 0.0000mm)
 * Net: In (pour: Gate_Strip, material: Polysilicon, z: 0.0004mm)
+* Net: VDD (pour: VDD_Source_Pad, material: Aluminum, z: 0.0013mm)
+* Net: Out (pour: Out_Drain_Pad, material: Aluminum, z: 0.0013mm)
 * Net: In (pour: Gate_Pad, material: Aluminum, z: 0.0013mm)
+* Net: VDD (pour: VDD_Rail, material: Aluminum, z: 0.0013mm)
+* Net: Out (pour: Out_Export_Pad, material: Aluminum, z: 0.0013mm)
 * Net: In (width=200nm, material=Tungsten)
 *   Connected pins:
 *     - Gate_Strip.anchor
@@ -22,12 +22,12 @@
 *     - Via_Gate.__virtual_Via_Gate
 * Net: Out (width=200nm, material=Tungsten)
 *   Connected pins:
+*     - PMOS_Drain.anchor
+*     - PMOS_Drain.__virtual_PMOS_Drain
 *     - Out_Drain_Pad.anchor
 *     - Out_Drain_Pad.__virtual_Out_Drain_Pad
 *     - Out_Export_Pad.anchor
 *     - Out_Export_Pad.__virtual_Out_Export_Pad
-*     - PMOS_Drain.anchor
-*     - PMOS_Drain.__virtual_PMOS_Drain
 *     - Via_Drain.__virtual_Via_Drain
 *     - Out_Drain_Pad.__virtual_Out_Drain_Pad
 *     - Out_Export_Pad.__virtual_Out_Export_Pad
@@ -35,12 +35,12 @@
 *     - Out_Export_Pad.__virtual_Out_Export_Pad
 * Net: VDD (width=200nm, material=Tungsten)
 *   Connected pins:
-*     - VDD_Rail.anchor
-*     - VDD_Rail.__virtual_VDD_Rail
-*     - VDD_Source_Pad.anchor
-*     - VDD_Source_Pad.__virtual_VDD_Source_Pad
 *     - PMOS_Source.anchor
 *     - PMOS_Source.__virtual_PMOS_Source
+*     - VDD_Source_Pad.anchor
+*     - VDD_Source_Pad.__virtual_VDD_Source_Pad
+*     - VDD_Rail.anchor
+*     - VDD_Rail.__virtual_VDD_Rail
 *     - Via_Source.__virtual_Via_Source
 *     - VDD_Source_Pad.__virtual_VDD_Source_Pad
 *     - VDD_Rail.__virtual_VDD_Rail

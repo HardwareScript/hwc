@@ -6,7 +6,6 @@ mod routing_phase;
 pub mod space_setup;
 
 use crate::ir::errors::IrError;
-use crate::ir::placement_item::PlacementItem;
 use crate::ir::stackup_manager::StackupManager;
 use crate::SymbolTable;
 use hwc_diagnostics::DiagnosticCollector;
@@ -21,7 +20,7 @@ use rustc_hash::FxHashMap;
 /// instead of a long parameter list.
 pub struct CompilationContext<'a> {
     pub sorted_ids: &'a [compact_str::CompactString],
-    pub placement_items: &'a [PlacementItem],
+    pub placement_items: &'a [crate::ir::placement_item::ContextualPlacementItem],
     pub item_map: &'a FxHashMap<compact_str::CompactString, usize>,
     pub origin: OriginPoint,
     pub symbol_table: &'a SymbolTable,
@@ -103,9 +102,11 @@ pub fn compile_single_space(
     ),
     IrError,
 > {
-    let placement_items = placement_items::collect_placement_items(space_def, symbol_table)?;
+    // Build eval context first (contains space-level let bindings)
+    let eval_context_initial = space_setup::build_eval_context(symbol_table, None, space_def)?;
 
-    let eval_context_initial = space_setup::build_eval_context(symbol_table, None, space_def);
+    // Collect placement items (unroll loops with eval context)
+    let placement_items = placement_items::collect_placement_items(space_def, symbol_table, &eval_context_initial)?;
 
     let mut space = space_setup::create_space(space_def, symbol_table, &eval_context_initial)?;
 
@@ -114,7 +115,7 @@ pub fn compile_single_space(
 
     let origin = space_def.origin.unwrap_or_default();
 
-    let eval_context = space_setup::build_eval_context(symbol_table, profile.as_ref(), space_def);
+    let eval_context = space_setup::build_eval_context(symbol_table, profile.as_ref(), space_def)?;
 
     let stackup_manager = space_setup::create_stackup_and_materials(
         profile.as_ref(),

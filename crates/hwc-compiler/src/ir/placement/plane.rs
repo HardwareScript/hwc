@@ -4,24 +4,27 @@ use super::context::PlacementContext;
 use hwc_engine::space::PourMetadata;
 use hwc_engine::{HardwareSpace, Point3D};
 
-/// Check if a coordinate uses a .center edge reference
-fn matches_center_edge(coord: &hwc_parser::Coordinate) -> bool {
-    use hwc_parser::{Coordinate, Expression, Edge};
-    
-    let check_expr = |expr: &Expression| -> bool {
-        match expr {
-            Expression::AnchorReference { edge, .. } => matches!(edge, Edge::Center),
-            _ => false,
-        }
-    };
-    
-    match coord {
-        Coordinate::Positional { x, y, z, .. } | Coordinate::Declarative { x, y, z, .. } => {
-            check_expr(x) || check_expr(y) || check_expr(z)
-        }
-        Coordinate::Relative(_) => false,
-    }
-}
+// REMOVED: matches_center_edge() function
+// 
+// v0.2.1 Refactoring: `at:` positioning semantics are now explicit and predictable
+// 
+// EXPLICIT POSITIONING (at:):
+//   - `at: [x, y]` places the shape's origin-aligned corner at (x, y)
+//   - The corner used depends on the space's `origin:` declaration:
+//     * `origin: bl by b` → places bottom-left corner at (x, y)
+//     * `origin: tl by t` → places top-left corner at (x, y)
+//     * etc.
+//   - Coordinates are evaluated using anchor arithmetic, but the semantic is ALWAYS
+//     "place the origin corner here" - no implicit centering adjustments
+//
+// RELATIONAL CENTERING (align:):
+//   - `align: center_x with expr` explicitly calculates centering offset
+//   - This is ergonomic sugar that compiles to explicit corner positioning
+//   - The relational resolver handles the centering math
+//
+// This removes implicit magic where the compiler tried to detect center references
+// in `at:` expressions and auto-adjust positioning. That violated the principle
+// of least surprise and broke with complex expressions like `(A.center_x + B.center_x) / 2`.
 
 struct ResolvedCutout {
     at_pt: Point3D,
@@ -219,12 +222,13 @@ pub fn place_plane(
         .resolve_elevation(&plane.elevation, ctx.symbol_table, ctx.eval_context)?;
     let z_end_nm = z_start_nm + thickness_nm;
 
+    // v0.2.1: Pass bbox_tracker for anchor arithmetic evaluation
     let coord_ctx = CoordinateContext {
         origin: ctx.origin,
         space_dimensions: &space.dimensions,
         symbol_table: ctx.symbol_table,
         eval_context: ctx.eval_context,
-        bbox_tracker: None,
+        bbox_tracker: Some(bbox_tracker),
         stackup_manager: ctx.stackup_manager,
         profile: ctx.profile,
     };
@@ -264,32 +268,12 @@ pub fn place_plane(
             });
         };
 
-        // v0.1.9: Adjust for center alignment [Spatial_Synthesis_Abstraction.md §1.4.1]
-        //
-        // CENTER ALIGNMENT SEMANTICS: When positioning at a center point (either via
-        // relational `align: center` or direct `.center` anchor reference), we must:
-        //   1. Take the target's center coordinate
-        //   2. Subtract half of THIS object's dimensions
-        //   3. Result: bottom-left corner position that centers this object
-        //
-        // Example: Region center = (460µm, 300µm), Shape = 120µm x 80µm
-        //   - Coordinate resolver returns: (460µm, 300µm)
-        //   - We adjust: X = 460µm - 60µm = 400µm, Y = 300µm - 40µm = 260µm
-        //   - Result: Shape spans X:400-520µm, Y:260-340µm, center at (460,300) ✓ CENTERED
-        
-        // Check if the coordinate uses .center edge reference
-        let uses_center_anchor = if let Some(from_coord) = &plane.from {
-            matches_center_edge(from_coord)
-        } else {
-            false
-        };
-        
-        // Apply centering for both direct .center anchors and relational align constraints
-        if uses_center_anchor {
-            position.x -= width_nm / 2;
-            position.y -= height_nm / 2;
-        }
-        
+        // v0.2.1: Apply centering adjustments for align: center_x/center_y constraints
+        // 
+        // When using `align: center_x with <target>`, the relational resolver returns
+        // the center X coordinate. We need to subtract half the width to get the corner position.
+        // 
+        // This is the EXPLICIT centering behavior - no implicit magic based on expression content.
         for constraint in &plane.relational_constraints {
             if let hwc_parser::RelationalConstraint::Align { axis, .. } = constraint {
                 match axis {
@@ -300,12 +284,15 @@ pub fn place_plane(
                         position.y -= height_nm / 2;
                     }
                     hwc_parser::AlignmentAxis::CenterZ => {
-                        // Z-centering doesn't affect XY position
+                        // Z-centering adjustment would go here if needed
                     }
-                    _ => {}
+                    _ => {
+                        // Edge alignments (top, bottom, left, right) don't need adjustment
+                    }
                 }
             }
         }
+        // This violated least-surprise principle and failed with complex expressions.
 
         let end_pt = Point3D::new(position.x + width_nm, position.y + height_nm, position.z);
         let area = width_nm * height_nm;

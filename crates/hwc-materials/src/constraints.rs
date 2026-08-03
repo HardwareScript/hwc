@@ -96,8 +96,9 @@ pub struct ConstraintSet {
     /// tubes, TSVs). Sourced from `manufacturing.circle_segments` in the PDK
     /// profile. No compiler default — must be declared.
     pub circle_segments: u32,
-    /// Technology node string (e.g. "PCB", "ASIC") for manufacturing checks.
-    pub technology: Option<String>,
+    /// Technology type (PCB or ASIC) - REQUIRED field that determines via geometry,
+    /// clearance rules, and manufacturing constraints. Must be explicitly declared.
+    pub technology: hwc_types::Technology,
     /// Per-layer routability map (v0.1.8 Physical Synthesis Guardrails).
     /// Maps layer name (e.g., "active", "metal1") to its routable mode.
     /// The pathfinder looks up this table before placing trace segments.

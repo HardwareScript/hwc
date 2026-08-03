@@ -37,37 +37,51 @@ impl NetId {
 /// Technology strategy for PCB vs ASIC design rules.
 ///
 /// This enum represents the two supported technology families and encapsulates
-/// the differing design-rule calculations for each. It serves as the single
-/// source of truth for technology-specific logic across the entire codebase.
+/// Technology type distinguishing between PCB and ASIC design rules.
+///
+/// This enum determines manufacturing-specific behavior throughout the compiler:
+/// - Via geometry (drilled holes with annular rings vs photolithographic contacts)
+/// - Clearance rules (IPC standards vs process design rules)
+/// - Layer stack assumptions (copper + FR4 vs deposited metal + oxide)
+///
+/// **IMPORTANT**: This must be explicitly declared in every profile. No defaults
+/// are permitted to prevent accidental mismatches between design intent and
+/// manufacturing constraints.
+///
+/// This type serves as the single source of truth for technology-specific logic
+/// across the entire codebase.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
-pub enum TechnologyStrategy {
-    /// Printed circuit board technology.
+pub enum Technology {
+    /// Printed Circuit Board technology (drilled vias, copper traces on FR4)
     Pcb,
-    /// Application-specific integrated circuit technology.
+    /// Application-Specific Integrated Circuit technology (photolithography)
     Asic,
 }
 
-impl Default for TechnologyStrategy {
-    /// Default to ASIC technology strategy.
-    fn default() -> Self {
-        Self::Asic
-    }
-}
-
-impl TechnologyStrategy {
-    /// Determine the technology strategy from the minimum annular ring value.
+impl Technology {
+    /// Parse a technology string from profile definition.
     ///
-    /// If `min_annular_ring_nm` is greater than zero the technology is PCB,
-    /// otherwise it is ASIC.
-    #[inline]
-    pub const fn from_annular_ring(min_annular_ring_nm: i64) -> Self {
-        if min_annular_ring_nm > 0 {
-            Self::Pcb
-        } else {
-            Self::Asic
+    /// Case-insensitive matching for user convenience.
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s.to_lowercase().as_str() {
+            "pcb" => Some(Self::Pcb),
+            "asic" => Some(Self::Asic),
+            _ => None,
         }
     }
 
+    /// Convert to canonical string representation.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Pcb => "PCB",
+            Self::Asic => "ASIC",
+        }
+    }
+}
+
+/// Legacy alias for Technology enum.
+/// 
+impl Technology {
     /// Compute the contact expansion for this technology.
     ///
     /// For PCB the expansion equals `min_annular_ring_nm`.
@@ -127,25 +141,41 @@ mod tests {
     use super::*;
 
     #[test]
-    fn default_is_asic() {
-        assert_eq!(TechnologyStrategy::default(), TechnologyStrategy::Asic);
+    fn technology_from_str() {
+        assert_eq!(Technology::from_str("PCB"), Some(Technology::Pcb));
+        assert_eq!(Technology::from_str("pcb"), Some(Technology::Pcb));
+        assert_eq!(Technology::from_str("ASIC"), Some(Technology::Asic));
+        assert_eq!(Technology::from_str("asic"), Some(Technology::Asic));
+        assert_eq!(Technology::from_str("invalid"), None);
     }
 
     #[test]
-    fn from_annular_ring_positive_is_pcb() {
-        assert_eq!(TechnologyStrategy::from_annular_ring(1), TechnologyStrategy::Pcb);
-        assert_eq!(TechnologyStrategy::from_annular_ring(100), TechnologyStrategy::Pcb);
+    fn technology_as_str() {
+        assert_eq!(Technology::Pcb.as_str(), "PCB");
+        assert_eq!(Technology::Asic.as_str(), "ASIC");
     }
 
     #[test]
-    fn from_annular_ring_zero_or_negative_is_asic() {
-        assert_eq!(TechnologyStrategy::from_annular_ring(0), TechnologyStrategy::Asic);
-        assert_eq!(TechnologyStrategy::from_annular_ring(-5), TechnologyStrategy::Asic);
+    fn technology_name() {
+        assert_eq!(Technology::Pcb.name(), "PCB");
+        assert_eq!(Technology::Asic.name(), "ASIC");
+    }
+
+    #[test]
+    fn technology_is_pcb() {
+        assert!(Technology::Pcb.is_pcb());
+        assert!(!Technology::Asic.is_pcb());
+    }
+
+    #[test]
+    fn technology_is_asic() {
+        assert!(Technology::Asic.is_asic());
+        assert!(!Technology::Pcb.is_asic());
     }
 
     #[test]
     fn contact_expansion_pcb() {
-        let tech = TechnologyStrategy::Pcb;
+        let tech = Technology::Pcb;
         assert_eq!(tech.contact_expansion(10), 10);
         assert_eq!(tech.contact_expansion(0), 0);
         assert_eq!(tech.contact_expansion(-3), -3);
@@ -153,14 +183,14 @@ mod tests {
 
     #[test]
     fn contact_expansion_asic() {
-        let tech = TechnologyStrategy::Asic;
+        let tech = Technology::Asic;
         assert_eq!(tech.contact_expansion(10), 0);
         assert_eq!(tech.contact_expansion(0), 0);
     }
 
     #[test]
     fn port_escape_clearance_pcb() {
-        let tech = TechnologyStrategy::Pcb;
+        let tech = Technology::Pcb;
         assert_eq!(tech.port_escape_clearance(100, 50), 100);
         assert_eq!(tech.port_escape_clearance(0, 50), 50);
         assert_eq!(tech.port_escape_clearance(200, 30), 130);
@@ -168,38 +198,16 @@ mod tests {
 
     #[test]
     fn port_escape_clearance_asic() {
-        let tech = TechnologyStrategy::Asic;
+        let tech = Technology::Asic;
         assert_eq!(tech.port_escape_clearance(100, 50), 50);
         assert_eq!(tech.port_escape_clearance(0, 50), 50);
     }
 
     #[test]
     fn obstacle_inflation_delegates_to_port_escape_clearance() {
-        let pcb = TechnologyStrategy::Pcb;
-        let asic = TechnologyStrategy::Asic;
+        let pcb = Technology::Pcb;
+        let asic = Technology::Asic;
         assert_eq!(pcb.obstacle_inflation(100, 50), pcb.port_escape_clearance(100, 50));
         assert_eq!(asic.obstacle_inflation(100, 50), asic.port_escape_clearance(100, 50));
-    }
-
-    #[test]
-    fn name_pcb() {
-        assert_eq!(TechnologyStrategy::Pcb.name(), "PCB");
-    }
-
-    #[test]
-    fn name_asic() {
-        assert_eq!(TechnologyStrategy::Asic.name(), "ASIC");
-    }
-
-    #[test]
-    fn is_pcb() {
-        assert!(TechnologyStrategy::Pcb.is_pcb());
-        assert!(!TechnologyStrategy::Asic.is_pcb());
-    }
-
-    #[test]
-    fn is_asic() {
-        assert!(TechnologyStrategy::Asic.is_asic());
-        assert!(!TechnologyStrategy::Pcb.is_asic());
     }
 }

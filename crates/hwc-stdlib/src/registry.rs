@@ -77,6 +77,7 @@ mod tests {
     ) -> UnitDefinition {
         UnitDefinition {
             name: Identifier::with_dummy_span(name),
+            is_exported: false,
             symbol: symbol.to_string().into(),
             aliases: aliases.iter().map(|s| (*s).into()).collect(),
             base_si: Some("F".into()),

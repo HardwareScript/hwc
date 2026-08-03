@@ -13,6 +13,31 @@ pub enum PlacementItem {
     Region(hwc_parser::RegionDefinition), // v0.2.0: Region floorplanning
 }
 
+/// v0.2.1: Contextual placement item with associated evaluation context
+///
+/// Each placement item carries its own evaluation context, which includes:
+/// - Space-level let bindings
+/// - Loop-scoped let bindings (for items inside for loops)
+/// - Loop iteration variables
+///
+/// This ensures that expressions in coordinates, shapes, etc. are evaluated
+/// with the correct variable bindings from their lexical scope.
+#[derive(Debug, Clone)]
+pub struct ContextualPlacementItem {
+    pub item: PlacementItem,
+    pub eval_context: hwc_parser::EvaluationContext,
+}
+
+impl ContextualPlacementItem {
+    pub fn item_id(&self, index: usize) -> compact_str::CompactString {
+        self.item.item_id(index)
+    }
+
+    pub fn inner(&self) -> &PlacementItem {
+        &self.item
+    }
+}
+
 impl PlacementItem {
     pub fn item_id(&self, index: usize) -> compact_str::CompactString {
         match self {

@@ -1,0 +1,21 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,0.10x0.10x0.01mm,,,,,1
+Radial_0,Plane(Copper),,,,,,1
+Radial_1,Plane(Copper),,,,,,1
+Radial_2,Plane(Copper),,,,,,1
+Radial_3,Plane(Copper),,,,,,1
+Radial_4,Plane(Copper),,,,,,1
+Radial_5,Plane(Copper),,,,,,1
+Radial_6,Plane(Copper),,,,,,1
+Radial_7,Plane(Copper),,,,,,1
+
+# MATERIAL USAGE (Fabrication)
+Reference,Type,Material,Layer_Z_nm,Area_nm2,Volume_nm3
+Radial_0,Pour,Copper,z:1000,16000000,16000000000
+Radial_1,Pour,Copper,z:1000,16000000,16000000000
+Radial_2,Pour,Copper,z:1000,16000000,16000000000
+Radial_3,Pour,Copper,z:1000,16000000,16000000000
+Radial_4,Pour,Copper,z:1000,16000000,16000000000
+Radial_5,Pour,Copper,z:1000,16000000,16000000000
+Radial_6,Pour,Copper,z:1000,16000000,16000000000
+Radial_7,Pour,Copper,z:1000,16000000,16000000000

@@ -365,7 +365,7 @@ pub fn compute_position_from_constraints(
     _component_name: &Option<ComponentName>,
     bbox_tracker: &BoundingBoxTracker,
     symbol_table: &crate::SymbolTable,
-    _eval_context: &hwc_parser::EvaluationContext,
+    eval_context: &hwc_parser::EvaluationContext,
     origin: hwc_parser::OriginPoint,
     space_dimensions: &hwc_engine::Dimensions,
 ) -> Result<Coordinate, IrError> {
@@ -386,35 +386,68 @@ pub fn compute_position_from_constraints(
     for constraint in constraints {
         match constraint {
             RelationalConstraint::Align { axis, target, .. } => {
-                let target_bbox = resolve_target_bbox(target, bbox_tracker)?;
-                let (tx_min, tx_max, ty_min, ty_max) = target_bbox_to_user_ranges(&target_bbox, space_dimensions, origin.xy);
-
-                match axis {
-                    AlignmentAxis::CenterX => {
-                        x_nm = Some((tx_min + tx_max) / 2);
+                // v0.2.1: Handle both entity targets and expression targets
+                let resolved_value_nm = match target {
+                    hwc_parser::AlignmentTarget::Entity(component_name) => {
+                        // Traditional entity-based alignment
+                        let target_bbox = resolve_target_bbox(component_name, bbox_tracker)?;
+                        let (tx_min, tx_max, ty_min, ty_max) = target_bbox_to_user_ranges(&target_bbox, space_dimensions, origin.xy);
+                        
+                        // Return the appropriate coordinate based on axis
+                        match axis {
+                            AlignmentAxis::CenterX => (tx_min + tx_max) / 2,
+                            AlignmentAxis::CenterY => (ty_min + ty_max) / 2,
+                            AlignmentAxis::CenterZ => (target_bbox.min.z + target_bbox.max.z) / 2,
+                            AlignmentAxis::Top => {
+                                let formula = RelationalPlacementFormula::get(SpatialRelation::AlignTop, x_multiplier, y_multiplier);
+                                formula.resolve(ty_min, ty_max, 0, 0)
+                            }
+                            AlignmentAxis::Bottom => {
+                                let formula = RelationalPlacementFormula::get(SpatialRelation::AlignBottom, x_multiplier, y_multiplier);
+                                formula.resolve(ty_min, ty_max, 0, 0)
+                            }
+                            AlignmentAxis::Left => {
+                                let formula = RelationalPlacementFormula::get(SpatialRelation::AlignLeft, x_multiplier, y_multiplier);
+                                formula.resolve(tx_min, tx_max, 0, 0)
+                            }
+                            AlignmentAxis::Right => {
+                                let formula = RelationalPlacementFormula::get(SpatialRelation::AlignRight, x_multiplier, y_multiplier);
+                                formula.resolve(tx_min, tx_max, 0, 0)
+                            }
+                        }
                     }
-                    AlignmentAxis::CenterY => {
-                        y_nm = Some((ty_min + ty_max) / 2);
+                    hwc_parser::AlignmentTarget::Expression(expr) => {
+                        // v0.2.1: Expression-based alignment - evaluate the expression
+                        // The expression should evaluate to a coordinate value (e.g., (A.center_x + B.center_x) / 2)
+                        use crate::ir::placement::coordinate_evaluation::{evaluate_coordinate_with_anchors, CoordinateAxis};
+                        
+                        let context_axis = match axis {
+                            AlignmentAxis::CenterX | AlignmentAxis::Left | AlignmentAxis::Right => CoordinateAxis::X,
+                            AlignmentAxis::CenterY | AlignmentAxis::Top | AlignmentAxis::Bottom => CoordinateAxis::Y,
+                            AlignmentAxis::CenterZ => CoordinateAxis::Z,
+                        };
+                        
+                        evaluate_coordinate_with_anchors(
+                            expr,
+                            symbol_table,
+                            eval_context,
+                            bbox_tracker,
+                            context_axis,
+                            origin.z,
+                        ).map_err(|e| e)?
+                    }
+                };
+
+                // Assign to the appropriate axis
+                match axis {
+                    AlignmentAxis::CenterX | AlignmentAxis::Left | AlignmentAxis::Right => {
+                        x_nm = Some(resolved_value_nm);
+                    }
+                    AlignmentAxis::CenterY | AlignmentAxis::Top | AlignmentAxis::Bottom => {
+                        y_nm = Some(resolved_value_nm);
                     }
                     AlignmentAxis::CenterZ => {
-                        let center = (target_bbox.min.z + target_bbox.max.z) / 2;
-                        z_nm = Some(center);
-                    }
-                    AlignmentAxis::Top => {
-                        let formula = RelationalPlacementFormula::get(SpatialRelation::AlignTop, x_multiplier, y_multiplier);
-                        y_nm = Some(formula.resolve(ty_min, ty_max, 0, 0));
-                    }
-                    AlignmentAxis::Bottom => {
-                        let formula = RelationalPlacementFormula::get(SpatialRelation::AlignBottom, x_multiplier, y_multiplier);
-                        y_nm = Some(formula.resolve(ty_min, ty_max, 0, 0));
-                    }
-                    AlignmentAxis::Left => {
-                        let formula = RelationalPlacementFormula::get(SpatialRelation::AlignLeft, x_multiplier, y_multiplier);
-                        x_nm = Some(formula.resolve(tx_min, tx_max, 0, 0));
-                    }
-                    AlignmentAxis::Right => {
-                        let formula = RelationalPlacementFormula::get(SpatialRelation::AlignRight, x_multiplier, y_multiplier);
-                        x_nm = Some(formula.resolve(tx_min, tx_max, 0, 0));
+                        z_nm = Some(resolved_value_nm);
                     }
                 }
             }
@@ -575,6 +608,16 @@ fn evaluate_expression_to_nm(
                     }
                 }
                 hwc_parser::BinaryOperator::Modulo => Ok(left_nm % right_nm),
+                // Comparison operators return 1 for true, 0 for false
+                hwc_parser::BinaryOperator::Equal => Ok(if left_nm == right_nm { 1 } else { 0 }),
+                hwc_parser::BinaryOperator::NotEqual => Ok(if left_nm != right_nm { 1 } else { 0 }),
+                hwc_parser::BinaryOperator::LessThan => Ok(if left_nm < right_nm { 1 } else { 0 }),
+                hwc_parser::BinaryOperator::GreaterThan => Ok(if left_nm > right_nm { 1 } else { 0 }),
+                hwc_parser::BinaryOperator::LessThanOrEqual => Ok(if left_nm <= right_nm { 1 } else { 0 }),
+                hwc_parser::BinaryOperator::GreaterThanOrEqual => Ok(if left_nm >= right_nm { 1 } else { 0 }),
+                // Boolean operators (treat non-zero as true)
+                hwc_parser::BinaryOperator::And => Ok(if left_nm != 0 && right_nm != 0 { 1 } else { 0 }),
+                hwc_parser::BinaryOperator::Or => Ok(if left_nm != 0 || right_nm != 0 { 1 } else { 0 }),
             }
         }
         Expression::Unary {
@@ -584,6 +627,7 @@ fn evaluate_expression_to_nm(
             match operator {
                 hwc_parser::UnaryOperator::Negate => Ok(-operand_nm),
                 hwc_parser::UnaryOperator::Plus => Ok(operand_nm),
+                hwc_parser::UnaryOperator::Not => Ok(if operand_nm == 0 { 1 } else { 0 }),
             }
         }
         Expression::Grouped { expression, .. } => {

@@ -1,11 +1,11 @@
 Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
 Wafer,Substrate,0.00x0.00x0.00mm,,,,,1
 Pad_A,Plane(Aluminum),,,,,,1
-Central_Barrier,Plane(Aluminum),,,,,,1
 Pad_B,Plane(Aluminum),,,,,,1
+Central_Barrier,Plane(Aluminum),,,,,,1
 
 # MATERIAL USAGE (Fabrication)
 Reference,Type,Material,Layer_Z_nm,Area_nm2,Volume_nm3
 Pad_A,Pour,Aluminum,z:35,160000,1600000
-Central_Barrier,Pour,Aluminum,z:35,320000,3200000
 Pad_B,Pour,Aluminum,z:35,160000,1600000
+Central_Barrier,Pour,Aluminum,z:35,320000,3200000

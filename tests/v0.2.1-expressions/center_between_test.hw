@@ -1,0 +1,70 @@
+# center_between_test.hw
+# v0.2.1 Test: ANCHOR ARITHMETIC - Multi-Entity Centering
+# 
+# This test demonstrates:
+# 1. Placing entities at absolute positions
+# 2. Using anchor properties (Pad_A.center_x, Pad_B.right, etc.)
+# 3. Arithmetic over anchor properties: (A.center_x + B.center_x) / 2
+# 4. Offsetting from anchor edges: Pad_A.right + 5um
+# 
+# Expected result: Pad_C centered between A and B, Pad_D offset from A
+
+import * from @std/primitives/units
+import * from "./thick_layer_pdk"
+
+space Center_Between_Test:
+    dimensions: 100um by 100um by 10um
+    resolution: 10nm
+    origin: bl by b
+    profile: Thick_3D_Stack
+    
+    nets:
+        SIGNAL: { classification: signal, potential: 1.8V }
+    
+    # ========================================================================
+    # REFERENCE PADS - Absolute Positions
+    # ========================================================================
+    
+    add plane(Copper) named Pad_A on layer: metal1:
+        shape: SquareCube(size: 5um)
+        at: [20um, 50um]
+        net: SIGNAL
+    
+    add plane(Copper) named Pad_B on layer: metal1:
+        shape: SquareCube(size: 5um)
+        at: [80um, 50um]
+        net: SIGNAL
+    
+    # ========================================================================
+    # ANCHOR ARITHMETIC TESTS
+    # ========================================================================
+    
+    # TEST 1: Center between two pads using anchor arithmetic
+    # Expected: X = (20 + 2.5 + 80 + 2.5) / 2 = 52.5um, Y = 50 + 2.5 = 52.5um
+    add plane(Aluminum) named Pad_C on layer: metal1:
+        shape: SquareCube(size: 3um)
+        at: [
+            x: (Pad_A.center_x + Pad_B.center_x) / 2,
+            y: (Pad_A.center_y + Pad_B.center_y) / 2
+        ]
+        net: SIGNAL
+    
+    # TEST 2: Offset from right edge and top edge
+    # Expected: X = 20 + 5 + 5 = 30um, Y = 50 + 5 + 10 = 65um
+    add plane(Tungsten) named Pad_D on layer: metal1:
+        shape: SquareCube(size: 4um)
+        at: [
+            x: Pad_A.right + 5um,
+            y: Pad_A.top + 10um
+        ]
+        net: SIGNAL
+    
+    # TEST 3: Vertical centering with horizontal offset
+    # Expected: X = 80 - 3 = 77um, Y = 52.5um (centered on B's Y)
+    add plane(Gold) named Pad_E on layer: metal2:
+        shape: SquareCube(size: 3um)
+        at: [
+            x: Pad_B.left - 3um,
+            y: Pad_B.center_y
+        ]
+        net: SIGNAL

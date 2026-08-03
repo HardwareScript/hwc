@@ -370,10 +370,11 @@ fn test_lowercase_origins_accepted() {
     let lexer = Lexer::new(source);
     let tokens = lexer.tokenize().unwrap();
 
-    assert_eq!(tokens[0].token, Token::TopLeft);
-    assert_eq!(tokens[1].token, Token::BottomLeft);
-    assert_eq!(tokens[2].token, Token::TopRight);
-    assert_eq!(tokens[3].token, Token::BottomRight);
+    // v0.2.1: tl/bl/tr br are now identifiers (contextually parsed)
+    assert_eq!(tokens[0].token, Token::Identifier("tl".into()));
+    assert_eq!(tokens[1].token, Token::Identifier("bl".into()));
+    assert_eq!(tokens[2].token, Token::Identifier("tr".into()));
+    assert_eq!(tokens[3].token, Token::Identifier("br".into()));
 }
 
 #[test]

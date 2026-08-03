@@ -11,14 +11,21 @@ pub fn finalize(
     space_def: &hwc_parser::SpaceDefinition,
     eval_context: &hwc_parser::EvaluationContext,
 ) -> Result<(), IrError> {
+    // Check for Artist Mode vs Professional Mode
+    let is_artist_mode = space_def.implements_module.is_none();
+
     // P45 Forbidden Junction Detection (Assembly Level)
-    crate::ir::bridge_validator::validate_bridges(space, profile.as_ref(), Some(symbol_table))?;
+    // Only run in Professional Mode - Artist Mode skips bridge validation
+    if !is_artist_mode {
+        crate::ir::bridge_validator::validate_bridges(space, profile.as_ref(), Some(symbol_table))?;
+    }
 
     // Synchronize net names from pins to bound pours
     space.synchronize_nets();
 
     // Native Via Resolution (v0.1.8)
-    {
+    // Only run in Professional Mode - Artist Mode skips via resolution
+    if !is_artist_mode {
         let via_resolver = crate::via_resolver::ViaResolver::from_profile(
             profile.as_ref(),
             stackup_manager,

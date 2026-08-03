@@ -172,6 +172,7 @@ fn flatten_for_loop(
         return Err(FlattenError::InvalidRange { start, end });
     }
 
+    // INCLUSIVE range (Hardware Engineering Convention): 0..4 = [0,1,2,3,4] (5 items)
     for i in start..=end {
         context.set_variable(for_loop.variable.clone(), i);
         for statement in &for_loop.body {

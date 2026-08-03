@@ -33,72 +33,102 @@ export space PMOS_Cell implements PMOSTransistor:
         Out: { classification: signal, potential: 1.8V, current: 0.1uA }
         VDD: { classification: power,  potential: 1.8V, current: 10.0mA }
 
-    # 1. VDD Power Rail (Metal 1)
-    add pour(Aluminum) named VDD_Rail on layer: metal1:
-        net: VDD
-        boundary: [x: 0nm, y: 2300nm] to [x: 2000nm, y: 2900nm]
+    # ========================================================================
+    # ACTIVE REGIONS (Silicon P-type diffusions)
+    # v0.2.1: Refactored to use relational constraints
+    # ========================================================================
 
-    # 1b. VDD Source Landing Pad (Metal 1) - Landing pad for source via
-    add pour(Aluminum) named VDD_Source_Pad on layer: metal1:
-        net: VDD
-        boundary: [x: 500nm, y: 850nm] to [x: 800nm, y: 1150nm]
-
-    # 2. Output Landing Pad (Metal 1) - Landing pad for drain via
-    add pour(Aluminum) named Out_Drain_Pad on layer: metal1:
-        net: Out
-        boundary: [x: 1200nm, y: 850nm] to [x: 1500nm, y: 1150nm]
-
-    # 3. Output Export Pad (Metal 1) - External connection point
-    add pour(Aluminum) named Out_Export_Pad on layer: metal1:
-        net: Out
-        boundary: [x: 1200nm, y: 0nm] to [x: 1800nm, y: 400nm]
-
-    # 3. PMOS Source (P-type active diffusion - net VDD)
-    # FIX: Changed to Silicon_P for true PMOS operation
+    # 1. PMOS Source (P-type active diffusion - net VDD)
     add pour(Silicon_P) named PMOS_Source on layer: active:
         net: VDD
-        boundary: [x: 400nm, y: 700nm] to [x: 900nm, y: 1300nm]
+        dimensions: 500nm by 600nm
+        at: [x: 650nm, y: 1000nm]  # Center position
 
-    # 4. PMOS Drain (P-type active diffusion - net Out)
-    # FIX: Changed to Silicon_P for true PMOS operation
+    # 2. PMOS Drain (P-type active diffusion - net Out)
     add pour(Silicon_P) named PMOS_Drain on layer: active:
         net: Out
-        boundary: [x: 1100nm, y: 700nm] to [x: 1600nm, y: 1300nm]
+        dimensions: 500nm by 600nm
+        align: center_y with PMOS_Source
+        right_of: PMOS_Source by 450nm  # 200nm channel gap + 250nm half-width (center-to-edge spacing)
 
-    # 5. PMOS Gate (Vertical Polysilicon strip - net In)
-    # Extended to overlap active diffusions by 100nm on each side
-    # Active edges: X=900nm (Source) and X=1100nm (Drain)
-    # Gate extends: X=800nm to 1200nm (100nm overlap each side)
-    # Extended upward to Y=1800nm to overlap with Gate_Pad for via connection
+    # ========================================================================
+    # POLYSILICON GATE
+    # ========================================================================
+
+    # 3. PMOS Gate (Vertical Polysilicon strip - net In)
+    # Centered between source and drain, overlaps each by 100nm
+    # Extended vertically for contact pad connection
     add pour(Polysilicon) named Gate_Strip on layer: poly:
         net: In
-        boundary: [x: 800nm, y: 400nm] to [x: 1200nm, y: 1800nm]
+        dimensions: 400nm by 1400nm
+        align: center_x with (PMOS_Source.right + PMOS_Drain.left) / 2
+        align: center_y with PMOS_Source.center_y
 
-    # 5b. Gate Contact Pad (Metal 1) - Landing pad for gate connection
+    # ========================================================================
+    # METAL 1 PADS AND POWER RAIL
+    # ========================================================================
+
+    # 4. VDD Source Landing Pad (Metal 1) - Landing pad for source via
+    add pour(Aluminum) named VDD_Source_Pad on layer: metal1:
+        net: VDD
+        dimensions: 300nm by 300nm
+        align: center_x with PMOS_Source
+        align: center_y with PMOS_Source
+
+    # 5. Output Drain Landing Pad (Metal 1) - Landing pad for drain via
+    add pour(Aluminum) named Out_Drain_Pad on layer: metal1:
+        net: Out
+        dimensions: 300nm by 300nm
+        align: center_x with PMOS_Drain
+        align: center_y with PMOS_Drain
+
+    # 6. Gate Contact Pad (Metal 1) - Landing pad for gate connection
     add pour(Aluminum) named Gate_Pad on layer: metal1:
         net: In
-        boundary: [x: 800nm, y: 1700nm] to [x: 1200nm, y: 2100nm]
+        dimensions: 400nm by 400nm
+        align: center_x with Gate_Strip
+        align: center_y with Gate_Strip.top
 
-    # 6. Physical Ohmic Contacts (Silicide interface + Tungsten fill)
-    # Centered exactly inside their respective active diffusion regions
-    # Uses Titanium_Silicide interface to match bridge rules
-    add contact(Titanium_Silicide) named Via_Source at [x: 650nm, y: 1000nm] spanning layer: active to metal1:
+    # 7. VDD Power Rail (Metal 1) - Top horizontal power rail
+    add pour(Aluminum) named VDD_Rail on layer: metal1:
+        net: VDD
+        dimensions: 2000nm by 600nm
+        at: [x: 1000nm, y: 2600nm]  # Full width at top
+
+    # 8. Output Export Pad (Metal 1) - External connection point at bottom
+    add pour(Aluminum) named Out_Export_Pad on layer: metal1:
+        net: Out
+        dimensions: 600nm by 400nm
+        at: [x: 1500nm, y: 200nm]
+
+    # ========================================================================
+    # CONTACTS (Vias)
+    # v0.2.1: Using relational alignment for centering
+    # ========================================================================
+
+    # 9. Source Via (Active to Metal1)
+    add contact(Titanium_Silicide) named Via_Source spanning layer: active to metal1:
         net: VDD
         diameter: 200nm
         plating_thickness: 5nm
+        align: center_x with PMOS_Source
+        align: center_y with PMOS_Source
 
-    add contact(Titanium_Silicide) named Via_Drain at [x: 1350nm, y: 1000nm] spanning layer: active to metal1:
+    # 10. Drain Via (Active to Metal1)
+    add contact(Titanium_Silicide) named Via_Drain spanning layer: active to metal1:
         net: Out
         diameter: 200nm
         plating_thickness: 5nm
+        align: center_x with PMOS_Drain
+        align: center_y with PMOS_Drain
 
-    # 6b. Gate Contact Via (Poly to Metal1)
-    # Connects Gate_Strip (poly) to Gate_Pad (metal1)
-    # Centered in the overlap region between poly (Y=1700-1800) and metal1 pad (Y=1700-2100)
-    add contact(Titanium_Silicide) named Via_Gate at [x: 1000nm, y: 1750nm] spanning layer: poly to metal1:
+    # 11. Gate Via (Poly to Metal1)
+    add contact(Titanium_Silicide) named Via_Gate spanning layer: poly to metal1:
         net: In
         diameter: 200nm
         plating_thickness: 5nm
+        align: center_x with Gate_Strip
+        align: center_y with (Gate_Strip.top + Gate_Pad.bottom) / 2  # Centered in overlap
 
     # ========================================================================
     # PHYSICAL INTERCONNECTS (Metal 1 Routing)

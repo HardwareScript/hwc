@@ -1,0 +1,55 @@
+# radial_pattern_test.hw
+# v0.2.1 Test: Circular/Radial Placement with Trigonometric Functions
+# 
+# This test demonstrates:
+# 1. Built-in trigonometric functions: sin(), cos()
+# 2. Built-in angle conversion: radians() function
+# 3. Loop-scoped let bindings
+# 4. Parametric circular layouts
+#
+# Expected result: 8 copper blocks arranged in a perfect circle
+# - Center at (50um, 50um)
+# - Radius of 30um
+# - Elements at 0°, 45°, 90°, 135°, 180°, 225°, 270°, 315°
+#
+# NOTE: v0.2.1 uses built-in math functions, not stdlib const declarations
+
+import * from @std/primitives/units
+import * from "./thick_layer_pdk"
+
+space Radial_Pattern_Test:
+    dimensions: 100um by 100um by 10um
+    resolution: 10nm
+    origin: bl by b
+    profile: Thick_3D_Stack
+    
+    nets:
+        CLOCK: { classification: signal }
+    
+    let center_x = 50um
+    let center_y = 50um
+    let radius = 30um
+    let num_elements = 8
+    let block_size = 4um
+    
+    # Place elements in a circle
+    # INCLUSIVE: 0..7 = [0,1,2,3,4,5,6,7] = 8 elements
+    #
+    # Element 0: angle = 0°   → (80um, 50um) - East
+    # Element 1: angle = 45°  → (~71um, ~71um) - Northeast
+    # Element 2: angle = 90°  → (50um, 80um) - North
+    # Element 3: angle = 135° → (~29um, ~71um) - Northwest
+    # Element 4: angle = 180° → (20um, 50um) - West
+    # Element 5: angle = 225° → (~29um, ~29um) - Southwest
+    # Element 6: angle = 270° → (50um, 20um) - South
+    # Element 7: angle = 315° → (~71um, ~29um) - Southeast
+    for i in 0..7:
+        let angle = radians(i * 360 / num_elements)
+        
+        add plane(Copper) named Radial_{i} on layer: metal1:
+            shape: SquareCube(size: block_size)
+            at: [
+                x: center_x + radius * cos(angle),
+                y: center_y + radius * sin(angle)
+            ]
+            net: CLOCK

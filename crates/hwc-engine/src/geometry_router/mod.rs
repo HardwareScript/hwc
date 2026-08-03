@@ -155,5 +155,5 @@ pub use types::{
     NetRoute, RouteResult, RoutedNet, RoutingError, RoutingHeuristics, Via, ViaSpec, ViaType,
 };
 
-// v0.2.0: Re-export TechnologyStrategy from hwc-types for backward compatibility
-pub use hwc_types::TechnologyStrategy;
+// Re-export Technology from hwc-types
+pub use hwc_types::Technology;

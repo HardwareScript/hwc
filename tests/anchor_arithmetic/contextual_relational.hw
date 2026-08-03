@@ -1,0 +1,81 @@
+# contextual_relational.hw
+# v0.2.1 Test: Context-Aware Relational Placement
+#
+# This test demonstrates that spatial prepositions are now parsed contextually:
+# - right_of, left_of, above, below are Identifiers
+# - Parsed as keywords only in relational placement context
+# - Can be mixed with anchor arithmetic
+#
+# This proves context-aware parsing works correctly.
+
+import * from @std/primitives/units
+import * from "../ASIC-Minimal/minimal_pdk"
+
+module ContextualRelationalModule:
+    pins: [ input A, input B, input C, input D ]
+
+shape Pad(size: Measurement):
+    geometry:
+        Rectangle(width: size, height: size)
+
+space Contextual_Relational_Space implements ContextualRelationalModule:
+    dimensions: 1200um by 800um by 50nm
+    resolution: 1nm
+    origin: bl by b
+    profile: ASIC_Flattened
+
+    nets:
+        A: { classification: signal, potential: 1.8V, current: 0.1uA }
+        B: { classification: signal, potential: 1.8V, current: 0.1uA }
+        C: { classification: signal, potential: 1.8V, current: 0.1uA }
+        D: { classification: signal, potential: 1.8V, current: 0.1uA }
+
+    # ========================================================================
+    # BASE PAD: Absolute placement
+    # ========================================================================
+    
+    add plane(Aluminum) named Base_Pad on layer: metal1:
+        shape: Pad(size: 100um)
+        at: [200um, 400um]
+        net: A
+
+    # ========================================================================
+    # CONTEXTUAL RELATIONAL: right_of parsed as keyword in this context
+    # ========================================================================
+    
+    add plane(Aluminum) named Right_Pad {
+        right_of: Base_Pad with spacing: 50um
+    } on layer: metal1:
+        shape: Pad(size: 100um)
+        net: B
+
+    # ========================================================================
+    # CONTEXTUAL RELATIONAL: above parsed as keyword
+    # ========================================================================
+    
+    add plane(Aluminum) named Above_Pad {
+        above: Base_Pad with spacing: 50um
+        align: center_x with Base_Pad
+    } on layer: metal1:
+        shape: Pad(size: 100um)
+        net: C
+
+    # ========================================================================
+    # MIXED: Relational + Anchor Arithmetic
+    # Uses 'align' contextually while referencing entity with reserved name
+    # ========================================================================
+    
+    add plane(Aluminum) named Mixed_Pad {
+        align: center_x with Right_Pad
+    } on layer: metal1:
+        shape: Pad(size: 80um)
+        at: [y: Right_Pad.bottom - 150um]
+        net: D
+
+    # ========================================================================
+    # CONNECTIVITY
+    # ========================================================================
+    
+    add pour(Aluminum) named Background on layer: metal1:
+        boundary: [10um, 10um] to [1190um, 790um]
+        net: A

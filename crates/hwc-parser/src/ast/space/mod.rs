@@ -23,7 +23,7 @@ pub use routes::{
     RouteEndpointSpec, RouteEscape,
 };
 pub use space_def::{
-    LetBinding, RouteNetPolicy, SpaceDefinition, SpaceForLoop, SpaceStatement,
-    SpaceTopLevelStatement,
+    ConstBinding, LetBinding, RouteNetPolicy, SpaceDefinition, SpaceForLoop, SpaceIfConditional,
+    SpaceStatement, SpaceTopLevelStatement,
 };
 pub use substrate::{CoordinatePair, SubstratePlacement};

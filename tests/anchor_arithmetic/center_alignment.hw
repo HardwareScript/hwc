@@ -1,0 +1,92 @@
+# center_alignment.hw
+# v0.2.1 Test: Comptime Anchor Arithmetic
+# 
+# This test demonstrates:
+# 1. Anchor property access: Pad_A.center_x, Pad_A.center_y
+# 2. Binary arithmetic: (A + B) / 2
+# 3. Mixed expressions: entity.property + measurement
+#
+# Expected result: Pad_Center should be positioned exactly halfway between Pad_A and Pad_B
+
+import * from @std/primitives/units
+import * from "../ASIC-Minimal/minimal_pdk"
+
+module CenterAlignmentModule:
+    pins: [ input SIGNAL ]
+
+shape SquarePad(size: Measurement):
+    geometry:
+        Rectangle(width: size, height: size)
+
+space Center_Alignment_Space implements CenterAlignmentModule:
+    dimensions: 1000um by 500um by 50nm
+    resolution: 1nm
+    origin: bl by b
+    profile: ASIC_Flattened
+
+    nets:
+        SIGNAL: { classification: signal, potential: 1.8V, current: 0.1uA }
+
+    # ========================================================================
+    # BASE PADS: Two pads positioned absolutely
+    # ========================================================================
+    
+    add plane(Aluminum) named Pad_A on layer: metal1:
+        shape: SquarePad(size: 100um)
+        at: [100um, 200um]
+        net: SIGNAL
+
+    add plane(Aluminum) named Pad_B on layer: metal1:
+        shape: SquarePad(size: 100um)
+        at: [800um, 200um]
+        net: SIGNAL
+
+    # ========================================================================
+    # ANCHOR ARITHMETIC TEST 1: Center between two pads
+    # Using: (Pad_A.center_x + Pad_B.center_x) / 2
+    # Expected position: X = (150um + 850um) / 2 = 500um
+    # ========================================================================
+    
+    add plane(Aluminum) named Pad_Center on layer: metal1:
+        shape: SquarePad(size: 50um)
+        at: [
+            x: (Pad_A.center_x + Pad_B.center_x) / 2,
+            y: Pad_A.center_y
+        ]
+        net: SIGNAL
+
+    # ========================================================================
+    # ANCHOR ARITHMETIC TEST 2: Offset from anchor
+    # Using: Pad_A.right + offset
+    # Expected position: X = 200um + 50um = 250um
+    # ========================================================================
+    
+    add plane(Aluminum) named Pad_Right_Offset on layer: metal1:
+        shape: SquarePad(size: 30um)
+        at: [
+            x: Pad_A.right + 50um,
+            y: Pad_A.top + 50um
+        ]
+        net: SIGNAL
+
+    # ========================================================================
+    # ANCHOR ARITHMETIC TEST 3: Multiple operations
+    # Using: (Pad_B.left - Pad_A.right) / 2 + Pad_A.right
+    # This calculates midpoint of gap between pads
+    # ========================================================================
+    
+    add plane(Aluminum) named Pad_Gap_Center on layer: metal1:
+        shape: SquarePad(size: 20um)
+        at: [
+            x: (Pad_B.left - Pad_A.right) / 2 + Pad_A.right,
+            y: Pad_A.bottom - 50um
+        ]
+        net: SIGNAL
+
+    # ========================================================================
+    # CONNECTIVITY: Pour to connect all pads (single net for demo)
+    # ========================================================================
+    
+    add pour(Aluminum) named Background on layer: metal1:
+        boundary: [10um, 10um] to [990um, 490um]
+        net: SIGNAL

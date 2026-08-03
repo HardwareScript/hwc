@@ -3,11 +3,11 @@ Wafer,Substrate,0.00x0.00x0.00mm,,,,,1
 
 # MATERIAL USAGE (Fabrication)
 Reference,Type,Material,Layer_Z_nm,Area_nm2,Volume_nm3
-VDD_Rail,Pour,Aluminum,z:1250,1200000,480000000
-VDD_Source_Pad,Pour,Aluminum,z:1250,90000,36000000
-Out_Drain_Pad,Pour,Aluminum,z:1250,90000,36000000
-Out_Export_Pad,Pour,Aluminum,z:1250,240000,96000000
 PMOS_Source,Pour,Silicon_P,z:0,300000,120000000
 PMOS_Drain,Pour,Silicon_P,z:0,300000,120000000
 Gate_Strip,Pour,Polysilicon,z:450,560000,224000000
+VDD_Source_Pad,Pour,Aluminum,z:1250,90000,36000000
+Out_Drain_Pad,Pour,Aluminum,z:1250,90000,36000000
 Gate_Pad,Pour,Aluminum,z:1250,160000,64000000
+VDD_Rail,Pour,Aluminum,z:1250,1200000,480000000
+Out_Export_Pad,Pour,Aluminum,z:1250,240000,96000000

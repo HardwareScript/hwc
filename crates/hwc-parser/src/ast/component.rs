@@ -165,12 +165,24 @@ pub enum DirectionalConstraint {
 /// - `align: center_y with Pad_A`
 /// - `above Pad_B with spacing: 1.0mm`
 /// - `right_of Pad_C`
+
+/// Target for alignment constraints (v0.2.1: supports expressions)
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum AlignmentTarget {
+    /// Simple entity reference: `align: center_x with Pad_A`
+    Entity(ComponentName),
+    /// Expression-based target: `align: center_x with (Pad_A.center_x + Pad_B.center_x) / 2`
+    /// v0.2.1: Enables anchor arithmetic in alignment constraints
+    Expression(super::Expression),
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum RelationalConstraint {
     /// Co-planar axis alignment: `align: <axis> with <target>`
+    /// v0.2.1: target can be an entity name OR an expression
     Align {
         axis: AlignmentAxis,
-        target: ComponentName,
+        target: AlignmentTarget,
         span: Span,
     },
     /// Directional offset: `above|below|right_of|left_of <target> [with spacing: <expr>]`
@@ -224,13 +236,26 @@ pub enum NetBinding {
     },
 }
 
-/// Component name with optional array index (v0.1.6 Sprint 3.4)
-/// Supports both simple names (`M1`) and indexed names (`Adder[i]`)
+/// Component name with optional array index (v0.1.6 Sprint 3.4) and template interpolation (v0.2.1)
+/// Supports:
+/// - Simple names: `M1`
+/// - Indexed names: `Adder[i]`
+/// - Template interpolation: `L1_R{row}_C{col}`
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ComponentName {
     pub base: CompactString,
     pub index: Option<super::Expression>,
+    /// Template parts for string interpolation (v0.2.1)
+    /// Example: "L1_R{row}_C{col}" becomes ["L1_R", "{row}", "_C", "{col}"]
+    pub template_parts: Option<Vec<TemplateNamePart>>,
     pub span: Span,
+}
+
+/// Part of a template name - either a literal string or an expression to interpolate
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum TemplateNamePart {
+    Literal(CompactString),
+    Expression(super::Expression),
 }
 
 impl ComponentName {
@@ -239,6 +264,7 @@ impl ComponentName {
         ComponentName {
             base: name,
             index: None,
+            template_parts: None,
             span,
         }
     }
@@ -248,12 +274,61 @@ impl ComponentName {
         ComponentName {
             base: name,
             index: Some(index),
+            template_parts: None,
+            span,
+        }
+    }
+
+    /// Create a template-interpolated component name (v0.2.1)
+    /// Example: "L1_R{row}_C{col}" with expressions for row and col
+    pub fn template(parts: Vec<TemplateNamePart>, span: Span) -> Self {
+        // Generate a base name for display (just concatenate literal parts)
+        let base = parts
+            .iter()
+            .map(|p| match p {
+                TemplateNamePart::Literal(s) => s.as_str(),
+                TemplateNamePart::Expression(_) => "{expr}",
+            })
+            .collect::<String>()
+            .into();
+
+        ComponentName {
+            base,
+            index: None,
+            template_parts: Some(parts),
             span,
         }
     }
 
     /// Convert to string representation (for display/debugging)
+    /// Evaluates template interpolation if present (v0.2.1)
     pub fn to_string(&self) -> CompactString {
+        // Handle template interpolation (v0.2.1)
+        if let Some(ref template_parts) = self.template_parts {
+            let mut result = String::new();
+            for part in template_parts {
+                match part {
+                    TemplateNamePart::Literal(lit) => {
+                        result.push_str(lit.as_str());
+                    }
+                    TemplateNamePart::Expression(expr) => {
+                        // Try to evaluate the expression to a constant value
+                        match expr.evaluate_const() {
+                            Ok(super::Value::Number(n)) => {
+                                result.push_str(&n.to_string());
+                            }
+                            _ => {
+                                // If we can't evaluate, show the expression
+                                result.push_str(&format!("{{{}}}", expr));
+                            }
+                        }
+                    }
+                }
+            }
+            return result.into();
+        }
+        
+        // Handle array indexing
         if let Some(ref idx) = self.index {
             format!("{}[{}]", self.base, idx).into()
         } else {
@@ -274,11 +349,8 @@ impl ComponentName {
 
 impl std::fmt::Display for ComponentName {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Some(ref idx) = self.index {
-            write!(f, "{}[{}]", self.base, idx)
-        } else {
-            write!(f, "{}", self.base)
-        }
+        // Use to_string which handles all cases including template interpolation
+        write!(f, "{}", self.to_string())
     }
 }
 

@@ -174,6 +174,30 @@ impl<'a> ConstraintSolver<'a> {
                     (anchor_bbox.min.z + anchor_bbox.max.z) / 2,
                 )
             }
+            hwc_parser::Edge::CenterX => {
+                // center_x is the midpoint of left and right edges
+                Point3D::new(
+                    (anchor_bbox.min.x + anchor_bbox.max.x) / 2,
+                    anchor_bbox.min.y,
+                    anchor_bbox.min.z,
+                )
+            }
+            hwc_parser::Edge::CenterY => {
+                // center_y is the midpoint of top and bottom edges
+                Point3D::new(
+                    anchor_bbox.min.x,
+                    (anchor_bbox.min.y + anchor_bbox.max.y) / 2,
+                    anchor_bbox.min.z,
+                )
+            }
+            hwc_parser::Edge::CenterZ => {
+                // center_z is the midpoint of min_z and max_z edges
+                Point3D::new(
+                    anchor_bbox.min.x,
+                    anchor_bbox.min.y,
+                    (anchor_bbox.min.z + anchor_bbox.max.z) / 2,
+                )
+            }
             hwc_parser::Edge::TopLeft => {
                 Point3D::new(anchor_bbox.min.x, anchor_bbox.max.y, anchor_bbox.min.z)
             }
@@ -217,7 +241,7 @@ impl<'a> ConstraintSolver<'a> {
 
         // NATIVE FIX: Preserve edge semantics in placement intent
         match rel_pos.edge {
-            hwc_parser::Edge::Center => Ok(PlacementIntent::Center(final_point)),
+            hwc_parser::Edge::Center | hwc_parser::Edge::CenterX | hwc_parser::Edge::CenterY | hwc_parser::Edge::CenterZ => Ok(PlacementIntent::Center(final_point)),
             _ => Ok(PlacementIntent::Corner(final_point)),
         }
     }
@@ -364,6 +388,9 @@ impl<'a> ConstraintSolver<'a> {
             hwc_parser::Edge::MinZ => hwc_engine::geometry::Edge::MinZ,
             hwc_parser::Edge::MaxZ => hwc_engine::geometry::Edge::MaxZ,
             hwc_parser::Edge::Center => hwc_engine::geometry::Edge::Left,
+            hwc_parser::Edge::CenterX => hwc_engine::geometry::Edge::Left,
+            hwc_parser::Edge::CenterY => hwc_engine::geometry::Edge::Left,
+            hwc_parser::Edge::CenterZ => hwc_engine::geometry::Edge::Left,
         }
     }
 
@@ -395,12 +422,12 @@ impl<'a> ConstraintSolver<'a> {
                 let offset_nm = self.measurement_to_nm(measurement)?;
                 
                 // Special case: Center edge with zero offset is valid (just use center point)
-                if edge == hwc_parser::Edge::Center && offset_nm == 0 {
+                if matches!(edge, hwc_parser::Edge::Center | hwc_parser::Edge::CenterX | hwc_parser::Edge::CenterY | hwc_parser::Edge::CenterZ) && offset_nm == 0 {
                     return Ok(base_point);
                 }
                 
                 // But non-zero single offsets from center are invalid (which direction to move?)
-                if edge == hwc_parser::Edge::Center {
+                if matches!(edge, hwc_parser::Edge::Center | hwc_parser::Edge::CenterX | hwc_parser::Edge::CenterY | hwc_parser::Edge::CenterZ) {
                     return Err(
                         "Cannot use single-value offset from center anchor. \
                          Use vector offset like: space.center + [x, y, z]".to_string()

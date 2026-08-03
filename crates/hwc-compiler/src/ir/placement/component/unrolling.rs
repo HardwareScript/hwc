@@ -228,11 +228,7 @@ pub fn unroll_internal_features(
                         // v0.1.8 CRITICAL FIX: Skip substrate-spanning pad geometry for ASIC components
                         // ASIC pins don't need top/bottom pads - they exist at specific layers
                         // Only PCB through-hole components need substrate-spanning geometry
-                        let is_asic = space
-                            .fabrication_constraints
-                            .as_ref()
-                            .and_then(|c| c.technology.as_ref())
-                            .is_some_and(|t| t.to_lowercase() == "asic");
+                        let is_asic = space.fabrication_constraints.as_ref().is_some_and(|c| c.technology.is_asic());
 
                         if is_asic {
                             // For ASIC: pads are already handled by internal pours (e.g., metal1 landing pads)

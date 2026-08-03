@@ -7,6 +7,9 @@ use super::expression::Expression;
 use crate::lexer::Span;
 use compact_str::CompactString;
 
+// Re-export Technology from hwc-types for use in AST
+pub use hwc_types::Technology;
+
 /// Preferred routing direction for a metal layer (v0.1.7 ASIC extension).
 ///
 /// Odd metal layers (M1, M3, M5) typically prefer horizontal routing,
@@ -178,7 +181,7 @@ pub struct ProfileDefinition {
     pub bridges: Vec<BridgeRule>,
     /// Explicit via definitions (v0.1.7)
     pub vias: Vec<ViaDefinition>,
-    pub technology: Option<String>,
+    pub technology: Option<Technology>,
     pub other: rustc_hash::FxHashMap<CompactString, String>, // v0.1.6: Custom constraint blocks
     pub span: Span,
 }

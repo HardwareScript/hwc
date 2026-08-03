@@ -401,7 +401,9 @@ impl super::super::super::Parser {
         self.expect(&Token::Dedent)?;
 
         // Expand the for loop: substitute variable and evaluate expressions
-        // INCLUSIVE range (Ruby-style): start..end includes both endpoints
+        // INCLUSIVE range (Hardware Engineering Convention): 0..4 = [0,1,2,3,4] (5 items)
+        // This matches hardware datasheets: "Layers 1 through 5" means all 5 layers
+        // Different from programming languages (Rust/Python) but natural for engineers
         for i in range_start..=range_end {
             let mut context: EvaluationContext = rustc_hash::FxHashMap::default();
             context.insert(variable.clone().into(), Value::Number(i as i64));

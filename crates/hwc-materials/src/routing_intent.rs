@@ -173,7 +173,7 @@ mod tests {
         };
 
         let intent =
-            RoutingIntent::from_profile_data("Clock", Some("straight"), Some(&cost_weights));
+            RoutingIntent::from_profile_data("Clock", Some("straight"), Some(&cost_weights), None);
 
         assert_eq!(intent.name, "Clock");
         assert!(intent.is_critical_path);

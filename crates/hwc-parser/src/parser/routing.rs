@@ -530,24 +530,19 @@ impl super::Parser {
 
         // Parse cardinal direction
         let port = if let Some(current) = self.current() {
-            let dir = match &current.token {
-                Token::TopLeft => {
+            let dir = if self.check_identifier("tl") {
                     self.advance();
                     CardinalDirection::North
-                }
-                Token::BottomLeft => {
+                } else if self.check_identifier("bl") {
                     self.advance();
                     CardinalDirection::South
-                }
-                Token::TopRight => {
+                } else if self.check_identifier("tr") {
                     self.advance();
                     CardinalDirection::East
-                }
-                Token::BottomRight => {
+                } else if self.check_identifier("br") {
                     self.advance();
                     CardinalDirection::West
-                }
-                Token::Identifier(s) => {
+                } else if let Token::Identifier(s) = &current.token {
                     let s = s.to_lowercase();
                     self.advance();
                     match s.as_str() {
@@ -562,11 +557,9 @@ impl super::Parser {
                         )))
                         }
                     }
-                }
-                _ => {
+                } else {
                     return Err(self.error("Expected cardinal direction (North, South, East, West)"))
-                }
-            };
+                };
             dir
         } else {
             return Err(self.error("Expected cardinal direction"));

@@ -139,6 +139,18 @@ impl crate::parser::Parser {
                         continue;
                     }
                 }
+            } else if self.check(&Token::Const) {
+                // v0.2.1: Parse immutable constant binding: `const PI: 3.14159`
+                match self.parse_space_const_binding() {
+                    Ok(const_binding) => {
+                        statements.push(SpaceTopLevelStatement::Const(const_binding));
+                    }
+                    Err(err) => {
+                        collector.report(err);
+                        self.sync_to_next_definition();
+                        continue;
+                    }
+                }
             } else if self.check(&Token::Region) {
                 // v0.2.0: Parse region declaration
                 match self.parse_region() {
@@ -422,6 +434,32 @@ impl crate::parser::Parser {
         let span = Span::new(start.start, self.previous_span().end);
 
         Ok(crate::ast::LetBinding {
+            name: name.into(),
+            value,
+            span,
+        })
+    }
+
+    /// Parse immutable constant binding in space block (v0.2.1)
+    /// Example: `const PI: 3.14159`
+    pub(in crate::parser) fn parse_space_const_binding(
+        &mut self,
+    ) -> Result<crate::ast::ConstBinding, crate::ParseError> {
+        let start = self.current_span();
+
+        self.expect(&Token::Const)?;
+
+        let name = self.expect_identifier_string()?;
+
+        self.expect(&Token::Colon)?;
+
+        let value = self.parse_expression()?;
+
+        self.skip_whitespace();
+
+        let span = Span::new(start.start, self.previous_span().end);
+
+        Ok(crate::ast::ConstBinding {
             name: name.into(),
             value,
             span,

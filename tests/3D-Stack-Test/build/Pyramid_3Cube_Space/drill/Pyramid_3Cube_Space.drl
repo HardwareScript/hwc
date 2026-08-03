@@ -1,11 +1,8 @@
 M48
-; DRILL file {Pyramid_3Cube_Space} date 2026-08-01
+; DRILL file {Pyramid_3Cube_Space} date 2026-08-02
 ; v0.1.7 physical Z (mm) recorded per tool pass where applicable
 ; FORMAT={-:-/ absolute / inch / decimal}
 FMAT,2
 INCH
-T1C0.0000
 %
-T1
-X0.0002Y0.0003
 M30

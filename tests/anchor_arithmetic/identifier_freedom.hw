@@ -1,0 +1,118 @@
+# identifier_freedom.hw
+# v0.2.1 Test: Lexer Token Pruning & Identifier Freedom
+#
+# This test demonstrates that previously reserved tokens are now valid identifiers:
+# - Spatial prepositions: above, below, right_of, left_of
+# - Origin codes: tl, bl, tr, br
+# - Loop reference: last (removed entirely)
+#
+# All these can now be used as:
+# - Net names
+# - Component names
+# - Signal names
+# - Pin names
+#
+# This proves the lexer correctly treats them as contextual identifiers.
+
+import * from @std/primitives/units
+import * from "../ASIC-Minimal/minimal_pdk"
+
+module IdentifierFreedomModule:
+    pins: [ 
+        input above,      # Previously reserved token!
+        input below,      # Previously reserved token!
+        input right_of,   # Previously reserved token!
+        input left_of,    # Previously reserved token!
+        input tl,         # Previously reserved token!
+        input br,         # Previously reserved token!
+        output last       # Previously reserved token! (now contextually parsed in loops)
+    ]
+
+shape SmallSquare(size: Measurement):
+    geometry:
+        Rectangle(width: size, height: size)
+
+space Identifier_Freedom_Space implements IdentifierFreedomModule:
+    dimensions: 1000um by 600um by 50nm
+    resolution: 1nm
+    origin: bl by b
+    profile: ASIC_Flattened
+
+    # ========================================================================
+    # NET NAMES: Using previously reserved tokens
+    # ========================================================================
+    
+    nets:
+        above:    { classification: signal, potential: 1.8V, current: 0.1uA }
+        below:    { classification: signal, potential: 1.8V, current: 0.1uA }
+        right_of: { classification: signal, potential: 1.8V, current: 0.1uA }
+        left_of:  { classification: signal, potential: 1.8V, current: 0.1uA }
+        tl:       { classification: signal, potential: 1.8V, current: 0.1uA }
+        br:       { classification: signal, potential: 1.8V, current: 0.1uA }
+        last:     { classification: signal, potential: 1.8V, current: 0.1uA }
+
+    # ========================================================================
+    # COMPONENT NAMES: Using previously reserved tokens
+    # ========================================================================
+    
+    # Net name: 'above' (was reserved token)
+    add plane(Aluminum) named Pad_Above on layer: metal1:
+        shape: SmallSquare(size: 80um)
+        at: [100um, 400um]
+        net: above
+
+    # Net name: 'below' (was reserved token)
+    add plane(Aluminum) named Pad_Below on layer: metal1:
+        shape: SmallSquare(size: 80um)
+        at: [250um, 400um]
+        net: below
+
+    # Net name: 'right_of' (was reserved token)
+    add plane(Aluminum) named Pad_RightOf on layer: metal1:
+        shape: SmallSquare(size: 80um)
+        at: [400um, 400um]
+        net: right_of
+
+    # Net name: 'left_of' (was reserved token)
+    add plane(Aluminum) named Pad_LeftOf on layer: metal1:
+        shape: SmallSquare(size: 80um)
+        at: [550um, 400um]
+        net: left_of
+
+    # Component name: 'tl' (was reserved origin token)
+    add plane(Aluminum) named tl on layer: metal1:
+        shape: SmallSquare(size: 80um)
+        at: [100um, 200um]
+        net: tl
+
+    # Component name: 'br' (was reserved origin token)
+    add plane(Aluminum) named br on layer: metal1:
+        shape: SmallSquare(size: 80um)
+        at: [250um, 200um]
+        net: br
+
+    # Net name: 'last' (was reserved loop reference token)
+    add plane(Aluminum) named Pad_Last on layer: metal1:
+        shape: SmallSquare(size: 80um)
+        at: [400um, 200um]
+        net: last
+
+    # ========================================================================
+    # CONTEXTUAL USAGE: These same words still work as keywords in context
+    # This pad uses contextual 'align' with reserved-word-as-identifier reference
+    # ========================================================================
+    
+    add plane(Aluminum) named Contextual_Test {
+        align: center_x with tl
+        align: center_y with tl
+    } on layer: metal1:
+        shape: SmallSquare(size: 30um)
+        net: tl
+
+    # ========================================================================
+    # CONNECTIVITY: Pour to connect all
+    # ========================================================================
+    
+    add pour(Aluminum) named Background on layer: metal1:
+        boundary: [10um, 10um] to [990um, 590um]
+        net: above

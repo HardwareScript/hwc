@@ -148,6 +148,16 @@ fn evaluate_with_ctx(
                     }
                 }
                 hwc_parser::BinaryOperator::Modulo => Ok(l % r),
+                // Comparison operators return 1 for true, 0 for false
+                hwc_parser::BinaryOperator::Equal => Ok(if l == r { 1 } else { 0 }),
+                hwc_parser::BinaryOperator::NotEqual => Ok(if l != r { 1 } else { 0 }),
+                hwc_parser::BinaryOperator::LessThan => Ok(if l < r { 1 } else { 0 }),
+                hwc_parser::BinaryOperator::GreaterThan => Ok(if l > r { 1 } else { 0 }),
+                hwc_parser::BinaryOperator::LessThanOrEqual => Ok(if l <= r { 1 } else { 0 }),
+                hwc_parser::BinaryOperator::GreaterThanOrEqual => Ok(if l >= r { 1 } else { 0 }),
+                // Boolean operators (treat non-zero as true)
+                hwc_parser::BinaryOperator::And => Ok(if l != 0 && r != 0 { 1 } else { 0 }),
+                hwc_parser::BinaryOperator::Or => Ok(if l != 0 || r != 0 { 1 } else { 0 }),
             }
         }
         hwc_parser::Expression::Unary {
@@ -157,6 +167,7 @@ fn evaluate_with_ctx(
             match operator {
                 hwc_parser::UnaryOperator::Negate => Ok(-val),
                 hwc_parser::UnaryOperator::Plus => Ok(val),
+                hwc_parser::UnaryOperator::Not => Ok(if val == 0 { 1 } else { 0 }),
             }
         }
         hwc_parser::Expression::Grouped { expression, .. } => {

@@ -241,6 +241,18 @@ pub enum IrError {
     )]
     InvalidExpression(String),
 
+    #[error("Dimensional unit mismatch in expression: {expression}")]
+    #[diagnostic(
+        code(C44),
+        url("https://docs.hw-script.org/errors/C44"),
+        help("Cannot {operation} incompatible units. {detail}\n\nHardware Script enforces dimensional type safety to prevent physically nonsensical operations.")
+    )]
+    DimensionalUnitMismatch {
+        expression: String,
+        operation: String,
+        detail: String,
+    },
+
     #[error("Component '{component}' overlaps with substrate material", component = .0.component)]
     #[diagnostic(
         code(P44),

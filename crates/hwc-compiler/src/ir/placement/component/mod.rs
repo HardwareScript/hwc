@@ -101,7 +101,7 @@ pub fn place_component(
         .map(|r| r.angle)
         .ok_or_else(|| {
             let is_asic = space.fabrication_constraints.as_ref().is_some_and(|c| {
-                c.technology.as_ref().is_some_and(|t| t.to_lowercase() == "asic")
+                c.technology.is_asic()
             });
 
             if is_asic {

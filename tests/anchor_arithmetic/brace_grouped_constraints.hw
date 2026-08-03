@@ -1,0 +1,91 @@
+# brace_grouped_constraints.hw
+# v0.2.1 Test: Brace-Grouped Constraint Blocks
+#
+# This test demonstrates the new multi-line syntax from Section 5.3 of the spec:
+# - Constraints grouped inside { } for readability
+# - No lexer ambiguity
+# - Prevents single-line overflow
+#
+# Old syntax (single line):
+#   add plane(...) named Pad align: x with A align: y with B on layer: metal1
+#
+# New syntax (brace-grouped):
+#   add plane(...) named Pad {
+#       align: x with A
+#       align: y with B
+#   } on layer: metal1
+
+import * from @std/primitives/units
+import * from "../ASIC-Minimal/minimal_pdk"
+
+module BraceGroupedModule:
+    pins: [ input SIG ]
+
+shape Square(size: Measurement):
+    geometry:
+        Rectangle(width: size, height: size)
+
+space Brace_Grouped_Space implements BraceGroupedModule:
+    dimensions: 800um by 600um by 50nm
+    resolution: 1nm
+    origin: bl by b
+    profile: ASIC_Flattened
+
+    nets:
+        SIG: { classification: signal, potential: 1.8V, current: 0.1uA }
+
+    # ========================================================================
+    # REFERENCE PADS
+    # ========================================================================
+    
+    add plane(Aluminum) named Ref_A on layer: metal1:
+        shape: Square(size: 100um)
+        at: [150um, 300um]
+        net: SIG
+
+    add plane(Aluminum) named Ref_B on layer: metal1:
+        shape: Square(size: 100um)
+        at: [550um, 300um]
+        net: SIG
+
+    # ========================================================================
+    # TEST 1: Brace-grouped alignment constraints
+    # Centers between Ref_A and Ref_B using readable multi-line syntax
+    # ========================================================================
+    
+    add plane(Aluminum) named Centered_Pad {
+        align: center_x with Ref_A
+        align: center_y with Ref_B
+    } on layer: metal1:
+        shape: Square(size: 60um)
+        net: SIG
+
+    # ========================================================================
+    # TEST 2: Multiple constraints with relational placement
+    # ========================================================================
+    
+    add plane(Aluminum) named Complex_Constraints {
+        right_of: Ref_A with spacing: 50um
+        align: center_y with Ref_A
+    } on layer: metal1:
+        shape: Square(size: 70um)
+        net: SIG
+
+    # ========================================================================
+    # TEST 3: Mixing brace-grouped constraints with anchor arithmetic
+    # ========================================================================
+    
+    add plane(Aluminum) named Mixed_Syntax {
+        align: center_x with space
+    } on layer: metal1:
+        shape: Square(size: 50um)
+        at: [y: (Ref_A.top + Ref_B.bottom) / 2]
+        net: SIG
+
+    # ========================================================================
+    # CONNECTIVITY
+    # ========================================================================
+    
+    add pour(Aluminum) named Background on layer: metal1:
+        boundary: [10um, 10um] to [790um, 590um]
+        net: SIG

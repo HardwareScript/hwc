@@ -1,7 +1,17 @@
 # pyramid_3cube_test.hw
-# Minimal 3D stacking test: 2 cubes at base + 1 cube on top
-# Tests: XY centering + Z-axis stacking using relational constraints
-# PURE GEOMETRY MODE - No connectivity validation
+# v0.2.1 Test: CHECKERBOARD PYRAMID - Demonstrating Individual Block Visibility
+# 
+# This test demonstrates:
+# 1. Perfect 5-layer pyramid structure (5×5 base → 4×4 → 3×3 → 2×2 → 1×1 apex)
+# 2. CHECKERBOARD PATTERN: Alternating Aluminum (silver) and Tungsten (blue)
+# 3. Shows that each block is individually generated, not a stretched slab
+# 4. Comptime loop-based generation with material selection logic
+# 5. Pattern: (row + col) % 2 determines material
+#
+# IMPORTANT: HardwareScript uses INCLUSIVE ranges (hardware engineering convention)
+# for i in 0..4 = [0,1,2,3,4] = 5 iterations (like "Layers 0 through 4")
+#
+# Expected result: A checkerboard-patterned pyramid showing individual blocks
 
 import * from @std/primitives/units
 import * from "./thick_layer_pdk"
@@ -11,44 +21,149 @@ shape SquareCube(size: Measurement):
         Rectangle(width: size, height: size)
 
 space Pyramid_3Cube_Space:
-    dimensions: 10.0um by 10.0um by 10.0um
+    dimensions: 60.0um by 60.0um by 20.0um
     resolution: 10nm
     origin: bl by b
     profile: Thick_3D_Stack
 
     nets:
-        TestNet: { classification: signal, potential: 1.8V, current: 0.1uA }
+        POWER: { classification: power, potential: 3.3V, current: 100mA }
 
     # ========================================================================
-    # BASE LAYER: Two 3um cubes side by side on metal1  
-    # Metal1 Z-range: 1500-2500nm (1um thick)
-    # ========================================================================
-    
-    # Left cube
-    add plane(Aluminum) named Base_Left on layer: metal1:
-        shape: SquareCube(size: 3.0um)
-        at: [3.5um, 5.0um]
-        net: TestNet
-
-    # Right cube - placed using relational constraint
-    add plane(Aluminum) named Base_Right {
-        right_of Base_Left
-        align: center_y with Base_Left
-    } on layer: metal1:
-        shape: SquareCube(size: 3.0um)
-        net: TestNet
-
-    # ========================================================================
-    # TOP LAYER: Calculate midpoint between the two base cubes
-    # Try using compile-time arithmetic to find center
+    # PERFECT PYRAMID PARAMETERS - NO GAPS
     # ========================================================================
     
-    # Calculate the midpoint X coordinate
-    let midpoint_x = (Base_Left.center_x + Base_Right.center_x) / 2
+    let block_size = 4.0um      # Each cube is 4×4×1um (larger for visibility)
+    let block_pitch = block_size  # NO GAP: blocks touch edge-to-edge
     
-    add plane(Aluminum) named Top_Center on layer: metal2:
-        shape: SquareCube(size: 2.0um)
-        at: [midpoint_x, 5.0um]
-        net: TestNet
+    # Center the entire pyramid in the 60×60um space
+    let pyramid_base_size = 5 * block_size  # 20um for 5×5 base
+    let base_offset = (60.0um - pyramid_base_size) / 2  # Centers at 20um
+    
+    # ========================================================================
+    # LAYER 1: 5×5 CHECKERBOARD BASE (25 blocks) - Metal1
+    # Z-range: 1000-2000nm
+    # Checkerboard pattern: (row + col) % 2 == 0 → Aluminum, else → Tungsten
+    # INCLUSIVE: 0..4 = [0,1,2,3,4] = 5 rows/cols
+    # ========================================================================
+    
+    for row in 0..4:
+        for col in 0..4:
+            # Checkerboard logic: alternate materials
+            if (row + col) mod 2 == 0:
+                add plane(Aluminum) named L1_R{row}_C{col} on layer: metal1:
+                    shape: SquareCube(size: block_size)
+                    at: [
+                        x: base_offset + col * block_pitch,
+                        y: base_offset + row * block_pitch
+                    ]
+                    net: POWER
+            else:
+                add plane(Tungsten) named L1_R{row}_C{col} on layer: metal1:
+                    shape: SquareCube(size: block_size)
+                    at: [
+                        x: base_offset + col * block_pitch,
+                        y: base_offset + row * block_pitch
+                    ]
+                    net: POWER
 
+    # ========================================================================
+    # LAYER 2: 4×4 CHECKERBOARD (16 blocks) - Metal2
+    # Z-range: 2000-3000nm
+    # Centered: shifts by block_size/2 in both X and Y
+    # INCLUSIVE: 0..3 = [0,1,2,3] = 4 rows/cols
+    # ========================================================================
+    
+    let l2_offset = base_offset + block_size / 2
+    
+    for row in 0..3:
+        for col in 0..3:
+            if (row + col) mod 2 == 0:
+                add plane(Aluminum) named L2_R{row}_C{col} on layer: metal2:
+                    shape: SquareCube(size: block_size)
+                    at: [
+                        x: l2_offset + col * block_pitch,
+                        y: l2_offset + row * block_pitch
+                    ]
+                    net: POWER
+            else:
+                add plane(Tungsten) named L2_R{row}_C{col} on layer: metal2:
+                    shape: SquareCube(size: block_size)
+                    at: [
+                        x: l2_offset + col * block_pitch,
+                        y: l2_offset + row * block_pitch
+                    ]
+                    net: POWER
 
+    # ========================================================================
+    # LAYER 3: 3×3 CHECKERBOARD (9 blocks) - Metal3
+    # Z-range: 3000-4000nm
+    # Centered: shifts by another block_size/2 (total: block_size)
+    # INCLUSIVE: 0..2 = [0,1,2] = 3 rows/cols
+    # ========================================================================
+    
+    let l3_offset = base_offset + block_size
+    
+    for row in 0..2:
+        for col in 0..2:
+            if (row + col) mod 2 == 0:
+                add plane(Aluminum) named L3_R{row}_C{col} on layer: metal3:
+                    shape: SquareCube(size: block_size)
+                    at: [
+                        x: l3_offset + col * block_pitch,
+                        y: l3_offset + row * block_pitch
+                    ]
+                    net: POWER
+            else:
+                add plane(Tungsten) named L3_R{row}_C{col} on layer: metal3:
+                    shape: SquareCube(size: block_size)
+                    at: [
+                        x: l3_offset + col * block_pitch,
+                        y: l3_offset + row * block_pitch
+                    ]
+                    net: POWER
+
+    # ========================================================================
+    # LAYER 4: 2×2 CHECKERBOARD (4 blocks) - Metal4
+    # Z-range: 4000-5000nm
+    # Centered: shifts by another block_size/2 (total: 1.5 * block_size)
+    # INCLUSIVE: 0..1 = [0,1] = 2 rows/cols
+    # ========================================================================
+    
+    let l4_offset = base_offset + block_size + block_size / 2
+    
+    for row in 0..1:
+        for col in 0..1:
+            if (row + col) mod 2 == 0:
+                add plane(Aluminum) named L4_R{row}_C{col} on layer: metal4:
+                    shape: SquareCube(size: block_size)
+                    at: [
+                        x: l4_offset + col * block_pitch,
+                        y: l4_offset + row * block_pitch
+                    ]
+                    net: POWER
+            else:
+                add plane(Tungsten) named L4_R{row}_C{col} on layer: metal4:
+                    shape: SquareCube(size: block_size)
+                    at: [
+                        x: l4_offset + col * block_pitch,
+                        y: l4_offset + row * block_pitch
+                    ]
+                    net: POWER
+
+    # ========================================================================
+    # LAYER 5: 1×1 APEX (1 block) - Metal5
+    # Z-range: 5000-6000nm
+    # Perfect apex: centered at (2 * block_size) from base
+    # Single Aluminum block at the top
+    # ========================================================================
+    
+    let l5_offset = base_offset + block_size * 2
+    
+    add plane(Aluminum) named L5_Apex on layer: metal5:
+        shape: SquareCube(size: block_size)
+        at: [
+            x: l5_offset,
+            y: l5_offset
+        ]
+        net: POWER

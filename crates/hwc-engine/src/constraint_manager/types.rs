@@ -131,8 +131,10 @@ pub struct FabricationConstraints {
     /// None: no solder mask expansion declared in profile
     pub solder_mask_expansion_nm: Option<i64>,
 
-    /// Technology node string (e.g. "PCB", "ASIC") for manufacturing checks.
-    pub technology: Option<String>,
+    /// Technology type (PCB or ASIC) - REQUIRED field that determines via geometry,
+    /// clearance rules, and manufacturing constraints throughout the entire pipeline.
+    /// Must be explicitly declared in every profile.
+    pub technology: hwc_types::Technology,
 }
 
 /// Complete constraint rulebook for the routing engine.

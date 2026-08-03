@@ -5,21 +5,177 @@
 * ========================================
 * NETS
 * ========================================
-* Net: TestNet (pour: Base_Left, material: Aluminum, z: 0.0015mm)
-* Net: TestNet (pour: Base_Right, material: Aluminum, z: 0.0015mm)
-* Net: TestNet (pour: Top_Center, material: Aluminum, z: 0.0030mm)
-* Net: TestNet (width=200000nm, material=Tungsten)
+* Net: POWER (pour: L1_R0_C0, material: Aluminum, z: 0.0010mm)
+* Net: POWER (pour: L1_R0_C1, material: Tungsten, z: 0.0010mm)
+* Net: POWER (pour: L1_R0_C2, material: Aluminum, z: 0.0010mm)
+* Net: POWER (pour: L1_R0_C3, material: Tungsten, z: 0.0010mm)
+* Net: POWER (pour: L1_R0_C4, material: Aluminum, z: 0.0010mm)
+* Net: POWER (pour: L1_R1_C0, material: Tungsten, z: 0.0010mm)
+* Net: POWER (pour: L1_R1_C1, material: Aluminum, z: 0.0010mm)
+* Net: POWER (pour: L1_R1_C2, material: Tungsten, z: 0.0010mm)
+* Net: POWER (pour: L1_R1_C3, material: Aluminum, z: 0.0010mm)
+* Net: POWER (pour: L1_R1_C4, material: Tungsten, z: 0.0010mm)
+* Net: POWER (pour: L1_R2_C0, material: Aluminum, z: 0.0010mm)
+* Net: POWER (pour: L1_R2_C1, material: Tungsten, z: 0.0010mm)
+* Net: POWER (pour: L1_R2_C2, material: Aluminum, z: 0.0010mm)
+* Net: POWER (pour: L1_R2_C3, material: Tungsten, z: 0.0010mm)
+* Net: POWER (pour: L1_R2_C4, material: Aluminum, z: 0.0010mm)
+* Net: POWER (pour: L1_R3_C0, material: Tungsten, z: 0.0010mm)
+* Net: POWER (pour: L1_R3_C1, material: Aluminum, z: 0.0010mm)
+* Net: POWER (pour: L1_R3_C2, material: Tungsten, z: 0.0010mm)
+* Net: POWER (pour: L1_R3_C3, material: Aluminum, z: 0.0010mm)
+* Net: POWER (pour: L1_R3_C4, material: Tungsten, z: 0.0010mm)
+* Net: POWER (pour: L1_R4_C0, material: Aluminum, z: 0.0010mm)
+* Net: POWER (pour: L1_R4_C1, material: Tungsten, z: 0.0010mm)
+* Net: POWER (pour: L1_R4_C2, material: Aluminum, z: 0.0010mm)
+* Net: POWER (pour: L1_R4_C3, material: Tungsten, z: 0.0010mm)
+* Net: POWER (pour: L1_R4_C4, material: Aluminum, z: 0.0010mm)
+* Net: POWER (pour: L2_R0_C0, material: Aluminum, z: 0.0020mm)
+* Net: POWER (pour: L2_R0_C1, material: Tungsten, z: 0.0020mm)
+* Net: POWER (pour: L2_R0_C2, material: Aluminum, z: 0.0020mm)
+* Net: POWER (pour: L2_R0_C3, material: Tungsten, z: 0.0020mm)
+* Net: POWER (pour: L2_R1_C0, material: Tungsten, z: 0.0020mm)
+* Net: POWER (pour: L2_R1_C1, material: Aluminum, z: 0.0020mm)
+* Net: POWER (pour: L2_R1_C2, material: Tungsten, z: 0.0020mm)
+* Net: POWER (pour: L2_R1_C3, material: Aluminum, z: 0.0020mm)
+* Net: POWER (pour: L2_R2_C0, material: Aluminum, z: 0.0020mm)
+* Net: POWER (pour: L2_R2_C1, material: Tungsten, z: 0.0020mm)
+* Net: POWER (pour: L2_R2_C2, material: Aluminum, z: 0.0020mm)
+* Net: POWER (pour: L2_R2_C3, material: Tungsten, z: 0.0020mm)
+* Net: POWER (pour: L2_R3_C0, material: Tungsten, z: 0.0020mm)
+* Net: POWER (pour: L2_R3_C1, material: Aluminum, z: 0.0020mm)
+* Net: POWER (pour: L2_R3_C2, material: Tungsten, z: 0.0020mm)
+* Net: POWER (pour: L2_R3_C3, material: Aluminum, z: 0.0020mm)
+* Net: POWER (pour: L3_R0_C0, material: Aluminum, z: 0.0030mm)
+* Net: POWER (pour: L3_R0_C1, material: Tungsten, z: 0.0030mm)
+* Net: POWER (pour: L3_R0_C2, material: Aluminum, z: 0.0030mm)
+* Net: POWER (pour: L3_R1_C0, material: Tungsten, z: 0.0030mm)
+* Net: POWER (pour: L3_R1_C1, material: Aluminum, z: 0.0030mm)
+* Net: POWER (pour: L3_R1_C2, material: Tungsten, z: 0.0030mm)
+* Net: POWER (pour: L3_R2_C0, material: Aluminum, z: 0.0030mm)
+* Net: POWER (pour: L3_R2_C1, material: Tungsten, z: 0.0030mm)
+* Net: POWER (pour: L3_R2_C2, material: Aluminum, z: 0.0030mm)
+* Net: POWER (pour: L4_R0_C0, material: Aluminum, z: 0.0040mm)
+* Net: POWER (pour: L4_R0_C1, material: Tungsten, z: 0.0040mm)
+* Net: POWER (pour: L4_R1_C0, material: Tungsten, z: 0.0040mm)
+* Net: POWER (pour: L4_R1_C1, material: Aluminum, z: 0.0040mm)
+* Net: POWER (pour: L5_Apex, material: Aluminum, z: 0.0050mm)
+* Net: POWER (width=200nm, material=Tungsten)
 *   Connected pins:
-*     - Base_Left.__virtual_Base_Left
-*     - Base_Right.__virtual_Base_Right
-*     - Top_Center.__virtual_Top_Center
+*     - L1_R0_C0.__virtual_L1_R0_C0
+*     - L1_R0_C1.__virtual_L1_R0_C1
+*     - L1_R0_C2.__virtual_L1_R0_C2
+*     - L1_R0_C3.__virtual_L1_R0_C3
+*     - L1_R0_C4.__virtual_L1_R0_C4
+*     - L1_R1_C0.__virtual_L1_R1_C0
+*     - L1_R1_C1.__virtual_L1_R1_C1
+*     - L1_R1_C2.__virtual_L1_R1_C2
+*     - L1_R1_C3.__virtual_L1_R1_C3
+*     - L1_R1_C4.__virtual_L1_R1_C4
+*     - L1_R2_C0.__virtual_L1_R2_C0
+*     - L1_R2_C1.__virtual_L1_R2_C1
+*     - L1_R2_C2.__virtual_L1_R2_C2
+*     - L1_R2_C3.__virtual_L1_R2_C3
+*     - L1_R2_C4.__virtual_L1_R2_C4
+*     - L1_R3_C0.__virtual_L1_R3_C0
+*     - L1_R3_C1.__virtual_L1_R3_C1
+*     - L1_R3_C2.__virtual_L1_R3_C2
+*     - L1_R3_C3.__virtual_L1_R3_C3
+*     - L1_R3_C4.__virtual_L1_R3_C4
+*     - L1_R4_C0.__virtual_L1_R4_C0
+*     - L1_R4_C1.__virtual_L1_R4_C1
+*     - L1_R4_C2.__virtual_L1_R4_C2
+*     - L1_R4_C3.__virtual_L1_R4_C3
+*     - L1_R4_C4.__virtual_L1_R4_C4
+*     - L2_R0_C0.__virtual_L2_R0_C0
+*     - L2_R0_C1.__virtual_L2_R0_C1
+*     - L2_R0_C2.__virtual_L2_R0_C2
+*     - L2_R0_C3.__virtual_L2_R0_C3
+*     - L2_R1_C0.__virtual_L2_R1_C0
+*     - L2_R1_C1.__virtual_L2_R1_C1
+*     - L2_R1_C2.__virtual_L2_R1_C2
+*     - L2_R1_C3.__virtual_L2_R1_C3
+*     - L2_R2_C0.__virtual_L2_R2_C0
+*     - L2_R2_C1.__virtual_L2_R2_C1
+*     - L2_R2_C2.__virtual_L2_R2_C2
+*     - L2_R2_C3.__virtual_L2_R2_C3
+*     - L2_R3_C0.__virtual_L2_R3_C0
+*     - L2_R3_C1.__virtual_L2_R3_C1
+*     - L2_R3_C2.__virtual_L2_R3_C2
+*     - L2_R3_C3.__virtual_L2_R3_C3
+*     - L3_R0_C0.__virtual_L3_R0_C0
+*     - L3_R0_C1.__virtual_L3_R0_C1
+*     - L3_R0_C2.__virtual_L3_R0_C2
+*     - L3_R1_C0.__virtual_L3_R1_C0
+*     - L3_R1_C1.__virtual_L3_R1_C1
+*     - L3_R1_C2.__virtual_L3_R1_C2
+*     - L3_R2_C0.__virtual_L3_R2_C0
+*     - L3_R2_C1.__virtual_L3_R2_C1
+*     - L3_R2_C2.__virtual_L3_R2_C2
+*     - L4_R0_C0.__virtual_L4_R0_C0
+*     - L4_R0_C1.__virtual_L4_R0_C1
+*     - L4_R1_C0.__virtual_L4_R1_C0
+*     - L4_R1_C1.__virtual_L4_R1_C1
+*     - L5_Apex.__virtual_L5_Apex
 
 * ========================================
 * COMPONENTS (Schematic-Level Subcircuits)
 * ========================================
-XBase_Left TestNet Plane(Aluminum)
-XBase_Right TestNet Plane(Aluminum)
-XTop_Center TestNet Plane(Aluminum)
+XL1_R0_C0 POWER Plane(Aluminum)
+XL1_R0_C1 POWER Plane(Tungsten)
+XL1_R0_C2 POWER Plane(Aluminum)
+XL1_R0_C3 POWER Plane(Tungsten)
+XL1_R0_C4 POWER Plane(Aluminum)
+XL1_R1_C0 POWER Plane(Tungsten)
+XL1_R1_C1 POWER Plane(Aluminum)
+XL1_R1_C2 POWER Plane(Tungsten)
+XL1_R1_C3 POWER Plane(Aluminum)
+XL1_R1_C4 POWER Plane(Tungsten)
+XL1_R2_C0 POWER Plane(Aluminum)
+XL1_R2_C1 POWER Plane(Tungsten)
+XL1_R2_C2 POWER Plane(Aluminum)
+XL1_R2_C3 POWER Plane(Tungsten)
+XL1_R2_C4 POWER Plane(Aluminum)
+XL1_R3_C0 POWER Plane(Tungsten)
+XL1_R3_C1 POWER Plane(Aluminum)
+XL1_R3_C2 POWER Plane(Tungsten)
+XL1_R3_C3 POWER Plane(Aluminum)
+XL1_R3_C4 POWER Plane(Tungsten)
+XL1_R4_C0 POWER Plane(Aluminum)
+XL1_R4_C1 POWER Plane(Tungsten)
+XL1_R4_C2 POWER Plane(Aluminum)
+XL1_R4_C3 POWER Plane(Tungsten)
+XL1_R4_C4 POWER Plane(Aluminum)
+XL2_R0_C0 POWER Plane(Aluminum)
+XL2_R0_C1 POWER Plane(Tungsten)
+XL2_R0_C2 POWER Plane(Aluminum)
+XL2_R0_C3 POWER Plane(Tungsten)
+XL2_R1_C0 POWER Plane(Tungsten)
+XL2_R1_C1 POWER Plane(Aluminum)
+XL2_R1_C2 POWER Plane(Tungsten)
+XL2_R1_C3 POWER Plane(Aluminum)
+XL2_R2_C0 POWER Plane(Aluminum)
+XL2_R2_C1 POWER Plane(Tungsten)
+XL2_R2_C2 POWER Plane(Aluminum)
+XL2_R2_C3 POWER Plane(Tungsten)
+XL2_R3_C0 POWER Plane(Tungsten)
+XL2_R3_C1 POWER Plane(Aluminum)
+XL2_R3_C2 POWER Plane(Tungsten)
+XL2_R3_C3 POWER Plane(Aluminum)
+XL3_R0_C0 POWER Plane(Aluminum)
+XL3_R0_C1 POWER Plane(Tungsten)
+XL3_R0_C2 POWER Plane(Aluminum)
+XL3_R1_C0 POWER Plane(Tungsten)
+XL3_R1_C1 POWER Plane(Aluminum)
+XL3_R1_C2 POWER Plane(Tungsten)
+XL3_R2_C0 POWER Plane(Aluminum)
+XL3_R2_C1 POWER Plane(Tungsten)
+XL3_R2_C2 POWER Plane(Aluminum)
+XL4_R0_C0 POWER Plane(Aluminum)
+XL4_R0_C1 POWER Plane(Tungsten)
+XL4_R1_C0 POWER Plane(Tungsten)
+XL4_R1_C1 POWER Plane(Aluminum)
+XL5_Apex POWER Plane(Aluminum)
 
 * ========================================
 * DEVICE EXTRACTION REQUIRES EXPLICIT BINDINGS

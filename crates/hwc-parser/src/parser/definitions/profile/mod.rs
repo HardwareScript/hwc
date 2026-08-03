@@ -337,7 +337,20 @@ impl super::super::Parser {
                     }
                 }
                 "technology" => {
-                    technology = self.expect_string().ok();
+                    if let Ok(tech_str) = self.expect_string() {
+                        match hwc_types::Technology::from_str(&tech_str) {
+                            Some(tech) => {
+                                technology = Some(tech);
+                            }
+                            None => {
+                                let err = self.error(&format!(
+                                    "Invalid technology '{}'. Supported values: 'PCB', 'ASIC'",
+                                    tech_str
+                                ));
+                                collector.report(err);
+                            }
+                        }
+                    }
                     self.skip_whitespace();
                 }
                 _ => {

@@ -7,31 +7,14 @@
 //! This eliminates scattered conditional logic throughout the router.
 
 use crate::constraint_manager::FabricationConstraints;
+use hwc_types::Technology;
 
-/// Technology-specific routing behavior strategy.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TechnologyStrategy {
-    /// PCB technology: Drilled/plated vias with annular rings.
-    /// Pads extend beyond drill holes, requiring trace_width/2 projection.
-    Pcb,
-    
-    /// ASIC technology: Deposited contacts with flush boundaries.
-    /// Contacts are rectangular blocks with no overhang.
-    Asic,
-}
-
-impl TechnologyStrategy {
-    /// Determine technology strategy from fabrication constraints.
+impl Technology {
+    /// Get technology directly from fabrication constraints.
     ///
-    /// # Decision Rule
-    /// - If `min_annular_ring_nm > 0`: PCB (pads have overhang)
-    /// - If `min_annular_ring_nm == 0`: ASIC (flush contacts)
+    /// No inference - the technology field is required in the profile.
     pub fn from_constraints(fab: &FabricationConstraints) -> Self {
-        if fab.min_annular_ring_nm > 0 {
-            Self::Pcb
-        } else {
-            Self::Asic
-        }
+        fab.technology
     }
 
     /// Calculate port escape clearance based on technology.
@@ -85,7 +68,7 @@ mod tests {
 
     #[test]
     fn test_pcb_strategy() {
-        let strategy = TechnologyStrategy::Pcb;
+        let strategy = Technology::Pcb;
         
         // PCB: (trace_width/2) + min_clearance
         assert_eq!(strategy.calculate_port_escape_clearance(200_000, 150_000), 250_000);
@@ -94,7 +77,7 @@ mod tests {
 
     #[test]
     fn test_asic_strategy() {
-        let strategy = TechnologyStrategy::Asic;
+        let strategy = Technology::Asic;
         
         // ASIC: min_clearance only (typically 0nm)
         assert_eq!(strategy.calculate_port_escape_clearance(200_000, 0), 0);
@@ -119,9 +102,9 @@ mod tests {
             safety_factor: 2.0,
             stackup: None,
             solder_mask_expansion_nm: None,
-            technology: Some("PCB".to_string()),
+            technology: Technology::Pcb,
         };
-        assert_eq!(TechnologyStrategy::from_constraints(&pcb_fab), TechnologyStrategy::Pcb);
+        assert_eq!(Technology::from_constraints(&pcb_fab), Technology::Pcb);
 
         let asic_fab = FabricationConstraints {
             min_trace_width_nm: 200,
@@ -136,8 +119,8 @@ mod tests {
             safety_factor: 2.0,
             stackup: None,
             solder_mask_expansion_nm: None,
-            technology: Some("ASIC".to_string()),
+            technology: Technology::Asic,
         };
-        assert_eq!(TechnologyStrategy::from_constraints(&asic_fab), TechnologyStrategy::Asic);
+        assert_eq!(Technology::from_constraints(&asic_fab), Technology::Asic);
     }
 }

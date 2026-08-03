@@ -5,36 +5,46 @@
 * ========================================
 * NETS
 * ========================================
-* Net: GND (pour: GND_Rail, material: Aluminum, z: 0.0013mm)
-* Net: Out (pour: Out_Pad, material: Aluminum, z: 0.0013mm)
 * Net: GND (pour: NMOS_Source, material: Silicon_N, z: 0.0000mm)
 * Net: Out (pour: NMOS_Drain, material: Silicon_N, z: 0.0000mm)
 * Net: In (pour: Gate_Strip, material: Polysilicon, z: 0.0004mm)
+* Net: GND (pour: GND_Source_Pad, material: Aluminum, z: 0.0013mm)
+* Net: Out (pour: Out_Drain_Pad, material: Aluminum, z: 0.0013mm)
+* Net: In (pour: Gate_Pad, material: Aluminum, z: 0.0013mm)
+* Net: GND (pour: GND_Rail, material: Aluminum, z: 0.0013mm)
+* Net: Out (pour: Out_Export_Pad, material: Aluminum, z: 0.0013mm)
 * Net: In (width=200nm, material=Tungsten)
 *   Connected pins:
 *     - Gate_Strip.anchor
 *     - Gate_Strip.__virtual_Gate_Strip
+*     - Gate_Pad.anchor
+*     - Gate_Pad.__virtual_Gate_Pad
+*     - Via_Gate.__virtual_Via_Gate
 * Net: Out (width=200nm, material=Tungsten)
 *   Connected pins:
-*     - Out_Pad.anchor
-*     - Out_Pad.__virtual_Out_Pad
 *     - NMOS_Drain.anchor
 *     - NMOS_Drain.__virtual_NMOS_Drain
+*     - Out_Drain_Pad.anchor
+*     - Out_Drain_Pad.__virtual_Out_Drain_Pad
+*     - Out_Export_Pad.anchor
+*     - Out_Export_Pad.__virtual_Out_Export_Pad
 *     - Via_Drain.__virtual_Via_Drain
-*     - Via_Drain.__virtual_Via_Drain
-*     - Out_Pad.__virtual_Out_Pad
-*     - Via_Drain.__virtual_Via_Drain
-*     - Out_Pad.__virtual_Out_Pad
+*     - Out_Drain_Pad.__virtual_Out_Drain_Pad
+*     - Out_Export_Pad.__virtual_Out_Export_Pad
+*     - Out_Drain_Pad.__virtual_Out_Drain_Pad
+*     - Out_Export_Pad.__virtual_Out_Export_Pad
 * Net: GND (width=200nm, material=Tungsten)
 *   Connected pins:
-*     - GND_Rail.anchor
-*     - GND_Rail.__virtual_GND_Rail
 *     - NMOS_Source.anchor
 *     - NMOS_Source.__virtual_NMOS_Source
-*     - Via_Source.__virtual_Via_Source
-*     - Via_Source.__virtual_Via_Source
+*     - GND_Source_Pad.anchor
+*     - GND_Source_Pad.__virtual_GND_Source_Pad
+*     - GND_Rail.anchor
 *     - GND_Rail.__virtual_GND_Rail
 *     - Via_Source.__virtual_Via_Source
+*     - GND_Source_Pad.__virtual_GND_Source_Pad
+*     - GND_Rail.__virtual_GND_Rail
+*     - GND_Source_Pad.__virtual_GND_Source_Pad
 *     - GND_Rail.__virtual_GND_Rail
 * Net: TEMP_NET (width=200nm, material=Tungsten)
 

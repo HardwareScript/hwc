@@ -1,0 +1,79 @@
+# dependency_chain_test.hw
+# v0.2.1 Test: DAG DEPENDENCY CHAIN - Multi-Level Anchor References
+# 
+# This test demonstrates:
+# 1. Directed Acyclic Graph (DAG) dependency validation
+# 2. Multi-level anchor references: A → B → C → D
+# 3. Cross-references using multiple anchors: (A + D) / 2
+# 4. Compiler should topologically sort entities for evaluation
+# 
+# Expected result: Horizontal chain of 4 pads, with a 5th centered above
+
+import * from @std/primitives/units
+import * from "./thick_layer_pdk"
+
+space Dependency_Chain_Test:
+    dimensions: 200um by 50um by 10um
+    resolution: 10nm
+    origin: bl by b
+    profile: Thick_3D_Stack
+    
+    nets:
+        DATA: { classification: signal, potential: 1.2V }
+    
+    let pad_size = 5um
+    let spacing = 15um
+    
+    # ========================================================================
+    # DEPENDENCY CHAIN: Anchor → Derived_1 → Derived_2 → Derived_3
+    # Each entity depends on the previous one's position
+    # ========================================================================
+    
+    # LEVEL 0: Absolute position (no dependencies)
+    add plane(Copper) named Anchor on layer: metal1:
+        shape: SquareCube(size: pad_size)
+        at: [10um, 25um]
+        net: DATA
+    
+    # LEVEL 1: References Anchor (depends on: Anchor)
+    add plane(Aluminum) named Derived_1 on layer: metal1:
+        shape: SquareCube(size: pad_size)
+        at: [
+            x: Anchor.right + spacing,
+            y: Anchor.center_y
+        ]
+        net: DATA
+    
+    # LEVEL 2: References Derived_1 (depends on: Anchor → Derived_1)
+    add plane(Tungsten) named Derived_2 on layer: metal1:
+        shape: SquareCube(size: pad_size)
+        at: [
+            x: Derived_1.right + spacing,
+            y: Derived_1.center_y
+        ]
+        net: DATA
+    
+    # LEVEL 3: References Derived_2 (depends on: Anchor → Derived_1 → Derived_2)
+    add plane(Gold) named Derived_3 on layer: metal1:
+        shape: SquareCube(size: pad_size)
+        at: [
+            x: Derived_2.right + spacing,
+            y: Derived_2.center_y
+        ]
+        net: DATA
+    
+    # ========================================================================
+    # CROSS-REFERENCE TEST
+    # References both Anchor (level 0) and Derived_3 (level 3)
+    # Compiler must evaluate in correct topological order
+    # ========================================================================
+    
+    # CROSS-REF: Centered between first and last, positioned above
+    # Depends on: Anchor (level 0), Derived_3 (level 3)
+    add plane(Silver) named Cross_Ref on layer: metal2:
+        shape: SquareCube(size: 3um)
+        at: [
+            x: (Anchor.center_x + Derived_3.center_x) / 2,
+            y: Anchor.center_y + 10um
+        ]
+        net: DATA

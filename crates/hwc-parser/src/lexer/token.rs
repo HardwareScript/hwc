@@ -6,12 +6,72 @@
 //! v0.1.6 Changes:
 //! - Removed `define` keyword - type keywords are now first-class
 //! - Example: `component Resistor:` not `define component "Resistor":`
+//!
+//! v0.2.1 Changes:
+//! - Added InterpolatedIdentifier for modern template-style name generation
+//! - Example: `L1_R{row}_C{col}` compiles to individual names at compile time
 
 use logos::Logos;
 use std::fmt;
 
 use super::parsers::*;
 use super::units::Measurement;
+
+/// Part of an interpolated identifier - either literal text or an expression
+#[derive(Debug, Clone, PartialEq)]
+pub enum InterpolatedPart {
+    /// Literal text part: "L1_R", "_C", etc.
+    Literal(String),
+    /// Expression part (unparsed source text): "row", "col", "i+1", etc.
+    /// Will be parsed into Expression AST later by the parser
+    Expression(String),
+}
+
+/// Parse an interpolated identifier like: L1_R{row}_C{col}
+/// Returns a vector alternating between Literal and Expression parts
+fn parse_interpolated_identifier(lex: &mut logos::Lexer<Token>) -> Option<Vec<InterpolatedPart>> {
+    let source = lex.slice();
+    let mut parts = Vec::new();
+    let mut current_pos = 0;
+    
+    while current_pos < source.len() {
+        // Find the next {
+        if let Some(brace_start) = source[current_pos..].find('{') {
+            let abs_brace_start = current_pos + brace_start;
+            
+            // Add literal part before the brace (if any)
+            if brace_start > 0 {
+                parts.push(InterpolatedPart::Literal(
+                    source[current_pos..abs_brace_start].to_string()
+                ));
+            }
+            
+            // Find the matching }
+            if let Some(brace_end) = source[abs_brace_start..].find('}') {
+                let abs_brace_end = abs_brace_start + brace_end;
+                
+                // Extract expression between braces
+                let expr = source[abs_brace_start + 1..abs_brace_end].to_string();
+                parts.push(InterpolatedPart::Expression(expr));
+                
+                current_pos = abs_brace_end + 1;
+            } else {
+                // Unmatched brace - shouldn't happen with regex, but be safe
+                return None;
+            }
+        } else {
+            // No more braces - add remaining literal (if any)
+            if current_pos < source.len() {
+                parts.push(InterpolatedPart::Literal(
+                    source[current_pos..].to_string()
+                ));
+            }
+            break;
+        }
+    }
+    
+    Some(parts)
+}
 
 // Helper functions for parsing integer literals with different bases
 fn parse_any_integer(lex: &mut logos::Lexer<Token>) -> Option<i64> {
@@ -125,17 +185,9 @@ pub enum Token {
     #[token("with")]
     With,
 
-    #[token("above")]
-    Above,
-
-    #[token("below")]
-    Below,
-
-    #[token("right_of")]
-    RightOf,
-
-    #[token("left_of")]
-    LeftOf,
+    // v0.2.1: 'above', 'below', 'right_of', 'left_of' REMOVED as tokens
+    // Now parsed contextually as identifiers by hwc-parser
+    // See: crates/hwc-parser/src/parser/context.rs
 
     // v0.2.0: Region floorplanning keyword
     #[token("region")]
@@ -163,19 +215,10 @@ pub enum Token {
     Origin,
 
     // ========================================================================
-    // ORIGIN POINTS - Shorthand coordinate system origins (strictly lowercase)
+    // ORIGIN POINTS - REMOVED IN v0.2.1
+    // 'tl', 'bl', 'tr', 'br' are now parsed contextually as identifiers
+    // See: crates/hwc-parser/src/parser/context.rs
     // ========================================================================
-    #[token("tl")]
-    TopLeft,
-
-    #[token("bl")]
-    BottomLeft,
-
-    #[token("tr")]
-    TopRight,
-
-    #[token("br")]
-    BottomRight,
 
     // ========================================================================
     // Z-AXIS ORIGIN DIRECTION - Vertical coordinate system direction
@@ -289,10 +332,9 @@ pub enum Token {
     // ========================================================================
     // PARAMETRIC LOOP KEYWORDS (v0.1.6 Sprint 3.4)
     // ========================================================================
-    /// Reference to the previous iteration's component in a for loop
-    /// Used for relative positioning: `after: last.right + 1mm`
-    #[token("last")]
-    Last,
+    // v0.2.1: 'last' REMOVED as token - superseded by loop index arithmetic
+    // (i * pitch). Now parsed contextually as identifier.
+    // See: crates/hwc-parser/src/parser/context.rs
 
     // ========================================================================
     // SPACE STATEMENT TYPES (for add statements)
@@ -386,6 +428,9 @@ pub enum Token {
 
     #[token("=")]
     Equals,
+    
+    #[token("==")]
+    DoubleEquals,
 
     #[token("<")]
     LessThan,
@@ -441,6 +486,21 @@ pub enum Token {
     // ========================================================================
     // LITERALS
     // ========================================================================
+    /// Interpolated Identifiers (v0.2.1): Modern template-style interpolation
+    /// Pattern: Identifier{expr}Literal{expr}...
+    /// Example: L1_R{row}_C{col} where row and col are loop variables
+    /// 
+    /// This must come BEFORE plain Identifier to match interpolated patterns first
+    /// The callback parses the entire interpolated identifier and extracts parts
+    /// 
+    /// Regex breakdown:
+    /// - [a-zA-Z_][a-zA-Z0-9_]* = Initial identifier part (required)
+    /// - (\{[^}]+\}([a-zA-Z0-9_]+)?)+ = One or more interpolations with optional literal after each
+    ///   - \{[^}]+\} = {expression}
+    ///   - ([a-zA-Z0-9_]+)? = Optional literal part (can end with {expr})
+    #[regex(r"[a-zA-Z_][a-zA-Z0-9_]*(\{[^}]+\}([a-zA-Z0-9_]+)?)+", priority = 10, callback = parse_interpolated_identifier)]
+    InterpolatedIdentifier(Vec<InterpolatedPart>),
+    
     /// Identifiers: PascalCase, snake_case, or camelCase
     /// Pattern: starts with letter, contains letters, digits, underscores
     #[regex(r"[a-zA-Z_][a-zA-Z0-9_]*", |lex| lex.slice().to_string())]
@@ -570,6 +630,16 @@ impl fmt::Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             // Translate compiler-speak to human-speak
+            Token::InterpolatedIdentifier(parts) => {
+                write!(f, "interpolated name '")?;
+                for part in parts {
+                    match part {
+                        InterpolatedPart::Literal(lit) => write!(f, "{}", lit)?,
+                        InterpolatedPart::Expression(expr) => write!(f, "{{{}}}", expr)?,
+                    }
+                }
+                write!(f, "'")
+            }
             Token::Identifier(s) => write!(f, "the name '{}'", s),
             Token::Integer(n) => write!(f, "the number {}", n),
             Token::Float(n) => write!(f, "the number {}", n),
@@ -588,6 +658,7 @@ impl fmt::Display for Token {
             Token::AtSymbol => write!(f, "an @ symbol"),
             Token::Slash => write!(f, "a slash '/'"),
             Token::Equals => write!(f, "an equals sign '='"),
+            Token::DoubleEquals => write!(f, "a double equals '=='"),
             Token::LessThan => write!(f, "a less-than sign '<'"),
             Token::GreaterThan => write!(f, "a greater-than sign '>'"),
 
@@ -612,10 +683,6 @@ impl fmt::Display for Token {
             Token::Enter => write!(f, "the 'enter' keyword"),
             Token::Align => write!(f, "the 'align' keyword"),
             Token::With => write!(f, "the 'with' keyword"),
-            Token::Above => write!(f, "the 'above' keyword"),
-            Token::Below => write!(f, "the 'below' keyword"),
-            Token::RightOf => write!(f, "the 'right_of' keyword"),
-            Token::LeftOf => write!(f, "the 'left_of' keyword"),
             Token::Region => write!(f, "the 'region' keyword"),
             Token::Inside => write!(f, "the 'inside' keyword"),
             Token::Dimensions => write!(f, "the 'dimensions' keyword"),
@@ -623,10 +690,6 @@ impl fmt::Display for Token {
             Token::Resolution => write!(f, "the 'resolution' keyword"),
             Token::Path => write!(f, "the 'path' keyword"),
             Token::Origin => write!(f, "the 'origin' keyword"),
-            Token::TopLeft => write!(f, "'tl' (top-left origin)"),
-            Token::BottomLeft => write!(f, "'bl' (bottom-left origin)"),
-            Token::TopRight => write!(f, "'tr' (top-right origin)"),
-            Token::BottomRight => write!(f, "'br' (bottom-right origin)"),
             Token::Space => write!(f, "the 'space' keyword"),
             Token::Material => write!(f, "the 'material' keyword"),
             Token::Profile => write!(f, "the 'profile' keyword"),
@@ -665,7 +728,6 @@ impl fmt::Display for Token {
             Token::If => write!(f, "the 'if' keyword"),
             Token::Then => write!(f, "the 'then' keyword"),
             Token::Else => write!(f, "the 'else' keyword"),
-            Token::Last => write!(f, "the 'last' keyword"),
             Token::Range => write!(f, "a range operator '..'"),
             Token::NotEquals => write!(f, "a not-equals operator '!='"),
             Token::Plus => write!(f, "a plus sign '+'"),

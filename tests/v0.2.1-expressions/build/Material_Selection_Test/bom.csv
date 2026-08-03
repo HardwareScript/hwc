@@ -1,0 +1,37 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,0.08x0.08x0.01mm,,,,,1
+Block_R0_C0,Plane(Copper),,,,,,1
+Block_R0_C1,Plane(Copper),,,,,,1
+Block_R0_C2,Plane(Copper),,,,,,1
+Block_R0_C3,Plane(Copper),,,,,,1
+Block_R1_C0,Plane(Copper),,,,,,1
+Block_R1_C1,Plane(Gold),,,,,,1
+Block_R1_C2,Plane(Aluminum),,,,,,1
+Block_R1_C3,Plane(Copper),,,,,,1
+Block_R2_C0,Plane(Copper),,,,,,1
+Block_R2_C1,Plane(Aluminum),,,,,,1
+Block_R2_C2,Plane(Aluminum),,,,,,1
+Block_R2_C3,Plane(Copper),,,,,,1
+Block_R3_C0,Plane(Copper),,,,,,1
+Block_R3_C1,Plane(Copper),,,,,,1
+Block_R3_C2,Plane(Copper),,,,,,1
+Block_R3_C3,Plane(Copper),,,,,,1
+
+# MATERIAL USAGE (Fabrication)
+Reference,Type,Material,Layer_Z_nm,Area_nm2,Volume_nm3
+Block_R0_C0,Pour,Copper,z:1000,36000000,36000000000
+Block_R0_C1,Pour,Copper,z:1000,36000000,36000000000
+Block_R0_C2,Pour,Copper,z:1000,36000000,36000000000
+Block_R0_C3,Pour,Copper,z:1000,36000000,36000000000
+Block_R1_C0,Pour,Copper,z:1000,36000000,36000000000
+Block_R1_C1,Pour,Gold,z:1000,36000000,36000000000
+Block_R1_C2,Pour,Aluminum,z:1000,36000000,36000000000
+Block_R1_C3,Pour,Copper,z:1000,36000000,36000000000
+Block_R2_C0,Pour,Copper,z:1000,36000000,36000000000
+Block_R2_C1,Pour,Aluminum,z:1000,36000000,36000000000
+Block_R2_C2,Pour,Aluminum,z:1000,36000000,36000000000
+Block_R2_C3,Pour,Copper,z:1000,36000000,36000000000
+Block_R3_C0,Pour,Copper,z:1000,36000000,36000000000
+Block_R3_C1,Pour,Copper,z:1000,36000000,36000000000
+Block_R3_C2,Pour,Copper,z:1000,36000000,36000000000
+Block_R3_C3,Pour,Copper,z:1000,36000000,36000000000

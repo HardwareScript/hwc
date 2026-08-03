@@ -1,0 +1,46 @@
+# parametric_grid_test.hw
+# v0.2.1 Test: PARAMETRIC GRID - Variable Spacing Based on Loop Index
+# 
+# This test demonstrates:
+# 1. Using loop index variable (i) in arithmetic expressions
+# 2. Dynamic pitch calculation: pitch = base_pitch + (i * growth_factor)
+# 3. Non-uniform grid generation with increasing spacing
+# 
+# Expected result: 5×5 grid with spacing that grows as you move right/up
+
+import * from @std/primitives/units
+import * from "./thick_layer_pdk"
+
+space Parametric_Grid_Test:
+    dimensions: 150um by 150um by 10um
+    resolution: 10nm
+    origin: bl by b
+    profile: Thick_3D_Stack
+    
+    nets:
+        GND: { classification: ground, potential: 0V }
+    
+    # ========================================================================
+    # PARAMETRIC GRID PARAMETERS
+    # ========================================================================
+    
+    let base_pitch = 10um       # Starting spacing
+    let growth_factor = 2um     # Additional spacing per index
+    let block_size = 5um        # Fixed block size
+    
+    # ========================================================================
+    # VARIABLE-PITCH GRID GENERATION
+    # Grid spacing increases: 10um, 12um, 14um, 16um, 18um
+    # Position formula: base + sum(base_pitch + k*growth_factor) for k=0..i-1
+    # Simplified: base + i*base_pitch + i*(i-1)/2*growth_factor
+    # ========================================================================
+    
+    for i in 0..4:
+        for j in 0..4:
+            add plane(Copper) named Grid_R{i}_C{j} on layer: metal1:
+                shape: SquareCube(size: block_size)
+                at: [
+                    x: 10um + i * base_pitch + i * (i * growth_factor / 2),
+                    y: 10um + j * base_pitch + j * (j * growth_factor / 2)
+                ]
+                net: GND

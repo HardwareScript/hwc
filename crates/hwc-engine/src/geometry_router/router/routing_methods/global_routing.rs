@@ -24,8 +24,6 @@ impl GeometryRouter {
         target: Point3D,
         trace_width_nm: i64,
     ) -> Point3D {
-        use hwc_types::TechnologyStrategy;
-
         // Read fabrication constraints (zero-magic - no fallbacks)
         let fabrication = self
             .constraints
@@ -33,9 +31,8 @@ impl GeometryRouter {
             .as_ref()
             .expect("BUG: Fabrication constraints required for boundary port resolution");
 
-        // v0.2.0: Technology Strategy Pattern
-        // Determine PCB vs ASIC routing behavior from min_annular_ring
-        let strategy = TechnologyStrategy::from_annular_ring(fabrication.min_annular_ring_nm);
+        // v0.2.1: Technology from profile (required field)
+        let strategy = fabrication.technology;
         let port_escape_clearance = strategy.port_escape_clearance(
             trace_width_nm,
             fabrication.min_trace_spacing_nm,

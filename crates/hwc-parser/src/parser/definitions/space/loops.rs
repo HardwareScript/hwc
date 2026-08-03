@@ -36,45 +36,10 @@ impl crate::parser::Parser {
             }
 
             // Parse statements inside the for loop
-            if self.check(&Token::For) {
-                // Nested for loop
-                let nested_loop = self.parse_space_for_loop()?;
-                body.push(SpaceStatement::ForLoop(Box::new(nested_loop)));
-            } else if self.check(&Token::Add) {
-                // Check what kind of add statement this is
-                let next_pos = self.current + 1;
-                if let Some(next_token) = self.tokens.get(next_pos) {
-                    match &next_token.token {
-                        Token::Pour => {
-                            let pour = self.parse_pour()?;
-                            body.push(SpaceStatement::Pour(Box::new(pour)));
-                        }
-                        Token::Plane => {
-                            let plane = self.parse_plane()?;
-                            body.push(SpaceStatement::Plane(Box::new(plane)));
-                        }
-                        Token::Contact => {
-                            let contact = self.parse_contact()?;
-                            body.push(SpaceStatement::Contact(contact));
-                        }
-                        _ => {
-                            // Component placement
-                            let component = self.parse_component_placement()?;
-                            body.push(SpaceStatement::Component(Box::new(component)));
-                        }
-                    }
-                } else {
-                    // Default to component placement
-                    let component = self.parse_component_placement()?;
-                    body.push(SpaceStatement::Component(Box::new(component)));
-                }
-            } else if self.check(&Token::Route) {
-                let route = self.parse_route()?;
-                body.push(SpaceStatement::Route(route));
-            } else if self.check(&Token::Newline) {
+            if self.check(&Token::Newline) {
                 self.advance();
             } else {
-                return Err(self.error("Expected 'add', 'route', or 'for' in for loop body"));
+                body.push(self.parse_space_statement()?);
             }
         }
 
@@ -87,5 +52,121 @@ impl crate::parser::Parser {
             body,
             span: Span::new(start_pos, self.previous_span().end),
         })
+    }
+
+    /// Parse compile-time if conditional in space block (v0.2.1)
+    ///
+    /// This is NOT runtime control flow - it's a compile-time code generator condition.
+    /// The condition is evaluated during loop unrolling to generate different geometry.
+    ///
+    /// Syntax:
+    /// ```hardware
+    /// if (row + col) mod 2 == 0:
+    ///     add plane(Aluminum) named L1_R{row}_C{col} on layer: metal1
+    /// else:
+    ///     add plane(Tungsten) named L1_R{row}_C{col} on layer: metal1
+    /// ```
+    pub(in crate::parser) fn parse_space_if_conditional(&mut self) -> Result<SpaceIfConditional, ParseError> {
+        let start_pos = self.current_span().start;
+
+        self.expect(&Token::If)?;
+        let condition = self.parse_expression()?;
+        self.expect(&Token::Colon)?;
+        self.expect(&Token::Newline)?;
+        self.expect(&Token::Indent)?;
+
+        let mut then_body = Vec::new();
+
+        // Parse then block
+        while !self.is_at_end() && !self.check(&Token::Dedent) {
+            self.skip_whitespace();
+
+            if self.check(&Token::Dedent) {
+                break;
+            }
+
+            then_body.push(self.parse_space_statement()?);
+        }
+
+        self.expect(&Token::Dedent)?;
+
+        // Parse optional else block
+        let mut else_body = Vec::new();
+        if self.check(&Token::Else) {
+            self.advance(); // consume 'else'
+            self.expect(&Token::Colon)?;
+            self.expect(&Token::Newline)?;
+            self.expect(&Token::Indent)?;
+
+            while !self.is_at_end() && !self.check(&Token::Dedent) {
+                self.skip_whitespace();
+
+                if self.check(&Token::Dedent) {
+                    break;
+                }
+
+                else_body.push(self.parse_space_statement()?);
+            }
+
+            self.expect(&Token::Dedent)?;
+        }
+
+        Ok(SpaceIfConditional {
+            condition,
+            then_body,
+            else_body,
+            span: Span::new(start_pos, self.previous_span().end),
+        })
+    }
+
+    /// Helper to parse a single space statement (used by both for and if)
+    fn parse_space_statement(&mut self) -> Result<SpaceStatement, ParseError> {
+        if self.check(&Token::For) {
+            let nested_loop = self.parse_space_for_loop()?;
+            Ok(SpaceStatement::ForLoop(Box::new(nested_loop)))
+        } else if self.check(&Token::If) {
+            let if_stmt = self.parse_space_if_conditional()?;
+            Ok(SpaceStatement::If(if_stmt))
+        } else if self.check(&Token::Let) {
+            // v0.2.1: Loop-scoped let bindings
+            let let_binding = self.parse_space_let_binding()?;
+            Ok(SpaceStatement::Let(let_binding))
+        } else if self.check(&Token::Add) {
+            // Check what kind of add statement this is
+            let next_pos = self.current + 1;
+            if let Some(next_token) = self.tokens.get(next_pos) {
+                match &next_token.token {
+                    Token::Pour => {
+                        let pour = self.parse_pour()?;
+                        Ok(SpaceStatement::Pour(Box::new(pour)))
+                    }
+                    Token::Plane => {
+                        let plane = self.parse_plane()?;
+                        Ok(SpaceStatement::Plane(Box::new(plane)))
+                    }
+                    Token::Contact => {
+                        let contact = self.parse_contact()?;
+                        Ok(SpaceStatement::Contact(contact))
+                    }
+                    _ => {
+                        // Component placement
+                        let component = self.parse_component_placement()?;
+                        Ok(SpaceStatement::Component(Box::new(component)))
+                    }
+                }
+            } else {
+                // Default to component placement
+                let component = self.parse_component_placement()?;
+                Ok(SpaceStatement::Component(Box::new(component)))
+            }
+        } else if self.check(&Token::Route) {
+            let route = self.parse_route()?;
+            Ok(SpaceStatement::Route(route))
+        } else if self.check(&Token::Newline) {
+            self.advance();
+            self.parse_space_statement() // Recurse to get next real statement
+        } else {
+            Err(self.error("Expected 'add', 'route', 'if', 'for', or 'let' in space block"))
+        }
     }
 }

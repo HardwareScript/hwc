@@ -5,7 +5,6 @@ use super::errors::IrError;
 use crate::conversions::profile_to_constraints;
 use hwc_engine::{Dimensions, HardwareSpace, MaterialRegistry, AIR_MATERIAL_ID};
 use hwc_parser::SpaceDefinition;
-use hwc_types::TechnologyStrategy;
 
 /// Create a hardware space from space definition.
 pub fn create_hardware_space(
@@ -178,7 +177,7 @@ pub fn create_hardware_space(
         space_view,
         origin,
         resolution_nm,
-        TechnologyStrategy::default(),
+        hwc_types::Technology::Asic, // Temporary - will be set from profile
     );
 
     // Load fabrication constraints from profile (v0.1.6: DRC Integration)
@@ -194,8 +193,8 @@ pub fn create_hardware_space(
         // Convert profile to constraints - preserve the actual error instead of masking it
         let constraints = profile_to_constraints(profile_def, symbol_table)?;
 
-        // v0.2.0: Determine technology strategy from annular ring constraint
-        let technology_strategy = TechnologyStrategy::from_annular_ring(constraints.via.min_annular_ring_nm);
+        // v0.2.1: Get technology directly from profile (no inference)
+        let technology_strategy = constraints.technology;
         space.technology_strategy = technology_strategy;
 
         space.fabrication_constraints = Some(constraints);
@@ -217,9 +216,7 @@ pub fn create_hardware_space(
         space.set_net_classification(net_decl.name.clone(), classification);
 
         let is_asic = space.fabrication_constraints.as_ref().is_some_and(|c| {
-            c.technology
-                .as_ref()
-                .is_some_and(|t| t.to_lowercase() == "asic")
+            c.technology.is_asic()
         });
         let min_width = space.fabrication_constraints.as_ref()
             .map(|c| c.trace.min_width_nm)

@@ -1,0 +1,53 @@
+# circular_dependency_error.hw
+# v0.2.1 Test: Circular Dependency Detection (Error C22)
+#
+# This test SHOULD FAIL with Error C22 during compilation.
+#
+# Circular dependency:
+#   Pad_A depends on Pad_B (references Pad_B.right)
+#   Pad_B depends on Pad_A (references Pad_A.right)
+#
+# Expected behavior: Build fails with clear error message showing the cycle.
+#
+# Law 2 from spec: "Acyclic Dependency DAG (No Circular References)"
+
+import * from @std/primitives/units
+import * from "../ASIC-Minimal/minimal_pdk"
+
+module CircularDepModule:
+    pins: [ input SIG ]
+
+shape Square(size: Measurement):
+    geometry:
+        Rectangle(width: size, height: size)
+
+space Circular_Dependency_Test implements CircularDepModule:
+    dimensions: 1000um by 500um by 50nm
+    resolution: 1nm
+    origin: bl by b
+    profile: ASIC_Flattened
+
+    nets:
+        SIG: { classification: signal, potential: 1.8V, current: 0.1uA }
+
+    # ========================================================================
+    # CIRCULAR DEPENDENCY: Pad_A → Pad_B → Pad_A
+    # THIS SHOULD FAIL AT COMPILE TIME with Error C22
+    # ========================================================================
+    
+    # Pad_A references Pad_B.right (depends on Pad_B)
+    add plane(Aluminum) named Pad_A on layer: metal1:
+        shape: Square(size: 100um)
+        at: [x: Pad_B.right + 100um, y: 200um]
+        net: SIG
+
+    # Pad_B references Pad_A.right (depends on Pad_A)
+    add plane(Aluminum) named Pad_B on layer: metal1:
+        shape: Square(size: 100um)
+        at: [x: Pad_A.right + 100um, y: 200um]
+        net: SIG
+
+    # Background pour (won't be reached due to compilation error)
+    add pour(Aluminum) named Background on layer: metal1:
+        boundary: [10um, 10um] to [990um, 490um]
+        net: SIG

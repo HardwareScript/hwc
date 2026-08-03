@@ -71,16 +71,22 @@ impl crate::parser::Parser {
 
             (pos, anchor, from_elev, to_elev)
         } else {
-            // Inline syntax: at ... spanning ...
-            self.expect(&Token::At)?;
-            
-            let (pos, anchor) = if self.check(&Token::Colon) {
-                self.advance();
-                let anchor = self.parse_region_anchor()?;
-                (None, Some(anchor))
+            // Inline syntax: at ... spanning ... OR just spanning with relational constraints
+            // v0.2.1: Make 'at' optional if relational constraints are provided in properties block
+            let (pos, anchor) = if self.check(&Token::At) {
+                self.advance(); // consume 'at'
+                
+                if self.check(&Token::Colon) {
+                    self.advance();
+                    let anchor = self.parse_region_anchor()?;
+                    (None, Some(anchor))
+                } else {
+                    let pos = self.parse_coordinate_optional_z()?;
+                    (Some(pos), None)
+                }
             } else {
-                let pos = self.parse_coordinate_optional_z()?;
-                (Some(pos), None)
+                // No 'at' clause - position will come from relational constraints
+                (None, None)
             };
 
             self.expect(&Token::Spanning)?;
@@ -90,13 +96,14 @@ impl crate::parser::Parser {
         };
 
         // Optional: properties block
-        let (properties, net_in_block) = if self.check(&Token::Colon) {
+        let (properties, net_in_block, relational_constraints) = if self.check(&Token::Colon) {
             self.advance();
             self.expect(&Token::Newline)?;
             self.expect(&Token::Indent)?;
 
             let mut props = rustc_hash::FxHashMap::default();
             let mut net_in_block = None;
+            let mut relational_constraints = smallvec::SmallVec::new();
 
             while !self.is_at_end() && !self.check(&Token::Dedent) {
                 if self.check(&Token::Newline) {
@@ -109,6 +116,44 @@ impl crate::parser::Parser {
 
                 if field_name == "net" {
                     net_in_block = Some(self.parse_net_name()?);
+                } else if field_name == "align" {
+                    // v0.2.1: Parse alignment constraints
+                    let start_pos = self.current_span().start;
+                    let axis_name = self.expect_identifier()?;
+                    let axis = match axis_name.as_str() {
+                        "center_x" => AlignmentAxis::CenterX,
+                        "center_y" => AlignmentAxis::CenterY,
+                        "center_z" => AlignmentAxis::CenterZ,
+                        _ => return Err(self.error(&format!("Unknown alignment axis: {}", axis_name))),
+                    };
+
+                    self.expect(&Token::With)?;
+
+                    // Parse target (entity name or expression)
+                    let target = if self.check(&Token::OpenParen) {
+                        let expr = self.parse_expression()?;
+                        AlignmentTarget::Expression(expr)
+                    } else if self.current().map(|t| matches!(t.token, Token::Identifier(_))).unwrap_or(false) {
+                        let checkpoint = self.current;
+                        let _ = self.expect_identifier_string()?;
+                        
+                        if self.check(&Token::Dot) {
+                            // Anchor reference - parse as expression
+                            self.current = checkpoint;
+                            let expr = self.parse_expression()?;
+                            AlignmentTarget::Expression(expr)
+                        } else {
+                            // Simple entity name
+                            self.current = checkpoint;
+                            let component_name = self.parse_component_name()?;
+                            AlignmentTarget::Entity(component_name)
+                        }
+                    } else {
+                        return Err(self.error("Expected entity name or expression after 'with'"));
+                    };
+
+                    let span = Span::new(start_pos, self.previous_span().end);
+                    relational_constraints.push(RelationalConstraint::Align { axis, target, span });
                 } else {
                     // v0.1.9: Generic property parsing
                     let expr = if self.check(&Token::True) {
@@ -139,11 +184,11 @@ impl crate::parser::Parser {
             }
 
             self.expect(&Token::Dedent)?;
-            (props, net_in_block)
+            (props, net_in_block, relational_constraints)
         } else {
             // No properties block, just consume newline
             self.skip_whitespace();
-            (rustc_hash::FxHashMap::default(), None)
+            (rustc_hash::FxHashMap::default(), None, smallvec::SmallVec::new())
         };
 
         let end_pos = self.previous_span().end;
@@ -157,6 +202,7 @@ impl crate::parser::Parser {
             to_elevation,
             net: net.or(net_in_block),
             properties,
+            relational_constraints, // v0.2.1: Pass relational constraints
             contour: None,
             span: Span::new(start_pos, end_pos),
         })

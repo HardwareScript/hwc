@@ -23,7 +23,7 @@ use hwc_engine::geometry::{BoundingBox, Point3D};
 use hwc_engine::geometry_router::constraints::NetConstraints;
 use hwc_engine::geometry_router::partition::GCellId;
 use hwc_engine::netlist::NetId;
-use hwc_types::TechnologyStrategy;
+use hwc_types::Technology;
 
 use crate::ir::errors::IrError;
 
@@ -61,8 +61,8 @@ pub struct RoutingContextInput {
     pub trace_width_nm: i64,
     /// Minimum clearance in nanometers.
     pub min_clearance_nm: i64,
-    /// Technology strategy (PCB or ASIC).
-    pub technology_strategy: TechnologyStrategy,
+    /// Technology (PCB or ASIC).
+    pub technology_strategy: Technology,
     /// Board bounding box in nanometers.
     pub board_bounds: BoundingBox,
 }

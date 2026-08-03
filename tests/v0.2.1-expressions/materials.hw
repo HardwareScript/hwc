@@ -1,0 +1,112 @@
+# materials.hw
+import * from @std/primitives/units
+
+export material Silicon_N:
+    category: semiconductor
+    symbol: "Si_N"
+    process: deposited
+    properties:
+        color: "#809080"  # Greenish
+        metallic: 0.1
+        roughness: 0.7
+        resistivity: 0.5ohm_m
+
+export material Silicon_P:
+    category: semiconductor
+    symbol: "Si_P"
+    process: deposited
+    properties:
+        color: "#C08080"  # Reddish
+        metallic: 0.1
+        roughness: 0.7
+        resistivity: 0.5ohm_m
+
+export material Polysilicon:
+    category: conductor
+    symbol: "Poly"
+    process: deposited
+    properties:
+        color: "#FF6060"  # Red
+        metallic: 0.3
+        roughness: 0.8
+        resistivity: 1e-4ohm_m
+        thermal_conductivity: 30.0W_mK
+        max_current_density: 1e9A_m2
+
+export material Aluminum:
+    category: conductor
+    symbol: "Al"
+    process: deposited
+    properties:
+        color: "#C0C0C0"  # Silver
+        metallic: 0.8
+        roughness: 0.2
+        resistivity: 2.82e-8ohm_m
+        thermal_conductivity: 237.0W_mK
+        max_current_density: 1e9A_m2
+
+export material Tungsten:
+    category: conductor
+    symbol: "W"
+    process: deposited
+    properties:
+        color: "#8080FF"  # Light Blue
+        metallic: 0.7
+        roughness: 0.3
+        resistivity: 5.6e-8ohm_m
+        thermal_conductivity: 173.0W_mK
+        max_current_density: 1e10A_m2
+
+export material Copper:
+    category: conductor
+    symbol: "Cu"
+    process: deposited
+    properties:
+        color: "#FF8040"  # Orange-copper
+        metallic: 0.9
+        roughness: 0.2
+        resistivity: 1.68e-8ohm_m
+        thermal_conductivity: 401.0W_mK
+        max_current_density: 1e10A_m2
+
+export material Gold:
+    category: conductor
+    symbol: "Au"
+    process: deposited
+    properties:
+        color: "#FFD700"  # Gold
+        metallic: 0.85
+        roughness: 0.15
+        resistivity: 2.44e-8ohm_m
+        thermal_conductivity: 318.0W_mK
+        max_current_density: 1e10A_m2
+
+export material Silver:
+    category: conductor
+    symbol: "Ag"
+    process: deposited
+    properties:
+        color: "#E8E8E8"  # Bright Silver
+        metallic: 0.95
+        roughness: 0.1
+        resistivity: 1.59e-8ohm_m
+        thermal_conductivity: 429.0W_mK
+        max_current_density: 1e10A_m2
+
+export material Titanium_Silicide:
+    category: conductor
+    symbol: "TiSi2"
+    process: deposited
+    properties:
+        color: "#404040"  # Very Dark Grey
+        resistivity: 1.5e-7ohm_m
+        thermal_conductivity: 30.0W_mK
+        max_current_density: 5e9A_m2
+
+export material Air:
+    category: insulator
+    symbol: "Air"
+    process: deposited
+    properties:
+        color: "#E0E8FF"
+        relative_permittivity: 1.0

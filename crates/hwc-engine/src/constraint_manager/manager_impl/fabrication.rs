@@ -74,6 +74,12 @@ pub fn load_fabrication_constraints<S: SymbolTableTrait>(
         safety_factor,
         stackup,
         solder_mask_expansion_nm,
-        technology: profile_def.technology.clone(),
+        technology: profile_def.technology.ok_or_else(|| {
+            format!(
+                "Profile '{}': missing REQUIRED 'technology' field. Must be explicitly declared as either 'PCB' or 'ASIC'.\n\
+                 This field is mandatory because it determines via geometry, clearance rules, and manufacturing constraints.",
+                profile_name
+            )
+        })?,
     })
 }

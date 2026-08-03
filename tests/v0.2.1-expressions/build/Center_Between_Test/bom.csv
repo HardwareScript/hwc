@@ -1,0 +1,15 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,0.10x0.10x0.01mm,,,,,1
+Pad_A,Plane(Copper),,,,,,1
+Pad_B,Plane(Copper),,,,,,1
+Pad_C,Plane(Aluminum),,,,,,1
+Pad_D,Plane(Tungsten),,,,,,1
+Pad_E,Plane(Gold),,,,,,1
+
+# MATERIAL USAGE (Fabrication)
+Reference,Type,Material,Layer_Z_nm,Area_nm2,Volume_nm3
+Pad_A,Pour,Copper,z:1000,25000000,25000000000
+Pad_B,Pour,Copper,z:1000,25000000,25000000000
+Pad_C,Pour,Aluminum,z:1000,9000000,9000000000
+Pad_D,Pour,Tungsten,z:1000,16000000,16000000000
+Pad_E,Pour,Gold,z:2000,9000000,9000000000

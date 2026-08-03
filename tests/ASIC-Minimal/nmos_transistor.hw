@@ -33,66 +33,116 @@ export space NMOS_Cell implements NMOSTransistor:
         Out: { classification: signal, potential: 1.8V, current: 0.1uA }
         GND: { classification: ground, potential: 0.0V, current: 10.0mA }
 
-    # 1. GND Power Rail (Metal 1) - Positioned at the bottom for NMOS
-    add pour(Aluminum) named GND_Rail on layer: metal1:
-        net: GND
-        boundary: [x: 0nm, y: 100nm] to [x: 2000nm, y: 700nm]
+    # ========================================================================
+    # ACTIVE REGIONS (Silicon N-type diffusions)
+    # v0.2.1: Refactored to use relational constraints
+    # ========================================================================
 
-    # 2. Output Landing Pad (Metal 1) - Positioned at the top for NMOS
-    add pour(Aluminum) named Out_Pad on layer: metal1:
-        net: Out
-        boundary: [x: 1200nm, y: 2600nm] to [x: 1800nm, y: 3000nm]
-
-    # 3. NMOS Source (N-type active diffusion - net GND)
+    # 1. NMOS Source (N-type active diffusion - net GND)
     add pour(Silicon_N) named NMOS_Source on layer: active:
         net: GND
-        boundary: [x: 400nm, y: 1700nm] to [x: 900nm, y: 2300nm]
+        dimensions: 500nm by 600nm
+        at: [x: 650nm, y: 2000nm]  # Center position
 
-    # 4. NMOS Drain (N-type active diffusion - net Out)
+    # 2. NMOS Drain (N-type active diffusion - net Out)
     add pour(Silicon_N) named NMOS_Drain on layer: active:
         net: Out
-        boundary: [x: 1100nm, y: 1700nm] to [x: 1600nm, y: 2300nm]
+        dimensions: 500nm by 600nm
+        align: center_y with NMOS_Source
+        right_of: NMOS_Source by 450nm  # 200nm channel gap + 250nm half-width (center-to-edge spacing)
 
-    # 5. NMOS Gate (Vertical Polysilicon strip - net In)
-    # Extended to overlap active diffusions by 100nm on each side
-    # Active edges: X=900nm (Source) and X=1100nm (Drain)
-    # Gate extends: X=800nm to 1200nm (100nm overlap each side)
+    # ========================================================================
+    # POLYSILICON GATE
+    # ========================================================================
+
+    # 3. NMOS Gate (Vertical Polysilicon strip - net In)
+    # Centered between source and drain, overlaps each by 100nm
+    # Extended vertically for contact pad connection
     add pour(Polysilicon) named Gate_Strip on layer: poly:
         net: In
-        boundary: [x: 800nm, y: 1400nm] to [x: 1200nm, y: 2600nm]
+        dimensions: 400nm by 1200nm
+        align: center_x with (NMOS_Source.right + NMOS_Drain.left) / 2
+        align: center_y with NMOS_Source.center_y
 
-    # 6. Physical Ohmic Contacts (Silicide interface + Tungsten fill)
-    # Centered exactly inside their respective active diffusion regions
-    # Uses Titanium_Silicide interface to match bridge rules
-    add contact(Titanium_Silicide) named Via_Source at [x: 650nm, y: 2000nm] spanning layer: active to metal1:
+    # ========================================================================
+    # METAL 1 PADS AND POWER RAIL
+    # ========================================================================
+
+    # 4. GND Source Landing Pad (Metal 1) - Landing pad for source via
+    add pour(Aluminum) named GND_Source_Pad on layer: metal1:
+        net: GND
+        dimensions: 300nm by 300nm
+        align: center_x with NMOS_Source
+        align: center_y with NMOS_Source
+
+    # 5. Output Drain Landing Pad (Metal 1) - Landing pad for drain via
+    add pour(Aluminum) named Out_Drain_Pad on layer: metal1:
+        net: Out
+        dimensions: 300nm by 300nm
+        align: center_x with NMOS_Drain
+        align: center_y with NMOS_Drain
+
+    # 6. Gate Contact Pad (Metal 1) - Landing pad for gate connection
+    add pour(Aluminum) named Gate_Pad on layer: metal1:
+        net: In
+        dimensions: 400nm by 400nm
+        align: center_x with Gate_Strip
+        align: center_y with Gate_Strip.bottom
+
+    # 7. GND Power Rail (Metal 1) - Bottom horizontal power rail
+    add pour(Aluminum) named GND_Rail on layer: metal1:
+        net: GND
+        dimensions: 2000nm by 600nm
+        at: [x: 1000nm, y: 400nm]  # Full width at bottom
+
+    # 8. Output Export Pad (Metal 1) - External connection point at top
+    add pour(Aluminum) named Out_Export_Pad on layer: metal1:
+        net: Out
+        dimensions: 600nm by 400nm
+        at: [x: 1500nm, y: 2800nm]
+
+    # ========================================================================
+    # CONTACTS (Vias)
+    # v0.2.1: Using relational alignment for centering
+    # ========================================================================
+
+    # 9. Source Via (Active to Metal1)
+    add contact(Titanium_Silicide) named Via_Source spanning layer: active to metal1:
         net: GND
         diameter: 200nm
         plating_thickness: 5nm
+        align: center_x with NMOS_Source
+        align: center_y with NMOS_Source
 
-    add contact(Titanium_Silicide) named Via_Drain at [x: 1350nm, y: 2000nm] spanning layer: active to metal1:
+    # 10. Drain Via (Active to Metal1)
+    add contact(Titanium_Silicide) named Via_Drain spanning layer: active to metal1:
         net: Out
         diameter: 200nm
         plating_thickness: 5nm
+        align: center_x with NMOS_Drain
+        align: center_y with NMOS_Drain
 
-    # Gate Contact: Connects polysilicon gate to metal1 pad
-    add contact(Titanium_Silicide) named Via_Gate at [x: 1000nm, y: 1350nm] spanning layer: poly to metal1:
+    # 11. Gate Via (Poly to Metal1)
+    add contact(Titanium_Silicide) named Via_Gate spanning layer: poly to metal1:
         net: In
         diameter: 200nm
         plating_thickness: 5nm
+        align: center_x with Gate_Strip
+        align: center_y with (Gate_Strip.bottom + Gate_Pad.top) / 2  # Centered in overlap
 
     # ========================================================================
     # PHYSICAL INTERCONNECTS (Metal 1 Routing)
     # ========================================================================
 
-    # Ground Strap: Connects NMOS Source down to GND Rail (Vertical line)
-    route Via_Source to GND_Rail:
+    # Ground Strap: Connects NMOS Source landing pad down to GND Rail (Vertical line)
+    route GND_Source_Pad to GND_Rail:
         net: GND
         width: 200nm
         layer: metal1
         intent: PowerRail
 
-    # Signal Interconnect: Connects NMOS Drain up to Out Pad (Mitered detour)
-    route Via_Drain to Out_Pad:
+    # Signal Interconnect: Connects NMOS Drain landing pad up to Out Export Pad
+    route Out_Drain_Pad to Out_Export_Pad:
         net: Out
         width: 200nm
         layer: metal1

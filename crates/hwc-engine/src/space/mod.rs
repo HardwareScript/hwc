@@ -14,7 +14,7 @@ use crate::material::{MaterialId, MaterialRegistry};
 use crate::netlist::{NetId, NetlistArena};
 
 use compact_str::CompactString;
-use hwc_types::TechnologyStrategy;
+use hwc_types::Technology;
 use rustc_hash::FxHashMap;
 
 /// **v0.2.0: Stackup layer information (single source of truth)**
@@ -149,7 +149,7 @@ pub struct HardwareSpace {
     /// **v0.2.0: Technology strategy determined from PDK profile**
     /// Set once during compilation and used consistently throughout all subsystems.
     /// No scattered conditionals - this is the single source of truth.
-    pub technology_strategy: TechnologyStrategy,
+    pub technology_strategy: Technology,
 
     /// **v0.2.0: Hierarchical Routing Database (PROPER ARCHITECTURE)**
     /// Maintains clear separation between child-instance routes and parent-level
@@ -186,7 +186,7 @@ impl HardwareSpace {
         view: SpaceView,
         origin: hwc_parser::OriginPoint,
         resolution_nm: i64,
-        technology_strategy: TechnologyStrategy,
+        technology_strategy: Technology,
     ) -> Self {
         let entity_graph = EntityGraph::new();
         let netlist = NetlistArena::new();

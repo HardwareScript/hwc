@@ -34,24 +34,20 @@ impl crate::parser::Parser {
         self.expect(&Token::Colon)?;
 
         // Parse XY component
-        let xy = match self.current().map(|t| &t.token) {
-            Some(Token::TopLeft) => {
-                self.advance();
-                OriginXY::TL
-            }
-            Some(Token::BottomLeft) => {
-                self.advance();
-                OriginXY::BL
-            }
-            Some(Token::TopRight) => {
-                self.advance();
-                OriginXY::TR
-            }
-            Some(Token::BottomRight) => {
-                self.advance();
-                OriginXY::BR
-            }
-            _ => return Err(self.error("Expected origin XY point (tl, bl, tr, or br)")),
+        let xy = if self.check_identifier("tl") {
+            self.advance();
+            OriginXY::TL
+        } else if self.check_identifier("bl") {
+            self.advance();
+            OriginXY::BL
+        } else if self.check_identifier("tr") {
+            self.advance();
+            OriginXY::TR
+        } else if self.check_identifier("br") {
+            self.advance();
+            OriginXY::BR
+        } else {
+            return Err(self.error("Expected origin XY point (tl, bl, tr, or br)"));
         };
 
         // Check for optional Z component: `by t` or `by b`

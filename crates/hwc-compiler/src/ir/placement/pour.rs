@@ -17,13 +17,26 @@ pub fn place_pour(
             material: pour.material.clone(),
         })?;
 
-    let boundary = pour
-        .boundary
-        .as_ref()
-        .ok_or_else(|| IrError::PlacementConstraint {
-            message: format!("Pour '{}' missing boundary", pour.name),
+    // v0.2.1: Boundary is optional if relational constraints are provided
+    // The relational resolver will compute the boundary from constraints
+    if pour.boundary.is_none() && pour.relational_constraints.is_empty() {
+        return Err(IrError::PlacementConstraint {
+            message: format!(
+                "Pour '{}' missing boundary (provide either 'boundary:' or relational constraints like 'align:', 'right_of:', etc.)",
+                pour.name
+            ),
             component: pour.name.to_string().into(),
-        })?;
+        });
+    }
+
+    // If there are relational constraints but no boundary yet, it will be resolved later
+    // by the relational resolver. For now, skip placement if boundary is missing.
+    if pour.boundary.is_none() {
+        // Relational constraints present - will be resolved in relational_resolver pass
+        return Ok(());
+    }
+
+    let boundary = pour.boundary.as_ref().unwrap();
 
     let layer_name = match &pour.elevation {
         hwc_parser::Elevation::Semantic(id) => id.to_string(),

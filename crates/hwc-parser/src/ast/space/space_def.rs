@@ -20,6 +20,15 @@ pub struct LetBinding {
     pub span: Span,
 }
 
+/// Immutable constant binding in space block (v0.2.1)
+/// Example: `const PI: 3.14159`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ConstBinding {
+    pub name: CompactString,
+    pub value: Expression,
+    pub span: Span,
+}
+
 /// Space definition: `space Name:` (v0.1.6)
 /// v0.2.0: Supports optional `export` keyword for visibility control
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -60,6 +69,7 @@ pub enum SpaceTopLevelStatement {
     RouteNetPolicy(RouteNetPolicy),
     Region(RegionDefinition), // v0.2.0: Region declaration
     Let(LetBinding),           // v0.2.0: Local variable binding
+    Const(ConstBinding),       // v0.2.1: Immutable constant binding
 }
 
 /// v0.1.8: Prescriptive net-scoped route policy
@@ -82,6 +92,17 @@ pub struct SpaceForLoop {
     pub span: Span,
 }
 
+/// Compile-time conditional in space block (v0.2.1: Generator Conditions)
+/// This is NOT runtime control flow - it's compile-time code generation branching
+/// Example: if (row + col) mod 2 == 0: add Aluminum else: add Tungsten
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SpaceIfConditional {
+    pub condition: Expression,
+    pub then_body: Vec<SpaceStatement>,
+    pub else_body: Vec<SpaceStatement>,
+    pub span: Span,
+}
+
 /// Statement inside a space for loop
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum SpaceStatement {
@@ -92,6 +113,8 @@ pub enum SpaceStatement {
     SpaceInstance(Box<super::placements::SpaceInstancePlacement>), // v0.2.1: Hierarchical space composition
     Route(Route),
     ForLoop(Box<SpaceForLoop>),
+    If(SpaceIfConditional), // v0.2.1: Compile-time conditional branching
+    Let(LetBinding),        // v0.2.1: Loop-scoped let bindings
 }
 
 impl SpaceDefinition {
