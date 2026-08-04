@@ -102,16 +102,18 @@ impl crate::parser::Parser {
                     // v0.2.1: Center position for dimension-based pours
                     // Example: at: [x: 650nm, y: 1000nm]
                     position = Some(self.parse_coordinate_optional_z()?);
+                    eprintln!("[POUR PARSER DEBUG] Parsed 'at' position: {:?}", position);
                 }
                 "align" => {
                     // v0.2.1: Alignment constraints
                     let start_pos = self.current_span().start;
                     let axis_name = self.expect_identifier()?;
                     let axis = match axis_name.as_str() {
-                        "center_x" => AlignmentAxis::CenterX,
-                        "center_y" => AlignmentAxis::CenterY,
-                        "center_z" => AlignmentAxis::CenterZ,
-                        _ => return Err(self.error(&format!("Unknown alignment axis: {}", axis_name))),
+                        "center" => AlignmentAxis::Center,
+                        "x" => AlignmentAxis::X,
+                        "y" => AlignmentAxis::Y,
+                        "z" => AlignmentAxis::Z,
+                        _ => return Err(self.error(&format!("Unknown alignment axis: {}. Expected: center, x, y, or z", axis_name))),
                     };
 
                     self.expect(&Token::With)?;
@@ -245,19 +247,30 @@ impl crate::parser::Parser {
 
         let end_pos = self.previous_span().end;
 
-        // v0.2.1: Convert dimensions + position + relational constraints to boundary
-        // If dimensions and position are provided, convert to boundary for backward compatibility
-        let final_boundary = if let Some((width, height)) = dimensions {
-            if let Some(center_pos) = position {
-                // Convert center position + dimensions to corner boundary
-                // boundary = [center.x - width/2, center.y - height/2] to [center.x + width/2, center.y + height/2]
+        // v0.2.1: Extract width and height from dimensions tuple
+        let (width, height) = match dimensions {
+            Some((w, h)) => (Some(w), Some(h)),
+            None => (None, None),
+        };
+
+        // v0.2.1: Create boundary only for non-relative coordinates
+        // For relative coordinates, store position + width/height and let compiler resolve
+        let final_boundary = match (&position, &width, &height) {
+            (Some(Coordinate::Relative(_)), Some(_), Some(_)) => {
+                // Relative position with dimensions - don't create boundary yet
+                eprintln!("[POUR PARSER DEBUG] Storing relative position + dimensions for compiler resolution");
+                boundary
+            }
+            (Some(pos @ (Coordinate::Declarative { .. } | Coordinate::Positional { .. })), Some(w), Some(h)) => {
+                // Declarative/Positional with dimensions - create boundary now
+                eprintln!("[POUR BOUNDARY DEBUG] Converting declarative/positional center_pos to boundary");
                 let span_empty = Span::new(0, 0);
                 let from = Coordinate::Positional {
                     x: Expression::Binary {
-                        left: Box::new(center_pos.x().clone()),
+                        left: Box::new(pos.x().clone()),
                         operator: BinaryOperator::Subtract,
                         right: Box::new(Expression::Binary {
-                            left: Box::new(width.clone()),
+                            left: Box::new(w.clone()),
                             operator: BinaryOperator::Divide,
                             right: Box::new(Expression::Literal { value: 2, span: span_empty }),
                             span: span_empty,
@@ -265,25 +278,25 @@ impl crate::parser::Parser {
                         span: span_empty,
                     },
                     y: Expression::Binary {
-                        left: Box::new(center_pos.y().clone()),
+                        left: Box::new(pos.y().clone()),
                         operator: BinaryOperator::Subtract,
                         right: Box::new(Expression::Binary {
-                            left: Box::new(height.clone()),
+                            left: Box::new(h.clone()),
                             operator: BinaryOperator::Divide,
                             right: Box::new(Expression::Literal { value: 2, span: span_empty }),
                             span: span_empty,
                         }),
                         span: span_empty,
                     },
-                    z: center_pos.z().clone(),
+                    z: pos.z().clone(),
                     span: span_empty,
                 };
                 let to = Coordinate::Positional {
                     x: Expression::Binary {
-                        left: Box::new(center_pos.x().clone()),
+                        left: Box::new(pos.x().clone()),
                         operator: BinaryOperator::Add,
                         right: Box::new(Expression::Binary {
-                            left: Box::new(width),
+                            left: Box::new(w.clone()),
                             operator: BinaryOperator::Divide,
                             right: Box::new(Expression::Literal { value: 2, span: span_empty }),
                             span: span_empty,
@@ -291,99 +304,22 @@ impl crate::parser::Parser {
                         span: span_empty,
                     },
                     y: Expression::Binary {
-                        left: Box::new(center_pos.y().clone()),
+                        left: Box::new(pos.y().clone()),
                         operator: BinaryOperator::Add,
                         right: Box::new(Expression::Binary {
-                            left: Box::new(height),
+                            left: Box::new(h.clone()),
                             operator: BinaryOperator::Divide,
                             right: Box::new(Expression::Literal { value: 2, span: span_empty }),
                             span: span_empty,
                         }),
                         span: span_empty,
                     },
-                    z: center_pos.z().clone(),
+                    z: pos.z().clone(),
                     span: span_empty,
                 };
-                Some(crate::PourBoundary::Rect(Box::new(from), Box::new(to)))
-            } else {
-                // v0.2.1: dimensions without position - create symbolic boundary
-                // that will be resolved by relational constraints
-                // This ensures the boundary structure exists for the compiler to update
-                let span_empty = Span::new(0, 0);
-                
-                // Create a placeholder center at origin - will be replaced by relational resolver
-                let placeholder_center = Expression::Measurement {
-                    value: 0.0,
-                    unit: Unit::Nanometer,
-                    span: span_empty,
-                };
-                
-                let from = Coordinate::Positional {
-                    x: Expression::Binary {
-                        left: Box::new(placeholder_center.clone()),
-                        operator: BinaryOperator::Subtract,
-                        right: Box::new(Expression::Binary {
-                            left: Box::new(width.clone()),
-                            operator: BinaryOperator::Divide,
-                            right: Box::new(Expression::Literal { value: 2, span: span_empty }),
-                            span: span_empty,
-                        }),
-                        span: span_empty,
-                    },
-                    y: Expression::Binary {
-                        left: Box::new(placeholder_center.clone()),
-                        operator: BinaryOperator::Subtract,
-                        right: Box::new(Expression::Binary {
-                            left: Box::new(height.clone()),
-                            operator: BinaryOperator::Divide,
-                            right: Box::new(Expression::Literal { value: 2, span: span_empty }),
-                            span: span_empty,
-                        }),
-                        span: span_empty,
-                    },
-                    z: Expression::Measurement {
-                        value: 0.0,
-                        unit: Unit::Nanometer,
-                        span: span_empty,
-                    },
-                    span: span_empty,
-                };
-                
-                let to = Coordinate::Positional {
-                    x: Expression::Binary {
-                        left: Box::new(placeholder_center.clone()),
-                        operator: BinaryOperator::Add,
-                        right: Box::new(Expression::Binary {
-                            left: Box::new(width),
-                            operator: BinaryOperator::Divide,
-                            right: Box::new(Expression::Literal { value: 2, span: span_empty }),
-                            span: span_empty,
-                        }),
-                        span: span_empty,
-                    },
-                    y: Expression::Binary {
-                        left: Box::new(placeholder_center),
-                        operator: BinaryOperator::Add,
-                        right: Box::new(Expression::Binary {
-                            left: Box::new(height),
-                            operator: BinaryOperator::Divide,
-                            right: Box::new(Expression::Literal { value: 2, span: span_empty }),
-                            span: span_empty,
-                        }),
-                        span: span_empty,
-                    },
-                    z: Expression::Measurement {
-                        value: 0.0,
-                        unit: Unit::Nanometer,
-                        span: span_empty,
-                    },
-                    span: span_empty,
-                };
-                
                 Some(crate::PourBoundary::Rect(Box::new(from), Box::new(to)))
             }
-        } else {
-            boundary
+            _ => boundary
         };
 
         Ok(PourPlacement {
@@ -391,6 +327,9 @@ impl crate::parser::Parser {
             name,
             elevation,
             thickness,
+            position, // v0.2.1: Store original position for relational resolver
+            width,    // v0.2.1: Store width for compiler to resolve with relative position
+            height,   // v0.2.1: Store height for compiler to resolve with relative position
             boundary: final_boundary,
             net,
             device,

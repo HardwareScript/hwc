@@ -70,7 +70,7 @@ space Two_Pad_Layout implements Two_Pad_Connection:
     # The relational resolver runs before the main placement loop, producing
     # a concrete Coordinate that feeds the standard placement pipeline.
     # ------------------------------------------------------------------
-    add plane(Aluminum) named Pad_B align: center_y with Pad_A right_of Pad_A with spacing: 1500nm on layer: metal1:
+    add plane(Aluminum) named Pad_B align: y with Pad_A right_of Pad_A with spacing: 1500nm on layer: metal1:
         shape: Pad(w: 600nm, h: 600nm)
         net: SIG_OUT
 

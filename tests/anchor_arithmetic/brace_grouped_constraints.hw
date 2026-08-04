@@ -54,8 +54,8 @@ space Brace_Grouped_Space implements BraceGroupedModule:
     # ========================================================================
     
     add plane(Aluminum) named Centered_Pad {
-        align: center_x with Ref_A
-        align: center_y with Ref_B
+        align: x with Ref_A
+        align: y with Ref_B
     } on layer: metal1:
         shape: Square(size: 60um)
         net: SIG
@@ -66,7 +66,7 @@ space Brace_Grouped_Space implements BraceGroupedModule:
     
     add plane(Aluminum) named Complex_Constraints {
         right_of: Ref_A with spacing: 50um
-        align: center_y with Ref_A
+        align: y with Ref_A
     } on layer: metal1:
         shape: Square(size: 70um)
         net: SIG
@@ -76,7 +76,7 @@ space Brace_Grouped_Space implements BraceGroupedModule:
     # ========================================================================
     
     add plane(Aluminum) named Mixed_Syntax {
-        align: center_x with space
+        align: x with space
     } on layer: metal1:
         shape: Square(size: 50um)
         at: [y: (Ref_A.top + Ref_B.bottom) / 2]

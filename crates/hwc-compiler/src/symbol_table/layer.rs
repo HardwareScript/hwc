@@ -1,74 +1,57 @@
-//! Symbol table authority-stack layers (Local / HPM / Prelude / Core).
+//! Unified Symbol Table - Zero Boilerplate Architecture
 //!
-//! **Not** PCB Z-axis layers — those are resolved by
-//! [`crate::ir::stackup_manager::StackupManager`] from `Elevation` + profile `stackup`.
+//! Replaces 20+ separate HashMaps with ONE unified Definition enum.
+//! This eliminates struct field explosion and copy-paste boilerplate.
 
 use compact_str::CompactString;
-use hwc_parser::{
-    logic::{EnumDefinition, LogicDefinition, StructDefinition},
-    BridgeDefinition, ComponentDefinition, ConstDefinition, DeviceDefinition,
-    InterfaceDefinition, MaterialAliasDefinition, MaterialDefinition, MechanicalDefinition,
-    ModuleDefinition, PatternDefinition, ProfileDefinition, ShapeDefinition,
-    SignalGroupDefinition, StrategyDefinition, TestDefinition, UnitDefinition,
-};
 use rustc_hash::FxHashMap;
 
-/// A single layer in the authority stack
-#[derive(Debug, Clone)]
+use super::definition::Definition;
+
+/// A single layer in the authority stack (Local / HPM / Prelude / Core)
+///
+/// Unified architecture: ONE map instead of 20 separate HashMaps
+#[derive(Debug, Clone, Default)]
 pub struct SymbolLayer {
-    pub(super) bridges: FxHashMap<CompactString, BridgeDefinition>,
-    pub(super) materials: FxHashMap<CompactString, MaterialDefinition>,
-    pub(super) material_aliases: FxHashMap<CompactString, MaterialAliasDefinition>,
-    pub(super) profiles: FxHashMap<CompactString, ProfileDefinition>,
-    pub(super) components: FxHashMap<CompactString, ComponentDefinition>,
-    pub(super) modules: FxHashMap<CompactString, ModuleDefinition>,
-    pub(super) mechanicals: FxHashMap<CompactString, MechanicalDefinition>,
-    pub(super) interfaces: FxHashMap<CompactString, InterfaceDefinition>,
-    pub(super) tests: FxHashMap<CompactString, TestDefinition>,
-    pub(super) signal_groups: FxHashMap<CompactString, SignalGroupDefinition>,
-    pub(super) patterns: FxHashMap<CompactString, PatternDefinition>,
-    pub(super) strategies: FxHashMap<CompactString, StrategyDefinition>,
-    pub(super) logic_blocks: FxHashMap<CompactString, LogicDefinition>,
-    pub(super) enums: FxHashMap<CompactString, EnumDefinition>,
-    pub(super) structs: FxHashMap<CompactString, StructDefinition>,
-    pub(super) units: FxHashMap<CompactString, UnitDefinition>,
-    pub(super) devices: FxHashMap<CompactString, DeviceDefinition>,
-    pub(super) constants: FxHashMap<CompactString, ConstDefinition>,
-    pub(super) shapes: FxHashMap<CompactString, ShapeDefinition>,
-    /// v0.2.1: Space definitions for hierarchical composition
-    pub(super) spaces: FxHashMap<CompactString, hwc_parser::SpaceDefinition>,
+    /// Universal symbol index: Name → Definition
+    /// This replaces materials, profiles, components, modules, etc. with ONE map
+    pub(super) symbols: FxHashMap<CompactString, Definition>,
 }
 
 impl SymbolLayer {
     pub fn new() -> Self {
         Self {
-            bridges: FxHashMap::default(),
-            materials: FxHashMap::default(),
-            material_aliases: FxHashMap::default(),
-            profiles: FxHashMap::default(),
-            components: FxHashMap::default(),
-            modules: FxHashMap::default(),
-            mechanicals: FxHashMap::default(),
-            interfaces: FxHashMap::default(),
-            tests: FxHashMap::default(),
-            signal_groups: FxHashMap::default(),
-            patterns: FxHashMap::default(),
-            strategies: FxHashMap::default(),
-            logic_blocks: FxHashMap::default(),
-            enums: FxHashMap::default(),
-            structs: FxHashMap::default(),
-            units: FxHashMap::default(),
-            devices: FxHashMap::default(),
-            constants: FxHashMap::default(),
-            shapes: FxHashMap::default(),
-            spaces: FxHashMap::default(),
+            symbols: FxHashMap::default(),
         }
     }
-}
 
-impl Default for SymbolLayer {
-    fn default() -> Self {
-        Self::new()
+    /// Insert any definition dynamically (zero boilerplate!)
+    pub fn insert(&mut self, name: CompactString, def: Definition) {
+        self.symbols.insert(name, def);
+    }
+
+    /// Get a definition by name
+    pub fn get(&self, name: &str) -> Option<&Definition> {
+        self.symbols.get(name)
+    }
+
+    /// Check if a symbol exists
+    pub fn contains(&self, name: &str) -> bool {
+        self.symbols.contains_key(name)
+    }
+
+    /// Get total number of definitions in this layer
+    pub fn len(&self) -> usize {
+        self.symbols.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.symbols.is_empty()
+    }
+
+    /// Iterate over all definitions
+    pub fn iter(&self) -> impl Iterator<Item = (&CompactString, &Definition)> {
+        self.symbols.iter()
     }
 }
 
@@ -76,6 +59,8 @@ impl Default for SymbolLayer {
 ///
 /// v0.1.6 Update: Implements layered authority stack (Local > HPM > Prelude > Core)
 /// for proper symbol resolution and property-level shadowing.
+///
+/// v0.2.1 Refactoring: Unified Definition enum eliminates 20+ HashMap boilerplate
 ///
 /// v0.1.6 Performance: Semantic Baking Cache
 /// Components are "baked" (parsed once) during registration and cached as pure integers.
@@ -98,12 +83,6 @@ pub struct SymbolTable {
     // Example: "Metals" -> (layer_index, original_path)
     // This enables: import @std/materials/conductors as Metals
     pub(super) namespaces: FxHashMap<CompactString, usize>,
-
-    // SEMANTIC BAKING CACHE: Pre-parsed component definitions
-    // Key: component name, Value: BakedComponent (pure integers, no strings)
-    // This cache is populated during registration and used during placement
-    // Performance: Eliminates O(N × parsing_cost) overhead in placement loops
-    pub(super) baked_components: FxHashMap<CompactString, crate::BakedComponent>,
 }
 
 impl SymbolTable {
@@ -115,7 +94,6 @@ impl SymbolTable {
             hpm: Vec::new(),
             local: SymbolLayer::new(),
             namespaces: FxHashMap::default(),
-            baked_components: FxHashMap::default(),
         }
     }
 
@@ -147,364 +125,72 @@ impl SymbolTable {
         None
     }
 
-    /// Add a unit to the prelude layer (for standard library loading)
-    pub fn add_prelude_unit(&mut self, name: CompactString, unit: UnitDefinition) {
-        self.prelude.units.insert(name, unit);
-    }
-
-    /// Add a constant to the prelude layer (for standard library loading)
-    pub fn add_prelude_constant(&mut self, name: CompactString, constant: ConstDefinition) {
-        self.prelude.constants.insert(name, constant);
-    }
-
-    /// Check if a material exists in any layer
-    /// Supports namespaced lookups: "Metals.Copper" will look in the "Metals" namespace
-    /// Supports material aliases.
-    pub fn has_material(&self, name: &str) -> bool {
-        // Check for namespaced lookup first
+    /// UNIVERSAL SYMBOL LOOKUP ENGINE
+    /// Replaces 20+ separate has_xxx/get_xxx methods with ONE lookup function
+    ///
+    /// Searches: Local > HPM (reverse order) > Prelude > Core
+    /// Supports namespaced lookups ("Metals.Copper") and export filtering
+    pub fn get_symbol(&self, name: &str) -> Option<&Definition> {
+        // 1. Namespaced lookup (e.g. "Metals.Copper")
         if let Some((layer_index, identifier)) = self.resolve_namespace(name) {
             return self
                 .hpm
                 .get(layer_index)
-                .map(|layer| {
-                    layer.materials.contains_key(identifier)
-                        || layer.material_aliases.contains_key(identifier)
-                })
-                .unwrap_or(false);
+                .and_then(|layer| layer.get(identifier))
+                .filter(|def| def.is_exported());
         }
 
-        // Regular lookup across all layers
-        self.local.materials.contains_key(name)
-            || self.local.material_aliases.contains_key(name)
-            || self.hpm.iter().any(|layer| {
-                layer.materials.contains_key(name) || layer.material_aliases.contains_key(name)
-            })
-            || self.prelude.materials.contains_key(name)
-            || self.prelude.material_aliases.contains_key(name)
-            || self.core.materials.contains_key(name)
-            || self.core.material_aliases.contains_key(name)
-    }
-
-    /// Check if a profile exists in any layer
-    /// Supports namespaced lookups: "Foundry.TSMC_180nm"
-    pub fn has_profile(&self, name: &str) -> bool {
-        // Check for namespaced lookup first
-        if let Some((layer_index, identifier)) = self.resolve_namespace(name) {
-            return self
-                .hpm
-                .get(layer_index)
-                .map(|layer| layer.profiles.contains_key(identifier))
-                .unwrap_or(false);
+        // 2. Regular lookup: Local (highest priority)
+        if let Some(def) = self.local.get(name) {
+            return Some(def);
         }
 
-        // Regular lookup across all layers
-        self.local.profiles.contains_key(name)
-            || self
-                .hpm
-                .iter()
-                .any(|layer| layer.profiles.contains_key(name))
-            || self.prelude.profiles.contains_key(name)
-            || self.core.profiles.contains_key(name)
-    }
-
-    /// Debug method to list all profile names in all layers
-    pub fn debug_list_profiles(&self) -> Vec<String> {
-        let mut profiles = Vec::new();
-        for key in self.local.profiles.keys() {
-            profiles.push(format!("local:{}", key));
-        }
-        for (idx, layer) in self.hpm.iter().enumerate() {
-            for key in layer.profiles.keys() {
-                profiles.push(format!("hpm[{}]:{}", idx, key));
+        // 3. HPM Layers (reverse order, last import wins; filter exported only)
+        for layer in self.hpm.iter().rev() {
+            if let Some(def) = layer.get(name) {
+                if def.is_exported() {
+                    return Some(def);
+                }
             }
         }
-        for key in self.prelude.profiles.keys() {
-            profiles.push(format!("prelude:{}", key));
-        }
-        for key in self.core.profiles.keys() {
-            profiles.push(format!("core:{}", key));
-        }
-        profiles
-    }
 
-    /// Check if a component exists in any layer
-    /// Supports namespaced lookups: "Parts.MCU"
-    pub fn has_component(&self, name: &str) -> bool {
-        // Check for namespaced lookup first
-        if let Some((layer_index, identifier)) = self.resolve_namespace(name) {
-            return self
-                .hpm
-                .get(layer_index)
-                .map(|layer| layer.components.contains_key(identifier))
-                .unwrap_or(false);
+        // 4. Prelude layer
+        if let Some(def) = self.prelude.get(name) {
+            return Some(def);
         }
 
-        // Regular lookup across all layers
-        self.local.components.contains_key(name)
-            || self
-                .hpm
-                .iter()
-                .any(|layer| layer.components.contains_key(name))
-            || self.prelude.components.contains_key(name)
-            || self.core.components.contains_key(name)
+        // 5. Core layer (lowest priority)
+        self.core.get(name)
     }
 
-    /// Check if a module exists in any layer
-    /// Supports namespaced lookups: "Logic.Adder64"
-    pub fn has_module(&self, name: &str) -> bool {
-        // Check for namespaced lookup first
-        if let Some((layer_index, identifier)) = self.resolve_namespace(name) {
-            return self
-                .hpm
-                .get(layer_index)
-                .map(|layer| layer.modules.contains_key(identifier))
-                .unwrap_or(false);
-        }
-
-        // Regular lookup across all layers
-        self.local.modules.contains_key(name)
-            || self
-                .hpm
-                .iter()
-                .any(|layer| layer.modules.contains_key(name))
-            || self.prelude.modules.contains_key(name)
-            || self.core.modules.contains_key(name)
+    /// Generic "has" check replacing 20 separate `has_xxx` methods!
+    pub fn has_symbol(&self, name: &str) -> bool {
+        self.get_symbol(name).is_some()
     }
 
-    /// Check if a mechanical exists in any layer
-    pub fn has_mechanical(&self, name: &str) -> bool {
-        self.local.mechanicals.contains_key(name)
-            || self
-                .hpm
-                .iter()
-                .any(|layer| layer.mechanicals.contains_key(name))
-            || self.prelude.mechanicals.contains_key(name)
-            || self.core.mechanicals.contains_key(name)
+    /// Check if a symbol exists AND matches a specific kind
+    pub fn has_symbol_of_kind(&self, name: &str, expected_kind: &str) -> bool {
+        self.get_symbol(name)
+            .map(|def| def.kind_str() == expected_kind)
+            .unwrap_or(false)
     }
 
-    /// Check if an interface exists in any layer
-    pub fn has_interface(&self, name: &str) -> bool {
-        self.local.interfaces.contains_key(name)
-            || self
-                .hpm
-                .iter()
-                .any(|layer| layer.interfaces.contains_key(name))
-            || self.prelude.interfaces.contains_key(name)
-            || self.core.interfaces.contains_key(name)
-    }
-
-    /// Check if a test exists in any layer
-    pub fn has_test(&self, name: &str) -> bool {
-        self.local.tests.contains_key(name)
-            || self.hpm.iter().any(|layer| layer.tests.contains_key(name))
-            || self.prelude.tests.contains_key(name)
-            || self.core.tests.contains_key(name)
-    }
-
-    /// Check if a signal group exists in any layer
-    pub fn has_signal_group(&self, name: &str) -> bool {
-        self.local.signal_groups.contains_key(name)
-            || self
-                .hpm
-                .iter()
-                .any(|layer| layer.signal_groups.contains_key(name))
-            || self.prelude.signal_groups.contains_key(name)
-            || self.core.signal_groups.contains_key(name)
-    }
-
-    /// Check if a pattern exists in any layer
-    pub fn has_pattern(&self, name: &str) -> bool {
-        self.local.patterns.contains_key(name)
-            || self
-                .hpm
-                .iter()
-                .any(|layer| layer.patterns.contains_key(name))
-            || self.prelude.patterns.contains_key(name)
-            || self.core.patterns.contains_key(name)
-    }
-
-    /// Check if a strategy exists in any layer
-    pub fn has_strategy(&self, name: &str) -> bool {
-        self.local.strategies.contains_key(name)
-            || self
-                .hpm
-                .iter()
-                .any(|layer| layer.strategies.contains_key(name))
-            || self.prelude.strategies.contains_key(name)
-            || self.core.strategies.contains_key(name)
-    }
-
-    /// Check if a logic block exists in any layer
-    pub fn has_logic(&self, name: &str) -> bool {
-        self.local.logic_blocks.contains_key(name)
-            || self
-                .hpm
-                .iter()
-                .any(|layer| layer.logic_blocks.contains_key(name))
-            || self.prelude.logic_blocks.contains_key(name)
-            || self.core.logic_blocks.contains_key(name)
-    }
-
-    /// Check if an enum exists in any layer
-    pub fn has_enum(&self, name: &str) -> bool {
-        self.local.enums.contains_key(name)
-            || self.hpm.iter().any(|layer| layer.enums.contains_key(name))
-            || self.prelude.enums.contains_key(name)
-            || self.core.enums.contains_key(name)
-    }
-
-    /// Check if a struct exists in any layer
-    pub fn has_struct(&self, name: &str) -> bool {
-        self.local.structs.contains_key(name)
-            || self
-                .hpm
-                .iter()
-                .any(|layer| layer.structs.contains_key(name))
-            || self.prelude.structs.contains_key(name)
-            || self.core.structs.contains_key(name)
-    }
-
-    /// Check if a shape exists in any layer
-    pub fn has_shape(&self, name: &str) -> bool {
-        self.local.shapes.contains_key(name)
-            || self.hpm.iter().any(|layer| layer.shapes.contains_key(name))
-            || self.prelude.shapes.contains_key(name)
-            || self.core.shapes.contains_key(name)
-    }
-
-    /// Look up a shape definition by name across all layers
-    /// Returns the first match found in priority order: local > hpm > prelude > core
-    pub fn get_shape(&self, name: &str) -> Option<&ShapeDefinition> {
-        self.local
-            .shapes
-            .get(name)
-            .or_else(|| self.hpm.iter().find_map(|layer| layer.shapes.get(name)))
-            .or_else(|| self.prelude.shapes.get(name))
-            .or_else(|| self.core.shapes.get(name))
-    }
-
-    /// Count total definitions across all layers
+    /// Count total definitions across all layers (ONE line instead of 20!)
     pub fn definition_count(&self) -> usize {
-        let count_layer = |layer: &SymbolLayer| {
-            layer.bridges.len()
-                + layer.materials.len()
-                + layer.profiles.len()
-                + layer.components.len()
-                + layer.modules.len()
-                + layer.mechanicals.len()
-                + layer.interfaces.len()
-                + layer.tests.len()
-                + layer.signal_groups.len()
-                + layer.patterns.len()
-                + layer.strategies.len()
-                + layer.logic_blocks.len()
-                + layer.enums.len()
-                + layer.structs.len()
-                + layer.units.len()
-                + layer.constants.len()
-                + layer.shapes.len()
-                + layer.spaces.len()
-        };
-
-        count_layer(&self.local)
-            + self.hpm.iter().map(count_layer).sum::<usize>()
-            + count_layer(&self.prelude)
-            + count_layer(&self.core)
+        self.local.len()
+            + self.hpm.iter().map(|layer| layer.len()).sum::<usize>()
+            + self.prelude.len()
+            + self.core.len()
     }
 
-    /// Get all materials (for database population) - collects from all layers
-    /// WARNING: This clones all materials. Use get_material() for lookups instead.
-    pub fn materials(&self) -> FxHashMap<CompactString, MaterialDefinition> {
-        let mut all_materials = FxHashMap::default();
+    /// Iterate over all definitions in priority order
+    pub fn iter_all_symbols(&self) -> impl Iterator<Item = (&CompactString, &Definition)> {
+        let local = self.local.iter();
+        let hpm = self.hpm.iter().rev().flat_map(|layer| layer.iter());
+        let prelude = self.prelude.iter();
+        let core = self.core.iter();
 
-        // Start with core (lowest priority)
-        all_materials.extend(self.core.materials.clone());
-
-        // Add prelude (overrides core)
-        all_materials.extend(self.prelude.materials.clone());
-
-        // Add HPM layers (in order, so last import wins)
-        for layer in &self.hpm {
-            all_materials.extend(layer.materials.clone());
-        }
-
-        // Add local (highest priority, overrides everything)
-        all_materials.extend(self.local.materials.clone());
-
-        all_materials
-    }
-
-    /// Get all bridges (for via resolver) - collects from all layers (v0.2.0)
-    ///
-    /// Priority: local > hpm (last wins) > prelude > core
-    /// Multiple bridges for the same material pair are allowed; the via resolver
-    /// will pick the most appropriate one based on context.
-    pub fn get_all_bridges(&self) -> Vec<BridgeDefinition> {
-        let mut bridges = Vec::new();
-
-        // Collect from all layers in reverse priority order (so later additions override)
-        // Core (lowest priority)
-        bridges.extend(self.core.bridges.values().cloned());
-
-        // Prelude
-        bridges.extend(self.prelude.bridges.values().cloned());
-
-        // HPM layers (in order, so last import wins)
-        for layer in &self.hpm {
-            bridges.extend(layer.bridges.values().cloned());
-        }
-
-        // Local (highest priority)
-        bridges.extend(self.local.bridges.values().cloned());
-
-        bridges
-    }
-
-    /// Look up a space definition by name (v0.2.1 - Hierarchical Space Composition)
-    ///
-    /// Searches all layers in priority order: local > hpm (last wins) > prelude > core
-    /// Returns the first match found.
-    /// 
-    /// Uses clean layered lookup logic - no repetitive or_else chains.
-    pub fn get_space(&self, name: &str) -> Option<&hwc_parser::SpaceDefinition> {
-        // Check for namespaced lookup first
-        if let Some((layer_index, identifier)) = self.resolve_namespace(name) {
-            return self
-                .hpm
-                .get(layer_index)
-                .and_then(|layer| layer.spaces.get(identifier));
-        }
-
-        // Search layers in priority order: local > hpm (reverse) > prelude > core
-        self.local
-            .spaces
-            .get(name)
-            .or_else(|| {
-                self.hpm
-                    .iter()
-                    .rev()
-                    .find_map(|layer| layer.spaces.get(name))
-            })
-            .or_else(|| self.prelude.spaces.get(name))
-            .or_else(|| self.core.spaces.get(name))
-    }
-
-    /// DEBUG: List all space names in local layer
-    pub fn list_local_spaces(&self) -> Vec<String> {
-        self.local.spaces.keys().map(|k| k.to_string()).collect()
-    }
-
-    /// DEBUG: List all space names in HPM layers
-    pub fn list_hpm_spaces(&self) -> Vec<Vec<String>> {
-        self.hpm
-            .iter()
-            .map(|layer| layer.spaces.keys().map(|k| k.to_string()).collect())
-            .collect()
-    }
-
-    /// Check if a space exists in any layer (v0.2.1)
-    pub fn has_space(&self, name: &str) -> bool {
-        self.get_space(name).is_some()
+        local.chain(hpm).chain(prelude).chain(core)
     }
 }
 

@@ -1,0 +1,156 @@
+# variable_resistor_test.hw
+# Demonstrates how resistor geometry affects resistance
+# Based on the principle: R = ρ * (L/A) where L is length and A is cross-sectional area
+#
+# With polysilicon sheet resistance of 400 Ohms/square:
+# - Short_Fat:  10μm x 10μm = 1 square = ~400 Ohms
+# - Long_Thin:  10μm x 1μm  = 10 squares = ~4000 Ohms
+# - Very_Long:  20μm x 1μm  = 20 squares = ~8000 Ohms
+
+import * from @std/primitives/units
+import * from "./resistor_pdk"
+
+# Device definition for resistors
+device Resistor:
+    terminals: [A, B]
+    materials:
+        A: Polysilicon
+        B: Polysilicon
+
+module VariableResistor:
+    pins: [input In1, input In2, input In3, output Out1, output Out2, output Out3]
+    route In1 to Out1
+    route In2 to Out2
+    route In3 to Out3
+
+space Variable_Resistor_Space implements VariableResistor:
+    # Large space to accommodate multiple resistors
+    dimensions: 30.0um by 15.0um by 500nm
+    resolution: 10nm
+    origin: bl by b
+    profile: Resistor_3D
+
+    nets:
+        In1:  { classification: signal, potential: 1.8V, current: 1.0uA }
+        Out1: { classification: signal, potential: 0.0V, current: 1.0uA }
+        In2:  { classification: signal, potential: 1.8V, current: 1.0uA }
+        Out2: { classification: signal, potential: 0.0V, current: 1.0uA }
+        In3:  { classification: signal, potential: 1.8V, current: 1.0uA }
+        Out3: { classification: signal, potential: 0.0V, current: 1.0uA }
+
+    # ========================================================================
+    # RESISTOR 1: SHORT FAT (Low Resistance ~400 Ohms)
+    # 10μm x 10μm = 1 square
+    # ========================================================================
+
+    # Terminal A (left half of resistor body)
+    add pour(Polysilicon) named R1_Body_A on layer: polyres:
+        device: R1.A
+        dimensions: 5.0um by 10.0um
+        at: [x: 4.5um, y: 3.0um]
+
+    # Terminal B (right half of resistor body)
+    add pour(Polysilicon) named R1_Body_B on layer: polyres:
+        device: R1.B
+        dimensions: 5.0um by 10.0um
+        at: [x: 9.5um, y: 3.0um]
+
+    add pour(Aluminum) named R1_Contact_Left on layer: metal1:
+        net: In1
+        dimensions: 800nm by 800nm
+        at: [x: 2.4um, y: 3.0um]
+
+    add pour(Aluminum) named R1_Contact_Right on layer: metal1:
+        net: Out1
+        dimensions: 800nm by 800nm
+        at: [x: 11.6um, y: 3.0um]
+
+    add contact(Titanium_Silicide) named R1_Via_Left spanning layer: polyres to metal1:
+        net: In1
+        diameter: 400nm
+        plating_thickness: 5nm
+        align: center with R1_Contact_Left
+
+    add contact(Titanium_Silicide) named R1_Via_Right spanning layer: polyres to metal1:
+        net: Out1
+        diameter: 400nm
+        plating_thickness: 5nm
+        align: center with R1_Contact_Right
+
+    # ========================================================================
+    # RESISTOR 2: LONG THIN (Medium Resistance ~4000 Ohms)
+    # 10μm x 1μm = 10 squares
+    # ========================================================================
+
+    # Terminal A (left half of resistor body)
+    add pour(Polysilicon) named R2_Body_A on layer: polyres:
+        device: R2.A
+        dimensions: 5.0um by 1.0um
+        at: [x: 4.5um, y: 7.5um]
+
+    # Terminal B (right half of resistor body)
+    add pour(Polysilicon) named R2_Body_B on layer: polyres:
+        device: R2.B
+        dimensions: 5.0um by 1.0um
+        at: [x: 9.5um, y: 7.5um]
+
+    add pour(Aluminum) named R2_Contact_Left on layer: metal1:
+        net: In2
+        dimensions: 800nm by 800nm
+        at: [x: 2.4um, y: 7.5um]
+
+    add pour(Aluminum) named R2_Contact_Right on layer: metal1:
+        net: Out2
+        dimensions: 800nm by 800nm
+        at: [x: 11.6um, y: 7.5um]
+
+    add contact(Titanium_Silicide) named R2_Via_Left spanning layer: polyres to metal1:
+        net: In2
+        diameter: 400nm
+        plating_thickness: 5nm
+        align: center with R2_Contact_Left
+
+    add contact(Titanium_Silicide) named R2_Via_Right spanning layer: polyres to metal1:
+        net: Out2
+        diameter: 400nm
+        plating_thickness: 5nm
+        align: center with R2_Contact_Right
+
+    # ========================================================================
+    # RESISTOR 3: VERY LONG THIN (High Resistance ~8000 Ohms)
+    # 20μm x 1μm = 20 squares
+    # ========================================================================
+
+    # Terminal A (left half of resistor body)
+    add pour(Polysilicon) named R3_Body_A on layer: polyres:
+        device: R3.A
+        dimensions: 10.0um by 1.0um
+        at: [x: 5.0um, y: 12.0um]
+
+    # Terminal B (right half of resistor body)
+    add pour(Polysilicon) named R3_Body_B on layer: polyres:
+        device: R3.B
+        dimensions: 10.0um by 1.0um
+        at: [x: 15.0um, y: 12.0um]
+
+    add pour(Aluminum) named R3_Contact_Left on layer: metal1:
+        net: In3
+        dimensions: 800nm by 800nm
+        at: [x: 0.4um, y: 12.0um]
+
+    add pour(Aluminum) named R3_Contact_Right on layer: metal1:
+        net: Out3
+        dimensions: 800nm by 800nm
+        at: [x: 19.6um, y: 12.0um]
+
+    add contact(Titanium_Silicide) named R3_Via_Left spanning layer: polyres to metal1:
+        net: In3
+        diameter: 400nm
+        plating_thickness: 5nm
+        align: center with R3_Contact_Left
+
+    add contact(Titanium_Silicide) named R3_Via_Right spanning layer: polyres to metal1:
+        net: Out3
+        diameter: 400nm
+        plating_thickness: 5nm
+        align: center with R3_Contact_Right

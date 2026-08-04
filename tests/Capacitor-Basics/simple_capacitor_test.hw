@@ -1,0 +1,98 @@
+# simple_capacitor_test.hw
+# Basic test: Parallel-plate capacitor on silicon
+# Top Plate (Metal 1) overlapping Bottom Plate (Polysilicon)
+# Dielectric: 10nm SiO2 oxide (d1 layer)
+#
+# Physics: C = ε₀εᵣ(A/d)
+# - Area (A): 10μm × 10μm = 100μm²
+# - Thickness (d): 10nm (d1 layer)
+# - εᵣ (SiO2): 3.9
+# - Expected C ≈ 0.35pF (3.45×10⁻¹³ F)
+
+import * from @std/primitives/units
+import * from "./capacitor_pdk"
+
+# Native device contract for capacitor
+# Compiler will automatically calculate C = ε₀εᵣ(A/d) from overlap geometry
+device Capacitor:
+    terminals: [top, bottom]
+    materials:
+        top: Aluminum
+        bottom: Polysilicon
+
+module SimpleCapacitor:
+    pins: [input In, output Out]
+    route In to Out
+
+space Simple_Capacitor_Space implements SimpleCapacitor:
+    dimensions: 15.0um by 15.0um by 100nm
+    resolution: 10nm
+    origin: bl by b
+    profile: Capacitor_Flattened
+
+    nets:
+        In:  { classification: signal, potential: 1.8V, current: 1.0nA }
+        Out: { classification: signal, potential: 0.0V, current: 1.0nA }
+
+    # ========================================================================
+    # PARAMETRIC LAYOUT - Clean middle-level syntax with anchor arithmetic
+    # ========================================================================
+    
+    let plate_size = 10.0um
+    let pad_size = 1.0um
+    let pad_offset = 1.0um
+    
+    # ========================================================================
+    # 1. BOTTOM PLATE (Polysilicon - Net Out / Ground)
+    # ========================================================================
+    # 10μm × 10μm square plate centered in the space
+    add pour(Polysilicon) named Bottom_Plate on layer: polyres:
+        device: C1.bottom
+        net: Out
+        dimensions: plate_size by plate_size
+        at: [x: 7.5um, y: 7.5um]
+
+    # ========================================================================
+    # 2. TOP PLATE (Metal 1 - Net In / Signal)
+    # ========================================================================
+    # Perfectly aligned with Bottom_Plate using anchor arithmetic
+    add pour(Aluminum) named Top_Plate on layer: metal1:
+        device: C1.top
+        net: In
+        dimensions: plate_size by plate_size
+        align: center with Bottom_Plate
+
+    # ========================================================================
+    # 3. EXTERNAL CONNECTION PADS - Positioned relative to capacitor plates
+    # ========================================================================
+
+    # Input pad on left, aligned with top plate
+    add pour(Aluminum) named In_Pad on layer: metal1:
+        net: In
+        dimensions: pad_size by pad_size
+        at: [x: pad_offset, y: Bottom_Plate.center_y]
+
+    # Output pad - position it far from capacitor area to avoid clearance issues
+    # Place it to the right and below the bottom plate
+    add pour(Polysilicon) named Out_Pad on layer: polyres:
+        net: Out
+        dimensions: pad_size by pad_size
+        at: [x: Bottom_Plate.right + 1.0um, y: 1.5um]
+
+    # ========================================================================
+    # 4. ROUTING - Connect pads to capacitor plates
+    # ========================================================================
+
+    # Route input pad to top plate on metal1
+    route In_Pad to Top_Plate:
+        net: In
+        width: 500nm
+        layer: metal1
+        intent: Signal
+
+    # Route bottom plate to output pad on polyres
+    route Bottom_Plate to Out_Pad:
+        net: Out
+        width: 500nm
+        layer: polyres
+        intent: Signal

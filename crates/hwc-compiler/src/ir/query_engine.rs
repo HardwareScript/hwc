@@ -345,7 +345,7 @@ mod tests {
             }),
             trace_width_nm: 100,
             min_clearance_nm: 50,
-            technology_strategy: TechnologyStrategy::Asic, // ASIC mode for test
+            technology_strategy: Technology::Asic, // ASIC mode for test
             board_bounds: BoundingBox::new(
                 Point3D::new(0, 0, 0),
                 Point3D::new(100_000, 100_000, 0),
@@ -368,7 +368,7 @@ mod tests {
             }),
             trace_width_nm: 100,
             min_clearance_nm: 50,
-            technology_strategy: TechnologyStrategy::Asic, // ASIC mode for test
+            technology_strategy: Technology::Asic, // ASIC mode for test
             board_bounds: BoundingBox::new(
                 Point3D::new(0, 0, 0),
                 Point3D::new(100_000, 100_000, 0),

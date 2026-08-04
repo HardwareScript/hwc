@@ -1,0 +1,83 @@
+# materials.hw - Capacitor-Basics Materials
+# Focused on parallel-plate capacitors with metal-insulator-metal (MIM) structure
+import * from @std/primitives/units
+
+# Polysilicon - Bottom plate material
+# Used for polyres layer (bottom capacitor plate)
+export material Polysilicon:
+    category: conductor
+    symbol: "Poly"
+    process: deposited
+    properties:
+        color: "#FF6060"  # Red
+        metallic: 0.3
+        roughness: 0.8
+        opacity: 1.0
+        resistivity: 4e-4ohm_m
+        thermal_conductivity: 30.0W_mK
+        max_current_density: 1e2A_mm2
+
+# Aluminum - Top plate material
+# Used for metal1 layer (top capacitor plate and contacts)
+export material Aluminum:
+    category: conductor
+    symbol: "Al"
+    process: deposited
+    properties:
+        color: "#C0C0C0"  # Silver
+        opacity: 1.0
+        metallic: 0.8
+        roughness: 0.2
+        resistivity: 2.82e-8ohm_m
+        thermal_conductivity: 237.0W_mK
+        max_current_density: 1e3A_mm2
+
+# Tungsten - Via fill material
+# Used for connecting between layers
+export material Tungsten:
+    category: conductor
+    symbol: "W"
+    process: deposited
+    properties:
+        color: "#8080FF"  # Light Blue
+        opacity: 1.0
+        metallic: 0.7
+        roughness: 0.3
+        resistivity: 5.6e-8ohm_m
+        thermal_conductivity: 173.0W_mK
+        max_current_density: 1e4A_mm2
+
+# Titanium Silicide - Contact interface material
+# Forms ohmic contact between layers
+export material Titanium_Silicide:
+    category: conductor
+    symbol: "TiSi2"
+    process: deposited
+    properties:
+        color: "#404040"  # Very Dark Grey
+        opacity: 1.0
+        resistivity: 1.5e-7ohm_m
+        thermal_conductivity: 30.0W_mK
+        max_current_density: 5e3A_mm2
+
+# Silicon Dioxide - Critical dielectric material for capacitor
+# This is the insulator layer between top and bottom plates
+# εr ≈ 3.9 gives us the capacitance: C = ε₀εᵣ(A/d)
+export material Silicon_Dioxide:
+    category: insulator
+    symbol: "SiO2"
+    process: deposited
+    properties:
+        color: "#E0E8FF"  # Light blue-white (translucent in 3D)
+        opacity: 0.6      # Semi-transparent to see capacitor sandwich
+        relative_permittivity: 3.9  # Critical for C calculation!
+
+# Air - Default dielectric for spacing
+export material Air:
+    category: insulator
+    symbol: "Air"
+    process: deposited
+    properties:
+        color: "#F0F4FF"
+        opacity: 0.3
+        relative_permittivity: 1.0

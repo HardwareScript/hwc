@@ -66,8 +66,17 @@ impl<'a> DeviceExtractor<'a> {
         // Step 1: Group all pours by their device binding
         let bindings = self.group_pours_by_device_binding();
 
-        // Step 2: Extract devices and their terminals from module statements
-        let extracted = ExtractedDevices::from_module(module);
+        // Step 2: Extract devices from BOTH module statements AND pour bindings
+        let mut extracted = ExtractedDevices::from_module(module);
+        let from_bindings = ExtractedDevices::from_pour_bindings(&bindings);
+        
+        // Merge devices from bindings into extracted
+        for (device_name, device_type) in from_bindings.devices {
+            extracted.devices.push((device_name.clone(), device_type));
+        }
+        for (device_name, terminals) in from_bindings.device_terminals {
+            extracted.device_terminals.entry(device_name).or_default().extend(terminals);
+        }
 
         // Step 2.5: Build terminal-to-net mapping from module route statements
         let (terminal_to_net, all_net_names) = self.build_terminal_to_net_mapping(module);
@@ -150,6 +159,53 @@ impl<'a> DeviceExtractor<'a> {
         }
     }
 
+    /// Helper: Find a net from overlapping contacts/vias when pour itself is 'nc'
+    fn find_overlapping_net(&self, pour: &hwc_engine::space::PourMetadata) -> Option<String> {
+        let pour_bbox = pour.bbox.as_ref()?;
+        
+        // Check all contacts for overlaps
+        for contact in &self.space.contacts {
+            if let Some(contact_bbox) = &contact.bbox {
+                if Self::bboxes_overlap(pour_bbox, contact_bbox) {
+                    if let Some(net) = &contact.net {
+                        if net.as_str() != "nc" && !net.is_empty() {
+                            return Some(net.to_string());
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Check all pours for overlaps (for vias or other connecting pours)
+        for other_pour in &self.space.pours {
+            if other_pour.name == pour.name {
+                continue; // Skip self
+            }
+            
+            if let Some(other_bbox) = &other_pour.bbox {
+                if Self::bboxes_overlap(pour_bbox, other_bbox) {
+                    if let Some(net) = &other_pour.net {
+                        if net.as_str() != "nc" && !net.is_empty() {
+                            return Some(net.to_string());
+                        }
+                    }
+                }
+            }
+        }
+        
+        None
+    }
+    
+    /// Helper: Check if two bounding boxes overlap
+    fn bboxes_overlap(a: &hwc_engine::geometry::BoundingBox, b: &hwc_engine::geometry::BoundingBox) -> bool {
+        // Bounding boxes overlap if they intersect in all 3 dimensions
+        let x_overlap = a.min.x < b.max.x && a.max.x > b.min.x;
+        let y_overlap = a.min.y < b.max.y && a.max.y > b.min.y;
+        let z_overlap = a.min.z < b.max.z && a.max.z > b.min.z;
+        
+        x_overlap && y_overlap && z_overlap
+    }
+
     /// Extract a device from explicitly bound geometry
     fn extract_bound_device(
         &mut self,
@@ -168,7 +224,15 @@ impl<'a> DeviceExtractor<'a> {
             {
                 net_from_route.to_string()
             } else {
-                pour.net.clone().unwrap_or_else(|| "nc".into()).to_string()
+                // Try to get net from the pour itself first
+                let pour_net = pour.net.clone().unwrap_or_else(|| "nc".into());
+                
+                if pour_net.as_str() != "nc" && !pour_net.is_empty() {
+                    pour_net.to_string()
+                } else {
+                    // Pour is 'nc', check for overlapping contacts/vias to inherit their net
+                    self.find_overlapping_net(pour).unwrap_or_else(|| "nc".to_string())
+                }
             };
             terminals.insert(terminal_name.clone(), net.clone());
             println!("      ├─ {}: {} (net: {})", terminal_name, pour.name, net);
@@ -193,6 +257,7 @@ impl<'a> DeviceExtractor<'a> {
             }
         }
 
+        // Calculate parameters based on device type
         if let Some(gate_pour) = terminal_pours.get("gate") {
             if is_ic_package || !has_active_region {
                 println!(
@@ -246,6 +311,37 @@ impl<'a> DeviceExtractor<'a> {
                     device_name,
                 )?;
             }
+        } else if device_type == "Resistor" || device_type.contains("Resistor") {
+            // Calculate resistor parameters
+            // Find the largest pour (resistor body)
+            let resistor_body = terminal_pours
+                .values()
+                .max_by_key(|p| p.area_nm2)
+                .ok_or_else(|| {
+                    DeviceExtractionError::InvalidGeometry {
+                        device_name: device_name.clone().into(),
+                        device_type: "Resistor".into(),
+                        reason: "No pours found to calculate resistance".into(),
+                    }
+                })?;
+            
+            // Calculate dimensions from area (assuming rectangular or square)
+            let area_nm2 = resistor_body.area_nm2 as f64;
+            let side_nm = area_nm2.sqrt();
+            let side_um = side_nm / 1000.0;
+            
+            // For now, assume square geometry (L = W)
+            // Sheet resistance for polysilicon: ~400 Ohms/square
+            let sheet_resistance = 400.0;
+            
+            // For a square, L/W = 1, so R = R_sheet
+            let resistance = sheet_resistance;
+            
+            parameters.insert("R".into(), resistance);
+            parameters.insert("W".into(), side_um);
+            parameters.insert("L".into(), side_um);
+            
+            println!("      ├─ R={:.2}Ω W={:.2}um L={:.2}um (square geometry assumed)", resistance, side_um, side_um);
         }
 
         self.validate_device_materials(device_name, device_type, terminal_pours)?;

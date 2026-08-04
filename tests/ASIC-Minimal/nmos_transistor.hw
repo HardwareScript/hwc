@@ -48,7 +48,7 @@ export space NMOS_Cell implements NMOSTransistor:
     add pour(Silicon_N) named NMOS_Drain on layer: active:
         net: Out
         dimensions: 500nm by 600nm
-        align: center_y with NMOS_Source
+        align: y with NMOS_Source
         right_of: NMOS_Source by 450nm  # 200nm channel gap + 250nm half-width (center-to-edge spacing)
 
     # ========================================================================
@@ -61,8 +61,8 @@ export space NMOS_Cell implements NMOSTransistor:
     add pour(Polysilicon) named Gate_Strip on layer: poly:
         net: In
         dimensions: 400nm by 1200nm
-        align: center_x with (NMOS_Source.right + NMOS_Drain.left) / 2
-        align: center_y with NMOS_Source.center_y
+        align: x with (NMOS_Source.right + NMOS_Drain.left) / 2
+        align: y with NMOS_Source.center_y
 
     # ========================================================================
     # METAL 1 PADS AND POWER RAIL
@@ -72,22 +72,20 @@ export space NMOS_Cell implements NMOSTransistor:
     add pour(Aluminum) named GND_Source_Pad on layer: metal1:
         net: GND
         dimensions: 300nm by 300nm
-        align: center_x with NMOS_Source
-        align: center_y with NMOS_Source
+        align: center with NMOS_Source
 
     # 5. Output Drain Landing Pad (Metal 1) - Landing pad for drain via
     add pour(Aluminum) named Out_Drain_Pad on layer: metal1:
         net: Out
         dimensions: 300nm by 300nm
-        align: center_x with NMOS_Drain
-        align: center_y with NMOS_Drain
+        align: center with NMOS_Drain
 
     # 6. Gate Contact Pad (Metal 1) - Landing pad for gate connection
     add pour(Aluminum) named Gate_Pad on layer: metal1:
         net: In
         dimensions: 400nm by 400nm
-        align: center_x with Gate_Strip
-        align: center_y with Gate_Strip.bottom
+        align: x with Gate_Strip
+        align: y with Gate_Strip.bottom
 
     # 7. GND Power Rail (Metal 1) - Bottom horizontal power rail
     add pour(Aluminum) named GND_Rail on layer: metal1:
@@ -111,24 +109,22 @@ export space NMOS_Cell implements NMOSTransistor:
         net: GND
         diameter: 200nm
         plating_thickness: 5nm
-        align: center_x with NMOS_Source
-        align: center_y with NMOS_Source
+        align: center with NMOS_Source
 
     # 10. Drain Via (Active to Metal1)
     add contact(Titanium_Silicide) named Via_Drain spanning layer: active to metal1:
         net: Out
         diameter: 200nm
         plating_thickness: 5nm
-        align: center_x with NMOS_Drain
-        align: center_y with NMOS_Drain
+        align: center with NMOS_Drain
 
     # 11. Gate Via (Poly to Metal1)
     add contact(Titanium_Silicide) named Via_Gate spanning layer: poly to metal1:
         net: In
         diameter: 200nm
         plating_thickness: 5nm
-        align: center_x with Gate_Strip
-        align: center_y with (Gate_Strip.bottom + Gate_Pad.top) / 2  # Centered in overlap
+        align: x with Gate_Strip
+        align: y with (Gate_Strip.bottom + Gate_Pad.top) / 2  # Centered in overlap
 
     # ========================================================================
     # PHYSICAL INTERCONNECTS (Metal 1 Routing)

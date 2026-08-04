@@ -479,14 +479,15 @@ impl crate::parser::Parser {
         self.expect(&Token::Colon)?;
         let axis_str = self.expect_identifier_string()?;
         let axis = match axis_str.as_str() {
-            "center_x" => AlignmentAxis::CenterX,
-            "center_y" => AlignmentAxis::CenterY,
-            "center_z" => AlignmentAxis::CenterZ,
+            "center" => AlignmentAxis::Center,
+            "x" => AlignmentAxis::X,
+            "y" => AlignmentAxis::Y,
+            "z" => AlignmentAxis::Z,
             "top" => AlignmentAxis::Top,
             "bottom" => AlignmentAxis::Bottom,
             "left" => AlignmentAxis::Left,
             "right" => AlignmentAxis::Right,
-            _ => return Err(self.error(&format!("Invalid alignment axis '{}'", axis_str))),
+            _ => return Err(self.error(&format!("Invalid alignment axis '{}'. Expected: center, x, y, z, top, bottom, left, or right", axis_str))),
         };
         self.expect(&Token::With)?;
         let target = self.parse_component_name()?;

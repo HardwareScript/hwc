@@ -336,7 +336,9 @@ pub fn spanning_coordinate_to_point(
             ctx.origin.z,
         ).map_err(|e| e.to_string())?
     } else {
-        evaluate_expression_to_nm(x_expr, ctx.symbol_table, ctx.eval_context)?
+        let result = evaluate_expression_to_nm(x_expr, ctx.symbol_table, ctx.eval_context)?;
+        eprintln!("[SPANNING_COORD DEBUG] X expression: {:?} -> {}nm", x_expr, result);
+        result
     };
 
     let y_nm = if has_anchor_refs && y_expr.contains_anchor_reference() {
@@ -350,7 +352,9 @@ pub fn spanning_coordinate_to_point(
             ctx.origin.z,
         ).map_err(|e| e.to_string())?
     } else {
-        evaluate_expression_to_nm(y_expr, ctx.symbol_table, ctx.eval_context)?
+        let result = evaluate_expression_to_nm(y_expr, ctx.symbol_table, ctx.eval_context)?;
+        eprintln!("[SPANNING_COORD DEBUG] Y expression: {:?} -> {}nm", y_expr, result);
+        result
     };
 
     let z_nm = resolve_coordinate_z_nm(z_expr, ctx, has_anchor_refs)?;

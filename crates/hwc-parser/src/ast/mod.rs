@@ -7,7 +7,7 @@ mod bridge;
 mod common;
 mod component;
 mod const_def;
-mod device;
+pub mod device;
 mod device_contract;
 pub mod expr;
 mod expression;

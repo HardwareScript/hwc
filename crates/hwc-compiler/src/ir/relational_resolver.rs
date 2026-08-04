@@ -28,8 +28,8 @@ pub enum SpatialRelation {
     AlignBottom,
     AlignLeft,
     AlignRight,
-    AlignCenterX,
-    AlignCenterY,
+    AlignX,
+    AlignY,
 }
 
 /// A formula for calculating the user-coordinate offset.
@@ -221,7 +221,7 @@ impl RelationalPlacementFormula {
                     }
                 }
             }
-            SpatialRelation::AlignCenterX => {
+            SpatialRelation::AlignX => {
                 Self {
                     is_y_axis: false,
                     use_target_max: false,
@@ -230,7 +230,7 @@ impl RelationalPlacementFormula {
                     is_center_alignment: true,
                 }
             }
-            SpatialRelation::AlignCenterY => {
+            SpatialRelation::AlignY => {
                 Self {
                     is_y_axis: true,
                     use_target_max: false,
@@ -393,28 +393,51 @@ pub fn compute_position_from_constraints(
                         let target_bbox = resolve_target_bbox(component_name, bbox_tracker)?;
                         let (tx_min, tx_max, ty_min, ty_max) = target_bbox_to_user_ranges(&target_bbox, space_dimensions, origin.xy);
                         
-                        // Return the appropriate coordinate based on axis
-                        match axis {
-                            AlignmentAxis::CenterX => (tx_min + tx_max) / 2,
-                            AlignmentAxis::CenterY => (ty_min + ty_max) / 2,
-                            AlignmentAxis::CenterZ => (target_bbox.min.z + target_bbox.max.z) / 2,
-                            AlignmentAxis::Top => {
-                                let formula = RelationalPlacementFormula::get(SpatialRelation::AlignTop, x_multiplier, y_multiplier);
-                                formula.resolve(ty_min, ty_max, 0, 0)
-                            }
-                            AlignmentAxis::Bottom => {
-                                let formula = RelationalPlacementFormula::get(SpatialRelation::AlignBottom, x_multiplier, y_multiplier);
-                                formula.resolve(ty_min, ty_max, 0, 0)
-                            }
-                            AlignmentAxis::Left => {
-                                let formula = RelationalPlacementFormula::get(SpatialRelation::AlignLeft, x_multiplier, y_multiplier);
-                                formula.resolve(tx_min, tx_max, 0, 0)
-                            }
-                            AlignmentAxis::Right => {
-                                let formula = RelationalPlacementFormula::get(SpatialRelation::AlignRight, x_multiplier, y_multiplier);
-                                formula.resolve(tx_min, tx_max, 0, 0)
-                            }
+                    // Return the appropriate coordinate based on axis
+                    match axis {
+                        AlignmentAxis::Center => {
+                            // Center aligns BOTH X and Y
+                            x_nm = Some((tx_min + tx_max) / 2);
+                            y_nm = Some((ty_min + ty_max) / 2);
+                            return Ok(Coordinate::Declarative {
+                                x: Expression::Measurement {
+                                    value: x_nm.unwrap() as f64,
+                                    unit: Unit::Nanometer,
+                                    span: hwc_parser::Span::new(0, 0),
+                                },
+                                y: Expression::Measurement {
+                                    value: y_nm.unwrap() as f64,
+                                    unit: Unit::Nanometer,
+                                    span: hwc_parser::Span::new(0, 0),
+                                },
+                                z: Expression::Measurement {
+                                    value: z_nm.unwrap_or(0) as f64,
+                                    unit: Unit::Nanometer,
+                                    span: hwc_parser::Span::new(0, 0),
+                                },
+                                span: hwc_parser::Span::new(0, 0),
+                            });
                         }
+                        AlignmentAxis::X => (tx_min + tx_max) / 2,
+                        AlignmentAxis::Y => (ty_min + ty_max) / 2,
+                        AlignmentAxis::Z => (target_bbox.min.z + target_bbox.max.z) / 2,
+                        AlignmentAxis::Top => {
+                            let formula = RelationalPlacementFormula::get(SpatialRelation::AlignTop, x_multiplier, y_multiplier);
+                            formula.resolve(ty_min, ty_max, 0, 0)
+                        }
+                        AlignmentAxis::Bottom => {
+                            let formula = RelationalPlacementFormula::get(SpatialRelation::AlignBottom, x_multiplier, y_multiplier);
+                            formula.resolve(ty_min, ty_max, 0, 0)
+                        }
+                        AlignmentAxis::Left => {
+                            let formula = RelationalPlacementFormula::get(SpatialRelation::AlignLeft, x_multiplier, y_multiplier);
+                            formula.resolve(tx_min, tx_max, 0, 0)
+                        }
+                        AlignmentAxis::Right => {
+                            let formula = RelationalPlacementFormula::get(SpatialRelation::AlignRight, x_multiplier, y_multiplier);
+                            formula.resolve(tx_min, tx_max, 0, 0)
+                        }
+                    }
                     }
                     hwc_parser::AlignmentTarget::Expression(expr) => {
                         // v0.2.1: Expression-based alignment - evaluate the expression
@@ -422,9 +445,27 @@ pub fn compute_position_from_constraints(
                         use crate::ir::placement::coordinate_evaluation::{evaluate_coordinate_with_anchors, CoordinateAxis};
                         
                         let context_axis = match axis {
-                            AlignmentAxis::CenterX | AlignmentAxis::Left | AlignmentAxis::Right => CoordinateAxis::X,
-                            AlignmentAxis::CenterY | AlignmentAxis::Top | AlignmentAxis::Bottom => CoordinateAxis::Y,
-                            AlignmentAxis::CenterZ => CoordinateAxis::Z,
+                            AlignmentAxis::Center => return Ok(Coordinate::Declarative {
+                                x: Expression::Measurement {
+                                    value: x_nm.unwrap() as f64,
+                                    unit: Unit::Nanometer,
+                                    span: hwc_parser::Span::new(0, 0),
+                                },
+                                y: Expression::Measurement {
+                                    value: y_nm.unwrap() as f64,
+                                    unit: Unit::Nanometer,
+                                    span: hwc_parser::Span::new(0, 0),
+                                },
+                                z: Expression::Measurement {
+                                    value: z_nm.unwrap_or(0) as f64,
+                                    unit: Unit::Nanometer,
+                                    span: hwc_parser::Span::new(0, 0),
+                                },
+                                span: hwc_parser::Span::new(0, 0),
+                            }), // Already handled above
+                            AlignmentAxis::X | AlignmentAxis::Left | AlignmentAxis::Right => CoordinateAxis::X,
+                            AlignmentAxis::Y | AlignmentAxis::Top | AlignmentAxis::Bottom => CoordinateAxis::Y,
+                            AlignmentAxis::Z => CoordinateAxis::Z,
                         };
                         
                         evaluate_coordinate_with_anchors(
@@ -440,13 +481,14 @@ pub fn compute_position_from_constraints(
 
                 // Assign to the appropriate axis
                 match axis {
-                    AlignmentAxis::CenterX | AlignmentAxis::Left | AlignmentAxis::Right => {
+                    AlignmentAxis::Center => unreachable!("Center handled earlier"),
+                    AlignmentAxis::X | AlignmentAxis::Left | AlignmentAxis::Right => {
                         x_nm = Some(resolved_value_nm);
                     }
-                    AlignmentAxis::CenterY | AlignmentAxis::Top | AlignmentAxis::Bottom => {
+                    AlignmentAxis::Y | AlignmentAxis::Top | AlignmentAxis::Bottom => {
                         y_nm = Some(resolved_value_nm);
                     }
-                    AlignmentAxis::CenterZ => {
+                    AlignmentAxis::Z => {
                         z_nm = Some(resolved_value_nm);
                     }
                 }

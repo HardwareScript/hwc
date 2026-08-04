@@ -42,7 +42,7 @@ space Obstacle_Space implements ObstacleTest:
     # 2. Pad B (Destination - Net In) on Right - Positioned relationally relative to Pad_A
     # Separated by 2.0um with same vertical alignment
     add plane(Aluminum) named Pad_B {
-        align: center_y with Pad_A
+        align: y with Pad_A
         right_of Pad_A with spacing: 2.0um
     } on layer: metal1:
         shape: Pad(width: 400nm)
@@ -52,8 +52,8 @@ space Obstacle_Space implements ObstacleTest:
     # v0.2.1: Uses align: constraints for explicit centering (ergonomic high-level syntax)
     # This completely blocks the horizontal centerline between pads
     add plane(Aluminum) named Central_Barrier {
-        align: center_x with (Pad_A.center_x + Pad_B.center_x) / 2
-        align: center_y with (Pad_A.center_y + Pad_B.center_y) / 2
+        align: x with (Pad_A.center_x + Pad_B.center_x) / 2
+        align: y with (Pad_A.center_y + Pad_B.center_y) / 2
     } on layer: metal1:
         shape: Barrier(width: 400nm, height: 800nm)
         net: Out

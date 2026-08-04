@@ -24,6 +24,7 @@ pub mod anchor_arithmetic; // v0.2.1: Comptime anchor arithmetic evaluator
 pub mod bridge_validator;
 pub mod compilation;
 pub mod conversions;
+pub mod device_registry; // v0.2.1: Device instance registry population
 pub mod errors;
 pub mod logic;
 pub mod meander_injection;

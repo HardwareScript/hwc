@@ -101,10 +101,21 @@ impl<'a> AutoRouter<'a> {
                     .copied();
                 let current_ma = self.resolve_net_current(&net_name, data)?;
 
+                // Determine the routing layer for this net
+                // Use the explicit layer name stored during routing planning (single source of truth)
+                let routing_layer_name = data
+                    .net_layer_names_by_id
+                    .get(&actual_net_id)
+                    .ok_or_else(|| IrError::RoutingError(format!(
+                        "Could not determine routing layer for net '{}' - no layer name recorded",
+                        net_name
+                    )))?;
+
                 self.register_analytic_route(
                     actual_net_id,
                     &net_name,
                     merged_path,
+                    routing_layer_name,
                     first_thickness,
                     declared_width,
                     current_ma,

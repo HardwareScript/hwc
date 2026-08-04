@@ -37,7 +37,7 @@ space Obstacle_Demo implements Obstacle_Connection:
         # No net assigned (hard obstacle)
 
     # Goal Pad
-    add plane(Aluminum) named Pad_B align: center_y with Pad_A right_of Pad_A with spacing: 700um on layer: metal1:
+    add plane(Aluminum) named Pad_B align: y with Pad_A right_of Pad_A with spacing: 700um on layer: metal1:
         shape: CubicPad(w: 200um, h: 200um)
         net: B
 

@@ -110,7 +110,7 @@ impl LogicalSynthesizer {
         for statement in &module.statements {
             match statement {
                 ModuleStatement::AddComponent(add) => {
-                    // Extract device type (e.g., "NMOS", "PMOS")
+                    // Extract device type (e.g., "NMOS", "PMOS", "Resistor")
                     let device_type_name = &add.component_type;
 
                     // Dynamically register device type
@@ -144,6 +144,12 @@ impl LogicalSynthesizer {
                 }
             }
         }
+
+        // NOTE: If the module has no AddComponent statements but the space has device bindings,
+        // the devices will be empty here. The alignment validator should be aware that when
+        // devices.len() == 0 in the logical netlist but > 0 in the physical netlist,
+        // this indicates a valid pattern where devices are declared through physical bindings only.
+        // This is handled in the validator by relaxing the device count check when logical has 0.
 
         // Step 3: Build terminal-to-net mapping with union-find for net merging
         // Map from "device.terminal" to net name

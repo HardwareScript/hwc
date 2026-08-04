@@ -144,7 +144,7 @@ pub fn instantiate_sub_space(
     // NO FALLBACK: If space doesn't exist, this is a compilation error
     let child_space_def = symbol_table
         .get_space(placement.space_name.as_str())
-        .ok_or_else(|| {
+        .map_err(|_| {
             // DEBUG: List all available spaces
             eprintln!("[DEBUG] Available spaces in symbol table:");
             eprintln!("[DEBUG]   Local layer: {:?}", symbol_table.list_local_spaces());

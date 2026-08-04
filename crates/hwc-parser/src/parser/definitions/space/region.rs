@@ -130,11 +130,11 @@ impl crate::parser::Parser {
                     "bottom" => RegionConstraintType::AlignBottom,
                     "left" => RegionConstraintType::AlignLeft,
                     "right" => RegionConstraintType::AlignRight,
-                    "center_x" => RegionConstraintType::AlignCenterX,
-                    "center_y" => RegionConstraintType::AlignCenterY,
+                    "x" => RegionConstraintType::AlignX,
+                    "y" => RegionConstraintType::AlignY,
                     _ => {
                         return Err(self.error(&format!(
-                            "Unknown alignment type: '{}'. Expected 'top', 'bottom', 'left', 'right', 'center_x', or 'center_y'",
+                            "Unknown alignment type: '{}'. Expected 'top', 'bottom', 'left', 'right', 'x', or 'y'",
                             align_type
                         )))
                     }

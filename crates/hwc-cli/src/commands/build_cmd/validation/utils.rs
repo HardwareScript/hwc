@@ -34,10 +34,11 @@ pub fn convert_metadata_to_physics(
             None
         };
 
-        eprintln!("[CONNECTIVITY DEBUG] Substrate layer {}: net={:?} type={:?} bbox=({},{},{}) -> ({},{},{})",
+        eprintln!("[CONNECTIVITY DEBUG] Substrate layer {}: net={:?} type={:?} bbox=({},{},{}) -> ({},{},{}) device_binding={:?}",
             idx, layer.net, layer.layer_type, 
             layer.bbox.min.x, layer.bbox.min.y, layer.bbox.min.z,
-            layer.bbox.max.x, layer.bbox.max.y, layer.bbox.max.z);
+            layer.bbox.max.x, layer.bbox.max.y, layer.bbox.max.z,
+            layer.device_binding);
 
         // NOTE on Z extents: We preserve the full physical Z extent of substrate pours
         // for connectivity checking. A previous "Z-plane flattening" fix shrunk pours to
@@ -58,6 +59,13 @@ pub fn convert_metadata_to_physics(
             let min_y = layer.bbox.min.y - expansion;
             let max_y = layer.bbox.max.y + expansion;
 
+            let device_binding = layer.device_binding.as_ref().map(|(dev_name, terminal)| {
+                hwc_physics::connectivity::DeviceBinding {
+                    device_name: dev_name.as_str().into(),
+                    terminal: terminal.as_str().into(),
+                }
+            });
+
             physics_substrate_layers.push(hwc_physics::connectivity::SubstrateLayerMetadata {
                 material: layer.material,
                 net: layer.net,
@@ -67,6 +75,7 @@ pub fn convert_metadata_to_physics(
                     Point3D::new(max_x, max_y, layer.bbox.max.z),
                 ),
                 layer_type: layer.layer_type,
+                device_binding,
             });
         } else {
             for region in &layer.regions {
@@ -74,6 +83,13 @@ pub fn convert_metadata_to_physics(
                 let reg_max_x = region.max.x + expansion;
                 let reg_min_y = region.min.y - expansion;
                 let reg_max_y = region.max.y + expansion;
+
+                let device_binding = layer.device_binding.as_ref().map(|(dev_name, terminal)| {
+                    hwc_physics::connectivity::DeviceBinding {
+                        device_name: dev_name.as_str().into(),
+                        terminal: terminal.as_str().into(),
+                    }
+                });
 
                 physics_substrate_layers.push(hwc_physics::connectivity::SubstrateLayerMetadata {
                     material: layer.material,
@@ -84,6 +100,7 @@ pub fn convert_metadata_to_physics(
                         Point3D::new(reg_max_x, reg_max_y, region.max.z),
                     ),
                     layer_type: layer.layer_type,
+                    device_binding,
                 });
             }
         }
@@ -114,6 +131,7 @@ pub fn convert_metadata_to_physics(
                         Point3D::new(bbox.max.x + annular_ring_nm, bbox.max.y + annular_ring_nm, bbox.max.z),
                     ),
                     layer_type: hwc_physics::connectivity::SubstrateLayerType::Contact,
+                    device_binding: None,
                 });
             }
         }
@@ -128,7 +146,10 @@ pub fn convert_metadata_to_physics(
     // **v0.2.0 FIX**: Use hierarchical routing database to get all routes (child + parent)
     // with proper provenance tracking instead of mixing entity_graph and analytic_routes.
     eprintln!("[CONNECTIVITY DEBUG] Processing analytic routes from hierarchical routing database");
-    let all_routes = space.routing_database.export_as_routed_segments();
+    let all_routes = space.routing_database.export_as_routed_segments_with_stackup(
+        &space.stackup_layers,
+        &space.material_registry,
+    );
     eprintln!("[CONNECTIVITY DEBUG] Got {} route groups from routing database", all_routes.len());
     
     for (net_id, segments) in &all_routes {
@@ -158,6 +179,7 @@ pub fn convert_metadata_to_physics(
                         Point3D::new(seg_bbox.max.x, seg_bbox.max.y, seg_bbox.max.z),
                     ),
                     layer_type: hwc_physics::connectivity::SubstrateLayerType::Contact,
+                    device_binding: None,
                 });
             } else {
                 // Treat as a horizontal route
@@ -201,6 +223,7 @@ pub fn convert_metadata_to_physics(
             net_name,
             bbox,
             layer_type: hwc_physics::connectivity::SubstrateLayerType::Contact,
+            device_binding: None,
         });
     }
 

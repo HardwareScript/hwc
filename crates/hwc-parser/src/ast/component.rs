@@ -115,13 +115,14 @@ pub enum MountingSide {
 /// Alignment axis for relational constraints (v0.1.9)
 ///
 /// Specifies which axis or edge to align with a target component.
-/// Used in: `align: center_y with Pad_A`
+/// Used in: `align: center with Pad_A` or `align: x with Pad_A`
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AlignmentAxis {
-    CenterX,
-    CenterY,
-    CenterZ,
-    Top,
+    Center,   // Aligns both X and Y to center
+    X,        // Explicit X-axis only
+    Y,        // Explicit Y-axis only
+    Z,        // Explicit Z-axis only
+    Top,      // Semantic edge alignment
     Bottom,
     Left,
     Right,

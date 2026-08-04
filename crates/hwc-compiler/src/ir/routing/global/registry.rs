@@ -62,6 +62,7 @@ impl<'a> AutoRouter<'a> {
         net_id: NetId,
         net_name: &str,
         path: Vec<Point3D>,
+        routing_layer_name: &str,
         thickness_nm: i64,
         declared_width_nm: Option<i64>,
         current_limit_ma: f64,
@@ -129,35 +130,40 @@ impl<'a> AutoRouter<'a> {
             });
         }
 
-        let sample_z = if path.len() > 1 { path[1].z } else { path[0].z };
-        let copper_id = if let Some(layer_name) = self.stackup_manager.get_layer_name_at_z(sample_z)
-        {
-            let mat_name = self
-                .profile
-                .and_then(|p| p.stackup.as_ref())
-                .and_then(|stackup| {
-                    stackup
-                        .layers
-                        .iter()
-                        .find(|l| l.name.name == layer_name)
-                        .map(|l| l.material.clone())
-                })
-                .ok_or_else(|| IrError::UndeclaredMaterial {
-                    material: format!(
-                        "No material defined for layer '{}' at Z={}nm",
-                        layer_name, sample_z
-                    )
-                    .into(),
-                })?;
-            self.space
-                .material_registry
-                .get_id(&mat_name)
-                .ok_or_else(|| IrError::UndeclaredMaterial { material: mat_name })?
-        } else {
-            return Err(IrError::UndeclaredMaterial {
-                material: format!("No stackup layer found at Z={}nm", sample_z).into(),
-            });
-        };
+        // Material determination: Use the explicitly specified routing layer
+        // This is the SINGLE SOURCE OF TRUTH - determined at routing planning time
+        let material_id = self
+            .profile
+            .and_then(|p| p.stackup.as_ref())
+            .and_then(|stackup| {
+                stackup
+                    .layers
+                    .iter()
+                    .find(|l| l.name.name == routing_layer_name)
+                    .map(|l| l.material.clone())
+            })
+            .ok_or_else(|| IrError::UndeclaredMaterial {
+                material: format!(
+                    "No material defined for routing layer '{}'",
+                    routing_layer_name
+                )
+                .into(),
+            })
+            .and_then(|mat_name| {
+                self.space
+                    .material_registry
+                    .get_id(&mat_name)
+                    .ok_or_else(|| IrError::UndeclaredMaterial {
+                        material: mat_name.clone(),
+                    })
+                    .map(|id| {
+                        eprintln!(
+                            "[REGISTRY MATERIAL DEBUG] Net '{}': routing_layer='{}', material='{}', material_id={}",
+                            net_name, routing_layer_name, mat_name, id
+                        );
+                        id
+                    })
+            })?;
 
         let net_actual_current_ma = self
             .space
@@ -180,7 +186,7 @@ impl<'a> AutoRouter<'a> {
             net_id,
             hwc_engine::space::CrossSection::new(trace_width_nm, thickness_nm),
             segments,
-            copper_id,
+            material_id,
             net_name.into(),
             hwc_engine::space::CurrentRating::new(net_actual_current_ma, current_limit_ma),
             layer_z_range,

@@ -103,8 +103,7 @@ space Identifier_Freedom_Space implements IdentifierFreedomModule:
     # ========================================================================
     
     add plane(Aluminum) named Contextual_Test {
-        align: center_x with tl
-        align: center_y with tl
+        align: center with tl
     } on layer: metal1:
         shape: SmallSquare(size: 30um)
         net: tl

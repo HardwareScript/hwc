@@ -55,7 +55,7 @@ space Contextual_Relational_Space implements ContextualRelationalModule:
     
     add plane(Aluminum) named Above_Pad {
         above: Base_Pad with spacing: 50um
-        align: center_x with Base_Pad
+        align: x with Base_Pad
     } on layer: metal1:
         shape: Pad(size: 100um)
         net: C
@@ -66,7 +66,7 @@ space Contextual_Relational_Space implements ContextualRelationalModule:
     # ========================================================================
     
     add plane(Aluminum) named Mixed_Pad {
-        align: center_x with Right_Pad
+        align: x with Right_Pad
     } on layer: metal1:
         shape: Pad(size: 80um)
         at: [y: Right_Pad.bottom - 150um]

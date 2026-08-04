@@ -252,7 +252,7 @@ fn resolve_region_from_constraints(
                 x_nm = Some(formula.resolve(tx_min, tx_max, spacing_nm, region_width));
                 if y_nm.is_none() {
                     let formula_cy = RelationalPlacementFormula::get(
-                        SpatialRelation::AlignCenterY, x_multiplier, y_multiplier,
+                        SpatialRelation::AlignY, x_multiplier, y_multiplier,
                     );
                     y_nm = Some(formula_cy.resolve(ty_min, ty_max, 0, region_height));
                 }
@@ -264,7 +264,7 @@ fn resolve_region_from_constraints(
                 x_nm = Some(formula.resolve(tx_min, tx_max, spacing_nm, region_width));
                 if y_nm.is_none() {
                     let formula_cy = RelationalPlacementFormula::get(
-                        SpatialRelation::AlignCenterY, x_multiplier, y_multiplier,
+                        SpatialRelation::AlignY, x_multiplier, y_multiplier,
                     );
                     y_nm = Some(formula_cy.resolve(ty_min, ty_max, 0, region_height));
                 }
@@ -277,7 +277,7 @@ fn resolve_region_from_constraints(
                 y_nm = Some(formula.resolve(ty_min, ty_max, spacing_nm, region_height));
                 if x_nm.is_none() {
                     let formula_cx = RelationalPlacementFormula::get(
-                        SpatialRelation::AlignCenterX, x_multiplier, y_multiplier,
+                        SpatialRelation::AlignX, x_multiplier, y_multiplier,
                     );
                     x_nm = Some(formula_cx.resolve(tx_min, tx_max, 0, region_width));
                 }
@@ -289,20 +289,20 @@ fn resolve_region_from_constraints(
                 y_nm = Some(formula.resolve(ty_min, ty_max, spacing_nm, region_height));
                 if x_nm.is_none() {
                     let formula_cx = RelationalPlacementFormula::get(
-                        SpatialRelation::AlignCenterX, x_multiplier, y_multiplier,
+                        SpatialRelation::AlignX, x_multiplier, y_multiplier,
                     );
                     x_nm = Some(formula_cx.resolve(tx_min, tx_max, 0, region_width));
                 }
             }
-            RegionConstraintType::AlignCenterX => {
+            RegionConstraintType::AlignX => {
                 let formula = RelationalPlacementFormula::get(
-                    SpatialRelation::AlignCenterX, x_multiplier, y_multiplier,
+                    SpatialRelation::AlignX, x_multiplier, y_multiplier,
                 );
                 x_nm = Some(formula.resolve(tx_min, tx_max, 0, region_width));
             }
-            RegionConstraintType::AlignCenterY => {
+            RegionConstraintType::AlignY => {
                 let formula = RelationalPlacementFormula::get(
-                    SpatialRelation::AlignCenterY, x_multiplier, y_multiplier,
+                    SpatialRelation::AlignY, x_multiplier, y_multiplier,
                 );
                 y_nm = Some(formula.resolve(ty_min, ty_max, 0, region_height));
             }

@@ -88,6 +88,7 @@ impl Exporter {
                 &compiled.symbol_table,
                 output_dir,
                 compiled.physical_netlist.as_ref(),
+                compiled.space_def.as_ref(),
             ),
             ExportFormat::Bom => bom::export(&compiled.space, &compiled.symbol_table, output_dir),
             ExportFormat::Excellon => excellon::export(&compiled.space, output_dir),

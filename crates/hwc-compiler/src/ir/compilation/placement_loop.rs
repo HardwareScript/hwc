@@ -84,9 +84,12 @@ pub fn execute_placement(
                         resolved_pour.name, resolved_position.x(), resolved_position.y()
                     );
 
-                    // Create or update boundary from resolved position
-                    // If boundary exists (from dimensions+at in parser), update its center
-                    // If boundary is None (dimensions only, no at:), create it from dimensions
+                    resolved_pour.position = Some(resolved_position.clone());
+
+                    // Create or update boundary from resolved position.
+                    // If boundary exists (from dimensions+at in parser), update its center.
+                    // If boundary is None (dimensions only, no at:), leave it None — place_pour
+                    // will build it from position + width/height in the position+dimensions path.
                     if let Some(hwc_parser::PourBoundary::Rect(from, to)) = &resolved_pour.boundary {
                         // Boundary exists - extract dimensions and recompute with new center
                         let width_expr = hwc_parser::Expression::Binary {
@@ -166,6 +169,18 @@ pub fn execute_placement(
                             Box::new(new_to),
                         ));
                     }
+
+                    // v0.2.1 FIX: Clear relational_constraints after resolution.
+                    //
+                    // place_pour has this guard:
+                    //   if boundary.is_none() && !relational_constraints.is_empty() { return Ok(()); }
+                    //
+                    // This guard exists to defer pours whose constraints can't be resolved yet.
+                    // But at this point we've ALREADY resolved them and set `position`. If we
+                    // leave constraints non-empty, place_pour sees boundary=None + constraints≠empty
+                    // and early-returns without registering the entity in the bbox_tracker.
+                    // Clearing them signals "constraints resolved; proceed with position+dimensions."
+                    resolved_pour.relational_constraints = smallvec::smallvec![];
                 }
 
                 crate::ir::placement::place_pour(space, &resolved_pour, bbox_tracker, &place_ctx)?;

@@ -126,6 +126,9 @@ pub fn unroll_pour(
         name,
         elevation,
         thickness,
+        position: pour.position.clone(), // v0.2.1: Preserve position field
+        width: pour.width.clone(),       // v0.2.1: Preserve width field
+        height: pour.height.clone(),     // v0.2.1: Preserve height field
         boundary,
         net,
         device: pour.device.clone(),

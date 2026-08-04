@@ -42,8 +42,8 @@ space Pyramid_Minimal_Space implements PyramidMinimalTest:
     # Should be at X=5um (center between 2um and 8um), Y=5um (same as base)
     # ========================================================================
     add plane(Aluminum) named Top_Center {
-        align: center_x with space
-        align: center_y with Base_Left
+        align: x with space
+        align: y with Base_Left
         above Base_Left with spacing: 500nm
     } on layer: metal1:
         shape: SquareCube(size: 2.0um)

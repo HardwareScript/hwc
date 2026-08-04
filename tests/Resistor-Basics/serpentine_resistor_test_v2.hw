@@ -1,0 +1,148 @@
+# serpentine_resistor_test_v2.hw
+# v0.2.1 MIDDLE-LEVEL REFACTOR: Parametric Serpentine Resistor
+# 
+# Demonstrates:
+# 1. Loop-based segment generation with arithmetic expressions
+# 2. Conditional material assignment (even/odd segments)
+# 3. Parametric vertical connector placement
+# 4. Device terminal binding with compile-time logic
+
+import * from @std/primitives/units
+import * from "./resistor_pdk"
+
+device Resistor:
+    terminals: [A, B]
+    materials:
+        A: Polysilicon
+        B: Polysilicon
+
+module SerpentineResistor:
+    pins: [input In, output Out]
+    route In to Out
+
+space Serpentine_Resistor_Space implements SerpentineResistor:
+    dimensions: 15.0um by 12.0um by 500nm
+    resolution: 10nm
+    origin: bl by b
+    profile: Resistor_Flattened
+
+    nets:
+        In:  { classification: signal, potential: 1.8V, current: 1.0uA }
+        Out: { classification: signal, potential: 0.0V, current: 1.0uA }
+
+    # ========================================================================
+    # PARAMETRIC SERPENTINE CONFIGURATION
+    # ========================================================================
+    
+    let num_segments = 5           # Number of horizontal resistor segments
+    let segment_width = 10.0um     # Width of each horizontal segment
+    let segment_height = 1.0um     # Height of each horizontal segment
+    let vertical_spacing = 2.0um   # Vertical space between segments
+    let connector_width = 1.0um    # Width of vertical connectors
+    let base_x = 5.0um             # Horizontal center position
+    let base_y = 2.0um             # Starting Y position
+    
+    # ========================================================================
+    # POLYSILICON SERPENTINE PATH (Parametric Generation)
+    # Creates 5 horizontal segments with 4 vertical connectors
+    # ========================================================================
+    
+    # Generate horizontal segments (0..4 = 5 segments)
+    for i in 0..4:
+        let segment_y = base_y + i * vertical_spacing
+        
+        # Determine device terminal based on segment position
+        # First 4 segments bind to terminal A, last segment to terminal B
+        if i < 4:
+            add pour(Polysilicon) named Seg{i} on layer: polyres:
+                device: R1.A
+                dimensions: segment_width by segment_height
+                at: [x: base_x, y: segment_y]
+        else:
+            add pour(Polysilicon) named Seg{i} on layer: polyres:
+                device: R1.B
+                dimensions: segment_width by segment_height
+                at: [x: base_x, y: segment_y]
+    
+    # Generate vertical connectors (0..3 = 4 connectors)
+    for i in 0..3:
+        let connector_y = base_y + i * vertical_spacing + segment_height
+        
+        # Alternate between left and right connectors
+        # Even indices (0, 2) connect on the right side
+        # Odd indices (1, 3) connect on the left side
+        if i mod 2 == 0:
+            # Right-side connector
+            add pour(Polysilicon) named Vert{i} on layer: polyres:
+                device: R1.A
+                dimensions: connector_width by vertical_spacing
+                at: [x: base_x + segment_width / 2 - connector_width / 2, y: connector_y]
+        else:
+            # Left-side connector
+            add pour(Polysilicon) named Vert{i} on layer: polyres:
+                device: R1.A
+                dimensions: connector_width by vertical_spacing
+                at: [x: base_x - segment_width / 2 + connector_width / 2, y: connector_y]
+
+    # ========================================================================
+    # METAL CONTACTS FOR TERMINALS (Using Anchor Arithmetic)
+    # ========================================================================
+    
+    # Input contact - overlaps left end of first segment (Seg0)
+    add pour(Aluminum) named Contact_In on layer: metal1:
+        net: In
+        dimensions: 800nm by 800nm
+        at: [x: base_x - segment_width / 2 + 500nm, y: base_y]
+
+    # Output contact - overlaps right end of last segment (Seg4)
+    add pour(Aluminum) named Contact_Out on layer: metal1:
+        net: Out
+        dimensions: 800nm by 800nm
+        at: [x: base_x + segment_width / 2 - 500nm, y: base_y + 4 * vertical_spacing]
+
+    # Vias connecting contacts to polysilicon
+    add contact(Titanium_Silicide) named Via_In spanning layer: polyres to metal1:
+        net: In
+        diameter: 400nm
+        plating_thickness: 5nm
+        align: center with Contact_In
+
+    add contact(Titanium_Silicide) named Via_Out spanning layer: polyres to metal1:
+        net: Out
+        diameter: 400nm
+        plating_thickness: 5nm
+        align: center with Contact_Out
+
+    # ========================================================================
+    # EXTERNAL CONNECTION PADS (Parametric Positioning)
+    # ========================================================================
+    
+    let pad_size = 1.0um
+    
+    add pour(Aluminum) named In_Pad on layer: metal1:
+        net: In
+        dimensions: pad_size by pad_size
+        at: [x: 1.0um, y: base_y]
+
+    add pour(Aluminum) named Out_Pad on layer: metal1:
+        net: Out
+        dimensions: pad_size by pad_size
+        at: [x: 13.0um, y: base_y + 4 * vertical_spacing]
+
+    # ========================================================================
+    # ROUTING (Using Parametric Wire Width)
+    # ========================================================================
+    
+    let trace_width = 500nm
+    
+    route In_Pad to Contact_In:
+        net: In
+        width: trace_width
+        layer: metal1
+        intent: Signal
+
+    route Contact_Out to Out_Pad:
+        net: Out
+        width: trace_width
+        layer: metal1
+        intent: Signal

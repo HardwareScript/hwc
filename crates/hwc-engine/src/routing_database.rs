@@ -372,12 +372,18 @@ impl HierarchicalRoutingDatabase {
     
     /// Export for legacy entity_graph.routed_segments() compatibility
     ///
-    /// Returns all routes (child + parent) grouped by net_id.
+    /// Returns all routes (child + parent) grouped by net_id with proper per-segment material lookup.
     /// Used during transition period to maintain compatibility.
-    pub fn export_as_routed_segments(&self) -> Vec<(NetId, Vec<TraceSegment>)> {
+    /// 
+    /// v0.2.1: Material IDs are looked up per-segment from the stackup based on Z-coordinate.
+    pub fn export_as_routed_segments_with_stackup(
+        &self,
+        stackup_layers: &[crate::space::StackupLayer],
+        material_registry: &crate::material::MaterialRegistry,
+    ) -> Vec<(NetId, Vec<TraceSegment>)> {
         let mut net_segments: FxHashMap<NetId, Vec<TraceSegment>> = FxHashMap::default();
         
-        // Add child routes
+        // Add child routes (these already have correct materials)
         for ((_, net_id), segments) in &self.child_instance_routes {
             net_segments
                 .entry(*net_id)
@@ -385,16 +391,47 @@ impl HierarchicalRoutingDatabase {
                 .extend(segments.clone());
         }
         
-        // Add parent routes
+        // Add parent routes with per-segment material lookup
         for trace in &self.parent_interconnects {
             let segments: Vec<TraceSegment> = trace.segments
                 .iter()
-                .map(|line_seg| TraceSegment::new(
-                    line_seg.start,
-                    line_seg.end,
-                    trace.cross_section.width_nm,
-                    trace.material,
-                ))
+                .map(|line_seg| {
+                    // Look up material based on segment's Z-coordinate
+                    let seg_z = if line_seg.start.z == line_seg.end.z {
+                        line_seg.start.z
+                    } else {
+                        line_seg.start.z // For vias, use starting Z
+                    };
+                    
+                    let material_id = stackup_layers
+                        .iter()
+                        .find(|layer| seg_z >= layer.z_bottom && seg_z <= layer.z_top)
+                        .and_then(|layer| material_registry.get_id(&layer.material_name))
+                        .expect(&format!(
+                            "FATAL: No stackup layer found at Z={}nm for route segment ({},{},{}) -> ({},{},{}) on net {:?}.\n\
+                             Routes must be placed on layers defined in the stackup.\n\
+                             Available stackup layers:\n{}\n\
+                             This indicates a mismatch between routing Z-coordinates and stackup layer definitions.",
+                            seg_z,
+                            line_seg.start.x, line_seg.start.y, line_seg.start.z,
+                            line_seg.end.x, line_seg.end.y, line_seg.end.z,
+                            trace.net_id,
+                            stackup_layers.iter()
+                                .map(|l| format!(
+                                    "  - {}: Z: {}nm-{}nm, Material: {}",
+                                    l.name, l.z_bottom, l.z_top, l.material_name
+                                ))
+                                .collect::<Vec<_>>()
+                                .join("\n")
+                        ));
+                    
+                    TraceSegment::new(
+                        line_seg.start,
+                        line_seg.end,
+                        trace.cross_section.width_nm,
+                        material_id,
+                    )
+                })
                 .collect();
             
             net_segments
@@ -405,6 +442,12 @@ impl HierarchicalRoutingDatabase {
         
         net_segments.into_iter().collect()
     }
+    
+    // NOTE: The old export_as_routed_segments() method has been REMOVED.
+    // It used a single hardcoded material ID for entire traces, causing incorrect
+    // material assignment for multi-layer routes. All call sites must now use
+    // export_as_routed_segments_with_stackup() which performs proper per-segment
+    // material lookup based on Z-coordinate from the stackup definition.
     
     /// Clear all routing data (used during re-registration)
     pub fn clear(&mut self) {

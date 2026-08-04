@@ -66,6 +66,14 @@ pub enum SymbolError {
     #[error("Material alias depth exceeded for '{name}': {depth} hops")]
     #[diagnostic(help("Material aliases are limited to 10 hops to prevent infinite recursion."))]
     AliasDepthExceeded { name: CompactString, depth: usize },
+
+    #[error("Type mismatch for '{name}': expected {expected}, found {found}")]
+    #[diagnostic(help("The symbol '{name}' is defined as a {found}, but you're trying to use it as a {expected}."))]
+    TypeMismatch {
+        name: CompactString,
+        expected: &'static str,
+        found: &'static str,
+    },
 }
 
 impl SymbolError {
@@ -118,6 +126,15 @@ impl SymbolError {
             name,
             target,
             span: span_of(span.0, span.1),
+        }
+    }
+
+    /// Construct a TypeMismatch error
+    pub fn type_mismatch(name: &str, expected: &'static str, found: &'static str) -> Self {
+        Self::TypeMismatch {
+            name: name.into(),
+            expected,
+            found,
         }
     }
 }

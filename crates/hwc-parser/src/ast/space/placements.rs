@@ -14,6 +14,13 @@ pub struct PourPlacement {
     pub name: crate::ast::component::ComponentName,
     pub elevation: Elevation,
     pub thickness: Option<Expression>,
+    /// Position coordinate when using `at:` (can be relative, declarative, or positional).
+    pub position: Option<Coordinate>,
+    /// Width and height when using `dimensions:` with `at:` syntax.
+    /// When present with position, boundary is derived from position + dimensions by the compiler.
+    pub width: Option<Expression>,
+    pub height: Option<Expression>,
+    /// Explicit boundary when using `boundary:` or `spanning:` syntax.
     pub boundary: Option<PourBoundary>,
     pub net: Option<NetName>,
     pub device: Option<DeviceBinding>,

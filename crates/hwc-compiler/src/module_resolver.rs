@@ -747,11 +747,13 @@ mod tests {
     fn test_resolver_error_types() {
         let err = ResolverError::FileNotFound {
             path: "test".to_string(),
+            span: None,
         };
         assert!(err.to_string().contains("test"));
 
         let err = ResolverError::StdlibNotFound {
             path: "stdlib".to_string(),
+            span: None,
         };
         assert!(err.to_string().contains("stdlib"));
     }

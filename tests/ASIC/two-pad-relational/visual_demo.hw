@@ -34,7 +34,7 @@ space Visual_Demo implements Pad_Connection:
 
     # Large cubic pad B (200um x 200um x 40um thick) - 100x bigger
     # Positioned relationally - to the right with more spacing
-    add plane(Aluminum) named Pad_B align: center_y with Pad_A right_of Pad_A with spacing: 500um on layer: metal1:
+    add plane(Aluminum) named Pad_B align: y with Pad_A right_of Pad_A with spacing: 500um on layer: metal1:
         shape: CubicPad(w: 200um, h: 200um)
         net: B
 

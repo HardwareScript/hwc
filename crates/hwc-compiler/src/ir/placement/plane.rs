@@ -268,22 +268,27 @@ pub fn place_plane(
             });
         };
 
-        // v0.2.1: Apply centering adjustments for align: center_x/center_y constraints
+        // v0.2.1: Apply centering adjustments for align: center constraints
         // 
-        // When using `align: center_x with <target>`, the relational resolver returns
-        // the center X coordinate. We need to subtract half the width to get the corner position.
+        // When using `align: center with <target>`, the relational resolver returns
+        // the center X and Y coordinates. We need to subtract half the width/height 
+        // to get the corner position.
         // 
         // This is the EXPLICIT centering behavior - no implicit magic based on expression content.
         for constraint in &plane.relational_constraints {
             if let hwc_parser::RelationalConstraint::Align { axis, .. } = constraint {
                 match axis {
-                    hwc_parser::AlignmentAxis::CenterX => {
+                    hwc_parser::AlignmentAxis::Center => {
                         position.x -= width_nm / 2;
-                    }
-                    hwc_parser::AlignmentAxis::CenterY => {
                         position.y -= height_nm / 2;
                     }
-                    hwc_parser::AlignmentAxis::CenterZ => {
+                    hwc_parser::AlignmentAxis::X => {
+                        position.x -= width_nm / 2;
+                    }
+                    hwc_parser::AlignmentAxis::Y => {
+                        position.y -= height_nm / 2;
+                    }
+                    hwc_parser::AlignmentAxis::Z => {
                         // Z-centering adjustment would go here if needed
                     }
                     _ => {

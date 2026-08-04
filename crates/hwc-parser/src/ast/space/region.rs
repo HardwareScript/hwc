@@ -60,8 +60,8 @@ pub enum RegionConstraintType {
     AlignBottom,
     AlignLeft,
     AlignRight,
-    AlignCenterX,
-    AlignCenterY,
+    AlignX,
+    AlignY,
 }
 
 /// Optional explicit boundary for a region

@@ -23,6 +23,7 @@ impl EntityGraph {
     }
 
     /// Add a substrate layer with clearance validation (v0.1.9).
+    /// v0.2.1: Added device terminal exemption for capacitors and other vertically-stacked devices.
     pub fn add_substrate_layer_checked(
         &mut self,
         material: MaterialId,
@@ -30,12 +31,30 @@ impl EntityGraph {
         bbox: BoundingBox,
         layer_type: SubstrateLayerType,
         min_clearance_nm: i64,
+        device_binding: Option<(&compact_str::CompactString, &compact_str::CompactString)>, // (device_name, terminal)
+        pours: &[crate::space::PourMetadata],
     ) -> Result<(), String> {
         if net != NetId::UNCONNECTED {
-            for existing in &self.substrate_layers {
+            for (idx, existing) in self.substrate_layers.iter().enumerate() {
                 if existing.net == NetId::UNCONNECTED || existing.net == net {
                     continue;
                 }
+                
+                // DEVICE TERMINAL EXEMPTION (v0.2.1): If both pours belong to same device instance,
+                // skip clearance check (intentional overlap for capacitors, transistors, etc.)
+                if let Some((dev_name, _terminal)) = device_binding {
+                    // Check if existing layer has device binding to same device
+                    // The substrate layer index maps to pour index since they're added in order
+                    if idx < pours.len() {
+                        if let Some(ref existing_binding) = pours[idx].device_binding {
+                            if existing_binding.device_name == *dev_name {
+                                // Same device instance - allow overlap (e.g., capacitor plates)
+                                continue;
+                            }
+                        }
+                    }
+                }
+                
                 let distance = bbox.distance_to(&existing.bbox);
                 if distance < min_clearance_nm {
                     return Err(format!(
@@ -45,7 +64,10 @@ impl EntityGraph {
                 }
             }
         }
-        let layer = SubstrateLayer::new(material, net, bbox, layer_type);
+        let mut layer = SubstrateLayer::new(material, net, bbox, layer_type);
+        if let Some((dev_name, terminal)) = device_binding {
+            layer.device_binding = Some((dev_name.to_string(), terminal.to_string()));
+        }
         self.substrate_layers.push(layer);
         Ok(())
     }

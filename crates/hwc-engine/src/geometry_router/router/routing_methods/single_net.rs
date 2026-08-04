@@ -745,6 +745,7 @@ impl GeometryRouter {
             }
         }
 
+        // v0.2.1 FIX: Routes will get correct materials from routing database export
         entity_graph.register_route(
             route.net_id,
             &final_path,

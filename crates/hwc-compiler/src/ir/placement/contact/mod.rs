@@ -35,35 +35,35 @@ pub fn place_contact(
         // Resolve relational anchor (e.g., Region.center) - returns 2D point
         resolve_relational_anchor(anchor, bbox_tracker, &contact.name)?
     } else if let Some(ref position) = contact.position {
-        // Absolute coordinates - returns 3D point, we extract x,y
-        let (_x_expr, _y_expr) = match position {
-            hwc_parser::Coordinate::Positional { x, y, .. }
-            | hwc_parser::Coordinate::Declarative { x, y, .. } => (x, y),
-            hwc_parser::Coordinate::Relative(_) => {
-                return Err(IrError::PlacementConstraint {
-                    message: "Relative coordinates are not supported for contact placement".into(),
-                    component: contact.name.base.to_string(),
-                });
-            }
-        };
-
-        let ctx = crate::ir::conversions::CoordinateContext {
-            origin,
-            space_dimensions: &space.dimensions,
-            symbol_table,
-            eval_context,
-            bbox_tracker: None,
-            stackup_manager,
-            profile,
-        };
-        let point_3d = crate::ir::conversions::coordinate_to_point(position, &ctx).map_err(|e| {
-            IrError::CoordinateResolutionFailed {
-                coordinate_str: format!("contact '{}' position", contact.name.base.as_str()),
-                reason: e,
-            }
-        })?;
-        // Extract 2D point from 3D
-        Point2D::new(point_3d.x, point_3d.y)
+        if position.is_relative() {
+            let solver = crate::constraint_solver::ConstraintSolver::new(bbox_tracker, eval_context);
+            let intent = solver.resolve_position(position).map_err(|e| {
+                IrError::CoordinateResolutionFailed {
+                    coordinate_str: format!("contact '{}' position", contact.name.base.as_str()),
+                    reason: e.to_string(),
+                }
+            })?;
+            let point_3d = intent.point();
+            Point2D::new(point_3d.x, point_3d.y)
+        } else {
+            let ctx = crate::ir::conversions::CoordinateContext {
+                origin,
+                space_dimensions: &space.dimensions,
+                symbol_table,
+                eval_context,
+                bbox_tracker: Some(bbox_tracker),
+                stackup_manager,
+                profile,
+            };
+            let point_3d = crate::ir::conversions::coordinate_to_point(position, &ctx).map_err(|e| {
+                IrError::CoordinateResolutionFailed {
+                    coordinate_str: format!("contact '{}' position", contact.name.base.as_str()),
+                    reason: e,
+                }
+            })?;
+            // Extract 2D point from 3D
+            Point2D::new(point_3d.x, point_3d.y)
+        }
     } else if !contact.relational_constraints.is_empty() {
         // v0.2.1: Relational constraints present - will be resolved later
         // Skip placement for now, the relational resolver will handle it

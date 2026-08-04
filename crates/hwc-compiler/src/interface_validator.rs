@@ -237,6 +237,7 @@ mod tests {
 
         let interface = PolymorphicInterfaceDefinition {
             name: Identifier::with_dummy_span("I2S_DAC"),
+            is_exported: false,
             description: None,
             required_pins: vec![
                 InterfacePin {
@@ -267,6 +268,7 @@ mod tests {
         // Register interface
         let interface = PolymorphicInterfaceDefinition {
             name: Identifier::with_dummy_span("I2S_DAC"),
+            is_exported: false,
             description: None,
             required_pins: vec![
                 InterfacePin {
@@ -290,6 +292,7 @@ mod tests {
         // Create component that implements the interface
         let component = ComponentDefinition {
             name: Identifier::with_dummy_span("CS4344"),
+            is_exported: false,
             parameters: vec![].into(),
             metadata: None,
             pins: vec!["BCLK".into(), "LRCLK".into(), "VCC".into()].into(),
@@ -316,6 +319,7 @@ mod tests {
         // Register interface
         let interface = PolymorphicInterfaceDefinition {
             name: Identifier::with_dummy_span("I2S_DAC"),
+            is_exported: false,
             description: None,
             required_pins: vec![
                 InterfacePin {
@@ -339,6 +343,7 @@ mod tests {
         // Create component missing LRCLK pin
         let component = ComponentDefinition {
             name: Identifier::with_dummy_span("BadChip"),
+            is_exported: false,
             parameters: vec![].into(),
             metadata: None,
             pins: vec!["BCLK".into(), "VCC".into()].into(), // Missing LRCLK
@@ -372,6 +377,7 @@ mod tests {
         // Register interface
         let interface = PolymorphicInterfaceDefinition {
             name: Identifier::with_dummy_span("I2S_DAC"),
+            is_exported: false,
             description: None,
             required_pins: vec![
                 InterfacePin {
@@ -395,6 +401,7 @@ mod tests {
         // Create component with different pin names
         let component = ComponentDefinition {
             name: Identifier::with_dummy_span("PCM5102"),
+            is_exported: false,
             parameters: vec![].into(),
             metadata: None,
             pins: vec!["BCK".into(), "LRCK".into(), "VCC".into()].into(),
@@ -432,6 +439,7 @@ mod tests {
         // Create component that implements non-existent interface
         let component = ComponentDefinition {
             name: Identifier::with_dummy_span("BadChip"),
+            is_exported: false,
             parameters: vec![].into(),
             metadata: None,
             pins: vec!["BCLK".into()].into(),
@@ -466,6 +474,7 @@ mod tests {
 
         let interface = PolymorphicInterfaceDefinition {
             name: Identifier::with_dummy_span("I2S_DAC"),
+            is_exported: false,
             description: None,
             required_pins: vec![],
             optional_pins: vec![],
@@ -475,6 +484,7 @@ mod tests {
 
         let component = ComponentDefinition {
             name: Identifier::with_dummy_span("CS4344"),
+            is_exported: false,
             parameters: vec![].into(),
             metadata: None,
             pins: vec![].into(),
@@ -500,6 +510,7 @@ mod tests {
 
         let interface = PolymorphicInterfaceDefinition {
             name: Identifier::with_dummy_span("I2S_DAC"),
+            is_exported: false,
             description: None,
             required_pins: vec![],
             optional_pins: vec![],
@@ -510,6 +521,7 @@ mod tests {
         let components = vec![
             ComponentDefinition {
                 name: Identifier::with_dummy_span("CS4344"),
+                is_exported: false,
                 parameters: vec![].into(),
                 metadata: None,
                 pins: vec![].into(),
@@ -526,6 +538,7 @@ mod tests {
             },
             ComponentDefinition {
                 name: Identifier::with_dummy_span("PCM5102"),
+                is_exported: false,
                 parameters: vec![].into(),
                 metadata: None,
                 pins: vec![].into(),
@@ -542,6 +555,7 @@ mod tests {
             },
             ComponentDefinition {
                 name: Identifier::with_dummy_span("FlashChip"),
+                is_exported: false,
                 parameters: vec![].into(),
                 metadata: None,
                 pins: vec![].into(),

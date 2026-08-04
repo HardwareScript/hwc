@@ -1,12 +1,12 @@
-use super::super::{error::SymbolError, layer::SymbolTable};
+use super::super::{error::SymbolError, layer::SymbolTable, Definition};
 use compact_str::CompactString;
 use hwc_diagnostics::DiagnosticCollector;
 use hwc_parser::{
     logic::{EnumDefinition, LogicDefinition, StructDefinition},
-    BridgeDefinition, ComponentDefinition, InterfaceDefinition, MaterialAliasDefinition,
-    MaterialDefinition, MechanicalDefinition, ModuleDefinition, PatternDefinition,
-    ProfileDefinition, ShapeDefinition, SignalGroupDefinition, StrategyDefinition,
-    TestDefinition, UnitDefinition,
+    BridgeDefinition, ComponentDefinition, DeviceDefinition, InterfaceDefinition,
+    MaterialAliasDefinition, MaterialDefinition, MechanicalDefinition, ModuleDefinition,
+    PatternDefinition, ProfileDefinition, ShapeDefinition, SignalGroupDefinition,
+    StrategyDefinition, TestDefinition, UnitDefinition,
 };
 
 impl SymbolTable {
@@ -18,8 +18,7 @@ impl SymbolTable {
     ) {
         let name_str = def.name.as_str().to_string();
 
-        // Check for duplicate in local layer
-        if let Some(existing) = self.local.material_aliases.get(name_str.as_str()) {
+        if let Some(Definition::MaterialAlias(existing)) = self.local.get(name_str.as_str()) {
             collector.report(SymbolError::duplicate(
                 def.name.to_string().into(),
                 "material_alias",
@@ -29,7 +28,7 @@ impl SymbolTable {
             return;
         }
 
-        self.local.material_aliases.insert(name_str.into(), def);
+        self.local.insert(name_str.into(), Definition::MaterialAlias(def));
     }
 
     /// Register a material definition (in local layer)
@@ -43,8 +42,7 @@ impl SymbolTable {
     pub fn register_material(&mut self, collector: &DiagnosticCollector, def: MaterialDefinition) {
         let name_str = def.name.as_str().to_string();
 
-        // Check for duplicate in local layer (same layer = error)
-        if let Some(existing) = self.local.materials.get(name_str.as_str()) {
+        if let Some(Definition::Material(existing)) = self.local.get(name_str.as_str()) {
             collector.report(SymbolError::duplicate(
                 def.name.to_string().into(),
                 "material",
@@ -54,7 +52,6 @@ impl SymbolTable {
             return;
         }
 
-        // Rule 1: Check if this local definition shadows an import (GAP3)
         if let Some(import_source) = self.check_material_shadowing(&name_str) {
             collector.report(SymbolError::shadowing(
                 def.name.to_string().into(),
@@ -64,79 +61,62 @@ impl SymbolTable {
             ));
         }
 
-        // Check if material exists in lower layers (HPM/Prelude/Core)
-        // If yes, merge properties (property-level shadowing)
         let material_to_register =
             if let Some(base_material) = self.find_material_in_lower_layers(&name_str) {
-                // Property-level shadowing: merge base with override
                 self.merge_properties(base_material, &def)
             } else {
-                // No base material found - use definition as-is
                 def
             };
 
-        self.local
-            .materials
-            .insert(name_str.into(), material_to_register);
+        self.local.insert(name_str.into(), Definition::Material(material_to_register));
     }
 
     /// Find a material in lower layers (HPM > Prelude > Core), excluding local layer
     fn find_material_in_lower_layers(&self, name: &str) -> Option<&MaterialDefinition> {
-        // Search HPM layers in reverse order (last import wins)
         for layer in self.hpm.iter().rev() {
-            if let Some(def) = layer.materials.get(name) {
-                return Some(def);
+            if let Some(Definition::Material(mat)) = layer.get(name) {
+                return Some(mat);
             }
         }
 
-        // Search prelude
-        if let Some(def) = self.prelude.materials.get(name) {
-            return Some(def);
+        if let Some(Definition::Material(mat)) = self.prelude.get(name) {
+            return Some(mat);
         }
 
-        // Search core
-        if let Some(def) = self.core.materials.get(name) {
-            return Some(def);
+        if let Some(Definition::Material(mat)) = self.core.get(name) {
+            return Some(mat);
         }
 
         None
     }
 
     /// Check if a material exists in lower layers and return the source layer name
-    /// Returns: Some("imported library"), Some("@std/materials"), or None
-    /// This is used for Rule 1 shadowing warnings (GAP3)
     fn check_material_shadowing(&self, name: &str) -> Option<CompactString> {
-        // Check HPM layers (imported definitions)
         for layer in self.hpm.iter().rev() {
-            if layer.materials.contains_key(name) {
+            if layer.get(name).is_some() {
                 return Some("imported library".into());
             }
         }
-
-        // Check prelude (stdlib)
-        if self.prelude.materials.contains_key(name) {
+        if self.prelude.get(name).is_some() {
             return Some("@std/materials".into());
         }
-
-        // Check core
-        if self.core.materials.contains_key(name) {
+        if self.core.get(name).is_some() {
             return Some("core library".into());
         }
-
         None
     }
 
     /// Check if a profile exists in lower layers and return the source layer name
     fn check_profile_shadowing(&self, name: &str) -> Option<CompactString> {
         for layer in self.hpm.iter().rev() {
-            if layer.profiles.contains_key(name) {
+            if layer.get(name).is_some() {
                 return Some("imported library".into());
             }
         }
-        if self.prelude.profiles.contains_key(name) {
+        if self.prelude.get(name).is_some() {
             return Some("@std/profiles".into());
         }
-        if self.core.profiles.contains_key(name) {
+        if self.core.get(name).is_some() {
             return Some("core library".into());
         }
         None
@@ -145,14 +125,14 @@ impl SymbolTable {
     /// Check if a component exists in lower layers and return the source layer name
     fn check_component_shadowing(&self, name: &str) -> Option<CompactString> {
         for layer in self.hpm.iter().rev() {
-            if layer.components.contains_key(name) {
+            if layer.get(name).is_some() {
                 return Some("imported library".into());
             }
         }
-        if self.prelude.components.contains_key(name) {
+        if self.prelude.get(name).is_some() {
             return Some("@std/components".into());
         }
-        if self.core.components.contains_key(name) {
+        if self.core.get(name).is_some() {
             return Some("core library".into());
         }
         None
@@ -161,14 +141,14 @@ impl SymbolTable {
     /// Check if a module exists in lower layers and return the source layer name
     fn check_module_shadowing(&self, name: &str) -> Option<CompactString> {
         for layer in self.hpm.iter().rev() {
-            if layer.modules.contains_key(name) {
+            if layer.get(name).is_some() {
                 return Some("imported library".into());
             }
         }
-        if self.prelude.modules.contains_key(name) {
+        if self.prelude.get(name).is_some() {
             return Some("@std/modules".into());
         }
-        if self.core.modules.contains_key(name) {
+        if self.core.get(name).is_some() {
             return Some("core library".into());
         }
         None
@@ -179,7 +159,7 @@ impl SymbolTable {
     /// Rule 1 (GAP3): Local Beats Global - warns if shadowing an import
     pub fn register_profile(&mut self, collector: &DiagnosticCollector, def: ProfileDefinition) {
         let name_str = def.name.as_str();
-        if let Some(existing) = self.local.profiles.get(name_str) {
+        if let Some(Definition::Profile(existing)) = self.local.get(name_str) {
             collector.report(SymbolError::duplicate(
                 def.name.to_string().into(),
                 "profile",
@@ -189,7 +169,6 @@ impl SymbolTable {
             return;
         }
 
-        // Rule 1: Check if this local definition shadows an import (GAP3)
         if let Some(import_source) = self.check_profile_shadowing(name_str) {
             collector.report(SymbolError::shadowing(
                 def.name.to_string().into(),
@@ -199,7 +178,7 @@ impl SymbolTable {
             ));
         }
 
-        self.local.profiles.insert(name_str.into(), def);
+        self.local.insert(name_str.into(), Definition::Profile(def));
     }
 
     /// Register a component definition (in local layer)
@@ -215,7 +194,7 @@ impl SymbolTable {
         def: ComponentDefinition,
     ) {
         let name_str = def.name.as_str().to_string();
-        if let Some(existing) = self.local.components.get(name_str.as_str()) {
+        if let Some(Definition::Component(existing)) = self.local.get(name_str.as_str()) {
             collector.report(SymbolError::duplicate(
                 def.name.to_string().into(),
                 "component",
@@ -225,7 +204,6 @@ impl SymbolTable {
             return;
         }
 
-        // Rule 1: Check if this local definition shadows an import (GAP3)
         if let Some(import_source) = self.check_component_shadowing(&name_str) {
             collector.report(SymbolError::shadowing(
                 def.name.to_string().into(),
@@ -235,21 +213,7 @@ impl SymbolTable {
             ));
         }
 
-        // Register the AST definition
-        self.local.components.insert(name_str.clone().into(), def);
-
-        // SEMANTIC BAKING: Bake local components too
-        match self.bake_component(&name_str) {
-            Ok(baked) => {
-                self.cache_baked_component(name_str.into(), baked);
-            }
-            Err(e) => {
-                eprintln!(
-                    "[WARN] Failed to bake local component '{}': {:?}",
-                    name_str, e
-                );
-            }
-        }
+        self.local.insert(name_str.clone().into(), Definition::Component(def));
     }
 
     /// Register a module definition (in local layer)
@@ -257,7 +221,7 @@ impl SymbolTable {
     /// Rule 1 (GAP3): Local Beats Global - warns if shadowing an import
     pub fn register_module(&mut self, collector: &DiagnosticCollector, def: ModuleDefinition) {
         let name_str = def.name.as_str();
-        if let Some(existing) = self.local.modules.get(name_str) {
+        if let Some(Definition::Module(existing)) = self.local.get(name_str) {
             collector.report(SymbolError::duplicate(
                 def.name.to_string().into(),
                 "module",
@@ -267,7 +231,6 @@ impl SymbolTable {
             return;
         }
 
-        // Rule 1: Check if this local definition shadows an import (GAP3)
         if let Some(import_source) = self.check_module_shadowing(name_str) {
             collector.report(SymbolError::shadowing(
                 def.name.to_string().into(),
@@ -277,41 +240,19 @@ impl SymbolTable {
             ));
         }
 
-        // Validate logic block if present (Gap 5.8: Combinational Loop Detection)
         if let Some(ref _logic_block) = def.logic {
-            // Extract module pins for validation
             let _module_pins: Vec<(String, Option<usize>)> = def
                 .pins
                 .iter()
                 .map(|pin| (pin.name.clone().into(), pin.array_size))
                 .collect();
 
-            // TODO: Logic validation during registration
-            // This requires a HardwareSpace which we don't have during registration
-            // Validation will happen during actual synthesis
-            /*
-            // Create a logic synthesizer to validate the logic block
-            use crate::logic_synthesizer::LogicSynthesizer;
-            let mut synthesizer = LogicSynthesizer::new(self);
-
-            // Run validation (this will check for combinational loops, width mismatches, etc.)
-            // Errors are reported to the collector
-            let (_comps, _nets, warnings) =
-                synthesizer.synthesize_logic_block(collector, logic_block, &module_pins);
-
-            // Report warnings to collector
-            for warning in warnings {
-                collector.report(warning);
-            }
-            */
-
-            // If validation had errors, skip registration
             if collector.has_errors() {
                 return;
             }
         }
 
-        self.local.modules.insert(name_str.into(), def);
+        self.local.insert(name_str.into(), Definition::Module(def));
     }
 
     /// Register a mechanical definition (in local layer)
@@ -321,7 +262,7 @@ impl SymbolTable {
         def: MechanicalDefinition,
     ) {
         let name_str = def.name.as_str();
-        if let Some(existing) = self.local.mechanicals.get(name_str) {
+        if let Some(Definition::Mechanical(existing)) = self.local.get(name_str) {
             collector.report(SymbolError::duplicate(
                 def.name.to_string().into(),
                 "mechanical",
@@ -330,7 +271,7 @@ impl SymbolTable {
             ));
             return;
         }
-        self.local.mechanicals.insert(name_str.into(), def);
+        self.local.insert(name_str.into(), Definition::Mechanical(def));
     }
 
     /// Register an interface definition (in local layer)
@@ -340,7 +281,7 @@ impl SymbolTable {
         def: InterfaceDefinition,
     ) {
         let name_str = def.name.as_str();
-        if let Some(existing) = self.local.interfaces.get(name_str) {
+        if let Some(Definition::Interface(existing)) = self.local.get(name_str) {
             collector.report(SymbolError::duplicate(
                 def.name.to_string().into(),
                 "interface",
@@ -349,13 +290,13 @@ impl SymbolTable {
             ));
             return;
         }
-        self.local.interfaces.insert(name_str.into(), def);
+        self.local.insert(name_str.into(), Definition::Interface(def));
     }
 
     /// Register a test definition (in local layer)
     pub fn register_test(&mut self, collector: &DiagnosticCollector, def: TestDefinition) {
         let name_str = def.name.as_str();
-        if let Some(existing) = self.local.tests.get(name_str) {
+        if let Some(Definition::Test(existing)) = self.local.get(name_str) {
             collector.report(SymbolError::duplicate(
                 def.name.to_string().into(),
                 "test",
@@ -364,7 +305,7 @@ impl SymbolTable {
             ));
             return;
         }
-        self.local.tests.insert(name_str.into(), def);
+        self.local.insert(name_str.into(), Definition::Test(def));
     }
 
     /// Register a signal group definition (in local layer)
@@ -374,7 +315,7 @@ impl SymbolTable {
         def: SignalGroupDefinition,
     ) {
         let name_str = def.name.as_str();
-        if let Some(existing) = self.local.signal_groups.get(name_str) {
+        if let Some(Definition::SignalGroup(existing)) = self.local.get(name_str) {
             collector.report(SymbolError::duplicate(
                 def.name.to_string().into(),
                 "signal_group",
@@ -383,13 +324,13 @@ impl SymbolTable {
             ));
             return;
         }
-        self.local.signal_groups.insert(name_str.into(), def);
+        self.local.insert(name_str.into(), Definition::SignalGroup(def));
     }
 
     /// Register a pattern definition (in local layer)
     pub fn register_pattern(&mut self, collector: &DiagnosticCollector, def: PatternDefinition) {
         let name_str = def.name.as_str();
-        if let Some(existing) = self.local.patterns.get(name_str) {
+        if let Some(Definition::Pattern(existing)) = self.local.get(name_str) {
             collector.report(SymbolError::duplicate(
                 def.name.to_string().into(),
                 "pattern",
@@ -398,13 +339,13 @@ impl SymbolTable {
             ));
             return;
         }
-        self.local.patterns.insert(name_str.into(), def);
+        self.local.insert(name_str.into(), Definition::Pattern(def));
     }
 
     /// Register a strategy definition (in local layer)
     pub fn register_strategy(&mut self, collector: &DiagnosticCollector, def: StrategyDefinition) {
         let name_str = def.name.as_str();
-        if let Some(existing) = self.local.strategies.get(name_str) {
+        if let Some(Definition::Strategy(existing)) = self.local.get(name_str) {
             collector.report(SymbolError::duplicate(
                 def.name.to_string().into(),
                 "strategy",
@@ -413,13 +354,13 @@ impl SymbolTable {
             ));
             return;
         }
-        self.local.strategies.insert(name_str.into(), def);
+        self.local.insert(name_str.into(), Definition::Strategy(def));
     }
 
     /// Register a logic block definition (in local layer)
     pub fn register_logic(&mut self, collector: &DiagnosticCollector, def: LogicDefinition) {
         let name_str = def.name.as_str();
-        if let Some(existing) = self.local.logic_blocks.get(name_str) {
+        if let Some(Definition::Logic(existing)) = self.local.get(name_str) {
             collector.report(SymbolError::duplicate(
                 def.name.to_string().into(),
                 "logic",
@@ -428,13 +369,13 @@ impl SymbolTable {
             ));
             return;
         }
-        self.local.logic_blocks.insert(name_str.into(), def);
+        self.local.insert(name_str.into(), Definition::Logic(def));
     }
 
     /// Register an enum definition (in local layer)
     pub fn register_enum(&mut self, collector: &DiagnosticCollector, def: EnumDefinition) {
         let name_str = def.name.as_str();
-        if let Some(existing) = self.local.enums.get(name_str) {
+        if let Some(Definition::Enum(existing)) = self.local.get(name_str) {
             collector.report(SymbolError::duplicate(
                 def.name.to_string().into(),
                 "enum",
@@ -443,13 +384,13 @@ impl SymbolTable {
             ));
             return;
         }
-        self.local.enums.insert(name_str.into(), def);
+        self.local.insert(name_str.into(), Definition::Enum(def));
     }
 
     /// Register a struct definition (in local layer)
     pub fn register_struct(&mut self, collector: &DiagnosticCollector, def: StructDefinition) {
         let name_str = def.name.as_str();
-        if let Some(existing) = self.local.structs.get(name_str) {
+        if let Some(Definition::Struct(existing)) = self.local.get(name_str) {
             collector.report(SymbolError::duplicate(
                 def.name.to_string().into(),
                 "struct",
@@ -458,13 +399,13 @@ impl SymbolTable {
             ));
             return;
         }
-        self.local.structs.insert(name_str.into(), def);
+        self.local.insert(name_str.into(), Definition::Struct(def));
     }
 
     /// Register a shape definition (in local layer)
     pub fn register_shape(&mut self, collector: &DiagnosticCollector, def: ShapeDefinition) {
         let name_str = def.name.as_str();
-        if let Some(existing) = self.local.shapes.get(name_str) {
+        if let Some(Definition::Shape(existing)) = self.local.get(name_str) {
             collector.report(SymbolError::duplicate(
                 def.name.to_string().into(),
                 "shape",
@@ -473,7 +414,7 @@ impl SymbolTable {
             ));
             return;
         }
-        self.local.shapes.insert(name_str.into(), def);
+        self.local.insert(name_str.into(), Definition::Shape(def));
     }
 
     /// Register a unit definition in the local layer (user-defined units in current file)
@@ -483,8 +424,10 @@ impl SymbolTable {
     pub fn register_unit(&mut self, collector: &DiagnosticCollector, def: UnitDefinition) {
         let symbol = def.symbol.clone();
 
-        // Check for duplicate in local layer
-        if let Some(existing) = self.local.units.values().find(|u| u.symbol == symbol) {
+        if let Some(Definition::Unit(existing)) = self.local.iter()
+            .find(|(_, d)| matches!(d, Definition::Unit(u) if u.symbol == symbol))
+            .map(|(_, d)| d) 
+        {
             collector.report(SymbolError::duplicate(
                 symbol.clone(),
                 "unit",
@@ -494,7 +437,6 @@ impl SymbolTable {
             return;
         }
 
-        // Check if this shadows an imported or prelude unit
         if self.resolve_unit_symbol(&symbol).is_some() {
             collector.report(SymbolError::shadowing(
                 symbol.clone(),
@@ -504,7 +446,7 @@ impl SymbolTable {
             ));
         }
 
-        self.local.units.insert(symbol, def);
+        self.local.insert(symbol, Definition::Unit(def));
     }
 
     /// Register a bridge definition (in local layer) (v0.2.0)
@@ -517,10 +459,48 @@ impl SymbolTable {
     /// appropriate one based on the stackup and manufacturing constraints.
     pub fn register_bridge(&mut self, _collector: &DiagnosticCollector, def: BridgeDefinition) {
         let key = CompactString::from(format!("{}_{}", def.from, def.to));
-        
-        // Note: Multiple bridges for the same material pair are allowed
-        // The via resolver handles priority/selection logic
-        // Last registration wins for same key (consistent with other definitions)
-        self.local.bridges.insert(key, def);
+        self.local.insert(key, Definition::Bridge(def));
+    }
+
+    /// Register a device definition (in local layer)
+    ///
+    /// Devices define the physical contract for foundry primitives (transistors,
+    /// diodes, resistors, etc.), specifying required terminals and expected
+    /// materials for each terminal.
+    ///
+    /// Rule 1 (GAP3): Local Beats Global - warns if shadowing an import
+    pub fn register_device(&mut self, collector: &DiagnosticCollector, def: DeviceDefinition) {
+        let name_str = def.name.as_str();
+        if let Some(Definition::Device(existing)) = self.local.get(name_str) {
+            collector.report(SymbolError::duplicate(
+                def.name.to_string().into(),
+                "device",
+                (def.span.start, def.span.end),
+                Some((existing.span.start, existing.span.end)),
+            ));
+            return;
+        }
+
+        // Check if shadowing imported device
+        if self.check_device_shadowing(name_str) {
+            collector.report(SymbolError::shadowing(
+                def.name.to_string().into(),
+                "device",
+                (def.span.start, def.span.end),
+                "imported library".into(),
+            ));
+        }
+
+        self.local.insert(name_str.into(), Definition::Device(def));
+    }
+
+    /// Check if a device exists in lower layers and return true if shadowing
+    fn check_device_shadowing(&self, name: &str) -> bool {
+        for layer in self.hpm.iter().rev() {
+            if layer.get(name).is_some() {
+                return true;
+            }
+        }
+        self.prelude.get(name).is_some() || self.core.get(name).is_some()
     }
 }

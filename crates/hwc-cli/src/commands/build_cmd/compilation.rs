@@ -163,6 +163,9 @@ fn build_symbol_table(
             hwc_parser::Definition::Unit(unit) => {
                 symbol_table.register_unit(collector, unit.clone());
             }
+            hwc_parser::Definition::Device(device) => {
+                symbol_table.register_device(collector, device.clone());
+            }
             hwc_parser::Definition::Material(mat) => {
                 symbol_table.register_material(collector, mat.clone());
             }

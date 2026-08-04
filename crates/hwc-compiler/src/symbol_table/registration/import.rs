@@ -7,9 +7,11 @@ use hwc_parser::{
     StrategyDefinition, TestDefinition, UnitDefinition,
 };
 
+use super::super::Definition;
+
 impl SymbolTable {
     /// Register an imported space definition (in HPM layer) (v0.2.1)
-    /// 
+    ///
     /// v0.2.1: Hierarchical Space Composition support
     /// Stores ALL definitions (exported and private) for proper scoped resolution
     pub fn register_import_space(&mut self, def: SpaceDefinition) {
@@ -17,19 +19,16 @@ impl SymbolTable {
 
         eprintln!("[DEBUG] register_import_space called for space: {}", name_str);
 
-        // Ensure we have at least one HPM layer
         if self.hpm.is_empty() {
             eprintln!("[DEBUG] HPM is empty, creating new layer");
             self.hpm.push(super::super::layer::SymbolLayer::new());
         }
 
-        // Add to the current (last) HPM layer
         self.hpm
             .last_mut()
             .unwrap()
-            .spaces
-            .insert(name_str.clone().into(), def);
-        
+            .insert(name_str.clone().into(), Definition::Space(def));
+
         eprintln!("[DEBUG] Space '{}' registered in HPM layer. Total HPM layers: {}", name_str, self.hpm.len());
     }
 
@@ -38,17 +37,14 @@ impl SymbolTable {
     pub fn register_import_bridge(&mut self, def: BridgeDefinition) {
         let key = format!("{}_{}", def.from, def.to);
 
-        // Ensure we have at least one HPM layer
         if self.hpm.is_empty() {
             self.hpm.push(super::super::layer::SymbolLayer::new());
         }
 
-        // Add to the current (last) HPM layer - stores both exported and private
         self.hpm
             .last_mut()
             .unwrap()
-            .bridges
-            .insert(key.into(), def);
+            .insert(key.into(), Definition::Bridge(def));
     }
 
     /// Register an imported material alias (in HPM layer)
@@ -56,17 +52,14 @@ impl SymbolTable {
     pub fn register_import_material_alias(&mut self, def: MaterialAliasDefinition) {
         let name_str = def.name.as_str().to_string();
 
-        // Ensure we have at least one HPM layer
         if self.hpm.is_empty() {
             self.hpm.push(super::super::layer::SymbolLayer::new());
         }
 
-        // Add to the current (last) HPM layer - stores both exported and private
         self.hpm
             .last_mut()
             .unwrap()
-            .material_aliases
-            .insert(name_str.into(), def);
+            .insert(name_str.into(), Definition::MaterialAlias(def));
     }
 
     /// Register an imported unit definition (in HPM layer)
@@ -76,7 +69,7 @@ impl SymbolTable {
         if self.hpm.is_empty() {
             self.hpm.push(super::super::layer::SymbolLayer::new());
         }
-        self.hpm.last_mut().unwrap().units.insert(symbol, def);
+        self.hpm.last_mut().unwrap().insert(symbol, Definition::Unit(def));
     }
 
     /// Register an imported device definition (in HPM layer)
@@ -89,8 +82,7 @@ impl SymbolTable {
         self.hpm
             .last_mut()
             .unwrap()
-            .devices
-            .insert(name.into(), def);
+            .insert(name.into(), Definition::Device(def));
     }
 
     /// Register an imported constant (in HPM layer)
@@ -100,7 +92,7 @@ impl SymbolTable {
         if self.hpm.is_empty() {
             self.hpm.push(super::super::layer::SymbolLayer::new());
         }
-        self.hpm.last_mut().unwrap().constants.insert(name, def);
+        self.hpm.last_mut().unwrap().insert(name, Definition::Const(def));
     }
 
     /// Register an imported shape definition (in HPM layer)
@@ -113,31 +105,27 @@ impl SymbolTable {
         self.hpm
             .last_mut()
             .unwrap()
-            .shapes
-            .insert(name_str.into(), def);
+            .insert(name_str.into(), Definition::Shape(def));
     }
 
     /// Register an imported material definition (in HPM layer)
     ///
     /// This is used by the ModuleResolver when processing import statements.
     /// Imported materials go into the HPM layer, not the local layer.
-    /// 
+    ///
     /// v0.2.0: Stores ALL definitions (exported and private) for proper scoped resolution.
     /// Export filtering happens during name resolution, not during registration.
     pub fn register_import_material(&mut self, def: MaterialDefinition) {
         let name_str = def.name.as_str().to_string();
 
-        // Ensure we have at least one HPM layer
         if self.hpm.is_empty() {
             self.hpm.push(super::super::layer::SymbolLayer::new());
         }
 
-        // Add to the current (last) HPM layer - stores both exported and private
         self.hpm
             .last_mut()
             .unwrap()
-            .materials
-            .insert(name_str.into(), def);
+            .insert(name_str.into(), Definition::Material(def));
     }
 
     /// Register an imported profile definition (in HPM layer)
@@ -150,8 +138,7 @@ impl SymbolTable {
         self.hpm
             .last_mut()
             .unwrap()
-            .profiles
-            .insert(name_str.into(), def);
+            .insert(name_str.into(), Definition::Profile(def));
     }
 
     /// Register an imported component definition (in HPM layer)
@@ -166,21 +153,7 @@ impl SymbolTable {
         self.hpm
             .last_mut()
             .unwrap()
-            .components
-            .insert(name_str.clone().into(), def);
-
-        // SEMANTIC BAKING: Bake imported components too
-        match self.bake_component(&name_str) {
-            Ok(baked) => {
-                self.cache_baked_component(name_str.into(), baked);
-            }
-            Err(e) => {
-                eprintln!(
-                    "[WARN] Failed to bake imported component '{}': {:?}",
-                    name_str, e
-                );
-            }
-        }
+            .insert(name_str.clone().into(), Definition::Component(def));
     }
 
     /// Register an imported module definition (in HPM layer)
@@ -193,8 +166,7 @@ impl SymbolTable {
         self.hpm
             .last_mut()
             .unwrap()
-            .modules
-            .insert(name_str.into(), def);
+            .insert(name_str.into(), Definition::Module(def));
     }
 
     /// Register an imported mechanical definition (in HPM layer)
@@ -207,8 +179,7 @@ impl SymbolTable {
         self.hpm
             .last_mut()
             .unwrap()
-            .mechanicals
-            .insert(name_str.into(), def);
+            .insert(name_str.into(), Definition::Mechanical(def));
     }
 
     /// Register an imported interface definition (in HPM layer)
@@ -221,8 +192,7 @@ impl SymbolTable {
         self.hpm
             .last_mut()
             .unwrap()
-            .interfaces
-            .insert(name_str.into(), def);
+            .insert(name_str.into(), Definition::Interface(def));
     }
 
     /// Register an imported signal group definition (in HPM layer)
@@ -235,8 +205,7 @@ impl SymbolTable {
         self.hpm
             .last_mut()
             .unwrap()
-            .signal_groups
-            .insert(name_str.into(), def);
+            .insert(name_str.into(), Definition::SignalGroup(def));
     }
 
     /// Register an imported pattern definition (in HPM layer)
@@ -249,8 +218,7 @@ impl SymbolTable {
         self.hpm
             .last_mut()
             .unwrap()
-            .patterns
-            .insert(name_str.into(), def);
+            .insert(name_str.into(), Definition::Pattern(def));
     }
 
     /// Register an imported strategy definition (in HPM layer)
@@ -263,8 +231,7 @@ impl SymbolTable {
         self.hpm
             .last_mut()
             .unwrap()
-            .strategies
-            .insert(name_str.into(), def);
+            .insert(name_str.into(), Definition::Strategy(def));
     }
 
     /// Register an imported logic block definition (in HPM layer)
@@ -277,8 +244,7 @@ impl SymbolTable {
         self.hpm
             .last_mut()
             .unwrap()
-            .logic_blocks
-            .insert(name_str.into(), def);
+            .insert(name_str.into(), Definition::Logic(def));
     }
 
     /// Register an imported enum definition (in HPM layer)
@@ -291,8 +257,7 @@ impl SymbolTable {
         self.hpm
             .last_mut()
             .unwrap()
-            .enums
-            .insert(name_str.into(), def);
+            .insert(name_str.into(), Definition::Enum(def));
     }
 
     /// Register an imported struct definition (in HPM layer)
@@ -305,8 +270,7 @@ impl SymbolTable {
         self.hpm
             .last_mut()
             .unwrap()
-            .structs
-            .insert(name_str.into(), def);
+            .insert(name_str.into(), Definition::Struct(def));
     }
 
     /// Register an imported test definition (in HPM layer)
@@ -319,7 +283,6 @@ impl SymbolTable {
         self.hpm
             .last_mut()
             .unwrap()
-            .tests
-            .insert(name_str.into(), def);
+            .insert(name_str.into(), Definition::Test(def));
     }
 }

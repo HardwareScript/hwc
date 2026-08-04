@@ -70,14 +70,14 @@ pub struct UnifiedCopperContour {
 /// This function uses proper lookup tables and fails fast if data is inconsistent.
 /// It does NOT have hardcoded material names or default values.
 pub fn generate_copper_contours(space: &HardwareSpace) -> Vec<UnifiedCopperContour> {
-    eprintln!("[UNIFIED GEOMETRY] Starting generation...");
+   
     let mut pools: FxHashMap<CopperPoolKey, Vec<Path64>> = FxHashMap::default();
 
     // 1. Add substrate layers (pads, pours, contacts)
     //    These are already realized by the compiler into the entity_graph
     let substrate_layers = space.entity_graph.get_substrate_layers();
     
-    eprintln!("[UNIFIED GEOMETRY] Processing {} substrate layers", substrate_layers.len());
+   
     
     for layer in substrate_layers {
         // Only include conductive layers (Pour and Contact types)
@@ -96,10 +96,7 @@ pub fn generate_copper_contours(space: &HardwareSpace) -> Vec<UnifiedCopperConto
             net_id: layer.net,
         };
 
-        eprintln!(
-            "[UNIFIED GEOMETRY]   Substrate layer: net={:?}, type={:?}, material={:?}, Z={}→{}nm",
-            layer.net, layer.layer_type, layer.material, layer.bbox.min.z, layer.bbox.max.z
-        );
+       
 
         let path = match &layer.shape {
             SubstrateLayerShape::Rect => rect_to_path(&layer.bbox),
@@ -121,18 +118,14 @@ pub fn generate_copper_contours(space: &HardwareSpace) -> Vec<UnifiedCopperConto
     // 2. Add analytic trace geometry
     //    The trace_geometry engine handles proper Z-range resolution
     //    from AnalyticTrace.layer_z_range (stackup-derived)
-    eprintln!("[UNIFIED GEOMETRY] Generating trace geometry...");
+  
     let trace_pools = trace_geometry::generate_trace_geometry(space);
     
-    eprintln!("[UNIFIED GEOMETRY] Got {} trace pools", trace_pools.len());
+    
     
     for (geom_key, mut geom_pool) in trace_pools {
         geom_pool.flush_pending();
         
-        eprintln!(
-            "[UNIFIED GEOMETRY]   Trace pool: net={:?}, Z={}→{}nm, {} paths",
-            geom_key.net_id, geom_key.z_min, geom_key.z_max, geom_pool.paths.len()
-        );
         
         // Convert from trace_geometry key to unified key
         let key = CopperPoolKey {
@@ -239,47 +232,21 @@ pub fn generate_copper_contours(space: &HardwareSpace) -> Vec<UnifiedCopperConto
     // 4. Perform Boolean union on each pool
     let mut result = Vec::new();
     
-    eprintln!("[UNIFIED GEOMETRY] Performing Boolean union on {} pools...", pools.len());
+   
     
     for (key, paths) in pools {
         if paths.is_empty() {
             continue;
         }
 
-        eprintln!(
-            "[UNIFIED GEOMETRY]   Pool key=(z={:?}→{:?}, mat={:?}, net={:?}): {} paths before union",
-            key.z_min, key.z_max, key.material, key.net_id, paths.len()
-        );
-
-        // Debug: Print bounding boxes of first few paths
-        for (idx, path) in paths.iter().enumerate().take(5) {
-            if !path.is_empty() {
-                let min_x = path.iter().map(|p| p.x).min().unwrap();
-                let max_x = path.iter().map(|p| p.x).max().unwrap();
-                let min_y = path.iter().map(|p| p.y).min().unwrap();
-                let max_y = path.iter().map(|p| p.y).max().unwrap();
-                eprintln!(
-                    "[UNIFIED GEOMETRY]     Path {}: bbox=({}, {}) to ({}, {}), {} points",
-                    idx, min_x, min_y, max_x, max_y, path.len()
-                );
-            }
-        }
+       
 
         // Boolean union to merge overlapping geometry
         let contours = clipper2_rust::union_64(&paths, &Vec::new(), FillRule::NonZero);
         
-        eprintln!("[UNIFIED GEOMETRY]     Input paths to union:");
-        for (i, path) in paths.iter().enumerate() {
-            eprintln!("[UNIFIED GEOMETRY]       Path {}: {} points", i, path.len());
-            for (j, pt) in path.iter().enumerate() {
-                eprintln!("[UNIFIED GEOMETRY]         Point {}: ({}, {})", j, pt.x, pt.y);
-            }
-        }
+       
         
-        eprintln!(
-            "[UNIFIED GEOMETRY]     After union: {} contours",
-            contours.len()
-        );
+      
         
         // Debug: Print first few points of the unified contour
         if !contours.is_empty() && !contours[0].is_empty() {
@@ -299,7 +266,7 @@ pub fn generate_copper_contours(space: &HardwareSpace) -> Vec<UnifiedCopperConto
     // Sort for deterministic output
     result.sort_by_key(|c| c.key);
     
-    eprintln!("[UNIFIED GEOMETRY] Returning {} unified contour groups", result.len());
+   
     
     result
 }

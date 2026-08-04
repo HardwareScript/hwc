@@ -49,6 +49,24 @@ pub struct DeviceBinding {
     pub terminal: CompactString,    // e.g., "gate", "source", "drain", "bulk"
 }
 
+/// Device instance metadata (v0.2.1: Native Device Support)
+///
+/// Stores information about a device instance discovered from pour bindings.
+/// This is the single source of truth for device extraction to SPICE, BOM, etc.
+#[derive(Debug, Clone)]
+pub struct DeviceInstance {
+    /// Instance name (e.g., "R1", "M1")
+    pub name: CompactString,
+    /// Device type name (e.g., "Resistor", "NMOS", "Capacitor")
+    pub device_type: CompactString,
+    /// Terminal names (e.g., ["A", "B"] for resistor, ["gate", "source", "drain", "bulk"] for MOSFET)
+    pub terminals: Vec<CompactString>,
+    /// Net connections for each terminal (terminal_name -> net_name)
+    pub terminal_nets: rustc_hash::FxHashMap<CompactString, CompactString>,
+    /// Calculated parameters (e.g., "R" -> 400.0 for resistance, "W" -> 1.0, "L" -> 0.18 for transistors)
+    pub parameters: rustc_hash::FxHashMap<CompactString, f64>,
+}
+
 /// Metadata about a contact/via for connectivity checking
 #[derive(Debug, Clone)]
 pub struct ContactMetadata {

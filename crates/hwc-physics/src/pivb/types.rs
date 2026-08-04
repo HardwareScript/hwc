@@ -1,5 +1,6 @@
 use crate::geometry::{BoundingBox, Point3D};
 use compact_str::CompactString;
+use crate::connectivity::DeviceBinding;
 
 /// A Planar Island represents a continuous copper region on a single layer.
 ///
@@ -30,6 +31,8 @@ pub struct PlanarIsland {
     pub net_id: hwc_types::NetId,
     /// Material ID
     pub material: u8,
+    /// Device terminal binding (v0.2.1) - if present, this island is part of a device terminal
+    pub device_binding: Option<DeviceBinding>,
 }
 
 /// A Vertical Bridge represents a via or contact that connects Planar Islands

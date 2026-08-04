@@ -1,5 +1,6 @@
 //! Device binding and net declaration parsing
 
+use crate::ast::MeasurementValue;
 use crate::ast::*;
 use crate::lexer::{Span, Token};
 use crate::parser::error::ParseError;
@@ -65,10 +66,11 @@ impl crate::parser::Parser {
             self.expect(&Token::Colon)?;
 
             // v0.1.8: Support both simple classification and brace-enclosed properties
+            // v0.2.1: Store raw measurements, defer unit conversion to compiler phase
             let mut classification = NetClassification::Signal;
-            let mut potential_mv: Option<i64> = None;
-            let mut current_ma: Option<f64> = None;
-            let mut frequency_hz: Option<f64> = None;
+            let mut potential: Option<MeasurementValue> = None;
+            let mut current: Option<MeasurementValue> = None;
+            let mut frequency: Option<MeasurementValue> = None;
 
             if self.check(&Token::OpenBrace) {
                 self.advance(); // consume '{'
@@ -89,16 +91,27 @@ impl crate::parser::Parser {
                         "potential" => {
                             if let Some(token) = self.current() {
                                 if let Token::Measurement(m) = &token.token {
+                                    let span = token.span;
                                     let value = m.value;
-                                    use crate::lexer::units::{Unit as LexerUnit, VoltageUnit};
-                                    potential_mv = Some(match m.unit {
-                                        LexerUnit::Voltage(VoltageUnit::Volts) => {
-                                            (value * 1000.0) as i64
+                                    // Extract unit string - no conversion, store as-is
+                                    let unit_str = match &m.unit {
+                                        crate::lexer::units::Unit::Voltage(v) => {
+                                            use crate::lexer::units::VoltageUnit;
+                                            match v {
+                                                VoltageUnit::Volts => "V",
+                                                VoltageUnit::Millivolts => "mV",
+                                                VoltageUnit::Kilovolts => "kV",
+                                            }
                                         }
-                                        LexerUnit::Voltage(VoltageUnit::Millivolts) => value as i64,
+                                        crate::lexer::units::Unit::Custom(s) => s.as_str(),
                                         _ => {
-                                            return Err(self.error("Expected V or mV for potential"))
+                                            return Err(self.error("Expected voltage unit"))
                                         }
+                                    };
+                                    potential = Some(MeasurementValue {
+                                        value,
+                                        unit: unit_str.into(),
+                                        span,
                                     });
                                     self.advance();
                                 }
@@ -107,19 +120,27 @@ impl crate::parser::Parser {
                         "current" => {
                             if let Some(token) = self.current() {
                                 if let Token::Measurement(m) = &token.token {
+                                    let span = token.span;
                                     let value = m.value;
-                                    use crate::lexer::units::{CurrentUnit, Unit as LexerUnit};
-                                    current_ma = Some(match m.unit {
-                                        LexerUnit::Current(CurrentUnit::Amperes) => value * 1000.0,
-                                        LexerUnit::Current(CurrentUnit::Milliamperes) => value,
-                                        LexerUnit::Current(CurrentUnit::Microamperes) => {
-                                            value / 1000.0
+                                    // Extract unit string - no conversion, store as-is
+                                    let unit_str = match &m.unit {
+                                        crate::lexer::units::Unit::Current(c) => {
+                                            use crate::lexer::units::CurrentUnit;
+                                            match c {
+                                                CurrentUnit::Amperes => "A",
+                                                CurrentUnit::Milliamperes => "mA",
+                                                CurrentUnit::Microamperes => "µA",
+                                            }
                                         }
+                                        crate::lexer::units::Unit::Custom(s) => s.as_str(),
                                         _ => {
-                                            return Err(
-                                                self.error("Expected A, mA, or uA for current")
-                                            )
+                                            return Err(self.error("Expected current unit"))
                                         }
+                                    };
+                                    current = Some(MeasurementValue {
+                                        value,
+                                        unit: unit_str.into(),
+                                        span,
                                     });
                                     self.advance();
                                 }
@@ -128,20 +149,19 @@ impl crate::parser::Parser {
                         "frequency" => {
                             if let Some(token) = self.current() {
                                 if let Token::Measurement(m) = &token.token {
+                                    let span = token.span;
                                     let value = m.value;
-                                    use crate::lexer::units::Unit as LexerUnit;
-                                    frequency_hz = Some(match m.unit {
-                                        LexerUnit::Custom(ref s) if s == "Hz" => value,
-                                        LexerUnit::Custom(ref s) if s == "kHz" => value * 1_000.0,
-                                        LexerUnit::Custom(ref s) if s == "MHz" => {
-                                            value * 1_000_000.0
-                                        }
-                                        LexerUnit::Custom(ref s) if s == "GHz" => {
-                                            value * 1_000_000_000.0
-                                        }
+                                    // Extract unit string - no conversion, store as-is
+                                    let unit_str = match &m.unit {
+                                        crate::lexer::units::Unit::Custom(s) => s.as_str(),
                                         _ => {
-                                            return Err(self.error("Expected Hz, kHz, MHz, or GHz"))
+                                            return Err(self.error("Expected frequency unit"))
                                         }
+                                    };
+                                    frequency = Some(MeasurementValue {
+                                        value,
+                                        unit: unit_str.into(),
+                                        span,
                                     });
                                     self.advance();
                                 }
@@ -167,6 +187,7 @@ impl crate::parser::Parser {
                 };
 
                 // v0.1.7: Parse optional frequency: e.g., `signal, frequency: 5GHz`
+                // v0.2.1: Store raw measurement value
                 if self.check(&Token::Comma) {
                     self.advance(); // consume comma
                     self.skip_whitespace();
@@ -176,16 +197,17 @@ impl crate::parser::Parser {
                         self.skip_whitespace();
                         if let Some(token) = self.current() {
                             if let Token::Measurement(m) = &token.token {
+                                let span = token.span;
                                 let value = m.value;
-                                use crate::lexer::units::Unit as LexerUnit;
-                                frequency_hz = Some(match m.unit {
-                                    LexerUnit::Custom(ref s) if s == "Hz" => value,
-                                    LexerUnit::Custom(ref s) if s == "kHz" => value * 1_000.0,
-                                    LexerUnit::Custom(ref s) if s == "MHz" => value * 1_000_000.0,
-                                    LexerUnit::Custom(ref s) if s == "GHz" => {
-                                        value * 1_000_000_000.0
-                                    }
-                                    _ => return Err(self.error("Invalid frequency unit")),
+                                // Extract unit string - no conversion
+                                let unit_str = match &m.unit {
+                                    crate::lexer::units::Unit::Custom(s) => s.as_str(),
+                                    _ => return Err(self.error("Expected frequency unit")),
+                                };
+                                frequency = Some(MeasurementValue {
+                                    value,
+                                    unit: unit_str.into(),
+                                    span,
                                 });
                                 self.advance();
                             }
@@ -199,9 +221,9 @@ impl crate::parser::Parser {
             net_declarations.push(NetDeclaration {
                 name: net_name.into(),
                 classification,
-                potential_mv,
-                current_ma,
-                frequency_hz,
+                potential,
+                current,
+                frequency,
                 span: Span::new(start_pos, self.previous_span().end),
             });
         }

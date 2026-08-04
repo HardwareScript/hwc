@@ -36,7 +36,7 @@ space Two_Tower_Space implements TwoTowerBridge:
     # Left edge of Region B will resolve to: 600nm (A right) + 1200nm (spacing) = 1800nm
     region Silicon_Zone_B:
         right_of: Silicon_Zone_A with spacing: 1.2um
-        align: center_y with Silicon_Zone_A
+        align: y with Silicon_Zone_A
         boundary: [width: 400nm, height: 400nm]
 
     # ========================================================================

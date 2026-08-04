@@ -2,6 +2,7 @@
 
 use super::super::error::{span_to_source_span, ParseError};
 use crate::ast::*;
+use crate::ast::device::SpiceExportInfo;
 use crate::lexer::{Span, Token};
 use compact_str::CompactString;
 use rustc_hash::FxHashMap;
@@ -207,13 +208,132 @@ impl super::super::Parser {
         };
 
         Some(DeviceDefinition {
-            name,
+            name: name.clone(),
             is_exported,
-            terminals,
+            terminals: terminals.clone(),
             materials,
             tolerance,
+            spice_info: Self::generate_default_spice_info(&name, &terminals),
             span: Span::new(start_pos, end_pos),
         })
+    }
+    
+    /// Generate default SPICE export info based on device name and terminals
+    ///
+    /// This provides sensible defaults for common device types. Users can override
+    /// by adding explicit `spice:` blocks in future versions.
+    fn generate_default_spice_info(
+        device_name: &Identifier,
+        terminals: &SmallVec<[CompactString; 4]>,
+    ) -> Option<SpiceExportInfo> {
+        let name_str = device_name.as_str();
+        
+        // Match common device types
+        match name_str {
+            "Resistor" | "PolyResistor" => {
+                let mut terminal_order = SmallVec::new();
+                terminal_order.push("A".into());
+                terminal_order.push("B".into());
+                
+                let mut parameters = SmallVec::new();
+                parameters.push("R".into());
+                
+                Some(SpiceExportInfo {
+                    prefix: 'R',
+                    terminal_order,
+                    parameters,
+                    model_name: None,
+                })
+            }
+            "Capacitor" => {
+                let mut terminal_order = SmallVec::new();
+                terminal_order.push("Top".into());
+                terminal_order.push("Bottom".into());
+                
+                let mut parameters = SmallVec::new();
+                parameters.push("C".into());
+                
+                Some(SpiceExportInfo {
+                    prefix: 'C',
+                    terminal_order,
+                    parameters,
+                    model_name: None,
+                })
+            }
+            "Inductor" => {
+                let mut terminal_order = SmallVec::new();
+                terminal_order.push("A".into());
+                terminal_order.push("B".into());
+                
+                let mut parameters = SmallVec::new();
+                parameters.push("L".into());
+                
+                Some(SpiceExportInfo {
+                    prefix: 'L',
+                    terminal_order,
+                    parameters,
+                    model_name: None,
+                })
+            }
+            "Diode" => {
+                let mut terminal_order = SmallVec::new();
+                terminal_order.push("Anode".into());
+                terminal_order.push("Cathode".into());
+                
+                Some(SpiceExportInfo {
+                    prefix: 'D',
+                    terminal_order,
+                    parameters: SmallVec::new(),
+                    model_name: Some("D1N4148".into()),
+                })
+            }
+            "NMOS" => {
+                let mut terminal_order = SmallVec::new();
+                terminal_order.push("drain".into());
+                terminal_order.push("gate".into());
+                terminal_order.push("source".into());
+                terminal_order.push("bulk".into());
+                
+                let mut parameters = SmallVec::new();
+                parameters.push("W".into());
+                parameters.push("L".into());
+                
+                Some(SpiceExportInfo {
+                    prefix: 'M',
+                    terminal_order,
+                    parameters,
+                    model_name: Some("NMOS".into()),
+                })
+            }
+            "PMOS" => {
+                let mut terminal_order = SmallVec::new();
+                terminal_order.push("drain".into());
+                terminal_order.push("gate".into());
+                terminal_order.push("source".into());
+                terminal_order.push("bulk".into());
+                
+                let mut parameters = SmallVec::new();
+                parameters.push("W".into());
+                parameters.push("L".into());
+                
+                Some(SpiceExportInfo {
+                    prefix: 'M',
+                    terminal_order,
+                    parameters,
+                    model_name: Some("PMOS".into()),
+                })
+            }
+            _ => {
+                // For unknown device types, generate generic subcircuit format
+                // X<name> <terminals in declaration order> <model_name>
+                Some(SpiceExportInfo {
+                    prefix: 'X',
+                    terminal_order: terminals.clone(),
+                    parameters: SmallVec::new(),
+                    model_name: Some(device_name.to_string().into()),
+                })
+            }
+        }
     }
 
     /// Parse terminal list: `[gate, source, drain, bulk]`

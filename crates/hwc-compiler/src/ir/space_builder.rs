@@ -109,8 +109,10 @@ pub fn create_hardware_space(
                 }
                 "max_current_density" => {
                     if let hwc_parser::PropertyValue::Measurement(m) = &prop.value {
+                        eprintln!("[MATERIAL PROP DEBUG] Material '{}': max_current_density = {} (unit: {:?})", name, m.value, m.unit);
                         max_current_density_a_mm2 = Some(m.value);
                     } else if let hwc_parser::PropertyValue::Number(v) = prop.value {
+                        eprintln!("[MATERIAL PROP DEBUG] Material '{}': max_current_density = {} (no unit)", name, v);
                         max_current_density_a_mm2 = Some(v);
                     }
                 }
@@ -119,6 +121,8 @@ pub fn create_hardware_space(
         }
         if let Some(id) = material_registry.get_id(&name) {
             if let (Some(rho), Some(k)) = (resistivity_ohm_m, thermal_conductivity_w_mk) {
+                eprintln!("[MATERIAL REGISTER DEBUG] Registering material '{}' (id={}): rho={}, k={}, thickness={}, max_i={:?}", 
+                    name, id, rho, k, thickness_nm, max_current_density_a_mm2);
                 material_registry.set_physical_props(
                     id,
                     rho,
@@ -127,6 +131,8 @@ pub fn create_hardware_space(
                     max_current_density_a_mm2,
                 );
             } else if thickness_nm > 0 {
+                eprintln!("[MATERIAL REGISTER DEBUG] Registering material '{}' (id={}) with thickness only: thickness={}, max_i={:?}", 
+                    name, id, thickness_nm, max_current_density_a_mm2);
                 material_registry.set_physical_props(
                     id,
                     0.0,
@@ -230,12 +236,24 @@ pub fn create_hardware_space(
                 .get_or_create_net_with_technology(&net_decl.name, is_asic, min_width);
 
         // v0.1.7: Set net frequency on the netlist (for SI-aware routing)
-        if let Some(freq_hz) = net_decl.frequency_hz {
+        // v0.2.1: Convert using unit registry
+        if let Some(ref freq_measurement) = net_decl.frequency {
+            let freq_hz = freq_measurement.to_hertz(unit_registry)
+                .map_err(|e| IrError::UnitConversion {
+                    message: format!("Failed to convert frequency for net '{}': {}", net_decl.name, e),
+                    span: Some(freq_measurement.span),
+                })?;
             space.netlist.set_net_frequency(net_id, freq_hz);
         }
 
         // v0.1.8: Set net current on the netlist (for thermal/EM validation)
-        if let Some(current_ma) = net_decl.current_ma {
+        // v0.2.1: Convert using unit registry
+        if let Some(ref current_measurement) = net_decl.current {
+            let current_ma = current_measurement.to_milliamperes(unit_registry)
+                .map_err(|e| IrError::UnitConversion {
+                    message: format!("Failed to convert current for net '{}': {}", net_decl.name, e),
+                    span: Some(current_measurement.span),
+                })?;
             space.netlist.set_net_current(net_id, current_ma);
         }
     }

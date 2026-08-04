@@ -82,6 +82,48 @@ unit Kilometer:
     dimension: length
 
 ## ============================================================================
+## CURRENT UNITS (Derived from Ampere)
+## ============================================================================
+## Base unit: Ampere (A)
+## Required for current density calculations and electromigration analysis
+
+unit Milliampere:
+    symbol: "mA"
+    base_si: "A"
+    multiplier: 1e-3
+    dimension: current
+    description: "Common unit for moderate currents"
+
+unit Microampere:
+    symbol: "µA"
+    aliases: ["uA"]
+    base_si: "A"
+    multiplier: 1e-6
+    dimension: current
+    description: "Common for low-power circuits"
+
+unit Nanoampere:
+    symbol: "nA"
+    base_si: "A"
+    multiplier: 1e-9
+    dimension: current
+    description: "Common for ultra-low-power and leakage currents"
+
+unit Picoampere:
+    symbol: "pA"
+    base_si: "A"
+    multiplier: 1e-12
+    dimension: current
+    description: "Common for capacitor leakage and photodiode currents"
+
+unit Kiloampere:
+    symbol: "kA"
+    base_si: "A"
+    multiplier: 1e3
+    dimension: current
+    description: "Common for high-power applications"
+
+## ============================================================================
 ## CAPACITANCE UNITS
 ## ============================================================================
 ## Base unit: Farad (F)
@@ -321,6 +363,30 @@ unit Picosecond:
     multiplier: 1e-12
     dimension: time
     description: "High-speed signal timing"
+
+## ============================================================================
+## CURRENT DENSITY UNITS
+## ============================================================================
+## Used for material max_current_density specifications and electromigration checks
+
+unit AmperePerSquareMeter:
+    symbol: "A_m2"
+    aliases: ["A/m²", "A/m2"]
+    base_si: "A/m²"
+    dimension: current_density
+    description: "Current density in amperes per square meter"
+    note: "SI unit for current density"
+    examples: ["1e8A_m2", "1e9A_m2"]
+
+unit AmperePerSquareMillimeter:
+    symbol: "A_mm2"
+    aliases: ["A/mm²", "A/mm2"]
+    base_si: "A/m²"
+    multiplier: 1e6
+    dimension: current_density
+    description: "Current density in amperes per square millimeter"
+    note: "Common for PCB and semiconductor current density specifications"
+    examples: ["100A_mm2", "1e3A_mm2"]
 
 ## ============================================================================
 ## WIRE GAUGE UNITS

@@ -28,8 +28,7 @@ space Pyramid_Stack_Space implements PyramidStackTest:
     # This is the foundation - centered in space at Z=35nm (metal1 layer base)
     # ========================================================================
     add plane(Aluminum) named Base_10um {
-        align: center_x with space
-        align: center_y with space
+        align: center with space
     } on layer: metal1:
         shape: SquareCube(size: 10.0um)
         net: TestNet
@@ -38,8 +37,7 @@ space Pyramid_Stack_Space implements PyramidStackTest:
     # LAYER 2: 9um x 9um - Centered on Base_10um, 400nm higher
     # ========================================================================
     add plane(Aluminum) named Layer_9um {
-        align: center_x with Base_10um
-        align: center_y with Base_10um
+        align: center with Base_10um
         above: Base_10um by 400nm
     } on layer: metal1:
         shape: SquareCube(size: 9.0um)
@@ -49,8 +47,7 @@ space Pyramid_Stack_Space implements PyramidStackTest:
     # LAYER 3: 8um x 8um - Centered on Layer_9um, 400nm higher
     # ========================================================================
     add plane(Aluminum) named Layer_8um {
-        align: center_x with Layer_9um
-        align: center_y with Layer_9um
+        align: center with Layer_9um
         above: Layer_9um by 400nm
     } on layer: metal1:
         shape: SquareCube(size: 8.0um)
@@ -60,8 +57,7 @@ space Pyramid_Stack_Space implements PyramidStackTest:
     # LAYER 4: 7um x 7um - Centered on Layer_8um, 400nm higher
     # ========================================================================
     add plane(Aluminum) named Layer_7um {
-        align: center_x with Layer_8um
-        align: center_y with Layer_8um
+        align: center with Layer_8um
         above: Layer_8um by 400nm
     } on layer: metal1:
         shape: SquareCube(size: 7.0um)
@@ -71,8 +67,7 @@ space Pyramid_Stack_Space implements PyramidStackTest:
     # LAYER 5: 6um x 6um - Centered on Layer_7um, 400nm higher
     # ========================================================================
     add plane(Aluminum) named Layer_6um {
-        align: center_x with Layer_7um
-        align: center_y with Layer_7um
+        align: center with Layer_7um
         above: Layer_7um by 400nm
     } on layer: metal1:
         shape: SquareCube(size: 6.0um)
@@ -82,8 +77,7 @@ space Pyramid_Stack_Space implements PyramidStackTest:
     # LAYER 6: 5um x 5um - Centered on Layer_6um, 400nm higher
     # ========================================================================
     add plane(Aluminum) named Layer_5um {
-        align: center_x with Layer_6um
-        align: center_y with Layer_6um
+        align: center with Layer_6um
         above: Layer_6um by 400nm
     } on layer: metal1:
         shape: SquareCube(size: 5.0um)
@@ -93,8 +87,7 @@ space Pyramid_Stack_Space implements PyramidStackTest:
     # LAYER 7: 4um x 4um - Centered on Layer_5um, 400nm higher
     # ========================================================================
     add plane(Aluminum) named Layer_4um {
-        align: center_x with Layer_5um
-        align: center_y with Layer_5um
+        align: center with Layer_5um
         above: Layer_5um by 400nm
     } on layer: metal1:
         shape: SquareCube(size: 4.0um)
@@ -104,8 +97,7 @@ space Pyramid_Stack_Space implements PyramidStackTest:
     # LAYER 8: 3um x 3um - Centered on Layer_4um, 400nm higher
     # ========================================================================
     add plane(Aluminum) named Layer_3um {
-        align: center_x with Layer_4um
-        align: center_y with Layer_4um
+        align: center with Layer_4um
         above: Layer_4um by 400nm
     } on layer: metal1:
         shape: SquareCube(size: 3.0um)
@@ -115,8 +107,7 @@ space Pyramid_Stack_Space implements PyramidStackTest:
     # LAYER 9: 2um x 2um - Centered on Layer_3um, 400nm higher
     # ========================================================================
     add plane(Aluminum) named Layer_2um {
-        align: center_x with Layer_3um
-        align: center_y with Layer_3um
+        align: center with Layer_3um
         above: Layer_3um by 400nm
     } on layer: metal1:
         shape: SquareCube(size: 2.0um)
@@ -126,8 +117,7 @@ space Pyramid_Stack_Space implements PyramidStackTest:
     # LAYER 10: TOP - 1um x 1um (Smallest, pyramid peak)
     # ========================================================================
     add plane(Aluminum) named Top_1um {
-        align: center_x with Layer_2um
-        align: center_y with Layer_2um
+        align: center with Layer_2um
         above: Layer_2um by 400nm
     } on layer: metal1:
         shape: SquareCube(size: 1.0um)

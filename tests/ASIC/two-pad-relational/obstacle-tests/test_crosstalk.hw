@@ -33,7 +33,7 @@ space Crosstalk_Demo implements Parallel_Routes:
         at: [x: 100um, y: 200um]
         net: A1
 
-    add plane(Aluminum) named Pad_B1 align: center_y with Pad_A1 right_of Pad_A1 with spacing: 800um on layer: metal1:
+    add plane(Aluminum) named Pad_B1 align: y with Pad_A1 right_of Pad_A1 with spacing: 800um on layer: metal1:
         shape: CubicPad(w: 150um, h: 150um)
         net: B1
 
@@ -42,7 +42,7 @@ space Crosstalk_Demo implements Parallel_Routes:
         shape: CubicPad(w: 150um, h: 150um)
         net: A2
 
-    add plane(Aluminum) named Pad_B2 align: center_y with Pad_A2 right_of Pad_A2 with spacing: 800um on layer: metal1:
+    add plane(Aluminum) named Pad_B2 align: y with Pad_A2 right_of Pad_A2 with spacing: 800um on layer: metal1:
         shape: CubicPad(w: 150um, h: 150um)
         net: B2
 

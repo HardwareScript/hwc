@@ -260,17 +260,6 @@ mod tests {
         }
     }
 
-    fn make_anchor(name: &str, edge: Edge) -> Expression {
-        Expression::AnchorReference {
-            anchor: hwc_parser::AnchorReference {
-                name: name.into(),
-                span: Span::new(0, 0),
-            },
-            edge,
-            span: Span::new(0, 0),
-        }
-    }
-
     fn make_binary(left: Expression, op: BinaryOperator, right: Expression) -> Expression {
         Expression::Binary {
             left: Box::new(left),

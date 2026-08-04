@@ -171,6 +171,8 @@ impl EntityGraph {
     pub fn sync_from_routing_database(
         &mut self,
         routing_database: &crate::routing_database::HierarchicalRoutingDatabase,
+        stackup_layers: &[crate::space::StackupLayer],
+        material_registry: &crate::material::MaterialRegistry,
     ) {
         eprintln!("[ENTITY_GRAPH SYNC] Synchronizing routed_segments from routing database");
         eprintln!("[ENTITY_GRAPH SYNC]   Before sync: {} route groups", self.routed_segments.len());
@@ -178,8 +180,11 @@ impl EntityGraph {
         // CLEAR existing routed_segments - database is source of truth
         self.routed_segments.clear();
 
-        // REBUILD from database export
-        let database_routes = routing_database.export_as_routed_segments();
+        // REBUILD from database export with proper per-segment material lookup
+        let database_routes = routing_database.export_as_routed_segments_with_stackup(
+            stackup_layers,
+            material_registry,
+        );
         
         eprintln!("[ENTITY_GRAPH SYNC]   Database provided {} route groups", database_routes.len());
 

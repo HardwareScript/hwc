@@ -25,7 +25,7 @@ impl hwc_engine::SymbolTableTrait for SymbolTable {
     }
 
     fn measurement_to_nm(&self, measurement: &hwc_parser::Measurement) -> Result<i64, String> {
-        self.measurement_to_nm(measurement)
+        SymbolTable::measurement_to_nm(self, measurement)
     }
 }
 

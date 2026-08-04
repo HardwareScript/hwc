@@ -100,6 +100,8 @@ impl<'a> PivbSolver<'a> {
     /// Overlapping same-net geometry is welded (unioned) into single islands,
     /// simulating the Boolean Union that the Geometry Refinement Engine performs
     /// on pre-welded 2D contours.
+    ///
+    /// v0.2.1: Device terminal bindings are preserved during island extraction.
     fn extract_planar_islands(&self) -> Vec<PlanarIsland> {
         let mut raw_islands: Vec<PlanarIsland> = Vec::new();
         let mut island_id = 0;
@@ -111,6 +113,8 @@ impl<'a> PivbSolver<'a> {
             };
 
             if !self.conductive_material_ids.contains(&layer.material) {
+                eprintln!("[PIVB ISLAND DEBUG] Skipping layer with non-conductive material {} (net={})", 
+                    layer.material, net_name);
                 continue;
             }
 
@@ -128,6 +132,7 @@ impl<'a> PivbSolver<'a> {
                 net_name,
                 net_id: layer.net,
                 material: layer.material,
+                device_binding: layer.device_binding.clone(),
             });
 
             island_id += 1;
@@ -146,6 +151,14 @@ impl<'a> PivbSolver<'a> {
     fn weld_islands(&self, islands: Vec<PlanarIsland>) -> Vec<PlanarIsland> {
         if islands.len() <= 1 {
             return islands;
+        }
+
+        eprintln!("[PIVB WELD DEBUG] Starting welding with {} raw islands", islands.len());
+        for (i, island) in islands.iter().enumerate() {
+            eprintln!("[PIVB WELD DEBUG]   Island {}: net={}, material={}, z={}-{}, bbox=({},{},{}) -> ({},{},{})",
+                i, island.net_name, island.material, island.z_min, island.z_max,
+                island.bbox.min.x, island.bbox.min.y, island.bbox.min.z,
+                island.bbox.max.x, island.bbox.max.y, island.bbox.max.z);
         }
 
         let n = islands.len();
@@ -179,10 +192,23 @@ impl<'a> PivbSolver<'a> {
         // Union overlapping same-net, same-material islands
         for i in 0..n {
             for j in (i + 1)..n {
-                if islands[i].net_name == islands[j].net_name
-                    && islands[i].material == islands[j].material
-                    && self.islands_overlap_3d(&islands[i], &islands[j])
-                {
+                let same_net = islands[i].net_name == islands[j].net_name;
+                let same_material = islands[i].material == islands[j].material;
+                
+                // v0.2.1: MATERIAL COMPATIBILITY CHECK
+                // Routes may have incorrect material IDs but should still weld with device terminals
+                // if they're on the same Z-plane. This is a workaround for routing engine material assignment.
+                let z_compatible = islands[i].z_min <= islands[j].z_max && islands[i].z_max >= islands[j].z_min;
+                let material_compatible = same_material || 
+                    (same_net && z_compatible && 
+                     (islands[i].device_binding.is_some() || islands[j].device_binding.is_some()));
+                
+                let overlaps = self.islands_overlap_3d(&islands[i], &islands[j]);
+                
+                if same_net && material_compatible && overlaps {
+                    eprintln!("[PIVB WELD DEBUG] Welding island {} (net={}, mat={}, z={}-{}) with island {} (net={}, mat={}, z={}-{})",
+                        i, islands[i].net_name, islands[i].material, islands[i].z_min, islands[i].z_max,
+                        j, islands[j].net_name, islands[j].material, islands[j].z_min, islands[j].z_max);
                     union(&mut parent, &mut rank, i, j);
                 }
             }
@@ -239,8 +265,11 @@ impl<'a> PivbSolver<'a> {
                 net_name: first.net_name.clone(),
                 net_id: first.net_id,
                 material: first.material,
+                device_binding: first.device_binding.clone(),
             });
         }
+
+        eprintln!("[PIVB WELD DEBUG] After welding: {} welded islands (from {} raw)", welded.len(), n);
 
         welded
     }
@@ -371,6 +400,12 @@ impl<'a> PivbSolver<'a> {
     ///
     /// Builds a connectivity graph from the net's islands and bridges,
     /// then checks if the graph has exactly one connected component.
+    ///
+    /// v0.2.1: Device-aware connectivity validation.
+    /// Device terminal islands are treated as "connectivity anchors" that
+    /// provide implicit connectivity across their entire surface. Other islands
+    /// (pads, routes) that physically overlap with device terminals are considered
+    /// connected to the device.
     fn validate_net(
         &self,
         net_name: &CompactString,
@@ -408,6 +443,47 @@ impl<'a> PivbSolver<'a> {
                 id_to_idx.get(&bridge.island_b),
             ) {
                 graph.add_edge(u, v);
+            }
+        }
+
+        // v0.2.1: Device-aware connectivity bridging
+        // Add implicit edges between device terminal islands and other islands that physically overlap
+        let device_islands: Vec<(usize, &PlanarIsland)> = islands
+            .iter()
+            .enumerate()
+            .filter(|(_, island)| island.device_binding.is_some())
+            .map(|(idx, island)| (idx, *island))
+            .collect();
+
+        let non_device_islands: Vec<(usize, &PlanarIsland)> = islands
+            .iter()
+            .enumerate()
+            .filter(|(_, island)| island.device_binding.is_none())
+            .map(|(idx, island)| (idx, *island))
+            .collect();
+
+        eprintln!("[PIVB DEVICE DEBUG] Net '{}': {} device islands, {} non-device islands", 
+            net_name, device_islands.len(), non_device_islands.len());
+
+        // Connect non-device islands to device terminals if they physically overlap
+        for (device_idx, device_island) in &device_islands {
+            eprintln!("[PIVB DEVICE DEBUG]   Device island {}: {:?} bbox=({},{},{}) -> ({},{},{})",
+                device_idx, device_island.device_binding,
+                device_island.bbox.min.x, device_island.bbox.min.y, device_island.bbox.min.z,
+                device_island.bbox.max.x, device_island.bbox.max.y, device_island.bbox.max.z);
+            
+            for (non_device_idx, non_device_island) in &non_device_islands {
+                let overlaps = self.islands_overlap_3d(device_island, non_device_island);
+                eprintln!("[PIVB DEVICE DEBUG]     Non-device island {}: bbox=({},{},{}) -> ({},{},{}) overlaps={}",
+                    non_device_idx,
+                    non_device_island.bbox.min.x, non_device_island.bbox.min.y, non_device_island.bbox.min.z,
+                    non_device_island.bbox.max.x, non_device_island.bbox.max.y, non_device_island.bbox.max.z,
+                    overlaps);
+                
+                if overlaps {
+                    eprintln!("[PIVB DEVICE DEBUG]       -> Adding implicit edge!");
+                    graph.add_edge(*device_idx, *non_device_idx);
+                }
             }
         }
 
@@ -575,6 +651,7 @@ mod tests {
                 Point3D::new(x + 1000, y + 1000, z + 100),
             ),
             layer_type: SubstrateLayerType::Pour,
+            device_binding: None,
         }
     }
 

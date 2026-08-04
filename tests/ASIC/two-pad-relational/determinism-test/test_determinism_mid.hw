@@ -47,7 +47,7 @@ space Determinism_Mid implements Simple_TwoPad:
     # Spacing = clear gap between regions = 550um (target) - 250um (RegionA end) = 300um
     region RegionB:
         right_of: RegionA with spacing: 300um
-        align: center_y with RegionA
+        align: y with RegionA
         boundary: [width: pad_width, height: pad_height]
 
     # Region for obstacle
@@ -56,7 +56,7 @@ space Determinism_Mid implements Simple_TwoPad:
     # Y-offset from center alignment: obstacle center_y should be +20um from pad center_y
     region ObstacleRegion:
         right_of: RegionA with spacing: 110um
-        align: center_y with RegionA
+        align: y with RegionA
         boundary: [width: obstacle_width, height: obstacle_height]
 
     # ========================================================================

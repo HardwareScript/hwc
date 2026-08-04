@@ -51,11 +51,18 @@ pub fn validate_current_density(
                     }
 
                     let props = match material_registry.get_physical_props(route.material) {
-                        Some(p) => p,
-                        None => return Err(format!(
-                            "[DRC] FATAL: material_id {} not found in registry for net '{}'.",
-                            route.material, route.net_name
-                        )),
+                        Some(p) => {
+                            eprintln!("[DRC THERMAL DEBUG] Found props for material {} (net '{}'): resistivity={}, thermal_k={}, max_i={:?}", 
+                                route.material, route.net_name, p.resistivity_ohm_m, p.thermal_conductivity_w_mk, p.max_current_density_a_mm2);
+                            p
+                        }
+                        None => {
+                            eprintln!("[DRC THERMAL DEBUG] No props found for material {} (net '{}')", route.material, route.net_name);
+                            return Err(format!(
+                                "[DRC] FATAL: material_id {} not found in registry for net '{}'.",
+                                route.material, route.net_name
+                            ))
+                        }
                     };
 
                     let max_density_a_mm2 = match props.max_current_density_a_mm2 {

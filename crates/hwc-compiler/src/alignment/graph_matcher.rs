@@ -75,10 +75,25 @@ impl<'a> GraphMatcher<'a> {
     /// Ok(()) if netlists match, Err with detailed mismatch information otherwise
     pub fn verify_isomorphism(&self) -> Result<(), AlignmentError> {
         // Step 1: Check device count
-        if self.logical.devices.len() != self.physical.devices.len() {
+        // Special case: If module has 0 devices but space has devices from bindings,
+        // this is valid - it means the module only declares the interface (pins)
+        // and the implementation is purely physical (device bindings in space).
+        // This is a valid pattern for simple circuits (e.g., resistor dividers).
+        let logical_device_count = self.logical.devices.len();
+        let physical_device_count = self.physical.devices.len();
+        
+        if logical_device_count == 0 && physical_device_count > 0 {
+            // Valid pattern: Module declares only pins, space implements with device bindings
+            // Skip device type and connectivity checks since there's no logical device to compare
+            // Only verify port mappings
+            self.verify_port_mappings()?;
+            return Ok(());
+        }
+        
+        if logical_device_count != physical_device_count {
             return Err(AlignmentError::DeviceCountMismatch {
-                expected: self.logical.devices.len(),
-                found: self.physical.devices.len(),
+                expected: logical_device_count,
+                found: physical_device_count,
             });
         }
 

@@ -37,11 +37,33 @@ impl GeometryRouter {
                 for window in path.windows(2) {
                     eprintln!("[REFINEMENT DEBUG] Net {:?}: Converting segment ({},{},{}) -> ({},{},{})", 
                         net_id, window[0].x, window[0].y, window[0].z, window[1].x, window[1].y, window[1].z);
+                    
+                    // v0.2.1: Look up material based on segment's Z-coordinate from substrate layers
+                    // Find a conductive substrate layer at this Z and use its material
+                    let segment_z = window[0].z;
+                    let segment_material = if let Some(ref layers) = self.substrate_layers {
+                        layers.iter()
+                            .find(|layer| {
+                                // Check if this segment's Z is within the layer's Z range
+                                segment_z >= layer.bbox.min.z && segment_z <= layer.bbox.max.z
+                                    && self.material_registry.is_conductor(layer.material)
+                            })
+                            .map(|layer| layer.material)
+                            .expect(&format!(
+                                "FATAL: No conductive substrate layer found at Z={} for route segment. \
+                                 Routes must be on conductive layers. Available layers: {:?}",
+                                segment_z,
+                                layers.iter().map(|l| (l.bbox.min.z, l.bbox.max.z, l.material)).collect::<Vec<_>>()
+                            ))
+                    } else {
+                        panic!("FATAL: substrate_layers not available in router for material lookup at Z={}", segment_z);
+                    };
+                    
                     all_segments.push(TraceSegment::new(
                         window[0],
                         window[1],
                         self.trace_width_nm,
-                        self.routing_material_id,
+                        segment_material,
                     ));
                     all_net_ids.push(net_id);
                 }

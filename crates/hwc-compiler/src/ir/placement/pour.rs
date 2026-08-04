@@ -17,23 +17,126 @@ pub fn place_pour(
             material: pour.material.clone(),
         })?;
 
-    // v0.2.1: Boundary is optional if relational constraints are provided
-    // The relational resolver will compute the boundary from constraints
-    if pour.boundary.is_none() && pour.relational_constraints.is_empty() {
+    // v0.2.1: Boundary is optional if relational constraints OR (position + dimensions) are provided
+    // The relational resolver/compiler will compute the boundary from constraints or position + dimensions
+    let has_dimensions = pour.width.is_some() && pour.height.is_some();
+    if pour.boundary.is_none() && pour.relational_constraints.is_empty() && !(pour.position.is_some() && has_dimensions) {
         return Err(IrError::PlacementConstraint {
             message: format!(
-                "Pour '{}' missing boundary (provide either 'boundary:' or relational constraints like 'align:', 'right_of:', etc.)",
+                "Pour '{}' missing boundary (provide either 'boundary:', 'at:' + 'dimensions:', or relational constraints like 'align:', 'right_of:', etc.)",
                 pour.name
             ),
             component: pour.name.to_string().into(),
         });
     }
 
-    // If there are relational constraints but no boundary yet, it will be resolved later
-    // by the relational resolver. For now, skip placement if boundary is missing.
+    // If there are relational constraints or (position + dimensions) but no boundary yet, resolve them first
     if pour.boundary.is_none() {
-        // Relational constraints present - will be resolved in relational_resolver pass
-        return Ok(());
+        // Will be resolved in this function or relational_resolver pass
+        if pour.relational_constraints.is_empty() {
+            // Must be position + dimensions case - resolve it now
+            if let (Some(pos), Some(w), Some(h)) = (&pour.position, &pour.width, &pour.height) {
+                let center = if pos.is_relative() {
+                    let solver = crate::constraint_solver::ConstraintSolver::new(bbox_tracker, ctx.eval_context);
+                    let intent = solver.resolve_position(pos).map_err(|e| {
+                        IrError::CoordinateResolutionFailed {
+                            coordinate_str: format!("pour '{}' position", pour.name),
+                            reason: e.to_string(),
+                        }
+                    })?;
+                    intent.point()
+                } else {
+                    let coord_ctx = CoordinateContext {
+                        origin: ctx.origin,
+                        space_dimensions: &space.dimensions,
+                        symbol_table: ctx.symbol_table,
+                        eval_context: ctx.eval_context,
+                        bbox_tracker: Some(bbox_tracker),
+                        stackup_manager: ctx.stackup_manager,
+                        profile: ctx.profile,
+                    };
+                    crate::ir::conversions::coordinate_to_point(pos, &coord_ctx).map_err(|e| {
+                        IrError::CoordinateResolutionFailed {
+                            coordinate_str: format!("pour '{}' position", pour.name),
+                            reason: e,
+                        }
+                    })?
+                };
+                
+                // Evaluate dimensions
+                let width_nm = crate::ir::conversions::evaluate_expression_to_nm(w, ctx.symbol_table, ctx.eval_context)
+                    .map_err(|e| IrError::CoordinateResolutionFailed {
+                        coordinate_str: format!("pour '{}' width", pour.name),
+                        reason: e,
+                    })?;
+                let height_nm = crate::ir::conversions::evaluate_expression_to_nm(h, ctx.symbol_table, ctx.eval_context)
+                    .map_err(|e| IrError::CoordinateResolutionFailed {
+                        coordinate_str: format!("pour '{}' height", pour.name),
+                        reason: e,
+                    })?;
+                
+                // Create boundary from center + dimensions
+                let from = Point3D::new(
+                    center.x - width_nm / 2,
+                    center.y - height_nm / 2,
+                    center.z,
+                );
+                let to = Point3D::new(
+                    center.x + width_nm / 2,
+                    center.y + height_nm / 2,
+                    center.z,
+                );
+                
+                let span_empty = hwc_parser::Span::new(0, 0);
+                
+                // Create a mutable pour to place
+                let mut resolved_pour = pour.clone();
+                resolved_pour.boundary = Some(hwc_parser::PourBoundary::Rect(
+                    Box::new(hwc_parser::Coordinate::Positional {
+                        x: hwc_parser::Expression::Measurement {
+                            value: from.x as f64,
+                            unit: hwc_parser::Unit::Nanometer,
+                            span: span_empty,
+                        },
+                        y: hwc_parser::Expression::Measurement {
+                            value: from.y as f64,
+                            unit: hwc_parser::Unit::Nanometer,
+                            span: span_empty,
+                        },
+                        z: hwc_parser::Expression::Measurement {
+                            value: from.z as f64,
+                            unit: hwc_parser::Unit::Nanometer,
+                            span: span_empty,
+                        },
+                        span: span_empty,
+                    }),
+                    Box::new(hwc_parser::Coordinate::Positional {
+                        x: hwc_parser::Expression::Measurement {
+                            value: to.x as f64,
+                            unit: hwc_parser::Unit::Nanometer,
+                            span: span_empty,
+                        },
+                        y: hwc_parser::Expression::Measurement {
+                            value: to.y as f64,
+                            unit: hwc_parser::Unit::Nanometer,
+                            span: span_empty,
+                        },
+                        z: hwc_parser::Expression::Measurement {
+                            value: to.z as f64,
+                            unit: hwc_parser::Unit::Nanometer,
+                            span: span_empty,
+                        },
+                        span: span_empty,
+                    }),
+                ));
+                
+                // Continue with placement using resolved boundary
+                return place_pour(space, &resolved_pour, bbox_tracker, ctx);
+            }
+        } else {
+            // Relational constraints present - will be resolved in relational_resolver pass
+            return Ok(());
+        }
     }
 
     let boundary = pour.boundary.as_ref().unwrap();
@@ -596,12 +699,17 @@ pub fn place_pour(
             .add_circle_substrate_layer(material_id, hwc_engine::NetId::new(net_id), bbox, radius);
     } else {
         // Use checked version to catch clearance violations early (v0.1.9)
+        // v0.2.1: Pass device binding for same-device terminal exemption (capacitors, etc.)
+        let device_binding_ref = pour.device.as_ref().map(|b| (&b.device_name, &b.terminal));
+        
         if let Err(msg) = space.entity_graph.add_substrate_layer_checked(
             material_id,
             hwc_engine::NetId::new(net_id),
             bbox,
             hwc_engine::geometry_router::entity_graph::SubstrateLayerType::Pour,
             min_clearance_nm,
+            device_binding_ref,
+            &space.pours,
         ) {
             return Err(IrError::ClearanceViolation {
                 entity_type: "pour".into(),

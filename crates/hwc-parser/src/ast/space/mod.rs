@@ -9,7 +9,7 @@ mod substrate;
 
 pub use elevation::{Elevation, RoutingConfig, RoutingMode};
 pub use layout::{LayoutStatement, ModuleInternalPlacement, ModuleLayoutBlock};
-pub use nets::{NetClassification, NetDeclaration};
+pub use nets::{MeasurementValue, NetClassification, NetDeclaration};
 pub use placements::{
     AnchorPoint, CapType, ContactPlacement, CutoutShape, DeviceBinding, PlanePlacement,
     PolygonPlacement, PourBoundary, PourPlacement, RelationalAnchor, ShapeInstance,

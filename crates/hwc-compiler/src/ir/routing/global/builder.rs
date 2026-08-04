@@ -10,6 +10,7 @@ pub struct RoutingData {
     pub net_id_to_name: FxHashMap<NetId, CompactString>,
     pub net_layer_targets: FxHashMap<CompactString, i64>,
     pub net_layer_targets_by_id: FxHashMap<NetId, i64>,
+    pub net_layer_names_by_id: FxHashMap<NetId, CompactString>,  // NEW: Store layer names directly
     pub net_declared_widths: FxHashMap<CompactString, i64>,
     pub net_currents_ma: FxHashMap<CompactString, f64>,
     pub obstacle_bboxes: Vec<BoundingBox>,
@@ -22,6 +23,7 @@ impl<'a> AutoRouter<'a> {
         let mut net_id_to_name = FxHashMap::default();
         let mut net_layer_targets = FxHashMap::default();
         let mut net_layer_targets_by_id = FxHashMap::default();
+        let mut net_layer_names_by_id = FxHashMap::default();  // NEW
         let mut net_declared_widths = FxHashMap::default();
         let mut net_currents_ma = FxHashMap::default();
         let mut net_intents = FxHashMap::default();
@@ -91,6 +93,7 @@ impl<'a> AutoRouter<'a> {
                                     if let Ok(routing_z) = self.space.routing_layer_db.get_routing_z(&layer_id.name) {
                                         net_layer_targets.insert(net_name.clone(), routing_z);
                                         net_layer_targets_by_id.insert(actual_net_id, routing_z);
+                                        net_layer_names_by_id.insert(actual_net_id, layer_id.name.clone().into());  // NEW: Store layer name
                                         eprintln!("[ROUTING BUILDER] Route for net '{}' (id={}) targets layer '{}' at routing Z={}nm", 
                                             net_name, actual_net_id.raw(), layer_id.name, routing_z);
                                     }
@@ -176,6 +179,7 @@ impl<'a> AutoRouter<'a> {
             net_id_to_name,
             net_layer_targets,
             net_layer_targets_by_id,
+            net_layer_names_by_id,  // NEW
             net_declared_widths,
             net_currents_ma,
             obstacle_bboxes,

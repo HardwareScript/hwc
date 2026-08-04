@@ -15,6 +15,8 @@ pub struct SubstrateLayer {
     pub shape: SubstrateLayerShape,
     pub koz_radius_nm: i64,
     pub regions: SmallVec<[BoundingBox; 4]>,
+    /// Device terminal binding (v0.2.1) - if present, this layer is part of a device terminal
+    pub device_binding: Option<(String, String)>, // (device_name, terminal)
 }
 
 impl SubstrateLayer {
@@ -33,6 +35,7 @@ impl SubstrateLayer {
             shape: SubstrateLayerShape::Rect,
             koz_radius_nm: 0,
             regions: SmallVec::new(),
+            device_binding: None,
         }
     }
 
@@ -52,6 +55,7 @@ impl SubstrateLayer {
             shape: SubstrateLayerShape::cylinder(diameter, segments),
             koz_radius_nm: 0,
             regions: SmallVec::new(),
+            device_binding: None,
         }
     }
 
@@ -65,6 +69,7 @@ impl SubstrateLayer {
             shape: SubstrateLayerShape::Circle { radius },
             koz_radius_nm: 0,
             regions: SmallVec::new(),
+            device_binding: None,
         }
     }
 
@@ -78,6 +83,7 @@ impl SubstrateLayer {
             shape: SubstrateLayerShape::square(size),
             koz_radius_nm: 0,
             regions: SmallVec::new(),
+            device_binding: None,
         }
     }
 
@@ -91,6 +97,7 @@ impl SubstrateLayer {
             shape: SubstrateLayerShape::hexagon(size),
             koz_radius_nm: 0,
             regions: SmallVec::new(),
+            device_binding: None,
         }
     }
 
@@ -113,6 +120,7 @@ impl SubstrateLayer {
             },
             koz_radius_nm: 0,
             regions: SmallVec::new(),
+            device_binding: None,
         }
     }
 
@@ -146,6 +154,7 @@ impl SubstrateLayer {
             },
             koz_radius_nm: 0,
             regions: SmallVec::new(),
+            device_binding: None,
         }
     }
 
@@ -165,6 +174,7 @@ impl SubstrateLayer {
             shape: SubstrateLayerShape::Rect,
             koz_radius_nm: 0,
             regions: SmallVec::new(),
+            device_binding: None,
         }
     }
 

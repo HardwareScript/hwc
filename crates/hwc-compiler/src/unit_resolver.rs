@@ -85,6 +85,7 @@ mod tests {
     fn create_test_unit_def(symbol: &str, aliases: Vec<&str>, dimension: &str) -> UnitDefinition {
         UnitDefinition {
             name: Identifier::with_dummy_span(symbol),
+            is_exported: false,
             symbol: symbol.to_string().into(),
             aliases: aliases.iter().map(|s| (*s).into()).collect(),
             base_si: Some("m".into()),

@@ -37,6 +37,15 @@ pub struct SubstrateLayerMetadata {
     pub net_name: Option<CompactString>, // Resolved net name for easier lookup
     pub bbox: BoundingBox,
     pub layer_type: SubstrateLayerType,
+    /// Device terminal binding (v0.2.1) - if present, this layer is part of a device terminal
+    pub device_binding: Option<DeviceBinding>,
+}
+
+/// Device binding for connectivity checking (v0.2.1)
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeviceBinding {
+    pub device_name: CompactString,
+    pub terminal: CompactString,
 }
 
 #[derive(Debug, Clone)]

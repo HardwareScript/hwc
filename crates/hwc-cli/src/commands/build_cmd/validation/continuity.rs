@@ -31,8 +31,8 @@ pub fn run_physical_continuity_check(
     eprintln!("[PIVB DEBUG] Converting {} route segments to substrate layers", physics_route_segments.len());
     
     for route in physics_route_segments {
-        eprintln!("[PIVB DEBUG]   Route net={:?} bbox=({},{},{}) -> ({},{},{})",
-            route.net, route.bbox.min.x, route.bbox.min.y, route.bbox.min.z,
+        eprintln!("[PIVB DEBUG]   Route net={:?} material={} bbox=({},{},{}) -> ({},{},{})",
+            route.net, route.material, route.bbox.min.x, route.bbox.min.y, route.bbox.min.z,
             route.bbox.max.x, route.bbox.max.y, route.bbox.max.z);
         all_substrate_layers.push(hwc_physics::connectivity::SubstrateLayerMetadata {
             material: route.material,
@@ -40,6 +40,7 @@ pub fn run_physical_continuity_check(
             net_name: route.net_name.clone(),
             bbox: route.bbox,
             layer_type: hwc_physics::connectivity::SubstrateLayerType::Pour, // Routes are planar pours
+            device_binding: None,
         });
     }
     

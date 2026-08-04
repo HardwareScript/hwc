@@ -1,0 +1,114 @@
+# simple_resistor_test.hw
+# Basic test: A simple square resistor with two terminal contacts
+# Based on SiliWiz resistor tutorial
+# A 1μm x 1μm square polysilicon resistor should have ~400 Ohms resistance
+# (Sheet resistance: 400 Ohms/square)
+
+import * from @std/primitives/units
+import * from "./resistor_pdk"
+
+# Native device contract for polysilicon resistor
+# Compiler will automatically exempt terminal DRC and calculate R = R_sheet * (L/W)
+device Resistor:
+    terminals: [A, B]
+    materials:
+        A: Polysilicon
+        B: Polysilicon
+
+module SimpleResistor:
+    pins: [input In, output Out]
+    route In to Out
+
+space Simple_Resistor_Space implements SimpleResistor:
+    # 5μm x 3μm space - plenty of room for a simple resistor
+    dimensions: 5.0um by 3.0um by 100nm
+    resolution: 10nm
+    origin: bl by b
+    profile: Resistor_Flattened
+
+    nets:
+        In:  { classification: signal, potential: 1.8V, current: 1.0uA }
+        Out: { classification: signal, potential: 0.0V, current: 1.0uA }
+
+    # ========================================================================
+    # POLYSILICON RESISTOR BODY
+    # ========================================================================
+    # 1μm x 1μm square polysilicon resistor (should be ~400 Ohms)
+    # Using device binding approach - compiler exempts DRC between terminals
+    # Terminal A is the left side of the resistor
+    add pour(Polysilicon) named Resistor_Body_A on layer: polyres:
+        device: R1.A
+        dimensions: 500nm by 1.0um
+        at: [x: 1.75um, y: 1.5um]
+
+    # Terminal B is the right side of the resistor
+    add pour(Polysilicon) named Resistor_Body_B on layer: polyres:
+        device: R1.B
+        dimensions: 500nm by 1.0um
+        at: [x: 2.25um, y: 1.5um]
+
+    # ========================================================================
+    # METAL CONTACTS FOR RESISTOR TERMINALS
+    # ========================================================================
+
+    # Left terminal A contact - overlaps left edge
+    # No device binding - this is just for routing
+    add pour(Aluminum) named Contact_A on layer: metal1:
+        net: In
+        dimensions: 400nm by 400nm
+        at: [x: 1.7um, y: 1.5um]
+
+    # Right terminal B contact - overlaps right edge  
+    # No device binding - this is just for routing
+    add pour(Aluminum) named Contact_B on layer: metal1:
+        net: Out
+        dimensions: 400nm by 400nm
+        at: [x: 2.3um, y: 1.5um]
+
+    # Vias connecting metal contacts to polysilicon
+    # No device binding - these are just interconnects
+    add contact(Titanium_Silicide) named Via_A spanning layer: polyres to metal1:
+        net: In
+        diameter: 200nm
+        plating_thickness: 5nm
+        align: center with Contact_A
+
+    add contact(Titanium_Silicide) named Via_B spanning layer: polyres to metal1:
+        net: Out
+        diameter: 200nm
+        plating_thickness: 5nm
+        align: center with Contact_B
+
+    # ========================================================================
+    # EXTERNAL CONNECTION PADS
+    # ========================================================================
+
+    # Input pad at far left
+    add pour(Aluminum) named In_Pad on layer: metal1:
+        net: In
+        dimensions: 600nm by 600nm
+        at: [x: 500nm, y: 1.5um]
+
+    # Output pad at far right
+    add pour(Aluminum) named Out_Pad on layer: metal1:
+        net: Out
+        dimensions: 600nm by 600nm
+        at: [x: 3.5um, y: 1.5um]
+
+    # ========================================================================
+    # ROUTING - Connect pads to resistor terminals
+    # ========================================================================
+
+    # Connect input pad to resistor terminal A (In net)
+    route In_Pad to Contact_A:
+        net: In
+        width: 300nm
+        layer: metal1
+        intent: Signal
+
+    # Connect resistor terminal B to output pad (Out net)
+    route Contact_B to Out_Pad:
+        net: Out
+        width: 300nm
+        layer: metal1
+        intent: Signal

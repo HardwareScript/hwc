@@ -145,6 +145,38 @@ pub fn build_and_sort(
                         }
                     }
                 }
+                // v0.2.1 FIX: Extract dependencies from relational constraints on pours.
+                // Without this, pours that use `align:` / `right_of:` / etc. are not
+                // ordered after the entities they reference, causing bbox_tracker misses.
+                for constraint in &p.relational_constraints {
+                    match constraint {
+                        hwc_parser::RelationalConstraint::Align { target, .. } => {
+                            match target {
+                                hwc_parser::AlignmentTarget::Entity(entity_name) => {
+                                    graph.add_dependency(item_id.clone(), entity_name.base.clone());
+                                }
+                                hwc_parser::AlignmentTarget::Expression(expr) => {
+                                    graph.extract_dependencies_from_expr(
+                                        &item_id,
+                                        expr,
+                                        last_component_name.as_ref(),
+                                    );
+                                }
+                            }
+                        }
+                        hwc_parser::RelationalConstraint::Directional(dir) => {
+                            let target = match dir {
+                                hwc_parser::DirectionalConstraint::Above { target, .. }
+                                | hwc_parser::DirectionalConstraint::Below { target, .. }
+                                | hwc_parser::DirectionalConstraint::RightOf { target, .. }
+                                | hwc_parser::DirectionalConstraint::LeftOf { target, .. } => {
+                                    target
+                                }
+                            };
+                            graph.add_dependency(item_id.clone(), target.base.clone());
+                        }
+                    }
+                }
             }
             PlacementItem::Plane(p) => {
                 if let Some(from) = &p.from {
@@ -173,6 +205,38 @@ pub fn build_and_sort(
                 // v0.2.0: Handle relational anchor dependencies
                 if let Some(anchor) = &c.relational_anchor {
                     graph.add_dependency(item_id.clone(), anchor.region_name.to_string().into());
+                }
+                // v0.2.1 FIX: Extract dependencies from relational constraints on contacts.
+                // Contacts that use `align: center_x with SomeEntity` must be placed AFTER
+                // SomeEntity, but this edge was not being registered in the dependency graph.
+                for constraint in &c.relational_constraints {
+                    match constraint {
+                        hwc_parser::RelationalConstraint::Align { target, .. } => {
+                            match target {
+                                hwc_parser::AlignmentTarget::Entity(entity_name) => {
+                                    graph.add_dependency(item_id.clone(), entity_name.base.clone());
+                                }
+                                hwc_parser::AlignmentTarget::Expression(expr) => {
+                                    graph.extract_dependencies_from_expr(
+                                        &item_id,
+                                        expr,
+                                        last_component_name.as_ref(),
+                                    );
+                                }
+                            }
+                        }
+                        hwc_parser::RelationalConstraint::Directional(dir) => {
+                            let target = match dir {
+                                hwc_parser::DirectionalConstraint::Above { target, .. }
+                                | hwc_parser::DirectionalConstraint::Below { target, .. }
+                                | hwc_parser::DirectionalConstraint::RightOf { target, .. }
+                                | hwc_parser::DirectionalConstraint::LeftOf { target, .. } => {
+                                    target
+                                }
+                            };
+                            graph.add_dependency(item_id.clone(), target.base.clone());
+                        }
+                    }
                 }
             }
             PlacementItem::SpaceInstance(space_inst) => {

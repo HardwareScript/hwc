@@ -59,13 +59,13 @@ space Corner_Demo_mid implements Corner_Cases:
     # Obstacle is placed 50µm right of TightRegionA
     region ObstacleRegion:
         right_of: TightRegionA with spacing: 50um
-        align: center_y with TightRegionA
+        align: y with TightRegionA
         boundary: [width: obstacle_w, height: obstacle_h]
 
     # TightRegionB is placed 200µm right of TightRegionA (past the 120µm obstacle!)
     region TightRegionB:
         right_of: TightRegionA with spacing: 200um
-        align: center_y with TightRegionA
+        align: y with TightRegionA
         boundary: [width: tight_pad_w, height: tight_pad_h]
 
     # ========================================================================

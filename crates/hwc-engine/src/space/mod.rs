@@ -174,6 +174,13 @@ pub struct HardwareSpace {
     /// **v0.2.0: Database of explicit via/contact instances (PROPER ARCHITECTURE)**
     /// Tracks all user-defined vias to prevent duplicate auto-insertion. Populated during placement.
     pub via_instance_db: crate::via_instance_database::ViaInstanceDatabase,
+
+    /// **v0.2.1: Device instances registry (Native Device Support - PROPER ARCHITECTURE)**
+    /// Single source of truth for all device instances extracted from pour bindings.
+    /// Populated during compilation from device definitions and pour bindings.
+    /// Used by SPICE exporter, BOM generator, and other export formats.
+    /// This eliminates guessing and provides clean separation between compilation and export.
+    pub device_instances: Vec<crate::space::DeviceInstance>,
 }
 
 impl HardwareSpace {
@@ -217,6 +224,7 @@ impl HardwareSpace {
             routing_layer_db: crate::routing_layer_database::RoutingLayerDatabase::default(),
             via_layer_mapping_db: crate::via_layer_mapping_database::ViaLayerMappingDatabase::default(),
             via_instance_db: crate::via_instance_database::ViaInstanceDatabase::new(),
+            device_instances: Vec::new(),
         }
     }
 

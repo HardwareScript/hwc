@@ -17,6 +17,7 @@ use rustc_hash::FxHashMap;
 ///
 /// Sprint 1.5: Enhanced to support multiple allowed materials per terminal
 /// Sprint 4.1: Enhanced to support parameter tolerance specifications
+/// v0.2.1: Added SPICE export metadata for netlist generation
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DeviceDefinition {
     pub name: Identifier,
@@ -28,7 +29,27 @@ pub struct DeviceDefinition {
     /// Parameter tolerance specifications (e.g., W: 1%, L: 1%, AS: 5%)
     /// Values are relative tolerances (0.01 = 1%)
     pub tolerance: Option<FxHashMap<CompactString, f64>>,
+    /// SPICE export metadata (v0.2.1)
+    pub spice_info: Option<SpiceExportInfo>,
     pub span: Span,
+}
+
+/// SPICE export information for device definitions
+///
+/// This metadata tells the netlist exporter how to format the device in SPICE.
+/// Without this, the exporter cannot generate correct SPICE syntax.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SpiceExportInfo {
+    /// SPICE device prefix (R for resistor, C for capacitor, M for MOSFET, etc.)
+    pub prefix: char,
+    /// Ordered list of terminal names for SPICE card
+    /// Example: ["A", "B"] for resistor, ["drain", "gate", "source", "bulk"] for MOSFET
+    pub terminal_order: SmallVec<[CompactString; 4]>,
+    /// Parameter names that should be included in SPICE card
+    /// Example: ["R"] for resistor, ["W", "L", "AS", "AD"] for MOSFET
+    pub parameters: SmallVec<[CompactString; 4]>,
+    /// Optional model name suffix (for MOSFETs, diodes)
+    pub model_name: Option<CompactString>,
 }
 
 impl DeviceDefinition {
@@ -48,5 +69,13 @@ impl DeviceDefinition {
             .get(terminal)
             .map(|allowed| allowed.iter().any(|m| m == material))
             .unwrap_or(false)
+    }
+    
+    /// Get SPICE export information
+    ///
+    /// Returns None if this device doesn't have SPICE export metadata defined.
+    /// Callers should error if attempting to export a device without SPICE info.
+    pub fn spice_info(&self) -> Option<&SpiceExportInfo> {
+        self.spice_info.as_ref()
     }
 }

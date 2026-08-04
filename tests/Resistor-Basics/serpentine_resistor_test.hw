@@ -1,0 +1,145 @@
+# serpentine_resistor_test.hw
+# A simple U-shaped serpentine resistor demonstrating multi-segment resistive paths
+# Based on working simple_resistor_test.hw pattern
+
+import * from @std/primitives/units
+import * from "./resistor_pdk"
+
+device Resistor:
+    terminals: [A, B]
+    materials:
+        A: Polysilicon
+        B: Polysilicon
+
+module SerpentineResistor:
+    pins: [input In, output Out]
+    route In to Out
+
+space Serpentine_Resistor_Space implements SerpentineResistor:
+    dimensions: 15.0um by 12.0um by 500nm
+    resolution: 10nm
+    origin: bl by b
+    profile: Resistor_Flattened
+
+    nets:
+        In:  { classification: signal, potential: 1.8V, current: 1.0uA }
+        Out: { classification: signal, potential: 0.0V, current: 1.0uA }
+
+    # ========================================================================
+    # POLYSILICON SERPENTINE PATH
+    # Creates an S-shaped meandering resistor path
+    # 5 horizontal segments with 4 vertical connectors
+    # ========================================================================
+
+    # Segment 1: Bottom horizontal (left to right) - Terminal A
+    add pour(Polysilicon) named Seg1 on layer: polyres:
+        device: R1.A
+        dimensions: 10.0um by 1.0um
+        at: [x: 5.0um, y: 2.0um]
+
+    # Vertical connector 1: Right side going up
+    add pour(Polysilicon) named Vert1 on layer: polyres:
+        device: R1.A
+        dimensions: 1.0um by 2.0um
+        at: [x: 9.5um, y: 3.0um]
+
+    # Segment 2: Second horizontal (right to left)
+    add pour(Polysilicon) named Seg2 on layer: polyres:
+        device: R1.A
+        dimensions: 10.0um by 1.0um
+        at: [x: 5.0um, y: 4.0um]
+
+    # Vertical connector 2: Left side going up
+    add pour(Polysilicon) named Vert2 on layer: polyres:
+        device: R1.A
+        dimensions: 1.0um by 2.0um
+        at: [x: 0.5um, y: 5.0um]
+
+    # Segment 3: Middle horizontal (left to right)
+    add pour(Polysilicon) named Seg3 on layer: polyres:
+        device: R1.A
+        dimensions: 10.0um by 1.0um
+        at: [x: 5.0um, y: 6.0um]
+
+    # Vertical connector 3: Right side going up
+    add pour(Polysilicon) named Vert3 on layer: polyres:
+        device: R1.A
+        dimensions: 1.0um by 2.0um
+        at: [x: 9.5um, y: 7.0um]
+
+    # Segment 4: Fourth horizontal (right to left)
+    add pour(Polysilicon) named Seg4 on layer: polyres:
+        device: R1.A
+        dimensions: 10.0um by 1.0um
+        at: [x: 5.0um, y: 8.0um]
+
+    # Vertical connector 4: Left side going up
+    add pour(Polysilicon) named Vert4 on layer: polyres:
+        device: R1.A
+        dimensions: 1.0um by 2.0um
+        at: [x: 0.5um, y: 9.0um]
+
+    # Segment 5: Top horizontal (left to right) - Terminal B
+    add pour(Polysilicon) named Seg5 on layer: polyres:
+        device: R1.B
+        dimensions: 10.0um by 1.0um
+        at: [x: 5.0um, y: 10.0um]
+
+    # ========================================================================
+    # METAL CONTACTS FOR TERMINALS
+    # ========================================================================
+
+    # Input contact - overlaps left end of Seg1
+    add pour(Aluminum) named Contact_In on layer: metal1:
+        net: In
+        dimensions: 800nm by 800nm
+        at: [x: 500nm, y: 2.0um]
+
+    # Output contact - overlaps right end of Seg5
+    add pour(Aluminum) named Contact_Out on layer: metal1:
+        net: Out
+        dimensions: 800nm by 800nm
+        at: [x: 9.5um, y: 10.0um]
+
+    # Vias connecting contacts to polysilicon
+    add contact(Titanium_Silicide) named Via_In spanning layer: polyres to metal1:
+        net: In
+        diameter: 400nm
+        plating_thickness: 5nm
+        align: center with Contact_In
+
+    add contact(Titanium_Silicide) named Via_Out spanning layer: polyres to metal1:
+        net: Out
+        diameter: 400nm
+        plating_thickness: 5nm
+        align: center with Contact_Out
+
+    # ========================================================================
+    # EXTERNAL CONNECTION PADS
+    # ========================================================================
+
+    add pour(Aluminum) named In_Pad on layer: metal1:
+        net: In
+        dimensions: 1.0um by 1.0um
+        at: [x: 1.0um, y: 2.0um]
+
+    add pour(Aluminum) named Out_Pad on layer: metal1:
+        net: Out
+        dimensions: 1.0um by 1.0um
+        at: [x: 13.0um, y: 10.0um]
+
+    # ========================================================================
+    # ROUTING
+    # ========================================================================
+
+    route In_Pad to Contact_In:
+        net: In
+        width: 500nm
+        layer: metal1
+        intent: Signal
+
+    route Contact_Out to Out_Pad:
+        net: Out
+        width: 500nm
+        layer: metal1
+        intent: Signal
