@@ -5,7 +5,7 @@ use crate::ast::*;
 use crate::ast::device::SpiceExportInfo;
 use crate::lexer::{Span, Token};
 use compact_str::CompactString;
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use smallvec::SmallVec;
 
 impl super::super::Parser {
@@ -59,6 +59,7 @@ impl super::super::Parser {
         let mut terminals = None;
         let mut materials = None;
         let mut tolerance = None;
+        let mut spice_info = None;
 
         while !self.check(&Token::Dedent) && !self.is_at_end() {
             self.skip_whitespace();
@@ -150,6 +151,27 @@ impl super::super::Parser {
                             }
                             continue;
                         }
+                        "spice" => {
+                            self.advance(); // consume 'spice'
+                            if let Err(e) = self.expect(&Token::Colon) {
+                                collector.report(e);
+                                continue;
+                            }
+                            if let Err(e) = self.expect(&Token::Newline) {
+                                collector.report(e);
+                                continue;
+                            }
+                            match self.parse_spice_block() {
+                                Ok(info) => spice_info = Some(info),
+                                Err(e) => {
+                                    collector.report(e);
+                                    self.skip_whitespace();
+                                    continue;
+                                }
+                            }
+                            self.skip_whitespace();
+                            continue;
+                        }
                         _ => {}
                     }
                 }
@@ -207,133 +229,181 @@ impl super::super::Parser {
             }
         };
 
+        // Validate spice block if present
+        if let Some(ref spice) = spice_info {
+            // Check that terminal_order references valid terminals
+            for terminal in &spice.terminal_order {
+                if !terminals.contains(terminal) {
+                    collector.report(ParseError::General {
+                        span: span_to_source_span(&Span::new(start_pos, end_pos)),
+                        message: format!("SPICE terminal_order references '{}' which is not in device terminals: {:?}", terminal, terminals).into(),
+                    });
+                    return None;
+                }
+            }
+            
+            // Check that all terminals are in terminal_order (warning, not error)
+            let terminal_set: FxHashSet<_> = terminals.iter().collect();
+            let order_set: FxHashSet<_> = spice.terminal_order.iter().collect();
+            
+            if terminal_set != order_set {
+                eprintln!(
+                    "Warning: Device '{}' has terminals {:?} but SPICE terminal_order is {:?}",
+                    name.as_str(), terminals, spice.terminal_order
+                );
+            }
+        }
+
         Some(DeviceDefinition {
             name: name.clone(),
             is_exported,
             terminals: terminals.clone(),
             materials,
             tolerance,
-            spice_info: Self::generate_default_spice_info(&name, &terminals),
+            spice_info,
             span: Span::new(start_pos, end_pos),
         })
     }
     
-    /// Generate default SPICE export info based on device name and terminals
-    ///
-    /// This provides sensible defaults for common device types. Users can override
-    /// by adding explicit `spice:` blocks in future versions.
-    fn generate_default_spice_info(
-        device_name: &Identifier,
-        terminals: &SmallVec<[CompactString; 4]>,
-    ) -> Option<SpiceExportInfo> {
-        let name_str = device_name.as_str();
+    /// Parse SPICE export metadata block
+    fn parse_spice_block(&mut self) -> Result<SpiceExportInfo, ParseError> {
+        self.expect(&Token::Indent)?;
         
-        // Match common device types
-        match name_str {
-            "Resistor" | "PolyResistor" => {
-                let mut terminal_order = SmallVec::new();
-                terminal_order.push("A".into());
-                terminal_order.push("B".into());
-                
-                let mut parameters = SmallVec::new();
-                parameters.push("R".into());
-                
-                Some(SpiceExportInfo {
-                    prefix: 'R',
-                    terminal_order,
-                    parameters,
-                    model_name: None,
-                })
+        let mut prefix: Option<char> = None;
+        let mut terminal_order: Option<SmallVec<[CompactString; 4]>> = None;
+        let mut parameters: Option<SmallVec<[CompactString; 4]>> = None;
+        let mut model_name: Option<CompactString> = None;
+        let mut parameter_style: Option<SpiceParameterStyle> = None;
+        
+        while !self.check(&Token::Dedent) && !self.is_at_end() {
+            self.skip_whitespace();
+            
+            if self.check(&Token::Dedent) || self.is_at_end() {
+                break;
             }
-            "Capacitor" => {
-                let mut terminal_order = SmallVec::new();
-                terminal_order.push("Top".into());
-                terminal_order.push("Bottom".into());
-                
-                let mut parameters = SmallVec::new();
-                parameters.push("C".into());
-                
-                Some(SpiceExportInfo {
-                    prefix: 'C',
-                    terminal_order,
-                    parameters,
-                    model_name: None,
-                })
+            
+            if let Some(current) = self.current() {
+                if let Token::Identifier(field_name) = &current.token {
+                    match field_name.as_str() {
+                        "prefix" => {
+                            self.advance();
+                            self.expect(&Token::Colon)?;
+                            self.skip_whitespace();
+                            
+                            // Parse single character
+                            if let Some(tok) = self.current() {
+                                if let Token::Identifier(s) = &tok.token {
+                                    if s.len() == 1 {
+                                        prefix = Some(s.chars().next().unwrap());
+                                        self.advance();
+                                    } else {
+                                        return Err(self.error("SPICE prefix must be a single character (R, C, L, M, D, etc.)"));
+                                    }
+                                } else {
+                                    return Err(self.error("Expected SPICE prefix identifier"));
+                                }
+                            }
+                        }
+                        
+                        "terminal_order" => {
+                            self.advance();
+                            self.expect(&Token::Colon)?;
+                            terminal_order = Some(self.parse_identifier_list()?);
+                        }
+                        
+                        "parameters" => {
+                            self.advance();
+                            self.expect(&Token::Colon)?;
+                            parameters = Some(self.parse_identifier_list()?);
+                        }
+                        
+                        "model" => {
+                            self.advance();
+                            self.expect(&Token::Colon)?;
+                            self.skip_whitespace();
+                            model_name = Some(self.expect_identifier()?.name);
+                        }
+                        
+                        "parameter_style" => {
+                            self.advance();
+                            self.expect(&Token::Colon)?;
+                            self.skip_whitespace();
+                            
+                            let style_ident = self.expect_identifier()?;
+                            parameter_style = Some(match style_ident.name.as_str() {
+                                "positional" => SpiceParameterStyle::Positional,
+                                "named" => SpiceParameterStyle::Named,
+                                other => {
+                                    return Err(self.error(&format!(
+                                        "Unknown parameter_style: '{}'. Expected 'positional' or 'named'",
+                                        other
+                                    )));
+                                }
+                            });
+                        }
+                        
+                        _ => {
+                            return Err(self.error(&format!(
+                                "Unknown spice field: '{}'. Expected: prefix, terminal_order, parameters, parameter_style, or model",
+                                field_name
+                            )));
+                        }
+                    }
+                } else {
+                    return Err(self.error("Expected spice field identifier"));
+                }
             }
-            "Inductor" => {
-                let mut terminal_order = SmallVec::new();
-                terminal_order.push("A".into());
-                terminal_order.push("B".into());
-                
-                let mut parameters = SmallVec::new();
-                parameters.push("L".into());
-                
-                Some(SpiceExportInfo {
-                    prefix: 'L',
-                    terminal_order,
-                    parameters,
-                    model_name: None,
-                })
-            }
-            "Diode" => {
-                let mut terminal_order = SmallVec::new();
-                terminal_order.push("Anode".into());
-                terminal_order.push("Cathode".into());
-                
-                Some(SpiceExportInfo {
-                    prefix: 'D',
-                    terminal_order,
-                    parameters: SmallVec::new(),
-                    model_name: Some("D1N4148".into()),
-                })
-            }
-            "NMOS" => {
-                let mut terminal_order = SmallVec::new();
-                terminal_order.push("drain".into());
-                terminal_order.push("gate".into());
-                terminal_order.push("source".into());
-                terminal_order.push("bulk".into());
-                
-                let mut parameters = SmallVec::new();
-                parameters.push("W".into());
-                parameters.push("L".into());
-                
-                Some(SpiceExportInfo {
-                    prefix: 'M',
-                    terminal_order,
-                    parameters,
-                    model_name: Some("NMOS".into()),
-                })
-            }
-            "PMOS" => {
-                let mut terminal_order = SmallVec::new();
-                terminal_order.push("drain".into());
-                terminal_order.push("gate".into());
-                terminal_order.push("source".into());
-                terminal_order.push("bulk".into());
-                
-                let mut parameters = SmallVec::new();
-                parameters.push("W".into());
-                parameters.push("L".into());
-                
-                Some(SpiceExportInfo {
-                    prefix: 'M',
-                    terminal_order,
-                    parameters,
-                    model_name: Some("PMOS".into()),
-                })
-            }
-            _ => {
-                // For unknown device types, generate generic subcircuit format
-                // X<name> <terminals in declaration order> <model_name>
-                Some(SpiceExportInfo {
-                    prefix: 'X',
-                    terminal_order: terminals.clone(),
-                    parameters: SmallVec::new(),
-                    model_name: Some(device_name.to_string().into()),
-                })
+            
+            self.skip_whitespace();
+        }
+        
+        self.expect(&Token::Dedent)?;
+        
+        // STRICT VALIDATION - ALL required fields must be present
+        // NO DEFAULTS, NO FALLBACKS - fail loudly if missing
+        let prefix = prefix.ok_or_else(|| self.error("SPICE block missing REQUIRED field 'prefix'. Add 'prefix: <char>' (e.g., 'prefix: C' for capacitor)"))?;
+        let terminal_order = terminal_order.ok_or_else(|| self.error("SPICE block missing REQUIRED field 'terminal_order'. Add 'terminal_order: [term1, term2, ...]'"))?;
+        let parameter_style = parameter_style.ok_or_else(|| self.error("SPICE block missing REQUIRED field 'parameter_style'. Add 'parameter_style: positional' or 'parameter_style: named'"))?;
+        
+        // Parameters can be empty (for devices with no extracted parameters)
+        let parameters = parameters.unwrap_or_default();
+        
+        Ok(SpiceExportInfo {
+            prefix,
+            terminal_order,
+            parameters,
+            model_name,
+            parameter_style,
+        })
+    }
+
+    /// Parse identifier list: [A, B, C]
+    fn parse_identifier_list(&mut self) -> Result<SmallVec<[CompactString; 4]>, ParseError> {
+        let mut result = SmallVec::new();
+        
+        self.expect(&Token::OpenBracket)?;
+        self.skip_whitespace();
+        
+        if self.check(&Token::CloseBracket) {
+            self.advance();
+            return Ok(result);
+        }
+        
+        loop {
+            let ident = self.expect_identifier()?;
+            result.push(ident.name);
+            self.skip_whitespace();
+            
+            if self.check(&Token::Comma) {
+                self.advance();
+                self.skip_whitespace();
+            } else {
+                break;
             }
         }
+        
+        self.expect(&Token::CloseBracket)?;
+        Ok(result)
     }
 
     /// Parse terminal list: `[gate, source, drain, bulk]`

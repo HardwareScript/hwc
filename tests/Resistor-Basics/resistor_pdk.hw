@@ -36,7 +36,7 @@ export profile Resistor_Flattened:
         min_annular_ring: 50nm
         min_spacing: 300nm
         shape: SquareContact
-        contact_depth: 50nm
+        contact_depth: 10nm  # Match layer thickness to prevent substrate penetration
 
     trace:
         min_width: 200nm

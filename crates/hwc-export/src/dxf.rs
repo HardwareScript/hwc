@@ -98,26 +98,13 @@ pub fn export(
             .expect(&format!("Material '{}' not found in symbol table during DXF export", mat_name));
         let true_color = parse_true_color(&color_hex);
 
-        eprintln!("[DXF CONTOURS] Net {:?}: {} contours", contour_data.key.net_id, contour_data.contours.len());
-
-        for (idx, path) in contour_data.contours.iter().enumerate() {
-            eprintln!("[DXF CONTOUR {}] {} points", idx, path.len());
-            
+        for path in &contour_data.contours {
             let point_count = path.len();
             if point_count < 3 {
                 continue;
             }
 
-            // Debug: Print first few points to see the contour shape
-            if path.len() >= 4 {
-                eprintln!("[DXF CONTOUR {}] First 4 points: ({}, {}), ({}, {}), ({}, {}), ({}, {})",
-                    idx, 
-                    path[0].x, path[0].y,
-                    path[1].x, path[1].y,
-                    path[2].x, path[2].y,
-                    path[3].x, path[3].y
-                );
-            }
+            
 
             let layer_name = if is_asic { mat_name } else { "PCB_LAYERS" };
 

@@ -37,9 +37,18 @@ impl<'a> AutoRouter<'a> {
             // segment independently but only call register_analytic_route once with a merged
             // path to avoid duplicate parent route registration.
             
-            // Collect all segments by processing each path
-            let mut all_processed_paths: Vec<Vec<Point3D>> = Vec::new();
+            // **BUG FIX v0.2.1: Process route segments independently, then combine**
+            // Previously, all route segments were concatenated into a single waypoint array,
+            // which caused manhattan_path_to_segments to incorrectly delete valid routes due to
+            // false collinearity detection between unrelated segments.
+            //
+            // The fix: Process each route statement separately to preserve route boundaries,
+            // then combine all processed segments into a single AnalyticTrace registration.
+            // This prevents both the concatenation bug AND duplicate parent route errors.
+            
+            let mut all_segments: Vec<hwc_engine::LineSegment> = Vec::new();
             let mut first_thickness = trace_thickness_nm;
+            let mut route_count = 0;
 
             for path in segments {
                 if path.len() < 2 {
@@ -82,19 +91,39 @@ impl<'a> AutoRouter<'a> {
                 }
 
                 // Store the first thickness value
-                if all_processed_paths.is_empty() {
+                if route_count == 0 {
                     first_thickness = actual_thickness;
                 }
 
-                all_processed_paths.push(final_path);
+                // Convert path to segments independently (avoiding concatenation bug)
+                if final_path.len() >= 2 {
+                    let min_seg_len_nm = crate::ir::routing::helpers::require_min_segment_length_nm(self.profile)?;
+                    
+                    let has_z_transitions = final_path.windows(2).any(|w| w[0].z != w[1].z);
+                    let has_diagonal_segments = final_path.windows(2).any(|w| {
+                        let dx = (w[1].x - w[0].x).abs();
+                        let dy = (w[1].y - w[0].y).abs();
+                        let dz = (w[1].z - w[0].z).abs();
+                        (dx > 0 && dy > 0) || (dx > 0 && dz > 0) || (dy > 0 && dz > 0)
+                    });
+                    
+                    let route_segments = if has_z_transitions || has_diagonal_segments {
+                        let mut segs = Vec::new();
+                        for i in 0..final_path.len() - 1 {
+                            segs.push(hwc_engine::LineSegment::new(final_path[i], final_path[i + 1]));
+                        }
+                        segs
+                    } else {
+                        crate::ir::routing::helpers::manhattan_path_to_segments(&final_path, min_seg_len_nm)
+                    };
+                    
+                    all_segments.extend(route_segments);
+                    route_count += 1;
+                }
             }
 
-            // Concatenate all paths into a single continuous path
-            // This creates one unified route registration for the net
-            let merged_path: Vec<Point3D> = all_processed_paths.into_iter().flatten().collect();
-
-            // Only register if we have valid path data
-            if !merged_path.is_empty() {
+            // Register all segments as a single parent route
+            if !all_segments.is_empty() {
                 let declared_width = data
                     .net_declared_widths
                     .get::<str>(net_name.as_ref())
@@ -102,7 +131,6 @@ impl<'a> AutoRouter<'a> {
                 let current_ma = self.resolve_net_current(&net_name, data)?;
 
                 // Determine the routing layer for this net
-                // Use the explicit layer name stored during routing planning (single source of truth)
                 let routing_layer_name = data
                     .net_layer_names_by_id
                     .get(&actual_net_id)
@@ -111,10 +139,11 @@ impl<'a> AutoRouter<'a> {
                         net_name
                     )))?;
 
-                self.register_analytic_route(
+                // Create a single AnalyticTrace with all segments
+                self.register_analytic_route_from_segments(
                     actual_net_id,
                     &net_name,
-                    merged_path,
+                    all_segments,
                     routing_layer_name,
                     first_thickness,
                     declared_width,
@@ -394,4 +423,105 @@ impl<'a> AutoRouter<'a> {
 
         Ok(())
     }
+
+    /// Register a route from pre-computed segments (v0.2.1 bug fix for multi-segment routes)
+    /// This bypasses path concatenation to avoid false collinearity detection in manhattan_path_to_segments
+    fn register_analytic_route_from_segments(
+        &mut self,
+        net_id: NetId,
+        net_name: &str,
+        segments: Vec<hwc_engine::LineSegment>,
+        routing_layer_name: &str,
+        thickness_nm: i64,
+        declared_width_nm: Option<i64>,
+        current_limit_ma: f64,
+    ) -> Result<(), IrError> {
+        use hwc_engine::AnalyticTrace;
+
+        if segments.is_empty() {
+            return Ok(());
+        }
+
+        let min_width_nm = self
+            .space
+            .fabrication_constraints
+            .as_ref()
+            .map(|c| c.trace.min_width_nm)
+            .ok_or_else(|| IrError::MissingAsicConstraint {
+                message: "Analytic route requires trace width constraint but none is loaded.".into(),
+                hint: "Ensure a profile with 'trace:' constraints is declared in the space definition.".into(),
+            })?;
+
+        let trace_width_nm = declared_width_nm.unwrap_or(min_width_nm);
+
+        // Material determination using routing layer
+        let material_id = self
+            .profile
+            .and_then(|p| p.stackup.as_ref())
+            .and_then(|stackup| {
+                stackup
+                    .layers
+                    .iter()
+                    .find(|l| l.name.name == routing_layer_name)
+                    .map(|l| l.material.clone())
+            })
+            .ok_or_else(|| IrError::UndeclaredMaterial {
+                material: format!(
+                    "No material defined for routing layer '{}'",
+                    routing_layer_name
+                )
+                .into(),
+            })
+            .and_then(|mat_name| {
+                self.space
+                    .material_registry
+                    .get_id(&mat_name)
+                    .ok_or_else(|| IrError::UndeclaredMaterial {
+                        material: mat_name.clone(),
+                    })
+                    .map(|id| {
+                        eprintln!(
+                            "[REGISTRY MATERIAL DEBUG] Net '{}': routing_layer='{}', material='{}', material_id={}",
+                            net_name, routing_layer_name, mat_name, id
+                        );
+                        id
+                    })
+            })?;
+
+        let net_actual_current_ma = self
+            .space
+            .netlist
+            .get_net(net_id)
+            .and_then(|n| n.current_ma)
+            .unwrap_or(0.0);
+
+        // Compute layer_z_range for horizontal traces
+        let layer_z_range = segments
+            .iter()
+            .find(|s| s.start.z == s.end.z)
+            .and_then(|s| self.space.find_layer_at_z(s.start.z))
+            .map(|layer| (layer.z_bottom, layer.z_top));
+
+        let trace = AnalyticTrace::with_layer_z_range(
+            net_id,
+            hwc_engine::space::CrossSection::new(trace_width_nm, thickness_nm),
+            segments,
+            material_id,
+            net_name.into(),
+            hwc_engine::space::CurrentRating::new(net_actual_current_ma, current_limit_ma),
+            layer_z_range,
+        );
+
+        let from_entity = format!("auto_route_{}_start", net_name);
+        let to_entity = format!("auto_route_{}_end", net_name);
+
+        self.space.routing_database.register_autorouter_route(
+            trace,
+            from_entity.into(),
+            to_entity.into(),
+        ).map_err(|e| IrError::RoutingError(e))?;
+
+        Ok(())
+    }
 }
+

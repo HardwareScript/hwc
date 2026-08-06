@@ -45,16 +45,50 @@ pub enum ManufacturingProcess {
 }
 
 /// Physical properties for thermal/electrical calculations.
-#[derive(Debug, Clone, Copy)]
+///
+/// v0.2.1: Dynamic property storage - supports any property declared in .hw files
+/// without hardcoding specific property names in the compiler.
+///
+/// Properties are stored as declared:
+/// - resistivity: 4e-4ohm_m → stored as ("resistivity", 0.0004)
+/// - thermal_conductivity: 30.0W_mK → stored as ("thermal_conductivity", 30.0)
+/// - relative_permittivity: 3.9 → stored as ("relative_permittivity", 3.9)
+#[derive(Debug, Clone)]
 pub struct MaterialPhysicalProps {
-    /// Resistivity in Ohm·meters
-    pub resistivity_ohm_m: f64,
-    /// Thermal conductivity in W/(m·K)
-    pub thermal_conductivity_w_mk: f64,
-    /// Default layer thickness in nanometers (from material definition)
-    pub thickness_nm: i64,
-    /// Maximum current density in A/mm² (for EM checks)
-    pub max_current_density_a_mm2: Option<f64>,
+    /// Dynamic property storage: property_name → value
+    pub properties: FxHashMap<CompactString, f64>,
+}
+
+impl MaterialPhysicalProps {
+    /// Create empty properties
+    pub fn new() -> Self {
+        Self {
+            properties: FxHashMap::default(),
+        }
+    }
+
+    /// Get a property value by name
+    ///
+    /// Returns None if property not declared in material definition.
+    pub fn get(&self, name: &str) -> Option<f64> {
+        self.properties.get(name).copied()
+    }
+
+    /// Set a property value
+    pub fn set(&mut self, name: impl Into<CompactString>, value: f64) {
+        self.properties.insert(name.into(), value);
+    }
+
+    /// Check if a property exists
+    pub fn has(&self, name: &str) -> bool {
+        self.properties.contains_key(name)
+    }
+}
+
+impl Default for MaterialPhysicalProps {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 /// Strict material registry — maps material names to IDs and conductivity classes.
@@ -228,30 +262,17 @@ impl MaterialRegistry {
         )
     }
 
-    /// Store physical properties (resistivity, thermal conductivity, thickness) for a material.
-    pub fn set_physical_props(
-        &mut self,
-        id: MaterialId,
-        resistivity_ohm_m: f64,
-        thermal_conductivity_w_mk: f64,
-        thickness_nm: i64,
-        max_current_density_a_mm2: Option<f64>,
-    ) {
-        self.id_to_physical.insert(
-            id,
-            MaterialPhysicalProps {
-                resistivity_ohm_m,
-                thermal_conductivity_w_mk,
-                thickness_nm,
-                max_current_density_a_mm2,
-            },
-        );
+    /// Store physical properties for a material (dynamic key-value pairs)
+    ///
+    /// Properties are stored exactly as declared in .hw files.
+    pub fn set_physical_props(&mut self, id: MaterialId, props: MaterialPhysicalProps) {
+        self.id_to_physical.insert(id, props);
     }
 
     /// Get physical properties for a material. Returns `None` if not stored.
     #[inline]
-    pub fn get_physical_props(&self, id: MaterialId) -> Option<MaterialPhysicalProps> {
-        self.id_to_physical.get(&id).copied()
+    pub fn get_physical_props(&self, id: MaterialId) -> Option<&MaterialPhysicalProps> {
+        self.id_to_physical.get(&id)
     }
 
     /// Validate that a conductor material has all required physical properties.
@@ -259,26 +280,23 @@ impl MaterialRegistry {
         if !self.is_conductor(id) {
             return Ok(());
         }
-        let props = self.get_physical_props(id);
+        
+        let props = self.get_physical_props(id).ok_or_else(|| {
+            format!("Conductor material '{}' has no physical properties defined", name)
+        })?;
+        
         let mut missing = Vec::new();
-        match props {
-            Some(p) => {
-                if p.resistivity_ohm_m == 0.0 {
-                    missing.push("resistivity");
-                }
-                if p.thermal_conductivity_w_mk == 0.0 {
-                    missing.push("thermal_conductivity");
-                }
-                if p.max_current_density_a_mm2.is_none() {
-                    missing.push("max_current_density");
-                }
-            }
-            None => {
-                missing.push("resistivity");
-                missing.push("thermal_conductivity");
-                missing.push("max_current_density");
-            }
+        
+        if !props.has("resistivity") {
+            missing.push("resistivity");
         }
+        if !props.has("thermal_conductivity") {
+            missing.push("thermal_conductivity");
+        }
+        if !props.has("max_current_density") {
+            missing.push("max_current_density");
+        }
+        
         if missing.is_empty() {
             Ok(())
         } else {
@@ -291,14 +309,14 @@ impl MaterialRegistry {
     }
 
     /// Get physical properties by material name. Returns `None` if not found.
-    pub fn get_physical_props_by_name(&self, name: &str) -> Option<MaterialPhysicalProps> {
+    pub fn get_physical_props_by_name(&self, name: &str) -> Option<&MaterialPhysicalProps> {
         self.get_id(name).and_then(|id| self.get_physical_props(id))
     }
 
     /// Get material physical properties by material ID (alias for get_physical_props).
     /// Returns `None` if no physical properties are stored for this material.
     #[inline]
-    pub fn get_material(&self, id: MaterialId) -> Option<MaterialPhysicalProps> {
+    pub fn get_material(&self, id: MaterialId) -> Option<&MaterialPhysicalProps> {
         self.get_physical_props(id)
     }
 }

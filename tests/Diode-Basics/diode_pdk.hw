@@ -1,0 +1,107 @@
+# diode_pdk.hw - Process Design Kit for P-N Junction Diode Testing
+# Simplified PDK focused on P-N junction diodes (Silicon P-N structures)
+import * from @std/primitives/units
+import Silicon_P, Silicon_N, Aluminum, Titanium_Silicide, Silicon_Dioxide, Air from "./materials"
+
+export Silicon_P
+export Silicon_N
+export Aluminum
+export Titanium_Silicide
+export Silicon_Dioxide
+export Air
+
+# ========================================================================
+# SPICE MODEL CARDS (Process-Specific Semiconductor Physics)
+# ========================================================================
+# These model cards define the semiconductor physics for this process.
+# In a real foundry PDK, these would come from characterized test structures.
+#
+# For testing, we provide a generic silicon diode model matching typical
+# small-signal diode behavior (similar to 1N4148).
+
+export spice_model DMOD:
+    type: diode
+    parameters:
+        IS: 1e-12    # Saturation current (1 pA - typical for silicon P-N junction)
+        N: 1.0       # Ideality factor (1.0 = ideal, 1.5-2.0 = real with recombination)
+        RS: 0.1      # Series resistance (Ohms - contact + bulk resistance)
+        BV: 40.0     # Breakdown voltage (Volts - reverse bias limit)
+        IBV: 1e-10   # Breakdown current (knee sharpness)
+        CJO: 5e-13   # Zero-bias junction capacitance (0.5 pF)
+        VJ: 0.7      # Junction potential (built-in voltage)
+        M: 0.5       # Grading coefficient (0.5 = abrupt junction)
+
+# ========================================================================
+# GEOMETRY & CONTACT DEFINITIONS
+# ========================================================================
+
+export shape SquareContact(width: Measurement):
+    geometry:
+        Rectangle(width: width, height: width)
+
+export bridge Silicon_P to Aluminum:
+    interface: Titanium_Silicide
+    thickness: 5nm
+    fill: Aluminum
+
+export bridge Silicon_N to Aluminum:
+    interface: Titanium_Silicide
+    thickness: 5nm
+    fill: Aluminum
+
+export profile Diode_Flattened:
+    technology: "ASIC"
+    
+    stackup:
+        active:  [material: Silicon_P,        thickness: 10nm, routable: true]
+        d1:      [material: Silicon_Dioxide,  thickness: 10nm, routable: false]
+        metal1:  [material: Aluminum,         thickness: 10nm, routable: true]
+
+    via:
+        min_diameter: 200nm
+        min_annular_ring: 50nm
+        min_spacing: 300nm
+        shape: SquareContact
+        contact_depth: 10nm
+
+    trace:
+        min_width: 200nm
+        min_spacing: 200nm
+        edge_clearance: 100nm
+
+    manufacturing:
+        copper_thickness: 10nm
+        circle_segments: 64
+        solder_mask_thickness: 0nm
+        solder_mask_expansion: 0nm
+
+    clearance:
+        high_voltage: 500nm
+        safety_factor: 1.5
+
+    thermal:
+        ambient_temp: 25C
+        max_operating_temp: 125C
+        max_temp_rise: 50C
+        clustering_threshold: 10um
+
+    layer:
+        min_thickness: 5nm
+        allowed_conductors: [Aluminum, Silicon_P, Silicon_N]
+        allowed_dielectrics: [Silicon_Dioxide, Air]
+
+    routing:
+        max_local_route_length: 50um
+        min_segment_length: 200nm
+        escape_stub: 0nm
+        base_cost: 1
+        via_penalty: 50
+        direction_penalty: 10
+        tight_clearance_penalty: 2
+        crosstalk_penalty: 3
+        impedance_penalty: 1
+        reference_void_penalty: 5000000
+
+    net_type Signal:
+        routing_style: auto
+        escape_stub: 0nm

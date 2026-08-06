@@ -148,6 +148,31 @@ pub fn place_contact(
         end_z - start_z
     );
 
+    // v0.2.1: VALIDATION - Prevent substrate penetration
+    // Vias must not extend below the substrate base (Z=0) or above the space depth
+    if start_z < 0 {
+        return Err(IrError::PlacementConstraint {
+            message: format!(
+                "Via '{}' extends below substrate base (Z={}nm < 0nm). \
+                 Vias cannot penetrate below the wafer. \
+                 Reduce profile via.contact_depth (currently {}nm) or adjust layer thicknesses.",
+                contact_name_debug, start_z, contact_depth_nm
+            ),
+            component: contact_name_debug.to_string(),
+        });
+    }
+    
+    if end_z > space.dimensions.depth_nm {
+        return Err(IrError::PlacementConstraint {
+            message: format!(
+                "Via '{}' extends above space depth (Z={}nm > {}nm). \
+                 Increase space dimensions.z or reduce via.contact_depth.",
+                contact_name_debug, end_z, space.dimensions.depth_nm
+            ),
+            component: contact_name_debug.to_string(),
+        });
+    }
+
     let start_point = Point3D::new(xy_point.x - radius_nm, xy_point.y - radius_nm, start_z);
     let end_point = Point3D::new(xy_point.x + radius_nm, xy_point.y + radius_nm, end_z);
 

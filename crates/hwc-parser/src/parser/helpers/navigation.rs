@@ -83,6 +83,7 @@ impl Parser {
                 Token::Spanning => Some("spanning"),
                 Token::Interface => Some("interface"),
                 Token::Device => Some("device"),
+                Token::SpiceModel => Some("spice_model"),
                 Token::On => Some("on"),
                 Token::At => Some("at"),
                 Token::To => Some("to"),
@@ -135,6 +136,7 @@ impl Parser {
                     | Token::Spanning
                     | Token::Interface
                     | Token::Device
+                    | Token::SpiceModel
                     | Token::On
                     | Token::At
                     | Token::To

@@ -1,0 +1,16 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,0.01x0.00x0.00mm,,,,,1
+
+# MATERIAL USAGE (Fabrication)
+Reference,Type,Material,Layer_Z_nm,Area_nm2,Volume_nm3
+R1_Body_A,Pour,Polysilicon,z:0,500000,5000000
+R1_Body_B,Pour,Polysilicon,z:0,500000,5000000
+R1_Contact_A,Pour,Aluminum,z:20,160000,1600000
+R1_Contact_B,Pour,Aluminum,z:20,160000,1600000
+R2_Body_A,Pour,Polysilicon,z:0,500000,5000000
+R2_Body_B,Pour,Polysilicon,z:0,500000,5000000
+R2_Contact_A,Pour,Aluminum,z:20,160000,1600000
+R2_Contact_B,Pour,Aluminum,z:20,160000,1600000
+In_Pad,Pour,Aluminum,z:20,360000,3600000
+Mid_Pad,Pour,Aluminum,z:20,360000,3600000
+GND_Pad,Pour,Aluminum,z:20,360000,3600000

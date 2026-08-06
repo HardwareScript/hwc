@@ -1,0 +1,55 @@
+# via_sandwich_test.hw
+# Test via penetration depths into pads
+#
+# TWO TEST SCENARIOS:
+# 1. TOP VIA: Penetrates halfway (150nm) into aluminum pad (300nm thick)
+# 2. BOTTOM VIA: Penetrates completely through (300nm) polysilicon pad
+#
+# Stack structure (Z-axis):
+# - Poly pad: Z=0→300nm (300nm thick)
+# - Dielectric: Z=300→700nm (400nm thick, transparent)
+# - Aluminum pad: Z=700→1000nm (300nm thick)
+#
+# Via behaviors:
+# - Top via: Extends from Z=550nm (dielectric) to Z=850nm (halfway into aluminum)
+# - Bottom via: Extends from Z=0nm (bottom of poly) to Z=300nm (top of poly)
+
+import * from @std/primitives/units
+import * from "./pdk"
+
+space Via_Sandwich_Space:
+    dimensions: 3.0um by 3.0um by 1000nm
+    resolution: 10nm
+    origin: bl by b
+    profile: ViaSandwichProfile
+    
+    nets:
+        TestNet: { classification: signal, potential: 1.8V, current: 1.0uA }
+    
+    # ========================================================================
+    # BOTTOM PAD (Polysilicon) - Z=0→300nm (300nm thick)
+    # Via penetrates ENTIRE HEIGHT (300nm) - spans completely through pad
+    # Tests full-span cutout case (via bottom = pad bottom, via exit = pad top)
+    # ========================================================================
+    add pour(Polysilicon) named Bottom_Pad on layer: poly:
+        net: TestNet
+        dimensions: 1.2um by 1.2um
+        at: [x: 1.5um, y: 1.5um]
+    
+    # ========================================================================
+    # TOP PAD (Aluminum) - Z=700→1000nm
+    # Via will penetrate halfway into this (150nm out of 300nm)
+    # ========================================================================
+    add pour(Aluminum) named Top_Pad on layer: metal1:
+        net: TestNet
+        dimensions: 1.0um by 1.0um
+        at: [x: 1.5um, y: 1.5um]
+    
+    # ========================================================================
+    # SINGLE VIA - Connects bottom poly pad to top aluminum pad
+    # This via will demonstrate partial penetration (contact_depth behavior)
+    # ========================================================================
+    add contact(Tungsten) named Center_Via spanning layer: poly to metal1:
+        net: TestNet
+        diameter: 300nm
+        align: center with Bottom_Pad

@@ -54,6 +54,7 @@ pub struct CompiledOutput {
     pub symbol_table: SymbolTable,
     pub space_def: Option<hwc_parser::SpaceDefinition>, // v0.1.6: For profile access
     pub physical_netlist: Option<hwc_compiler::alignment::PhysicalNetlist>, // v0.1.6: Extracted devices for netlist export
+    pub unit_registry: hwc_types::UnitRegistry,
 }
 
 #[derive(Default)]
@@ -89,6 +90,7 @@ impl Exporter {
                 output_dir,
                 compiled.physical_netlist.as_ref(),
                 compiled.space_def.as_ref(),
+                &compiled.unit_registry,
             ),
             ExportFormat::Bom => bom::export(&compiled.space, &compiled.symbol_table, output_dir),
             ExportFormat::Excellon => excellon::export(&compiled.space, output_dir),

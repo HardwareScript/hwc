@@ -104,7 +104,9 @@ pub(super) fn resolve_z_span(
         //
         // Example: contact_depth=50nm means via extends from (lower_top - 50nm) to (upper_bottom + 50nm),
         // penetrating 50nm into the lower layer and 50nm into the upper layer.
-        let via_bottom = lower_top - contact_depth_nm;
+        //
+        // v0.2.1 FIX: Clamp via_bottom to 0 to prevent substrate penetration below the wafer base
+        let via_bottom = (lower_top - contact_depth_nm).max(0);
         let via_top = upper_bottom + contact_depth_nm;
 
         (via_bottom, via_top)

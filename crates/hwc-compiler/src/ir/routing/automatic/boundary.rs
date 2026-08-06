@@ -304,7 +304,6 @@ pub fn calculate_boundary_points(
     route: &hwc_parser::Route,
     trace_width_nm: i64,
 ) -> BoundaryPoints {
-    eprintln!("[CIR BOUNDARY] calculate_boundary_points called with trace_width={}nm", trace_width_nm);
     
     let board_bounds = space.entity_graph.total_bounding_box();
 
@@ -318,8 +317,7 @@ pub fn calculate_boundary_points(
         })?;
     
     let clearance_nm = constraints.trace.min_spacing_nm;
-    eprintln!("[CIR BOUNDARY] clearance_nm={}", clearance_nm);
-
+   
     let resolve_offset = |spec: &Option<hwc_parser::EdgeOffsetSpec>| -> EdgeOffset {
         match spec {
             Some(hwc_parser::EdgeOffsetSpec::Named(pos)) => match pos {
@@ -382,11 +380,7 @@ pub fn calculate_boundary_points(
         goal_conn.z_elevation, // FROM DATABASE!
     );
 
-    eprintln!(
-        "[CIR BOUNDARY] From database: {} = ({}, {}, {}nm), {} = ({}, {}, {}nm)",
-        from_label, start_pin_center.x, start_pin_center.y, start_pin_center.z,
-        to_label, goal_pin_center.x, goal_pin_center.y, goal_pin_center.z
-    );
+   
 
     // v0.1.9: Obstacle-aware auto-port selection
     // Uses topological ray-casting to select escape ports with maximum clearance

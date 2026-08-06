@@ -55,6 +55,7 @@ pub fn execute(
     };
 
     // Transform AST to all HardwareSpaces (with lockfile support)
+    let unit_registry = compilation_result.unit_registry();
     let spaces_result = hwc_compiler::program_to_spaces_with_lockfile(
         &compilation_result.ast,
         &compilation_result.symbol_table,
@@ -62,6 +63,7 @@ pub fn execute(
         lockfile_path.as_deref(),
         Some(&source_content),
         config.force_reroute,
+        &unit_registry,
     );
 
     // Print any diagnostics
@@ -224,6 +226,7 @@ pub fn execute(
             output_dir: &space_output_dir,
             formats: &export_formats,
             start_time,
+            unit_registry: compilation_result.unit_registry(),
         })?;
     }
 

@@ -4,7 +4,7 @@ use hwc_parser::{
     BridgeDefinition, ComponentDefinition, InterfaceDefinition, MaterialAliasDefinition,
     MaterialDefinition, MechanicalDefinition, ModuleDefinition, PatternDefinition,
     ProfileDefinition, ShapeDefinition, SignalGroupDefinition, SpaceDefinition,
-    StrategyDefinition, TestDefinition, UnitDefinition,
+    SpiceModelDefinition, StrategyDefinition, TestDefinition, UnitDefinition,
 };
 
 use super::super::Definition;
@@ -284,5 +284,20 @@ impl SymbolTable {
             .last_mut()
             .unwrap()
             .insert(name_str.into(), Definition::Test(def));
+    }
+
+    /// Register an imported SPICE model definition (in HPM layer) (v0.2.1)
+    ///
+    /// v0.2.1: SPICE Model Card support for PDK physics
+    /// Stores ALL definitions (exported and private) for proper scoped resolution
+    pub fn register_import_spice_model(&mut self, def: SpiceModelDefinition) {
+        let name_str = def.name.as_str().to_string();
+        if self.hpm.is_empty() {
+            self.hpm.push(super::super::layer::SymbolLayer::new());
+        }
+        self.hpm
+            .last_mut()
+            .unwrap()
+            .insert(name_str.into(), Definition::SpiceModel(def));
     }
 }

@@ -1,0 +1,181 @@
+# voltage_divider.hw
+# Voltage Divider Test: Two 1μm x 1μm Polysilicon Resistors (400Ω each)
+# Expected SPICE Output: V(Mid) = 1.8V * (400 / (400 + 400)) = 0.9V
+#
+# This test validates:
+# 1. Multi-device SPICE extraction (RR1 and RR2)
+# 2. Intermediate net resolution (Mid node)
+# 3. DC Operating Point simulation capability
+#
+# Physics: V_out = V_in * (R2 / (R1 + R2))
+# - R1 = 400Ω (top resistor: In to Mid)
+# - R2 = 400Ω (bottom resistor: Mid to GND)
+# - V_in = 1.8V
+# - V_mid = 1.8V * (400 / 800) = 0.9V
+
+import * from @std/primitives/units
+import * from "./resistor_pdk"
+
+# ========================================================================
+# DEVICE DEFINITION - Polysilicon Resistor Contract
+# ========================================================================
+device Resistor:
+    terminals: [A, B]
+    materials:
+        A: Polysilicon
+        B: Polysilicon
+    spice:
+        prefix: R
+        terminal_order: [A, B]
+        parameters: [R]
+        parameter_style: positional
+
+# ========================================================================
+# MODULE - Logical Interface for Voltage Divider
+# ========================================================================
+module VoltageDivider:
+    pins: [input In, output Mid, ground GND]
+    route In to Mid
+    route Mid to GND
+
+# ========================================================================
+# SPACE - Physical Implementation of Voltage Divider
+# ========================================================================
+space Voltage_Divider_Space implements VoltageDivider:
+    dimensions: 8.0um by 4.0um by 100nm
+    resolution: 10nm
+    origin: bl by b
+    profile: Resistor_Flattened
+
+    nets:
+        In:  { classification: signal, potential: 1.8V, current: 1.0uA }
+        Mid: { classification: signal, potential: 0.9V, current: 1.0uA }
+        GND: { classification: ground, potential: 0.0V, current: 2.0uA }
+
+    # ========================================================================
+    # RESISTOR 1 (R1: 400 Ohms) - Top Resistor between In and Mid
+    # ========================================================================
+    # 1μm × 1μm square polysilicon resistor
+    # Split into two halves for terminal A and B
+    add pour(Polysilicon) named R1_Body_A on layer: polyres:
+        device: R1.A
+        dimensions: 500nm by 1.0um
+        at: [x: 1.75um, y: 2.0um]
+
+    add pour(Polysilicon) named R1_Body_B on layer: polyres:
+        device: R1.B
+        dimensions: 500nm by 1.0um
+        at: [x: 2.25um, y: 2.0um]
+
+    # Metal contacts for R1 terminals
+    add pour(Aluminum) named R1_Contact_A on layer: metal1:
+        net: In
+        dimensions: 400nm by 400nm
+        at: [x: 1.7um, y: 2.0um]
+
+    add pour(Aluminum) named R1_Contact_B on layer: metal1:
+        net: Mid
+        dimensions: 400nm by 400nm
+        at: [x: 2.3um, y: 2.0um]
+
+    # Vias for R1
+    add contact(Titanium_Silicide) named Via_R1_A spanning layer: polyres to metal1:
+        net: In
+        diameter: 200nm
+        plating_thickness: 5nm
+        align: center with R1_Contact_A
+
+    add contact(Titanium_Silicide) named Via_R1_B spanning layer: polyres to metal1:
+        net: Mid
+        diameter: 200nm
+        plating_thickness: 5nm
+        align: center with R1_Contact_B
+
+    # ========================================================================
+    # RESISTOR 2 (R2: 400 Ohms) - Bottom Resistor between Mid and GND
+    # ========================================================================
+    # 1μm × 1μm square polysilicon resistor
+    # Split into two halves for terminal A and B
+    add pour(Polysilicon) named R2_Body_A on layer: polyres:
+        device: R2.A
+        dimensions: 500nm by 1.0um
+        at: [x: 4.75um, y: 2.0um]
+
+    add pour(Polysilicon) named R2_Body_B on layer: polyres:
+        device: R2.B
+        dimensions: 500nm by 1.0um
+        at: [x: 5.25um, y: 2.0um]
+
+    # Metal contacts for R2 terminals
+    add pour(Aluminum) named R2_Contact_A on layer: metal1:
+        net: Mid
+        dimensions: 400nm by 400nm
+        at: [x: 4.7um, y: 2.0um]
+
+    add pour(Aluminum) named R2_Contact_B on layer: metal1:
+        net: GND
+        dimensions: 400nm by 400nm
+        at: [x: 5.3um, y: 2.0um]
+
+    # Vias for R2
+    add contact(Titanium_Silicide) named Via_R2_A spanning layer: polyres to metal1:
+        net: Mid
+        diameter: 200nm
+        plating_thickness: 5nm
+        align: center with R2_Contact_A
+
+    add contact(Titanium_Silicide) named Via_R2_B spanning layer: polyres to metal1:
+        net: GND
+        diameter: 200nm
+        plating_thickness: 5nm
+        align: center with R2_Contact_B
+
+    # ========================================================================
+    # PADS & ROUTING - External connections
+    # ========================================================================
+    
+    # Input pad (1.8V)
+    add pour(Aluminum) named In_Pad on layer: metal1:
+        net: In
+        dimensions: 600nm by 600nm
+        at: [x: 600nm, y: 2.0um]
+
+    # Mid-point pad (0.9V expected)
+    add pour(Aluminum) named Mid_Pad on layer: metal1:
+        net: Mid
+        dimensions: 600nm by 600nm
+        at: [x: 3.5um, y: 2.0um]
+
+    # Ground pad (0V)
+    add pour(Aluminum) named GND_Pad on layer: metal1:
+        net: GND
+        dimensions: 600nm by 600nm
+        at: [x: 6.5um, y: 2.0um]
+
+    # ========================================================================
+    # INTERCONNECTS - Route all pads to resistors
+    # ========================================================================
+
+    # Input to R1 (In net)
+    route In_Pad to R1_Contact_A:
+        net: In
+        width: 300nm
+        layer: metal1
+
+    # R1 to Mid pad (Mid net)
+    route R1_Contact_B to Mid_Pad:
+        net: Mid
+        width: 300nm
+        layer: metal1
+
+    # Mid pad to R2 (Mid net)
+    route Mid_Pad to R2_Contact_A:
+        net: Mid
+        width: 300nm
+        layer: metal1
+
+    # R2 to Ground (GND net)
+    route R2_Contact_B to GND_Pad:
+        net: GND
+        width: 300nm
+        layer: metal1

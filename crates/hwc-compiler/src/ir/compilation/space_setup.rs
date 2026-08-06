@@ -6,8 +6,9 @@ pub fn create_space(
     space_def: &hwc_parser::SpaceDefinition,
     symbol_table: &SymbolTable,
     eval_context: &hwc_parser::EvaluationContext,
+    unit_registry: &hwc_types::UnitRegistry,
 ) -> Result<hwc_engine::HardwareSpace, IrError> {
-    let space = crate::ir::space_builder::create_hardware_space(space_def, symbol_table, eval_context)?;
+    let space = crate::ir::space_builder::create_hardware_space(space_def, symbol_table, eval_context, unit_registry)?;
     crate::ir::space_builder::validate_asic_constraints(space_def, symbol_table, eval_context)?;
     Ok(space)
 }
@@ -88,14 +89,16 @@ pub fn populate_material_registry(
                 crate::ir::conversions::evaluate_expression_to_nm(&layer.thickness, symbol_table, eval_context)
             {
                 if let Some(mat_id) = space.material_registry.get_id(&layer.material) {
-                    let existing = space.material_registry.get_physical_props(mat_id);
-                    space.material_registry.set_physical_props(
-                        mat_id,
-                        existing.map(|p| p.resistivity_ohm_m).unwrap_or(0.0),
-                        existing.map(|p| p.thermal_conductivity_w_mk).unwrap_or(0.0),
-                        thickness_nm,
-                        existing.and_then(|p| p.max_current_density_a_mm2),
-                    );
+                    // Update thickness in material properties (preserving all other properties)
+                    let mut props = space
+                        .material_registry
+                        .get_physical_props(mat_id)
+                        .cloned()
+                        .unwrap_or_else(hwc_engine::material::MaterialPhysicalProps::new);
+                    
+                    props.set("thickness", thickness_nm as f64);
+                    
+                    space.material_registry.set_physical_props(mat_id, props);
                 }
             }
         }

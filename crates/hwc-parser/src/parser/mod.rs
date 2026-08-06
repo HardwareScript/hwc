@@ -172,6 +172,7 @@ impl Parser {
                 || self.check(&crate::lexer::Token::Const)
                 || self.check(&crate::lexer::Token::SignalGroup)
                 || self.check(&crate::lexer::Token::Shape)
+                || self.check(&crate::lexer::Token::SpiceModel)
                 || self.check(&crate::lexer::Token::Logic)
                 || self.check(&crate::lexer::Token::Enum)
                 || self.check(&crate::lexer::Token::Struct)
@@ -298,6 +299,7 @@ impl Parser {
                 | crate::lexer::Token::Const
                 | crate::lexer::Token::SignalGroup
                 | crate::lexer::Token::Shape
+                | crate::lexer::Token::SpiceModel
                 | crate::lexer::Token::Logic
                 | crate::lexer::Token::Enum
                 | crate::lexer::Token::Struct

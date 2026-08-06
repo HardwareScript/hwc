@@ -1,11 +1,30 @@
 //! Substrate layer processing and net-aware clustering
 //!
-//! **v0.2.2**: This module now uses the unified_geometry module as the single source
-//! of truth for copper contours. It focuses on 3D mesh extrusion and substrate base
-//! rendering, delegating all 2D geometry calculations to unified_geometry.
+//! **v0.2.2 Industry Standard 3D CAD Architecture**
+//!
+//! This module implements the physical truth of semiconductor/PCB manufacturing:
+//!
+//! ## Copper Geometry (From unified_geometry module)
+//! - All conductive pads and traces are SOLID (no holes punched!)
+//! - Vias and pads on the same net are Boolean-unioned into single solid shapes
+//! - unified_geometry module is the single source of truth for 2D contours
+//!
+//! ## Substrate Base (Rendered here)
+//! - Dielectric layers (Silicon_Dioxide, FR4) get via hole cutouts
+//! - SubstrateMeshBuilder performs Clipper2 Boolean DIFFERENCE to cut holes
+//! - Via pillars are rendered as solid cylinders/prisms inside these holes
+//!
+//! ## Physical Stack
+//! ```text
+//! Top Conductive Pad (SOLID) ← No hole!
+//!     ↓ (via pillar passes through pad, both solid, unioned)
+//! Dielectric Layer (HOLE CUT) ← Only layer with hole!
+//!     ↓ (via pillar fills the hole)
+//! Bottom Conductive Pad (SOLID) ← No hole!
+//! ```
 
-use super::mesh_generation::{create_box_with_holes_mesh, create_via_mesh, ViaMeshParams};
-use super::types::{BoxParams, MaterialNode, MeshNode};
+use super::mesh_generation::{create_via_mesh, ViaMeshParams};
+use super::types::{MaterialNode, MeshNode};
 use crate::mesh_extrusion::extrude_polygon_mesh;
 use compact_str::CompactString;
 use hwc_engine::geometry_router::entity_graph::CapType;
@@ -124,7 +143,7 @@ pub fn add_substrate(
         }));
     }
 
-    // **SUBSTRATE BASE**: Render the FR4 or silicon substrate base
+    // **SUBSTRATE BASE**: Render the FR4 or silicon substrate base with via cutouts
     for (idx, layer) in substrate_layers.iter().enumerate() {
         if layer.layer_type
             != hwc_engine::geometry_router::entity_graph::SubstrateLayerType::Substrate
@@ -141,36 +160,96 @@ pub fn add_substrate(
             continue;
         }
 
-        let min_x_mm = layer.bbox.min.x as f64 / 1_000_000.0;
-        let min_y_mm = layer.bbox.min.y as f64 / 1_000_000.0;
-        let min_z_mm = layer.bbox.min.z as f64 / 1_000_000.0;
-        let max_x_mm = layer.bbox.max.x as f64 / 1_000_000.0;
-        let max_y_mm = layer.bbox.max.y as f64 / 1_000_000.0;
-        let max_z_mm = layer.bbox.max.z as f64 / 1_000_000.0;
-        let width = max_x_mm - min_x_mm;
-        let height = max_y_mm - min_y_mm;
-        let depth = max_z_mm - min_z_mm;
+        eprintln!(
+            "[SUBSTRATE BASE] Building substrate layer {} (Z={}→{}nm, material={}) with via cutouts",
+            idx, layer.bbox.min.z, layer.bbox.max.z, material_name
+        );
 
-        meshes.push(MeshNode {
-            name: format!("Substrate_Base_{}", idx).into(),
-            vertices: Vec::new(),
-            faces: create_box_with_holes_mesh(
-                &format!("Substrate_Base_{}", idx),
-                BoxParams {
-                    x: min_x_mm,
-                    y: min_y_mm,
-                    z: min_z_mm,
-                    width,
-                    height,
-                    depth,
-                },
-                vec![],
-                material_name,
-                space.view,
-                super::types::FaceCulling::none(),
-            )
-            .faces,
-            material_name: material_name.to_string().into(),
-        });
+        // **v0.2.2: Use production-grade SubstrateMeshBuilder with Clipper2 + Earcut**
+        // Collect all vias that should create cutouts in this substrate layer
+        let via_cutouts: Vec<super::mesh_generation::ViaCutout> = space
+            .vias
+            .iter()
+            .enumerate()
+            .filter_map(|(via_idx, via)| {
+                // Get the via's substrate layer representation to check its shape
+                let via_substrate_layer = space
+                    .entity_graph
+                    .get_substrate_layers()
+                    .iter()
+                    .find(|layer| {
+                        layer.layer_type == hwc_engine::geometry_router::entity_graph::SubstrateLayerType::Contact
+                            && layer.net == via.net_id
+                            && (layer.bbox.min.x + layer.bbox.max.x) / 2 == via.position.0
+                            && (layer.bbox.min.y + layer.bbox.max.y) / 2 == via.position.1
+                    });
+
+                if let Some(substrate_layer) = via_substrate_layer {
+                    // Check if this is a polygon via (square/rectangular IC via)
+                    match &substrate_layer.shape {
+                        hwc_engine::geometry_router::substrate_types::SubstrateLayerShape::Polygon { outer_contour, .. } => {
+                            eprintln!(
+                                "[SUBSTRATE CUTOUT] Via {} is polygonal ({} vertices), creating polygon cutout",
+                                via_idx,
+                                outer_contour.len()
+                            );
+                            Some(super::mesh_generation::ViaCutout::new_polygonal(
+                                outer_contour.clone(),
+                                via.from_z_nm.min(via.to_z_nm),
+                                via.from_z_nm.max(via.to_z_nm),
+                            ).ok()?)
+                        }
+                        _ => {
+                            // Circular or other shape - use circular cutout
+                            eprintln!(
+                                "[SUBSTRATE CUTOUT] Via {} is circular (dia={}nm), creating circular cutout",
+                                via_idx,
+                                via.diameter_nm
+                            );
+                            Some(super::mesh_generation::ViaCutout::new_circular(
+                                via.position.0,
+                                via.position.1,
+                                via.diameter_nm,
+                                via.from_z_nm.min(via.to_z_nm),
+                                via.from_z_nm.max(via.to_z_nm),
+                            ).ok()?)
+                        }
+                    }
+                } else {
+                    // Fallback: create circular cutout
+                    super::mesh_generation::ViaCutout::new_circular(
+                        via.position.0,
+                        via.position.1,
+                        via.diameter_nm,
+                        via.from_z_nm.min(via.to_z_nm),
+                        via.from_z_nm.max(via.to_z_nm),
+                    ).ok()
+                }
+            })
+            .collect();
+
+        eprintln!("[SUBSTRATE BASE] Found {} valid vias for cutout consideration", via_cutouts.len());
+
+        // Build the substrate mesh with via cutouts using clean builder pattern
+        match super::mesh_generation::SubstrateMeshBuilder::new(
+            layer.bbox,
+            material_name.to_string(),
+            space.view,
+        )
+        .with_vias(via_cutouts)
+        .build(&format!("Substrate_Base_{}", idx))
+        {
+            Ok(mesh_node) => {
+                eprintln!(
+                    "[SUBSTRATE BASE] Successfully generated mesh with {} vertices, {} faces",
+                    mesh_node.vertices.len(),
+                    mesh_node.faces.len()
+                );
+                meshes.push(mesh_node);
+            }
+            Err(e) => {
+                eprintln!("[SUBSTRATE BASE ERROR] Failed to generate substrate mesh: {}", e);
+            }
+        }
     }
 }

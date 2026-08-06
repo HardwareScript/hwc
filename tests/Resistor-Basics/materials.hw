@@ -4,7 +4,7 @@ import * from @std/primitives/units
 
 # Polysilicon - The primary resistive material
 # Used for polyres layer (resistors)
-# Sheet resistance: ~400 Ohms per square micrometre (typical for undoped poly)
+# Sheet resistance: 400 Ohms per square at 10nm thickness
 export material Polysilicon:
     category: conductor
     symbol: "Poly"
@@ -14,7 +14,7 @@ export material Polysilicon:
         metallic: 0.3
         roughness: 0.8
         opacity: 1.0      # Fully opaque - solid view
-        resistivity: 4e-4ohm_m  # ~400 Ohms/square at 1um thickness
+        resistivity: 4e-6ohm_m  # 400 Ohms/square at 10nm thickness (R_sheet = ρ/t = 4e-6/10e-9 = 400)
         thermal_conductivity: 30.0W_mK
         max_current_density: 1e2A_mm2
 

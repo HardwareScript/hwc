@@ -23,6 +23,7 @@ pub mod profile;
 mod shape;
 mod signal_group;
 mod space;
+mod spice_model;
 mod test;
 mod unit;
 
@@ -46,6 +47,7 @@ pub use profile::*;
 pub use shape::*;
 pub use signal_group::*;
 pub use space::*;
+pub use spice_model::*;
 pub use test::*;
 pub use unit::*;
 
@@ -90,6 +92,7 @@ pub enum Definition {
     Struct(logic::StructDefinition), // NEW: Struct definitions for v0.4.0
     Logic(logic::LogicDefinition), // NEW: Logic block definitions for v0.4.0
     Shape(ShapeDefinition),   // NEW: Custom 2D polygon shape definitions
+    SpiceModel(SpiceModelDefinition), // NEW: SPICE model card definitions for v0.2.1+ (PDK physics)
 }
 
 // REMOVED (pre-release cleanup): Legacy AST struct (the old non-Program wrapper).

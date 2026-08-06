@@ -153,14 +153,6 @@ impl<'a> PivbSolver<'a> {
             return islands;
         }
 
-        eprintln!("[PIVB WELD DEBUG] Starting welding with {} raw islands", islands.len());
-        for (i, island) in islands.iter().enumerate() {
-            eprintln!("[PIVB WELD DEBUG]   Island {}: net={}, material={}, z={}-{}, bbox=({},{},{}) -> ({},{},{})",
-                i, island.net_name, island.material, island.z_min, island.z_max,
-                island.bbox.min.x, island.bbox.min.y, island.bbox.min.z,
-                island.bbox.max.x, island.bbox.max.y, island.bbox.max.z);
-        }
-
         let n = islands.len();
         let mut parent: Vec<usize> = (0..n).collect();
 
@@ -170,24 +162,6 @@ impl<'a> PivbSolver<'a> {
             }
             parent[x]
         }
-
-        fn union(parent: &mut [usize], rank: &mut [usize], x: usize, y: usize) {
-            let rx = find(parent, x);
-            let ry = find(parent, y);
-            if rx == ry {
-                return;
-            }
-            if rank[rx] < rank[ry] {
-                parent[rx] = ry;
-            } else if rank[rx] > rank[ry] {
-                parent[ry] = rx;
-            } else {
-                parent[ry] = rx;
-                rank[rx] += 1;
-            }
-        }
-
-        let mut rank = vec![0; n];
 
         // Union overlapping same-net, same-material islands
         for i in 0..n {
@@ -199,17 +173,16 @@ impl<'a> PivbSolver<'a> {
                 // Routes may have incorrect material IDs but should still weld with device terminals
                 // if they're on the same Z-plane. This is a workaround for routing engine material assignment.
                 let z_compatible = islands[i].z_min <= islands[j].z_max && islands[i].z_max >= islands[j].z_min;
-                let material_compatible = same_material || 
+                let compatible = same_material || 
                     (same_net && z_compatible && 
                      (islands[i].device_binding.is_some() || islands[j].device_binding.is_some()));
                 
-                let overlaps = self.islands_overlap_3d(&islands[i], &islands[j]);
-                
-                if same_net && material_compatible && overlaps {
-                    eprintln!("[PIVB WELD DEBUG] Welding island {} (net={}, mat={}, z={}-{}) with island {} (net={}, mat={}, z={}-{})",
-                        i, islands[i].net_name, islands[i].material, islands[i].z_min, islands[i].z_max,
-                        j, islands[j].net_name, islands[j].material, islands[j].z_min, islands[j].z_max);
-                    union(&mut parent, &mut rank, i, j);
+                if compatible && same_net && self.islands_overlap_3d(&islands[i], &islands[j]) {
+                    let rx = find(&mut parent, i);
+                    let ry = find(&mut parent, j);
+                    if rx != ry {
+                        parent[rx] = ry;
+                    }
                 }
             }
         }
@@ -268,8 +241,6 @@ impl<'a> PivbSolver<'a> {
                 device_binding: first.device_binding.clone(),
             });
         }
-
-        eprintln!("[PIVB WELD DEBUG] After welding: {} welded islands (from {} raw)", welded.len(), n);
 
         welded
     }

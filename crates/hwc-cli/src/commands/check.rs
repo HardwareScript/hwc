@@ -89,10 +89,12 @@ pub fn execute(
     // Build symbol table for semantic validation
     use hwc_compiler::{ModuleResolver, SymbolTable};
     let mut symbol_table = SymbolTable::new();
+    let mut unit_registry = hwc_types::UnitRegistry::new(vec![]);
 
     // Load prelude (units.hw, math.hw) for unit resolution and constant folding
     match hwc_compiler::Prelude::load() {
         Ok(prelude) => {
+            unit_registry = prelude.build_unit_registry();
             for unit in &prelude.units {
                 symbol_table.register_prelude_unit(unit.clone());
             }
@@ -167,7 +169,7 @@ pub fn execute(
     }
 
     // Try to compile to HardwareSpace for full validation
-    match hwc_compiler::program_to_space(&ast, &symbol_table, &collector) {
+    match hwc_compiler::program_to_space(&ast, &symbol_table, &collector, &unit_registry) {
         Ok(space) => {
             println!("✅ Semantic validation passed");
             println!(

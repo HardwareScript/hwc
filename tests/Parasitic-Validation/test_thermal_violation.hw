@@ -1,0 +1,107 @@
+# test_thermal_violation.hw
+# Parasitic Validation Test 2: Thermal Rise Violation (Error P22)
+#
+# PURPOSE: Verify that the compiler HALTS with Error P22 when I_RMS through
+# parasitic trace resistance generates temperature rise ΔT exceeding thermal limits
+#
+# EXPECTED BEHAVIOR:
+# - Material: Polysilicon with ρ = 4.0e-6 Ω·m (very high resistivity)
+# - Trace geometry: L = 5μm, W = 200nm, t = 50nm
+# - Trace resistance: R = ρ(L/Wt) = 4e-6 × (5e-6)/(200e-9 × 50e-9) = 2000Ω
+# - RMS current: I_RMS = 100 μA (declared in net)
+# - Power dissipation: P = I²R = (100e-6)² × 2000 = 20 μW
+# - Profile thermal limit: max_temp_rise = 20°C (very strict)
+# - Poor thermal conductivity of polysilicon (30 W/mK) + high power
+# - VIOLATION: ΔT exceeds 20°C → Compiler should HALT with Error P22
+#
+# The compiler should report:
+# "Error P22: Thermal rise violation at trace segment (coordinates)
+#  Temperature rise ΔT = XX°C exceeds limit 20°C
+#  Power dissipation P = 20μW through R = 2000Ω
+#  Reduce current or increase trace width"
+
+import * from @std/primitives/units
+import * from "./parasitic_pdk"
+
+device Resistor:
+    terminals: [A, B]
+    materials:
+        A: Polysilicon
+        B: Polysilicon
+    spice:
+        prefix: R
+        terminal_order: [A, B]
+        parameters: [R]
+        parameter_style: positional
+
+module ThermalTest:
+    pins: [input In, output Out]
+    route In to Out
+
+space Thermal_Violation_Space implements ThermalTest:
+    dimensions: 8.0um by 4.0um by 300nm
+    resolution: 10nm
+    origin: bl by b
+    profile: Thermal_Test_Profile  # Strict thermal limits: max_temp_rise = 20°C
+
+    # Declare high RMS current through resistive polysilicon
+    # This will cause significant I²R heating
+    nets:
+        In:  { classification: signal, potential: 1.8V, current: 100uA }
+        Out: { classification: signal, potential: 0.0V, current: 100uA }
+
+    # ========================================================================
+    # HIGH RESISTANCE POLYSILICON TRACE
+    # ========================================================================
+    
+    # Left terminal (polysilicon)
+    add pour(Polysilicon) named Left_Terminal on layer: polyres:
+        net: In
+        dimensions: 500nm by 500nm
+        at: [x: 1.0um, y: 2.0um]
+
+    # Right terminal (polysilicon)
+    add pour(Polysilicon) named Right_Terminal on layer: polyres:
+        net: Out
+        dimensions: 500nm by 500nm
+        at: [x: 7.0um, y: 2.0um]
+
+    # Metal contact pads for external connections
+    add pour(Aluminum) named In_Pad on layer: metal1:
+        net: In
+        dimensions: 800nm by 800nm
+        at: [x: 1.0um, y: 2.0um]
+
+    add pour(Aluminum) named Out_Pad on layer: metal1:
+        net: Out
+        dimensions: 800nm by 800nm
+        at: [x: 7.0um, y: 2.0um]
+
+    # Vias connecting metal to polysilicon
+    add contact(Titanium_Silicide) named Via_In spanning layer: polyres to metal1:
+        net: In
+        diameter: 200nm
+        plating_thickness: 5nm
+        align: center with In_Pad
+
+    add contact(Titanium_Silicide) named Via_Out spanning layer: polyres to metal1:
+        net: Out
+        diameter: 200nm
+        plating_thickness: 5nm
+        align: center with Out_Pad
+
+    # ========================================================================
+    # CRITICAL ROUTING - Long thin polysilicon trace with high current
+    # ========================================================================
+    # This should trigger Error P22 during physical verification
+    # Polysilicon: ρ = 4.0e-6 Ω·m, thermal_conductivity = 30 W/mK (poor)
+    # Long trace (5μm) with narrow width (200nm) → high resistance
+    # High current (100μA RMS) → significant I²R heating
+    # Profile limit: max_temp_rise = 20°C (strict)
+    # Expected: ΔT > 20°C → P22 Error
+    
+    route Left_Terminal to Right_Terminal:
+        net: In
+        width: 200nm        # Narrow width → high resistance
+        layer: polyres
+        intent: Signal

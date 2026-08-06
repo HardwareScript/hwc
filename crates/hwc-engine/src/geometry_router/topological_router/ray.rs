@@ -120,13 +120,6 @@ impl TopologicalRouter {
             }
         }
 
-        if let Some(hit) = &closest {
-            eprintln!(
-                "[DEBUG RAY] Ray from {:?} dir {:?} hit obstacle {:?} at distance {}",
-                origin, direction, hit.obstacle, hit.distance
-            );
-        }
-
         closest
     }
 

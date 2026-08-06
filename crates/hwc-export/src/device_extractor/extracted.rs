@@ -62,37 +62,32 @@ impl ExtractedDevices {
     /// This supports the native `device` keyword pattern where pours are bound 
     /// to device terminals using `device: DeviceName.terminal`.
     /// 
-    /// Since we don't have explicit type information from the bindings alone,
-    /// we infer the device type from the defined device contracts in the file.
+    /// Queries the symbol table to find the correct device type by matching terminal names.
     pub fn from_pour_bindings(
         bindings: &FxHashMap<CompactString, FxHashMap<CompactString, hwc_engine::space::PourMetadata>>,
+        symbol_table: &hwc_compiler::SymbolTable,
     ) -> Self {
         let mut extracted = Self::new();
 
         for (device_name, terminals_map) in bindings {
-            // For now, assume all device instances with 2-terminal bindings (A, B) are Resistors
-            // This is a temporary heuristic until we have explicit device type declarations
             let terminal_names: Vec<CompactString> = terminals_map.keys().cloned().collect();
             
-            let device_type: CompactString = if terminal_names.len() == 2 
-                && terminal_names.contains(&"A".into()) 
-                && terminal_names.contains(&"B".into()) {
-                "Resistor".into()
-            } else if terminal_names.len() == 4 
-                && terminal_names.contains(&"gate".into()) 
-                && terminal_names.contains(&"source".into())
-                && terminal_names.contains(&"drain".into())
-                && terminal_names.contains(&"bulk".into()) {
-                "NMOS".into() // or PMOS - would need additional logic
-            } else {
-                // Generic fallback
-                "Device".into()
-            };
-            
-            extracted.devices.push((device_name.clone(), device_type.clone()));
-            extracted.device_terminals.insert(device_name.clone(), terminal_names);
-            
-            println!("      ├─ Discovered device '{}' of type '{}' from pour bindings", device_name, device_type);
+            // Query symbol table to find which device definition matches these terminals
+            match find_device_type_by_terminals(&terminal_names, symbol_table) {
+                Some(device_type) => {
+                    println!("      ├─ Discovered device '{}' of type '{}' from pour bindings (matched {} terminals)", 
+                             device_name, device_type, terminal_names.len());
+                    
+                    extracted.devices.push((device_name.clone(), device_type));
+                    extracted.device_terminals.insert(device_name.clone(), terminal_names);
+                },
+                None => {
+                    // No matching device definition found - this is an error
+                    println!("      ├─ ERROR: Device '{}' has terminals {:?} that don't match any device definition in symbol table", 
+                             device_name, terminal_names);
+                    // Don't add to extracted devices - will fail with clear error later
+                }
+            }
         }
 
         extracted
@@ -103,4 +98,34 @@ impl Default for ExtractedDevices {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// Find device type by matching terminal names against device definitions in symbol table
+/// 
+/// This performs a precise match: the terminal names from pour bindings must exactly match
+/// the terminals defined in a device definition (order-independent).
+/// 
+/// Returns the device type name if a match is found, None otherwise.
+fn find_device_type_by_terminals(
+    terminals: &[CompactString],
+    symbol_table: &hwc_compiler::SymbolTable,
+) -> Option<CompactString> {
+    // Convert terminals to a sorted set for order-independent comparison
+    let mut terminal_set: Vec<&str> = terminals.iter().map(|s| s.as_str()).collect();
+    terminal_set.sort_unstable();
+    
+    // Iterate through all device definitions in the symbol table
+    for (device_name, device_def) in symbol_table.iter_all_devices() {
+        // Get terminals from device definition and sort them
+        let mut def_terminals: Vec<&str> = device_def.terminals.iter().map(|t| t.as_str()).collect();
+        def_terminals.sort_unstable();
+        
+        // If terminals match exactly, we found the device type
+        if terminal_set == def_terminals {
+            return Some(device_name.clone());
+        }
+    }
+    
+    // No matching device definition found
+    None
 }

@@ -102,7 +102,7 @@ impl crate::parser::Parser {
                     // v0.2.1: Center position for dimension-based pours
                     // Example: at: [x: 650nm, y: 1000nm]
                     position = Some(self.parse_coordinate_optional_z()?);
-                    eprintln!("[POUR PARSER DEBUG] Parsed 'at' position: {:?}", position);
+                   
                 }
                 "align" => {
                     // v0.2.1: Alignment constraints
@@ -258,7 +258,7 @@ impl crate::parser::Parser {
         let final_boundary = match (&position, &width, &height) {
             (Some(Coordinate::Relative(_)), Some(_), Some(_)) => {
                 // Relative position with dimensions - don't create boundary yet
-                eprintln!("[POUR PARSER DEBUG] Storing relative position + dimensions for compiler resolution");
+             
                 boundary
             }
             (Some(pos @ (Coordinate::Declarative { .. } | Coordinate::Positional { .. })), Some(w), Some(h)) => {

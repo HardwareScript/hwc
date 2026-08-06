@@ -724,8 +724,20 @@ pub fn place_plane(
     {
         let plane_center_x = (start_with_z.x + end_with_z.x) / 2;
         let plane_center_y = (start_with_z.y + end_with_z.y) / 2;
-        // Register plane at routing layer bottom Z (same as pours)
-        let routing_z = start_with_z.z;  // Bottom of the plane layer = routing elevation
+        
+        // v0.2.1 FIX: Use the routing layer's official routing_z, not start_with_z.z
+        // Base layers (polyres, active) route at z_top, interconnect (metal1+) at z_bottom
+        let routing_z = match space.routing_layer_db.get_routing_z(&layer_name) {
+            Ok(z) => z,
+            Err(_) => {
+                // Layer not found or not routable - use z_bottom as fallback
+                eprintln!(
+                    "[PLACE_PLANE] WARNING: Layer '{}' not found in routing database, using z_bottom={}nm",
+                    layer_name, start_with_z.z
+                );
+                start_with_z.z
+            }
+        };
 
         if let Err(e) = space.layer_connection_db.register_surface(
             &plane.name.base,
@@ -741,7 +753,7 @@ pub fn place_plane(
             );
         } else {
             eprintln!(
-                "[PLACE_PLANE] Registered plane '{}' surface on layer '{}' at routing Z={}nm (layer bottom)",
+                "[PLACE_PLANE] Registered plane '{}' surface on layer '{}' at routing Z={}nm (routing layer elevation)",
                 plane.name.base, layer_name, routing_z
             );
         }

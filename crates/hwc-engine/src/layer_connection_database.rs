@@ -293,15 +293,36 @@ impl LayerConnectionDatabase {
                 continue;
             }
 
-            // For routable layers, check if connection Z matches routing Z
-            if let Some(&expected_z) = routing_z_map.get(layer) {
-                if conn.z_elevation != expected_z {
-                    errors.push(LayerConnectionError::ConnectionZMismatch {
-                        entity: entity.clone(),
-                        connection_z: conn.z_elevation,
-                        expected_routing_z: expected_z,
-                        layer: layer.clone(),
-                    });
+            // v0.2.1 FIX: Vias connect at layer INTERFACES, pours connect at ROUTING surfaces
+            // Only validate routing_z for PourSurface and PadSurface connections
+            match conn.connection_type {
+                ConnectionType::ViaBottom | ConnectionType::ViaTop => {
+                    // Vias connect at layer interfaces (top of lower layer, bottom of upper layer)
+                    // These are NOT at routing_z, so skip routing_z validation for vias
+                    // Instead, validate that via connections are within layer bounds
+                    if let Some(layer_info) = stackup.iter().find(|l| l.name == *layer) {
+                        if conn.z_elevation < layer_info.z_bottom || conn.z_elevation > layer_info.z_top {
+                            errors.push(LayerConnectionError::ConnectionZMismatch {
+                                entity: entity.clone(),
+                                connection_z: conn.z_elevation,
+                                expected_routing_z: layer_info.z_bottom, // Use z_bottom as reference in error message
+                                layer: layer.clone(),
+                            });
+                        }
+                    }
+                }
+                ConnectionType::PourSurface | ConnectionType::PadSurface => {
+                    // Pours and pads MUST connect at routing_z for proper routing
+                    if let Some(&expected_z) = routing_z_map.get(layer) {
+                        if conn.z_elevation != expected_z {
+                            errors.push(LayerConnectionError::ConnectionZMismatch {
+                                entity: entity.clone(),
+                                connection_z: conn.z_elevation,
+                                expected_routing_z: expected_z,
+                                layer: layer.clone(),
+                            });
+                        }
+                    }
                 }
             }
         }

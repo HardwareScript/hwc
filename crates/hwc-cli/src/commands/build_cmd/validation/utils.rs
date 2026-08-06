@@ -16,15 +16,10 @@ pub fn convert_metadata_to_physics(
         space.fabrication_constraints.as_ref().map(|c| c.via.min_annular_ring_nm).unwrap_or(0),
     );
 
-    eprintln!("[CONNECTIVITY DEBUG] Technology: {}", strategy.name());
-    eprintln!("[CONNECTIVITY DEBUG] Annular ring expansion: {} nm", annular_ring_nm);
-    eprintln!("[CONNECTIVITY DEBUG] Converting {} substrate layers from entity_graph", 
-        space.entity_graph.get_substrate_layers().len());
-
     // v0.1.8: Preserve indices to maintain compatibility with the Unified Spatial Index.
     // We no longer skip Net 0 layers here; they are handled by the Conductive Island Gate
     // and Substrate Isolation logic in the IslandBuilder.
-    for (idx, layer) in space.entity_graph.get_substrate_layers().iter().enumerate() {
+    for (_idx, layer) in space.entity_graph.get_substrate_layers().iter().enumerate() {
         let net_name = if layer.net != hwc_engine::netlist::NetId::UNCONNECTED {
             space
                 .netlist
@@ -33,12 +28,6 @@ pub fn convert_metadata_to_physics(
         } else {
             None
         };
-
-        eprintln!("[CONNECTIVITY DEBUG] Substrate layer {}: net={:?} type={:?} bbox=({},{},{}) -> ({},{},{}) device_binding={:?}",
-            idx, layer.net, layer.layer_type, 
-            layer.bbox.min.x, layer.bbox.min.y, layer.bbox.min.z,
-            layer.bbox.max.x, layer.bbox.max.y, layer.bbox.max.z,
-            layer.device_binding);
 
         // NOTE on Z extents: We preserve the full physical Z extent of substrate pours
         // for connectivity checking. A previous "Z-plane flattening" fix shrunk pours to
@@ -145,31 +134,20 @@ pub fn convert_metadata_to_physics(
     //
     // **v0.2.0 FIX**: Use hierarchical routing database to get all routes (child + parent)
     // with proper provenance tracking instead of mixing entity_graph and analytic_routes.
-    eprintln!("[CONNECTIVITY DEBUG] Processing analytic routes from hierarchical routing database");
     let all_routes = space.routing_database.export_as_routed_segments_with_stackup(
         &space.stackup_layers,
         &space.material_registry,
     );
-    eprintln!("[CONNECTIVITY DEBUG] Got {} route groups from routing database", all_routes.len());
     
     for (net_id, segments) in &all_routes {
         let net_name = space.netlist.get_net(*net_id).map(|n| n.name.clone());
         
-        eprintln!("[CONNECTIVITY DEBUG] Processing net {:?} with {} segments", net_id, segments.len());
-        
-        for (seg_idx, seg) in segments.iter().enumerate() {
+        for (_seg_idx, seg) in segments.iter().enumerate() {
             let is_vertical = seg.start.x == seg.end.x && seg.start.y == seg.end.y;
             let seg_bbox = seg.bounding_box();
             
-            eprintln!("[CONNECTIVITY DEBUG]   Segment {}: ({},{},{}) -> ({},{},{})",
-                seg_idx, seg.start.x, seg.start.y, seg.start.z, seg.end.x, seg.end.y, seg.end.z);
-            eprintln!("[CONNECTIVITY DEBUG]     is_vertical={} bbox=({},{},{}) -> ({},{},{})",
-                is_vertical, seg_bbox.min.x, seg_bbox.min.y, seg_bbox.min.z,
-                seg_bbox.max.x, seg_bbox.max.y, seg_bbox.max.z);
-            
             if is_vertical {
                 // Treat as a vertical bridge
-                eprintln!("[CONNECTIVITY DEBUG]     -> Added as CONTACT");
                 physics_substrate_layers.push(hwc_physics::connectivity::SubstrateLayerMetadata {
                     material: seg.material_id,
                     net: *net_id,
@@ -183,7 +161,6 @@ pub fn convert_metadata_to_physics(
                 });
             } else {
                 // Treat as a horizontal route
-                eprintln!("[CONNECTIVITY DEBUG]     -> Added as ROUTE SEGMENT");
                 physics_route_segments.push(hwc_physics::RouteSegmentMetadata {
                     net: *net_id,
                     net_name: net_name.clone(),

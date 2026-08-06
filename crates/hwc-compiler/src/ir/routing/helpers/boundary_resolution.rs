@@ -376,10 +376,7 @@ pub fn resolve_route_boundary_points(
         goal_point
     };
 
-    eprintln!("[BOUNDARY RESOLUTION DEBUG] Returning boundary points:");
-    eprintln!("[BOUNDARY RESOLUTION DEBUG]   start: ({},{},{})", final_start_point.x, final_start_point.y, final_start_point.z);
-    eprintln!("[BOUNDARY RESOLUTION DEBUG]   goal:  ({},{},{})", final_goal_point.x, final_goal_point.y, final_goal_point.z);
-
+   
     Ok((final_start_point, final_goal_point, from_region.normal, to_region.normal))
 }
 

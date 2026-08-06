@@ -19,7 +19,7 @@ impl MeasurementValue {
     ///
     /// Validates that the unit is a voltage dimension and converts to mV.
     /// Supports any voltage unit defined in the standard library or user code.
-    pub fn to_millivolts(&self, unit_registry: &hwc_stdlib::UnitRegistry) -> Result<i64, String> {
+    pub fn to_millivolts(&self, unit_registry: &hwc_types::UnitRegistry) -> Result<i64, String> {
         // Check dimension
         let dimension = unit_registry.get_dimension(&self.unit)
             .ok_or_else(|| format!("Unknown unit '{}' - not found in unit registry", self.unit))?;
@@ -39,7 +39,7 @@ impl MeasurementValue {
     ///
     /// Validates that the unit is a current dimension and converts to mA.
     /// Supports any current unit defined in the standard library or user code.
-    pub fn to_milliamperes(&self, unit_registry: &hwc_stdlib::UnitRegistry) -> Result<f64, String> {
+    pub fn to_milliamperes(&self, unit_registry: &hwc_types::UnitRegistry) -> Result<f64, String> {
         // Check dimension
         let dimension = unit_registry.get_dimension(&self.unit)
             .ok_or_else(|| format!("Unknown unit '{}' - not found in unit registry", self.unit))?;
@@ -59,7 +59,7 @@ impl MeasurementValue {
     ///
     /// Validates that the unit is a frequency dimension and converts to Hz.
     /// Supports any frequency unit defined in the standard library or user code.
-    pub fn to_hertz(&self, unit_registry: &hwc_stdlib::UnitRegistry) -> Result<f64, String> {
+    pub fn to_hertz(&self, unit_registry: &hwc_types::UnitRegistry) -> Result<f64, String> {
         // Check dimension
         let dimension = unit_registry.get_dimension(&self.unit)
             .ok_or_else(|| format!("Unknown unit '{}' - not found in unit registry", self.unit))?;

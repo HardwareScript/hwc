@@ -28,6 +28,7 @@ impl Parser {
                 Token::Spanning => Some("spanning".into()),
                 Token::Interface => Some("interface".into()),
                 Token::Device => Some("device".into()),
+                Token::SpiceModel => Some("spice_model".into()),
                 Token::On => Some("on".into()),
                 Token::At => Some("at".into()),
                 Token::To => Some("to".into()),

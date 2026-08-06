@@ -294,8 +294,7 @@ impl GeometryRouter {
             self.trace_width_nm,
         );
 
-        eprintln!("[ROUTE_NET_GLOBAL DEBUG] Completed routing for net {:?}:", route.net_id);
-        eprintln!("[ROUTE_NET_GLOBAL DEBUG]   Final path length: {}", final_path.len());
+       
         for (i, p) in final_path.iter().enumerate().take(6) {
             eprintln!("[ROUTE_NET_GLOBAL DEBUG]     [{}]: ({},{},{})", i, p.x, p.y, p.z);
         }
@@ -361,7 +360,7 @@ impl GeometryRouter {
 
                 let routed = self.route_net_global(entity_graph, &route)?;
 
-                eprintln!("[EXPLICIT_GLOBAL DEBUG] Segment {}->{} routed for net {:?}", i, i+1, net_id);
+               
                 if let Some(path) = routed.paths.first() {
                     eprintln!("[EXPLICIT_GLOBAL DEBUG]   Returned path length: {}", path.len());
                     for (j, p) in path.iter().enumerate().take(4) {
@@ -385,7 +384,7 @@ impl GeometryRouter {
             result.vias.extend(net_vias);
         }
 
-        eprintln!("[EXPLICIT_GLOBAL DEBUG] About to return result with {} nets", result.paths.len());
+        
         for (net_id, path_segments) in &result.paths {
             eprintln!("[EXPLICIT_GLOBAL DEBUG]   Net {:?}: {} segments", net_id, path_segments.len());
             for (seg_idx, segment) in path_segments.iter().enumerate() {

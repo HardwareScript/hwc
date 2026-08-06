@@ -60,6 +60,9 @@ pub fn export_glb(
         let is_transparent = mat.opacity < 1.0;
         let has_jelly_effect = mat.subsurface > 0.0;
 
+        eprintln!("[GLB EXPORT] Material '{}': opacity={}, color=({},{},{}), alphaMode={}", 
+                  name, mat.opacity, r, g, b, if is_transparent { "BLEND" } else { "OPAQUE" });
+
         // v0.1.7: Decoupled Transparency (Opacity) from Optics (Subsurface)
         // 1. Standard Alpha Blending (Smooth transparency)
         let alpha_mode = if is_transparent { "BLEND" } else { "OPAQUE" };
@@ -74,17 +77,16 @@ pub fn export_glb(
             "name": name,
             "pbrMetallicRoughness": pbr,
             "alphaMode": alpha_mode,
-            "doubleSided": true
+            "doubleSided": true  // v0.2.2: Try double-sided to fix viewer transparency bugs
         });
 
-        // v0.1.7: Zero-Flicker GPU Handshake (Depth Bias)
-        // Conductors and high-precedence materials get a priority offset to resolve depth ties
+        // v0.2.2: Render Order for Z-fighting prevention (NO polygonOffset - causes transparency bugs)
+        // Higher renderOrder = drawn later = appears on top when coplanar
+        // Conductors (precedence=1) get renderOrder=9 (drawn on top)
+        // Semiconductors (precedence=2) get renderOrder=8
+        // Insulators (precedence=3+) get renderOrder ≤7
         if mat.precedence < 4 {
-            let factor = (mat.precedence as f32) - 4.0; // 1 -> -3.0, 2 -> -2.0, 3 -> -1.0
             material_json["extras"] = json!({
-                "polygonOffset": true,
-                "polygonOffsetFactor": factor,
-                "polygonOffsetUnits": factor,
                 "renderOrder": (10 - mat.precedence) as i32
             });
         }
@@ -141,48 +143,14 @@ pub fn export_glb(
         materials_array.push(material_json);
     }
 
-    // 1.5. Collect unknown materials from meshes and add them dynamically using lookup table
-    let mut materials_owned = materials.clone();
+    // 1.5. Verify all mesh materials are defined - no silent fallbacks
     for mesh in &optimized_meshes {
-        // FIXED: Iterate over optimized_meshes
         if !mat_map.contains_key(&mesh.material_name) {
-            let mat_idx = materials_array.len();
-            let (material_node, _) =
-                get_or_create_material(&mut materials_owned, &mesh.material_name)
-                    .expect("Failed to get or create material");
-            mat_map.insert(mesh.material_name.clone(), mat_idx);
-
-            // Add fallback material with inferred properties
-            let (r, g, b) = material_node.color.to_normalized();
-            let precedence = material_node.precedence;
-            let factor = if precedence < 4 {
-                Some((precedence as f32) - 4.0)
-            } else {
-                None
-            };
-
-            let mut material_json = json!({
-                "name": mesh.material_name,
-                "pbrMetallicRoughness": {
-                    "baseColorFactor": [r, g, b, material_node.opacity],
-                    "metallicFactor": material_node.metallic,
-                    "roughnessFactor": material_node.roughness
-                },
-                "alphaMode": "OPAQUE",
-                "doubleSided": true
-            });
-
-            // Apply depth bias for non-substrate materials
-            if let Some(f) = factor {
-                material_json["extras"] = json!({
-                    "polygonOffset": true,
-                    "polygonOffsetFactor": f,
-                    "polygonOffsetUnits": f,
-                    "renderOrder": (10 - precedence) as i32
-                });
-            }
-
-            materials_array.push(material_json);
+            panic!(
+                "Material '{}' used in mesh '{}' is not defined in the PDK. \
+                 Add a material definition to your materials.hw file or PDK profile.",
+                mesh.material_name, mesh.name
+            );
         }
     }
 

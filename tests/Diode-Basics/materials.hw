@@ -1,0 +1,77 @@
+# materials.hw - Diode-Basics Materials
+# Focused on P-N junction semiconductors and metal contacts
+import * from @std/primitives/units
+
+# Silicon_P - P-type doped silicon (Anode material)
+# Doped with acceptors (Boron) - creates holes as majority carriers
+export material Silicon_P:
+    category: semiconductor
+    symbol: "Si_P"
+    process: deposited
+    properties:
+        color: "#FF8040"  # Orange (P-type convention)
+        opacity: 1.0      # Fully opaque - solid view
+        metallic: 0.2
+        roughness: 0.5
+        resistivity: 10.0ohm_m  # P-type doped silicon resistivity
+
+# Silicon_N - N-type doped silicon (Cathode material)
+# Doped with donors (Phosphorus/Arsenic) - creates electrons as majority carriers
+export material Silicon_N:
+    category: semiconductor
+    symbol: "Si_N"
+    process: deposited
+    properties:
+        color: "#40FF40"  # Green (N-type convention)
+        opacity: 1.0      # Fully opaque - solid view
+        metallic: 0.2
+        roughness: 0.5
+        resistivity: 1e-4ohm_m  # N-type heavily doped silicon resistivity
+
+# Aluminum - Low resistance metal for contacts and routing
+export material Aluminum:
+    category: conductor
+    symbol: "Al"
+    process: deposited
+    properties:
+        color: "#C0C0C0"  # Silver
+        opacity: 1.0      # Fully opaque - solid view
+        metallic: 0.8
+        roughness: 0.2
+        resistivity: 2.82e-8ohm_m
+        thermal_conductivity: 237.0W_mK
+        max_current_density: 1e3A_mm2
+
+# Titanium Silicide - Contact interface material
+# Forms ohmic contact between silicon and aluminum
+export material Titanium_Silicide:
+    category: conductor
+    symbol: "TiSi2"
+    process: deposited
+    properties:
+        color: "#404040"  # Very Dark Grey
+        opacity: 1.0      # Fully opaque - solid view
+        resistivity: 1.5e-7ohm_m
+        thermal_conductivity: 30.0W_mK
+        max_current_density: 5e3A_mm2
+
+# Silicon Dioxide - Insulator/dielectric
+# Used for isolation between layers
+export material Silicon_Dioxide:
+    category: insulator
+    symbol: "SiO2"
+    process: deposited
+    properties:
+        color: "#E0E8FF"  # Light blue-white
+        opacity: 1.0      # Fully opaque - solid view
+        relative_permittivity: 3.9
+
+# Air - Default dielectric for spacing
+export material Air:
+    category: insulator
+    symbol: "Air"
+    process: deposited
+    properties:
+        color: "#F0F4FF"
+        opacity: 1.0      # Fully opaque - solid view
+        relative_permittivity: 1.0

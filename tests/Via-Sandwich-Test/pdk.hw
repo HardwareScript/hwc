@@ -1,0 +1,85 @@
+# pdk.hw - PDK for via sandwich burial test with thick layers for visibility
+import * from @std/primitives/units
+import Silicon_Dioxide, Air, Tungsten, Titanium_Silicide, Aluminum, Polysilicon, Silicon_N from "./materials"
+
+export Silicon_Dioxide
+export Air
+export Tungsten
+export Titanium_Silicide
+export Aluminum
+export Polysilicon
+export Silicon_N
+
+# Square via contact shape
+export shape SquareContact(width: Measurement):
+    geometry:
+        Rectangle(width: width, height: width)
+
+# Bridge definitions
+export bridge Silicon_N to Aluminum:
+    interface: Titanium_Silicide
+    thickness: 5nm
+    fill: Tungsten
+
+export bridge Polysilicon to Aluminum:
+    interface: Titanium_Silicide
+    thickness: 5nm
+    fill: Tungsten
+
+# Simplified 3-layer profile (matching Via-Cutout-Test structure)
+export profile ViaSandwichProfile:
+    technology: "ASIC"
+    
+    stackup:
+        poly:       [material: Polysilicon,     thickness: 300nm, routable: true]   # Bottom conductor
+        d1:         [material: Silicon_Dioxide, thickness: 400nm, routable: false]  # Thick dielectric
+        metal1:     [material: Aluminum,        thickness: 300nm, routable: true]   # Top conductor
+    
+    via:
+        min_diameter: 200nm
+        min_annular_ring: 0nm
+        min_spacing: 300nm
+        shape: SquareContact
+        contact_depth: 300nm  # Full penetration through 300nm pads
+    
+    trace:
+        min_width: 200nm
+        min_spacing: 200nm
+        edge_clearance: 100nm
+    
+    manufacturing:
+        copper_thickness: 300nm
+        circle_segments: 32
+        solder_mask_thickness: 0nm
+        solder_mask_expansion: 0nm
+    
+    clearance:
+        high_voltage: 500nm
+        safety_factor: 1.5
+    
+    thermal:
+        ambient_temp: 25C
+        max_operating_temp: 125C
+        max_temp_rise: 50C
+        clustering_threshold: 10um
+    
+    layer:
+        min_thickness: 50nm
+        allowed_conductors: [Aluminum, Polysilicon, Silicon_N]
+        allowed_dielectrics: [Silicon_Dioxide, Air]
+    
+    routing:
+        max_local_route_length: 50um
+        min_segment_length: 200nm
+        escape_stub: 0nm
+        base_cost: 1
+        via_penalty: 50
+        direction_penalty: 10
+        tight_clearance_penalty: 2
+        crosstalk_penalty: 3
+        impedance_penalty: 1
+        reference_void_penalty: 5000000
+    
+    net_type Signal:
+        routing_style: auto
+        escape_stub: 0nm

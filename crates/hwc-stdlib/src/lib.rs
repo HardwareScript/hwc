@@ -6,10 +6,11 @@
 //! - Standard library file loading
 
 mod loader;
-mod registry;
 
 pub use loader::StdlibLoader;
-pub use registry::UnitRegistry;
+
+// Re-export UnitRegistry and UnitInfo from hwc-types (single source of truth)
+pub use hwc_types::{UnitInfo, UnitRegistry};
 
 use hwc_parser::UnitDefinition;
 use std::path::PathBuf;
@@ -37,6 +38,24 @@ pub fn stdlib_search_paths() -> Vec<PathBuf> {
 pub fn load_stdlib() -> Result<Vec<UnitDefinition>, StdlibError> {
     let loader = StdlibLoader::new();
     loader.load()
+}
+
+/// Convert parser UnitDefinition list into UnitInfo list for registry building.
+pub fn unit_definitions_to_info(defs: Vec<UnitDefinition>) -> Vec<UnitInfo> {
+    defs.into_iter()
+        .map(|d| UnitInfo {
+            symbol: d.symbol,
+            aliases: d.aliases,
+            multiplier: d.multiplier,
+            dimension: d.dimension,
+        })
+        .collect()
+}
+
+/// Load standard library and build a UnitRegistry.
+pub fn load_stdlib_registry() -> Result<UnitRegistry, StdlibError> {
+    let defs = load_stdlib()?;
+    Ok(UnitRegistry::new(unit_definitions_to_info(defs)))
 }
 
 /// Standard library errors

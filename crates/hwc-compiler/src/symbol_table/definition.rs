@@ -8,7 +8,8 @@ use hwc_parser::{
     BridgeDefinition, ComponentDefinition, ConstDefinition, DeviceDefinition,
     InterfaceDefinition, MaterialAliasDefinition, MaterialDefinition, MechanicalDefinition,
     ModuleDefinition, PatternDefinition, ProfileDefinition, ShapeDefinition,
-    SignalGroupDefinition, SpaceDefinition, StrategyDefinition, TestDefinition, UnitDefinition,
+    SignalGroupDefinition, SpaceDefinition, SpiceModelDefinition, StrategyDefinition,
+    TestDefinition, UnitDefinition,
 };
 
 /// Unified enum representing any top-level declaration in HardwareScript
@@ -37,6 +38,7 @@ pub enum Definition {
     Shape(ShapeDefinition),
     Space(SpaceDefinition),
     Bridge(BridgeDefinition),
+    SpiceModel(SpiceModelDefinition), // v0.2.1: SPICE model card definitions
 }
 
 impl Definition {
@@ -63,6 +65,7 @@ impl Definition {
             Definition::Shape(_) => "shape",
             Definition::Space(_) => "space",
             Definition::Bridge(_) => "bridge",
+            Definition::SpiceModel(_) => "spice_model",
         }
     }
 
@@ -85,6 +88,7 @@ impl Definition {
             Definition::Device(d) => d.is_exported,
             Definition::Shape(d) => d.is_exported,
             Definition::Space(d) => d.is_exported,
+            Definition::SpiceModel(d) => d.is_exported,
             // Local/prelude items without export flags are implicitly public
             _ => true,
         }
@@ -112,6 +116,7 @@ impl Definition {
             Definition::Const(d) => d.name.as_str(),
             Definition::Shape(d) => d.name.as_str(),
             Definition::Space(d) => d.name.as_str(),
+            Definition::SpiceModel(d) => d.name.as_str(),
             Definition::Bridge(_) => "<bridge>", // Bridges don't have names
         }
     }

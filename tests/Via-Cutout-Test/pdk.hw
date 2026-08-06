@@ -1,0 +1,78 @@
+# pdk.hw - Minimal ASIC PDK for via cutout testing
+import * from @std/primitives/units
+import Silicon_Dioxide, Titanium_Silicide, Aluminum, Silicon_P from "./materials"
+
+export Silicon_Dioxide
+export Titanium_Silicide
+export Aluminum
+export Silicon_P
+
+# Square via contact shape
+export shape SquareContact(width: Measurement):
+    geometry:
+        Rectangle(width: width, height: width)
+
+# Bridge from silicon to aluminum through silicide
+export bridge Silicon_P to Aluminum:
+    interface: Titanium_Silicide
+    thickness: 5nm
+    fill: Aluminum
+
+# Simple 3-layer ASIC stackup with THICK dielectric for clear via visualization
+# The KEY TEST: Via pillar renders ONLY in dielectric, NOT in conductive pads
+export profile ViaTestProfile:
+    technology: "ASIC"
+    
+    stackup:
+        active:  [material: Silicon_P,        thickness: 10nm,  routable: true]   # Bottom pad layer
+        d1:      [material: Silicon_Dioxide,  thickness: 490nm, routable: false]  # THICK dielectric (via fills this)
+        metal1:  [material: Aluminum,         thickness: 10nm,  routable: true]   # Top pad layer
+    
+    via:
+        min_diameter: 200nm
+        min_annular_ring: 50nm
+        min_spacing: 300nm
+        shape: SquareContact
+        contact_depth: 490nm  # Via spans entire dielectric thickness
+    
+    trace:
+        min_width: 200nm
+        min_spacing: 200nm
+        edge_clearance: 100nm
+    
+    manufacturing:
+        copper_thickness: 10nm
+        circle_segments: 32
+        solder_mask_thickness: 0nm
+        solder_mask_expansion: 0nm
+    
+    clearance:
+        high_voltage: 500nm
+        safety_factor: 1.5
+    
+    thermal:
+        ambient_temp: 25C
+        max_operating_temp: 125C
+        max_temp_rise: 50C
+        clustering_threshold: 10um
+    
+    layer:
+        min_thickness: 5nm
+        allowed_conductors: [Aluminum, Silicon_P]
+        allowed_dielectrics: [Silicon_Dioxide]
+    
+    routing:
+        max_local_route_length: 50um
+        min_segment_length: 200nm
+        escape_stub: 0nm
+        base_cost: 1
+        via_penalty: 50
+        direction_penalty: 10
+        tight_clearance_penalty: 2
+        crosstalk_penalty: 3
+        impedance_penalty: 1
+        reference_void_penalty: 5000000
+    
+    net_type Signal:
+        routing_style: auto
+        escape_stub: 0nm

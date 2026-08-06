@@ -15,6 +15,7 @@ pub struct ExportParams<'a> {
     pub output_dir: &'a PathBuf,
     pub formats: &'a [ExportFormat],
     pub start_time: Instant,
+    pub unit_registry: hwc_types::UnitRegistry,
 }
 
 /// Export all requested formats plus auto-export utilities
@@ -27,6 +28,7 @@ pub fn export_all(params: ExportParams) -> Result<()> {
         output_dir,
         formats,
         start_time,
+        unit_registry,
     } = params;
 
     // Extract space definition for compiled output
@@ -43,6 +45,7 @@ pub fn export_all(params: ExportParams) -> Result<()> {
         symbol_table,
         space_def: space_def.cloned(),
         physical_netlist,
+        unit_registry,
     };
 
     println!(

@@ -171,8 +171,9 @@ impl ConstraintManager {
                 .ok_or_else(|| format!("Net ID {:?} not found in netlist", net_id))?;
 
             // Perform electrical analysis for this net
+            let unit_registry = hwc_types::UnitRegistry::new(vec![]);
             let (voltage_mv, current_ma_opt) =
-                electrical_analysis::analyze_net_electrical(net, netlist, None)?;
+                electrical_analysis::analyze_net_electrical(net, netlist, None, &unit_registry)?;
 
             // Generate routing constraints for this net
             let params = NetConstraintParams {

@@ -11,6 +11,7 @@ pub fn create_hardware_space(
     space_def: &SpaceDefinition,
     symbol_table: &crate::SymbolTable,
     eval_context: &hwc_parser::EvaluationContext,
+    unit_registry: &hwc_types::UnitRegistry,
 ) -> Result<HardwareSpace, IrError> {
     let dimensions = space_def
         .dimensions
@@ -78,70 +79,38 @@ pub fn create_hardware_space(
         };
         material_registry.register_with_properties(&name, conductivity, process);
 
-        // Extract and store physical properties for thermal/electrical calculations
-        let mut resistivity_ohm_m: Option<f64> = None;
-        let mut thermal_conductivity_w_mk: Option<f64> = None;
-        let mut thickness_nm: i64 = 0;
-        let mut max_current_density_a_mm2: Option<f64> = None;
+        // Extract ALL physical properties dynamically (no hardcoding!)
+        let mut props = hwc_engine::material::MaterialPhysicalProps::new();
+        
         for prop in &mat_def.properties {
-            match prop.key.as_str() {
-                "resistivity" => {
-                    if let hwc_parser::PropertyValue::Measurement(m) = &prop.value {
-                        resistivity_ohm_m = Some(m.value);
-                    }
-                }
-                "thermal_conductivity" => {
-                    if let hwc_parser::PropertyValue::Measurement(m) = &prop.value {
-                        thermal_conductivity_w_mk = Some(m.value);
-                    } else if let hwc_parser::PropertyValue::Number(v) = prop.value {
-                        thermal_conductivity_w_mk = Some(v);
-                    }
-                }
-                "thickness" => {
-                    thickness_nm = match &prop.value {
-                        hwc_parser::PropertyValue::Measurement(m) => {
+            let value = match &prop.value {
+                hwc_parser::PropertyValue::Measurement(m) => {
+                    // Convert measurement to base SI units
+                    match prop.key.as_str() {
+                        "thickness" => {
+                            // Convert to nanometers - MUST succeed
                             measurement_to_nm(m, symbol_table, eval_context)
-                                .unwrap_or((m.value * 1_000_000.0) as i64)
+                                .map_err(|e| IrError::UnitConversion {
+                                    message: e.to_string(),
+                                    span: None,
+                                })?
+                                as f64
                         }
-                        hwc_parser::PropertyValue::Number(v) => (*v * 1_000_000.0) as i64,
-                        _ => 0,
-                    };
-                }
-                "max_current_density" => {
-                    if let hwc_parser::PropertyValue::Measurement(m) = &prop.value {
-                        eprintln!("[MATERIAL PROP DEBUG] Material '{}': max_current_density = {} (unit: {:?})", name, m.value, m.unit);
-                        max_current_density_a_mm2 = Some(m.value);
-                    } else if let hwc_parser::PropertyValue::Number(v) = prop.value {
-                        eprintln!("[MATERIAL PROP DEBUG] Material '{}': max_current_density = {} (no unit)", name, v);
-                        max_current_density_a_mm2 = Some(v);
+                        _ => m.value, // Use value as-is for other properties
                     }
                 }
-                _ => {}
-            }
+                hwc_parser::PropertyValue::Number(v) => *v,
+                _ => continue, // Skip non-numeric properties
+            };
+            
+            props.set(prop.key.as_str(), value);
         }
+        
+        // Store properties in material registry
         if let Some(id) = material_registry.get_id(&name) {
-            if let (Some(rho), Some(k)) = (resistivity_ohm_m, thermal_conductivity_w_mk) {
-                eprintln!("[MATERIAL REGISTER DEBUG] Registering material '{}' (id={}): rho={}, k={}, thickness={}, max_i={:?}", 
-                    name, id, rho, k, thickness_nm, max_current_density_a_mm2);
-                material_registry.set_physical_props(
-                    id,
-                    rho,
-                    k,
-                    thickness_nm,
-                    max_current_density_a_mm2,
-                );
-            } else if thickness_nm > 0 {
-                eprintln!("[MATERIAL REGISTER DEBUG] Registering material '{}' (id={}) with thickness only: thickness={}, max_i={:?}", 
-                    name, id, thickness_nm, max_current_density_a_mm2);
-                material_registry.set_physical_props(
-                    id,
-                    0.0,
-                    0.0,
-                    thickness_nm,
-                    max_current_density_a_mm2,
-                );
-            }
-            // Validate conductor materials have all required physical properties
+            material_registry.set_physical_props(id, props);
+            
+            // Validate conductor materials have required properties
             if let Err(msg) = material_registry.validate_conductor_props(id, &name) {
                 return Err(IrError::MissingPhysicalProperty {
                     material: name,
@@ -241,7 +210,10 @@ pub fn create_hardware_space(
             let freq_hz = freq_measurement.to_hertz(unit_registry)
                 .map_err(|e| IrError::UnitConversion {
                     message: format!("Failed to convert frequency for net '{}': {}", net_decl.name, e),
-                    span: Some(freq_measurement.span),
+                    span: Some(miette::SourceSpan::new(
+                        freq_measurement.span.start.into(),
+                        (freq_measurement.span.end - freq_measurement.span.start).into(),
+                    )),
                 })?;
             space.netlist.set_net_frequency(net_id, freq_hz);
         }
@@ -252,7 +224,10 @@ pub fn create_hardware_space(
             let current_ma = current_measurement.to_milliamperes(unit_registry)
                 .map_err(|e| IrError::UnitConversion {
                     message: format!("Failed to convert current for net '{}': {}", net_decl.name, e),
-                    span: Some(current_measurement.span),
+                    span: Some(miette::SourceSpan::new(
+                        current_measurement.span.start.into(),
+                        (current_measurement.span.end - current_measurement.span.start).into(),
+                    )),
                 })?;
             space.netlist.set_net_current(net_id, current_ma);
         }
@@ -429,8 +404,9 @@ mod tests {
         let program = parse(source).expect("Failed to parse");
         let space_def = get_space(&program);
         let symbol_table = crate::SymbolTable::new();
+        let unit_registry = hwc_types::UnitRegistry::new(vec![]);
 
-        let space = create_hardware_space(space_def, &symbol_table, &hwc_parser::EvaluationContext::default()).unwrap();
+        let space = create_hardware_space(space_def, &symbol_table, &hwc_parser::EvaluationContext::default(), &unit_registry).unwrap();
         assert_eq!(space.name, "Test");
         assert_eq!(space.dimensions.width_nm, 50_000_000);
         // Resolution is 100um (100_000 nm)

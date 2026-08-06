@@ -304,19 +304,11 @@ pub fn generate_trace_geometry(
 ) -> FxHashMap<GeometryPoolKey, GeometryPool> {
     let mut pools: FxHashMap<GeometryPoolKey, GeometryPool> = FxHashMap::default();
 
-    eprintln!(
-        "[TRACE GEOMETRY ENGINE] Processing {} analytic routes",
-        space.analytic_routes.len()
-    );
+   
 
     // Convert each trace into geometry segments and pool them
     for trace in &space.analytic_routes {
-        eprintln!(
-            "[TRACE GEOMETRY] Processing trace: net='{}', segments={}, layer_z_range={:?}",
-            trace.net_name,
-            trace.segments.len(),
-            trace.layer_z_range
-        );
+       
 
         for (seg_idx, segment) in trace.segments.iter().enumerate() {
             // Convert LineSegment to GeometrySegment
@@ -353,11 +345,7 @@ pub fn generate_trace_geometry(
         pool.flush_pending();
     }
 
-    eprintln!(
-        "[TRACE GEOMETRY ENGINE] Created {} geometry pools",
-        pools.len()
-    );
-
+   
     pools
 }
 

@@ -1,0 +1,281 @@
+# parasitic_pdk.hw - Process Design Kit for Parasitic Validation
+# Profiles designed to trigger specific parasitic verification errors
+import * from @std/primitives/units
+import Copper, Aluminum, Polysilicon, Tungsten, Titanium_Silicide, Silicon_Dioxide, High_K_Dielectric, Air from "./materials"
+
+export Copper
+export Aluminum
+export Polysilicon
+export Tungsten
+export Titanium_Silicide
+export Silicon_Dioxide
+export High_K_Dielectric
+export Air
+
+# Square contact shape for vias
+export shape SquareContact(width: Measurement):
+    geometry:
+        Rectangle(width: width, height: width)
+
+# Bridge definitions
+export bridge Polysilicon to Aluminum:
+    interface: Titanium_Silicide
+    thickness: 5nm
+    fill: Tungsten
+
+export bridge Polysilicon to Copper:
+    interface: Titanium_Silicide
+    thickness: 5nm
+    fill: Tungsten
+
+export bridge Aluminum to Copper:
+    interface: Titanium_Silicide
+    thickness: 5nm
+    fill: Tungsten
+
+# Profile for Electromigration (P21) Testing
+# Thin traces with high current limits to trigger EM violations
+# Error P21: Current density J = I_peak / A_trace exceeds J_limit
+export profile EM_Test_Profile:
+    technology: "ASIC"
+    
+    stackup:
+        metal1:     [material: Copper,          thickness: 100nm, routable: true]
+        d1:         [material: Silicon_Dioxide, thickness: 200nm, routable: false]
+        metal2:     [material: Copper,          thickness: 100nm, routable: true]
+
+    via:
+        min_diameter: 200nm
+        min_annular_ring: 50nm
+        min_spacing: 300nm
+        shape: SquareContact
+        contact_depth: 50nm
+
+    trace:
+        min_width: 100nm      # Very thin traces - easy to violate EM
+        min_spacing: 200nm
+        edge_clearance: 100nm
+
+    manufacturing:
+        copper_thickness: 100nm
+        circle_segments: 64
+        solder_mask_thickness: 0nm
+        solder_mask_expansion: 0nm
+
+    clearance:
+        high_voltage: 500nm
+        safety_factor: 1.5
+
+    thermal:
+        ambient_temp: 25C
+        max_operating_temp: 125C
+        max_temp_rise: 30C       # Strict thermal limit
+        clustering_threshold: 10um
+
+    layer:
+        min_thickness: 50nm
+        allowed_conductors: [Copper, Aluminum]
+        allowed_dielectrics: [Silicon_Dioxide, Air]
+
+    routing:
+        max_local_route_length: 100um
+        min_segment_length: 100nm
+        escape_stub: 0nm
+        base_cost: 1
+        via_penalty: 50
+        direction_penalty: 10
+        tight_clearance_penalty: 2
+        crosstalk_penalty: 3
+        impedance_penalty: 1
+        reference_void_penalty: 5000000
+
+    net_type Signal:
+        routing_style: auto
+        escape_stub: 0nm
+
+    net_type Power:
+        routing_style: auto
+        escape_stub: 0nm
+
+# Profile for Thermal Rise (P22) Testing
+# High resistivity polysilicon with strict thermal limits
+# Error P22: I_RMS through parasitic R generates ΔT exceeding limit
+export profile Thermal_Test_Profile:
+    technology: "ASIC"
+    
+    stackup:
+        polyres:    [material: Polysilicon,     thickness: 50nm,  routable: true]
+        d1:         [material: Silicon_Dioxide, thickness: 100nm, routable: false]
+        metal1:     [material: Aluminum,        thickness: 100nm, routable: true]
+
+    via:
+        min_diameter: 200nm
+        min_annular_ring: 50nm
+        min_spacing: 300nm
+        shape: SquareContact
+        contact_depth: 50nm
+
+    trace:
+        min_width: 200nm
+        min_spacing: 200nm
+        edge_clearance: 100nm
+
+    manufacturing:
+        copper_thickness: 50nm
+        circle_segments: 64
+        solder_mask_thickness: 0nm
+        solder_mask_expansion: 0nm
+
+    clearance:
+        high_voltage: 500nm
+        safety_factor: 1.5
+
+    thermal:
+        ambient_temp: 25C
+        max_operating_temp: 85C     # Lower limit
+        max_temp_rise: 20C          # Very strict - only 20°C rise allowed
+        clustering_threshold: 5um    # Small clustering for tight thermal checks
+
+    layer:
+        min_thickness: 50nm
+        allowed_conductors: [Polysilicon, Aluminum]
+        allowed_dielectrics: [Silicon_Dioxide, Air]
+
+    routing:
+        max_local_route_length: 50um
+        min_segment_length: 200nm
+        escape_stub: 0nm
+        base_cost: 1
+        via_penalty: 50
+        direction_penalty: 10
+        tight_clearance_penalty: 2
+        crosstalk_penalty: 3
+        impedance_penalty: 1
+        reference_void_penalty: 5000000
+
+    net_type Signal:
+        routing_style: auto
+        escape_stub: 0nm
+
+# Profile for Crosstalk Testing
+# High-K dielectric and close spacing to maximize C_12 coupling
+# Signal integrity violation when C_12 exceeds max_crosstalk_db budget
+export profile Crosstalk_Test_Profile:
+    technology: "ASIC"
+    
+    stackup:
+        metal1:     [material: Copper,              thickness: 200nm, routable: true]
+        d1:         [material: High_K_Dielectric,   thickness: 100nm, routable: false]
+        metal2:     [material: Copper,              thickness: 200nm, routable: true]
+
+    via:
+        min_diameter: 200nm
+        min_annular_ring: 50nm
+        min_spacing: 300nm
+        shape: SquareContact
+        contact_depth: 50nm
+
+    trace:
+        min_width: 200nm
+        min_spacing: 100nm      # Very tight spacing - high crosstalk
+        edge_clearance: 100nm
+
+    manufacturing:
+        copper_thickness: 200nm
+        circle_segments: 64
+        solder_mask_thickness: 0nm
+        solder_mask_expansion: 0nm
+
+    clearance:
+        high_voltage: 500nm
+        safety_factor: 1.5
+
+    thermal:
+        ambient_temp: 25C
+        max_operating_temp: 125C
+        max_temp_rise: 50C
+        clustering_threshold: 10um
+
+    layer:
+        min_thickness: 50nm
+        allowed_conductors: [Copper, Aluminum]
+        allowed_dielectrics: [High_K_Dielectric, Silicon_Dioxide, Air]
+
+    routing:
+        max_local_route_length: 100um
+        min_segment_length: 200nm
+        escape_stub: 0nm
+        base_cost: 1
+        via_penalty: 50
+        direction_penalty: 10
+        tight_clearance_penalty: 2
+        crosstalk_penalty: 100      # Very high penalty for crosstalk
+        impedance_penalty: 1
+        reference_void_penalty: 5000000
+
+    net_type Signal:
+        routing_style: auto
+        escape_stub: 0nm
+
+    net_type Clock:
+        routing_style: auto
+        escape_stub: 0nm
+
+# Standard profile for baseline parasitic extraction
+# Should pass all checks and show proper SPICE annotation
+export profile Standard_Profile:
+    technology: "ASIC"
+    
+    stackup:
+        metal1:     [material: Copper,          thickness: 500nm, routable: true]
+        d1:         [material: Silicon_Dioxide, thickness: 500nm, routable: false]
+        metal2:     [material: Copper,          thickness: 500nm, routable: true]
+
+    via:
+        min_diameter: 300nm
+        min_annular_ring: 100nm
+        min_spacing: 400nm
+        shape: SquareContact
+        contact_depth: 100nm
+
+    trace:
+        min_width: 500nm        # Wide traces - safe for EM
+        min_spacing: 500nm      # Good spacing - low crosstalk
+        edge_clearance: 200nm
+
+    manufacturing:
+        copper_thickness: 500nm
+        circle_segments: 64
+        solder_mask_thickness: 0nm
+        solder_mask_expansion: 0nm
+
+    clearance:
+        high_voltage: 1um
+        safety_factor: 2.0
+
+    thermal:
+        ambient_temp: 25C
+        max_operating_temp: 125C
+        max_temp_rise: 80C      # Generous thermal budget
+        clustering_threshold: 20um
+
+    layer:
+        min_thickness: 100nm
+        allowed_conductors: [Copper, Aluminum]
+        allowed_dielectrics: [Silicon_Dioxide, Air]
+
+    routing:
+        max_local_route_length: 200um
+        min_segment_length: 500nm
+        escape_stub: 0nm
+        base_cost: 1
+        via_penalty: 50
+        direction_penalty: 10
+        tight_clearance_penalty: 2
+        crosstalk_penalty: 3
+        impedance_penalty: 1
+        reference_void_penalty: 5000000
+
+    net_type Signal:
+        routing_style: auto
+        escape_stub: 0nm

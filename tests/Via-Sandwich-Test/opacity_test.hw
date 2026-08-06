@@ -1,0 +1,27 @@
+# opacity_test.hw
+# Simple test to verify material opacity rendering
+# Just three solid blocks - no vias, no complexity
+
+import * from @std/primitives/units
+import * from "./pdk"
+
+space Opacity_Test_Space:
+    dimensions: 2.0um by 2.0um by 900nm
+    resolution: 10nm
+    origin: bl by b
+    profile: ViaSandwichProfile
+    
+    nets:
+        TestNet: { classification: signal, potential: 1.8V, current: 1.0uA }
+    
+    # Bottom block - Polysilicon (should be RED and OPAQUE)
+    add pour(Polysilicon) named Poly_Block on layer: poly:
+        net: TestNet
+        dimensions: 1.0um by 1.0um
+        at: [x: 1.0um, y: 1.0um]
+    
+    # Top block - Aluminum (should be GRAY and OPAQUE)
+    add pour(Aluminum) named Aluminum_Block on layer: metal1:
+        net: TestNet
+        dimensions: 1.0um by 1.0um
+        at: [x: 1.0um, y: 1.0um]

@@ -1,0 +1,79 @@
+# test_em_violation.hw
+# Parasitic Validation Test 1: Electromigration Violation (Error P21)
+#
+# PURPOSE: Verify that the compiler HALTS with Error P21 when current density
+# J = I_peak / A_trace exceeds material max_current_density limit
+#
+# EXPECTED BEHAVIOR:
+# - Thin trace: 100nm width × 100nm thickness = 0.01 μm²
+# - Peak current: 50 μA (declared in net current_limit)
+# - Current density: J = 50μA / 0.01μm² = 5.0 mA/μm²
+# - Material limit (Copper): 2.0 mA/μm² (see materials.hw)
+# - VIOLATION: J > J_limit → Compiler should HALT with Error P21
+#
+# The compiler should report:
+# "Error P21: Electromigration violation at trace segment (coordinates)
+#  Current density J = 5.0 mA/μm² exceeds limit 2.0 mA/μm²
+#  Required minimum width: 250nm for I_peak = 50μA"
+
+import * from @std/primitives/units
+import * from "./parasitic_pdk"
+
+device Resistor:
+    terminals: [A, B]
+    materials:
+        A: Copper
+        B: Copper
+    spice:
+        prefix: R
+        terminal_order: [A, B]
+        parameters: [R]
+        parameter_style: positional
+
+module EMTest:
+    pins: [input In, output Out]
+    route In to Out
+
+space EM_Violation_Space implements EMTest:
+    dimensions: 10.0um by 5.0um by 500nm
+    resolution: 10nm
+    origin: bl by b
+    profile: EM_Test_Profile
+
+    # Declare strict current limits to trigger EM check
+    # Peak current of 50μA through thin 100nm trace = EM violation
+    nets:
+        In:  { classification: signal, potential: 3.3V, current: 50uA }
+        Out: { classification: signal, potential: 0.0V, current: 50uA }
+
+    # ========================================================================
+    # THIN COPPER TRACE - Will violate electromigration limits
+    # ========================================================================
+    
+    # Left pad - connection point
+    add pour(Copper) named In_Pad on layer: metal1:
+        net: In
+        dimensions: 1.0um by 1.0um
+        at: [x: 1.0um, y: 2.5um]
+
+    # Right pad - connection point
+    add pour(Copper) named Out_Pad on layer: metal1:
+        net: Out
+        dimensions: 1.0um by 1.0um
+        at: [x: 9.0um, y: 2.5um]
+
+    # ========================================================================
+    # CRITICAL ROUTING - Thin trace with high current
+    # ========================================================================
+    # This routing should trigger Error P21 during physical verification
+    # Trace: 100nm width × 100nm thickness = 0.01 μm² cross-section
+    # Peak current: 50 μA
+    # Current density: 50μA / 0.01μm² = 5.0 mA/μm²
+    # Copper limit: 2.0 mA/μm² (from materials.hw)
+    # VIOLATION: 5.0 > 2.0 → P21 Error
+    
+    route In_Pad to Out_Pad:
+        net: In
+        width: 100nm        # Minimum width - will be too thin
+        layer: metal1
+        intent: Signal

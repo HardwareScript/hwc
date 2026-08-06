@@ -1,0 +1,106 @@
+# materials.hw - Parasitic Validation Materials
+# Materials with well-defined electrical properties for parasitic testing
+# Focus: Electromigration, thermal rise, crosstalk, and coupling capacitance
+import * from @std/primitives/units
+
+# Copper - Low resistivity conductor with strict EM limits
+# Used for testing electromigration (P21) and thermal (P22) checks
+export material Copper:
+    category: conductor
+    symbol: "Cu"
+    process: deposited
+    properties:
+        color: "#B87333"  # Copper color
+        metallic: 0.9
+        roughness: 0.1
+        opacity: 1.0
+        resistivity: 1.68e-8ohm_m  # Very low - standard copper
+        thermal_conductivity: 400.0W_mK
+        max_current_density: 2.0mA_um2  # Strict limit for EM testing (2 mA/μm²)
+
+# Aluminum - Standard interconnect metal
+# Higher resistivity than copper, moderate EM limits
+export material Aluminum:
+    category: conductor
+    symbol: "Al"
+    process: deposited
+    properties:
+        color: "#C0C0C0"  # Silver
+        opacity: 1.0
+        metallic: 0.8
+        roughness: 0.2
+        resistivity: 2.82e-8ohm_m
+        thermal_conductivity: 237.0W_mK
+        max_current_density: 1.0mA_um2  # Lower than copper
+
+# Polysilicon - High resistivity for testing thermal rise
+# Sheet resistance will cause significant heating under current
+export material Polysilicon:
+    category: conductor
+    symbol: "Poly"
+    process: deposited
+    properties:
+        color: "#FF6060"  # Red
+        metallic: 0.3
+        roughness: 0.8
+        opacity: 1.0
+        resistivity: 4.0e-6ohm_m  # 1000x higher than aluminum
+        thermal_conductivity: 30.0W_mK  # Poor thermal conductivity
+        max_current_density: 0.1mA_um2  # Very strict EM limit
+
+# Tungsten - Via fill material with moderate properties
+export material Tungsten:
+    category: conductor
+    symbol: "W"
+    process: deposited
+    properties:
+        color: "#8080FF"  # Light Blue
+        opacity: 1.0
+        metallic: 0.7
+        roughness: 0.3
+        resistivity: 5.6e-8ohm_m
+        thermal_conductivity: 173.0W_mK
+        max_current_density: 10.0mA_um2
+
+# Titanium Silicide - Contact interface material
+export material Titanium_Silicide:
+    category: conductor
+    symbol: "TiSi2"
+    process: deposited
+    properties:
+        color: "#404040"  # Very Dark Grey
+        opacity: 1.0
+        resistivity: 1.5e-7ohm_m
+        thermal_conductivity: 30.0W_mK
+        max_current_density: 5.0mA_um2
+
+# Silicon Dioxide - Standard dielectric with εr = 3.9
+# Critical for crosstalk and coupling capacitance calculations
+export material Silicon_Dioxide:
+    category: insulator
+    symbol: "SiO2"
+    process: deposited
+    properties:
+        color: "#E0E8FF"  # Light blue-white
+        opacity: 0.6
+        relative_permittivity: 3.9  # Standard SiO2
+
+# High-K Dielectric - For testing high coupling capacitance
+export material High_K_Dielectric:
+    category: insulator
+    symbol: "HfO2"
+    process: deposited
+    properties:
+        color: "#FFE0FF"  # Light pink
+        opacity: 0.6
+        relative_permittivity: 25.0  # Very high εr - strong coupling
+
+# Air - Default dielectric
+export material Air:
+    category: insulator
+    symbol: "Air"
+    process: deposited
+    properties:
+        color: "#F0F4FF"
+        opacity: 0.3
+        relative_permittivity: 1.0

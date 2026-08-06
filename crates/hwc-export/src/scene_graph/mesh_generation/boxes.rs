@@ -496,6 +496,14 @@ fn subdivide_rect(root_mesh: &mut MeshNode, params: SubdivideRectParams) {
         return;
     }
 
+    // **v0.2.2 FIX**: If no cutouts actually intersect this region, render as solid box
+    if local_cutouts.is_empty() {
+        let sub_params = BoxParams::new(x1, y1, z_min, x2 - x1, y2 - y1, depth);
+        let sub_mesh = create_box_mesh("zone", sub_params, &material_name, view, base_culling);
+        add_to_mesh(root_mesh, sub_mesh.vertices, sub_mesh.faces);
+        return;
+    }
+
     // Pick the first cutout to partition around
     let (hx1, hx2, hy1, hy2, is_cylinder, cylinder_params) = match local_cutouts[0] {
         CutoutParams::Cylinder {

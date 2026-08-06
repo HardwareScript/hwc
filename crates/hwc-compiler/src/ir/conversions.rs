@@ -337,7 +337,7 @@ pub fn spanning_coordinate_to_point(
         ).map_err(|e| e.to_string())?
     } else {
         let result = evaluate_expression_to_nm(x_expr, ctx.symbol_table, ctx.eval_context)?;
-        eprintln!("[SPANNING_COORD DEBUG] X expression: {:?} -> {}nm", x_expr, result);
+       
         result
     };
 
@@ -353,7 +353,7 @@ pub fn spanning_coordinate_to_point(
         ).map_err(|e| e.to_string())?
     } else {
         let result = evaluate_expression_to_nm(y_expr, ctx.symbol_table, ctx.eval_context)?;
-        eprintln!("[SPANNING_COORD DEBUG] Y expression: {:?} -> {}nm", y_expr, result);
+      
         result
     };
 

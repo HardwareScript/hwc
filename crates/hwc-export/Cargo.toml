@@ -12,7 +12,9 @@ thiserror = { workspace = true }
 hwc-engine = { workspace = true }
 hwc-compiler = { workspace = true }
 hwc-parser = { workspace = true }
+hwc-types = { workspace = true }
 hwc-materials = { workspace = true }
+hwc-physics = { workspace = true }
 chrono = { version = "0.4", features = ["serde"] }
 rustc-hash = { workspace = true }
 compact_str = { workspace = true }

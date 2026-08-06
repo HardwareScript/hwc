@@ -11,6 +11,14 @@ pub struct CompilationResult {
     pub symbol_table: SymbolTable,
     pub source: String,
     pub collector: hwc_compiler::DiagnosticCollector,
+    prelude: hwc_compiler::Prelude,
+}
+
+impl CompilationResult {
+    /// Build a UnitRegistry from the prelude units.
+    pub fn unit_registry(&self) -> hwc_types::UnitRegistry {
+        self.prelude.build_unit_registry()
+    }
 }
 
 /// Compile source file to AST and symbol table
@@ -91,7 +99,7 @@ pub fn compile_source(
     );
 
     // Build symbol table
-    let symbol_table = build_symbol_table(&ast, input, &collector, config, start_time)?;
+    let (symbol_table, prelude) = build_symbol_table(&ast, input, &collector, config, start_time)?;
 
     // Print warnings if any
     if collector.warning_count() > 0 {
@@ -108,6 +116,7 @@ pub fn compile_source(
         symbol_table,
         source,
         collector,
+        prelude,
     })
 }
 
@@ -118,7 +127,7 @@ fn build_symbol_table(
     collector: &hwc_compiler::DiagnosticCollector,
     config: &BuildConfig,
     start_time: Instant,
-) -> Result<SymbolTable> {
+) -> Result<(SymbolTable, hwc_compiler::Prelude)> {
     let mut symbol_table = SymbolTable::new();
 
     // Load prelude
@@ -221,5 +230,5 @@ fn build_symbol_table(
         start_time.elapsed().as_secs_f64() * 1000.0
     );
 
-    Ok(symbol_table)
+    Ok((symbol_table, prelude))
 }

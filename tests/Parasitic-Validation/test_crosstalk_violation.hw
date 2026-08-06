@@ -1,0 +1,97 @@
+# test_crosstalk_violation.hw
+# Parasitic Validation Test 3: Crosstalk / Signal Integrity Violation
+#
+# PURPOSE: Verify that the compiler HALTS when coupling capacitance C_12
+# between adjacent traces exceeds the max_crosstalk_db declared in routing intent
+#
+# EXPECTED BEHAVIOR:
+# - High-K dielectric (εr = 25.0) between metal layers
+# - Two parallel traces running side-by-side with tight spacing (100nm)
+# - Long parallel run (8μm) maximizes coupling length
+# - Clock net with strict max_crosstalk_db: -40dB budget
+# - Sakurai microstrip equation calculates C_12 coupling capacitance
+# - VIOLATION: C_12 coupling exceeds -40dB budget → Compiler should HALT
+#
+# The compiler should report signal integrity budget violation and suggest
+# increasing spacing or using different routing layers
+
+import * from @std/primitives/units
+import * from "./parasitic_pdk"
+
+module CrosstalkTest:
+    pins: [input Clock, input Data, output Clock_Out, output Data_Out]
+    route Clock to Clock_Out
+    route Data to Data_Out
+
+space Crosstalk_Violation_Space implements CrosstalkTest:
+    dimensions: 12.0um by 6.0um by 500nm
+    resolution: 10nm
+    origin: bl by b
+    profile: Crosstalk_Test_Profile  # High-K dielectric, tight spacing
+
+    # Declare nets with strict crosstalk budget for clock
+    nets:
+        Clock:      { classification: signal, potential: 1.8V, current: 10uA }
+        Clock_Out:  { classification: signal, potential: 0.0V, current: 10uA }
+        Data:       { classification: signal, potential: 1.8V, current: 10uA }
+        Data_Out:   { classification: signal, potential: 0.0V, current: 10uA }
+
+    # ========================================================================
+    # CLOCK NET - Sensitive to crosstalk
+    # ========================================================================
+    
+    # Clock input pad
+    add pour(Copper) named Clock_In_Pad on layer: metal1:
+        net: Clock
+        dimensions: 800nm by 800nm
+        at: [x: 1.0um, y: 4.0um]
+
+    # Clock output pad
+    add pour(Copper) named Clock_Out_Pad on layer: metal1:
+        net: Clock_Out
+        dimensions: 800nm by 800nm
+        at: [x: 11.0um, y: 4.0um]
+
+    # ========================================================================
+    # DATA NET - Aggressor signal running parallel to clock
+    # ========================================================================
+    
+    # Data input pad
+    add pour(Copper) named Data_In_Pad on layer: metal1:
+        net: Data
+        dimensions: 800nm by 800nm
+        at: [x: 1.0um, y: 2.0um]
+
+    # Data output pad
+    add pour(Copper) named Data_Out_Pad on layer: metal1:
+        net: Data_Out
+        dimensions: 800nm by 800nm
+        at: [x: 11.0um, y: 2.0um]
+
+    # ========================================================================
+    # CRITICAL ROUTING - Parallel traces with tight spacing
+    # ========================================================================
+    # These two traces will run parallel for 8μm with only 100nm spacing
+    # High-K dielectric (εr = 25.0) will create strong coupling capacitance
+    # Clock intent declares max_crosstalk_db: -40dB (from net_type Clock in PDK)
+    # Expected: C_12 coupling violates budget → Compilation HALT
+    
+    # Clock trace - sensitive victim net with strict crosstalk budget
+    route Clock_In_Pad to Clock_Out_Pad:
+        net: Clock
+        width: 200nm
+        layer: metal1
+        intent: Clock        # This intent has max_crosstalk_db: -40dB
+
+    # Data trace - aggressor net running parallel to clock
+    # Profile has min_spacing: 100nm (very tight)
+    # This will be routed very close to Clock trace
+    route Data_In_Pad to Data_Out_Pad:
+        net: Data
+        width: 200nm
+        layer: metal1
+        intent: Signal
+
+    # NOTE: The router will place these traces adjacent with ~100-200nm spacing
+    # This tight spacing + high-K dielectric + long parallel run should
+    # violate the Clock net's -40dB crosstalk budget

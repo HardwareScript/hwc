@@ -26,4 +26,5 @@ hwc-physics = { workspace = true }
 hwc-export = { workspace = true }
 hwc-materials = { workspace = true }
 hwc-stdlib = { workspace = true }
+hwc-types = { workspace = true }
 hwc-diagnostics = { workspace = true }

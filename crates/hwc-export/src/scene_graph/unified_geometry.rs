@@ -16,12 +16,55 @@
 //! This eliminates the previous architectural violation where DXF was doing its own
 //! geometry calculations, causing inconsistencies between exporters.
 //!
+//! # Industry-Standard 3D CAD Architecture (v0.2.2)
+//!
+//! ## Physical Stackup (No Hacks, Pure Physics)
+//!
+//! ```text
+//! ┌─────────────────────────────────────────────────────────────┐
+//! │ TOP CONDUCTIVE LAYER (metal1: Z=60→70nm)                    │
+//! │  • Top_Pad (Aluminum) is SOLID - NO hole punched!           │
+//! │  • Via pillar is also SOLID at Z=60→70nm                    │
+//! │  • Boolean union merges them into single solid shape        │
+//! ├─────────────────────────────────────────────────────────────┤
+//! │ INTER-LAYER DIELECTRIC (d1: Z=10→60nm)                      │
+//! │  • Via pillar (Titanium_Silicide) is SOLID Z=10→60nm       │
+//! │  • Substrate mesh builder cuts hole in Silicon_Dioxide base │
+//! ├─────────────────────────────────────────────────────────────┤
+//! │ BOTTOM ACTIVE LAYER (active: Z=0→10nm)                      │
+//! │  • Bottom_Pad (Silicon_P) is SOLID - NO hole punched!       │
+//! │  • Via pillar is also SOLID at Z=0→10nm                     │
+//! │  • Boolean union merges them into single solid shape        │
+//! └─────────────────────────────────────────────────────────────┘
+//! ```
+//!
+//! ## The 4 Standard Rules
+//!
+//! 1. **Pads and Traces on Conductive Layers ARE SOLID**
+//!    - Top_Pad, Bottom_Pad, all metal traces are solid extruded blocks
+//!    - NO holes are cut from conductive geometry
+//!
+//! 2. **Dielectric/Substrate Base Layers GET HOLE CUTOUTS**
+//!    - Dielectric layers (oxide, substrate) have via holes cut by mesh builder
+//!    - This is where the "hole punching" happens (NOT in metal pads!)
+//!
+//! 3. **Via/Contact Plugs ARE SOLID PILLARS**
+//!    - Via material is extruded as a solid pillar through ALL layers it passes
+//!    - In conductive layers: Via + Pad both solid → Boolean union welds them
+//!    - In dielectric layers: Via solid, substrate base has hole → Pillar fills hole
+//!
+//! 4. **Single-Sided Winding (GPU Backface Culling)**
+//!    - All meshes use CCW winding for outer faces
+//!    - glTF export sets "doubleSided": false
+//!    - GPU discards interior touching faces naturally → Zero Z-fighting
+//!
 //! # Design Rules
 //!
 //! - NO hardcoded material names (use MaterialRegistry lookups)
 //! - NO fallback defaults (fail fast if data is missing)
 //! - Use proper typed IDs (MaterialId, NetId) everywhere
 //! - All Z-ranges come from either AnalyticTrace.layer_z_range or SubstrateLayer.bbox
+//! - NO subtraction of vias from same-net conductive pads (they union together!)
 
 use crate::geometry_union::{circle_to_path, rect_to_path};
 use crate::scene_graph::trace_geometry;
@@ -80,10 +123,20 @@ pub fn generate_copper_contours(space: &HardwareSpace) -> Vec<UnifiedCopperConto
    
     
     for layer in substrate_layers {
-        // Only include conductive layers (Pour and Contact types)
-        if layer.layer_type != SubstrateLayerType::Pour
-            && layer.layer_type != SubstrateLayerType::Contact
-        {
+        // **v0.2.2 PROPER FIX**: Segment Contact layers by stackup
+        // 
+        // Contact layers (vias) span multiple stackup layers. We need to split them
+        // into segments so that:
+        // - Segments in conductive layers (active, metal) are rendered as solid copper
+        // - Segments in dielectric layers are NOT rendered (substrate will have holes)
+        if layer.layer_type == SubstrateLayerType::Contact {
+            // Find which stackup layers this contact intersects
+            segment_contact_by_stackup(layer, &space.stackup_layers, &mut pools);
+            continue;
+        }
+        
+        // Pour layers are already properly bounded and can be added directly
+        if layer.layer_type != SubstrateLayerType::Pour {
             continue;
         }
 
@@ -248,15 +301,7 @@ pub fn generate_copper_contours(space: &HardwareSpace) -> Vec<UnifiedCopperConto
         
       
         
-        // Debug: Print first few points of the unified contour
-        if !contours.is_empty() && !contours[0].is_empty() {
-            let num_points = contours[0].len().min(8);
-            eprint!("[UNIFIED GEOMETRY]     First {} points of unified contour: ", num_points);
-            for i in 0..num_points {
-                eprint!("({},{}) ", contours[0][i].x, contours[0][i].y);
-            }
-            eprintln!();
-        }
+      
         
         if !contours.is_empty() {
             result.push(UnifiedCopperContour { key, contours });
@@ -269,4 +314,117 @@ pub fn generate_copper_contours(space: &HardwareSpace) -> Vec<UnifiedCopperConto
    
     
     result
+}
+
+/// Segment a Contact layer (via) by stackup layers
+///
+/// **v0.2.3 Smart Cutout Strategy - No Z-Fighting**
+///
+/// ## The Z-Fighting Problem
+/// When via penetrates partway into a pad, cutting a hole creates an internal wall
+/// that Z-fights with the via surface. Solution: Only cut holes when via FULLY
+/// spans the layer (goes all the way through).
+///
+/// ## Strategy
+/// - **Via partially penetrates pad**: Render via inside pad, NO cutout (no Z-fighting!)
+/// - **Via fully spans pad**: Cut complete hole through pad (like PCB through-hole)
+/// - **Via in dielectric only**: Render via, cut hole in dielectric substrate
+///
+/// ## Example
+/// Via Z=200→800nm through poly pad Z=0→300nm:
+/// - Poly segment Z=200→300nm: Partial penetration (100nm deep) → NO cutout, via renders inside
+/// - Dielectric Z=300→700nm: Full span → Cut hole in substrate, via fills it
+/// - Metal segment Z=700→800nm: Partial penetration (100nm deep) → NO cutout, via renders inside
+fn segment_contact_by_stackup(
+    contact: &hwc_engine::geometry_router::substrate_types::SubstrateLayer,
+    stackup_layers: &[hwc_engine::space::StackupLayer],
+    pools: &mut FxHashMap<CopperPoolKey, Vec<Path64>>,
+) {
+    let via_z_min = contact.bbox.min.z;
+    let via_z_max = contact.bbox.max.z;
+
+    // Extract the via's 2D contour once
+    let via_path = match &contact.shape {
+        SubstrateLayerShape::Rect => rect_to_path(&contact.bbox),
+        SubstrateLayerShape::Circle { radius } => {
+            let cx = (contact.bbox.min.x + contact.bbox.max.x) / 2;
+            let cy = (contact.bbox.min.y + contact.bbox.max.y) / 2;
+            circle_to_path(cx, cy, *radius, 64)
+        }
+        SubstrateLayerShape::Polygon { outer_contour, .. } => outer_contour.clone(),
+        _ => {
+            eprintln!(
+                "[VIA SEGMENT WARNING] Unsupported via shape: {:?}",
+                contact.shape
+            );
+            return;
+        }
+    };
+
+    // Find all stackup layers that this via intersects
+    for stackup_layer in stackup_layers {
+        // Check if via's Z-span intersects this stackup layer
+        if via_z_max <= stackup_layer.z_bottom || via_z_min >= stackup_layer.z_top {
+            continue; // No intersection
+        }
+
+        // Calculate the intersection Z-range
+        let segment_z_min = via_z_min.max(stackup_layer.z_bottom);
+        let segment_z_max = via_z_max.min(stackup_layer.z_top);
+
+        if segment_z_max <= segment_z_min {
+            continue; // Degenerate segment
+        }
+
+        // **v0.2.3 SMART CUTOUT**: Check if via fully spans this layer
+        let via_fully_spans_layer = segment_z_min == stackup_layer.z_bottom 
+                                    && segment_z_max == stackup_layer.z_top;
+
+        if stackup_layer.is_routable {
+            // Conductive layer (active, poly, metal)
+            if via_fully_spans_layer {
+                // Via goes completely through pad → Render via, cut hole (PCB style)
+                eprintln!(
+                    "[VIA FULL SPAN] Via fully spans conductive layer '{}' (Z={}→{}nm) - will cut hole",
+                    stackup_layer.name, segment_z_min, segment_z_max
+                );
+                // Render via in this segment
+                let key = CopperPoolKey {
+                    z_min: segment_z_min,
+                    z_max: segment_z_max,
+                    material: contact.material,
+                    net_id: contact.net,
+                };
+                pools.entry(key).or_default().push(via_path.clone());
+            } else {
+                // Via partially penetrates pad → Render via inside, NO hole (no Z-fighting!)
+                eprintln!(
+                    "[VIA PARTIAL] Via partially penetrates conductive layer '{}' (Z={}→{}nm, layer={}→{}nm) - embedding without cutout",
+                    stackup_layer.name, segment_z_min, segment_z_max, 
+                    stackup_layer.z_bottom, stackup_layer.z_top
+                );
+                // Render via in this segment (it will overlap with pad, but fully inside = no Z-fighting)
+                let key = CopperPoolKey {
+                    z_min: segment_z_min,
+                    z_max: segment_z_max,
+                    material: contact.material,
+                    net_id: contact.net,
+                };
+                pools.entry(key).or_default().push(via_path.clone());
+            }
+        } else {
+            // Dielectric layer - always render via and cut hole in substrate
+            eprintln!(
+                "[VIA DIELECTRIC] Via in dielectric layer '{}' (Z={}→{}nm) - will cut hole in substrate",
+                stackup_layer.name, segment_z_min, segment_z_max
+            );
+            let key = CopperPoolKey {
+                z_min: segment_z_min,
+                z_max: segment_z_max,
+                material: contact.material,
+                net_id: contact.net,
+            };
+            pools.entry(key).or_default().push(via_path.clone());
+        }
+    }
 }

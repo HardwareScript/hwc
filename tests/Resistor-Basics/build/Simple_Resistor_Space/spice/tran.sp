@@ -44,8 +44,6 @@ RR1 In Out 400.00
 * ========================================
 * STIMULUS & ANALYSIS
 * ========================================
-V_In In 0 PULSE(0 1.800 10ns 1ns 1ns 50ns 100ns)
-V_Out Out 0 DC 0
 Vgnd GND 0 0
 .tran 200ns
 .plot tran V(In) V(Out) I(RR1)

@@ -230,18 +230,24 @@ impl GeometryRouter {
                         let mat_props = self
                             .material_registry
                             .get_material(segment.material_id)
-                            .unwrap_or_else(|| {
-                                panic!(
-                                    "FATAL: Route segment references unregistered material_id={}",
-                                    segment.material_id
-                                )
-                            });
+                            .expect(&format!(
+                                "FATAL: Route segment references unregistered material_id={}",
+                                segment.material_id
+                            ));
+                        
+                        let thickness = mat_props
+                            .get("thickness")
+                            .expect(&format!(
+                                "FATAL: Material id={} has no 'thickness' property defined",
+                                segment.material_id
+                            )) as i64;
+                        
                         assert!(
-                            mat_props.thickness_nm > 0,
+                            thickness > 0,
                             "FATAL: Material id={} has zero thickness",
                             segment.material_id
                         );
-                        mat_props.thickness_nm
+                        thickness
                     },
                     start: segment.start,
                     end: segment.end,

@@ -1,0 +1,9 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,0.02x0.01x0.00mm,,,,,1
+
+# MATERIAL USAGE (Fabrication)
+Reference,Type,Material,Layer_Z_nm,Area_nm2,Volume_nm3
+In_Pad,Pour,Copper,z:0,4000000,2000000000
+Mid_Node,Pour,Copper,z:1000,4000000,2000000000
+Out_Pad,Pour,Copper,z:0,4000000,2000000000
+Dummy_Trace,Pour,Copper,z:0,5000000,2500000000

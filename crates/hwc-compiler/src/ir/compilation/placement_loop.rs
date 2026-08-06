@@ -309,6 +309,7 @@ pub fn execute_placement(
                     item_eval_context,
                     ctx.origin,
                     space,
+                    ctx.unit_registry,
                 )?;
             }
             PlacementItem::Route(_) => {

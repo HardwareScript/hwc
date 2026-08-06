@@ -29,6 +29,7 @@ pub struct CompilationContext<'a> {
     pub profile: Option<&'a ProfileDefinition>,
     pub space_def: &'a SpaceDefinition,
     pub collector: &'a DiagnosticCollector,
+    pub unit_registry: &'a hwc_types::UnitRegistry,
 }
 
 /// Compile a space recursively for hierarchical composition (v0.2.1)
@@ -43,6 +44,7 @@ pub fn compile_space_recursive(
     space_def: &SpaceDefinition,
     symbol_table: &SymbolTable,
     _eval_context_parent: &EvaluationContext,
+    unit_registry: &hwc_types::UnitRegistry,
 ) -> Result<HardwareSpace, IrError> {
     eprintln!(
         "[RECURSIVE] Compiling child space '{}' (no lockfile cache)",
@@ -61,6 +63,7 @@ pub fn compile_space_recursive(
         None,           // No source content
         true,           // Force fresh routing
         None,           // No query store
+        unit_registry,
     )?;
 
     // Check if any errors were collected during child compilation
@@ -94,6 +97,7 @@ pub fn compile_single_space(
     _source_content: Option<&str>,
     force_reroute: bool,
     query_store: Option<hwc_engine::geometry_router::query_engine::QueryStore>,
+    unit_registry: &hwc_types::UnitRegistry,
 ) -> Result<
     (
         HardwareSpace,
@@ -108,7 +112,7 @@ pub fn compile_single_space(
     // Collect placement items (unroll loops with eval context)
     let placement_items = placement_items::collect_placement_items(space_def, symbol_table, &eval_context_initial)?;
 
-    let mut space = space_setup::create_space(space_def, symbol_table, &eval_context_initial)?;
+    let mut space = space_setup::create_space(space_def, symbol_table, &eval_context_initial, unit_registry)?;
 
     let (profile, solder_mask_thickness_nm) =
         space_setup::resolve_solder_mask_thickness(space_def, symbol_table, &eval_context_initial)?;
@@ -130,6 +134,42 @@ pub fn compile_single_space(
     // Export stackup metadata so it's available during export and validation without
     // needing to pass the full StackupManager everywhere.
     space.stackup_layers = stackup_manager.export_stackup_layers();
+
+    // **v0.2.2: Register dielectric stackup layers as substrate base layers in entity graph**
+    // This allows the substrate rendering code to find and render dielectric layers with via cutouts
+    for stackup_layer in &space.stackup_layers {
+        if !stackup_layer.is_routable {
+            // This is a dielectric layer - register it as a substrate base layer
+            let material_id = space
+                .material_registry
+                .get_id(&stackup_layer.material_name)
+                .expect(&format!(
+                    "Material '{}' from stackup not found in material registry",
+                    stackup_layer.material_name
+                ));
+            
+            let substrate_bbox = hwc_engine::geometry::BoundingBox::new(
+                hwc_engine::geometry::Point3D::new(0, 0, stackup_layer.z_bottom),
+                hwc_engine::geometry::Point3D::new(
+                    space.dimensions.width_nm,
+                    space.dimensions.height_nm,
+                    stackup_layer.z_top,
+                ),
+            );
+            
+            eprintln!(
+                "[STACKUP→SUBSTRATE] Registering dielectric layer '{}' (Z={}→{}nm, material={}) as substrate base",
+                stackup_layer.name, stackup_layer.z_bottom, stackup_layer.z_top, stackup_layer.material_name
+            );
+            
+            space.entity_graph.add_substrate_layer(
+                material_id,
+                hwc_engine::NetId::UNCONNECTED,
+                substrate_bbox,
+                hwc_engine::geometry_router::substrate_types::SubstrateLayerType::Substrate,
+            );
+        }
+    }
 
     // **v0.2.0: Build routing layer database from stackup (single source of truth)**
     space.routing_layer_db = hwc_engine::RoutingLayerDatabase::from_stackup(
@@ -168,6 +208,7 @@ pub fn compile_single_space(
         profile: profile.as_ref(),
         space_def,
         collector,
+        unit_registry,
     };
     // Register 'space' as a special anchor representing the space boundaries
     // The 'space' anchor represents the absolute coordinate system of the design space.
@@ -268,6 +309,7 @@ pub fn program_to_space(
     program: &hwc_parser::Program,
     symbol_table: &SymbolTable,
     collector: &hwc_diagnostics::DiagnosticCollector,
+    unit_registry: &hwc_types::UnitRegistry,
 ) -> Result<HardwareSpace, IrError> {
     let space_def = program
         .definitions
@@ -282,7 +324,7 @@ pub fn program_to_space(
         .ok_or(IrError::NoSpaceDefinition)?;
 
     let (space, _qs, _from_cache) =
-        compile_single_space(space_def, symbol_table, collector, None, None, false, None)?;
+        compile_single_space(space_def, symbol_table, collector, None, None, false, None, unit_registry)?;
     Ok(space)
 }
 
@@ -293,8 +335,9 @@ pub fn program_to_spaces(
     program: &hwc_parser::Program,
     symbol_table: &SymbolTable,
     collector: &hwc_diagnostics::DiagnosticCollector,
+    unit_registry: &hwc_types::UnitRegistry,
 ) -> Result<rustc_hash::FxHashMap<compact_str::CompactString, HardwareSpace>, IrError> {
-    program_to_spaces_with_lockfile(program, symbol_table, collector, None, None, false)
+    program_to_spaces_with_lockfile(program, symbol_table, collector, None, None, false, unit_registry)
 }
 
 /// Compile all space definitions into HardwareSpaces with lockfile support.
@@ -307,6 +350,7 @@ pub fn program_to_spaces_with_lockfile(
     lockfile_path: Option<&std::path::Path>,
     source_content: Option<&str>,
     force_reroute: bool,
+    unit_registry: &hwc_types::UnitRegistry,
 ) -> Result<rustc_hash::FxHashMap<compact_str::CompactString, HardwareSpace>, IrError> {
     let space_defs: Vec<&hwc_parser::SpaceDefinition> = program
         .definitions
@@ -337,6 +381,7 @@ pub fn program_to_spaces_with_lockfile(
             source_content,
             force_reroute,
             shared_qs.take(),
+            unit_registry,
         )?;
 
         shared_qs = qs;

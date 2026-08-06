@@ -84,7 +84,8 @@ pub fn execute(input: PathBuf, _build_dir: PathBuf, verbose: bool, parallel: boo
         return Err(miette::miette!("Registration errors found"));
     }
 
-    let _space = program_to_space(&ast, &symbol_table, &collector)
+    let unit_registry = hwc_types::UnitRegistry::new(vec![]);
+    let _space = program_to_space(&ast, &symbol_table, &collector, &unit_registry)
         .map_err(|e| miette::miette!("Failed to create hardware space: {}", e))?;
 
     // Initialize physics engine

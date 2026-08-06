@@ -42,10 +42,7 @@ impl EntityGraph {
         layer_z: i64,
     ) -> EntityId {
         let id = EntityId::from_semantic(&format!("space:{}", name));
-        eprintln!(
-            "[DEBUG register_space_entity] Registering '{}' with EntityId: {}, net_id: {:?}",
-            name, id, net_id
-        );
+       
         self.entity_registry.insert(
             id,
             EntityData {

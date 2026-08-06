@@ -630,6 +630,19 @@ pub enum IrError {
     )]
     NavigableSpaceFailed { gcell_id: u32, reason: String },
 
+    /// Unit conversion error during IR building.
+    #[error("Unit conversion error: {message}")]
+    #[diagnostic(
+        code(C45),
+        url("https://docs.hw-script.org/errors/C45"),
+        help("Check that the unit matches the expected dimension for this field.")
+    )]
+    UnitConversion {
+        message: String,
+        #[label("invalid unit here")]
+        span: Option<miette::SourceSpan>,
+    },
+
     /// R37: Constraint validation found hard violations that cannot be resolved.
     #[error("Hard constraint violation for net {net_id}: {description}")]
     #[diagnostic(

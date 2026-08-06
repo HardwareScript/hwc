@@ -190,19 +190,12 @@ impl MiterEngine {
             let p_curr = deduped[i];
             let p_next = deduped[i + 1];
             
-            eprintln!("[MITER CHECK] Evaluating corner at i={}, point=({},{},{})", 
-                i, p_curr.x, p_curr.y, p_curr.z);
-            eprintln!("[MITER CHECK]   p_prev=({},{},{})", p_prev.x, p_prev.y, p_prev.z);
-            eprintln!("[MITER CHECK]   p_next=({},{},{})", p_next.x, p_next.y, p_next.z);
-            
+           
             // CRITICAL: Check if current point is a via endpoint
             // If it is, skip mitering to preserve the via connection
             let is_via_endpoint = context.is_via_endpoint(&p_curr, net_id, via_tolerance);
             
-            if is_via_endpoint {
-                eprintln!("[MITER] Skipping miter at ({},{},{}) - identified as via endpoint", 
-                    p_curr.x, p_curr.y, p_curr.z);
-            }
+        
 
             // Direction vectors (XY only — miter is a 2D operation)
             let v1_x = p_curr.x - p_prev.x;
@@ -210,14 +203,13 @@ impl MiterEngine {
             let v2_x = p_next.x - p_curr.x;
             let v2_y = p_next.y - p_curr.y;
             
-            eprintln!("[MITER CHECK]   v1=({},{}), v2=({},{})", v1_x, v1_y, v2_x, v2_y);
+           
 
             // Check for 90° corner: orthogonal segments in the XY plane
             let dot = v1_x * v2_x + v1_y * v2_y;
             let is_corner = dot == 0 && (v1_x != 0 || v1_y != 0) && (v2_x != 0 || v2_y != 0);
             
-            eprintln!("[MITER CHECK]   dot={}, is_corner={}, is_via_endpoint={}", 
-                dot, is_corner, is_via_endpoint);
+           
 
             if is_corner && !is_via_endpoint {
                 let len1_f = ((v1_x * v1_x + v1_y * v1_y) as f64).sqrt();
@@ -225,9 +217,7 @@ impl MiterEngine {
                 let len1 = len1_f as i64;
                 let len2 = len2_f as i64;
                 
-                eprintln!("[MITER CHECK]   len1={}, len2={}, miter_dist={}", len1, len2, miter_dist);
-                eprintln!("[MITER CHECK]   len1 > miter_dist? {}, len2 > miter_dist? {}", 
-                    len1 > miter_dist, len2 > miter_dist);
+              
 
                 if len1 > miter_dist && len2 > miter_dist {
                     let u1_x_f = v1_x as f64 / len1_f;

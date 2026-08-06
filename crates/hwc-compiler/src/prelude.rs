@@ -30,6 +30,21 @@ impl Prelude {
         Ok(Self { units, constants })
     }
 
+    /// Build a UnitRegistry from the prelude unit definitions.
+    pub fn build_unit_registry(&self) -> hwc_types::UnitRegistry {
+        let info: Vec<hwc_types::UnitInfo> = self
+            .units
+            .iter()
+            .map(|d| hwc_types::UnitInfo {
+                symbol: d.symbol.clone(),
+                aliases: d.aliases.clone(),
+                multiplier: d.multiplier,
+                dimension: d.dimension.clone(),
+            })
+            .collect();
+        hwc_types::UnitRegistry::new(info)
+    }
+
     /// Load unit definitions from primitives/units.hw
     fn load_units() -> Result<Vec<UnitDefinition>, PreludeError> {
         // Tokenize

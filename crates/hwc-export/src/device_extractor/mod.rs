@@ -6,6 +6,7 @@ pub mod error;
 pub mod extracted;
 pub mod geometry;
 pub mod mapping;
+pub mod parameter_extraction;
 pub mod spice;
 pub mod validation;
 
@@ -25,6 +26,7 @@ pub struct DeviceExtractor<'a> {
     pub(super) space: &'a HardwareSpace,
     pub(super) symbol_table: &'a hwc_compiler::SymbolTable,
     pub(super) device_registry: DeviceTypeRegistry,
+    pub(super) parameter_registry: parameter_extraction::ParameterExtractionRegistry,
 }
 
 impl<'a> DeviceExtractor<'a> {
@@ -33,6 +35,7 @@ impl<'a> DeviceExtractor<'a> {
             space,
             symbol_table,
             device_registry: DeviceTypeRegistry::new(),
+            parameter_registry: parameter_extraction::ParameterExtractionRegistry::default(),
         }
     }
 
@@ -68,7 +71,7 @@ impl<'a> DeviceExtractor<'a> {
 
         // Step 2: Extract devices from BOTH module statements AND pour bindings
         let mut extracted = ExtractedDevices::from_module(module);
-        let from_bindings = ExtractedDevices::from_pour_bindings(&bindings);
+        let from_bindings = ExtractedDevices::from_pour_bindings(&bindings, self.symbol_table);
         
         // Merge devices from bindings into extracted
         for (device_name, device_type) in from_bindings.devices {
@@ -238,33 +241,39 @@ impl<'a> DeviceExtractor<'a> {
             println!("      ├─ {}: {} (net: {})", terminal_name, pour.name, net);
         }
 
-        let mut parameters = FxHashMap::default();
-
-        let is_ic_package = device_type.starts_with('U')
-            || device_type.contains("SOIC")
-            || device_type.contains("QFN");
-
-        let mut has_active_region = false;
-        for pour in terminal_pours.values() {
-            if matches!(
-                self.space
-                    .material_registry
-                    .get_conductivity_by_name(&pour.material_name),
-                Some(hwc_engine::MaterialConductivity::Semiconductor)
-            ) {
-                has_active_region = true;
-                break;
-            }
-        }
-
-        // Calculate parameters based on device type
-        if let Some(gate_pour) = terminal_pours.get("gate") {
-            if is_ic_package || !has_active_region {
+        // Extract parameters using the registry-based system
+        let parameters = self
+            .parameter_registry
+            .extract(device_type, terminal_pours, self.space)
+            .unwrap_or_else(|err| {
                 println!(
-                    "      ├─ Skipping MOSFET extraction for {}: Not a silicon-level transistor",
-                    device_name
+                    "      └─ Warning: Parameter extraction failed for {}: {}",
+                    device_name, err
                 );
-            } else {
+                FxHashMap::default()
+            });
+
+        // Special handling for MOSFETs (if they have gate terminal)
+        let mut mosfet_parameters = FxHashMap::default();
+        if terminal_pours.contains_key("gate") {
+            let is_ic_package = device_type.starts_with('U')
+                || device_type.contains("SOIC")
+                || device_type.contains("QFN");
+
+            let mut has_active_region = false;
+            for pour in terminal_pours.values() {
+                if matches!(
+                    self.space
+                        .material_registry
+                        .get_conductivity_by_name(&pour.material_name),
+                    Some(hwc_engine::MaterialConductivity::Semiconductor)
+                ) {
+                    has_active_region = true;
+                    break;
+                }
+            }
+
+            if !is_ic_package && has_active_region {
                 let drain_net = terminals.get("drain").map(|s| s.as_str()).unwrap_or("nc");
                 let gate_net = terminals.get("gate").map(|s| s.as_str()).unwrap_or("nc");
                 let source_net = terminals.get("source").map(|s| s.as_str()).unwrap_or("nc");
@@ -282,67 +291,47 @@ impl<'a> DeviceExtractor<'a> {
                     return Ok(());
                 }
 
-                let (width_um, length_um) = self.calculate_channel_dimensions(gate_pour)?;
-                parameters.insert("W".into(), width_um);
-                parameters.insert("L".into(), length_um);
-                println!("      ├─ W={:.1}um L={:.1}um", width_um, length_um);
+                if let Some(gate_pour) = terminal_pours.get("gate") {
+                    let (width_um, length_um) = self.calculate_channel_dimensions(gate_pour)?;
+                    mosfet_parameters.insert("W".into(), width_um);
+                    mosfet_parameters.insert("L".into(), length_um);
+                    println!("      ├─ W={:.1}um L={:.1}um", width_um, length_um);
 
-                let source_pour = terminal_pours.get("source");
-                let drain_pour = terminal_pours.get("drain");
-                if let (Some(s), Some(d)) = (source_pour, drain_pour) {
-                    let (as_m2, ad_m2, ps_m, pd_m) = self
-                        .calculate_parasitics_from_pours(s, d)
-                        .unwrap_or((0.0, 0.0, 0.0, 0.0));
-                    parameters.insert("AS".into(), as_m2);
-                    parameters.insert("AD".into(), ad_m2);
-                    parameters.insert("PS".into(), ps_m);
-                    parameters.insert("PD".into(), pd_m);
-                    println!(
-                        "      └─ Parasitics: AS={:.2e}m² AD={:.2e}m² PS={:.2e}m PD={:.2e}m",
-                        as_m2, ad_m2, ps_m, pd_m
-                    );
-                }
-
-                let bulk_pour = terminal_pours.get("bulk");
-                self.validate_bulk_biasing_from_material(
-                    bulk_net,
-                    device_type,
-                    bulk_pour,
-                    device_name,
-                )?;
-            }
-        } else if device_type == "Resistor" || device_type.contains("Resistor") {
-            // Calculate resistor parameters
-            // Find the largest pour (resistor body)
-            let resistor_body = terminal_pours
-                .values()
-                .max_by_key(|p| p.area_nm2)
-                .ok_or_else(|| {
-                    DeviceExtractionError::InvalidGeometry {
-                        device_name: device_name.clone().into(),
-                        device_type: "Resistor".into(),
-                        reason: "No pours found to calculate resistance".into(),
+                    let source_pour = terminal_pours.get("source");
+                    let drain_pour = terminal_pours.get("drain");
+                    if let (Some(s), Some(d)) = (source_pour, drain_pour) {
+                        let (as_m2, ad_m2, ps_m, pd_m) = self
+                            .calculate_parasitics_from_pours(s, d)
+                            .unwrap_or((0.0, 0.0, 0.0, 0.0));
+                        mosfet_parameters.insert("AS".into(), as_m2);
+                        mosfet_parameters.insert("AD".into(), ad_m2);
+                        mosfet_parameters.insert("PS".into(), ps_m);
+                        mosfet_parameters.insert("PD".into(), pd_m);
+                        println!(
+                            "      └─ Parasitics: AS={:.2e}m² AD={:.2e}m² PS={:.2e}m PD={:.2e}m",
+                            as_m2, ad_m2, ps_m, pd_m
+                        );
                     }
-                })?;
-            
-            // Calculate dimensions from area (assuming rectangular or square)
-            let area_nm2 = resistor_body.area_nm2 as f64;
-            let side_nm = area_nm2.sqrt();
-            let side_um = side_nm / 1000.0;
-            
-            // For now, assume square geometry (L = W)
-            // Sheet resistance for polysilicon: ~400 Ohms/square
-            let sheet_resistance = 400.0;
-            
-            // For a square, L/W = 1, so R = R_sheet
-            let resistance = sheet_resistance;
-            
-            parameters.insert("R".into(), resistance);
-            parameters.insert("W".into(), side_um);
-            parameters.insert("L".into(), side_um);
-            
-            println!("      ├─ R={:.2}Ω W={:.2}um L={:.2}um (square geometry assumed)", resistance, side_um, side_um);
+
+                    let bulk_pour = terminal_pours.get("bulk");
+                    self.validate_bulk_biasing_from_material(
+                        bulk_net,
+                        device_type,
+                        bulk_pour,
+                        device_name,
+                    )?;
+                }
+            } else {
+                println!(
+                    "      ├─ Skipping MOSFET extraction for {}: Not a silicon-level transistor",
+                    device_name
+                );
+            }
         }
+
+        // Merge MOSFET parameters with extracted parameters (MOSFET takes precedence)
+        let mut final_parameters = parameters;
+        final_parameters.extend(mosfet_parameters);
 
         self.validate_device_materials(device_name, device_type, terminal_pours)?;
 
@@ -364,7 +353,7 @@ impl<'a> DeviceExtractor<'a> {
             name: device_name.into(),
             device_type_id,
             terminals,
-            parameters,
+            parameters: final_parameters,
             terminal_pours: terminal_pours_map,
         };
 

@@ -1,0 +1,7 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,0.00x0.00x0.00mm,,,,,1
+
+# MATERIAL USAGE (Fabrication)
+Reference,Type,Material,Layer_Z_nm,Area_nm2,Volume_nm3
+Bottom_Pad,Pour,Polysilicon,z:0,1440000,432000000
+Top_Pad,Pour,Aluminum,z:700,1000000,300000000

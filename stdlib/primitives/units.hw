@@ -124,6 +124,41 @@ unit Kiloampere:
     description: "Common for high-power applications"
 
 ## ============================================================================
+## VOLTAGE UNITS (Derived from Volt)
+## ============================================================================
+## Base unit: Volt (V)
+## Required for potential declarations and power supply specifications
+
+unit Volt:
+    symbol: "V"
+    base_si: "V"
+    dimension: voltage
+    multiplier: 1
+    description: "SI unit of electric potential"
+
+unit Millivolt:
+    symbol: "mV"
+    base_si: "V"
+    multiplier: 1e-3
+    dimension: voltage
+    description: "Common for small signal voltages"
+
+unit Microvolt:
+    symbol: "µV"
+    aliases: ["uV"]
+    base_si: "V"
+    multiplier: 1e-6
+    dimension: voltage
+    description: "Common for sensor and low-level signals"
+
+unit Kilovolt:
+    symbol: "kV"
+    base_si: "V"
+    multiplier: 1e3
+    dimension: voltage
+    description: "Common for high-voltage applications"
+
+## ============================================================================
 ## CAPACITANCE UNITS
 ## ============================================================================
 ## Base unit: Farad (F)

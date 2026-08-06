@@ -35,9 +35,7 @@ impl GeometryRouter {
         for (&net_id, paths) in &result.paths {
             for path in paths {
                 for window in path.windows(2) {
-                    eprintln!("[REFINEMENT DEBUG] Net {:?}: Converting segment ({},{},{}) -> ({},{},{})", 
-                        net_id, window[0].x, window[0].y, window[0].z, window[1].x, window[1].y, window[1].z);
-                    
+                   
                     // v0.2.1: Look up material based on segment's Z-coordinate from substrate layers
                     // Find a conductive substrate layer at this Z and use its material
                     let segment_z = window[0].z;
@@ -71,14 +69,13 @@ impl GeometryRouter {
         }
 
         if !all_segments.is_empty() {
-            eprintln!("[REFINEMENT DEBUG] About to legalize {} segments", all_segments.len());
-            
+           
             // Build a properly configured layer-aware spatial index
             let mut spatial_index = DynamicSpatialIndex::new();
             
             // Configure layer Z-ranges from the entity graph
             if let Some(z_ranges) = entity_graph.spatial().layer_z_ranges() {
-                eprintln!("[REFINEMENT DEBUG] Configuring spatial index with {} layer Z-ranges", z_ranges.len());
+               
                 spatial_index.set_layer_z_ranges(&z_ranges);
             } else {
                 eprintln!("[REFINEMENT WARNING] No layer Z-ranges configured - all segments will be in fallback bucket!");
@@ -88,15 +85,27 @@ impl GeometryRouter {
             for (idx, seg) in all_segments.iter().enumerate() {
                 let net_id = all_net_ids.get(idx).copied().unwrap_or(NetId::UNCONNECTED);
                 let net_idx = net_id.raw() as usize;
-                let thickness_nm = self.material_registry
+                
+                // Get material properties to find thickness
+                let material_props = self.material_registry
                     .get_material(seg.material_id)
-                    .map(|m| m.thickness_nm)
-                    .unwrap_or_else(|| {
-                        panic!(
-                            "FATAL: Material id={} has zero thickness — must be declared in PDK",
+                    .ok_or_else(|| {
+                        format!(
+                            "FATAL: Material id={} has no properties defined - must be declared in PDK",
                             seg.material_id
                         )
-                    });
+                    })
+                    .expect("Material properties required");
+                
+                let thickness_nm = material_props
+                    .get("thickness")
+                    .ok_or_else(|| {
+                        format!(
+                            "FATAL: Material id={} missing 'thickness' property - must be declared in PDK",
+                            seg.material_id
+                        )
+                    })
+                    .expect("Material thickness required") as i64;
                 
                 spatial_index.insert(crate::geometry_router::spatial_index::IndexedSegment::new(
                     hwc_physics::spatial_index::SpatialEntitySource::RouteSegment {
@@ -119,7 +128,7 @@ impl GeometryRouter {
                 10, // max iterations
             );
 
-            eprintln!("[REFINEMENT DEBUG] After legalization: {} segments", legalized_segments.len());
+           
             for (idx, seg) in legalized_segments.iter().enumerate().take(4) {
                 eprintln!("[REFINEMENT DEBUG]   Segment {}: ({},{},{}) -> ({},{},{})", 
                     idx, seg.start.x, seg.start.y, seg.start.z, seg.end.x, seg.end.y, seg.end.z);
@@ -131,7 +140,7 @@ impl GeometryRouter {
                 compactor.compact(&legalized_segments, &legalized_net_ids, &Default::default());
             let compacted_segments = Compactor::apply_moves(&legalized_segments, &moves);
 
-            eprintln!("[REFINEMENT DEBUG] After compaction: {} segments", compacted_segments.len());
+           
             for (idx, seg) in compacted_segments.iter().enumerate().take(4) {
                 eprintln!("[REFINEMENT DEBUG]   Segment {}: ({},{},{}) -> ({},{},{})", 
                     idx, seg.start.x, seg.start.y, seg.start.z, seg.end.x, seg.end.y, seg.end.z);

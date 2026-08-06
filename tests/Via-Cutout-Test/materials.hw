@@ -1,0 +1,54 @@
+# materials.hw - Minimal materials for ASIC via cutout testing
+import * from @std/primitives/units
+
+# Dielectric material (will be drilled/etched for via)
+export material Silicon_Dioxide:
+    category: insulator
+    symbol: "SiO2"
+    process: deposited
+    properties:
+        relative_permittivity: 3.9
+        color: "#E0E0FF"
+        opacity: 0.7
+        metallic: 0.0
+        roughness: 0.3
+
+# Metal for via contact
+export material Titanium_Silicide:
+    category: conductor
+    symbol: "TiSi2"
+    process: deposited
+    properties:
+        resistivity: 13e-8ohm_m
+        color: "#8B8680"
+        opacity: 1.0
+        metallic: 0.7
+        roughness: 0.3
+        thermal_conductivity: 30.0W_mK
+        max_current_density: 5e3A_mm2
+
+# Top metal layer
+export material Aluminum:
+    category: conductor
+    symbol: "Al"
+    process: deposited
+    properties:
+        resistivity: 2.82e-8ohm_m
+        color: "#C0C0C0"
+        opacity: 1.0
+        metallic: 0.8
+        roughness: 0.2
+        thermal_conductivity: 237.0W_mK
+        max_current_density: 1e3A_mm2
+
+# Bottom active layer (for contact landing)
+export material Silicon_P:
+    category: semiconductor
+    symbol: "Si_P"
+    process: deposited
+    properties:
+        resistivity: 1e-2ohm_m
+        color: "#FFB6C1"
+        opacity: 1.0
+        metallic: 0.2
+        roughness: 0.5

@@ -131,6 +131,7 @@ pub fn instantiate_sub_space(
     eval_context: &hwc_parser::EvaluationContext,
     origin: hwc_parser::OriginPoint,
     parent_space: &mut HardwareSpace,
+    unit_registry: &hwc_types::UnitRegistry,
 ) -> Result<(), IrError> {
     eprintln!(
         "[HIERARCHICAL v0.2.1 FIX] ==== START instantiate_sub_space ===="
@@ -164,7 +165,7 @@ pub fn instantiate_sub_space(
 
     // STEP 2: Recursively compile the child space
     // This will populate a HardwareSpace with all entities
-    let child_space = compile_child_space(child_space_def, symbol_table, eval_context)?;
+    let child_space = compile_child_space(child_space_def, symbol_table, eval_context, unit_registry)?;
 
     eprintln!(
         "[HIERARCHICAL] Child space compiled: {} substrate layers, {} routed segment groups",
@@ -333,6 +334,7 @@ fn compile_child_space(
     space_def: &hwc_parser::SpaceDefinition,
     symbol_table: &SymbolTable,
     eval_context: &hwc_parser::EvaluationContext,
+    unit_registry: &hwc_types::UnitRegistry,
 ) -> Result<HardwareSpace, IrError> {
     eprintln!("[HIERARCHICAL] Compiling child space '{}'", space_def.name);
 
@@ -342,6 +344,7 @@ fn compile_child_space(
         space_def,
         symbol_table,
         eval_context,
+        unit_registry,
     )?;
 
     eprintln!(

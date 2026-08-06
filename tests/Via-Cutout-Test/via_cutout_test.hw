@@ -1,0 +1,65 @@
+# via_cutout_test.hw
+# Tall vertical test to verify IC via rendering (deposited damascene process)
+#
+# PHYSICAL REALITY TEST FOR IC VIAS:
+# 1. Bottom pad (Silicon_P) is SOLID on active layer
+# 2. Thick dielectric (Silicon_Dioxide) has a HOLE etched through it
+# 3. Via pillar (Titanium_Silicide) fills ONLY the dielectric hole
+# 4. Top pad (Aluminum) is SOLID on metal1 layer
+# 5. Via touches pads at interfaces but does NOT overlap them in 3D
+#
+# Expected GLB export:
+# - Bottom pad: solid block Z=0→10nm
+# - Dielectric: thick layer Z=10→500nm with square hole cutout
+# - Via pillar: fills hole Z=10→500nm (ONLY in dielectric, not in pads!)
+# - Top pad: solid block Z=500→510nm
+# - NO overlapping geometry = NO Z-fighting!
+
+import * from @std/primitives/units
+import * from "./pdk"
+
+space Via_Cutout_Test_Space:
+    dimensions: 3.0um by 3.0um by 1000nm  # Tall enough for stackup: 10nm + 490nm + 10nm = 510nm
+    resolution: 10nm
+    origin: bl by b
+    profile: ViaTestProfile
+    
+    nets:
+        TestNet: { classification: signal, potential: 1.8V, current: 1.0uA }
+    
+    # ========================================================================
+    # BOTTOM LAYER (active layer) - Via lands here
+    # ========================================================================
+    add pour(Silicon_P) named Bottom_Pad on layer: active:
+        net: TestNet
+        dimensions: 1.2um by 1.2um
+        at: [x: 1.5um, y: 1.5um]
+    
+    # ========================================================================
+    # TOP LAYER (metal1) - Via connects to here
+    # ========================================================================
+    add pour(Aluminum) named Top_Pad on layer: metal1:
+        net: TestNet
+        dimensions: 1.0um by 1.0um
+        at: [x: 1.5um, y: 1.5um]
+    
+    # ========================================================================
+    # VIA - THE CRITICAL TEST!
+    # ========================================================================
+    # This via spans from active (Z=0) through THICK d1 dielectric to metal1 (Z=500nm)
+    # 
+    # EXPECTED BEHAVIOR (IC Deposited Via):
+    # 1. Bottom_Pad (Silicon_P): solid Z=0→10nm, no via overlap
+    # 2. Via pillar (Titanium_Silicide): ONLY Z=10→500nm (dielectric only!)
+    # 3. Dielectric (Silicon_Dioxide): Z=10→500nm with 300nm×300nm hole cutout
+    # 4. Top_Pad (Aluminum): solid Z=500→510nm, no via overlap
+    #
+    # The tall dielectric makes it easy to see:
+    # - Via pillar is clearly separated from pads
+    # - Dielectric hole is visible
+    # - No Z-fighting at any interface
+    #
+    add contact(Titanium_Silicide) named Via_Center spanning layer: active to metal1:
+        net: TestNet  # Same net - connects bottom pad to top pad
+        diameter: 300nm
+        align: center with Bottom_Pad

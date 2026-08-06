@@ -14,13 +14,41 @@
 use compact_str::CompactString;
 use hwc_compiler::SymbolTable;
 use hwc_engine::HardwareSpace;
+use hwc_parser::SpiceParameterStyle;
+use rustc_hash::FxHashMap;
 use std::path::Path;
+
+/// Parasitic element extracted from routing
+#[derive(Debug, Clone)]
+enum ParasiticElement {
+    TraceResistor {
+        name: String,
+        node_a: String,
+        node_b: String,
+        value_ohms: f64,
+    },
+    GroundCapacitance {
+        name: String,
+        node: String,
+        ref_node: String,
+        value_farads: f64,
+    },
+}
+
+/// Physical netlist graph with integrated parasitics
+#[derive(Debug, Clone)]
+struct PhysicalNetlistGraph {
+    /// Device terminal connections (terminal -> physical node)
+    device_nodes: FxHashMap<(String, String), String>, // (device_name, terminal) -> node_id
+    /// Parasitic elements
+    parasitics: Vec<ParasiticElement>,
+    /// Net entry points (top-level net name -> entry node)
+    net_entry_points: FxHashMap<String, String>,
+}
 
 /// Stimulus generation mode for SPICE export
 #[derive(Debug, Clone, Copy)]
 enum StimulusMode {
-    /// No stimulus - pure circuit only
-    None,
     /// DC voltage sources with .op directive
     DcOperatingPoint,
     /// Pulsed voltage sources with .tran directive
@@ -34,13 +62,17 @@ pub fn export(
     output_dir: &Path,
     physical_netlist: Option<&hwc_compiler::alignment::PhysicalNetlist>,
     space_def: Option<&hwc_parser::SpaceDefinition>,
+    unit_registry: &hwc_types::UnitRegistry,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Create spice subdirectory
     let spice_dir = output_dir.join("spice");
     std::fs::create_dir_all(&spice_dir)?;
 
+    // Build physical netlist graph with integrated parasitics (used by both circuit and stimulus)
+    let physical_graph = build_physical_netlist_graph(space, symbol_table, physical_netlist)?;
+
     // Generate circuit body (reused by all variants)
-    let circuit_body = generate_circuit_body(space, symbol_table, physical_netlist)?;
+    let circuit_body = generate_circuit_body(space, symbol_table, physical_netlist, &physical_graph)?;
 
     // 1. Raw circuit (DUT only - no stimulus)
     let circuit_content = format!(
@@ -55,7 +87,7 @@ pub fn export(
     std::fs::write(spice_dir.join("circuit.sp"), circuit_content)?;
 
     // 2. DC operating point test
-    let dc_stimulus = generate_stimulus(space_def, StimulusMode::DcOperatingPoint, physical_netlist);
+    let dc_stimulus = generate_stimulus(space_def, StimulusMode::DcOperatingPoint, physical_netlist, unit_registry, &physical_graph, Some(symbol_table));
     let dc_content = format!(
         "* Hardware Script DC Operating Point Test\n\
          * Space: {}\n\
@@ -72,7 +104,7 @@ pub fn export(
     std::fs::write(spice_dir.join("dc.sp"), dc_content)?;
 
     // 3. Transient waveform test
-    let tran_stimulus = generate_stimulus(space_def, StimulusMode::Transient, physical_netlist);
+    let tran_stimulus = generate_stimulus(space_def, StimulusMode::Transient, physical_netlist, unit_registry, &physical_graph, Some(symbol_table));
     let tran_content = format!(
         "* Hardware Script Transient Waveform Test\n\
          * Space: {}\n\
@@ -106,90 +138,270 @@ pub fn export(
     Ok(())
 }
 
+/// Extract trace parasitics (R, C, L) from routed segments and build physical netlist graph
+fn build_physical_netlist_graph(
+    space: &HardwareSpace,
+    _symbol_table: &SymbolTable,
+    physical_netlist: Option<&hwc_compiler::alignment::PhysicalNetlist>,
+) -> Result<PhysicalNetlistGraph, Box<dyn std::error::Error>> {
+    let mut graph = PhysicalNetlistGraph {
+        device_nodes: FxHashMap::default(),
+        parasitics: Vec::new(),
+        net_entry_points: FxHashMap::default(),
+    };
+    
+    if space.analytic_routes.is_empty() {
+        // No routing - use logical net names directly
+        if let Some(netlist) = physical_netlist {
+            for device in &netlist.devices {
+                for (terminal, net_name) in &device.terminals {
+                    let key = (device.name.to_string(), terminal.to_string());
+                    graph.device_nodes.insert(key, net_name.clone());
+                }
+            }
+        }
+        return Ok(graph);
+    }
+    
+    // Physical constants
+    const EPS_0: f64 = 8.854187817e-12; // F/m
+    
+    // Build net-to-segments mapping
+    let mut net_segments: FxHashMap<String, Vec<(usize, usize)>> = FxHashMap::default();
+    for (trace_idx, trace) in space.analytic_routes.iter().enumerate() {
+        for seg_idx in 0..trace.segments.len() {
+            net_segments.entry(trace.net_name.to_string())
+                .or_default()
+                .push((trace_idx, seg_idx));
+        }
+    }
+    
+    // For each net with routing, create physical node chain
+    for (net_name, segments) in &net_segments {
+        if segments.is_empty() {
+            graph.net_entry_points.insert(net_name.clone(), net_name.clone());
+            continue;
+        }
+        
+        // Entry point is the first segment start node
+        let entry_node = format!("n{}_entry", net_name);
+        graph.net_entry_points.insert(net_name.clone(), entry_node.clone());
+        
+        let mut prev_node = entry_node;
+        
+        // Extract parasitics for each segment
+        for (seg_num, &(trace_idx, seg_idx)) in segments.iter().enumerate() {
+            let trace = &space.analytic_routes[trace_idx];
+            let segment = &trace.segments[seg_idx];
+            
+            let node_end = if seg_num == segments.len() - 1 {
+                // Last segment connects to device terminals
+                format!("n{}_dev", net_name)
+            } else {
+                format!("n{}_{}", net_name, seg_num)
+            };
+            
+            // Extract resistance
+            if let Some(material_props) = space.material_registry.get_physical_props(trace.material) {
+                if let Some(resistivity) = material_props.get("resistivity") {
+                    let thickness_nm = trace.cross_section.thickness_nm;
+                    let width_nm = trace.cross_section.width_nm;
+                    
+                    let dx = (segment.end.x - segment.start.x) as f64;
+                    let dy = (segment.end.y - segment.start.y) as f64;
+                    let dz = (segment.end.z - segment.start.z) as f64;
+                    let length_m = ((dx * dx + dy * dy + dz * dz).sqrt()) * 1e-9;
+                    
+                    let thickness_m = thickness_nm as f64 * 1e-9;
+                    let width_m = width_nm as f64 * 1e-9;
+                    let cross_section_m2 = width_m * thickness_m;
+                    
+                    if cross_section_m2 <= 0.0 {
+                        return Err(format!("Invalid cross-section for net '{}'", net_name).into());
+                    }
+                    
+                    let resistance_ohm = resistivity * (length_m / cross_section_m2);
+                    
+                    if resistance_ohm > 0.001 {
+                        graph.parasitics.push(ParasiticElement::TraceResistor {
+                            name: format!("Rtr_{}_{}", net_name, seg_num),
+                            node_a: prev_node.clone(),
+                            node_b: node_end.clone(),
+                            value_ohms: resistance_ohm,
+                        });
+                    }
+                    
+                    // Extract ground capacitance for horizontal traces
+                    if dz.abs() < 1.0 {
+                        let substrate_height_nm = 1000; // TODO: get from stackup
+                        let substrate_height_m = substrate_height_nm as f64 * 1e-9;
+                        let epsilon_r = 3.9; // TODO: get from dielectric layer
+                        
+                        let area_m2 = width_m * length_m;
+                        let capacitance_f = EPS_0 * epsilon_r * (area_m2 / substrate_height_m);
+                        
+                        if capacitance_f > 1e-17 {
+                            graph.parasitics.push(ParasiticElement::GroundCapacitance {
+                                name: format!("Cgnd_{}_{}", net_name, seg_num),
+                                node: node_end.clone(),
+                                ref_node: "0".to_string(),
+                                value_farads: capacitance_f,
+                            });
+                        }
+                    }
+                }
+            }
+            
+            prev_node = node_end;
+        }
+        
+        // Map all devices on this net to the final physical node
+        if let Some(netlist) = physical_netlist {
+            for device in &netlist.devices {
+                for (terminal, terminal_net) in &device.terminals {
+                    if terminal_net == net_name {
+                        let key = (device.name.to_string(), terminal.to_string());
+                        graph.device_nodes.insert(key, prev_node.clone());
+                    }
+                }
+            }
+        }
+    }
+    
+    Ok(graph)
+}
+
+/// Determines if a voltage source should be generated for a net based on module pin direction.
+///
+/// **Zero-Magic Rule for SPICE Stimulus Generation:**
+/// - Input pins / Power nets → Generate driving source
+/// - Ground pins / Ground nets → Generate ground reference (0V)
+/// - Output pins / Signal nets → DO NOT generate source (circuit-determined)
+///
+/// **Semantic Rule:**
+/// `potential:` on an output/signal net is an Expected Operating Constraint for DRC/LVS,
+/// NOT an active driving source. Generating a voltage source on an output would short-circuit
+/// the resistor network and destroy the simulation.
+fn should_generate_voltage_source(
+    net_decl: &hwc_parser::NetDeclaration,
+    module_def: Option<&hwc_parser::ModuleDefinition>,
+) -> bool {
+    use hwc_parser::{NetClassification, PinDirection};
+
+    // Rule 1: Ground nets always get a ground reference (0V source)
+    if net_decl.classification == NetClassification::Ground {
+        return true;
+    }
+
+    // Rule 2: Power nets always get a driving source
+    if net_decl.classification == NetClassification::Power {
+        return true;
+    }
+
+    // Rule 3: If there's a module definition, check pin direction
+    if let Some(module) = module_def {
+        // Find the pin that corresponds to this net
+        for pin in &module.pins {
+            if pin.name.as_str() == net_decl.name.as_str() {
+                return match pin.direction {
+                    PinDirection::Input => true,    // Input pins need driving sources
+                    PinDirection::Power => true,     // Power pins need driving sources
+                    PinDirection::Ground => true,    // Ground pins need ground references
+                    PinDirection::Output => false,   // Output pins are circuit-determined
+                    PinDirection::Inout => true,     // Bidirectional pins get sources (can be overridden later)
+                    PinDirection::Passive => false,  // Passive pins are circuit-determined
+                };
+            }
+        }
+    }
+
+    // Rule 4: Artist Mode (no module) - only generate sources for power/ground classification
+    // Signal nets without module context are assumed to be internal/circuit-determined
+    false
+}
+
 /// Generate stimulus section based on mode
 fn generate_stimulus(
     space_def: Option<&hwc_parser::SpaceDefinition>,
     mode: StimulusMode,
-    physical_netlist: Option<&hwc_compiler::alignment::PhysicalNetlist>,
+    _physical_netlist: Option<&hwc_compiler::alignment::PhysicalNetlist>,
+    unit_registry: &hwc_types::UnitRegistry,
+    physical_graph: &PhysicalNetlistGraph,
+    symbol_table: Option<&SymbolTable>,
 ) -> String {
     let mut stimulus = String::new();
 
+    // Get module definition if the space implements a module
+    let module_def = space_def
+        .and_then(|space| space.implements_module.as_ref())
+        .and_then(|module_name| {
+            symbol_table.and_then(|st| st.get_module(module_name).ok())
+        });
+
     match mode {
-        StimulusMode::None => {
-            // No stimulus
-            return stimulus;
-        }
         StimulusMode::DcOperatingPoint => {
             // Generate DC voltage sources from net declarations
             if let Some(space_def) = space_def {
                 for net_decl in &space_def.nets {
-                    if let Some(potential_mv) = net_decl.potential_mv {
-                        let net_name = net_decl.name.as_str();
-                        let voltage_v = potential_mv as f64 / 1000.0; // Convert mV to V
-                        stimulus.push_str(&format!("V_{} {} 0 DC {:.3}\n", net_name, net_name, voltage_v));
+                    if let Some(ref potential) = net_decl.potential {
+                        // Check if this net should have a voltage source based on module pin direction
+                        if should_generate_voltage_source(net_decl, module_def) {
+                            match potential.to_millivolts(unit_registry) {
+                                Ok(voltage_mv) => {
+                                    let net_name = net_decl.name.as_str();
+                                    let voltage_v = voltage_mv as f64 / 1000.0;
+                                    
+                                    // Use physical entry node if routing exists
+                                    let node_name = physical_graph.net_entry_points
+                                        .get(net_name)
+                                        .map(|s| s.as_str())
+                                        .unwrap_or(net_name);
+                                    
+                                    stimulus.push_str(&format!("V_{} {} 0 DC {:.3}\n", net_name, node_name, voltage_v));
+                                }
+                                Err(e) => {
+                                    eprintln!("Warning: Skipping voltage source for net '{}': {}", net_decl.name, e);
+                                }
+                            }
+                        }
                     }
                 }
             }
-            stimulus.push_str("Vgnd GND 0 0\n");
             stimulus.push_str(".op\n");
         }
         StimulusMode::Transient => {
-            // Generate pulsed voltage sources for transient analysis
+            // Generate voltage sources for transient analysis
             if let Some(space_def) = space_def {
                 for net_decl in &space_def.nets {
-                    if let Some(potential_mv) = net_decl.potential_mv {
-                        let net_name = net_decl.name.as_str();
-                        let voltage_v = potential_mv as f64 / 1000.0; // Convert mV to V
-                        
-                        if voltage_v > 0.0 {
-                            // Create pulse: PULSE(Vlow Vhigh Tdelay Trise Tfall Twidth Tperiod)
-                            stimulus.push_str(&format!(
-                                "V_{} {} 0 PULSE(0 {:.3} 10ns 1ns 1ns 50ns 100ns)\n",
-                                net_name, net_name, voltage_v
-                            ));
-                        } else {
-                            // Ground or 0V nets stay at DC 0
-                            stimulus.push_str(&format!("V_{} {} 0 DC 0\n", net_name, net_name));
+                    if let Some(ref potential) = net_decl.potential {
+                        // Check if this net should have a voltage source based on module pin direction
+                        if should_generate_voltage_source(net_decl, module_def) {
+                            match potential.to_millivolts(unit_registry) {
+                                Ok(voltage_mv) => {
+                                    let net_name = net_decl.name.as_str();
+                                    let voltage_v = voltage_mv as f64 / 1000.0;
+                                    
+                                    // Use physical entry node if routing exists
+                                    let node_name = physical_graph.net_entry_points
+                                        .get(net_name)
+                                        .map(|s| s.as_str())
+                                        .unwrap_or(net_name);
+                                    
+                                    // Generate DC sources (not PULSE) unless explicitly configured otherwise
+                                    stimulus.push_str(&format!("V_{} {} 0 DC {:.3}\n", net_name, node_name, voltage_v));
+                                }
+                                Err(e) => {
+                                    eprintln!("[STIMULUS ERROR] Failed to convert potential for net '{}': {}", net_decl.name, e);
+                                }
+                            }
                         }
                     }
                 }
             }
-            stimulus.push_str("Vgnd GND 0 0\n");
             stimulus.push_str(".tran 200ns\n");
             
-            // Add automatic plot directive for signal and power nets
-            let mut plot_traces = Vec::new();
-            
-            if let Some(space_def) = space_def {
-                for net_decl in &space_def.nets {
-                    // Auto-plot signal and power nets
-                    match net_decl.classification {
-                        hwc_parser::NetClassification::Signal |
-                        hwc_parser::NetClassification::Power => {
-                            plot_traces.push(format!("V({})", net_decl.name));
-                        }
-                        _ => {}
-                    }
-                }
-            }
-            
-            // Add currents from all extracted devices
-            if let Some(netlist) = physical_netlist {
-                for device in &netlist.devices {
-                    // Get device type prefix (R, C, L, M, etc.)
-                    let prefix = if let Some(type_name) = netlist.device_registry.get_name(device.device_type_id) {
-                        type_name.chars().next().unwrap_or('X')
-                    } else {
-                        'X'
-                    };
-                    plot_traces.push(format!("I({}{})", prefix, device.name));
-                }
-            }
-            
-            // Emit plot directive if we have traces
-            if !plot_traces.is_empty() {
-                stimulus.push_str(&format!(".plot tran {}\n", plot_traces.join(" ")));
-            }
+            // Don't use .plot - LTspice ignores it
+            // Instead, we'll generate a .plt file separately for automatic waveform display
         }
     }
 
@@ -201,6 +413,7 @@ fn generate_circuit_body(
     space: &HardwareSpace,
     symbol_table: &SymbolTable,
     physical_netlist: Option<&hwc_compiler::alignment::PhysicalNetlist>,
+    physical_graph: &PhysicalNetlistGraph,
 ) -> Result<String, Box<dyn std::error::Error>> {
     let mut netlist_str = String::new();
 
@@ -394,6 +607,7 @@ fn generate_circuit_body(
     // GAP 7 Phase 4: EXTRACTED DEVICES (Intent-Based Atom Architecture)
     // Devices are extracted from explicit device: bindings during alignment validation
     // This section outputs devices using their SPICE metadata from device definitions
+    
     if let Some(netlist) = physical_netlist {
         if !netlist.devices.is_empty() {
             netlist_str.push_str("\n* ========================================\n");
@@ -423,9 +637,19 @@ fn generate_circuit_body(
                 // Get SPICE export info - ERROR if not defined
                 let spice_info = device_def.spice_info().ok_or_else(|| {
                     format!(
-                        "Device '{}' of type '{}' has no SPICE export metadata. \
-                         Add 'spice_info' to the device definition.",
-                        device.name, device_type_name
+                        "Device '{}' of type '{}' has no SPICE export metadata.\n\
+                         \n\
+                         Add a 'spice:' block to the device definition:\n\
+                         \n\
+                         device {}:\n\
+                             terminals: [...]\n\
+                             materials: ...\n\
+                             spice:\n\
+                                 prefix: <char>  # R, C, L, M, D, etc.\n\
+                                 terminal_order: [terminal1, terminal2, ...]\n\
+                                 parameters: [param1, param2, ...]  # optional\n\
+                                 model: ModelName  # optional",
+                        device.name, device_type_name, device_type_name
                     )
                 })?;
 
@@ -433,16 +657,22 @@ fn generate_circuit_body(
                 netlist_str.push(spice_info.prefix);
                 netlist_str.push_str(&device.name);
 
-                // Add terminals in the order specified by device definition
+                // Add terminals using physical nodes from the graph
                 for terminal_name in &spice_info.terminal_order {
-                    let net_name = device.terminals.get(terminal_name.as_str()).ok_or_else(|| {
-                        format!(
-                            "Device '{}' missing required terminal '{}' (device type: {})",
-                            device.name, terminal_name, device_type_name
-                        )
-                    })?;
+                    let key = (device.name.to_string(), terminal_name.to_string());
+                    let physical_node = if let Some(node) = physical_graph.device_nodes.get(&key) {
+                        node.clone()
+                    } else {
+                        // Fallback to logical net name if no physical node
+                        device.terminals.get(terminal_name.as_str())
+                            .ok_or_else(|| format!(
+                                "Device '{}' missing terminal '{}' (device type: {})",
+                                device.name, terminal_name, device_type_name
+                            ))?.clone()
+                    };
+                    
                     netlist_str.push(' ');
-                    netlist_str.push_str(net_name);
+                    netlist_str.push_str(&physical_node);
                 }
 
                 // Add model name if specified
@@ -452,6 +682,9 @@ fn generate_circuit_body(
                 }
 
                 // Add parameters specified in device definition
+                // Format style is user-controlled via the device's spice.parameter_style field
+                // NO COMPILER GUESSING - the user declares how parameters should be formatted
+                
                 for param_name in &spice_info.parameters {
                     let param_value = device.parameters.get(param_name.as_str()).ok_or_else(|| {
                         format!(
@@ -460,18 +693,48 @@ fn generate_circuit_body(
                         )
                     })?;
                     
-                    // Format parameter based on name convention
-                    if param_name.as_str() == "R" || param_name.as_str() == "C" || param_name.as_str() == "L" {
-                        // Direct value for passive components
-                        netlist_str.push_str(&format!(" {:.2}", param_value));
-                    } else {
-                        // Named parameter for active components
-                        netlist_str.push_str(&format!(" {}={:.2}u", param_name, param_value));
+                    match spice_info.parameter_style {
+                        SpiceParameterStyle::Positional => {
+                            // Positional values: R1 n1 n2 1000
+                            // Use scientific notation for very small or very large values
+                            if param_value.abs() < 1e-3 || param_value.abs() > 1e6 {
+                                netlist_str.push_str(&format!(" {:.2e}", param_value));
+                            } else {
+                                netlist_str.push_str(&format!(" {:.2}", param_value));
+                            }
+                        }
+                        SpiceParameterStyle::Named => {
+                            // Named parameters: M1 d g s b NMOS W=1u L=0.18u
+                            netlist_str.push_str(&format!(" {}={:.2}u", param_name, param_value));
+                        }
                     }
                 }
 
                 netlist_str.push('\n');
             }
+            netlist_str.push('\n');
+        }
+        
+        // Emit parasitics integrated into the netlist
+        if !physical_graph.parasitics.is_empty() {
+            netlist_str.push_str("* ========================================\n");
+            netlist_str.push_str("* INTEGRATED TRACE PARASITICS\n");
+            netlist_str.push_str("* ========================================\n");
+            
+            for parasitic in &physical_graph.parasitics {
+                match parasitic {
+                    ParasiticElement::TraceResistor { name, node_a, node_b, value_ohms } => {
+                        netlist_str.push_str(&format!("* Trace resistance\n"));
+                        netlist_str.push_str(&format!("R{} {} {} {:.6e}\n", name, node_a, node_b, value_ohms));
+                    }
+                    ParasiticElement::GroundCapacitance { name, node, ref_node, value_farads } => {
+                        netlist_str.push_str(&format!("* Ground capacitance\n"));
+                        netlist_str.push_str(&format!("C{} {} {} {:.6e}\n", name, node, ref_node, value_farads));
+                    }
+                }
+            }
+            
+            netlist_str.push_str(&format!("\n* Total parasitic elements: {}\n", physical_graph.parasitics.len()));
             netlist_str.push('\n');
         }
     } else {
@@ -486,3 +749,5 @@ fn generate_circuit_body(
 
     Ok(netlist_str)
 }
+
+

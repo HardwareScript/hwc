@@ -1,142 +1,106 @@
 use compact_str::CompactString;
+use hwc_compiler::SymbolTable;
 use hwc_engine::HardwareSpace;
+use hwc_parser::ast::device::SpiceParameterStyle;
 
-/// Format device instances as SPICE text
+/// Format device instances as SPICE text using device contracts
 ///
-/// Reads from HardwareSpace.device_instances (populated during compilation)
-/// and formats them according to SPICE3/ngspice standards.
+/// **NO HARDCODING** - All device information comes from the device contract's SpiceExportInfo.
+/// This ensures the compiler respects what the .hw files declare, not what we guess.
 ///
-/// Supports:
-/// - Resistors (R): R<name> <nodeA> <nodeB> <value_ohms>
-/// - Capacitors (C): C<name> <nodeA> <nodeB> <value_farads>
-/// - Inductors (L): L<name> <nodeA> <nodeB> <value_henries>
-/// - Diodes (D): D<name> <anode> <cathode> <model>
-/// - MOSFETs (M): M<name> <drain> <gate> <source> <bulk> <model> W=<w>u L=<l>u
-/// - Subcircuits (X): X<name> <nodes...> <subckt_name>
-pub fn format_spice(space: &HardwareSpace) -> CompactString {
+/// If a device is missing SpiceExportInfo, we ERROR LOUDLY rather than guessing.
+pub fn format_spice(space: &HardwareSpace, symbol_table: &SymbolTable) -> Result<CompactString, String> {
     let mut spice = String::new();
+    let mut errors = Vec::new();
 
     // Header comments
     spice.push_str("* Hardware Script Native Netlist\n");
     spice.push_str("* Format: SPICE3 / ngspice\n\n");
 
-    // Format each device from the registry
+    // Format each device from the registry using its contract
     for device in &space.device_instances {
-        let device_type = device.device_type.as_str();
-        let nc = "nc".into();
-
-        // Match on device category/type
-        match device_type {
-            // ================================================================
-            // RESISTOR CARD: R<name> <nodeA> <nodeB> <value_ohms>
-            // ================================================================
-            "Resistor" | "PolyResistor" | "R" => {
-                let node_a = device.terminal_nets.get("A").unwrap_or(&nc);
-                let node_b = device.terminal_nets.get("B").unwrap_or(&nc);
-                let r_val = device.parameters.get("R").copied().unwrap_or(400.0);
-
-                spice.push_str(&format!(
-                    "R{} {} {} {:.2}\n",
-                    device.name, node_a, node_b, r_val
+        // Look up the device contract in the symbol table using get_device()
+        let device_def = match symbol_table.get_device(device.device_type.as_str()) {
+            Ok(def) => def,
+            Err(e) => {
+                errors.push(format!(
+                    "Device '{}' type '{}' not found in symbol table: {}",
+                    device.name, device.device_type, e
                 ));
+                continue;
             }
+        };
 
-            // ================================================================
-            // CAPACITOR CARD: C<name> <nodeA> <nodeB> <value_farads>
-            // ================================================================
-            "Capacitor" | "C" => {
-                let top = device.terminal_nets.get("top")
-                    .or_else(|| device.terminal_nets.get("A"))
-                    .unwrap_or(&nc);
-                let bottom = device.terminal_nets.get("bottom")
-                    .or_else(|| device.terminal_nets.get("B"))
-                    .unwrap_or(&nc);
-                let c_val = device.parameters.get("C").copied().unwrap_or(1e-12);
-
-                spice.push_str(&format!(
-                    "C{} {} {} {:.2e}\n",
-                    device.name, top, bottom, c_val
+        // Get SPICE export info from the device contract
+        let spice_info = match device_def.spice_info() {
+            Some(info) => info,
+            None => {
+                errors.push(format!(
+                    "Device '{}' (type: {}) missing SPICE export metadata in device contract",
+                    device.name, device.device_type
                 ));
+                continue;
             }
+        };
 
-            // ================================================================
-            // INDUCTOR CARD: L<name> <nodeA> <nodeB> <value_henries>
-            // ================================================================
-            "Inductor" | "L" => {
-                let node_a = device.terminal_nets.get("A").unwrap_or(&nc);
-                let node_b = device.terminal_nets.get("B").unwrap_or(&nc);
-                let l_val = device.parameters.get("L").copied().unwrap_or(1e-9);
+        // Build the SPICE card using contract metadata
+        let nc: CompactString = "nc".into();
+        
+        // Start with prefix and name: R1, D1, M1, etc.
+        spice.push_str(&format!("{}{} ", spice_info.prefix, device.name));
 
-                spice.push_str(&format!(
-                    "L{} {} {} {:.2e}\n",
-                    device.name, node_a, node_b, l_val
-                ));
+        // Add terminals in the order specified by the contract
+        for terminal_name in &spice_info.terminal_order {
+            let net = device.terminal_nets.get(terminal_name.as_str()).unwrap_or(&nc);
+            spice.push_str(&format!("{} ", net));
+        }
+
+        // Add model name if specified
+        if let Some(ref model_name) = spice_info.model_name {
+            spice.push_str(&format!("{} ", model_name));
+        }
+
+        // Add parameters based on style
+        match spice_info.parameter_style {
+            SpiceParameterStyle::Positional => {
+                // Positional: R1 n1 n2 1000
+                // Parameters appear as bare values in order
+                for param_name in &spice_info.parameters {
+                    if let Some(&value) = device.parameters.get(param_name.as_str()) {
+                        spice.push_str(&format!("{:.2e} ", value));
+                    } else {
+                        errors.push(format!(
+                            "Device '{}' missing required parameter '{}' (device type: {})",
+                            device.name, param_name, device.device_type
+                        ));
+                    }
+                }
             }
-
-            // ================================================================
-            // DIODE CARD: D<name> <anode> <cathode> <model>
-            // ================================================================
-            "Diode" | "D" => {
-                let anode = device.terminal_nets.get("anode")
-                    .or_else(|| device.terminal_nets.get("A"))
-                    .unwrap_or(&nc);
-                let cathode = device.terminal_nets.get("cathode")
-                    .or_else(|| device.terminal_nets.get("K"))
-                    .unwrap_or(&nc);
-
-                spice.push_str(&format!(
-                    "D{} {} {} D1N4148\n",
-                    device.name, anode, cathode
-                ));
-            }
-
-            // ================================================================
-            // MOSFET CARD: M<name> <drain> <gate> <source> <bulk> <model> W=<w>u L=<l>u
-            // ================================================================
-            "NMOS" | "PMOS" | "MOSFET" | "Transistor" => {
-                let drain = device.terminal_nets.get("drain").unwrap_or(&nc);
-                let gate = device.terminal_nets.get("gate").unwrap_or(&nc);
-                let source = device.terminal_nets.get("source").unwrap_or(&nc);
-                let bulk = device.terminal_nets.get("bulk").unwrap_or(&nc);
-
-                let w = device.parameters.get("W").copied().unwrap_or(1.0);
-                let l = device.parameters.get("L").copied().unwrap_or(0.18);
-
-                spice.push_str(&format!(
-                    "M{} {} {} {} {} {} W={}u L={}u",
-                    device.name, drain, gate, source, bulk, device_type, w, l
-                ));
-
-                // Add parasitic parameters if available
-                if let Some(&as_val) = device.parameters.get("AS") {
-                    spice.push_str(&format!(" AS={:.2e}", as_val));
+            SpiceParameterStyle::Named => {
+                // Named: M1 d g s b NMOS W=1u L=0.18u
+                // Parameters appear as name=value pairs
+                for param_name in &spice_info.parameters {
+                    if let Some(&value) = device.parameters.get(param_name.as_str()) {
+                        spice.push_str(&format!("{}={:.2e} ", param_name, value));
+                    } else {
+                        errors.push(format!(
+                            "Device '{}' missing required parameter '{}' (device type: {})",
+                            device.name, param_name, device.device_type
+                        ));
+                    }
                 }
-                if let Some(&ad_val) = device.parameters.get("AD") {
-                    spice.push_str(&format!(" AD={:.2e}", ad_val));
-                }
-                if let Some(&ps_val) = device.parameters.get("PS") {
-                    spice.push_str(&format!(" PS={:.2e}", ps_val));
-                }
-                if let Some(&pd_val) = device.parameters.get("PD") {
-                    spice.push_str(&format!(" PD={:.2e}", pd_val));
-                }
-
-                spice.push('\n');
-            }
-
-            // ================================================================
-            // GENERIC SUBCIRCUIT FALLBACK: X<name> <nodes...> <subckt_name>
-            // ================================================================
-            _ => {
-                spice.push_str(&format!("X{} ", device.name));
-                for (_term_name, net_name) in &device.terminal_nets {
-                    spice.push_str(&format!("{} ", net_name));
-                }
-                spice.push_str(&format!("{}\n", device_type));
             }
         }
+
+        spice.push('\n');
     }
 
     spice.push_str("\n* End of Netlist\n");
-    spice.into()
+
+    // If any errors occurred, return them as a combined error message
+    if !errors.is_empty() {
+        return Err(errors.join("\n"));
+    }
+
+    Ok(spice.into())
 }

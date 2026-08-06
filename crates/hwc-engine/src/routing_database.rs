@@ -531,20 +531,16 @@ impl HierarchicalRoutingDatabase {
         netlist: &crate::netlist::NetlistArena,
         stackup_layers: &[crate::space::StackupLayer],
     ) -> Vec<AnalyticTrace> {
-        eprintln!(
-            "[ROUTING DB BUILD] Starting build_analytic_routes: {} parent routes, {} child route groups",
-            self.parent_interconnects.len(),
-            self.child_instance_routes.len()
-        );
+        
         
         let mut routes = Vec::new();
 
         // Parent interconnects are already AnalyticTrace
-        eprintln!("[ROUTING DB BUILD] Extending with {} parent interconnects", self.parent_interconnects.len());
+       
         routes.extend(self.parent_interconnects.iter().cloned());
 
         // Convert child routes to AnalyticTrace format
-        eprintln!("[ROUTING DB BUILD] Processing {} child route groups", self.child_instance_routes.len());
+      
         for ((instance_name, net_id), segments) in &self.child_instance_routes {
             if segments.is_empty() {
                 continue;
@@ -661,12 +657,7 @@ impl HierarchicalRoutingDatabase {
             ));
         }
 
-        eprintln!(
-            "[ROUTING DB BUILD] Returning {} total routes ({} parent + {} child converted)",
-            routes.len(),
-            self.parent_interconnects.len(),
-            routes.len() - self.parent_interconnects.len()
-        );
+       
         
         routes
     }

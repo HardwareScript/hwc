@@ -1,0 +1,132 @@
+# test_parasitic_extraction.hw# Parasitic Validation Test 4: Successful Parasitic Extraction (Baseline)
+#
+# PURPOSE: Verify that the compiler SUCCESSFULLY extracts and embeds parasitics
+# into SPICE without halting. This test should PASS all checks and demonstrate
+# proper annotation in build/*/spice/circuit.sp
+#
+# EXPECTED BEHAVIOR:
+# - Wide, well-spaced traces with generous current limits
+# - All parasitic checks pass (no P21, P22, or crosstalk violations)
+# - Compiler extracts R, C, L parasitics and embeds in SPICE
+# - Check build/Parasitic_Extraction_Space/spice/circuit.sp for:
+#   * RR1, RR2 (trace resistance)
+#   * CC1, CC2 (coupling and ground capacitance)
+#   * LL1, LL2 (via inductance if present)
+# - Build completes successfully with parasitic annotations
+#
+# VERIFICATION STEPS:
+# 1. Run: hwc build test_parasitic_extraction.hw
+# 2. Expect: Successful build (no errors)
+# 3. Inspect: build/Parasitic_Extraction_Space/spice/circuit.sp
+# 4. Look for: Extracted parasitic elements embedded in SPICE netlist
+# 5. Open in hsm: Interactive visual probing and waveform analysis
+
+import * from @std/primitives/units
+import * from "./parasitic_pdk"
+
+device Resistor:
+    terminals: [A, B]
+    materials:
+        A: Copper
+        B: Copper
+    spice:
+        prefix: R
+        terminal_order: [A, B]
+        parameters: [R]
+        parameter_style: positional
+
+module ParasiticTest:
+    pins: [input In, output Out]
+    route In to Out
+
+space Parasitic_Extraction_Space implements ParasiticTest:
+    dimensions: 20.0um by 10.0um by 1.5um
+    resolution: 10nm
+    origin: bl by b
+    profile: Standard_Profile  # Generous limits, should pass all checks
+
+    # Conservative current limits - well within safe operating region  
+    nets:
+        In:  { classification: signal, potential: 1.8V, current: 0.5uA }
+        Out: { classification: signal, potential: 0.0V, current: 0.5uA }
+
+    # ========================================================================
+    # SAFE ROUTING STRUCTURE
+    # ========================================================================
+    
+    # Input pad
+    add pour(Copper) named In_Pad on layer: metal1:
+        net: In
+        dimensions: 2.0um by 2.0um
+        at: [x: 2.0um, y: 5.0um]
+
+    # Intermediate node on metal2 (demonstrates via inductance)
+    add pour(Copper) named Mid_Node on layer: metal2:
+        net: In
+        dimensions: 2.0um by 2.0um
+        at: [x: 10.0um, y: 5.0um]
+
+    # Output pad
+    add pour(Copper) named Out_Pad on layer: metal1:
+        net: Out
+        dimensions: 2.0um by 2.0um
+        at: [x: 18.0um, y: 5.0um]
+
+    # Via connecting metal1 to metal2 (should extract via inductance)
+    add contact(Tungsten) named Via_Up spanning layer: metal1 to metal2:
+        net: In
+        diameter: 300nm
+        plating_thickness: 10nm
+        align: center with In_Pad
+
+    # Via connecting metal2 back to metal1
+    add contact(Tungsten) named Via_Down spanning layer: metal2 to metal1:
+        net: In
+        diameter: 300nm
+        plating_thickness: 10nm
+        align: center with Mid_Node
+
+    # ========================================================================
+    # ROUTING - Should extract trace R and coupling C
+    # ========================================================================
+    
+    # Route segment 1: In_Pad to Via_Up (metal1)
+    # Should extract: RR1 (trace resistance), CC1 (ground capacitance)
+    route In_Pad to Via_Up:
+        net: In
+        width: 500nm        # Wide trace - safe for EM
+        layer: metal1
+        intent: Signal
+
+    # Route segment 2: Via_Up to Mid_Node (metal2)
+    # Via inductance L_via should be calculated here
+    # Should extract: LL1 (via self-inductance)
+    
+    # Route segment 3: Mid_Node to Via_Down (metal2)
+    # Should extract: RR2 (trace resistance), CC2 (coupling capacitance)
+    route Mid_Node to Via_Down:
+        net: In
+        width: 500nm        # Wide trace - safe for EM
+        layer: metal2
+        intent: Signal
+
+    # Route segment 4: Via_Down to Out_Pad (metal1)
+    # Should extract: RR3 (trace resistance), CC3 (ground capacitance)
+    # This completes the path from In to Out
+    
+    # Add a second dummy net to create coupling capacitance test
+    add pour(Copper) named Dummy_Trace on layer: metal1:
+        dimensions: 10.0um by 500nm
+        at: [x: 10.0um, y: 3.0um]  # Parallel to main routing path
+
+# ============================================================================
+# EXPECTED SPICE OUTPUT (in circuit.sp):
+# ============================================================================
+# * Extracted parasitic elements:
+# RR1 In_Pad Via_Up 0.168         * Trace resistance (segment 1)
+# CC1 In_Pad 0 0.XXe-15            * Ground capacitance
+# LL1 Via_Up Mid_Node 0.XXe-12     * Via inductance
+# RR2 Mid_Node Via_Down 0.168      * Trace resistance (segment 2)
+# CC2 Mid_Node 0 0.XXe-15          * Ground capacitance
+# CC3 Mid_Node Dummy_Trace 0.XXe-15 * Coupling capacitance (if parallel)
+# RR3 Via_Down Out_Pad 0.168       * Trace resistance (segment 3)

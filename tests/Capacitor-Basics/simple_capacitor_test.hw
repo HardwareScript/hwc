@@ -19,6 +19,11 @@ device Capacitor:
     materials:
         top: Aluminum
         bottom: Polysilicon
+    spice:
+        prefix: C
+        terminal_order: [top, bottom]
+        parameters: [C]
+        parameter_style: positional
 
 module SimpleCapacitor:
     pins: [input In, output Out]

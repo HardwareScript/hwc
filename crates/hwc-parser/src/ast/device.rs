@@ -34,10 +34,24 @@ pub struct DeviceDefinition {
     pub span: Span,
 }
 
+/// SPICE parameter formatting style
+///
+/// Declares how parameters should be formatted in SPICE output.
+/// REQUIRED field - no defaults, user must explicitly declare.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SpiceParameterStyle {
+    /// Positional values: R1 n1 n2 1000
+    /// Used by: R, C, L, V, I, E, G, H, F
+    Positional,
+    /// Named parameters: M1 d g s b NMOS W=1u L=0.18u
+    /// Used by: M, Q, J, X (transistors and subcircuits)
+    Named,
+}
+
 /// SPICE export information for device definitions
 ///
 /// This metadata tells the netlist exporter how to format the device in SPICE.
-/// Without this, the exporter cannot generate correct SPICE syntax.
+/// ALL fields are REQUIRED - no defaults, no guessing, fail loudly if missing.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SpiceExportInfo {
     /// SPICE device prefix (R for resistor, C for capacitor, M for MOSFET, etc.)
@@ -50,6 +64,9 @@ pub struct SpiceExportInfo {
     pub parameters: SmallVec<[CompactString; 4]>,
     /// Optional model name suffix (for MOSFETs, diodes)
     pub model_name: Option<CompactString>,
+    /// Parameter formatting style - REQUIRED, no default
+    /// User must explicitly declare: positional or named
+    pub parameter_style: SpiceParameterStyle,
 }
 
 impl DeviceDefinition {

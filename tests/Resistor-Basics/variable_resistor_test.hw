@@ -16,6 +16,10 @@ device Resistor:
     materials:
         A: Polysilicon
         B: Polysilicon
+    spice:
+        prefix: R
+        terminal_order: [A, B]
+        parameters: [R]
 
 module VariableResistor:
     pins: [input In1, input In2, input In3, output Out1, output Out2, output Out3]

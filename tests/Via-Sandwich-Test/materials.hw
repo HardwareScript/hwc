@@ -1,0 +1,90 @@
+# materials.hw - Materials for via sandwich burial testing
+import * from @std/primitives/units
+
+# Dielectric materials
+export material Silicon_Dioxide:
+    category: insulator
+    symbol: "SiO2"
+    process: deposited
+    properties:
+        relative_permittivity: 3.9
+        color: "#E0E0FF"
+        opacity: 0.0  # Transparent - let vias show clearly
+        metallic: 0.0
+        roughness: 0.3
+
+export material Air:
+    category: insulator
+    symbol: "Air"
+    process: deposited
+    properties:
+        relative_permittivity: 1.0
+        color: "#FFFFFF"
+        opacity: 0.0  # Invisible - no rendering
+        metallic: 0.0
+        roughness: 0.0
+
+# Via materials
+export material Tungsten:
+    category: conductor
+    symbol: "W"
+    process: deposited
+    properties:
+        resistivity: 5.6e-8ohm_m
+        color: "#1a1a1a"  # Dark gray/black for clear visibility
+        opacity: 1.0
+        metallic: 0.9
+        roughness: 0.2
+        thermal_conductivity: 173.0W_mK
+        max_current_density: 8e3A_mm2
+
+export material Titanium_Silicide:
+    category: conductor
+    symbol: "TiSi2"
+    process: deposited
+    properties:
+        resistivity: 13e-8ohm_m
+        color: "#8B8680"
+        opacity: 1.0
+        metallic: 0.7
+        roughness: 0.3
+        thermal_conductivity: 30.0W_mK
+        max_current_density: 5e3A_mm2
+
+# Metal layers
+export material Aluminum:
+    category: conductor
+    symbol: "Al"
+    process: deposited
+    properties:
+        resistivity: 2.82e-8ohm_m
+        color: "#C0C0C0"
+        opacity: 1.0
+        metallic: 0.8
+        roughness: 0.2
+        thermal_conductivity: 237.0W_mK
+        max_current_density: 1e3A_mm2
+
+export material Polysilicon:
+    category: conductor
+    symbol: "Poly"
+    process: deposited
+    properties:
+        resistivity: 1e-3ohm_m
+        color: "#FF6060"
+        opacity: 1.0
+        metallic: 0.3
+        roughness: 0.8
+        thermal_conductivity: 30.0W_mK
+        max_current_density: 500A_mm2
+
+export material Silicon_N:
+    category: semiconductor
+    symbol: "Si_N"
+    process: deposited
+    properties:
+        resistivity: 1e-2ohm_m
+        color: "#87CEEB"
+        opacity: 1.0
+        metallic: 0.2
+        roughness: 0.5

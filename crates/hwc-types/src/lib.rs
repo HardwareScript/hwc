@@ -3,6 +3,10 @@
 //! This crate contains fundamental types that need to be shared across
 //! multiple crates without creating circular dependencies.
 
+mod unit_registry;
+
+pub use unit_registry::{UnitInfo, UnitRegistry};
+
 /// Strongly-typed net ID (newtype wrapper around u32).
 ///
 /// Zero memory overhead - compiles to a raw u32.
