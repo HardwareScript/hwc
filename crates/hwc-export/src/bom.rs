@@ -95,13 +95,14 @@ pub fn export(
 
     // Add material usage section for ASIC/fabrication tracking
     bom.push_str("\n# MATERIAL USAGE (Fabrication)\n");
-    bom.push_str("Reference,Type,Material,Layer_Z_nm,Area_nm2,Volume_nm3\n");
+    bom.push_str("Reference,Type,Material,Layer,Area_nm2,Volume_nm3\n");
 
     // Track pours from space.pours metadata
-    let material_count = space.pours.len();
+    // Filter out virtual/zero-volume entities (Air material, zero volume)
+    let mut physical_pours = Vec::new();
+    let mut material_totals: std::collections::HashMap<String, (i64, u64, usize)> = std::collections::HashMap::new();
+    
     for pour in &space.pours {
-        let layer_info = format!("z:{}", pour.z_bottom_nm);
-
         // Calculate volume if bbox available
         let volume_nm3: u64 = if let Some(bbox) = &pour.bbox {
             let width = (bbox.max.x - bbox.min.x).unsigned_abs() as u128;
@@ -112,20 +113,80 @@ pub fn export(
             0
         };
 
+        // Refinement 1: Filter out zero-volume and virtual (Air) entities
+        if volume_nm3 == 0 || pour.area_nm2 == 0 || pour.material_name == "Air" {
+            continue;
+        }
+
+        // Refinement 2: Get layer name from stackup
+        let layer_name = space.stackup_layers
+            .iter()
+            .find(|layer| {
+                let layer_z_min = layer.z_bottom;
+                let layer_z_max = layer.z_top;
+                pour.z_bottom_nm >= layer_z_min && pour.z_bottom_nm <= layer_z_max
+            })
+            .map(|layer| format!("{} (z:{}nm)", layer.name, pour.z_bottom_nm))
+            .unwrap_or_else(|| format!("z:{}nm", pour.z_bottom_nm));
+
+        physical_pours.push((
+            pour.name.to_string(),
+            pour.material_name.to_string(),
+            layer_name.clone(),
+            pour.area_nm2,
+            volume_nm3,
+        ));
+
+        // Refinement 3: Accumulate material totals
+        let material_key = pour.material_name.to_string();
+        let entry = material_totals.entry(material_key).or_insert((0, 0, 0));
+        entry.0 += pour.area_nm2;
+        entry.1 += volume_nm3;
+        entry.2 += 1;
+    }
+
+    // Write physical pours
+    for (name, material, layer, area, volume) in &physical_pours {
         bom.push_str(&format!(
             "{},Pour,{},{},{},{}\n",
-            pour.name, pour.material_name, layer_info, pour.area_nm2, volume_nm3
+            name, material, layer, area, volume
         ));
+    }
+
+    // Refinement 3: Add aggregated material totals
+    if !material_totals.is_empty() {
+        bom.push_str("\n# AGGREGATED MATERIAL TOTALS (Foundry Fabrication Summary)\n");
+        bom.push_str("Material,Total_Area_nm2,Total_Volume_nm3,Layer_Count,Coverage_Percentage\n");
+
+        // Calculate die area for coverage percentage
+        let die_area_nm2 = space.dimensions.width_nm as i64 * space.dimensions.height_nm as i64;
+
+        // Sort by material name for consistent output
+        let mut materials: Vec<_> = material_totals.iter().collect();
+        materials.sort_by_key(|(name, _)| name.as_str());
+
+        for (material, (total_area, total_volume, layer_count)) in materials {
+            let coverage_percentage = if die_area_nm2 > 0 {
+                (*total_area as f64 / die_area_nm2 as f64) * 100.0
+            } else {
+                0.0
+            };
+
+            bom.push_str(&format!(
+                "{},{},{},{},{:.1}%\n",
+                material, total_area, total_volume, layer_count, coverage_percentage
+            ));
+        }
     }
 
     std::fs::write(&path, bom)?;
 
-    let _total_items = 1 + discrete_count + material_count; // substrate + discrete components + materials
+    let physical_material_count = physical_pours.len();
     println!(
         "   ✅ BOM: {} ({} discrete items, {} material items)",
         path.display(),
         discrete_count,
-        material_count
+        physical_material_count
     );
 
     Ok(())

@@ -2,11 +2,15 @@ Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
 Wafer,Substrate,0.02x0.01x0.00mm,,,,,1
 
 # MATERIAL USAGE (Fabrication)
-Reference,Type,Material,Layer_Z_nm,Area_nm2,Volume_nm3
-Resistor_Body_A,Pour,Polysilicon,z:0,2000000,400000000
-Resistor_Body_B,Pour,Polysilicon,z:0,2000000,400000000
-Resistor_Bulk,Pour,Air,z:0,0,0
-Contact_A,Pour,Aluminum,z:500,160000,134400000
-Contact_B,Pour,Aluminum,z:500,160000,134400000
-In_Pad,Pour,Aluminum,z:500,1000000,840000000
-Out_Pad,Pour,Aluminum,z:500,1000000,840000000
+Reference,Type,Material,Layer,Area_nm2,Volume_nm3
+Resistor_Body_A,Pour,Polysilicon,polyres (z:0nm),2000000,400000000
+Resistor_Body_B,Pour,Polysilicon,polyres (z:0nm),2000000,400000000
+Contact_A,Pour,Aluminum,d1 (z:500nm),160000,134400000
+Contact_B,Pour,Aluminum,d1 (z:500nm),160000,134400000
+In_Pad,Pour,Aluminum,d1 (z:500nm),1000000,840000000
+Out_Pad,Pour,Aluminum,d1 (z:500nm),1000000,840000000
+
+# AGGREGATED MATERIAL TOTALS (Foundry Fabrication Summary)
+Material,Total_Area_nm2,Total_Volume_nm3,Layer_Count,Coverage_Percentage
+Aluminum,2320000,1948800000,4,1.2%
+Polysilicon,4000000,800000000,2,2.0%
