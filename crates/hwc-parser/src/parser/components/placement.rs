@@ -9,13 +9,13 @@ impl crate::parser::Parser {
     // ========================================================================
     pub(in crate::parser) fn parse_component_name(&mut self) -> Result<ComponentName, ParseError> {
         let start_span = self.current_span().start;
-        
+
         // Check for interpolated template name: L1_R{row}_C{col}
         if let Some(spanned) = self.current() {
             if let Token::InterpolatedIdentifier(ref parts) = spanned.token {
                 let parts_clone = parts.clone();
                 self.advance(); // Consume token
-                
+
                 let mut template_parts = Vec::with_capacity(parts_clone.len());
                 for part in parts_clone {
                     match part {
@@ -29,12 +29,12 @@ impl crate::parser::Parser {
                         }
                     }
                 }
-                
+
                 let span = Span::new(start_span, self.previous_span().end);
                 return Ok(ComponentName::template(template_parts, span));
             }
         }
-        
+
         // Regular identifier name
         let base_name = self.expect_identifier_string()?;
 
@@ -50,11 +50,14 @@ impl crate::parser::Parser {
             Ok(ComponentName::simple(base_name.into(), span))
         }
     }
-    
+
     /// Streamlined string expression parser using standard operator precedence
-    fn parse_expression_from_str(&self, expr_str: &str) -> Result<crate::ast::Expression, ParseError> {
+    fn parse_expression_from_str(
+        &self,
+        expr_str: &str,
+    ) -> Result<crate::ast::Expression, ParseError> {
         let trimmed = expr_str.trim();
-        
+
         // Fast-path: Literal integer
         if let Ok(val) = trimmed.parse::<i64>() {
             return Ok(crate::ast::Expression::Literal {
@@ -62,7 +65,7 @@ impl crate::parser::Parser {
                 span: self.current_span(),
             });
         }
-        
+
         // Fast-path: Literal float
         if let Ok(val) = trimmed.parse::<f64>() {
             return Ok(crate::ast::Expression::FloatLiteral {
@@ -70,7 +73,7 @@ impl crate::parser::Parser {
                 span: self.current_span(),
             });
         }
-        
+
         // Fast-path: Simple Variable name
         if trimmed.chars().all(|c| c.is_alphanumeric() || c == '_') {
             return Ok(crate::ast::Expression::Variable {
@@ -78,11 +81,11 @@ impl crate::parser::Parser {
                 span: self.current_span(),
             });
         }
-        
+
         // Complex expressions: Delegate to compound parser
         self.parse_compound_expr_str(trimmed)
     }
-    
+
     fn parse_compound_expr_str(&self, s: &str) -> Result<crate::ast::Expression, ParseError> {
         // Evaluate additions/subtractions outside parens
         if let Some((left, op, right)) = self.split_outer_operator(s, &['+', '-']) {
@@ -98,7 +101,7 @@ impl crate::parser::Parser {
                 span: self.current_span(),
             });
         }
-        
+
         // Evaluate multiplications/divisions outside parens
         if let Some((left, op, right)) = self.split_outer_operator(s, &['*', '/']) {
             let operator = if op == '*' {
@@ -113,7 +116,7 @@ impl crate::parser::Parser {
                 span: self.current_span(),
             });
         }
-        
+
         // Handle parentheses: (expr)
         if s.starts_with('(') && s.ends_with(')') {
             return Ok(crate::ast::Expression::Grouped {
@@ -121,14 +124,18 @@ impl crate::parser::Parser {
                 span: self.current_span(),
             });
         }
-        
+
         Err(self.error(&format!("Invalid expression in interpolation: '{}'", s)))
     }
-    
-    fn split_outer_operator<'a>(&self, s: &'a str, ops: &[char]) -> Option<(&'a str, char, &'a str)> {
+
+    fn split_outer_operator<'a>(
+        &self,
+        s: &'a str,
+        ops: &[char],
+    ) -> Option<(&'a str, char, &'a str)> {
         let mut depth = 0;
         let mut last_match = None;
-        
+
         for (i, ch) in s.char_indices() {
             match ch {
                 '(' => depth += 1,
@@ -139,14 +146,14 @@ impl crate::parser::Parser {
                 _ => {}
             }
         }
-        
+
         last_match.map(|(pos, ch)| (&s[..pos], ch, &s[pos + 1..]))
     }
 
     // ========================================================================
     // UNORDERED COMPONENT PLACEMENT PARSER (Zero Lookahead Hacks!)
     // ========================================================================
-    
+
     /// Parse component placement: `add Type (params) named Instance at [Z,X,Y] rotated angle`
     /// v0.2.1: Supports unordered placement clauses (at, on, rotated, align, directional)
     pub(in crate::parser) fn parse_component_placement(
@@ -442,7 +449,7 @@ impl crate::parser::Parser {
     // ========================================================================
     // HELPER DISPATCHERS (Clean, Consolidated Functions)
     // ========================================================================
-    
+
     fn parse_elevation_clause(&mut self) -> Result<Elevation, ParseError> {
         if self.check_identifier("layer") {
             self.advance();
@@ -473,8 +480,11 @@ impl crate::parser::Parser {
             Err(self.error("Expected 'layer' or 'z' after 'on' keyword"))
         }
     }
-    
-    fn parse_align_constraint(&mut self, start_pos: usize) -> Result<RelationalConstraint, ParseError> {
+
+    fn parse_align_constraint(
+        &mut self,
+        start_pos: usize,
+    ) -> Result<RelationalConstraint, ParseError> {
         self.advance(); // consume 'align'
         self.expect(&Token::Colon)?;
         let axis_str = self.expect_identifier_string()?;
@@ -492,16 +502,20 @@ impl crate::parser::Parser {
         self.expect(&Token::With)?;
         let target = self.parse_component_name()?;
         let span = Span::new(start_pos, self.previous_span().end);
-        Ok(RelationalConstraint::Align { axis, target: AlignmentTarget::Entity(target), span })
+        Ok(RelationalConstraint::Align {
+            axis,
+            target: AlignmentTarget::Entity(target),
+            span,
+        })
     }
-    
+
     fn is_directional_preposition(&self) -> bool {
         self.check_identifier("above")
             || self.check_identifier("below")
             || self.check_identifier("right_of")
             || self.check_identifier("left_of")
     }
-    
+
     fn parse_directional_constraint(&mut self) -> Result<RelationalConstraint, ParseError> {
         let dir = self.expect_identifier_string()?;
         let target = self.parse_component_name()?;
@@ -513,7 +527,7 @@ impl crate::parser::Parser {
         } else {
             None
         };
-        
+
         let constraint = match dir.as_str() {
             "above" => DirectionalConstraint::Above { target, spacing },
             "below" => DirectionalConstraint::Below { target, spacing },
@@ -521,7 +535,7 @@ impl crate::parser::Parser {
             "left_of" => DirectionalConstraint::LeftOf { target, spacing },
             _ => unreachable!(),
         };
-        
+
         Ok(RelationalConstraint::Directional(constraint))
     }
 

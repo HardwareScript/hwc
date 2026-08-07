@@ -73,16 +73,24 @@ pub fn place_substrate(
         profile: ctx.profile,
     };
     let user_start = hwc_engine::geometry::Point3D::new(
-        crate::ir::conversions::evaluate_expression_to_nm(substrate.from.x(), ctx.symbol_table, ctx.eval_context)
-            .map_err(|e| IrError::CoordinateResolutionFailed {
-                coordinate_str: "substrate from X".into(),
-                reason: e.to_string(),
-            })?,
-        crate::ir::conversions::evaluate_expression_to_nm(substrate.from.y(), ctx.symbol_table, ctx.eval_context)
-            .map_err(|e| IrError::CoordinateResolutionFailed {
-                coordinate_str: "substrate from Y".into(),
-                reason: e.to_string(),
-            })?,
+        crate::ir::conversions::evaluate_expression_to_nm(
+            substrate.from.x(),
+            ctx.symbol_table,
+            ctx.eval_context,
+        )
+        .map_err(|e| IrError::CoordinateResolutionFailed {
+            coordinate_str: "substrate from X".into(),
+            reason: e.to_string(),
+        })?,
+        crate::ir::conversions::evaluate_expression_to_nm(
+            substrate.from.y(),
+            ctx.symbol_table,
+            ctx.eval_context,
+        )
+        .map_err(|e| IrError::CoordinateResolutionFailed {
+            coordinate_str: "substrate from Y".into(),
+            reason: e.to_string(),
+        })?,
         crate::ir::conversions::resolve_coordinate_z_nm(substrate.from.z(), &z_ctx, false)
             .map_err(|e| IrError::CoordinateResolutionFailed {
                 coordinate_str: "substrate from Z".into(),
@@ -97,16 +105,24 @@ pub fn place_substrate(
             })?
             .z;
     let user_end = hwc_engine::geometry::Point3D::new(
-        crate::ir::conversions::evaluate_expression_to_nm(substrate.to.x(), ctx.symbol_table, ctx.eval_context)
-            .map_err(|e| IrError::CoordinateResolutionFailed {
-                coordinate_str: "substrate to X".into(),
-                reason: e.to_string(),
-            })?,
-        crate::ir::conversions::evaluate_expression_to_nm(substrate.to.y(), ctx.symbol_table, ctx.eval_context)
-            .map_err(|e| IrError::CoordinateResolutionFailed {
-                coordinate_str: "substrate to Y".into(),
-                reason: e.to_string(),
-            })?,
+        crate::ir::conversions::evaluate_expression_to_nm(
+            substrate.to.x(),
+            ctx.symbol_table,
+            ctx.eval_context,
+        )
+        .map_err(|e| IrError::CoordinateResolutionFailed {
+            coordinate_str: "substrate to X".into(),
+            reason: e.to_string(),
+        })?,
+        crate::ir::conversions::evaluate_expression_to_nm(
+            substrate.to.y(),
+            ctx.symbol_table,
+            ctx.eval_context,
+        )
+        .map_err(|e| IrError::CoordinateResolutionFailed {
+            coordinate_str: "substrate to Y".into(),
+            reason: e.to_string(),
+        })?,
         user_end_z,
     );
     let user_substrate_bbox = hwc_engine::geometry::BoundingBox::new(user_start, user_end);

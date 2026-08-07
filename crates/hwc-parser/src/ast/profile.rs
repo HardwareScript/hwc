@@ -92,7 +92,8 @@ pub struct RoutingConstraints {
     /// Default perpendicular escape stub length (v0.1.9 Declarative Escape Policies).
     /// Distance the trace must travel perpendicular to the pad edge before turning.
     /// - 0nm: Turn immediately (flush with pad edge)
-    /// - >0nm: Enforces perpendicular escape segment
+    /// - greater than 0nm: Enforces perpendicular escape segment
+    ///
     /// Can be overridden by net_type intent or individual route declarations.
     pub escape_stub: Option<Measurement>,
     pub span: Span,
@@ -328,9 +329,9 @@ pub struct ViaConstraints {
     pub default_via_fill: Option<Identifier>,
     /// Via shape: "square" or "cylinder"
     pub shape: Option<Identifier>,
-    
+
     /// Contact depth: How deep the via penetrates into source and destination conductive layers.
-    /// 
+    ///
     /// v0.2.1: Supports expressions (percentages, absolute measurements, arithmetic).
     /// - Percentage: `50%` means 50% of each layer's thickness
     /// - Absolute: `150nm` means exactly 150nm into each layer
@@ -344,7 +345,7 @@ pub struct ViaConstraints {
     ///
     /// **Required field** - no default value to ensure explicit process specification.
     pub contact_depth: Expression,
-    
+
     /// Material-specific contact depths (v0.2.1).
     /// Maps material name to depth expression. When a via connects two layers,
     /// the compiler looks up each layer's material and applies its specific depth.
@@ -357,15 +358,15 @@ pub struct ViaConstraints {
     ///     Tungsten: 40%
     /// ```
     pub material_contact_depths: Option<rustc_hash::FxHashMap<String, Expression>>,
-    
+
     /// Minimum contact depth in nanometers (safety bound, v0.2.1).
     /// Prevents vias from having insufficient penetration regardless of percentage calculation.
     pub min_contact_depth: Option<Measurement>,
-    
+
     /// Maximum contact depth in nanometers (safety bound, v0.2.1).
     /// Prevents vias from over-penetrating regardless of percentage calculation.
     pub max_contact_depth: Option<Measurement>,
-    
+
     // v0.1.7 ASIC Extensions
     /// Per-layer enclosure (annular ring) constraints.
     /// Maps layer name to minimum enclosure distance.

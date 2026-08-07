@@ -261,7 +261,9 @@ impl super::Parser {
                         self.expect(&Token::Colon)?;
                         enter_escape = Some(self.parse_route_escape()?);
                     } else {
-                        return Err(self.error("Expected 'exit' or 'enter' after 'prefer'/'require'"));
+                        return Err(
+                            self.error("Expected 'exit' or 'enter' after 'prefer'/'require'")
+                        );
                     }
                 } else if self.check(&Token::Exit) {
                     self.advance(); // consume 'exit'
@@ -531,35 +533,35 @@ impl super::Parser {
         // Parse cardinal direction
         let port = if let Some(current) = self.current() {
             let dir = if self.check_identifier("tl") {
-                    self.advance();
-                    CardinalDirection::North
-                } else if self.check_identifier("bl") {
-                    self.advance();
-                    CardinalDirection::South
-                } else if self.check_identifier("tr") {
-                    self.advance();
-                    CardinalDirection::East
-                } else if self.check_identifier("br") {
-                    self.advance();
-                    CardinalDirection::West
-                } else if let Token::Identifier(s) = &current.token {
-                    let s = s.to_lowercase();
-                    self.advance();
-                    match s.as_str() {
-                        "north" | "n" | "top" => CardinalDirection::North,
-                        "south" | "s" | "bottom" => CardinalDirection::South,
-                        "east" | "e" | "right" => CardinalDirection::East,
-                        "west" | "w" | "left" => CardinalDirection::West,
-                        _ => {
-                            return Err(self.error(&format!(
+                self.advance();
+                CardinalDirection::North
+            } else if self.check_identifier("bl") {
+                self.advance();
+                CardinalDirection::South
+            } else if self.check_identifier("tr") {
+                self.advance();
+                CardinalDirection::East
+            } else if self.check_identifier("br") {
+                self.advance();
+                CardinalDirection::West
+            } else if let Token::Identifier(s) = &current.token {
+                let s = s.to_lowercase();
+                self.advance();
+                match s.as_str() {
+                    "north" | "n" | "top" => CardinalDirection::North,
+                    "south" | "s" | "bottom" => CardinalDirection::South,
+                    "east" | "e" | "right" => CardinalDirection::East,
+                    "west" | "w" | "left" => CardinalDirection::West,
+                    _ => {
+                        return Err(self.error(&format!(
                             "Expected cardinal direction (North, South, East, West), found '{}'",
                             s
                         )))
-                        }
                     }
-                } else {
-                    return Err(self.error("Expected cardinal direction (North, South, East, West)"))
-                };
+                }
+            } else {
+                return Err(self.error("Expected cardinal direction (North, South, East, West)"));
+            };
             dir
         } else {
             return Err(self.error("Expected cardinal direction"));

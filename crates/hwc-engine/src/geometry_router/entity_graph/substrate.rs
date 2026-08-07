@@ -41,7 +41,7 @@ impl EntityGraph {
                 if existing.net == NetId::UNCONNECTED || existing.net == net {
                     continue;
                 }
-                
+
                 // DEVICE TERMINAL EXEMPTION (v0.2.2): If both pours belong to same device instance,
                 // skip clearance check (intentional overlap for capacitors, transistors, etc.)
                 if let Some((dev_name, _terminal)) = device_binding {
@@ -55,7 +55,7 @@ impl EntityGraph {
                         }
                     }
                 }
-                
+
                 // v0.2.3: LAYER-AWARE CLEARANCE
                 // Only check clearance for conductors on overlapping Z-ranges.
                 // Layers separated by dielectric don't need lateral clearance.
@@ -65,8 +65,9 @@ impl EntityGraph {
                 //
                 // Two ranges overlap if: !(a.max <= b.min || b.max <= a.min)
                 // Simplified: a.max > b.min && b.max > a.min
-                let z_overlap = bbox.max.z > existing.bbox.min.z && existing.bbox.max.z > bbox.min.z;
-                
+                let z_overlap =
+                    bbox.max.z > existing.bbox.min.z && existing.bbox.max.z > bbox.min.z;
+
                 if !z_overlap {
                     // No Z-overlap = different layers, skip clearance check
                     eprintln!(
@@ -75,7 +76,7 @@ impl EntityGraph {
                     );
                     continue;
                 }
-                
+
                 let distance = bbox.distance_to(&existing.bbox);
                 if distance < min_clearance_nm {
                     return Err(format!(
@@ -146,7 +147,7 @@ impl EntityGraph {
     }
 
     /// Get only routable surfaces (pours, traces) for a specific net, excluding vias/contacts.
-    /// 
+    ///
     /// This method is used by the ViaResolver to identify layer transitions that need bridging.
     /// Vias/contacts are bridges themselves and should not trigger via insertion.
     pub fn get_pours_for_net(&self, net_id: NetId) -> Vec<SubstrateLayer> {

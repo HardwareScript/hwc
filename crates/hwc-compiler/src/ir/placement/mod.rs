@@ -12,7 +12,7 @@ pub mod coordinate_evaluation; // Made public for anchor reference evaluation
 pub mod helpers;
 pub mod intent; // PlacementIntent: explicit semantic precision for placement
 mod module;
-mod plane;
+mod plane; // Modular: see plane/mod.rs
 mod pour;
 mod region; // v0.2.0: Region floorplanning
 mod space_instance; // v0.2.1: Hierarchical space composition

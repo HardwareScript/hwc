@@ -22,7 +22,15 @@ pub struct RouteSpaceRequest<'a> {
     pub net_frequencies: &'a FxHashMap<crate::netlist::NetId, f64>,
     pub net_trace_widths: &'a FxHashMap<crate::netlist::NetId, i64>,
     /// v0.1.9: Per-net start/goal normals for perpendicular escape routing.
-    pub net_normals: Option<&'a FxHashMap<crate::netlist::NetId, (crate::geometry_router::connection_interface::Normal2D, crate::geometry_router::connection_interface::Normal2D)>>,
+    pub net_normals: Option<
+        &'a FxHashMap<
+            crate::netlist::NetId,
+            (
+                crate::geometry_router::connection_interface::Normal2D,
+                crate::geometry_router::connection_interface::Normal2D,
+            ),
+        >,
+    >,
     /// v0.1.9: Per-net escape stub distances in nanometers.
     pub net_escape_stubs: Option<&'a FxHashMap<crate::netlist::NetId, i64>>,
     /// v0.2.0: Per-net target Z-layer for explicit layer routing (layer: metal1).
@@ -67,7 +75,7 @@ impl Default for RouterConfig {
 }
 
 /// Geometry Router: Main routing engine.
-/// 
+///
 /// # Architecture Note (v0.2.0 Refactor)
 /// GeometryRouter does NOT own EntityGraph - it is passed by mutable reference.
 /// EntityGraph lives in Space and is the single source of truth for all routing data.
@@ -126,7 +134,13 @@ pub struct GeometryRouter {
     pub(crate) net_trace_widths: FxHashMap<crate::netlist::NetId, i64>,
 
     /// v0.1.9: Per-net start/goal normals for perpendicular escape routing.
-    pub(crate) net_normals: FxHashMap<crate::netlist::NetId, (crate::geometry_router::connection_interface::Normal2D, crate::geometry_router::connection_interface::Normal2D)>,
+    pub(crate) net_normals: FxHashMap<
+        crate::netlist::NetId,
+        (
+            crate::geometry_router::connection_interface::Normal2D,
+            crate::geometry_router::connection_interface::Normal2D,
+        ),
+    >,
 
     /// v0.1.9: Per-net escape stub distances for perpendicular escape routing.
     pub(crate) net_escape_stubs: FxHashMap<crate::netlist::NetId, i64>,

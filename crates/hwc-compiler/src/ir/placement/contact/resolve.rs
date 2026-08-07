@@ -10,19 +10,20 @@ pub(super) fn resolve_relational_anchor(
     contact_name: &hwc_parser::ComponentName,
 ) -> Result<Point2D, IrError> {
     let region_name = anchor.region_name.as_str();
-    
+
     // Look up the region's bounding box
-    let region_bbox = bbox_tracker
-        .get(region_name)
-        .ok_or_else(|| IrError::PlacementConstraint {
-            message: format!(
-                "Contact '{}' references unknown region '{}'",
-                contact_name.base.as_str(),
-                region_name
-            ),
-            component: contact_name.base.as_str().to_string(),
-        })?;
-    
+    let region_bbox =
+        bbox_tracker
+            .get(region_name)
+            .ok_or_else(|| IrError::PlacementConstraint {
+                message: format!(
+                    "Contact '{}' references unknown region '{}'",
+                    contact_name.base.as_str(),
+                    region_name
+                ),
+                component: contact_name.base.as_str().to_string(),
+            })?;
+
     // Calculate anchor point based on region bounding box
     let (x_nm, y_nm) = match anchor.anchor_point {
         hwc_parser::AnchorPoint::Center => {
@@ -51,12 +52,16 @@ pub(super) fn resolve_relational_anchor(
             (center_x, region_bbox.min.y)
         }
     };
-    
+
     println!(
         "[RELATIONAL_ANCHOR] Resolved '{}.{:?}' to ({}, {}) for contact '{}'",
-        region_name, anchor.anchor_point, x_nm, y_nm, contact_name.base.as_str()
+        region_name,
+        anchor.anchor_point,
+        x_nm,
+        y_nm,
+        contact_name.base.as_str()
     );
-    
+
     Ok(Point2D::new(x_nm, y_nm))
 }
 
@@ -72,10 +77,7 @@ pub(super) fn check_material_collisions(
             if contact_bbox.intersects(existing_bbox)
                 && existing_contact.material_name != contact.material
             {
-                let contact_name: compact_str::CompactString = contact
-                    .name
-                    .base
-                    .clone();
+                let contact_name: compact_str::CompactString = contact.name.base.clone();
 
                 return Err(IrError::PlacementConstraint {
                     message: format!(
@@ -99,9 +101,10 @@ pub(super) fn resolve_net_id(
     contact: &hwc_parser::ContactPlacement,
 ) -> Result<u32, IrError> {
     if let Some(net_name) = &contact.net {
-        let is_asic = space.fabrication_constraints.as_ref().is_some_and(|c| {
-            c.technology.is_asic()
-        });
+        let is_asic = space
+            .fabrication_constraints
+            .as_ref()
+            .is_some_and(|c| c.technology.is_asic());
         let min_width = space
             .fabrication_constraints
             .as_ref()
@@ -156,7 +159,10 @@ pub(super) fn resolve_shape(
     if contour.is_none() {
         let shape_name_from_contact = get_prop_string(contact, "shape", eval_context);
         let shape_name = shape_name_from_contact.or_else(|| {
-            profile.and_then(|p| p.via.as_ref()).and_then(|v| v.shape.as_ref()).map(|id| id.name.as_str().into())
+            profile
+                .and_then(|p| p.via.as_ref())
+                .and_then(|v| v.shape.as_ref())
+                .map(|id| id.name.as_str().into())
         });
 
         if let Some(shape_name) = shape_name {

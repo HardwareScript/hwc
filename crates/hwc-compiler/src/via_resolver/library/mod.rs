@@ -359,7 +359,7 @@ impl ViaLibrary {
                 let from_matches = v.from_material == from_material;
                 let to_matches = v.to_material == to_material
                     || v.interface_material.as_ref().map(|i| i.as_str()) == Some(to_material);
-                
+
                 from_matches && to_matches
             })
             .max_by_key(|v| v.to_layer); // Prefer via that goes furthest (closest to target)

@@ -83,7 +83,7 @@ pub struct PinDeclaration {
 pub enum ModuleStatement {
     /// Add component: `add ComponentType (params) named Instance`
     /// Note: NO `at [x,y,z]` allowed in modules (that's in space layout blocks)
-    AddComponent(ModuleComponentPlacement),
+    AddComponent(Box<ModuleComponentPlacement>),
 
     /// Route: `route From.Pin to To.Pin`
     /// Note: NO waypoints allowed in modules (pure logical connection)

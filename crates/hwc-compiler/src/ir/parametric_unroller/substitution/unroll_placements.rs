@@ -304,9 +304,7 @@ pub fn unroll_space_instance(
 
     // Rotation MUST be present (required for space instances)
     if space_inst.rotation.is_none() {
-        return Err(IrError::CompilationAborted {
-            error_count: 1,
-        });
+        return Err(IrError::CompilationAborted { error_count: 1 });
     }
 
     // Substitute net map entries
@@ -320,15 +318,13 @@ pub fn unroll_space_instance(
         } else {
             parent_net_str.to_string()
         };
-        
+
         net_map.insert(child_net.clone(), substituted_parent.into());
     }
 
     // Net map MUST NOT be empty after substitution
     if net_map.is_empty() {
-        return Err(IrError::CompilationAborted {
-            error_count: 1,
-        });
+        return Err(IrError::CompilationAborted { error_count: 1 });
     }
 
     Ok(hwc_parser::SpaceInstancePlacement {

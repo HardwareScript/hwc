@@ -66,7 +66,9 @@ impl crate::parser::Parser {
     /// else:
     ///     add plane(Tungsten) named L1_R{row}_C{col} on layer: metal1
     /// ```
-    pub(in crate::parser) fn parse_space_if_conditional(&mut self) -> Result<SpaceIfConditional, ParseError> {
+    pub(in crate::parser) fn parse_space_if_conditional(
+        &mut self,
+    ) -> Result<SpaceIfConditional, ParseError> {
         let start_pos = self.current_span().start;
 
         self.expect(&Token::If)?;

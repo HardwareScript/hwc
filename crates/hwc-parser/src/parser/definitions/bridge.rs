@@ -64,32 +64,33 @@ impl super::super::Parser {
         }
 
         // Check for shorthand (material on same line) vs full syntax (indented block)
-        let (interface_material, interface_thickness, fill_material) = if self.check(&Token::Newline) {
-            // Full syntax with indented properties
-            self.advance(); // consume newline
-            
-            // Skip any blank lines
-            while self.check(&Token::Newline) {
-                self.advance();
-            }
-            
-            // Expect indent
-            if let Err(e) = self.expect(&Token::Indent) {
-                collector.report(e);
-                return None;
-            }
+        let (interface_material, interface_thickness, fill_material) =
+            if self.check(&Token::Newline) {
+                // Full syntax with indented properties
+                self.advance(); // consume newline
 
-            self.parse_bridge_properties(collector)?
-        } else {
-            // Shorthand: material name directly after colon
-            match self.expect_identifier() {
-                Ok(ident) => (CompactString::from(ident.name.as_str()), None, None),
-                Err(e) => {
+                // Skip any blank lines
+                while self.check(&Token::Newline) {
+                    self.advance();
+                }
+
+                // Expect indent
+                if let Err(e) = self.expect(&Token::Indent) {
                     collector.report(e);
                     return None;
                 }
-            }
-        };
+
+                self.parse_bridge_properties(collector)?
+            } else {
+                // Shorthand: material name directly after colon
+                match self.expect_identifier() {
+                    Ok(ident) => (CompactString::from(ident.name.as_str()), None, None),
+                    Err(e) => {
+                        collector.report(e);
+                        return None;
+                    }
+                }
+            };
 
         let end_pos = self.previous_span().end;
 
@@ -149,7 +150,7 @@ impl super::super::Parser {
                         continue;
                     }
                     self.skip_whitespace();
-                    
+
                     match self.expect_identifier() {
                         Ok(ident) => {
                             interface_material = Some(CompactString::from(ident.name.as_str()));
@@ -166,7 +167,7 @@ impl super::super::Parser {
                         continue;
                     }
                     self.skip_whitespace();
-                    
+
                     match self.parse_measurement() {
                         Ok(measurement) => {
                             interface_thickness = Some(measurement);
@@ -183,7 +184,7 @@ impl super::super::Parser {
                         continue;
                     }
                     self.skip_whitespace();
-                    
+
                     match self.expect_identifier() {
                         Ok(ident) => {
                             fill_material = Some(CompactString::from(ident.name.as_str()));
@@ -218,6 +219,10 @@ impl super::super::Parser {
             return None;
         }
 
-        Some((interface_material.unwrap(), interface_thickness, fill_material))
+        Some((
+            interface_material.unwrap(),
+            interface_thickness,
+            fill_material,
+        ))
     }
 }

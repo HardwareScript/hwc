@@ -197,25 +197,25 @@ pub fn place_component(
             let intent = RoutingIntent::new("Default");
 
             // TODO(v0.1.10): Add orientation lookup from component definition
-            // 
+            //
             // Components should support explicit orientation declaration in their layout block:
-            // 
+            //
             //   component MyIC:
             //     layout:
             //       orientation: north  # Optional: north, south, east, west
             //       shape: Rectangle(...)
             //       pin_positions: { VCC: ..., GND: ... }
-            // 
+            //
             // Implementation steps:
             // 1. Add `orientation: Option<Orientation>` field to LayoutBlock in parser/ast/component.rs
             // 2. Parse orientation keyword in parser (north/south/east/west → Orientation enum)
             // 3. Here: Read component_def.layout.orientation and use if Some(), else:
             //    - Point geometry → Orientation::None (radial, no preference)
             //    - Edge/Polygon geometry → Orientation::Derived (from vertex winding)
-            // 
+            //
             // For now: Point geometry always uses None (correct for ball/via contacts)
             let orientation = hwc_engine::geometry_router::connection_interface::Orientation::None;
-            
+
             let interface =
                 hwc_engine::geometry_router::connection_interface::PhysicalInterface::new(
                     id,

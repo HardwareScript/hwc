@@ -148,7 +148,7 @@ impl super::super::super::Parser {
     fn parse_material_depth_map(&mut self) -> Result<FxHashMap<String, Expression>, ParseError> {
         self.expect(&Token::Newline)?;
         self.expect(&Token::Indent)?;
-        
+
         let mut map = FxHashMap::default();
 
         while !self.check(&Token::Dedent) && !self.is_at_end() {

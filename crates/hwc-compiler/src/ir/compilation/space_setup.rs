@@ -8,7 +8,12 @@ pub fn create_space(
     eval_context: &hwc_parser::EvaluationContext,
     unit_registry: &hwc_types::UnitRegistry,
 ) -> Result<hwc_engine::HardwareSpace, IrError> {
-    let space = crate::ir::space_builder::create_hardware_space(space_def, symbol_table, eval_context, unit_registry)?;
+    let space = crate::ir::space_builder::create_hardware_space(
+        space_def,
+        symbol_table,
+        eval_context,
+        unit_registry,
+    )?;
     crate::ir::space_builder::validate_asic_constraints(space_def, symbol_table, eval_context)?;
     Ok(space)
 }
@@ -85,9 +90,11 @@ pub fn populate_material_registry(
 ) {
     if let Some(stackup) = profile.and_then(|p| p.stackup.as_ref()) {
         for layer in &stackup.layers {
-            if let Ok(thickness_nm) =
-                crate::ir::conversions::evaluate_expression_to_nm(&layer.thickness, symbol_table, eval_context)
-            {
+            if let Ok(thickness_nm) = crate::ir::conversions::evaluate_expression_to_nm(
+                &layer.thickness,
+                symbol_table,
+                eval_context,
+            ) {
                 if let Some(mat_id) = space.material_registry.get_id(&layer.material) {
                     // Update thickness in material properties (preserving all other properties)
                     let mut props = space
@@ -95,9 +102,9 @@ pub fn populate_material_registry(
                         .get_physical_props(mat_id)
                         .cloned()
                         .unwrap_or_else(hwc_engine::material::MaterialPhysicalProps::new);
-                    
+
                     props.set("thickness", thickness_nm as f64);
-                    
+
                     space.material_registry.set_physical_props(mat_id, props);
                 }
             }
@@ -123,8 +130,9 @@ pub fn build_eval_context(
     profile: Option<&hwc_parser::ProfileDefinition>,
     space_def: &hwc_parser::SpaceDefinition,
 ) -> Result<hwc_parser::EvaluationContext, IrError> {
-    let mut eval_context = crate::constraint_solver::ConstraintSolver::build_eval_context(symbol_table);
-    
+    let mut eval_context =
+        crate::constraint_solver::ConstraintSolver::build_eval_context(symbol_table);
+
     // Register PDK profile variables as "pdk.*" for use in expressions
     // Store as Value::Measurement to preserve unit information
     if let Some(prof) = profile {
@@ -155,7 +163,7 @@ pub fn build_eval_context(
             );
         }
     }
-    
+
     // v0.2.0: Register local let bindings from space block
     // Example: `let edge_pad_w = 150um` becomes available in all subsequent expressions
     // v0.2.1: DIMENSIONAL TYPE SAFETY - Fail hard on unit mismatches
@@ -171,7 +179,11 @@ pub fn build_eval_context(
                     let error_msg = e.to_string();
                     if error_msg.contains("Cannot convert") || error_msg.contains("unit") {
                         return Err(IrError::DimensionalUnitMismatch {
-                            expression: format!("let {} = {}", let_binding.name, format!("{:?}", let_binding.value)),
+                            expression: format!(
+                                "let {} = {}",
+                                let_binding.name,
+                                format!("{:?}", let_binding.value)
+                            ),
                             operation: "evaluate".to_string(),
                             detail: format!("Expression evaluation failed: {}", error_msg),
                         });
@@ -200,7 +212,11 @@ pub fn build_eval_context(
                     let error_msg = e.to_string();
                     if error_msg.contains("Cannot convert") || error_msg.contains("unit") {
                         return Err(IrError::DimensionalUnitMismatch {
-                            expression: format!("const {} = {}", const_binding.name, format!("{:?}", const_binding.value)),
+                            expression: format!(
+                                "const {} = {}",
+                                const_binding.name,
+                                format!("{:?}", const_binding.value)
+                            ),
                             operation: "evaluate".to_string(),
                             detail: format!("Expression evaluation failed: {}", error_msg),
                         });
@@ -214,7 +230,7 @@ pub fn build_eval_context(
             }
         }
     }
-    
+
     Ok(eval_context)
 }
 

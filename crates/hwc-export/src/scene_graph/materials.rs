@@ -69,8 +69,10 @@ pub fn add_materials_from_symbol_table(
         // Extract visual properties with defaults (v0.1.6 God-Tier Visual API)
         let mut opacity = material_def.get_opacity() as f32;
 
-        eprintln!("[MATERIAL DEBUG] Material '{}': category={:?}, initial_opacity={}", 
-                  name, material_def.category, opacity);
+        eprintln!(
+            "[MATERIAL DEBUG] Material '{}': category={:?}, initial_opacity={}",
+            name, material_def.category, opacity
+        );
 
         // v0.1.7: Force components and semiconductor bodies to be Opaque
         // DISABLED: Allow semiconductors to be transparent for visualization
@@ -80,14 +82,18 @@ pub fn add_materials_from_symbol_table(
         // {
         //     opacity = 1.0;
         // }
-        if name.to_lowercase().contains("body")
-            || name.to_lowercase().contains("component")
-        {
-            eprintln!("[MATERIAL DEBUG] Material '{}': Forcing opacity to 1.0 (body/component)", name);
+        if name.to_lowercase().contains("body") || name.to_lowercase().contains("component") {
+            eprintln!(
+                "[MATERIAL DEBUG] Material '{}': Forcing opacity to 1.0 (body/component)",
+                name
+            );
             opacity = 1.0;
         }
-        
-        eprintln!("[MATERIAL DEBUG] Material '{}': final_opacity={}", name, opacity);
+
+        eprintln!(
+            "[MATERIAL DEBUG] Material '{}': final_opacity={}",
+            name, opacity
+        );
 
         let outline_opacity = material_def.get_outline_opacity() as f32;
         let roughness = material_def.get_roughness() as f32;

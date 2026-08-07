@@ -102,7 +102,6 @@ impl crate::parser::Parser {
                     // v0.2.1: Center position for dimension-based pours
                     // Example: at: [x: 650nm, y: 1000nm]
                     position = Some(self.parse_coordinate_optional_z()?);
-                   
                 }
                 "align" => {
                     // v0.2.1: Alignment constraints
@@ -113,7 +112,12 @@ impl crate::parser::Parser {
                         "x" => AlignmentAxis::X,
                         "y" => AlignmentAxis::Y,
                         "z" => AlignmentAxis::Z,
-                        _ => return Err(self.error(&format!("Unknown alignment axis: {}. Expected: center, x, y, or z", axis_name))),
+                        _ => {
+                            return Err(self.error(&format!(
+                                "Unknown alignment axis: {}. Expected: center, x, y, or z",
+                                axis_name
+                            )))
+                        }
                     };
 
                     self.expect(&Token::With)?;
@@ -122,10 +126,14 @@ impl crate::parser::Parser {
                     let target = if self.check(&Token::OpenParen) {
                         let expr = self.parse_expression()?;
                         AlignmentTarget::Expression(expr)
-                    } else if self.current().map(|t| matches!(t.token, Token::Identifier(_))).unwrap_or(false) {
+                    } else if self
+                        .current()
+                        .map(|t| matches!(t.token, Token::Identifier(_)))
+                        .unwrap_or(false)
+                    {
                         let checkpoint = self.current;
                         let _ = self.expect_identifier_string()?;
-                        
+
                         if self.check(&Token::Dot) {
                             // Anchor reference - parse as expression
                             self.current = checkpoint;
@@ -147,7 +155,7 @@ impl crate::parser::Parser {
                 "above" | "below" | "left_of" | "right_of" => {
                     // v0.2.1: Directional constraints
                     let target = self.parse_component_name()?;
-                    
+
                     let spacing = if self.check(&Token::By) {
                         self.advance();
                         Some(self.parse_expression()?)
@@ -258,12 +266,16 @@ impl crate::parser::Parser {
         let final_boundary = match (&position, &width, &height) {
             (Some(Coordinate::Relative(_)), Some(_), Some(_)) => {
                 // Relative position with dimensions - don't create boundary yet
-             
+
                 boundary
             }
-            (Some(pos @ (Coordinate::Declarative { .. } | Coordinate::Positional { .. })), Some(w), Some(h)) => {
+            (
+                Some(pos @ (Coordinate::Declarative { .. } | Coordinate::Positional { .. })),
+                Some(w),
+                Some(h),
+            ) => {
                 // Declarative/Positional with dimensions - create boundary now
-            
+
                 let span_empty = Span::new(0, 0);
                 let from = Coordinate::Positional {
                     x: Expression::Binary {
@@ -272,7 +284,10 @@ impl crate::parser::Parser {
                         right: Box::new(Expression::Binary {
                             left: Box::new(w.clone()),
                             operator: BinaryOperator::Divide,
-                            right: Box::new(Expression::Literal { value: 2, span: span_empty }),
+                            right: Box::new(Expression::Literal {
+                                value: 2,
+                                span: span_empty,
+                            }),
                             span: span_empty,
                         }),
                         span: span_empty,
@@ -283,7 +298,10 @@ impl crate::parser::Parser {
                         right: Box::new(Expression::Binary {
                             left: Box::new(h.clone()),
                             operator: BinaryOperator::Divide,
-                            right: Box::new(Expression::Literal { value: 2, span: span_empty }),
+                            right: Box::new(Expression::Literal {
+                                value: 2,
+                                span: span_empty,
+                            }),
                             span: span_empty,
                         }),
                         span: span_empty,
@@ -298,7 +316,10 @@ impl crate::parser::Parser {
                         right: Box::new(Expression::Binary {
                             left: Box::new(w.clone()),
                             operator: BinaryOperator::Divide,
-                            right: Box::new(Expression::Literal { value: 2, span: span_empty }),
+                            right: Box::new(Expression::Literal {
+                                value: 2,
+                                span: span_empty,
+                            }),
                             span: span_empty,
                         }),
                         span: span_empty,
@@ -309,7 +330,10 @@ impl crate::parser::Parser {
                         right: Box::new(Expression::Binary {
                             left: Box::new(h.clone()),
                             operator: BinaryOperator::Divide,
-                            right: Box::new(Expression::Literal { value: 2, span: span_empty }),
+                            right: Box::new(Expression::Literal {
+                                value: 2,
+                                span: span_empty,
+                            }),
                             span: span_empty,
                         }),
                         span: span_empty,
@@ -319,7 +343,7 @@ impl crate::parser::Parser {
                 };
                 Some(crate::PourBoundary::Rect(Box::new(from), Box::new(to)))
             }
-            _ => boundary
+            _ => boundary,
         };
 
         Ok(PourPlacement {
@@ -336,7 +360,7 @@ impl crate::parser::Parser {
             thermal_relief,
             waivers,
             relational_constraints, // v0.2.1: Pass relational constraints
-            inside_region, // v0.2.0: Region containment
+            inside_region,          // v0.2.0: Region containment
             span: Span::new(start_pos, end_pos),
         })
     }

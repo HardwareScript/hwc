@@ -1,5 +1,5 @@
 use crate::ir::errors::IrError;
-use crate::ir::placement_item::{PlacementItem, ContextualPlacementItem};
+use crate::ir::placement_item::{ContextualPlacementItem, PlacementItem};
 use compact_str::CompactString;
 
 /// Build the dependency graph from placement items and return topologically sorted IDs.
@@ -150,20 +150,18 @@ pub fn build_and_sort(
                 // ordered after the entities they reference, causing bbox_tracker misses.
                 for constraint in &p.relational_constraints {
                     match constraint {
-                        hwc_parser::RelationalConstraint::Align { target, .. } => {
-                            match target {
-                                hwc_parser::AlignmentTarget::Entity(entity_name) => {
-                                    graph.add_dependency(item_id.clone(), entity_name.base.clone());
-                                }
-                                hwc_parser::AlignmentTarget::Expression(expr) => {
-                                    graph.extract_dependencies_from_expr(
-                                        &item_id,
-                                        expr,
-                                        last_component_name.as_ref(),
-                                    );
-                                }
+                        hwc_parser::RelationalConstraint::Align { target, .. } => match target {
+                            hwc_parser::AlignmentTarget::Entity(entity_name) => {
+                                graph.add_dependency(item_id.clone(), entity_name.base.clone());
                             }
-                        }
+                            hwc_parser::AlignmentTarget::Expression(expr) => {
+                                graph.extract_dependencies_from_expr(
+                                    &item_id,
+                                    expr,
+                                    last_component_name.as_ref(),
+                                );
+                            }
+                        },
                         hwc_parser::RelationalConstraint::Directional(dir) => {
                             let target = match dir {
                                 hwc_parser::DirectionalConstraint::Above { target, .. }
@@ -211,20 +209,18 @@ pub fn build_and_sort(
                 // SomeEntity, but this edge was not being registered in the dependency graph.
                 for constraint in &c.relational_constraints {
                     match constraint {
-                        hwc_parser::RelationalConstraint::Align { target, .. } => {
-                            match target {
-                                hwc_parser::AlignmentTarget::Entity(entity_name) => {
-                                    graph.add_dependency(item_id.clone(), entity_name.base.clone());
-                                }
-                                hwc_parser::AlignmentTarget::Expression(expr) => {
-                                    graph.extract_dependencies_from_expr(
-                                        &item_id,
-                                        expr,
-                                        last_component_name.as_ref(),
-                                    );
-                                }
+                        hwc_parser::RelationalConstraint::Align { target, .. } => match target {
+                            hwc_parser::AlignmentTarget::Entity(entity_name) => {
+                                graph.add_dependency(item_id.clone(), entity_name.base.clone());
                             }
-                        }
+                            hwc_parser::AlignmentTarget::Expression(expr) => {
+                                graph.extract_dependencies_from_expr(
+                                    &item_id,
+                                    expr,
+                                    last_component_name.as_ref(),
+                                );
+                            }
+                        },
                         hwc_parser::RelationalConstraint::Directional(dir) => {
                             let target = match dir {
                                 hwc_parser::DirectionalConstraint::Above { target, .. }
@@ -247,7 +243,7 @@ pub fn build_and_sort(
                     &space_inst.position,
                     last_component_name.as_ref(),
                 );
-                
+
                 // Note: net_map dependencies are handled during netlist compilation, not placement
             }
             PlacementItem::Route(r) => {

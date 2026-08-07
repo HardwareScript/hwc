@@ -12,7 +12,12 @@ use super::collision::{
     print_identity_collision_warning, print_same_iteration_collision_warnings, CollisionWarning,
 };
 use super::substitution::{
-    format_net_name, unroll_component, unroll_contact, unroll_plane, unroll_pour, unroll_route,
+    format_net_name,
+    unroll_component,
+    unroll_contact,
+    unroll_plane,
+    unroll_pour,
+    unroll_route,
     unroll_space_instance, // v0.2.1
 };
 use crate::ir::errors::IrError;
@@ -153,34 +158,16 @@ impl UnrollContext {
 /// Each `process_*` method handles one statement type, keeping the logic
 /// flat and isolated. The `process_statement` method provides the main dispatch.
 trait StatementProcessor {
-    fn process_component(
-        &mut self,
-        comp: &ComponentPlacement,
-    ) -> Result<(), IrError>;
-    fn process_pour(
-        &mut self,
-        pour: &PourPlacement,
-    ) -> Result<(), IrError>;
-    fn process_plane(
-        &mut self,
-        plane: &PlanePlacement,
-    ) -> Result<(), IrError>;
-    fn process_contact(
-        &mut self,
-        contact: &ContactPlacement,
-    ) -> Result<(), IrError>;
+    fn process_component(&mut self, comp: &ComponentPlacement) -> Result<(), IrError>;
+    fn process_pour(&mut self, pour: &PourPlacement) -> Result<(), IrError>;
+    fn process_plane(&mut self, plane: &PlanePlacement) -> Result<(), IrError>;
+    fn process_contact(&mut self, contact: &ContactPlacement) -> Result<(), IrError>;
     fn process_space_instance(
         &mut self,
         inst: &hwc_parser::SpaceInstancePlacement,
     ) -> Result<(), IrError>;
-    fn process_route(
-        &mut self,
-        route: &Route,
-    ) -> Result<(), IrError>;
-    fn process_let(
-        &mut self,
-        let_binding: &hwc_parser::LetBinding,
-    ) -> Result<(), IrError>;
+    fn process_route(&mut self, route: &Route) -> Result<(), IrError>;
+    fn process_let(&mut self, let_binding: &hwc_parser::LetBinding) -> Result<(), IrError>;
     fn process_if(
         &mut self,
         if_stmt: &hwc_parser::SpaceIfConditional,
@@ -219,10 +206,7 @@ impl StatementProcessor for UnrollContext {
         }
     }
 
-    fn process_component(
-        &mut self,
-        comp: &ComponentPlacement,
-    ) -> Result<(), IrError> {
+    fn process_component(&mut self, comp: &ComponentPlacement) -> Result<(), IrError> {
         let unrolled = unroll_component(comp, &self.loop_variable, self.iteration_value)?;
         self.components.push(ContextualItem {
             item: unrolled,
@@ -231,10 +215,7 @@ impl StatementProcessor for UnrollContext {
         Ok(())
     }
 
-    fn process_pour(
-        &mut self,
-        pour: &PourPlacement,
-    ) -> Result<(), IrError> {
+    fn process_pour(&mut self, pour: &PourPlacement) -> Result<(), IrError> {
         let unrolled = unroll_pour(pour, &self.loop_variable, self.iteration_value)?;
 
         if let Some(ref net) = unrolled.net {
@@ -249,10 +230,7 @@ impl StatementProcessor for UnrollContext {
         Ok(())
     }
 
-    fn process_plane(
-        &mut self,
-        plane: &PlanePlacement,
-    ) -> Result<(), IrError> {
+    fn process_plane(&mut self, plane: &PlanePlacement) -> Result<(), IrError> {
         let unrolled = unroll_plane(plane, &self.loop_variable, self.iteration_value)?;
         self.planes.push(ContextualItem {
             item: unrolled,
@@ -261,10 +239,7 @@ impl StatementProcessor for UnrollContext {
         Ok(())
     }
 
-    fn process_contact(
-        &mut self,
-        contact: &ContactPlacement,
-    ) -> Result<(), IrError> {
+    fn process_contact(&mut self, contact: &ContactPlacement) -> Result<(), IrError> {
         let unrolled = unroll_contact(contact, &self.loop_variable, self.iteration_value)?;
 
         if let Some(ref net) = unrolled.net {
@@ -283,7 +258,8 @@ impl StatementProcessor for UnrollContext {
         &mut self,
         space_inst: &hwc_parser::SpaceInstancePlacement,
     ) -> Result<(), IrError> {
-        let unrolled = unroll_space_instance(space_inst, &self.loop_variable, self.iteration_value)?;
+        let unrolled =
+            unroll_space_instance(space_inst, &self.loop_variable, self.iteration_value)?;
 
         for (_child_net, parent_net) in &unrolled.net_map {
             let net_str: CompactString = parent_net.clone();
@@ -301,10 +277,7 @@ impl StatementProcessor for UnrollContext {
         Ok(())
     }
 
-    fn process_route(
-        &mut self,
-        route: &Route,
-    ) -> Result<(), IrError> {
+    fn process_route(&mut self, route: &Route) -> Result<(), IrError> {
         let unrolled = unroll_route(route, &self.loop_variable, self.iteration_value)?;
         self.routes.push(ContextualItem {
             item: unrolled,
@@ -313,10 +286,7 @@ impl StatementProcessor for UnrollContext {
         Ok(())
     }
 
-    fn process_let(
-        &mut self,
-        let_binding: &hwc_parser::LetBinding,
-    ) -> Result<(), IrError> {
+    fn process_let(&mut self, let_binding: &hwc_parser::LetBinding) -> Result<(), IrError> {
         let value = let_binding
             .value
             .evaluate(&self.eval_context)
@@ -376,8 +346,11 @@ impl StatementProcessor for UnrollContext {
 
         // Merge nested results, substituting the current loop variable
         for contextual_comp in nested_result.components {
-            let unrolled =
-                unroll_component(&contextual_comp.item, &self.loop_variable, self.iteration_value)?;
+            let unrolled = unroll_component(
+                &contextual_comp.item,
+                &self.loop_variable,
+                self.iteration_value,
+            )?;
             self.components.push(ContextualItem {
                 item: unrolled,
                 eval_context: contextual_comp.eval_context,
@@ -385,8 +358,11 @@ impl StatementProcessor for UnrollContext {
         }
 
         for contextual_pour in nested_result.pours {
-            let unrolled =
-                unroll_pour(&contextual_pour.item, &self.loop_variable, self.iteration_value)?;
+            let unrolled = unroll_pour(
+                &contextual_pour.item,
+                &self.loop_variable,
+                self.iteration_value,
+            )?;
             self.pours.push(ContextualItem {
                 item: unrolled,
                 eval_context: contextual_pour.eval_context,
@@ -394,8 +370,11 @@ impl StatementProcessor for UnrollContext {
         }
 
         for contextual_plane in nested_result.planes {
-            let unrolled =
-                unroll_plane(&contextual_plane.item, &self.loop_variable, self.iteration_value)?;
+            let unrolled = unroll_plane(
+                &contextual_plane.item,
+                &self.loop_variable,
+                self.iteration_value,
+            )?;
             self.planes.push(ContextualItem {
                 item: unrolled,
                 eval_context: contextual_plane.eval_context,
@@ -427,8 +406,11 @@ impl StatementProcessor for UnrollContext {
         }
 
         for contextual_route in nested_result.routes {
-            let unrolled =
-                unroll_route(&contextual_route.item, &self.loop_variable, self.iteration_value)?;
+            let unrolled = unroll_route(
+                &contextual_route.item,
+                &self.loop_variable,
+                self.iteration_value,
+            )?;
             self.routes.push(ContextualItem {
                 item: unrolled,
                 eval_context: contextual_route.eval_context,

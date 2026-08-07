@@ -69,10 +69,10 @@
 use crate::geometry_union::{circle_to_path, rect_to_path};
 use crate::scene_graph::trace_geometry;
 use clipper2_rust::{FillRule, Path64};
-use hwc_engine::geometry_router::substrate_types::SubstrateLayerShape;
 use hwc_engine::geometry_router::entity_graph::SubstrateLayerType;
-use hwc_engine::{HardwareSpace, MaterialId};
+use hwc_engine::geometry_router::substrate_types::SubstrateLayerShape;
 use hwc_engine::netlist::NetId;
+use hwc_engine::{HardwareSpace, MaterialId};
 use rustc_hash::FxHashMap;
 
 /// Key for grouping 2D paths that will be unioned together
@@ -113,18 +113,15 @@ pub struct UnifiedCopperContour {
 /// This function uses proper lookup tables and fails fast if data is inconsistent.
 /// It does NOT have hardcoded material names or default values.
 pub fn generate_copper_contours(space: &HardwareSpace) -> Vec<UnifiedCopperContour> {
-   
     let mut pools: FxHashMap<CopperPoolKey, Vec<Path64>> = FxHashMap::default();
 
     // 1. Add substrate layers (pads, pours, contacts)
     //    These are already realized by the compiler into the entity_graph
     let substrate_layers = space.entity_graph.get_substrate_layers();
-    
-   
-    
+
     for layer in substrate_layers {
         // **v0.2.2 PROPER FIX**: Segment Contact layers by stackup
-        // 
+        //
         // Contact layers (vias) span multiple stackup layers. We need to split them
         // into segments so that:
         // - Segments in conductive layers (active, metal) are rendered as solid copper
@@ -134,7 +131,7 @@ pub fn generate_copper_contours(space: &HardwareSpace) -> Vec<UnifiedCopperConto
             segment_contact_by_stackup(layer, &space.stackup_layers, &mut pools);
             continue;
         }
-        
+
         // Pour layers are already properly bounded and can be added directly
         if layer.layer_type != SubstrateLayerType::Pour {
             continue;
@@ -148,8 +145,6 @@ pub fn generate_copper_contours(space: &HardwareSpace) -> Vec<UnifiedCopperConto
             material: layer.material,
             net_id: layer.net,
         };
-
-       
 
         let path = match &layer.shape {
             SubstrateLayerShape::Rect => rect_to_path(&layer.bbox),
@@ -171,15 +166,12 @@ pub fn generate_copper_contours(space: &HardwareSpace) -> Vec<UnifiedCopperConto
     // 2. Add analytic trace geometry
     //    The trace_geometry engine handles proper Z-range resolution
     //    from AnalyticTrace.layer_z_range (stackup-derived)
-  
+
     let trace_pools = trace_geometry::generate_trace_geometry(space);
-    
-    
-    
+
     for (geom_key, mut geom_pool) in trace_pools {
         geom_pool.flush_pending();
-        
-        
+
         // Convert from trace_geometry key to unified key
         let key = CopperPoolKey {
             z_min: geom_key.z_min,
@@ -187,7 +179,7 @@ pub fn generate_copper_contours(space: &HardwareSpace) -> Vec<UnifiedCopperConto
             material: geom_key.material,
             net_id: geom_key.net_id,
         };
-        
+
         pools.entry(key).or_default().extend(geom_pool.paths);
     }
 
@@ -201,7 +193,7 @@ pub fn generate_copper_contours(space: &HardwareSpace) -> Vec<UnifiedCopperConto
             .get_process(via.material_id)
             .map(|process| process == hwc_engine::ManufacturingProcess::Deposited)
             .unwrap_or(false);
-            
+
         if is_deposited_via {
             // IC vias are already in entity_graph as Contact layers, skip
             continue;
@@ -210,10 +202,10 @@ pub fn generate_copper_contours(space: &HardwareSpace) -> Vec<UnifiedCopperConto
         // PCB via: add annular ring pads at top and bottom
         let z_start = via.from_z_nm.min(via.to_z_nm);
         let z_end = via.from_z_nm.max(via.to_z_nm);
-        
+
         // Annular ring: pad extends beyond via barrel
         let pad_radius = via.diameter_nm / 2 + via.annular_ring_nm.max(via.diameter_nm / 4);
-        
+
         // Find the conductor material for pads
         let pad_material_id = if space.material_registry.is_conductor(via.material_id) {
             via.material_id
@@ -239,7 +231,7 @@ pub fn generate_copper_contours(space: &HardwareSpace) -> Vec<UnifiedCopperConto
                 Stackup layers must cover all via landing points.",
                 z_end
             ));
-        
+
         let top_z_min = top_layer.z_bottom;
         let top_z_max = top_layer.z_top;
 
@@ -253,7 +245,7 @@ pub fn generate_copper_contours(space: &HardwareSpace) -> Vec<UnifiedCopperConto
                 Stackup layers must cover all via landing points.",
                 z_start
             ));
-        
+
         let bottom_z_min = bottom_layer.z_bottom;
         let bottom_z_max = bottom_layer.z_top;
 
@@ -264,10 +256,12 @@ pub fn generate_copper_contours(space: &HardwareSpace) -> Vec<UnifiedCopperConto
             material: pad_material_id,
             net_id: via.net_id,
         };
-        pools
-            .entry(top_key)
-            .or_default()
-            .push(circle_to_path(via.position.0, via.position.1, pad_radius, 64));
+        pools.entry(top_key).or_default().push(circle_to_path(
+            via.position.0,
+            via.position.1,
+            pad_radius,
+            64,
+        ));
 
         // Bottom pad
         let bottom_key = CopperPoolKey {
@@ -276,33 +270,25 @@ pub fn generate_copper_contours(space: &HardwareSpace) -> Vec<UnifiedCopperConto
             material: pad_material_id,
             net_id: via.net_id,
         };
-        pools
-            .entry(bottom_key)
-            .or_default()
-            .push(circle_to_path(via.position.0, via.position.1, pad_radius, 64));
+        pools.entry(bottom_key).or_default().push(circle_to_path(
+            via.position.0,
+            via.position.1,
+            pad_radius,
+            64,
+        ));
     }
 
     // 4. Perform Boolean union on each pool
     let mut result = Vec::new();
-    
-   
-    
+
     for (key, paths) in pools {
         if paths.is_empty() {
             continue;
         }
 
-       
-
         // Boolean union to merge overlapping geometry
         let contours = clipper2_rust::union_64(&paths, &Vec::new(), FillRule::NonZero);
-        
-       
-        
-      
-        
-      
-        
+
         if !contours.is_empty() {
             result.push(UnifiedCopperContour { key, contours });
         }
@@ -310,9 +296,7 @@ pub fn generate_copper_contours(space: &HardwareSpace) -> Vec<UnifiedCopperConto
 
     // Sort for deterministic output
     result.sort_by_key(|c| c.key);
-    
-   
-    
+
     result
 }
 
@@ -377,8 +361,8 @@ fn segment_contact_by_stackup(
         }
 
         // **v0.2.3 SMART CUTOUT**: Check if via fully spans this layer
-        let via_fully_spans_layer = segment_z_min == stackup_layer.z_bottom 
-                                    && segment_z_max == stackup_layer.z_top;
+        let via_fully_spans_layer =
+            segment_z_min == stackup_layer.z_bottom && segment_z_max == stackup_layer.z_top;
 
         if stackup_layer.is_routable {
             // Conductive layer (active, poly, metal)
@@ -400,7 +384,7 @@ fn segment_contact_by_stackup(
                 // Via partially penetrates pad → Render via inside, NO hole (no Z-fighting!)
                 eprintln!(
                     "[VIA PARTIAL] Via partially penetrates conductive layer '{}' (Z={}→{}nm, layer={}→{}nm) - embedding without cutout",
-                    stackup_layer.name, segment_z_min, segment_z_max, 
+                    stackup_layer.name, segment_z_min, segment_z_max,
                     stackup_layer.z_bottom, stackup_layer.z_top
                 );
                 // Render via in this segment (it will overlap with pad, but fully inside = no Z-fighting)

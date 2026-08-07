@@ -31,15 +31,9 @@ pub struct PlacedEntity {
 #[derive(Debug, Clone)]
 pub enum EvaluationError {
     /// Entity not yet placed (dependency not resolved)
-    EntityNotPlaced {
-        entity: CompactString,
-        span: Span,
-    },
+    EntityNotPlaced { entity: CompactString, span: Span },
     /// Unknown anchor property
-    UnknownProperty {
-        property: CompactString,
-        span: Span,
-    },
+    UnknownProperty { property: CompactString, span: Span },
     /// Division by zero
     DivisionByZero { span: Span },
     /// Dimensional type mismatch (e.g., length + voltage)
@@ -114,7 +108,7 @@ impl<'a> AnchorEvaluator<'a> {
             Edge::CenterY => Ok((entity.min_y + entity.max_y) / 2),
             Edge::CenterZ => Ok((entity.min_z + entity.max_z) / 2),
             Edge::Center => Ok((entity.min_x + entity.max_x) / 2), // Default to X
-            Edge::TopLeft => Ok(entity.max_y),                      // Y component
+            Edge::TopLeft => Ok(entity.max_y),                     // Y component
             Edge::TopRight => Ok(entity.max_y),
             Edge::BottomLeft => Ok(entity.min_y),
             Edge::BottomRight => Ok(entity.min_y),
@@ -129,7 +123,10 @@ impl<'a> AnchorEvaluator<'a> {
             Expression::FloatLiteral { value, .. } => Ok((*value * 1_000_000.0) as i64),
 
             Expression::Measurement {
-                value, unit, span: _, ..
+                value,
+                unit,
+                span: _,
+                ..
             } => {
                 let pm = measurement_to_picometers(*value, unit);
                 Ok(pm)
@@ -182,14 +179,18 @@ impl<'a> AnchorEvaluator<'a> {
                     BinaryOperator::Multiply => Ok(left_val * right_val),
                     BinaryOperator::Divide => {
                         if right_val == 0 {
-                            Err(EvaluationError::DivisionByZero { span: Span::new(0, 0) })
+                            Err(EvaluationError::DivisionByZero {
+                                span: Span::new(0, 0),
+                            })
                         } else {
                             Ok(left_val / right_val)
                         }
                     }
                     BinaryOperator::Modulo => {
                         if right_val == 0 {
-                            Err(EvaluationError::DivisionByZero { span: Span::new(0, 0) })
+                            Err(EvaluationError::DivisionByZero {
+                                span: Span::new(0, 0),
+                            })
                         } else {
                             Ok(left_val % right_val)
                         }
@@ -199,11 +200,23 @@ impl<'a> AnchorEvaluator<'a> {
                     BinaryOperator::NotEqual => Ok(if left_val != right_val { 1 } else { 0 }),
                     BinaryOperator::LessThan => Ok(if left_val < right_val { 1 } else { 0 }),
                     BinaryOperator::GreaterThan => Ok(if left_val > right_val { 1 } else { 0 }),
-                    BinaryOperator::LessThanOrEqual => Ok(if left_val <= right_val { 1 } else { 0 }),
-                    BinaryOperator::GreaterThanOrEqual => Ok(if left_val >= right_val { 1 } else { 0 }),
+                    BinaryOperator::LessThanOrEqual => {
+                        Ok(if left_val <= right_val { 1 } else { 0 })
+                    }
+                    BinaryOperator::GreaterThanOrEqual => {
+                        Ok(if left_val >= right_val { 1 } else { 0 })
+                    }
                     // Boolean operators (treat non-zero as true)
-                    BinaryOperator::And => Ok(if left_val != 0 && right_val != 0 { 1 } else { 0 }),
-                    BinaryOperator::Or => Ok(if left_val != 0 || right_val != 0 { 1 } else { 0 }),
+                    BinaryOperator::And => Ok(if left_val != 0 && right_val != 0 {
+                        1
+                    } else {
+                        0
+                    }),
+                    BinaryOperator::Or => Ok(if left_val != 0 || right_val != 0 {
+                        1
+                    } else {
+                        0
+                    }),
                 }
             }
 
@@ -213,23 +226,27 @@ impl<'a> AnchorEvaluator<'a> {
                 Ok(0) // Placeholder - coordinates are handled separately
             }
 
-            Expression::FunctionCall { name, arguments: _, span } => {
+            Expression::FunctionCall {
+                name,
+                arguments: _,
+                span,
+            } => {
                 // Function calls need evaluation context - delegate to expression evaluator
                 let eval_context = hwc_parser::EvaluationContext::default();
-                let result = expr.evaluate(&eval_context).map_err(|e| {
-                    EvaluationError::EntityNotPlaced {
-                        entity: format!("function '{}': {}", name, e).into(),
-                        span: *span,
-                    }
-                })?;
-                
+                let result =
+                    expr.evaluate(&eval_context)
+                        .map_err(|e| EvaluationError::EntityNotPlaced {
+                            entity: format!("function '{}': {}", name, e).into(),
+                            span: *span,
+                        })?;
+
                 // Convert result to picometers
-                result.to_picometers().map_err(|e| {
-                    EvaluationError::EntityNotPlaced {
+                result
+                    .to_picometers()
+                    .map_err(|e| EvaluationError::EntityNotPlaced {
                         entity: format!("function result: {}", e).into(),
                         span: *span,
-                    }
-                })
+                    })
             }
         }
     }

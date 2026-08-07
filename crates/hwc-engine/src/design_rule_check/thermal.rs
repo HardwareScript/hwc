@@ -55,28 +55,24 @@ pub fn validate_current_density(
                             "[DRC] FATAL: material_id {} not found in registry for net '{}'.",
                             route.material, route.net_name
                         ))?;
-                    
                     let resistivity = props.get("resistivity").ok_or_else(|| format!(
                         "[DRC] FATAL: material for net '{}' has no 'resistivity' property. \
                          Add resistivity to your material definition.",
                         route.net_name
                     ))?;
-                    
                     let thermal_k = props.get("thermal_conductivity").ok_or_else(|| format!(
                         "[DRC] FATAL: material for net '{}' has no 'thermal_conductivity' property. \
                          Add thermal_conductivity to your material definition.",
                         route.net_name
                     ))?;
-                    
                     let max_density_a_mm2 = props.get("max_current_density").ok_or_else(|| format!(
                         "[DRC] FATAL: material for net '{}' has no 'max_current_density' property. \
                          Add max_current_density to your material definition.",
                         route.net_name
                     ))?;
-                    
+
                     eprintln!("[DRC THERMAL DEBUG] Found props for material {} (net '{}'): resistivity={}, thermal_k={}, max_i={}", 
                         route.material, route.net_name, resistivity, thermal_k, max_density_a_mm2);
-
                     // CHECK 1: Does actual operating current exceed the route's declared capability?
                     if route.current.actual_ma > route.current.limit_ma {
                         let location = route

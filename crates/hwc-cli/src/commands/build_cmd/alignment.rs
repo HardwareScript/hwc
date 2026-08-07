@@ -70,13 +70,17 @@ pub fn validate_alignment(
         // **v0.2.2: Use device_instances from compiler instead of re-extracting**
         // The compiler already discovered devices during populate_device_instances(),
         // so we just convert that to PhysicalNetlist format for alignment/export.
-        let extracted_netlist = hwc_compiler::ir::device_registry::device_instances_to_physical_netlist(
-            space,
-            Some(space_def),
-            Some(symbol_table),
+        let extracted_netlist =
+            hwc_compiler::ir::device_registry::device_instances_to_physical_netlist(
+                space,
+                Some(space_def),
+                Some(symbol_table),
+            );
+
+        println!(
+            "   ✅ Physical netlist extracted: {} devices",
+            extracted_netlist.devices.len()
         );
-        
-        println!("   ✅ Physical netlist extracted: {} devices", extracted_netlist.devices.len());
 
         // Extract module definition for alignment validation
         let _module_def = ast.definitions.iter().find_map(|def| {

@@ -34,10 +34,10 @@
 //!     dummy_fill_pattern: DotGrid(size: 2um, spacing: 4um)
 //! ```
 
-use crate::netlist::NetId;
 use crate::geometry::{BoundingBox, Point3D};
 use crate::geometry_router::substrate_types::SubstrateLayerType;
 use crate::geometry_router::EntityGraph;
+use crate::netlist::NetId;
 
 /// Configuration for dummy metal fill (thieving).
 ///
@@ -429,8 +429,8 @@ impl DummyFillEngine {
                 if !has_conflict {
                     // v0.1.8: Register dummy as native SubstrateLayer (Pour, net_id=0)
                     entity_graph.add_substrate_layer(
-                        0u8, // material placeholder — will be resolved by stackup
-                        NetId::UNCONNECTED,   // net_id = 0 (UNCONNECTED)
+                        0u8,                // material placeholder — will be resolved by stackup
+                        NetId::UNCONNECTED, // net_id = 0 (UNCONNECTED)
                         dummy_bbox,
                         SubstrateLayerType::Pour,
                     );

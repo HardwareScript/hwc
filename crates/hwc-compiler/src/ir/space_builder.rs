@@ -38,7 +38,8 @@ pub fn create_hardware_space(
         .resolution
         .as_ref()
         .map(|res_measurement| {
-            measurement_to_nm(res_measurement, symbol_table, eval_context).map_err(IrError::InvalidExpression)
+            measurement_to_nm(res_measurement, symbol_table, eval_context)
+                .map_err(IrError::InvalidExpression)
         })
         .transpose()?
         .ok_or_else(|| IrError::MissingGrid)?;
@@ -81,7 +82,7 @@ pub fn create_hardware_space(
 
         // Extract ALL physical properties dynamically (no hardcoding!)
         let mut props = hwc_engine::material::MaterialPhysicalProps::new();
-        
+
         for prop in &mat_def.properties {
             let value = match &prop.value {
                 hwc_parser::PropertyValue::Measurement(m) => {
@@ -89,12 +90,12 @@ pub fn create_hardware_space(
                     match prop.key.as_str() {
                         "thickness" => {
                             // Convert to nanometers - MUST succeed
-                            measurement_to_nm(m, symbol_table, eval_context)
-                                .map_err(|e| IrError::UnitConversion {
+                            measurement_to_nm(m, symbol_table, eval_context).map_err(|e| {
+                                IrError::UnitConversion {
                                     message: e.to_string(),
                                     span: None,
-                                })?
-                                as f64
+                                }
+                            })? as f64
                         }
                         _ => m.value, // Use value as-is for other properties
                     }
@@ -102,14 +103,14 @@ pub fn create_hardware_space(
                 hwc_parser::PropertyValue::Number(v) => *v,
                 _ => continue, // Skip non-numeric properties
             };
-            
+
             props.set(prop.key.as_str(), value);
         }
-        
+
         // Store properties in material registry
         if let Some(id) = material_registry.get_id(&name) {
             material_registry.set_physical_props(id, props);
-            
+
             // Validate conductor materials have required properties
             if let Err(msg) = material_registry.validate_conductor_props(id, &name) {
                 return Err(IrError::MissingPhysicalProperty {
@@ -140,7 +141,8 @@ pub fn create_hardware_space(
         space_name: space_def.name.to_string(),
         hint: "Every space must declare a coordinate system origin.\n\
                Add to your space definition:\n  origin: bl by b\n\n\
-               Options: bl (bottom-left), br (bottom-right), tl (top-left), tr (top-right)".into(),
+               Options: bl (bottom-left), br (bottom-right), tl (top-left), tr (top-right)"
+            .into(),
     })?;
 
     // Create hardware space
@@ -190,9 +192,10 @@ pub fn create_hardware_space(
         };
         space.set_net_classification(net_decl.name.clone(), classification);
 
-        let is_asic = space.fabrication_constraints.as_ref().is_some_and(|c| {
-            c.technology.is_asic()
-        });
+        let is_asic = space
+            .fabrication_constraints
+            .as_ref()
+            .is_some_and(|c| c.technology.is_asic());
         let min_width = space.fabrication_constraints.as_ref()
             .map(|c| c.trace.min_width_nm)
             .ok_or_else(|| IrError::MissingAsicConstraint {
@@ -207,23 +210,32 @@ pub fn create_hardware_space(
         // v0.1.7: Set net frequency on the netlist (for SI-aware routing)
         // v0.2.1: Convert using unit registry
         if let Some(ref freq_measurement) = net_decl.frequency {
-            let freq_hz = freq_measurement.to_hertz(unit_registry)
-                .map_err(|e| IrError::UnitConversion {
-                    message: format!("Failed to convert frequency for net '{}': {}", net_decl.name, e),
-                    span: Some(miette::SourceSpan::new(
-                        freq_measurement.span.start.into(),
-                        (freq_measurement.span.end - freq_measurement.span.start).into(),
-                    )),
-                })?;
+            let freq_hz =
+                freq_measurement
+                    .to_hertz(unit_registry)
+                    .map_err(|e| IrError::UnitConversion {
+                        message: format!(
+                            "Failed to convert frequency for net '{}': {}",
+                            net_decl.name, e
+                        ),
+                        span: Some(miette::SourceSpan::new(
+                            freq_measurement.span.start.into(),
+                            (freq_measurement.span.end - freq_measurement.span.start).into(),
+                        )),
+                    })?;
             space.netlist.set_net_frequency(net_id, freq_hz);
         }
 
         // v0.1.8: Set net current on the netlist (for thermal/EM validation)
         // v0.2.1: Convert using unit registry
         if let Some(ref current_measurement) = net_decl.current {
-            let current_ma = current_measurement.to_milliamperes(unit_registry)
+            let current_ma = current_measurement
+                .to_milliamperes(unit_registry)
                 .map_err(|e| IrError::UnitConversion {
-                    message: format!("Failed to convert current for net '{}': {}", net_decl.name, e),
+                    message: format!(
+                        "Failed to convert current for net '{}': {}",
+                        net_decl.name, e
+                    ),
                     span: Some(miette::SourceSpan::new(
                         current_measurement.span.start.into(),
                         (current_measurement.span.end - current_measurement.span.start).into(),
@@ -308,9 +320,11 @@ pub fn validate_asic_constraints(
         for statement in &space_def.statements {
             if let hwc_parser::SpaceTopLevelStatement::Route(route) = statement {
                 if let Some(w_expr) = &route.width {
-                    if let Ok(width_nm) =
-                        crate::ir::conversions::evaluate_expression_to_nm(w_expr, symbol_table, eval_context)
-                    {
+                    if let Ok(width_nm) = crate::ir::conversions::evaluate_expression_to_nm(
+                        w_expr,
+                        symbol_table,
+                        eval_context,
+                    ) {
                         if width_nm < pdk_min_width_nm {
                             return Err(IrError::MissingAsicConstraint {
                                 message: format!(
@@ -406,7 +420,13 @@ mod tests {
         let symbol_table = crate::SymbolTable::new();
         let unit_registry = hwc_types::UnitRegistry::new(vec![]);
 
-        let space = create_hardware_space(space_def, &symbol_table, &hwc_parser::EvaluationContext::default(), &unit_registry).unwrap();
+        let space = create_hardware_space(
+            space_def,
+            &symbol_table,
+            &hwc_parser::EvaluationContext::default(),
+            &unit_registry,
+        )
+        .unwrap();
         assert_eq!(space.name, "Test");
         assert_eq!(space.dimensions.width_nm, 50_000_000);
         // Resolution is 100um (100_000 nm)

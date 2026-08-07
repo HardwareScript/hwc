@@ -280,13 +280,16 @@ impl MaterialRegistry {
         if !self.is_conductor(id) {
             return Ok(());
         }
-        
+
         let props = self.get_physical_props(id).ok_or_else(|| {
-            format!("Conductor material '{}' has no physical properties defined", name)
+            format!(
+                "Conductor material '{}' has no physical properties defined",
+                name
+            )
         })?;
-        
+
         let mut missing = Vec::new();
-        
+
         if !props.has("resistivity") {
             missing.push("resistivity");
         }
@@ -296,7 +299,7 @@ impl MaterialRegistry {
         if !props.has("max_current_density") {
             missing.push("max_current_density");
         }
-        
+
         if missing.is_empty() {
             Ok(())
         } else {

@@ -9,7 +9,10 @@ use hwc_parser::ast::device::SpiceParameterStyle;
 /// This ensures the compiler respects what the .hw files declare, not what we guess.
 ///
 /// If a device is missing SpiceExportInfo, we ERROR LOUDLY rather than guessing.
-pub fn format_spice(space: &HardwareSpace, symbol_table: &SymbolTable) -> Result<CompactString, String> {
+pub fn format_spice(
+    space: &HardwareSpace,
+    symbol_table: &SymbolTable,
+) -> Result<CompactString, String> {
     let mut spice = String::new();
     let mut errors = Vec::new();
 
@@ -45,13 +48,16 @@ pub fn format_spice(space: &HardwareSpace, symbol_table: &SymbolTable) -> Result
 
         // Build the SPICE card using contract metadata
         let nc: CompactString = "nc".into();
-        
+
         // Start with prefix and name: R1, D1, M1, etc.
         spice.push_str(&format!("{}{} ", spice_info.prefix, device.name));
 
         // Add terminals in the order specified by the contract
         for terminal_name in &spice_info.terminal_order {
-            let net = device.terminal_nets.get(terminal_name.as_str()).unwrap_or(&nc);
+            let net = device
+                .terminal_nets
+                .get(terminal_name.as_str())
+                .unwrap_or(&nc);
             spice.push_str(&format!("{} ", net));
         }
 

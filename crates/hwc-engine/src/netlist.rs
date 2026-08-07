@@ -55,8 +55,6 @@ impl PinId {
     }
 }
 
-
-
 /// Component data stored in the arena.
 #[derive(Clone, Debug)]
 pub struct ComponentData {

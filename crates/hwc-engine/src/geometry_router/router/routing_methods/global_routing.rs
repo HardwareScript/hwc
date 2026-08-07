@@ -33,10 +33,8 @@ impl GeometryRouter {
 
         // v0.2.1: Technology from profile (required field)
         let strategy = fabrication.technology;
-        let port_escape_clearance = strategy.port_escape_clearance(
-            trace_width_nm,
-            fabrication.min_trace_spacing_nm,
-        );
+        let port_escape_clearance =
+            strategy.port_escape_clearance(trace_width_nm, fabrication.min_trace_spacing_nm);
 
         // Try 1: component_metadata lookup (fast, exact)
         let maybe_bbox = entity_graph
@@ -162,20 +160,22 @@ impl GeometryRouter {
                 p.z.min(max_valid_z).max(0),
             )
         };
-        
+
         // v0.2.0: PhysicalTruth - Structural Solution (Path Stitching Pattern)
         // In ASIC mode, "layer:" is a routing preference, NOT a coordinate override.
         // We route on the preferred layer and stitch vertical segments to connect the pins.
         let start = clamp_coords(route.start);
         let goal = clamp_coords(route.goal);
         let target_z_preference = self.net_layer_targets.get(&route.net_id).copied();
-        
-       
+
         // Determine the search points for routing
         // If we have a layer preference, route on that layer, otherwise route at pin heights
         let (search_start, search_goal) = if let Some(target_z) = target_z_preference {
             eprintln!("  Routing Layer (preferred): Z={}nm", target_z);
-            eprintln!("  Strategy: Route on Z={}, then stitch vertical segments to pins", target_z);
+            eprintln!(
+                "  Strategy: Route on Z={}, then stitch vertical segments to pins",
+                target_z
+            );
             (
                 Point3D::new(start.x, start.y, target_z),
                 Point3D::new(goal.x, goal.y, target_z),
@@ -201,70 +201,74 @@ impl GeometryRouter {
         let exempt_net_ids = vec![route.net_id.raw() as usize];
 
         // Route on the search layer (either pin heights or preferred routing layer)
-        let routing_path = if let Some(&(start_normal, goal_normal)) = self.net_normals.get(&route.net_id) {
-            let escape_stub_nm = self.net_escape_stubs.get(&route.net_id).copied()
-                .expect("COMPILER BUG: Net has normals but no escape_stub");
-            
-            eprintln!("[GLOBAL ROUTING] Net {} using perpendicular escape: stub={}nm", route.net_id.raw(), escape_stub_nm);
-            
-            match topo_router.route_with_perpendicular_escape(
-                search_start,
-                search_goal,
-                start_normal,
-                goal_normal,
-                escape_stub_nm,
-                &spatial_index,
-                &board_bounds,
-                &exempt_net_ids,
-            ) {
-                Some(topo_path) if topo_path.waypoints.len() >= 2 => topo_path.waypoints,
-                _ => {
-                    return Err(RoutingError::NoPathFound {
-                        net_id: route.net_id,
-                        start: route.start,
-                        goal: route.goal,
-                    });
+        let routing_path =
+            if let Some(&(start_normal, goal_normal)) = self.net_normals.get(&route.net_id) {
+                let escape_stub_nm = self
+                    .net_escape_stubs
+                    .get(&route.net_id)
+                    .copied()
+                    .expect("COMPILER BUG: Net has normals but no escape_stub");
+
+                eprintln!(
+                    "[GLOBAL ROUTING] Net {} using perpendicular escape: stub={}nm",
+                    route.net_id.raw(),
+                    escape_stub_nm
+                );
+
+                match topo_router.route_with_perpendicular_escape(
+                    search_start,
+                    search_goal,
+                    start_normal,
+                    goal_normal,
+                    escape_stub_nm,
+                    &spatial_index,
+                    &board_bounds,
+                    &exempt_net_ids,
+                ) {
+                    Some(topo_path) if topo_path.waypoints.len() >= 2 => topo_path.waypoints,
+                    _ => {
+                        return Err(RoutingError::NoPathFound {
+                            net_id: route.net_id,
+                            start: route.start,
+                            goal: route.goal,
+                        });
+                    }
                 }
-            }
-        } else {
-            match topo_router.route_with_exemptions(
-                search_start,
-                search_goal,
-                &spatial_index,
-                &board_bounds,
-                &exempt_net_ids,
-            ) {
-                Some(topo_path) if topo_path.waypoints.len() >= 2 => topo_path.waypoints,
-                _ => {
-                    return Err(RoutingError::NoPathFound {
-                        net_id: route.net_id,
-                        start: route.start,
-                        goal: route.goal,
-                    });
+            } else {
+                match topo_router.route_with_exemptions(
+                    search_start,
+                    search_goal,
+                    &spatial_index,
+                    &board_bounds,
+                    &exempt_net_ids,
+                ) {
+                    Some(topo_path) if topo_path.waypoints.len() >= 2 => topo_path.waypoints,
+                    _ => {
+                        return Err(RoutingError::NoPathFound {
+                            net_id: route.net_id,
+                            start: route.start,
+                            goal: route.goal,
+                        });
+                    }
                 }
-            }
-        };
+            };
 
         // v0.2.0: PATH STITCHING - Build the 3D path with vertical segments
         // Structure: [Physical Pin Start] -> [Routing Layer] -> ... -> [Routing Layer] -> [Physical Pin Goal]
         let mut final_path = Vec::new();
-        
+
         // Add entry vertical segment if start pin is not on routing layer
         if start.z != search_start.z {
             final_path.push(start);
-            
         }
-        
+
         // Add the routed path on the target layer
         final_path.extend(routing_path);
-        
+
         // Add exit vertical segment if goal pin is not on routing layer
         if goal.z != search_goal.z {
             final_path.push(goal);
-           
         }
-        
-       
 
         // Extract vias from the stitched path - this will detect the Z-transitions
         let detected_vias = self.extract_vias_from_path(&final_path, route.net_id);
@@ -274,8 +278,6 @@ impl GeometryRouter {
             .iter()
             .flat_map(|via| self.unroll_detected_via(via))
             .collect();
-
-       
 
         let mut placed_vias = Vec::new();
         for via in unrolled_vias {
@@ -294,12 +296,17 @@ impl GeometryRouter {
             self.trace_width_nm,
         );
 
-       
         for (i, p) in final_path.iter().enumerate().take(6) {
-            eprintln!("[ROUTE_NET_GLOBAL DEBUG]     [{}]: ({},{},{})", i, p.x, p.y, p.z);
+            eprintln!(
+                "[ROUTE_NET_GLOBAL DEBUG]     [{}]: ({},{},{})",
+                i, p.x, p.y, p.z
+            );
         }
         if final_path.len() > 6 {
-            eprintln!("[ROUTE_NET_GLOBAL DEBUG]     ... and {} more points", final_path.len() - 6);
+            eprintln!(
+                "[ROUTE_NET_GLOBAL DEBUG]     ... and {} more points",
+                final_path.len() - 6
+            );
         }
 
         Ok(RoutedNet {
@@ -356,18 +363,24 @@ impl GeometryRouter {
                     goal: points[i + 1],
                 };
 
-               
-
                 let routed = self.route_net_global(entity_graph, &route)?;
 
-               
                 if let Some(path) = routed.paths.first() {
-                    eprintln!("[EXPLICIT_GLOBAL DEBUG]   Returned path length: {}", path.len());
+                    eprintln!(
+                        "[EXPLICIT_GLOBAL DEBUG]   Returned path length: {}",
+                        path.len()
+                    );
                     for (j, p) in path.iter().enumerate().take(4) {
-                        eprintln!("[EXPLICIT_GLOBAL DEBUG]   path[{}]: ({},{},{})", j, p.x, p.y, p.z);
+                        eprintln!(
+                            "[EXPLICIT_GLOBAL DEBUG]   path[{}]: ({},{},{})",
+                            j, p.x, p.y, p.z
+                        );
                     }
                     if path.len() > 4 {
-                        eprintln!("[EXPLICIT_GLOBAL DEBUG]   ... and {} more points", path.len() - 4);
+                        eprintln!(
+                            "[EXPLICIT_GLOBAL DEBUG]   ... and {} more points",
+                            path.len() - 4
+                        );
                     }
                 }
                 if let Some(path) = routed.paths.into_iter().next() {
@@ -384,13 +397,23 @@ impl GeometryRouter {
             result.vias.extend(net_vias);
         }
 
-        
         for (net_id, path_segments) in &result.paths {
-            eprintln!("[EXPLICIT_GLOBAL DEBUG]   Net {:?}: {} segments", net_id, path_segments.len());
+            eprintln!(
+                "[EXPLICIT_GLOBAL DEBUG]   Net {:?}: {} segments",
+                net_id,
+                path_segments.len()
+            );
             for (seg_idx, segment) in path_segments.iter().enumerate() {
-                eprintln!("[EXPLICIT_GLOBAL DEBUG]     Segment {}: {} points", seg_idx, segment.len());
+                eprintln!(
+                    "[EXPLICIT_GLOBAL DEBUG]     Segment {}: {} points",
+                    seg_idx,
+                    segment.len()
+                );
                 for (pt_idx, pt) in segment.iter().enumerate().take(2) {
-                    eprintln!("[EXPLICIT_GLOBAL DEBUG]       Point {}: ({},{},{})", pt_idx, pt.x, pt.y, pt.z);
+                    eprintln!(
+                        "[EXPLICIT_GLOBAL DEBUG]       Point {}: ({},{},{})",
+                        pt_idx, pt.x, pt.y, pt.z
+                    );
                 }
             }
         }

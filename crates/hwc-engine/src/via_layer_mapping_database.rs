@@ -25,11 +25,7 @@ impl std::fmt::Display for ViaLayerMappingError {
                 write!(f, "Material '{}' not found in registry", material)
             }
             Self::LayerNotFoundForMaterial { material } => {
-                write!(
-                    f,
-                    "No stackup layer found for material '{}'",
-                    material
-                )
+                write!(f, "No stackup layer found for material '{}'", material)
             }
             Self::ViaConnectionNotFound {
                 from_material,
@@ -79,19 +75,14 @@ impl ViaLayerMappingDatabase {
     ///
     /// Each bridge rule defines a material transition. The stackup provides
     /// the layer Z coordinates for each material.
-    pub fn from_stackup(
-        stackup: &[StackupLayer],
-        material_registry: &MaterialRegistry,
-    ) -> Self {
+    pub fn from_stackup(stackup: &[StackupLayer], material_registry: &MaterialRegistry) -> Self {
         let mut db = Self {
             via_specs: FxHashMap::default(),
         };
 
         // Generate via connections for all adjacent conductive layer pairs
-        let conductive_layers: Vec<&StackupLayer> = stackup
-            .iter()
-            .filter(|l| l.is_routable)
-            .collect();
+        let conductive_layers: Vec<&StackupLayer> =
+            stackup.iter().filter(|l| l.is_routable).collect();
 
         for window in conductive_layers.windows(2) {
             let from_layer = window[0];
@@ -203,25 +194,21 @@ impl ViaLayerMappingDatabase {
         to_material: &str,
         material_registry: &MaterialRegistry,
     ) -> Result<&ViaConnection, ViaLayerMappingError> {
-        let from_id = material_registry
-            .get_id(from_material)
-            .ok_or_else(|| ViaLayerMappingError::MaterialNotFound {
+        let from_id = material_registry.get_id(from_material).ok_or_else(|| {
+            ViaLayerMappingError::MaterialNotFound {
                 material: from_material.into(),
-            })?;
-        let to_id = material_registry
-            .get_id(to_material)
-            .ok_or_else(|| ViaLayerMappingError::MaterialNotFound {
+            }
+        })?;
+        let to_id = material_registry.get_id(to_material).ok_or_else(|| {
+            ViaLayerMappingError::MaterialNotFound {
                 material: to_material.into(),
-            })?;
+            }
+        })?;
         self.get_via_connection(from_id, to_id)
     }
 
     /// Check if a via connection exists for a material pair.
-    pub fn has_via_connection(
-        &self,
-        from_material: MaterialId,
-        to_material: MaterialId,
-    ) -> bool {
+    pub fn has_via_connection(&self, from_material: MaterialId, to_material: MaterialId) -> bool {
         self.via_specs.contains_key(&(from_material, to_material))
     }
 
@@ -255,14 +242,7 @@ mod tests {
     fn make_test_data() -> (Vec<StackupLayer>, MaterialRegistry) {
         let stackup = vec![
             StackupLayer::new("poly".into(), 400, 850, 450, "Polysilicon".into(), true),
-            StackupLayer::new(
-                "metal1".into(),
-                1250,
-                1650,
-                400,
-                "Aluminum".into(),
-                true,
-            ),
+            StackupLayer::new("metal1".into(), 1250, 1650, 400, "Aluminum".into(), true),
         ];
 
         let mut reg = MaterialRegistry::new();

@@ -119,19 +119,28 @@ impl<'a> AutoRouter<'a> {
 
         // v0.1.9: Extract explicit segments WITH normals for perpendicular escape
         let mut explicit_segments: Vec<(NetId, Vec<Point3D>)> = Vec::new();
-        let mut net_normals: FxHashMap<NetId, (hwc_engine::geometry_router::connection_interface::Normal2D, hwc_engine::geometry_router::connection_interface::Normal2D)> = FxHashMap::default();
+        let mut net_normals: FxHashMap<
+            NetId,
+            (
+                hwc_engine::geometry_router::connection_interface::Normal2D,
+                hwc_engine::geometry_router::connection_interface::Normal2D,
+            ),
+        > = FxHashMap::default();
         let mut net_escape_stubs: FxHashMap<NetId, i64> = FxHashMap::default();
 
         // v0.1.9: Build a map from route index to escape_stub from original parser routes
-        let route_escape_stubs: Vec<Option<i64>> = self.config.auto_routes
+        let route_escape_stubs: Vec<Option<i64>> = self
+            .config
+            .auto_routes
             .iter()
             .map(|route| {
-                route.escape_stub.as_ref().and_then(|expr| {
-                    self.evaluate_escape_stub_expression(expr).ok()
-                })
+                route
+                    .escape_stub
+                    .as_ref()
+                    .and_then(|expr| self.evaluate_escape_stub_expression(expr).ok())
             })
             .collect();
-        
+
         // NATIVE FIX: Get global default escape_stub from profile (REQUIRED)
         // Profile measurements don't contain pdk.* references, so we can use simple conversion
         let global_escape_stub_nm = self
@@ -153,44 +162,50 @@ impl<'a> AutoRouter<'a> {
             })?;
 
         for (idx, resolved) in data.resolved_routes.iter().enumerate() {
-            match crate::ir::routing::resolve_route_boundary_points(self.space, resolved, resolved.width_nm) {
+            match crate::ir::routing::resolve_route_boundary_points(
+                self.space,
+                resolved,
+                resolved.width_nm,
+            ) {
                 Ok((start, goal, start_normal, goal_normal)) => {
                     eprintln!("[ENGINE DEBUG] Route {} ({}): boundary resolution returned start=({},{},{}), goal=({},{},{})",
                         idx, resolved.net_name, start.x, start.y, start.z, goal.x, goal.y, goal.z);
-                    
+
                     explicit_segments.push((resolved.net_id, vec![start, goal]));
-                    
-                    eprintln!("[ENGINE DEBUG] Route {} ({}): pushed to explicit_segments",
-                        idx, resolved.net_name);
-                    
+
+                    eprintln!(
+                        "[ENGINE DEBUG] Route {} ({}): pushed to explicit_segments",
+                        idx, resolved.net_name
+                    );
+
                     // Convert Point3D normals (i64) to Normal2D (i32) - safe for unit vectors scaled by 10^9
-                    let start_normal_2d = hwc_engine::geometry_router::connection_interface::Normal2D {
-                        x: start_normal.x as i32,
-                        y: start_normal.y as i32,
-                    };
-                    let goal_normal_2d = hwc_engine::geometry_router::connection_interface::Normal2D {
-                        x: goal_normal.x as i32,
-                        y: goal_normal.y as i32,
-                    };
+                    let start_normal_2d =
+                        hwc_engine::geometry_router::connection_interface::Normal2D {
+                            x: start_normal.x as i32,
+                            y: start_normal.y as i32,
+                        };
+                    let goal_normal_2d =
+                        hwc_engine::geometry_router::connection_interface::Normal2D {
+                            x: goal_normal.x as i32,
+                            y: goal_normal.y as i32,
+                        };
                     net_normals.insert(resolved.net_id, (start_normal_2d, goal_normal_2d));
-                    
+
                     // v0.1.9 NATIVE FIX: Resolve escape_stub with proper authority hierarchy:
                     // 1. Route-specific override (highest priority)
                     // 2. Intent-based override (from net_type)
                     // 3. Profile global default (required, no fallback)
-                    let escape_stub_nm = if let Some(Some(route_override)) = route_escape_stubs.get(idx) {
+                    let escape_stub_nm = if let Some(Some(route_override)) =
+                        route_escape_stubs.get(idx)
+                    {
                         // Route-specific escape_stub takes highest priority
-                       
+
                         *route_override
                     } else if let Some(intent_name) = data.net_intents.get(&resolved.net_name) {
-                       
                         // Look up intent's escape_stub
                         self.profile
                             .and_then(|p| p.intents.iter().find(|pi| pi.name.name == *intent_name))
-                            .and_then(|pi| {
-                               
-                                pi.escape_stub.as_ref()
-                            })
+                            .and_then(|pi| pi.escape_stub.as_ref())
                             .map(|m| {
                                 // Simple unit conversion - profile measurements are literals
                                 let nm = match m.unit {
@@ -200,21 +215,17 @@ impl<'a> AutoRouter<'a> {
                                     hwc_parser::Unit::Centimeter => (m.value * 10_000_000.0) as i64,
                                     _ => panic!("Invalid unit for escape_stub: {:?}", m.unit),
                                 };
-                               
+
                                 nm
                             })
-                            .unwrap_or_else(|| {
-                                
-                                global_escape_stub_nm
-                            })
+                            .unwrap_or_else(|| global_escape_stub_nm)
                     } else {
                         // No route override, no intent -> use global (which is required to exist)
-                       
+
                         global_escape_stub_nm
                     };
-                    
+
                     net_escape_stubs.insert(resolved.net_id, escape_stub_nm);
-                   
                 }
                 Err(e) => {
                     eprintln!("[ROUTER WARNING] Failed to resolve boundary points for net '{}': {:?} - skipping", resolved.net_name, e);
@@ -239,9 +250,17 @@ impl<'a> AutoRouter<'a> {
 
         let net_trace_widths_by_id = self.build_net_trace_widths(data);
 
-        eprintln!("[ENGINE DEBUG] About to call route_space with {} explicit segments:", explicit_segments.len());
+        eprintln!(
+            "[ENGINE DEBUG] About to call route_space with {} explicit segments:",
+            explicit_segments.len()
+        );
         for (i, (net_id, points)) in explicit_segments.iter().enumerate() {
-            eprintln!("[ENGINE DEBUG]   Segment {} (net {:?}): {} points", i, net_id, points.len());
+            eprintln!(
+                "[ENGINE DEBUG]   Segment {} (net {:?}): {} points",
+                i,
+                net_id,
+                points.len()
+            );
             for (j, p) in points.iter().enumerate() {
                 eprintln!("[ENGINE DEBUG]     Point {}: ({},{},{})", j, p.x, p.y, p.z);
             }
@@ -462,7 +481,10 @@ impl<'a> AutoRouter<'a> {
 
 impl<'a> AutoRouter<'a> {
     /// v0.1.9: Helper to evaluate escape_stub expression to nanometers
-    fn evaluate_escape_stub_expression(&self, expr: &hwc_parser::Expression) -> Result<i64, IrError> {
+    fn evaluate_escape_stub_expression(
+        &self,
+        expr: &hwc_parser::Expression,
+    ) -> Result<i64, IrError> {
         match expr {
             hwc_parser::Expression::Literal { value, .. } => Ok(*value),
             hwc_parser::Expression::FloatLiteral { value, .. } => Ok(*value as i64),
@@ -478,12 +500,12 @@ impl<'a> AutoRouter<'a> {
                     }),
                 };
                 Ok(nm)
-            },
+            }
             _ => Err(IrError::InvalidRouteExpression {
                 expression: format!("{:?}", expr),
-                reason: "escape_stub must be a measurement expression (e.g., '500nm', '1um')".into(),
+                reason: "escape_stub must be a measurement expression (e.g., '500nm', '1um')"
+                    .into(),
             }),
         }
     }
-
 }

@@ -68,8 +68,8 @@ pub enum SpaceTopLevelStatement {
     Expose(Expose),
     RouteNetPolicy(RouteNetPolicy),
     Region(RegionDefinition), // v0.2.0: Region declaration
-    Let(LetBinding),           // v0.2.0: Local variable binding
-    Const(ConstBinding),       // v0.2.1: Immutable constant binding
+    Let(LetBinding),          // v0.2.0: Local variable binding
+    Const(ConstBinding),      // v0.2.1: Immutable constant binding
 }
 
 /// v0.1.8: Prescriptive net-scoped route policy

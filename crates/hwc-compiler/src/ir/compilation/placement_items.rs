@@ -1,4 +1,4 @@
-use crate::ir::placement_item::{PlacementItem, ContextualPlacementItem};
+use crate::ir::placement_item::{ContextualPlacementItem, PlacementItem};
 use crate::SymbolTable;
 
 /// Collect all placement items from space statements, unrolling for-loops inline
@@ -62,8 +62,11 @@ pub fn collect_placement_items(
                 });
             }
             hwc_parser::SpaceTopLevelStatement::ForLoop(for_loop) => {
-                let unrolled =
-                    crate::ir::parametric_unroller::unroll_for_loop(for_loop, symbol_table, eval_context)?;
+                let unrolled = crate::ir::parametric_unroller::unroll_for_loop(
+                    for_loop,
+                    symbol_table,
+                    eval_context,
+                )?;
 
                 for contextual_comp in unrolled.components {
                     placement_items.push(ContextualPlacementItem {

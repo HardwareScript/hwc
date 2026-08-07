@@ -48,7 +48,7 @@ pub struct PhysicalInterfaceParams {
     pub geometry: InterfaceGeometry,
     pub capabilities: SmallVec<[InterfaceCapability; 4]>,
     pub routing_intent: RoutingIntent,
-    pub orientation: Option<Orientation>,  // User-declared orientation (None = auto-derive)
+    pub orientation: Option<Orientation>, // User-declared orientation (None = auto-derive)
     pub trace_width_nm: i64,
     pub escape_stub_length_nm: i64,
 }
@@ -68,7 +68,7 @@ impl PhysicalInterface {
         geometry: InterfaceGeometry,
         capabilities: SmallVec<[InterfaceCapability; 4]>,
         routing_intent: RoutingIntent,
-        orientation: Orientation,  // Accept orientation from caller
+        orientation: Orientation, // Accept orientation from caller
         db: &dyn RoutingDatabase,
         trace_width_nm: i64,
         escape_stub_length_nm: i64,
@@ -112,7 +112,7 @@ impl PhysicalInterface {
                 _ => Orientation::Derived,
             }
         };
-        
+
         Self::new(
             params.id,
             params.component_id,

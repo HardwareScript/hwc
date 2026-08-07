@@ -172,18 +172,18 @@ pub struct ViaConstraints {
     ///
     /// v0.2.1: This is now the FALLBACK only. Use material_contact_depths for specific materials.
     pub contact_depth_nm: i64,
-    
+
     /// Material-specific contact depths in nanometers (v0.2.1).
     /// Maps material name to penetration depth. When a via connects two layers,
     /// each layer's material is looked up to get its specific depth.
     ///
     /// Empty map means use global contact_depth_nm for all materials.
     pub material_contact_depths_nm: rustc_hash::FxHashMap<CompactString, i64>,
-    
+
     /// Minimum contact depth in nanometers (safety bound, v0.2.1).
     /// Applied after percentage calculation to prevent insufficient penetration.
     pub min_contact_depth_nm: Option<i64>,
-    
+
     /// Maximum contact depth in nanometers (safety bound, v0.2.1).
     /// Applied after percentage calculation to prevent over-penetration.
     pub max_contact_depth_nm: Option<i64>,

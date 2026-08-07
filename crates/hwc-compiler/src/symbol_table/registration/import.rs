@@ -4,7 +4,7 @@ use hwc_parser::{
     BridgeDefinition, ComponentDefinition, InterfaceDefinition, MaterialAliasDefinition,
     MaterialDefinition, MechanicalDefinition, ModuleDefinition, PatternDefinition,
     ProfileDefinition, ShapeDefinition, SignalGroupDefinition, SpaceDefinition,
-    SpiceModelDefinition, SubcircuitDefinition, StrategyDefinition, TestDefinition, UnitDefinition,
+    SpiceModelDefinition, StrategyDefinition, SubcircuitDefinition, TestDefinition, UnitDefinition,
 };
 
 use super::super::Definition;
@@ -17,7 +17,10 @@ impl SymbolTable {
     pub fn register_import_space(&mut self, def: SpaceDefinition) {
         let name_str = def.name.as_str().to_string();
 
-        eprintln!("[DEBUG] register_import_space called for space: {}", name_str);
+        eprintln!(
+            "[DEBUG] register_import_space called for space: {}",
+            name_str
+        );
 
         if self.hpm.is_empty() {
             eprintln!("[DEBUG] HPM is empty, creating new layer");
@@ -29,7 +32,11 @@ impl SymbolTable {
             .unwrap()
             .insert(name_str.clone().into(), Definition::Space(def));
 
-        eprintln!("[DEBUG] Space '{}' registered in HPM layer. Total HPM layers: {}", name_str, self.hpm.len());
+        eprintln!(
+            "[DEBUG] Space '{}' registered in HPM layer. Total HPM layers: {}",
+            name_str,
+            self.hpm.len()
+        );
     }
 
     /// Register an imported bridge definition (in HPM layer) (v0.2.0)
@@ -69,7 +76,10 @@ impl SymbolTable {
         if self.hpm.is_empty() {
             self.hpm.push(super::super::layer::SymbolLayer::new());
         }
-        self.hpm.last_mut().unwrap().insert(symbol, Definition::Unit(def));
+        self.hpm
+            .last_mut()
+            .unwrap()
+            .insert(symbol, Definition::Unit(def));
     }
 
     /// Register an imported device definition (in HPM layer)
@@ -92,7 +102,10 @@ impl SymbolTable {
         if self.hpm.is_empty() {
             self.hpm.push(super::super::layer::SymbolLayer::new());
         }
-        self.hpm.last_mut().unwrap().insert(name, Definition::Const(def));
+        self.hpm
+            .last_mut()
+            .unwrap()
+            .insert(name, Definition::Const(def));
     }
 
     /// Register an imported shape definition (in HPM layer)

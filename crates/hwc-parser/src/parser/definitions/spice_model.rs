@@ -84,7 +84,10 @@ impl super::super::Parser {
                 Err(e) => {
                     collector.report(e);
                     // Skip to next line and try to continue
-                    while !self.is_at_end() && !self.check(&Token::Newline) && !self.check(&Token::Dedent) {
+                    while !self.is_at_end()
+                        && !self.check(&Token::Newline)
+                        && !self.check(&Token::Dedent)
+                    {
                         self.advance();
                     }
                     continue;
@@ -95,7 +98,10 @@ impl super::super::Parser {
             if let Err(e) = self.expect(&Token::Colon) {
                 collector.report(e);
                 // Skip to next line and try to continue
-                while !self.is_at_end() && !self.check(&Token::Newline) && !self.check(&Token::Dedent) {
+                while !self.is_at_end()
+                    && !self.check(&Token::Newline)
+                    && !self.check(&Token::Dedent)
+                {
                     self.advance();
                 }
                 continue;
@@ -113,7 +119,10 @@ impl super::super::Parser {
                         Err(e) => {
                             collector.report(e);
                             // Skip to next line and try to continue
-                            while !self.is_at_end() && !self.check(&Token::Newline) && !self.check(&Token::Dedent) {
+                            while !self.is_at_end()
+                                && !self.check(&Token::Newline)
+                                && !self.check(&Token::Dedent)
+                            {
                                 self.advance();
                             }
                             continue;
@@ -130,7 +139,10 @@ impl super::super::Parser {
                             message: format!("spice_model '{}' parameters block", name.name).into(),
                         });
                         // Skip to next line and try to continue
-                        while !self.is_at_end() && !self.check(&Token::Newline) && !self.check(&Token::Dedent) {
+                        while !self.is_at_end()
+                            && !self.check(&Token::Newline)
+                            && !self.check(&Token::Dedent)
+                        {
                             self.advance();
                         }
                         continue;
@@ -152,7 +164,10 @@ impl super::super::Parser {
                             Err(e) => {
                                 collector.report(e);
                                 // Skip to next line and try to continue
-                                while !self.is_at_end() && !self.check(&Token::Newline) && !self.check(&Token::Dedent) {
+                                while !self.is_at_end()
+                                    && !self.check(&Token::Newline)
+                                    && !self.check(&Token::Dedent)
+                                {
                                     self.advance();
                                 }
                                 continue;
@@ -163,7 +178,10 @@ impl super::super::Parser {
                         if let Err(e) = self.expect(&Token::Colon) {
                             collector.report(e);
                             // Skip to next line and try to continue
-                            while !self.is_at_end() && !self.check(&Token::Newline) && !self.check(&Token::Dedent) {
+                            while !self.is_at_end()
+                                && !self.check(&Token::Newline)
+                                && !self.check(&Token::Dedent)
+                            {
                                 self.advance();
                             }
                             continue;
@@ -177,7 +195,10 @@ impl super::super::Parser {
                             Err(e) => {
                                 collector.report(e);
                                 // Skip to next line and try to continue
-                                while !self.is_at_end() && !self.check(&Token::Newline) && !self.check(&Token::Dedent) {
+                                while !self.is_at_end()
+                                    && !self.check(&Token::Newline)
+                                    && !self.check(&Token::Dedent)
+                                {
                                     self.advance();
                                 }
                                 continue;
@@ -204,7 +225,10 @@ impl super::super::Parser {
                         ).into(),
                     });
                     // Skip to next line and try to continue
-                    while !self.is_at_end() && !self.check(&Token::Newline) && !self.check(&Token::Dedent) {
+                    while !self.is_at_end()
+                        && !self.check(&Token::Newline)
+                        && !self.check(&Token::Dedent)
+                    {
                         self.advance();
                     }
                     continue;

@@ -17,13 +17,7 @@ impl GeometryRouter {
         name: compact_str::CompactString,
         component_type: compact_str::CompactString,
     ) {
-        entity_graph.add_component_metadata(
-            bbox,
-            material,
-            name,
-            component_type,
-            SmallVec::new(),
-        );
+        entity_graph.add_component_metadata(bbox, material, name, component_type, SmallVec::new());
     }
 
     /// Add a component pin (GAP3).
@@ -37,8 +31,7 @@ impl GeometryRouter {
         pin_name: compact_str::CompactString,
         net: Option<compact_str::CompactString>,
     ) {
-        entity_graph
-            .add_component_pin(x_nm, y_nm, z_nm, component_name, pin_name, net);
+        entity_graph.add_component_pin(x_nm, y_nm, z_nm, component_name, pin_name, net);
     }
 
     /// Build the Entity Graph spatial index from current component metadata.

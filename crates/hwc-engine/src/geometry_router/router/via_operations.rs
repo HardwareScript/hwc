@@ -91,7 +91,7 @@ impl GeometryRouter {
                     .fabrication
                     .as_ref()
                     .expect("FATAL: Fabrication constraints required for via extraction. Ensure a profile with 'trace:' and 'via:' constraints is declared in the space definition.");
-                
+
                 let diameter_nm = fabrication.min_via_diameter_nm;
                 let annular_ring_nm = fabrication.min_annular_ring_nm;
 
@@ -116,16 +116,14 @@ impl GeometryRouter {
         // v0.2.0: Filter out vias that overlap with existing explicit contacts.
         // This prevents the router from creating duplicate vias when the user
         // has already placed contacts at specific locations (Bug Fix: Edge-Drop Issue).
-       
+
         let _initial_via_count = vias.len();
         vias.retain(|via| {
-            let keep = !self.has_existing_contact_at(via.position, via.from_z_nm, via.to_z_nm, net_id);
-            if !keep {
-                
-            }
+            let keep =
+                !self.has_existing_contact_at(via.position, via.from_z_nm, via.to_z_nm, net_id);
+            if !keep {}
             keep
         });
-       
 
         vias
     }
@@ -146,11 +144,11 @@ impl GeometryRouter {
         net_id: NetId,
     ) -> bool {
         use crate::geometry_router::substrate_types::SubstrateLayerShape;
-        
+
         let min_z = from_z.min(to_z);
         let max_z = from_z.max(to_z);
         let _net_raw = net_id.raw();
-        
+
         // STRUCTURAL FIX: Use self.substrate_layers (populated by route_space) instead of
         // entity_graph.get_substrate_layers() (which only contains component obstacles, not substrate layers).
         // substrate_layers are passed from the space and stored during route_space() initialization.
@@ -158,33 +156,32 @@ impl GeometryRouter {
             Some(layers) => layers,
             None => return false, // No substrate context available, cannot deduplicate
         };
-       
+
         // Check all substrate layers for existing cylindrical contacts
         for (_idx, layer) in substrate_layers.iter().enumerate() {
             // Must be on the same net
             if layer.net != net_id {
                 continue;
             }
-            
-           
+
             // Only check Circle-shaped layers (contacts/vias)
             // This filters out rectangular pours and pads
             let is_circular = matches!(layer.shape, SubstrateLayerShape::Circle { .. });
             if !is_circular {
                 continue;
             }
-            
+
             // Check if the contact's Z range overlaps with the via's Z range
             let layer_min_z = layer.bbox.min.z;
             let layer_max_z = layer.bbox.max.z;
-            
+
             // Significant Z overlap required (>50% of via height)
             let via_height = (max_z - min_z).max(1);
             let overlap_z = layer_max_z.min(max_z) - layer_min_z.max(min_z);
             if overlap_z < via_height / 2 {
                 continue; // No significant Z overlap
             }
-            
+
             // Check if the contact's XY position overlaps with the via position
             // Use the contact's radius from its shape definition
             let tolerance = if let SubstrateLayerShape::Circle { radius } = layer.shape {
@@ -197,14 +194,14 @@ impl GeometryRouter {
                     layer.shape
                 );
             };
-                
+
             let layer_center_x = (layer.bbox.min.x + layer.bbox.max.x) / 2;
             let layer_center_y = (layer.bbox.min.y + layer.bbox.max.y) / 2;
             let dx = layer_center_x - position.0;
             let dy = layer_center_y - position.1;
             let distance_sq = dx * dx + dy * dy;
             let tolerance_sq = tolerance * tolerance;
-            
+
             if distance_sq <= tolerance_sq {
                 println!(
                     "[VIA DEDUP] Skipping auto-generated via at ({},{}) Z={}→{}nm - \
@@ -216,7 +213,7 @@ impl GeometryRouter {
                 return true;
             }
         }
-        
+
         false
     }
 
@@ -281,7 +278,13 @@ impl GeometryRouter {
         let total_radius = (via.diameter_nm + 2 * annular_ring) / 2;
 
         for z_nm in via.z_planes_between(&self.config.layer_z_positions, 0, self.bounds.depth_nm) {
-            self.mark_circular_area_occupied(entity_graph, via.position, total_radius, z_nm, via.net_id);
+            self.mark_circular_area_occupied(
+                entity_graph,
+                via.position,
+                total_radius,
+                z_nm,
+                via.net_id,
+            );
         }
 
         self.generate_antipads(entity_graph, via);
@@ -407,13 +410,13 @@ impl GeometryRouter {
         );
 
         let mut via_tower = Vec::new();
-        
+
         let fabrication = self
             .constraints
             .fabrication
             .as_ref()
             .expect("FATAL: Fabrication constraints required for via tower unrolling. Ensure a profile with 'via:' constraints is declared in the space definition.");
-        
+
         let diameter_nm = fabrication.min_via_diameter_nm;
         let annular_ring = fabrication.min_annular_ring_nm;
 
@@ -517,7 +520,13 @@ impl GeometryRouter {
                 let pad_radius = (via.diameter_nm / 2) + enclosure;
 
                 // Stamp the landing pad
-                self.mark_circular_area_occupied(entity_graph, via.position, pad_radius, z_nm, via.net_id);
+                self.mark_circular_area_occupied(
+                    entity_graph,
+                    via.position,
+                    pad_radius,
+                    z_nm,
+                    via.net_id,
+                );
             }
         }
     }

@@ -33,7 +33,9 @@ pub fn resolve_position(
 }
 
 /// Convert an absolute coordinate (Positional/Declarative) to a Point3D.
-fn absolute_coordinate_to_point(coord: &hwc_parser::Coordinate) -> Result<hwc_engine::geometry::Point3D, IrError> {
+fn absolute_coordinate_to_point(
+    coord: &hwc_parser::Coordinate,
+) -> Result<hwc_engine::geometry::Point3D, IrError> {
     let (x_expr, y_expr, z_expr) = match coord {
         hwc_parser::Coordinate::Positional { x, y, z, .. }
         | hwc_parser::Coordinate::Declarative { x, y, z, .. } => (x, y, z),
@@ -47,23 +49,20 @@ fn absolute_coordinate_to_point(coord: &hwc_parser::Coordinate) -> Result<hwc_en
 
     // Use a minimal eval context for absolute coordinates (no anchor references expected)
     let empty_ctx = hwc_parser::EvaluationContext::default();
-    let x_nm = evaluate_expression_to_nm(x_expr, &crate::SymbolTable::default(), &empty_ctx).map_err(|e| {
-        IrError::CoordinateResolutionFailed {
+    let x_nm = evaluate_expression_to_nm(x_expr, &crate::SymbolTable::default(), &empty_ctx)
+        .map_err(|e| IrError::CoordinateResolutionFailed {
             coordinate_str: "X coordinate".into(),
             reason: e,
-        }
-    })?;
-    let y_nm = evaluate_expression_to_nm(y_expr, &crate::SymbolTable::default(), &empty_ctx).map_err(|e| {
-        IrError::CoordinateResolutionFailed {
+        })?;
+    let y_nm = evaluate_expression_to_nm(y_expr, &crate::SymbolTable::default(), &empty_ctx)
+        .map_err(|e| IrError::CoordinateResolutionFailed {
             coordinate_str: "Y coordinate".into(),
             reason: e,
-        }
-    })?;
-    let z_nm = evaluate_expression_to_nm(z_expr, &crate::SymbolTable::default(), &empty_ctx).map_err(|e| {
-        IrError::CoordinateResolutionFailed {
+        })?;
+    let z_nm = evaluate_expression_to_nm(z_expr, &crate::SymbolTable::default(), &empty_ctx)
+        .map_err(|e| IrError::CoordinateResolutionFailed {
             coordinate_str: "Z coordinate".into(),
             reason: e,
-        }
-    })?;
+        })?;
     Ok(hwc_engine::geometry::Point3D::new(x_nm, y_nm, z_nm))
 }

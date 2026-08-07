@@ -38,8 +38,10 @@ impl ViaResolver {
         eval_context: &hwc_parser::EvaluationContext,
     ) -> Result<Self, IrError> {
         // v0.2.0: Query bridges from global symbol table (first-class definitions)
-        let bridge_table =
-            crate::bridge_resolver::BridgeTable::from_profile_and_symbol_table(profile, Some(symbol_table));
+        let bridge_table = crate::bridge_resolver::BridgeTable::from_profile_and_symbol_table(
+            profile,
+            Some(symbol_table),
+        );
 
         let library = ViaLibrary::from_profile(
             profile,
@@ -52,11 +54,11 @@ impl ViaResolver {
         let min_spacing_nm = profile
             .and_then(|p| p.via.as_ref())
             .and_then(|v| v.min_spacing.as_ref())
-            .and_then(|m| crate::ir::conversions::measurement_to_nm(m, symbol_table, eval_context).ok())
-            .ok_or_else(|| {
-                IrError::MissingProfileConstraint {
-                    field: "via.min_spacing".to_string()
-                }
+            .and_then(|m| {
+                crate::ir::conversions::measurement_to_nm(m, symbol_table, eval_context).ok()
+            })
+            .ok_or_else(|| IrError::MissingProfileConstraint {
+                field: "via.min_spacing".to_string(),
             })?;
 
         Ok(Self {
@@ -136,7 +138,6 @@ impl ViaResolver {
             net_id,
             stackup_manager,
         } = *ctx;
-        
 
         // v0.2.0 STRUCTURAL FIX: Query only routable surfaces (pours), not bridges (contacts).
         // The EntityGraph now provides get_pours_for_net() which excludes Contact-type elements.
@@ -151,7 +152,10 @@ impl ViaResolver {
         for (idx, el) in all_elements.iter().enumerate() {
             let mid_z = (el.bbox.min.z + el.bbox.max.z) / 2;
             let layer_idx = stackup_manager.get_layer_index_at_z(mid_z);
-            let mat_name = space.material_registry.get_name(el.material).unwrap_or("Unknown");
+            let mat_name = space
+                .material_registry
+                .get_name(el.material)
+                .unwrap_or("Unknown");
             println!(
                 "     [{}] layer_type={:?}, mid_z={}nm, layer_idx={:?}, material={}, bbox={:?}",
                 idx, el.layer_type, mid_z, layer_idx, mat_name, el.bbox
@@ -186,7 +190,6 @@ impl ViaResolver {
 
         for from_el in &from_elements {
             for to_el in &to_elements {
-
                 // v0.1.8: Via placement is a 2D XY operation, per the NativeViaResolver spec
                 // (§2.2: "Pass 2 fetches all PlanarIslands (2D contours) at the transition
                 // coordinates (X, Y)"). Stackup layers always have disjoint Z-ranges by design,
@@ -204,7 +207,7 @@ impl ViaResolver {
                     // v0.2.0 DATABASE-DRIVEN: Query ViaInstanceDatabase for existing explicit vias.
                     let from_layer_name = &stackup_manager.ordered_layers()[from_layer];
                     let to_layer_name = &stackup_manager.ordered_layers()[to_layer];
-                    
+
                     println!(
                         "   [VIA CHECK] XY overlap at ({}, {}) between {} (layer {}) and {} (layer {})",
                         center_x, center_y, from_layer_name, from_layer, to_layer_name, to_layer
@@ -213,7 +216,7 @@ impl ViaResolver {
                         "   [VIA CHECK] Querying ViaInstanceDatabase for net {:?}: {} -> {}",
                         net_id, from_layer_name, to_layer_name
                     );
-                    
+
                     if space.via_instance_db.has_via_at(
                         net_id,
                         from_layer_name,
@@ -226,7 +229,7 @@ impl ViaResolver {
                         );
                         continue;
                     }
-                    
+
                     println!(
                         "   ✗ No explicit via found at ({}, {}) - will attempt auto-insertion",
                         center_x, center_y
@@ -280,7 +283,6 @@ impl ViaResolver {
             from_material,
             to_material,
         } = request;
-       
 
         let ViaBridgeContext {
             net_id,
@@ -294,8 +296,6 @@ impl ViaResolver {
             &to_material,
             stackup_manager,
         )?;
-
-       
 
         let via = hwc_engine::geometry_router::Via::new(hwc_engine::geometry_router::ViaSpec {
             position: (x, y),

@@ -171,9 +171,13 @@ mod tests {
         let units = vec![test_unit("mA", vec![], Some(1e-3), "current")];
         let registry = UnitRegistry::new(units);
 
-        let result = registry.convert_with_validation(50.0, "mA", "current").unwrap();
+        let result = registry
+            .convert_with_validation(50.0, "mA", "current")
+            .unwrap();
         assert!((result - 0.05).abs() < 1e-10);
 
-        assert!(registry.convert_with_validation(50.0, "mA", "voltage").is_err());
+        assert!(registry
+            .convert_with_validation(50.0, "mA", "voltage")
+            .is_err());
     }
 }

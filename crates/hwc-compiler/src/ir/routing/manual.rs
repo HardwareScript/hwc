@@ -158,7 +158,10 @@ pub fn route_manual(
     // v0.1.7: Resolve material dynamically from the stackup layer
     // This ensures that manual traces merge perfectly with via rings/pours on the same layer.
     let first_wp_z = waypoints.first().map(|p| p.z).unwrap_or(0);
-    let (material_name, route_layer_name): (compact_str::CompactString, compact_str::CompactString) = (|| -> Option<(compact_str::CompactString, compact_str::CompactString)> {
+    let (material_name, route_layer_name): (
+        compact_str::CompactString,
+        compact_str::CompactString,
+    ) = (|| -> Option<(compact_str::CompactString, compact_str::CompactString)> {
         let layer_name = stackup_manager.get_layer_name_at_z(first_wp_z)?;
         let material = profile
             .and_then(|p| p.stackup.as_ref())
@@ -189,19 +192,17 @@ pub fn route_manual(
     // v0.1.7: Create analytic trace for substrate layer realization
     // (manual routes must use the same analytic → substrate pipeline as auto routes)
     let trace_width_nm = if let Some(width_expr) = &route.width {
-        super::super::conversions::evaluate_expression_to_nm(width_expr, symbol_table, eval_context).map_err(
-            |e| IrError::InvalidRouteExpression {
+        super::super::conversions::evaluate_expression_to_nm(width_expr, symbol_table, eval_context)
+            .map_err(|e| IrError::InvalidRouteExpression {
                 expression: "route width".into(),
                 reason: e.to_string(),
-            },
-        )?
+            })?
     } else if let Some(trace) = profile.and_then(|p| p.trace.as_ref()) {
-        super::super::conversions::measurement_to_nm(&trace.min_width, symbol_table, eval_context).map_err(
-            |e| IrError::InvalidRouteExpression {
-                expression: "route width from profile".into(),
-                reason: e.to_string(),
-            },
-        )?
+        super::super::conversions::measurement_to_nm(&trace.min_width, symbol_table, eval_context)
+            .map_err(|e| IrError::InvalidRouteExpression {
+            expression: "route width from profile".into(),
+            reason: e.to_string(),
+        })?
     } else {
         return Err(IrError::MissingAsicConstraint {
             message: "Manual route has no explicit width and no profile trace constraints.".into(),
@@ -303,17 +304,19 @@ pub fn route_manual(
         net_name.clone(),
         hwc_engine::space::CurrentRating::new(net_actual_current_ma, current_ma),
         layer_z_range,
-        route_layer_name,  // v0.2.2: Explicit layer lineage
+        route_layer_name, // v0.2.2: Explicit layer lineage
     );
 
     // v0.2.0: Register parent-level route in hierarchical routing database
     // This is the single source of truth for all routing data.
     let from_entity = format!("{}", super::helpers::endpoint_label(&route.from));
     let to_entity = format!("{}", super::helpers::endpoint_label(&route.to));
-    
-    eprintln!("[ROUTING DB MANUAL] Registering parent route: from='{}', to='{}', net='{}', net_id={:?}",
-        from_entity, to_entity, net_name, net_id);
-    
+
+    eprintln!(
+        "[ROUTING DB MANUAL] Registering parent route: from='{}', to='{}', net='{}', net_id={:?}",
+        from_entity, to_entity, net_name, net_id
+    );
+
     space.routing_database.register_parent_route(
         analytic_trace,
         from_entity.into(),

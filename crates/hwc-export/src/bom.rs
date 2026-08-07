@@ -100,8 +100,9 @@ pub fn export(
     // Track pours from space.pours metadata
     // Filter out virtual/zero-volume entities (Air material, zero volume)
     let mut physical_pours = Vec::new();
-    let mut material_totals: std::collections::HashMap<String, (i64, u64, usize)> = std::collections::HashMap::new();
-    
+    let mut material_totals: std::collections::HashMap<String, (i64, u64, usize)> =
+        std::collections::HashMap::new();
+
     for pour in &space.pours {
         // Calculate volume if bbox available
         let volume_nm3: u64 = if let Some(bbox) = &pour.bbox {
@@ -119,7 +120,8 @@ pub fn export(
         }
 
         // Refinement 2: Get layer name from stackup
-        let layer_name = space.stackup_layers
+        let layer_name = space
+            .stackup_layers
             .iter()
             .find(|layer| {
                 let layer_z_min = layer.z_bottom;

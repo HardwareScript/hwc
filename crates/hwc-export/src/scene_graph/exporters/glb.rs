@@ -1,6 +1,5 @@
 //! GLB (glTF binary) export functionality
 
-
 use crate::scene_graph::types::Face; // FIXED: Imported Face type for batching
 use crate::scene_graph::types::MaterialNode;
 use crate::scene_graph::types::MeshNode;
@@ -60,8 +59,15 @@ pub fn export_glb(
         let is_transparent = mat.opacity < 1.0;
         let has_jelly_effect = mat.subsurface > 0.0;
 
-        eprintln!("[GLB EXPORT] Material '{}': opacity={}, color=({},{},{}), alphaMode={}", 
-                  name, mat.opacity, r, g, b, if is_transparent { "BLEND" } else { "OPAQUE" });
+        eprintln!(
+            "[GLB EXPORT] Material '{}': opacity={}, color=({},{},{}), alphaMode={}",
+            name,
+            mat.opacity,
+            r,
+            g,
+            b,
+            if is_transparent { "BLEND" } else { "OPAQUE" }
+        );
 
         // v0.1.7: Decoupled Transparency (Opacity) from Optics (Subsurface)
         // 1. Standard Alpha Blending (Smooth transparency)

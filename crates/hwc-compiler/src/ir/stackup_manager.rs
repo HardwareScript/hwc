@@ -71,11 +71,12 @@ impl StackupManager {
             let mut resolved: Vec<(String, i64, bool, String)> = Vec::new();
 
             for layer in &stackup.layers {
-                let thickness_nm = evaluate_expression_to_nm(&layer.thickness, symbol_table, eval_context)
-                    .map_err(|e| IrError::StackupResolutionFailed {
-                        layer_name: layer.name.name.clone(),
-                        reason: format!("Failed to evaluate thickness: {}", e),
-                    })?;
+                let thickness_nm =
+                    evaluate_expression_to_nm(&layer.thickness, symbol_table, eval_context)
+                        .map_err(|e| IrError::StackupResolutionFailed {
+                            layer_name: layer.name.name.clone(),
+                            reason: format!("Failed to evaluate thickness: {}", e),
+                        })?;
 
                 // v0.1.8: Determine conductivity by looking up the material in the Symbol Table.
                 // No hardcoded names or fallbacks.
@@ -240,12 +241,12 @@ impl StackupManager {
     }
 
     /// **v0.2.0: Export stackup metadata for HardwareSpace**
-    /// 
+    ///
     /// Converts the StackupManager's layer information into a format suitable for
     /// embedding in HardwareSpace. This provides a single source of truth for layer
     /// Z-coordinates accessible during export and validation without needing the full
     /// StackupManager.
-    /// 
+    ///
     /// # Panics
     /// Never panics - returns an empty Vec if stackup is empty.
     pub fn export_stackup_layers(&self) -> Vec<hwc_engine::space::StackupLayer> {
@@ -325,11 +326,14 @@ impl StackupManager {
         _resolution_nm: i64,
     ) -> Result<i64, IrError> {
         match elevation {
-            Elevation::Physical { start, .. } => evaluate_expression_to_nm(start, symbol_table, eval_context)
-                .map_err(|e| IrError::CoordinateResolutionFailed {
-                    coordinate_str: "physical Z expression".into(),
-                    reason: e.to_string(),
-                }),
+            Elevation::Physical { start, .. } => {
+                evaluate_expression_to_nm(start, symbol_table, eval_context).map_err(|e| {
+                    IrError::CoordinateResolutionFailed {
+                        coordinate_str: "physical Z expression".into(),
+                        reason: e.to_string(),
+                    }
+                })
+            }
             Elevation::Semantic(ident) => self
                 .layer_start_z_nm
                 .get(&ident.name.to_string())
@@ -359,12 +363,11 @@ impl StackupManager {
                 })?,
             Elevation::Physical { end, .. } => {
                 if let Some(end_expr) = end {
-                    let top = evaluate_expression_to_nm(end_expr, symbol_table, eval_context).map_err(|e| {
-                        IrError::CoordinateResolutionFailed {
+                    let top = evaluate_expression_to_nm(end_expr, symbol_table, eval_context)
+                        .map_err(|e| IrError::CoordinateResolutionFailed {
                             coordinate_str: "physical Z-end expression".into(),
                             reason: e.to_string(),
-                        }
-                    })?;
+                        })?;
                     top - bottom
                 } else {
                     return Err(IrError::CoordinateResolutionFailed {

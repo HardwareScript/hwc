@@ -121,7 +121,10 @@ impl<'a> ConstraintSolver<'a> {
     /// **v0.1.6**: Supports `last` keyword for space-global component reference
     /// - `last` resolves to the most recently placed component in the space
     /// - This allows chaining across loop boundaries (God-Tier feature!)
-    fn resolve_relative_position(&self, rel_pos: &RelativePosition) -> Result<PlacementIntent, String> {
+    fn resolve_relative_position(
+        &self,
+        rel_pos: &RelativePosition,
+    ) -> Result<PlacementIntent, String> {
         let anchor_name = &rel_pos.anchor.name;
 
         // Handle 'last' keyword - resolve to the most recently placed component
@@ -241,7 +244,10 @@ impl<'a> ConstraintSolver<'a> {
 
         // NATIVE FIX: Preserve edge semantics in placement intent
         match rel_pos.edge {
-            hwc_parser::Edge::Center | hwc_parser::Edge::CenterX | hwc_parser::Edge::CenterY | hwc_parser::Edge::CenterZ => Ok(PlacementIntent::Center(final_point)),
+            hwc_parser::Edge::Center
+            | hwc_parser::Edge::CenterX
+            | hwc_parser::Edge::CenterY
+            | hwc_parser::Edge::CenterZ => Ok(PlacementIntent::Center(final_point)),
             _ => Ok(PlacementIntent::Corner(final_point)),
         }
     }
@@ -378,9 +384,9 @@ impl<'a> ConstraintSolver<'a> {
             hwc_parser::Edge::Left | hwc_parser::Edge::TopLeft | hwc_parser::Edge::BottomLeft => {
                 hwc_engine::geometry::Edge::Left
             }
-            hwc_parser::Edge::Right | hwc_parser::Edge::TopRight | hwc_parser::Edge::BottomRight => {
-                hwc_engine::geometry::Edge::Right
-            }
+            hwc_parser::Edge::Right
+            | hwc_parser::Edge::TopRight
+            | hwc_parser::Edge::BottomRight => hwc_engine::geometry::Edge::Right,
             hwc_parser::Edge::Top => hwc_engine::geometry::Edge::Top,
             hwc_parser::Edge::Bottom => hwc_engine::geometry::Edge::Bottom,
             hwc_parser::Edge::Front => hwc_engine::geometry::Edge::Front,
@@ -398,11 +404,13 @@ impl<'a> ConstraintSolver<'a> {
         &self,
         base_point: Point3D,
         offset: &RelativeOffset,
-        edge: hwc_parser::Edge,  // Parser edge, not engine edge
+        edge: hwc_parser::Edge, // Parser edge, not engine edge
     ) -> Result<Point3D, String> {
-        eprintln!("[APPLY_OFFSET] base_point=({}, {}, {}), edge={:?}", 
-            base_point.x, base_point.y, base_point.z, edge);
-        
+        eprintln!(
+            "[APPLY_OFFSET] base_point=({}, {}, {}), edge={:?}",
+            base_point.x, base_point.y, base_point.z, edge
+        );
+
         match offset {
             RelativeOffset::Single(measurement) => {
                 // GAP1 FIX: Coordinate Inheritance for Single-Direction Offsets
@@ -420,20 +428,32 @@ impl<'a> ConstraintSolver<'a> {
                 // After this fix:
                 // - Adder[0] at y: 5mm → Adder[1] at y: 5mm (CORRECT - stayed in line)
                 let offset_nm = self.measurement_to_nm(measurement)?;
-                
+
                 // Special case: Center edge with zero offset is valid (just use center point)
-                if matches!(edge, hwc_parser::Edge::Center | hwc_parser::Edge::CenterX | hwc_parser::Edge::CenterY | hwc_parser::Edge::CenterZ) && offset_nm == 0 {
+                if matches!(
+                    edge,
+                    hwc_parser::Edge::Center
+                        | hwc_parser::Edge::CenterX
+                        | hwc_parser::Edge::CenterY
+                        | hwc_parser::Edge::CenterZ
+                ) && offset_nm == 0
+                {
                     return Ok(base_point);
                 }
-                
+
                 // But non-zero single offsets from center are invalid (which direction to move?)
-                if matches!(edge, hwc_parser::Edge::Center | hwc_parser::Edge::CenterX | hwc_parser::Edge::CenterY | hwc_parser::Edge::CenterZ) {
-                    return Err(
-                        "Cannot use single-value offset from center anchor. \
-                         Use vector offset like: space.center + [x, y, z]".to_string()
-                    );
+                if matches!(
+                    edge,
+                    hwc_parser::Edge::Center
+                        | hwc_parser::Edge::CenterX
+                        | hwc_parser::Edge::CenterY
+                        | hwc_parser::Edge::CenterZ
+                ) {
+                    return Err("Cannot use single-value offset from center anchor. \
+                         Use vector offset like: space.center + [x, y, z]"
+                        .to_string());
                 }
-                
+
                 let engine_edge = self.convert_edge(edge);
                 let (dx, dy, dz) = engine_edge.direction_vector();
 
@@ -452,11 +472,18 @@ impl<'a> ConstraintSolver<'a> {
                 let dx_nm = self.expression_to_nm(x)?;
                 let dy_nm = self.expression_to_nm(y)?;
                 let dz_nm = self.expression_to_nm(z)?;
-                
-                eprintln!("[APPLY_OFFSET] Vector offset: dx={}, dy={}, dz={}", dx_nm, dy_nm, dz_nm);
-                eprintln!("[APPLY_OFFSET] Result: ({}, {}, {})", 
-                    base_point.x + dx_nm, base_point.y + dy_nm, base_point.z + dz_nm);
-                
+
+                eprintln!(
+                    "[APPLY_OFFSET] Vector offset: dx={}, dy={}, dz={}",
+                    dx_nm, dy_nm, dz_nm
+                );
+                eprintln!(
+                    "[APPLY_OFFSET] Result: ({}, {}, {})",
+                    base_point.x + dx_nm,
+                    base_point.y + dy_nm,
+                    base_point.z + dz_nm
+                );
+
                 Ok(Point3D::new(
                     base_point.x + dx_nm,
                     base_point.y + dy_nm,
@@ -494,10 +521,13 @@ impl<'a> ConstraintSolver<'a> {
     fn expression_to_nm(&self, expr: &Expression) -> Result<i64, String> {
         // NATIVE FIX: Use the pre-built context instead of rebuilding it
         eprintln!("[EXPR_TO_NM DEBUG] Evaluating expression: {:?}", expr);
-        eprintln!("[EXPR_TO_NM DEBUG] eval_context has {} entries", self.eval_context.len());
-        
+        eprintln!(
+            "[EXPR_TO_NM DEBUG] eval_context has {} entries",
+            self.eval_context.len()
+        );
+
         let value = expr.evaluate(self.eval_context)?;
-        
+
         eprintln!("[EXPR_TO_NM DEBUG] Expression evaluated to: {:?}", value);
 
         match value {

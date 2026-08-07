@@ -264,7 +264,9 @@ impl super::super::Parser {
                         // Store in other for now, will be properly integrated
                         other.insert("substrate_net".into(), net_ident.name.to_string());
                     } else {
-                        let err = self.error("Expected net name after 'substrate_net:' (e.g., BULK, SUB, GND)");
+                        let err = self.error(
+                            "Expected net name after 'substrate_net:' (e.g., BULK, SUB, GND)",
+                        );
                         collector.report(err);
                     }
                 }
@@ -350,11 +352,11 @@ impl super::super::Parser {
                 }
                 "technology" => {
                     if let Ok(tech_str) = self.expect_string() {
-                        match hwc_types::Technology::from_str(&tech_str) {
-                            Some(tech) => {
+                        match tech_str.parse::<hwc_types::Technology>() {
+                            Ok(tech) => {
                                 technology = Some(tech);
                             }
-                            None => {
+                            Err(_) => {
                                 let err = self.error(&format!(
                                     "Invalid technology '{}'. Supported values: 'PCB', 'ASIC'",
                                     tech_str

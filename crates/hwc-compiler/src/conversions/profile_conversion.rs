@@ -34,21 +34,15 @@ pub fn profile_to_constraints(
         // The actual evaluation happens per-via with layer context in depth_resolver
         // We just need something non-zero to pass validation
         let contact_depth_nm = 1; // Sentinel: actual depth calculated per-via
-        
+
         // v0.2.1: Material-specific depths are also sentinels
         let material_contact_depths_nm = rustc_hash::FxHashMap::default();
-        
+
         // v0.2.1: Evaluate safety bounds (these are absolute values)
-        let min_contact_depth_nm = via_def
-            .min_contact_depth
-            .as_ref()
-            .map(measurement_to_nm);
-        
-        let max_contact_depth_nm = via_def
-            .max_contact_depth
-            .as_ref()
-            .map(measurement_to_nm);
-        
+        let min_contact_depth_nm = via_def.min_contact_depth.as_ref().map(measurement_to_nm);
+
+        let max_contact_depth_nm = via_def.max_contact_depth.as_ref().map(measurement_to_nm);
+
         ViaConstraints {
             min_diameter_nm: measurement_to_nm(&via_def.min_diameter),
             max_diameter_nm: 0,
@@ -63,7 +57,7 @@ pub fn profile_to_constraints(
                 .as_ref()
                 .map(measurement_to_nm)
                 .unwrap_or_else(|| measurement_to_nm(&via_def.min_diameter)),
-            contact_depth_nm, // Sentinel value - not used
+            contact_depth_nm,           // Sentinel value - not used
             material_contact_depths_nm, // Empty - we read from profile directly
             min_contact_depth_nm,
             max_contact_depth_nm,
@@ -262,7 +256,7 @@ pub fn profile_to_constraints(
                 impedance_penalty: cw.impedance_penalty,
                 reference_void_penalty: cw.reference_void_penalty,
             });
-            // NATIVE FIX: Extract escape_stub from profile intent  
+            // NATIVE FIX: Extract escape_stub from profile intent
             let escape_stub_nm = pi.escape_stub.as_ref().map(measurement_to_nm);
             RoutingIntent::from_profile_data(
                 &pi.name.name,

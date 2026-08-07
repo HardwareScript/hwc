@@ -141,7 +141,7 @@ pub fn substitute_in_component_name(
     // Handle template interpolation (v0.2.1)
     if let Some(ref template_parts) = name.template_parts {
         let mut substituted_parts = Vec::new();
-        
+
         for part in template_parts {
             match part {
                 hwc_parser::TemplateNamePart::Literal(lit) => {
@@ -150,21 +150,22 @@ pub fn substitute_in_component_name(
                 hwc_parser::TemplateNamePart::Expression(expr) => {
                     let substituted_expr = substitute_in_expression(expr, variable, value)
                         .unwrap_or_else(|_| expr.clone());
-                    substituted_parts.push(hwc_parser::TemplateNamePart::Expression(substituted_expr));
+                    substituted_parts
+                        .push(hwc_parser::TemplateNamePart::Expression(substituted_expr));
                 }
             }
         }
-        
+
         return hwc_parser::ComponentName::template(substituted_parts, name.span);
     }
-    
+
     // Handle array indexing
     if let Some(ref index_expr) = name.index {
         let substituted_index = substitute_in_expression(index_expr, variable, value)
             .unwrap_or_else(|_| index_expr.clone());
         return hwc_parser::ComponentName::indexed(name.base.clone(), substituted_index, name.span);
     }
-    
+
     // Simple name - no substitution needed
     name.clone()
 }

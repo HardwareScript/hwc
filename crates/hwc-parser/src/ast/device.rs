@@ -91,7 +91,7 @@ impl DeviceDefinition {
             .map(|allowed| allowed.iter().any(|m| m == material))
             .unwrap_or(false)
     }
-    
+
     /// Get SPICE export information
     ///
     /// Returns None if this device doesn't have SPICE export metadata defined.

@@ -119,7 +119,8 @@ pub struct ContactPlacement {
     pub net: Option<NetName>,
     pub properties: rustc_hash::FxHashMap<CompactString, Expression>,
     /// v0.2.1: Relational constraints (align, above, below, etc.)
-    pub relational_constraints: smallvec::SmallVec<[crate::ast::component::RelationalConstraint; 2]>,
+    pub relational_constraints:
+        smallvec::SmallVec<[crate::ast::component::RelationalConstraint; 2]>,
     #[serde(skip)]
     pub contour: Option<clipper2_rust::Path64>,
     pub span: Span,

@@ -201,10 +201,10 @@ impl Unit {
             // Distance units
             Unit::Millimeter => Ok("mm"),
             Unit::Centimeter => Ok("cm"),
-            Unit::Micrometer => Ok("u"),  // SPICE uses 'u' for micro
+            Unit::Micrometer => Ok("u"), // SPICE uses 'u' for micro
             Unit::Nanometer => Ok("n"),
             Unit::Picometer => Ok("p"),
-            
+
             // Electrical units (no suffix - base unit)
             Unit::Volt => Ok(""),
             Unit::Millivolt => Ok("m"),
@@ -212,10 +212,10 @@ impl Unit {
             Unit::Ampere => Ok(""),
             Unit::Milliampere => Ok("m"),
             Unit::Microampere => Ok("u"),
-            
+
             // Temperature
             Unit::Celsius => Err("SPICE uses Kelvin for temperature, not Celsius".to_string()),
-            
+
             // Custom units - parse the string to extract SPICE suffix
             Unit::Custom(s) => {
                 // For custom units, the string itself might be the SPICE representation

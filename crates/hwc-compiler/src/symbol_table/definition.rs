@@ -5,11 +5,10 @@
 
 use hwc_parser::logic::{EnumDefinition, LogicDefinition, StructDefinition};
 use hwc_parser::{
-    BridgeDefinition, ComponentDefinition, ConstDefinition, DeviceDefinition,
-    InterfaceDefinition, MaterialAliasDefinition, MaterialDefinition, MechanicalDefinition,
-    ModuleDefinition, PatternDefinition, ProfileDefinition, ShapeDefinition,
-    SignalGroupDefinition, SpaceDefinition, SpiceModelDefinition, SubcircuitDefinition,
-    StrategyDefinition, TestDefinition, UnitDefinition,
+    BridgeDefinition, ComponentDefinition, ConstDefinition, DeviceDefinition, InterfaceDefinition,
+    MaterialAliasDefinition, MaterialDefinition, MechanicalDefinition, ModuleDefinition,
+    PatternDefinition, ProfileDefinition, ShapeDefinition, SignalGroupDefinition, SpaceDefinition,
+    SpiceModelDefinition, StrategyDefinition, SubcircuitDefinition, TestDefinition, UnitDefinition,
 };
 
 /// Unified enum representing any top-level declaration in HardwareScript

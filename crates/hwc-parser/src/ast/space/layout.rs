@@ -14,7 +14,7 @@ pub struct ModuleLayoutBlock {
 /// Statement inside a layout block (mirrors ModuleStatement but for physical placement)
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum LayoutStatement {
-    Placement(ModuleInternalPlacement),
+    Placement(Box<ModuleInternalPlacement>),
     For {
         variable: CompactString,
         start: usize,

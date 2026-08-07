@@ -81,7 +81,7 @@ impl<'a> GraphMatcher<'a> {
         // This is a valid pattern for simple circuits (e.g., resistor dividers).
         let logical_device_count = self.logical.devices.len();
         let physical_device_count = self.physical.devices.len();
-        
+
         if logical_device_count == 0 && physical_device_count > 0 {
             // Valid pattern: Module declares only pins, space implements with device bindings
             // Skip device type and connectivity checks since there's no logical device to compare
@@ -89,7 +89,7 @@ impl<'a> GraphMatcher<'a> {
             self.verify_port_mappings()?;
             return Ok(());
         }
-        
+
         if logical_device_count != physical_device_count {
             return Err(AlignmentError::DeviceCountMismatch {
                 expected: logical_device_count,

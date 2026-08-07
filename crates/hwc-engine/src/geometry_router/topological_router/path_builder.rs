@@ -102,15 +102,13 @@ impl TopologicalRouter {
         obstacles: &DynamicSpatialIndex,
         _board_bounds: &BoundingBox,
     ) -> Option<TopologicalPath> {
-       
-
         if start.x == target.x || start.y == target.y {
             let waypoints = vec![start, target];
             let collides = self.segment_intersects_obstacle(start, target, obstacles);
-            
+
             if !collides {
                 let total_length = start.manhattan_distance(&target);
-               
+
                 return Some(TopologicalPath {
                     waypoints,
                     total_length,
@@ -121,10 +119,10 @@ impl TopologicalRouter {
         let bend_hv = Point3D::new(target.x, start.y, start.z);
         let hv_seg1_collides = self.segment_intersects_obstacle(start, bend_hv, obstacles);
         let hv_seg2_collides = self.segment_intersects_obstacle(bend_hv, target, obstacles);
-       
+
         if !hv_seg1_collides && !hv_seg2_collides {
             let total_length = start.manhattan_distance(&target);
-         
+
             return Some(TopologicalPath {
                 waypoints: vec![start, bend_hv, target],
                 total_length,
@@ -134,18 +132,16 @@ impl TopologicalRouter {
         let bend_vh = Point3D::new(start.x, target.y, start.z);
         let vh_seg1_collides = self.segment_intersects_obstacle(start, bend_vh, obstacles);
         let vh_seg2_collides = self.segment_intersects_obstacle(bend_vh, target, obstacles);
-        
-            
+
         if !vh_seg1_collides && !vh_seg2_collides {
             let total_length = start.manhattan_distance(&target);
-           
+
             return Some(TopologicalPath {
                 waypoints: vec![start, bend_vh, target],
                 total_length,
             });
         }
 
-       
         None
     }
 

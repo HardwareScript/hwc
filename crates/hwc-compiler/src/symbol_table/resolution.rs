@@ -4,11 +4,10 @@ use super::{error::SymbolError, layer::SymbolTable, Definition};
 use compact_str::CompactString;
 use hwc_parser::{
     logic::{EnumDefinition, LogicDefinition, StructDefinition},
-    BridgeDefinition, ComponentDefinition, ConstDefinition, DeviceDefinition,
-    InterfaceDefinition, MaterialDefinition, MechanicalDefinition,
-    ModuleDefinition, PatternDefinition, ProfileDefinition, ShapeDefinition,
-    SignalGroupDefinition, SpaceDefinition, SpiceModelDefinition, SubcircuitDefinition,
-    StrategyDefinition, TestDefinition, UnitDefinition,
+    BridgeDefinition, ComponentDefinition, ConstDefinition, DeviceDefinition, InterfaceDefinition,
+    MaterialDefinition, MechanicalDefinition, ModuleDefinition, PatternDefinition,
+    ProfileDefinition, ShapeDefinition, SignalGroupDefinition, SpaceDefinition,
+    SpiceModelDefinition, StrategyDefinition, SubcircuitDefinition, TestDefinition, UnitDefinition,
 };
 
 impl SymbolTable {
@@ -16,11 +15,7 @@ impl SymbolTable {
     pub fn get_space(&self, name: &str) -> Result<&SpaceDefinition, SymbolError> {
         match self.get_symbol(name) {
             Some(Definition::Space(space)) => Ok(space),
-            Some(other) => Err(SymbolError::type_mismatch(
-                name,
-                "space",
-                other.kind_str(),
-            )),
+            Some(other) => Err(SymbolError::type_mismatch(name, "space", other.kind_str())),
             None => Err(SymbolError::undefined(name.into(), "space", None)),
         }
     }
@@ -72,11 +67,7 @@ impl SymbolTable {
     pub fn get_module(&self, name: &str) -> Result<&ModuleDefinition, SymbolError> {
         match self.get_symbol(name) {
             Some(Definition::Module(module)) => Ok(module),
-            Some(other) => Err(SymbolError::type_mismatch(
-                name,
-                "module",
-                other.kind_str(),
-            )),
+            Some(other) => Err(SymbolError::type_mismatch(name, "module", other.kind_str())),
             None => Err(SymbolError::undefined(name.into(), "module", None)),
         }
     }
@@ -85,11 +76,7 @@ impl SymbolTable {
     pub fn get_device(&self, name: &str) -> Result<&DeviceDefinition, SymbolError> {
         match self.get_symbol(name) {
             Some(Definition::Device(dev)) => Ok(dev),
-            Some(other) => Err(SymbolError::type_mismatch(
-                name,
-                "device",
-                other.kind_str(),
-            )),
+            Some(other) => Err(SymbolError::type_mismatch(name, "device", other.kind_str())),
             None => Err(SymbolError::undefined(name.into(), "device", None)),
         }
     }
@@ -124,11 +111,7 @@ impl SymbolTable {
     pub fn get_test(&self, name: &str) -> Result<&TestDefinition, SymbolError> {
         match self.get_symbol(name) {
             Some(Definition::Test(test)) => Ok(test),
-            Some(other) => Err(SymbolError::type_mismatch(
-                name,
-                "test",
-                other.kind_str(),
-            )),
+            Some(other) => Err(SymbolError::type_mismatch(name, "test", other.kind_str())),
             None => Err(SymbolError::undefined(name.into(), "test", None)),
         }
     }
@@ -176,11 +159,7 @@ impl SymbolTable {
     pub fn get_logic(&self, name: &str) -> Result<&LogicDefinition, SymbolError> {
         match self.get_symbol(name) {
             Some(Definition::Logic(logic)) => Ok(logic),
-            Some(other) => Err(SymbolError::type_mismatch(
-                name,
-                "logic",
-                other.kind_str(),
-            )),
+            Some(other) => Err(SymbolError::type_mismatch(name, "logic", other.kind_str())),
             None => Err(SymbolError::undefined(name.into(), "logic", None)),
         }
     }
@@ -198,11 +177,7 @@ impl SymbolTable {
     pub fn get_struct(&self, name: &str) -> Result<&StructDefinition, SymbolError> {
         match self.get_symbol(name) {
             Some(Definition::Struct(s)) => Ok(s),
-            Some(other) => Err(SymbolError::type_mismatch(
-                name,
-                "struct",
-                other.kind_str(),
-            )),
+            Some(other) => Err(SymbolError::type_mismatch(name, "struct", other.kind_str())),
             None => Err(SymbolError::undefined(name.into(), "struct", None)),
         }
     }
@@ -447,10 +422,7 @@ impl SymbolTable {
 
     /// Convert a measurement to nanometers using the symbol table for unit resolution.
     /// This delegates to the canonical ir::conversions::measurement_to_nm function.
-    pub fn measurement_to_nm(
-        &self,
-        measurement: &hwc_parser::Measurement,
-    ) -> Result<i64, String> {
+    pub fn measurement_to_nm(&self, measurement: &hwc_parser::Measurement) -> Result<i64, String> {
         crate::ir::conversions::measurement_to_nm_simple(measurement, self)
     }
 }

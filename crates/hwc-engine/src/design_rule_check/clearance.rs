@@ -101,7 +101,9 @@ pub fn validate_clearances(
             // v0.2.2: DEVICE-AWARE CLEARANCE EXEMPTION
             // If both entities are part of the same device (different terminals),
             // skip clearance check - device terminals are MEANT to interact
-            if let (Some(ref entity_device), Some(ref cand_device)) = (&entity.device_binding, &cand.device_binding) {
+            if let (Some(ref entity_device), Some(ref cand_device)) =
+                (&entity.device_binding, &cand.device_binding)
+            {
                 if entity_device.device_name == cand_device.device_name {
                     // Same device, different terminals - intentional interaction, not a short circuit
                     eprintln!("[DRC DEVICE EXEMPT] Skipping clearance check between {}.{} and {}.{} (same device)",

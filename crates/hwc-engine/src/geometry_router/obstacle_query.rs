@@ -5,7 +5,7 @@
 //! with a single, queryable, well-documented system.
 //!
 //! ## Design Philosophy
-//! 
+//!
 //! Instead of littering obstacle-building code with ad-hoc conditions like:
 //! ```ignore
 //! if net_id != NetId::UNCONNECTED && net_id == route.net_id { continue; }
@@ -22,7 +22,7 @@
 //! ## Fail-Loud Philosophy
 //!
 //! **NO DEFAULTS. NO FALLBACKS. NO SILENT FAILURES.**
-//! 
+//!
 //! - Every decision must match an explicit rule
 //! - Unknown states return `Result::Err` with diagnostic context
 //! - Hardcoded assumptions are forbidden
@@ -56,20 +56,20 @@ pub enum ObstacleQueryError {
         hint: String,
     },
     /// Material type could not be classified as conductor/insulator
-    UnclassifiedMaterial {
-        material_id: u8,
-        hint: String,
-    },
+    UnclassifiedMaterial { material_id: u8, hint: String },
     /// Invalid routing context (malformed input)
-    InvalidContext {
-        reason: String,
-    },
+    InvalidContext { reason: String },
 }
 
 impl fmt::Display for ObstacleQueryError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ObstacleQueryError::UnhandledLayerType { layer_type, net_id, bbox, hint } => {
+            ObstacleQueryError::UnhandledLayerType {
+                layer_type,
+                net_id,
+                bbox,
+                hint,
+            } => {
                 write!(
                     f,
                     "Routing obstacle query encountered unhandled layer type {:?} (net={:?}, bbox={:?}).\n\
@@ -99,13 +99,9 @@ impl std::error::Error for ObstacleQueryError {}
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ObstacleDecision {
     /// This layer IS an obstacle for the route
-    IsObstacle {
-        reason: ObstacleReason,
-    },
+    IsObstacle { reason: ObstacleReason },
     /// This layer is NOT an obstacle (exempted)
-    Exempt {
-        reason: ExemptionReason,
-    },
+    Exempt { reason: ExemptionReason },
 }
 
 /// Why a layer is considered an obstacle
@@ -265,10 +261,7 @@ mod tests {
         SubstrateLayer::new(
             0, // material_id
             NetId::new(net_id),
-            BoundingBox::new(
-                Point3D::new(1000, 1000, 0),
-                Point3D::new(2000, 2000, 100),
-            ),
+            BoundingBox::new(Point3D::new(1000, 1000, 0), Point3D::new(2000, 2000, 100)),
             layer_type,
         )
     }
@@ -287,7 +280,8 @@ mod tests {
         let layer = make_layer(1, SubstrateLayerType::Substrate);
         let context = make_context(2); // Different net
 
-        let decision = ObstacleQuery::is_obstacle_for(&layer, &context).expect("Query should succeed");
+        let decision =
+            ObstacleQuery::is_obstacle_for(&layer, &context).expect("Query should succeed");
         assert_eq!(
             decision,
             ObstacleDecision::Exempt {
@@ -301,7 +295,8 @@ mod tests {
         let layer = make_layer(1, SubstrateLayerType::Pour);
         let context = make_context(1); // Same net
 
-        let decision = ObstacleQuery::is_obstacle_for(&layer, &context).expect("Query should succeed");
+        let decision =
+            ObstacleQuery::is_obstacle_for(&layer, &context).expect("Query should succeed");
         assert_eq!(
             decision,
             ObstacleDecision::Exempt {
@@ -315,7 +310,8 @@ mod tests {
         let layer = make_layer(1, SubstrateLayerType::Pour);
         let context = make_context(2); // Different net
 
-        let decision = ObstacleQuery::is_obstacle_for(&layer, &context).expect("Query should succeed");
+        let decision =
+            ObstacleQuery::is_obstacle_for(&layer, &context).expect("Query should succeed");
         assert_eq!(
             decision,
             ObstacleDecision::IsObstacle {
@@ -329,7 +325,8 @@ mod tests {
         let layer = make_layer(0, SubstrateLayerType::Pour); // net_id = 0
         let context = make_context(1);
 
-        let decision = ObstacleQuery::is_obstacle_for(&layer, &context).expect("Query should succeed");
+        let decision =
+            ObstacleQuery::is_obstacle_for(&layer, &context).expect("Query should succeed");
         assert_eq!(
             decision,
             ObstacleDecision::IsObstacle {
@@ -346,7 +343,8 @@ mod tests {
         // Place goal inside layer bbox
         context.goal = Point3D::new(1500, 1500, 50);
 
-        let decision = ObstacleQuery::is_obstacle_for(&layer, &context).expect("Query should succeed");
+        let decision =
+            ObstacleQuery::is_obstacle_for(&layer, &context).expect("Query should succeed");
         assert_eq!(
             decision,
             ObstacleDecision::Exempt {
@@ -363,7 +361,7 @@ mod tests {
 
         let result = ObstacleQuery::is_obstacle_for(&layer, &context);
         assert!(result.is_err(), "Should fail on invalid context");
-        
+
         if let Err(ObstacleQueryError::InvalidContext { reason }) = result {
             assert!(reason.contains("trace_width_nm"));
         } else {

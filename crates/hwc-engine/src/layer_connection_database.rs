@@ -70,7 +70,11 @@ impl std::fmt::Display for LayerConnectionError {
                 )
             }
             Self::EntityNotRegistered { entity } => {
-                write!(f, "Entity '{}' is not registered in the connection database", entity)
+                write!(
+                    f,
+                    "Entity '{}' is not registered in the connection database",
+                    entity
+                )
             }
             Self::ConnectionZMismatch {
                 entity,
@@ -232,22 +236,17 @@ impl LayerConnectionDatabase {
         layer_name: &str,
     ) -> Result<&RoutingConnectionPoint, LayerConnectionError> {
         let key: (CompactString, CompactString) = (entity_name.into(), layer_name.into());
-        self.connections.get(&key).ok_or_else(|| {
-            LayerConnectionError::NoConnectionPoint {
+        self.connections
+            .get(&key)
+            .ok_or_else(|| LayerConnectionError::NoConnectionPoint {
                 entity: entity_name.into(),
                 layer: layer_name.into(),
-            }
-        })
+            })
     }
 
     /// Get all connection points for an entity (across all layers).
-    pub fn get_entity_connections(
-        &self,
-        entity_name: &str,
-    ) -> Option<&[CompactString]> {
-        self.entity_layers
-            .get(entity_name)
-            .map(|v| v.as_slice())
+    pub fn get_entity_connections(&self, entity_name: &str) -> Option<&[CompactString]> {
+        self.entity_layers.get(entity_name).map(|v| v.as_slice())
     }
 
     /// Check if an entity has a connection on a specific layer.
@@ -286,7 +285,7 @@ impl LayerConnectionDatabase {
         for ((entity, layer), conn) in &self.connections {
             // Only validate routable layers - non-routable layers connect at interfaces
             let is_routable = routable_map.get(layer.as_str()).copied().unwrap_or(false);
-            
+
             if !is_routable {
                 // Non-routable layers (like "active") connect at interfaces, not routing Z
                 // This is expected and correct - skip validation
@@ -301,7 +300,9 @@ impl LayerConnectionDatabase {
                     // These are NOT at routing_z, so skip routing_z validation for vias
                     // Instead, validate that via connections are within layer bounds
                     if let Some(layer_info) = stackup.iter().find(|l| l.name == *layer) {
-                        if conn.z_elevation < layer_info.z_bottom || conn.z_elevation > layer_info.z_top {
+                        if conn.z_elevation < layer_info.z_bottom
+                            || conn.z_elevation > layer_info.z_top
+                        {
                             errors.push(LayerConnectionError::ConnectionZMismatch {
                                 entity: entity.clone(),
                                 connection_z: conn.z_elevation,
@@ -405,17 +406,8 @@ mod tests {
     fn test_validate_catches_z_mismatch() {
         let mut db = LayerConnectionDatabase::new();
 
-        db.register_via(
-            "Via1",
-            "metal1",
-            1300,
-            "metal2",
-            2000,
-            (0, 0),
-            1,
-            2,
-        )
-        .unwrap();
+        db.register_via("Via1", "metal1", 1300, "metal2", 2000, (0, 0), 1, 2)
+            .unwrap();
 
         let mut routing_z = FxHashMap::default();
         routing_z.insert("metal1".into(), 1250);
@@ -424,24 +416,18 @@ mod tests {
         assert!(result.is_err());
         let errors = result.unwrap_err();
         assert_eq!(errors.len(), 1);
-        assert!(matches!(&errors[0], LayerConnectionError::ConnectionZMismatch { .. }));
+        assert!(matches!(
+            &errors[0],
+            LayerConnectionError::ConnectionZMismatch { .. }
+        ));
     }
 
     #[test]
     fn test_validate_passes_when_z_matches() {
         let mut db = LayerConnectionDatabase::new();
 
-        db.register_via(
-            "Via1",
-            "metal1",
-            1250,
-            "metal2",
-            2000,
-            (0, 0),
-            1,
-            2,
-        )
-        .unwrap();
+        db.register_via("Via1", "metal1", 1250, "metal2", 2000, (0, 0), 1, 2)
+            .unwrap();
 
         let mut routing_z = FxHashMap::default();
         routing_z.insert("metal1".into(), 1250);

@@ -1,9 +1,9 @@
+mod depth_resolver;
 mod helpers;
 mod netlist_ops;
 mod place_drilled;
 mod place_simple;
 mod resolve;
-mod depth_resolver;
 
 use crate::ir::errors::IrError;
 use crate::ir::stackup_manager::StackupManager;
@@ -37,7 +37,8 @@ pub fn place_contact(
         resolve_relational_anchor(anchor, bbox_tracker, &contact.name)?
     } else if let Some(ref position) = contact.position {
         if position.is_relative() {
-            let solver = crate::constraint_solver::ConstraintSolver::new(bbox_tracker, eval_context);
+            let solver =
+                crate::constraint_solver::ConstraintSolver::new(bbox_tracker, eval_context);
             let intent = solver.resolve_position(position).map_err(|e| {
                 IrError::CoordinateResolutionFailed {
                     coordinate_str: format!("contact '{}' position", contact.name.base.as_str()),
@@ -56,12 +57,16 @@ pub fn place_contact(
                 stackup_manager,
                 profile,
             };
-            let point_3d = crate::ir::conversions::coordinate_to_point(position, &ctx).map_err(|e| {
-                IrError::CoordinateResolutionFailed {
-                    coordinate_str: format!("contact '{}' position", contact.name.base.as_str()),
-                    reason: e,
-                }
-            })?;
+            let point_3d =
+                crate::ir::conversions::coordinate_to_point(position, &ctx).map_err(|e| {
+                    IrError::CoordinateResolutionFailed {
+                        coordinate_str: format!(
+                            "contact '{}' position",
+                            contact.name.base.as_str()
+                        ),
+                        reason: e,
+                    }
+                })?;
             // Extract 2D point from 3D
             Point2D::new(point_3d.x, point_3d.y)
         }
@@ -75,10 +80,13 @@ pub fn place_contact(
             component: contact.name.base.to_string(),
         });
     };
-    
-    println!("[PLACE_CONTACT_DEBUG] Resolved xy_point for '{}': x={}, y={}", 
+
+    println!(
+        "[PLACE_CONTACT_DEBUG] Resolved xy_point for '{}': x={}, y={}",
         contact.name.base.as_str(),
-        xy_point.x, xy_point.y);
+        xy_point.x,
+        xy_point.y
+    );
 
     let diameter_nm = get_prop_nm(contact, "drill_diameter", symbol_table, eval_context)
         .or_else(|| get_prop_nm(contact, "diameter", symbol_table, eval_context))
@@ -109,9 +117,13 @@ pub fn place_contact(
         eval_context,
         space.resolution_nm,
     )?;
-    let from_top_nm =
-        stackup_manager.resolve_elevation_top(&contact.from_elevation, symbol_table, eval_context)?;
-    let to_top_nm = stackup_manager.resolve_elevation_top(&contact.to_elevation, symbol_table, eval_context)?;
+    let from_top_nm = stackup_manager.resolve_elevation_top(
+        &contact.from_elevation,
+        symbol_table,
+        eval_context,
+    )?;
+    let to_top_nm =
+        stackup_manager.resolve_elevation_top(&contact.to_elevation, symbol_table, eval_context)?;
 
     let contact_name_debug = contact.name.base.as_str();
     println!("[PLACE_CONTACT] '{}' material='{}' dia={}nm from_z={}nm to_z={}nm from_top={}nm to_top={}nm",
@@ -139,51 +151,73 @@ pub fn place_contact(
                 from_top_nm,
             )
         };
-    
+
     let lower_layer_name = lower_layer_name.ok_or_else(|| IrError::PlacementConstraint {
-        message: format!("Could not resolve lower layer name for contact '{}'", contact_name_debug),
+        message: format!(
+            "Could not resolve lower layer name for contact '{}'",
+            contact_name_debug
+        ),
         component: contact_name_debug.to_string(),
     })?;
-    
+
     let upper_layer_name = upper_layer_name.ok_or_else(|| IrError::PlacementConstraint {
-        message: format!("Could not resolve upper layer name for contact '{}'", contact_name_debug),
+        message: format!(
+            "Could not resolve upper layer name for contact '{}'",
+            contact_name_debug
+        ),
         component: contact_name_debug.to_string(),
     })?;
-    
+
     let lower_thickness_nm = lower_top - lower_bottom;
     let upper_thickness_nm = upper_top - upper_bottom;
-    
+
     // Get layer materials from stackup
-    let lower_material = stackup_manager.get_layer_material(&lower_layer_name)
+    let lower_material = stackup_manager
+        .get_layer_material(&lower_layer_name)
         .ok_or_else(|| IrError::PlacementConstraint {
-            message: format!("Could not resolve material for layer '{}'", lower_layer_name),
+            message: format!(
+                "Could not resolve material for layer '{}'",
+                lower_layer_name
+            ),
             component: contact_name_debug.to_string(),
         })?;
-    
-    let upper_material = stackup_manager.get_layer_material(&upper_layer_name)
+
+    let upper_material = stackup_manager
+        .get_layer_material(&upper_layer_name)
         .ok_or_else(|| IrError::PlacementConstraint {
-            message: format!("Could not resolve material for layer '{}'", upper_layer_name),
+            message: format!(
+                "Could not resolve material for layer '{}'",
+                upper_layer_name
+            ),
             component: contact_name_debug.to_string(),
         })?;
-    
+
     println!(
         "[PLACE_CONTACT] '{}' layers: lower='{}' ({}, {}nm thick) upper='{}' ({}, {}nm thick)",
         contact_name_debug,
-        lower_layer_name, lower_material, lower_thickness_nm,
-        upper_layer_name, upper_material, upper_thickness_nm
+        lower_layer_name,
+        lower_material,
+        lower_thickness_nm,
+        upper_layer_name,
+        upper_material,
+        upper_thickness_nm
     );
-    
+
     // v0.2.1: Get safety bounds from profile
     let min_depth_nm = profile
         .and_then(|p| p.via.as_ref())
         .and_then(|v| v.min_contact_depth.as_ref())
-        .and_then(|m| crate::ir::conversions::measurement_to_nm(m, symbol_table, eval_context).ok());
-    
+        .and_then(|m| {
+            crate::ir::conversions::measurement_to_nm(m, symbol_table, eval_context).ok()
+        });
+
     let max_depth_nm = profile
         .and_then(|p| p.via.as_ref())
         .and_then(|v| v.max_contact_depth.as_ref())
-        .and_then(|m| crate::ir::conversions::measurement_to_nm(m, symbol_table, eval_context).ok());
-    
+        .and_then(|m| {
+            crate::ir::conversions::measurement_to_nm(m, symbol_table, eval_context).ok()
+        });
+
     // v0.2.1: Create depth evaluation context
     let depth_context = depth_resolver::DepthEvaluationContext {
         lower_layer_thickness_nm: lower_thickness_nm,
@@ -194,7 +228,7 @@ pub fn place_contact(
         symbol_table,
         eval_context,
     };
-    
+
     // v0.2.1: Resolve depths using material-aware lookup
     let (lower_depth_nm, upper_depth_nm) = depth_resolver::resolve_contact_depths(
         contact,
@@ -205,17 +239,20 @@ pub fn place_contact(
         upper_thickness_nm,
         upper_material,
         profile.ok_or_else(|| IrError::MissingAsicConstraint {
-            message: format!("Contact '{}' requires a profile definition", contact_name_debug),
+            message: format!(
+                "Contact '{}' requires a profile definition",
+                contact_name_debug
+            ),
             hint: "Add a profile to your space definition".into(),
         })?,
         &depth_context,
     )?;
-    
+
     println!(
         "[PLACE_CONTACT] '{}' resolved depths: lower={}nm upper={}nm",
         contact_name_debug, lower_depth_nm, upper_depth_nm
     );
-    
+
     // v0.2.1: VALIDATION - Prevent depth exceeding layer thickness
     if lower_depth_nm > lower_thickness_nm {
         return Err(IrError::PlacementConstraint {
@@ -227,7 +264,7 @@ pub fn place_contact(
             component: contact_name_debug.to_string(),
         });
     }
-    
+
     if upper_depth_nm > upper_thickness_nm {
         return Err(IrError::PlacementConstraint {
             message: format!(
@@ -238,7 +275,7 @@ pub fn place_contact(
             component: contact_name_debug.to_string(),
         });
     }
-    
+
     // Calculate via Z-span using resolved depths
     let via_bottom = (lower_top - lower_depth_nm).max(0); // Clamp to substrate base
     let via_top = upper_bottom + upper_depth_nm;
@@ -266,7 +303,7 @@ pub fn place_contact(
             component: contact_name_debug.to_string(),
         });
     }
-    
+
     if end_z > space.dimensions.depth_nm {
         return Err(IrError::PlacementConstraint {
             message: format!(
@@ -293,7 +330,7 @@ pub fn place_contact(
             start_z.max(end_z),
         ),
     );
-    
+
     println!("[PLACE_CONTACT_DEBUG] '{}' contact_bbox calculated: min=({},{},{}) max=({},{},{}), radius={}nm",
         contact_name_debug,
         contact_bbox.min.x, contact_bbox.min.y, contact_bbox.min.z,
@@ -404,19 +441,18 @@ pub fn place_contact(
         )?;
     } else {
         // NO DEFAULTS: Material MUST have an explicit process declaration
-        let material_def = symbol_table.get_material(&contact.material)
-            .map_err(|_| IrError::UndeclaredMaterial {
+        let material_def = symbol_table.get_material(&contact.material).map_err(|_| {
+            IrError::UndeclaredMaterial {
                 material: contact.material.clone(),
-            })?;
-        
+            }
+        })?;
+
         // Process is now a required field (not Option), validated at parse time
         let process = match material_def.process {
             hwc_parser::ManufacturingProcess::DrilledPlated => {
                 hwc_engine::ManufacturingProcess::DrilledPlated
             }
-            hwc_parser::ManufacturingProcess::Etched => {
-                hwc_engine::ManufacturingProcess::Etched
-            }
+            hwc_parser::ManufacturingProcess::Etched => hwc_engine::ManufacturingProcess::Etched,
             hwc_parser::ManufacturingProcess::Deposited => {
                 hwc_engine::ManufacturingProcess::Deposited
             }
@@ -492,18 +528,19 @@ pub fn place_contact(
 
     // v0.2.0: Register contact as a routable entity
     let contact_name_str = contact.name.base.as_str();
-    let net_id = contact.net.as_ref().and_then(|net| {
-        space.netlist.get_net_by_name(net.base.as_str())
-    });
+    let net_id = contact
+        .net
+        .as_ref()
+        .and_then(|net| space.netlist.get_net_by_name(net.base.as_str()));
 
     // v0.2.0: Register via connections in the layer connection database
     // Use the via-layer mapping database to determine exact connection Z values
     // instead of guessing from bounding box midpoints.
     {
         let from_mat_id = space.material_registry.get_id(&contact.material);
-        let to_mat_id = bridge_material_name.as_ref().and_then(|b| {
-            space.material_registry.get_id(b)
-        });
+        let to_mat_id = bridge_material_name
+            .as_ref()
+            .and_then(|b| space.material_registry.get_id(b));
 
         // Register connection points for the layers this via spans
         // The from_elevation and to_elevation give us the semantic layer names
@@ -520,8 +557,8 @@ pub fn place_contact(
             // CRITICAL FIX: Via connections are at layer interfaces, not layer bottoms
             // Bottom connection = TOP of the FROM layer (where via exits the lower layer)
             // Top connection = BOTTOM of the TO layer (where via enters the upper layer)
-            let bottom_connection_z = from_top_nm;  // Top of "active" layer
-            let top_connection_z = to_bottom_nm;    // Bottom of "metal1" layer
+            let bottom_connection_z = from_top_nm; // Top of "active" layer
+            let top_connection_z = to_bottom_nm; // Bottom of "metal1" layer
 
             let bottom_mat = from_mat_id.unwrap_or(0);
             let top_mat = to_mat_id.unwrap_or(from_mat_id.unwrap_or(0));
@@ -598,16 +635,19 @@ pub fn place_contact(
 
     // v0.2.0 CIR: Register PhysicalInterface for this contact
     {
-        use hwc_engine::geometry_router::connection_interface::{InterfaceGeometry, PhysicalInterface};
+        use hwc_engine::geometry_router::connection_interface::{
+            InterfaceGeometry, PhysicalInterface,
+        };
         use hwc_engine::geometry_router::routing_intent::RoutingIntent;
         use hwc_engine::netlist::ComponentId;
         use smallvec::smallvec;
 
-        let constraints = space.fabrication_constraints.as_ref()
-            .ok_or_else(|| IrError::MissingAsicConstraint {
+        let constraints = space.fabrication_constraints.as_ref().ok_or_else(|| {
+            IrError::MissingAsicConstraint {
                 message: "Fabrication constraints required for contact interface generation".into(),
                 hint: "Add a 'trace:' block to your profile with min_width and min_spacing".into(),
-            })?;
+            }
+        })?;
 
         let trace_width_nm = constraints.trace.min_width_nm;
         let clearance_nm = constraints.trace.min_spacing_nm;
@@ -619,7 +659,8 @@ pub fn place_contact(
             _ => None,
         } {
             // Try to get the routing Z from the routing layer database
-            space.routing_layer_db
+            space
+                .routing_layer_db
                 .get_routing_z(from_name)
                 .unwrap_or_else(|_| {
                     // Fall back to top of via bbox if routing layer DB doesn't have this layer
@@ -655,7 +696,8 @@ pub fn place_contact(
 
         let interface_id = space.entity_graph.allocate_interface_id();
         let intent = RoutingIntent::new("Default");
-        let db = hwc_engine::geometry_router::connection_interface::DefaultRoutingDatabase::default();
+        let db =
+            hwc_engine::geometry_router::connection_interface::DefaultRoutingDatabase::default();
         let pseudo_component_id = ComponentId::new(0xFFFF_0000 + interface_id.raw());
 
         let interface = PhysicalInterface::new(
@@ -670,12 +712,11 @@ pub fn place_contact(
             clearance_nm * 2,
         );
 
-        space.entity_graph.register_space_entity_interface(
-            contact.name.base.clone(),
-            interface,
-        );
+        space
+            .entity_graph
+            .register_space_entity_interface(contact.name.base.clone(), interface);
     }
-    
+
     println!(
         "[DEBUG] Registered contact '{}' as routing endpoint with net_id={:?}",
         contact_name_str, net_id

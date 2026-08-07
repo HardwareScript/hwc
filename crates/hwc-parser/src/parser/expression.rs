@@ -164,33 +164,33 @@ impl Parser {
                         // Parse function call: sin(x), cos(angle), etc.
                         let func_name = self.expect_identifier_string()?;
                         let func_span = self.previous_span();
-                        
+
                         self.expect(&Token::OpenParen)?;
-                        
+
                         // Parse comma-separated arguments
                         let mut arguments = Vec::new();
-                        
+
                         if !self.check(&Token::CloseParen) {
                             loop {
                                 arguments.push(self.parse_expression()?);
-                                
+
                                 if !self.check(&Token::Comma) {
                                     break;
                                 }
                                 self.advance(); // consume comma
                             }
                         }
-                        
+
                         self.expect(&Token::CloseParen)?;
                         let end_pos = self.previous_span().end;
-                        
+
                         return Ok(Expression::FunctionCall {
                             name: func_name.into(),
                             arguments,
                             span: Span::new(func_span.start, end_pos),
                         });
                     }
-                    
+
                     // Check if this is an anchor reference: ComponentName.edge or ComponentName[i].edge
                     // We need to look ahead to see if there's a dot followed by a valid spatial edge name
                     let is_anchor = if let Some(next) = self.peek_ahead(1) {
@@ -240,8 +240,9 @@ impl Parser {
                                                     self.tokens.get(self.current + lookahead + 1)
                                                 {
                                                     if matches!(after.token, Token::Dot) {
-                                                        if let Some(edge_tok) =
-                                                            self.tokens.get(self.current + lookahead + 2)
+                                                        if let Some(edge_tok) = self
+                                                            .tokens
+                                                            .get(self.current + lookahead + 2)
                                                         {
                                                             if let Token::Identifier(edge_name) =
                                                                 &edge_tok.token

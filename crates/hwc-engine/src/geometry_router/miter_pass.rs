@@ -12,9 +12,9 @@
 //! The engine queries contact metadata to identify endpoints that connect to
 //! vias/pads and preserves these connections by skipping miter on terminal segments.
 
-use crate::geometry::{Point3D, BoundingBox};
+use super::coordinate_system::{get_routing_direction, CardinalDirection};
+use crate::geometry::{BoundingBox, Point3D};
 use crate::netlist::NetId;
-use super::coordinate_system::{CardinalDirection, get_routing_direction};
 
 /// Context provider for via/pad location queries
 ///
@@ -26,7 +26,7 @@ pub trait MiterContext {
     /// Returns true if the point is within the specified tolerance of a contact center
     /// or landing pad, indicating that segments touching this point should not be mitered.
     fn is_via_endpoint(&self, point: &Point3D, net_id: Option<NetId>, tolerance_nm: i64) -> bool;
-    
+
     /// Get the bounding box of a contact/via at or near the given point
     ///
     /// Returns None if no contact found within tolerance
@@ -37,10 +37,15 @@ pub trait MiterContext {
 pub struct NullMiterContext;
 
 impl MiterContext for NullMiterContext {
-    fn is_via_endpoint(&self, _point: &Point3D, _net_id: Option<NetId>, _tolerance_nm: i64) -> bool {
+    fn is_via_endpoint(
+        &self,
+        _point: &Point3D,
+        _net_id: Option<NetId>,
+        _tolerance_nm: i64,
+    ) -> bool {
         false // No via data available, miter everything
     }
-    
+
     fn get_contact_bbox(&self, _point: &Point3D, _tolerance_nm: i64) -> Option<BoundingBox> {
         None
     }
@@ -94,7 +99,7 @@ impl MiterEngine {
         for (i, p) in path.iter().enumerate() {
             eprintln!("[MITER INPUT]   Point {}: ({},{},{})", i, p.x, p.y, p.z);
         }
-        
+
         if path.len() < 3 {
             return path.to_vec();
         }
@@ -107,8 +112,11 @@ impl MiterEngine {
             .filter(|(i, p)| *i == 0 || *p != path[i - 1])
             .map(|(_, p)| p)
             .collect();
-        
-        eprintln!("[MITER DEDUP] After deduplication: {} points", deduped.len());
+
+        eprintln!(
+            "[MITER DEDUP] After deduplication: {} points",
+            deduped.len()
+        );
         for (i, p) in deduped.iter().enumerate() {
             eprintln!("[MITER DEDUP]   Point {}: ({},{},{})", i, p.x, p.y, p.z);
         }
@@ -118,13 +126,13 @@ impl MiterEngine {
         }
 
         let mut mitered = Vec::with_capacity(deduped.len() + deduped.len() / 2);
-        
+
         // Miter distance: 1.5× trace width for standard impedance stability
         let miter_dist = self.trace_width_nm * 3 / 2;
-        
+
         // Tolerance for via endpoint detection (half the trace width)
         let via_tolerance = self.trace_width_nm / 2;
-        
+
         // v0.2.0 FIX: Via edge coverage with proper forward extension
         // RATIONALE: The export engine uses EndType::Butt (flush ends) when stroking traces.
         // If a waypoint is at the via CENTER (650nm) and we stroke with 100nm radius, the
@@ -136,21 +144,25 @@ impl MiterEngine {
         //
         // CRITICAL: We extend FORWARD (in routing direction), not backward (which would create
         // overshoot artifacts).
-        
+
         let first = deduped[0];
         if deduped.len() >= 2 {
             if let Some(via_bbox) = context.get_contact_bbox(&first, via_tolerance) {
-                eprintln!("[MITER VIA COVERAGE] First point ({},{},{}) is via center", 
-                    first.x, first.y, first.z);
-                eprintln!("[MITER VIA COVERAGE]   Via bbox: ({},{}) -> ({},{})", 
-                    via_bbox.min.x, via_bbox.min.y, via_bbox.max.x, via_bbox.max.y);
-                
+                eprintln!(
+                    "[MITER VIA COVERAGE] First point ({},{},{}) is via center",
+                    first.x, first.y, first.z
+                );
+                eprintln!(
+                    "[MITER VIA COVERAGE]   Via bbox: ({},{}) -> ({},{})",
+                    via_bbox.min.x, via_bbox.min.y, via_bbox.max.x, via_bbox.max.y
+                );
+
                 // Determine routing direction using coordinate system utilities
                 let second = deduped[1];
                 let direction = get_routing_direction(&first, &second);
-                
+
                 eprintln!("[MITER VIA COVERAGE]   Routing direction: {:?}", direction);
-                
+
                 // Calculate via edge point IN THE DIRECTION OF ROUTING
                 // This ensures the stroked trace (with flush ends) covers the via
                 let via_edge = match direction {
@@ -172,10 +184,12 @@ impl MiterEngine {
                         Point3D::new(first.x, via_bbox.max.y, first.z)
                     }
                 };
-                
-                eprintln!("[MITER VIA COVERAGE]   Using via edge waypoint: ({},{},{})", 
-                    via_edge.x, via_edge.y, via_edge.z);
-                    
+
+                eprintln!(
+                    "[MITER VIA COVERAGE]   Using via edge waypoint: ({},{},{})",
+                    via_edge.x, via_edge.y, via_edge.z
+                );
+
                 mitered.push(via_edge);
             } else {
                 mitered.push(first);
@@ -189,35 +203,26 @@ impl MiterEngine {
             let p_prev = deduped[i - 1];
             let p_curr = deduped[i];
             let p_next = deduped[i + 1];
-            
-           
+
             // CRITICAL: Check if current point is a via endpoint
             // If it is, skip mitering to preserve the via connection
             let is_via_endpoint = context.is_via_endpoint(&p_curr, net_id, via_tolerance);
-            
-        
 
             // Direction vectors (XY only — miter is a 2D operation)
             let v1_x = p_curr.x - p_prev.x;
             let v1_y = p_curr.y - p_prev.y;
             let v2_x = p_next.x - p_curr.x;
             let v2_y = p_next.y - p_curr.y;
-            
-           
 
             // Check for 90° corner: orthogonal segments in the XY plane
             let dot = v1_x * v2_x + v1_y * v2_y;
             let is_corner = dot == 0 && (v1_x != 0 || v1_y != 0) && (v2_x != 0 || v2_y != 0);
-            
-           
 
             if is_corner && !is_via_endpoint {
                 let len1_f = ((v1_x * v1_x + v1_y * v1_y) as f64).sqrt();
                 let len2_f = ((v2_x * v2_x + v2_y * v2_y) as f64).sqrt();
                 let len1 = len1_f as i64;
                 let len2 = len2_f as i64;
-                
-              
 
                 if len1 > miter_dist && len2 > miter_dist {
                     let u1_x_f = v1_x as f64 / len1_f;
@@ -235,8 +240,11 @@ impl MiterEngine {
                         p_curr.y + (u2_y_f * miter_dist as f64).round() as i64,
                         p_curr.z,
                     );
-                    
-                    eprintln!("[MITER APPLY] Applying miter at ({},{},{})", p_curr.x, p_curr.y, p_curr.z);
+
+                    eprintln!(
+                        "[MITER APPLY] Applying miter at ({},{},{})",
+                        p_curr.x, p_curr.y, p_curr.z
+                    );
                     eprintln!("[MITER APPLY]   p_a=({},{},{})", p_a.x, p_a.y, p_a.z);
                     eprintln!("[MITER APPLY]   p_b=({},{},{})", p_b.x, p_b.y, p_b.z);
 
@@ -269,21 +277,25 @@ impl MiterEngine {
         if last != *mitered.last().unwrap() {
             mitered.push(last);
         }
-        
+
         // Add via edge extension for last point if it's a via
         if deduped.len() >= 2 {
             if let Some(via_bbox) = context.get_contact_bbox(&last, via_tolerance) {
-                eprintln!("[MITER VIA COVERAGE] Last point ({},{},{}) is via center", 
-                    last.x, last.y, last.z);
-                eprintln!("[MITER VIA COVERAGE]   Via bbox: ({},{}) -> ({},{})", 
-                    via_bbox.min.x, via_bbox.min.y, via_bbox.max.x, via_bbox.max.y);
-                
+                eprintln!(
+                    "[MITER VIA COVERAGE] Last point ({},{},{}) is via center",
+                    last.x, last.y, last.z
+                );
+                eprintln!(
+                    "[MITER VIA COVERAGE]   Via bbox: ({},{}) -> ({},{})",
+                    via_bbox.min.x, via_bbox.min.y, via_bbox.max.x, via_bbox.max.y
+                );
+
                 // Determine routing direction using coordinate system utilities
                 let second_last = deduped[deduped.len() - 2];
                 let direction = get_routing_direction(&second_last, &last);
-                
+
                 eprintln!("[MITER VIA COVERAGE]   Routing direction: {:?}", direction);
-                
+
                 // Calculate via edge point based on routing direction
                 let via_edge = match direction {
                     CardinalDirection::East => {
@@ -303,14 +315,16 @@ impl MiterEngine {
                         Point3D::new(last.x, via_bbox.min.y, last.z)
                     }
                 };
-                
-                eprintln!("[MITER VIA COVERAGE]   Adding via edge point: ({},{},{})", 
-                    via_edge.x, via_edge.y, via_edge.z);
-                    
+
+                eprintln!(
+                    "[MITER VIA COVERAGE]   Adding via edge point: ({},{},{})",
+                    via_edge.x, via_edge.y, via_edge.z
+                );
+
                 mitered.push(via_edge);
             }
         }
-        
+
         mitered
     }
 

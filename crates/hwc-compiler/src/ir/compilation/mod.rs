@@ -59,10 +59,10 @@ pub fn compile_space_recursive(
         space_def,
         symbol_table,
         &collector,
-        None,           // No lockfile path
-        None,           // No source content
-        true,           // Force fresh routing
-        None,           // No query store
+        None, // No lockfile path
+        None, // No source content
+        true, // Force fresh routing
+        None, // No query store
         unit_registry,
     )?;
 
@@ -110,9 +110,15 @@ pub fn compile_single_space(
     let eval_context_initial = space_setup::build_eval_context(symbol_table, None, space_def)?;
 
     // Collect placement items (unroll loops with eval context)
-    let placement_items = placement_items::collect_placement_items(space_def, symbol_table, &eval_context_initial)?;
+    let placement_items =
+        placement_items::collect_placement_items(space_def, symbol_table, &eval_context_initial)?;
 
-    let mut space = space_setup::create_space(space_def, symbol_table, &eval_context_initial, unit_registry)?;
+    let mut space = space_setup::create_space(
+        space_def,
+        symbol_table,
+        &eval_context_initial,
+        unit_registry,
+    )?;
 
     let (profile, solder_mask_thickness_nm) =
         space_setup::resolve_solder_mask_thickness(space_def, symbol_table, &eval_context_initial)?;
@@ -147,7 +153,7 @@ pub fn compile_single_space(
                     "Material '{}' from stackup not found in material registry",
                     stackup_layer.material_name
                 ));
-            
+
             let substrate_bbox = hwc_engine::geometry::BoundingBox::new(
                 hwc_engine::geometry::Point3D::new(0, 0, stackup_layer.z_bottom),
                 hwc_engine::geometry::Point3D::new(
@@ -156,12 +162,12 @@ pub fn compile_single_space(
                     stackup_layer.z_top,
                 ),
             );
-            
+
             eprintln!(
                 "[STACKUP→SUBSTRATE] Registering dielectric layer '{}' (Z={}→{}nm, material={}) as substrate base",
                 stackup_layer.name, stackup_layer.z_bottom, stackup_layer.z_top, stackup_layer.material_name
             );
-            
+
             space.entity_graph.add_substrate_layer(
                 material_id,
                 hwc_engine::NetId::UNCONNECTED,
@@ -191,7 +197,12 @@ pub fn compile_single_space(
         space.via_layer_mapping_db.connection_count()
     );
 
-    space_setup::populate_material_registry(&mut space, profile.as_ref(), symbol_table, &eval_context);
+    space_setup::populate_material_registry(
+        &mut space,
+        profile.as_ref(),
+        symbol_table,
+        &eval_context,
+    );
     let sorted_ids = dependency_graph::build_and_sort(&placement_items, symbol_table)?;
 
     space_setup::generate_solder_mask(&mut space, solder_mask_thickness_nm, &stackup_manager)?;
@@ -230,11 +241,7 @@ pub fn compile_single_space(
         hwc_engine::geometry::Point3D { x: 0, y: 0, z: 0 },
     );
 
-    placement_loop::execute_placement(
-        &mut space,
-        &compile_ctx,
-        &mut bbox_tracker,
-    )?;
+    placement_loop::execute_placement(&mut space, &compile_ctx, &mut bbox_tracker)?;
 
     placement_loop::check_static_shorts(&space)?;
 
@@ -251,11 +258,12 @@ pub fn compile_single_space(
     // Architecture principle: routing_database is the source of truth,
     // entity_graph.routed_segments is a read-only view for obstacle queries.
     eprintln!("[COMPILATION] Synchronizing entity_graph from routing database...");
-    space.entity_graph.sync_from_routing_database(
-        &space.routing_database,
-        &space.routing_layer_db,
+    space
+        .entity_graph
+        .sync_from_routing_database(&space.routing_database, &space.routing_layer_db);
+    eprintln!(
+        "[COMPILATION] Synchronization complete - router can now see child routes as same-net ✓"
     );
-    eprintln!("[COMPILATION] Synchronization complete - router can now see child routes as same-net ✓");
 
     let routes_loaded_from_lock =
         routing_phase::try_load_lockfile(&mut space, lockfile_path, force_reroute)?;
@@ -267,8 +275,12 @@ pub fn compile_single_space(
         .unwrap_or(hwc_parser::RoutingMode::Mixed);
 
     if !routes_loaded_from_lock {
-        let _route_net_policies =
-            routing_phase::collect_route_net_policies(&space, space_def, symbol_table, &eval_context);
+        let _route_net_policies = routing_phase::collect_route_net_policies(
+            &space,
+            space_def,
+            symbol_table,
+            &eval_context,
+        );
 
         let auto_routes = routing_phase::process_routes(&mut space, &compile_ctx, routing_mode)?;
 
@@ -322,8 +334,16 @@ pub fn program_to_space(
         })
         .ok_or(IrError::NoSpaceDefinition)?;
 
-    let (space, _qs, _from_cache) =
-        compile_single_space(space_def, symbol_table, collector, None, None, false, None, unit_registry)?;
+    let (space, _qs, _from_cache) = compile_single_space(
+        space_def,
+        symbol_table,
+        collector,
+        None,
+        None,
+        false,
+        None,
+        unit_registry,
+    )?;
     Ok(space)
 }
 
@@ -336,7 +356,15 @@ pub fn program_to_spaces(
     collector: &hwc_diagnostics::DiagnosticCollector,
     unit_registry: &hwc_types::UnitRegistry,
 ) -> Result<rustc_hash::FxHashMap<compact_str::CompactString, HardwareSpace>, IrError> {
-    program_to_spaces_with_lockfile(program, symbol_table, collector, None, None, false, unit_registry)
+    program_to_spaces_with_lockfile(
+        program,
+        symbol_table,
+        collector,
+        None,
+        None,
+        false,
+        unit_registry,
+    )
 }
 
 /// Compile all space definitions into HardwareSpaces with lockfile support.

@@ -15,7 +15,10 @@ pub enum RoutingLayerError {
         material: CompactString,
     },
     /// A routable layer references an undeclared material
-    UndeclaredMaterial { material: CompactString, layer: CompactString },
+    UndeclaredMaterial {
+        material: CompactString,
+        layer: CompactString,
+    },
 }
 
 impl std::fmt::Display for RoutingLayerError {
@@ -84,10 +87,7 @@ impl RoutingLayerDatabase {
     /// - Interconnect layers (metal1+) connect to vias FROM BELOW → use z_bottom
     ///
     /// This aligns routing centerlines with via connection points for DRC compliance.
-    pub fn from_stackup(
-        stackup: &[StackupLayer],
-        material_registry: &MaterialRegistry,
-    ) -> Self {
+    pub fn from_stackup(stackup: &[StackupLayer], material_registry: &MaterialRegistry) -> Self {
         let mut db = Self {
             layers: FxHashMap::default(),
             ordered_names: Vec::new(),
@@ -97,7 +97,7 @@ impl RoutingLayerDatabase {
         // Heuristic: First 2 routable layers are base layers (active, poly)
         // All subsequent layers are interconnect (metal1, metal2, ...)
         let mut routable_layer_count = 0;
-        
+
         for layer in stackup {
             // Look up the material to determine conductivity
             let mat_id = material_registry.get_id(&layer.material_name);
@@ -109,7 +109,7 @@ impl RoutingLayerDatabase {
             });
 
             let is_routable = is_conductive && layer.is_routable;
-            
+
             // **v0.2.1 FIX: Data-driven routing Z assignment**
             // Base layers (active, poly) only connect to vias from above → route at z_top
             // Interconnect layers (metal1+) connect to vias from below → route at z_bottom
@@ -170,11 +170,12 @@ impl RoutingLayerDatabase {
     /// Returns `Err` if the layer doesn't exist or isn't routable.
     /// NO fallback. NO default. Query or fail.
     pub fn get_routing_z(&self, layer_name: &str) -> Result<i64, RoutingLayerError> {
-        let layer = self.layers.get(layer_name).ok_or_else(|| {
-            RoutingLayerError::LayerNotFound {
-                layer: layer_name.into(),
-            }
-        })?;
+        let layer =
+            self.layers
+                .get(layer_name)
+                .ok_or_else(|| RoutingLayerError::LayerNotFound {
+                    layer: layer_name.into(),
+                })?;
 
         if !layer.is_routable {
             return Err(RoutingLayerError::LayerNotRoutable {
@@ -188,9 +189,11 @@ impl RoutingLayerDatabase {
 
     /// Get the full routing layer definition for a named layer.
     pub fn get_layer(&self, layer_name: &str) -> Result<&RoutingLayer, RoutingLayerError> {
-        self.layers.get(layer_name).ok_or_else(|| RoutingLayerError::LayerNotFound {
-            layer: layer_name.into(),
-        })
+        self.layers
+            .get(layer_name)
+            .ok_or_else(|| RoutingLayerError::LayerNotFound {
+                layer: layer_name.into(),
+            })
     }
 
     /// Get the bottom Z of a layer (for via connection validation).
@@ -223,14 +226,17 @@ impl RoutingLayerDatabase {
 
     /// Validate the database — ensure all routable layers have valid Z ranges.
     pub fn validate(&self) -> Result<(), Vec<RoutingLayerError>> {
-        eprintln!("[ROUTING LAYER DB] Validating {} layers:", self.layers.len());
+        eprintln!(
+            "[ROUTING LAYER DB] Validating {} layers:",
+            self.layers.len()
+        );
         for (name, layer) in &self.layers {
             eprintln!(
                 "[ROUTING LAYER DB]   '{}': routable={}, routing_z={}nm, z_bottom={}nm, z_top={}nm",
                 name, layer.is_routable, layer.routing_z, layer.z_bottom, layer.z_top
             );
         }
-        
+
         let mut errors = Vec::new();
 
         for (name, layer) in &self.layers {
@@ -315,7 +321,10 @@ mod tests {
 
         let result = db.get_routing_z("nonexistent");
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), RoutingLayerError::LayerNotFound { .. }));
+        assert!(matches!(
+            result.unwrap_err(),
+            RoutingLayerError::LayerNotFound { .. }
+        ));
     }
 
     #[test]

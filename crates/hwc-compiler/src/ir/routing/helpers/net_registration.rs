@@ -22,12 +22,11 @@ pub fn register_net_for_route(
     let net_name: CompactString = format!("NET_{}_to_{}", from_name, to_name).into();
 
     let width_nm = if let Some(w_expr) = &route.width {
-        crate::ir::conversions::evaluate_expression_to_nm(w_expr, symbol_table, eval_context).map_err(|e| {
-            IrError::InvalidRouteExpression {
+        crate::ir::conversions::evaluate_expression_to_nm(w_expr, symbol_table, eval_context)
+            .map_err(|e| IrError::InvalidRouteExpression {
                 expression: "trace width".into(),
                 reason: e.to_string(),
-            }
-        })?
+            })?
     } else {
         profile.and_then(|p| p.trace.as_ref())
             .map(|t| crate::ir::conversions::measurement_to_nm(&t.min_width, symbol_table, eval_context))

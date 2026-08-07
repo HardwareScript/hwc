@@ -45,14 +45,17 @@ pub fn add_substrate(
     // All copper contours come from unified_geometry module.
     // This module only handles 3D extrusion of those contours.
     let copper_contours = crate::scene_graph::generate_copper_contours(space);
-    
-    eprintln!("[SUBSTRATE MESH] Processing {} unified copper pools", copper_contours.len());
-    
+
+    eprintln!(
+        "[SUBSTRATE MESH] Processing {} unified copper pools",
+        copper_contours.len()
+    );
+
     // Extrude each unified copper contour into 3D meshes
     for contour_data in copper_contours {
         let z_min_mm = contour_data.key.z_min as f64 / 1_000_000.0;
         let depth_mm = (contour_data.key.z_max - contour_data.key.z_min) as f64 / 1_000_000.0;
-        
+
         let material_name = space
             .material_registry
             .get_name(contour_data.key.material)
@@ -81,7 +84,11 @@ pub fn add_substrate(
                 .collect();
 
             meshes.push(extrude_polygon_mesh(
-                &format!("Copper_Net{}_Contour{}", contour_data.key.net_id.raw(), c_idx),
+                &format!(
+                    "Copper_Net{}_Contour{}",
+                    contour_data.key.net_id.raw(),
+                    c_idx
+                ),
                 &outer_points,
                 &[],
                 z_min_mm,
@@ -103,19 +110,22 @@ pub fn add_substrate(
         let center_x_mm = via.position.0 as f64 / 1_000_000.0;
         let center_y_mm = via.position.1 as f64 / 1_000_000.0;
         let outer_dia_mm = via.diameter_nm as f64 / 1_000_000.0;
-        
+
         let material_name = space
             .material_registry
             .get_name(via.material_id)
-            .expect(&format!("Material ID {:?} not found in registry for via {}", via.material_id, via_idx));
-        
+            .expect(&format!(
+                "Material ID {:?} not found in registry for via {}",
+                via.material_id, via_idx
+            ));
+
         // Check if this is an IC via (deposited) or PCB via (drilled/plated)
         let is_ic_via = space
             .material_registry
             .get_process(via.material_id)
             .map(|process| process == hwc_engine::ManufacturingProcess::Deposited)
             .unwrap_or(false);
-        
+
         if is_ic_via {
             // IC vias are fully represented by Contact substrate layers (already extruded)
             continue;
@@ -154,7 +164,10 @@ pub fn add_substrate(
         let material_name = space
             .material_registry
             .get_name(layer.material)
-            .expect(&format!("Material ID {:?} not found in registry for substrate base layer {}", layer.material, idx));
+            .expect(&format!(
+                "Material ID {:?} not found in registry for substrate base layer {}",
+                layer.material, idx
+            ));
 
         if material_name == "Void" || material_name == "Air" {
             continue;
@@ -228,7 +241,10 @@ pub fn add_substrate(
             })
             .collect();
 
-        eprintln!("[SUBSTRATE BASE] Found {} valid vias for cutout consideration", via_cutouts.len());
+        eprintln!(
+            "[SUBSTRATE BASE] Found {} valid vias for cutout consideration",
+            via_cutouts.len()
+        );
 
         // Build the substrate mesh with via cutouts using clean builder pattern
         match super::mesh_generation::SubstrateMeshBuilder::new(
@@ -248,7 +264,10 @@ pub fn add_substrate(
                 meshes.push(mesh_node);
             }
             Err(e) => {
-                eprintln!("[SUBSTRATE BASE ERROR] Failed to generate substrate mesh: {}", e);
+                eprintln!(
+                    "[SUBSTRATE BASE ERROR] Failed to generate substrate mesh: {}",
+                    e
+                );
             }
         }
     }

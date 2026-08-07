@@ -48,8 +48,8 @@ pub use profile::*;
 pub use shape::*;
 pub use signal_group::*;
 pub use space::*;
-pub use subcircuit::*;
 pub use spice_model::*;
+pub use subcircuit::*;
 pub use test::*;
 pub use unit::*;
 

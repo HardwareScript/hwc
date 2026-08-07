@@ -18,7 +18,7 @@ use hwc_types::Technology;
 use rustc_hash::FxHashMap;
 
 /// **v0.2.0: Stackup layer information (single source of truth)**
-/// 
+///
 /// Minimal stackup metadata embedded in HardwareSpace so export and validation
 /// code can resolve layer Z-coordinates without needing the full StackupManager.
 #[derive(Debug, Clone)]
@@ -222,7 +222,8 @@ impl HardwareSpace {
             routing_database: crate::routing_database::HierarchicalRoutingDatabase::new(),
             layer_connection_db: crate::layer_connection_database::LayerConnectionDatabase::new(),
             routing_layer_db: crate::routing_layer_database::RoutingLayerDatabase::default(),
-            via_layer_mapping_db: crate::via_layer_mapping_database::ViaLayerMappingDatabase::default(),
+            via_layer_mapping_db:
+                crate::via_layer_mapping_database::ViaLayerMappingDatabase::default(),
             via_instance_db: crate::via_instance_database::ViaInstanceDatabase::new(),
             device_instances: Vec::new(),
         }
@@ -315,14 +316,28 @@ impl HardwareSpace {
     ///
     /// Called after routing operations complete to sync the derived view.
     pub fn sync_analytic_routes_from_database(&mut self) {
-        eprintln!("[SYNC] sync_analytic_routes_from_database() called for space '{}'", self.name);
-        eprintln!("[SYNC]   Before sync: analytic_routes.len() = {}", self.analytic_routes.len());
-        
-        self.analytic_routes = self.routing_database.build_analytic_routes(&self.netlist, &self.stackup_layers);
-        
-        eprintln!("[SYNC]   After sync: analytic_routes.len() = {}", self.analytic_routes.len());
+        eprintln!(
+            "[SYNC] sync_analytic_routes_from_database() called for space '{}'",
+            self.name
+        );
+        eprintln!(
+            "[SYNC]   Before sync: analytic_routes.len() = {}",
+            self.analytic_routes.len()
+        );
+
+        self.analytic_routes = self
+            .routing_database
+            .build_analytic_routes(&self.netlist, &self.stackup_layers);
+
+        eprintln!(
+            "[SYNC]   After sync: analytic_routes.len() = {}",
+            self.analytic_routes.len()
+        );
         eprintln!("[SYNC]   Routing database stats:");
-        eprintln!("[SYNC]     - parent_interconnects: {}", self.routing_database.get_parent_interconnects().len());
+        eprintln!(
+            "[SYNC]     - parent_interconnects: {}",
+            self.routing_database.get_parent_interconnects().len()
+        );
     }
 
     /// **v0.2.0: Add an analytic route (GOD-TIER NATIVE API)**
@@ -430,30 +445,37 @@ impl HardwareSpace {
 /// Provides via/contact location queries to the miter engine, allowing it to
 /// preserve connections to via landing pads by skipping miter on terminal segments.
 impl crate::geometry_router::miter_pass::MiterContext for HardwareSpace {
-    fn is_via_endpoint(&self, point: &crate::geometry::Point3D, net_id: Option<NetId>, tolerance_nm: i64) -> bool {
+    fn is_via_endpoint(
+        &self,
+        point: &crate::geometry::Point3D,
+        net_id: Option<NetId>,
+        tolerance_nm: i64,
+    ) -> bool {
         // Query contact metadata to check if this point is a via center
         for contact in &self.contacts {
             // Skip if net doesn't match (when net filtering is requested)
             if let Some(query_net) = net_id {
                 if let Some(contact_net_name) = &contact.net {
-                    if let Some(contact_net_id) = self.netlist.get_net_by_name(contact_net_name.as_str()) {
+                    if let Some(contact_net_id) =
+                        self.netlist.get_net_by_name(contact_net_name.as_str())
+                    {
                         if contact_net_id != query_net {
                             continue; // Wrong net, skip this contact
                         }
                     }
                 }
             }
-            
+
             // Check if point is within tolerance of contact bbox center
             if let Some(bbox) = contact.bbox {
                 let center_x = (bbox.min.x + bbox.max.x) / 2;
                 let center_y = (bbox.min.y + bbox.max.y) / 2;
                 let center_z = (bbox.min.z + bbox.max.z) / 2;
-                
+
                 let dx = (point.x - center_x).abs();
                 let dy = (point.y - center_y).abs();
                 let dz = (point.z - center_z).abs();
-                
+
                 // Check if point is within tolerance of contact center (XY plane)
                 // Z can be different (routing layer vs via center) so check Z separately
                 if dx <= tolerance_nm && dy <= tolerance_nm && dz <= bbox.max.z - bbox.min.z {
@@ -463,16 +485,20 @@ impl crate::geometry_router::miter_pass::MiterContext for HardwareSpace {
         }
         false
     }
-    
-    fn get_contact_bbox(&self, point: &crate::geometry::Point3D, tolerance_nm: i64) -> Option<BoundingBox> {
+
+    fn get_contact_bbox(
+        &self,
+        point: &crate::geometry::Point3D,
+        tolerance_nm: i64,
+    ) -> Option<BoundingBox> {
         for contact in &self.contacts {
             if let Some(bbox) = contact.bbox {
                 let center_x = (bbox.min.x + bbox.max.x) / 2;
                 let center_y = (bbox.min.y + bbox.max.y) / 2;
-                
+
                 let dx = (point.x - center_x).abs();
                 let dy = (point.y - center_y).abs();
-                
+
                 if dx <= tolerance_nm && dy <= tolerance_nm {
                     return Some(bbox);
                 }

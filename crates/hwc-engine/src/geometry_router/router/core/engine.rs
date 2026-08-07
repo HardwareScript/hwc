@@ -34,7 +34,7 @@ impl GeometryRouter {
         }
         self.net_frequencies = net_frequencies.clone();
         self.net_trace_widths = net_trace_widths.clone();
-        
+
         // v0.1.9: Store per-net normals and escape stubs for perpendicular escape routing
         if let Some(normals) = net_normals {
             self.net_normals = normals.clone();
@@ -42,13 +42,16 @@ impl GeometryRouter {
         if let Some(escape_stubs) = net_escape_stubs {
             self.net_escape_stubs = escape_stubs.clone();
         }
-        
+
         // v0.2.0: Store per-net layer targets for explicit layer routing
         if let Some(layer_targets) = net_layer_targets {
             self.net_layer_targets = layer_targets.clone();
             for (net_id, target_z) in layer_targets {
-                eprintln!("[ROUTER ENGINE] Net {} has explicit layer target at Z={}nm", 
-                    net_id.raw(), target_z);
+                eprintln!(
+                    "[ROUTER ENGINE] Net {} has explicit layer target at Z={}nm",
+                    net_id.raw(),
+                    target_z
+                );
             }
         }
 
@@ -59,8 +62,10 @@ impl GeometryRouter {
             .constraints
             .fabrication
             .as_ref()
-            .expect("BUG: Fabrication constraints required for routing partition grid. \
-                     Ensure the profile defines 'trace.min_spacing'.")
+            .expect(
+                "BUG: Fabrication constraints required for routing partition grid. \
+                     Ensure the profile defines 'trace.min_spacing'.",
+            )
             .min_trace_spacing_nm;
         let partition = crate::geometry_router::partition::PartitionGrid::new(
             *grid_bbox,
@@ -76,8 +81,6 @@ impl GeometryRouter {
         } else {
             RouteResult::new()
         };
-
-       
 
         let width = grid_bbox.max.x - grid_bbox.min.x;
         let height = grid_bbox.max.y - grid_bbox.min.y;
@@ -95,9 +98,7 @@ impl GeometryRouter {
             )?;
             result.merge(steiner_result);
             self.apply_refinement_pipeline(entity_graph, &mut result);
-            
-          
-            
+
             Ok(result)
         } else {
             let hierarchical_result = self.route_hierarchical(
@@ -110,9 +111,7 @@ impl GeometryRouter {
             )?;
             result.merge(hierarchical_result);
             self.apply_refinement_pipeline(entity_graph, &mut result);
-            
-            
-            
+
             Ok(result)
         }
     }
@@ -232,8 +231,11 @@ impl GeometryRouter {
                                 net_layer_targets: FxHashMap::default(),
                             };
 
-                            let result = isolated
-                                .decompose_net_steiner(&mut isolated_entity_graph, net_id, pins);
+                            let result = isolated.decompose_net_steiner(
+                                &mut isolated_entity_graph,
+                                net_id,
+                                pins,
+                            );
                             (net_id, result)
                         });
                         handles.push(handle);
@@ -360,10 +362,9 @@ impl GeometryRouter {
                     let mut local_entity_graph = crate::geometry_router::EntityGraph::new();
                     local_entity_graph.copy_metadata_from(entity_graph);
 
-                    match cell_router.route_all_nets_steiner_global(
-                        &mut local_entity_graph,
-                        &local_nets,
-                    ) {
+                    match cell_router
+                        .route_all_nets_steiner_global(&mut local_entity_graph, &local_nets)
+                    {
                         Ok(local_result) => {
                             let mut cell_result = RouteResult::new();
                             for (net_id, local_paths) in &local_result.paths {

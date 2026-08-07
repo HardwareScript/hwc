@@ -149,9 +149,11 @@ pub fn evaluate_constraints(
             })?
     } else if let Some(ref intent_name) = route.intent {
         // Net type intent override
-        if let Some(intent) = profile
-            .and_then(|p| p.intents.iter().find(|i| i.name.name == intent_name.as_str()))
-        {
+        if let Some(intent) = profile.and_then(|p| {
+            p.intents
+                .iter()
+                .find(|i| i.name.name == intent_name.as_str())
+        }) {
             if let Some(ref stub_meas) = intent.escape_stub {
                 crate::ir::conversions::measurement_to_nm(stub_meas, symbol_table, eval_context)
                     .map_err(|e| IrError::InvalidRouteExpression {

@@ -14,7 +14,8 @@ pub fn place_component_array(
     bbox_tracker: &mut crate::bounding_box_tracker::BoundingBoxTracker,
     ctx: &PlacementContext,
 ) -> Result<(), IrError> {
-    let pitch_nm = evaluate_measurement_to_nm(&array_config.pitch, ctx.symbol_table, ctx.eval_context)?;
+    let pitch_nm =
+        evaluate_measurement_to_nm(&array_config.pitch, ctx.symbol_table, ctx.eval_context)?;
 
     for i in 0..array_config.count {
         let (offset_x_nm, offset_y_nm) = match array_config.layout {
@@ -248,12 +249,16 @@ fn calculate_pour_bboxes_for_array(
             }
         })?;
 
-        let z_bottom_nm = ctx
-            .stackup_manager
-            .resolve_elevation(&pour.elevation, ctx.symbol_table, ctx.eval_context)?;
-        let z_top_nm = ctx
-            .stackup_manager
-            .resolve_elevation_top(&pour.elevation, ctx.symbol_table, ctx.eval_context)?;
+        let z_bottom_nm = ctx.stackup_manager.resolve_elevation(
+            &pour.elevation,
+            ctx.symbol_table,
+            ctx.eval_context,
+        )?;
+        let z_top_nm = ctx.stackup_manager.resolve_elevation_top(
+            &pour.elevation,
+            ctx.symbol_table,
+            ctx.eval_context,
+        )?;
 
         let instance_start =
             Point3D::new(start.x + offset_x_nm, start.y + offset_y_nm, z_bottom_nm);
@@ -289,7 +294,8 @@ fn merge_explicit_terminals(
             component: component.component_type.name.to_string(),
         })?;
 
-    let pitch_nm = evaluate_measurement_to_nm(&array_config.pitch, ctx.symbol_table, ctx.eval_context)?;
+    let pitch_nm =
+        evaluate_measurement_to_nm(&array_config.pitch, ctx.symbol_table, ctx.eval_context)?;
 
     for terminal_name in &array_config.merge_terminals {
         let terminal_pours: Vec<_> = layout
@@ -436,9 +442,11 @@ fn merge_pour_across_instances(
         space.pours.push(hwc_engine::space::PourMetadata {
             name: merged_name.into(),
             material_name: pour.material.clone(),
-            z_bottom_nm: ctx
-                .stackup_manager
-                .resolve_elevation(&pour.elevation, ctx.symbol_table, ctx.eval_context)?,
+            z_bottom_nm: ctx.stackup_manager.resolve_elevation(
+                &pour.elevation,
+                ctx.symbol_table,
+                ctx.eval_context,
+            )?,
             net: pour.net.as_ref().map(|n| n.to_string()),
             area_nm2,
             bbox: Some(bbox),

@@ -74,16 +74,11 @@ pub use geometry_router::{DummyFillConfig, DummyFillEngine, DummyFillStats};
 pub use geometry_router::{MultiNetManager, MultiNetStats, TopologicalPath, TopologicalRouter};
 pub use geometry_router::{PatternStep, RoutingPattern};
 pub use geometry_router::{TeardropConfig, TeardropEngine};
-pub use material::{
-    ManufacturingProcess, MaterialConductivity, MaterialId, MaterialRegistry, AIR_MATERIAL_ID,
-};
 pub use layer_connection_database::{
     ConnectionType, LayerConnectionDatabase, LayerConnectionError, RoutingConnectionPoint,
 };
-pub use routing_layer_database::{RoutingLayer, RoutingLayerDatabase, RoutingLayerError};
-pub use via_instance_database::{ViaInstance, ViaInstanceDatabase};
-pub use via_layer_mapping_database::{
-    BridgeRuleInput, ViaConnection, ViaLayerMappingDatabase, ViaLayerMappingError,
+pub use material::{
+    ManufacturingProcess, MaterialConductivity, MaterialId, MaterialRegistry, AIR_MATERIAL_ID,
 };
 pub use netlist::{
     ArenaStats, ComponentData, ComponentId, NetData, NetId, NetlistArena, PinData, PinId,
@@ -92,7 +87,12 @@ pub use routing_database::{
     ConnectivityError, HierarchicalRoutingDatabase, ProvenanceSegment, RouteId, RouteSource,
     RoutingStatistics,
 };
+pub use routing_layer_database::{RoutingLayer, RoutingLayerDatabase, RoutingLayerError};
 pub use space::{
     AnalyticTrace, ContactMetadata, Dimensions, HardwareSpace, KeepOutZone, LineSegment, PadShape,
     PourMetadata, SpaceView,
+};
+pub use via_instance_database::{ViaInstance, ViaInstanceDatabase};
+pub use via_layer_mapping_database::{
+    BridgeRuleInput, ViaConnection, ViaLayerMappingDatabase, ViaLayerMappingError,
 };

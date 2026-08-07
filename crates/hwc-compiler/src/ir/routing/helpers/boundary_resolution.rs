@@ -13,10 +13,10 @@ fn select_access_region_by_port<'a>(
 ) -> Result<&'a hwc_engine::geometry_router::connection_interface::AccessRegion, IrError> {
     // Map the CardinalPort to its unit normal vector
     let target_normal = match port {
-        CardinalPort::North => (0i64, 1i64),   // +Y
-        CardinalPort::South => (0i64, -1i64),  // -Y
-        CardinalPort::East => (1i64, 0i64),    // +X
-        CardinalPort::West => (-1i64, 0i64),   // -X
+        CardinalPort::North => (0i64, 1i64),  // +Y
+        CardinalPort::South => (0i64, -1i64), // -Y
+        CardinalPort::East => (1i64, 0i64),   // +X
+        CardinalPort::West => (-1i64, 0i64),  // -X
     };
 
     regions
@@ -78,9 +78,15 @@ pub fn resolve_route_boundary_points(
     space: &HardwareSpace,
     route: &super::super::types::ResolvedRoute,
     trace_width_nm: i64,
-) -> Result<(Point3D, Point3D, hwc_engine::geometry_router::connection_interface::Normal2D, hwc_engine::geometry_router::connection_interface::Normal2D), IrError> {
-   
-   
+) -> Result<
+    (
+        Point3D,
+        Point3D,
+        hwc_engine::geometry_router::connection_interface::Normal2D,
+        hwc_engine::geometry_router::connection_interface::Normal2D,
+    ),
+    IrError,
+> {
     // Query entity names from EntityGraph
     let from_entity_data = space
         .entity_graph
@@ -88,26 +94,27 @@ pub fn resolve_route_boundary_points(
         .map_err(|_| IrError::UnresolvedEndpoint {
             endpoint: format!("Entity {:?} ({})", route.from, route.net_name),
             span: miette::SourceSpan::from(0),
-            help_message: format!(
-                "EntityId {:?} not found in EntityGraph.",
-                route.from
-            ),
+            help_message: format!("EntityId {:?} not found in EntityGraph.", route.from),
         })?;
 
-    let to_entity_data = space
-        .entity_graph
-        .get_entity_data(route.to)
-        .map_err(|_| IrError::UnresolvedEndpoint {
-            endpoint: format!("Entity {:?} ({})", route.to, route.net_name),
-            span: miette::SourceSpan::from(0),
-            help_message: format!(
-                "EntityId {:?} not found in EntityGraph.",
-                route.to
-            ),
-        })?;
+    let to_entity_data =
+        space
+            .entity_graph
+            .get_entity_data(route.to)
+            .map_err(|_| IrError::UnresolvedEndpoint {
+                endpoint: format!("Entity {:?} ({})", route.to, route.net_name),
+                span: miette::SourceSpan::from(0),
+                help_message: format!("EntityId {:?} not found in EntityGraph.", route.to),
+            })?;
 
-    eprintln!("  from entity: '{}' (EntityId: {:?})", from_entity_data.name, route.from);
-    eprintln!("  to entity: '{}' (EntityId: {:?})", to_entity_data.name, route.to);
+    eprintln!(
+        "  from entity: '{}' (EntityId: {:?})",
+        from_entity_data.name, route.from
+    );
+    eprintln!(
+        "  to entity: '{}' (EntityId: {:?})",
+        to_entity_data.name, route.to
+    );
 
     // Query PhysicalInterface data by entity name
     let from_interface = space
@@ -136,7 +143,6 @@ pub fn resolve_route_boundary_points(
             ),
         })?;
 
-   
     // Access the pre-computed AccessRegions
     if from_interface.access_regions.is_empty() {
         return Err(IrError::InvalidRouteExpression {
@@ -161,32 +167,48 @@ pub fn resolve_route_boundary_points(
     // Use the boundary.rs select_routable_port analyzer to choose ports based on
     // actual obstacle geometry, then map those ports directly to AccessRegions.
     // This eliminates the split-brain bug where geometric selection overrode obstacle analysis.
-    
+
     // v0.2.0 DATABASE-DRIVEN: Query exact Z from layer connection database using route's declared layer.
     // NO FALLBACK to bbox midpoint - if the connection doesn't exist, FAIL LOUDLY.
     // This prevents silent routing errors from misaligned Z coordinates.
-    
+
     // Determine the routing layer name from the route constraints
     // (In the future, this should come from ResolvedRoute.layer_name)
     let routing_layer = &route.layer_name;
-    
-    eprintln!("[BOUNDARY RESOLUTION] Looking up connection points for layer: '{}'", routing_layer);
-    
-    let from_z = space.layer_connection_db
+
+    eprintln!(
+        "[BOUNDARY RESOLUTION] Looking up connection points for layer: '{}'",
+        routing_layer
+    );
+
+    let from_z = space
+        .layer_connection_db
         .get_connection_point(&from_entity_data.name, routing_layer)
         .map(|c| {
-            eprintln!("[BOUNDARY RESOLUTION]   FROM entity '{}' on layer '{}': Z={}nm", 
-                from_entity_data.name, routing_layer, c.z_elevation);
+            eprintln!(
+                "[BOUNDARY RESOLUTION]   FROM entity '{}' on layer '{}': Z={}nm",
+                from_entity_data.name, routing_layer, c.z_elevation
+            );
             c.z_elevation
         })
         .map_err(|e| {
-            let registered = space.layer_connection_db
+            let registered = space
+                .layer_connection_db
                 .get_entity_connections(&from_entity_data.name)
-                .map(|layers| layers.iter().map(|l| l.as_str()).collect::<Vec<_>>().join(", "))
+                .map(|layers| {
+                    layers
+                        .iter()
+                        .map(|l| l.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                })
                 .unwrap_or_else(|| "none".to_string());
-            
+
             IrError::InvalidRouteExpression {
-                expression: format!("route from {} on layer {}", from_entity_data.name, routing_layer),
+                expression: format!(
+                    "route from {} on layer {}",
+                    from_entity_data.name, routing_layer
+                ),
                 reason: format!(
                     "Entity '{}' has no connection point on routing layer '{}'.\n\
                      \n\
@@ -197,29 +219,39 @@ pub fn resolve_route_boundary_points(
                      2. The via wasn't properly registered during placement (compiler bug).\n\
                      \n\
                      Database error: {}",
-                    from_entity_data.name,
-                    routing_layer,
-                    registered,
-                    e
+                    from_entity_data.name, routing_layer, registered, e
                 ),
             }
         })?;
-    
-    let to_z = space.layer_connection_db
+
+    let to_z = space
+        .layer_connection_db
         .get_connection_point(&to_entity_data.name, routing_layer)
         .map(|c| {
-            eprintln!("[BOUNDARY RESOLUTION]   TO entity '{}' on layer '{}': Z={}nm", 
-                to_entity_data.name, routing_layer, c.z_elevation);
+            eprintln!(
+                "[BOUNDARY RESOLUTION]   TO entity '{}' on layer '{}': Z={}nm",
+                to_entity_data.name, routing_layer, c.z_elevation
+            );
             c.z_elevation
         })
         .map_err(|e| {
-            let registered = space.layer_connection_db
+            let registered = space
+                .layer_connection_db
                 .get_entity_connections(&to_entity_data.name)
-                .map(|layers| layers.iter().map(|l| l.as_str()).collect::<Vec<_>>().join(", "))
+                .map(|layers| {
+                    layers
+                        .iter()
+                        .map(|l| l.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                })
                 .unwrap_or_else(|| "none".to_string());
-            
+
             IrError::InvalidRouteExpression {
-                expression: format!("route to {} on layer {}", to_entity_data.name, routing_layer),
+                expression: format!(
+                    "route to {} on layer {}",
+                    to_entity_data.name, routing_layer
+                ),
                 reason: format!(
                     "Entity '{}' has no connection point on routing layer '{}'.\n\
                      \n\
@@ -230,14 +262,11 @@ pub fn resolve_route_boundary_points(
                      2. The via wasn't properly registered during placement (compiler bug).\n\
                      \n\
                      Database error: {}",
-                    to_entity_data.name,
-                    routing_layer,
-                    registered,
-                    e
+                    to_entity_data.name, routing_layer, registered, e
                 ),
             }
         })?;
-    
+
     let from_center = Point3D::new(
         (from_entity_data.bbox.min.x + from_entity_data.bbox.max.x) / 2,
         (from_entity_data.bbox.min.y + from_entity_data.bbox.max.y) / 2,
@@ -248,9 +277,10 @@ pub fn resolve_route_boundary_points(
         (to_entity_data.bbox.min.y + to_entity_data.bbox.max.y) / 2,
         to_z,
     );
-    
+
     // Retrieve fabrication constraints for clearance calculation
-    let clearance_nm = space.fabrication_constraints
+    let clearance_nm = space
+        .fabrication_constraints
         .as_ref()
         .ok_or_else(|| IrError::MissingAsicConstraint {
             message: "Fabrication constraints required for routing".into(),
@@ -258,12 +288,12 @@ pub fn resolve_route_boundary_points(
         })?
         .trace
         .min_spacing_nm;
-    
+
     // v0.1.9.1: Extract net IDs for exemption during port selection
     // This prevents the ray-caster from treating the pads' own geometry as obstacles
     let from_net_id = from_entity_data.net_id;
     let to_net_id = to_entity_data.net_id;
-    
+
     // Perform obstacle-aware port selection
     let exit_port = select_routable_port_from_resolution(
         space,
@@ -277,7 +307,7 @@ pub fn resolve_route_boundary_points(
         from_net_id,
         to_net_id,
     )?;
-    
+
     let enter_port = select_routable_port_from_resolution(
         space,
         &to_entity_data.name,
@@ -290,34 +320,26 @@ pub fn resolve_route_boundary_points(
         from_net_id,
         to_net_id,
     )?;
-    
-    // Map selected ports directly to their AccessRegions
-    let from_region = select_access_region_by_port(
-        &from_interface.access_regions,
-        exit_port,
-        "source"
-    )?;
-    
-    let to_region = select_access_region_by_port(
-        &to_interface.access_regions,
-        enter_port,
-        "destination"
-    )?;
 
-   
+    // Map selected ports directly to their AccessRegions
+    let from_region =
+        select_access_region_by_port(&from_interface.access_regions, exit_port, "source")?;
+
+    let to_region =
+        select_access_region_by_port(&to_interface.access_regions, enter_port, "destination")?;
 
     // DYNAMIC BOUNDARY RESOLUTION WITH ZERO-GAP CONTACT LOCK:
     // The cached entry_point was computed with PDK min_width during AccessRegion creation.
     // We need to recalculate for the actual trace width.
-    // 
+    //
     // LAW 1: Zero-Gap Contact Lock
     //   The trace centerline is positioned exactly at (boundary ± trace_width/2)
     //   This guarantees the trace edge touches the pad edge with 0nm gap.
-    // 
+    //
     // LAW 2: Mandatory Perpendicular Escape Segment
     //   The router will enforce a perpendicular escape segment along the normal
     //   (implemented in topological_router)
-    
+
     // Retrieve PDK min_width from fabrication constraints (REQUIRED)
     let pdk_min_width_nm = space.fabrication_constraints
         .as_ref()
@@ -327,7 +349,7 @@ pub fn resolve_route_boundary_points(
         })?
         .trace
         .min_width_nm;
-    
+
     // v0.1.9: Zero-Gap Contact Lock - no escape stub at boundary
     // v0.2.0: Use database-queried Z values, not cached AccessRegion Z
     let start_point = resolve_boundary_entry(
@@ -337,7 +359,7 @@ pub fn resolve_route_boundary_points(
         trace_width_nm,
         from_z, // Use database Z, not entry_point.z
     );
-    
+
     let goal_point = resolve_boundary_entry(
         to_region.entry_point,
         to_region.normal,
@@ -346,38 +368,47 @@ pub fn resolve_route_boundary_points(
         to_z, // Use database Z, not entry_point.z
     );
 
-   
     // v0.2.0: Contact-Aware Routing Override
     // If an explicit contact exists on the pad that connects to the target layer,
     // use the contact's position instead of the pad boundary edge.
     // This prevents the router from creating duplicate vias at the wrong location.
-    
+
     let final_start_point = if let Some((contact_x, contact_y)) = find_contact_on_pad(
         space,
         &from_entity_data.bbox,
         start_point.z, // Use the routing layer Z
         from_net_id,
     ) {
-        eprintln!("  🔧 CONTACT OVERRIDE: Using explicit contact at ({},{}) instead of pad edge", contact_x, contact_y);
+        eprintln!(
+            "  🔧 CONTACT OVERRIDE: Using explicit contact at ({},{}) instead of pad edge",
+            contact_x, contact_y
+        );
         Point3D::new(contact_x, contact_y, start_point.z)
     } else {
         start_point
     };
-    
+
     let final_goal_point = if let Some((contact_x, contact_y)) = find_contact_on_pad(
         space,
         &to_entity_data.bbox,
         goal_point.z, // Use the routing layer Z
         to_net_id,
     ) {
-        eprintln!("  🔧 CONTACT OVERRIDE: Using explicit contact at ({},{}) instead of pad edge", contact_x, contact_y);
+        eprintln!(
+            "  🔧 CONTACT OVERRIDE: Using explicit contact at ({},{}) instead of pad edge",
+            contact_x, contact_y
+        );
         Point3D::new(contact_x, contact_y, goal_point.z)
     } else {
         goal_point
     };
 
-   
-    Ok((final_start_point, final_goal_point, from_region.normal, to_region.normal))
+    Ok((
+        final_start_point,
+        final_goal_point,
+        from_region.normal,
+        to_region.normal,
+    ))
 }
 
 /// Apply dynamic boundary offset scaling with Zero-Gap Contact Lock.
@@ -396,23 +427,21 @@ fn resolve_boundary_entry(
     database_z: i64, // v0.2.0: Use database-queried Z, not cached AccessRegion Z
 ) -> Point3D {
     const SCALE: i64 = 1_000_000_000;
-    
+
     let default_half_width = default_width_nm / 2;
     let actual_half_width = actual_width_nm / 2;
-    
+
     // 1. Reverse the pre-cached default shift to find the true pad edge coordinate
     //    (Since normal points outward, we subtract the default half-width)
     let edge_x = entry_point.x - (normal.x as i64 * default_half_width) / SCALE;
     let edge_y = entry_point.y - (normal.y as i64 * default_half_width) / SCALE;
-    
+
     // 2. Project INWARD by EXACTLY the actual trace half-width (Zero-Gap Contact Lock)
     //    For the trace edge to touch the pad edge, the centerline must be INSIDE by half-width
     //    Since normal points outward, we SUBTRACT to move inward
     let corrected_x = edge_x - (normal.x as i64 * actual_half_width) / SCALE;
     let corrected_y = edge_y - (normal.y as i64 * actual_half_width) / SCALE;
-    
-    
-    
+
     Point3D::new(corrected_x, corrected_y, database_z) // v0.2.0: Use database Z
 }
 
@@ -438,7 +467,8 @@ pub fn resolve_route_pin_centers(
         })?;
 
         // v0.2.0 DATABASE-DRIVEN: Query layer connection database using route's declared layer
-        let z = space.layer_connection_db
+        let z = space
+            .layer_connection_db
             .get_connection_point(&data.name, routing_layer)
             .map(|c| c.z_elevation)
             .map_err(|e| IrError::InvalidRouteExpression {
@@ -481,12 +511,10 @@ fn find_contact_on_pad(
     net_id: Option<hwc_engine::netlist::NetId>,
 ) -> Option<(i64, i64)> {
     use hwc_engine::geometry_router::substrate_types::SubstrateLayerShape;
-    
+
     let net_id = net_id?; // Return None if no net_id provided
     let net_raw = net_id.raw();
-    
-    
-    
+
     // Search all substrate layers for circular contacts that:
     // 1. Are on the same net
     // 2. Have XY center within the pad's XY bbox
@@ -496,34 +524,35 @@ fn find_contact_on_pad(
         if layer.net != hwc_engine::NetId::new(net_raw) {
             continue;
         }
-        
+
         // Must be circular (contact shape, not rectangular pour)
         let is_circular = matches!(layer.shape, SubstrateLayerShape::Circle { .. });
         if !is_circular {
             continue;
         }
-        
+
         let layer_center_x = (layer.bbox.min.x + layer.bbox.max.x) / 2;
         let layer_center_y = (layer.bbox.min.y + layer.bbox.max.y) / 2;
-        
+
         // Check if contact center is within pad's XY bounds
         let within_pad_x = layer_center_x >= pad_bbox.min.x && layer_center_x <= pad_bbox.max.x;
         let within_pad_y = layer_center_y >= pad_bbox.min.y && layer_center_y <= pad_bbox.max.y;
-        
+
         if !within_pad_x || !within_pad_y {
             continue;
         }
-        
+
         // Check if contact spans to the target Z layer (with tolerance)
         let contact_spans_target = layer.bbox.min.z <= target_z && layer.bbox.max.z >= target_z;
-        
+
         if contact_spans_target {
-            eprintln!("[CONTACT FOUND] Layer {} at ({},{}) Z={}→{}nm spans target Z={}nm",
-                idx, layer_center_x, layer_center_y, layer.bbox.min.z, layer.bbox.max.z, target_z);
+            eprintln!(
+                "[CONTACT FOUND] Layer {} at ({},{}) Z={}→{}nm spans target Z={}nm",
+                idx, layer_center_x, layer_center_y, layer.bbox.min.z, layer.bbox.max.z, target_z
+            );
             return Some((layer_center_x, layer_center_y));
         }
     }
-    
-    
+
     None
 }

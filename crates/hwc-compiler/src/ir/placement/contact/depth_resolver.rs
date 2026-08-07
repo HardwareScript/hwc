@@ -41,7 +41,7 @@ fn convert_measurement_to_nm(value: f64, unit: &Unit) -> i64 {
 pub enum DepthSpecification {
     /// Uniform depth for both layers: `contact_depth: 50%`
     Uniform(Expression),
-    
+
     /// Asymmetric depths: `contact_depth: { lower: 75%, upper: 33% }`
     Asymmetric {
         lower: Expression,
@@ -53,24 +53,24 @@ pub enum DepthSpecification {
 pub struct DepthEvaluationContext<'a> {
     /// Lower layer thickness in nanometers
     pub lower_layer_thickness_nm: i64,
-    
+
     /// Upper layer thickness in nanometers
     pub upper_layer_thickness_nm: i64,
-    
+
     /// Space resolution in nanometers (for minimal depths) - reserved for future use
     #[allow(dead_code)]
     pub resolution_nm: i64,
-    
+
     /// Minimum allowed depth (safety bound)
     pub min_depth_nm: Option<i64>,
-    
+
     /// Maximum allowed depth (safety bound)
     pub max_depth_nm: Option<i64>,
-    
+
     /// Symbol table for expression evaluation - reserved for future use
     #[allow(dead_code)]
     pub symbol_table: &'a crate::SymbolTable,
-    
+
     /// Evaluation context for expressions - reserved for future use
     #[allow(dead_code)]
     pub eval_context: &'a hwc_parser::EvaluationContext,
@@ -93,7 +93,7 @@ impl<'a> DepthEvaluationContext<'a> {
         let depth_nm = self.evaluate_expression_raw(expr, layer_thickness_nm)?;
         Ok(self.apply_safety_bounds(depth_nm))
     }
-    
+
     /// Evaluate expression without applying safety bounds (internal)
     fn evaluate_expression_raw(
         &self,
@@ -107,24 +107,29 @@ impl<'a> DepthEvaluationContext<'a> {
                 let depth = (layer_thickness_nm as f64 * (value / 100.0)).round() as i64;
                 Ok(depth)
             }
-            
+
             // Measurement (absolute)
             Expression::Measurement { value, unit, .. } => {
                 let depth_nm = convert_measurement_to_nm(*value, unit);
                 Ok(depth_nm)
             }
-            
+
             // Integer literal (treated as nanometers)
             Expression::Literal { value, .. } => Ok(*value),
-            
+
             // Float literal (treated as nanometers)
             Expression::FloatLiteral { value, .. } => Ok(value.round() as i64),
-            
+
             // Binary operations
-            Expression::Binary { left, operator, right, .. } => {
+            Expression::Binary {
+                left,
+                operator,
+                right,
+                ..
+            } => {
                 let left_val = self.evaluate_expression_raw(left, layer_thickness_nm)?;
                 let right_val = self.evaluate_expression_raw(right, layer_thickness_nm)?;
-                
+
                 match operator {
                     hwc_parser::BinaryOperator::Add => Ok(left_val + right_val),
                     hwc_parser::BinaryOperator::Subtract => Ok(left_val - right_val),
@@ -138,11 +143,14 @@ impl<'a> DepthEvaluationContext<'a> {
                         Ok(left_val / right_val)
                     }
                     _ => Err(IrError::ExpressionEvaluation {
-                        message: format!("Unsupported operator in depth expression: {:?}", operator),
+                        message: format!(
+                            "Unsupported operator in depth expression: {:?}",
+                            operator
+                        ),
                     }),
                 }
             }
-            
+
             _ => {
                 // For complex expressions, try generic evaluation
                 // This handles identifiers, property access, etc.
@@ -159,7 +167,7 @@ impl<'a> DepthEvaluationContext<'a> {
             }
         }
     }
-    
+
     /// Try to evaluate expression using generic evaluation context
     fn try_generic_evaluation(&self, _expr: &Expression) -> Result<i64, IrError> {
         // TODO: Integrate with existing expression evaluator
@@ -168,19 +176,19 @@ impl<'a> DepthEvaluationContext<'a> {
             message: "Complex expression evaluation not yet implemented for depth".into(),
         })
     }
-    
+
     /// Apply safety bounds (min/max) to depth value
     fn apply_safety_bounds(&self, depth_nm: i64) -> i64 {
         let mut result = depth_nm;
-        
+
         if let Some(min) = self.min_depth_nm {
             result = result.max(min);
         }
-        
+
         if let Some(max) = self.max_depth_nm {
             result = result.min(max);
         }
-        
+
         result
     }
 }
@@ -219,7 +227,6 @@ pub fn resolve_contact_depths(
     profile: &hwc_parser::ProfileDefinition,
     context: &DepthEvaluationContext,
 ) -> Result<(i64, i64), IrError> {
-    
     // PRIORITY 1: Per-instance override
     if let Some(depth_prop) = get_contact_depth_property(contact) {
         println!(
@@ -228,9 +235,13 @@ pub fn resolve_contact_depths(
         );
         return evaluate_depth_specification(&depth_prop, context);
     }
-    
+
     // PRIORITY 2: Material-specific depths from PDK
-    if let Some(material_depths) = &profile.via.as_ref().and_then(|v| v.material_contact_depths.as_ref()) {
+    if let Some(material_depths) = &profile
+        .via
+        .as_ref()
+        .and_then(|v| v.material_contact_depths.as_ref())
+    {
         // Look up lower layer material
         if let Some(lower_expr) = material_depths.get(lower_material) {
             println!(
@@ -238,7 +249,7 @@ pub fn resolve_contact_depths(
                 contact.name.base.as_str(), lower_layer_name, lower_material
             );
             let lower_depth = context.evaluate_for_layer(lower_expr, lower_layer_thickness_nm)?;
-            
+
             // Look up upper layer material
             let upper_depth = if let Some(upper_expr) = material_depths.get(upper_material) {
                 println!(
@@ -252,18 +263,21 @@ pub fn resolve_contact_depths(
                     "[DEPTH_RESOLVER] Contact '{}': Upper material '{}' not in map, using global default",
                     contact.name.base.as_str(), upper_material
                 );
-                let global_expr = profile.via.as_ref()
+                let global_expr = profile
+                    .via
+                    .as_ref()
                     .ok_or_else(|| IrError::MissingAsicConstraint {
                         message: "Profile via constraints required".into(),
                         hint: "Add via: block to profile".into(),
                     })?
-                    .contact_depth.clone();
+                    .contact_depth
+                    .clone();
                 context.evaluate_for_layer(&global_expr, upper_layer_thickness_nm)?
             };
-            
+
             return Ok((lower_depth, upper_depth));
         }
-        
+
         // Lower material not in map, check upper
         if let Some(upper_expr) = material_depths.get(upper_material) {
             println!(
@@ -271,20 +285,23 @@ pub fn resolve_contact_depths(
                 contact.name.base.as_str(), upper_layer_name, upper_material
             );
             let upper_depth = context.evaluate_for_layer(upper_expr, upper_layer_thickness_nm)?;
-            
+
             // Use global default for lower
-            let global_expr = profile.via.as_ref()
+            let global_expr = profile
+                .via
+                .as_ref()
                 .ok_or_else(|| IrError::MissingAsicConstraint {
                     message: "Profile via constraints required".into(),
                     hint: "Add via: block to profile".into(),
                 })?
-                .contact_depth.clone();
+                .contact_depth
+                .clone();
             let lower_depth = context.evaluate_for_layer(&global_expr, lower_layer_thickness_nm)?;
-            
+
             return Ok((lower_depth, upper_depth));
         }
     }
-    
+
     // PRIORITY 3: Global PDK default
     println!(
         "[DEPTH_RESOLVER] Contact '{}': Using global PDK default depth",
@@ -299,32 +316,34 @@ pub fn resolve_contact_depths(
             hint: "Add 'contact_depth: 50%' or 'contact_depth: 150nm' to the 'via:' section of your profile.\nThis specifies how deep vias penetrate into conductive layers.".into(),
         })?
         .contact_depth.clone();
-    
+
     let lower_depth = context.evaluate_for_layer(&global_expr, lower_layer_thickness_nm)?;
     let upper_depth = context.evaluate_for_layer(&global_expr, upper_layer_thickness_nm)?;
-    
+
     Ok((lower_depth, upper_depth))
 }
 
 /// Extract contact_depth property from contact placement (if specified)
-fn get_contact_depth_property(contact: &hwc_parser::ContactPlacement) -> Option<DepthSpecification> {
+fn get_contact_depth_property(
+    contact: &hwc_parser::ContactPlacement,
+) -> Option<DepthSpecification> {
     // Check if contact has a "contact_depth" property
     if let Some(expr) = contact.properties.get("contact_depth") {
         // Simple uniform depth: contact_depth: 50%
         return Some(DepthSpecification::Uniform(expr.clone()));
     }
-    
+
     // Check for asymmetric depth properties: contact_depth_lower and contact_depth_upper
     let lower = contact.properties.get("contact_depth_lower");
     let upper = contact.properties.get("contact_depth_upper");
-    
+
     if let (Some(lower_expr), Some(upper_expr)) = (lower, upper) {
         return Some(DepthSpecification::Asymmetric {
             lower: lower_expr.clone(),
             upper: upper_expr.clone(),
         });
     }
-    
+
     None
 }
 
@@ -340,8 +359,10 @@ fn evaluate_depth_specification(
             Ok((lower_depth, upper_depth))
         }
         DepthSpecification::Asymmetric { lower, upper } => {
-            let lower_depth = context.evaluate_for_layer(lower, context.lower_layer_thickness_nm)?;
-            let upper_depth = context.evaluate_for_layer(upper, context.upper_layer_thickness_nm)?;
+            let lower_depth =
+                context.evaluate_for_layer(lower, context.lower_layer_thickness_nm)?;
+            let upper_depth =
+                context.evaluate_for_layer(upper, context.upper_layer_thickness_nm)?;
             Ok((lower_depth, upper_depth))
         }
     }

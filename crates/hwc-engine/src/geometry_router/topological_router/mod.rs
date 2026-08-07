@@ -91,7 +91,6 @@ impl TopologicalRouter {
 
         // If escape_stub is 0, no perpendicular escape required - route directly
         if escape_stub_nm == 0 {
-           
             let router = TopologicalRouter {
                 trace_width_nm: self.trace_width_nm,
                 layer_prefer_horizontal: self.layer_prefer_horizontal,
@@ -101,8 +100,6 @@ impl TopologicalRouter {
             };
             return router.route(start, target, obstacles, board_bounds);
         }
-
-       
 
         // Generate mandatory start escape point
         let start_escape = Point3D::new(
@@ -118,8 +115,6 @@ impl TopologicalRouter {
             target.z,
         );
 
-       
-
         // Create a router with exemptions
         let router = TopologicalRouter {
             trace_width_nm: self.trace_width_nm,
@@ -130,7 +125,9 @@ impl TopologicalRouter {
         };
 
         // Run the topological pathfinder from start_escape to target_escape
-        if let Some(mut intermediate_path) = router.route(start_escape, target_escape, obstacles, board_bounds) {
+        if let Some(mut intermediate_path) =
+            router.route(start_escape, target_escape, obstacles, board_bounds)
+        {
             // Native Splice: prepend the start contact point and append the target contact point
             let mut final_waypoints = vec![start];
             final_waypoints.append(&mut intermediate_path.waypoints);
@@ -147,15 +144,20 @@ impl TopologicalRouter {
                 })
                 .sum();
 
-            eprintln!("  ✅ Perpendicular escape routing succeeded: {} waypoints, total_length={}nm",
-                final_waypoints.len(), total_length);
+            eprintln!(
+                "  ✅ Perpendicular escape routing succeeded: {} waypoints, total_length={}nm",
+                final_waypoints.len(),
+                total_length
+            );
 
             Some(TopologicalPath {
                 waypoints: final_waypoints,
                 total_length,
             })
         } else {
-            eprintln!("  ❌ Perpendicular escape routing failed: no path found between escape points");
+            eprintln!(
+                "  ❌ Perpendicular escape routing failed: no path found between escape points"
+            );
             None
         }
     }

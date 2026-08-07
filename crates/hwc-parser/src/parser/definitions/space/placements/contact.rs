@@ -3,7 +3,7 @@ use crate::lexer::{Span, Token};
 use crate::parser::error::ParseError;
 
 impl crate::parser::Parser {
-    /// Parse contact/via placement: 
+    /// Parse contact/via placement:
     /// - Absolute: `add contact(Tungsten) at [x:500um, y:325um] spanning z:6 to z:8`
     /// - Relational: `add contact(Tungsten) at: Region.center spanning layer: l1 to l2`
     pub(in crate::parser) fn parse_contact(&mut self) -> Result<ContactPlacement, ParseError> {
@@ -31,69 +31,70 @@ impl crate::parser::Parser {
         };
 
         // Check for brace-grouped placement clauses or inline placement
-        let (position, relational_anchor, from_elevation, to_elevation) = if self.check(&Token::OpenBrace) {
-            // Multi-line syntax with braces: { at: ... \n spanning ... }
-            self.advance(); // consume '{'
-            self.skip_whitespace();
-            if self.check(&Token::Newline) {
-                self.advance();
-            }
-            if self.check(&Token::Indent) {
-                self.advance();
-            }
+        let (position, relational_anchor, from_elevation, to_elevation) =
+            if self.check(&Token::OpenBrace) {
+                // Multi-line syntax with braces: { at: ... \n spanning ... }
+                self.advance(); // consume '{'
+                self.skip_whitespace();
+                if self.check(&Token::Newline) {
+                    self.advance();
+                }
+                if self.check(&Token::Indent) {
+                    self.advance();
+                }
 
-            self.expect(&Token::At)?;
-            
-            let (pos, anchor) = if self.check(&Token::Colon) {
-                self.advance();
-                let anchor = self.parse_region_anchor()?;
-                (None, Some(anchor))
-            } else {
-                let pos = self.parse_coordinate_optional_z()?;
-                (Some(pos), None)
-            };
+                self.expect(&Token::At)?;
 
-            self.skip_whitespace();
-            if self.check(&Token::Newline) {
-                self.advance();
-            }
-
-            self.expect(&Token::Spanning)?;
-            let (from_elev, to_elev) = self.parse_spanning_clause()?;
-
-            self.skip_whitespace();
-            if self.check(&Token::Dedent) {
-                self.advance();
-            }
-            self.skip_whitespace();
-            self.expect(&Token::CloseBrace)?;
-            self.skip_whitespace();
-
-            (pos, anchor, from_elev, to_elev)
-        } else {
-            // Inline syntax: at ... spanning ... OR just spanning with relational constraints
-            // v0.2.1: Make 'at' optional if relational constraints are provided in properties block
-            let (pos, anchor) = if self.check(&Token::At) {
-                self.advance(); // consume 'at'
-                
-                if self.check(&Token::Colon) {
+                let (pos, anchor) = if self.check(&Token::Colon) {
                     self.advance();
                     let anchor = self.parse_region_anchor()?;
                     (None, Some(anchor))
                 } else {
                     let pos = self.parse_coordinate_optional_z()?;
                     (Some(pos), None)
+                };
+
+                self.skip_whitespace();
+                if self.check(&Token::Newline) {
+                    self.advance();
                 }
+
+                self.expect(&Token::Spanning)?;
+                let (from_elev, to_elev) = self.parse_spanning_clause()?;
+
+                self.skip_whitespace();
+                if self.check(&Token::Dedent) {
+                    self.advance();
+                }
+                self.skip_whitespace();
+                self.expect(&Token::CloseBrace)?;
+                self.skip_whitespace();
+
+                (pos, anchor, from_elev, to_elev)
             } else {
-                // No 'at' clause - position will come from relational constraints
-                (None, None)
+                // Inline syntax: at ... spanning ... OR just spanning with relational constraints
+                // v0.2.1: Make 'at' optional if relational constraints are provided in properties block
+                let (pos, anchor) = if self.check(&Token::At) {
+                    self.advance(); // consume 'at'
+
+                    if self.check(&Token::Colon) {
+                        self.advance();
+                        let anchor = self.parse_region_anchor()?;
+                        (None, Some(anchor))
+                    } else {
+                        let pos = self.parse_coordinate_optional_z()?;
+                        (Some(pos), None)
+                    }
+                } else {
+                    // No 'at' clause - position will come from relational constraints
+                    (None, None)
+                };
+
+                self.expect(&Token::Spanning)?;
+                let (from_elev, to_elev) = self.parse_spanning_clause()?;
+
+                (pos, anchor, from_elev, to_elev)
             };
-
-            self.expect(&Token::Spanning)?;
-            let (from_elev, to_elev) = self.parse_spanning_clause()?;
-
-            (pos, anchor, from_elev, to_elev)
-        };
 
         // Optional: properties block
         let (properties, net_in_block, relational_constraints) = if self.check(&Token::Colon) {
@@ -125,7 +126,12 @@ impl crate::parser::Parser {
                         "x" => AlignmentAxis::X,
                         "y" => AlignmentAxis::Y,
                         "z" => AlignmentAxis::Z,
-                        _ => return Err(self.error(&format!("Unknown alignment axis: {}. Expected: center, x, y, or z", axis_name))),
+                        _ => {
+                            return Err(self.error(&format!(
+                                "Unknown alignment axis: {}. Expected: center, x, y, or z",
+                                axis_name
+                            )))
+                        }
                     };
 
                     self.expect(&Token::With)?;
@@ -134,10 +140,14 @@ impl crate::parser::Parser {
                     let target = if self.check(&Token::OpenParen) {
                         let expr = self.parse_expression()?;
                         AlignmentTarget::Expression(expr)
-                    } else if self.current().map(|t| matches!(t.token, Token::Identifier(_))).unwrap_or(false) {
+                    } else if self
+                        .current()
+                        .map(|t| matches!(t.token, Token::Identifier(_)))
+                        .unwrap_or(false)
+                    {
                         let checkpoint = self.current;
                         let _ = self.expect_identifier_string()?;
-                        
+
                         if self.check(&Token::Dot) {
                             // Anchor reference - parse as expression
                             self.current = checkpoint;
@@ -189,7 +199,11 @@ impl crate::parser::Parser {
         } else {
             // No properties block, just consume newline
             self.skip_whitespace();
-            (rustc_hash::FxHashMap::default(), None, smallvec::SmallVec::new())
+            (
+                rustc_hash::FxHashMap::default(),
+                None,
+                smallvec::SmallVec::new(),
+            )
         };
 
         let end_pos = self.previous_span().end;
@@ -215,7 +229,7 @@ impl crate::parser::Parser {
         let region_name = self.expect_identifier()?;
         self.expect(&Token::Dot)?;
         let anchor_str = self.expect_identifier_string()?;
-        
+
         let anchor_point = match anchor_str.as_str() {
             "center" => AnchorPoint::Center,
             "bottom_left" => AnchorPoint::BottomLeft,
@@ -233,7 +247,7 @@ impl crate::parser::Parser {
                 )))
             }
         };
-        
+
         let end_pos = self.previous_span().end;
         Ok(RelationalAnchor {
             region_name,

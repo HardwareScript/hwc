@@ -72,13 +72,17 @@ impl<'a> DeviceExtractor<'a> {
         // Step 2: Extract devices from BOTH module statements AND pour bindings
         let mut extracted = ExtractedDevices::from_module(module);
         let from_bindings = ExtractedDevices::from_pour_bindings(&bindings, self.symbol_table);
-        
+
         // Merge devices from bindings into extracted
         for (device_name, device_type) in from_bindings.devices {
             extracted.devices.push((device_name.clone(), device_type));
         }
         for (device_name, terminals) in from_bindings.device_terminals {
-            extracted.device_terminals.entry(device_name).or_default().extend(terminals);
+            extracted
+                .device_terminals
+                .entry(device_name)
+                .or_default()
+                .extend(terminals);
         }
 
         // Step 2.5: Build terminal-to-net mapping from module route statements
@@ -165,7 +169,7 @@ impl<'a> DeviceExtractor<'a> {
     /// Helper: Find a net from overlapping contacts/vias when pour itself is 'nc'
     fn find_overlapping_net(&self, pour: &hwc_engine::space::PourMetadata) -> Option<String> {
         let pour_bbox = pour.bbox.as_ref()?;
-        
+
         // Check all contacts for overlaps
         for contact in &self.space.contacts {
             if let Some(contact_bbox) = &contact.bbox {
@@ -178,13 +182,13 @@ impl<'a> DeviceExtractor<'a> {
                 }
             }
         }
-        
+
         // Check all pours for overlaps (for vias or other connecting pours)
         for other_pour in &self.space.pours {
             if other_pour.name == pour.name {
                 continue; // Skip self
             }
-            
+
             if let Some(other_bbox) = &other_pour.bbox {
                 if Self::bboxes_overlap(pour_bbox, other_bbox) {
                     if let Some(net) = &other_pour.net {
@@ -195,17 +199,20 @@ impl<'a> DeviceExtractor<'a> {
                 }
             }
         }
-        
+
         None
     }
-    
+
     /// Helper: Check if two bounding boxes overlap
-    fn bboxes_overlap(a: &hwc_engine::geometry::BoundingBox, b: &hwc_engine::geometry::BoundingBox) -> bool {
+    fn bboxes_overlap(
+        a: &hwc_engine::geometry::BoundingBox,
+        b: &hwc_engine::geometry::BoundingBox,
+    ) -> bool {
         // Bounding boxes overlap if they intersect in all 3 dimensions
         let x_overlap = a.min.x < b.max.x && a.max.x > b.min.x;
         let y_overlap = a.min.y < b.max.y && a.max.y > b.min.y;
         let z_overlap = a.min.z < b.max.z && a.max.z > b.min.z;
-        
+
         x_overlap && y_overlap && z_overlap
     }
 
@@ -229,12 +236,13 @@ impl<'a> DeviceExtractor<'a> {
             } else {
                 // Try to get net from the pour itself first
                 let pour_net = pour.net.clone().unwrap_or_else(|| "nc".into());
-                
+
                 if pour_net.as_str() != "nc" && !pour_net.is_empty() {
                     pour_net.to_string()
                 } else {
                     // Pour is 'nc', check for overlapping contacts/vias to inherit their net
-                    self.find_overlapping_net(pour).unwrap_or_else(|| "nc".to_string())
+                    self.find_overlapping_net(pour)
+                        .unwrap_or_else(|| "nc".to_string())
                 }
             };
             terminals.insert(terminal_name.clone(), net.clone());

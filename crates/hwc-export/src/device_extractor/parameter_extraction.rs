@@ -15,7 +15,7 @@
 //! ```rust
 //! let mut registry = ParameterExtractionRegistry::new();
 //! registry.register_standard_extractors();
-//! 
+//!
 //! let params = registry.extract("Capacitor", &terminal_pours, space)?;
 //! // Returns: {"C": 0.35e-12}
 //! ```
@@ -158,7 +158,7 @@ fn extract_capacitor_parameters(
     for layer in &space.stackup_layers {
         // Check if layer overlaps with the Z range between plates
         let layer_overlaps = layer.z_bottom < z_max && layer.z_top > z_min;
-        
+
         if layer_overlaps {
             // Get material ID
             if let Some(material_id) = space.material_registry.get_id(&layer.material_name) {
@@ -168,12 +168,13 @@ fn extract_capacitor_parameters(
                     let overlap_start = layer.z_bottom.max(z_min);
                     let overlap_end = layer.z_top.min(z_max);
                     let overlap_thickness = (overlap_end - overlap_start) as f64;
-                    
+
                     if overlap_thickness > 0.0 {
                         dielectric_thickness_nm += overlap_thickness;
-                        
+
                         // Get permittivity for this dielectric layer
-                        if let Some(props) = space.material_registry.get_physical_props(material_id) {
+                        if let Some(props) = space.material_registry.get_physical_props(material_id)
+                        {
                             if let Some(epsilon_r) = props.get("relative_permittivity") {
                                 // For multiple dielectric layers, use the first one found
                                 // TODO: Implement series capacitance for multi-layer dielectrics
@@ -222,7 +223,7 @@ fn extract_capacitor_parameters(
 
     let mut params = FxHashMap::default();
     params.insert("C".into(), capacitance_f);
-    
+
     // Only include ESR if non-zero (allows backwards compatibility)
     if esr_total > 0.0 {
         params.insert("ESR".into(), esr_total);
@@ -232,7 +233,7 @@ fn extract_capacitor_parameters(
         "      ├─ C={:.2e}F (εᵣ={:.1}, A={:.0}nm², d={:.0}nm)",
         capacitance_f, dielectric_epsilon_r, overlap_area_nm2, dielectric_thickness_nm
     );
-    
+
     if esr_total > 0.0 {
         println!(
             "      ├─ ESR={:.2e}Ω (top={:.2e}Ω, bottom={:.2e}Ω)",
@@ -269,21 +270,26 @@ fn calculate_plate_resistance(
     }
 
     // For conductors, resistivity is REQUIRED
-    let material_props = space.material_registry.get_physical_props(material_id)
-        .ok_or_else(|| format!(
-            "Conductor material '{}' has no physical properties defined.\n\
+    let material_props = space
+        .material_registry
+        .get_physical_props(material_id)
+        .ok_or_else(|| {
+            format!(
+                "Conductor material '{}' has no physical properties defined.\n\
              Add properties block to material definition with 'resistivity' field.",
-            pour.material_name
-        ))?;
-    
-    let resistivity = material_props.get("resistivity")
-        .ok_or_else(|| format!(
+                pour.material_name
+            )
+        })?;
+
+    let resistivity = material_props.get("resistivity").ok_or_else(|| {
+        format!(
             "Conductor material '{}' missing REQUIRED 'resistivity' property for ESR calculation.\n\
              \n\
              Add to material definition:\n\
              properties:\n    resistivity: <value>  # Ω·m",
             pour.material_name
-        ))?;
+        )
+    })?;
 
     // Get plate thickness from stackup layer
     let z_bottom = pour.z_bottom_nm;
@@ -346,23 +352,19 @@ fn extract_resistor_parameters(
         })?;
 
     // Get required properties (strict - no defaults!)
-    let resistivity = material_props
-        .get("resistivity")
-        .ok_or_else(|| {
-            format!(
-                "Material '{}' missing 'resistivity' property required for resistance calculation",
-                pour1.material_name
-            )
-        })?;
+    let resistivity = material_props.get("resistivity").ok_or_else(|| {
+        format!(
+            "Material '{}' missing 'resistivity' property required for resistance calculation",
+            pour1.material_name
+        )
+    })?;
 
     // Get thickness from stackup layer (NOT from material properties!)
     let z_bottom = pour1.z_bottom_nm;
     let layer_thickness_nm = space
         .stackup_layers
         .iter()
-        .find(|layer| {
-            z_bottom >= layer.z_bottom && z_bottom < layer.z_top
-        })
+        .find(|layer| z_bottom >= layer.z_bottom && z_bottom < layer.z_top)
         .map(|layer| (layer.z_top - layer.z_bottom) as f64)
         .ok_or_else(|| {
             format!(
@@ -431,36 +433,34 @@ fn extract_resistor_parameters(
 /// - Contact area (from via geometry)
 ///
 /// Returns 0.0 if no contact found or no interface resistance data available.
-fn calculate_contact_resistance(
-    pour: &PourMetadata,
-    space: &HardwareSpace,
-) -> Result<f64, String> {
+fn calculate_contact_resistance(pour: &PourMetadata, space: &HardwareSpace) -> Result<f64, String> {
     // Find contacts that connect to this pour
     // A contact is relevant if it overlaps with the pour's bounding box and Z range
     let pour_bbox = pour.bbox.as_ref().ok_or_else(|| {
-        format!("Pour '{}' has no bounding box for contact resistance calculation", pour.name)
+        format!(
+            "Pour '{}' has no bounding box for contact resistance calculation",
+            pour.name
+        )
     })?;
-    
+
     let pour_z = pour.z_bottom_nm;
-    
+
     for contact in &space.contacts {
         // Get contact bbox
         let contact_bbox = match &contact.bbox {
             Some(bbox) => bbox,
             None => continue, // Skip contacts without bounding boxes
         };
-        
+
         // Check if contact overlaps with this pour in X-Y plane
-        let overlaps_xy = !(
-            contact_bbox.min.x >= pour_bbox.max.x ||
-            contact_bbox.max.x <= pour_bbox.min.x ||
-            contact_bbox.min.y >= pour_bbox.max.y ||
-            contact_bbox.max.y <= pour_bbox.min.y
-        );
-        
+        let overlaps_xy = !(contact_bbox.min.x >= pour_bbox.max.x
+            || contact_bbox.max.x <= pour_bbox.min.x
+            || contact_bbox.min.y >= pour_bbox.max.y
+            || contact_bbox.max.y <= pour_bbox.min.y);
+
         // Check if contact connects to this Z layer
         let overlaps_z = contact.z_start_nm <= pour_z && contact.z_end_nm >= pour_z;
-        
+
         if overlaps_xy && overlaps_z {
             // Found a contact on this terminal
             // Calculate contact area from drill diameter
@@ -468,27 +468,33 @@ fn calculate_contact_resistance(
                 let contact_radius_nm = drill_diameter_nm as f64 / 2.0;
                 let contact_area_nm2 = std::f64::consts::PI * contact_radius_nm * contact_radius_nm;
                 let contact_area_m2 = contact_area_nm2 * 1e-18;
-                
+
                 // Look for interface/bridge material properties
                 // The contact material's resistivity at the interface determines R_0
                 let contact_material_id = space
                     .material_registry
                     .get_id(&contact.material_name)
-                    .ok_or_else(|| format!("Contact material '{}' not found", contact.material_name))?;
-                
-                if let Some(contact_props) = space.material_registry.get_physical_props(contact_material_id) {
-                    if let Some(interface_resistivity) = contact_props.get("interface_resistivity") {
+                    .ok_or_else(|| {
+                        format!("Contact material '{}' not found", contact.material_name)
+                    })?;
+
+                if let Some(contact_props) = space
+                    .material_registry
+                    .get_physical_props(contact_material_id)
+                {
+                    if let Some(interface_resistivity) = contact_props.get("interface_resistivity")
+                    {
                         // Interface resistivity is defined - calculate R_0
                         // Assume interface thickness is contact diameter (conservative estimate)
                         let interface_thickness_m = drill_diameter_nm as f64 * 1e-9;
-                        
+
                         // R_0 = ρ_interface × (t / A)
                         let r0 = interface_resistivity * (interface_thickness_m / contact_area_m2);
-                        
+
                         return Ok(r0);
                     }
                 }
-                
+
                 // No interface resistivity defined - return 0 (perfect contact)
                 // This is NOT a fallback/default - it's the correct physical model when
                 // the user hasn't defined interface resistance in their materials
@@ -496,7 +502,7 @@ fn calculate_contact_resistance(
             }
         }
     }
-    
+
     // No contact found on this terminal - return 0
     // This occurs for pours that don't have vias (e.g., direct metal connections)
     Ok(0.0)

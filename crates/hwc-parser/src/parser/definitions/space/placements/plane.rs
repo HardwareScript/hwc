@@ -15,7 +15,7 @@ impl crate::parser::Parser {
 
         self.expect(&Token::Named)?;
         let name = self.parse_component_name()?;
-        
+
         self.skip_whitespace(); // Allow newline after name
 
         // v0.2.0: Optional inside: RegionName
@@ -24,14 +24,21 @@ impl crate::parser::Parser {
             self.expect(&Token::Colon)?;
             let region_id = self.expect_identifier()?;
             self.skip_whitespace(); // Allow newline after inside clause
-            eprintln!("[DBG plane] after inside: {:?} | next tok: {:?}", region_id.as_str(), self.current().map(|t| format!("{:?}", t.token)));
+            eprintln!(
+                "[DBG plane] after inside: {:?} | next tok: {:?}",
+                region_id.as_str(),
+                self.current().map(|t| format!("{:?}", t.token))
+            );
             Some(region_id)
         } else {
             None
         };
 
-        eprintln!("[DBG plane] before relational_constraints | current tok: {:?}", self.current().map(|t| format!("{:?}", t.token)));
-        
+        eprintln!(
+            "[DBG plane] before relational_constraints | current tok: {:?}",
+            self.current().map(|t| format!("{:?}", t.token))
+        );
+
         // Parse relational constraints - either inline or in braces
         let relational_constraints = if self.check(&Token::OpenBrace) {
             // Multi-line syntax with braces: { align: ... \n align: ... }
@@ -43,9 +50,9 @@ impl crate::parser::Parser {
             if self.check(&Token::Indent) {
                 self.advance();
             }
-            
+
             let constraints = self.parse_relational_constraints_block(start_pos)?;
-            
+
             self.skip_whitespace();
             if self.check(&Token::Dedent) {
                 self.advance();
@@ -53,35 +60,56 @@ impl crate::parser::Parser {
             self.skip_whitespace();
             self.expect(&Token::CloseBrace)?;
             self.skip_whitespace(); // Allow newline after '}'
-            
+
             constraints
         } else {
             // Inline syntax: align: ... align: ... (on same line)
             self.parse_relational_constraints(start_pos)?
         };
-        
+
         self.skip_whitespace(); // Allow newline after relational constraints
-        eprintln!("[DBG plane] after relational_constraints | current tok: {:?}", self.current().map(|t| format!("{:?}", t.token)));
+        eprintln!(
+            "[DBG plane] after relational_constraints | current tok: {:?}",
+            self.current().map(|t| format!("{:?}", t.token))
+        );
 
         let elevation = if self.check(&Token::On) {
             self.advance();
             let elev = self.parse_elevation("plane")?;
             self.skip_whitespace(); // Allow newline after elevation
-            eprintln!("[DBG plane] elevation parsed, expecting block colon | next tok: {:?}", self.current().map(|t| format!("{:?}", t.token)));
+            eprintln!(
+                "[DBG plane] elevation parsed, expecting block colon | next tok: {:?}",
+                self.current().map(|t| format!("{:?}", t.token))
+            );
             self.expect(&Token::Colon)?;
             elev
         } else {
-            eprintln!("[DBG plane] no 'on', expecting block colon | current tok: {:?}", self.current().map(|t| format!("{:?}", t.token)));
+            eprintln!(
+                "[DBG plane] no 'on', expecting block colon | current tok: {:?}",
+                self.current().map(|t| format!("{:?}", t.token))
+            );
             self.expect(&Token::Colon)?;
-            eprintln!("[DBG plane] consumed block colon | current tok: {:?}", self.current().map(|t| format!("{:?}", t.token)));
+            eprintln!(
+                "[DBG plane] consumed block colon | current tok: {:?}",
+                self.current().map(|t| format!("{:?}", t.token))
+            );
             Elevation::Relative
         };
 
-        eprintln!("[DBG plane] before newline | current tok: {:?}", self.current().map(|t| format!("{:?}", t.token)));
+        eprintln!(
+            "[DBG plane] before newline | current tok: {:?}",
+            self.current().map(|t| format!("{:?}", t.token))
+        );
         self.expect(&Token::Newline)?;
-        eprintln!("[DBG plane] before indent | current tok: {:?}", self.current().map(|t| format!("{:?}", t.token)));
+        eprintln!(
+            "[DBG plane] before indent | current tok: {:?}",
+            self.current().map(|t| format!("{:?}", t.token))
+        );
         self.expect(&Token::Indent)?;
-        eprintln!("[DBG plane] entered body | current tok: {:?}", self.current().map(|t| format!("{:?}", t.token)));
+        eprintln!(
+            "[DBG plane] entered body | current tok: {:?}",
+            self.current().map(|t| format!("{:?}", t.token))
+        );
 
         let mut from = None;
         let mut to = None;
@@ -96,7 +124,10 @@ impl crate::parser::Parser {
                 continue;
             }
 
-            eprintln!("[DBG plane] body loop | current tok: {:?}", self.current().map(|t| format!("{:?}", t.token)));
+            eprintln!(
+                "[DBG plane] body loop | current tok: {:?}",
+                self.current().map(|t| format!("{:?}", t.token))
+            );
             let field_name = self.expect_identifier_or_keyword_string()?;
             self.expect(&Token::Colon)?;
 
@@ -231,17 +262,21 @@ impl crate::parser::Parser {
                 }
             };
             self.expect(&Token::With)?;
-            
+
             // v0.2.1: Parse target as expression or simple entity name
             let target = if self.check(&Token::OpenParen) {
                 // Complex expression: (A.center_x + B.center_x) / 2
                 let expr = self.parse_expression()?;
                 AlignmentTarget::Expression(expr)
-            } else if self.current().map(|t| matches!(t.token, Token::Identifier(_))).unwrap_or(false) {
+            } else if self
+                .current()
+                .map(|t| matches!(t.token, Token::Identifier(_)))
+                .unwrap_or(false)
+            {
                 // Check if it's a simple identifier or an anchor reference
                 let checkpoint = self.current;
                 let _ = self.expect_identifier_string()?;
-                
+
                 if self.check(&Token::Dot) {
                     // It's an anchor reference like Pad_A.center_x - parse as expression
                     self.current = checkpoint; // Backtrack
@@ -256,7 +291,7 @@ impl crate::parser::Parser {
             } else {
                 return Err(self.error("Expected entity name or expression after 'with'"));
             };
-            
+
             let span = Span::new(start_pos, self.previous_span().end);
             constraints.push(RelationalConstraint::Align { axis, target, span });
         }
@@ -348,7 +383,7 @@ impl crate::parser::Parser {
 
         while !self.check(&Token::CloseBrace) && !self.check(&Token::Dedent) && !self.is_at_end() {
             self.skip_whitespace();
-            
+
             if self.check(&Token::CloseBrace) || self.check(&Token::Dedent) {
                 break;
             }
@@ -376,17 +411,21 @@ impl crate::parser::Parser {
                     }
                 };
                 self.expect(&Token::With)?;
-                
+
                 // v0.2.1: Parse target as expression or simple entity name
                 let target = if self.check(&Token::OpenParen) {
                     // Complex expression: (A.center_x + B.center_x) / 2
                     let expr = self.parse_expression()?;
                     AlignmentTarget::Expression(expr)
-                } else if self.current().map(|t| matches!(t.token, Token::Identifier(_))).unwrap_or(false) {
+                } else if self
+                    .current()
+                    .map(|t| matches!(t.token, Token::Identifier(_)))
+                    .unwrap_or(false)
+                {
                     // Check if it's a simple identifier or an anchor reference
                     let checkpoint = self.current;
                     let _ = self.expect_identifier_string()?;
-                    
+
                     if self.check(&Token::Dot) {
                         // It's an anchor reference like Pad_A.center_x - parse as expression
                         self.current = checkpoint; // Backtrack
@@ -401,7 +440,7 @@ impl crate::parser::Parser {
                 } else {
                     return Err(self.error("Expected entity name or expression after 'with'"));
                 };
-                
+
                 let span = Span::new(start_pos, self.previous_span().end);
                 constraints.push(RelationalConstraint::Align { axis, target, span });
                 self.skip_whitespace();

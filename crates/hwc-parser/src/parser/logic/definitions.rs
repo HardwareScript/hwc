@@ -3,7 +3,10 @@ use crate::lexer::{Span, Token};
 use crate::parser::{ParseError, Parser};
 
 impl Parser {
-    pub fn parse_logic_definition(&mut self, is_exported: bool) -> Result<LogicDefinition, ParseError> {
+    pub fn parse_logic_definition(
+        &mut self,
+        is_exported: bool,
+    ) -> Result<LogicDefinition, ParseError> {
         let start = self.current_span();
 
         self.expect(&Token::Logic)?;

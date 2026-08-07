@@ -1,8 +1,8 @@
 //! Device definition parsing
 
 use super::super::error::{span_to_source_span, ParseError};
-use crate::ast::*;
 use crate::ast::device::SpiceExportInfo;
+use crate::ast::*;
 use crate::lexer::{Span, Token};
 use compact_str::CompactString;
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -241,15 +241,17 @@ impl super::super::Parser {
                     return None;
                 }
             }
-            
+
             // Check that all terminals are in terminal_order (warning, not error)
             let terminal_set: FxHashSet<_> = terminals.iter().collect();
             let order_set: FxHashSet<_> = spice.terminal_order.iter().collect();
-            
+
             if terminal_set != order_set {
                 eprintln!(
                     "Warning: Device '{}' has terminals {:?} but SPICE terminal_order is {:?}",
-                    name.as_str(), terminals, spice.terminal_order
+                    name.as_str(),
+                    terminals,
+                    spice.terminal_order
                 );
             }
         }
@@ -264,25 +266,25 @@ impl super::super::Parser {
             span: Span::new(start_pos, end_pos),
         })
     }
-    
+
     /// Parse SPICE export metadata block
     fn parse_spice_block(&mut self) -> Result<SpiceExportInfo, ParseError> {
         self.expect(&Token::Indent)?;
-        
+
         let mut prefix: Option<char> = None;
         let mut terminal_order: Option<SmallVec<[CompactString; 4]>> = None;
         let mut parameters: Option<SmallVec<[CompactString; 4]>> = None;
         let mut model_name: Option<CompactString> = None;
         let mut parameter_style: Option<SpiceParameterStyle> = None;
         let mut subcircuit: Option<CompactString> = None;
-        
+
         while !self.check(&Token::Dedent) && !self.is_at_end() {
             self.skip_whitespace();
-            
+
             if self.check(&Token::Dedent) || self.is_at_end() {
                 break;
             }
-            
+
             // Use expect_identifier_string to handle keywords-as-identifiers
             let field_name = match self.expect_identifier_string() {
                 Ok(name) => name,
@@ -290,88 +292,90 @@ impl super::super::Parser {
                     return Err(e);
                 }
             };
-            
+
             match field_name.as_str() {
-                        "prefix" => {
-                            self.expect(&Token::Colon)?;
-                            self.skip_whitespace();
-                            
-                            // Parse single character
-                            if let Some(tok) = self.current() {
-                                if let Token::Identifier(s) = &tok.token {
-                                    if s.len() == 1 {
-                                        prefix = Some(s.chars().next().unwrap());
-                                        self.advance();
-                                    } else {
-                                        return Err(self.error("SPICE prefix must be a single character (R, C, L, M, D, etc.)"));
-                                    }
-                                } else {
-                                    return Err(self.error("Expected SPICE prefix identifier"));
-                                }
+                "prefix" => {
+                    self.expect(&Token::Colon)?;
+                    self.skip_whitespace();
+
+                    // Parse single character
+                    if let Some(tok) = self.current() {
+                        if let Token::Identifier(s) = &tok.token {
+                            if s.len() == 1 {
+                                prefix = Some(s.chars().next().unwrap());
+                                self.advance();
+                            } else {
+                                return Err(self.error(
+                                    "SPICE prefix must be a single character (R, C, L, M, D, etc.)",
+                                ));
                             }
+                        } else {
+                            return Err(self.error("Expected SPICE prefix identifier"));
                         }
-                        
-                        "terminal_order" => {
-                            self.expect(&Token::Colon)?;
-                            terminal_order = Some(self.parse_identifier_list()?);
-                        }
-                        
-                        "parameters" => {
-                            self.expect(&Token::Colon)?;
-                            parameters = Some(self.parse_identifier_list()?);
-                        }
-                        
-                        "model" => {
-                            self.expect(&Token::Colon)?;
-                            self.skip_whitespace();
-                            model_name = Some(self.expect_identifier()?.name);
-                        }
-                        
-                        "parameter_style" => {
-                            self.expect(&Token::Colon)?;
-                            self.skip_whitespace();
-                            
-                            let style_ident = self.expect_identifier()?;
-                            parameter_style = Some(match style_ident.name.as_str() {
-                                "positional" => SpiceParameterStyle::Positional,
-                                "named" => SpiceParameterStyle::Named,
-                                other => {
-                                    return Err(self.error(&format!(
-                                        "Unknown parameter_style: '{}'. Expected 'positional' or 'named'",
-                                        other
-                                    )));
-                                }
-                            });
-                        }
-                        
-                        "subcircuit" => {
-                            self.expect(&Token::Colon)?;
-                            self.skip_whitespace();
-                            subcircuit = Some(self.expect_identifier()?.name);
-                        }
-                        
-                        _ => {
+                    }
+                }
+
+                "terminal_order" => {
+                    self.expect(&Token::Colon)?;
+                    terminal_order = Some(self.parse_identifier_list()?);
+                }
+
+                "parameters" => {
+                    self.expect(&Token::Colon)?;
+                    parameters = Some(self.parse_identifier_list()?);
+                }
+
+                "model" => {
+                    self.expect(&Token::Colon)?;
+                    self.skip_whitespace();
+                    model_name = Some(self.expect_identifier()?.name);
+                }
+
+                "parameter_style" => {
+                    self.expect(&Token::Colon)?;
+                    self.skip_whitespace();
+
+                    let style_ident = self.expect_identifier()?;
+                    parameter_style = Some(match style_ident.name.as_str() {
+                        "positional" => SpiceParameterStyle::Positional,
+                        "named" => SpiceParameterStyle::Named,
+                        other => {
                             return Err(self.error(&format!(
+                                "Unknown parameter_style: '{}'. Expected 'positional' or 'named'",
+                                other
+                            )));
+                        }
+                    });
+                }
+
+                "subcircuit" => {
+                    self.expect(&Token::Colon)?;
+                    self.skip_whitespace();
+                    subcircuit = Some(self.expect_identifier()?.name);
+                }
+
+                _ => {
+                    return Err(self.error(&format!(
                                 "Unknown spice field: '{}'. Expected: prefix, terminal_order, parameters, parameter_style, model, or subcircuit",
                                 field_name
                             )));
-                        }
-                    }
-            
+                }
+            }
+
             self.skip_whitespace();
         }
-        
+
         self.expect(&Token::Dedent)?;
-        
+
         // STRICT VALIDATION - ALL required fields must be present
         // NO DEFAULTS, NO FALLBACKS - fail loudly if missing
         let prefix = prefix.ok_or_else(|| self.error("SPICE block missing REQUIRED field 'prefix'. Add 'prefix: <char>' (e.g., 'prefix: C' for capacitor)"))?;
         let terminal_order = terminal_order.ok_or_else(|| self.error("SPICE block missing REQUIRED field 'terminal_order'. Add 'terminal_order: [term1, term2, ...]'"))?;
         let parameter_style = parameter_style.ok_or_else(|| self.error("SPICE block missing REQUIRED field 'parameter_style'. Add 'parameter_style: positional' or 'parameter_style: named'"))?;
-        
+
         // Parameters can be empty (for devices with no extracted parameters)
         let parameters = parameters.unwrap_or_default();
-        
+
         Ok(SpiceExportInfo {
             prefix,
             terminal_order,
@@ -383,22 +387,24 @@ impl super::super::Parser {
     }
 
     /// Parse identifier list: [A, B, C]
-    pub(crate) fn parse_identifier_list(&mut self) -> Result<SmallVec<[CompactString; 4]>, ParseError> {
+    pub(crate) fn parse_identifier_list(
+        &mut self,
+    ) -> Result<SmallVec<[CompactString; 4]>, ParseError> {
         let mut result = SmallVec::new();
-        
+
         self.expect(&Token::OpenBracket)?;
         self.skip_whitespace();
-        
+
         if self.check(&Token::CloseBracket) {
             self.advance();
             return Ok(result);
         }
-        
+
         loop {
             let ident = self.expect_identifier()?;
             result.push(ident.name);
             self.skip_whitespace();
-            
+
             if self.check(&Token::Comma) {
                 self.advance();
                 self.skip_whitespace();
@@ -406,7 +412,7 @@ impl super::super::Parser {
                 break;
             }
         }
-        
+
         self.expect(&Token::CloseBracket)?;
         Ok(result)
     }

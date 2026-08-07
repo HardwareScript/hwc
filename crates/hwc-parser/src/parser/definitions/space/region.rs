@@ -1,15 +1,17 @@
 //! Region parsing for floorplanning (v0.2.0)
 
-use crate::{RegionAnchor, RegionBoundary, RegionConstraint, RegionConstraintType, RegionDefinition};
 use crate::lexer::Token;
 use crate::parser::ParseError;
+use crate::{
+    RegionAnchor, RegionBoundary, RegionConstraint, RegionConstraintType, RegionDefinition,
+};
 
 impl crate::parser::Parser {
     /// Parse region definition:
     /// ```hw
     /// region AnalogRegion:
     ///     at: space.bottom_left + [100um, 100um]
-    /// 
+    ///
     /// region DigitalRegion:
     ///     right_of: AnalogRegion with spacing: pdk.min_spacing * 10
     ///     align: top with AnalogRegion
@@ -41,14 +43,12 @@ impl crate::parser::Parser {
                 self.advance();
                 self.expect(&Token::Colon)?;
 
-                
-
                 if self.check(&Token::OpenBracket) {
                     let coord = self.parse_coordinate_optional_z()?;
                     anchor = Some(RegionAnchor::Absolute(coord));
                 } else {
                     let expr = self.parse_prefix_expression()?;
-                   
+
                     if self.check(&Token::Plus) || self.check(&Token::Hyphen) {
                         let op = if self.check(&Token::Plus) {
                             crate::ast::BinaryOperator::Add
@@ -56,7 +56,7 @@ impl crate::parser::Parser {
                             crate::ast::BinaryOperator::Subtract
                         };
                         self.advance();
-                      
+
                         let offset = self.parse_coordinate_optional_z()?;
                         anchor = Some(RegionAnchor::Offset {
                             base: expr,
@@ -158,7 +158,9 @@ impl crate::parser::Parser {
             } else {
                 return Err(self.error(&format!(
                     "Unexpected token in region definition: {}",
-                    self.current().map(|t| t.token.to_string()).unwrap_or_else(|| "EOF".to_string())
+                    self.current()
+                        .map(|t| t.token.to_string())
+                        .unwrap_or_else(|| "EOF".to_string())
                 )));
             }
         }
@@ -177,9 +179,7 @@ impl crate::parser::Parser {
     }
 
     /// Parse optional spacing: `with spacing: pdk.min_spacing * 10`
-    fn parse_optional_spacing(
-        &mut self,
-    ) -> Result<Option<crate::Expression>, ParseError> {
+    fn parse_optional_spacing(&mut self) -> Result<Option<crate::Expression>, ParseError> {
         if self.check(&Token::With) {
             self.advance();
             if self.check(&Token::Identifier("spacing".into())) {

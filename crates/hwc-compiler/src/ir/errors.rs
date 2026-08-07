@@ -32,10 +32,7 @@ pub enum IrError {
         url("https://docs.hw-script.org/errors/C32"),
         help("{hint}")
     )]
-    MissingOrigin {
-        space_name: String,
-        hint: String,
-    },
+    MissingOrigin { space_name: String, hint: String },
 
     #[error("Space grid not specified")]
     #[diagnostic(
@@ -732,9 +729,7 @@ pub enum IrError {
     #[diagnostic(
         code(R42),
         url("https://docs.hw-script.org/errors/R42"),
-        help(
-            "{problem}\n\n{hint}"
-        )
+        help("{problem}\n\n{hint}")
     )]
     PreRoutingValidationFailed {
         route: CompactString,
@@ -748,9 +743,7 @@ pub enum IrError {
     #[diagnostic(
         code(R43),
         url("https://docs.hw-script.org/errors/R43"),
-        help(
-            "{problem}\n\n{hint}"
-        )
+        help("{problem}\n\n{hint}")
     )]
     PostRoutingValidationFailed {
         net: CompactString,
@@ -812,10 +805,7 @@ pub enum IrError {
         url("https://docs.hw-script.org/errors/R47"),
         help("{hint}")
     )]
-    LayerConnectionError {
-        message: String,
-        hint: String,
-    },
+    LayerConnectionError { message: String, hint: String },
 
     /// Routing layer database error.
     #[error("Routing layer database error: {message}")]
@@ -824,10 +814,7 @@ pub enum IrError {
         url("https://docs.hw-script.org/errors/R48"),
         help("{hint}")
     )]
-    RoutingLayerError {
-        message: String,
-        hint: String,
-    },
+    RoutingLayerError { message: String, hint: String },
 }
 
 #[derive(Debug, Clone)]

@@ -319,15 +319,20 @@ impl Legalizer {
         &self,
         segments: &[TraceSegment],
         net_ids: &[NetId],
-        spatial_index: &DynamicSpatialIndex,  // Use pre-configured index from caller
+        spatial_index: &DynamicSpatialIndex, // Use pre-configured index from caller
         max_iterations: usize,
     ) -> (Vec<TraceSegment>, Vec<NetId>) {
         let mut current = segments.to_vec();
         let current_net_ids = net_ids.to_vec();
-        
-        eprintln!("[LEGALIZER DEBUG] Starting legalization with {} segments", current.len());
-        eprintln!("[LEGALIZER DEBUG] Using caller-provided spatial index (layer-aware: {})", 
-            spatial_index.layer_z_ranges().is_some());
+
+        eprintln!(
+            "[LEGALIZER DEBUG] Starting legalization with {} segments",
+            current.len()
+        );
+        eprintln!(
+            "[LEGALIZER DEBUG] Using caller-provided spatial index (layer-aware: {})",
+            spatial_index.layer_z_ranges().is_some()
+        );
 
         for _iter in 0..max_iterations {
             let violations = self.detect_violations(&current, &current_net_ids, spatial_index);
@@ -336,7 +341,11 @@ impl Legalizer {
                 break;
             }
 
-            eprintln!("[LEGALIZER DEBUG] Found {} violations in iteration {}", violations.len(), _iter);
+            eprintln!(
+                "[LEGALIZER DEBUG] Found {} violations in iteration {}",
+                violations.len(),
+                _iter
+            );
 
             let mut windows: Vec<LegalizationWindow> = violations
                 .iter()
@@ -379,7 +388,7 @@ impl Legalizer {
             };
             let window_ref = windows.first().unwrap_or(&empty_window);
             current = self.apply_nudges(&current, window_ref, &all_displacements);
-            
+
             // Note: Caller must rebuild spatial index with updated segments for next iteration
         }
 

@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 /// ```hw
 /// region AnalogRegion:
 ///     at: space.bottom_left + [100um, 100um]
-/// 
+///
 /// region DigitalRegion:
 ///     right_of: AnalogRegion with spacing: pdk.min_spacing * 10
 ///     align: top with AnalogRegion

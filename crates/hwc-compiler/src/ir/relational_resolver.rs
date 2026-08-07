@@ -8,8 +8,8 @@
 
 use compact_str::CompactString;
 use hwc_parser::{
-    AlignmentAxis, ComponentName, Coordinate, DirectionalConstraint, Expression,
-    RelationalConstraint, Unit, OriginXY,
+    AlignmentAxis, ComponentName, Coordinate, DirectionalConstraint, Expression, OriginXY,
+    RelationalConstraint, Unit,
 };
 
 use crate::bounding_box_tracker::BoundingBoxTracker;
@@ -221,42 +221,32 @@ impl RelationalPlacementFormula {
                     }
                 }
             }
-            SpatialRelation::AlignX => {
-                Self {
-                    is_y_axis: false,
-                    use_target_max: false,
-                    spacing_multiplier: 0,
-                    self_dimension_multiplier: 0,
-                    is_center_alignment: true,
-                }
-            }
-            SpatialRelation::AlignY => {
-                Self {
-                    is_y_axis: true,
-                    use_target_max: false,
-                    spacing_multiplier: 0,
-                    self_dimension_multiplier: 0,
-                    is_center_alignment: true,
-                }
-            }
+            SpatialRelation::AlignX => Self {
+                is_y_axis: false,
+                use_target_max: false,
+                spacing_multiplier: 0,
+                self_dimension_multiplier: 0,
+                is_center_alignment: true,
+            },
+            SpatialRelation::AlignY => Self {
+                is_y_axis: true,
+                use_target_max: false,
+                spacing_multiplier: 0,
+                self_dimension_multiplier: 0,
+                is_center_alignment: true,
+            },
         }
     }
 
     /// Resolve the position using the formula
-    pub fn resolve(
-        &self,
-        t_min: i64,
-        t_max: i64,
-        spacing_nm: i64,
-        self_dimension_nm: i64,
-    ) -> i64 {
+    pub fn resolve(&self, t_min: i64, t_max: i64, spacing_nm: i64, self_dimension_nm: i64) -> i64 {
         if self.is_center_alignment {
             let center = (t_min + t_max) / 2;
             center - (self_dimension_nm / 2)
         } else {
             let base_edge = if self.use_target_max { t_max } else { t_min };
-            base_edge 
-                + (self.spacing_multiplier * spacing_nm) 
+            base_edge
+                + (self.spacing_multiplier * spacing_nm)
                 + (self.self_dimension_multiplier * self_dimension_nm)
         }
     }
@@ -391,83 +381,108 @@ pub fn compute_position_from_constraints(
                     hwc_parser::AlignmentTarget::Entity(component_name) => {
                         // Traditional entity-based alignment
                         let target_bbox = resolve_target_bbox(component_name, bbox_tracker)?;
-                        let (tx_min, tx_max, ty_min, ty_max) = target_bbox_to_user_ranges(&target_bbox, space_dimensions, origin.xy);
-                        
-                    // Return the appropriate coordinate based on axis
-                    match axis {
-                        AlignmentAxis::Center => {
-                            // Center aligns BOTH X and Y
-                            x_nm = Some((tx_min + tx_max) / 2);
-                            y_nm = Some((ty_min + ty_max) / 2);
-                            return Ok(Coordinate::Declarative {
-                                x: Expression::Measurement {
-                                    value: x_nm.unwrap() as f64,
-                                    unit: Unit::Nanometer,
+                        let (tx_min, tx_max, ty_min, ty_max) =
+                            target_bbox_to_user_ranges(&target_bbox, space_dimensions, origin.xy);
+
+                        // Return the appropriate coordinate based on axis
+                        match axis {
+                            AlignmentAxis::Center => {
+                                // Center aligns BOTH X and Y
+                                x_nm = Some((tx_min + tx_max) / 2);
+                                y_nm = Some((ty_min + ty_max) / 2);
+                                return Ok(Coordinate::Declarative {
+                                    x: Expression::Measurement {
+                                        value: x_nm.unwrap() as f64,
+                                        unit: Unit::Nanometer,
+                                        span: hwc_parser::Span::new(0, 0),
+                                    },
+                                    y: Expression::Measurement {
+                                        value: y_nm.unwrap() as f64,
+                                        unit: Unit::Nanometer,
+                                        span: hwc_parser::Span::new(0, 0),
+                                    },
+                                    z: Expression::Measurement {
+                                        value: z_nm.unwrap_or(0) as f64,
+                                        unit: Unit::Nanometer,
+                                        span: hwc_parser::Span::new(0, 0),
+                                    },
                                     span: hwc_parser::Span::new(0, 0),
-                                },
-                                y: Expression::Measurement {
-                                    value: y_nm.unwrap() as f64,
-                                    unit: Unit::Nanometer,
-                                    span: hwc_parser::Span::new(0, 0),
-                                },
-                                z: Expression::Measurement {
-                                    value: z_nm.unwrap_or(0) as f64,
-                                    unit: Unit::Nanometer,
-                                    span: hwc_parser::Span::new(0, 0),
-                                },
-                                span: hwc_parser::Span::new(0, 0),
-                            });
+                                });
+                            }
+                            AlignmentAxis::X => (tx_min + tx_max) / 2,
+                            AlignmentAxis::Y => (ty_min + ty_max) / 2,
+                            AlignmentAxis::Z => (target_bbox.min.z + target_bbox.max.z) / 2,
+                            AlignmentAxis::Top => {
+                                let formula = RelationalPlacementFormula::get(
+                                    SpatialRelation::AlignTop,
+                                    x_multiplier,
+                                    y_multiplier,
+                                );
+                                formula.resolve(ty_min, ty_max, 0, 0)
+                            }
+                            AlignmentAxis::Bottom => {
+                                let formula = RelationalPlacementFormula::get(
+                                    SpatialRelation::AlignBottom,
+                                    x_multiplier,
+                                    y_multiplier,
+                                );
+                                formula.resolve(ty_min, ty_max, 0, 0)
+                            }
+                            AlignmentAxis::Left => {
+                                let formula = RelationalPlacementFormula::get(
+                                    SpatialRelation::AlignLeft,
+                                    x_multiplier,
+                                    y_multiplier,
+                                );
+                                formula.resolve(tx_min, tx_max, 0, 0)
+                            }
+                            AlignmentAxis::Right => {
+                                let formula = RelationalPlacementFormula::get(
+                                    SpatialRelation::AlignRight,
+                                    x_multiplier,
+                                    y_multiplier,
+                                );
+                                formula.resolve(tx_min, tx_max, 0, 0)
+                            }
                         }
-                        AlignmentAxis::X => (tx_min + tx_max) / 2,
-                        AlignmentAxis::Y => (ty_min + ty_max) / 2,
-                        AlignmentAxis::Z => (target_bbox.min.z + target_bbox.max.z) / 2,
-                        AlignmentAxis::Top => {
-                            let formula = RelationalPlacementFormula::get(SpatialRelation::AlignTop, x_multiplier, y_multiplier);
-                            formula.resolve(ty_min, ty_max, 0, 0)
-                        }
-                        AlignmentAxis::Bottom => {
-                            let formula = RelationalPlacementFormula::get(SpatialRelation::AlignBottom, x_multiplier, y_multiplier);
-                            formula.resolve(ty_min, ty_max, 0, 0)
-                        }
-                        AlignmentAxis::Left => {
-                            let formula = RelationalPlacementFormula::get(SpatialRelation::AlignLeft, x_multiplier, y_multiplier);
-                            formula.resolve(tx_min, tx_max, 0, 0)
-                        }
-                        AlignmentAxis::Right => {
-                            let formula = RelationalPlacementFormula::get(SpatialRelation::AlignRight, x_multiplier, y_multiplier);
-                            formula.resolve(tx_min, tx_max, 0, 0)
-                        }
-                    }
                     }
                     hwc_parser::AlignmentTarget::Expression(expr) => {
                         // v0.2.1: Expression-based alignment - evaluate the expression
                         // The expression should evaluate to a coordinate value (e.g., (A.center_x + B.center_x) / 2)
-                        use crate::ir::placement::coordinate_evaluation::{evaluate_coordinate_with_anchors, CoordinateAxis};
-                        
+                        use crate::ir::placement::coordinate_evaluation::{
+                            evaluate_coordinate_with_anchors, CoordinateAxis,
+                        };
+
                         let context_axis = match axis {
-                            AlignmentAxis::Center => return Ok(Coordinate::Declarative {
-                                x: Expression::Measurement {
-                                    value: x_nm.unwrap() as f64,
-                                    unit: Unit::Nanometer,
+                            AlignmentAxis::Center => {
+                                return Ok(Coordinate::Declarative {
+                                    x: Expression::Measurement {
+                                        value: x_nm.unwrap() as f64,
+                                        unit: Unit::Nanometer,
+                                        span: hwc_parser::Span::new(0, 0),
+                                    },
+                                    y: Expression::Measurement {
+                                        value: y_nm.unwrap() as f64,
+                                        unit: Unit::Nanometer,
+                                        span: hwc_parser::Span::new(0, 0),
+                                    },
+                                    z: Expression::Measurement {
+                                        value: z_nm.unwrap_or(0) as f64,
+                                        unit: Unit::Nanometer,
+                                        span: hwc_parser::Span::new(0, 0),
+                                    },
                                     span: hwc_parser::Span::new(0, 0),
-                                },
-                                y: Expression::Measurement {
-                                    value: y_nm.unwrap() as f64,
-                                    unit: Unit::Nanometer,
-                                    span: hwc_parser::Span::new(0, 0),
-                                },
-                                z: Expression::Measurement {
-                                    value: z_nm.unwrap_or(0) as f64,
-                                    unit: Unit::Nanometer,
-                                    span: hwc_parser::Span::new(0, 0),
-                                },
-                                span: hwc_parser::Span::new(0, 0),
-                            }), // Already handled above
-                            AlignmentAxis::X | AlignmentAxis::Left | AlignmentAxis::Right => CoordinateAxis::X,
-                            AlignmentAxis::Y | AlignmentAxis::Top | AlignmentAxis::Bottom => CoordinateAxis::Y,
+                                })
+                            } // Already handled above
+                            AlignmentAxis::X | AlignmentAxis::Left | AlignmentAxis::Right => {
+                                CoordinateAxis::X
+                            }
+                            AlignmentAxis::Y | AlignmentAxis::Top | AlignmentAxis::Bottom => {
+                                CoordinateAxis::Y
+                            }
                             AlignmentAxis::Z => CoordinateAxis::Z,
                         };
-                        
+
                         evaluate_coordinate_with_anchors(
                             expr,
                             symbol_table,
@@ -475,7 +490,8 @@ pub fn compute_position_from_constraints(
                             bbox_tracker,
                             context_axis,
                             origin.z,
-                        ).map_err(|e| e)?
+                        )
+                        .map_err(|e| e)?
                     }
                 };
 
@@ -495,14 +511,23 @@ pub fn compute_position_from_constraints(
             }
             RelationalConstraint::Directional(dir) => {
                 let (target, spacing_expr, relation) = match dir {
-                    DirectionalConstraint::Above { target, spacing } => (target, spacing, SpatialRelation::Above),
-                    DirectionalConstraint::Below { target, spacing } => (target, spacing, SpatialRelation::Below),
-                    DirectionalConstraint::RightOf { target, spacing } => (target, spacing, SpatialRelation::RightOf),
-                    DirectionalConstraint::LeftOf { target, spacing } => (target, spacing, SpatialRelation::LeftOf),
+                    DirectionalConstraint::Above { target, spacing } => {
+                        (target, spacing, SpatialRelation::Above)
+                    }
+                    DirectionalConstraint::Below { target, spacing } => {
+                        (target, spacing, SpatialRelation::Below)
+                    }
+                    DirectionalConstraint::RightOf { target, spacing } => {
+                        (target, spacing, SpatialRelation::RightOf)
+                    }
+                    DirectionalConstraint::LeftOf { target, spacing } => {
+                        (target, spacing, SpatialRelation::LeftOf)
+                    }
                 };
 
                 let target_bbox = resolve_target_bbox(target, bbox_tracker)?;
-                let (tx_min, tx_max, ty_min, ty_max) = target_bbox_to_user_ranges(&target_bbox, space_dimensions, origin.xy);
+                let (tx_min, tx_max, ty_min, ty_max) =
+                    target_bbox_to_user_ranges(&target_bbox, space_dimensions, origin.xy);
                 let spacing_nm = if let Some(expr) = spacing_expr {
                     evaluate_expression_to_nm(expr, symbol_table)?
                 } else {
@@ -537,7 +562,10 @@ pub fn compute_position_from_constraints(
     })?;
     let z = z_nm.unwrap_or(0); // Z is optional (defaults to layer bottom)
 
-    eprintln!("[RELATIONAL_RESOLVER] Resolved position: X={}nm, Y={}nm, Z={}nm", x, y, z);
+    eprintln!(
+        "[RELATIONAL_RESOLVER] Resolved position: X={}nm, Y={}nm, Z={}nm",
+        x, y, z
+    );
 
     Ok(Coordinate::Declarative {
         x: Expression::Measurement {
@@ -566,8 +594,14 @@ fn resolve_target_bbox(
 ) -> Result<hwc_engine::geometry::BoundingBox, IrError> {
     let target_name: CompactString = target.base.clone();
 
-    eprintln!("[RELATIONAL_RESOLVER DEBUG] Resolving target: '{}'", target_name);
-    eprintln!("[RELATIONAL_RESOLVER DEBUG] Available entities in bbox_tracker: {:?}", bbox_tracker.all_names());
+    eprintln!(
+        "[RELATIONAL_RESOLVER DEBUG] Resolving target: '{}'",
+        target_name
+    );
+    eprintln!(
+        "[RELATIONAL_RESOLVER DEBUG] Available entities in bbox_tracker: {:?}",
+        bbox_tracker.all_names()
+    );
 
     bbox_tracker
         .get(&target_name)
@@ -654,12 +688,22 @@ fn evaluate_expression_to_nm(
                 hwc_parser::BinaryOperator::Equal => Ok(if left_nm == right_nm { 1 } else { 0 }),
                 hwc_parser::BinaryOperator::NotEqual => Ok(if left_nm != right_nm { 1 } else { 0 }),
                 hwc_parser::BinaryOperator::LessThan => Ok(if left_nm < right_nm { 1 } else { 0 }),
-                hwc_parser::BinaryOperator::GreaterThan => Ok(if left_nm > right_nm { 1 } else { 0 }),
-                hwc_parser::BinaryOperator::LessThanOrEqual => Ok(if left_nm <= right_nm { 1 } else { 0 }),
-                hwc_parser::BinaryOperator::GreaterThanOrEqual => Ok(if left_nm >= right_nm { 1 } else { 0 }),
+                hwc_parser::BinaryOperator::GreaterThan => {
+                    Ok(if left_nm > right_nm { 1 } else { 0 })
+                }
+                hwc_parser::BinaryOperator::LessThanOrEqual => {
+                    Ok(if left_nm <= right_nm { 1 } else { 0 })
+                }
+                hwc_parser::BinaryOperator::GreaterThanOrEqual => {
+                    Ok(if left_nm >= right_nm { 1 } else { 0 })
+                }
                 // Boolean operators (treat non-zero as true)
-                hwc_parser::BinaryOperator::And => Ok(if left_nm != 0 && right_nm != 0 { 1 } else { 0 }),
-                hwc_parser::BinaryOperator::Or => Ok(if left_nm != 0 || right_nm != 0 { 1 } else { 0 }),
+                hwc_parser::BinaryOperator::And => {
+                    Ok(if left_nm != 0 && right_nm != 0 { 1 } else { 0 })
+                }
+                hwc_parser::BinaryOperator::Or => {
+                    Ok(if left_nm != 0 || right_nm != 0 { 1 } else { 0 })
+                }
             }
         }
         Expression::Unary {

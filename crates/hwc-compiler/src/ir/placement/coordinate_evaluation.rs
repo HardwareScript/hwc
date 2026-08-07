@@ -56,10 +56,12 @@ pub fn evaluate_coordinate_to_nm(
         Expression::Variable { name, .. } => {
             if let Some(value) = eval_context.get(name) {
                 // Convert the strongly-typed Value to nanometers
-                value.to_nanometers().map_err(|e| IrError::CoordinateResolutionFailed {
-                    coordinate_str: format!("variable '{}'", name),
-                    reason: e,
-                })
+                value
+                    .to_nanometers()
+                    .map_err(|e| IrError::CoordinateResolutionFailed {
+                        coordinate_str: format!("variable '{}'", name),
+                        reason: e,
+                    })
             } else if let Some(const_value) = symbol_table.get_all_constants().get(name) {
                 Ok(*const_value as i64)
             } else {
@@ -92,15 +94,63 @@ pub fn evaluate_coordinate_to_nm(
                 }
                 BinaryOperator::Modulo => left_nm % right_nm,
                 // Comparison operators return 1 for true, 0 for false
-                BinaryOperator::Equal => if left_nm == right_nm { 1 } else { 0 },
-                BinaryOperator::NotEqual => if left_nm != right_nm { 1 } else { 0 },
-                BinaryOperator::LessThan => if left_nm < right_nm { 1 } else { 0 },
-                BinaryOperator::GreaterThan => if left_nm > right_nm { 1 } else { 0 },
-                BinaryOperator::LessThanOrEqual => if left_nm <= right_nm { 1 } else { 0 },
-                BinaryOperator::GreaterThanOrEqual => if left_nm >= right_nm { 1 } else { 0 },
+                BinaryOperator::Equal => {
+                    if left_nm == right_nm {
+                        1
+                    } else {
+                        0
+                    }
+                }
+                BinaryOperator::NotEqual => {
+                    if left_nm != right_nm {
+                        1
+                    } else {
+                        0
+                    }
+                }
+                BinaryOperator::LessThan => {
+                    if left_nm < right_nm {
+                        1
+                    } else {
+                        0
+                    }
+                }
+                BinaryOperator::GreaterThan => {
+                    if left_nm > right_nm {
+                        1
+                    } else {
+                        0
+                    }
+                }
+                BinaryOperator::LessThanOrEqual => {
+                    if left_nm <= right_nm {
+                        1
+                    } else {
+                        0
+                    }
+                }
+                BinaryOperator::GreaterThanOrEqual => {
+                    if left_nm >= right_nm {
+                        1
+                    } else {
+                        0
+                    }
+                }
                 // Boolean operators (treat non-zero as true)
-                BinaryOperator::And => if left_nm != 0 && right_nm != 0 { 1 } else { 0 },
-                BinaryOperator::Or => if left_nm != 0 || right_nm != 0 { 1 } else { 0 },
+                BinaryOperator::And => {
+                    if left_nm != 0 && right_nm != 0 {
+                        1
+                    } else {
+                        0
+                    }
+                }
+                BinaryOperator::Or => {
+                    if left_nm != 0 || right_nm != 0 {
+                        1
+                    } else {
+                        0
+                    }
+                }
             };
             Ok(result)
         }
@@ -111,7 +161,13 @@ pub fn evaluate_coordinate_to_nm(
             let result = match operator {
                 UnaryOperator::Negate => -operand_nm,
                 UnaryOperator::Plus => operand_nm,
-                UnaryOperator::Not => if operand_nm == 0 { 1 } else { 0 },
+                UnaryOperator::Not => {
+                    if operand_nm == 0 {
+                        1
+                    } else {
+                        0
+                    }
+                }
             };
             Ok(result)
         }
@@ -133,16 +189,18 @@ pub fn evaluate_coordinate_to_nm(
         Expression::FunctionCall { .. } => {
             // Function calls need to be evaluated through the normal expression evaluator
             // which has full context for variable resolution
-            let value = expr.evaluate(eval_context).map_err(|e| {
-                IrError::CoordinateResolutionFailed {
-                    coordinate_str: "function call".into(),
+            let value =
+                expr.evaluate(eval_context)
+                    .map_err(|e| IrError::CoordinateResolutionFailed {
+                        coordinate_str: "function call".into(),
+                        reason: e,
+                    })?;
+            value
+                .to_nanometers()
+                .map_err(|e| IrError::CoordinateResolutionFailed {
+                    coordinate_str: "function call result".into(),
                     reason: e,
-                }
-            })?;
-            value.to_nanometers().map_err(|e| IrError::CoordinateResolutionFailed {
-                coordinate_str: "function call result".into(),
-                reason: e,
-            })
+                })
         }
     }
 }
@@ -202,12 +260,12 @@ pub fn evaluate_coordinate_with_anchors(
             })?;
 
             let engine_edge = match edge {
-                hwc_parser::Edge::Left | hwc_parser::Edge::TopLeft | hwc_parser::Edge::BottomLeft => {
-                    hwc_engine::geometry::Edge::Left
-                }
-                hwc_parser::Edge::Right | hwc_parser::Edge::TopRight | hwc_parser::Edge::BottomRight => {
-                    hwc_engine::geometry::Edge::Right
-                }
+                hwc_parser::Edge::Left
+                | hwc_parser::Edge::TopLeft
+                | hwc_parser::Edge::BottomLeft => hwc_engine::geometry::Edge::Left,
+                hwc_parser::Edge::Right
+                | hwc_parser::Edge::TopRight
+                | hwc_parser::Edge::BottomRight => hwc_engine::geometry::Edge::Right,
                 hwc_parser::Edge::Top => hwc_engine::geometry::Edge::Top,
                 hwc_parser::Edge::Bottom => hwc_engine::geometry::Edge::Bottom,
                 hwc_parser::Edge::Front => hwc_engine::geometry::Edge::Front,
@@ -341,15 +399,63 @@ pub fn evaluate_coordinate_with_anchors(
                 }
                 BinaryOperator::Modulo => left_nm % right_nm,
                 // Comparison operators return 1 for true, 0 for false
-                BinaryOperator::Equal => if left_nm == right_nm { 1 } else { 0 },
-                BinaryOperator::NotEqual => if left_nm != right_nm { 1 } else { 0 },
-                BinaryOperator::LessThan => if left_nm < right_nm { 1 } else { 0 },
-                BinaryOperator::GreaterThan => if left_nm > right_nm { 1 } else { 0 },
-                BinaryOperator::LessThanOrEqual => if left_nm <= right_nm { 1 } else { 0 },
-                BinaryOperator::GreaterThanOrEqual => if left_nm >= right_nm { 1 } else { 0 },
+                BinaryOperator::Equal => {
+                    if left_nm == right_nm {
+                        1
+                    } else {
+                        0
+                    }
+                }
+                BinaryOperator::NotEqual => {
+                    if left_nm != right_nm {
+                        1
+                    } else {
+                        0
+                    }
+                }
+                BinaryOperator::LessThan => {
+                    if left_nm < right_nm {
+                        1
+                    } else {
+                        0
+                    }
+                }
+                BinaryOperator::GreaterThan => {
+                    if left_nm > right_nm {
+                        1
+                    } else {
+                        0
+                    }
+                }
+                BinaryOperator::LessThanOrEqual => {
+                    if left_nm <= right_nm {
+                        1
+                    } else {
+                        0
+                    }
+                }
+                BinaryOperator::GreaterThanOrEqual => {
+                    if left_nm >= right_nm {
+                        1
+                    } else {
+                        0
+                    }
+                }
                 // Boolean operators (treat non-zero as true)
-                BinaryOperator::And => if left_nm != 0 && right_nm != 0 { 1 } else { 0 },
-                BinaryOperator::Or => if left_nm != 0 || right_nm != 0 { 1 } else { 0 },
+                BinaryOperator::And => {
+                    if left_nm != 0 && right_nm != 0 {
+                        1
+                    } else {
+                        0
+                    }
+                }
+                BinaryOperator::Or => {
+                    if left_nm != 0 || right_nm != 0 {
+                        1
+                    } else {
+                        0
+                    }
+                }
             };
             Ok(result)
         }
@@ -368,7 +474,13 @@ pub fn evaluate_coordinate_with_anchors(
             let result = match operator {
                 UnaryOperator::Negate => -operand_nm,
                 UnaryOperator::Plus => operand_nm,
-                UnaryOperator::Not => if operand_nm == 0 { 1 } else { 0 },
+                UnaryOperator::Not => {
+                    if operand_nm == 0 {
+                        1
+                    } else {
+                        0
+                    }
+                }
             };
             Ok(result)
         }

@@ -141,9 +141,7 @@ impl SubcircuitDefinition {
                         return Err(format!(
                             "Element '{}' references undefined terminal '{}'. \
                              Declared terminals: {:?}",
-                            element.name,
-                            name,
-                            self.terminals
+                            element.name, name, self.terminals
                         ));
                     }
                 }
@@ -193,10 +191,13 @@ mod tests {
                 name: "R1".into(),
                 element_type: "Resistor".into(),
                 nodes: vec![Node::Terminal("A".into()), Node::Terminal("B".into())],
-                parameters: vec![("value".into(), Expression::FloatLiteral {
-                    value: 100.0,
-                    span: Span::new(0, 0),
-                })],
+                parameters: vec![(
+                    "value".into(),
+                    Expression::FloatLiteral {
+                        value: 100.0,
+                        span: Span::new(0, 0),
+                    },
+                )],
                 span: Span::new(0, 0),
             }],
             is_exported: true,
@@ -216,10 +217,13 @@ mod tests {
                 name: "R1".into(),
                 element_type: "Resistor".into(),
                 nodes: vec![Node::Terminal("A".into()), Node::Terminal("C".into())], // Undefined terminal
-                parameters: vec![("value".into(), Expression::FloatLiteral {
-                    value: 100.0,
-                    span: Span::new(0, 0),
-                })],
+                parameters: vec![(
+                    "value".into(),
+                    Expression::FloatLiteral {
+                        value: 100.0,
+                        span: Span::new(0, 0),
+                    },
+                )],
                 span: Span::new(0, 0),
             }],
             is_exported: true,

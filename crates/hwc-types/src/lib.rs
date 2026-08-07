@@ -11,7 +11,9 @@ pub use unit_registry::{UnitInfo, UnitRegistry};
 ///
 /// Zero memory overhead - compiles to a raw u32.
 /// Provides compile-time safety for net identification across the codebase.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub struct NetId(pub u32);
 
 impl NetId {
@@ -62,16 +64,39 @@ pub enum Technology {
     Asic,
 }
 
+impl std::str::FromStr for Technology {
+    type Err = TechnologyParseError;
+
+    /// Parse a technology string from profile definition.
+    ///
+    /// Case-insensitive matching for user convenience.
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "pcb" => Ok(Self::Pcb),
+            "asic" => Ok(Self::Asic),
+            _ => Err(TechnologyParseError(s.to_string())),
+        }
+    }
+}
+
+/// Error returned when a technology string cannot be parsed.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TechnologyParseError(pub String);
+
+impl std::fmt::Display for TechnologyParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "invalid technology '{}'", self.0)
+    }
+}
+
+impl std::error::Error for TechnologyParseError {}
+
 impl Technology {
     /// Parse a technology string from profile definition.
     ///
     /// Case-insensitive matching for user convenience.
-    pub fn from_str(s: &str) -> Option<Self> {
-        match s.to_lowercase().as_str() {
-            "pcb" => Some(Self::Pcb),
-            "asic" => Some(Self::Asic),
-            _ => None,
-        }
+    pub fn parse(s: &str) -> Option<Self> {
+        s.parse::<Self>().ok()
     }
 
     /// Convert to canonical string representation.
@@ -84,7 +109,7 @@ impl Technology {
 }
 
 /// Legacy alias for Technology enum.
-/// 
+///
 impl Technology {
     /// Compute the contact expansion for this technology.
     ///
@@ -146,11 +171,11 @@ mod tests {
 
     #[test]
     fn technology_from_str() {
-        assert_eq!(Technology::from_str("PCB"), Some(Technology::Pcb));
-        assert_eq!(Technology::from_str("pcb"), Some(Technology::Pcb));
-        assert_eq!(Technology::from_str("ASIC"), Some(Technology::Asic));
-        assert_eq!(Technology::from_str("asic"), Some(Technology::Asic));
-        assert_eq!(Technology::from_str("invalid"), None);
+        assert_eq!("PCB".parse::<Technology>(), Ok(Technology::Pcb));
+        assert_eq!("pcb".parse::<Technology>(), Ok(Technology::Pcb));
+        assert_eq!("ASIC".parse::<Technology>(), Ok(Technology::Asic));
+        assert_eq!("asic".parse::<Technology>(), Ok(Technology::Asic));
+        assert!("invalid".parse::<Technology>().is_err());
     }
 
     #[test]
@@ -211,7 +236,13 @@ mod tests {
     fn obstacle_inflation_delegates_to_port_escape_clearance() {
         let pcb = Technology::Pcb;
         let asic = Technology::Asic;
-        assert_eq!(pcb.obstacle_inflation(100, 50), pcb.port_escape_clearance(100, 50));
-        assert_eq!(asic.obstacle_inflation(100, 50), asic.port_escape_clearance(100, 50));
+        assert_eq!(
+            pcb.obstacle_inflation(100, 50),
+            pcb.port_escape_clearance(100, 50)
+        );
+        assert_eq!(
+            asic.obstacle_inflation(100, 50),
+            asic.port_escape_clearance(100, 50)
+        );
     }
 }

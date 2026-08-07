@@ -6,8 +6,7 @@ use hwc_parser::{
     BridgeDefinition, ComponentDefinition, DeviceDefinition, InterfaceDefinition,
     MaterialAliasDefinition, MaterialDefinition, MechanicalDefinition, ModuleDefinition,
     PatternDefinition, ProfileDefinition, ShapeDefinition, SignalGroupDefinition,
-    SpiceModelDefinition, SubcircuitDefinition,
-    StrategyDefinition, TestDefinition, UnitDefinition,
+    SpiceModelDefinition, StrategyDefinition, SubcircuitDefinition, TestDefinition, UnitDefinition,
 };
 
 impl SymbolTable {
@@ -29,7 +28,8 @@ impl SymbolTable {
             return;
         }
 
-        self.local.insert(name_str.into(), Definition::MaterialAlias(def));
+        self.local
+            .insert(name_str.into(), Definition::MaterialAlias(def));
     }
 
     /// Register a material definition (in local layer)
@@ -69,7 +69,8 @@ impl SymbolTable {
                 def
             };
 
-        self.local.insert(name_str.into(), Definition::Material(material_to_register));
+        self.local
+            .insert(name_str.into(), Definition::Material(material_to_register));
     }
 
     /// Find a material in lower layers (HPM > Prelude > Core), excluding local layer
@@ -214,7 +215,8 @@ impl SymbolTable {
             ));
         }
 
-        self.local.insert(name_str.clone().into(), Definition::Component(def));
+        self.local
+            .insert(name_str.clone().into(), Definition::Component(def));
     }
 
     /// Register a module definition (in local layer)
@@ -272,7 +274,8 @@ impl SymbolTable {
             ));
             return;
         }
-        self.local.insert(name_str.into(), Definition::Mechanical(def));
+        self.local
+            .insert(name_str.into(), Definition::Mechanical(def));
     }
 
     /// Register an interface definition (in local layer)
@@ -291,7 +294,8 @@ impl SymbolTable {
             ));
             return;
         }
-        self.local.insert(name_str.into(), Definition::Interface(def));
+        self.local
+            .insert(name_str.into(), Definition::Interface(def));
     }
 
     /// Register a test definition (in local layer)
@@ -325,7 +329,8 @@ impl SymbolTable {
             ));
             return;
         }
-        self.local.insert(name_str.into(), Definition::SignalGroup(def));
+        self.local
+            .insert(name_str.into(), Definition::SignalGroup(def));
     }
 
     /// Register a pattern definition (in local layer)
@@ -355,7 +360,8 @@ impl SymbolTable {
             ));
             return;
         }
-        self.local.insert(name_str.into(), Definition::Strategy(def));
+        self.local
+            .insert(name_str.into(), Definition::Strategy(def));
     }
 
     /// Register a logic block definition (in local layer)
@@ -425,9 +431,11 @@ impl SymbolTable {
     pub fn register_unit(&mut self, collector: &DiagnosticCollector, def: UnitDefinition) {
         let symbol = def.symbol.clone();
 
-        if let Some(Definition::Unit(existing)) = self.local.iter()
+        if let Some(Definition::Unit(existing)) = self
+            .local
+            .iter()
             .find(|(_, d)| matches!(d, Definition::Unit(u) if u.symbol == symbol))
-            .map(|(_, d)| d) 
+            .map(|(_, d)| d)
         {
             collector.report(SymbolError::duplicate(
                 symbol.clone(),
@@ -509,7 +517,11 @@ impl SymbolTable {
     ///
     /// SPICE models provide analytical models for device simulation.
     /// Example: .model NMOS NMOS (VTO=0.7 KP=120u)
-    pub fn register_spice_model(&mut self, collector: &DiagnosticCollector, def: SpiceModelDefinition) {
+    pub fn register_spice_model(
+        &mut self,
+        collector: &DiagnosticCollector,
+        def: SpiceModelDefinition,
+    ) {
         let name_str = def.name.as_str();
         if let Some(Definition::SpiceModel(existing)) = self.local.get(name_str) {
             collector.report(SymbolError::duplicate(
@@ -520,7 +532,8 @@ impl SymbolTable {
             ));
             return;
         }
-        self.local.insert(name_str.into(), Definition::SpiceModel(def));
+        self.local
+            .insert(name_str.into(), Definition::SpiceModel(def));
     }
 
     /// Register a subcircuit definition (in local layer)
@@ -538,7 +551,11 @@ impl SymbolTable {
     ///         R_body: Resistor(node_1, node_2, val: 350.0ohm_sq * (L / W))
     ///         ...
     /// ```
-    pub fn register_subcircuit(&mut self, collector: &DiagnosticCollector, def: SubcircuitDefinition) {
+    pub fn register_subcircuit(
+        &mut self,
+        collector: &DiagnosticCollector,
+        def: SubcircuitDefinition,
+    ) {
         let name_str = def.name.as_str();
         if let Some(Definition::Subcircuit(existing)) = self.local.get(name_str) {
             collector.report(SymbolError::duplicate(
@@ -549,6 +566,7 @@ impl SymbolTable {
             ));
             return;
         }
-        self.local.insert(name_str.into(), Definition::Subcircuit(def));
+        self.local
+            .insert(name_str.into(), Definition::Subcircuit(def));
     }
 }

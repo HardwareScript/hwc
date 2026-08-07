@@ -113,7 +113,7 @@ impl LineSegment {
     }
 
     /// Compute physical Z-bounds for this segment given its layer thickness.
-    /// 
+    ///
     /// **Z-Axis Semantics:**
     /// - For horizontal traces: centerline_z ± thickness/2 gives physical bounds
     /// - For vias: start.z and end.z already span the physical range

@@ -30,7 +30,7 @@ impl crate::parser::Parser {
         self.expect(&Token::Named)?;
         let instance_name = ComponentName {
             base: self.expect_identifier_string()?.into(),
-            index: None, // Space instances don't use array indexing
+            index: None,          // Space instances don't use array indexing
             template_parts: None, // Space instances don't use template interpolation
             span: self.previous_span(),
         };
@@ -60,9 +60,7 @@ impl crate::parser::Parser {
         }
 
         if !self.check(&Token::Indent) {
-            return Err(
-                self.error("Expected indented block with 'net_map' for space instance")
-            );
+            return Err(self.error("Expected indented block with 'net_map' for space instance"));
         }
         self.advance(); // consume indent
 
@@ -85,7 +83,7 @@ impl crate::parser::Parser {
                     if self.check(&Token::CloseBracket) {
                         return Err(self.error(
                             "Space instantiation requires at least one net mapping in net_map. \
-                            Example: net_map: [VDD_Rail: VDD, GND_Rail: GND]"
+                            Example: net_map: [VDD_Rail: VDD, GND_Rail: GND]",
                         ));
                     }
 
@@ -131,13 +129,13 @@ impl crate::parser::Parser {
             } else {
                 return Err(self.error(
                     "Expected 'net_map' in space instance block. \
-                    Space instantiation requires explicit net mapping."
+                    Space instantiation requires explicit net mapping.",
                 ));
             }
         } else {
             return Err(self.error(
                 "Expected 'net_map' in space instance block. \
-                Space instantiation requires explicit net mapping."
+                Space instantiation requires explicit net mapping.",
             ));
         }
 

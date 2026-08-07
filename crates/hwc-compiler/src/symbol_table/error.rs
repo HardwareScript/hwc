@@ -68,7 +68,9 @@ pub enum SymbolError {
     AliasDepthExceeded { name: CompactString, depth: usize },
 
     #[error("Type mismatch for '{name}': expected {expected}, found {found}")]
-    #[diagnostic(help("The symbol '{name}' is defined as a {found}, but you're trying to use it as a {expected}."))]
+    #[diagnostic(help(
+        "The symbol '{name}' is defined as a {found}, but you're trying to use it as a {expected}."
+    ))]
     TypeMismatch {
         name: CompactString,
         expected: &'static str,

@@ -34,17 +34,24 @@ pub fn manhattan_path_to_segments(
     path: &[hwc_engine::Point3D],
     min_seg_len_nm: i64,
 ) -> Vec<hwc_engine::LineSegment> {
-    eprintln!("[MANHATTAN_TO_SEGMENTS] Input path has {} waypoints, min_seg_len_nm={}", path.len(), min_seg_len_nm);
+    eprintln!(
+        "[MANHATTAN_TO_SEGMENTS] Input path has {} waypoints, min_seg_len_nm={}",
+        path.len(),
+        min_seg_len_nm
+    );
     for (idx, p) in path.iter().enumerate() {
         eprintln!("[MANHATTAN_TO_SEGMENTS]   waypoint[{}]: {:?}", idx, p);
     }
-    
+
     if path.len() < 2 {
         return Vec::new();
     }
 
     let min_seg_len_sq = min_seg_len_nm.saturating_mul(min_seg_len_nm);
-    eprintln!("[MANHATTAN_TO_SEGMENTS] min_seg_len_sq = {}", min_seg_len_sq);
+    eprintln!(
+        "[MANHATTAN_TO_SEGMENTS] min_seg_len_sq = {}",
+        min_seg_len_sq
+    );
     let mut segments = Vec::new();
     let mut start = path[0];
 
@@ -108,7 +115,10 @@ pub fn manhattan_path_to_segments(
         // 1. Not collinear AND (not short OR is diagonal)
         // 2. Not a duplicate point
         if !is_collinear && (!is_short || is_diagonal) && start != p2 {
-            eprintln!("[MANHATTAN_TO_SEGMENTS]   → Emitting segment: {:?} -> {:?}", start, p2);
+            eprintln!(
+                "[MANHATTAN_TO_SEGMENTS]   → Emitting segment: {:?} -> {:?}",
+                start, p2
+            );
             segments.push(hwc_engine::LineSegment::new(start, p2));
             start = p2;
         } else {
@@ -118,13 +128,22 @@ pub fn manhattan_path_to_segments(
 
     let last = path[path.len() - 1];
     if start != last {
-        eprintln!("[MANHATTAN_TO_SEGMENTS] Emitting final segment: {:?} -> {:?}", start, last);
+        eprintln!(
+            "[MANHATTAN_TO_SEGMENTS] Emitting final segment: {:?} -> {:?}",
+            start, last
+        );
         segments.push(hwc_engine::LineSegment::new(start, last));
     }
 
-    eprintln!("[MANHATTAN_TO_SEGMENTS] Final output: {} segments", segments.len());
+    eprintln!(
+        "[MANHATTAN_TO_SEGMENTS] Final output: {} segments",
+        segments.len()
+    );
     for (idx, seg) in segments.iter().enumerate() {
-        eprintln!("[MANHATTAN_TO_SEGMENTS]   segment[{}]: {:?} -> {:?}", idx, seg.start, seg.end);
+        eprintln!(
+            "[MANHATTAN_TO_SEGMENTS]   segment[{}]: {:?} -> {:?}",
+            idx, seg.start, seg.end
+        );
     }
 
     segments

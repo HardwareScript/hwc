@@ -29,28 +29,28 @@ use compact_str::CompactString;
 pub struct BridgeDefinition {
     /// Bridge identifier (auto-generated: from_to)
     pub name: Identifier,
-    
+
     /// Whether this bridge is exported (v0.2.0: Access control)
     pub is_exported: bool,
-    
+
     /// Source material name (e.g., "Silicon_N")
     pub from: CompactString,
-    
+
     /// Destination material name (e.g., "Aluminum")
     pub to: CompactString,
-    
+
     /// Bridge interface material name (e.g., "Titanium_Silicide")
     /// This is the thin layer that forms the ohmic contact with the source material
     pub interface_material: CompactString,
-    
+
     /// Interface thickness (e.g., 50nm)
     /// Required for multi-layer bridge stacks
     pub interface_thickness: Option<Measurement>,
-    
+
     /// Via fill material (e.g., "Tungsten")
     /// Fills the remainder of the via after the interface layer
     pub fill_material: Option<CompactString>,
-    
+
     pub span: Span,
 }
 

@@ -116,7 +116,7 @@ pub fn execute(
             // Add source code for better error display
             let e_with_src = e.with_source(
                 collector.source.to_string(),
-                collector.file_name.to_string()
+                collector.file_name.to_string(),
             );
             collector.report(e_with_src);
         }

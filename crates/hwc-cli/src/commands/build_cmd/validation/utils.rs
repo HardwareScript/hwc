@@ -13,7 +13,11 @@ pub fn convert_metadata_to_physics(
     // v0.2.0: Use technology strategy from space (set during compilation)
     let strategy = space.technology_strategy;
     let annular_ring_nm = strategy.contact_expansion(
-        space.fabrication_constraints.as_ref().map(|c| c.via.min_annular_ring_nm).unwrap_or(0),
+        space
+            .fabrication_constraints
+            .as_ref()
+            .map(|c| c.via.min_annular_ring_nm)
+            .unwrap_or(0),
     );
 
     // v0.1.8: Preserve indices to maintain compatibility with the Unified Spatial Index.
@@ -39,7 +43,8 @@ pub fn convert_metadata_to_physics(
 
         // v0.2.0 FIX: Apply annular ring expansion for Contact layers to account for
         // PCB pad overhangs. For ASIC (annular_ring_nm == 0), this has no effect.
-        let is_contact = layer.layer_type == hwc_engine::geometry_router::substrate_types::SubstrateLayerType::Contact;
+        let is_contact = layer.layer_type
+            == hwc_engine::geometry_router::substrate_types::SubstrateLayerType::Contact;
         let expansion = if is_contact { annular_ring_nm } else { 0 };
 
         if layer.regions.is_empty() {
@@ -103,7 +108,7 @@ pub fn convert_metadata_to_physics(
     for contact in &space.contacts {
         let material_id = space.material_registry.get_id(&contact.material_name);
         if let Some(id) = material_id {
-        let net_id = contact
+            let net_id = contact
                 .net
                 .as_ref()
                 .and_then(|name| space.netlist.get_net_by_name(name))
@@ -116,8 +121,16 @@ pub fn convert_metadata_to_physics(
                     net: net_id,
                     net_name: contact.net.clone(),
                     bbox: BoundingBox::new(
-                        Point3D::new(bbox.min.x - annular_ring_nm, bbox.min.y - annular_ring_nm, bbox.min.z),
-                        Point3D::new(bbox.max.x + annular_ring_nm, bbox.max.y + annular_ring_nm, bbox.max.z),
+                        Point3D::new(
+                            bbox.min.x - annular_ring_nm,
+                            bbox.min.y - annular_ring_nm,
+                            bbox.min.z,
+                        ),
+                        Point3D::new(
+                            bbox.max.x + annular_ring_nm,
+                            bbox.max.y + annular_ring_nm,
+                            bbox.max.z,
+                        ),
                     ),
                     layer_type: hwc_physics::connectivity::SubstrateLayerType::Contact,
                     device_binding: None,
@@ -138,17 +151,17 @@ pub fn convert_metadata_to_physics(
     // **v0.2.2 ARCHITECTURAL FIX**: Use direct layer lineage lookup instead of reverse
     // Z-coordinate guessing. Routes store their layer name; materials come from the
     // RoutingLayerDatabase, not from spatial stackup queries.
-    let all_routes = space.routing_database.export_as_routed_segments_with_lineage(
-        &space.routing_layer_db,
-    );
-    
+    let all_routes = space
+        .routing_database
+        .export_as_routed_segments_with_lineage(&space.routing_layer_db);
+
     for (net_id, segments) in &all_routes {
         let net_name = space.netlist.get_net(*net_id).map(|n| n.name.clone());
-        
+
         for (_seg_idx, seg) in segments.iter().enumerate() {
             let is_vertical = seg.start.x == seg.end.x && seg.start.y == seg.end.y;
             let seg_bbox = seg.bounding_box();
-            
+
             if is_vertical {
                 // Treat as a vertical bridge
                 physics_substrate_layers.push(hwc_physics::connectivity::SubstrateLayerMetadata {

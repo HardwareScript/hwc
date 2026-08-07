@@ -227,12 +227,16 @@ pub fn extract_corridor_impl(
                 .chain(adjacent_obstacles.iter())
                 .cloned()
                 .collect();
-            let expanded_decomposer =
-                SpatialDecomposer::new(combined, context.trace_width_nm, context.min_clearance_nm, context.technology_strategy)
-                    .map_err(|e| IrError::NavigableSpaceFailed {
-                        gcell_id: context.gcell_id.0,
-                        reason: e.to_string(),
-                    })?;
+            let expanded_decomposer = SpatialDecomposer::new(
+                combined,
+                context.trace_width_nm,
+                context.min_clearance_nm,
+                context.technology_strategy,
+            )
+            .map_err(|e| IrError::NavigableSpaceFailed {
+                gcell_id: context.gcell_id.0,
+                reason: e.to_string(),
+            })?;
             let expanded_cells = expanded_decomposer.decompose(&context.board_bounds, entry_port.z);
             if let Ok(expanded_corridor) =
                 expanded_decomposer.extract_corridor(entry_port, exit_port, &expanded_cells)

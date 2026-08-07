@@ -21,55 +21,70 @@ impl MeasurementValue {
     /// Supports any voltage unit defined in the standard library or user code.
     pub fn to_millivolts(&self, unit_registry: &hwc_types::UnitRegistry) -> Result<i64, String> {
         // Check dimension
-        let dimension = unit_registry.get_dimension(&self.unit)
+        let dimension = unit_registry
+            .get_dimension(&self.unit)
             .ok_or_else(|| format!("Unknown unit '{}' - not found in unit registry", self.unit))?;
-        
+
         if dimension != "voltage" {
-            return Err(format!("Expected voltage unit, got {} (dimension: {})", self.unit, dimension));
+            return Err(format!(
+                "Expected voltage unit, got {} (dimension: {})",
+                self.unit, dimension
+            ));
         }
-        
+
         // Convert to base SI (volts), then to millivolts
-        let volts = unit_registry.to_base_si(self.value, &self.unit)
+        let volts = unit_registry
+            .to_base_si(self.value, &self.unit)
             .ok_or_else(|| format!("Cannot convert {} to base SI unit", self.unit))?;
-        
+
         Ok((volts * 1000.0) as i64)
     }
-    
+
     /// Convert to milliamperes using the unit registry
     ///
     /// Validates that the unit is a current dimension and converts to mA.
     /// Supports any current unit defined in the standard library or user code.
     pub fn to_milliamperes(&self, unit_registry: &hwc_types::UnitRegistry) -> Result<f64, String> {
         // Check dimension
-        let dimension = unit_registry.get_dimension(&self.unit)
+        let dimension = unit_registry
+            .get_dimension(&self.unit)
             .ok_or_else(|| format!("Unknown unit '{}' - not found in unit registry", self.unit))?;
-        
+
         if dimension != "current" {
-            return Err(format!("Expected current unit, got {} (dimension: {})", self.unit, dimension));
+            return Err(format!(
+                "Expected current unit, got {} (dimension: {})",
+                self.unit, dimension
+            ));
         }
-        
+
         // Convert to base SI (amperes), then to milliamperes
-        let amperes = unit_registry.to_base_si(self.value, &self.unit)
+        let amperes = unit_registry
+            .to_base_si(self.value, &self.unit)
             .ok_or_else(|| format!("Cannot convert {} to base SI unit", self.unit))?;
-        
+
         Ok(amperes * 1000.0)
     }
-    
+
     /// Convert to hertz using the unit registry
     ///
     /// Validates that the unit is a frequency dimension and converts to Hz.
     /// Supports any frequency unit defined in the standard library or user code.
     pub fn to_hertz(&self, unit_registry: &hwc_types::UnitRegistry) -> Result<f64, String> {
         // Check dimension
-        let dimension = unit_registry.get_dimension(&self.unit)
+        let dimension = unit_registry
+            .get_dimension(&self.unit)
             .ok_or_else(|| format!("Unknown unit '{}' - not found in unit registry", self.unit))?;
-        
+
         if dimension != "frequency" {
-            return Err(format!("Expected frequency unit, got {} (dimension: {})", self.unit, dimension));
+            return Err(format!(
+                "Expected frequency unit, got {} (dimension: {})",
+                self.unit, dimension
+            ));
         }
-        
+
         // Convert to base SI (hertz)
-        unit_registry.to_base_si(self.value, &self.unit)
+        unit_registry
+            .to_base_si(self.value, &self.unit)
             .ok_or_else(|| format!("Cannot convert {} to base SI unit", self.unit))
     }
 }

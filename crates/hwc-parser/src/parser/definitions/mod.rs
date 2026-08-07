@@ -117,11 +117,13 @@ impl super::Parser {
         let result = match self.current().map(|t| &t.token) {
             Some(Token::Bridge) => {
                 // // eprintln!("[DEBUG] Dispatching to parse_bridge");
-                self.parse_bridge(collector, is_exported).map(Definition::Bridge)
+                self.parse_bridge(collector, is_exported)
+                    .map(Definition::Bridge)
             }
             Some(Token::Material) => {
                 // // eprintln!("[DEBUG] Dispatching to parse_material");
-                self.parse_material(collector, is_exported).map(Definition::Material)
+                self.parse_material(collector, is_exported)
+                    .map(Definition::Material)
             }
             Some(Token::Profile) => {
                 // // eprintln!("[DEBUG] Dispatching to parse_profile");
@@ -135,35 +137,43 @@ impl super::Parser {
             }
             Some(Token::Module) => {
                 // // eprintln!("[DEBUG] Dispatching to parse_module");
-                self.parse_module(collector, is_exported).map(Definition::Module)
+                self.parse_module(collector, is_exported)
+                    .map(Definition::Module)
             }
             Some(Token::Mechanical) => {
                 // // eprintln!("[DEBUG] Dispatching to parse_mechanical");
-                self.parse_mechanical(collector, is_exported).map(Definition::Mechanical)
+                self.parse_mechanical(collector, is_exported)
+                    .map(Definition::Mechanical)
             }
             Some(Token::Interface) => {
                 // // eprintln!("[DEBUG] Dispatching to parse_interface");
-                self.parse_interface(collector, is_exported).map(Definition::Interface)
+                self.parse_interface(collector, is_exported)
+                    .map(Definition::Interface)
             }
             Some(Token::Test) => {
                 // // eprintln!("[DEBUG] Dispatching to parse_test");
-                self.parse_test(collector, is_exported).map(Definition::Test)
+                self.parse_test(collector, is_exported)
+                    .map(Definition::Test)
             }
             Some(Token::Space) => {
                 // // eprintln!("[DEBUG] Dispatching to parse_space");
-                self.parse_space(collector, is_exported).map(Definition::Space)
+                self.parse_space(collector, is_exported)
+                    .map(Definition::Space)
             }
             Some(Token::Unit) => {
                 // // eprintln!("[DEBUG] Dispatching to parse_unit");
-                self.parse_unit(collector, is_exported).map(Definition::Unit)
+                self.parse_unit(collector, is_exported)
+                    .map(Definition::Unit)
             }
             Some(Token::Device) => {
                 // // eprintln!("[DEBUG] Dispatching to parse_device");
-                self.parse_device(collector, is_exported).map(Definition::Device)
+                self.parse_device(collector, is_exported)
+                    .map(Definition::Device)
             }
             Some(Token::Const) => {
                 // // eprintln!("[DEBUG] Dispatching to parse_const");
-                self.parse_const(collector, is_exported).map(Definition::Const)
+                self.parse_const(collector, is_exported)
+                    .map(Definition::Const)
             }
             Some(Token::SignalGroup) => {
                 // // eprintln!("[DEBUG] Dispatching to parse_signal_group_definition");
@@ -172,7 +182,8 @@ impl super::Parser {
             }
             Some(Token::Shape) => {
                 // // eprintln!("[DEBUG] Dispatching to parse_shape");
-                self.parse_shape(collector, is_exported).map(Definition::Shape)
+                self.parse_shape(collector, is_exported)
+                    .map(Definition::Shape)
             }
             Some(Token::SpiceModel) => {
                 // // eprintln!("[DEBUG] Dispatching to parse_spice_model");

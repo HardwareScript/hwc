@@ -92,7 +92,8 @@ pub fn collect_route_net_policies(
 
     for policy in &space_def.route_net_policies() {
         if let Some(ref pattern_inst) = policy.pattern {
-            match crate::ir::routing::instantiate_pattern(pattern_inst, symbol_table, eval_context) {
+            match crate::ir::routing::instantiate_pattern(pattern_inst, symbol_table, eval_context)
+            {
                 Ok(pattern) => {
                     if let Some(net_id) = space.netlist.get_net_by_name(policy.net_id.as_str()) {
                         route_net_policies.insert(net_id, pattern);
@@ -124,7 +125,6 @@ pub fn process_routes(
 ) -> Result<Vec<hwc_parser::Route>, IrError> {
     let mut auto_routes = Vec::new();
 
-    
     for id in ctx.sorted_ids.iter() {
         let &item_idx = ctx.item_map.get(id).unwrap();
         let contextual_item = &ctx.placement_items[item_idx];
@@ -132,8 +132,6 @@ pub fn process_routes(
         let item_eval_context = &contextual_item.eval_context;
 
         if let PlacementItem::Route(route) = item {
-           
-
             crate::ir::routing::register_net_for_route(
                 space,
                 route,
@@ -192,7 +190,8 @@ pub fn auto_route(
         }
         return Err(IrError::RoutingLayerError {
             message: format!("{} routing layer validation errors", errors.len()),
-            hint: "Fix the stackup definition to ensure all routable layers have valid Z ranges.".into(),
+            hint: "Fix the stackup definition to ensure all routable layers have valid Z ranges."
+                .into(),
         });
     }
     eprintln!(
@@ -245,9 +244,10 @@ pub fn auto_route(
             if seg.start.z == seg.end.z {
                 // Horizontal segment — verify Z is within a valid layer
                 let seg_z = seg.start.z;
-                let in_valid_layer = space.stackup_layers.iter().any(|l| {
-                    l.is_routable && seg_z >= l.z_bottom && seg_z <= l.z_top
-                });
+                let in_valid_layer = space
+                    .stackup_layers
+                    .iter()
+                    .any(|l| l.is_routable && seg_z >= l.z_bottom && seg_z <= l.z_top);
                 if !in_valid_layer {
                     post_errors.push(format!(
                         "Net '{}': horizontal trace at Z={}nm is not within any routing layer bounds",

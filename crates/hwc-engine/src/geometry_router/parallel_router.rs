@@ -3,12 +3,12 @@
 //! Uses TopologicalRouter as the sole routing engine within isolated domains.
 
 use crate::constraint_manager::{ConstraintRulebook, Route, RoutedDomain, RoutingDomain};
-use crate::netlist::NetId;
 use crate::geometry::Point3D;
 use crate::geometry::{BoundingBox, TraceSegment};
 use crate::geometry_router::spatial_index::{DynamicSpatialIndex, IndexedSegment};
 use crate::geometry_router::topological_router::TopologicalRouter;
 use crate::geometry_router::EntityGraph;
+use crate::netlist::NetId;
 use crate::netlist::NetlistArena;
 
 pub struct ParallelRouter {
@@ -89,7 +89,13 @@ impl ParallelRouter {
             let trace_seg =
                 TraceSegment::new(meta.bbox.min, meta.bbox.max, w.max(h), meta.material);
             let thickness_nm = meta.bbox.max.z - meta.bbox.min.z;
-            let component_net_id = meta.net_bindings.values().next().copied().unwrap_or(NetId::UNCONNECTED).raw() as usize;
+            let component_net_id = meta
+                .net_bindings
+                .values()
+                .next()
+                .copied()
+                .unwrap_or(NetId::UNCONNECTED)
+                .raw() as usize;
             spatial_index.insert(IndexedSegment {
                 source: hwc_physics::spatial_index::SpatialEntitySource::ComponentInstance {
                     instance_id: seg_id,

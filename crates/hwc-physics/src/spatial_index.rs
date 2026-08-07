@@ -300,7 +300,6 @@ impl DynamicSpatialIndex {
     pub fn query_bbox(&self, bbox: &BoundingBox) -> Vec<&IndexedSegment> {
         let z_min = bbox.min.z;
         let z_max = bbox.max.z;
-        
 
         let layer_indices = self.layers_for_z_range(z_min, z_max);
 

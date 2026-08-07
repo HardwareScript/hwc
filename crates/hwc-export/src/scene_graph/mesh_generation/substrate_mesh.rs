@@ -83,8 +83,12 @@ impl ViaCutout {
     #[inline]
     pub fn intersects_z(&self, z_min: i64, z_max: i64) -> bool {
         let (via_z_min, via_z_max) = match self {
-            ViaCutout::Circular { z_min_nm, z_max_nm, .. } => (*z_min_nm, *z_max_nm),
-            ViaCutout::Polygonal { z_min_nm, z_max_nm, .. } => (*z_min_nm, *z_max_nm),
+            ViaCutout::Circular {
+                z_min_nm, z_max_nm, ..
+            } => (*z_min_nm, *z_max_nm),
+            ViaCutout::Polygonal {
+                z_min_nm, z_max_nm, ..
+            } => (*z_min_nm, *z_max_nm),
         };
         !(via_z_max <= z_min || via_z_min >= z_max)
     }
@@ -93,7 +97,12 @@ impl ViaCutout {
     #[inline]
     pub fn intersects_xy(&self, bbox: &BoundingBox) -> bool {
         match self {
-            ViaCutout::Circular { center_x_nm, center_y_nm, diameter_nm, .. } => {
+            ViaCutout::Circular {
+                center_x_nm,
+                center_y_nm,
+                diameter_nm,
+                ..
+            } => {
                 let r = diameter_nm / 2;
                 !(center_x_nm + r <= bbox.min.x
                     || center_x_nm - r >= bbox.max.x
@@ -174,8 +183,7 @@ impl SubstrateMeshBuilder {
             .vias
             .iter()
             .filter(|v| {
-                v.intersects_z(self.bbox.min.z, self.bbox.max.z)
-                    && v.intersects_xy(&self.bbox)
+                v.intersects_z(self.bbox.min.z, self.bbox.max.z) && v.intersects_xy(&self.bbox)
             })
             .collect();
 
@@ -226,12 +234,24 @@ fn generate_solid_box(name: &str, bbox: &BoundingBox, mat: &str, view: SpaceView
     ];
 
     let faces = vec![
-        Face { vertices: vec![0, 3, 2, 1] },
-        Face { vertices: vec![4, 5, 6, 7] },
-        Face { vertices: vec![0, 1, 5, 4] },
-        Face { vertices: vec![1, 2, 6, 5] },
-        Face { vertices: vec![2, 3, 7, 6] },
-        Face { vertices: vec![3, 0, 4, 7] },
+        Face {
+            vertices: vec![0, 3, 2, 1],
+        },
+        Face {
+            vertices: vec![4, 5, 6, 7],
+        },
+        Face {
+            vertices: vec![0, 1, 5, 4],
+        },
+        Face {
+            vertices: vec![1, 2, 6, 5],
+        },
+        Face {
+            vertices: vec![2, 3, 7, 6],
+        },
+        Face {
+            vertices: vec![3, 0, 4, 7],
+        },
     ];
 
     MeshNode {
@@ -302,12 +322,7 @@ fn generate_substrate_with_vias(
     }
 
     // 3. Perform Boolean Difference: subject - clips
-    let diff_result = boolean_op_64(
-        ClipType::Difference,
-        FillRule::NonZero,
-        &subject,
-        &clips,
-    );
+    let diff_result = boolean_op_64(ClipType::Difference, FillRule::NonZero, &subject, &clips);
 
     // Convert to mm
     let mut outer_contour_mm: Vec<(f64, f64)> = Vec::new();

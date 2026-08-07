@@ -219,7 +219,10 @@ pub(super) fn place_deposited_via(
             ctx.end_point.x, ctx.end_point.y, ctx.end_point.z, ctx.diameter_nm);
 
         // DEBUG: Show original polygon points from shape definition
-        println!("[PLACE_CONTACT_DEBUG] '{}' Original polygon points (local space):", contact_name_debug);
+        println!(
+            "[PLACE_CONTACT_DEBUG] '{}' Original polygon points (local space):",
+            contact_name_debug
+        );
         for (i, p) in path.iter().enumerate() {
             println!("  Point {}: ({}, {})", i, p.x, p.y);
         }
@@ -228,19 +231,25 @@ pub(super) fn place_deposited_via(
         // The shape definition generates points centered at (0,0), but the via is placed at xy_point
         let cx = (ctx.contact_bbox.min.x + ctx.contact_bbox.max.x) / 2;
         let cy = (ctx.contact_bbox.min.y + ctx.contact_bbox.max.y) / 2;
-        
-        println!("[PLACE_CONTACT_DEBUG] '{}' Translating by center: ({}, {})", contact_name_debug, cx, cy);
-        
+
+        println!(
+            "[PLACE_CONTACT_DEBUG] '{}' Translating by center: ({}, {})",
+            contact_name_debug, cx, cy
+        );
+
         let world_space_points: Vec<hwc_engine::geometry::Point2D> = path
             .iter()
             .map(|p| hwc_engine::geometry::Point2D::new(p.x + cx, p.y + cy))
             .collect();
-        
-        println!("[PLACE_CONTACT_DEBUG] '{}' Transformed polygon points (world space):", contact_name_debug);
+
+        println!(
+            "[PLACE_CONTACT_DEBUG] '{}' Transformed polygon points (world space):",
+            contact_name_debug
+        );
         for (i, p) in world_space_points.iter().enumerate() {
             println!("  Point {}: ({}, {})", i, p.x, p.y);
         }
-        
+
         let polygon = hwc_engine::geometry::Polygon::new(world_space_points);
 
         space.entity_graph.add_polygon_substrate_layer(

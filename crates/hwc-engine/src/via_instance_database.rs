@@ -114,9 +114,7 @@ impl ViaInstanceDatabase {
     ) -> Vec<&ViaInstance> {
         let layer_key = (from_layer.into(), to_layer.into());
         if let Some(vias) = self.vias_by_layers.get(&layer_key) {
-            vias.iter()
-                .filter(|v| v.net_id == net_id)
-                .collect()
+            vias.iter().filter(|v| v.net_id == net_id).collect()
         } else {
             Vec::new()
         }
@@ -140,7 +138,7 @@ mod tests {
     #[test]
     fn test_register_and_query() {
         let mut db = ViaInstanceDatabase::new();
-        
+
         db.register(
             "Via_Source",
             NetId(1),
@@ -152,16 +150,16 @@ mod tests {
 
         // Should find via at center
         assert!(db.has_via_at(NetId(1), "active", "metal1", (650, 1000)));
-        
+
         // Should find via at edge
         assert!(db.has_via_at(NetId(1), "active", "metal1", (550, 900)));
-        
+
         // Should not find via outside bbox
         assert!(!db.has_via_at(NetId(1), "active", "metal1", (800, 1000)));
-        
+
         // Should not find via on wrong net
         assert!(!db.has_via_at(NetId(2), "active", "metal1", (650, 1000)));
-        
+
         // Should not find via on wrong layers
         assert!(!db.has_via_at(NetId(1), "poly", "metal1", (650, 1000)));
     }
@@ -169,10 +167,31 @@ mod tests {
     #[test]
     fn test_get_vias_for_layers() {
         let mut db = ViaInstanceDatabase::new();
-        
-        db.register("Via1", NetId(1), "active", "metal1", (0, 0, 100, 100), (0, 1000));
-        db.register("Via2", NetId(1), "poly", "metal1", (200, 200, 300, 300), (450, 1650));
-        db.register("Via3", NetId(2), "active", "metal1", (400, 400, 500, 500), (0, 1000));
+
+        db.register(
+            "Via1",
+            NetId(1),
+            "active",
+            "metal1",
+            (0, 0, 100, 100),
+            (0, 1000),
+        );
+        db.register(
+            "Via2",
+            NetId(1),
+            "poly",
+            "metal1",
+            (200, 200, 300, 300),
+            (450, 1650),
+        );
+        db.register(
+            "Via3",
+            NetId(2),
+            "active",
+            "metal1",
+            (400, 400, 500, 500),
+            (0, 1000),
+        );
 
         let vias = db.get_vias_for_layers(NetId(1), "active", "metal1");
         assert_eq!(vias.len(), 1);

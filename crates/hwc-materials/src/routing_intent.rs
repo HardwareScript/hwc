@@ -128,7 +128,7 @@ impl RoutingIntent {
         if let Some(pw) = cost_weights {
             intent.cost_weights = Some(pw.clone());
         }
-        
+
         // Set escape stub if provided
         intent.escape_stub_nm = escape_stub_nm;
 

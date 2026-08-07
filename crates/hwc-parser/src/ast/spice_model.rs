@@ -146,13 +146,8 @@ mod tests {
         params.insert("N".into(), 1.0);
         params.insert("RS".into(), 0.1);
 
-        let model = SpiceModelDefinition::new(
-            name,
-            "D".into(),
-            params,
-            true,
-            Span::new(0, 0),
-        ).unwrap();
+        let model =
+            SpiceModelDefinition::new(name, "D".into(), params, true, Span::new(0, 0)).unwrap();
 
         assert_eq!(model.model_type, "D");
         assert_eq!(model.parameters.len(), 3);
@@ -165,16 +160,12 @@ mod tests {
         let mut params = FxHashMap::default();
         params.insert("IS".into(), 1e-12);
 
-        let result = SpiceModelDefinition::new(
-            name,
-            "".into(),
-            params,
-            true,
-            Span::new(0, 0),
-        );
+        let result = SpiceModelDefinition::new(name, "".into(), params, true, Span::new(0, 0));
 
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("missing REQUIRED field 'type'"));
+        assert!(result
+            .unwrap_err()
+            .contains("missing REQUIRED field 'type'"));
     }
 
     #[test]
@@ -182,13 +173,7 @@ mod tests {
         let name = Identifier::new("DMOD".into(), Span::new(0, 0));
         let params = FxHashMap::default();
 
-        let result = SpiceModelDefinition::new(
-            name,
-            "D".into(),
-            params,
-            true,
-            Span::new(0, 0),
-        );
+        let result = SpiceModelDefinition::new(name, "D".into(), params, true, Span::new(0, 0));
 
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("has no parameters"));
@@ -201,13 +186,8 @@ mod tests {
         params.insert("IS".into(), 1e-12);
         params.insert("N".into(), 1.0);
 
-        let model = SpiceModelDefinition::new(
-            name,
-            "D".into(),
-            params,
-            true,
-            Span::new(0, 0),
-        ).unwrap();
+        let model =
+            SpiceModelDefinition::new(name, "D".into(), params, true, Span::new(0, 0)).unwrap();
 
         let card = model.to_spice_card();
         assert!(card.starts_with(".model DMOD D ("));

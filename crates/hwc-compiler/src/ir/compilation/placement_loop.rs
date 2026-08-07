@@ -30,7 +30,7 @@ pub fn execute_placement(
         let &item_idx = ctx.item_map.get(id).unwrap();
         let contextual_item = &ctx.placement_items[item_idx];
         let item = &contextual_item.item;
-        
+
         // v0.2.1: Use the item's evaluation context (contains loop-scoped let bindings)
         let item_eval_context = &contextual_item.eval_context;
 
@@ -63,7 +63,7 @@ pub fn execute_placement(
             }
             PlacementItem::Pour(pour) => {
                 eprintln!("[DEBUG] Placing pour: {}", pour.name);
-                
+
                 let mut resolved_pour = pour.clone();
 
                 // v0.2.1: Resolve relational constraints if present
@@ -90,7 +90,8 @@ pub fn execute_placement(
                     // If boundary exists (from dimensions+at in parser), update its center.
                     // If boundary is None (dimensions only, no at:), leave it None — place_pour
                     // will build it from position + width/height in the position+dimensions path.
-                    if let Some(hwc_parser::PourBoundary::Rect(from, to)) = &resolved_pour.boundary {
+                    if let Some(hwc_parser::PourBoundary::Rect(from, to)) = &resolved_pour.boundary
+                    {
                         // Boundary exists - extract dimensions and recompute with new center
                         let width_expr = hwc_parser::Expression::Binary {
                             left: Box::new(to.x().clone()),
@@ -117,7 +118,10 @@ pub fn execute_placement(
                                 right: Box::new(hwc_parser::Expression::Binary {
                                     left: Box::new(width_expr.clone()),
                                     operator: hwc_parser::BinaryOperator::Divide,
-                                    right: Box::new(hwc_parser::Expression::Literal { value: 2, span: hwc_parser::Span::new(0, 0) }),
+                                    right: Box::new(hwc_parser::Expression::Literal {
+                                        value: 2,
+                                        span: hwc_parser::Span::new(0, 0),
+                                    }),
                                     span: hwc_parser::Span::new(0, 0),
                                 }),
                                 span: hwc_parser::Span::new(0, 0),
@@ -128,7 +132,10 @@ pub fn execute_placement(
                                 right: Box::new(hwc_parser::Expression::Binary {
                                     left: Box::new(height_expr.clone()),
                                     operator: hwc_parser::BinaryOperator::Divide,
-                                    right: Box::new(hwc_parser::Expression::Literal { value: 2, span: hwc_parser::Span::new(0, 0) }),
+                                    right: Box::new(hwc_parser::Expression::Literal {
+                                        value: 2,
+                                        span: hwc_parser::Span::new(0, 0),
+                                    }),
                                     span: hwc_parser::Span::new(0, 0),
                                 }),
                                 span: hwc_parser::Span::new(0, 0),
@@ -144,7 +151,10 @@ pub fn execute_placement(
                                 right: Box::new(hwc_parser::Expression::Binary {
                                     left: Box::new(width_expr),
                                     operator: hwc_parser::BinaryOperator::Divide,
-                                    right: Box::new(hwc_parser::Expression::Literal { value: 2, span: hwc_parser::Span::new(0, 0) }),
+                                    right: Box::new(hwc_parser::Expression::Literal {
+                                        value: 2,
+                                        span: hwc_parser::Span::new(0, 0),
+                                    }),
                                     span: hwc_parser::Span::new(0, 0),
                                 }),
                                 span: hwc_parser::Span::new(0, 0),
@@ -155,7 +165,10 @@ pub fn execute_placement(
                                 right: Box::new(hwc_parser::Expression::Binary {
                                     left: Box::new(height_expr),
                                     operator: hwc_parser::BinaryOperator::Divide,
-                                    right: Box::new(hwc_parser::Expression::Literal { value: 2, span: hwc_parser::Span::new(0, 0) }),
+                                    right: Box::new(hwc_parser::Expression::Literal {
+                                        value: 2,
+                                        span: hwc_parser::Span::new(0, 0),
+                                    }),
                                     span: hwc_parser::Span::new(0, 0),
                                 }),
                                 span: hwc_parser::Span::new(0, 0),
@@ -218,7 +231,7 @@ pub fn execute_placement(
             }
             PlacementItem::Contact(contact) => {
                 eprintln!("[DEBUG] Placing contact");
-                
+
                 let mut resolved_contact = contact.clone();
 
                 // v0.2.1: Resolve relational constraints if present
@@ -301,7 +314,7 @@ pub fn execute_placement(
                     "[DEBUG] Instantiating sub-space: {} as {}",
                     space_inst.space_name, space_inst.instance_name.base
                 );
-                
+
                 // Pass the full space object so we have access to the netlist
                 crate::ir::placement::instantiate_sub_space(
                     space_inst,

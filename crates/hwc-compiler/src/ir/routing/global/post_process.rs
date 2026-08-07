@@ -36,7 +36,7 @@ impl<'a> AutoRouter<'a> {
             // The router may return multiple disconnected path segments. We process each
             // segment independently but only call register_analytic_route once with a merged
             // path to avoid duplicate parent route registration.
-            
+
             // **BUG FIX v0.2.1: Process route segments independently, then combine**
             // Previously, all route segments were concatenated into a single waypoint array,
             // which caused manhattan_path_to_segments to incorrectly delete valid routes due to
@@ -45,7 +45,7 @@ impl<'a> AutoRouter<'a> {
             // The fix: Process each route statement separately to preserve route boundaries,
             // then combine all processed segments into a single AnalyticTrace registration.
             // This prevents both the concatenation bug AND duplicate parent route errors.
-            
+
             let mut all_segments: Vec<hwc_engine::LineSegment> = Vec::new();
             let mut first_thickness = trace_thickness_nm;
             let mut route_count = 0;
@@ -54,14 +54,18 @@ impl<'a> AutoRouter<'a> {
                 if path.len() < 2 {
                     continue;
                 }
-                
-                eprintln!("[POST_PROCESS DEBUG] Net {:?} path BEFORE miter (len={}):", net_id_raw, path.len());
+
+                eprintln!(
+                    "[POST_PROCESS DEBUG] Net {:?} path BEFORE miter (len={}):",
+                    net_id_raw,
+                    path.len()
+                );
                 for (i, p) in path.iter().enumerate().take(5) {
                     eprintln!("[POST_PROCESS DEBUG]   [{}]: ({},{},{})", i, p.x, p.y, p.z);
                 }
-                
+
                 let miter_engine = hwc_engine::MiterEngine::new(trace_width);
-                
+
                 // **v0.2.0: Context-aware mitering** - query the space for via locations
                 // and pass as context to preserve via landing pad connections
                 let mitered_path = miter_engine.apply_miter_pass_with_context(
@@ -69,17 +73,21 @@ impl<'a> AutoRouter<'a> {
                     &*self.space as &dyn hwc_engine::geometry_router::miter_pass::MiterContext,
                     Some(*net_id_raw),
                 );
-                
-                eprintln!("[POST_PROCESS DEBUG] Net {:?} path AFTER miter (len={}):", net_id_raw, mitered_path.len());
+
+                eprintln!(
+                    "[POST_PROCESS DEBUG] Net {:?} path AFTER miter (len={}):",
+                    net_id_raw,
+                    mitered_path.len()
+                );
                 for (i, p) in mitered_path.iter().enumerate().take(5) {
                     eprintln!("[POST_PROCESS DEBUG]   [{}]: ({},{},{})", i, p.x, p.y, p.z);
                 }
-                
+
                 let (refined_path, actual_thickness) =
                     self.refine_path_z(mitered_path, trace_thickness_nm)?;
 
                 let mut final_path = refined_path;
-                
+
                 // STRUCTURAL FIX: Only add vertical transitions if the path doesn't already have them
                 // The new routing engine (v0.2.0) already includes vertical transitions in the path
                 let has_z_transitions = final_path.windows(2).any(|w| w[0].z != w[1].z);
@@ -97,8 +105,9 @@ impl<'a> AutoRouter<'a> {
 
                 // Convert path to segments independently (avoiding concatenation bug)
                 if final_path.len() >= 2 {
-                    let min_seg_len_nm = crate::ir::routing::helpers::require_min_segment_length_nm(self.profile)?;
-                    
+                    let min_seg_len_nm =
+                        crate::ir::routing::helpers::require_min_segment_length_nm(self.profile)?;
+
                     let has_z_transitions = final_path.windows(2).any(|w| w[0].z != w[1].z);
                     let has_diagonal_segments = final_path.windows(2).any(|w| {
                         let dx = (w[1].x - w[0].x).abs();
@@ -106,17 +115,23 @@ impl<'a> AutoRouter<'a> {
                         let dz = (w[1].z - w[0].z).abs();
                         (dx > 0 && dy > 0) || (dx > 0 && dz > 0) || (dy > 0 && dz > 0)
                     });
-                    
+
                     let route_segments = if has_z_transitions || has_diagonal_segments {
                         let mut segs = Vec::new();
                         for i in 0..final_path.len() - 1 {
-                            segs.push(hwc_engine::LineSegment::new(final_path[i], final_path[i + 1]));
+                            segs.push(hwc_engine::LineSegment::new(
+                                final_path[i],
+                                final_path[i + 1],
+                            ));
                         }
                         segs
                     } else {
-                        crate::ir::routing::helpers::manhattan_path_to_segments(&final_path, min_seg_len_nm)
+                        crate::ir::routing::helpers::manhattan_path_to_segments(
+                            &final_path,
+                            min_seg_len_nm,
+                        )
                     };
-                    
+
                     all_segments.extend(route_segments);
                     route_count += 1;
                 }
@@ -134,10 +149,12 @@ impl<'a> AutoRouter<'a> {
                 let routing_layer_name = data
                     .net_layer_names_by_id
                     .get(&actual_net_id)
-                    .ok_or_else(|| IrError::RoutingError(format!(
+                    .ok_or_else(|| {
+                        IrError::RoutingError(format!(
                         "Could not determine routing layer for net '{}' - no layer name recorded",
                         net_name
-                    )))?;
+                    ))
+                    })?;
 
                 // Create a single AnalyticTrace with all segments
                 self.register_analytic_route_from_segments(
@@ -204,7 +221,7 @@ impl<'a> AutoRouter<'a> {
         //   2. entity_graph stays synchronized (child + parent routes coexist)
         //
         // No action needed here - routes are already in the database.
-        
+
         // NOTE: The loop below is now a NO-OP since we don't clear or register.
         // Keeping it commented for reference during transition.
         // for (&net_id, mutated_paths) in &result.paths {
@@ -218,7 +235,7 @@ impl<'a> AutoRouter<'a> {
         //         );
         //     }
         // }
-        
+
         Ok(result)
     }
 
@@ -256,23 +273,21 @@ impl<'a> AutoRouter<'a> {
     ) -> Result<(Vec<Point3D>, i64), IrError> {
         // STRUCTURAL FIX: Check if path already has Z transitions BEFORE refining
         let has_z_transitions = path.windows(2).any(|w| w[0].z != w[1].z);
-        
+
         if has_z_transitions {
-            
             // Path already has vertical transitions from the new router
             // Don't flatten the Z coordinates - just determine the thickness
             let first_z = path.first().map(|p| p.z).unwrap_or(0);
             let first_layer = self.stackup_manager.get_layer_index_at_z(first_z);
             let actual_thickness = if let Some(layer_idx) = first_layer {
-                self.stackup_manager.get_thickness_for_layer_index(layer_idx)?
+                self.stackup_manager
+                    .get_thickness_for_layer_index(layer_idx)?
             } else {
                 default_thickness
             };
             return Ok((path, actual_thickness));
         }
-        
-       
-        
+
         let first_z = path.first().map(|p| p.z).unwrap_or(0);
         let last_z = path.last().map(|p| p.z).unwrap_or(0);
         let first_layer = self.stackup_manager.get_layer_index_at_z(first_z);
@@ -375,12 +390,12 @@ impl<'a> AutoRouter<'a> {
         //
         // For now, we'll skip legalization in hierarchical designs to avoid data corruption.
         eprintln!("[LEGALIZATION] Skipping post-routing legalization (hierarchical design - needs refactor)");
-        
+
         // Original legalization code (DISABLED to prevent clearing child routes):
         // let legalizer = hwc_engine::geometry_router::Legalizer::new(min_clearance);
         // let all_routes = self.space.entity_graph.get_all_routes();
         // ... (rest of legalization code that clears and re-registers)
-        
+
         Ok(())
     }
 
@@ -416,10 +431,12 @@ impl<'a> AutoRouter<'a> {
         self.space.sync_analytic_routes_from_database();
 
         // Validate routing database consistency
-        self.space.routing_database.validate()
-            .map_err(|errors| IrError::RoutingError(
-                format!("Routing database validation failed:\n{}", errors.join("\n"))
-            ))?;
+        self.space.routing_database.validate().map_err(|errors| {
+            IrError::RoutingError(format!(
+                "Routing database validation failed:\n{}",
+                errors.join("\n")
+            ))
+        })?;
 
         Ok(())
     }
@@ -510,19 +527,17 @@ impl<'a> AutoRouter<'a> {
             net_name.into(),
             hwc_engine::space::CurrentRating::new(net_actual_current_ma, current_limit_ma),
             layer_z_range,
-            routing_layer_name.into(),  // v0.2.2: Explicit layer lineage
+            routing_layer_name.into(), // v0.2.2: Explicit layer lineage
         );
 
         let from_entity = format!("auto_route_{}_start", net_name);
         let to_entity = format!("auto_route_{}_end", net_name);
 
-        self.space.routing_database.register_autorouter_route(
-            trace,
-            from_entity.into(),
-            to_entity.into(),
-        ).map_err(|e| IrError::RoutingError(e))?;
+        self.space
+            .routing_database
+            .register_autorouter_route(trace, from_entity.into(), to_entity.into())
+            .map_err(|e| IrError::RoutingError(e))?;
 
         Ok(())
     }
 }
-

@@ -80,22 +80,31 @@ pub fn export(
     // DXF is now a pure reader - no geometry calculations here.
     let copper_contours = crate::scene_graph::generate_copper_contours(space);
 
-    eprintln!("[DXF EXPORT] Received {} copper contour groups from unified geometry", copper_contours.len());
+    eprintln!(
+        "[DXF EXPORT] Received {} copper contour groups from unified geometry",
+        copper_contours.len()
+    );
 
     // Export each unified copper contour pool
     for contour_data in &copper_contours {
         let z_min_nm = contour_data.key.z_min;
         let material_id = contour_data.key.material;
-        
+
         let mat_name = space
             .material_registry
             .get_name(material_id)
-            .expect(&format!("Material ID {:?} not found in registry during DXF copper export", material_id));
-        
+            .expect(&format!(
+                "Material ID {:?} not found in registry during DXF copper export",
+                material_id
+            ));
+
         let color_hex = symbol_table
             .get_material(mat_name)
             .map(|m| m.get_color())
-            .expect(&format!("Material '{}' not found in symbol table during DXF export", mat_name));
+            .expect(&format!(
+                "Material '{}' not found in symbol table during DXF export",
+                mat_name
+            ));
         let true_color = parse_true_color(&color_hex);
 
         for path in &contour_data.contours {
@@ -103,8 +112,6 @@ pub fn export(
             if point_count < 3 {
                 continue;
             }
-
-            
 
             let layer_name = if is_asic { mat_name } else { "PCB_LAYERS" };
 
@@ -135,7 +142,7 @@ pub fn export(
                 "Material ID {:?} not found in registry during DXF substrate export",
                 layer.material
             ));
-        
+
         if mat_name.to_lowercase() == "void" || mat_name.to_lowercase() == "air" {
             continue;
         }
@@ -212,12 +219,7 @@ pub fn export(
                 // Polygon points are now in world space, convert directly to mm
                 let outer_points: Vec<(f64, f64)> = outer_contour
                     .iter()
-                    .map(|p| {
-                        (
-                            p.x as f64 / 1_000_000.0,
-                            p.y as f64 / 1_000_000.0,
-                        )
-                    })
+                    .map(|p| (p.x as f64 / 1_000_000.0, p.y as f64 / 1_000_000.0))
                     .collect();
 
                 if outer_points.len() >= 3 {
@@ -239,12 +241,7 @@ pub fn export(
                     // Holes are also in world space
                     let hole_points: Vec<(f64, f64)> = hole
                         .iter()
-                        .map(|p| {
-                            (
-                                p.x as f64 / 1_000_000.0,
-                                p.y as f64 / 1_000_000.0,
-                            )
-                        })
+                        .map(|p| (p.x as f64 / 1_000_000.0, p.y as f64 / 1_000_000.0))
                         .collect();
                     if hole_points.len() >= 3 {
                         writeln!(w, "  0\nLWPOLYLINE")?;
@@ -318,12 +315,18 @@ fn parse_true_color(hex: &str) -> u32 {
         );
     }
 
-    let r = u32::from_str_radix(&hex[1..3], 16)
-        .expect(&format!("Invalid red component in color '{}'. Must be 00-FF", hex));
-    let g = u32::from_str_radix(&hex[3..5], 16)
-        .expect(&format!("Invalid green component in color '{}'. Must be 00-FF", hex));
-    let b = u32::from_str_radix(&hex[5..7], 16)
-        .expect(&format!("Invalid blue component in color '{}'. Must be 00-FF", hex));
-    
+    let r = u32::from_str_radix(&hex[1..3], 16).expect(&format!(
+        "Invalid red component in color '{}'. Must be 00-FF",
+        hex
+    ));
+    let g = u32::from_str_radix(&hex[3..5], 16).expect(&format!(
+        "Invalid green component in color '{}'. Must be 00-FF",
+        hex
+    ));
+    let b = u32::from_str_radix(&hex[5..7], 16).expect(&format!(
+        "Invalid blue component in color '{}'. Must be 00-FF",
+        hex
+    ));
+
     (r << 16) | (g << 8) | b
 }

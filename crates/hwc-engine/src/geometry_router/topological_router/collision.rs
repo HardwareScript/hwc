@@ -53,7 +53,7 @@ impl TopologicalRouter {
     /// Check if a segment between two points intersects any obstacle.
     /// Uses Minkowski sum inflation: inflate_by = trace_width_nm / 2 + min_clearance_nm
     /// NOTE: For single-layer 2D routing, we only inflate X/Y dimensions, not Z.
-    /// 
+    ///
     /// VERTICAL VIA EXEMPTION (v0.2.0):
     /// If the segment is vertical (start.z != end.z), it represents a via transition.
     /// Vias are exempt from collision checks with obstacles on intermediate Z layers,
@@ -84,22 +84,19 @@ impl TopologicalRouter {
             min: Point3D::new(
                 segment_bbox.min.x - inflate,
                 segment_bbox.min.y - inflate,
-                segment_bbox.min.z,  // Don't inflate Z
+                segment_bbox.min.z, // Don't inflate Z
             ),
             max: Point3D::new(
                 segment_bbox.max.x + inflate,
                 segment_bbox.max.y + inflate,
-                segment_bbox.max.z,  // Don't inflate Z
+                segment_bbox.max.z, // Don't inflate Z
             ),
         };
-
-       
 
         let candidates = self.query_all_obstacles(&query_bbox, obstacles);
 
         for seg in candidates.iter() {
             if self.exempt_net_ids.contains(&(seg.net_id.raw() as usize)) {
-               
                 continue;
             }
 
@@ -115,8 +112,11 @@ impl TopologicalRouter {
             // This allows vias to pass through non-routable dielectric layers.
             if is_vertical_via {
                 let _is_intermediate_layer = (obs_z_min > route_z_min && obs_z_max < route_z_max)
-                    || (obs_z_min >= route_z_min && obs_z_max <= route_z_max && obs_z_min != route_z_min && obs_z_max != route_z_max);
-                
+                    || (obs_z_min >= route_z_min
+                        && obs_z_max <= route_z_max
+                        && obs_z_min != route_z_min
+                        && obs_z_max != route_z_max);
+
                 // Only check collision if obstacle is on the same layer as via endpoints
                 if obs_z_min != route_z_min && obs_z_max != route_z_max {
                     continue; // Skip intermediate layer obstacles
@@ -136,19 +136,17 @@ impl TopologicalRouter {
                 ),
             };
 
-           
-
             // v0.1.9.1 FIX: Only inflate X/Y, not Z, for single-layer 2D routing
             let inflated_segment = BoundingBox {
                 min: Point3D::new(
                     segment_bbox.min.x - inflate,
                     segment_bbox.min.y - inflate,
-                    segment_bbox.min.z,  // Don't inflate Z
+                    segment_bbox.min.z, // Don't inflate Z
                 ),
                 max: Point3D::new(
                     segment_bbox.max.x + inflate,
                     segment_bbox.max.y + inflate,
-                    segment_bbox.max.z,  // Don't inflate Z
+                    segment_bbox.max.z, // Don't inflate Z
                 ),
             };
 
@@ -160,12 +158,10 @@ impl TopologicalRouter {
                 && inflated_segment.max.z >= obs_bbox.min.z;
 
             if x_overlaps && y_overlaps && z_overlaps {
-              
                 return true;
             }
         }
 
-       
         false
     }
 }

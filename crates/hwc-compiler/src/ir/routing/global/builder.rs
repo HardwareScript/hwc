@@ -10,7 +10,7 @@ pub struct RoutingData {
     pub net_id_to_name: FxHashMap<NetId, CompactString>,
     pub net_layer_targets: FxHashMap<CompactString, i64>,
     pub net_layer_targets_by_id: FxHashMap<NetId, i64>,
-    pub net_layer_names_by_id: FxHashMap<NetId, CompactString>,  // NEW: Store layer names directly
+    pub net_layer_names_by_id: FxHashMap<NetId, CompactString>, // NEW: Store layer names directly
     pub net_declared_widths: FxHashMap<CompactString, i64>,
     pub net_currents_ma: FxHashMap<CompactString, f64>,
     pub obstacle_bboxes: Vec<BoundingBox>,
@@ -23,7 +23,7 @@ impl<'a> AutoRouter<'a> {
         let mut net_id_to_name = FxHashMap::default();
         let mut net_layer_targets = FxHashMap::default();
         let mut net_layer_targets_by_id = FxHashMap::default();
-        let mut net_layer_names_by_id = FxHashMap::default();  // NEW
+        let mut net_layer_names_by_id = FxHashMap::default(); // NEW
         let mut net_declared_widths = FxHashMap::default();
         let mut net_currents_ma = FxHashMap::default();
         let mut net_intents = FxHashMap::default();
@@ -90,44 +90,49 @@ impl<'a> AutoRouter<'a> {
                                 if let Some(ref layer_id) = route.layer {
                                     // v0.2.0: Query routing layer database for routing Z elevation
                                     // Use the layer bottom Z (routing elevation) not the centerline
-                                    if let Ok(routing_z) = self.space.routing_layer_db.get_routing_z(&layer_id.name) {
+                                    if let Ok(routing_z) =
+                                        self.space.routing_layer_db.get_routing_z(&layer_id.name)
+                                    {
                                         net_layer_targets.insert(net_name.clone(), routing_z);
                                         net_layer_targets_by_id.insert(actual_net_id, routing_z);
-                                        net_layer_names_by_id.insert(actual_net_id, layer_id.name.clone().into());  // NEW: Store layer name
+                                        net_layer_names_by_id
+                                            .insert(actual_net_id, layer_id.name.clone().into()); // NEW: Store layer name
                                         eprintln!("[ROUTING BUILDER] Route for net '{}' (id={}) targets layer '{}' at routing Z={}nm", 
                                             net_name, actual_net_id.raw(), layer_id.name, routing_z);
                                     }
                                 }
                                 if let Some(ref width_expr) = route.width {
-                                    if let Ok(w_nm) = crate::ir::conversions::evaluate_expression_to_nm(
-                                        width_expr,
+                                    if let Ok(w_nm) =
+                                        crate::ir::conversions::evaluate_expression_to_nm(
+                                            width_expr,
+                                            self.symbol_table,
+                                            self.eval_context,
+                                        )
+                                    {
+                                        net_declared_widths.insert(net_name.clone(), w_nm);
+                                    }
+                                }
+                                if let Some(ref ac) = route.current_limit_ac {
+                                    let rms = crate::ir::conversions::evaluate_expression_to_ma(
+                                        &ac.rms,
                                         self.symbol_table,
-                                self.eval_context,
-                            ) {
-                                net_declared_widths.insert(net_name.clone(), w_nm);
-                            }
-                        }
-                        if let Some(ref ac) = route.current_limit_ac {
-                            let rms = crate::ir::conversions::evaluate_expression_to_ma(
-                                &ac.rms,
-                                self.symbol_table,
-                            )
-                            .unwrap_or(0.0);
-                            let peak = crate::ir::conversions::evaluate_expression_to_ma(
-                                &ac.peak,
-                                self.symbol_table,
-                            )
-                            .unwrap_or(rms);
-                            net_currents_ma.insert(net_name.clone(), peak);
-                        }
-                        if let Some(ref intent_name) = route.intent {
-                            eprintln!("[ROUTING BUILDER] Route from {:?} to {:?} has intent: '{}' for net '{}'", 
+                                    )
+                                    .unwrap_or(0.0);
+                                    let peak = crate::ir::conversions::evaluate_expression_to_ma(
+                                        &ac.peak,
+                                        self.symbol_table,
+                                    )
+                                    .unwrap_or(rms);
+                                    net_currents_ma.insert(net_name.clone(), peak);
+                                }
+                                if let Some(ref intent_name) = route.intent {
+                                    eprintln!("[ROUTING BUILDER] Route from {:?} to {:?} has intent: '{}' for net '{}'", 
                                 route.from, route.to, intent_name, net_name);
-                            net_intents.insert(net_name.clone(), intent_name.clone());
-                        } else {
-                            eprintln!("[ROUTING BUILDER] Route from {:?} to {:?} has NO intent for net '{}'", 
+                                    net_intents.insert(net_name.clone(), intent_name.clone());
+                                } else {
+                                    eprintln!("[ROUTING BUILDER] Route from {:?} to {:?} has NO intent for net '{}'", 
                                 route.from, route.to, net_name);
-                        }
+                                }
                             }
                             Err(e) => {
                                 eprintln!("[ROUTER ERROR] Failed to create resolved route for net '{}': {:?}", net_name, e);
@@ -179,7 +184,7 @@ impl<'a> AutoRouter<'a> {
             net_id_to_name,
             net_layer_targets,
             net_layer_targets_by_id,
-            net_layer_names_by_id,  // NEW
+            net_layer_names_by_id, // NEW
             net_declared_widths,
             net_currents_ma,
             obstacle_bboxes,
@@ -399,7 +404,8 @@ impl<'a> AutoRouter<'a> {
                        Example:\n\
                          route A to B:\n\
                            layer: metal1\n\
-                           width: 200nm".into(),
+                           width: 200nm"
+                    .into(),
             })?;
 
         let mut resolved = crate::ir::routing::types::ResolvedRoute::new(

@@ -178,64 +178,63 @@ pub fn lockfile_to_traces(
         // This mirrors the logic in every other routing path (manual, auto, global).
         //
         // **v0.2.2 LAYER LINEAGE**: Extract layer name for explicit lineage tracking
-        let layer_z_range_with_name = {
-            let is_horizontal = segments
-                .iter()
-                .all(|s| s.start.z == s.end.z)
-                && segments
-                    .windows(2)
-                    .all(|w| w[0].start.z == w[1].start.z);
+        let layer_z_range_with_name =
+            {
+                let is_horizontal = segments.iter().all(|s| s.start.z == s.end.z)
+                    && segments.windows(2).all(|w| w[0].start.z == w[1].start.z);
 
-            if is_horizontal {
-                let centerline_z = segments.first().map(|s| s.start.z).ok_or_else(|| {
-                    format!("[LOCK] FATAL: net {} has no segments", net_id_raw)
-                })?;
-                let count = stackup_layers.len();
-                let layer = stackup_layers
-                    .iter()
-                    .enumerate()
-                    .find(|&(idx, l)| {
-                        let is_top = idx == count - 1;
-                        if is_top {
-                            centerline_z >= l.z_bottom && centerline_z <= l.z_top
-                        } else {
-                            centerline_z >= l.z_bottom && centerline_z < l.z_top
-                        }
-                    })
-                    .map(|(_, l)| l)
-                    .ok_or_else(|| {
-                        format!(
-                            "[LOCK] FATAL: net {} has a horizontal segment at Z={}nm \
+                if is_horizontal {
+                    let centerline_z = segments.first().map(|s| s.start.z).ok_or_else(|| {
+                        format!("[LOCK] FATAL: net {} has no segments", net_id_raw)
+                    })?;
+                    let count = stackup_layers.len();
+                    let layer = stackup_layers
+                        .iter()
+                        .enumerate()
+                        .find(|&(idx, l)| {
+                            let is_top = idx == count - 1;
+                            if is_top {
+                                centerline_z >= l.z_bottom && centerline_z <= l.z_top
+                            } else {
+                                centerline_z >= l.z_bottom && centerline_z < l.z_top
+                            }
+                        })
+                        .map(|(_, l)| l)
+                        .ok_or_else(|| {
+                            format!(
+                                "[LOCK] FATAL: net {} has a horizontal segment at Z={}nm \
                              that does not match any layer in the stackup. \
                              Delete the lockfile and rebuild.",
-                            net_id_raw, centerline_z
-                        )
+                                net_id_raw, centerline_z
+                            )
+                        })?;
+                    Ok::<_, String>(Some(((layer.z_bottom, layer.z_top), layer.name.clone())))
+                } else {
+                    // Via or multi-layer trace: Z span encoded in segment start/end.
+                    // For vias, we must still determine a layer for lineage tracking.
+                    let first_z = segments.first().map(|s| s.start.z).ok_or_else(|| {
+                        format!("[LOCK] FATAL: net {} has no segments", net_id_raw)
                     })?;
-                Ok::<_, String>(Some(((layer.z_bottom, layer.z_top), layer.name.clone())))
-            } else {
-                // Via or multi-layer trace: Z span encoded in segment start/end.
-                // For vias, we must still determine a layer for lineage tracking.
-                let first_z = segments
-                    .first()
-                    .map(|s| s.start.z)
-                    .ok_or_else(|| format!("[LOCK] FATAL: net {} has no segments", net_id_raw))?;
-                
-                let nearest_layer = stackup_layers
-                    .iter()
-                    .find(|l| first_z >= l.z_bottom && first_z <= l.z_top)
-                    .ok_or_else(|| {
-                        format!(
-                            "[LOCK] FATAL: net {} vertical segment at Z={}nm \
+
+                    let nearest_layer = stackup_layers
+                        .iter()
+                        .find(|l| first_z >= l.z_bottom && first_z <= l.z_top)
+                        .ok_or_else(|| {
+                            format!(
+                                "[LOCK] FATAL: net {} vertical segment at Z={}nm \
                              does not match any stackup layer. Delete the lockfile and rebuild.",
-                            net_id_raw, first_z
-                        )
-                    })?;
-                
-                // Return the same type structure: ((z_bottom, z_top), name)
-                // For vias, we use the nearest layer's Z bounds
-                Ok::<_, String>(Some(((nearest_layer.z_bottom, nearest_layer.z_top), nearest_layer.name.clone())))
-            }
-        }?;
+                                net_id_raw, first_z
+                            )
+                        })?;
+
+                    // Return the same type structure: ((z_bottom, z_top), name)
+                    // For vias, we use the nearest layer's Z bounds
+                    Ok::<_, String>(Some((
+                        (nearest_layer.z_bottom, nearest_layer.z_top),
+                        nearest_layer.name.clone(),
+                    )))
+                }
+            }?;
 
         let (layer_z_range, route_layer_name) = match layer_z_range_with_name {
             Some((z_range, name)) => (Some(z_range), name),
@@ -255,7 +254,7 @@ pub fn lockfile_to_traces(
             net_name,
             crate::space::CurrentRating::new(net_actual_current_ma, current_ma),
             layer_z_range,
-            route_layer_name,  // v0.2.2: Explicit layer lineage
+            route_layer_name, // v0.2.2: Explicit layer lineage
         ));
     }
 

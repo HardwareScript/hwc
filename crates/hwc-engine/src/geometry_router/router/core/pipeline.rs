@@ -19,13 +19,15 @@ impl GeometryRouter {
         result: &mut RouteResult,
     ) {
         eprintln!("[REFINEMENT PIPELINE DEBUG] Starting refinement pipeline");
-        
+
         let min_clearance_nm = self
             .constraints
             .fabrication
             .as_ref()
-            .expect("BUG: Fabrication constraints required for route refinement pipeline. \
-                     Ensure the profile defines 'trace.min_spacing'.")
+            .expect(
+                "BUG: Fabrication constraints required for route refinement pipeline. \
+                     Ensure the profile defines 'trace.min_spacing'.",
+            )
             .min_trace_spacing_nm;
 
         // --- Stage 1: Legalization ---
@@ -35,7 +37,6 @@ impl GeometryRouter {
         for (&net_id, paths) in &result.paths {
             for path in paths {
                 for window in path.windows(2) {
-                   
                     // v0.2.1: Look up material based on segment's Z-coordinate from substrate layers
                     // Find a conductive substrate layer at this Z and use its material
                     let segment_z = window[0].z;
@@ -56,7 +57,7 @@ impl GeometryRouter {
                     } else {
                         panic!("FATAL: substrate_layers not available in router for material lookup at Z={}", segment_z);
                     };
-                    
+
                     all_segments.push(TraceSegment::new(
                         window[0],
                         window[1],
@@ -69,23 +70,21 @@ impl GeometryRouter {
         }
 
         if !all_segments.is_empty() {
-           
             // Build a properly configured layer-aware spatial index
             let mut spatial_index = DynamicSpatialIndex::new();
-            
+
             // Configure layer Z-ranges from the entity graph
             if let Some(z_ranges) = entity_graph.spatial().layer_z_ranges() {
-               
                 spatial_index.set_layer_z_ranges(&z_ranges);
             } else {
                 eprintln!("[REFINEMENT WARNING] No layer Z-ranges configured - all segments will be in fallback bucket!");
             }
-            
+
             // Insert segments into spatial index
             for (idx, seg) in all_segments.iter().enumerate() {
                 let net_id = all_net_ids.get(idx).copied().unwrap_or(NetId::UNCONNECTED);
                 let net_idx = net_id.raw() as usize;
-                
+
                 // Get material properties to find thickness
                 let material_props = self.material_registry
                     .get_material(seg.material_id)
@@ -96,7 +95,7 @@ impl GeometryRouter {
                         )
                     })
                     .expect("Material properties required");
-                
+
                 let thickness_nm = material_props
                     .get("thickness")
                     .ok_or_else(|| {
@@ -106,7 +105,7 @@ impl GeometryRouter {
                         )
                     })
                     .expect("Material thickness required") as i64;
-                
+
                 spatial_index.insert(crate::geometry_router::spatial_index::IndexedSegment::new(
                     hwc_physics::spatial_index::SpatialEntitySource::RouteSegment {
                         net_idx,
@@ -119,7 +118,7 @@ impl GeometryRouter {
                     thickness_nm,
                 ));
             }
-            
+
             let legalizer = Legalizer::new(min_clearance_nm);
             let (legalized_segments, legalized_net_ids) = legalizer.legalize(
                 &all_segments,
@@ -128,10 +127,11 @@ impl GeometryRouter {
                 10, // max iterations
             );
 
-           
             for (idx, seg) in legalized_segments.iter().enumerate().take(4) {
-                eprintln!("[REFINEMENT DEBUG]   Segment {}: ({},{},{}) -> ({},{},{})", 
-                    idx, seg.start.x, seg.start.y, seg.start.z, seg.end.x, seg.end.y, seg.end.z);
+                eprintln!(
+                    "[REFINEMENT DEBUG]   Segment {}: ({},{},{}) -> ({},{},{})",
+                    idx, seg.start.x, seg.start.y, seg.start.z, seg.end.x, seg.end.y, seg.end.z
+                );
             }
 
             // --- Stage 2: Compaction ---
@@ -140,10 +140,11 @@ impl GeometryRouter {
                 compactor.compact(&legalized_segments, &legalized_net_ids, &Default::default());
             let compacted_segments = Compactor::apply_moves(&legalized_segments, &moves);
 
-           
             for (idx, seg) in compacted_segments.iter().enumerate().take(4) {
-                eprintln!("[REFINEMENT DEBUG]   Segment {}: ({},{},{}) -> ({},{},{})", 
-                    idx, seg.start.x, seg.start.y, seg.start.z, seg.end.x, seg.end.y, seg.end.z);
+                eprintln!(
+                    "[REFINEMENT DEBUG]   Segment {}: ({},{},{}) -> ({},{},{})",
+                    idx, seg.start.x, seg.start.y, seg.start.z, seg.end.x, seg.end.y, seg.end.z
+                );
             }
 
             // --- Stage 3: Miter Pass ---

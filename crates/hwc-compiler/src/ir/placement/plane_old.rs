@@ -1,3 +1,11 @@
+// DEPRECATED - REFERENCE ONLY - SCHEDULED FOR DELETION
+//
+// This monolithic implementation has been superseded by the modular `plane/`
+// subfolder (see `plane/mod.rs`). It is NOT compiled: it is intentionally not
+// declared as a module in `../mod.rs`.
+//
+// Kept temporarily as a reference for the refactor. Safe to delete.
+
 use super::super::conversions::{spanning_coordinate_to_point, CoordinateContext};
 use super::super::errors::IrError;
 use super::context::PlacementContext;

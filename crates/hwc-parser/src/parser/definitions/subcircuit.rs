@@ -156,7 +156,8 @@ impl crate::parser::Parser {
                 expected: format!(
                     "subcircuit '{}' requires 'elements' field. Add 'elements:' block",
                     name.name
-                ).into(),
+                )
+                .into(),
                 found: "missing elements".into(),
             });
             return None;
@@ -237,7 +238,7 @@ impl crate::parser::Parser {
         let mut parameters = Vec::new();
         while !self.check(&Token::CloseBracket) && !self.is_at_end() {
             let param_start = self.current_span().start;
-            
+
             if let Ok(param_name) = self.expect_identifier_string() {
                 let default_value = if self.check(&Token::Equals) {
                     self.advance();
@@ -363,17 +364,17 @@ impl crate::parser::Parser {
             if param_name == "nodes" {
                 // Parse node list: [node1, node2, ...]
                 self.expect(&Token::OpenBracket).ok()?;
-                
+
                 while !self.check(&Token::CloseBracket) && !self.is_at_end() {
                     if let Some(node) = self.parse_node(collector) {
                         nodes.push(node);
                     }
-                    
+
                     if self.check(&Token::Comma) {
                         self.advance();
                     }
                 }
-                
+
                 self.expect(&Token::CloseBracket).ok()?;
             } else {
                 // Regular parameter: parse as expression

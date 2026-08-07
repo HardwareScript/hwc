@@ -103,7 +103,11 @@ impl super::super::super::Parser {
                 self.expect(&Token::With)?;
                 let target = self.parse_component_name()?;
                 let span = Span::new(start_pos, self.previous_span().end);
-                relational_constraints.push(RelationalConstraint::Align { axis, target: AlignmentTarget::Entity(target), span });
+                relational_constraints.push(RelationalConstraint::Align {
+                    axis,
+                    target: AlignmentTarget::Entity(target),
+                    span,
+                });
                 self.skip_whitespace();
                 continue;
             }

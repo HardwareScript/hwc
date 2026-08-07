@@ -105,7 +105,7 @@ impl GeometrySegment {
                     "BUG: Horizontal trace segment must have layer_z_range from stackup. \
                      All routing traces must reference a defined stackup layer with explicit Z bounds."
                 );
-                
+
                 // Validate that segment Z is within the layer bounds
                 if segment.start.z < z_min || segment.start.z > z_max {
                     eprintln!(
@@ -118,20 +118,20 @@ impl GeometrySegment {
             SegmentType::Via => {
                 // Via: MUST use the routing layer's Z-range to ensure proper merging
                 // with horizontal traces in the Boolean union and DXF export.
-                // 
+                //
                 // Zero-Fallback Policy: If layer_z_range is missing, this is a compiler bug.
                 // Vias on routing layers MUST have their layer Z-range provided.
                 let (layer_z_min, layer_z_max) = layer_z_range.expect(
                     "BUG: Via segment must have layer_z_range for proper geometry pooling. \
                      Vias connecting to routing layers must be extruded across the full layer \
-                     thickness to merge with horizontal traces."
+                     thickness to merge with horizontal traces.",
                 );
-                
+
                 eprintln!(
                     "[TRACE GEOMETRY] Via segment using routing layer Z-range: {}→{}nm (via endpoints: {}→{}nm)",
                     layer_z_min, layer_z_max, segment.start.z, segment.end.z
                 );
-                
+
                 (layer_z_min, layer_z_max)
             }
             _ => unreachable!(), // Already filtered above
@@ -226,7 +226,11 @@ impl GeometryPool {
     /// 2. Extrude the result from z_min to z_max
     ///
     /// Returns a list of MeshNode objects (one per contour after union).
-    pub fn generate_meshes(&mut self, material_name: &str, view: hwc_engine::space::SpaceView) -> Vec<MeshNode> {
+    pub fn generate_meshes(
+        &mut self,
+        material_name: &str,
+        view: hwc_engine::space::SpaceView,
+    ) -> Vec<MeshNode> {
         self.flush_pending();
 
         if self.paths.is_empty() {
@@ -241,10 +245,7 @@ impl GeometryPool {
         // Perform 2D Boolean Union
         let unioned = clipper2_rust::union_64(&self.paths, &Vec::new(), FillRule::NonZero);
 
-        eprintln!(
-            "[GEOMETRY POOL]   After union: {} contours",
-            unioned.len()
-        );
+        eprintln!("[GEOMETRY POOL]   After union: {} contours", unioned.len());
 
         // Extrude each contour
         let z_min_mm = self.key.z_min as f64 / 1_000_000.0;
@@ -263,7 +264,11 @@ impl GeometryPool {
                 .collect();
 
             let mesh = crate::mesh_extrusion::extrude_polygon_mesh(
-                &format!("TracePool_Net{:?}_Contour{}", self.key.net_id.raw(), contour_idx),
+                &format!(
+                    "TracePool_Net{:?}_Contour{}",
+                    self.key.net_id.raw(),
+                    contour_idx
+                ),
                 &outer_points,
                 &[],
                 z_min_mm,
@@ -274,10 +279,7 @@ impl GeometryPool {
             meshes.push(mesh);
         }
 
-        eprintln!(
-            "[GEOMETRY POOL]   Generated {} meshes",
-            meshes.len()
-        );
+        eprintln!("[GEOMETRY POOL]   Generated {} meshes", meshes.len());
 
         meshes
     }
@@ -299,17 +301,11 @@ impl GeometryPool {
 /// # Returns
 ///
 /// A map from GeometryPoolKey to MeshNode list.
-pub fn generate_trace_geometry(
-    space: &HardwareSpace,
-) -> FxHashMap<GeometryPoolKey, GeometryPool> {
+pub fn generate_trace_geometry(space: &HardwareSpace) -> FxHashMap<GeometryPoolKey, GeometryPool> {
     let mut pools: FxHashMap<GeometryPoolKey, GeometryPool> = FxHashMap::default();
-
-   
 
     // Convert each trace into geometry segments and pool them
     for trace in &space.analytic_routes {
-       
-
         for (seg_idx, segment) in trace.segments.iter().enumerate() {
             // Convert LineSegment to GeometrySegment
             let geom_seg = match GeometrySegment::from_line_segment(
@@ -336,7 +332,10 @@ pub fn generate_trace_geometry(
 
             // Add to appropriate pool (horizontal traces only)
             let key = geom_seg.pool_key();
-            pools.entry(key).or_insert_with(|| GeometryPool::new(key)).add_segment(&geom_seg);
+            pools
+                .entry(key)
+                .or_insert_with(|| GeometryPool::new(key))
+                .add_segment(&geom_seg);
         }
     }
 
@@ -345,10 +344,8 @@ pub fn generate_trace_geometry(
         pool.flush_pending();
     }
 
-   
     pools
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -364,7 +361,7 @@ mod tests {
 
         let geom = GeometrySegment::from_line_segment(
             seg,
-            200,              // width
+            200,                // width
             Some((1050, 1450)), // layer bounds
             MaterialId(1),
             NetId::new(1),
@@ -381,8 +378,8 @@ mod tests {
 
         let geom = GeometrySegment::from_line_segment(
             seg,
-            200,           // width
-            None,          // no layer bounds needed for vias
+            200,  // width
+            None, // no layer bounds needed for vias
             MaterialId(1),
             NetId::new(1),
         )

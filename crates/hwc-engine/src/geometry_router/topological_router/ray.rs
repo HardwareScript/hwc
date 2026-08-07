@@ -39,7 +39,7 @@ impl TopologicalRouter {
     /// Returns the first obstacle intersection using the Slab Method.
     ///
     /// v0.1.9.1 BUG FIX: Type-aware bounding box calculation for obstacles.
-    /// 
+    ///
     /// PROBLEM: Previously, all obstacles had `width_nm / 2` subtracted from their
     /// min coordinates and added to max coordinates. This is correct for routed traces
     /// (where start/end are centerline points), but WRONG for solid pours/pads/planes
@@ -73,7 +73,7 @@ impl TopologicalRouter {
             if self.exempt_net_ids.contains(&(seg.net_id.raw() as usize)) {
                 continue;
             }
-            
+
             // v0.1.9.1 NATIVE FIX: Type-aware bounding box calculation
             // Only apply width_nm/2 shift to actual routed trace segments.
             // Substrate layers, planes, and component bboxes already represent
@@ -82,13 +82,13 @@ impl TopologicalRouter {
                 seg.source,
                 crate::geometry_router::spatial_index::SpatialEntitySource::RouteSegment { .. }
             );
-            
+
             let half_width = if is_trace {
                 seg.width_nm / 2
             } else {
                 0 // No shift for solid rectangular pours/pads
             };
-            
+
             let seg_bbox = BoundingBox {
                 min: Point3D::new(
                     seg.start.x.min(seg.end.x) - half_width - inflate,
@@ -101,7 +101,7 @@ impl TopologicalRouter {
                     seg.start.z.max(seg.end.z),
                 ),
             };
-            
+
             if let Some(dist) = self.slab_intersect(origin, direction, &seg_bbox) {
                 if dist >= 0 && dist < min_dist {
                     min_dist = dist;
@@ -153,11 +153,11 @@ impl TopologicalRouter {
         // Use a tolerance of 50nm to handle rounding errors.
         const Z_TOLERANCE_NM: i64 = 50;
         let obstacle_z = aabb.min.z; // For flattened layers, min.z == max.z
-        
+
         if (origin.z - obstacle_z).abs() > Z_TOLERANCE_NM {
             return None; // Ray and obstacle are at different Z levels - no collision
         }
-        
+
         match direction {
             RayDirection::East => {
                 if origin.y < aabb.min.y || origin.y > aabb.max.y {

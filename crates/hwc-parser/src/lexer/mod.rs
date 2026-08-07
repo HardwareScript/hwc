@@ -28,6 +28,6 @@ mod tests;
 // Re-export public API
 pub use error::{span_to_source_span, LexError};
 pub use span::{Span, SpannedToken};
-pub use token::{Token, InterpolatedPart};
+pub use token::{InterpolatedPart, Token};
 pub use tokenizer::Lexer;
 pub use units::*;

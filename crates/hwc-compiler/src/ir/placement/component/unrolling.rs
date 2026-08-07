@@ -34,12 +34,24 @@ fn offset_declarative_coord(
 ) -> hwc_parser::Coordinate {
     match coord {
         hwc_parser::Coordinate::Declarative { x, y, z, span } => {
-            let x_nm =
-                crate::ir::conversions::evaluate_expression_to_nm(x, ctx.symbol_table, ctx.eval_context).unwrap_or(0);
-            let y_nm =
-                crate::ir::conversions::evaluate_expression_to_nm(y, ctx.symbol_table, ctx.eval_context).unwrap_or(0);
-            let z_nm =
-                crate::ir::conversions::evaluate_expression_to_nm(z, ctx.symbol_table, ctx.eval_context).unwrap_or(0);
+            let x_nm = crate::ir::conversions::evaluate_expression_to_nm(
+                x,
+                ctx.symbol_table,
+                ctx.eval_context,
+            )
+            .unwrap_or(0);
+            let y_nm = crate::ir::conversions::evaluate_expression_to_nm(
+                y,
+                ctx.symbol_table,
+                ctx.eval_context,
+            )
+            .unwrap_or(0);
+            let z_nm = crate::ir::conversions::evaluate_expression_to_nm(
+                z,
+                ctx.symbol_table,
+                ctx.eval_context,
+            )
+            .unwrap_or(0);
             hwc_parser::Coordinate::Positional {
                 x: hwc_parser::Expression::Measurement {
                     value: (position.x + x_nm) as f64 / 1_000_000.0,
@@ -228,7 +240,10 @@ pub fn unroll_internal_features(
                         // v0.1.8 CRITICAL FIX: Skip substrate-spanning pad geometry for ASIC components
                         // ASIC pins don't need top/bottom pads - they exist at specific layers
                         // Only PCB through-hole components need substrate-spanning geometry
-                        let is_asic = space.fabrication_constraints.as_ref().is_some_and(|c| c.technology.is_asic());
+                        let is_asic = space
+                            .fabrication_constraints
+                            .as_ref()
+                            .is_some_and(|c| c.technology.is_asic());
 
                         if is_asic {
                             // For ASIC: pads are already handled by internal pours (e.g., metal1 landing pads)
@@ -315,7 +330,9 @@ pub fn unroll_internal_features(
                                 .via.min_annular_ring_nm;
 
                             // v0.2.0: Use technology strategy for contact expansion
-                            let effective_annular_ring = space.technology_strategy.contact_expansion(min_annular_ring_nm);
+                            let effective_annular_ring = space
+                                .technology_strategy
+                                .contact_expansion(min_annular_ring_nm);
                             let pad_diameter_nm = drill_diameter_nm + (2 * effective_annular_ring);
 
                             let circle_segments = space

@@ -24,12 +24,20 @@ pub fn route_automatic(
 ) -> Result<(), IrError> {
     let from_name = crate::ir::routing::helpers::construct_entity_name(&route.from)?;
     let to_name = crate::ir::routing::helpers::construct_entity_name(&route.to)?;
-    
-    eprintln!("[ROUTE_AUTO] Starting automatic routing: {} -> {}", from_name, to_name);
+
+    eprintln!(
+        "[ROUTE_AUTO] Starting automatic routing: {} -> {}",
+        from_name, to_name
+    );
 
     // PHASE 1: CONSTRAINT MANAGER
-    let constraints =
-        super::constraints::evaluate_constraints(space, route, symbol_table, eval_context, profile)?;
+    let constraints = super::constraints::evaluate_constraints(
+        space,
+        route,
+        symbol_table,
+        eval_context,
+        profile,
+    )?;
     let min_clearance_nm = constraints.min_clearance_nm;
     let current_ma = constraints.current_ma;
     let trace_width_nm = constraints.trace_width_nm;
@@ -65,14 +73,30 @@ pub fn route_automatic(
     };
 
     // Resolve target layer override
-    let target_z_nm =
-        super::constraints::resolve_target_layer(route, &space.routing_layer_db, stackup_manager, start_boundary)?;
+    let target_z_nm = super::constraints::resolve_target_layer(
+        route,
+        &space.routing_layer_db,
+        stackup_manager,
+        start_boundary,
+    )?;
 
     eprintln!("[ROUTING] Using perpendicular escape routing with Zero-Gap Contact Lock");
-    eprintln!("[ROUTING]   start_boundary: ({},{},{})", start_boundary.x, start_boundary.y, start_boundary.z);
-    eprintln!("[ROUTING]   goal_boundary: ({},{},{})", goal_boundary.x, goal_boundary.y, goal_boundary.z);
-    eprintln!("[ROUTING]   start_normal: ({},{})", start_normal.x, start_normal.y);
-    eprintln!("[ROUTING]   goal_normal: ({},{})", goal_normal.x, goal_normal.y);
+    eprintln!(
+        "[ROUTING]   start_boundary: ({},{},{})",
+        start_boundary.x, start_boundary.y, start_boundary.z
+    );
+    eprintln!(
+        "[ROUTING]   goal_boundary: ({},{},{})",
+        goal_boundary.x, goal_boundary.y, goal_boundary.z
+    );
+    eprintln!(
+        "[ROUTING]   start_normal: ({},{})",
+        start_normal.x, start_normal.y
+    );
+    eprintln!(
+        "[ROUTING]   goal_normal: ({},{})",
+        goal_normal.x, goal_normal.y
+    );
 
     // PHASE 2: GEOMETRY ROUTER - Net registration
     let net_id = crate::ir::routing::helpers::register_net_for_route(
@@ -99,12 +123,18 @@ pub fn route_automatic(
         "[BOX-MODEL-DEBUG]   Start Boundary (Contact Point): ({}, {}, {})",
         start_boundary.x, start_boundary.y, start_boundary.z
     );
-    eprintln!("[BOX-MODEL-DEBUG]   Start Normal: ({}, {})", start_normal.x, start_normal.y);
+    eprintln!(
+        "[BOX-MODEL-DEBUG]   Start Normal: ({}, {})",
+        start_normal.x, start_normal.y
+    );
     eprintln!(
         "[BOX-MODEL-DEBUG]   Goal Boundary (Contact Point): ({}, {}, {})",
         goal_boundary.x, goal_boundary.y, goal_boundary.z
     );
-    eprintln!("[BOX-MODEL-DEBUG]   Goal Normal: ({}, {})", goal_normal.x, goal_normal.y);
+    eprintln!(
+        "[BOX-MODEL-DEBUG]   Goal Normal: ({}, {})",
+        goal_normal.x, goal_normal.y
+    );
 
     // Resolve material
     let route_z = target_z_nm.unwrap_or(start_boundary.z);
@@ -142,9 +172,12 @@ pub fn route_automatic(
 
     // v0.1.9: Use route_with_perpendicular_escape for Zero-Gap Contact Lock + Mandatory Perpendicular Escape
     let exempt_net_ids = vec![net_id.raw() as usize];
-    
-    eprintln!("[ROUTING] Calling router with escape_stub={}nm", escape_stub_nm);
-    
+
+    eprintln!(
+        "[ROUTING] Calling router with escape_stub={}nm",
+        escape_stub_nm
+    );
+
     let mut path = topo_router
         .route_with_perpendicular_escape(
             start_boundary,
@@ -168,7 +201,10 @@ pub fn route_automatic(
         })?
         .waypoints;
 
-    eprintln!("[PERPENDICULAR ESCAPE DEBUG] Routed path has {} waypoints", path.len());
+    eprintln!(
+        "[PERPENDICULAR ESCAPE DEBUG] Routed path has {} waypoints",
+        path.len()
+    );
     for (i, wp) in path.iter().enumerate().take(4) {
         eprintln!("  path[{}]: ({},{},{})", i, wp.x, wp.y, wp.z);
     }
@@ -188,7 +224,7 @@ pub fn route_automatic(
             path.clone()
         } else {
             // Multi-segment path - extract intermediate points
-            path[1..path.len()-1].to_vec()
+            path[1..path.len() - 1].to_vec()
         };
         path = intermediate_path;
     }
@@ -256,11 +292,16 @@ pub fn route_automatic(
         profile,
     )?;
 
-    eprintln!("🔍 [PIPELINE SEGMENTS] Created {} segments from refined_path with {} points", 
-        segments.len(), refined_path.len());
+    eprintln!(
+        "🔍 [PIPELINE SEGMENTS] Created {} segments from refined_path with {} points",
+        segments.len(),
+        refined_path.len()
+    );
     for (i, seg) in segments.iter().enumerate() {
-        eprintln!("🔍   Segment[{}]: ({},{},{}) -> ({},{},{})", 
-            i, seg.start.x, seg.start.y, seg.start.z, seg.end.x, seg.end.y, seg.end.z);
+        eprintln!(
+            "🔍   Segment[{}]: ({},{},{}) -> ({},{},{})",
+            i, seg.start.x, seg.start.y, seg.start.z, seg.end.x, seg.end.y, seg.end.z
+        );
     }
 
     // Teardrops
@@ -302,17 +343,18 @@ pub fn route_automatic(
                 net_name
             ),
         })?;
-    
-    let route_layer = space
-        .find_layer_at_z(horizontal_seg_z)
-        .ok_or_else(|| IrError::InvalidRouteExpression {
-            expression: "automatic route".into(),
-            reason: format!(
-                "Route for net '{}' at Z={}nm does not match any stackup layer",
-                net_name, horizontal_seg_z
-            ),
-        })?;
-    
+
+    let route_layer =
+        space
+            .find_layer_at_z(horizontal_seg_z)
+            .ok_or_else(|| IrError::InvalidRouteExpression {
+                expression: "automatic route".into(),
+                reason: format!(
+                    "Route for net '{}' at Z={}nm does not match any stackup layer",
+                    net_name, horizontal_seg_z
+                ),
+            })?;
+
     let layer_z_range = (route_layer.z_bottom, route_layer.z_top);
     let route_layer_name = route_layer.name.clone();
 
@@ -324,7 +366,7 @@ pub fn route_automatic(
         net_name.clone(),
         hwc_engine::space::CurrentRating::new(net_actual_current_ma, current_ma),
         Some(layer_z_range),
-        route_layer_name,  // v0.2.2: Explicit layer lineage
+        route_layer_name, // v0.2.2: Explicit layer lineage
     );
 
     eprintln!(
@@ -350,15 +392,17 @@ pub fn route_automatic(
 
     // v0.2.0: Register parent-level route in hierarchical routing database
     // This is the single source of truth for all routing data.
-    eprintln!("[ROUTING DB AUTO] Registering parent route: from='{}', to='{}', net='{}', net_id={:?}",
-        from_component_name, to_component_name, net_name, net_id);
-    
+    eprintln!(
+        "[ROUTING DB AUTO] Registering parent route: from='{}', to='{}', net='{}', net_id={:?}",
+        from_component_name, to_component_name, net_name, net_id
+    );
+
     space.routing_database.register_parent_route(
         analytic_trace,
         from_component_name.clone().into(),
         to_component_name.clone().into(),
     );
-    
+
     space.netlist.connect_pin(start_pin_id, net_id);
     space.netlist.connect_pin(goal_pin_id, net_id);
 

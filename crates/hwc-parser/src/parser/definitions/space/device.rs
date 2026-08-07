@@ -104,9 +104,7 @@ impl crate::parser::Parser {
                                             }
                                         }
                                         crate::lexer::units::Unit::Custom(s) => s.as_str(),
-                                        _ => {
-                                            return Err(self.error("Expected voltage unit"))
-                                        }
+                                        _ => return Err(self.error("Expected voltage unit")),
                                     };
                                     potential = Some(MeasurementValue {
                                         value,
@@ -133,9 +131,7 @@ impl crate::parser::Parser {
                                             }
                                         }
                                         crate::lexer::units::Unit::Custom(s) => s.as_str(),
-                                        _ => {
-                                            return Err(self.error("Expected current unit"))
-                                        }
+                                        _ => return Err(self.error("Expected current unit")),
                                     };
                                     current = Some(MeasurementValue {
                                         value,
@@ -154,9 +150,7 @@ impl crate::parser::Parser {
                                     // Extract unit string - no conversion, store as-is
                                     let unit_str = match &m.unit {
                                         crate::lexer::units::Unit::Custom(s) => s.as_str(),
-                                        _ => {
-                                            return Err(self.error("Expected frequency unit"))
-                                        }
+                                        _ => return Err(self.error("Expected frequency unit")),
                                     };
                                     frequency = Some(MeasurementValue {
                                         value,

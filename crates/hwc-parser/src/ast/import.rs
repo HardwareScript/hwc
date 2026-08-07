@@ -28,7 +28,7 @@ pub struct Import {
 /// Example:
 /// ```hw
 /// import PublicSilicon, Aluminum from materials
-/// 
+///
 /// # Re-export these materials so they're part of this file's public API
 /// export PublicSilicon
 /// export Aluminum

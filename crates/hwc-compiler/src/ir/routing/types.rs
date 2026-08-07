@@ -91,7 +91,7 @@ pub struct ResolvedRoute {
 
 impl ResolvedRoute {
     /// Create a new resolved route with entity endpoints.
-    /// 
+    ///
     /// v0.2.0: layer_name is now REQUIRED for database-driven routing.
     pub fn new(
         net_id: NetId,

@@ -47,7 +47,13 @@ impl Validator {
         self.check_physical_z_in_coordinates(collector, space);
 
         // Check for overlapping components
-        self.check_collisions(collector, &space.components(), space, symbol_table, eval_context);
+        self.check_collisions(
+            collector,
+            &space.components(),
+            space,
+            symbol_table,
+            eval_context,
+        );
 
         // Check for unconnected pins
         self.check_connectivity(collector, space, program);
@@ -438,7 +444,8 @@ impl Validator {
         let z_nm = if matches!(coord, Coordinate::Relative(_)) {
             0
         } else {
-            crate::ir::conversions::evaluate_expression_to_nm(coord.z(), symbol_table, eval_context).unwrap_or(0)
+            crate::ir::conversions::evaluate_expression_to_nm(coord.z(), symbol_table, eval_context)
+                .unwrap_or(0)
         };
 
         (x_nm, y_nm, z_nm)

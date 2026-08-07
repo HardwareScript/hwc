@@ -67,8 +67,10 @@ impl GeometryRouter {
             let goal_coord = segment.to_pin.position;
 
             // Resolve boundary docking ports on-demand using global-space coordinate checks
-            let start_port = self.resolve_boundary_port(entity_graph, start_coord, goal_coord, trace_width);
-            let goal_port = self.resolve_boundary_port(entity_graph, goal_coord, start_coord, trace_width);
+            let start_port =
+                self.resolve_boundary_port(entity_graph, start_coord, goal_coord, trace_width);
+            let goal_port =
+                self.resolve_boundary_port(entity_graph, goal_coord, start_coord, trace_width);
 
             // v0.1.8: Ensure ports are on the same Z layer.
             // In a vector-first system, traces must be coplanar with the pad anchor.

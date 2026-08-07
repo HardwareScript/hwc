@@ -113,8 +113,10 @@ impl<'a> PivbSolver<'a> {
             };
 
             if !self.conductive_material_ids.contains(&layer.material) {
-                eprintln!("[PIVB ISLAND DEBUG] Skipping layer with non-conductive material {} (net={})", 
-                    layer.material, net_name);
+                eprintln!(
+                    "[PIVB ISLAND DEBUG] Skipping layer with non-conductive material {} (net={})",
+                    layer.material, net_name
+                );
                 continue;
             }
 
@@ -168,15 +170,18 @@ impl<'a> PivbSolver<'a> {
             for j in (i + 1)..n {
                 let same_net = islands[i].net_name == islands[j].net_name;
                 let same_material = islands[i].material == islands[j].material;
-                
+
                 // v0.2.1: MATERIAL COMPATIBILITY CHECK
                 // Routes may have incorrect material IDs but should still weld with device terminals
                 // if they're on the same Z-plane. This is a workaround for routing engine material assignment.
-                let z_compatible = islands[i].z_min <= islands[j].z_max && islands[i].z_max >= islands[j].z_min;
-                let compatible = same_material || 
-                    (same_net && z_compatible && 
-                     (islands[i].device_binding.is_some() || islands[j].device_binding.is_some()));
-                
+                let z_compatible =
+                    islands[i].z_min <= islands[j].z_max && islands[i].z_max >= islands[j].z_min;
+                let compatible = same_material
+                    || (same_net
+                        && z_compatible
+                        && (islands[i].device_binding.is_some()
+                            || islands[j].device_binding.is_some()));
+
                 if compatible && same_net && self.islands_overlap_3d(&islands[i], &islands[j]) {
                     let rx = find(&mut parent, i);
                     let ry = find(&mut parent, j);
@@ -433,16 +438,27 @@ impl<'a> PivbSolver<'a> {
             .map(|(idx, island)| (idx, *island))
             .collect();
 
-        eprintln!("[PIVB DEVICE DEBUG] Net '{}': {} device islands, {} non-device islands", 
-            net_name, device_islands.len(), non_device_islands.len());
+        eprintln!(
+            "[PIVB DEVICE DEBUG] Net '{}': {} device islands, {} non-device islands",
+            net_name,
+            device_islands.len(),
+            non_device_islands.len()
+        );
 
         // Connect non-device islands to device terminals if they physically overlap
         for (device_idx, device_island) in &device_islands {
-            eprintln!("[PIVB DEVICE DEBUG]   Device island {}: {:?} bbox=({},{},{}) -> ({},{},{})",
-                device_idx, device_island.device_binding,
-                device_island.bbox.min.x, device_island.bbox.min.y, device_island.bbox.min.z,
-                device_island.bbox.max.x, device_island.bbox.max.y, device_island.bbox.max.z);
-            
+            eprintln!(
+                "[PIVB DEVICE DEBUG]   Device island {}: {:?} bbox=({},{},{}) -> ({},{},{})",
+                device_idx,
+                device_island.device_binding,
+                device_island.bbox.min.x,
+                device_island.bbox.min.y,
+                device_island.bbox.min.z,
+                device_island.bbox.max.x,
+                device_island.bbox.max.y,
+                device_island.bbox.max.z
+            );
+
             for (non_device_idx, non_device_island) in &non_device_islands {
                 let overlaps = self.islands_overlap_3d(device_island, non_device_island);
                 eprintln!("[PIVB DEVICE DEBUG]     Non-device island {}: bbox=({},{},{}) -> ({},{},{}) overlaps={}",
@@ -450,7 +466,7 @@ impl<'a> PivbSolver<'a> {
                     non_device_island.bbox.min.x, non_device_island.bbox.min.y, non_device_island.bbox.min.z,
                     non_device_island.bbox.max.x, non_device_island.bbox.max.y, non_device_island.bbox.max.z,
                     overlaps);
-                
+
                 if overlaps {
                     eprintln!("[PIVB DEVICE DEBUG]       -> Adding implicit edge!");
                     graph.add_edge(*device_idx, *non_device_idx);

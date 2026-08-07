@@ -56,7 +56,7 @@ pub struct LayoutBlock {
     pub internal_pours: Vec<super::space::PourPlacement>,
     /// Default stand-off height for the package (v0.1.7)
     pub standoff: Option<super::Expression>,
-    
+
     // TODO(v0.1.10): Add orientation field for Connection Interface Routing (CIR)
     // pub orientation: Option<Orientation>,  // north, south, east, west
     //
@@ -68,7 +68,6 @@ pub struct LayoutBlock {
     //
     // When None, the system auto-derives from geometry winding.
     // See: hwc-compiler/src/ir/placement/component/mod.rs for usage
-    
     pub span: Span,
 }
 
@@ -118,11 +117,11 @@ pub enum MountingSide {
 /// Used in: `align: center with Pad_A` or `align: x with Pad_A`
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AlignmentAxis {
-    Center,   // Aligns both X and Y to center
-    X,        // Explicit X-axis only
-    Y,        // Explicit Y-axis only
-    Z,        // Explicit Z-axis only
-    Top,      // Semantic edge alignment
+    Center, // Aligns both X and Y to center
+    X,      // Explicit X-axis only
+    Y,      // Explicit Y-axis only
+    Z,      // Explicit Z-axis only
+    Top,    // Semantic edge alignment
     Bottom,
     Left,
     Right,
@@ -166,7 +165,7 @@ pub enum DirectionalConstraint {
 /// - `align: center_y with Pad_A`
 /// - `above Pad_B with spacing: 1.0mm`
 /// - `right_of Pad_C`
-
+///
 /// Target for alignment constraints (v0.2.1: supports expressions)
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum AlignmentTarget {
@@ -328,7 +327,7 @@ impl ComponentName {
             }
             return result.into();
         }
-        
+
         // Handle array indexing
         if let Some(ref idx) = self.index {
             format!("{}[{}]", self.base, idx).into()

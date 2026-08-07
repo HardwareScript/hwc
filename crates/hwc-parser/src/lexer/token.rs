@@ -33,27 +33,27 @@ fn parse_interpolated_identifier(lex: &mut logos::Lexer<Token>) -> Option<Vec<In
     let source = lex.slice();
     let mut parts = Vec::new();
     let mut current_pos = 0;
-    
+
     while current_pos < source.len() {
         // Find the next {
         if let Some(brace_start) = source[current_pos..].find('{') {
             let abs_brace_start = current_pos + brace_start;
-            
+
             // Add literal part before the brace (if any)
             if brace_start > 0 {
                 parts.push(InterpolatedPart::Literal(
-                    source[current_pos..abs_brace_start].to_string()
+                    source[current_pos..abs_brace_start].to_string(),
                 ));
             }
-            
+
             // Find the matching }
             if let Some(brace_end) = source[abs_brace_start..].find('}') {
                 let abs_brace_end = abs_brace_start + brace_end;
-                
+
                 // Extract expression between braces
                 let expr = source[abs_brace_start + 1..abs_brace_end].to_string();
                 parts.push(InterpolatedPart::Expression(expr));
-                
+
                 current_pos = abs_brace_end + 1;
             } else {
                 // Unmatched brace - shouldn't happen with regex, but be safe
@@ -62,14 +62,12 @@ fn parse_interpolated_identifier(lex: &mut logos::Lexer<Token>) -> Option<Vec<In
         } else {
             // No more braces - add remaining literal (if any)
             if current_pos < source.len() {
-                parts.push(InterpolatedPart::Literal(
-                    source[current_pos..].to_string()
-                ));
+                parts.push(InterpolatedPart::Literal(source[current_pos..].to_string()));
             }
             break;
         }
     }
-    
+
     Some(parts)
 }
 
@@ -434,7 +432,7 @@ pub enum Token {
 
     #[token("=")]
     Equals,
-    
+
     #[token("==")]
     DoubleEquals,
 
@@ -495,10 +493,10 @@ pub enum Token {
     /// Interpolated Identifiers (v0.2.1): Modern template-style interpolation
     /// Pattern: Identifier{expr}Literal{expr}...
     /// Example: L1_R{row}_C{col} where row and col are loop variables
-    /// 
+    ///
     /// This must come BEFORE plain Identifier to match interpolated patterns first
     /// The callback parses the entire interpolated identifier and extracts parts
-    /// 
+    ///
     /// Regex breakdown:
     /// - [a-zA-Z_][a-zA-Z0-9_]* = Initial identifier part (required)
     /// - (\{[^}]+\}([a-zA-Z0-9_]+)?)+ = One or more interpolations with optional literal after each
@@ -506,7 +504,7 @@ pub enum Token {
     ///   - ([a-zA-Z0-9_]+)? = Optional literal part (can end with {expr})
     #[regex(r"[a-zA-Z_][a-zA-Z0-9_]*(\{[^}]+\}([a-zA-Z0-9_]+)?)+", priority = 10, callback = parse_interpolated_identifier)]
     InterpolatedIdentifier(Vec<InterpolatedPart>),
-    
+
     /// Identifiers: PascalCase, snake_case, or camelCase
     /// Pattern: starts with letter, contains letters, digits, underscores
     #[regex(r"[a-zA-Z_][a-zA-Z0-9_]*", |lex| lex.slice().to_string())]

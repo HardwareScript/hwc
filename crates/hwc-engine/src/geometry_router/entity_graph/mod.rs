@@ -248,12 +248,20 @@ impl EntityGraph {
 
     /// Iterate over routed segments (net ID and segment list pairs).
     #[inline]
-    pub fn iter_routed_segments(&self) -> impl Iterator<Item = (&NetId, &Vec<crate::geometry::TraceSegment>)> {
-        self.routed_segments.iter().map(|(net_id, segments)| (net_id, segments))
+    pub fn iter_routed_segments(
+        &self,
+    ) -> impl Iterator<Item = (&NetId, &Vec<crate::geometry::TraceSegment>)> {
+        self.routed_segments
+            .iter()
+            .map(|(net_id, segments)| (net_id, segments))
     }
 
     /// Add routed segments for a net.
-    pub fn add_routed_segments(&mut self, net_id: NetId, segments: Vec<crate::geometry::TraceSegment>) {
+    pub fn add_routed_segments(
+        &mut self,
+        net_id: NetId,
+        segments: Vec<crate::geometry::TraceSegment>,
+    ) {
         self.routed_segments.push((net_id, segments));
     }
 }

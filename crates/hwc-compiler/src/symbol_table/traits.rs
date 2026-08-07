@@ -6,7 +6,7 @@ use hwc_parser::{MaterialDefinition, ProfileDefinition};
 // ========== Internal layered lookup trait ==========
 
 /// Trait for extracting values from a SymbolLayer
-/// 
+///
 /// This enables clean, type-safe lookups across the layer hierarchy
 /// without repetitive or_else chains.
 pub(super) trait _LayerLookup<T> {

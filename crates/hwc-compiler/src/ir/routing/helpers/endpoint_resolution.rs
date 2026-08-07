@@ -1,7 +1,6 @@
 use crate::ir::errors::IrError;
 use compact_str::CompactString;
 
-
 /// Human-readable label for a route endpoint.
 pub fn endpoint_label(endpoint: &hwc_parser::RouteEndpointSpec) -> String {
     construct_entity_name(endpoint)
@@ -25,7 +24,7 @@ pub fn construct_entity_name(
             // This gets parsed as ComponentPin but should be treated as SpaceEntity
             let full_name = if let Some(ref index_expr) = component_index {
                 let _index_value = evaluate_index_expression(index_expr)?;
-                format!("{}", component_name)  
+                format!("{}", component_name)
             } else {
                 format!("{}.{}", component_name, pin_name)
             };
@@ -83,8 +82,16 @@ pub fn evaluate_index_expression(expr: &hwc_parser::Expression) -> Result<i64, I
                 BinaryOperator::LessThanOrEqual => Ok(if left_val <= right_val { 1 } else { 0 }),
                 BinaryOperator::GreaterThanOrEqual => Ok(if left_val >= right_val { 1 } else { 0 }),
                 // Boolean operators (treat non-zero as true)
-                BinaryOperator::And => Ok(if left_val != 0 && right_val != 0 { 1 } else { 0 }),
-                BinaryOperator::Or => Ok(if left_val != 0 || right_val != 0 { 1 } else { 0 }),
+                BinaryOperator::And => Ok(if left_val != 0 && right_val != 0 {
+                    1
+                } else {
+                    0
+                }),
+                BinaryOperator::Or => Ok(if left_val != 0 || right_val != 0 {
+                    1
+                } else {
+                    0
+                }),
             }
         }
         hwc_parser::Expression::Unary {
@@ -192,4 +199,3 @@ pub fn resolve_endpoint_entity_ids(
 
     Ok((from_id, to_id))
 }
-

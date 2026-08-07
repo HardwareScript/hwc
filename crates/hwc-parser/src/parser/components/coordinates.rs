@@ -321,10 +321,7 @@ impl crate::parser::Parser {
     }
 
     /// Parse positional coordinate: [X, Y, Z] (or [X, Y] if z_optional)
-    fn parse_positional_coordinate(
-        &mut self,
-        z_optional: bool,
-    ) -> Result<Coordinate, ParseError> {
+    fn parse_positional_coordinate(&mut self, z_optional: bool) -> Result<Coordinate, ParseError> {
         let start_pos = self.current_span().start;
         let x = self.parse_expression()?; // X first
         self.expect(&Token::Comma)?;

@@ -95,7 +95,7 @@ impl GeometryRouter {
                 }
             }
         }
-        
+
         // 3. Check router-generated substrate layers (vias created during this routing session)
         for layer in entity_graph.get_substrate_layers() {
             if !layer.bbox.intersects(&bbox) {

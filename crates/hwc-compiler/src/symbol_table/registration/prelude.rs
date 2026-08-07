@@ -17,7 +17,8 @@ impl SymbolTable {
                 Some((existing.span.start, existing.span.end)),
             ));
         }
-        self.prelude.insert(name_str.into(), Definition::MaterialAlias(def));
+        self.prelude
+            .insert(name_str.into(), Definition::MaterialAlias(def));
         Ok(())
     }
 
@@ -53,7 +54,8 @@ impl SymbolTable {
                 Some((existing.span.start, existing.span.end)),
             ));
         }
-        self.prelude.insert(name_str.into(), Definition::Material(def));
+        self.prelude
+            .insert(name_str.into(), Definition::Material(def));
         Ok(())
     }
 }
