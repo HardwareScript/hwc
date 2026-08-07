@@ -4,7 +4,7 @@ use hwc_parser::{
     BridgeDefinition, ComponentDefinition, InterfaceDefinition, MaterialAliasDefinition,
     MaterialDefinition, MechanicalDefinition, ModuleDefinition, PatternDefinition,
     ProfileDefinition, ShapeDefinition, SignalGroupDefinition, SpaceDefinition,
-    SpiceModelDefinition, StrategyDefinition, TestDefinition, UnitDefinition,
+    SpiceModelDefinition, SubcircuitDefinition, StrategyDefinition, TestDefinition, UnitDefinition,
 };
 
 use super::super::Definition;
@@ -299,5 +299,20 @@ impl SymbolTable {
             .last_mut()
             .unwrap()
             .insert(name_str.into(), Definition::SpiceModel(def));
+    }
+
+    /// Register an imported SPICE subcircuit definition (in HPM layer) (v0.2.2)
+    ///
+    /// v0.3.0: Native typed subcircuit support for PDK compact models
+    /// Stores ALL definitions (exported and private) for proper scoped resolution
+    pub fn register_import_subcircuit(&mut self, def: SubcircuitDefinition) {
+        let name_str = def.name.as_str().to_string();
+        if self.hpm.is_empty() {
+            self.hpm.push(super::super::layer::SymbolLayer::new());
+        }
+        self.hpm
+            .last_mut()
+            .unwrap()
+            .insert(name_str.into(), Definition::Subcircuit(def));
     }
 }

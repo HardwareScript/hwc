@@ -134,9 +134,12 @@ pub fn convert_metadata_to_physics(
     //
     // **v0.2.0 FIX**: Use hierarchical routing database to get all routes (child + parent)
     // with proper provenance tracking instead of mixing entity_graph and analytic_routes.
-    let all_routes = space.routing_database.export_as_routed_segments_with_stackup(
-        &space.stackup_layers,
-        &space.material_registry,
+    //
+    // **v0.2.2 ARCHITECTURAL FIX**: Use direct layer lineage lookup instead of reverse
+    // Z-coordinate guessing. Routes store their layer name; materials come from the
+    // RoutingLayerDatabase, not from spatial stackup queries.
+    let all_routes = space.routing_database.export_as_routed_segments_with_lineage(
+        &space.routing_layer_db,
     );
     
     for (net_id, segments) in &all_routes {

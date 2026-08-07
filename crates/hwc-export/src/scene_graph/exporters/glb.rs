@@ -1,6 +1,6 @@
 //! GLB (glTF binary) export functionality
 
-use crate::scene_graph::materials::get_or_create_material;
+
 use crate::scene_graph::types::Face; // FIXED: Imported Face type for batching
 use crate::scene_graph::types::MaterialNode;
 use crate::scene_graph::types::MeshNode;

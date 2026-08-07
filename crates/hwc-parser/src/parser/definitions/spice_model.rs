@@ -59,7 +59,7 @@ impl super::super::Parser {
         self.skip_whitespace();
 
         // Expect indent for body
-        if let Err(e) = self.expect(&Token::Indent) {
+        if let Err(_e) = self.expect(&Token::Indent) {
             collector.report(ParseError::ExpectedIndent {
                 span: span_to_source_span(&self.current_span()),
                 message: format!("spice_model '{}' body", name.name).into(),
@@ -124,7 +124,7 @@ impl super::super::Parser {
                     // Parse parameters block
                     self.skip_whitespace();
 
-                    if let Err(e) = self.expect(&Token::Indent) {
+                    if let Err(_e) = self.expect(&Token::Indent) {
                         collector.report(ParseError::ExpectedIndent {
                             span: span_to_source_span(&self.current_span()),
                             message: format!("spice_model '{}' parameters block", name.name).into(),

@@ -289,11 +289,32 @@ pub fn route_automatic(
     // Find the Z of the first horizontal segment (start.z == end.z) and look up its
     // layer. Traces can have via-stitch segments at the start/end while still being
     // a single-layer route, so we must not require ALL segments to share the same Z.
-    let layer_z_range = segments
+    //
+    // **v0.2.2 LAYER LINEAGE**: Also extract the layer name for explicit lineage tracking.
+    let horizontal_seg_z = segments
         .iter()
         .find(|s| s.start.z == s.end.z)
-        .and_then(|s| space.find_layer_at_z(s.start.z))
-        .map(|layer| (layer.z_bottom, layer.z_top));
+        .map(|s| s.start.z)
+        .ok_or_else(|| IrError::InvalidRouteExpression {
+            expression: "automatic route".into(),
+            reason: format!(
+                "Route for net '{}' has no horizontal segments - cannot determine routing layer",
+                net_name
+            ),
+        })?;
+    
+    let route_layer = space
+        .find_layer_at_z(horizontal_seg_z)
+        .ok_or_else(|| IrError::InvalidRouteExpression {
+            expression: "automatic route".into(),
+            reason: format!(
+                "Route for net '{}' at Z={}nm does not match any stackup layer",
+                net_name, horizontal_seg_z
+            ),
+        })?;
+    
+    let layer_z_range = (route_layer.z_bottom, route_layer.z_top);
+    let route_layer_name = route_layer.name.clone();
 
     let analytic_trace = hwc_engine::AnalyticTrace::with_layer_z_range(
         net_id,
@@ -302,7 +323,8 @@ pub fn route_automatic(
         copper_id,
         net_name.clone(),
         hwc_engine::space::CurrentRating::new(net_actual_current_ma, current_ma),
-        layer_z_range,
+        Some(layer_z_range),
+        route_layer_name,  // v0.2.2: Explicit layer lineage
     );
 
     eprintln!(

@@ -69,7 +69,7 @@ export material Silicon_Dioxide:
     process: deposited
     properties:
         color: "#E0E8FF"  # Light blue-white
-        opacity: 1.0      # Fully opaque - solid view
+        opacity: 0      # Fully opaque - solid view
         relative_permittivity: 3.9
 
 # Air - Default dielectric for spacing

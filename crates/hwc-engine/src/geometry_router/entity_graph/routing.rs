@@ -171,8 +171,7 @@ impl EntityGraph {
     pub fn sync_from_routing_database(
         &mut self,
         routing_database: &crate::routing_database::HierarchicalRoutingDatabase,
-        stackup_layers: &[crate::space::StackupLayer],
-        material_registry: &crate::material::MaterialRegistry,
+        routing_layer_db: &crate::routing_layer_database::RoutingLayerDatabase,
     ) {
         eprintln!("[ENTITY_GRAPH SYNC] Synchronizing routed_segments from routing database");
         eprintln!("[ENTITY_GRAPH SYNC]   Before sync: {} route groups", self.routed_segments.len());
@@ -181,9 +180,9 @@ impl EntityGraph {
         self.routed_segments.clear();
 
         // REBUILD from database export with proper per-segment material lookup
-        let database_routes = routing_database.export_as_routed_segments_with_stackup(
-            stackup_layers,
-            material_registry,
+        // **v0.2.2**: Use direct layer lineage lookup instead of reverse Z-coordinate guessing
+        let database_routes = routing_database.export_as_routed_segments_with_lineage(
+            routing_layer_db,
         );
         
         eprintln!("[ENTITY_GRAPH SYNC]   Database provided {} route groups", database_routes.len());

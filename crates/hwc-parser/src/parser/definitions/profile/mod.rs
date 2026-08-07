@@ -256,6 +256,18 @@ impl super::super::Parser {
                     description = self.expect_string().ok();
                     self.skip_whitespace();
                 }
+                "substrate_net" => {
+                    // v0.2.2 Stage 1: Substrate/bulk net for parasitic capacitance
+                    // substrate_net: BULK or substrate_net: GND
+                    if let Ok(net_ident) = self.expect_identifier() {
+                        self.skip_whitespace();
+                        // Store in other for now, will be properly integrated
+                        other.insert("substrate_net".into(), net_ident.name.to_string());
+                    } else {
+                        let err = self.error("Expected net name after 'substrate_net:' (e.g., BULK, SUB, GND)");
+                        collector.report(err);
+                    }
+                }
                 "thermal" => {
                     if let Err(e) = self.expect(&Token::Newline) {
                         collector.report(e);
@@ -404,6 +416,9 @@ impl super::super::Parser {
 
         let end_pos = self.previous_span().end;
 
+        // Extract substrate_net from other HashMap (v0.2.2 Stage 1)
+        let substrate_net = other.get("substrate_net").map(|s| s.as_str().into());
+
         Some(ProfileDefinition {
             name,
             is_exported,
@@ -421,6 +436,7 @@ impl super::super::Parser {
             bridges,
             vias: vias_list,
             technology,
+            substrate_net,
             other,
             span: Span::new(start_pos, end_pos),
         })

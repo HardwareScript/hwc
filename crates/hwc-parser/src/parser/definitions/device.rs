@@ -274,6 +274,7 @@ impl super::super::Parser {
         let mut parameters: Option<SmallVec<[CompactString; 4]>> = None;
         let mut model_name: Option<CompactString> = None;
         let mut parameter_style: Option<SpiceParameterStyle> = None;
+        let mut subcircuit: Option<CompactString> = None;
         
         while !self.check(&Token::Dedent) && !self.is_at_end() {
             self.skip_whitespace();
@@ -282,11 +283,16 @@ impl super::super::Parser {
                 break;
             }
             
-            if let Some(current) = self.current() {
-                if let Token::Identifier(field_name) = &current.token {
-                    match field_name.as_str() {
+            // Use expect_identifier_string to handle keywords-as-identifiers
+            let field_name = match self.expect_identifier_string() {
+                Ok(name) => name,
+                Err(e) => {
+                    return Err(e);
+                }
+            };
+            
+            match field_name.as_str() {
                         "prefix" => {
-                            self.advance();
                             self.expect(&Token::Colon)?;
                             self.skip_whitespace();
                             
@@ -306,26 +312,22 @@ impl super::super::Parser {
                         }
                         
                         "terminal_order" => {
-                            self.advance();
                             self.expect(&Token::Colon)?;
                             terminal_order = Some(self.parse_identifier_list()?);
                         }
                         
                         "parameters" => {
-                            self.advance();
                             self.expect(&Token::Colon)?;
                             parameters = Some(self.parse_identifier_list()?);
                         }
                         
                         "model" => {
-                            self.advance();
                             self.expect(&Token::Colon)?;
                             self.skip_whitespace();
                             model_name = Some(self.expect_identifier()?.name);
                         }
                         
                         "parameter_style" => {
-                            self.advance();
                             self.expect(&Token::Colon)?;
                             self.skip_whitespace();
                             
@@ -342,17 +344,19 @@ impl super::super::Parser {
                             });
                         }
                         
+                        "subcircuit" => {
+                            self.expect(&Token::Colon)?;
+                            self.skip_whitespace();
+                            subcircuit = Some(self.expect_identifier()?.name);
+                        }
+                        
                         _ => {
                             return Err(self.error(&format!(
-                                "Unknown spice field: '{}'. Expected: prefix, terminal_order, parameters, parameter_style, or model",
+                                "Unknown spice field: '{}'. Expected: prefix, terminal_order, parameters, parameter_style, model, or subcircuit",
                                 field_name
                             )));
                         }
                     }
-                } else {
-                    return Err(self.error("Expected spice field identifier"));
-                }
-            }
             
             self.skip_whitespace();
         }
@@ -374,11 +378,12 @@ impl super::super::Parser {
             parameters,
             model_name,
             parameter_style,
+            subcircuit,
         })
     }
 
     /// Parse identifier list: [A, B, C]
-    fn parse_identifier_list(&mut self) -> Result<SmallVec<[CompactString; 4]>, ParseError> {
+    pub(crate) fn parse_identifier_list(&mut self) -> Result<SmallVec<[CompactString; 4]>, ParseError> {
         let mut result = SmallVec::new();
         
         self.expect(&Token::OpenBracket)?;

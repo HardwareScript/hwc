@@ -3,6 +3,15 @@
 //! Generates .drl files for PCB manufacturing.
 //! Excellon format is the industry standard for drill hole locations.
 //!
+//! **Manufacturing Technology Differences:**
+//! - **PCB (Printed Circuit Board):** Mechanical/laser drilling creates holes
+//!   → Requires Excellon drill files (.drl) with X/Y coordinates and tool sizes
+//! - **IC/ASIC (Integrated Circuit):** Photolithography etches vias through masks
+//!   → Uses GDSII (.gds) format where vias are mask patterns, not drill coordinates
+//!
+//! This module only exports drill files for PCB technology. For IC/ASIC designs,
+//! via information is exported through DXF (which can be converted to GDSII).
+//!
 //! **GAP1 Section 3.1, 4.2: Drill File Export**
 //! **GAP1 Section 5.3: HDI Via Support**
 
@@ -239,13 +248,31 @@ fn nm_to_inches(nm: i64) -> f64 {
 ///
 /// Extracts all vias from the routed space and generates an Excellon drill file.
 ///
+/// **IC vs PCB Manufacturing:**
+/// - PCB: Mechanical drilling creates holes (Excellon drill files needed)
+/// - IC/ASIC: Photolithography etches vias (GDSII masks, no drill files)
+///
+/// This function only generates drill files for PCB technology.
+/// For IC/ASIC designs, drill file export is skipped since vias are part
+/// of the mask layers (exported via DXF → GDSII workflow).
+///
 /// # Arguments
 /// * `space` - Hardware space with routed nets and vias
 /// * `output_dir` - Output directory for drill file
 ///
 /// # Returns
-/// Result indicating success or error
+/// Result indicating success or error (always succeeds for IC)
 pub fn export(space: &HardwareSpace, output_dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    use hwc_types::Technology;
+
+    // IC/ASIC: Skip drill file generation
+    // Vias are etched through photolithography masks (GDSII), not drilled
+    if space.technology_strategy == Technology::Asic {
+        // Silently skip - this is expected behavior for IC designs
+        return Ok(());
+    }
+
+    // PCB: Generate drill file for mechanical drilling
     // Create drill/ subdirectory for clean organization
     let drill_dir = output_dir.join("drill");
     std::fs::create_dir_all(&drill_dir)?;

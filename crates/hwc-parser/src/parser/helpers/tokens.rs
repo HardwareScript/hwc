@@ -72,6 +72,7 @@ impl Parser {
                 Token::With => Some("with".into()),
                 Token::Inside => Some("inside".into()),
                 Token::Region => Some("region".into()),
+                Token::Subcircuit => Some("subcircuit".into()),
                 _ => None,
             };
 

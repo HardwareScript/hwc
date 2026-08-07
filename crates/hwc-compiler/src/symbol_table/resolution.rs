@@ -7,7 +7,8 @@ use hwc_parser::{
     BridgeDefinition, ComponentDefinition, ConstDefinition, DeviceDefinition,
     InterfaceDefinition, MaterialDefinition, MechanicalDefinition,
     ModuleDefinition, PatternDefinition, ProfileDefinition, ShapeDefinition,
-    SignalGroupDefinition, SpaceDefinition, StrategyDefinition, TestDefinition, UnitDefinition,
+    SignalGroupDefinition, SpaceDefinition, SpiceModelDefinition, SubcircuitDefinition,
+    StrategyDefinition, TestDefinition, UnitDefinition,
 };
 
 impl SymbolTable {
@@ -230,6 +231,32 @@ impl SymbolTable {
         }
     }
 
+    /// Get a SPICE model definition by name
+    pub fn get_spice_model(&self, name: &str) -> Result<&SpiceModelDefinition, SymbolError> {
+        match self.get_symbol(name) {
+            Some(Definition::SpiceModel(model)) => Ok(model),
+            Some(other) => Err(SymbolError::type_mismatch(
+                name,
+                "spice_model",
+                other.kind_str(),
+            )),
+            None => Err(SymbolError::undefined(name.into(), "spice_model", None)),
+        }
+    }
+
+    /// Get a SPICE subcircuit definition by name
+    pub fn get_subcircuit(&self, name: &str) -> Result<&SubcircuitDefinition, SymbolError> {
+        match self.get_symbol(name) {
+            Some(Definition::Subcircuit(subckt)) => Ok(subckt),
+            Some(other) => Err(SymbolError::type_mismatch(
+                name,
+                "subcircuit",
+                other.kind_str(),
+            )),
+            None => Err(SymbolError::undefined(name.into(), "subcircuit", None)),
+        }
+    }
+
     /// Helper methods for specific checks
     pub fn has_material(&self, name: &str) -> bool {
         matches!(
@@ -292,6 +319,14 @@ impl SymbolTable {
 
     pub fn has_shape(&self, name: &str) -> bool {
         matches!(self.get_symbol(name), Some(Definition::Shape(_)))
+    }
+
+    pub fn has_spice_model(&self, name: &str) -> bool {
+        matches!(self.get_symbol(name), Some(Definition::SpiceModel(_)))
+    }
+
+    pub fn has_spice_subcircuit(&self, name: &str) -> bool {
+        matches!(self.get_symbol(name), Some(Definition::Subcircuit(_)))
     }
 
     /// Collect all materials (for database population)

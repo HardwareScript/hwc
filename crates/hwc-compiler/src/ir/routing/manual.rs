@@ -158,9 +158,9 @@ pub fn route_manual(
     // v0.1.7: Resolve material dynamically from the stackup layer
     // This ensures that manual traces merge perfectly with via rings/pours on the same layer.
     let first_wp_z = waypoints.first().map(|p| p.z).unwrap_or(0);
-    let material_name: compact_str::CompactString = (|| -> Option<compact_str::CompactString> {
+    let (material_name, route_layer_name): (compact_str::CompactString, compact_str::CompactString) = (|| -> Option<(compact_str::CompactString, compact_str::CompactString)> {
         let layer_name = stackup_manager.get_layer_name_at_z(first_wp_z)?;
-        profile
+        let material = profile
             .and_then(|p| p.stackup.as_ref())
             .and_then(|stackup| {
                 stackup
@@ -168,7 +168,8 @@ pub fn route_manual(
                     .iter()
                     .find(|l| l.name.name == layer_name)
                     .map(|l| l.material.clone())
-            })
+            })?;
+        Some((material, layer_name.into()))
     })()
     .ok_or_else(|| IrError::InvalidRouteExpression {
         expression: "manual route".into(),
@@ -302,6 +303,7 @@ pub fn route_manual(
         net_name.clone(),
         hwc_engine::space::CurrentRating::new(net_actual_current_ma, current_ma),
         layer_z_range,
+        route_layer_name,  // v0.2.2: Explicit layer lineage
     );
 
     // v0.2.0: Register parent-level route in hierarchical routing database

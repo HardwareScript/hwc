@@ -101,6 +101,7 @@ impl ParallelRouter {
                 start: trace_seg.start,
                 end: trace_seg.end,
                 layer: meta.bbox.min.z,
+                device_binding: None, // Component instances don't have device bindings yet
             });
         }
 

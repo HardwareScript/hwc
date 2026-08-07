@@ -54,7 +54,7 @@ pub enum SpiceParameterStyle {
 /// ALL fields are REQUIRED - no defaults, no guessing, fail loudly if missing.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SpiceExportInfo {
-    /// SPICE device prefix (R for resistor, C for capacitor, M for MOSFET, etc.)
+    /// SPICE device prefix (R for resistor, C for capacitor, M for MOSFET, X for subcircuit, etc.)
     pub prefix: char,
     /// Ordered list of terminal names for SPICE card
     /// Example: ["A", "B"] for resistor, ["drain", "gate", "source", "bulk"] for MOSFET
@@ -67,6 +67,10 @@ pub struct SpiceExportInfo {
     /// Parameter formatting style - REQUIRED, no default
     /// User must explicitly declare: positional or named
     pub parameter_style: SpiceParameterStyle,
+    /// Optional PDK subcircuit name (for wrapped devices like sky130_fd_pr__res_high_po)
+    /// If present, overrides prefix and emits X prefix with subcircuit call
+    /// Example: "sky130_fd_pr__res_high_po" → "XR1 n1 n2 nGND sky130_fd_pr__res_high_po W=1.0u L=4.0u"
+    pub subcircuit: Option<CompactString>,
 }
 
 impl DeviceDefinition {

@@ -1,4 +1,3 @@
-use crate::netlist::NetId;
 use super::super::super::types::{NetRoute, RoutedNet, RoutingError};
 use super::super::core::GeometryRouter;
 use crate::geometry::BoundingBox;
@@ -95,6 +94,7 @@ impl GeometryRouter {
                     start: hwc_physics::geometry::Point3D::new(meta.bbox.min.x, meta.bbox.min.y, z_min),
                     end: hwc_physics::geometry::Point3D::new(meta.bbox.max.x, meta.bbox.max.y, z_max),
                     layer: z_min,
+                    device_binding: None, // Component keepouts don't have device bindings
                 });
                 seg_id += 1;
             }
@@ -112,50 +112,47 @@ impl GeometryRouter {
                 eprintln!("[OBSTACLE-DEBUG]     sub[{}] net={:?} bbox=({},{},{})-({},{},{})", i, sub_layer.net, sub_layer.bbox.min.x, sub_layer.bbox.min.y, sub_layer.bbox.min.z, sub_layer.bbox.max.x, sub_layer.bbox.max.y, sub_layer.bbox.max.z);
             }
             for (substrate_idx, sub_layer) in substrate_layers.iter().enumerate() {
-                let sub_net_id = sub_layer.net;
+                // v0.2.3: Use centralized obstacle query system (NO inline conditionals!)
+                let route_context = crate::geometry_router::obstacle_query::RouteContext {
+                    net_id: active_route.net_id,
+                    start: active_route.start,
+                    goal: active_route.goal,
+                    trace_width_nm: self.trace_width_nm,
+                };
 
-              
-                // Same-net pours are not obstacles (we can route over our own pours)
-                // BUT: net_id = 0 pours (keepout zones) are ALWAYS obstacles
-                if sub_net_id != NetId::UNCONNECTED && sub_net_id == active_route.net_id {
-                  
-                    continue;
-                }
-
-                // DESTINATION PAD EXEMPTION (v0.1.9 C-Space fix):
-                // The goal anchor is placed at pad_edge - trace_width/2, so it sits just
-                // OUTSIDE the raw bbox. After Minkowski inflation by trace_width/2 the
-                // destination pad's inflated boundary swallows the goal → EndPointOutsideSpace.
-                // Fix: use trace_width/2 as a proximity margin. If the goal (or start) lands
-                // within that margin of the bbox boundary, this layer is an endpoint pad and
-                // must be exempted from the obstacle list.
-                // Only keepout zones (net_id = 0) are always obstacles regardless.
-                if sub_net_id != NetId::UNCONNECTED {
-                    let proximity = self.trace_width_nm / 2;
-                    let goal = active_route.goal;
-                    let bbox = &sub_layer.bbox;
-                    // Expanded bbox by proximity margin on all XY sides (Z uses raw bounds)
-                    if goal.x >= bbox.min.x - proximity
-                        && goal.x <= bbox.max.x + proximity
-                        && goal.y >= bbox.min.y - proximity
-                        && goal.y <= bbox.max.y + proximity
-                        && goal.z >= bbox.min.z
-                        && goal.z <= bbox.max.z
-                    {
-                       
+                use crate::geometry_router::obstacle_query::{ObstacleDecision, ObstacleQuery};
+                
+                match ObstacleQuery::is_obstacle_for(sub_layer, &route_context) {
+                    Ok(ObstacleDecision::Exempt { reason }) => {
+                        eprintln!(
+                            "[OBSTACLE-DEBUG]     sub[{}] EXEMPTED: {:?}",
+                            substrate_idx, reason
+                        );
                         continue;
                     }
-                    // Also exempt if the start point is docking into this pad (different net-id source)
-                    let start = active_route.start;
-                    if start.x >= bbox.min.x - proximity
-                        && start.x <= bbox.max.x + proximity
-                        && start.y >= bbox.min.y - proximity
-                        && start.y <= bbox.max.y + proximity
-                        && start.z >= bbox.min.z
-                        && start.z <= bbox.max.z
-                    {
-                       
-                        continue;
+                    Ok(ObstacleDecision::IsObstacle { reason }) => {
+                        eprintln!(
+                            "[OBSTACLE-DEBUG]     sub[{}] IS OBSTACLE: {:?}",
+                            substrate_idx, reason
+                        );
+                        // Continue to obstacle insertion below
+                    }
+                    Err(err) => {
+                        // FAIL LOUDLY: Obstacle logic is ambiguous
+                        eprintln!(
+                            "[OBSTACLE-DEBUG] ERROR: Obstacle query failed for sub[{}]: {}",
+                            substrate_idx, err
+                        );
+                        eprintln!(
+                            "[OBSTACLE-DEBUG]   Layer: net={:?}, type={:?}, bbox={:?}",
+                            sub_layer.net, sub_layer.layer_type, sub_layer.bbox
+                        );
+                        panic!(
+                            "Routing obstacle query encountered unhandled state. This is a compiler bug.\n\
+                             Fix the obstacle query system to handle this case explicitly.\n\
+                             Error: {}",
+                            err
+                        );
                     }
                 }
 
@@ -169,12 +166,18 @@ impl GeometryRouter {
                         index: substrate_idx,
                     },
                     segment_id: stable_segment_id,
-                    net_id: sub_net_id,
+                    net_id: sub_layer.net, // v0.2.3: Use sub_layer.net directly
                     width_nm: 0,
                     thickness_nm: sub_layer.bbox.max.z - sub_layer.bbox.min.z,
                     start: sub_layer.bbox.min,
                     end: sub_layer.bbox.max,
                     layer: sub_layer.bbox.min.z,
+                    device_binding: sub_layer.device_binding.as_ref().map(|(dev, term)| {
+                        hwc_physics::connectivity::DeviceBinding {
+                            device_name: dev.as_str().into(),
+                            terminal: term.as_str().into(),
+                        }
+                    }), // v0.2.2: Convert (String, String) to DeviceBinding
                 });
                 seg_id += 1;
             }
@@ -252,6 +255,7 @@ impl GeometryRouter {
                     start: segment.start,
                     end: segment.end,
                     layer: segment.start.z,
+                    device_binding: None, // Routed traces don't have device bindings
                 });
                 seg_id += 1;
             }

@@ -113,22 +113,29 @@ impl RoutingLayerDatabase {
             // **v0.2.1 FIX: Data-driven routing Z assignment**
             // Base layers (active, poly) only connect to vias from above → route at z_top
             // Interconnect layers (metal1+) connect to vias from below → route at z_bottom
+            //
+            // **v0.2.2 BOUNDARY FIX**: Routes must be strictly inside routable layers, not on boundaries.
+            // Layer boundaries may be shared with adjacent dielectric layers, causing material lookup
+            // ambiguity. We use the layer centerline to ensure deterministic material assignment.
             let routing_z = if is_routable {
                 routable_layer_count += 1;
+                let layer_centerline = (layer.z_bottom + layer.z_top) / 2;
                 if routable_layer_count <= 2 {
                     // Base/Semiconductor layers: vias connect from above
+                    // Route at centerline to avoid boundary ambiguity
                     eprintln!(
-                        "[ROUTING LAYER DB] Layer '{}' (#{}) is BASE layer: routing_z = z_top = {}nm",
-                        layer.name, routable_layer_count, layer.z_top
+                        "[ROUTING LAYER DB] Layer '{}' (#{}) is BASE layer: routing_z = centerline = {}nm (z_bottom={}nm, z_top={}nm)",
+                        layer.name, routable_layer_count, layer_centerline, layer.z_bottom, layer.z_top
                     );
-                    layer.z_top
+                    layer_centerline
                 } else {
                     // Interconnect layers: vias connect from below
+                    // Route at centerline to avoid boundary ambiguity
                     eprintln!(
-                        "[ROUTING LAYER DB] Layer '{}' (#{}) is INTERCONNECT layer: routing_z = z_bottom = {}nm",
-                        layer.name, routable_layer_count, layer.z_bottom
+                        "[ROUTING LAYER DB] Layer '{}' (#{}) is INTERCONNECT layer: routing_z = centerline = {}nm (z_bottom={}nm, z_top={}nm)",
+                        layer.name, routable_layer_count, layer_centerline, layer.z_bottom, layer.z_top
                     );
-                    layer.z_bottom
+                    layer_centerline
                 }
             } else {
                 // Non-routable layers use z_bottom (doesn't matter since they won't be routed)

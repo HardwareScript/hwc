@@ -35,7 +35,7 @@ impl super::super::super::Parser {
         };
 
         // Parse optional parameters: (val: Measurement, tol: Measurement)
-        let parameters = if self.check(&Token::OpenParen) {
+        let parameters: SmallVec<[ComponentParameter; 4]> = if self.check(&Token::OpenParen) {
             self.advance();
             match self.parse_component_parameters() {
                 Ok(params) => {

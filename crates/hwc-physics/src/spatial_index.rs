@@ -25,6 +25,8 @@ pub struct IndexedSegment {
     pub start: Point3D,
     pub end: Point3D,
     pub layer: i64,
+    /// Device terminal binding (v0.2.2) - if present, this segment is part of a device terminal
+    pub device_binding: Option<crate::connectivity::DeviceBinding>,
 }
 
 impl IndexedSegment {
@@ -58,6 +60,7 @@ impl IndexedSegment {
             start: segment.start,
             end: segment.end,
             layer,
+            device_binding: None, // Default to no device binding
         }
     }
 
@@ -390,6 +393,7 @@ impl DynamicSpatialIndex {
                 start: bbox.min,
                 end: bbox.max,
                 layer: bbox.min.z,
+                device_binding: layer.device_binding.clone(), // v0.2.2: Propagate device binding
             });
         }
 
@@ -409,6 +413,7 @@ impl DynamicSpatialIndex {
                 start: bbox.min,
                 end: bbox.max,
                 layer: bbox.min.z,
+                device_binding: None, // Routes don't have device bindings
             });
         }
 

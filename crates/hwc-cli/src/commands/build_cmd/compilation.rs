@@ -199,6 +199,12 @@ fn build_symbol_table(
             hwc_parser::Definition::Shape(shape) => {
                 symbol_table.register_shape(collector, shape.clone());
             }
+            hwc_parser::Definition::SpiceModel(spice_model) => {
+                symbol_table.register_spice_model(collector, spice_model.clone());
+            }
+            hwc_parser::Definition::Subcircuit(subcircuit) => {
+                symbol_table.register_subcircuit(collector, subcircuit.clone());
+            }
             _ => {}
         }
     }

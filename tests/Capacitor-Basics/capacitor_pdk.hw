@@ -1,7 +1,7 @@
 # capacitor_pdk.hw - Process Design Kit for Capacitor Testing
 # Simplified PDK focused on parallel-plate capacitors (MIM structures)
 import * from @std/primitives/units
-import Polysilicon, Aluminum, Tungsten, Titanium_Silicide, Silicon_Dioxide, Air from "./materials"
+import Polysilicon, Aluminum, Tungsten, Titanium_Silicide, Silicon_Dioxide, Air, MIMCap from "./materials"
 
 export Polysilicon
 export Aluminum
@@ -9,35 +9,54 @@ export Tungsten
 export Titanium_Silicide
 export Silicon_Dioxide
 export Air
+export MIMCap
 
 # Define square contact shape for vias
 export shape SquareContact(width: Measurement):
     geometry:
         Rectangle(width: width, height: width)
 
-# Define the bridge from polysilicon to metal using silicide + tungsten
+# Define bridges for layer transitions
 export bridge Polysilicon to Aluminum:
     interface: Titanium_Silicide
     thickness: 5nm
     fill: Tungsten
 
-# Flattened profile for 2D capacitor testing
-# Critical: d1 layer (SiO2) is 10nm thick - this is the capacitor dielectric!
+export bridge Aluminum to MIMCap:
+    interface: Titanium_Silicide
+    thickness: 2nm
+    fill: Tungsten
+
+export bridge MIMCap to Aluminum:
+    interface: Titanium_Silicide
+    thickness: 2nm
+    fill: Tungsten
+
+# MIM Capacitor profile - Matches SiliWiz tutorial structure
+# Critical: mimcap_dielectric layer is 5nm thick - optimized for high capacitance!
 # For C = ε₀εᵣ(A/d), thin dielectric = higher capacitance
-export profile Capacitor_Flattened:
+export profile Capacitor_MIM:
     technology: "ASIC"
     
     stackup:
-        polyres:    [material: Polysilicon,      thickness: 10nm, routable: true]   # Z: 0-10nm   (Bottom Plate)
-        d1:         [material: Silicon_Dioxide,  thickness: 10nm, routable: false]  # Z: 10-20nm  (Dielectric!)
-        metal1:     [material: Aluminum,         thickness: 10nm, routable: true]   # Z: 20-30nm  (Top Plate)
+        metal1:            [material: Aluminum,         thickness: 20nm, routable: true]   # Z: 0-20nm   (Bottom Plate)
+        mimcap_dielectric: [material: Silicon_Dioxide,  thickness: 5nm,  routable: false]  # Z: 20-25nm  (Thin Dielectric!)
+        mimcap:            [material: MIMCap,           thickness: 15nm, routable: true]   # Z: 25-40nm  (Top Capacitor Plate)
+        d2:                [material: Silicon_Dioxide,  thickness: 30nm, routable: false]  # Z: 40-70nm  (Inter-metal Dielectric)
+        metal2:            [material: Aluminum,         thickness: 30nm, routable: true]   # Z: 70-100nm (Top Metal Layer)
 
     via:
         min_diameter: 200nm
         min_annular_ring: 50nm
         min_spacing: 300nm
         shape: SquareContact
-        contact_depth: 50nm
+        contact_depth: 30%  # Global default for capacitor contacts
+        
+        # v0.2.1: Material-specific penetration depths for capacitor structures
+        # Shallow penetration preserves plate geometry and uniform E-field
+        material_contact_depths:
+            Aluminum: 30%      # Shallow penetration into top plate
+            Polysilicon: 30%   # Shallow penetration into bottom plate
 
     trace:
         min_width: 200nm
@@ -62,7 +81,7 @@ export profile Capacitor_Flattened:
 
     layer:
         min_thickness: 5nm
-        allowed_conductors: [Aluminum, Polysilicon]
+        allowed_conductors: [Aluminum, MIMCap]
         allowed_dielectrics: [Silicon_Dioxide, Air]
 
     routing:
@@ -81,9 +100,9 @@ export profile Capacitor_Flattened:
         routing_style: auto
         escape_stub: 0nm
 
-# 3D profile for capacitor with realistic layer thicknesses
-# Similar to Skywater 130nm process
-export profile Capacitor_3D:
+# Legacy profile for backward compatibility (poly-based capacitors)
+# Not recommended - use Capacitor_MIM for better performance
+export profile Capacitor_Legacy:
     technology: "ASIC"
     
     stackup:
@@ -96,7 +115,13 @@ export profile Capacitor_3D:
         min_annular_ring: 50nm
         min_spacing: 400nm
         shape: SquareContact
-        contact_depth: 100nm
+        contact_depth: 30%  # Global default for capacitor contacts
+        
+        # v0.2.1: Material-specific penetration depths for capacitor structures
+        # Shallow penetration preserves plate geometry and uniform E-field
+        material_contact_depths:
+            Aluminum: 30%      # Shallow penetration into top plate
+            Polysilicon: 30%   # Shallow penetration into bottom plate
 
     trace:
         min_width: 300nm

@@ -67,32 +67,25 @@ pub fn validate_alignment(
         }
 
         // Extract physical netlist from geometry
-        use compact_str::CompactString;
-        use hwc_export::device_extractor::DeviceExtractor;
-        let mut device_extractor = DeviceExtractor::new(space, symbol_table);
+        // **v0.2.2: Use device_instances from compiler instead of re-extracting**
+        // The compiler already discovered devices during populate_device_instances(),
+        // so we just convert that to PhysicalNetlist format for alignment/export.
+        let extracted_netlist = hwc_compiler::ir::device_registry::device_instances_to_physical_netlist(
+            space,
+            Some(space_def),
+            Some(symbol_table),
+        );
+        
+        println!("   ✅ Physical netlist extracted: {} devices", extracted_netlist.devices.len());
 
-        // Extract module definition for intent-based device extraction
-        let module_def = ast.definitions.iter().find_map(|def| {
+        // Extract module definition for alignment validation
+        let _module_def = ast.definitions.iter().find_map(|def| {
             if let hwc_parser::Definition::Module(module) = def {
                 Some(module)
             } else {
                 None
             }
         });
-
-        // println!($3"[DEBUG] About to call extract_devices_with_module at {:.2}ms",
-        //    start_time.elapsed().as_secs_f64() * 1000.0
-        //  );
-        let extracted_netlist = device_extractor
-            .extract_devices_with_module(module_def)
-            .map_err(|errors| {
-                let error_messages: Vec<CompactString> =
-                    errors.iter().map(|e| e.to_string().into()).collect();
-                miette::miette!("Device extraction failed:\n{}", error_messages.join("\n"))
-            })?;
-        // println!($3"[DEBUG] Device extraction complete at {:.2}ms",
-        //     start_time.elapsed().as_secs_f64() * 1000.0
-        //  );
 
         // Run alignment validation
         // println!($3"[DEBUG] Running alignment validation...");

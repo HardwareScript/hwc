@@ -102,16 +102,14 @@ space Serpentine_Resistor_Space implements SerpentineResistor:
         at: [x: 9.5um, y: 10.0um]
 
     # Vias connecting contacts to polysilicon
-    add contact(Titanium_Silicide) named Via_In spanning layer: polyres to metal1:
+    add contact(Tungsten) named Via_In spanning layer: polyres to metal1:
         net: In
         diameter: 400nm
-        plating_thickness: 5nm
         align: center with Contact_In
 
-    add contact(Titanium_Silicide) named Via_Out spanning layer: polyres to metal1:
+    add contact(Tungsten) named Via_Out spanning layer: polyres to metal1:
         net: Out
         diameter: 400nm
-        plating_thickness: 5nm
         align: center with Contact_Out
 
     # ========================================================================

@@ -15,6 +15,9 @@ impl super::super::super::Parser {
         let mut default_via_fill = None;
         let mut shape = None;
         let mut contact_depth = None;
+        let mut material_contact_depths = None;
+        let mut min_contact_depth = None;
+        let mut max_contact_depth = None;
         // v0.1.7 ASIC Extensions
         let mut enclosures = None;
         let mut allow_stacked_vias = None;
@@ -60,7 +63,21 @@ impl super::super::super::Parser {
                     self.skip_whitespace();
                 }
                 "contact_depth" => {
-                    contact_depth = Some(self.parse_measurement()?);
+                    // v0.2.1: Parse as expression (supports percentages, measurements, arithmetic)
+                    contact_depth = Some(self.parse_expression()?);
+                    self.skip_whitespace();
+                }
+                "material_contact_depths" => {
+                    // v0.2.1: Parse material-specific depth map
+                    material_contact_depths = Some(self.parse_material_depth_map()?);
+                    self.skip_whitespace();
+                }
+                "min_contact_depth" => {
+                    min_contact_depth = Some(self.parse_measurement()?);
+                    self.skip_whitespace();
+                }
+                "max_contact_depth" => {
+                    max_contact_depth = Some(self.parse_measurement()?);
                     self.skip_whitespace();
                 }
                 // v0.1.7 ASIC Extensions
@@ -98,7 +115,7 @@ impl super::super::super::Parser {
 
         let contact_depth = contact_depth.ok_or_else(|| ParseError::General {
             span: span_to_source_span(&Span::new(start_pos, end_pos)),
-            message: "Via constraints must have 'contact_depth' field. This specifies how deep vias penetrate into conductive layers (e.g., contact_depth: 50nm)".into(),
+            message: "Via constraints must have 'contact_depth' field. Specify depth as percentage (50%), absolute measurement (150nm), or expression.\n\nExamples:\n  contact_depth: 50%\n  contact_depth: 150nm\n  contact_depth: 0%  (surface contact)\n  contact_depth: 100%  (complete penetration)".into(),
         })?;
 
         Ok(ViaConstraints {
@@ -110,11 +127,48 @@ impl super::super::super::Parser {
             default_via_fill,
             shape,
             contact_depth,
+            material_contact_depths,
+            min_contact_depth,
+            max_contact_depth,
             enclosures,
             allow_stacked_vias,
             min_stagger_offset,
             span: Span::new(start_pos, end_pos),
         })
+    }
+
+    /// Parse material-specific depth map (v0.2.1)
+    /// Syntax:
+    /// ```
+    /// material_contact_depths:
+    ///     Aluminum: 33%
+    ///     Polysilicon: 75%
+    ///     Tungsten: 150nm
+    /// ```
+    fn parse_material_depth_map(&mut self) -> Result<FxHashMap<String, Expression>, ParseError> {
+        self.expect(&Token::Newline)?;
+        self.expect(&Token::Indent)?;
+        
+        let mut map = FxHashMap::default();
+
+        while !self.check(&Token::Dedent) && !self.is_at_end() {
+            self.skip_whitespace();
+
+            if self.check(&Token::Dedent) {
+                break;
+            }
+
+            let material_name = self.expect_identifier()?.to_string();
+            self.expect(&Token::Colon)?;
+            self.skip_whitespace();
+            let depth_expr = self.parse_expression()?;
+            map.insert(material_name, depth_expr);
+
+            self.skip_whitespace();
+        }
+
+        self.expect(&Token::Dedent)?;
+        Ok(map)
     }
 
     /// Parse enclosure map: [m1: 30nm, m2: 40nm, m3: 50nm]

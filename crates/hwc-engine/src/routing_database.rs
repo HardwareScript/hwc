@@ -372,18 +372,25 @@ impl HierarchicalRoutingDatabase {
     
     /// Export for legacy entity_graph.routed_segments() compatibility
     ///
-    /// Returns all routes (child + parent) grouped by net_id with proper per-segment material lookup.
-    /// Used during transition period to maintain compatibility.
-    /// 
-    /// v0.2.1: Material IDs are looked up per-segment from the stackup based on Z-coordinate.
-    pub fn export_as_routed_segments_with_stackup(
+    /// Export all routes (child + parent) as TraceSegments with proper per-segment material lookup.
+    ///
+    /// **v0.2.2 ARCHITECTURAL FIX: Direct Layer Lineage**
+    /// Routes now store their layer name explicitly. Materials and Z-coordinates are looked up
+    /// directly from the RoutingLayerDatabase, eliminating reverse spatial guessing.
+    ///
+    /// # Arguments
+    /// * `routing_layer_db` - Layer database for direct material/Z lookup by layer name
+    ///
+    /// # Returns
+    /// Vector of (net_id, segments) tuples where each segment has the correct material_id
+    /// derived directly from its layer assignment.
+    pub fn export_as_routed_segments_with_lineage(
         &self,
-        stackup_layers: &[crate::space::StackupLayer],
-        material_registry: &crate::material::MaterialRegistry,
+        routing_layer_db: &crate::routing_layer_database::RoutingLayerDatabase,
     ) -> Vec<(NetId, Vec<TraceSegment>)> {
         let mut net_segments: FxHashMap<NetId, Vec<TraceSegment>> = FxHashMap::default();
         
-        // Add child routes (these already have correct materials)
+        // Add child routes (these already have correct materials from flattening)
         for ((_, net_id), segments) in &self.child_instance_routes {
             net_segments
                 .entry(*net_id)
@@ -391,45 +398,31 @@ impl HierarchicalRoutingDatabase {
                 .extend(segments.clone());
         }
         
-        // Add parent routes with per-segment material lookup
+        // Add parent routes with DIRECT LAYER LINEAGE LOOKUP
         for trace in &self.parent_interconnects {
+            // ARCHITECTURAL FIX: Look up layer definition directly by name stored in trace
+            let layer_def = match routing_layer_db.get_layer(&trace.layer_name) {
+                Ok(layer) => layer,
+                Err(e) => {
+                    eprintln!(
+                        "[ROUTING DB EXPORT ERROR] Route on net {:?} references unknown layer '{}': {:?}",
+                        trace.net_id, trace.layer_name, e
+                    );
+                    continue; // Skip routes with invalid layer references
+                }
+            };
+            
+            // Direct lineage: Material ID comes from the layer definition, not reverse Z-lookup!
+            let material_id = layer_def.material_id;
+            
             let segments: Vec<TraceSegment> = trace.segments
                 .iter()
                 .map(|line_seg| {
-                    // Look up material based on segment's Z-coordinate
-                    let seg_z = if line_seg.start.z == line_seg.end.z {
-                        line_seg.start.z
-                    } else {
-                        line_seg.start.z // For vias, use starting Z
-                    };
-                    
-                    let material_id = stackup_layers
-                        .iter()
-                        .find(|layer| seg_z >= layer.z_bottom && seg_z <= layer.z_top)
-                        .and_then(|layer| material_registry.get_id(&layer.material_name))
-                        .expect(&format!(
-                            "FATAL: No stackup layer found at Z={}nm for route segment ({},{},{}) -> ({},{},{}) on net {:?}.\n\
-                             Routes must be placed on layers defined in the stackup.\n\
-                             Available stackup layers:\n{}\n\
-                             This indicates a mismatch between routing Z-coordinates and stackup layer definitions.",
-                            seg_z,
-                            line_seg.start.x, line_seg.start.y, line_seg.start.z,
-                            line_seg.end.x, line_seg.end.y, line_seg.end.z,
-                            trace.net_id,
-                            stackup_layers.iter()
-                                .map(|l| format!(
-                                    "  - {}: Z: {}nm-{}nm, Material: {}",
-                                    l.name, l.z_bottom, l.z_top, l.material_name
-                                ))
-                                .collect::<Vec<_>>()
-                                .join("\n")
-                        ));
-                    
                     TraceSegment::new(
                         line_seg.start,
                         line_seg.end,
                         trace.cross_section.width_nm,
-                        material_id,
+                        material_id,  // DIRECT: From layer definition, not spatial guessing
                     )
                 })
                 .collect();
@@ -443,11 +436,11 @@ impl HierarchicalRoutingDatabase {
         net_segments.into_iter().collect()
     }
     
-    // NOTE: The old export_as_routed_segments() method has been REMOVED.
+    // NOTE: The old export_as_routed_segments_with_stackup() method has been REMOVED.
     // It used a single hardcoded material ID for entire traces, causing incorrect
     // material assignment for multi-layer routes. All call sites must now use
-    // export_as_routed_segments_with_stackup() which performs proper per-segment
-    // material lookup based on Z-coordinate from the stackup definition.
+    // export_as_routed_segments_with_lineage() which performs direct layer lineage
+    // lookup instead of reverse Z-coordinate guessing.
     
     /// Clear all routing data (used during re-registration)
     pub fn clear(&mut self) {
@@ -570,7 +563,7 @@ impl HierarchicalRoutingDatabase {
                 instance_name, net_id, line_segments.len()
             );
             
-            let layer_z_range = if !line_segments.is_empty() {
+            let layer_z_range_with_name = if !line_segments.is_empty() {
                 // Collect all horizontal segments (where start.z == end.z)
                 let horizontal_z_levels: Vec<i64> = line_segments
                     .iter()
@@ -605,6 +598,8 @@ impl HierarchicalRoutingDatabase {
                     // topmost, to match HardwareSpace::find_layer_at_z semantics and avoid
                     // ambiguity at shared layer boundaries (e.g. Z=1250 is metal1.z_bottom,
                     // not d1.z_top).
+                    //
+                    // **v0.2.2 LAYER LINEAGE**: Also extract layer name for explicit lineage
                     let layer_count = stackup_layers.len();
                     let result = stackup_layers
                         .iter()
@@ -627,7 +622,7 @@ impl HierarchicalRoutingDatabase {
                                 "[ROUTING DB]   ✓ Found layer '{}' at Z={}→{}nm for centerline Z={}nm",
                                 layer.name, layer.z_bottom, layer.z_top, centerline_z
                             );
-                            (layer.z_bottom, layer.z_top)
+                            ((layer.z_bottom, layer.z_top), layer.name.clone())
                         });
                     
                     if result.is_none() {
@@ -635,15 +630,45 @@ impl HierarchicalRoutingDatabase {
                             "[ROUTING DB]   ✗ No layer found for centerline Z={}nm!",
                             centerline_z
                         );
+                        eprintln!("[ROUTING DB]   FATAL: Child route has no matching stackup layer. This should never happen.");
                     }
                     
                     result
                 } else {
                     eprintln!("[ROUTING DB]   No horizontal segments found - route is pure vias");
-                    None
+                    // For via-only routes, use the first segment's Z to find a layer
+                    if let Some(first_seg) = line_segments.first() {
+                        let via_z = first_seg.start.z;
+                        stackup_layers
+                            .iter()
+                            .find(|layer| via_z >= layer.z_bottom && via_z <= layer.z_top)
+                            .map(|layer| {
+                                eprintln!(
+                                    "[ROUTING DB]   ✓ Via-only route: using layer '{}' at Z={}nm",
+                                    layer.name, via_z
+                                );
+                                ((layer.z_bottom, layer.z_top), layer.name.clone())
+                            })
+                    } else {
+                        None
+                    }
                 }
             } else {
                 None
+            };
+
+            let (layer_z_range, route_layer_name) = match layer_z_range_with_name {
+                Some((z_range, name)) => (Some(z_range), name),
+                None => {
+                    eprintln!(
+                        "[ROUTING DB] FATAL: Could not determine layer for child route: instance='{}', net={:?}",
+                        instance_name, net_id
+                    );
+                    panic!(
+                        "Child route for instance '{}', net {:?} has no matching stackup layer",
+                        instance_name, net_id
+                    );
+                }
             };
 
             routes.push(AnalyticTrace::with_layer_z_range(
@@ -654,6 +679,7 @@ impl HierarchicalRoutingDatabase {
                 net_name,
                 crate::space::CurrentRating::new(0.0, 0.0),
                 layer_z_range,
+                route_layer_name,  // v0.2.2: Explicit layer lineage
             ));
         }
 

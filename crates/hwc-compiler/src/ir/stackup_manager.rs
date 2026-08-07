@@ -488,6 +488,17 @@ impl StackupManager {
         }
     }
 
+    /// Returns the material name for a given layer (v0.2.1)
+    ///
+    /// # Arguments
+    /// * `layer_name` - The semantic layer name (e.g., "poly", "metal1")
+    ///
+    /// # Returns
+    /// Material name if layer exists, None otherwise
+    pub fn get_layer_material(&self, layer_name: &str) -> Option<&str> {
+        self.layer_materials.get(layer_name).map(|s| s.as_str())
+    }
+
     /// Returns the number of semantic layers in the stackup.
     pub fn layer_count(&self) -> usize {
         self.ordered_layers.len()

@@ -95,6 +95,14 @@ pub enum IrError {
     )]
     PlacementConstraint { message: String, component: String },
 
+    #[error("Expression evaluation failed: {message}")]
+    #[diagnostic(
+        code(R25),
+        url("https://docs.hw-script.org/errors/R25"),
+        help("Check expression syntax and ensure all variables are defined")
+    )]
+    ExpressionEvaluation { message: String },
+
     #[error("No route path found from {from_pin} to {to_pin}")]
     #[diagnostic(
         code(R16),
@@ -231,6 +239,19 @@ pub enum IrError {
         pour_b: CompactString,
         mat_b: CompactString,
         z_nm: i64,
+    },
+
+    #[error("Device terminal pour '{pour_name}' missing explicit net assignment")]
+    #[diagnostic(
+        code(D01),
+        url("https://docs.hw-script.org/errors/D01"),
+        help("HardwareScript Philosophy: Zero Compiler Magic\n\nDevice terminal pours MUST have explicit 'net:' assignments. The compiler does NOT infer connectivity from physical layout.\n\nFix: Add 'net: <NetName>' to the pour definition:\n\n  add pour({material}) named {pour_name}:\n      device: {device}.{terminal}\n      net: YourNetName  ← ADD THIS LINE\n      dimensions: ...")
+    )]
+    DeviceTerminalMissingNet {
+        pour_name: CompactString,
+        device: CompactString,
+        terminal: CompactString,
+        material: CompactString,
     },
 
     #[error("Invalid expression in loop: {0}")]

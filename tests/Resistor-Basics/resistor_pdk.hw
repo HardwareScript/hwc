@@ -1,5 +1,12 @@
 # resistor_pdk.hw - Process Design Kit for Resistor Basics
-# Simplified PDK focused on polysilicon resistors and metal interconnects
+# Based on SkyWater SKY130 PDK specifications for P+ poly precision resistors
+# Source: https://skywater-pdk.readthedocs.io/en/main/rules/device-details.html
+# Device: sky130_fd_pr__res_high_po (P+ Poly Precision Resistor)
+#
+# Educational Context:
+# This PDK demonstrates HardwareScript's explicit device model using foundry-accurate
+# parameters from SkyWater SKY130, the first open-source commercial PDK.
+# Compare with SiliWiz tutorial (uses simplified 400 Ω/□ for teaching).
 import * from @std/primitives/units
 import Polysilicon, Aluminum, Tungsten, Titanium_Silicide, Silicon_Dioxide, Air from "./materials"
 
@@ -16,27 +23,43 @@ export shape SquareContact(width: Measurement):
         Rectangle(width: width, height: width)
 
 # Define the bridge from polysilicon to metal using silicide + tungsten
+# 
+# SkyWater SKY130 Contact Stack:
+# ===============================
+# licon (local interconnect contact) bridges poly/diffusion to metal1
+# Stack: Poly → TiSi₂ (salicide, 5-10nm) → Tungsten fill → Metal1
+# Contact resistance dominated by silicide interface quality
 export bridge Polysilicon to Aluminum:
     interface: Titanium_Silicide
-    thickness: 5nm
+    thickness: 5nm  # Typical salicide thickness in SKY130
     fill: Tungsten
 
 # Flattened profile for 2D resistor testing
-# Ultra-thin layers to keep geometry simple for learning
+# Simplified ultra-thin layers for educational visualization
+# 
+# Note: This profile uses thin layers (10nm) for 2D layout clarity.
+# For tapeout-ready designs, use Resistor_3D profile with SKY130 layer thicknesses.
 export profile Resistor_Flattened:
     technology: "ASIC"
+    substrate_net: GND  # v0.2.2 Stage 1: Parasitic capacitances connect to GND
     
     stackup:
-        polyres:    [material: Polysilicon,      thickness: 10nm, routable: true]
-        d1:         [material: Silicon_Dioxide,  thickness: 10nm, routable: false]
-        metal1:     [material: Aluminum,         thickness: 10nm, routable: true]
+        polyres:    [material: Polysilicon,      thickness: 10nm, routable: true]   # Simplified for 2D
+        d1:         [material: Silicon_Dioxide,  thickness: 10nm, routable: false]  # Simplified ILD
+        metal1:     [material: Aluminum,         thickness: 10nm, routable: true]   # Simplified metal
 
     via:
         min_diameter: 200nm
         min_annular_ring: 50nm
         min_spacing: 300nm
         shape: SquareContact
-        contact_depth: 10nm  # Match layer thickness to prevent substrate penetration
+        contact_depth: 30%  # v0.2.1: Global default with percentage control
+        
+        # v0.2.1: Material-specific penetration depths for resistor structures
+        # Shallow penetration minimizes disturbance to resistive path
+        material_contact_depths:
+            Aluminum: 30%      # Shallow penetration into metal contacts
+            Polysilicon: 30%   # Shallow penetration preserves resistive geometry
 
     trace:
         min_width: 200nm
@@ -81,21 +104,36 @@ export profile Resistor_Flattened:
         escape_stub: 0nm
 
 # 3D profile for resistor with realistic layer thicknesses
-# Similar to Skywater 130nm process layer thicknesses
+# Based on SkyWater SKY130 process stackup dimensions
+#
+# SkyWater SKY130 Layer Thicknesses:
+# ===================================
+# Polysilicon (poly): ~180-200nm (gate poly thickness)
+# ILD1 (poly to metal1): ~300-400nm (inter-layer dielectric)
+# Metal-1 through Metal-4: ~840nm each (aluminum interconnect)
+#
+# Reference: SKY130 process cross-sections and e-test specifications
 export profile Resistor_3D:
     technology: "ASIC"
+    substrate_net: GND  # v0.2.2 Stage 1: Parasitic capacitances connect to GND
     
     stackup:
-        polyres:    [material: Polysilicon,      thickness: 200nm, routable: true]
-        d1:         [material: Silicon_Dioxide,  thickness: 300nm, routable: false]
-        metal1:     [material: Aluminum,         thickness: 500nm, routable: true]
+        polyres:    [material: Polysilicon,      thickness: 200nm, routable: true]   # SKY130 poly thickness
+        d1:         [material: Silicon_Dioxide,  thickness: 300nm, routable: false]  # SKY130 ILD1 thickness
+        metal1:     [material: Aluminum,         thickness: 840nm, routable: true]   # SKY130 metal-1 thickness
 
     via:
         min_diameter: 300nm
         min_annular_ring: 50nm
         min_spacing: 400nm
         shape: SquareContact
-        contact_depth: 100nm
+        contact_depth: 30%  # v0.2.1: Global default with percentage control
+        
+        # v0.2.1: Material-specific penetration depths for resistor structures
+        # Shallow penetration minimizes disturbance to resistive path
+        material_contact_depths:
+            Aluminum: 30%      # Shallow penetration into metal contacts
+            Polysilicon: 30%   # Shallow penetration preserves resistive geometry
 
     trace:
         min_width: 300nm
@@ -138,3 +176,66 @@ export profile Resistor_3D:
     net_type Signal:
         routing_style: auto
         escape_stub: 0nm
+
+# ============================================================================
+# Native Typed Subcircuit: SkyWater SKY130 P+ Poly Precision Resistor
+# ============================================================================
+# Device: sky130_fd_pr__res_high_po
+# 
+# Physical Reality:
+# - Sheet resistance: ~350 Ω/□ (P+ poly with silicide block)
+# - End contact resistance: ~362 Ω each (poly-silicide interface)
+# - Parasitic capacitance: ~2 fF/μm² to substrate (oxide coupling)
+#
+# Subcircuit Model Structure:
+# ```
+#   PLUS ──[ R_head: 362Ω ]── node_1 ──[ R_body: 350Ω/□ × (L/W) ]── node_2 ──[ R_tail: 362Ω ]── MINUS
+#            |                                                                      |
+#            └─[ C_sub1: 2fF/μm² × W×L ]─ BULK                                    └─[ C_sub2: 2fF/μm² × W×L ]─ BULK
+# ```
+#
+# References:
+# - SkyWater SKY130 PDK: https://skywater-pdk.readthedocs.io/
+# - Resistor design rules: Section 8.3 (P+ Poly Precision Resistor)
+# ============================================================================
+export subcircuit sky130_fd_pr__res_high_po:
+    terminals: [PLUS, MINUS, BULK]
+    parameters: [W = 1.0um, L = 1.0um]
+    elements:
+        # End contact resistances (poly-to-silicide interface)
+        R_head: Resistor(nodes: [PLUS, node_1], value: 362.0ohm)
+        R_tail: Resistor(nodes: [node_2, MINUS], value: 362.0ohm)
+        
+        # Body resistance (sheet resistance × aspect ratio)
+        # Sheet resistance: 350 Ω/□ (ohm per square)
+        # Geometry factor: L / W (length over width)
+        R_body: Resistor(nodes: [node_1, node_2], value: 350.0ohm * (L / W))
+        
+        # Parasitic substrate capacitances
+        # Capacitance density: 2 fF/μm² (oxide coupling to substrate)
+        C_sub1: Capacitor(nodes: [PLUS, BULK], value: 2.0fF * W * L)
+        C_sub2: Capacitor(nodes: [MINUS, BULK], value: 2.0fF * W * L)
+
+# ============================================================================
+# Device Definition: Resistor with Explicit 3-Terminal Contract
+# ============================================================================
+# This device wraps the sky130_fd_pr__res_high_po subcircuit with an explicit
+# 3-terminal contract. All terminals (A, B, BULK) MUST be bound in layouts.
+#
+# Zero Compiler Magic:
+# - If a terminal is missing in the layout, compilation FAILS LOUDLY
+# - No hidden GND connections - user must explicitly bind BULK to their ground net
+# ============================================================================
+export device Resistor_SKY130:
+    terminals: [A, B, BULK]
+    materials:
+        A: Polysilicon       # Positive terminal (maps to subcircuit PLUS)
+        B: Polysilicon       # Negative terminal (maps to subcircuit MINUS)
+        BULK: Air            # Substrate/bulk terminal (virtual, bound via net)
+    
+    spice:
+        prefix: X
+        subcircuit: sky130_fd_pr__res_high_po
+        terminal_order: [A, B, BULK]  # Explicit 3-terminal SPICE order
+        parameters: [W, L]
+        parameter_style: named

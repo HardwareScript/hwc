@@ -24,6 +24,7 @@ impl EntityGraph {
 
     /// Add a substrate layer with clearance validation (v0.1.9).
     /// v0.2.1: Added device terminal exemption for capacitors and other vertically-stacked devices.
+    /// v0.2.3: Layer-aware clearance - only check conductors on the same Z-layer
     pub fn add_substrate_layer_checked(
         &mut self,
         material: MaterialId,
@@ -32,27 +33,47 @@ impl EntityGraph {
         layer_type: SubstrateLayerType,
         min_clearance_nm: i64,
         device_binding: Option<(&compact_str::CompactString, &compact_str::CompactString)>, // (device_name, terminal)
-        pours: &[crate::space::PourMetadata],
+        _pours: &[crate::space::PourMetadata],
     ) -> Result<(), String> {
         if net != NetId::UNCONNECTED {
-            for (idx, existing) in self.substrate_layers.iter().enumerate() {
+            for existing in self.substrate_layers.iter() {
+                // Skip same-net layers (can overlap your own pours)
                 if existing.net == NetId::UNCONNECTED || existing.net == net {
                     continue;
                 }
                 
-                // DEVICE TERMINAL EXEMPTION (v0.2.1): If both pours belong to same device instance,
+                // DEVICE TERMINAL EXEMPTION (v0.2.2): If both pours belong to same device instance,
                 // skip clearance check (intentional overlap for capacitors, transistors, etc.)
                 if let Some((dev_name, _terminal)) = device_binding {
                     // Check if existing layer has device binding to same device
-                    // The substrate layer index maps to pour index since they're added in order
-                    if idx < pours.len() {
-                        if let Some(ref existing_binding) = pours[idx].device_binding {
-                            if existing_binding.device_name == *dev_name {
-                                // Same device instance - allow overlap (e.g., capacitor plates)
-                                continue;
-                            }
+                    if let Some((ref existing_dev, ref _existing_term)) = existing.device_binding {
+                        if existing_dev == dev_name {
+                            // Same device instance - allow overlap (e.g., capacitor plates)
+                            eprintln!("[PLACEMENT DEVICE EXEMPT] Skipping clearance check between {}.{} and {}.{} (same device)",
+                                dev_name, _terminal, existing_dev, _existing_term);
+                            continue;
                         }
                     }
+                }
+                
+                // v0.2.3: LAYER-AWARE CLEARANCE
+                // Only check clearance for conductors on overlapping Z-ranges.
+                // Layers separated by dielectric don't need lateral clearance.
+                //
+                // Example: metal1 at Z=0-20nm and metal2 at Z=70-100nm are separated
+                // by 50nm of dielectric. They should NOT trigger clearance violations.
+                //
+                // Two ranges overlap if: !(a.max <= b.min || b.max <= a.min)
+                // Simplified: a.max > b.min && b.max > a.min
+                let z_overlap = bbox.max.z > existing.bbox.min.z && existing.bbox.max.z > bbox.min.z;
+                
+                if !z_overlap {
+                    // No Z-overlap = different layers, skip clearance check
+                    eprintln!(
+                        "[PLACEMENT] Skipping clearance check: Z-separated layers (new Z={}-{}nm, existing Z={}-{}nm)",
+                        bbox.min.z, bbox.max.z, existing.bbox.min.z, existing.bbox.max.z
+                    );
+                    continue;
                 }
                 
                 let distance = bbox.distance_to(&existing.bbox);
@@ -317,6 +338,12 @@ impl EntityGraph {
                     start: combined.min,
                     end: combined.max,
                     layer: combined.min.z,
+                    device_binding: layer.device_binding.as_ref().map(|(dev, term)| {
+                        hwc_physics::connectivity::DeviceBinding {
+                            device_name: dev.as_str().into(),
+                            terminal: term.as_str().into(),
+                        }
+                    }), // v0.2.2: Convert (String, String) to DeviceBinding
                 }
             })
             .collect()

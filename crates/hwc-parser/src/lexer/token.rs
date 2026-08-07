@@ -275,6 +275,9 @@ pub enum Token {
     #[token("spice_model")]
     SpiceModel,
 
+    #[token("subcircuit")]
+    Subcircuit,
+
     // Note: 'pattern' and 'strategy' are handled as identifiers in most contexts
     // and only recognized as definition types after 'define' keyword
 
@@ -708,6 +711,7 @@ impl fmt::Display for Token {
             Token::SignalGroup => write!(f, "the 'signal_group' keyword"),
             Token::NetType => write!(f, "the 'net_type' keyword"),
             Token::SpiceModel => write!(f, "the 'spice_model' keyword"),
+            Token::Subcircuit => write!(f, "the 'subcircuit' keyword"),
             Token::Logic => write!(f, "the 'logic' keyword"),
             Token::Enum => write!(f, "the 'enum' keyword"),
             Token::Struct => write!(f, "the 'struct' keyword"),

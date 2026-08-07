@@ -215,6 +215,10 @@ pub struct AnalyticTrace {
     /// Format: (z_min, z_max) in nanometers
     /// This represents the actual physical bounds of the copper layer
     pub layer_z_range: Option<(i64, i64)>,
+    /// **v0.2.2**: Layer name for explicit lineage tracking (e.g., "metal2")
+    /// This is the single source of truth for the route's layer assignment.
+    /// Material ID and Z-coordinates should be derived from this, not vice versa.
+    pub layer_name: CompactString,
 }
 
 impl AnalyticTrace {
@@ -223,6 +227,9 @@ impl AnalyticTrace {
     /// **v0.2.0 CRITICAL CHANGE:**
     /// `layer_z_range` must be provided for horizontal traces to correctly
     /// extrude them to their physical layer thickness (from stackup definition).
+    ///
+    /// **v0.2.2 LAYER LINEAGE:**
+    /// `layer_name` must be provided to maintain explicit layer lineage.
     pub fn with_layer_z_range(
         net_id: NetId,
         cross_section: CrossSection,
@@ -231,6 +238,7 @@ impl AnalyticTrace {
         net_name: CompactString,
         current: CurrentRating,
         layer_z_range: Option<(i64, i64)>,
+        layer_name: CompactString,
     ) -> Self {
         Self {
             net_id,
@@ -240,6 +248,7 @@ impl AnalyticTrace {
             net_name,
             current,
             layer_z_range,
+            layer_name,
         }
     }
 

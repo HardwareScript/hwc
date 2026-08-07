@@ -32,7 +32,7 @@ export material Tungsten:
     properties:
         resistivity: 5.6e-8ohm_m
         color: "#1a1a1a"  # Dark gray/black for clear visibility
-        opacity: 1.0
+        opacity: 0.5
         metallic: 0.9
         roughness: 0.2
         thermal_conductivity: 173.0W_mK
@@ -45,7 +45,7 @@ export material Titanium_Silicide:
     properties:
         resistivity: 13e-8ohm_m
         color: "#8B8680"
-        opacity: 1.0
+        opacity: 0.5
         metallic: 0.7
         roughness: 0.3
         thermal_conductivity: 30.0W_mK
@@ -59,7 +59,7 @@ export material Aluminum:
     properties:
         resistivity: 2.82e-8ohm_m
         color: "#C0C0C0"
-        opacity: 1.0
+        opacity: 0.5
         metallic: 0.8
         roughness: 0.2
         thermal_conductivity: 237.0W_mK
@@ -72,7 +72,7 @@ export material Polysilicon:
     properties:
         resistivity: 1e-3ohm_m
         color: "#FF6060"
-        opacity: 1.0
+        opacity: 0.9
         metallic: 0.3
         roughness: 0.8
         thermal_conductivity: 30.0W_mK

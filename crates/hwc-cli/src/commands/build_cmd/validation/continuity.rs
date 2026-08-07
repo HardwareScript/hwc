@@ -18,9 +18,14 @@ pub fn run_physical_continuity_check(
     }
 
     let mut conductive_material_ids = rustc_hash::FxHashSet::default();
-    for (id, _name) in space.material_registry.all_materials() {
-        if space.material_registry.is_conductor(id) || space.material_registry.is_semiconductor(id)
-        {
+    for (id, name) in space.material_registry.all_materials() {
+        let is_conductor = space.material_registry.is_conductor(id);
+        let is_semiconductor = space.material_registry.is_semiconductor(id);
+        
+        eprintln!("[PIVB MATERIAL DEBUG] Material {} ('{}'): conductor={}, semiconductor={}", 
+            id, name, is_conductor, is_semiconductor);
+        
+        if is_conductor || is_semiconductor {
             conductive_material_ids.insert(id);
         }
     }

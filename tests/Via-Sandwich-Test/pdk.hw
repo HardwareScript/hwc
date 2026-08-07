@@ -40,7 +40,12 @@ export profile ViaSandwichProfile:
         min_annular_ring: 0nm
         min_spacing: 300nm
         shape: SquareContact
-        contact_depth: 300nm  # Full penetration through 300nm pads
+        contact_depth: 50%  # v0.2.1: Global default (fallback)
+        
+        # v0.2.1: Material-specific penetration depths
+        material_contact_depths:
+            Aluminum: 100%      # Complete penetration through aluminum (top layer)
+            Polysilicon: 30%    # Shallow 30% penetration into polysilicon (bottom layer)
     
     trace:
         min_width: 200nm

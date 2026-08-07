@@ -1,117 +1,213 @@
 # simple_resistor_test.hw
-# Basic test: A simple square resistor with two terminal contacts
-# Based on SiliWiz resistor tutorial
-# A 1μm x 1μm square polysilicon resistor should have ~400 Ohms resistance
-# (Sheet resistance: 400 Ohms/square)
+# Polysilicon Resistor Test - HardwareScript Explicit Device Model
+# Based on SkyWater SKY130 PDK P+ Poly Precision Resistor
+# Reference: https://skywater-pdk.readthedocs.io/en/main/rules/device-details.html
+# Educational Reference: https://tinytapeout.com/siliwiz/resistors/
+#
+# ARCHITECTURAL NOTE: Legacy EDA vs. HardwareScript Philosophy
+# ============================================================
+#
+# Legacy Tools (Magic VLSI, SiliWiz, Cadence PEX):
+#   - Draw ONE continuous polyres rectangle (4μm × 1μm)
+#   - Place contacts at ends (x=8μm: Net In, x=12μm: Net Out)
+#   - Tool INFERS: "This is a resistor between In and Out"
+#   - Black-box heuristics, unpredictable on complex layouts
+#
+# HardwareScript (Zero Compiler Magic):
+#   - Explicit device contract: `device Resistor: terminals: [A, B]`
+#   - Explicit terminal bindings: `device: R1.A` and `device: R1.B`
+#   - Physical channel split into TWO touching halves (2μm each)
+#   - Compiler calculates: R = R_sheet × (L_total/W) = 350Ω/□ × (4μm/1μm) = 1400Ω
+#   - 100% deterministic, fail-loudly, extends to FinFETs/multi-finger devices
+#
+# This test validates the HardwareScript explicit model:
+#   Terminal A: 8μm→10μm (Net: In)  
+#   Terminal B: 10μm→12μm (Net: Out) ← touching at x=10μm
+#   Total: 4μm × 1μm = 1400Ω (SKY130 P+ poly at 350 Ω/□)
+#
+# SkyWater SKY130 P+ Poly Precision Resistor Specifications:
+# ===========================================================
+# Device Model: sky130_fd_pr__res_high_po
+# Sheet Resistance: ~350 Ω/□ (typical, foundry-accurate)
+# E-test Data: RP0P35X20SQ = 7888Ω for 20 squares → ~394 Ω/□ measured
+# Available Widths: 0.35, 0.69, 1.41, 2.85, 5.73 μm (fixed in PDK)
+# This test uses 1.0μm width for educational clarity
+#
+# Resistance Formula: R = R_sheet × (L/W)
+# Where:
+#   R_sheet = 350 Ω/□ (sheet resistance, SKY130 P+ poly)
+#   L = resistor length (4.0 μm in this test)
+#   W = resistor width (1.0 μm in this test)
+#   R = 350 Ω/□ × (4.0 μm / 1.0 μm) = 1400 Ω
+#
+# Physics: R = ρ(L/A) where ρ = resistivity, L = length, A = cross-sectional area
+# For thin films: R = R_sheet × (L/W) where R_sheet = ρ/t (sheet resistance)
+#
+# Educational Note:
+# SiliWiz tutorial uses simplified 400 Ω/□ for teaching → 1600Ω for this geometry
+# SKY130 foundry-accurate value is 350 Ω/□ → 1400Ω for tapeout readiness
 
 import * from @std/primitives/units
 import * from "./resistor_pdk"
 
 # Native device contract for polysilicon resistor
-# Compiler will automatically exempt terminal DRC and calculate R = R_sheet * (L/W)
+# Compiler will automatically exempt terminal DRC and calculate R = R_sheet × (L/W)
+#
+# **Stage 1 SPICE Export: PDK Subcircuit Support**
+# When `subcircuit:` is specified, the exporter will emit an X-prefixed subcircuit call
+# instead of a flat resistor primitive. This enables foundry PDK model compatibility.
+#
+# Flat Mode (subcircuit not specified):
+#   RR1 In Out 1400.00
+#
+# PDK Subcircuit Mode (subcircuit specified):
+#   XR1 In Out GND sky130_fd_pr__res_high_po W=1.0u L=4.0u
+#
+# **Zero Compiler Magic: All Terminals Must Be Explicitly Bound**
+# The sky130_fd_pr__res_high_po subcircuit expects 3 terminals: PLUS, MINUS, BULK
+# Therefore, ALL THREE terminals must be explicitly declared and bound in layouts:
+#   - Terminal A (maps to PLUS): Physical polysilicon pour
+#   - Terminal B (maps to MINUS): Physical polysilicon pour  
+#   - Terminal BULK: Explicit net binding to ground (GND, VSS, etc.)
+# If any terminal is missing, compilation will FAIL LOUDLY with a clear error.
+#
 device Resistor:
-    terminals: [A, B]
+    terminals: [A, B, BULK]
     materials:
         A: Polysilicon
         B: Polysilicon
+        BULK: Air  # Virtual terminal - bound via net: GND, no physical pour needed
     spice:
-        prefix: R
-        terminal_order: [A, B]
-        parameters: [R]
-        parameter_style: positional
+        prefix: X  # X prefix for subcircuit calls
+        subcircuit: sky130_fd_pr__res_high_po  # Explicit PDK subcircuit (v0.3.0+)
+        terminal_order: [A, B, BULK]  # All 3 terminals in SPICE order
+        parameters: [W, L]  # Subcircuit parameters
+        parameter_style: named
 
 module SimpleResistor:
     pins: [input In, output Out]
     route In to Out
 
 space Simple_Resistor_Space implements SimpleResistor:
-    # 5μm x 3μm space - plenty of room for a simple resistor
-    dimensions: 5.0um by 3.0um by 100nm
+    dimensions: 20.0um by 10.0um by 1200nm  # Height to accommodate 200nm poly + 300nm ILD + 840nm metal1
     resolution: 10nm
     origin: bl by b
-    profile: Resistor_Flattened
+    profile: Resistor_3D  # Use SKY130-accurate layer thicknesses (200nm poly)
 
     nets:
         In:  { classification: signal, potential: 1.8V, current: 1.0uA }
         Out: { classification: signal, potential: 0.0V, current: 1.0uA }
+        GND: { classification: ground, potential: 0.0V, current: 0.0uA }  # Explicit ground net for BULK
 
     # ========================================================================
-    # POLYSILICON RESISTOR BODY
+    # POLYSILICON RESISTOR - SkyWater SKY130 P+ Poly Precision Resistor
     # ========================================================================
-    # 1μm x 1μm square polysilicon resistor (should be ~400 Ohms)
-    # Using device binding approach - compiler exempts DRC between terminals
-    # Terminal A is the left side of the resistor
+    
+    let res_length = 4.0um         # Resistor length (custom, not standard SKY130 width)
+    let res_width = 1.0um          # Resistor width (educational; SKY130 uses 0.35-5.73μm)
+    let contact_size = 400nm       # Metal contact pad size
+    
+    # Expected resistance calculation (SKY130 P+ poly):
+    # R = R_sheet × (L/W) = 350 Ω/□ × (4.0μm / 1.0μm) = 1400 Ω
+    #
+    # Note: SiliWiz tutorial predicts 1600Ω using simplified 400 Ω/□
+    # SKY130 foundry-accurate value: 1400Ω using measured 350 Ω/□
+    
+    # ========================================================================
+    # 1. RESISTOR BODY - HardwareScript Explicit Terminal Model
+    # ========================================================================
+    
+    # HardwareScript Philosophy: Explicit device contracts with zero compiler magic
+    # Physical channel split into two halves, each explicitly bound to a terminal
+    # This is NOT how Magic/SiliWiz works (they infer from geometry)
+    # This IS how HardwareScript works (explicit, deterministic, fail-loudly)
+    
+    # Terminal A - Left half of resistor (2μm × 1μm)
+    # Spans from 8μm to 10μm, centered at 9μm
     add pour(Polysilicon) named Resistor_Body_A on layer: polyres:
         device: R1.A
-        dimensions: 500nm by 1.0um
-        at: [x: 1.75um, y: 1.5um]
-
-    # Terminal B is the right side of the resistor
+        net: In
+        dimensions: res_length / 2 by res_width
+        at: [x: 10.0um - res_length / 4, y: 5.0um]  # Centered at 9μm
+    
+    # Terminal B - Right half of resistor (2μm × 1μm)
+    # Spans from 10μm to 12μm, centered at 11μm
+    # Touches Terminal A edge-to-edge at x = 10μm
     add pour(Polysilicon) named Resistor_Body_B on layer: polyres:
         device: R1.B
-        dimensions: 500nm by 1.0um
-        at: [x: 2.25um, y: 1.5um]
+        net: Out
+        dimensions: res_length / 2 by res_width
+        at: [x: 10.0um + res_length / 4, y: 5.0um]  # Centered at 11μm
+    
+    # Terminal BULK - Virtual terminal bound to ground net
+    # This is a zero-area "phantom" pour that only exists to satisfy the
+    # 3-terminal device contract. It connects the substrate terminal to GND.
+    # Material: Air (virtual, non-physical)
+    add pour(Air) named Resistor_Bulk on layer: polyres:
+        device: R1.BULK
+        net: GND
+        dimensions: 1nm by 1nm  # Minimal virtual footprint
+        at: [x: 10.0um, y: 3.0um]  # Below resistor body (arbitrary location)
 
     # ========================================================================
-    # METAL CONTACTS FOR RESISTOR TERMINALS
+    # 2. METAL CONTACTS - HardwareScript: Explicit placement over terminals
     # ========================================================================
-
-    # Left terminal A contact - overlaps left edge
-    # No device binding - this is just for routing
+    
+    # Contact A - Left end at 8μm (over Terminal A)
     add pour(Aluminum) named Contact_A on layer: metal1:
+        dimensions: contact_size by contact_size
+        at: [x: 10.0um - res_length / 2, y: 5.0um]  # At 8μm
         net: In
-        dimensions: 400nm by 400nm
-        at: [x: 1.7um, y: 1.5um]
-
-    # Right terminal B contact - overlaps right edge  
-    # No device binding - this is just for routing
+    
+    # Contact B - Right end at 12μm (over Terminal B)
     add pour(Aluminum) named Contact_B on layer: metal1:
+        dimensions: contact_size by contact_size
+        at: [x: 10.0um + res_length / 2, y: 5.0um]  # At 12μm
         net: Out
-        dimensions: 400nm by 400nm
-        at: [x: 2.3um, y: 1.5um]
 
-    # Vias connecting metal contacts to polysilicon
-    # No device binding - these are just interconnects
-    add contact(Titanium_Silicide) named Via_A spanning layer: polyres to metal1:
-        net: In
-        diameter: 200nm
-        plating_thickness: 5nm
+    # ========================================================================
+    # 3. VIAS - Bridge polyres to metal1
+    # ========================================================================
+    # SKY130 minimum via diameter: 300nm (from Resistor_3D profile)
+    
+    add contact(Tungsten) named Via_A spanning layer: polyres to metal1:
+        diameter: 300nm
         align: center with Contact_A
-
-    add contact(Titanium_Silicide) named Via_B spanning layer: polyres to metal1:
-        net: Out
-        diameter: 200nm
-        plating_thickness: 5nm
-        align: center with Contact_B
-
-    # ========================================================================
-    # EXTERNAL CONNECTION PADS
-    # ========================================================================
-
-    # Input pad at far left
-    add pour(Aluminum) named In_Pad on layer: metal1:
         net: In
-        dimensions: 600nm by 600nm
-        at: [x: 500nm, y: 1.5um]
 
-    # Output pad at far right
-    add pour(Aluminum) named Out_Pad on layer: metal1:
+    add contact(Tungsten) named Via_B spanning layer: polyres to metal1:
+        diameter: 300nm
+        align: center with Contact_B
         net: Out
-        dimensions: 600nm by 600nm
-        at: [x: 3.5um, y: 1.5um]
 
     # ========================================================================
-    # ROUTING - Connect pads to resistor terminals
+    # 4. EXTERNAL CONNECTION PADS
+    # ========================================================================
+    
+    # Input pad - Left side, 3μm spacing from resistor
+    add pour(Aluminum) named In_Pad on layer: metal1:
+        dimensions: 1.0um by 1.0um
+        at: [x: 10.0um - res_length / 2 - 3.0um, y: 5.0um]  # Left at 4μm
+        net: In
+
+    # Output pad - Right side, 3μm spacing from resistor
+    add pour(Aluminum) named Out_Pad on layer: metal1:
+        dimensions: 1.0um by 1.0um
+        at: [x: 10.0um + res_length / 2 + 3.0um, y: 5.0um]  # Right at 16μm
+        net: Out
+
+    # ========================================================================
+    # 5. ROUTING - Simple horizontal traces
     # ========================================================================
 
-    # Connect input pad to resistor terminal A (In net)
+    # Connect input pad to left contact (all on metal1)
     route In_Pad to Contact_A:
         net: In
         width: 300nm
         layer: metal1
         intent: Signal
 
-    # Connect resistor terminal B to output pad (Out net)
+    # Connect right contact to output pad (all on metal1)
     route Contact_B to Out_Pad:
         net: Out
         width: 300nm

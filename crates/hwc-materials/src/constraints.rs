@@ -165,14 +165,28 @@ pub struct ViaConstraints {
     /// Default via diameter in nanometers
     pub default_diameter_nm: i64,
 
-    /// Contact depth: How deep vias penetrate into conductive layers in nanometers.
+    /// Global contact depth: How deep vias penetrate into conductive layers in nanometers.
     ///
-    /// Specifies how much the via extends beyond the dielectric interface into both
-    /// the source and destination conductive layers. This ensures reliable electrical
-    /// contact per standard ASIC design rules.
+    /// This is the fallback depth used when no material-specific depth is defined.
+    /// Can be an absolute value (nm) or derived from a percentage expression.
     ///
-    /// Example: 50nm means via penetrates 50nm into poly layer and 50nm into metal1 layer.
+    /// v0.2.1: This is now the FALLBACK only. Use material_contact_depths for specific materials.
     pub contact_depth_nm: i64,
+    
+    /// Material-specific contact depths in nanometers (v0.2.1).
+    /// Maps material name to penetration depth. When a via connects two layers,
+    /// each layer's material is looked up to get its specific depth.
+    ///
+    /// Empty map means use global contact_depth_nm for all materials.
+    pub material_contact_depths_nm: rustc_hash::FxHashMap<CompactString, i64>,
+    
+    /// Minimum contact depth in nanometers (safety bound, v0.2.1).
+    /// Applied after percentage calculation to prevent insufficient penetration.
+    pub min_contact_depth_nm: Option<i64>,
+    
+    /// Maximum contact depth in nanometers (safety bound, v0.2.1).
+    /// Applied after percentage calculation to prevent over-penetration.
+    pub max_contact_depth_nm: Option<i64>,
 
     /// Via shape: "square" or "cylinder" (optional, defaults to cylinder)
     pub shape: Option<CompactString>,

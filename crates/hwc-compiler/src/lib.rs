@@ -4,7 +4,6 @@ pub mod alignment;
 pub mod alignment_layer; // Sprint 4.1: Alignment Layer (replaces traditional LVS)
 pub mod bounding_box_tracker;
 pub mod bridge_resolver;
-pub mod compiler;
 pub mod constraint_solver;
 pub mod conversions;
 pub mod electrical_symbol_table;
@@ -32,7 +31,6 @@ pub use alignment::{
     PhysicalNetlist,
 };
 pub use bounding_box_tracker::BoundingBoxTracker;
-pub use compiler::Compiler;
 pub use constraint_solver::ConstraintSolver;
 pub use conversions::{populate_material_database, profile_to_constraints, ConversionError};
 pub use via_resolver::library::{ViaLibrary, ViaType};

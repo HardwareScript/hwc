@@ -45,6 +45,7 @@ pub mod miter_pass;
 pub mod multi_net_manager;
 pub mod navigable_space;
 mod neighbor_generation;
+pub mod obstacle_query; // v0.2.3: Centralized obstacle decision system
 mod parallel_router;
 pub mod parasitic_extraction;
 pub mod partition;

@@ -253,8 +253,7 @@ pub fn compile_single_space(
     eprintln!("[COMPILATION] Synchronizing entity_graph from routing database...");
     space.entity_graph.sync_from_routing_database(
         &space.routing_database,
-        &space.stackup_layers,
-        &space.material_registry,
+        &space.routing_layer_db,
     );
     eprintln!("[COMPILATION] Synchronization complete - router can now see child routes as same-net ✓");
 
@@ -297,7 +296,7 @@ pub fn compile_single_space(
     // Extract device instances from pour bindings and populate the device registry.
     // This is the single source of truth for all device instances.
     // Export formats (SPICE, BOM, etc.) read from this registry - no re-inference needed.
-    crate::ir::device_registry::populate_device_instances(&mut space, symbol_table);
+    crate::ir::device_registry::populate_device_instances(&mut space, symbol_table)?;
 
     Ok((space, query_store, routes_loaded_from_lock))
 }

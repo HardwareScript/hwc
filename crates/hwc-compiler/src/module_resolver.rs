@@ -400,6 +400,7 @@ impl ModuleResolver {
             Definition::MaterialAlias(a) => a.is_exported,
             Definition::Space(s) => s.is_exported, // v0.2.1: Hierarchical Space Composition
             Definition::SpiceModel(sm) => sm.is_exported, // v0.2.1: SPICE model cards
+            Definition::Subcircuit(ss) => ss.is_exported, // v0.2.2: SPICE subcircuit cards
             Definition::PolymorphicInterface(_) => true, // TODO: add is_exported field
         }
     }
@@ -429,6 +430,7 @@ impl ModuleResolver {
             Definition::PolymorphicInterface(pi) => pi.name.as_str() == name,
             Definition::Space(s) => s.name.as_str() == name, // v0.2.1: Hierarchical Space Composition
             Definition::SpiceModel(sm) => sm.name.as_str() == name, // v0.2.1: SPICE model cards
+            Definition::Subcircuit(ss) => ss.name.as_str() == name, // v0.2.2: SPICE subcircuit cards
         }
     }
 
@@ -457,6 +459,7 @@ impl ModuleResolver {
             Definition::PolymorphicInterface(pi) => format!("PolymorphicInterface({})", pi.name),
             Definition::Space(_) => "Space".to_string(),
             Definition::SpiceModel(sm) => format!("SpiceModel({})", sm.name),
+            Definition::Subcircuit(ss) => format!("Subcircuit({})", ss.name),
         }
     }
 
@@ -628,6 +631,11 @@ impl ModuleResolver {
             Definition::SpiceModel(spice_model) => {
                 // v0.2.1: Register imported SPICE model cards for PDK physics
                 symbol_table.register_import_spice_model(spice_model.clone());
+                Ok(())
+            }
+            Definition::Subcircuit(subcircuit) => {
+                // v0.3.0+: Register imported native typed subcircuit definitions (replaces raw SPICE)
+                symbol_table.register_import_subcircuit(subcircuit.clone());
                 Ok(())
             }
         }

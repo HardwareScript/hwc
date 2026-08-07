@@ -47,21 +47,16 @@
 * ========================================
 * EXTRACTED DEVICES
 * ========================================
-RR2 In2 Out2 400.00
-RR3 In3 Out3 400.00
-RR1 In1 Out1 400.00
+RR2 In2 In2 15000.00
+RR3 In3 In3 30000.00
+RR1 In1 In1 2000.00
 
 
 * ========================================
 * STIMULUS & ANALYSIS
 * ========================================
-V_In1 In1 0 PULSE(0 1.800 10ns 1ns 1ns 50ns 100ns)
-V_Out1 Out1 0 DC 0
-V_In2 In2 0 PULSE(0 1.800 10ns 1ns 1ns 50ns 100ns)
-V_Out2 Out2 0 DC 0
-V_In3 In3 0 PULSE(0 1.800 10ns 1ns 1ns 50ns 100ns)
-V_Out3 Out3 0 DC 0
-Vgnd GND 0 0
+V_In1 In1 0 DC 1.800
+V_In2 In2 0 DC 1.800
+V_In3 In3 0 DC 1.800
 .tran 200ns
-.plot tran V(In1) V(Out1) V(In2) V(Out2) V(In3) V(Out3) I(RR2) I(RR3) I(RR1)
 .end

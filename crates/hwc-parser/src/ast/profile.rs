@@ -182,6 +182,11 @@ pub struct ProfileDefinition {
     /// Explicit via definitions (v0.1.7)
     pub vias: Vec<ViaDefinition>,
     pub technology: Option<Technology>,
+    /// Substrate/bulk net name for parasitic capacitance (v0.2.2 Stage 1)
+    /// Substrate capacitance connects to this net instead of hardcoded node 0.
+    /// For IC designs, typically "BULK" or "SUB". For PCB designs, typically "GND".
+    /// If not specified, parasitics connect to SPICE global node 0.
+    pub substrate_net: Option<CompactString>,
     pub other: rustc_hash::FxHashMap<CompactString, String>, // v0.1.6: Custom constraint blocks
     pub span: Span,
 }
@@ -326,18 +331,40 @@ pub struct ViaConstraints {
     
     /// Contact depth: How deep the via penetrates into source and destination conductive layers.
     /// 
-    /// In ASIC manufacturing, vias are etched through the dielectric and penetrate slightly
-    /// into both metal layers to ensure reliable electrical contact. This parameter specifies
-    /// that penetration depth.
+    /// v0.2.1: Supports expressions (percentages, absolute measurements, arithmetic).
+    /// - Percentage: `50%` means 50% of each layer's thickness
+    /// - Absolute: `150nm` means exactly 150nm into each layer
+    /// - Expression: Any compile-time expression that evaluates to a measurement or percentage
     ///
-    /// Example: `contact_depth: 50nm` means the via extends 50nm into both the lower and upper
-    /// conductive layers beyond the dielectric interface.
-    ///
-    /// Setting this to 0nm means the via only touches the layer surfaces (not recommended for
-    /// real designs as it violates standard design rules).
+    /// Examples:
+    /// - `contact_depth: 50%` → Penetrates 50% into each layer
+    /// - `contact_depth: 150nm` → Penetrates exactly 150nm
+    /// - `contact_depth: 0%` → Surface contact only (no penetration)
+    /// - `contact_depth: 100%` → Complete penetration through layer
     ///
     /// **Required field** - no default value to ensure explicit process specification.
-    pub contact_depth: Measurement,
+    pub contact_depth: Expression,
+    
+    /// Material-specific contact depths (v0.2.1).
+    /// Maps material name to depth expression. When a via connects two layers,
+    /// the compiler looks up each layer's material and applies its specific depth.
+    ///
+    /// Example:
+    /// ```
+    /// material_contact_depths:
+    ///     Aluminum: 33%
+    ///     Polysilicon: 75%
+    ///     Tungsten: 40%
+    /// ```
+    pub material_contact_depths: Option<rustc_hash::FxHashMap<String, Expression>>,
+    
+    /// Minimum contact depth in nanometers (safety bound, v0.2.1).
+    /// Prevents vias from having insufficient penetration regardless of percentage calculation.
+    pub min_contact_depth: Option<Measurement>,
+    
+    /// Maximum contact depth in nanometers (safety bound, v0.2.1).
+    /// Prevents vias from over-penetrating regardless of percentage calculation.
+    pub max_contact_depth: Option<Measurement>,
     
     // v0.1.7 ASIC Extensions
     /// Per-layer enclosure (annular ring) constraints.

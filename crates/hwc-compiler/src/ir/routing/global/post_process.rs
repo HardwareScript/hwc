@@ -510,6 +510,7 @@ impl<'a> AutoRouter<'a> {
             net_name.into(),
             hwc_engine::space::CurrentRating::new(net_actual_current_ma, current_limit_ma),
             layer_z_range,
+            routing_layer_name.into(),  // v0.2.2: Explicit layer lineage
         );
 
         let from_entity = format!("auto_route_{}_start", net_name);

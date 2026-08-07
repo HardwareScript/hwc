@@ -8,8 +8,8 @@ use hwc_parser::{
     BridgeDefinition, ComponentDefinition, ConstDefinition, DeviceDefinition,
     InterfaceDefinition, MaterialAliasDefinition, MaterialDefinition, MechanicalDefinition,
     ModuleDefinition, PatternDefinition, ProfileDefinition, ShapeDefinition,
-    SignalGroupDefinition, SpaceDefinition, SpiceModelDefinition, StrategyDefinition,
-    TestDefinition, UnitDefinition,
+    SignalGroupDefinition, SpaceDefinition, SpiceModelDefinition, SubcircuitDefinition,
+    StrategyDefinition, TestDefinition, UnitDefinition,
 };
 
 /// Unified enum representing any top-level declaration in HardwareScript
@@ -39,6 +39,7 @@ pub enum Definition {
     Space(SpaceDefinition),
     Bridge(BridgeDefinition),
     SpiceModel(SpiceModelDefinition), // v0.2.1: SPICE model card definitions
+    Subcircuit(SubcircuitDefinition), // v0.3.0: Native typed subcircuit definitions (replaces raw SPICE strings)
 }
 
 impl Definition {
@@ -66,6 +67,7 @@ impl Definition {
             Definition::Space(_) => "space",
             Definition::Bridge(_) => "bridge",
             Definition::SpiceModel(_) => "spice_model",
+            Definition::Subcircuit(_) => "subcircuit",
         }
     }
 
@@ -89,6 +91,7 @@ impl Definition {
             Definition::Shape(d) => d.is_exported,
             Definition::Space(d) => d.is_exported,
             Definition::SpiceModel(d) => d.is_exported,
+            Definition::Subcircuit(d) => d.is_exported,
             // Local/prelude items without export flags are implicitly public
             _ => true,
         }
@@ -117,6 +120,7 @@ impl Definition {
             Definition::Shape(d) => d.name.as_str(),
             Definition::Space(d) => d.name.as_str(),
             Definition::SpiceModel(d) => d.name.as_str(),
+            Definition::Subcircuit(d) => d.name.as_str(),
             Definition::Bridge(_) => "<bridge>", // Bridges don't have names
         }
     }

@@ -51,6 +51,7 @@ pub fn verify_em_thermal(params: &EmVerificationParams) -> Result<(), IrError> {
             start: seg.start,
             end: seg.end,
             layer: 0,
+            device_binding: None, // Route segments don't have device bindings
         })
         .collect();
 

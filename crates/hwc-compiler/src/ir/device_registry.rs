@@ -8,7 +8,7 @@ use compact_str::CompactString;
 use hwc_engine::space::{DeviceInstance, PourMetadata};
 use rustc_hash::FxHashMap;
 
-use crate::SymbolTable;
+use crate::{IrError, SymbolTable};
 
 /// Populate device instances in HardwareSpace from pour bindings
 ///
@@ -17,7 +17,7 @@ use crate::SymbolTable;
 pub fn populate_device_instances(
     space: &mut hwc_engine::HardwareSpace,
     symbol_table: &SymbolTable,
-) {
+) -> Result<(), IrError> {
     println!("   ├─ Populating device instance registry...");
     
     // Step 1: Group pours by device instance name
@@ -43,6 +43,17 @@ pub fn populate_device_instances(
             if let Some(ref binding) = pour.device_binding {
                 if !terminals.contains(&binding.terminal) {
                     terminals.push(binding.terminal.clone());
+                }
+                
+                // ZERO COMPILER MAGIC: Device terminal pours MUST have explicit net assignments
+                // HardwareScript does not infer connectivity - the user must declare it explicitly
+                if pour.net.is_none() {
+                    return Err(IrError::DeviceTerminalMissingNet {
+                        pour_name: pour.name.clone(),
+                        device: binding.device_name.clone(),
+                        terminal: binding.terminal.clone(),
+                        material: pour.material_name.clone(),
+                    });
                 }
                 
                 // Map terminal to net
@@ -89,6 +100,7 @@ pub fn populate_device_instances(
     }
     
     println!("   ├─ Device registry populated: {} devices", space.device_instances.len());
+    Ok(())
 }
 
 /// Look up device type from symbol table by matching terminals and materials
@@ -185,4 +197,125 @@ fn calculate_device_parameters(
     }
     
     params
+}
+
+/// Convert device_instances from HardwareSpace to PhysicalNetlist for export
+///
+/// This bridges the gap between the compiler's device registry (space.device_instances)
+/// and the alignment/export layer's PhysicalNetlist format.
+///
+/// # Arguments
+/// * `space` - The hardware space containing device instances
+/// * `space_def` - Optional space definition (needed to map module ports)
+/// * `symbol_table` - Optional symbol table (needed to look up module definition)
+pub fn device_instances_to_physical_netlist(
+    space: &hwc_engine::HardwareSpace,
+    space_def: Option<&hwc_parser::SpaceDefinition>,
+    symbol_table: Option<&crate::SymbolTable>,
+) -> crate::alignment::PhysicalNetlist {
+    use crate::alignment::{DeviceTypeRegistry, NetInfo, PhysicalDevice, PhysicalNetlist, PortInfo, PortDirection};
+    
+    let mut device_registry = DeviceTypeRegistry::new();
+    let mut physical_netlist = PhysicalNetlist::with_registry(device_registry.clone());
+    
+    // Build a map of device.terminal -> pour_name for terminal_pours field
+    let mut device_terminal_pours: rustc_hash::FxHashMap<(CompactString, CompactString), String> = 
+        rustc_hash::FxHashMap::default();
+    
+    for pour in &space.pours {
+        if let Some(ref binding) = pour.device_binding {
+            let key = (binding.device_name.clone(), binding.terminal.clone());
+            device_terminal_pours.insert(key, pour.name.to_string());
+        }
+    }
+    
+    // Convert each device instance to a PhysicalDevice
+    for device_instance in &space.device_instances {
+        // Register device type and get ID
+        let device_type_id = device_registry.get_or_register(&device_instance.device_type);
+        
+        // Convert terminal_nets from FxHashMap<CompactString, CompactString> to FxHashMap<CompactString, String>
+        let terminals: rustc_hash::FxHashMap<CompactString, String> = device_instance
+            .terminal_nets
+            .iter()
+            .map(|(k, v)| (k.clone(), v.to_string()))
+            .collect();
+        
+        // Build terminal_pours map
+        let terminal_pours: rustc_hash::FxHashMap<CompactString, String> = device_instance
+            .terminals
+            .iter()
+            .filter_map(|terminal| {
+                let key = (device_instance.name.clone(), terminal.clone());
+                device_terminal_pours.get(&key).map(|pour_name| (terminal.clone(), pour_name.clone()))
+            })
+            .collect();
+        
+        let physical_device = PhysicalDevice {
+            name: device_instance.name.clone(),
+            device_type_id,
+            terminals,
+            parameters: device_instance.parameters.clone(),
+            terminal_pours,
+        };
+        
+        physical_netlist.devices.push(physical_device);
+        
+        // Register nets from terminal connections
+        for (_terminal, net_name) in &device_instance.terminal_nets {
+            physical_netlist.nets.entry(net_name.clone()).or_insert_with(|| NetInfo {
+                name: net_name.clone(),
+                connected_devices: Vec::new(),
+            });
+            
+            // Add device name to net's connected devices list
+            if let Some(net_info) = physical_netlist.nets.get_mut(net_name) {
+                if !net_info.connected_devices.contains(&device_instance.name) {
+                    net_info.connected_devices.push(device_instance.name.clone());
+                }
+            }
+        }
+    }
+    
+    // Add all nets from the space's netlist as well (including ports/external connections)
+    for net_id in space.netlist.all_net_ids() {
+        if let Some(net) = space.netlist.get_net(net_id) {
+            physical_netlist.nets.entry(net.name.clone()).or_insert_with(|| NetInfo {
+                name: net.name.clone(),
+                connected_devices: Vec::new(),
+            });
+        }
+    }
+    
+    // Update the registry in the netlist
+    physical_netlist.device_registry = device_registry;
+    
+    // Map module ports to physical netlist ports
+    if let Some(space_def) = space_def {
+        if let Some(module_name) = &space_def.implements_module {
+            if let Some(symbol_table) = symbol_table {
+                if let Ok(module_def) = symbol_table.get_module(module_name) {
+                    // For each pin in the module, create a corresponding port in the physical netlist
+                    for pin in &module_def.pins {
+                        // Convert AST PinDirection to alignment PortDirection
+                        let direction = match pin.direction {
+                            hwc_parser::PinDirection::Input => PortDirection::Input,
+                            hwc_parser::PinDirection::Output => PortDirection::Output,
+                            hwc_parser::PinDirection::Inout => PortDirection::Inout,
+                            hwc_parser::PinDirection::Power => PortDirection::Power,
+                            hwc_parser::PinDirection::Ground => PortDirection::Ground,
+                            hwc_parser::PinDirection::Passive => PortDirection::Inout,
+                        };
+                        
+                        physical_netlist.ports.push(PortInfo {
+                            name: pin.name.clone(),
+                            direction,
+                        });
+                    }
+                }
+            }
+        }
+    }
+    
+    physical_netlist
 }

@@ -6,6 +6,7 @@ use hwc_parser::{
     BridgeDefinition, ComponentDefinition, DeviceDefinition, InterfaceDefinition,
     MaterialAliasDefinition, MaterialDefinition, MechanicalDefinition, ModuleDefinition,
     PatternDefinition, ProfileDefinition, ShapeDefinition, SignalGroupDefinition,
+    SpiceModelDefinition, SubcircuitDefinition,
     StrategyDefinition, TestDefinition, UnitDefinition,
 };
 
@@ -502,5 +503,52 @@ impl SymbolTable {
             }
         }
         self.prelude.get(name).is_some() || self.core.get(name).is_some()
+    }
+
+    /// Register a SPICE model definition (in local layer)
+    ///
+    /// SPICE models provide analytical models for device simulation.
+    /// Example: .model NMOS NMOS (VTO=0.7 KP=120u)
+    pub fn register_spice_model(&mut self, collector: &DiagnosticCollector, def: SpiceModelDefinition) {
+        let name_str = def.name.as_str();
+        if let Some(Definition::SpiceModel(existing)) = self.local.get(name_str) {
+            collector.report(SymbolError::duplicate(
+                def.name.to_string().into(),
+                "spice_model",
+                (def.span.start, def.span.end),
+                Some((existing.span.start, existing.span.end)),
+            ));
+            return;
+        }
+        self.local.insert(name_str.into(), Definition::SpiceModel(def));
+    }
+
+    /// Register a subcircuit definition (in local layer)
+    ///
+    /// Subcircuits provide foundry-supplied compact models for devices.
+    /// These are typed, validated AST structures (not raw SPICE strings).
+    ///
+    /// Example:
+    /// ```hw
+    /// subcircuit sky130_fd_pr__res_high_po:
+    ///     terminals: [PLUS, MINUS, BULK]
+    ///     parameters: [W = 1.0um, L = 1.0um]
+    ///     elements:
+    ///         R_head: Resistor(PLUS, node_1, val: 362.0ohm)
+    ///         R_body: Resistor(node_1, node_2, val: 350.0ohm_sq * (L / W))
+    ///         ...
+    /// ```
+    pub fn register_subcircuit(&mut self, collector: &DiagnosticCollector, def: SubcircuitDefinition) {
+        let name_str = def.name.as_str();
+        if let Some(Definition::Subcircuit(existing)) = self.local.get(name_str) {
+            collector.report(SymbolError::duplicate(
+                def.name.to_string().into(),
+                "subcircuit",
+                (def.span.start, def.span.end),
+                Some((existing.span.start, existing.span.end)),
+            ));
+            return;
+        }
+        self.local.insert(name_str.into(), Definition::Subcircuit(def));
     }
 }

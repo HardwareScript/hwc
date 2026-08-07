@@ -54,6 +54,12 @@ pub fn build_spatial_index(
             start: layer.bbox.min,  // Original 3D start point
             end: layer.bbox.max,    // Original 3D end point
             layer: layer.bbox.min.z,  // Bottom Z coordinate
+            device_binding: layer.device_binding.as_ref().map(|(dev, term)| {
+                hwc_physics::connectivity::DeviceBinding {
+                    device_name: dev.as_str().into(),
+                    terminal: term.as_str().into(),
+                }
+            }), // v0.2.2: Convert device binding
         };
        
         idx.insert(trace_seg);
@@ -79,6 +85,7 @@ pub fn build_spatial_index(
             start: meta.bbox.min,
             end: meta.bbox.max,
             layer: meta.bbox.min.z,
+            device_binding: None, // Component instances don't have device bindings
         };
         idx.insert(trace_seg);
     }

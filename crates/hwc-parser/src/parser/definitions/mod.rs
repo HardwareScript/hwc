@@ -25,6 +25,7 @@ pub mod shape; // Modular subfolder: parameters, points, generator, geometry, cs
 mod signal_group;
 mod space;
 mod spice_model;
+mod subcircuit;
 mod test;
 mod unit;
 
@@ -178,6 +179,11 @@ impl super::Parser {
                 self.parse_spice_model(collector, is_exported)
                     .map(Definition::SpiceModel)
             }
+            Some(Token::Subcircuit) => {
+                // v0.3.0: Native typed subcircuit definitions (replaces raw SPICE strings)
+                self.parse_subcircuit(collector, is_exported)
+                    .map(Definition::Subcircuit)
+            }
             Some(Token::Logic) => {
                 // // eprintln!("[DEBUG] Dispatching to parse_logic_definition");
                 self.advance(); // consume 'logic' token
@@ -212,7 +218,7 @@ impl super::Parser {
             _ => {
                 // // eprintln!("[DEBUG] Unexpected token in parse_definition");
                 collector.report(self.error(
-                    "Expected definition type (bridge, material, profile, component, module, mechanical, interface, test, unit, device, const, signal_group, shape, spice_model, logic, pattern, strategy, or space)",
+                    "Expected definition type (bridge, material, profile, component, module, mechanical, interface, test, unit, device, const, signal_group, shape, spice_model, spice_subcircuit, logic, pattern, strategy, or space)",
                 ));
                 None
             }

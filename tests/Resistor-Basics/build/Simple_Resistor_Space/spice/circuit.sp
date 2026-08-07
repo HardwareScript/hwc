@@ -4,14 +4,30 @@
 * Format: SPICE3
 
 * ========================================
+* PDK SUBCIRCUIT: sky130_fd_pr__res_high_po
+* ========================================
+.subckt sky130_fd_pr__res_high_po PLUS MINUS BULK W=1u L=1u
+RR_head PLUS node_1 362ohm
+RR_tail node_2 MINUS 362ohm
+RR_body node_1 node_2 {350ohm * ({L / W})}
+CC_sub1 PLUS BULK {{2fF * W} * L}
+CC_sub2 MINUS BULK {{2fF * W} * L}
+.ends sky130_fd_pr__res_high_po
+
+* ========================================
 * NETS
 * ========================================
-* Net: In (pour: Contact_A, material: Aluminum, z: 0.0000mm)
-* Net: Out (pour: Contact_B, material: Aluminum, z: 0.0000mm)
-* Net: In (pour: In_Pad, material: Aluminum, z: 0.0000mm)
-* Net: Out (pour: Out_Pad, material: Aluminum, z: 0.0000mm)
-* Net: In (width=200nm, material=Tungsten)
+* Net: In (pour: Resistor_Body_A, material: Polysilicon, z: 0.0000mm)
+* Net: Out (pour: Resistor_Body_B, material: Polysilicon, z: 0.0000mm)
+* Net: GND (pour: Resistor_Bulk, material: Air, z: 0.0000mm)
+* Net: In (pour: Contact_A, material: Aluminum, z: 0.0005mm)
+* Net: Out (pour: Contact_B, material: Aluminum, z: 0.0005mm)
+* Net: In (pour: In_Pad, material: Aluminum, z: 0.0005mm)
+* Net: Out (pour: Out_Pad, material: Aluminum, z: 0.0005mm)
+* Net: In (width=300nm, material=Tungsten)
 *   Connected pins:
+*     - Resistor_Body_A.anchor
+*     - Resistor_Body_A.__virtual_Resistor_Body_A
 *     - Contact_A.anchor
 *     - Contact_A.__virtual_Contact_A
 *     - Via_A.__virtual_Via_A
@@ -21,8 +37,10 @@
 *     - Contact_A.__virtual_Contact_A
 *     - In_Pad.__virtual_In_Pad
 *     - Contact_A.__virtual_Contact_A
-* Net: Out (width=200nm, material=Tungsten)
+* Net: Out (width=300nm, material=Tungsten)
 *   Connected pins:
+*     - Resistor_Body_B.anchor
+*     - Resistor_Body_B.__virtual_Resistor_Body_B
 *     - Contact_B.anchor
 *     - Contact_B.__virtual_Contact_B
 *     - Via_B.__virtual_Via_B
@@ -32,12 +50,30 @@
 *     - Out_Pad.__virtual_Out_Pad
 *     - Contact_B.__virtual_Contact_B
 *     - Out_Pad.__virtual_Out_Pad
-* Net: TEMP_NET (width=200nm, material=Tungsten)
+* Net: GND (width=300nm, material=Tungsten)
+*   Connected pins:
+*     - Resistor_Bulk.anchor
+*     - Resistor_Bulk.__virtual_Resistor_Bulk
+* Net: TEMP_NET (width=300nm, material=Tungsten)
 
 
 * ========================================
 * EXTRACTED DEVICES
 * ========================================
-RR1 In Out 400.00
+XR1 In Out GND sky130_fd_pr__res_high_po W=1.41u L=1.41u
+
+* ========================================
+* INTEGRATED TRACE PARASITICS
+* ========================================
+* Trace resistance
+RRtr_In_0 nIn_entry In 2.909524e-1
+* Ground capacitance
+CCgnd_In_0 In GND 8.978146e-17
+* Trace resistance
+RRtr_Out_0 nOut_entry Out 2.909524e-1
+* Ground capacitance
+CCgnd_Out_0 Out GND 8.978146e-17
+
+* Total parasitic elements: 4
 
 .end

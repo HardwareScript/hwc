@@ -6,36 +6,31 @@
 * ========================================
 * NETS
 * ========================================
-* Net: Out (pour: Bottom_Plate, material: Polysilicon, z: 0.0000mm)
-* Net: In (pour: Top_Plate, material: Aluminum, z: 0.0000mm)
-* Net: In (pour: In_Pad, material: Aluminum, z: 0.0000mm)
-* Net: Out (pour: Out_Pad, material: Polysilicon, z: 0.0000mm)
+* Net: Out (pour: Bottom_Plate, material: Aluminum, z: 0.0000mm)
+* Net: In (pour: Top_Plate, material: MIMCap, z: 0.0000mm)
+* Net: In (pour: Top_Contact_Metal2, material: Aluminum, z: 0.0001mm)
+* Net: Out (pour: Out_Pad, material: Aluminum, z: 0.0000mm)
+* Net: In (pour: In_Pad, material: Aluminum, z: 0.0001mm)
 * Net: In (width=200nm, material=Tungsten)
 *   Connected pins:
 *     - Top_Plate.anchor
 *     - Top_Plate.__virtual_Top_Plate
+*     - Top_Contact_Metal2.anchor
+*     - Top_Contact_Metal2.__virtual_Top_Contact_Metal2
+*     - Via_Top.__virtual_Via_Top
 *     - In_Pad.anchor
 *     - In_Pad.__virtual_In_Pad
-*     - In_Pad.__virtual_In_Pad
-*     - Top_Plate.__virtual_Top_Plate
-*     - In_Pad.__virtual_In_Pad
-*     - Top_Plate.__virtual_Top_Plate
 * Net: Out (width=200nm, material=Tungsten)
 *   Connected pins:
 *     - Bottom_Plate.anchor
 *     - Bottom_Plate.__virtual_Bottom_Plate
 *     - Out_Pad.anchor
 *     - Out_Pad.__virtual_Out_Pad
-*     - Bottom_Plate.__virtual_Bottom_Plate
-*     - Out_Pad.__virtual_Out_Pad
-*     - Bottom_Plate.__virtual_Bottom_Plate
-*     - Out_Pad.__virtual_Out_Pad
-* Net: TEMP_NET (width=200nm, material=Tungsten)
 
 
 * ========================================
 * EXTRACTED DEVICES
 * ========================================
-CC1 In Out 3.45e-13
+CC1 In Out 6.91e-13
 
 .end

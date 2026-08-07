@@ -3,6 +3,7 @@ mod netlist_ops;
 mod place_drilled;
 mod place_simple;
 mod resolve;
+mod depth_resolver;
 
 use crate::ir::errors::IrError;
 use crate::ir::stackup_manager::StackupManager;
@@ -117,28 +118,132 @@ pub fn place_contact(
         contact_name_debug, contact.material, diameter_nm,
         from_bottom_nm, to_bottom_nm, from_top_nm, to_top_nm);
 
-    // Extract contact_depth from profile (REQUIRED parameter - no fallback)
-    let contact_depth_nm = space
-        .fabrication_constraints
-        .as_ref()
-        .map(|c| c.via.contact_depth_nm)
-        .ok_or_else(|| IrError::MissingAsicConstraint {
-            message: format!(
-                "Contact '{}' requires profile via.contact_depth but none is defined",
-                contact_name_debug
-            ),
-            hint: "Add 'contact_depth: 50nm' to the 'via:' section of your profile.\nThis specifies how deep vias penetrate into conductive layers for reliable contact.".into(),
+    // v0.2.1: Resolve layer materials and thicknesses for depth calculation
+    let (lower_layer_name, lower_bottom, lower_top, upper_layer_name, upper_bottom, upper_top) =
+        if from_bottom_nm < to_bottom_nm {
+            (
+                stackup_manager.get_layer_name(&contact.from_elevation),
+                from_bottom_nm,
+                from_top_nm,
+                stackup_manager.get_layer_name(&contact.to_elevation),
+                to_bottom_nm,
+                to_top_nm,
+            )
+        } else {
+            (
+                stackup_manager.get_layer_name(&contact.to_elevation),
+                to_bottom_nm,
+                to_top_nm,
+                stackup_manager.get_layer_name(&contact.from_elevation),
+                from_bottom_nm,
+                from_top_nm,
+            )
+        };
+    
+    let lower_layer_name = lower_layer_name.ok_or_else(|| IrError::PlacementConstraint {
+        message: format!("Could not resolve lower layer name for contact '{}'", contact_name_debug),
+        component: contact_name_debug.to_string(),
+    })?;
+    
+    let upper_layer_name = upper_layer_name.ok_or_else(|| IrError::PlacementConstraint {
+        message: format!("Could not resolve upper layer name for contact '{}'", contact_name_debug),
+        component: contact_name_debug.to_string(),
+    })?;
+    
+    let lower_thickness_nm = lower_top - lower_bottom;
+    let upper_thickness_nm = upper_top - upper_bottom;
+    
+    // Get layer materials from stackup
+    let lower_material = stackup_manager.get_layer_material(&lower_layer_name)
+        .ok_or_else(|| IrError::PlacementConstraint {
+            message: format!("Could not resolve material for layer '{}'", lower_layer_name),
+            component: contact_name_debug.to_string(),
         })?;
-
-    let (start_z, end_z) = resolve_z_span(
-        stackup_manager,
-        contact,
-        from_bottom_nm,
-        from_top_nm,
-        to_bottom_nm,
-        to_top_nm,
-        contact_depth_nm,
+    
+    let upper_material = stackup_manager.get_layer_material(&upper_layer_name)
+        .ok_or_else(|| IrError::PlacementConstraint {
+            message: format!("Could not resolve material for layer '{}'", upper_layer_name),
+            component: contact_name_debug.to_string(),
+        })?;
+    
+    println!(
+        "[PLACE_CONTACT] '{}' layers: lower='{}' ({}, {}nm thick) upper='{}' ({}, {}nm thick)",
+        contact_name_debug,
+        lower_layer_name, lower_material, lower_thickness_nm,
+        upper_layer_name, upper_material, upper_thickness_nm
     );
+    
+    // v0.2.1: Get safety bounds from profile
+    let min_depth_nm = profile
+        .and_then(|p| p.via.as_ref())
+        .and_then(|v| v.min_contact_depth.as_ref())
+        .and_then(|m| crate::ir::conversions::measurement_to_nm(m, symbol_table, eval_context).ok());
+    
+    let max_depth_nm = profile
+        .and_then(|p| p.via.as_ref())
+        .and_then(|v| v.max_contact_depth.as_ref())
+        .and_then(|m| crate::ir::conversions::measurement_to_nm(m, symbol_table, eval_context).ok());
+    
+    // v0.2.1: Create depth evaluation context
+    let depth_context = depth_resolver::DepthEvaluationContext {
+        lower_layer_thickness_nm: lower_thickness_nm,
+        upper_layer_thickness_nm: upper_thickness_nm,
+        resolution_nm: space.resolution_nm,
+        min_depth_nm,
+        max_depth_nm,
+        symbol_table,
+        eval_context,
+    };
+    
+    // v0.2.1: Resolve depths using material-aware lookup
+    let (lower_depth_nm, upper_depth_nm) = depth_resolver::resolve_contact_depths(
+        contact,
+        &lower_layer_name,
+        lower_thickness_nm,
+        lower_material,
+        &upper_layer_name,
+        upper_thickness_nm,
+        upper_material,
+        profile.ok_or_else(|| IrError::MissingAsicConstraint {
+            message: format!("Contact '{}' requires a profile definition", contact_name_debug),
+            hint: "Add a profile to your space definition".into(),
+        })?,
+        &depth_context,
+    )?;
+    
+    println!(
+        "[PLACE_CONTACT] '{}' resolved depths: lower={}nm upper={}nm",
+        contact_name_debug, lower_depth_nm, upper_depth_nm
+    );
+    
+    // v0.2.1: VALIDATION - Prevent depth exceeding layer thickness
+    if lower_depth_nm > lower_thickness_nm {
+        return Err(IrError::PlacementConstraint {
+            message: format!(
+                "Via '{}' lower depth ({}nm) exceeds lower layer '{}' thickness ({}nm). \
+                 Reduce contact_depth or use percentage (e.g., 50% or 100% for complete penetration).",
+                contact_name_debug, lower_depth_nm, lower_layer_name, lower_thickness_nm
+            ),
+            component: contact_name_debug.to_string(),
+        });
+    }
+    
+    if upper_depth_nm > upper_thickness_nm {
+        return Err(IrError::PlacementConstraint {
+            message: format!(
+                "Via '{}' upper depth ({}nm) exceeds upper layer '{}' thickness ({}nm). \
+                 Reduce contact_depth or use percentage (e.g., 50% or 100% for complete penetration).",
+                contact_name_debug, upper_depth_nm, upper_layer_name, upper_thickness_nm
+            ),
+            component: contact_name_debug.to_string(),
+        });
+    }
+    
+    // Calculate via Z-span using resolved depths
+    let via_bottom = (lower_top - lower_depth_nm).max(0); // Clamp to substrate base
+    let via_top = upper_bottom + upper_depth_nm;
+
+    let (start_z, end_z) = (via_bottom, via_top);
 
     println!(
         "[PLACE_CONTACT] '{}' final span: start_z={}nm end_z={}nm ({}nm tall)",
@@ -155,8 +260,8 @@ pub fn place_contact(
             message: format!(
                 "Via '{}' extends below substrate base (Z={}nm < 0nm). \
                  Vias cannot penetrate below the wafer. \
-                 Reduce profile via.contact_depth (currently {}nm) or adjust layer thicknesses.",
-                contact_name_debug, start_z, contact_depth_nm
+                 Reduce lower layer penetration depth (currently {}nm into '{}') or adjust layer thicknesses.",
+                contact_name_debug, start_z, lower_depth_nm, lower_layer_name
             ),
             component: contact_name_debug.to_string(),
         });
@@ -166,8 +271,8 @@ pub fn place_contact(
         return Err(IrError::PlacementConstraint {
             message: format!(
                 "Via '{}' extends above space depth (Z={}nm > {}nm). \
-                 Increase space dimensions.z or reduce via.contact_depth.",
-                contact_name_debug, end_z, space.dimensions.depth_nm
+                 Increase space dimensions.z or reduce upper layer penetration depth (currently {}nm into '{}').",
+                contact_name_debug, end_z, space.dimensions.depth_nm, upper_depth_nm, upper_layer_name
             ),
             component: contact_name_debug.to_string(),
         });

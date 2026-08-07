@@ -263,7 +263,7 @@ impl crate::parser::Parser {
             }
             (Some(pos @ (Coordinate::Declarative { .. } | Coordinate::Positional { .. })), Some(w), Some(h)) => {
                 // Declarative/Positional with dimensions - create boundary now
-                eprintln!("[POUR BOUNDARY DEBUG] Converting declarative/positional center_pos to boundary");
+            
                 let span_empty = Span::new(0, 0);
                 let from = Coordinate::Positional {
                     x: Expression::Binary {

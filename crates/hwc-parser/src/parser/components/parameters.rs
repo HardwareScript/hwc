@@ -1,3 +1,4 @@
+use crate::ast::Parameter; // Component instantiation parameter (enum)
 use crate::lexer::Token;
 use crate::parser::error::ParseError;
 use smallvec::SmallVec;
@@ -7,7 +8,7 @@ impl crate::parser::Parser {
     /// v0.1.6: Only keyword arguments supported for self-documenting code
     pub(in crate::parser) fn parse_parameters(
         &mut self,
-    ) -> Result<SmallVec<[crate::ast::Parameter; 4]>, ParseError> {
+    ) -> Result<SmallVec<[Parameter; 4]>, ParseError> {
         self.expect(&Token::OpenParen)?;
 
         let mut params = SmallVec::new();
@@ -30,13 +31,13 @@ impl crate::parser::Parser {
 
     /// Parse a single parameter (keyword only - v0.1.6)
     /// Positional arguments are no longer supported for self-documenting code
-    fn parse_parameter(&mut self) -> Result<crate::ast::Parameter, ParseError> {
+    fn parse_parameter(&mut self) -> Result<Parameter, ParseError> {
         // v0.1.6: Only keyword arguments allowed
         // Syntax: name: value
         let name = self.expect_identifier_string()?;
         self.expect(&Token::Colon)?;
         let value = self.parse_parameter_value()?;
-        Ok(crate::ast::Parameter::Keyword {
+        Ok(Parameter::Keyword {
             name: name.into(),
             value,
         })

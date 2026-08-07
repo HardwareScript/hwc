@@ -1,6 +1,5 @@
 use super::helpers::{get_prop_nm, get_prop_string};
 use crate::ir::errors::IrError;
-use crate::ir::stackup_manager::StackupManager;
 use hwc_engine::HardwareSpace;
 use hwc_physics::geometry::Point2D;
 
@@ -59,60 +58,6 @@ pub(super) fn resolve_relational_anchor(
     );
     
     Ok(Point2D::new(x_nm, y_nm))
-}
-
-pub(super) fn resolve_z_span(
-    stackup_manager: &StackupManager,
-    contact: &hwc_parser::ContactPlacement,
-    from_bottom_nm: i64,
-    from_top_nm: i64,
-    to_bottom_nm: i64,
-    to_top_nm: i64,
-    contact_depth_nm: i64,
-) -> (i64, i64) {
-    if let (Some(from_name), Some(to_name)) = (
-        stackup_manager.get_layer_name(&contact.from_elevation),
-        stackup_manager.get_layer_name(&contact.to_elevation),
-    ) {
-        let (_lower_name, _lower_bottom, lower_top, _upper_name, upper_bottom, _upper_top) =
-            if from_bottom_nm < to_bottom_nm {
-                (
-                    from_name,
-                    from_bottom_nm,
-                    from_top_nm,
-                    to_name,
-                    to_bottom_nm,
-                    to_top_nm,
-                )
-            } else {
-                (
-                    to_name,
-                    to_bottom_nm,
-                    to_top_nm,
-                    from_name,
-                    from_bottom_nm,
-                    from_top_nm,
-                )
-            };
-
-        // ASIC Via Manufacturing Standard (v0.2.0):
-        // Vias penetrate into both source and destination conductive layers to ensure
-        // reliable electrical contact per standard design rules (e.g., SCMOS min 1λ enclosure).
-        //
-        // The contact_depth parameter (from profile via.contact_depth) specifies how deep
-        // the via extends into each layer beyond the dielectric interface.
-        //
-        // Example: contact_depth=50nm means via extends from (lower_top - 50nm) to (upper_bottom + 50nm),
-        // penetrating 50nm into the lower layer and 50nm into the upper layer.
-        //
-        // v0.2.1 FIX: Clamp via_bottom to 0 to prevent substrate penetration below the wafer base
-        let via_bottom = (lower_top - contact_depth_nm).max(0);
-        let via_top = upper_bottom + contact_depth_nm;
-
-        (via_bottom, via_top)
-    } else {
-        (from_bottom_nm.min(to_bottom_nm), from_top_nm.max(to_top_nm))
-    }
 }
 
 pub(super) fn check_material_collisions(

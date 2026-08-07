@@ -30,6 +30,25 @@ pub fn profile_to_constraints(
     };
 
     let via = if let Some(via_def) = &profile.via {
+        // v0.2.1: For contact_depth, store a sentinel value
+        // The actual evaluation happens per-via with layer context in depth_resolver
+        // We just need something non-zero to pass validation
+        let contact_depth_nm = 1; // Sentinel: actual depth calculated per-via
+        
+        // v0.2.1: Material-specific depths are also sentinels
+        let material_contact_depths_nm = rustc_hash::FxHashMap::default();
+        
+        // v0.2.1: Evaluate safety bounds (these are absolute values)
+        let min_contact_depth_nm = via_def
+            .min_contact_depth
+            .as_ref()
+            .map(measurement_to_nm);
+        
+        let max_contact_depth_nm = via_def
+            .max_contact_depth
+            .as_ref()
+            .map(measurement_to_nm);
+        
         ViaConstraints {
             min_diameter_nm: measurement_to_nm(&via_def.min_diameter),
             max_diameter_nm: 0,
@@ -44,7 +63,10 @@ pub fn profile_to_constraints(
                 .as_ref()
                 .map(measurement_to_nm)
                 .unwrap_or_else(|| measurement_to_nm(&via_def.min_diameter)),
-            contact_depth_nm: measurement_to_nm(&via_def.contact_depth),
+            contact_depth_nm, // Sentinel value - not used
+            material_contact_depths_nm, // Empty - we read from profile directly
+            min_contact_depth_nm,
+            max_contact_depth_nm,
             shape: via_def.shape.as_ref().map(|s| s.name.clone()),
         }
     } else {

@@ -191,6 +191,41 @@ pub enum Unit {
     Custom(String),
 }
 
+impl Unit {
+    /// Convert unit to SPICE suffix
+    ///
+    /// SPICE uses: f (femto), p (pico), n (nano), u (micro), m (milli), k (kilo), meg (mega), g (giga)
+    /// Returns an error for units that don't have a SPICE representation.
+    pub fn to_spice_suffix(&self) -> Result<&'static str, String> {
+        match self {
+            // Distance units
+            Unit::Millimeter => Ok("mm"),
+            Unit::Centimeter => Ok("cm"),
+            Unit::Micrometer => Ok("u"),  // SPICE uses 'u' for micro
+            Unit::Nanometer => Ok("n"),
+            Unit::Picometer => Ok("p"),
+            
+            // Electrical units (no suffix - base unit)
+            Unit::Volt => Ok(""),
+            Unit::Millivolt => Ok("m"),
+            Unit::Kilovolt => Ok("k"),
+            Unit::Ampere => Ok(""),
+            Unit::Milliampere => Ok("m"),
+            Unit::Microampere => Ok("u"),
+            
+            // Temperature
+            Unit::Celsius => Err("SPICE uses Kelvin for temperature, not Celsius".to_string()),
+            
+            // Custom units - parse the string to extract SPICE suffix
+            Unit::Custom(s) => {
+                // For custom units, the string itself might be the SPICE representation
+                // Examples: "ohm", "F", "H", "Hz"
+                Ok(Box::leak(s.clone().into_boxed_str()))
+            }
+        }
+    }
+}
+
 /// Coordinate: `[X, Y, Z]` (1-indexed, no spaces after commas)
 use super::expression::Expression;
 
