@@ -2,7 +2,7 @@ use crate::ast::{ModuleDefinition, ModuleStatement, Span};
 use crate::lexer::Token;
 use crate::parser::Parser;
 
-impl Parser {
+impl<'ast> Parser<'ast> {
     /// Parse a module definition: `module Name:`
     ///
     /// Syntax:
@@ -21,7 +21,7 @@ impl Parser {
         &mut self,
         collector: &crate::DiagnosticCollector,
         is_exported: bool,
-    ) -> Option<ModuleDefinition> {
+    ) -> Option<ModuleDefinition<'ast>> {
         let start = self.current_span();
 
         // Expect 'module' keyword

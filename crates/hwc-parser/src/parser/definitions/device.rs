@@ -8,7 +8,7 @@ use compact_str::CompactString;
 use rustc_hash::{FxHashMap, FxHashSet};
 use smallvec::SmallVec;
 
-impl super::super::Parser {
+impl<'ast> super::super::Parser<'ast> {
     /// Parse device definition: `device NMOS:`
     ///
     /// Syntax:

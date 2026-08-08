@@ -9,10 +9,10 @@ impl super::ModuleResolver {
     ///
     /// Imported definitions go into the HPM layer, not the local layer.
     /// This enables the Authority Stack (Local > HPM > Prelude > Core).
-    pub(super) fn register_definition(
+    pub(super) fn register_definition<'ast>(
         &self,
-        definition: &Definition,
-        symbol_table: &mut SymbolTable,
+        definition: &Definition<'ast>,
+        symbol_table: &mut SymbolTable<'ast>,
     ) -> Result<(), ResolverError> {
         match definition {
             Definition::Bridge(bridge) => {
@@ -97,7 +97,7 @@ impl super::ModuleResolver {
             }
             Definition::Space(space_def) => {
                 // v0.2.1: Register imported space definitions for hierarchical composition
-                symbol_table.register_import_space(space_def.clone());
+                symbol_table.register_import_space((**space_def).clone());
                 Ok(())
             }
             Definition::SpiceModel(spice_model) => {

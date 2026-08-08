@@ -10,7 +10,7 @@ use super::helpers::{is_block_literal, is_literal, unify_widths};
 pub struct WidthInference<'a> {
     widths: FxHashMap<CompactString, usize>,
     types: FxHashMap<CompactString, String>,
-    symbol_table: &'a crate::symbol_table::SymbolTable,
+    symbol_table: &'a crate::symbol_table::SymbolTable<'a>,
 }
 
 impl<'a> WidthInference<'a> {

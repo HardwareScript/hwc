@@ -225,9 +225,9 @@ pub fn add_offset_to_expression(
 
 /// Helper function to extract all placements from layout statements
 /// This recursively flattens for loops and if statements to get all placements
-pub fn extract_placements_from_layout_statements(
-    statements: &[hwc_parser::LayoutStatement],
-) -> Vec<hwc_parser::ModuleInternalPlacement> {
+pub fn extract_placements_from_layout_statements<'a>(
+    statements: &'a [hwc_parser::LayoutStatement],
+) -> Vec<&'a hwc_parser::ModuleInternalPlacement> {
     use hwc_parser::LayoutStatement;
 
     let mut placements = Vec::new();
@@ -235,7 +235,7 @@ pub fn extract_placements_from_layout_statements(
     for statement in statements {
         match statement {
             LayoutStatement::Placement(p) => {
-                placements.push(p.clone());
+                placements.push(*p);
             }
             LayoutStatement::For { body, .. } => {
                 // Recursively extract placements from for loop body

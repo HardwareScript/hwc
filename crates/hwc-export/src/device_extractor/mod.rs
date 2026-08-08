@@ -24,7 +24,7 @@ use rustc_hash::FxHashMap;
 /// Device extractor using explicit intent-based bindings
 pub struct DeviceExtractor<'a> {
     pub(super) space: &'a HardwareSpace,
-    pub(super) symbol_table: &'a hwc_compiler::SymbolTable,
+    pub(super) symbol_table: &'a hwc_compiler::SymbolTable<'a>,
     pub(super) device_registry: DeviceTypeRegistry,
     pub(super) parameter_registry: parameter_extraction::ParameterExtractionRegistry,
 }

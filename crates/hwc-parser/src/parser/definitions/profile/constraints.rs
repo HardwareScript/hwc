@@ -3,7 +3,7 @@ use crate::ast::*;
 use crate::lexer::{Span, Token};
 use compact_str::CompactString;
 
-impl super::super::super::Parser {
+impl<'ast> super::super::super::Parser<'ast> {
     /// Parse trace constraints block
     pub(super) fn parse_trace_constraints(&mut self) -> Result<TraceConstraints, ParseError> {
         let start_pos = self.current_span().start;

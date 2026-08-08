@@ -1,6 +1,7 @@
 //! Standard library file loader
 
 use crate::{stdlib_search_paths, StdlibError};
+use bumpalo::Bump;
 use hwc_parser::{Definition, Lexer, Parser, UnitDefinition};
 use std::fs;
 use std::path::PathBuf;
@@ -44,9 +45,10 @@ impl StdlibLoader {
             .map_err(|e| StdlibError::ParseError(format!("Tokenization failed: {:?}", e)))?;
 
         // Parse with diagnostic collector
+        let arena = Bump::new();
         let collector =
             hwc_parser::DiagnosticCollector::new_with_file(&source, &path.to_string_lossy(), 20);
-        let mut parser = Parser::new(tokens);
+        let mut parser = Parser::new(tokens, &arena);
         let program = parser.parse(&collector);
 
         // Check for errors

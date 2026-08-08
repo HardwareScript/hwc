@@ -4,7 +4,7 @@ use super::super::error::{span_to_source_span, ParseError};
 use crate::ast::*;
 use crate::lexer::{Span, Token};
 
-impl super::super::Parser {
+impl<'ast> super::super::Parser<'ast> {
     // ========================================================================
     // Material Definition Parsing
     // ========================================================================

@@ -4,28 +4,28 @@ use compact_str::CompactString;
 use serde::{Deserialize, Serialize};
 
 /// Layout block for mapping module internals: `layout ModuleName:`
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct ModuleLayoutBlock {
+#[derive(Debug, Clone, PartialEq)]
+pub struct ModuleLayoutBlock<'ast> {
     pub module_instance: CompactString,
-    pub statements: Vec<LayoutStatement>,
+    pub statements: Vec<LayoutStatement<'ast>>,
     pub span: Span,
 }
 
 /// Statement inside a layout block (mirrors ModuleStatement but for physical placement)
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum LayoutStatement {
-    Placement(Box<ModuleInternalPlacement>),
+#[derive(Debug, Clone, PartialEq)]
+pub enum LayoutStatement<'ast> {
+    Placement(&'ast ModuleInternalPlacement),
     For {
         variable: CompactString,
         start: usize,
         end: usize,
-        body: Vec<LayoutStatement>,
+        body: Vec<LayoutStatement<'ast>>,
         span: Span,
     },
     If {
         condition: crate::ast::module::Condition,
-        then_body: Vec<LayoutStatement>,
-        else_body: Option<Vec<LayoutStatement>>,
+        then_body: Vec<LayoutStatement<'ast>>,
+        else_body: Option<Vec<LayoutStatement<'ast>>>,
         span: Span,
     },
 }

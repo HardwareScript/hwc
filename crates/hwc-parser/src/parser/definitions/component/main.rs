@@ -5,7 +5,7 @@ use crate::ast::*;
 use crate::lexer::{Span, Token};
 use smallvec::SmallVec;
 
-impl super::super::super::Parser {
+impl<'ast> super::super::super::Parser<'ast> {
     /// Parse component definition: `define component "Resistor_0805" (val: Measurement):`
     pub(in super::super::super) fn parse_component_def(
         &mut self,

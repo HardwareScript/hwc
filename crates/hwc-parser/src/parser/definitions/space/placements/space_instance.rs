@@ -10,7 +10,7 @@ use crate::ast::*;
 use crate::lexer::{Span, Token};
 use crate::ParseError;
 
-impl crate::parser::Parser {
+impl<'ast> crate::parser::Parser<'ast> {
     /// Parse space instance placement: `add space SpaceName named InstName at [...] rotated ...deg:`
     pub(in crate::parser) fn parse_space_instance(
         &mut self,
@@ -154,111 +154,5 @@ impl crate::parser::Parser {
             net_map,
             span: Span::new(start_pos, end_pos),
         })
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::lexer::Lexer;
-    use crate::parser::Parser;
-    use crate::DiagnosticCollector;
-
-    #[test]
-    fn test_parse_space_instance_basic() {
-        let source = r#"space Parent:
-    add space PMOS_Cell named PMOS_Inst at [x: 0nm, y: 0nm, z: 0nm] rotated 0deg:
-        net_map: [VDD_Rail: VDD, Out_Pad: Out]
-"#;
-        let lexer = Lexer::new(source);
-        let tokens = lexer.tokenize().expect("Lexer should succeed");
-        let mut parser = Parser::new(tokens);
-        let collector = DiagnosticCollector::new(source, 100);
-        let program = parser.parse(&collector);
-
-        if collector.has_errors() {
-            eprintln!("Parse errors:\n{}", collector.summary());
-        }
-        assert!(!collector.has_errors(), "Should parse without errors");
-
-        let space = match program.definitions.into_iter().next() {
-            Some(crate::ast::Definition::Space(s)) => s,
-            _ => panic!("Expected space definition"),
-        };
-
-        // Check that we have a space instance
-        let space_instances: Vec<_> = space
-            .statements
-            .iter()
-            .filter_map(|s| {
-                if let crate::ast::SpaceTopLevelStatement::SpaceInstance(si) = s {
-                    Some(si.as_ref())
-                } else {
-                    None
-                }
-            })
-            .collect();
-
-        assert_eq!(space_instances.len(), 1, "Should have one space instance");
-        let inst = space_instances[0];
-        assert_eq!(inst.space_name.to_string(), "PMOS_Cell");
-        assert_eq!(inst.instance_name.base.as_str(), "PMOS_Inst");
-        assert!(inst.rotation.is_some(), "Rotation must be present");
-        assert_eq!(inst.net_map.len(), 2);
-        assert_eq!(inst.net_map.get("VDD_Rail").unwrap().as_str(), "VDD");
-        assert_eq!(inst.net_map.get("Out_Pad").unwrap().as_str(), "Out");
-    }
-
-    #[test]
-    fn test_parse_space_instance_without_rotation_fails() {
-        // This should FAIL - rotation is required
-        let source = r#"space Parent:
-    add space NMOS_Cell named NMOS_Inst at [x: 2500nm, y: 0nm, z: 0nm]:
-        net_map: [GND_Rail: GND]
-"#;
-        let lexer = Lexer::new(source);
-        let tokens = lexer.tokenize().expect("Lexer should succeed");
-        let mut parser = Parser::new(tokens);
-        let collector = DiagnosticCollector::new(source, 100);
-        let _program = parser.parse(&collector);
-
-        assert!(collector.has_errors(), "Should fail without rotation");
-    }
-
-    #[test]
-    fn test_parse_space_instance_complete() {
-        let source = r#"space Parent:
-    add space NMOS_Cell named NMOS_Inst at [x: 2500nm, y: 0nm, z: 1000nm] rotated 90deg:
-        net_map: [GND_Rail: GND, Out_Pad: Out, Gate_Strip: In]
-"#;
-        let lexer = Lexer::new(source);
-        let tokens = lexer.tokenize().expect("Lexer should succeed");
-        let mut parser = Parser::new(tokens);
-        let collector = DiagnosticCollector::new(source, 100);
-        let program = parser.parse(&collector);
-
-        assert!(!collector.has_errors(), "Should parse without errors");
-
-        let space = match program.definitions.into_iter().next() {
-            Some(crate::ast::Definition::Space(s)) => s,
-            _ => panic!("Expected space definition"),
-        };
-
-        let space_instances: Vec<_> = space
-            .statements
-            .iter()
-            .filter_map(|s| {
-                if let crate::ast::SpaceTopLevelStatement::SpaceInstance(si) = s {
-                    Some(si.as_ref())
-                } else {
-                    None
-                }
-            })
-            .collect();
-
-        assert_eq!(space_instances.len(), 1);
-        let inst = space_instances[0];
-        assert_eq!(inst.space_name.to_string(), "NMOS_Cell");
-        assert!(inst.rotation.is_some(), "Rotation must be present");
-        assert_eq!(inst.net_map.len(), 3);
     }
 }

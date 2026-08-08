@@ -6,7 +6,7 @@ use crate::{
     RegionAnchor, RegionBoundary, RegionConstraint, RegionConstraintType, RegionDefinition,
 };
 
-impl crate::parser::Parser {
+impl<'ast> crate::parser::Parser<'ast> {
     /// Parse region definition:
     /// ```hw
     /// region AnalogRegion:

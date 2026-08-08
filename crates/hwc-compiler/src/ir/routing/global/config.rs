@@ -38,7 +38,7 @@ pub struct AutoRouter<'a> {
     /// Active profile definition (for ASIC detection and layer info)
     pub profile: Option<&'a hwc_parser::ProfileDefinition>,
     /// Symbol table for constant lookups
-    pub symbol_table: &'a crate::SymbolTable,
+    pub symbol_table: &'a crate::SymbolTable<'a>,
     /// Evaluation context for expression evaluation
     pub eval_context: &'a hwc_parser::EvaluationContext,
     /// Configuration for the router.

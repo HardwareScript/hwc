@@ -3,7 +3,7 @@ use crate::SymbolTable;
 use hwc_engine::geometry::Point3D;
 
 pub struct PlacementContext<'a> {
-    pub symbol_table: &'a SymbolTable,
+    pub symbol_table: &'a SymbolTable<'a>,
     pub eval_context: &'a hwc_parser::EvaluationContext,
     pub stackup_manager: &'a StackupManager,
     pub collector: &'a hwc_diagnostics::DiagnosticCollector,

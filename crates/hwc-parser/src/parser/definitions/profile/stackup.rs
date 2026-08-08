@@ -2,7 +2,7 @@ use super::super::super::error::ParseError;
 use crate::ast::*;
 use crate::lexer::Token;
 
-impl super::super::super::Parser {
+impl<'ast> super::super::super::Parser<'ast> {
     /// Parse physical layer stackup block (v0.1.7 Z-Axis Abstraction)
     ///
     /// Syntax:

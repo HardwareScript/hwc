@@ -3,7 +3,7 @@ use crate::ast::*;
 use crate::lexer::{Span, Token};
 use rustc_hash::FxHashMap;
 
-impl super::super::super::Parser {
+impl<'ast> super::super::super::Parser<'ast> {
     /// Parse via constraints block
     pub(super) fn parse_via_constraints(&mut self) -> Result<ViaConstraints, ParseError> {
         let start_pos = self.current_span().start;

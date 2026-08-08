@@ -2,7 +2,7 @@ use crate::ast::{ArithmeticOp, ArrayIndex, Condition};
 use crate::lexer::Token;
 use crate::parser::{ParseError, Parser};
 
-impl Parser {
+impl<'ast> Parser<'ast> {
     /// Parse array index expression
     pub(super) fn parse_array_index(&mut self) -> Result<ArrayIndex, ParseError> {
         // Parse the left operand

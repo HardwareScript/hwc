@@ -3,6 +3,7 @@
 //! Based on v0.1.3 specification with indentation-based syntax.
 //! See `grammar/hardware.grammar` for complete syntax rules.
 
+pub mod arena;
 mod bridge;
 mod common;
 mod component;
@@ -56,33 +57,31 @@ pub use unit::*;
 // Re-export Span from lexer for use in AST
 pub use crate::lexer::Span;
 
-use serde::{Deserialize, Serialize};
-
 /// Root AST node representing a complete Hardware Script file (v0.1.4)
 ///
 /// v0.2.0: Adds re_exports for explicit symbol re-exporting (Rust-style pub use)
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Program {
+#[derive(Debug, Clone, PartialEq)]
+pub struct Program<'ast> {
     pub imports: Vec<Import>,
     pub re_exports: Vec<ReExport>,
-    pub definitions: Vec<Definition>,
+    pub definitions: Vec<Definition<'ast>>,
     pub span: Span,
 }
 
 /// Top-level definition (v0.1.4 unified syntax)
 /// v0.2.0: Adds Bridge as first-class definition
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum Definition {
+#[derive(Debug, Clone, PartialEq)]
+pub enum Definition<'ast> {
     Bridge(BridgeDefinition), // NEW v0.2.0: First-class bridge definitions
     Material(MaterialDefinition),
     Profile(Box<ProfileDefinition>),
-    Component(ComponentDefinition),
-    Module(ModuleDefinition), // NEW: Module support for v0.1.4
+    Component(&'ast ComponentDefinition), // Arena-allocated for SoC-scale performance
+    Module(ModuleDefinition<'ast>),       // NEW: Module support for v0.1.4
     Mechanical(MechanicalDefinition),
     Interface(InterfaceDefinition),
     PolymorphicInterface(PolymorphicInterfaceDefinition), // NEW: Duck-typed interfaces for v0.1.5
     Test(TestDefinition),
-    Space(SpaceDefinition),
+    Space(Box<SpaceDefinition<'ast>>),
     Unit(UnitDefinition),                   // Standard library unit definitions
     Device(DeviceDefinition), // NEW: Device definitions for v0.1.6 (foundry primitives)
     Const(ConstDefinition),   // NEW: Constant definitions for v0.1.6 (math.hw primitives)

@@ -2,7 +2,7 @@ use crate::lexer::Token;
 use crate::parser::error::ParseError;
 use compact_str::CompactString;
 
-impl crate::parser::Parser {
+impl<'ast> crate::parser::Parser<'ast> {
     /// Parse net bindings for component pins (v0.1.6 Item #13)
     /// Syntax: [pin1: NetName1, pin2: NetName2, ...]
     /// Supports:

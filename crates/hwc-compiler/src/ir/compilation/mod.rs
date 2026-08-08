@@ -18,16 +18,16 @@ use rustc_hash::FxHashMap;
 /// Bundles the compilation-wide context so individual pass functions
 /// (`execute_placement`, `process_routes`, …) take a single context argument
 /// instead of a long parameter list.
-pub struct CompilationContext<'a> {
+pub struct CompilationContext<'a, 'ast> {
     pub sorted_ids: &'a [compact_str::CompactString],
     pub placement_items: &'a [crate::ir::placement_item::ContextualPlacementItem],
     pub item_map: &'a FxHashMap<compact_str::CompactString, usize>,
     pub origin: OriginPoint,
-    pub symbol_table: &'a SymbolTable,
+    pub symbol_table: &'a SymbolTable<'ast>,
     pub eval_context: &'a EvaluationContext,
     pub stackup_manager: &'a StackupManager,
     pub profile: Option<&'a ProfileDefinition>,
-    pub space_def: &'a SpaceDefinition,
+    pub space_def: &'a SpaceDefinition<'ast>,
     pub collector: &'a DiagnosticCollector,
     pub unit_registry: &'a hwc_types::UnitRegistry,
 }
@@ -384,7 +384,7 @@ pub fn program_to_spaces_with_lockfile(
         .iter()
         .filter_map(|def| {
             if let hwc_parser::Definition::Space(space) = def {
-                Some(space)
+                Some(&**space) // Unbox the Box<SpaceDefinition>
             } else {
                 None
             }

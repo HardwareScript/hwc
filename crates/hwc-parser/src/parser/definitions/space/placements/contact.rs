@@ -2,11 +2,15 @@ use crate::ast::*;
 use crate::lexer::{Span, Token};
 use crate::parser::error::ParseError;
 
-impl crate::parser::Parser {
+impl<'ast> crate::parser::Parser<'ast> {
     /// Parse contact/via placement:
     /// - Absolute: `add contact(Tungsten) at [x:500um, y:325um] spanning z:6 to z:8`
     /// - Relational: `add contact(Tungsten) at: Region.center spanning layer: l1 to l2`
-    pub(in crate::parser) fn parse_contact(&mut self) -> Result<ContactPlacement, ParseError> {
+    ///
+    /// Returns arena-allocated reference for zero-copy AST
+    pub(in crate::parser) fn parse_contact(
+        &mut self,
+    ) -> Result<&'ast ContactPlacement, ParseError> {
         let start_pos = self.current_span().start;
 
         self.expect(&Token::Add)?;
@@ -208,7 +212,8 @@ impl crate::parser::Parser {
 
         let end_pos = self.previous_span().end;
 
-        Ok(ContactPlacement {
+        // Arena-allocate and return reference
+        let contact = self.arena.alloc(ContactPlacement {
             material: material.into(),
             name,
             position,
@@ -220,7 +225,9 @@ impl crate::parser::Parser {
             relational_constraints, // v0.2.1: Pass relational constraints
             contour: None,
             span: Span::new(start_pos, end_pos),
-        })
+        });
+
+        Ok(contact)
     }
 
     /// Parse region anchor: `Region.center`, `Region.bottom_left`, etc.

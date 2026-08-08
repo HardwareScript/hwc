@@ -49,10 +49,10 @@ impl ExportFormat {
     }
 }
 
-pub struct CompiledOutput {
+pub struct CompiledOutput<'ast> {
     pub space: HardwareSpace,
-    pub symbol_table: SymbolTable,
-    pub space_def: Option<hwc_parser::SpaceDefinition>, // v0.1.6: For profile access
+    pub symbol_table: SymbolTable<'ast>,
+    pub space_def: Option<hwc_parser::SpaceDefinition<'ast>>, // v0.1.6: For profile access
     pub physical_netlist: Option<hwc_compiler::alignment::PhysicalNetlist>, // v0.1.6: Extracted devices for netlist export
     pub unit_registry: hwc_types::UnitRegistry,
 }

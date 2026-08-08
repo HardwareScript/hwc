@@ -2,7 +2,7 @@ use super::super::super::error::{span_to_source_span, ParseError};
 use crate::ast::*;
 use crate::lexer::{Span, Token};
 
-impl super::super::super::Parser {
+impl<'ast> super::super::super::Parser<'ast> {
     /// Parse a bridge rule: `bridge Silicon to Copper: Cobalt_Silicide`
     /// or compound: `bridge Silicon to Copper: \n interface: ...`
     pub(super) fn parse_bridge_rule(&mut self) -> Result<BridgeRule, ParseError> {

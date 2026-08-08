@@ -50,7 +50,7 @@ pub fn collect_placement_items(
             }
             hwc_parser::SpaceTopLevelStatement::Contact(contact) => {
                 placement_items.push(ContextualPlacementItem {
-                    item: PlacementItem::Contact(contact.clone()),
+                    item: PlacementItem::Contact((*contact).clone()),
                     eval_context: eval_context.clone(),
                 });
             }

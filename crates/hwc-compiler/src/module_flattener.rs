@@ -135,7 +135,8 @@ fn flatten_statement(
     match statement {
         ModuleStatement::AddComponent(comp) => {
             // Evaluate array index if present
-            let mut flattened_comp = comp.clone();
+            // comp is &ModuleComponentPlacement due to arena allocation
+            let mut flattened_comp = (*comp).clone();
             if let Some(ref array_index) = comp.array_index {
                 let index_value = evaluate_array_index(array_index, context)?;
                 // Replace the array index with the evaluated value in the name

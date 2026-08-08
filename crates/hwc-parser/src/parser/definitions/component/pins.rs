@@ -5,7 +5,7 @@ use crate::lexer::Token;
 use compact_str::CompactString;
 use smallvec::SmallVec;
 
-impl super::super::super::Parser {
+impl<'ast> super::super::super::Parser<'ast> {
     pub(super) fn parse_pins_block(&mut self) -> Result<SmallVec<[CompactString; 4]>, ParseError> {
         // NOTE: The caller (parse_component_def) already consumed `Token::Colon`.
 

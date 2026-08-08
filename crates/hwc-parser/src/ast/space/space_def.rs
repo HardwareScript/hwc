@@ -31,8 +31,8 @@ pub struct ConstBinding {
 
 /// Space definition: `space Name:` (v0.1.6)
 /// v0.2.0: Supports optional `export` keyword for visibility control
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct SpaceDefinition {
+#[derive(Debug, Clone, PartialEq)]
+pub struct SpaceDefinition<'ast> {
     pub name: crate::ast::common::Identifier,
     pub is_exported: bool, // v0.2.0: Access control
     pub implements_module: Option<CompactString>,
@@ -44,8 +44,8 @@ pub struct SpaceDefinition {
     pub substrate: Option<SubstratePlacement>,
     pub render: Option<crate::ast::component::RenderBlock>,
     pub routing_config: Option<RoutingConfig>,
-    pub statements: Vec<SpaceTopLevelStatement>,
-    pub layouts: Vec<ModuleLayoutBlock>,
+    pub statements: Vec<SpaceTopLevelStatement<'ast>>,
+    pub layouts: Vec<ModuleLayoutBlock<'ast>>,
     pub routes: Vec<Route>,
     pub exposes: Vec<Expose>,
     pub nets: Vec<NetDeclaration>,
@@ -54,17 +54,17 @@ pub struct SpaceDefinition {
 }
 
 /// Top-level statement in a space block (v0.1.7)
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum SpaceTopLevelStatement {
+#[derive(Debug, Clone, PartialEq)]
+pub enum SpaceTopLevelStatement<'ast> {
     Substrate(SubstratePlacement),
     Component(Box<ComponentPlacement>),
     Pour(Box<PourPlacement>),
     Plane(Box<PlanePlacement>),
     Polygon(PolygonPlacement),
-    Contact(ContactPlacement),
+    Contact(&'ast ContactPlacement),
     SpaceInstance(Box<super::placements::SpaceInstancePlacement>), // v0.2.1: Hierarchical space composition
-    ForLoop(SpaceForLoop),
-    Route(Route),
+    ForLoop(SpaceForLoop<'ast>),
+    Route(&'ast Route), // Arena-allocated for SoC-scale performance
     Expose(Expose),
     RouteNetPolicy(RouteNetPolicy),
     Region(RegionDefinition), // v0.2.0: Region declaration
@@ -83,41 +83,41 @@ pub struct RouteNetPolicy {
 }
 
 /// For loop in space block (Sprint 3.4: Parametric Unrolling)
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct SpaceForLoop {
+#[derive(Debug, Clone, PartialEq)]
+pub struct SpaceForLoop<'ast> {
     pub variable: CompactString,
     pub start: usize,
     pub end: usize,
-    pub body: Vec<SpaceStatement>,
+    pub body: Vec<SpaceStatement<'ast>>,
     pub span: Span,
 }
 
 /// Compile-time conditional in space block (v0.2.1: Generator Conditions)
 /// This is NOT runtime control flow - it's compile-time code generation branching
 /// Example: if (row + col) mod 2 == 0: add Aluminum else: add Tungsten
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct SpaceIfConditional {
+#[derive(Debug, Clone, PartialEq)]
+pub struct SpaceIfConditional<'ast> {
     pub condition: Expression,
-    pub then_body: Vec<SpaceStatement>,
-    pub else_body: Vec<SpaceStatement>,
+    pub then_body: Vec<SpaceStatement<'ast>>,
+    pub else_body: Vec<SpaceStatement<'ast>>,
     pub span: Span,
 }
 
 /// Statement inside a space for loop
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum SpaceStatement {
+#[derive(Debug, Clone, PartialEq)]
+pub enum SpaceStatement<'ast> {
     Component(Box<ComponentPlacement>),
     Pour(Box<PourPlacement>),
     Plane(Box<PlanePlacement>),
-    Contact(ContactPlacement),
+    Contact(&'ast ContactPlacement),
     SpaceInstance(Box<super::placements::SpaceInstancePlacement>), // v0.2.1: Hierarchical space composition
-    Route(Route),
-    ForLoop(Box<SpaceForLoop>),
-    If(SpaceIfConditional), // v0.2.1: Compile-time conditional branching
-    Let(LetBinding),        // v0.2.1: Loop-scoped let bindings
+    Route(&'ast Route), // Arena-allocated for SoC-scale performance
+    ForLoop(Box<SpaceForLoop<'ast>>),
+    If(SpaceIfConditional<'ast>), // v0.2.1: Compile-time conditional branching
+    Let(LetBinding),              // v0.2.1: Loop-scoped let bindings
 }
 
-impl SpaceDefinition {
+impl<'ast> SpaceDefinition<'ast> {
     pub fn components(&self) -> Vec<ComponentPlacement> {
         self.statements
             .iter()
@@ -171,14 +171,14 @@ impl SpaceDefinition {
             .iter()
             .filter_map(|s| {
                 if let SpaceTopLevelStatement::Contact(c) = s {
-                    Some(c.clone())
+                    Some((*c).clone())
                 } else {
                     None
                 }
             })
             .collect()
     }
-    pub fn for_loops(&self) -> Vec<SpaceForLoop> {
+    pub fn for_loops(&self) -> Vec<SpaceForLoop<'ast>> {
         self.statements
             .iter()
             .filter_map(|s| {

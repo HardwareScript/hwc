@@ -12,13 +12,13 @@ use super::definition::Definition;
 ///
 /// Unified architecture: ONE map instead of 20 separate HashMaps
 #[derive(Debug, Clone, Default)]
-pub struct SymbolLayer {
+pub struct SymbolLayer<'ast> {
     /// Universal symbol index: Name → Definition
     /// This replaces materials, profiles, components, modules, etc. with ONE map
-    pub(super) symbols: FxHashMap<CompactString, Definition>,
+    pub(super) symbols: FxHashMap<CompactString, Definition<'ast>>,
 }
 
-impl SymbolLayer {
+impl<'ast> SymbolLayer<'ast> {
     pub fn new() -> Self {
         Self {
             symbols: FxHashMap::default(),
@@ -26,12 +26,12 @@ impl SymbolLayer {
     }
 
     /// Insert any definition dynamically (zero boilerplate!)
-    pub fn insert(&mut self, name: CompactString, def: Definition) {
+    pub fn insert(&mut self, name: CompactString, def: Definition<'ast>) {
         self.symbols.insert(name, def);
     }
 
     /// Get a definition by name
-    pub fn get(&self, name: &str) -> Option<&Definition> {
+    pub fn get(&self, name: &str) -> Option<&Definition<'_>> {
         self.symbols.get(name)
     }
 
@@ -50,7 +50,7 @@ impl SymbolLayer {
     }
 
     /// Iterate over all definitions
-    pub fn iter(&self) -> impl Iterator<Item = (&CompactString, &Definition)> {
+    pub fn iter(&self) -> impl Iterator<Item = (&CompactString, &Definition<'_>)> {
         self.symbols.iter()
     }
 }
@@ -66,18 +66,18 @@ impl SymbolLayer {
 /// Components are "baked" (parsed once) during registration and cached as pure integers.
 /// This eliminates repeated lexer invocations during placement loops.
 #[derive(Debug, Clone)]
-pub struct SymbolTable {
+pub struct SymbolTable<'ast> {
     // Core Layer: Hardcoded engine bootstraps (currently unused, reserved for future)
-    pub(super) core: SymbolLayer,
+    pub(super) core: SymbolLayer<'ast>,
 
     // Prelude Layer: Auto-loaded primitives from stdlib/primitives/
-    pub(super) prelude: SymbolLayer,
+    pub(super) prelude: SymbolLayer<'ast>,
 
     // HPM Layer: Imported definitions from external libraries (last import wins)
-    pub(super) hpm: Vec<SymbolLayer>,
+    pub(super) hpm: Vec<SymbolLayer<'ast>>,
 
     // Local Layer: Definitions in the current .hw file (highest priority)
-    pub(super) local: SymbolLayer,
+    pub(super) local: SymbolLayer<'ast>,
 
     // Namespace Aliases: Maps alias names to HPM layer indices
     // Example: "Metals" -> (layer_index, original_path)
@@ -85,7 +85,7 @@ pub struct SymbolTable {
     pub(super) namespaces: FxHashMap<CompactString, usize>,
 }
 
-impl SymbolTable {
+impl<'ast> SymbolTable<'ast> {
     /// Create a new empty symbol table
     pub fn new() -> Self {
         Self {
@@ -130,7 +130,7 @@ impl SymbolTable {
     ///
     /// Searches: Local > HPM (reverse order) > Prelude > Core
     /// Supports namespaced lookups ("Metals.Copper") and export filtering
-    pub fn get_symbol(&self, name: &str) -> Option<&Definition> {
+    pub fn get_symbol(&self, name: &str) -> Option<&Definition<'_>> {
         // 1. Namespaced lookup (e.g. "Metals.Copper")
         if let Some((layer_index, identifier)) = self.resolve_namespace(name) {
             return self
@@ -184,7 +184,7 @@ impl SymbolTable {
     }
 
     /// Iterate over all definitions in priority order
-    pub fn iter_all_symbols(&self) -> impl Iterator<Item = (&CompactString, &Definition)> {
+    pub fn iter_all_symbols(&self) -> impl Iterator<Item = (&CompactString, &Definition<'_>)> {
         let local = self.local.iter();
         let hpm = self.hpm.iter().rev().flat_map(|layer| layer.iter());
         let prelude = self.prelude.iter();
@@ -194,7 +194,7 @@ impl SymbolTable {
     }
 }
 
-impl Default for SymbolTable {
+impl<'ast> Default for SymbolTable<'ast> {
     fn default() -> Self {
         Self::new()
     }

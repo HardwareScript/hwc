@@ -9,8 +9,8 @@ use std::time::Instant;
 /// Parameters for export operations
 pub struct ExportParams<'a> {
     pub space: HardwareSpace,
-    pub symbol_table: SymbolTable,
-    pub ast: &'a Program,
+    pub symbol_table: SymbolTable<'a>,
+    pub ast: &'a Program<'a>,
     pub physical_netlist: Option<PhysicalNetlist>,
     pub output_dir: &'a PathBuf,
     pub formats: &'a [ExportFormat],
@@ -43,7 +43,7 @@ pub fn export_all(params: ExportParams) -> Result<()> {
     let compiled = CompiledOutput {
         space,
         symbol_table,
-        space_def: space_def.cloned(),
+        space_def: space_def.map(|b| *b.clone()),
         physical_netlist,
         unit_registry,
     };

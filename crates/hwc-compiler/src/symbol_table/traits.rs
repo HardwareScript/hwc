@@ -15,7 +15,7 @@ pub(super) trait _LayerLookup<T> {
 
 // ========== hwc-engine trait implementations ==========
 
-impl hwc_engine::SymbolTableTrait for SymbolTable {
+impl hwc_engine::SymbolTableTrait for SymbolTable<'_> {
     fn get_material(&self, name: &str) -> Result<&MaterialDefinition, String> {
         self.get_material(name).map_err(|e| e.to_string())
     }
@@ -31,7 +31,7 @@ impl hwc_engine::SymbolTableTrait for SymbolTable {
 
 // ========== hwc-physics trait implementations ==========
 
-impl hwc_physics::electrical::SymbolTableTrait for SymbolTable {
+impl hwc_physics::electrical::SymbolTableTrait for SymbolTable<'_> {
     fn get_material(&self, name: &str) -> Result<&MaterialDefinition, String> {
         self.get_material(name).map_err(|e| e.to_string())
     }
@@ -45,7 +45,7 @@ impl hwc_physics::electrical::SymbolTableTrait for SymbolTable {
     }
 }
 
-impl hwc_physics::thermal::SymbolTableTrait for SymbolTable {
+impl hwc_physics::thermal::SymbolTableTrait for SymbolTable<'_> {
     fn get_material(&self, name: &str) -> Result<&MaterialDefinition, String> {
         self.get_material(name).map_err(|e| e.to_string())
     }
@@ -59,13 +59,13 @@ impl hwc_physics::thermal::SymbolTableTrait for SymbolTable {
     }
 }
 
-impl hwc_physics::electromagnetic::SymbolTableTrait for SymbolTable {
+impl hwc_physics::electromagnetic::SymbolTableTrait for SymbolTable<'_> {
     fn get_material(&self, name: &str) -> Result<&MaterialDefinition, String> {
         self.get_material(name).map_err(|e| e.to_string())
     }
 }
 
-impl hwc_physics::clearance::SymbolTableTrait for SymbolTable {
+impl hwc_physics::clearance::SymbolTableTrait for SymbolTable<'_> {
     fn get_material(&self, name: &str) -> Result<&MaterialDefinition, String> {
         self.get_material(name).map_err(|e| e.to_string())
     }

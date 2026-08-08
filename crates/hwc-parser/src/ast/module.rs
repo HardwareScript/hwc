@@ -17,17 +17,17 @@ use compact_str::CompactString;
 ///
 /// Modules now support intrinsic physical layout (relative only) for Physical Macros.
 /// This cures the "Physical Pile" where logical modules instantiated sub-components at [0,0,0].
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct ModuleDefinition {
+#[derive(Debug, Clone, PartialEq)]
+pub struct ModuleDefinition<'ast> {
     pub name: Identifier,
     pub is_exported: bool, // v0.2.0: Access control
     pub pins: Vec<PinDeclaration>,
-    pub statements: Vec<ModuleStatement>,
+    pub statements: Vec<ModuleStatement<'ast>>,
     pub logic: Option<super::logic::LogicBlock>, // NEW: Logic synthesis support (v0.3.0)
     /// v0.1.7 Physical Macros (Physical Pile Paradox fix): intrinsic layout using relative coords only.
     /// When present, sub-component positions are defined here (relative to module origin) so modules
     /// carry physical structure and do not pile at [0,0,0] on instantiation.
-    pub intrinsic_layout: Option<Vec<super::space::LayoutStatement>>,
+    pub intrinsic_layout: Option<Vec<super::space::LayoutStatement<'ast>>>,
     pub span: Span,
 }
 
@@ -79,21 +79,21 @@ pub struct PinDeclaration {
 /// - Comptime for loops
 /// - Comptime if conditionals
 /// - Nested module instantiation
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum ModuleStatement {
+#[derive(Debug, Clone, PartialEq)]
+pub enum ModuleStatement<'ast> {
     /// Add component: `add ComponentType (params) named Instance`
     /// Note: NO `at [x,y,z]` allowed in modules (that's in space layout blocks)
-    AddComponent(Box<ModuleComponentPlacement>),
+    AddComponent(&'ast ModuleComponentPlacement),
 
     /// Route: `route From.Pin to To.Pin`
     /// Note: NO waypoints allowed in modules (pure logical connection)
     Route(ModuleRoute),
 
     /// Comptime for loop: `for i in 0..63:`
-    For(ForLoop),
+    For(ForLoop<'ast>),
 
     /// Comptime if conditional: `if condition:`
-    If(IfConditional),
+    If(IfConditional<'ast>),
 }
 
 /// Component placement inside a module (NO coordinates)
@@ -167,23 +167,23 @@ pub enum ArithmeticOp {
 /// Comptime for loop: `for i in 0..63:`
 ///
 /// Evaluated at compile time - generates multiple statements
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct ForLoop {
-    pub variable: CompactString,    // Loop variable name (e.g., "i")
-    pub start: usize,               // Start value (inclusive)
-    pub end: usize,                 // End value (inclusive, Ruby-style)
-    pub body: Vec<ModuleStatement>, // Statements inside loop
+#[derive(Debug, Clone, PartialEq)]
+pub struct ForLoop<'ast> {
+    pub variable: CompactString,          // Loop variable name (e.g., "i")
+    pub start: usize,                     // Start value (inclusive)
+    pub end: usize,                       // End value (inclusive, Ruby-style)
+    pub body: Vec<ModuleStatement<'ast>>, // Statements inside loop
     pub span: Span,
 }
 
 /// Comptime if conditional: `if condition:`
 ///
 /// Evaluated at compile time - only one branch is kept
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct IfConditional {
+#[derive(Debug, Clone, PartialEq)]
+pub struct IfConditional<'ast> {
     pub condition: Condition,
-    pub then_body: Vec<ModuleStatement>,
-    pub else_body: Option<Vec<ModuleStatement>>, // Optional else block
+    pub then_body: Vec<ModuleStatement<'ast>>,
+    pub else_body: Option<Vec<ModuleStatement<'ast>>>, // Optional else block
     pub span: Span,
 }
 

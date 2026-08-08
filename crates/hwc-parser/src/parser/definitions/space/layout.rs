@@ -4,11 +4,11 @@ use crate::ast::*;
 use crate::lexer::{Span, Token};
 use crate::parser::error::{span_to_source_span, ParseError};
 
-impl crate::parser::Parser {
+impl<'ast> crate::parser::Parser<'ast> {
     /// Parse module layout block: `layout ModuleName:`
     pub(in crate::parser) fn parse_module_layout_block(
         &mut self,
-    ) -> Result<ModuleLayoutBlock, ParseError> {
+    ) -> Result<ModuleLayoutBlock<'ast>, ParseError> {
         let start_pos = self.current_span().start;
 
         // v0.1.6: 'layout' is now an identifier
@@ -44,9 +44,10 @@ impl crate::parser::Parser {
     }
 
     /// Parse a single component placement in a layout block
+    /// Returns arena-allocated reference for zero-copy AST
     pub(in crate::parser) fn parse_layout_placement(
         &mut self,
-    ) -> Result<ModuleInternalPlacement, ParseError> {
+    ) -> Result<&'ast ModuleInternalPlacement, ParseError> {
         let start_pos = self.current_span().start;
 
         // Parse component name
@@ -66,18 +67,21 @@ impl crate::parser::Parser {
         let position = self.parse_coordinate()?;
         self.expect(&Token::Newline)?;
 
-        Ok(ModuleInternalPlacement {
+        // Arena-allocate and return reference
+        let placement = self.arena.alloc(ModuleInternalPlacement {
             component_name: component_name.into(),
             array_index,
             position,
             span: Span::new(start_pos, self.previous_span().end),
-        })
+        });
+
+        Ok(placement)
     }
 
     /// Parse for loop in layout block
     pub(in crate::parser) fn parse_layout_for_loop(
         &mut self,
-    ) -> Result<LayoutStatement, ParseError> {
+    ) -> Result<LayoutStatement<'ast>, ParseError> {
         let start_pos = self.current_span().start;
 
         self.expect(&Token::For)?;
@@ -118,7 +122,7 @@ impl crate::parser::Parser {
     /// Parse if conditional in layout block
     pub(in crate::parser) fn parse_layout_if_conditional(
         &mut self,
-    ) -> Result<LayoutStatement, ParseError> {
+    ) -> Result<LayoutStatement<'ast>, ParseError> {
         let start_pos = self.current_span().start;
 
         self.expect(&Token::If)?;

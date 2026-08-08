@@ -21,7 +21,7 @@ pub(super) struct SimpleViaCtx<'a> {
     pub start_z: i64,
     pub end_z: i64,
     pub contour: Option<clipper2_rust::Path64>,
-    pub symbol_table: &'a SymbolTable,
+    pub symbol_table: &'a SymbolTable<'a>,
     pub eval_context: &'a EvaluationContext,
     pub contact_name_debug: compact_str::CompactString,
     pub is_tented: bool,

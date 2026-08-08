@@ -2,7 +2,7 @@ use crate::lexer::Token;
 
 use crate::ShapePoint;
 
-impl crate::parser::Parser {
+impl<'ast> crate::parser::Parser<'ast> {
     pub(in crate::parser::definitions::shape) fn parse_shape_points(
         &mut self,
     ) -> Result<Vec<ShapePoint>, crate::parser::error::ParseError> {

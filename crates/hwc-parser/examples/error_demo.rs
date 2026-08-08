@@ -5,6 +5,7 @@
 //! To force ASCII mode: HWS_ASCII=1 cargo run --example error_demo
 //! To force Unicode mode: HWS_UNICODE=1 cargo run --example error_demo
 
+use bumpalo::Bump;
 use hwc_diagnostics::DiagnosticCollector;
 use hwc_parser::{Lexer, Parser};
 use miette::{GraphicalReportHandler, GraphicalTheme, NamedSource, Report};
@@ -16,7 +17,8 @@ fn show_error(title: &str, source: &str, filename: &str) {
     let lexer = Lexer::new(source);
     match lexer.tokenize() {
         Ok(tokens) => {
-            let mut parser = Parser::new(tokens);
+            let arena = Bump::new();
+            let mut parser = Parser::new(tokens, &arena);
             let collector = DiagnosticCollector::new(source, 100);
             let _program = parser.parse(&collector);
 

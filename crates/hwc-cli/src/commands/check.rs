@@ -45,8 +45,11 @@ pub fn execute(
     })?;
     // eprintln!($3"[DEBUG] Lexer complete, {} tokens", tokens.len());
 
+    // Create arena for AST allocations
+    let arena = bumpalo::Bump::new();
+
     // eprintln!($3"[DEBUG] Starting parser...");
-    let mut parser = Parser::new(tokens);
+    let mut parser = Parser::new(tokens, &arena);
     let ast = parser.parse(&collector);
     // eprintln!($3"[DEBUG] Parser complete");
 
@@ -112,7 +115,7 @@ pub fn execute(
 
     // Process imports first
     for import in &ast.imports {
-        if let Err(e) = resolver.resolve_import(import, &input, &mut symbol_table) {
+        if let Err(e) = resolver.resolve_import(import, &input, &mut symbol_table, &arena) {
             // Add source code for better error display
             let e_with_src = e.with_source(
                 collector.source.to_string(),
@@ -232,6 +235,9 @@ fn run_foundry_validation(
     // Build symbol table with imports resolved (so property merging happens)
     let mut symbol_table = SymbolTable::new();
 
+    // Create arena for import AST allocations
+    let arena = bumpalo::Bump::new();
+
     // Load prelude (units.hw, math.hw) for unit resolution and constant folding
     match hwc_compiler::Prelude::load() {
         Ok(prelude) => {
@@ -253,7 +259,7 @@ fn run_foundry_validation(
     // Process imports first (goes into HPM layer)
     for import in &ast.imports {
         resolver
-            .resolve_import(import, source_file, &mut symbol_table)
+            .resolve_import(import, source_file, &mut symbol_table, &arena)
             .map_err(|e| miette::miette!("Failed to resolve import: {}", e))?;
     }
 

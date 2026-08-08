@@ -76,9 +76,9 @@ pub fn calculate_module_bounding_box(
 
     /// Helper function to extract all placements from layout statements
     /// This recursively flattens for loops and if statements to get all placements
-    fn extract_placements_from_layout(
-        statements: &[hwc_parser::LayoutStatement],
-    ) -> Vec<hwc_parser::ModuleInternalPlacement> {
+    fn extract_placements_from_layout<'a>(
+        statements: &'a [hwc_parser::LayoutStatement],
+    ) -> Vec<&'a hwc_parser::ModuleInternalPlacement> {
         use hwc_parser::LayoutStatement;
 
         let mut placements = Vec::new();
@@ -86,7 +86,7 @@ pub fn calculate_module_bounding_box(
         for statement in statements {
             match statement {
                 LayoutStatement::Placement(p) => {
-                    placements.push(p.clone());
+                    placements.push(*p);
                 }
                 LayoutStatement::For { body, .. } => {
                     // Recursively extract placements from for loop body

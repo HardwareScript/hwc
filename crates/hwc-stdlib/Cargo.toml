@@ -8,6 +8,7 @@ description = "Standard library for Hardware Script"
 [dependencies]
 hwc-parser = { path = "../hwc-parser" }
 hwc-types = { path = "../hwc-types" }
+bumpalo = "3.20.2"
 dirs = "5.0"
 rustc-hash = { version = "2.1" }
 compact_str = { workspace = true }

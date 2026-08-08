@@ -12,6 +12,7 @@ rustc-hash = { workspace = true }
 compact_str = { workspace = true }
 smallvec = { workspace = true }
 clipper2-rust = "1.0"
+bumpalo = "3.20.2"
 
 hwc-diagnostics = { workspace = true }
 hwc-parser = { workspace = true }

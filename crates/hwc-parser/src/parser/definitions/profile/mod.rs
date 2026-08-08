@@ -8,7 +8,7 @@ mod via;
 use crate::ast::*;
 use crate::lexer::{Span, Token};
 
-impl super::super::Parser {
+impl<'ast> super::super::Parser<'ast> {
     // ========================================================================
     // Profile Definition Parsing
     // ========================================================================

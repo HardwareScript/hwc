@@ -19,7 +19,7 @@ use crate::ast::*;
 use crate::lexer::{Span, Token};
 use crate::parser::error::{span_to_source_span, ParseError};
 
-impl crate::parser::Parser {
+impl<'ast> crate::parser::Parser<'ast> {
     pub(super) fn parse_shape(
         &mut self,
         collector: &crate::DiagnosticCollector,

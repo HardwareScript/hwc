@@ -5,7 +5,7 @@ use crate::ast::*;
 use crate::lexer::{Span, Token};
 use crate::parser::error::ParseError;
 
-impl crate::parser::Parser {
+impl<'ast> crate::parser::Parser<'ast> {
     /// Parse device binding: `device: DeviceName.terminal`
     ///
     /// Phase 4 (Silent Atom): Explicit intent-based device binding

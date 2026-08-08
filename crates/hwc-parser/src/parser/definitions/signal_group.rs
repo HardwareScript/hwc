@@ -5,7 +5,7 @@ use crate::lexer::{Span, Token};
 use crate::parser::Parser;
 use rustc_hash::FxHashMap;
 
-impl Parser {
+impl<'ast> Parser<'ast> {
     /// Parse signal_group definition
     ///
     /// ```hw

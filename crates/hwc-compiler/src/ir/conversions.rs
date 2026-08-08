@@ -10,7 +10,7 @@ use hwc_parser::{Coordinate, Expression, Measurement, Unit, Value};
 pub struct CoordinateContext<'a> {
     pub origin: hwc_parser::OriginPoint,
     pub space_dimensions: &'a hwc_engine::Dimensions,
-    pub symbol_table: &'a crate::SymbolTable,
+    pub symbol_table: &'a crate::SymbolTable<'a>,
     pub eval_context: &'a hwc_parser::EvaluationContext,
     pub bbox_tracker: Option<&'a crate::bounding_box_tracker::BoundingBoxTracker>,
     pub stackup_manager: &'a StackupManager,

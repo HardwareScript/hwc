@@ -53,7 +53,8 @@ pub fn execute(input: PathBuf, _build_dir: PathBuf, verbose: bool, parallel: boo
     }
     let collector =
         hwc_compiler::DiagnosticCollector::new_with_file(&source, &input.to_string_lossy(), 20);
-    let mut parser = Parser::new(tokens);
+    let arena = bumpalo::Bump::new();
+    let mut parser = Parser::new(tokens, &arena);
     let ast = parser.parse(&collector);
 
     if collector.has_errors() {

@@ -3,9 +3,12 @@ use crate::lexer::Token;
 use crate::parser::{ParseError, Parser};
 use smallvec::SmallVec;
 
-impl Parser {
+impl<'ast> Parser<'ast> {
     /// Parse component addition in module: `add ComponentType (params) named Instance`
-    pub(super) fn parse_module_add(&mut self) -> Result<ModuleComponentPlacement, ParseError> {
+    /// Returns arena-allocated reference for zero-copy AST
+    pub(super) fn parse_module_add(
+        &mut self,
+    ) -> Result<&'ast ModuleComponentPlacement, ParseError> {
         let start = self.current_span();
 
         self.expect(&Token::Add)?;
@@ -52,13 +55,16 @@ impl Parser {
 
         let span = Span::new(start.start, self.previous_span().end);
 
-        Ok(ModuleComponentPlacement {
+        // Arena-allocate and return reference (rustc-style)
+        let placement = self.arena.alloc(ModuleComponentPlacement {
             component_type: component_type.into(),
             parameters,
             name: name.map(|s: String| s.into()),
             array_index,
             span,
-        })
+        });
+
+        Ok(placement)
     }
 
     /// Parse route in module: `route From.Pin to To.Pin`

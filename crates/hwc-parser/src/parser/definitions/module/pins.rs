@@ -2,7 +2,7 @@ use crate::ast::{PinDeclaration, Span};
 use crate::lexer::Token;
 use crate::parser::{ParseError, Parser};
 
-impl Parser {
+impl<'ast> Parser<'ast> {
     /// Parse module pins block
     ///
     /// Supports both inline and block syntax:

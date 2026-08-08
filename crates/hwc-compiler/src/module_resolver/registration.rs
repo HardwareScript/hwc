@@ -10,13 +10,13 @@ impl super::ModuleResolver {
     /// Register import targets into the symbol table
     ///
     /// Always executes, even for previously-loaded files (no state pollution)
-    pub(super) fn register_import_targets(
+    pub(super) fn register_import_targets<'ast>(
         &self,
         targets: &ImportTargets,
-        program: &hwc_parser::Program,
+        program: &hwc_parser::Program<'ast>,
         file_path: &Path,
         alias: Option<&hwc_parser::Identifier>,
-        symbol_table: &mut SymbolTable,
+        symbol_table: &mut SymbolTable<'ast>,
     ) -> Result<(), ResolverError> {
         // If this import has an alias, create a new HPM layer for the namespace
         if alias.is_some() {

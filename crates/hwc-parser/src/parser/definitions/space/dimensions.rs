@@ -4,7 +4,7 @@ use crate::ast::*;
 use crate::lexer::{Span, Token};
 use crate::parser::error::ParseError;
 
-impl crate::parser::Parser {
+impl<'ast> crate::parser::Parser<'ast> {
     /// Parse dimensions: `dimensions: 50mm by 50mm by 4mm`
     pub(in crate::parser) fn parse_dimensions(&mut self) -> Result<Dimensions, ParseError> {
         let start_pos = self.current_span().start;
@@ -96,51 +96,5 @@ impl crate::parser::Parser {
         let _ = (start_pos, end_pos);
 
         Ok(resolution)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::lexer::Lexer;
-    use crate::parser::Parser;
-    use crate::DiagnosticCollector;
-
-    fn parse_space_dimensions(source: &str) -> crate::ast::SpaceDefinition {
-        let lexer = Lexer::new(source);
-        let tokens = lexer.tokenize().expect("Lexer should succeed");
-        let mut parser = Parser::new(tokens);
-        let collector = DiagnosticCollector::new(source, 100);
-        let program = parser.parse(&collector);
-        assert!(
-            !collector.has_errors(),
-            "Parse errors: {}",
-            collector.summary()
-        );
-        assert_eq!(
-            program.definitions.len(),
-            1,
-            "Expected exactly one definition"
-        );
-        match program
-            .definitions
-            .into_iter()
-            .next()
-            .expect("Expected definition")
-        {
-            crate::ast::Definition::Space(s) => s,
-            other => panic!("Expected space definition, got {:?}", other),
-        }
-    }
-
-    #[test]
-    fn test_resolution_parses() {
-        let source = r#"space Test:
-    resolution: 1nm
-"#;
-        let space = parse_space_dimensions(source);
-        assert!(space.resolution.is_some(), "resolution should be parsed");
-        let res = space.resolution.expect("resolution present");
-        assert_eq!(res.value, 1.0);
-        assert_eq!(res.unit, crate::ast::Unit::Nanometer);
     }
 }

@@ -16,12 +16,12 @@ use hwc_parser::{
 /// This eliminates struct field explosion in SymbolLayer - instead of 20 separate
 /// FxHashMap fields, we have ONE map: FxHashMap<CompactString, Definition>
 #[derive(Debug, Clone)]
-pub enum Definition {
+pub enum Definition<'ast> {
     Material(MaterialDefinition),
     MaterialAlias(MaterialAliasDefinition),
     Profile(ProfileDefinition),
     Component(ComponentDefinition),
-    Module(ModuleDefinition),
+    Module(ModuleDefinition<'ast>),
     Mechanical(MechanicalDefinition),
     Interface(InterfaceDefinition),
     Test(TestDefinition),
@@ -35,13 +35,13 @@ pub enum Definition {
     Device(DeviceDefinition),
     Const(ConstDefinition),
     Shape(ShapeDefinition),
-    Space(SpaceDefinition),
+    Space(SpaceDefinition<'ast>),
     Bridge(BridgeDefinition),
     SpiceModel(SpiceModelDefinition), // v0.2.1: SPICE model card definitions
     Subcircuit(SubcircuitDefinition), // v0.3.0: Native typed subcircuit definitions (replaces raw SPICE strings)
 }
 
-impl Definition {
+impl<'ast> Definition<'ast> {
     /// Human-readable type name for diagnostics (e.g. "material", "component")
     pub fn kind_str(&self) -> &'static str {
         match self {

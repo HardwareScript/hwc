@@ -1,6 +1,6 @@
 use crate::lexer::Token;
 
-impl crate::parser::Parser {
+impl<'ast> crate::parser::Parser<'ast> {
     pub(in crate::parser::definitions::shape) fn read_expression_until_comma_or_close(
         &mut self,
     ) -> Result<String, crate::parser::error::ParseError> {

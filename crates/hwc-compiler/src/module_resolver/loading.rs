@@ -1,4 +1,4 @@
-//! Stateless AST loading and caching for import resolution.
+//! File parsing for import resolution (no caching - always fresh).
 
 use crate::embedded_stdlib;
 use crate::module_resolver::ResolverError;
@@ -6,14 +6,12 @@ use hwc_parser::{Definition, Lexer, Parser, Program};
 use std::path::Path;
 
 impl super::ModuleResolver {
-    /// Stateless AST loader - parses on cache miss, returns cached on hit
-    pub(super) fn get_or_parse_program(&mut self, path: &Path) -> Result<Program, ResolverError> {
-        // Check cache first (pure, stateless)
-        if let Some(cached_program) = self.ast_cache.get(path) {
-            return Ok(cached_program.clone());
-        }
-
-        // Cache miss - load and parse
+    /// Parse a program from a path (always fresh - no caching)
+    pub(super) fn parse_program<'ast>(
+        &mut self,
+        path: &Path,
+        arena: &'ast bumpalo::Bump,
+    ) -> Result<Program<'ast>, ResolverError> {
         if path.starts_with("@std/") {
             // Embedded stdlib
             let module_name = path.strip_prefix("@std/").unwrap().to_str().unwrap();
@@ -27,18 +25,19 @@ impl super::ModuleResolver {
                 span: hwc_parser::Span::new(0, 0),
             };
 
-            self.ast_cache.insert(path.to_path_buf(), program.clone());
             Ok(program)
         } else {
-            // File system
-            let program = self.parse_file(path)?;
-            self.ast_cache.insert(path.to_path_buf(), program.clone());
-            Ok(program)
+            // File system - parse fresh each time
+            self.parse_file(path, arena)
         }
     }
 
     /// Parse a file from disk
-    pub(super) fn parse_file(&self, path: &Path) -> Result<Program, ResolverError> {
+    pub(super) fn parse_file<'ast>(
+        &self,
+        path: &Path,
+        arena: &'ast bumpalo::Bump,
+    ) -> Result<Program<'ast>, ResolverError> {
         let source = std::fs::read_to_string(path).map_err(|e| ResolverError::FileReadError {
             path: path.display().to_string().into(),
             error: e.to_string(),
@@ -54,7 +53,7 @@ impl super::ModuleResolver {
 
         let collector =
             crate::DiagnosticCollector::new_with_file(&source, &path.to_string_lossy(), 20);
-        let mut parser = Parser::new(tokens);
+        let mut parser = Parser::new(tokens, arena);
         let program = parser.parse(&collector);
 
         if collector.has_errors() {
@@ -68,11 +67,11 @@ impl super::ModuleResolver {
         Ok(program)
     }
 
-    /// Load stdlib module from embedded source (zero I/O)
-    pub(super) fn load_stdlib_embedded(
+    /// Load stdlib module from embedded source (uses its own internal cache)
+    pub(super) fn load_stdlib_embedded<'ast>(
         &mut self,
         name: &str,
-    ) -> Result<Vec<Definition>, ResolverError> {
+    ) -> Result<Vec<Definition<'ast>>, ResolverError> {
         embedded_stdlib::get_stdlib_definitions(name).ok_or_else(|| ResolverError::StdlibNotFound {
             path: name.into(),
             span: None,

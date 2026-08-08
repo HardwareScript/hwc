@@ -9,7 +9,7 @@ use hwc_parser::{
     SpiceModelDefinition, StrategyDefinition, SubcircuitDefinition, TestDefinition, UnitDefinition,
 };
 
-impl SymbolTable {
+impl<'ast> SymbolTable<'ast> {
     /// Register a material alias (in local layer)
     pub fn register_material_alias(
         &mut self,
@@ -222,7 +222,11 @@ impl SymbolTable {
     /// Register a module definition (in local layer)
     ///
     /// Rule 1 (GAP3): Local Beats Global - warns if shadowing an import
-    pub fn register_module(&mut self, collector: &DiagnosticCollector, def: ModuleDefinition) {
+    pub fn register_module(
+        &mut self,
+        collector: &DiagnosticCollector,
+        def: ModuleDefinition<'ast>,
+    ) {
         let name_str = def.name.as_str();
         if let Some(Definition::Module(existing)) = self.local.get(name_str) {
             collector.report(SymbolError::duplicate(

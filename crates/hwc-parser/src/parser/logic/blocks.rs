@@ -2,7 +2,7 @@ use crate::ast::*;
 use crate::lexer::{Span, Token};
 use crate::parser::Parser;
 
-impl Parser {
+impl<'ast> Parser<'ast> {
     pub fn parse_logic_block(
         &mut self,
         collector: &crate::DiagnosticCollector,

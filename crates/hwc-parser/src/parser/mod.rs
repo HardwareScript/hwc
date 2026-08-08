@@ -24,22 +24,31 @@ pub use error::ParseError;
 
 use crate::ast::*;
 use crate::lexer::SpannedToken;
+use bumpalo::Bump;
 
-/// Parser for Hardware Script
-pub struct Parser {
+/// Parser for Hardware Script with arena allocation
+///
+/// The 'ast lifetime represents the arena lifetime - all AST nodes
+/// allocated during parsing will live for 'ast. This follows the
+/// rustc pattern for compiler AST allocation.
+pub struct Parser<'ast> {
     tokens: Vec<SpannedToken>,
     current: usize,
     /// Context-aware error generator (Phase 1 refactor)
     error_context: ContextErrorGenerator,
+    /// Arena allocator for AST nodes (rustc-style)
+    /// All large AST structures are allocated here for cache efficiency
+    pub(crate) arena: &'ast Bump,
 }
 
-impl Parser {
-    /// Create a new parser from a token stream
-    pub fn new(tokens: Vec<SpannedToken>) -> Self {
+impl<'ast> Parser<'ast> {
+    /// Create a new parser from a token stream with arena allocation
+    pub fn new(tokens: Vec<SpannedToken>, arena: &'ast Bump) -> Self {
         Self {
             tokens,
             current: 0,
             error_context: ContextErrorGenerator::new(),
+            arena,
         }
     }
 
@@ -60,11 +69,13 @@ impl Parser {
     /// ```rust,no_run
     /// use hwc_parser::{Parser, Lexer};
     /// use hwc_diagnostics::DiagnosticCollector;
+    /// use bumpalo::Bump;
     ///
     /// let source = "component Test:\n    pins: [A, B]";
     /// let lexer = Lexer::new(source);
     /// let tokens = lexer.tokenize().expect("Tokenization failed");
-    /// let mut parser = Parser::new(tokens);
+    /// let arena = Bump::new();
+    /// let mut parser = Parser::new(tokens, &arena);
     /// let collector = DiagnosticCollector::new(source, 100);
     /// let ast = parser.parse(&collector);
     ///
@@ -73,7 +84,7 @@ impl Parser {
     ///     std::process::exit(1);
     /// }
     /// ```
-    pub fn parse(&mut self, collector: &crate::DiagnosticCollector) -> Program {
+    pub fn parse(&mut self, collector: &crate::DiagnosticCollector) -> Program<'ast> {
         let start_pos = if let Some(first) = self.tokens.first() {
             first.span.start
         } else {

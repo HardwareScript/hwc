@@ -4,7 +4,7 @@ use crate::ast::*;
 use crate::lexer::{Span, Token};
 use crate::parser::error::ParseError;
 
-impl crate::parser::Parser {
+impl<'ast> crate::parser::Parser<'ast> {
     /// Parse for loop in space block (Sprint 3.4: Parametric Unrolling)
     ///
     /// Syntax:
@@ -13,7 +13,9 @@ impl crate::parser::Parser {
     ///     add Adder named Adder[i] at [x: i * 10mm, y: 0mm, z: 1]
     ///     route Adder[i].sum to Adder[i+1].carry
     /// ```
-    pub(in crate::parser) fn parse_space_for_loop(&mut self) -> Result<SpaceForLoop, ParseError> {
+    pub(in crate::parser) fn parse_space_for_loop(
+        &mut self,
+    ) -> Result<SpaceForLoop<'ast>, ParseError> {
         let start_pos = self.current_span().start;
 
         self.expect(&Token::For)?;
@@ -68,7 +70,7 @@ impl crate::parser::Parser {
     /// ```
     pub(in crate::parser) fn parse_space_if_conditional(
         &mut self,
-    ) -> Result<SpaceIfConditional, ParseError> {
+    ) -> Result<SpaceIfConditional<'ast>, ParseError> {
         let start_pos = self.current_span().start;
 
         self.expect(&Token::If)?;
@@ -122,7 +124,7 @@ impl crate::parser::Parser {
     }
 
     /// Helper to parse a single space statement (used by both for and if)
-    fn parse_space_statement(&mut self) -> Result<SpaceStatement, ParseError> {
+    fn parse_space_statement(&mut self) -> Result<SpaceStatement<'ast>, ParseError> {
         if self.check(&Token::For) {
             let nested_loop = self.parse_space_for_loop()?;
             Ok(SpaceStatement::ForLoop(Box::new(nested_loop)))
@@ -163,7 +165,9 @@ impl crate::parser::Parser {
             }
         } else if self.check(&Token::Route) {
             let route = self.parse_route()?;
-            Ok(SpaceStatement::Route(route))
+            // Arena-allocate for SoC-scale performance
+            let route_ref = self.arena.alloc(route);
+            Ok(SpaceStatement::Route(route_ref))
         } else if self.check(&Token::Newline) {
             self.advance();
             self.parse_space_statement() // Recurse to get next real statement

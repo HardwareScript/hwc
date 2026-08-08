@@ -3,7 +3,7 @@ use crate::lexer::{Span, Token};
 use crate::parser::ParseError;
 use crate::parser::Parser;
 
-impl Parser {
+impl<'ast> Parser<'ast> {
     pub fn parse_range(&mut self) -> Result<Range, ParseError> {
         let first = self.expect_integer()?;
 
