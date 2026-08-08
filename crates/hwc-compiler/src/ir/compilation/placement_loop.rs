@@ -41,6 +41,7 @@ pub fn execute_placement(
             collector: ctx.collector,
             profile: ctx.profile,
             origin: ctx.origin,
+            arena: ctx.arena,
         };
 
         match item {
@@ -323,6 +324,7 @@ pub fn execute_placement(
                     ctx.origin,
                     space,
                     ctx.unit_registry,
+                    ctx.arena,
                 )?;
             }
             PlacementItem::Route(_) => {

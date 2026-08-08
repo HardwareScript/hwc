@@ -2,7 +2,7 @@ use crate::ast::{BinaryOperator, Expression, Span, UnaryOperator};
 use crate::lexer::Token;
 use crate::parser::{ParseError, Parser};
 
-impl<'ast> Parser<'ast> {
+impl Parser {
     /// Parse an expression using Pratt parsing (operator precedence)
     /// This handles: literals, variables, binary ops (+, -, *, /, %), unary ops (-, +), and parentheses
     pub(super) fn parse_expression(&mut self) -> Result<Expression, ParseError> {

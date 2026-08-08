@@ -7,7 +7,6 @@
 //! - units.hw: SI unit definitions (µF, MHz, mm, etc.)
 //! - math.hw: Mathematical and physical constants (PI, E, SPEED_OF_LIGHT, etc.)
 
-use bumpalo::Bump;
 use compact_str::CompactString;
 use hwc_parser::{Definition, Lexer, Parser, UnitDefinition};
 use rustc_hash::FxHashMap;
@@ -54,13 +53,10 @@ impl Prelude {
             PreludeError::ParseError(format!("Failed to tokenize units.hw: {:?}", e))
         })?;
 
-        // Create temporary arena for parsing
-        let arena = Bump::new();
-
         // Parse
         let collector =
             crate::DiagnosticCollector::new_with_file(UNITS_HW, "@std/primitives/units", 20);
-        let mut parser = Parser::new(tokens, &arena);
+        let mut parser = Parser::new(tokens);
         let program = parser.parse(&collector);
 
         if collector.has_errors() {
@@ -93,13 +89,10 @@ impl Prelude {
             PreludeError::ParseError(format!("Failed to tokenize math.hw: {:?}", e))
         })?;
 
-        // Create temporary arena for parsing
-        let arena = Bump::new();
-
         // Parse
         let collector =
             crate::DiagnosticCollector::new_with_file(MATH_HW, "@std/primitives/math", 20);
-        let mut parser = Parser::new(tokens, &arena);
+        let mut parser = Parser::new(tokens);
         let program = parser.parse(&collector);
 
         if collector.has_errors() {

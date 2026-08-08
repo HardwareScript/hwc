@@ -590,6 +590,7 @@ pub fn unroll_internal_features(
                             collector: ctx.collector,
                             profile: ctx.profile,
                             origin: world_origin,
+                            arena: ctx.arena,
                         };
 
                         place_pour(space, &unrolled_pour, bbox_tracker, &world_ctx)?;

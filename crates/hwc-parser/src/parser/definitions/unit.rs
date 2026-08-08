@@ -5,7 +5,7 @@ use crate::ast::*;
 use crate::lexer::{Span, Token};
 use miette::SourceSpan;
 
-impl<'ast> super::super::Parser<'ast> {
+impl super::super::Parser {
     // ========================================================================
     // Measurement Parsing
     // ========================================================================

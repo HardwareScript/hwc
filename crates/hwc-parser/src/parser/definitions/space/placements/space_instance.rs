@@ -10,7 +10,7 @@ use crate::ast::*;
 use crate::lexer::{Span, Token};
 use crate::ParseError;
 
-impl<'ast> crate::parser::Parser<'ast> {
+impl crate::parser::Parser {
     /// Parse space instance placement: `add space SpaceName named InstName at [...] rotated ...deg:`
     pub(in crate::parser) fn parse_space_instance(
         &mut self,

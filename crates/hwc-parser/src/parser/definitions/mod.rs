@@ -33,7 +33,7 @@ use super::error::{span_to_source_span, ParseError};
 use crate::ast::*;
 use crate::lexer::Token;
 
-impl<'ast> super::Parser<'ast> {
+impl super::Parser {
     // ========================================================================
     // Top-Level Definition Parsing (v0.1.4)
     // ========================================================================
@@ -46,7 +46,7 @@ impl<'ast> super::Parser<'ast> {
     pub(super) fn parse_definition(
         &mut self,
         collector: &crate::DiagnosticCollector,
-    ) -> Option<Definition<'ast>> {
+    ) -> Option<Definition> {
         // eprintln!(
         //     "[DEBUG] parse_definition called, current token: {:?}",
         //     self.current().map(|t| &t.token)
@@ -133,7 +133,7 @@ impl<'ast> super::Parser<'ast> {
             Some(Token::Component) => {
                 // // eprintln!("[DEBUG] Dispatching to parse_component_def");
                 self.parse_component_def(collector, is_exported)
-                    .map(|comp| Definition::Component(self.arena.alloc(comp)))
+                    .map(Definition::Component)
             }
             Some(Token::Module) => {
                 // // eprintln!("[DEBUG] Dispatching to parse_module");

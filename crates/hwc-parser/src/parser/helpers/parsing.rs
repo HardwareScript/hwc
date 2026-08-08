@@ -2,7 +2,7 @@ use crate::lexer::{Span, Token};
 use crate::parser::{ParseError, Parser};
 use compact_str::CompactString;
 
-impl<'ast> Parser<'ast> {
+impl Parser {
     /// Parse a net name with optional array index (v0.1.6 Sprint 3.4)
     ///
     /// Supports both simple names (`VDD`) and indexed names (`Bus[i]`)

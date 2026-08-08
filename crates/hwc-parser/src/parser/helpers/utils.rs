@@ -4,7 +4,7 @@ use crate::parser::{ParseError, Parser};
 use compact_str::CompactString;
 use miette::SourceSpan;
 
-impl<'ast> Parser<'ast> {
+impl Parser {
     /// Create an error at the current position
     pub(crate) fn error(&self, message: &str) -> ParseError {
         if let Some(current) = self.current() {

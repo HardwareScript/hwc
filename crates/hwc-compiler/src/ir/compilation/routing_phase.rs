@@ -90,7 +90,7 @@ pub fn collect_route_net_policies(
 ) -> rustc_hash::FxHashMap<hwc_engine::netlist::NetId, hwc_engine::RoutingPattern> {
     let mut route_net_policies = rustc_hash::FxHashMap::default();
 
-    for policy in &space_def.route_net_policies() {
+    for policy in space_def.route_net_policies() {
         if let Some(ref pattern_inst) = policy.pattern {
             match crate::ir::routing::instantiate_pattern(pattern_inst, symbol_table, eval_context)
             {

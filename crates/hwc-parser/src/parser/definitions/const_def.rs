@@ -4,7 +4,7 @@ use crate::ast::ConstDefinition;
 use crate::lexer::Token;
 use crate::parser::Parser;
 
-impl<'ast> Parser<'ast> {
+impl Parser {
     /// Parse constant definition: `const NAME: value`
     ///
     /// Syntax:

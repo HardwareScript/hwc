@@ -1,14 +1,15 @@
+use crate::ast::arena::ModuleComponentId;
 use crate::ast::{ModuleComponentPlacement, ModulePinReference, ModuleRoute, Span};
 use crate::lexer::Token;
 use crate::parser::{ParseError, Parser};
 use smallvec::SmallVec;
 
-impl<'ast> Parser<'ast> {
+impl Parser {
     /// Parse component addition in module: `add ComponentType (params) named Instance`
     /// Returns arena-allocated reference for zero-copy AST
     pub(super) fn parse_module_add(
         &mut self,
-    ) -> Result<&'ast ModuleComponentPlacement, ParseError> {
+    ) -> Result<ModuleComponentId, ParseError> {
         let start = self.current_span();
 
         self.expect(&Token::Add)?;
@@ -55,16 +56,17 @@ impl<'ast> Parser<'ast> {
 
         let span = Span::new(start.start, self.previous_span().end);
 
-        // Arena-allocate and return reference (rustc-style)
-        let placement = self.arena.alloc(ModuleComponentPlacement {
+        // Return by value
+        let placement = ModuleComponentPlacement {
             component_type: component_type.into(),
             parameters,
             name: name.map(|s: String| s.into()),
             array_index,
             span,
-        });
+        };
 
-        Ok(placement)
+        // Arena-allocate and return ID
+        Ok(self.arena.alloc_module_component(placement))
     }
 
     /// Parse route in module: `route From.Pin to To.Pin`

@@ -2,7 +2,7 @@ use super::super::{error::SymbolError, layer::SymbolTable, Definition};
 use compact_str::CompactString;
 use hwc_parser::{MaterialAliasDefinition, MaterialDefinition, UnitDefinition};
 
-impl<'ast> SymbolTable<'ast> {
+impl SymbolTable {
     /// Register a material alias in the prelude layer
     pub fn register_prelude_material_alias(
         &mut self,

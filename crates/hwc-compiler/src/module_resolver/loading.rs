@@ -7,11 +7,10 @@ use std::path::Path;
 
 impl super::ModuleResolver {
     /// Parse a program from a path (always fresh - no caching)
-    pub(super) fn parse_program<'ast>(
+    pub(super) fn parse_program(
         &mut self,
         path: &Path,
-        arena: &'ast bumpalo::Bump,
-    ) -> Result<Program<'ast>, ResolverError> {
+    ) -> Result<Program, ResolverError> {
         if path.starts_with("@std/") {
             // Embedded stdlib
             let module_name = path.strip_prefix("@std/").unwrap().to_str().unwrap();
@@ -22,22 +21,22 @@ impl super::ModuleResolver {
                 imports: vec![],
                 re_exports: vec![],
                 definitions: defs,
+                arena: hwc_parser::ast::arena::AstArena::new(),
                 span: hwc_parser::Span::new(0, 0),
             };
 
             Ok(program)
         } else {
             // File system - parse fresh each time
-            self.parse_file(path, arena)
+            self.parse_file(path)
         }
     }
 
     /// Parse a file from disk
-    pub(super) fn parse_file<'ast>(
+    pub(super) fn parse_file(
         &self,
         path: &Path,
-        arena: &'ast bumpalo::Bump,
-    ) -> Result<Program<'ast>, ResolverError> {
+    ) -> Result<Program, ResolverError> {
         let source = std::fs::read_to_string(path).map_err(|e| ResolverError::FileReadError {
             path: path.display().to_string().into(),
             error: e.to_string(),
@@ -53,7 +52,7 @@ impl super::ModuleResolver {
 
         let collector =
             crate::DiagnosticCollector::new_with_file(&source, &path.to_string_lossy(), 20);
-        let mut parser = Parser::new(tokens, arena);
+        let mut parser = Parser::new(tokens);
         let program = parser.parse(&collector);
 
         if collector.has_errors() {
@@ -68,10 +67,10 @@ impl super::ModuleResolver {
     }
 
     /// Load stdlib module from embedded source (uses its own internal cache)
-    pub(super) fn load_stdlib_embedded<'ast>(
+    pub(super) fn load_stdlib_embedded(
         &mut self,
         name: &str,
-    ) -> Result<Vec<Definition<'ast>>, ResolverError> {
+    ) -> Result<Vec<Definition>, ResolverError> {
         embedded_stdlib::get_stdlib_definitions(name).ok_or_else(|| ResolverError::StdlibNotFound {
             path: name.into(),
             span: None,

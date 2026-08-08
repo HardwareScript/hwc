@@ -13,7 +13,7 @@ pub(super) struct DrilledViaPlacement<'a> {
     pub diameter_nm: i64,
     pub net_id: u32,
     pub contact_name_debug: &'a str,
-    pub symbol_table: &'a SymbolTable<'a>,
+    pub symbol_table: &'a SymbolTable,
     pub eval_context: &'a EvaluationContext,
     pub pad_bbox: BoundingBox,
     pub is_tented: bool,

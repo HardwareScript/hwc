@@ -2,7 +2,7 @@ use crate::ast::*;
 use crate::lexer::{Span, Token};
 use crate::parser::error::ParseError;
 
-impl<'ast> crate::parser::Parser<'ast> {
+impl crate::parser::Parser {
     /// Parse plane placement: `add plane(Copper) named GND_Plane inside: RegionName on layer: l1:`
     pub(in crate::parser) fn parse_plane(&mut self) -> Result<PlanePlacement, ParseError> {
         let start_pos = self.current_span().start;

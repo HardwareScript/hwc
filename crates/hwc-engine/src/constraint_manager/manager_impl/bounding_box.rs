@@ -19,9 +19,16 @@ use crate::geometry::{BoundingBox, Point3D};
 pub fn calculate_module_bounding_box(
     layout: &hwc_parser::ModuleLayoutBlock,
     resolution_nm: i64,
+    arena: &hwc_parser::ast::arena::AstArena,
 ) -> BoundingBox {
     // Extract all placements from layout statements (flattening for loops and if statements)
-    let placements = extract_placements_from_layout(&layout.statements);
+    let placement_ids = extract_placements_from_layout(&layout.statements);
+
+    // Look up actual placements from arena
+    let placements: Vec<&hwc_parser::ModuleInternalPlacement> = placement_ids
+        .iter()
+        .map(|id| &arena.module_internals[*id])
+        .collect();
 
     // If no placements, return a minimal bounding box at origin
     if placements.is_empty() {
@@ -74,24 +81,24 @@ pub fn calculate_module_bounding_box(
         max_z = max_z.max(z);
     }
 
-    /// Helper function to extract all placements from layout statements
+    /// Helper function to extract all placement IDs from layout statements
     /// This recursively flattens for loops and if statements to get all placements
     fn extract_placements_from_layout<'a>(
         statements: &'a [hwc_parser::LayoutStatement],
-    ) -> Vec<&'a hwc_parser::ModuleInternalPlacement> {
+    ) -> Vec<hwc_parser::ast::arena::ModuleInternalId> {
         use hwc_parser::LayoutStatement;
 
-        let mut placements = Vec::new();
+        let mut placement_ids = Vec::new();
 
         for statement in statements {
             match statement {
-                LayoutStatement::Placement(p) => {
-                    placements.push(*p);
+                LayoutStatement::Placement(id) => {
+                    placement_ids.push(*id);
                 }
                 LayoutStatement::For { body, .. } => {
                     // Recursively extract placements from for loop body
                     // Note: This doesn't evaluate the loop, just collects all placements
-                    placements.extend(extract_placements_from_layout(body));
+                    placement_ids.extend(extract_placements_from_layout(body));
                 }
                 LayoutStatement::If {
                     then_body,
@@ -99,15 +106,15 @@ pub fn calculate_module_bounding_box(
                     ..
                 } => {
                     // Collect placements from both branches
-                    placements.extend(extract_placements_from_layout(then_body));
+                    placement_ids.extend(extract_placements_from_layout(then_body));
                     if let Some(else_statements) = else_body {
-                        placements.extend(extract_placements_from_layout(else_statements));
+                        placement_ids.extend(extract_placements_from_layout(else_statements));
                     }
                 }
             }
         }
 
-        placements
+        placement_ids
     }
 
     // All coordinates are already in nanometers

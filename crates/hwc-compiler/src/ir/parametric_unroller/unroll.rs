@@ -58,13 +58,15 @@ pub struct UnrolledStatements {
 /// - Evaluation context (all variables in scope)
 /// - Accumulated results for each statement type
 /// - Net collision tracking
-struct UnrollContext {
+struct UnrollContext<'a> {
     /// Name of the loop variable (e.g., "i", "row", "col")
     loop_variable: CompactString,
     /// Current iteration value
     iteration_value: usize,
     /// Evaluation context with all variables in scope
     eval_context: hwc_parser::EvaluationContext,
+    /// Arena for looking up AST nodes by ID
+    arena: &'a hwc_parser::ast::arena::AstArena,
     /// Accumulated unrolled components
     components: Vec<ContextualItem<ComponentPlacement>>,
     /// Accumulated unrolled pours
@@ -83,16 +85,18 @@ struct UnrollContext {
     collision_warnings: Vec<CollisionWarning>,
 }
 
-impl UnrollContext {
+impl<'a> UnrollContext<'a> {
     fn new(
         loop_variable: CompactString,
         iteration_value: usize,
         eval_context: hwc_parser::EvaluationContext,
+        arena: &'a hwc_parser::ast::arena::AstArena,
     ) -> Self {
         Self {
             loop_variable,
             iteration_value,
             eval_context,
+            arena,
             components: Vec::new(),
             pours: Vec::new(),
             planes: Vec::new(),
@@ -187,19 +191,19 @@ trait StatementProcessor {
     ) -> Result<(), IrError>;
 }
 
-impl StatementProcessor for UnrollContext {
+impl<'a> StatementProcessor for UnrollContext<'a> {
     fn process_statement(
         &mut self,
         stmt: &SpaceStatement,
         symbol_table: &SymbolTable,
     ) -> Result<(), IrError> {
         match stmt {
-            SpaceStatement::Component(c) => self.process_component(c),
-            SpaceStatement::Pour(p) => self.process_pour(p),
-            SpaceStatement::Plane(p) => self.process_plane(p),
-            SpaceStatement::Contact(c) => self.process_contact(c),
-            SpaceStatement::SpaceInstance(si) => self.process_space_instance(si),
-            SpaceStatement::Route(r) => self.process_route(r),
+            SpaceStatement::Component(c) => self.process_component(&self.arena.components[*c]),
+            SpaceStatement::Pour(p) => self.process_pour(&self.arena.pours[*p]),
+            SpaceStatement::Plane(p) => self.process_plane(&self.arena.planes[*p]),
+            SpaceStatement::Contact(c) => self.process_contact(&self.arena.contacts[*c]),
+            SpaceStatement::SpaceInstance(si) => self.process_space_instance(&self.arena.space_instances[*si]),
+            SpaceStatement::Route(r) => self.process_route(&self.arena.routes[*r]),
             SpaceStatement::Let(l) => self.process_let(l),
             SpaceStatement::If(i) => self.process_if(i, symbol_table),
             SpaceStatement::ForLoop(fl) => self.process_for_loop(fl, symbol_table),
@@ -342,7 +346,7 @@ impl StatementProcessor for UnrollContext {
         symbol_table: &SymbolTable,
     ) -> Result<(), IrError> {
         let nested_result =
-            unroll_for_loop_with_context(nested_loop, symbol_table, &self.eval_context)?;
+            unroll_for_loop_with_context(nested_loop, symbol_table, &self.eval_context, self.arena)?;
 
         // Merge nested results, substituting the current loop variable
         for contextual_comp in nested_result.components {
@@ -444,8 +448,9 @@ pub fn unroll_for_loop(
     for_loop: &SpaceForLoop,
     _symbol_table: &SymbolTable,
     space_eval_context: &hwc_parser::EvaluationContext,
+    arena: &hwc_parser::ast::arena::AstArena,
 ) -> Result<UnrolledStatements, IrError> {
-    unroll_for_loop_with_context(for_loop, _symbol_table, space_eval_context)
+    unroll_for_loop_with_context(for_loop, _symbol_table, space_eval_context, arena)
 }
 
 /// Internal unroller that maintains evaluation context through nested loops.
@@ -456,6 +461,7 @@ fn unroll_for_loop_with_context(
     for_loop: &SpaceForLoop,
     _symbol_table: &SymbolTable,
     parent_context: &hwc_parser::EvaluationContext,
+    arena: &hwc_parser::ast::arena::AstArena,
 ) -> Result<UnrolledStatements, IrError> {
     // Accumulators for all iterations
     let mut all_components = Vec::new();
@@ -480,7 +486,7 @@ fn unroll_for_loop_with_context(
         );
 
         // Create unroll context for this iteration
-        let mut ctx = UnrollContext::new(for_loop.variable.clone(), i, iteration_context);
+        let mut ctx = UnrollContext::new(for_loop.variable.clone(), i, iteration_context, arena);
 
         // Process all statements in loop body via trait dispatch
         for statement in &for_loop.body {

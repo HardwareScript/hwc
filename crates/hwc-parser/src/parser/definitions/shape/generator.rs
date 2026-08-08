@@ -4,7 +4,7 @@ use rustc_hash::FxHashMap;
 use crate::parser::error::ParseError;
 use crate::ShapeGenerator;
 
-impl<'ast> crate::parser::Parser<'ast> {
+impl crate::parser::Parser {
     pub(in crate::parser::definitions::shape) fn parse_shape_generator(
         &mut self,
     ) -> Result<ShapeGenerator, ParseError> {

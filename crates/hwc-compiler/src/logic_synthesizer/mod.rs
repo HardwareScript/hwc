@@ -32,7 +32,7 @@ pub struct LogicSynthesizer<'a> {
     /// Reference to the hardware space being built
     space: &'a mut HardwareSpace,
     /// Symbol table for component lookups
-    symbol_table: &'a SymbolTable<'a>,
+    symbol_table: &'a SymbolTable,
     /// Electrical symbol table for tracking wires and pins
     electrical_symbols: ElectricalSymbolTable,
     /// Width inference engine for tracking bit widths

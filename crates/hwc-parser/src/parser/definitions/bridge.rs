@@ -4,7 +4,7 @@ use crate::ast::*;
 use crate::lexer::{Span, Token};
 use compact_str::CompactString;
 
-impl<'ast> super::super::Parser<'ast> {
+impl super::super::Parser {
     /// Parse a top-level bridge definition (v0.2.0)
     ///
     /// Syntax:

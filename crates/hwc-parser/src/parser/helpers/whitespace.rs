@@ -2,7 +2,7 @@ use crate::lexer::Token;
 use crate::parser::{ParseError, Parser};
 use compact_str::CompactString;
 
-impl<'ast> Parser<'ast> {
+impl Parser {
     /// Consume a statement terminator (newline, dedent, or EOF)
     ///
     /// In whitespace-significant languages like Python and Hardware Script,

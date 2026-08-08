@@ -20,7 +20,7 @@ use crate::lexer::{Span, Token};
 use crate::parser::error::{span_to_source_span, ParseError};
 use compact_str::CompactString;
 
-impl<'ast> crate::parser::Parser<'ast> {
+impl crate::parser::Parser {
     /// Parse a subcircuit definition
     ///
     /// Expected format:

@@ -10,18 +10,15 @@
 //! - Each cached module has its own arena that lives for 'static
 //! - No build-time pre-compilation (faster builds, simpler architecture)
 
-use bumpalo::Bump;
 use compact_str::CompactString;
 use hwc_parser::{Definition, Lexer, Parser};
 use rustc_hash::FxHashMap;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
-/// Cached stdlib module with its own arena
+/// Cached stdlib module
 struct CachedModule {
-    #[allow(dead_code)] // Arena must be kept alive for 'static references
-    arena: Bump,
-    definitions: Vec<Definition<'static>>,
+    definitions: Vec<Definition>,
 }
 
 /// Runtime-loaded stdlib cache (lazy initialization)
@@ -66,23 +63,13 @@ fn parse_stdlib_module(module_path: &str) -> Result<CachedModule, String> {
         .tokenize()
         .map_err(|e| format!("Lexer error in stdlib: {:?}", e))?;
 
-    // Create arena for this stdlib module - it will live for 'static
-    let arena = Bump::new();
-
-    // SAFETY: We're creating a 'static reference to the arena
-    // This is safe because:
-    // 1. The arena is moved into CachedModule which is stored in a static STDLIB_CACHE
-    // 2. The cache is never cleared, so the arena lives for the program's lifetime
-    // 3. This is the same pattern we use for the compilation session
-    let arena_ref: &'static Bump = unsafe { &*(&arena as *const Bump) };
-
     // Parse
     let collector = hwc_diagnostics::DiagnosticCollector::new_with_file(
         &source,
         &file_path.to_string_lossy(),
         20,
     );
-    let mut parser = Parser::new(tokens, arena_ref);
+    let mut parser = Parser::new(tokens);
     let program = parser.parse(&collector);
 
     if collector.has_errors() {
@@ -90,7 +77,6 @@ fn parse_stdlib_module(module_path: &str) -> Result<CachedModule, String> {
     }
 
     Ok(CachedModule {
-        arena,
         definitions: program.definitions,
     })
 }
@@ -109,21 +95,12 @@ fn parse_stdlib_module(module_path: &str) -> Result<CachedModule, String> {
 /// Performance:
 /// - First access: ~50-200ms (parsing from disk)
 /// - Subsequent access: ~0.1ms (cache lookup)
-pub fn get_stdlib_definitions<'ast>(path: &str) -> Option<Vec<Definition<'ast>>> {
+pub fn get_stdlib_definitions(path: &str) -> Option<Vec<Definition>> {
     let mut cache = STDLIB_CACHE.lock().unwrap();
 
     // Check cache first
     if let Some(cached) = cache.get(path) {
-        // SAFETY: We're transmuting from 'static to 'ast
-        // This is safe because:
-        // 1. The stdlib arena lives for 'static (never dropped)
-        // 2. 'ast is the compilation session lifetime, which is shorter than 'static
-        // 3. The definitions are cloned, so no aliasing issues
-        return Some(unsafe {
-            std::mem::transmute::<Vec<Definition<'static>>, Vec<Definition<'ast>>>(
-                cached.definitions.clone(),
-            )
-        });
+        return Some(cached.definitions.clone());
     }
 
     // Not in cache - parse from disk
@@ -131,9 +108,7 @@ pub fn get_stdlib_definitions<'ast>(path: &str) -> Option<Vec<Definition<'ast>>>
         Ok(cached_module) => {
             let defs = cached_module.definitions.clone();
             cache.insert(path.into(), cached_module);
-            Some(unsafe {
-                std::mem::transmute::<Vec<Definition<'static>>, Vec<Definition<'ast>>>(defs)
-            })
+            Some(defs)
         }
         Err(e) => {
             eprintln!("[STDLIB ERROR] Failed to load {}: {}", path, e);

@@ -2,7 +2,7 @@ use crate::lexer::Token;
 
 use crate::ShapeParameter;
 
-impl<'ast> crate::parser::Parser<'ast> {
+impl crate::parser::Parser {
     pub(in crate::parser::definitions::shape) fn parse_shape_parameters(
         &mut self,
     ) -> Result<Vec<ShapeParameter>, crate::parser::error::ParseError> {

@@ -45,11 +45,8 @@ pub fn execute(
     })?;
     // eprintln!($3"[DEBUG] Lexer complete, {} tokens", tokens.len());
 
-    // Create arena for AST allocations
-    let arena = bumpalo::Bump::new();
-
     // eprintln!($3"[DEBUG] Starting parser...");
-    let mut parser = Parser::new(tokens, &arena);
+    let mut parser = Parser::new(tokens);
     let ast = parser.parse(&collector);
     // eprintln!($3"[DEBUG] Parser complete");
 
@@ -115,7 +112,7 @@ pub fn execute(
 
     // Process imports first
     for import in &ast.imports {
-        if let Err(e) = resolver.resolve_import(import, &input, &mut symbol_table, &arena) {
+        if let Err(e) = resolver.resolve_import(import, &input, &mut symbol_table) {
             // Add source code for better error display
             let e_with_src = e.with_source(
                 collector.source.to_string(),
@@ -134,25 +131,33 @@ pub fn execute(
     // Register local definitions
     for definition in &ast.definitions {
         match definition {
-            hwc_parser::Definition::Material(mat) => {
+            hwc_parser::Definition::Material(id) => {
+                let mat = &ast.arena.material_defs[*id];
                 symbol_table.register_material(&collector, mat.clone());
             }
-            hwc_parser::Definition::Profile(profile) => {
-                symbol_table.register_profile(&collector, (**profile).clone());
+            hwc_parser::Definition::Profile(id) => {
+                let profile = &ast.arena.profile_defs[*id];
+                symbol_table.register_profile(&collector, profile.clone());
             }
-            hwc_parser::Definition::Component(component) => {
-                symbol_table.register_component(&collector, component.clone());
+            hwc_parser::Definition::Component(component_id) => {
+                // Look up the actual ComponentDefinition from the arena
+                let component_def = &ast.arena.component_defs[*component_id];
+                symbol_table.register_component(&collector, component_def.clone());
             }
-            hwc_parser::Definition::Module(module) => {
+            hwc_parser::Definition::Module(id) => {
+                let module = &ast.arena.module_defs[*id];
                 symbol_table.register_module(&collector, module.clone());
             }
-            hwc_parser::Definition::Mechanical(mechanical) => {
+            hwc_parser::Definition::Mechanical(id) => {
+                let mechanical = &ast.arena.mechanical_defs[*id];
                 symbol_table.register_mechanical(&collector, mechanical.clone());
             }
-            hwc_parser::Definition::Interface(interface) => {
+            hwc_parser::Definition::Interface(id) => {
+                let interface = &ast.arena.interface_defs[*id];
                 symbol_table.register_interface(&collector, interface.clone());
             }
-            hwc_parser::Definition::Test(test) => {
+            hwc_parser::Definition::Test(id) => {
+                let test = &ast.arena.test_defs[*id];
                 symbol_table.register_test(&collector, test.clone());
             }
             _ => {}
@@ -235,9 +240,6 @@ fn run_foundry_validation(
     // Build symbol table with imports resolved (so property merging happens)
     let mut symbol_table = SymbolTable::new();
 
-    // Create arena for import AST allocations
-    let arena = bumpalo::Bump::new();
-
     // Load prelude (units.hw, math.hw) for unit resolution and constant folding
     match hwc_compiler::Prelude::load() {
         Ok(prelude) => {
@@ -259,7 +261,7 @@ fn run_foundry_validation(
     // Process imports first (goes into HPM layer)
     for import in &ast.imports {
         resolver
-            .resolve_import(import, source_file, &mut symbol_table, &arena)
+            .resolve_import(import, source_file, &mut symbol_table)
             .map_err(|e| miette::miette!("Failed to resolve import: {}", e))?;
     }
 

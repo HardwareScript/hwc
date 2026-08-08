@@ -4,7 +4,7 @@ use crate::ast::*;
 use crate::lexer::{Span, Token};
 use crate::parser::error::ParseError;
 
-impl<'ast> crate::parser::Parser<'ast> {
+impl crate::parser::Parser {
     /// Parse for loop in space block (Sprint 3.4: Parametric Unrolling)
     ///
     /// Syntax:
@@ -15,7 +15,7 @@ impl<'ast> crate::parser::Parser<'ast> {
     /// ```
     pub(in crate::parser) fn parse_space_for_loop(
         &mut self,
-    ) -> Result<SpaceForLoop<'ast>, ParseError> {
+    ) -> Result<SpaceForLoop, ParseError> {
         let start_pos = self.current_span().start;
 
         self.expect(&Token::For)?;
@@ -70,7 +70,7 @@ impl<'ast> crate::parser::Parser<'ast> {
     /// ```
     pub(in crate::parser) fn parse_space_if_conditional(
         &mut self,
-    ) -> Result<SpaceIfConditional<'ast>, ParseError> {
+    ) -> Result<SpaceIfConditional, ParseError> {
         let start_pos = self.current_span().start;
 
         self.expect(&Token::If)?;
@@ -124,7 +124,7 @@ impl<'ast> crate::parser::Parser<'ast> {
     }
 
     /// Helper to parse a single space statement (used by both for and if)
-    fn parse_space_statement(&mut self) -> Result<SpaceStatement<'ast>, ParseError> {
+    fn parse_space_statement(&mut self) -> Result<SpaceStatement, ParseError> {
         if self.check(&Token::For) {
             let nested_loop = self.parse_space_for_loop()?;
             Ok(SpaceStatement::ForLoop(Box::new(nested_loop)))
@@ -142,32 +142,36 @@ impl<'ast> crate::parser::Parser<'ast> {
                 match &next_token.token {
                     Token::Pour => {
                         let pour = self.parse_pour()?;
-                        Ok(SpaceStatement::Pour(Box::new(pour)))
+                        let pour_id = self.arena.alloc_pour(pour);
+                        Ok(SpaceStatement::Pour(pour_id))
                     }
                     Token::Plane => {
                         let plane = self.parse_plane()?;
-                        Ok(SpaceStatement::Plane(Box::new(plane)))
+                        let plane_id = self.arena.alloc_plane(plane);
+                        Ok(SpaceStatement::Plane(plane_id))
                     }
                     Token::Contact => {
-                        let contact = self.parse_contact()?;
-                        Ok(SpaceStatement::Contact(contact))
+                        let contact_id = self.parse_contact()?;
+                        Ok(SpaceStatement::Contact(contact_id))
                     }
                     _ => {
                         // Component placement
                         let component = self.parse_component_placement()?;
-                        Ok(SpaceStatement::Component(Box::new(component)))
+                        let comp_id = self.arena.alloc_component(component);
+                        Ok(SpaceStatement::Component(comp_id))
                     }
                 }
             } else {
                 // Default to component placement
                 let component = self.parse_component_placement()?;
-                Ok(SpaceStatement::Component(Box::new(component)))
+                let comp_id = self.arena.alloc_component(component);
+                Ok(SpaceStatement::Component(comp_id))
             }
         } else if self.check(&Token::Route) {
             let route = self.parse_route()?;
             // Arena-allocate for SoC-scale performance
-            let route_ref = self.arena.alloc(route);
-            Ok(SpaceStatement::Route(route_ref))
+            let route_id = self.arena.alloc_route(route);
+            Ok(SpaceStatement::Route(route_id))
         } else if self.check(&Token::Newline) {
             self.advance();
             self.parse_space_statement() // Recurse to get next real statement

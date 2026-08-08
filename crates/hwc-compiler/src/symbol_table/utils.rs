@@ -5,7 +5,7 @@ use compact_str::CompactString;
 use hwc_parser::MaterialDefinition;
 use rustc_hash::FxHashMap;
 
-impl<'ast> SymbolTable<'ast> {
+impl SymbolTable {
     /// Expand a module's pin declarations into individual pin name strings.
     ///
     /// Array pins like `Bus_Out[64]` are expanded into:

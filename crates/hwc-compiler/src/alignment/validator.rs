@@ -62,6 +62,7 @@ impl AlignmentValidator {
         symbol_table: &SymbolTable,
         space: &hwc_engine::HardwareSpace,
         tolerance: Option<f64>,
+        arena: &hwc_parser::ast::arena::AstArena,
     ) -> Result<AlignmentResult, AlignmentError> {
         // Check if `implements` clause is present
         match &space_def.implements_module {
@@ -79,6 +80,7 @@ impl AlignmentValidator {
                     symbol_table,
                     space,
                     tolerance,
+                    arena,
                 )
             }
         }
@@ -91,6 +93,7 @@ impl AlignmentValidator {
         symbol_table: &SymbolTable,
         space: &hwc_engine::HardwareSpace,
         tolerance: Option<f64>,
+        arena: &hwc_parser::ast::arena::AstArena,
     ) -> Result<AlignmentResult, AlignmentError> {
         // Step 1: Look up the module definition
         let module_def =
@@ -102,7 +105,7 @@ impl AlignmentValidator {
 
         // Step 2: Synthesize logical netlist from module definition
         let mut logical_synthesizer = LogicalSynthesizer::new();
-        let logical_netlist = logical_synthesizer.synthesize(module_def)?;
+        let logical_netlist = logical_synthesizer.synthesize(module_def, arena)?;
 
         // Step 3: Get device type registry from logical synthesizer
         let device_registry = logical_synthesizer.device_registry();

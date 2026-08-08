@@ -9,7 +9,7 @@ use hwc_parser::{
     SpiceModelDefinition, StrategyDefinition, SubcircuitDefinition, TestDefinition, UnitDefinition,
 };
 
-impl<'ast> SymbolTable<'ast> {
+impl SymbolTable {
     /// Register a material alias (in local layer)
     pub fn register_material_alias(
         &mut self,
@@ -225,7 +225,7 @@ impl<'ast> SymbolTable<'ast> {
     pub fn register_module(
         &mut self,
         collector: &DiagnosticCollector,
-        def: ModuleDefinition<'ast>,
+        def: ModuleDefinition,
     ) {
         let name_str = def.name.as_str();
         if let Some(Definition::Module(existing)) = self.local.get(name_str) {

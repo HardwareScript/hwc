@@ -77,12 +77,14 @@ impl LogicalSynthesizer {
     ///
     /// # Arguments
     /// * `module` - The parsed module definition from the AST
+    /// * `arena` - The arena for looking up arena-allocated nodes
     ///
     /// # Returns
     /// Logical netlist or synthesis error
     pub fn synthesize(
         &mut self,
         module: &ModuleDefinition,
+        arena: &hwc_parser::ast::arena::AstArena,
     ) -> Result<LogicalNetlist, AlignmentError> {
         let mut netlist = LogicalNetlist::new();
 
@@ -109,7 +111,9 @@ impl LogicalSynthesizer {
 
         for statement in &module.statements {
             match statement {
-                ModuleStatement::AddComponent(add) => {
+                ModuleStatement::AddComponent(add_id) => {
+                    // Look up the actual placement from arena
+                    let add = &arena.module_components[*add_id];
                     // Extract device type (e.g., "NMOS", "PMOS", "Resistor")
                     let device_type_name = &add.component_type;
 

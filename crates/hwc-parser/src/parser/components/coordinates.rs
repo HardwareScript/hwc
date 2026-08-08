@@ -2,7 +2,7 @@ use crate::ast::*;
 use crate::lexer::{Span, Token};
 use crate::parser::error::ParseError;
 
-impl<'ast> crate::parser::Parser<'ast> {
+impl crate::parser::Parser {
     /// Parse coordinate: [X,Y,Z] (positional) or [x:10, y:15, z:2] (declarative)
     pub(in crate::parser) fn parse_coordinate(&mut self) -> Result<Coordinate, ParseError> {
         self.parse_coordinate_with_optional_z(false)

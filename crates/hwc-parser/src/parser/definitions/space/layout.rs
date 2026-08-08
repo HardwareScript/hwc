@@ -1,14 +1,15 @@
 //! Module layout block and statement parsing
 
+use crate::ast::arena::ModuleInternalId;
 use crate::ast::*;
 use crate::lexer::{Span, Token};
 use crate::parser::error::{span_to_source_span, ParseError};
 
-impl<'ast> crate::parser::Parser<'ast> {
+impl crate::parser::Parser {
     /// Parse module layout block: `layout ModuleName:`
     pub(in crate::parser) fn parse_module_layout_block(
         &mut self,
-    ) -> Result<ModuleLayoutBlock<'ast>, ParseError> {
+    ) -> Result<ModuleLayoutBlock, ParseError> {
         let start_pos = self.current_span().start;
 
         // v0.1.6: 'layout' is now an identifier
@@ -47,7 +48,7 @@ impl<'ast> crate::parser::Parser<'ast> {
     /// Returns arena-allocated reference for zero-copy AST
     pub(in crate::parser) fn parse_layout_placement(
         &mut self,
-    ) -> Result<&'ast ModuleInternalPlacement, ParseError> {
+    ) -> Result<ModuleInternalId, ParseError> {
         let start_pos = self.current_span().start;
 
         // Parse component name
@@ -67,21 +68,20 @@ impl<'ast> crate::parser::Parser<'ast> {
         let position = self.parse_coordinate()?;
         self.expect(&Token::Newline)?;
 
-        // Arena-allocate and return reference
-        let placement = self.arena.alloc(ModuleInternalPlacement {
+        // Arena-allocate and return ID
+        let placement = ModuleInternalPlacement {
             component_name: component_name.into(),
             array_index,
             position,
             span: Span::new(start_pos, self.previous_span().end),
-        });
-
-        Ok(placement)
+        };
+        Ok(self.arena.alloc_module_internal(placement))
     }
 
     /// Parse for loop in layout block
     pub(in crate::parser) fn parse_layout_for_loop(
         &mut self,
-    ) -> Result<LayoutStatement<'ast>, ParseError> {
+    ) -> Result<LayoutStatement, ParseError> {
         let start_pos = self.current_span().start;
 
         self.expect(&Token::For)?;
@@ -122,7 +122,7 @@ impl<'ast> crate::parser::Parser<'ast> {
     /// Parse if conditional in layout block
     pub(in crate::parser) fn parse_layout_if_conditional(
         &mut self,
-    ) -> Result<LayoutStatement<'ast>, ParseError> {
+    ) -> Result<LayoutStatement, ParseError> {
         let start_pos = self.current_span().start;
 
         self.expect(&Token::If)?;

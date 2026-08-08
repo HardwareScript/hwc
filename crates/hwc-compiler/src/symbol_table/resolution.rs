@@ -10,9 +10,9 @@ use hwc_parser::{
     SpiceModelDefinition, StrategyDefinition, SubcircuitDefinition, TestDefinition, UnitDefinition,
 };
 
-impl<'ast> SymbolTable<'ast> {
+impl SymbolTable {
     /// Get a space definition by name
-    pub fn get_space(&self, name: &str) -> Result<&SpaceDefinition<'_>, SymbolError> {
+    pub fn get_space(&self, name: &str) -> Result<&SpaceDefinition, SymbolError> {
         match self.get_symbol(name) {
             Some(Definition::Space(space)) => Ok(space),
             Some(other) => Err(SymbolError::type_mismatch(name, "space", other.kind_str())),
@@ -64,7 +64,7 @@ impl<'ast> SymbolTable<'ast> {
     }
 
     /// Get a module definition by name
-    pub fn get_module(&self, name: &str) -> Result<&ModuleDefinition<'_>, SymbolError> {
+    pub fn get_module(&self, name: &str) -> Result<&ModuleDefinition, SymbolError> {
         match self.get_symbol(name) {
             Some(Definition::Module(module)) => Ok(module),
             Some(other) => Err(SymbolError::type_mismatch(name, "module", other.kind_str())),

@@ -24,16 +24,22 @@ use rustc_hash::FxHashMap;
 /// Device extractor using explicit intent-based bindings
 pub struct DeviceExtractor<'a> {
     pub(super) space: &'a HardwareSpace,
-    pub(super) symbol_table: &'a hwc_compiler::SymbolTable<'a>,
+    pub(super) symbol_table: &'a hwc_compiler::SymbolTable,
+    pub(super) arena: &'a hwc_parser::ast::AstArena,
     pub(super) device_registry: DeviceTypeRegistry,
     pub(super) parameter_registry: parameter_extraction::ParameterExtractionRegistry,
 }
 
 impl<'a> DeviceExtractor<'a> {
-    pub fn new(space: &'a HardwareSpace, symbol_table: &'a hwc_compiler::SymbolTable) -> Self {
+    pub fn new(
+        space: &'a HardwareSpace,
+        symbol_table: &'a hwc_compiler::SymbolTable,
+        arena: &'a hwc_parser::ast::AstArena,
+    ) -> Self {
         Self {
             space,
             symbol_table,
+            arena,
             device_registry: DeviceTypeRegistry::new(),
             parameter_registry: parameter_extraction::ParameterExtractionRegistry::default(),
         }
@@ -70,7 +76,7 @@ impl<'a> DeviceExtractor<'a> {
         let bindings = self.group_pours_by_device_binding();
 
         // Step 2: Extract devices from BOTH module statements AND pour bindings
-        let mut extracted = ExtractedDevices::from_module(module);
+        let mut extracted = ExtractedDevices::from_module(module, self.arena);
         let from_bindings = ExtractedDevices::from_pour_bindings(&bindings, self.symbol_table);
 
         // Merge devices from bindings into extracted

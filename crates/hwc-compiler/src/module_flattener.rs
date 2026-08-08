@@ -114,13 +114,13 @@ impl ComptimeContext {
     }
 }
 
-pub fn flatten_module(module: &ModuleDefinition) -> Result<FlattenedModule, FlattenError> {
+pub fn flatten_module(module: &ModuleDefinition, arena: &hwc_parser::ast::arena::AstArena) -> Result<FlattenedModule, FlattenError> {
     let mut context = ComptimeContext::new();
     let mut components = Vec::new();
     let mut routes = Vec::new();
 
     for statement in &module.statements {
-        flatten_statement(statement, &mut context, &mut components, &mut routes)?;
+        flatten_statement(statement, &mut context, &mut components, &mut routes, arena)?;
     }
 
     Ok(FlattenedModule { components, routes })
@@ -131,16 +131,18 @@ fn flatten_statement(
     context: &mut ComptimeContext,
     components: &mut Vec<ModuleComponentPlacement>,
     routes: &mut Vec<ModuleRoute>,
+    arena: &hwc_parser::ast::arena::AstArena,
 ) -> Result<(), FlattenError> {
     match statement {
-        ModuleStatement::AddComponent(comp) => {
+        ModuleStatement::AddComponent(add_id) => {
+            // Look up the actual placement from arena
+            let add = &arena.module_components[*add_id];
             // Evaluate array index if present
-            // comp is &ModuleComponentPlacement due to arena allocation
-            let mut flattened_comp = (*comp).clone();
-            if let Some(ref array_index) = comp.array_index {
+            let mut flattened_comp = add.clone();
+            if let Some(ref array_index) = add.array_index {
                 let index_value = evaluate_array_index(array_index, context)?;
                 // Replace the array index with the evaluated value in the name
-                if let Some(ref base_name) = comp.name {
+                if let Some(ref base_name) = add.name {
                     flattened_comp.name = Some(format!("{}[{}]", base_name, index_value).into());
                     flattened_comp.array_index = None; // Clear the array index since it's now in the name
                 }
@@ -151,10 +153,10 @@ fn flatten_statement(
             routes.push(route.clone());
         }
         ModuleStatement::For(for_loop) => {
-            flatten_for_loop(for_loop, context, components, routes)?;
+            flatten_for_loop(for_loop, context, components, routes, arena)?;
         }
         ModuleStatement::If(if_cond) => {
-            flatten_if_conditional(if_cond, context, components, routes)?;
+            flatten_if_conditional(if_cond, context, components, routes, arena)?;
         }
     }
     Ok(())
@@ -165,6 +167,7 @@ fn flatten_for_loop(
     context: &mut ComptimeContext,
     components: &mut Vec<ModuleComponentPlacement>,
     routes: &mut Vec<ModuleRoute>,
+    arena: &hwc_parser::ast::arena::AstArena,
 ) -> Result<(), FlattenError> {
     let start = for_loop.start as i64;
     let end = for_loop.end as i64;
@@ -177,7 +180,7 @@ fn flatten_for_loop(
     for i in start..=end {
         context.set_variable(for_loop.variable.clone(), i);
         for statement in &for_loop.body {
-            flatten_statement(statement, context, components, routes)?;
+            flatten_statement(statement, context, components, routes, arena)?;
         }
     }
 
@@ -189,16 +192,17 @@ fn flatten_if_conditional(
     context: &mut ComptimeContext,
     components: &mut Vec<ModuleComponentPlacement>,
     routes: &mut Vec<ModuleRoute>,
+    arena: &hwc_parser::ast::arena::AstArena,
 ) -> Result<(), FlattenError> {
     let condition_result = evaluate_condition(&if_cond.condition, context)?;
 
     if condition_result {
         for statement in &if_cond.then_body {
-            flatten_statement(statement, context, components, routes)?;
+            flatten_statement(statement, context, components, routes, arena)?;
         }
     } else if let Some(else_body) = &if_cond.else_body {
         for statement in else_body {
-            flatten_statement(statement, context, components, routes)?;
+            flatten_statement(statement, context, components, routes, arena)?;
         }
     }
 

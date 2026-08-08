@@ -25,7 +25,7 @@ pub fn place_module_instance(
 
     println!("🔧 Flattening module: {}", module_placement.component_type);
 
-    let flattened = flatten_module(module_def).map_err(|e| IrError::PlacementConstraint {
+    let flattened = flatten_module(module_def, ctx.arena).map_err(|e| IrError::PlacementConstraint {
         message: format!("Module flattening failed: {}", e),
         component: module_placement.component_type.to_string(),
     })?;
@@ -79,7 +79,12 @@ pub fn place_module_instance(
         None
     };
 
-    if let Some(placements) = placements_source {
+    if let Some(placement_ids) = placements_source {
+        // Look up actual placements from arena
+        let placements: Vec<&hwc_parser::ModuleInternalPlacement> = placement_ids
+            .iter()
+            .map(|id| &ctx.arena.module_internals[*id])
+            .collect();
         for module_comp in &flattened.components {
             let comp_internal_name =
                 module_comp

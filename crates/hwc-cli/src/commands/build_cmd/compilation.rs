@@ -1,5 +1,4 @@
 use crate::commands::build_cmd::BuildConfig;
-use bumpalo::Bump;
 use hwc_compiler::SymbolTable;
 use hwc_parser::{Lexer, Parser, Program};
 use miette::Result;
@@ -7,32 +6,18 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 /// Result of the compilation phase
-///
-/// The arena lives for the entire compilation session - all ASTs from all files
-/// are allocated in this arena. This is the rustc-style session-scoped arena pattern.
-pub struct CompilationResult<'ast> {
-    /// Arena that owns all AST allocations. Keep this field FIRST so it's dropped last.
-    arena: Bump,
-    pub ast: Program<'ast>,
-    pub symbol_table: SymbolTable<'ast>,
+pub struct CompilationResult {
+    pub ast: Program,
+    pub symbol_table: SymbolTable,
     pub source: String,
     pub collector: hwc_compiler::DiagnosticCollector,
     prelude: hwc_compiler::Prelude,
 }
 
-impl<'ast> CompilationResult<'ast> {
+impl CompilationResult {
     /// Build a UnitRegistry from the prelude units.
     pub fn unit_registry(&self) -> hwc_types::UnitRegistry {
         self.prelude.build_unit_registry()
-    }
-}
-
-impl<'ast> Drop for CompilationResult<'ast> {
-    fn drop(&mut self) {
-        // Explicitly access arena to silence "never read" warning.
-        // The arena MUST be dropped last (after ast/symbol_table) to keep references valid.
-        // Rust's drop order (fields dropped in declaration order) ensures arena is dropped last.
-        let _ = &self.arena;
     }
 }
 
@@ -41,10 +26,7 @@ pub fn compile_source(
     input: &PathBuf,
     config: &BuildConfig,
     start_time: Instant,
-) -> Result<CompilationResult<'static>> {
-    // Create session-scoped arena - all ASTs for this compilation will be allocated here
-    let arena = Bump::new();
-
+) -> Result<CompilationResult> {
     // Read source
     let source = std::fs::read_to_string(input)
         .map_err(|e| miette::miette!("Failed to read file: {}", e))?;
@@ -75,8 +57,6 @@ pub fn compile_source(
     );
 
     // Parse with diagnostic collector
-    // Sprint 9 (Task 9.3): Default cap is 50, matching the Rust compiler model.
-    // Users can override with --limit N (lower) or --all (unlimited).
     let error_limit = if config.all {
         usize::MAX
     } else {
@@ -86,15 +66,7 @@ pub fn compile_source(
     let collector =
         hwc_compiler::DiagnosticCollector::new_with_file(&source, &file_name, error_limit);
 
-    // SAFETY: We're creating a self-referential structure here.
-    // The arena is moved into CompilationResult, and the AST references it.
-    // This is safe because:
-    // 1. The arena is never dropped while CompilationResult exists
-    // 2. The 'static lifetime is a lie, but it's bounded by CompilationResult's lifetime
-    // 3. This is the same pattern rustc uses with 'tcx
-    let arena_ref: &'static Bump = unsafe { &*(&arena as *const Bump) };
-
-    let mut parser = Parser::new(tokens, arena_ref);
+    let mut parser = Parser::new(tokens);
     let ast = parser.parse(&collector);
 
     if collector.has_errors() {
@@ -127,7 +99,7 @@ pub fn compile_source(
 
     // Build symbol table
     let (symbol_table, prelude) =
-        build_symbol_table(&ast, input, &collector, config, start_time, arena_ref)?;
+        build_symbol_table(&ast, input, &collector, config, start_time)?;
 
     // Print warnings if any
     if collector.warning_count() > 0 {
@@ -140,7 +112,6 @@ pub fn compile_source(
     }
 
     Ok(CompilationResult {
-        arena,
         ast,
         symbol_table,
         source,
@@ -150,14 +121,13 @@ pub fn compile_source(
 }
 
 /// Build symbol table with imports and definitions
-fn build_symbol_table<'ast>(
-    ast: &Program<'ast>,
+fn build_symbol_table(
+    ast: &Program,
     input: &Path,
     collector: &hwc_compiler::DiagnosticCollector,
     config: &BuildConfig,
     start_time: Instant,
-    arena: &'ast Bump,
-) -> Result<(SymbolTable<'ast>, hwc_compiler::Prelude)> {
+) -> Result<(SymbolTable, hwc_compiler::Prelude)> {
     let mut symbol_table = SymbolTable::new();
 
     // Load prelude
@@ -177,7 +147,7 @@ fn build_symbol_table<'ast>(
 
     // Process imports
     for import in &ast.imports {
-        if let Err(e) = resolver.resolve_import(import, input, &mut symbol_table, arena) {
+        if let Err(e) = resolver.resolve_import(import, input, &mut symbol_table) {
             // Add source code for better error display
             let e_with_src = e.with_source(
                 collector.source.to_string(),
@@ -193,34 +163,44 @@ fn build_symbol_table<'ast>(
         return Err(miette::miette!("Import resolution failed"));
     }
 
-    // Register local definitions
+    // Register local definitions (all now use arena lookup for uniform access)
     for definition in &ast.definitions {
         match definition {
-            hwc_parser::Definition::Bridge(bridge) => {
+            hwc_parser::Definition::Bridge(id) => {
+                let bridge = &ast.arena.bridge_defs[*id];
                 symbol_table.register_bridge(collector, bridge.clone());
             }
-            hwc_parser::Definition::Unit(unit) => {
+            hwc_parser::Definition::Unit(id) => {
+                let unit = &ast.arena.unit_defs[*id];
                 symbol_table.register_unit(collector, unit.clone());
             }
-            hwc_parser::Definition::Device(device) => {
+            hwc_parser::Definition::Device(id) => {
+                let device = &ast.arena.device_defs[*id];
                 symbol_table.register_device(collector, device.clone());
             }
-            hwc_parser::Definition::Material(mat) => {
+            hwc_parser::Definition::Material(id) => {
+                let mat = &ast.arena.material_defs[*id];
                 symbol_table.register_material(collector, mat.clone());
             }
-            hwc_parser::Definition::Profile(profile) => {
-                symbol_table.register_profile(collector, (**profile).clone());
+            hwc_parser::Definition::Profile(id) => {
+                let profile = &ast.arena.profile_defs[*id];
+                symbol_table.register_profile(collector, profile.clone());
             }
-            hwc_parser::Definition::Component(component) => {
-                symbol_table.register_component(collector, component.clone());
+            hwc_parser::Definition::Component(component_id) => {
+                // Look up the actual ComponentDefinition from the arena
+                let component_def = &ast.arena.component_defs[*component_id];
+                symbol_table.register_component(collector, component_def.clone());
             }
-            hwc_parser::Definition::Module(module) => {
+            hwc_parser::Definition::Module(id) => {
+                let module = &ast.arena.module_defs[*id];
                 symbol_table.register_module(collector, module.clone());
             }
-            hwc_parser::Definition::Mechanical(mechanical) => {
+            hwc_parser::Definition::Mechanical(id) => {
+                let mechanical = &ast.arena.mechanical_defs[*id];
                 symbol_table.register_mechanical(collector, mechanical.clone());
             }
-            hwc_parser::Definition::Interface(interface) => {
+            hwc_parser::Definition::Interface(id) => {
+                let interface = &ast.arena.interface_defs[*id];
                 symbol_table.register_interface(collector, interface.clone());
             }
             hwc_parser::Definition::Test(test) => {

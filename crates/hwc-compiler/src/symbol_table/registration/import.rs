@@ -9,12 +9,12 @@ use hwc_parser::{
 
 use super::super::Definition;
 
-impl<'ast> SymbolTable<'ast> {
+impl SymbolTable {
     /// Register an imported space definition (in HPM layer) (v0.2.1)
     ///
     /// v0.2.1: Hierarchical Space Composition support
     /// Stores ALL definitions (exported and private) for proper scoped resolution
-    pub fn register_import_space(&mut self, def: SpaceDefinition<'ast>) {
+    pub fn register_import_space(&mut self, def: SpaceDefinition) {
         let name_str = def.name.as_str().to_string();
 
         eprintln!(
@@ -171,7 +171,7 @@ impl<'ast> SymbolTable<'ast> {
 
     /// Register an imported module definition (in HPM layer)
     /// v0.2.0: Stores ALL definitions (exported and private) for proper scoped resolution
-    pub fn register_import_module(&mut self, def: ModuleDefinition<'ast>) {
+    pub fn register_import_module(&mut self, def: ModuleDefinition) {
         let name_str = def.name.as_str().to_string();
         if self.hpm.is_empty() {
             self.hpm.push(super::super::layer::SymbolLayer::new());

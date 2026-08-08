@@ -10,14 +10,16 @@ impl super::ModuleResolver {
     /// Register import targets into the symbol table
     ///
     /// Always executes, even for previously-loaded files (no state pollution)
-    pub(super) fn register_import_targets<'ast>(
+    pub(super) fn register_import_targets(
         &self,
         targets: &ImportTargets,
-        program: &hwc_parser::Program<'ast>,
+        program: &hwc_parser::Program,
         file_path: &Path,
         alias: Option<&hwc_parser::Identifier>,
-        symbol_table: &mut SymbolTable<'ast>,
+        symbol_table: &mut SymbolTable,
     ) -> Result<(), ResolverError> {
+        let arena = &program.arena;
+
         // If this import has an alias, create a new HPM layer for the namespace
         if alias.is_some() {
             symbol_table.push_hpm_layer();
@@ -27,8 +29,8 @@ impl super::ModuleResolver {
             ImportTargets::Star => {
                 // Wildcard import: register all EXPORTED definitions
                 for definition in &program.definitions {
-                    if self.is_exported(definition) {
-                        self.register_definition(definition, symbol_table)?;
+                    if self.is_exported(definition, arena) {
+                        self.register_definition(definition, arena, symbol_table)?;
                     }
                 }
             }
@@ -41,11 +43,11 @@ impl super::ModuleResolver {
                     let def = program
                         .definitions
                         .iter()
-                        .find(|d| self.def_matches_name(d, name_str));
+                        .find(|d| self.def_matches_name(d, name_str, arena));
 
                     if let Some(definition) = def {
                         // Found as a local definition - check if it's exported
-                        if !self.is_exported(definition) {
+                        if !self.is_exported(definition, arena) {
                             return Err(ResolverError::PrivateSymbolAccess {
                                 symbol: name_str.to_string(),
                                 path: file_path.display().to_string(),
@@ -57,7 +59,7 @@ impl super::ModuleResolver {
                             });
                         }
 
-                        self.register_definition(definition, symbol_table)?;
+                        self.register_definition(definition, arena, symbol_table)?;
                     } else {
                         // Not found in definitions - check if it's re-exported
                         let is_reexported = program
@@ -93,12 +95,12 @@ impl super::ModuleResolver {
     }
 
     /// Check if a definition is exported
-    pub(super) fn is_exported(&self, definition: &Definition) -> bool {
+    pub(super) fn is_exported(&self, definition: &Definition, arena: &hwc_parser::ast::arena::AstArena) -> bool {
         match definition {
             Definition::Bridge(b) => b.is_exported,
             Definition::Material(m) => m.is_exported,
             Definition::Profile(p) => p.is_exported,
-            Definition::Component(c) => c.is_exported,
+            Definition::Component(c) => arena.component_defs[*c].is_exported,
             Definition::Module(m) => m.is_exported,
             Definition::Logic(l) => l.is_exported,
             Definition::Enum(e) => e.is_exported,
@@ -122,12 +124,12 @@ impl super::ModuleResolver {
     }
 
     /// Check if a definition matches a name
-    pub(super) fn def_matches_name(&self, definition: &Definition, name: &str) -> bool {
+    pub(super) fn def_matches_name(&self, definition: &Definition, name: &str, arena: &hwc_parser::ast::arena::AstArena) -> bool {
         match definition {
             Definition::Bridge(b) => b.name.as_str() == name,
             Definition::Material(m) => m.name.as_str() == name,
             Definition::Profile(p) => p.name.as_str() == name,
-            Definition::Component(c) => c.name.as_str() == name,
+            Definition::Component(c) => arena.component_defs[*c].name.as_str() == name,
             Definition::Module(m) => m.name.as_str() == name,
             Definition::Logic(l) => l.name.as_str() == name,
             Definition::Enum(e) => e.name.as_str() == name,
@@ -151,12 +153,12 @@ impl super::ModuleResolver {
     }
 
     /// Get a definition's name for debug output
-    pub(super) fn _def_name(&self, definition: &Definition) -> String {
+    pub(super) fn _def_name(&self, definition: &Definition, arena: &hwc_parser::ast::arena::AstArena) -> String {
         match definition {
             Definition::Bridge(b) => format!("Bridge({})", b.name),
             Definition::Material(m) => format!("Material({})", m.name),
             Definition::Profile(p) => format!("Profile({})", p.name),
-            Definition::Component(c) => format!("Component({})", c.name),
+            Definition::Component(c) => format!("Component({})", arena.component_defs[*c].name),
             Definition::Module(m) => format!("Module({})", m.name),
             Definition::Logic(l) => format!("Logic({})", l.name),
             Definition::Enum(e) => format!("Enum({})", e.name),

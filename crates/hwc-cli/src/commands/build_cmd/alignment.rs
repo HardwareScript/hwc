@@ -99,6 +99,7 @@ pub fn validate_alignment(
             symbol_table,
             space,
             config.tolerance,
+            &ast.arena,
         )
         .map_err(|e| miette::miette!("Alignment validation error: {}", e))?;
         // println!($3"[DEBUG] Alignment validation complete at {:.2}ms",

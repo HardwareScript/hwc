@@ -69,7 +69,7 @@ pub struct DepthEvaluationContext<'a> {
 
     /// Symbol table for expression evaluation - reserved for future use
     #[allow(dead_code)]
-    pub symbol_table: &'a crate::SymbolTable<'a>,
+    pub symbol_table: &'a crate::SymbolTable,
 
     /// Evaluation context for expressions - reserved for future use
     #[allow(dead_code)]

@@ -3,7 +3,7 @@ use crate::parser::error::span_to_source_span;
 use crate::parser::{ParseError, Parser};
 use miette::SourceSpan;
 
-impl<'ast> Parser<'ast> {
+impl Parser {
     /// Get the current token without consuming it
     ///
     /// NOTE: This automatically skips comment tokens, making them invisible to all parsing logic.

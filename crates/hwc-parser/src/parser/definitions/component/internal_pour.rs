@@ -5,7 +5,7 @@ use crate::ast::*;
 use crate::lexer::{Span, Token};
 use smallvec::SmallVec;
 
-impl<'ast> super::super::super::Parser<'ast> {
+impl super::super::super::Parser {
     /// Parse internal pour within component layout block (Sprint 2.2)
     /// Syntax: `add pour(Material) named Name on z:Layer:`
     ///

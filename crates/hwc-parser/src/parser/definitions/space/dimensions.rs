@@ -4,7 +4,7 @@ use crate::ast::*;
 use crate::lexer::{Span, Token};
 use crate::parser::error::ParseError;
 
-impl<'ast> crate::parser::Parser<'ast> {
+impl crate::parser::Parser {
     /// Parse dimensions: `dimensions: 50mm by 50mm by 4mm`
     pub(in crate::parser) fn parse_dimensions(&mut self) -> Result<Dimensions, ParseError> {
         let start_pos = self.current_span().start;

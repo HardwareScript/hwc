@@ -4,7 +4,7 @@ use crate::parser::error::{span_to_source_span, ParseError};
 use crate::parser::Parser;
 use miette::SourceSpan;
 
-impl<'ast> Parser<'ast> {
+impl Parser {
     /// Expect and consume an identifier token, returning Identifier with span.
     /// v0.1.6: Context-aware parsing allows keywords to be treated as identifiers
     /// when they are in an identifier position (e.g. property names).

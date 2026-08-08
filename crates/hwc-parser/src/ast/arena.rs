@@ -256,8 +256,6 @@ macro_rules! define_id_type {
 // ID Type Definitions
 // =============================================================================
 
-define_id_type!(StmtId);
-define_id_type!(ExprId);
 define_id_type!(ComponentId);
 define_id_type!(PourId);
 define_id_type!(PlaneId);
@@ -266,18 +264,32 @@ define_id_type!(ContactId);
 define_id_type!(RouteId);
 define_id_type!(SpaceInstanceId);
 define_id_type!(ForLoopId);
+define_id_type!(ModuleComponentId);
+define_id_type!(ModuleInternalId);
+define_id_type!(ComponentDefId);
+define_id_type!(MaterialDefId);
+define_id_type!(ModuleDefId);
+define_id_type!(ProfileDefId);
+define_id_type!(SpaceDefId);
+define_id_type!(BridgeDefId);
+define_id_type!(MechanicalDefId);
+define_id_type!(InterfaceDefId);
+define_id_type!(TestDefId);
+define_id_type!(DeviceDefId);
+define_id_type!(UnitDefId);
+define_id_type!(ConstDefId);
 
 // =============================================================================
 // AST Arena
 // =============================================================================
 
-use crate::ast::component::ComponentPlacement;
-use crate::ast::expression::Expression;
-use crate::ast::space::placements::{
-    ContactPlacement, PlanePlacement, PolygonPlacement, PourPlacement, SpaceInstancePlacement,
+use crate::ast::component::{ComponentDefinition, ComponentPlacement};
+use crate::ast::module::ModuleComponentPlacement;
+use crate::ast::space::ModuleInternalPlacement;
+use crate::ast::space::{
+    ContactPlacement, PlanePlacement, PolygonPlacement, PourPlacement, Route, SpaceForLoop,
+    SpaceInstancePlacement,
 };
-use crate::ast::space::routes::Route;
-use crate::ast::space::space_def::{SpaceForLoop, SpaceTopLevelStatement};
 
 /// Centralized arena for all AST nodes
 ///
@@ -306,8 +318,6 @@ use crate::ast::space::space_def::{SpaceForLoop, SpaceTopLevelStatement};
 /// - Drop: O(n) but fast (contiguous deallocation)
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct AstArena {
-    pub statements: IndexVec<StmtId, SpaceTopLevelStatement>,
-    pub expressions: IndexVec<ExprId, Expression>,
     pub components: IndexVec<ComponentId, ComponentPlacement>,
     pub pours: IndexVec<PourId, PourPlacement>,
     pub planes: IndexVec<PlaneId, PlanePlacement>,
@@ -316,6 +326,22 @@ pub struct AstArena {
     pub routes: IndexVec<RouteId, Route>,
     pub space_instances: IndexVec<SpaceInstanceId, SpaceInstancePlacement>,
     pub for_loops: IndexVec<ForLoopId, SpaceForLoop>,
+    pub module_components: IndexVec<ModuleComponentId, ModuleComponentPlacement>,
+    pub module_internals: IndexVec<ModuleInternalId, ModuleInternalPlacement>,
+    
+    // Top-level definitions (100% uniform arena storage)
+    pub component_defs: IndexVec<ComponentDefId, ComponentDefinition>,
+    pub material_defs: IndexVec<MaterialDefId, crate::ast::MaterialDefinition>,
+    pub module_defs: IndexVec<ModuleDefId, crate::ast::ModuleDefinition>,
+    pub profile_defs: IndexVec<ProfileDefId, crate::ast::ProfileDefinition>,
+    pub space_defs: IndexVec<SpaceDefId, crate::ast::SpaceDefinition>,
+    pub bridge_defs: IndexVec<BridgeDefId, crate::ast::BridgeDefinition>,
+    pub mechanical_defs: IndexVec<MechanicalDefId, crate::ast::MechanicalDefinition>,
+    pub interface_defs: IndexVec<InterfaceDefId, crate::ast::InterfaceDefinition>,
+    pub test_defs: IndexVec<TestDefId, crate::ast::TestDefinition>,
+    pub device_defs: IndexVec<DeviceDefId, crate::ast::DeviceDefinition>,
+    pub unit_defs: IndexVec<UnitDefId, crate::ast::UnitDefinition>,
+    pub const_defs: IndexVec<ConstDefId, crate::ast::ConstDefinition>,
 }
 
 impl AstArena {
@@ -327,8 +353,6 @@ impl AstArena {
     /// Create a new arena with pre-allocated capacity
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
-            statements: IndexVec::with_capacity(capacity),
-            expressions: IndexVec::with_capacity(capacity),
             components: IndexVec::with_capacity(capacity / 2),
             pours: IndexVec::with_capacity(capacity / 10),
             planes: IndexVec::with_capacity(capacity / 20),
@@ -337,20 +361,26 @@ impl AstArena {
             routes: IndexVec::with_capacity(capacity / 5),
             space_instances: IndexVec::with_capacity(capacity / 20),
             for_loops: IndexVec::with_capacity(capacity / 50),
+            module_components: IndexVec::with_capacity(capacity / 10),
+            module_internals: IndexVec::with_capacity(capacity / 20),
+            
+            // Top-level definitions
+            component_defs: IndexVec::with_capacity(capacity / 10),
+            material_defs: IndexVec::with_capacity(capacity / 20),
+            module_defs: IndexVec::with_capacity(capacity / 20),
+            profile_defs: IndexVec::with_capacity(capacity / 50),
+            space_defs: IndexVec::with_capacity(capacity / 20),
+            bridge_defs: IndexVec::with_capacity(capacity / 100),
+            mechanical_defs: IndexVec::with_capacity(capacity / 100),
+            interface_defs: IndexVec::with_capacity(capacity / 50),
+            test_defs: IndexVec::with_capacity(capacity / 100),
+            device_defs: IndexVec::with_capacity(capacity / 50),
+            unit_defs: IndexVec::with_capacity(capacity / 100),
+            const_defs: IndexVec::with_capacity(capacity / 50),
         }
     }
 
     // Allocation methods
-    
-    #[inline]
-    pub fn alloc_statement(&mut self, stmt: SpaceTopLevelStatement) -> StmtId {
-        self.statements.push(stmt)
-    }
-
-    #[inline]
-    pub fn alloc_expression(&mut self, expr: Expression) -> ExprId {
-        self.expressions.push(expr)
-    }
 
     #[inline]
     pub fn alloc_component(&mut self, comp: ComponentPlacement) -> ComponentId {
@@ -392,10 +422,78 @@ impl AstArena {
         self.for_loops.push(loop_stmt)
     }
 
+    #[inline]
+    pub fn alloc_module_component(&mut self, mc: ModuleComponentPlacement) -> ModuleComponentId {
+        self.module_components.push(mc)
+    }
+
+    #[inline]
+    pub fn alloc_module_internal(&mut self, mi: ModuleInternalPlacement) -> ModuleInternalId {
+        self.module_internals.push(mi)
+    }
+
+    #[inline]
+    pub fn alloc_component_def(&mut self, cd: ComponentDefinition) -> ComponentDefId {
+        self.component_defs.push(cd)
+    }
+
+    #[inline]
+    pub fn alloc_material_def(&mut self, md: crate::ast::MaterialDefinition) -> MaterialDefId {
+        self.material_defs.push(md)
+    }
+
+    #[inline]
+    pub fn alloc_module_def(&mut self, md: crate::ast::ModuleDefinition) -> ModuleDefId {
+        self.module_defs.push(md)
+    }
+
+    #[inline]
+    pub fn alloc_profile_def(&mut self, pd: crate::ast::ProfileDefinition) -> ProfileDefId {
+        self.profile_defs.push(pd)
+    }
+
+    #[inline]
+    pub fn alloc_space_def(&mut self, sd: crate::ast::SpaceDefinition) -> SpaceDefId {
+        self.space_defs.push(sd)
+    }
+
+    #[inline]
+    pub fn alloc_bridge_def(&mut self, bd: crate::ast::BridgeDefinition) -> BridgeDefId {
+        self.bridge_defs.push(bd)
+    }
+
+    #[inline]
+    pub fn alloc_mechanical_def(&mut self, md: crate::ast::MechanicalDefinition) -> MechanicalDefId {
+        self.mechanical_defs.push(md)
+    }
+
+    #[inline]
+    pub fn alloc_interface_def(&mut self, id: crate::ast::InterfaceDefinition) -> InterfaceDefId {
+        self.interface_defs.push(id)
+    }
+
+    #[inline]
+    pub fn alloc_test_def(&mut self, td: crate::ast::TestDefinition) -> TestDefId {
+        self.test_defs.push(td)
+    }
+
+    #[inline]
+    pub fn alloc_device_def(&mut self, dd: crate::ast::DeviceDefinition) -> DeviceDefId {
+        self.device_defs.push(dd)
+    }
+
+    #[inline]
+    pub fn alloc_unit_def(&mut self, ud: crate::ast::UnitDefinition) -> UnitDefId {
+        self.unit_defs.push(ud)
+    }
+
+    #[inline]
+    pub fn alloc_const_def(&mut self, cd: crate::ast::ConstDefinition) -> ConstDefId {
+        self.const_defs.push(cd)
+    }
+
     /// Clear all arena contents (useful for reusing arena between parses)
     pub fn clear(&mut self) {
-        self.statements.clear();
-        self.expressions.clear();
         self.components.clear();
         self.pours.clear();
         self.planes.clear();
@@ -404,13 +502,27 @@ impl AstArena {
         self.routes.clear();
         self.space_instances.clear();
         self.for_loops.clear();
+        self.module_components.clear();
+        self.module_internals.clear();
+        
+        // Clear all definition types
+        self.component_defs.clear();
+        self.material_defs.clear();
+        self.module_defs.clear();
+        self.profile_defs.clear();
+        self.space_defs.clear();
+        self.bridge_defs.clear();
+        self.mechanical_defs.clear();
+        self.interface_defs.clear();
+        self.test_defs.clear();
+        self.device_defs.clear();
+        self.unit_defs.clear();
+        self.const_defs.clear();
     }
 
     /// Get total memory usage estimate in bytes
     pub fn memory_usage(&self) -> usize {
-        self.statements.len() * std::mem::size_of::<SpaceTopLevelStatement>()
-            + self.expressions.len() * std::mem::size_of::<Expression>()
-            + self.components.len() * std::mem::size_of::<ComponentPlacement>()
+        self.components.len() * std::mem::size_of::<ComponentPlacement>()
             + self.pours.len() * std::mem::size_of::<PourPlacement>()
             + self.planes.len() * std::mem::size_of::<PlanePlacement>()
             + self.polygons.len() * std::mem::size_of::<PolygonPlacement>()
@@ -418,6 +530,9 @@ impl AstArena {
             + self.routes.len() * std::mem::size_of::<Route>()
             + self.space_instances.len() * std::mem::size_of::<SpaceInstancePlacement>()
             + self.for_loops.len() * std::mem::size_of::<SpaceForLoop>()
+            + self.module_components.len() * std::mem::size_of::<ModuleComponentPlacement>()
+            + self.module_internals.len() * std::mem::size_of::<ModuleInternalPlacement>()
+            + self.component_defs.len() * std::mem::size_of::<ComponentDefinition>()
     }
 }
 
@@ -428,9 +543,7 @@ impl Serialize for AstArena {
         S: serde::Serializer,
     {
         use serde::ser::SerializeStruct;
-        let mut state = serializer.serialize_struct("AstArena", 10)?;
-        state.serialize_field("statements", &self.statements)?;
-        state.serialize_field("expressions", &self.expressions)?;
+        let mut state = serializer.serialize_struct("AstArena", 11)?;
         state.serialize_field("components", &self.components)?;
         state.serialize_field("pours", &self.pours)?;
         state.serialize_field("planes", &self.planes)?;
@@ -439,6 +552,9 @@ impl Serialize for AstArena {
         state.serialize_field("routes", &self.routes)?;
         state.serialize_field("space_instances", &self.space_instances)?;
         state.serialize_field("for_loops", &self.for_loops)?;
+        state.serialize_field("module_components", &self.module_components)?;
+        state.serialize_field("module_internals", &self.module_internals)?;
+        state.serialize_field("component_defs", &self.component_defs)?;
         state.end()
     }
 }
@@ -451,8 +567,6 @@ impl<'de> Deserialize<'de> for AstArena {
         #[derive(Deserialize)]
         #[serde(field_identifier, rename_all = "snake_case")]
         enum Field {
-            Statements,
-            Expressions,
             Components,
             Pours,
             Planes,
@@ -461,6 +575,9 @@ impl<'de> Deserialize<'de> for AstArena {
             Routes,
             SpaceInstances,
             ForLoops,
+            ModuleComponents,
+            ModuleInternals,
+            ComponentDefs,
         }
 
         struct AstArenaVisitor;
@@ -476,8 +593,6 @@ impl<'de> Deserialize<'de> for AstArena {
             where
                 V: serde::de::MapAccess<'de>,
             {
-                let mut statements = None;
-                let mut expressions = None;
                 let mut components = None;
                 let mut pours = None;
                 let mut planes = None;
@@ -486,11 +601,12 @@ impl<'de> Deserialize<'de> for AstArena {
                 let mut routes = None;
                 let mut space_instances = None;
                 let mut for_loops = None;
+                let mut module_components = None;
+                let mut module_internals = None;
+                let mut component_defs = None;
 
                 while let Some(key) = map.next_key()? {
                     match key {
-                        Field::Statements => statements = Some(map.next_value()?),
-                        Field::Expressions => expressions = Some(map.next_value()?),
                         Field::Components => components = Some(map.next_value()?),
                         Field::Pours => pours = Some(map.next_value()?),
                         Field::Planes => planes = Some(map.next_value()?),
@@ -499,12 +615,13 @@ impl<'de> Deserialize<'de> for AstArena {
                         Field::Routes => routes = Some(map.next_value()?),
                         Field::SpaceInstances => space_instances = Some(map.next_value()?),
                         Field::ForLoops => for_loops = Some(map.next_value()?),
+                        Field::ModuleComponents => module_components = Some(map.next_value()?),
+                        Field::ModuleInternals => module_internals = Some(map.next_value()?),
+                        Field::ComponentDefs => component_defs = Some(map.next_value()?),
                     }
                 }
 
                 Ok(AstArena {
-                    statements: statements.unwrap_or_default(),
-                    expressions: expressions.unwrap_or_default(),
                     components: components.unwrap_or_default(),
                     pours: pours.unwrap_or_default(),
                     planes: planes.unwrap_or_default(),
@@ -513,13 +630,14 @@ impl<'de> Deserialize<'de> for AstArena {
                     routes: routes.unwrap_or_default(),
                     space_instances: space_instances.unwrap_or_default(),
                     for_loops: for_loops.unwrap_or_default(),
+                    module_components: module_components.unwrap_or_default(),
+                    module_internals: module_internals.unwrap_or_default(),
+                    component_defs: component_defs.unwrap_or_default(),
                 })
             }
         }
 
         const FIELDS: &[&str] = &[
-            "statements",
-            "expressions",
             "components",
             "pours",
             "planes",
@@ -528,6 +646,9 @@ impl<'de> Deserialize<'de> for AstArena {
             "routes",
             "space_instances",
             "for_loops",
+            "module_components",
+            "module_internals",
+            "component_defs",
         ];
         deserializer.deserialize_struct("AstArena", FIELDS, AstArenaVisitor)
     }
@@ -538,46 +659,49 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_index_vec_type_safety() {
-        let mut arena = AstArena::new();
-        
-        // This should compile
-        let _comp_id = arena.components.push(ComponentPlacement::default());
-        
-        // Type safety is enforced at compile time
-        // Uncommenting this would cause a compile error:
-        // let route_id: RouteId = RouteId(0);
-        // let _wrong = &arena.components[route_id];  // ERROR: mismatched types
+    fn test_index_vec_push_and_index() {
+        let mut vec = IndexVec::<ComponentId, u32>::new();
+        let id1 = vec.push(42);
+        let id2 = vec.push(99);
+        assert_eq!(id1.0, 0);
+        assert_eq!(id2.0, 1);
+        assert_eq!(vec[id1], 42);
+        assert_eq!(vec[id2], 99);
+        assert_eq!(vec.len(), 2);
     }
 
     #[test]
-    fn test_arena_allocation() {
-        let mut arena = AstArena::new();
-        
-        assert_eq!(arena.components.len(), 0);
-        
-        let id1 = arena.components.push(ComponentPlacement::default());
-        assert_eq!(id1.0, 0);
-        assert_eq!(arena.components.len(), 1);
-        
-        let id2 = arena.components.push(ComponentPlacement::default());
-        assert_eq!(id2.0, 1);
-        assert_eq!(arena.components.len(), 2);
+    fn test_index_vec_type_safety() {
+        let mut comp_vec = IndexVec::<ComponentId, u32>::new();
+        let mut route_vec = IndexVec::<RouteId, u32>::new();
+        let comp_id = comp_vec.push(1);
+        let _route_id = route_vec.push(2);
+        assert_eq!(comp_vec[comp_id], 1);
+        // Type safety enforced at compile time:
+        // let _wrong = comp_vec[_route_id]; // ERROR: mismatched types
     }
 
     #[test]
     fn test_arena_clear() {
         let mut arena = AstArena::new();
-        
-        arena.components.push(ComponentPlacement::default());
-        arena.routes.push(Route::default());
-        
-        assert_eq!(arena.components.len(), 1);
-        assert_eq!(arena.routes.len(), 1);
-        
+        arena.contacts.push(ContactPlacement {
+            material: "Tungsten".into(),
+            name: crate::ast::component::ComponentName::simple(
+                "V1".into(),
+                crate::lexer::Span { start: 0, end: 0 },
+            ),
+            position: None,
+            relational_anchor: None,
+            from_elevation: Default::default(),
+            to_elevation: Default::default(),
+            net: None,
+            properties: Default::default(),
+            relational_constraints: Default::default(),
+            contour: None,
+            span: crate::lexer::Span { start: 0, end: 0 },
+        });
+        assert_eq!(arena.contacts.len(), 1);
         arena.clear();
-        
-        assert_eq!(arena.components.len(), 0);
-        assert_eq!(arena.routes.len(), 0);
+        assert_eq!(arena.contacts.len(), 0);
     }
 }

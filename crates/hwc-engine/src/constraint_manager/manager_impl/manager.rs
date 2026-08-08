@@ -225,8 +225,9 @@ impl ConstraintManager {
     pub fn calculate_module_bounding_box(
         &self,
         layout: &hwc_parser::ModuleLayoutBlock,
+        arena: &hwc_parser::ast::arena::AstArena,
     ) -> BoundingBox {
-        calculate_module_bounding_box(layout, self.resolution_nm)
+        calculate_module_bounding_box(layout, self.resolution_nm, arena)
     }
 
     /// Classify all nets as internal (within a module) or global (crossing boundaries).

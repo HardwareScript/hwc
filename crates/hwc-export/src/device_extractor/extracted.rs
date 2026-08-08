@@ -1,5 +1,5 @@
 use compact_str::CompactString;
-use hwc_parser::ast::ModuleDefinition;
+use hwc_parser::ast::{AstArena, ModuleComponentPlacement, ModuleDefinition};
 use rustc_hash::FxHashMap;
 
 /// Extracted device information from module statements
@@ -24,14 +24,16 @@ impl ExtractedDevices {
     /// Parses the module to find:
     /// 1. Which devices exist (from `add` statements OR device bindings)
     /// 2. Which terminals each device uses (from `route` statements OR bindings)
-    pub fn from_module(module: &ModuleDefinition) -> Self {
+    pub fn from_module(module: &ModuleDefinition, arena: &AstArena) -> Self {
         use hwc_parser::ast::ModuleStatement;
 
         let mut extracted = Self::new();
 
         for statement in &module.statements {
             match statement {
-                ModuleStatement::AddComponent(add) => {
+                ModuleStatement::AddComponent(add_id) => {
+                    // Look up the actual component placement from the arena
+                    let add: &ModuleComponentPlacement = &arena.module_components[*add_id];
                     if let Some(ref instance_name) = add.name {
                         extracted
                             .devices

@@ -4,7 +4,7 @@ use super::error::ParseError;
 use crate::ast::*;
 use crate::lexer::{Span, Token};
 
-impl<'ast> super::Parser<'ast> {
+impl super::Parser {
     // ========================================================================
     // Routing Parsing
     // ========================================================================

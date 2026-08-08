@@ -1,17 +1,18 @@
 //! Main component definition parsing and error recovery
 
 use super::super::super::error::ParseError;
+use crate::ast::arena::ComponentDefId;
 use crate::ast::*;
 use crate::lexer::{Span, Token};
 use smallvec::SmallVec;
 
-impl<'ast> super::super::super::Parser<'ast> {
+impl super::super::super::Parser {
     /// Parse component definition: `define component "Resistor_0805" (val: Measurement):`
     pub(in super::super::super) fn parse_component_def(
         &mut self,
         collector: &crate::DiagnosticCollector,
         is_exported: bool,
-    ) -> Option<ComponentDefinition> {
+    ) -> Option<ComponentDefId> {
         let start_pos = self.current_span().start;
 
         // eprintln!("[DEBUG] Parsing component definition...");
@@ -330,7 +331,7 @@ impl<'ast> super::super::super::Parser<'ast> {
 
         let end_pos = self.previous_span().end;
 
-        Some(ComponentDefinition {
+        let comp_def = ComponentDefinition {
             name,
             is_exported,
             parameters,
@@ -341,7 +342,10 @@ impl<'ast> super::super::super::Parser<'ast> {
             render,
             implements: SmallVec::new(), // TODO: Parse interface implementations
             span: Span::new(start_pos, end_pos),
-        })
+        };
+
+        // Arena-allocate and return ID
+        Some(self.arena.alloc_component_def(comp_def))
     }
 
     /// Synchronize to the next component block after a parse error.

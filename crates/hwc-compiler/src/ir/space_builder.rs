@@ -258,6 +258,7 @@ pub fn validate_asic_constraints(
     space_def: &SpaceDefinition,
     symbol_table: &crate::SymbolTable,
     eval_context: &hwc_parser::EvaluationContext,
+    arena: &hwc_parser::ast::arena::AstArena,
 ) -> Result<(), IrError> {
     // Check if this is an ASIC build
     let profile = space_def
@@ -287,7 +288,8 @@ pub fn validate_asic_constraints(
 
     // Rule 2: Every route must have an explicit width
     for statement in &space_def.statements {
-        if let hwc_parser::SpaceTopLevelStatement::Route(route) = statement {
+        if let hwc_parser::SpaceTopLevelStatement::Route(route_id) = statement {
+            let route = &arena.routes[*route_id];
             if route.width.is_none() {
                 let net_hint = format!(
                     "Route {:?} -> {:?} has no explicit width. Add 'width: <value>' to the route definition.",
@@ -318,7 +320,8 @@ pub fn validate_asic_constraints(
 
     if pdk_min_width_nm > 0 {
         for statement in &space_def.statements {
-            if let hwc_parser::SpaceTopLevelStatement::Route(route) = statement {
+            if let hwc_parser::SpaceTopLevelStatement::Route(route_id) = statement {
+                let route = &arena.routes[*route_id];
                 if let Some(w_expr) = &route.width {
                     if let Ok(width_nm) = crate::ir::conversions::evaluate_expression_to_nm(
                         w_expr,
@@ -353,7 +356,8 @@ pub fn validate_asic_constraints(
         .collect();
 
     for statement in &space_def.statements {
-        if let hwc_parser::SpaceTopLevelStatement::Pour(pour) = statement {
+        if let hwc_parser::SpaceTopLevelStatement::Pour(pour_id) = statement {
+            let pour = &arena.pours[*pour_id];
             if !declared_materials.iter().any(|m| m == pour.material) {
                 return Err(IrError::MissingAsicConstraint {
                     message: format!(

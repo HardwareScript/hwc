@@ -3,7 +3,7 @@ use crate::lexer::{Span, Token};
 use crate::parser::error::{span_to_source_span, ParseError};
 use miette::SourceSpan;
 
-impl<'ast> crate::parser::Parser<'ast> {
+impl crate::parser::Parser {
     /// Parse rotation: rotated 45 or rotated -30.5 or rotated 90° or rotated 90deg
     pub(in crate::parser) fn parse_rotation(&mut self) -> Result<Rotation, ParseError> {
         let start_pos = self.current_span().start;

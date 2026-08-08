@@ -9,10 +9,11 @@ impl super::ModuleResolver {
     ///
     /// Imported definitions go into the HPM layer, not the local layer.
     /// This enables the Authority Stack (Local > HPM > Prelude > Core).
-    pub(super) fn register_definition<'ast>(
+    pub(super) fn register_definition(
         &self,
-        definition: &Definition<'ast>,
-        symbol_table: &mut SymbolTable<'ast>,
+        definition: &Definition,
+        arena: &hwc_parser::ast::arena::AstArena,
+        symbol_table: &mut SymbolTable,
     ) -> Result<(), ResolverError> {
         match definition {
             Definition::Bridge(bridge) => {
@@ -28,7 +29,7 @@ impl super::ModuleResolver {
                 Ok(())
             }
             Definition::Component(component) => {
-                symbol_table.register_import_component(component.clone());
+                symbol_table.register_import_component(arena.component_defs[*component].clone());
                 Ok(())
             }
             Definition::Module(module) => {

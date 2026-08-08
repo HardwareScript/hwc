@@ -3,13 +3,13 @@
 use crate::ast::*;
 use crate::lexer::{Span, Token};
 
-impl<'ast> crate::parser::Parser<'ast> {
+impl crate::parser::Parser {
     /// Parse space definition: `define space "Name":`
     pub(in crate::parser) fn parse_space(
         &mut self,
         collector: &crate::DiagnosticCollector,
         is_exported: bool,
-    ) -> Option<SpaceDefinition<'ast>> {
+    ) -> Option<SpaceDefinition> {
         // Enter space context
         self.error_context
             .enter_context(crate::parser::ParsingContext::SpaceDefinition);
@@ -27,7 +27,7 @@ impl<'ast> crate::parser::Parser<'ast> {
         &mut self,
         collector: &crate::DiagnosticCollector,
         is_exported: bool,
-    ) -> Option<SpaceDefinition<'ast>> {
+    ) -> Option<SpaceDefinition> {
         let start_pos = self.current_span().start;
 
         if let Err(e) = self.expect(&Token::Space) {
@@ -188,9 +188,8 @@ impl<'ast> crate::parser::Parser<'ast> {
                             // v0.2.1: Parse hierarchical space instantiation
                             match self.parse_space_instance() {
                                 Ok(space_inst) => {
-                                    statements.push(SpaceTopLevelStatement::SpaceInstance(
-                                        Box::new(space_inst),
-                                    ));
+                                    let inst_id = self.arena.alloc_space_instance(space_inst);
+                                    statements.push(SpaceTopLevelStatement::SpaceInstance(inst_id));
                                 }
                                 Err(err) => {
                                     collector.report(err);
@@ -201,7 +200,8 @@ impl<'ast> crate::parser::Parser<'ast> {
                         }
                         Token::Pour => match self.parse_pour() {
                             Ok(pour) => {
-                                statements.push(SpaceTopLevelStatement::Pour(Box::new(pour)));
+                                let pour_id = self.arena.alloc_pour(pour);
+                                statements.push(SpaceTopLevelStatement::Pour(pour_id));
                             }
                             Err(err) => {
                                 collector.report(err);
@@ -211,7 +211,8 @@ impl<'ast> crate::parser::Parser<'ast> {
                         },
                         Token::Plane => match self.parse_plane() {
                             Ok(plane) => {
-                                statements.push(SpaceTopLevelStatement::Plane(Box::new(plane)));
+                                let plane_id = self.arena.alloc_plane(plane);
+                                statements.push(SpaceTopLevelStatement::Plane(plane_id));
                             }
                             Err(err) => {
                                 collector.report(err);
@@ -225,8 +226,8 @@ impl<'ast> crate::parser::Parser<'ast> {
                             }
                         }
                         Token::Contact => match self.parse_contact() {
-                            Ok(contact) => {
-                                statements.push(SpaceTopLevelStatement::Contact(contact));
+                            Ok(contact_id) => {
+                                statements.push(SpaceTopLevelStatement::Contact(contact_id));
                             }
                             Err(err) => {
                                 collector.report(err);
@@ -236,7 +237,8 @@ impl<'ast> crate::parser::Parser<'ast> {
                         },
                         _ => match self.parse_component_placement() {
                             Ok(comp) => {
-                                statements.push(SpaceTopLevelStatement::Component(Box::new(comp)));
+                                let comp_id = self.arena.alloc_component(comp);
+                                statements.push(SpaceTopLevelStatement::Component(comp_id));
                             }
                             Err(err) => {
                                 collector.report(err);
@@ -248,7 +250,8 @@ impl<'ast> crate::parser::Parser<'ast> {
                 } else {
                     match self.parse_component_placement() {
                         Ok(comp) => {
-                            statements.push(SpaceTopLevelStatement::Component(Box::new(comp)));
+                            let comp_id = self.arena.alloc_component(comp);
+                            statements.push(SpaceTopLevelStatement::Component(comp_id));
                         }
                         Err(err) => {
                             collector.report(err);
@@ -261,7 +264,8 @@ impl<'ast> crate::parser::Parser<'ast> {
                 // Sprint 3.4: Parse for loops in space blocks
                 match self.parse_space_for_loop() {
                     Ok(for_loop) => {
-                        statements.push(SpaceTopLevelStatement::ForLoop(for_loop));
+                        let for_id = self.arena.alloc_for_loop(for_loop);
+                        statements.push(SpaceTopLevelStatement::ForLoop(for_id));
                     }
                     Err(err) => {
                         collector.report(err);
@@ -286,21 +290,19 @@ impl<'ast> crate::parser::Parser<'ast> {
                                     continue;
                                 }
                             }
-                        } else if let Ok(route) = self.parse_route() {
-                            // Standard point-to-point route
-                            // Arena-allocate for SoC-scale performance
-                            let route_ref = self.arena.alloc(route.clone());
-                            statements.push(SpaceTopLevelStatement::Route(route_ref));
+                        } else                     if let Ok(route) = self.parse_route() {
+                            let route_id = self.arena.alloc_route(route.clone());
+                            statements.push(SpaceTopLevelStatement::Route(route_id));
                             routes.push(route);
                         }
                     } else if let Ok(route) = self.parse_route() {
-                        let route_ref = self.arena.alloc(route.clone());
-                        statements.push(SpaceTopLevelStatement::Route(route_ref));
+                        let route_id = self.arena.alloc_route(route.clone());
+                        statements.push(SpaceTopLevelStatement::Route(route_id));
                         routes.push(route);
                     }
                 } else if let Ok(route) = self.parse_route() {
-                    let route_ref = self.arena.alloc(route.clone());
-                    statements.push(SpaceTopLevelStatement::Route(route_ref));
+                    let route_id = self.arena.alloc_route(route.clone());
+                    statements.push(SpaceTopLevelStatement::Route(route_id));
                     routes.push(route);
                 }
             } else if self.check(&Token::Expose) {

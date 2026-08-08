@@ -2,7 +2,7 @@ use crate::ast::*;
 use crate::lexer::{Span, Token};
 use crate::parser::error::ParseError;
 
-impl<'ast> crate::parser::Parser<'ast> {
+impl crate::parser::Parser {
     /// Parse pour placement: `add pour(Copper) named GND_Plane inside: RegionName on z:2:`
     /// Supports namespaced materials: `add pour(Metals.Copper) named Trace1 on z:1:`
     pub(in crate::parser) fn parse_pour(&mut self) -> Result<PourPlacement, ParseError> {

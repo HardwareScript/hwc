@@ -12,7 +12,7 @@ pub(super) struct NetlistRegistration<'a> {
     pub xy_point: Point3D,
     pub start_z: i64,
     pub end_z: i64,
-    pub symbol_table: &'a SymbolTable<'a>,
+    pub symbol_table: &'a SymbolTable,
     pub eval_context: &'a EvaluationContext,
 }
 
@@ -79,7 +79,7 @@ pub(super) struct ContactMetadataStorage<'a> {
     pub is_tented: bool,
     pub bridge_material_name: Option<compact_str::CompactString>,
     pub contact_name_debug: &'a str,
-    pub symbol_table: &'a SymbolTable<'a>,
+    pub symbol_table: &'a SymbolTable,
     pub eval_context: &'a EvaluationContext,
 }
 

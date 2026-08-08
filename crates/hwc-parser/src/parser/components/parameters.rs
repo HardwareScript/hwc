@@ -3,7 +3,7 @@ use crate::lexer::Token;
 use crate::parser::error::ParseError;
 use smallvec::SmallVec;
 
-impl<'ast> crate::parser::Parser<'ast> {
+impl crate::parser::Parser {
     /// Parse parameters: (resistance: 10kΩ, tolerance: 1%)
     /// v0.1.6: Only keyword arguments supported for self-documenting code
     pub(in crate::parser) fn parse_parameters(

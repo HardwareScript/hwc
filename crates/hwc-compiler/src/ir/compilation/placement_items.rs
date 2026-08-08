@@ -8,6 +8,7 @@ pub fn collect_placement_items(
     space_def: &hwc_parser::SpaceDefinition,
     symbol_table: &SymbolTable,
     eval_context: &hwc_parser::EvaluationContext,
+    arena: &hwc_parser::ast::arena::AstArena,
 ) -> Result<Vec<ContextualPlacementItem>, crate::ir::errors::IrError> {
     let mut placement_items = Vec::new();
 
@@ -32,40 +33,41 @@ pub fn collect_placement_items(
             }
             hwc_parser::SpaceTopLevelStatement::Component(comp) => {
                 placement_items.push(ContextualPlacementItem {
-                    item: PlacementItem::Component(Box::new((**comp).clone())),
+                    item: PlacementItem::Component(Box::new(arena.components[*comp].clone())),
                     eval_context: eval_context.clone(),
                 });
             }
             hwc_parser::SpaceTopLevelStatement::Pour(pour) => {
                 placement_items.push(ContextualPlacementItem {
-                    item: PlacementItem::Pour((**pour).clone()),
+                    item: PlacementItem::Pour(arena.pours[*pour].clone()),
                     eval_context: eval_context.clone(),
                 });
             }
             hwc_parser::SpaceTopLevelStatement::Plane(plane) => {
                 placement_items.push(ContextualPlacementItem {
-                    item: PlacementItem::Plane(Box::new((**plane).clone())),
+                    item: PlacementItem::Plane(Box::new(arena.planes[*plane].clone())),
                     eval_context: eval_context.clone(),
                 });
             }
             hwc_parser::SpaceTopLevelStatement::Contact(contact) => {
                 placement_items.push(ContextualPlacementItem {
-                    item: PlacementItem::Contact((*contact).clone()),
+                    item: PlacementItem::Contact(arena.contacts[*contact].clone()),
                     eval_context: eval_context.clone(),
                 });
             }
             hwc_parser::SpaceTopLevelStatement::SpaceInstance(space_inst) => {
                 // v0.2.1: Hierarchical space composition
                 placement_items.push(ContextualPlacementItem {
-                    item: PlacementItem::SpaceInstance(Box::new((**space_inst).clone())),
+                    item: PlacementItem::SpaceInstance(Box::new(arena.space_instances[*space_inst].clone())),
                     eval_context: eval_context.clone(),
                 });
             }
             hwc_parser::SpaceTopLevelStatement::ForLoop(for_loop) => {
                 let unrolled = crate::ir::parametric_unroller::unroll_for_loop(
-                    for_loop,
+                    &arena.for_loops[*for_loop],
                     symbol_table,
                     eval_context,
+                    arena,
                 )?;
 
                 for contextual_comp in unrolled.components {
@@ -108,7 +110,7 @@ pub fn collect_placement_items(
             }
             hwc_parser::SpaceTopLevelStatement::Route(route) => {
                 placement_items.push(ContextualPlacementItem {
-                    item: PlacementItem::Route(route.clone()),
+                    item: PlacementItem::Route(arena.routes[*route].clone()),
                     eval_context: eval_context.clone(),
                 });
             }

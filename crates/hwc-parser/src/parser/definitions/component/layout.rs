@@ -5,7 +5,7 @@ use crate::ast::*;
 use crate::lexer::{Span, Token};
 use compact_str::CompactString;
 
-impl<'ast> super::super::super::Parser<'ast> {
+impl super::super::super::Parser {
     pub(super) fn parse_layout_block(&mut self) -> Result<LayoutBlock, ParseError> {
         let start_pos = self.current_span().start;
         let mut shape = None;

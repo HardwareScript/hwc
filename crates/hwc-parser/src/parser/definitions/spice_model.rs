@@ -24,7 +24,7 @@ use crate::parser::error::{span_to_source_span, ParseError};
 use compact_str::CompactString;
 use rustc_hash::FxHashMap;
 
-impl<'ast> super::super::Parser<'ast> {
+impl super::super::Parser {
     /// Parse spice_model definition: `spice_model DMOD:` or `export spice_model DMOD:`
     ///
     /// Reports errors to collector and returns None if parsing fails.

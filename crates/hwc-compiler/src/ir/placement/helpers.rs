@@ -225,36 +225,33 @@ pub fn add_offset_to_expression(
 
 /// Helper function to extract all placements from layout statements
 /// This recursively flattens for loops and if statements to get all placements
-pub fn extract_placements_from_layout_statements<'a>(
-    statements: &'a [hwc_parser::LayoutStatement],
-) -> Vec<&'a hwc_parser::ModuleInternalPlacement> {
+pub fn extract_placements_from_layout_statements(
+    statements: &[hwc_parser::LayoutStatement],
+) -> Vec<hwc_parser::ast::arena::ModuleInternalId> {
     use hwc_parser::LayoutStatement;
 
-    let mut placements = Vec::new();
+    let mut placement_ids = Vec::new();
 
     for statement in statements {
         match statement {
-            LayoutStatement::Placement(p) => {
-                placements.push(*p);
+            LayoutStatement::Placement(id) => {
+                placement_ids.push(*id);
             }
             LayoutStatement::For { body, .. } => {
-                // Recursively extract placements from for loop body
-                // Note: This doesn't evaluate the loop, just collects all placements
-                placements.extend(extract_placements_from_layout_statements(body));
+                placement_ids.extend(extract_placements_from_layout_statements(body));
             }
             LayoutStatement::If {
                 then_body,
                 else_body,
                 ..
             } => {
-                // Collect placements from both branches
-                placements.extend(extract_placements_from_layout_statements(then_body));
+                placement_ids.extend(extract_placements_from_layout_statements(then_body));
                 if let Some(else_statements) = else_body {
-                    placements.extend(extract_placements_from_layout_statements(else_statements));
+                    placement_ids.extend(extract_placements_from_layout_statements(else_statements));
                 }
             }
         }
     }
 
-    placements
+    placement_ids
 }

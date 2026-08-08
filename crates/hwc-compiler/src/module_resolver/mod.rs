@@ -53,12 +53,11 @@ impl ModuleResolver {
     ///
     /// **Clean Architecture**: This method ALWAYS parses fresh and registers symbols.
     /// No caching - ensures files are always up-to-date.
-    pub fn resolve_import<'ast>(
+    pub fn resolve_import(
         &mut self,
         import: &Import,
         source_file: &Path,
-        symbol_table: &mut SymbolTable<'ast>,
-        arena: &'ast bumpalo::Bump,
+        symbol_table: &mut SymbolTable,
     ) -> Result<(), ResolverError> {
         let file_path = self.resolve_path(&import.path, source_file)?;
 
@@ -81,7 +80,7 @@ impl ModuleResolver {
         }
 
         // 2. Load Program (parse fresh each time - no cache)
-        let program = self.parse_program(&file_path, arena)?;
+        let program = self.parse_program(&file_path)?;
 
         // 3. Push to resolution stack before processing sub-imports
         self.resolution_stack.push(file_path.clone());
@@ -89,7 +88,7 @@ impl ModuleResolver {
         // 4. Recursively resolve the module's own imports first
         // This ensures that re-exported symbols are available in the module's scope
         for sub_import in &program.imports {
-            self.resolve_import(sub_import, &file_path, symbol_table, arena)?;
+            self.resolve_import(sub_import, &file_path, symbol_table)?;
         }
 
         // 5. Pop from resolution stack

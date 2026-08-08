@@ -18,18 +18,19 @@ use rustc_hash::FxHashMap;
 /// Bundles the compilation-wide context so individual pass functions
 /// (`execute_placement`, `process_routes`, …) take a single context argument
 /// instead of a long parameter list.
-pub struct CompilationContext<'a, 'ast> {
+pub struct CompilationContext<'a> {
     pub sorted_ids: &'a [compact_str::CompactString],
     pub placement_items: &'a [crate::ir::placement_item::ContextualPlacementItem],
     pub item_map: &'a FxHashMap<compact_str::CompactString, usize>,
     pub origin: OriginPoint,
-    pub symbol_table: &'a SymbolTable<'ast>,
+    pub symbol_table: &'a SymbolTable,
     pub eval_context: &'a EvaluationContext,
     pub stackup_manager: &'a StackupManager,
     pub profile: Option<&'a ProfileDefinition>,
-    pub space_def: &'a SpaceDefinition<'ast>,
+    pub space_def: &'a SpaceDefinition,
     pub collector: &'a DiagnosticCollector,
     pub unit_registry: &'a hwc_types::UnitRegistry,
+    pub arena: &'a hwc_parser::ast::arena::AstArena,
 }
 
 /// Compile a space recursively for hierarchical composition (v0.2.1)
@@ -45,6 +46,7 @@ pub fn compile_space_recursive(
     symbol_table: &SymbolTable,
     _eval_context_parent: &EvaluationContext,
     unit_registry: &hwc_types::UnitRegistry,
+    arena: &hwc_parser::ast::arena::AstArena,
 ) -> Result<HardwareSpace, IrError> {
     eprintln!(
         "[RECURSIVE] Compiling child space '{}' (no lockfile cache)",
@@ -64,6 +66,7 @@ pub fn compile_space_recursive(
         true, // Force fresh routing
         None, // No query store
         unit_registry,
+        arena,
     )?;
 
     // Check if any errors were collected during child compilation
@@ -98,6 +101,7 @@ pub fn compile_single_space(
     force_reroute: bool,
     query_store: Option<hwc_engine::geometry_router::query_engine::QueryStore>,
     unit_registry: &hwc_types::UnitRegistry,
+    arena: &hwc_parser::ast::arena::AstArena,
 ) -> Result<
     (
         HardwareSpace,
@@ -111,13 +115,14 @@ pub fn compile_single_space(
 
     // Collect placement items (unroll loops with eval context)
     let placement_items =
-        placement_items::collect_placement_items(space_def, symbol_table, &eval_context_initial)?;
+        placement_items::collect_placement_items(space_def, symbol_table, &eval_context_initial, arena)?;
 
     let mut space = space_setup::create_space(
         space_def,
         symbol_table,
         &eval_context_initial,
         unit_registry,
+        arena,
     )?;
 
     let (profile, solder_mask_thickness_nm) =
@@ -220,6 +225,7 @@ pub fn compile_single_space(
         space_def,
         collector,
         unit_registry,
+        arena,
     };
     // Register 'space' as a special anchor representing the space boundaries
     // The 'space' anchor represents the absolute coordinate system of the design space.
@@ -322,6 +328,7 @@ pub fn program_to_space(
     collector: &hwc_diagnostics::DiagnosticCollector,
     unit_registry: &hwc_types::UnitRegistry,
 ) -> Result<HardwareSpace, IrError> {
+    let arena = &program.arena;
     let space_def = program
         .definitions
         .iter()
@@ -343,6 +350,7 @@ pub fn program_to_space(
         false,
         None,
         unit_registry,
+        arena,
     )?;
     Ok(space)
 }
@@ -409,6 +417,7 @@ pub fn program_to_spaces_with_lockfile(
             force_reroute,
             shared_qs.take(),
             unit_registry,
+            &program.arena,
         )?;
 
         shared_qs = qs;

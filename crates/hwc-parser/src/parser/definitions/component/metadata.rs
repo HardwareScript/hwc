@@ -4,7 +4,7 @@ use super::super::super::error::ParseError;
 use crate::ast::*;
 use crate::lexer::{Span, Token};
 
-impl<'ast> super::super::super::Parser<'ast> {
+impl super::super::super::Parser {
     pub(super) fn parse_component_metadata(&mut self) -> Result<ComponentMetadata, ParseError> {
         let start_pos = self.current_span().start;
         let mut manufacturer = None;

@@ -10,7 +10,7 @@ const KNOWN_CONSTANTS: &[&str] = &["PI", "DEG_TO_RAD"];
 // Inside property blocks: ':' is used for declarative facts (e.g., `net: GND`).
 // The geometry parser enforces '=' for assignments; property parsers enforce ':' for declarations.
 
-impl<'ast> crate::parser::Parser<'ast> {
+impl crate::parser::Parser {
     pub(in crate::parser::definitions::shape) fn parse_geometry_blocks(
         &mut self,
     ) -> Result<Vec<GeometryBlock>, crate::parser::error::ParseError> {

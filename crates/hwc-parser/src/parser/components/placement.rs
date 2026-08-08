@@ -3,7 +3,7 @@ use crate::lexer::{Span, Token};
 use crate::parser::error::ParseError;
 use smallvec::SmallVec;
 
-impl<'ast> crate::parser::Parser<'ast> {
+impl crate::parser::Parser {
     // ========================================================================
     // STREAMLINED COMPONENT NAME PARSING (Zero String Re-Parsing!)
     // ========================================================================

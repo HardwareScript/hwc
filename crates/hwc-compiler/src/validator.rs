@@ -44,19 +44,23 @@ impl Validator {
             }
         };
 
-        self.check_physical_z_in_coordinates(collector, space);
+        self.check_physical_z_in_coordinates(collector, space, &program.arena);
 
         // Check for overlapping components
+        let components: Vec<ComponentPlacement> = space
+            .component_ids()
+            .map(|id| program.arena.components[id].clone())
+            .collect();
         self.check_collisions(
             collector,
-            &space.components(),
+            &components,
             space,
             symbol_table,
             eval_context,
         );
 
         // Check for unconnected pins
-        self.check_connectivity(collector, space, program);
+        self.check_connectivity(collector, space, program, &program.arena);
     }
 
     /// Validate materials for Minimum Physical Viability (MPV)
@@ -293,8 +297,10 @@ impl Validator {
         &self,
         collector: &DiagnosticCollector,
         space: &SpaceDefinition,
+        arena: &hwc_parser::ast::arena::AstArena,
     ) {
-        for component in &space.components() {
+        for component_id in space.component_ids() {
+            let component = &arena.components[component_id];
             let position = match &component.position {
                 Some(pos) => pos,
                 None => continue, // v0.1.9: Skip components with unresolved relational constraints
@@ -457,13 +463,15 @@ impl Validator {
         collector: &DiagnosticCollector,
         space: &SpaceDefinition,
         program: &Program,
+        arena: &hwc_parser::ast::arena::AstArena,
     ) {
         // Build component registry
         let component_defs = self.build_component_registry(program);
 
         // Build pin registry: component_name.pin_name -> exists
         let mut all_pins: FxHashSet<CompactString> = FxHashSet::default();
-        for component in &space.components() {
+        for component_id in space.component_ids() {
+            let component = &arena.components[component_id];
             let component_name = component.name.clone().unwrap_or_else(|| {
                 // Create a simple ComponentName from the component type
                 hwc_parser::ComponentName::simple(
@@ -546,7 +554,8 @@ impl Validator {
 
         for def in &program.definitions {
             if let Definition::Component(comp_def) = def {
-                registry.insert(comp_def.name.to_string().into(), comp_def);
+                let comp = &program.arena.component_defs[*comp_def];
+                registry.insert(comp.name.to_string().into(), comp);
             }
         }
 

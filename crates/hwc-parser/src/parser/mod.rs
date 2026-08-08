@@ -22,33 +22,32 @@ pub use context_errors::{
 };
 pub use error::ParseError;
 
+use crate::ast::arena::AstArena;
 use crate::ast::*;
 use crate::lexer::SpannedToken;
-use bumpalo::Bump;
 
 /// Parser for Hardware Script with arena allocation
 ///
-/// The 'ast lifetime represents the arena lifetime - all AST nodes
-/// allocated during parsing will live for 'ast. This follows the
-/// rustc pattern for compiler AST allocation.
-pub struct Parser<'ast> {
+/// AST nodes are allocated into a type-safe AstArena referenced by u32 indices,
+/// eliminating lifetime parameters entirely.
+pub struct Parser {
     tokens: Vec<SpannedToken>,
     current: usize,
     /// Context-aware error generator (Phase 1 refactor)
     error_context: ContextErrorGenerator,
-    /// Arena allocator for AST nodes (rustc-style)
+    /// Type-safe arena allocator for AST nodes
     /// All large AST structures are allocated here for cache efficiency
-    pub(crate) arena: &'ast Bump,
+    pub arena: AstArena,
 }
 
-impl<'ast> Parser<'ast> {
+impl Parser {
     /// Create a new parser from a token stream with arena allocation
-    pub fn new(tokens: Vec<SpannedToken>, arena: &'ast Bump) -> Self {
+    pub fn new(tokens: Vec<SpannedToken>) -> Self {
         Self {
             tokens,
             current: 0,
             error_context: ContextErrorGenerator::new(),
-            arena,
+            arena: AstArena::new(),
         }
     }
 
@@ -84,7 +83,7 @@ impl<'ast> Parser<'ast> {
     ///     std::process::exit(1);
     /// }
     /// ```
-    pub fn parse(&mut self, collector: &crate::DiagnosticCollector) -> Program<'ast> {
+    pub fn parse(&mut self, collector: &crate::DiagnosticCollector) -> Program {
         let start_pos = if let Some(first) = self.tokens.first() {
             first.span.start
         } else {
@@ -253,10 +252,13 @@ impl<'ast> Parser<'ast> {
             0
         };
 
+        let arena = std::mem::take(&mut self.arena);
+
         Program {
             imports,
             re_exports,
             definitions,
+            arena,
             span: crate::lexer::Span::new(start_pos, end_pos),
         }
     }

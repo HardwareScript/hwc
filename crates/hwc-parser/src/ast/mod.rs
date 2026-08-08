@@ -30,6 +30,7 @@ mod test;
 mod unit;
 
 // Re-export all public types
+pub use arena::AstArena;
 pub use bridge::*;
 pub use common::*;
 pub use component::*;
@@ -57,44 +58,48 @@ pub use unit::*;
 // Re-export Span from lexer for use in AST
 pub use crate::lexer::Span;
 
+use arena::ComponentDefId;
+
 /// Root AST node representing a complete Hardware Script file (v0.1.4)
 ///
 /// v0.2.0: Adds re_exports for explicit symbol re-exporting (Rust-style pub use)
 #[derive(Debug, Clone, PartialEq)]
-pub struct Program<'ast> {
+pub struct Program {
     pub imports: Vec<Import>,
     pub re_exports: Vec<ReExport>,
-    pub definitions: Vec<Definition<'ast>>,
+    pub definitions: Vec<Definition>,
+    pub arena: arena::AstArena,
     pub span: Span,
 }
 
 /// Top-level definition (v0.1.4 unified syntax)
 /// v0.2.0: Adds Bridge as first-class definition
+/// v0.2.1: 100% Arena-based - all variants hold 4-byte IDs
 #[derive(Debug, Clone, PartialEq)]
-pub enum Definition<'ast> {
-    Bridge(BridgeDefinition), // NEW v0.2.0: First-class bridge definitions
-    Material(MaterialDefinition),
-    Profile(Box<ProfileDefinition>),
-    Component(&'ast ComponentDefinition), // Arena-allocated for SoC-scale performance
-    Module(ModuleDefinition<'ast>),       // NEW: Module support for v0.1.4
-    Mechanical(MechanicalDefinition),
-    Interface(InterfaceDefinition),
-    PolymorphicInterface(PolymorphicInterfaceDefinition), // NEW: Duck-typed interfaces for v0.1.5
-    Test(TestDefinition),
-    Space(Box<SpaceDefinition<'ast>>),
-    Unit(UnitDefinition),                   // Standard library unit definitions
-    Device(DeviceDefinition), // NEW: Device definitions for v0.1.6 (foundry primitives)
-    Const(ConstDefinition),   // NEW: Constant definitions for v0.1.6 (math.hw primitives)
-    SignalGroup(SignalGroupDefinition), // Signal grouping for impedance control
-    Pattern(PatternDefinition), // Routing pattern definitions
-    Strategy(StrategyDefinition), // Routing strategy definitions
-    MaterialAlias(MaterialAliasDefinition), // NEW: Material alias for stdlib
-    Enum(logic::EnumDefinition), // NEW: Enum definitions for v0.4.0
-    Struct(logic::StructDefinition), // NEW: Struct definitions for v0.4.0
-    Logic(logic::LogicDefinition), // NEW: Logic block definitions for v0.4.0
-    Shape(ShapeDefinition),   // NEW: Custom 2D polygon shape definitions
-    SpiceModel(SpiceModelDefinition), // NEW: SPICE model card definitions for v0.2.1+ (PDK physics)
-    Subcircuit(SubcircuitDefinition), // NEW: Native typed subcircuit definitions for v0.3.0+ (replaces raw SPICE strings)
+pub enum Definition {
+    Bridge(arena::BridgeDefId),
+    Material(arena::MaterialDefId),
+    Profile(arena::ProfileDefId),
+    Component(arena::ComponentDefId),
+    Module(arena::ModuleDefId),
+    Mechanical(arena::MechanicalDefId),
+    Interface(arena::InterfaceDefId),
+    PolymorphicInterface(arena::InterfaceDefId), // Reuse InterfaceDefId
+    Test(arena::TestDefId),
+    Space(arena::SpaceDefId),
+    Unit(arena::UnitDefId),
+    Device(arena::DeviceDefId),
+    Const(arena::ConstDefId),
+    SignalGroup(arena::InterfaceDefId), // Reuse InterfaceDefId for signal groups
+    Pattern(arena::InterfaceDefId), // Reuse until dedicated type needed
+    Strategy(arena::InterfaceDefId), // Reuse until dedicated type needed
+    MaterialAlias(arena::MaterialDefId), // Points to aliased material
+    Enum(logic::EnumDefinition), // Keep as direct value (small)
+    Struct(logic::StructDefinition), // Keep as direct value (small)
+    Logic(logic::LogicDefinition), // Keep as direct value (small)
+    Shape(ShapeDefinition), // Keep as direct value (small)
+    SpiceModel(SpiceModelDefinition), // Keep as direct value (small)
+    Subcircuit(SubcircuitDefinition), // Keep as direct value (small)
 }
 
 // REMOVED (pre-release cleanup): Legacy AST struct (the old non-Program wrapper).

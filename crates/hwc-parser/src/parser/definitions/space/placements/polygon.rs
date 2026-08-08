@@ -2,7 +2,7 @@ use crate::ast::*;
 use crate::lexer::{Span, Token};
 use crate::parser::error::ParseError;
 
-impl<'ast> crate::parser::Parser<'ast> {
+impl crate::parser::Parser {
     /// Parse polygon placement: `add polygon(Copper) named WiFi_Antenna at [x:10, y:10, z:1]:`
     pub(in crate::parser) fn parse_polygon(&mut self) -> Result<PolygonPlacement, ParseError> {
         let start_pos = self.current_span().start;

@@ -2,9 +2,9 @@ use crate::ast::{ForLoop, IfConditional, ModuleStatement, Span};
 use crate::lexer::Token;
 use crate::parser::{ParseError, Parser};
 
-impl<'ast> Parser<'ast> {
+impl Parser {
     /// Parse for loop: `for i in 0..63:`
-    pub(super) fn parse_for_loop(&mut self) -> Result<ForLoop<'ast>, ParseError> {
+    pub(super) fn parse_for_loop(&mut self) -> Result<ForLoop, ParseError> {
         let start = self.current_span();
 
         self.expect(&Token::For)?;
@@ -70,7 +70,7 @@ impl<'ast> Parser<'ast> {
     }
 
     /// Parse if conditional: `if condition:`
-    pub(super) fn parse_if_conditional(&mut self) -> Result<IfConditional<'ast>, ParseError> {
+    pub(super) fn parse_if_conditional(&mut self) -> Result<IfConditional, ParseError> {
         let start = self.current_span();
 
         self.expect(&Token::If)?;

@@ -3,7 +3,7 @@ use crate::lexer::{Span, Token};
 use crate::parser::ParseError;
 use crate::parser::Parser;
 
-impl<'ast> Parser<'ast> {
+impl Parser {
     pub(super) fn parse_logic_statement(&mut self) -> Result<LogicStatement, ParseError> {
         if let Some(Token::Identifier(name)) = self.current().map(|t| &t.token) {
             if name == "pass" {

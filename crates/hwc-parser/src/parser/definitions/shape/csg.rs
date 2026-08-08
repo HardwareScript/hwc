@@ -1,7 +1,7 @@
 use crate::ast::*;
 use crate::lexer::Token;
 
-impl<'ast> crate::parser::Parser<'ast> {
+impl crate::parser::Parser {
     pub(in crate::parser::definitions::shape) fn check_csg_operator(&self) -> bool {
         if let Some(current) = self.current() {
             if let Token::Identifier(_) = &current.token {

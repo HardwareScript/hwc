@@ -9,8 +9,8 @@ use std::time::Instant;
 /// Parameters for export operations
 pub struct ExportParams<'a> {
     pub space: HardwareSpace,
-    pub symbol_table: SymbolTable<'a>,
-    pub ast: &'a Program<'a>,
+    pub symbol_table: SymbolTable,
+    pub ast: &'a Program,
     pub physical_netlist: Option<PhysicalNetlist>,
     pub output_dir: &'a PathBuf,
     pub formats: &'a [ExportFormat],

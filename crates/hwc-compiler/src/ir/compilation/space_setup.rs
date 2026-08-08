@@ -7,6 +7,7 @@ pub fn create_space(
     symbol_table: &SymbolTable,
     eval_context: &hwc_parser::EvaluationContext,
     unit_registry: &hwc_types::UnitRegistry,
+    arena: &hwc_parser::ast::arena::AstArena,
 ) -> Result<hwc_engine::HardwareSpace, IrError> {
     let space = crate::ir::space_builder::create_hardware_space(
         space_def,
@@ -14,7 +15,7 @@ pub fn create_space(
         eval_context,
         unit_registry,
     )?;
-    crate::ir::space_builder::validate_asic_constraints(space_def, symbol_table, eval_context)?;
+    crate::ir::space_builder::validate_asic_constraints(space_def, symbol_table, eval_context, arena)?;
     Ok(space)
 }
 
