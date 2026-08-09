@@ -93,7 +93,6 @@ impl Parser {
                 Token::Dimensions => Some("dimensions"),
                 Token::Grid => Some("grid"),
                 Token::Path => Some("path"),
-                Token::Origin => Some("origin"),
                 Token::Let => Some("let"),
                 Token::Mut => Some("mut"),
                 Token::Const => Some("const"),
@@ -146,7 +145,6 @@ impl Parser {
                     | Token::Dimensions
                     | Token::Grid
                     | Token::Path
-                    | Token::Origin
                     | Token::Let
                     | Token::Mut
                     | Token::Const

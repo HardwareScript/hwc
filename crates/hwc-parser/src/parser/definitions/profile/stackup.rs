@@ -33,6 +33,7 @@ impl super::super::super::Parser {
             let mut material = None;
             let mut thickness = None;
             let mut routable = None;
+            let mut is_mask = None;
 
             // Parse key: value pairs inside the brackets (comma separated)
             while !self.check(&Token::CloseBracket) && !self.is_at_end() {
@@ -71,6 +72,21 @@ impl super::super::super::Parser {
                             }
                         });
                     }
+                    "is_mask" => {
+                        // v0.2.1: Parse is_mask flag for Zero-Magic mask layer support.
+                        // When true, export engine treats this as a subtractive mask layer.
+                        let mask_val = self.expect_identifier()?;
+                        is_mask = Some(match mask_val.as_str() {
+                            "true" => true,
+                            "false" => false,
+                            _ => {
+                                return Err(self.error(&format!(
+                                    "Unknown is_mask value: '{}' (expected 'true' or 'false')",
+                                    mask_val
+                                )));
+                            }
+                        });
+                    }
                     _ => {
                         return Err(
                             self.error(&format!("Unknown stackup layer property: '{}'", key))
@@ -99,6 +115,7 @@ impl super::super::super::Parser {
                 material: material.into(),
                 thickness,
                 routable,
+                is_mask,
             });
         }
 

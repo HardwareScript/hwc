@@ -24,8 +24,10 @@ pub struct HardwareSpaceParams {
     pub substrate_material_id: MaterialId,
     pub material_registry: MaterialRegistry,
     pub view: SpaceView,
-    pub origin: hwc_parser::OriginPoint,
-    pub resolution_nm: i64,
+    /// Manufacturing grid in nanometers, derived from the PDK profile
+    /// (`manufacturing.track_pitch`, falling back to
+    /// `manufacturing.min_feature_size`). v0.2.1: never user-declared.
+    pub manufacturing_grid_nm: i64,
     pub technology_strategy: Technology,
 }
 
@@ -108,12 +110,6 @@ pub struct HardwareSpace {
     pub substrate_material_id: MaterialId,
     pub view: SpaceView,
 
-    /// **v0.2.0: Coordinate system origin (PROPER ARCHITECTURE)**
-    /// Stores the user-declared coordinate system orientation (e.g., `origin: bl by b`).
-    /// Single source of truth for coordinate transformations, routing direction inference,
-    /// and geometry calculations. Eliminates hardcoded assumptions about axis orientation.
-    pub origin: hwc_parser::OriginPoint,
-
     /// Material registry for dynamic material support
     pub material_registry: MaterialRegistry,
 
@@ -150,8 +146,13 @@ pub struct HardwareSpace {
     /// **v0.1.7: Keep-Out Zones for DRC and routing (NATIVE)**
     pub keep_out_zones: Vec<KeepOutZone>,
 
-    /// **v0.1.8: Coordinate snapping resolution in nanometers.**
-    pub resolution_nm: i64,
+    /// **v0.2.1: Manufacturing grid in nanometers.**
+    ///
+    /// Derived from the PDK profile (`manufacturing.track_pitch`, falling back
+    /// to `manufacturing.min_feature_size`). Replaces the purged user-facing
+    /// `resolution:` declaration, which created a dual-authority conflict with
+    /// the profile. Used for coordinate snapping, router track pitch, and DRC.
+    pub manufacturing_grid_nm: i64,
 
     /// **v0.2.0: Stackup layer metadata (single source of truth)**
     /// Ordered list of layers from bottom to top with physical Z-coordinates.
@@ -207,7 +208,6 @@ impl HardwareSpace {
             substrate_material_id: params.substrate_material_id,
             material_registry: params.material_registry,
             view: params.view,
-            origin: params.origin,
             entity_graph,
             netlist,
             vias: Vec::new(),
@@ -219,7 +219,7 @@ impl HardwareSpace {
             analytic_routes: Vec::new(),
             fabrication_constraints: None,
             keep_out_zones: Vec::new(),
-            resolution_nm: params.resolution_nm,
+            manufacturing_grid_nm: params.manufacturing_grid_nm,
             stackup_layers: Vec::new(),
             technology_strategy: params.technology_strategy,
             routing_database: crate::routing_database::HierarchicalRoutingDatabase::new(),

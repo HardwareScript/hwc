@@ -8,7 +8,6 @@ pub struct PlacementContext<'a> {
     pub stackup_manager: &'a StackupManager,
     pub collector: &'a hwc_diagnostics::DiagnosticCollector,
     pub profile: Option<&'a hwc_parser::ProfileDefinition>,
-    pub origin: hwc_parser::OriginPoint,
     pub arena: &'a hwc_parser::ast::arena::AstArena,
 }
 

@@ -10,7 +10,6 @@ use hwc_engine::{
     space::ContactMetadata,
     HardwareSpace,
 };
-use hwc_parser::{OriginXY, OriginZ};
 
 /// Offset a declarative coordinate by the component's position
 ///
@@ -118,20 +117,9 @@ pub fn unroll_internal_features(
                             .map(|net_id| net_id.base.clone())
                     };
 
-                    let (center_x, center_y) = match ctx.origin.xy {
-                        OriginXY::TL => {
-                            (pd.position.x + width_nm / 2, pd.position.y - height_nm / 2)
-                        }
-                        OriginXY::TR => {
-                            (pd.position.x - width_nm / 2, pd.position.y - height_nm / 2)
-                        }
-                        OriginXY::BL => {
-                            (pd.position.x + width_nm / 2, pd.position.y + height_nm / 2)
-                        }
-                        OriginXY::BR => {
-                            (pd.position.x - width_nm / 2, pd.position.y + height_nm / 2)
-                        }
-                    };
+                    // v0.2.1: Canonical Bottom-Left origin.
+                    let (center_x, center_y) =
+                        (pd.position.x + width_nm / 2, pd.position.y + height_nm / 2);
 
                     let half_w = width_nm / 2;
                     let half_h = height_nm / 2;
@@ -151,10 +139,7 @@ pub fn unroll_internal_features(
                     let ry = (lx as f64 * sin_theta + ly as f64 * cos_theta) as i64;
 
                     let absolute_x_nm = center_x + rx;
-                    let absolute_y_nm = match ctx.origin.xy {
-                        OriginXY::TL | OriginXY::TR => center_y - ry,
-                        OriginXY::BL | OriginXY::BR => center_y + ry,
-                    };
+                    let absolute_y_nm = center_y + ry;
                     let absolute_z_nm =
                         pd.position.z + (pin_pos.z.unwrap_or(0.0) * 1_000_000.0) as i64;
 
@@ -368,7 +353,7 @@ pub fn unroll_internal_features(
 
                             let pad_half_nm = pad_diameter_nm / 2;
                             let start_z_nm =
-                                (substrate_bbox.min.z / space.resolution_nm) * space.resolution_nm;
+                                (substrate_bbox.min.z / space.manufacturing_grid_nm) * space.manufacturing_grid_nm;
                             let pad_bbox_start = BoundingBox::new(
                                 Point3D::new(
                                     absolute_x_nm - pad_half_nm,
@@ -378,7 +363,7 @@ pub fn unroll_internal_features(
                                 Point3D::new(
                                     absolute_x_nm + pad_half_nm,
                                     absolute_y_nm + pad_half_nm,
-                                    start_z_nm + space.resolution_nm,
+                                    start_z_nm + space.manufacturing_grid_nm,
                                 ),
                             );
                             space.entity_graph.add_cylinder_substrate_layer(
@@ -390,8 +375,8 @@ pub fn unroll_internal_features(
                                 0,
                             );
 
-                            let end_z_nm = (substrate_bbox.max.z / space.resolution_nm - 1)
-                                * space.resolution_nm;
+                            let end_z_nm = (substrate_bbox.max.z / space.manufacturing_grid_nm - 1)
+                                * space.manufacturing_grid_nm;
                             let pad_bbox_end = BoundingBox::new(
                                 Point3D::new(
                                     absolute_x_nm - pad_half_nm,
@@ -401,7 +386,7 @@ pub fn unroll_internal_features(
                                 Point3D::new(
                                     absolute_x_nm + pad_half_nm,
                                     absolute_y_nm + pad_half_nm,
-                                    end_z_nm + space.resolution_nm,
+                                    end_z_nm + space.manufacturing_grid_nm,
                                 ),
                             );
                             space.entity_graph.add_cylinder_substrate_layer(
@@ -413,9 +398,9 @@ pub fn unroll_internal_features(
                                 0,
                             );
 
-                            let board_max_z_nm = (space.dimensions.depth_nm / space.resolution_nm)
+                            let board_max_z_nm = (space.dimensions.depth_nm / space.manufacturing_grid_nm)
                                 .saturating_sub(1)
-                                * space.resolution_nm;
+                                * space.manufacturing_grid_nm;
                             let via = Via::new(ViaSpec {
                                 position: (absolute_x_nm, absolute_y_nm),
                                 from_z_nm: substrate_bbox.min.z,
@@ -579,17 +564,14 @@ pub fn unroll_internal_features(
                             }
                         }
 
-                        let mut world_origin = ctx.origin;
-                        world_origin.xy = OriginXY::BL;
-                        world_origin.z = OriginZ::Bottom;
-
+                        // v0.2.1: All placement is already in the canonical
+                        // Bottom-Left / Z-Up world system.
                         let world_ctx = PlacementContext {
                             symbol_table: ctx.symbol_table,
                             eval_context: ctx.eval_context,
                             stackup_manager: ctx.stackup_manager,
                             collector: ctx.collector,
                             profile: ctx.profile,
-                            origin: world_origin,
                             arena: ctx.arena,
                         };
 

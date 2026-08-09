@@ -47,10 +47,10 @@ pub fn signed_area(polygon: &[(i64, i64)]) -> i128 {
 /// Tolerance: `|cross_product| < max(1, min(|AB|, |BC|) / 1000)`.
 /// Adaptive — avoids dropping vertices on very short segments.
 ///
-/// v0.1.8: Scalable resolution-aware tolerance. Capped to `resolution_nm`
+/// v0.1.8: Scalable resolution-aware tolerance. Capped to `manufacturing_grid_nm`
 /// to ensure physical correctness at the user-defined snap-step.
 #[inline]
-pub fn merge_collinear_edges(polygon: &[(i64, i64)], resolution_nm: i64) -> Vec<(i64, i64)> {
+pub fn merge_collinear_edges(polygon: &[(i64, i64)], manufacturing_grid_nm: i64) -> Vec<(i64, i64)> {
     let n = polygon.len();
     if n < 3 {
         return polygon.to_vec();
@@ -77,7 +77,7 @@ pub fn merge_collinear_edges(polygon: &[(i64, i64)], resolution_nm: i64) -> Vec<
         // Instead of a hardcoded 1000nm (1um) cap, we scale the tolerance
         // relative to the user-defined resolution snap-step.
         // This ensures sub-atomic physical correctness at any scale.
-        let tolerance = 1_i64.max((len_ab.min(len_bc) / 1000).min(resolution_nm));
+        let tolerance = 1_i64.max((len_ab.min(len_bc) / 1000).min(manufacturing_grid_nm));
 
         if cross.abs() >= tolerance {
             result.push(curr);
@@ -222,13 +222,13 @@ pub fn canonicalize(
     polygon: Vec<(i64, i64)>,
     winding: WindingType,
     min_area: i64,
-    resolution_nm: i64,
+    manufacturing_grid_nm: i64,
 ) -> Option<Vec<(i64, i64)>> {
     if polygon.len() < 3 {
         return None;
     }
 
-    let merged = merge_collinear_edges(&polygon, resolution_nm);
+    let merged = merge_collinear_edges(&polygon, manufacturing_grid_nm);
     if merged.len() < 3 {
         return None;
     }

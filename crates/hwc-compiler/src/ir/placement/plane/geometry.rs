@@ -52,7 +52,6 @@ pub fn resolve_plane_geometry(
     ctx: &PlacementContext,
 ) -> Result<ResolvedGeometry, IrError> {
     let coord_ctx = CoordinateContext {
-        origin: ctx.origin,
         space_dimensions,
         symbol_table: ctx.symbol_table,
         eval_context: ctx.eval_context,

@@ -10,14 +10,12 @@ use hwc_engine::{HardwareSpace, Point3D};
 pub fn route_manual(
     space: &mut HardwareSpace,
     route: &hwc_parser::Route,
-    origin: hwc_parser::OriginPoint,
     symbol_table: &crate::SymbolTable,
     eval_context: &hwc_parser::EvaluationContext, // UNIVERSAL CONTEXT
     stackup_manager: &crate::ir::stackup_manager::StackupManager,
     profile: Option<&hwc_parser::ProfileDefinition>,
 ) -> Result<(), IrError> {
     let ctx = CoordinateContext {
-        origin,
         space_dimensions: &space.dimensions,
         symbol_table,
         eval_context,       // Pass the universal context
@@ -103,7 +101,7 @@ pub fn route_manual(
 
     // Check that first waypoint is on the start pad's edge
     if let Some(bbox) = &start_bbox {
-        if !waypoint_on_pad_edge(first_waypoint, bbox, space.resolution_nm) {
+        if !waypoint_on_pad_edge(first_waypoint, bbox, space.manufacturing_grid_nm) {
             return Err(IrError::NoPathFound {
                 net: format!(
                     "{} -> {}",
@@ -123,13 +121,13 @@ pub fn route_manual(
             space.dimensions.height_nm,
             space.dimensions.depth_nm,
         ),
-        hwc_engine::constraint_manager::ConstraintRulebook::new(space.resolution_nm),
+        hwc_engine::constraint_manager::ConstraintRulebook::new(space.manufacturing_grid_nm),
         space.material_registry.clone(),
     );
 
     // Check that last waypoint is on the end pad's edge
     if let Some(bbox) = &end_bbox {
-        if !waypoint_on_pad_edge(last_waypoint, bbox, space.resolution_nm) {
+        if !waypoint_on_pad_edge(last_waypoint, bbox, space.manufacturing_grid_nm) {
             return Err(IrError::NoPathFound {
                 net: format!(
                     "{} -> {}",

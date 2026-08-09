@@ -61,8 +61,6 @@ pub struct PourParseState {
 #[derive(Debug, Clone, Default)]
 pub struct SpaceParseState {
     pub has_dimensions: bool,
-    pub has_resolution: bool,
-    pub has_origin: bool,
     pub has_profile: bool,
     pub has_nets: bool,
 }
@@ -205,19 +203,27 @@ impl ContextErrorGenerator {
                 "component" | "module" | "material" | "profile" => {
                     return format!(
                         "Found '{}' keyword inside space definition.\n\
-                         Space blocks can only contain: dimensions, resolution, origin, profile, nets, add, route, expose, for.\n\n\
+                         Space blocks can only contain: dimensions, profile, nets, add, route, expose, for.\n\n\
                          Tip: Component and module definitions belong at the top level, not inside a space.",
                         name
                     );
                 }
                 "dimension" => {
                     return "Found 'dimension' (singular). Did you mean 'dimensions' (plural)?\n\
-                            Syntax: dimensions: <width> by <height> by <depth>"
+                            Syntax: dimensions: <width> by <height>"
                         .to_string();
                 }
-                "grid" => {
-                    return "Found 'grid'. In v0.1.6+, use 'resolution:' instead.\n\
-                            Syntax: resolution: 1nm"
+                "grid" | "resolution" => {
+                    return "Found 'grid'/'resolution'. Both were removed in v0.2.1.\n\
+                            Manufacturing snapping is governed by the PDK profile\n\
+                            (manufacturing.track_pitch / manufacturing.min_feature_size).\n\
+                            Remove this line and declare 'profile: <ProfileName>' instead."
+                        .to_string();
+                }
+                "origin" => {
+                    return "Found 'origin'. It was removed in v0.2.1.\n\
+                            All spaces now use the canonical Bottom-Left / Z-Up coordinate\n\
+                            system (X >= 0, Y >= 0, Z >= 0). Simply remove this line."
                         .to_string();
                 }
                 _ => {}
@@ -227,9 +233,7 @@ impl ContextErrorGenerator {
         format!(
             "Unexpected {} in space definition.\n\
              Valid space statements:\n\
-             - dimensions: <w> by <h> by <d>\n\
-             - resolution: <step>\n\
-             - origin: <origin_xy> by <origin_z>\n\
+             - dimensions: <w> by <h>\n\
              - profile: <ProfileName>\n\
              - nets: <net_declarations>\n\
              - add <component_placement>\n\

@@ -48,7 +48,6 @@ pub fn place_component(
         ctx.eval_context,
         ctx.stackup_manager,
         position,
-        ctx.origin,
     )?;
     position = mounting_res.position;
 

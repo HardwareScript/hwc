@@ -15,7 +15,7 @@ pub struct RoutingParams<'a> {
     pub constraints: &'a RouteConstraints,
     pub bounds: super::super::neighbor_generation::GridBounds,
     pub layer_direction: LayerDirection,
-    pub resolution_nm: i64,
+    pub manufacturing_grid_nm: i64,
     pub clearance_zones: &'a [ClearanceZone],
     pub entity_graph: Option<&'a EntityGraph>,
     pub fixed_z_nm: Option<i64>,

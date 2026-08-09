@@ -4,7 +4,7 @@
 //! in the Symbol Table.
 
 use super::symbol_table::{
-    extract_clearance_constraints, extract_solder_mask_expansion, extract_stackup_constraints,
+    extract_clearance_constraints, extract_stackup_constraints,
     extract_trace_constraints, extract_via_constraints, SymbolTableTrait,
 };
 use crate::constraint_manager::types::FabricationConstraints;
@@ -52,9 +52,6 @@ pub fn load_fabrication_constraints<S: SymbolTableTrait>(
     // Extract stackup constraints (optional)
     let stackup = extract_stackup_constraints(profile_def, symbol_table)?;
 
-    // Extract solder mask expansion (v0.1.7)
-    let solder_mask_expansion_nm = extract_solder_mask_expansion(profile_def, symbol_table)?;
-
     let (low_voltage_clearance_nm, medium_voltage_clearance_nm, high_voltage_clearance_nm, safety_factor) =
         clearance.ok_or_else(|| format!(
             "Profile '{}': missing clearance constraints. All clearance values must be explicitly declared in your PDK profile.",
@@ -73,7 +70,6 @@ pub fn load_fabrication_constraints<S: SymbolTableTrait>(
         high_voltage_clearance_nm,
         safety_factor,
         stackup,
-        solder_mask_expansion_nm,
         technology: profile_def.technology.ok_or_else(|| {
             format!(
                 "Profile '{}': missing REQUIRED 'technology' field. Must be explicitly declared as either 'PCB' or 'ASIC'.\n\

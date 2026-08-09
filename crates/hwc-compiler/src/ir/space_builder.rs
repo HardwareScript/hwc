@@ -7,6 +7,12 @@ use hwc_engine::{Dimensions, HardwareSpace, MaterialRegistry, AIR_MATERIAL_ID};
 use hwc_parser::SpaceDefinition;
 
 /// Create a hardware space from space definition.
+///
+/// v0.2.1 (Bloat Purge Category 1):
+/// - `dimensions:` supplies X and Y only. The Z-height is derived as the exact
+///   sum of `profile.stackup` layer thicknesses.
+/// - `resolution:` is purged; the manufacturing grid comes from the profile.
+/// - `origin:` is purged; the coordinate system is always Bottom-Left / Z-Up.
 pub fn create_hardware_space(
     space_def: &SpaceDefinition,
     symbol_table: &crate::SymbolTable,
@@ -23,32 +29,37 @@ pub fn create_hardware_space(
             ),
         })?;
 
-    // Convert dimensions to nanometers using the symbol table (supports custom units!)
+    // Convert X/Y dimensions to nanometers using the symbol table (supports custom units!)
+    let width_nm = measurement_to_nm(&dimensions.width, symbol_table, eval_context)
+        .map_err(IrError::InvalidExpression)?;
+    let height_nm = measurement_to_nm(&dimensions.height, symbol_table, eval_context)
+        .map_err(IrError::InvalidExpression)?;
+
+    // Resolve the profile FIRST so the stackup can define the Z-height and the
+    // manufacturing grid before the space is constructed.
+    let profile_def = crate::ir::compilation::space_setup::resolve_profile(space_def, symbol_table);
+
+    // v0.2.1: Z-depth is derived from the stackup, never user-declared.
+    let stackup_manager = crate::ir::stackup_manager::StackupManager::new(
+        profile_def.as_ref().and_then(|p| p.stackup.as_ref()),
+        symbol_table,
+        eval_context,
+    )?;
+    let depth_nm = stackup_manager.board_thickness_nm();
+
     let dims = Dimensions {
-        width_nm: measurement_to_nm(&dimensions.width, symbol_table, eval_context)
-            .map_err(IrError::InvalidExpression)?,
-        height_nm: measurement_to_nm(&dimensions.height, symbol_table, eval_context)
-            .map_err(IrError::InvalidExpression)?,
-        depth_nm: measurement_to_nm(&dimensions.depth, symbol_table, eval_context)
-            .map_err(IrError::InvalidExpression)?,
+        width_nm,
+        height_nm,
+        depth_nm,
     };
 
-    // Determine resolution for coordinate snapping
-    let resolution_nm = space_def
-        .resolution
-        .as_ref()
-        .map(|res_measurement| {
-            measurement_to_nm(res_measurement, symbol_table, eval_context)
-                .map_err(IrError::InvalidExpression)
-        })
-        .transpose()?
-        .ok_or_else(|| IrError::MissingGrid)?;
-
-    if resolution_nm <= 0 {
-        return Err(IrError::InvalidResolution {
-            value: resolution_nm,
-        });
-    }
+    // v0.2.1: Manufacturing grid replaces the purged `resolution:` field.
+    let manufacturing_grid_nm =
+        crate::ir::compilation::space_setup::resolve_manufacturing_grid_nm(
+            profile_def.as_ref(),
+            symbol_table,
+            eval_context,
+        )?;
 
     // Create material registry
     let mut material_registry = MaterialRegistry::new();
@@ -69,7 +80,7 @@ pub fn create_hardware_space(
             }
             hwc_parser::MaterialCategory::Insulator => hwc_engine::MaterialConductivity::Insulator,
         };
-        let process = match mat_def.process {
+        let process = match mat_def.get_process() {
             hwc_parser::ManufacturingProcess::DrilledPlated => {
                 hwc_engine::ManufacturingProcess::DrilledPlated
             }
@@ -135,16 +146,6 @@ pub fn create_hardware_space(
         hwc_engine::SpaceView::Horizontal
     };
 
-    // v0.2.0: Extract origin from space definition (single source of truth)
-    // REQUIRED - no fallback. User must explicitly declare coordinate system.
-    let origin = space_def.origin.ok_or_else(|| IrError::MissingOrigin {
-        space_name: space_def.name.to_string(),
-        hint: "Every space must declare a coordinate system origin.\n\
-               Add to your space definition:\n  origin: bl by b\n\n\
-               Options: bl (bottom-left), br (bottom-right), tl (top-left), tr (top-right)"
-            .into(),
-    })?;
-
     // Create hardware space
     let mut space = HardwareSpace::new(hwc_engine::space::HardwareSpaceParams {
         name: space_def.name.to_string().into(),
@@ -152,8 +153,7 @@ pub fn create_hardware_space(
         substrate_material_id: AIR_MATERIAL_ID, // Default substrate material, will be set if substrate specified
         material_registry,
         view: space_view,
-        origin,
-        resolution_nm,
+        manufacturing_grid_nm,
         technology_strategy: hwc_types::Technology::Asic, // Temporary - will be set from profile
     });
 

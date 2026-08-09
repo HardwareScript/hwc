@@ -58,7 +58,7 @@ impl Default for ThermalReliefConfig {
 /// Thermal relief generator
 pub struct ThermalReliefGenerator {
     config: ThermalReliefConfig,
-    resolution_nm: i64,
+    manufacturing_grid_nm: i64,
 }
 
 /// Parameters for spoke generation
@@ -83,10 +83,10 @@ pub struct RectangularPadParams {
 }
 
 impl ThermalReliefGenerator {
-    pub fn new(config: ThermalReliefConfig, resolution_nm: i64) -> Self {
+    pub fn new(config: ThermalReliefConfig, manufacturing_grid_nm: i64) -> Self {
         Self {
             config,
-            resolution_nm,
+            manufacturing_grid_nm,
         }
     }
 
@@ -118,7 +118,7 @@ impl ThermalReliefGenerator {
                 // Complete isolation — drill clearance gap through substrate layers
                 let clearance_radius = pad_radius_nm + self.config.gap_width_nm;
                 let half = clearance_radius;
-                let z_half = self.resolution_nm * 2;
+                let z_half = self.manufacturing_grid_nm * 2;
                 let cutout = BoundingBox::new(
                     Point3D::new(center.x - half, center.y - half, z_layer - z_half),
                     Point3D::new(center.x + half, center.y + half, z_layer + z_half),
@@ -148,7 +148,7 @@ impl ThermalReliefGenerator {
 
         // Clear clearance gap via substrate drill_hole
         let half = clearance_radius;
-        let z_half = self.resolution_nm * 2;
+        let z_half = self.manufacturing_grid_nm * 2;
         let cutout = BoundingBox::new(
             Point3D::new(center.x - half, center.y - half, z_layer - z_half),
             Point3D::new(center.x + half, center.y + half, z_layer + z_half),
@@ -156,7 +156,7 @@ impl ThermalReliefGenerator {
         grid.drill_hole(cutout, Some(clearance_radius * 2), net);
 
         // Add spokes
-        let spoke_length = self.config.gap_width_nm + self.resolution_nm * 2;
+        let spoke_length = self.config.gap_width_nm + self.manufacturing_grid_nm * 2;
         let angle_step = 2.0 * PI / self.config.spoke_count as f64;
 
         for i in 0..self.config.spoke_count {
@@ -250,7 +250,7 @@ impl ThermalReliefGenerator {
                 let gap = self.config.gap_width_nm;
                 let half_w = params.width_nm / 2 + gap;
                 let half_h = params.height_nm / 2 + gap;
-                let z_half = self.resolution_nm * 2;
+                let z_half = self.manufacturing_grid_nm * 2;
                 let cutout = BoundingBox::new(
                     Point3D::new(
                         params.center.x - half_w,

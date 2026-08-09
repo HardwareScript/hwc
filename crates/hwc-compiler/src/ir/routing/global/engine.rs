@@ -18,7 +18,7 @@ impl<'a> AutoRouter<'a> {
         );
 
         let mut constraints =
-            hwc_engine::constraint_manager::ConstraintRulebook::new(self.space.resolution_nm);
+            hwc_engine::constraint_manager::ConstraintRulebook::new(self.space.manufacturing_grid_nm);
         self.configure_constraints(&mut constraints)?;
 
         let mut geo_router = hwc_engine::GeometryRouter::new(
@@ -334,7 +334,6 @@ impl<'a> AutoRouter<'a> {
                 high_voltage_clearance_nm: constraint_set.clearance.high_voltage_nm,
                 safety_factor: constraint_set.clearance.safety_factor,
                 stackup,
-                solder_mask_expansion_nm: constraint_set.solder_mask_expansion_nm,
                 technology: constraint_set.technology,
             };
             constraints.set_fabrication_constraints(fab_constraints);

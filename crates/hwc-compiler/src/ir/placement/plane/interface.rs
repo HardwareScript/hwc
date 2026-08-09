@@ -9,7 +9,6 @@ use hwc_engine::geometry::BoundingBox;
 use hwc_engine::space::HardwareSpace;
 use hwc_engine::Point3D;
 use hwc_materials::IntentCostWeights;
-use hwc_parser::OriginXY;
 
 /// Register a `PhysicalInterface` for the placed plane so the router can treat
 /// it as a routing endpoint.
@@ -43,7 +42,7 @@ pub fn register_plane_interface(
     let trace_width_nm = constraints.trace.min_width_nm;
     let clearance_nm = constraints.trace.min_spacing_nm;
 
-    let geometry = InterfaceGeometry::Polygon(interface_polygon(bbox, ctx.origin.xy));
+    let geometry = InterfaceGeometry::Polygon(interface_polygon(bbox));
 
     let interface_id = space.entity_graph.allocate_interface_id();
 
@@ -106,30 +105,18 @@ pub fn register_plane_interface(
 /// SOLUTION: Register interface geometry at the middle Z to match where routing
 /// occurs, ensuring perfect Z alignment between placement and routing phases.
 ///
-/// The vertex winding order depends on the space's coordinate system origin:
-/// for BL/BR (Y increases upward) use CCW winding; for TL/TR (Y increases
-/// downward) use CW winding.
-fn interface_polygon(bbox: BoundingBox, origin_xy: OriginXY) -> Vec<Point3D> {
+/// v0.2.1: The canonical Bottom-Left origin means Y always increases upward,
+/// so vertices always use CCW winding.
+fn interface_polygon(bbox: BoundingBox) -> Vec<Point3D> {
     let middle_z_nm = (bbox.min.z + bbox.max.z) / 2;
-    let is_y_upward = matches!(origin_xy, OriginXY::BL | OriginXY::BR);
 
-    if is_y_upward {
-        // CCW winding for Y-up coordinate systems (BL, BR)
-        vec![
-            Point3D::new(bbox.min.x, bbox.min.y, middle_z_nm), // bottom-left
-            Point3D::new(bbox.max.x, bbox.min.y, middle_z_nm), // bottom-right
-            Point3D::new(bbox.max.x, bbox.max.y, middle_z_nm), // top-right
-            Point3D::new(bbox.min.x, bbox.max.y, middle_z_nm), // top-left
-        ]
-    } else {
-        // CW winding for Y-down coordinate systems (TL, TR)
-        vec![
-            Point3D::new(bbox.min.x, bbox.min.y, middle_z_nm), // top-left
-            Point3D::new(bbox.min.x, bbox.max.y, middle_z_nm), // bottom-left
-            Point3D::new(bbox.max.x, bbox.max.y, middle_z_nm), // bottom-right
-            Point3D::new(bbox.max.x, bbox.min.y, middle_z_nm), // top-right
-        ]
-    }
+    // CCW winding (Y increases upward)
+    vec![
+        Point3D::new(bbox.min.x, bbox.min.y, middle_z_nm), // bottom-left
+        Point3D::new(bbox.max.x, bbox.min.y, middle_z_nm), // bottom-right
+        Point3D::new(bbox.max.x, bbox.max.y, middle_z_nm), // top-right
+        Point3D::new(bbox.min.x, bbox.max.y, middle_z_nm), // top-left
+    ]
 }
 
 /// Build the routing intent lookup table from the profile's `net_type`

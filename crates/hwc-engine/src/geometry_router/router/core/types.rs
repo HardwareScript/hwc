@@ -56,7 +56,7 @@ pub struct RouterConfig {
     pub layer_z_positions: Vec<i64>,
     pub layer_materials: Vec<u8>,
     pub routing_heuristics: Option<RoutingHeuristics>,
-    pub resolution_nm: i64,
+    pub manufacturing_grid_nm: i64,
 }
 
 impl Default for RouterConfig {
@@ -69,7 +69,7 @@ impl Default for RouterConfig {
             layer_z_positions: Vec::new(),
             layer_materials: Vec::new(),
             routing_heuristics: None,
-            resolution_nm: 100, // Default resolution
+            manufacturing_grid_nm: 100, // Default resolution
         }
     }
 }
@@ -92,7 +92,7 @@ pub struct GeometryRouter {
     pub(crate) layer_directions: Vec<LayerDirection>,
 
     /// v0.1.8 continuous database snap-step resolution in nanometers
-    pub(crate) resolution_nm: i64,
+    pub(crate) manufacturing_grid_nm: i64,
 
     /// Material registry for physical thickness lookups (v0.1.8)
     pub(crate) material_registry: crate::material::MaterialRegistry,

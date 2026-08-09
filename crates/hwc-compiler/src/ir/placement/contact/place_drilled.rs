@@ -37,7 +37,6 @@ pub(super) fn place_drilled_via(args: DrilledViaPlacement) -> Result<(), IrError
         pad_diameter_nm,
         clearance_nm,
     } = args;
-    let solder_mask_expansion_nm = super::resolve::resolve_solder_mask_expansion(space)?;
 
     space
         .entity_graph
@@ -48,7 +47,6 @@ pub(super) fn place_drilled_via(args: DrilledViaPlacement) -> Result<(), IrError
             clearance_nm,
             is_tented,
             pad_diameter_nm,
-            solder_mask_expansion_nm,
         });
 
     let plating_thickness_nm =

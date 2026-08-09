@@ -6,7 +6,6 @@ use hwc_engine::geometry::BoundingBox;
 use hwc_engine::space::HardwareSpace;
 use hwc_engine::Point3D;
 use hwc_materials::IntentCostWeights;
-use hwc_parser::OriginXY;
 
 /// Register a `PhysicalInterface` for the placed pour so the router can connect
 /// to it as a routing endpoint.
@@ -43,26 +42,14 @@ pub fn register_pour_interface(
     // Calculate middle Z for alignment with routing queries
     let middle_z_nm = (bbox.min.z + bbox.max.z) / 2;
 
-    // Determine vertex winding order based on coordinate system origin
-    let is_y_upward = matches!(ctx.origin.xy, OriginXY::BL | OriginXY::BR);
-
-    let geometry = if is_y_upward {
-        // CCW winding for Y-up coordinate systems (BL, BR)
-        InterfaceGeometry::Polygon(vec![
-            Point3D::new(bbox.min.x, bbox.min.y, middle_z_nm), // bottom-left
-            Point3D::new(bbox.max.x, bbox.min.y, middle_z_nm), // bottom-right
-            Point3D::new(bbox.max.x, bbox.max.y, middle_z_nm), // top-right
-            Point3D::new(bbox.min.x, bbox.max.y, middle_z_nm), // top-left
-        ])
-    } else {
-        // CW winding for Y-down coordinate systems (TL, TR)
-        InterfaceGeometry::Polygon(vec![
-            Point3D::new(bbox.min.x, bbox.min.y, middle_z_nm), // top-left
-            Point3D::new(bbox.min.x, bbox.max.y, middle_z_nm), // bottom-left
-            Point3D::new(bbox.max.x, bbox.max.y, middle_z_nm), // bottom-right
-            Point3D::new(bbox.max.x, bbox.min.y, middle_z_nm), // top-right
-        ])
-    };
+    // v0.2.1: Canonical Bottom-Left origin means Y always increases upward,
+    // so interface polygons always use CCW winding.
+    let geometry = InterfaceGeometry::Polygon(vec![
+        Point3D::new(bbox.min.x, bbox.min.y, middle_z_nm), // bottom-left
+        Point3D::new(bbox.max.x, bbox.min.y, middle_z_nm), // bottom-right
+        Point3D::new(bbox.max.x, bbox.max.y, middle_z_nm), // top-right
+        Point3D::new(bbox.min.x, bbox.max.y, middle_z_nm), // top-left
+    ]);
 
     let interface_id = space.entity_graph.allocate_interface_id();
 

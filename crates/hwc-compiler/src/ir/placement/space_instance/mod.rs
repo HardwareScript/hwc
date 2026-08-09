@@ -24,7 +24,7 @@ pub mod transform;
 use crate::ir::errors::IrError;
 use crate::SymbolTable;
 use hwc_engine::HardwareSpace;
-use hwc_parser::{EvaluationContext, OriginPoint, SpaceDefinition, SpaceInstancePlacement};
+use hwc_parser::{EvaluationContext, SpaceDefinition, SpaceInstancePlacement};
 use hwc_types::UnitRegistry;
 
 use entity_registry::transform_entity_registry;
@@ -51,7 +51,6 @@ pub fn instantiate_sub_space(
     placement: &SpaceInstancePlacement,
     symbol_table: &SymbolTable,
     eval_context: &EvaluationContext,
-    origin: OriginPoint,
     parent_space: &mut HardwareSpace,
     unit_registry: &UnitRegistry,
     arena: &hwc_parser::ast::arena::AstArena,
@@ -99,7 +98,7 @@ pub fn instantiate_sub_space(
     );
 
     // STEP 3: Evaluate position and construct transformation matrix
-    let (x_nm, y_nm, z_layer) = evaluate_coordinate_nm(&placement.position, eval_context, &origin)?;
+    let (x_nm, y_nm, z_layer) = evaluate_coordinate_nm(&placement.position, eval_context)?;
 
     let rotation = placement.rotation.as_ref().ok_or_else(|| {
         IrError::PlacementError(format!(
@@ -290,7 +289,6 @@ pub(super) fn compile_child_space(
 pub(super) fn evaluate_coordinate_nm(
     coord: &hwc_parser::Coordinate,
     eval_context: &EvaluationContext,
-    origin: &OriginPoint,
 ) -> Result<(i64, i64, i32), IrError> {
     // Evaluate coordinate using the existing evaluation infrastructure
     let (x_pm, y_pm, z_layer) = coord
@@ -300,9 +298,6 @@ pub(super) fn evaluate_coordinate_nm(
     // Convert picometers to nanometers (1nm = 1000pm)
     let x_nm = x_pm / 1000;
     let y_nm = y_pm / 1000;
-
-    // Apply origin transformation if needed
-    let _ = origin; // Origin transformation will be applied during coordinate evaluation
 
     Ok((x_nm, y_nm, z_layer))
 }

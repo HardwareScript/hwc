@@ -76,9 +76,35 @@ pub fn populate_device_instances(
         ) {
             Some(name) => name,
             None => {
-                println!("      ⚠ Warning: Could not find device definition matching terminals {:?} with materials {:?}", 
-                         terminals, terminal_materials);
-                "UnknownDevice".into()
+                // Try to find close matches for better error message
+                let available_devices = find_similar_devices(symbol_table, &terminals, &terminal_materials);
+                
+                let mut error_msg = format!(
+                    "Device '{}' bindings do not match any device definition in the symbol table.\n\
+                     \n\
+                     Device bindings found in layout:\n\
+                     - Terminals: {:?}\n\
+                     - Materials: {:?}\n",
+                    device_name, terminals, terminal_materials
+                );
+
+                if !available_devices.is_empty() {
+                    error_msg.push_str("\nPossible matches with terminal/material mismatches:\n");
+                    for (dev_name, mismatch) in available_devices {
+                        error_msg.push_str(&format!("  - device '{}': {}\n", dev_name, mismatch));
+                    }
+                } else {
+                    error_msg.push_str("\nNo device definitions found with matching terminals.\n");
+                }
+
+                error_msg.push_str(
+                    "\nTo fix this:\n\
+                     1. Check that you've imported the device definition (import MyDevice from \"./pdk\")\n\
+                     2. Verify the device contract materials match your layout's pour materials\n\
+                     3. Ensure all terminals in the device definition are bound to pours with the correct materials\n"
+                );
+
+                return Err(IrError::DeviceRegistryError { message: error_msg });
             }
         };
 
@@ -141,6 +167,49 @@ fn lookup_device_type_from_symbol_table(
     }
 
     None
+}
+
+/// Find devices with similar terminals but mismatched materials to provide helpful error messages
+fn find_similar_devices(
+    symbol_table: &SymbolTable,
+    terminals: &[CompactString],
+    terminal_materials: &FxHashMap<CompactString, CompactString>,
+) -> Vec<(CompactString, String)> {
+    let mut similar = Vec::new();
+
+    for (name, device_def) in symbol_table.iter_all_devices() {
+        // Check if terminals match
+        let all_terminals_match = terminals
+            .iter()
+            .all(|terminal| device_def.has_terminal(terminal.as_str()));
+
+        if all_terminals_match {
+            // Terminals match but materials don't - find which materials mismatch
+            let mut mismatches = Vec::new();
+            for (terminal, actual_material) in terminal_materials.iter() {
+                if !device_def.is_material_allowed(terminal.as_str(), actual_material.as_str()) {
+                    // Get expected materials
+                    if let Some(expected_materials) = device_def.get_terminal_materials(terminal.as_str()) {
+                        let expected_str = if expected_materials.len() == 1 {
+                            format!("'{}'", expected_materials[0])
+                        } else {
+                            format!("one of [{}]", expected_materials.iter().map(|m| format!("'{}'", m)).collect::<Vec<_>>().join(", "))
+                        };
+                        mismatches.push(format!(
+                            "terminal '{}' expects {} but layout uses '{}'",
+                            terminal, expected_str, actual_material
+                        ));
+                    }
+                }
+            }
+            
+            if !mismatches.is_empty() {
+                similar.push((name.clone(), mismatches.join(", ")));
+            }
+        }
+    }
+
+    similar
 }
 
 /// Calculate device parameters from geometry

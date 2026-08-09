@@ -10,7 +10,7 @@ use crate::ir::stackup_manager::StackupManager;
 use crate::SymbolTable;
 use hwc_diagnostics::DiagnosticCollector;
 use hwc_engine::HardwareSpace;
-use hwc_parser::{EvaluationContext, OriginPoint, ProfileDefinition, SpaceDefinition};
+use hwc_parser::{EvaluationContext, ProfileDefinition, SpaceDefinition};
 
 /// Parameters for `compile_single_space` function to avoid too many arguments.
 pub struct CompileSpaceParams<'a> {
@@ -36,7 +36,6 @@ pub struct CompilationContext<'a> {
     /// string hashing and hash-map lookups.
     pub sorted_indices: &'a [usize],
     pub placement_items: &'a [crate::ir::placement_item::ContextualPlacementItem],
-    pub origin: OriginPoint,
     pub symbol_table: &'a SymbolTable,
     pub eval_context: &'a EvaluationContext,
     pub stackup_manager: &'a StackupManager,
@@ -156,10 +155,7 @@ pub fn compile_single_space(
         &arena,
     )?;
 
-    let (profile, solder_mask_thickness_nm) =
-        space_setup::resolve_solder_mask_thickness(space_def, symbol_table, &eval_context_initial)?;
-
-    let origin = space_def.origin.unwrap_or_default();
+    let profile = space_setup::resolve_profile(space_def, symbol_table);
 
     let eval_context = space_setup::build_eval_context(symbol_table, profile.as_ref(), space_def)?;
 
@@ -167,9 +163,6 @@ pub fn compile_single_space(
         profile.as_ref(),
         symbol_table,
         &eval_context,
-        space.resolution_nm,
-        origin.z,
-        solder_mask_thickness_nm,
     )?;
 
     // **v0.2.0: Populate stackup layers in HardwareSpace (single source of truth)**
@@ -243,12 +236,9 @@ pub fn compile_single_space(
     );
     let sorted_indices = dependency_graph::build_and_sort(&placement_items, symbol_table, &arena)?;
 
-    space_setup::generate_solder_mask(&mut space, solder_mask_thickness_nm, &stackup_manager)?;
-
     let compile_ctx = CompilationContext {
         sorted_indices: &sorted_indices,
         placement_items: &placement_items,
-        origin,
         symbol_table,
         eval_context: &eval_context,
         stackup_manager: &stackup_manager,

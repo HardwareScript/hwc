@@ -140,7 +140,7 @@ impl GeometryRouter {
                 .as_ref()
                 .expect("fabrication constraints guaranteed by earlier check")
                 .min_trace_width_nm,
-            self.resolution_nm,
+            self.manufacturing_grid_nm,
             min_clearance,
         );
 

@@ -1,5 +1,15 @@
 //! Solder mask and paste layer generation for Gerber export.
 //!
+//! **v0.2.1 NOTE**: This module is retained for backward compatibility but uses
+//! a legacy approach. In the future, it will be refactored to use Clipper2
+//! Boolean operations as described in the Zero-Magic Architecture:
+//!
+//! 1. Mask layers (solder mask, passivation, coverlay) are declared as ordinary
+//!    `is_mask: true` layers in `profile.stackup`
+//! 2. Export engine starts with full board/die polygon
+//! 3. Uses `clipper2_rust::difference_64` to punch pad/via openings
+//! 4. Eliminates all hardcoded solder mask logic from the compiler core
+//!
 //! This module generates the four additional manufacturing layers required for PCB assembly:
 //! - Top Solder Mask (.gts) - Defines where the green/black coating is removed
 //! - Bottom Solder Mask (.gbs) - Same for bottom layer
@@ -164,7 +174,7 @@ pub fn export(space: &HardwareSpace, output_dir: &Path) -> Result<(), Box<dyn st
     let pads = collect_pads(space)?;
 
     let (board_min_z_nm, board_max_z_nm) = board_z_extent(space);
-    let slab_z_nm = space.resolution_nm.max(1);
+    let slab_z_nm = space.manufacturing_grid_nm.max(1);
 
     export_layer(
         &pads,

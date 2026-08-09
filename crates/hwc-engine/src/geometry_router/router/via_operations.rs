@@ -66,9 +66,9 @@ impl GeometryRouter {
             }
 
             // v0.1.8: Layer-aware Z-delta threshold — replaces legacy
-            // `resolution_nm / 2` check. Uses minimum spacing between adjacent
+            // `manufacturing_grid_nm / 2` check. Uses minimum spacing between adjacent
             // layers to determine if a Z-change represents a real layer transition
-            // versus sub-layer noise. Falls back to resolution_nm/2 only when
+            // versus sub-layer noise. Falls back to manufacturing_grid_nm/2 only when
             // layer_z_positions is empty (no stackup defined).
             let z_delta = (to_z - from_z).abs();
             let z_threshold = if self.config.layer_z_positions.len() >= 2 {
@@ -83,7 +83,7 @@ impl GeometryRouter {
                 // A via is real if it spans more than 50% of the smallest layer gap
                 min_gap / 2
             } else {
-                self.resolution_nm / 2
+                self.manufacturing_grid_nm / 2
             };
             if to_z != from_z && z_delta > z_threshold {
                 let fabrication = self
@@ -317,7 +317,7 @@ impl GeometryRouter {
                             };
                             let generator = ThermalReliefGenerator::new(
                                 ThermalReliefConfig::default(),
-                                self.resolution_nm,
+                                self.manufacturing_grid_nm,
                             );
                             // v0.1.8: Thermal relief generation uses EntityGraph-native
                             // vector polygons — spokes are registered as Clipper2 Path64

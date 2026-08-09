@@ -8,7 +8,6 @@ use hwc_parser::{Coordinate, Expression, Measurement, Unit, Value};
 /// Context for coordinate-to-point conversion operations.
 /// Groups related parameters to avoid exceeding Clippy's argument limit.
 pub struct CoordinateContext<'a> {
-    pub origin: hwc_parser::OriginPoint,
     pub space_dimensions: &'a hwc_engine::Dimensions,
     pub symbol_table: &'a crate::SymbolTable,
     pub eval_context: &'a hwc_parser::EvaluationContext,
@@ -194,13 +193,6 @@ pub(crate) fn z_expr_is_physical(z_expr: &Expression) -> bool {
     }
 }
 
-pub fn apply_z_origin_physical(z_nm: i64, origin_z: hwc_parser::OriginZ, depth_nm: i64) -> i64 {
-    match origin_z {
-        hwc_parser::OriginZ::Bottom => z_nm,
-        hwc_parser::OriginZ::Top => depth_nm.saturating_sub(z_nm),
-    }
-}
-
 pub(crate) const DIMENSIONLESS_Z_ERROR: &str =
     "Z coordinates require physical units (e.g. z: 1.5mm). Dimensionless values like z: 1 are not supported.";
 
@@ -239,7 +231,6 @@ pub fn resolve_coordinate_z_nm(
             ctx.eval_context,
             tracker,
             super::placement::coordinate_evaluation::CoordinateAxis::Z,
-            ctx.origin.z,
         )
         .map_err(|e| e.to_string());
 
@@ -253,8 +244,9 @@ pub fn resolve_coordinate_z_nm(
         return Err(DIMENSIONLESS_Z_ERROR.to_string());
     }
 
-    let z_nm = evaluate_expression_to_nm(z_expr, ctx.symbol_table, ctx.eval_context)?;
-    let final_z = apply_z_origin_physical(z_nm, ctx.origin.z, ctx.space_dimensions.depth_nm);
+    // v0.2.1: Z is canonically bottom-up (Z=0 at the bottom of the stackup),
+    // so the evaluated value is already the final absolute Z.
+    let final_z = evaluate_expression_to_nm(z_expr, ctx.symbol_table, ctx.eval_context)?;
 
     let expr_summary = match z_expr {
         Expression::Measurement { value, unit, .. } => format!("{:.3}{:?}", value, unit),
@@ -289,7 +281,6 @@ pub fn coordinate_to_point(coord: &Coordinate, ctx: &CoordinateContext) -> Resul
             ctx.eval_context,
             tracker,
             CoordinateAxis::X,
-            ctx.origin.z,
         )
         .map_err(|e| e.to_string())?
     } else {
@@ -306,7 +297,6 @@ pub fn coordinate_to_point(coord: &Coordinate, ctx: &CoordinateContext) -> Resul
             ctx.eval_context,
             tracker,
             CoordinateAxis::Y,
-            ctx.origin.z,
         )
         .map_err(|e| e.to_string())?
     } else {
@@ -315,17 +305,9 @@ pub fn coordinate_to_point(coord: &Coordinate, ctx: &CoordinateContext) -> Resul
 
     let z_nm = resolve_coordinate_z_nm(z_expr, ctx, has_anchor_refs)?;
 
-    use hwc_parser::OriginXY;
-    let final_x_nm = match ctx.origin.xy {
-        OriginXY::TL | OriginXY::BL => x_nm,
-        OriginXY::TR | OriginXY::BR => ctx.space_dimensions.width_nm - x_nm,
-    };
-    let final_y_nm = match ctx.origin.xy {
-        OriginXY::BL | OriginXY::BR => y_nm,
-        OriginXY::TL | OriginXY::TR => ctx.space_dimensions.height_nm - y_nm,
-    };
-
-    Ok(Point3D::new(final_x_nm, final_y_nm, z_nm))
+    // v0.2.1: Canonical Bottom-Left origin - X and Y are used directly with no
+    // axis inversion. The purged `origin:` declaration previously mirrored these.
+    Ok(Point3D::new(x_nm, y_nm, z_nm))
 }
 
 pub fn spanning_coordinate_to_point(
@@ -357,7 +339,6 @@ pub fn spanning_coordinate_to_point(
             ctx.eval_context,
             tracker,
             CoordinateAxis::X,
-            ctx.origin.z,
         )
         .map_err(|e| e.to_string())?
     } else {
@@ -374,7 +355,6 @@ pub fn spanning_coordinate_to_point(
             ctx.eval_context,
             tracker,
             CoordinateAxis::Y,
-            ctx.origin.z,
         )
         .map_err(|e| e.to_string())?
     } else {
@@ -383,15 +363,7 @@ pub fn spanning_coordinate_to_point(
 
     let z_nm = resolve_coordinate_z_nm(z_expr, ctx, has_anchor_refs)?;
 
-    use hwc_parser::OriginXY;
-    let final_x_nm = match ctx.origin.xy {
-        OriginXY::TL | OriginXY::BL => x_nm,
-        OriginXY::TR | OriginXY::BR => ctx.space_dimensions.width_nm - x_nm,
-    };
-    let final_y_nm = match ctx.origin.xy {
-        OriginXY::BL | OriginXY::BR => y_nm,
-        OriginXY::TL | OriginXY::TR => ctx.space_dimensions.height_nm - y_nm,
-    };
-
-    Ok(Point3D::new(final_x_nm, final_y_nm, z_nm))
+    // v0.2.1: Canonical Bottom-Left origin - X and Y are used directly with no
+    // axis inversion. The purged `origin:` declaration previously mirrored these.
+    Ok(Point3D::new(x_nm, y_nm, z_nm))
 }

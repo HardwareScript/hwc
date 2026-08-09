@@ -37,8 +37,6 @@ pub struct SpaceDefinition {
     pub is_exported: bool, // v0.2.0: Access control
     pub implements_module: Option<CompactString>,
     pub dimensions: Option<crate::ast::common::Dimensions>,
-    pub resolution: Option<crate::ast::common::Measurement>,
-    pub origin: Option<crate::ast::common::OriginPoint>,
     pub profile: Option<crate::ast::common::Identifier>,
     pub mechanical: Option<crate::ast::common::Identifier>,
     pub substrate: Option<SubstrateId>,

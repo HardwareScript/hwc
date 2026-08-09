@@ -170,7 +170,7 @@ impl GeometryRouter {
         );
 
         let spatial_index = self.build_routing_spatial_index(entity_graph, route);
-        let track_pitch = self.resolution_nm;
+        let track_pitch = self.manufacturing_grid_nm;
 
         let topo_router =
             TopologicalRouter::new(trace_width, track_pitch, fabrication.min_trace_spacing_nm);

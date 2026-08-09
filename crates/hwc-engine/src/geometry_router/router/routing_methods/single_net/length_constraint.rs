@@ -20,7 +20,7 @@ impl GeometryRouter {
         })?;
 
         let trace_width = fabrication.min_trace_width_nm;
-        let track_pitch = self.resolution_nm;
+        let track_pitch = self.manufacturing_grid_nm;
         let board_bounds = BoundingBox::new(
             crate::geometry::Point3D::new(0, 0, 0),
             crate::geometry::Point3D::new(

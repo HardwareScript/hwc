@@ -30,7 +30,7 @@ use rustc_hash::FxHashMap;
 /// - `Docs/v0.1.3/COMPILER-INTERNALS.md` (lines 400-600, Layer 3 Physical IR)
 pub struct ConstraintManager {
     /// Coordinate snapping resolution in nanometers
-    resolution_nm: i64,
+    manufacturing_grid_nm: i64,
 
     /// Default safety factor for clearance calculations
     safety_factor: i64,
@@ -47,13 +47,13 @@ impl ConstraintManager {
     ///
     /// All parameters must come from the PDK profile.
     pub fn new(
-        resolution_nm: i64,
+        manufacturing_grid_nm: i64,
         safety_factor: i64,
         default_temp_rise_c: i64,
         default_max_parallel_nm: i64,
     ) -> Self {
         Self {
-            resolution_nm,
+            manufacturing_grid_nm,
             safety_factor,
             default_temp_rise_c,
             default_max_parallel_nm,
@@ -61,8 +61,8 @@ impl ConstraintManager {
     }
 
     /// Get the snapping resolution
-    pub fn resolution_nm(&self) -> i64 {
-        self.resolution_nm
+    pub fn manufacturing_grid_nm(&self) -> i64 {
+        self.manufacturing_grid_nm
     }
 
     /// Get the safety factor
@@ -159,7 +159,7 @@ impl ConstraintManager {
         is_external: bool,
         fabrication_constraints: Option<&FabricationConstraints>,
     ) -> Result<ConstraintRulebook, String> {
-        let mut rulebook = ConstraintRulebook::new(self.resolution_nm);
+        let mut rulebook = ConstraintRulebook::new(self.manufacturing_grid_nm);
 
         // Assign layer directions for Manhattan routing
         rulebook.layer_directions = self.assign_layer_directions(num_layers);
@@ -227,7 +227,7 @@ impl ConstraintManager {
         layout: &hwc_parser::ModuleLayoutBlock,
         arena: &hwc_parser::ast::arena::AstArena,
     ) -> BoundingBox {
-        calculate_module_bounding_box(layout, self.resolution_nm, arena)
+        calculate_module_bounding_box(layout, self.manufacturing_grid_nm, arena)
     }
 
     /// Classify all nets as internal (within a module) or global (crossing boundaries).

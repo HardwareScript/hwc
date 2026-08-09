@@ -127,10 +127,6 @@ pub struct FabricationConstraints {
     /// Stackup information for impedance calculations (optional)
     pub stackup: Option<StackupInfo>,
 
-    /// Solder mask expansion in nanometers (v0.1.7)
-    /// None: no solder mask expansion declared in profile
-    pub solder_mask_expansion_nm: Option<i64>,
-
     /// Technology type (PCB or ASIC) - REQUIRED field that determines via geometry,
     /// clearance rules, and manufacturing constraints throughout the entire pipeline.
     /// Must be explicitly declared in every profile.
@@ -153,7 +149,7 @@ pub struct ConstraintRulebook {
     pub layer_directions: FxHashMap<usize, LayerDirection>,
 
     /// Coordinate snapping resolution in nanometers
-    pub resolution_nm: i64,
+    pub manufacturing_grid_nm: i64,
 
     /// Default current for thermal calculations (milliamps)
     /// Used when net-specific current is not available
@@ -169,12 +165,12 @@ impl ConstraintRulebook {
     ///
     /// v0.1.8: No hardcoded defaults for current, temperature, or clearance.
     /// All values must come from the PDK profile. Fail-fast if not provided.
-    pub fn new(resolution_nm: i64) -> Self {
+    pub fn new(manufacturing_grid_nm: i64) -> Self {
         Self {
             per_net_constraints: FxHashMap::default(),
             clearance_zones: Vec::new(),
             layer_directions: FxHashMap::default(),
-            resolution_nm,
+            manufacturing_grid_nm,
             default_current_ma: None, // v0.1.8: No default. Fail if current_limit not declared.
             fabrication: None,        // Must come from PDK profile.
         }

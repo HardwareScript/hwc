@@ -151,7 +151,7 @@ pub fn route_automatic(
     // Build spatial index and run topological router
     let topo_router = hwc_engine::geometry_router::TopologicalRouter::new(
         trace_width_nm,
-        space.resolution_nm,
+        space.manufacturing_grid_nm,
         min_clearance_nm,
     );
     let board_bounds = hwc_engine::BoundingBox::new(
@@ -256,7 +256,7 @@ pub fn route_automatic(
     let (start_pin_id, goal_pin_id) = crate::ir::routing::helpers::get_pin_ids(space, route)?;
 
     let mut refined_path = path.clone();
-    let mut trace_thickness_nm = space.resolution_nm;
+    let mut trace_thickness_nm = space.manufacturing_grid_nm;
 
     if refined_path.len() >= 2 {
         let fixed_z = target_z_nm.or(Some(start_boundary.z));
@@ -265,11 +265,11 @@ pub fn route_automatic(
             stackup_manager,
             fixed_z,
             start_boundary.z,
-            space.resolution_nm,
+            space.manufacturing_grid_nm,
         )?;
     }
 
-    if trace_thickness_nm == space.resolution_nm && refined_path.len() >= 2 {
+    if trace_thickness_nm == space.manufacturing_grid_nm && refined_path.len() >= 2 {
         return Err(IrError::InvalidRouteExpression {
             expression: format!(
                 "route from {} to {}",
@@ -316,7 +316,7 @@ pub fn route_automatic(
             goal_pin: goal_boundary,
             trace_width_nm,
             config: &teardrop_config,
-            resolution_nm: space.resolution_nm,
+            manufacturing_grid_nm: space.manufacturing_grid_nm,
             net_handle: hwc_engine::netlist::NetHandle::new(net_id.raw() as u32),
         });
     }

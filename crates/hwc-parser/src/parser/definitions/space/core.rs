@@ -77,8 +77,6 @@ impl crate::parser::Parser {
         }
 
         let mut dimensions: Option<Dimensions> = None;
-        let mut resolution: Option<crate::ast::Measurement> = None;
-        let mut origin: Option<OriginPoint> = None;
         let mut profile: Option<Identifier> = None;
         let mut mechanical: Option<Identifier> = None;
         let mut substrate: Option<crate::ast::arena::SubstrateId> = None;
@@ -123,10 +121,6 @@ impl crate::parser::Parser {
             // Unified control flow - single if-else chain
             if self.check(&Token::Dimensions) {
                 dimensions = self.parse_dimensions().ok();
-            } else if self.check(&Token::Resolution) {
-                resolution = self.parse_resolution().ok();
-            } else if self.check(&Token::Origin) {
-                origin = self.parse_origin().ok();
             } else if self.check(&Token::Let) {
                 // v0.2.0: Parse local variable binding: `let pad_w = 150um`
                 match self.parse_space_let_binding() {
@@ -367,7 +361,7 @@ impl crate::parser::Parser {
                     } else {
                         // Unknown identifier
                         let err = self.error(&format!(
-                            "Unknown space field: '{}'. Expected 'dimensions', 'resolution', 'origin', 'profile', 'mechanical', 'add', 'route', or 'expose'",
+                            "Unknown space field: '{}'. Expected 'dimensions', 'profile', 'mechanical', 'add', 'route', or 'expose'",
                             name
                         ));
                         collector.report(err);
@@ -406,8 +400,6 @@ impl crate::parser::Parser {
             is_exported,
             implements_module: implements_module.map(|s: String| s.into()),
             dimensions,
-            resolution,
-            origin,
             profile,
             mechanical,
             substrate,

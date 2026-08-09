@@ -234,7 +234,6 @@ pub fn evaluate_coordinate_with_anchors(
     eval_context: &hwc_parser::EvaluationContext,
     bbox_tracker: &crate::bounding_box_tracker::BoundingBoxTracker,
     context_axis: CoordinateAxis,
-    origin_z: hwc_parser::OriginZ,
 ) -> Result<i64, IrError> {
     use hwc_parser::{BinaryOperator, Expression, UnaryOperator};
 
@@ -285,27 +284,13 @@ pub fn evaluate_coordinate_with_anchors(
                 hwc_parser::Edge::Top | hwc_parser::Edge::Bottom => {
                     match context_axis {
                         CoordinateAxis::Z => {
-                            // Sprint 6: last.top and last.bottom for Z-axis
-                            // Result depends on OriginZ (Top-Down vs Bottom-Up)
-                            match origin_z {
-                                hwc_parser::OriginZ::Bottom => {
-                                    // Layer indices increase with height (1=Ground, 10=Sky)
-                                    // Top is max, Bottom is min
-                                    if *edge == hwc_parser::Edge::Top {
-                                        anchor_bbox.max.z
-                                    } else {
-                                        anchor_bbox.min.z
-                                    }
-                                }
-                                hwc_parser::OriginZ::Top => {
-                                    // Layer indices increase with depth (1=Sky, 10=Ground)
-                                    // Top is min, Bottom is max
-                                    if *edge == hwc_parser::Edge::Top {
-                                        anchor_bbox.min.z
-                                    } else {
-                                        anchor_bbox.max.z
-                                    }
-                                }
+                            // Sprint 6: last.top and last.bottom for Z-axis.
+                            // v0.2.1: Z is canonically bottom-up, so height
+                            // increases with Z: top is max, bottom is min.
+                            if *edge == hwc_parser::Edge::Top {
+                                anchor_bbox.max.z
+                            } else {
+                                anchor_bbox.min.z
                             }
                         }
                         _ => edge_point.y,
@@ -374,7 +359,6 @@ pub fn evaluate_coordinate_with_anchors(
                 eval_context,
                 bbox_tracker,
                 context_axis,
-                origin_z,
             )?;
             let right_nm = evaluate_coordinate_with_anchors(
                 right,
@@ -382,7 +366,6 @@ pub fn evaluate_coordinate_with_anchors(
                 eval_context,
                 bbox_tracker,
                 context_axis,
-                origin_z,
             )?;
             let result = match operator {
                 BinaryOperator::Add => left_nm + right_nm,
@@ -469,7 +452,6 @@ pub fn evaluate_coordinate_with_anchors(
                 eval_context,
                 bbox_tracker,
                 context_axis,
-                origin_z,
             )?;
             let result = match operator {
                 UnaryOperator::Negate => -operand_nm,
@@ -491,7 +473,6 @@ pub fn evaluate_coordinate_with_anchors(
             eval_context,
             bbox_tracker,
             context_axis,
-            origin_z,
         ),
 
         _ => evaluate_coordinate_to_nm(expr, symbol_table, eval_context),

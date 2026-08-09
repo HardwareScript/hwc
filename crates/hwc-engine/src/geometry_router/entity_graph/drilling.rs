@@ -38,7 +38,6 @@ impl EntityGraph {
 
             let should_drill = match layer.layer_type {
                 SubstrateLayerType::Substrate => true,
-                SubstrateLayerType::SolderMask => true,
                 SubstrateLayerType::Pour => true,
                 SubstrateLayerType::Contact => false,
             };
@@ -54,15 +53,17 @@ impl EntityGraph {
     }
 
     /// Drill a hole for a via, respecting net connectivity.
+    ///
+    /// v0.2.1: Solder mask / passivation layers are no longer special-cased here.
+    /// Mask openings are generated at export time using Clipper2 Boolean operations.
     pub fn drill_via_hole(&mut self, spec: ViaHoleSpec) {
         let ViaHoleSpec {
             hole_bbox,
             diameter_nm,
             via_net,
             clearance_nm,
-            is_tented,
-            pad_diameter_nm,
-            solder_mask_expansion_nm,
+            is_tented: _,
+            pad_diameter_nm: _,
         } = spec;
         for layer in &mut self.substrate_layers {
             let intersects = if layer.regions.is_empty() {
@@ -87,24 +88,6 @@ impl EntityGraph {
                 match layer.layer_type {
                     SubstrateLayerType::Substrate => {
                         layer.add_cylinder_cutout(hole_bbox, diameter_nm);
-                    }
-                    SubstrateLayerType::SolderMask => {
-                        if !is_tented {
-                            let opening_diameter = pad_diameter_nm + 2 * solder_mask_expansion_nm;
-                            let mask_cutout_bbox = BoundingBox::new(
-                                crate::geometry::Point3D::new(
-                                    hole_bbox.min.x.max(layer.bbox.min.x),
-                                    hole_bbox.min.y.max(layer.bbox.min.y),
-                                    layer.bbox.min.z,
-                                ),
-                                crate::geometry::Point3D::new(
-                                    hole_bbox.max.x.min(layer.bbox.max.x),
-                                    hole_bbox.max.y.min(layer.bbox.max.y),
-                                    layer.bbox.max.z,
-                                ),
-                            );
-                            layer.add_cylinder_cutout(mask_cutout_bbox, opening_diameter);
-                        }
                     }
                     SubstrateLayerType::Pour => {
                         let diameter = if layer.net == via_net {

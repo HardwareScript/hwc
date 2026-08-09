@@ -37,7 +37,7 @@ pub struct Triangle {
 ///
 /// Returns `RefinedContour` for each merged region.
 #[inline]
-pub fn refine_layer(shapes: Vec<Vec<(i64, i64)>>, resolution_nm: i64) -> Vec<RefinedContour> {
+pub fn refine_layer(shapes: Vec<Vec<(i64, i64)>>, manufacturing_grid_nm: i64) -> Vec<RefinedContour> {
     let welded = copper_welder::union_polygons(shapes);
 
     let mut result = Vec::new();
@@ -54,7 +54,7 @@ pub fn refine_layer(shapes: Vec<Vec<(i64, i64)>>, resolution_nm: i64) -> Vec<Ref
         result.push(contour);
     }
 
-    canonicalize_contours(&mut result, resolution_nm);
+    canonicalize_contours(&mut result, manufacturing_grid_nm);
     result
 }
 
@@ -62,22 +62,22 @@ pub fn refine_layer(shapes: Vec<Vec<(i64, i64)>>, resolution_nm: i64) -> Vec<Ref
 #[inline]
 pub fn refine_geometry(
     raw_shapes: Vec<Vec<(i64, i64)>>,
-    resolution_nm: i64,
+    manufacturing_grid_nm: i64,
 ) -> Vec<RefinedContour> {
-    refine_layer(raw_shapes, resolution_nm)
+    refine_layer(raw_shapes, manufacturing_grid_nm)
 }
 
 /// Apply boundary canonicalization to all refined contours.
 ///
 /// Runs collinear edge merge, sliver removal, and winding normalization
 /// on both outer and hole rings.
-pub fn canonicalize_contours(contours: &mut [RefinedContour], resolution_nm: i64) {
+pub fn canonicalize_contours(contours: &mut [RefinedContour], manufacturing_grid_nm: i64) {
     for contour in contours.iter_mut() {
         if let Some(canonical) = boundary_canonicalization::canonicalize(
             contour.outer.clone(),
             WindingType::OuterContour,
             0,
-            resolution_nm,
+            manufacturing_grid_nm,
         ) {
             contour.outer = canonical;
         }
@@ -86,7 +86,7 @@ pub fn canonicalize_contours(contours: &mut [RefinedContour], resolution_nm: i64
                 hole.clone(),
                 WindingType::HoleContour,
                 0,
-                resolution_nm,
+                manufacturing_grid_nm,
             ) {
                 *hole = canonical;
             }

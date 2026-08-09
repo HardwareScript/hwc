@@ -56,45 +56,6 @@ impl std::hash::Hash for Identifier {
     }
 }
 
-/// Origin point for coordinate system abstraction
-/// Supports unified `xy by z` syntax (e.g., `tl by t`, `bl by b`)
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub struct OriginPoint {
-    pub xy: OriginXY,
-    pub z: OriginZ,
-}
-
-impl Default for OriginPoint {
-    fn default() -> Self {
-        OriginPoint {
-            xy: OriginXY::TL,
-            z: OriginZ::Top,
-        }
-    }
-}
-
-/// XY-plane origin point
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum OriginXY {
-    /// Top-Left origin (default) - Y increases downward like matrices
-    TL,
-    /// Bottom-Left origin - Y increases upward like CAD/Cartesian
-    BL,
-    /// Top-Right origin - X decreases, Y increases downward
-    TR,
-    /// Bottom-Right origin - X decreases, Y increases upward
-    BR,
-}
-
-/// Z-axis origin direction
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum OriginZ {
-    /// Top-Down (default) - Layer 1 is sky, Z increases downward (PCB/Software standard)
-    Top,
-    /// Bottom-Up - Layer 1 is ground, Z increases upward (3D Printer/Hardware standard)
-    Bottom,
-}
-
 /// Measurement: number + unit (e.g., `50mm`, `4.7kΩ`)
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Measurement {
@@ -422,12 +383,14 @@ pub struct PinReference {
     pub span: Span,
 }
 
-/// Dimensions: `dimensions: 50mm by 50mm by 4mm`
+/// Dimensions: `dimensions: 50mm by 50mm`
+///
+/// v0.2.1 (Bloat Purge Category 1.3): Z-depth is NOT user-specified. The board
+/// height is derived from the sum of `profile.stackup` layer thicknesses.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Dimensions {
     pub width: Measurement,
     pub height: Measurement,
-    pub depth: Measurement,
     pub span: Span,
 }
 

@@ -108,7 +108,6 @@ pub fn place_module_instance(
                 })?;
 
             let coord_ctx = CoordinateContext {
-                origin: ctx.origin,
                 space_dimensions: &space.dimensions,
                 symbol_table: ctx.symbol_table,
                 eval_context: ctx.eval_context,
@@ -162,7 +161,6 @@ pub fn place_module_instance(
         println!("   ⚠️  No layout (intrinsic or external) - using automatic offset placement (may cause collisions)");
 
         let coord_ctx = CoordinateContext {
-            origin: ctx.origin,
             space_dimensions: &space.dimensions,
             symbol_table: ctx.symbol_table,
             eval_context: ctx.eval_context,
@@ -289,7 +287,6 @@ pub fn place_module_instance(
         use crate::symbol_table::expand_pin_declarations;
 
         let coord_ctx = CoordinateContext {
-            origin: ctx.origin,
             space_dimensions: &space.dimensions,
             symbol_table: ctx.symbol_table,
             eval_context: ctx.eval_context,
@@ -444,7 +441,6 @@ pub fn place_module_instance(
             super::super::routing::route_trace(
                 space,
                 &space_route,
-                ctx.origin,
                 ctx.symbol_table,
                 ctx.eval_context,
                 ctx.stackup_manager,

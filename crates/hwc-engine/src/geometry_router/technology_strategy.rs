@@ -101,7 +101,6 @@ mod tests {
             high_voltage_clearance_nm: 1_000_000,
             safety_factor: 2.0,
             stackup: None,
-            solder_mask_expansion_nm: None,
             technology: Technology::Pcb,
         };
         assert_eq!(Technology::from_constraints(&pcb_fab), Technology::Pcb);
@@ -118,7 +117,6 @@ mod tests {
             high_voltage_clearance_nm: 500,
             safety_factor: 2.0,
             stackup: None,
-            solder_mask_expansion_nm: None,
             technology: Technology::Asic,
         };
         assert_eq!(Technology::from_constraints(&asic_fab), Technology::Asic);

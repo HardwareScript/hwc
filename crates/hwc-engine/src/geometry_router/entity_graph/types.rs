@@ -145,5 +145,4 @@ pub struct ViaHoleSpec {
     pub clearance_nm: i64,
     pub is_tented: bool,
     pub pad_diameter_nm: i64,
-    pub solder_mask_expansion_nm: i64,
 }

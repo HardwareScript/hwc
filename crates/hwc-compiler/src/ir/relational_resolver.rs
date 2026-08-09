@@ -8,7 +8,7 @@
 
 use compact_str::CompactString;
 use hwc_parser::{
-    AlignmentAxis, ComponentName, Coordinate, DirectionalConstraint, Expression, OriginXY,
+    AlignmentAxis, ComponentName, Coordinate, DirectionalConstraint, Expression,
     RelationalConstraint, Unit,
 };
 
@@ -252,27 +252,21 @@ impl RelationalPlacementFormula {
     }
 }
 
-/// Convert physical BoundingBox coordinates to User Space coordinates based on Origin.
+/// Convert physical BoundingBox coordinates to User Space coordinates.
+///
+/// v0.2.1: Under the canonical Bottom-Left origin, user space and physical
+/// space are identical, so this is an identity mapping. It is retained as a
+/// named seam so callers document intent at the conversion boundary.
 pub fn target_bbox_to_user_ranges(
     target_bbox: &hwc_engine::geometry::BoundingBox,
-    space_dimensions: &hwc_engine::Dimensions,
-    origin_xy: hwc_parser::OriginXY,
+    _space_dimensions: &hwc_engine::Dimensions,
 ) -> (i64, i64, i64, i64) {
-    let (tx_min, tx_max) = match origin_xy {
-        OriginXY::TL | OriginXY::BL => (target_bbox.min.x, target_bbox.max.x),
-        OriginXY::TR | OriginXY::BR => (
-            space_dimensions.width_nm - target_bbox.max.x,
-            space_dimensions.width_nm - target_bbox.min.x,
-        ),
-    };
-    let (ty_min, ty_max) = match origin_xy {
-        OriginXY::BL | OriginXY::BR => (target_bbox.min.y, target_bbox.max.y),
-        OriginXY::TL | OriginXY::TR => (
-            space_dimensions.height_nm - target_bbox.max.y,
-            space_dimensions.height_nm - target_bbox.min.y,
-        ),
-    };
-    (tx_min, tx_max, ty_min, ty_max)
+    (
+        target_bbox.min.x,
+        target_bbox.max.x,
+        target_bbox.min.y,
+        target_bbox.max.y,
+    )
 }
 
 /// Resolve relational constraints for all components in the placement list.
@@ -287,10 +281,10 @@ pub fn target_bbox_to_user_ranges(
 /// Evaluates alignment and directional constraints against the BoundingBoxTracker
 /// to produce a concrete `Coordinate::Declarative` position.
 ///
-/// **ORIGIN-AWARE COORDINATE SYSTEM**: This function dynamically adapts to the
-/// space's declared origin (TL, BL, TR, BR) by computing axis-direction multipliers.
-/// This ensures that directional operators (above, below, right_of, left_of) work
-/// correctly regardless of whether Y increases upward (BL) or downward (TL).
+/// **CANONICAL COORDINATE SYSTEM**: v0.2.1 purged the `origin:` declaration.
+/// Every space is Bottom-Left / Z-Up, so +X is rightward and +Y is upward.
+/// Directional operators (above, below, right_of, left_of) map directly onto
+/// positive/negative coordinate deltas with no axis inversion.
 ///
 /// **IMPORTANT**: This function returns the EXACT target coordinate:
 /// - For center alignment: Returns the center point of the target
@@ -305,18 +299,11 @@ pub fn compute_position_from_constraints(
     bbox_tracker: &BoundingBoxTracker,
     symbol_table: &crate::SymbolTable,
     eval_context: &hwc_parser::EvaluationContext,
-    origin: hwc_parser::OriginPoint,
     space_dimensions: &hwc_engine::Dimensions,
 ) -> Result<Coordinate, IrError> {
-    // Derive axis-direction multipliers from the declared origin
-    // This ensures physical directions (UP, DOWN, LEFT, RIGHT) map correctly
-    // to coordinate deltas regardless of the coordinate system orientation
-    let (x_multiplier, y_multiplier) = match origin.xy {
-        hwc_parser::OriginXY::BL => (1, 1), // Bottom-Left: +X right, +Y up
-        hwc_parser::OriginXY::TL => (1, -1), // Top-Left: +X right, +Y down
-        hwc_parser::OriginXY::BR => (-1, 1), // Bottom-Right: +X left, +Y up
-        hwc_parser::OriginXY::TR => (-1, -1), // Top-Right: +X left, +Y down
-    };
+    // v0.2.1: Canonical Bottom-Left origin — +X is rightward and +Y is upward,
+    // so physical directions map to coordinate deltas with no inversion.
+    let (x_multiplier, y_multiplier) = (1i64, 1i64);
 
     let mut x_nm: Option<i64> = None;
     let mut y_nm: Option<i64> = None;
@@ -331,7 +318,7 @@ pub fn compute_position_from_constraints(
                         // Traditional entity-based alignment
                         let target_bbox = resolve_target_bbox(component_name, bbox_tracker)?;
                         let (tx_min, tx_max, ty_min, ty_max) =
-                            target_bbox_to_user_ranges(&target_bbox, space_dimensions, origin.xy);
+                            target_bbox_to_user_ranges(&target_bbox, space_dimensions);
 
                         // Return the appropriate coordinate based on axis
                         match axis {
@@ -438,7 +425,6 @@ pub fn compute_position_from_constraints(
                             eval_context,
                             bbox_tracker,
                             context_axis,
-                            origin.z,
                         )?
                     }
                 };
@@ -475,7 +461,7 @@ pub fn compute_position_from_constraints(
 
                 let target_bbox = resolve_target_bbox(target, bbox_tracker)?;
                 let (tx_min, tx_max, ty_min, ty_max) =
-                    target_bbox_to_user_ranges(&target_bbox, space_dimensions, origin.xy);
+                    target_bbox_to_user_ranges(&target_bbox, space_dimensions);
                 let spacing_nm = if let Some(expr) = spacing_expr {
                     evaluate_expression_to_nm(expr, symbol_table)?
                 } else {

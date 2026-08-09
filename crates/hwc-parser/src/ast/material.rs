@@ -13,7 +13,7 @@ pub struct MaterialDefinition {
     pub name: Identifier,
     pub is_exported: bool, // v0.2.0: Access control
     pub category: MaterialCategory,
-    pub process: ManufacturingProcess, // v0.1.7: Physical process behavior
+    pub process: Option<ManufacturingProcess>, // v0.2.1: Optional with sensible defaults
     pub symbol: Option<CompactString>,
     pub description: Option<CompactString>,
     pub properties: Vec<Property>,
@@ -129,6 +129,16 @@ impl std::fmt::Display for MaterialCategory {
 }
 
 impl MaterialDefinition {
+    /// Get manufacturing process with category-based defaults (v0.2.1).
+    ///
+    /// `process:` is optional. When omitted, every category defaults to
+    /// `Deposited` (the common case for IC/3D-printed materials). This removes
+    /// the redundant mandatory `process:` declaration that added no information
+    /// for the vast majority of materials.
+    pub fn get_process(&self) -> ManufacturingProcess {
+        self.process.unwrap_or(ManufacturingProcess::Deposited)
+    }
+
     /// Get color with default fallback
     pub fn get_color(&self) -> CompactString {
         self.color.clone().unwrap_or_else(|| "#808080".into())

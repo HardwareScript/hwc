@@ -352,9 +352,7 @@ impl Validator {
             symbol_table
                 .measurement_to_nm(&dimensions.height)
                 .unwrap_or(0),
-            symbol_table
-                .measurement_to_nm(&dimensions.depth)
-                .unwrap_or(0),
+            0,
         );
 
         // Build bounding boxes for all components
@@ -375,8 +373,6 @@ impl Validator {
                 dimensions_nm,
                 symbol_table,
                 eval_context,
-                hwc_parser::OriginZ::Bottom,
-                1,
             );
             bboxes.push((name.to_string(), bbox));
         }
@@ -401,24 +397,14 @@ impl Validator {
 
     /// Calculate bounding box for a component at given position
     /// Uses a default size since we don't have component definitions yet
-    fn calculate_bounding_box(
-        &self,
-        position: &Coordinate,
-        space_dimensions_nm: (i64, i64, i64),
-        symbol_table: &crate::SymbolTable,
-        eval_context: &hwc_parser::EvaluationContext,
-        origin_z: hwc_parser::OriginZ,
-        grid_z_layers: usize,
+    fn calculate_bounding_box(&self, position: &Coordinate, space_dimensions_nm: (i64, i64, i64), symbol_table: &crate::SymbolTable, eval_context: &hwc_parser::EvaluationContext,
     ) -> BoundingBox {
         let (x_nm, y_nm, z_nm) = self.coordinate_to_nm(
             position,
             symbol_table,
             eval_context,
             space_dimensions_nm,
-            origin_z,
-            grid_z_layers,
         );
-
         // Convert to grid-like coordinates for bounding box (divide by 1mm)
         let x = x_nm / 1_000_000;
         let y = y_nm / 1_000_000;
@@ -437,8 +423,6 @@ impl Validator {
         symbol_table: &crate::SymbolTable,
         eval_context: &hwc_parser::EvaluationContext,
         space_dimensions_nm: (i64, i64, i64),
-        _origin_z: hwc_parser::OriginZ,
-        _grid_z_layers: usize,
     ) -> (i64, i64, i64) {
         let (x_val, y_val, _) = coord
             .evaluate_const()

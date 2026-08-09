@@ -26,7 +26,6 @@ use hwc_engine::HardwareSpace;
 pub fn route_trace(
     space: &mut HardwareSpace,
     route: &hwc_parser::Route,
-    origin: hwc_parser::OriginPoint,
     symbol_table: &crate::SymbolTable,
     eval_context: &hwc_parser::EvaluationContext, // UNIVERSAL CONTEXT
     stackup_manager: &crate::ir::stackup_manager::StackupManager,
@@ -45,7 +44,6 @@ pub fn route_trace(
         route_manual(
             space,
             route,
-            origin,
             symbol_table,
             eval_context,
             stackup_manager,

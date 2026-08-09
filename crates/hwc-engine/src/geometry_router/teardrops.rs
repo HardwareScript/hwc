@@ -114,7 +114,7 @@ pub struct TeardropRequest<'a> {
     /// Teardrop configuration.
     pub config: &'a TeardropConfig,
     /// Resolution in nanometers.
-    pub resolution_nm: i64,
+    pub manufacturing_grid_nm: i64,
     /// Net handle for the trace.
     pub net_handle: crate::netlist::NetHandle,
 }
@@ -160,7 +160,7 @@ mod tests {
             goal_pin,
             trace_width_nm: 200_000,
             config: &config,
-            resolution_nm: 100_000,
+            manufacturing_grid_nm: 100_000,
             net_handle: NetHandle::new(1),
         });
     }
@@ -183,7 +183,7 @@ mod tests {
             goal_pin: Point3D::new(1_000_000, 0, 0),
             trace_width_nm: 200_000,
             config: &config,
-            resolution_nm: 100_000,
+            manufacturing_grid_nm: 100_000,
             net_handle: NetHandle::new(1),
         });
     }

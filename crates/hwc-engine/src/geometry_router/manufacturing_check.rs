@@ -45,12 +45,6 @@ pub enum MfgViolationType {
     ViaAspectRatio { ratio: f64, limit: f64 },
     /// Stacked microvia count per column exceeds lamination cycle limit.
     LaminationCycleExceed { count: u32, limit: u32 },
-    /// Solder mask expansion out of technology-specific range.
-    SolderMaskExpansion {
-        actual: i64,
-        min_allowed: i64,
-        max_allowed: i64,
-    },
     /// Via spans more than a single metal layer pair (ASIC layer-local).
     ViaLayerViolation { message: String },
 }
@@ -70,17 +64,6 @@ impl fmt::Display for MfgViolationType {
                     f,
                     "Lamination cycle count {} exceeds limit {}",
                     count, limit
-                )
-            }
-            MfgViolationType::SolderMaskExpansion {
-                actual,
-                min_allowed,
-                max_allowed,
-            } => {
-                write!(
-                    f,
-                    "Solder mask expansion {}nm outside allowed range [{}nm, {}nm]",
-                    actual, min_allowed, max_allowed
                 )
             }
             MfgViolationType::ViaLayerViolation { message } => {
@@ -166,37 +149,6 @@ pub fn check_lamination_cycles(
     }
 
     None
-}
-
-/// Check solder mask expansion rules.
-/// Validates that mask_expansion_nm is within [min_expansion_nm, max_expansion_nm].
-#[inline]
-pub fn check_solder_mask_expansion(
-    pad_diameter_nm: i64,
-    mask_expansion_nm: i64,
-    min_expansion_nm: i64,
-    max_expansion_nm: i64,
-) -> Option<ManufacturingViolation> {
-    if pad_diameter_nm <= 0 {
-        return None;
-    }
-
-    if mask_expansion_nm < min_expansion_nm || mask_expansion_nm > max_expansion_nm {
-        Some(ManufacturingViolation {
-            violation_type: MfgViolationType::SolderMaskExpansion {
-                actual: mask_expansion_nm,
-                min_allowed: min_expansion_nm,
-                max_allowed: max_expansion_nm,
-            },
-            location: (0, 0),
-            message: format!(
-                "Solder mask expansion {}nm outside range [{}nm, {}nm]",
-                mask_expansion_nm, min_expansion_nm, max_expansion_nm
-            ),
-        })
-    } else {
-        None
-    }
 }
 
 /// Check technology-specific via constraints.
@@ -328,31 +280,6 @@ mod tests {
                 assert_eq!(*limit, 3);
             }
             _ => panic!("Expected LaminationCycleExceed violation"),
-        }
-    }
-
-    #[test]
-    fn test_solder_mask_expansion_within_range() {
-        let v = check_solder_mask_expansion(300_000, 50_000, 25_000, 75_000);
-        assert!(v.is_none());
-    }
-
-    #[test]
-    fn test_solder_mask_expansion_outside_range() {
-        let v = check_solder_mask_expansion(300_000, 100_000, 25_000, 75_000);
-        assert!(v.is_some());
-        let v = v.expect("violation expected");
-        match &v.violation_type {
-            MfgViolationType::SolderMaskExpansion {
-                actual,
-                min_allowed,
-                max_allowed,
-            } => {
-                assert_eq!(*actual, 100_000);
-                assert_eq!(*min_allowed, 25_000);
-                assert_eq!(*max_allowed, 75_000);
-            }
-            _ => panic!("Expected SolderMaskExpansion violation"),
         }
     }
 

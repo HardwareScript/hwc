@@ -115,7 +115,7 @@ pub fn populate_material_database(
                     name: name.clone(),
                     symbol: material_def.symbol.clone().unwrap_or_default(),
                     description: material_def.description.clone().unwrap_or_default(),
-                    process: match material_def.process {
+                    process: match material_def.get_process() {
                         hwc_parser::ManufacturingProcess::DrilledPlated => {
                             hwc_materials::ManufacturingProcess::DrilledPlated
                         }
@@ -236,7 +236,7 @@ pub fn populate_material_database(
                     name: name.clone(),
                     symbol: material_def.symbol.clone().unwrap_or_default(),
                     description: material_def.description.clone().unwrap_or_default(),
-                    process: match material_def.process {
+                    process: match material_def.get_process() {
                         hwc_parser::ManufacturingProcess::DrilledPlated => {
                             hwc_materials::ManufacturingProcess::DrilledPlated
                         }
@@ -383,7 +383,7 @@ pub fn populate_material_database(
                     name: name.clone(),
                     symbol: material_def.symbol.clone().unwrap_or_default(),
                     description: material_def.description.clone().unwrap_or_default(),
-                    process: match material_def.process {
+                    process: match material_def.get_process() {
                         hwc_parser::ManufacturingProcess::DrilledPlated => {
                             hwc_materials::ManufacturingProcess::DrilledPlated
                         }
@@ -518,7 +518,7 @@ pub fn populate_material_database(
                     name: name.clone(),
                     symbol: material_def.symbol.clone().unwrap_or_default(),
                     description: material_def.description.clone().unwrap_or_default(),
-                    process: match material_def.process {
+                    process: match material_def.get_process() {
                         hwc_parser::ManufacturingProcess::DrilledPlated => {
                             hwc_materials::ManufacturingProcess::DrilledPlated
                         }

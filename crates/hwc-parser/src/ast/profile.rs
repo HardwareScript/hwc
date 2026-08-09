@@ -277,10 +277,6 @@ pub struct ManufacturingConstraints {
     pub ipc2221_k_external: Option<f64>,
     pub ipc2221_k_internal: Option<f64>,
     pub min_feature_size: Option<Measurement>,
-    pub solder_mask_expansion: Option<Measurement>,
-    /// Solder mask thickness (default: 20µm). Applied on outer surfaces.
-    /// Components mounted on top/bottom sit on the mask, not on copper.
-    pub solder_mask_thickness: Option<Measurement>,
     /// Number of segments used to approximate circular geometry (vias, pads,
     /// tubes, TSVs). Declared in the PDK profile — no compiler default. This
     /// is the single source of truth consumed by both geometry generation and
@@ -434,6 +430,14 @@ pub struct StackupLayer {
     /// trace segments. `None` means the field was not declared (legacy files
     /// default to `true` for backward compatibility).
     pub routable: Option<RoutableMode>,
+
+    /// Whether this layer is a mask/passivation layer (v0.2.1 Zero-Magic Architecture).
+    /// When `true`, the export engine treats this as a subtractive mask layer:
+    /// - Starts with full board coverage
+    /// - Uses Clipper2 Difference to punch openings for pads/vias
+    /// Replaces hardcoded solder mask logic. Supports PCB solder mask, ASIC
+    /// passivation, and flex coverlay without special cases.
+    pub is_mask: Option<bool>,
 }
 
 /// Export & Visualization constraints (v0.1.6: Anti-Aliasing Switch)

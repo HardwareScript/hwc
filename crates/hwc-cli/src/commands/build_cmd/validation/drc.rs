@@ -56,7 +56,7 @@ pub fn run_drc_check(
     use hwc_engine::design_rule_check::DesignRuleChecker;
 
     // Create constraint rulebook from the fabrication profile
-    let mut constraint_rulebook = ConstraintRulebook::new(space.resolution_nm);
+    let mut constraint_rulebook = ConstraintRulebook::new(space.manufacturing_grid_nm);
 
     // Load fabrication constraints from profile (v0.1.6: DRC Integration)
     if let Some(ref constraints) = space.fabrication_constraints {
@@ -82,7 +82,6 @@ pub fn run_drc_check(
             high_voltage_clearance_nm: constraints.clearance.high_voltage_nm,
             safety_factor: constraints.clearance.safety_factor,
             stackup,
-            solder_mask_expansion_nm: constraints.solder_mask_expansion_nm,
             technology: constraints.technology,
         };
 

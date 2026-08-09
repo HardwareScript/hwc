@@ -90,12 +90,6 @@ pub fn profile_to_constraints(
         .and_then(|m| m.ipc2221_k_internal)
         .unwrap_or(0.024);
 
-    let solder_mask_expansion_nm = profile
-        .manufacturing
-        .as_ref()
-        .and_then(|m| m.solder_mask_expansion.as_ref())
-        .map(measurement_to_nm);
-
     let circle_segments: u32 = profile
         .manufacturing
         .as_ref()
@@ -114,6 +108,29 @@ pub fn profile_to_constraints(
                 "manufacturing.circle_segments".into(),
             ))
         })?;
+
+    // v0.2.1: Manufacturing grid is derived from the PDK profile, never from a
+    // user-facing `resolution:` declaration. Prefers `track_pitch`, falls back
+    // to `min_feature_size`.
+    let manufacturing_grid_nm: i64 = profile
+        .manufacturing
+        .as_ref()
+        .and_then(|m| {
+            m.track_pitch
+                .as_ref()
+                .or_else(|| m.min_feature_size.as_ref())
+                .map(measurement_to_nm)
+        })
+        .ok_or_else(|| {
+            ConversionError::MissingProfileConstraint(
+                "manufacturing.track_pitch (or manufacturing.min_feature_size)".into(),
+            )
+        })?;
+    if manufacturing_grid_nm <= 0 {
+        return Err(ConversionError::InvalidProfileConstraint(
+            "manufacturing.track_pitch must be positive".into(),
+        ));
+    }
 
     let _low_voltage_threshold_v = profile
         .clearance
@@ -277,7 +294,6 @@ pub fn profile_to_constraints(
         thermal,
         stackup,
         bridges,
-        solder_mask_expansion_nm,
         circle_segments,
         technology: profile.technology.ok_or_else(|| {
             ConversionError::MissingProfileConstraint(
@@ -287,5 +303,6 @@ pub fn profile_to_constraints(
         layer_routability,
         max_local_route_length_nm,
         intents,
+        manufacturing_grid_nm,
     })
 }

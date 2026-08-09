@@ -24,35 +24,59 @@ pub fn create_space(
     Ok(space)
 }
 
-/// Resolve profile and extract solder mask thickness (library-driven, not hardcoded).
-pub fn resolve_solder_mask_thickness(
+/// Resolve the active profile for a space.
+pub fn resolve_profile(
     space_def: &hwc_parser::SpaceDefinition,
     symbol_table: &SymbolTable,
-    eval_context: &hwc_parser::EvaluationContext,
-) -> Result<(Option<hwc_parser::ProfileDefinition>, i64), IrError> {
-    let profile = space_def
+) -> Option<hwc_parser::ProfileDefinition> {
+    space_def
         .profile
         .as_ref()
         .and_then(|p| symbol_table.get_profile(p.as_str()).ok())
-        .cloned();
+        .cloned()
+}
 
-    let solder_mask_thickness_nm = profile
-        .as_ref()
-        .and_then(|p| p.manufacturing.as_ref())
-        .and_then(|m| m.solder_mask_thickness.as_ref())
+/// Resolve the manufacturing grid in nanometers from the PDK profile.
+///
+/// v0.2.1 (Bloat Purge Category 1.2): replaces the purged user-facing
+/// `resolution:` declaration. The profile is the single authority for
+/// manufacturing snapping. Prefers `manufacturing.track_pitch`, falling back to
+/// `manufacturing.min_feature_size`.
+pub fn resolve_manufacturing_grid_nm(
+    profile: Option<&hwc_parser::ProfileDefinition>,
+    symbol_table: &SymbolTable,
+    eval_context: &hwc_parser::EvaluationContext,
+) -> Result<i64, IrError> {
+    let manufacturing = profile.and_then(|p| p.manufacturing.as_ref());
+
+    let measurement = manufacturing
+        .and_then(|m| m.track_pitch.as_ref())
+        .or_else(|| manufacturing.and_then(|m| m.min_feature_size.as_ref()));
+
+    let grid_nm = measurement
         .map(|t| crate::ir::conversions::measurement_to_nm(t, symbol_table, eval_context))
         .transpose()
         .map_err(|e| IrError::InvalidRouteExpression {
-            expression: "solder_mask_thickness".into(),
+            expression: "manufacturing grid".into(),
             reason: e.to_string(),
         })?
         .ok_or_else(|| IrError::MissingAsicConstraint {
-            message: "PDK missing required 'manufacturing.solder_mask_thickness' constraint."
+            message: "PDK profile is missing a manufacturing grid.".into(),
+            hint: "Add 'manufacturing: { track_pitch: <value> }' (or 'min_feature_size') to your \
+                   profile. v0.2.1 removed the space-level 'resolution:' field; the profile is \
+                   now the single source of truth for manufacturing snapping."
                 .into(),
-            hint: "Add 'manufacturing: { solder_mask_thickness: <value> }' to your profile.".into(),
         })?;
 
-    Ok((profile, solder_mask_thickness_nm))
+    if grid_nm <= 0 {
+        return Err(IrError::MissingAsicConstraint {
+            message: format!("Manufacturing grid must be positive, got {}nm.", grid_nm),
+            hint: "Set 'manufacturing.track_pitch' to a positive measurement in your profile."
+                .into(),
+        });
+    }
+
+    Ok(grid_nm)
 }
 
 /// Create the stackup manager.
@@ -64,17 +88,11 @@ pub fn create_stackup_and_materials(
     profile: Option<&hwc_parser::ProfileDefinition>,
     symbol_table: &SymbolTable,
     eval_context: &hwc_parser::EvaluationContext,
-    resolution_nm: i64,
-    origin_z: hwc_parser::OriginZ,
-    solder_mask_thickness_nm: i64,
 ) -> Result<crate::ir::stackup_manager::StackupManager, IrError> {
     let stackup_manager = crate::ir::stackup_manager::StackupManager::new(
         profile.and_then(|prof| prof.stackup.as_ref()),
         symbol_table,
         eval_context,
-        resolution_nm,
-        origin_z,
-        solder_mask_thickness_nm,
     )?;
 
     if stackup_manager.layer_count() == 0 {
@@ -236,62 +254,4 @@ pub fn build_eval_context(
     }
 
     Ok(eval_context)
-}
-
-/// Generate solder mask layers if the profile specifies them.
-pub fn generate_solder_mask(
-    space: &mut hwc_engine::HardwareSpace,
-    solder_mask_thickness_nm: i64,
-    stackup_manager: &crate::ir::stackup_manager::StackupManager,
-) -> Result<(), IrError> {
-    if solder_mask_thickness_nm == 0 {
-        return Ok(());
-    }
-
-    let width_nm = space.dimensions.width_nm;
-    let height_nm = space.dimensions.height_nm;
-    let stackup_height_nm = stackup_manager.board_thickness_nm();
-
-    let has_solder_mask = space.entity_graph.get_substrate_layers().iter().any(|l| {
-        l.layer_type == hwc_engine::geometry_router::substrate_types::SubstrateLayerType::SolderMask
-    });
-
-    if has_solder_mask {
-        return Ok(());
-    }
-
-    let mask_material_id = space
-        .material_registry
-        .get_id("SolderMask")
-        .ok_or_else(|| IrError::UndeclaredMaterial {
-            material: "SolderMask".into(),
-        })?;
-
-    let top_mask_bbox = hwc_engine::geometry::BoundingBox::new(
-        hwc_engine::geometry::Point3D::new(0, 0, stackup_height_nm),
-        hwc_engine::geometry::Point3D::new(
-            width_nm,
-            height_nm,
-            stackup_height_nm + solder_mask_thickness_nm,
-        ),
-    );
-    space.entity_graph.add_substrate_layer(
-        mask_material_id,
-        hwc_engine::NetId::UNCONNECTED,
-        top_mask_bbox,
-        hwc_engine::geometry_router::substrate_types::SubstrateLayerType::SolderMask,
-    );
-
-    let bottom_mask_bbox = hwc_engine::geometry::BoundingBox::new(
-        hwc_engine::geometry::Point3D::new(0, 0, -solder_mask_thickness_nm),
-        hwc_engine::geometry::Point3D::new(width_nm, height_nm, 0),
-    );
-    space.entity_graph.add_substrate_layer(
-        mask_material_id,
-        hwc_engine::NetId::UNCONNECTED,
-        bottom_mask_bbox,
-        hwc_engine::geometry_router::substrate_types::SubstrateLayerType::SolderMask,
-    );
-
-    Ok(())
 }

@@ -19,7 +19,6 @@ pub fn place_substrate(
     space.substrate_material_id = material_id;
 
     let coord_ctx = CoordinateContext {
-        origin: ctx.origin,
         space_dimensions: &space.dimensions,
         symbol_table: ctx.symbol_table,
         eval_context: ctx.eval_context,
@@ -64,7 +63,6 @@ pub fn place_substrate(
     space.substrate_bbox = Some(physical_substrate_bbox);
 
     let z_ctx = CoordinateContext {
-        origin: ctx.origin,
         space_dimensions: &space.dimensions,
         symbol_table: ctx.symbol_table,
         eval_context: ctx.eval_context,

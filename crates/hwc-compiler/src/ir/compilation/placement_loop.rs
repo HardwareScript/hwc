@@ -30,7 +30,6 @@ pub fn execute_placement(
             stackup_manager: ctx.stackup_manager,
             collector: ctx.collector,
             profile: ctx.profile,
-            origin: ctx.origin,
             arena: ctx.arena,
         };
 
@@ -44,7 +43,6 @@ pub fn execute_placement(
                         bbox_tracker,
                         symbol_table: ctx.symbol_table,
                         eval_context: item_eval_context,
-                        origin: ctx.origin,
                         space_dimensions: &space.dimensions,
                         stackup_manager: ctx.stackup_manager,
                         profile: ctx.profile,
@@ -71,7 +69,6 @@ pub fn execute_placement(
                             bbox_tracker,
                             ctx.symbol_table,
                             item_eval_context,
-                            ctx.origin,
                             &space.dimensions,
                         )?;
 
@@ -213,7 +210,6 @@ pub fn execute_placement(
                             bbox_tracker,
                             ctx.symbol_table,
                             item_eval_context,
-                            ctx.origin,
                             &space.dimensions,
                         )?;
                     resolved_plane.from = Some(resolved_position);
@@ -243,7 +239,6 @@ pub fn execute_placement(
                             bbox_tracker,
                             ctx.symbol_table,
                             item_eval_context,
-                            ctx.origin,
                             &space.dimensions,
                         )?;
 
@@ -268,7 +263,6 @@ pub fn execute_placement(
                 crate::ir::placement::place_contact(crate::ir::placement::PlaceContactParams {
                     space,
                     contact: &resolved_contact,
-                    origin: ctx.origin,
                     symbol_table: ctx.symbol_table,
                     eval_context: item_eval_context,
                     stackup_manager: ctx.stackup_manager,
@@ -293,7 +287,6 @@ pub fn execute_placement(
                             bbox_tracker,
                             ctx.symbol_table,
                             item_eval_context,
-                            ctx.origin,
                             &space.dimensions,
                         )?;
                     resolved_component.position = Some(resolved_position);
@@ -320,7 +313,6 @@ pub fn execute_placement(
                     space_inst,
                     ctx.symbol_table,
                     item_eval_context,
-                    ctx.origin,
                     space,
                     ctx.unit_registry,
                     ctx.arena,

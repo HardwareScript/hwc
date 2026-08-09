@@ -57,7 +57,7 @@ impl GeometryRouter {
 
         self.build_entity_graph(entity_graph);
 
-        let track_pitch = self.resolution_nm;
+        let track_pitch = self.manufacturing_grid_nm;
         let max_clearance = self
             .constraints
             .fabrication
@@ -178,7 +178,7 @@ impl GeometryRouter {
                         let bounds = self.bounds;
                         let constraints = self.constraints.clone();
                         let layer_directions = self.layer_directions.clone();
-                        let resolution_nm = self.resolution_nm;
+                        let manufacturing_grid_nm = self.manufacturing_grid_nm;
                         let material_registry = self.material_registry.clone();
                         let copper_pours = self.copper_pours.clone();
                         let bounding_box_tracker = self.bounding_box_tracker.clone();
@@ -210,7 +210,7 @@ impl GeometryRouter {
                                 bounds,
                                 constraints,
                                 layer_directions,
-                                resolution_nm,
+                                manufacturing_grid_nm,
                                 material_registry,
                                 vias: Vec::new(),
                                 copper_pours,
@@ -316,7 +316,7 @@ impl GeometryRouter {
                         ),
                         constraints: self.constraints.clone(),
                         layer_directions: self.layer_directions.clone(),
-                        resolution_nm: self.resolution_nm,
+                        manufacturing_grid_nm: self.manufacturing_grid_nm,
                         material_registry: self.material_registry.clone(),
                         vias: Vec::new(),
                         copper_pours: Vec::new(),
@@ -459,7 +459,7 @@ impl GeometryRouter {
 
                             let constraints = self.constraints.clone();
                             let layer_directions = self.layer_directions.clone();
-                            let resolution_nm = self.resolution_nm;
+                            let manufacturing_grid_nm = self.manufacturing_grid_nm;
                             let material_registry = self.material_registry.clone();
                             let copper_pours = self.copper_pours.clone();
                             let config = self.config.clone();
@@ -481,7 +481,7 @@ impl GeometryRouter {
                                     ),
                                     constraints,
                                     layer_directions,
-                                    resolution_nm,
+                                    manufacturing_grid_nm,
                                     material_registry,
                                     vias: Vec::new(),
                                     copper_pours,

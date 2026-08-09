@@ -83,9 +83,9 @@ pub fn validate_and_register(
                         let substrate_min_z = substrate_bbox.min.z;
                         let substrate_max_z = substrate_bbox.max.z;
 
-                        let component_z_layer = (component_min_z / space.resolution_nm) as usize;
-                        let substrate_min_layer = (substrate_min_z / space.resolution_nm) as usize;
-                        let substrate_max_layer = (substrate_max_z / space.resolution_nm) as usize;
+                        let component_z_layer = (component_min_z / space.manufacturing_grid_nm) as usize;
+                        let substrate_min_layer = (substrate_min_z / space.manufacturing_grid_nm) as usize;
+                        let substrate_max_layer = (substrate_max_z / space.manufacturing_grid_nm) as usize;
 
                         let source = ctx.collector.source.as_str();
                         let original_line = source
@@ -261,23 +261,10 @@ pub fn validate_and_register(
 
                     bbox_tracker.register(pd.name.clone().into(), bbox, vp.untransformed_origin);
 
-                    let (min_y, max_y) = match ctx.origin.xy {
-                        hwc_parser::OriginXY::TL | hwc_parser::OriginXY::TR => {
-                            (vp.position.y - height_nm, vp.position.y)
-                        }
-                        hwc_parser::OriginXY::BL | hwc_parser::OriginXY::BR => {
-                            (vp.position.y, vp.position.y + height_nm)
-                        }
-                    };
-
-                    let (min_x, max_x) = match ctx.origin.xy {
-                        hwc_parser::OriginXY::TL | hwc_parser::OriginXY::BL => {
-                            (vp.position.x, vp.position.x + width_nm)
-                        }
-                        hwc_parser::OriginXY::TR | hwc_parser::OriginXY::BR => {
-                            (vp.position.x - width_nm, vp.position.x)
-                        }
-                    };
+                    // v0.2.1: Canonical Bottom-Left origin — X grows rightward
+                    // and Y grows upward from the placement position.
+                    let (min_y, max_y) = (vp.position.y, vp.position.y + height_nm);
+                    let (min_x, max_x) = (vp.position.x, vp.position.x + width_nm);
 
                     let engine_bbox = if vp.rotation_deg.abs() < 0.001 {
                         BoundingBox::new(
@@ -285,20 +272,8 @@ pub fn validate_and_register(
                             Point3D::new(max_x, max_y, vp.body_max_z),
                         )
                     } else {
-                        let (center_x, center_y) = match ctx.origin.xy {
-                            hwc_parser::OriginXY::TL => {
-                                (vp.position.x + width_nm / 2, vp.position.y - height_nm / 2)
-                            }
-                            hwc_parser::OriginXY::TR => {
-                                (vp.position.x - width_nm / 2, vp.position.y - height_nm / 2)
-                            }
-                            hwc_parser::OriginXY::BL => {
-                                (vp.position.x + width_nm / 2, vp.position.y + height_nm / 2)
-                            }
-                            hwc_parser::OriginXY::BR => {
-                                (vp.position.x - width_nm / 2, vp.position.y + height_nm / 2)
-                            }
-                        };
+                        let (center_x, center_y) =
+                            (vp.position.x + width_nm / 2, vp.position.y + height_nm / 2);
                         let half_w = width_nm / 2;
                         let half_h = height_nm / 2;
                         let corners = [
@@ -318,14 +293,7 @@ pub fn validate_and_register(
                             let rx = (*cx as f64 * cos_theta - *cy as f64 * sin_theta) as i64;
                             let ry = (*cx as f64 * sin_theta + *cy as f64 * cos_theta) as i64;
                             let gx = center_x + rx;
-                            let gy = match ctx.origin.xy {
-                                hwc_parser::OriginXY::TL | hwc_parser::OriginXY::TR => {
-                                    center_y - ry
-                                }
-                                hwc_parser::OriginXY::BL | hwc_parser::OriginXY::BR => {
-                                    center_y + ry
-                                }
-                            };
+                            let gy = center_y + ry;
                             final_min_x = final_min_x.min(gx);
                             final_max_x = final_max_x.max(gx);
                             final_min_y = final_min_y.min(gy);

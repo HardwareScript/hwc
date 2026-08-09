@@ -52,7 +52,7 @@ pub fn execute(input: PathBuf, _build_dir: PathBuf) -> Result<()> {
     println!("📊 Analyzing design...");
 
     // Build constraint rulebook from fabrication profile
-    let mut constraint_rulebook = ConstraintRulebook::new(space.resolution_nm);
+    let mut constraint_rulebook = ConstraintRulebook::new(space.manufacturing_grid_nm);
 
     if let Some(ref constraints) = space.fabrication_constraints {
         use hwc_engine::constraint_manager::{FabricationConstraints, StackupInfo};
@@ -76,7 +76,6 @@ pub fn execute(input: PathBuf, _build_dir: PathBuf) -> Result<()> {
             high_voltage_clearance_nm: constraints.clearance.high_voltage_nm,
             safety_factor: constraints.clearance.safety_factor,
             stackup,
-            solder_mask_expansion_nm: constraints.solder_mask_expansion_nm,
             technology: constraints.technology,
         };
 

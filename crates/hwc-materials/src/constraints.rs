@@ -90,8 +90,6 @@ pub struct ConstraintSet {
     pub thermal: Option<ThermalConstraints>,
     pub stackup: Option<StackupConstraints>,
     pub bridges: Vec<BridgeRule>, // v0.1.7: Multi-material bridges
-    /// Solder mask expansion in nanometers (v0.1.7)
-    pub solder_mask_expansion_nm: Option<i64>,
     /// Number of segments used to approximate circular geometry (vias, pads,
     /// tubes, TSVs). Sourced from `manufacturing.circle_segments` in the PDK
     /// profile. No compiler default — must be declared.
@@ -109,6 +107,14 @@ pub struct ConstraintSet {
     /// User-declared routing intents (CIR Phase 2.2).
     /// Replaces hardcoded `RoutingIntent::clock()` etc. with table-driven lookup.
     pub intents: Vec<RoutingIntent>,
+    /// Manufacturing grid in nanometers (v0.2.1).
+    ///
+    /// The single source of truth for coordinate snapping, router track pitch,
+    /// DRC spacing, and circular geometry fidelity. Derived from the PDK
+    /// profile (`manufacturing.track_pitch`, falling back to
+    /// `manufacturing.min_feature_size`). Replaces the purged user-facing
+    /// `resolution:` declaration so the profile is the sole manufacturing authority.
+    pub manufacturing_grid_nm: i64,
 }
 
 /// Stackup constraints for impedance-controlled routing

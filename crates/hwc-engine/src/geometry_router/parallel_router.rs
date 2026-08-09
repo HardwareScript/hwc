@@ -13,15 +13,15 @@ use crate::netlist::NetlistArena;
 
 pub struct ParallelRouter {
     constraints: ConstraintRulebook,
-    resolution_nm: i64,
+    manufacturing_grid_nm: i64,
 }
 
 impl ParallelRouter {
     pub fn new(constraints: ConstraintRulebook) -> Self {
-        let resolution_nm = constraints.resolution_nm;
+        let manufacturing_grid_nm = constraints.manufacturing_grid_nm;
         Self {
             constraints,
-            resolution_nm,
+            manufacturing_grid_nm,
         }
     }
 
@@ -35,14 +35,14 @@ impl ParallelRouter {
         // owns its domain data (no Arc/Mutex needed) and there is no work-stealing
         // overhead for small task counts.
         let constraints = &self.constraints;
-        let resolution_nm = self.resolution_nm;
+        let manufacturing_grid_nm = self.manufacturing_grid_nm;
         std::thread::scope(|s| {
             let mut handles = Vec::new();
 
             for domain in domains {
                 let handle = s.spawn(move || {
                     let local_routes =
-                        Self::route_internal_nets(&domain, netlist, constraints, resolution_nm);
+                        Self::route_internal_nets(&domain, netlist, constraints, manufacturing_grid_nm);
 
                     let grid_chunk = EntityGraph::new();
 
@@ -67,7 +67,7 @@ impl ParallelRouter {
         domain: &RoutingDomain,
         netlist: &NetlistArena,
         _constraints: &ConstraintRulebook,
-        resolution_nm: i64,
+        manufacturing_grid_nm: i64,
     ) -> Vec<Route> {
         let mut routes = Vec::new();
 
@@ -118,7 +118,7 @@ impl ParallelRouter {
 
         let topo_router = TopologicalRouter::new(
             fab.min_trace_width_nm,
-            resolution_nm,
+            manufacturing_grid_nm,
             fab.min_trace_spacing_nm,
         );
 

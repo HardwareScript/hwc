@@ -26,19 +26,11 @@ pub enum IrError {
         span: miette::SourceSpan,
     },
 
-    #[error("Space origin not specified for '{space_name}'")]
-    #[diagnostic(
-        code(C32),
-        url("https://docs.hw-script.org/errors/C32"),
-        help("{hint}")
-    )]
-    MissingOrigin { space_name: String, hint: String },
-
     #[error("Space grid not specified")]
     #[diagnostic(
         code(C33),
         url("https://docs.hw-script.org/errors/C33"),
-        help("Add 'grid: <x> by <y> by <z>' or 'resolution: <step>' to the space definition")
+        help("Add 'grid: <x> by <y> by <z>' to the space definition")
     )]
     MissingGrid,
 
@@ -154,14 +146,6 @@ pub enum IrError {
         help("The {} waypoint at {}mm is {} away from pin {} at {}mm. Manual waypoints must start and end at the exact pin positions.", .0.waypoint_type, .0.waypoint_pos, .0.distance, .0.pin_name, .0.pin_pos)
     )]
     DisconnectedNet(Box<DisconnectedNetDetails>),
-
-    #[error("Invalid resolution: {value} nm")]
-    #[diagnostic(
-        code(C39),
-        url("https://docs.hw-script.org/errors/C39"),
-        help("Resolution must be a positive value, e.g., `resolution: 1nm`.")
-    )]
-    InvalidResolution { value: i64 },
 
     #[error("Profile '{name}' not found")]
     #[diagnostic(
@@ -797,6 +781,15 @@ pub enum IrError {
         to_material: CompactString,
         hint: String,
     },
+
+    /// Device definition lookup failed during device registration.
+    #[error("Device registration failed: {message}")]
+    #[diagnostic(
+        code(D02),
+        url("https://docs.hw-script.org/errors/D02"),
+        help("Device bindings in the layout do not match any device definition in the symbol table.")
+    )]
+    DeviceRegistryError { message: String },
 
     /// Layer connection database error.
     #[error("Layer connection database error: {message}")]

@@ -312,12 +312,12 @@ impl AnalyticTrace {
     ///
     /// # Arguments
     /// * `config` - Teardrop configuration.
-    /// * `resolution_nm` - Resolution in nanometers.
+    /// * `manufacturing_grid_nm` - Resolution in nanometers.
     /// * `net_handle` - Net handle for the trace.
     pub fn apply_teardrops_to_trace(
         &self,
         config: &crate::geometry_router::TeardropConfig,
-        _resolution_nm: i64,
+        _manufacturing_grid_nm: i64,
         _net_handle: crate::netlist::NetHandle,
     ) -> Option<Vec<LineSegment>> {
         if !config.enabled || self.segments.is_empty() {

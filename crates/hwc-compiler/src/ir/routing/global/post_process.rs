@@ -256,7 +256,7 @@ impl<'a> AutoRouter<'a> {
     }
 
     fn resolve_trace_thickness(&self, result: &RouteResult) -> Result<i64, IrError> {
-        let default_thickness = self.space.resolution_nm;
+        let default_thickness = self.space.manufacturing_grid_nm;
         let sample_z = result
             .paths
             .values()

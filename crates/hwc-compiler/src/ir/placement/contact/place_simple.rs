@@ -178,7 +178,6 @@ pub(super) fn place_etched_via(
             clearance_nm,
             is_tented: true,
             pad_diameter_nm: diameter_nm,
-            solder_mask_expansion_nm: 75_000,
         });
     let _ = contact_name_debug;
     Ok(())
@@ -190,7 +189,6 @@ pub(super) fn place_deposited_via(
 ) -> Result<(), IrError> {
     let contact = ctx.contact;
     let contact_name_debug = &ctx.contact_name_debug;
-    let solder_mask_expansion_nm = super::resolve::resolve_solder_mask_expansion(space)?;
     println!(
         "[PLACE_CONTACT] '{}' Deposited path: drilling via hole at bbox=({},{}-{},{}) dia={}",
         contact_name_debug,
@@ -209,7 +207,6 @@ pub(super) fn place_deposited_via(
             clearance_nm: ctx.clearance_nm,
             is_tented: ctx.is_tented,
             pad_diameter_nm: ctx.diameter_nm,
-            solder_mask_expansion_nm,
         });
 
     if let Some(path) = &ctx.contour {

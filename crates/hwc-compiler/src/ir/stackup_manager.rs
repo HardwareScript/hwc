@@ -26,10 +26,6 @@ pub struct StackupManager {
     /// Set of layer names that are conductive (Conductor or Semiconductor).
     /// v0.1.8: Determined at construction by looking up materials in the Symbol Table.
     conductive_layers: std::collections::HashSet<String>,
-
-    /// Solder mask thickness loaded dynamically from the active profile.
-    /// Used to offset component mounting planes so bodies sit on the mask, not on copper.
-    pub solder_mask_thickness_nm: i64,
 }
 
 impl StackupManager {
@@ -41,24 +37,20 @@ impl StackupManager {
             ordered_layers: Vec::new(),
             layer_materials: HashMap::new(),
             conductive_layers: std::collections::HashSet::new(),
-            solder_mask_thickness_nm: 0, // Opt-in: disabled unless profile declares solder_mask_thickness
         }
     }
 
     /// Creates a new StackupManager from an optional `LayerStackup`.
     ///
-    /// The stackup is assumed to be defined **top-to-bottom** in the source file
-    /// (common in PCB design: l1 is the top copper layer).
-    ///
-    /// The manager inverts this so that `Z=0` is at the bottom of the board,
-    /// matching the board's coordinate system.
+    /// v0.2.1 (Bloat Purge Categories 1 & 7): The stackup is a pure, ordered
+    /// bottom-to-top sandwich of material layers. Layer 0 starts at `Z = 0`
+    /// (the absolute floor) and each subsequent layer stacks upward. There are
+    /// no special cases: solder mask, coverlay, and passivation are ordinary
+    /// declared layers in `profile.stackup`.
     pub fn new(
         stackup_opt: Option<&LayerStackup>,
         symbol_table: &SymbolTable,
         eval_context: &hwc_parser::EvaluationContext,
-        _resolution_nm: i64,
-        origin_z: hwc_parser::OriginZ,
-        solder_mask_thickness_nm: i64,
     ) -> Result<Self, IrError> {
         let mut layer_start_z_nm = HashMap::new();
         let mut layer_thickness_nm = HashMap::new();
@@ -67,7 +59,7 @@ impl StackupManager {
         let mut conductive_layers = std::collections::HashSet::new();
 
         if let Some(stackup) = stackup_opt {
-            // Step 1: Resolve all thicknesses and calculate total height
+            // Step 1: Resolve all thicknesses and conductivity
             let mut resolved: Vec<(String, i64, bool, String)> = Vec::new();
 
             for layer in &stackup.layers {
@@ -107,41 +99,19 @@ impl StackupManager {
                 ));
             }
 
-            // Step 2: Assign absolute Z positions
-            // v0.1.7: The first layer in the stackup block is the PHYSICAL BOTTOM (Z=0).
-            // This follows the "Foundation-First" principle for both ASIC and PCB.
-            match origin_z {
-                hwc_parser::OriginZ::Bottom => {
-                    // Z=0 is the bottom of the board.
-                    // The first layer in the file is the physical bottom.
-                    let mut current_z = 0;
-                    for (name, thickness_nm, is_conductive, material) in resolved {
-                        layer_start_z_nm.insert(name.clone(), current_z);
-                        layer_thickness_nm.insert(name.clone(), thickness_nm);
-                        layer_materials.insert(name.clone(), material);
-                        ordered_layers.push(name.clone());
-                        if is_conductive {
-                            conductive_layers.insert(name);
-                        }
-                        current_z += thickness_nm;
-                    }
+            // Step 2: Assign absolute Z positions, bottom-up from Z=0.
+            // The first layer in the stackup block is the PHYSICAL BOTTOM.
+            // ZERO SPECIAL CASES. ZERO MAGIC.
+            let mut current_z = 0i64;
+            for (name, thickness_nm, is_conductive, material) in resolved {
+                layer_start_z_nm.insert(name.clone(), current_z);
+                layer_thickness_nm.insert(name.clone(), thickness_nm);
+                layer_materials.insert(name.clone(), material);
+                ordered_layers.push(name.clone());
+                if is_conductive {
+                    conductive_layers.insert(name);
                 }
-                hwc_parser::OriginZ::Top => {
-                    // Z=0 is the top of the board.
-                    // The first layer in the file is the physical bottom, so it's at Z = -total_thickness.
-                    let total_height: i64 = resolved.iter().map(|(_, t, _, _)| t).sum();
-                    let mut current_z = -total_height;
-                    for (name, thickness_nm, is_conductive, material) in resolved {
-                        layer_start_z_nm.insert(name.clone(), current_z);
-                        layer_thickness_nm.insert(name.clone(), thickness_nm);
-                        layer_materials.insert(name.clone(), material);
-                        ordered_layers.push(name.clone());
-                        if is_conductive {
-                            conductive_layers.insert(name);
-                        }
-                        current_z += thickness_nm;
-                    }
-                }
+                current_z += thickness_nm;
             }
         }
 
@@ -151,35 +121,24 @@ impl StackupManager {
             ordered_layers,
             layer_materials,
             conductive_layers,
-            solder_mask_thickness_nm,
         })
     }
 
-    /// Returns the total board thickness in nm.
+    /// Returns the total board thickness in nm (sum of ALL stackup layers).
     pub fn board_thickness_nm(&self) -> i64 {
         self.layer_thickness_nm.values().sum()
     }
 
     /// Get the absolute physical Z-boundary of the board for a mounting side.
     ///
-    /// Accounts for the solder mask layer applied on outer surfaces.
-    /// The mask thickness is loaded dynamically from the active profile's
-    /// `manufacturing.solder_mask_thickness` (default: 20µm).
-    /// Components mounted on top/bottom sit on the mask, not on copper.
+    /// v0.2.1: Protective coatings (solder mask, coverlay, passivation) are
+    /// ordinary stackup layers, so the surfaces are simply the stackup bounds.
+    /// Z = 0 is the absolute floor — no negative coordinates.
     pub fn board_surface_z(&self, side: MountingSide) -> i64 {
         match side {
-            MountingSide::Top => {
-                // Top-mounted components sit on top of the top solder mask
-                self.board_thickness_nm() + self.solder_mask_thickness_nm
-            }
-            MountingSide::Bottom => {
-                // Bottom-mounted components sit underneath the bottom solder mask
-                -self.solder_mask_thickness_nm
-            }
-            MountingSide::Embedded => {
-                // Custom logic for cavities (defaults to middle layer)
-                self.board_thickness_nm() / 2
-            }
+            MountingSide::Top => self.board_thickness_nm(),
+            MountingSide::Bottom => 0,
+            MountingSide::Embedded => self.board_thickness_nm() / 2,
         }
     }
 

@@ -189,8 +189,21 @@ impl super::super::Parser {
 
             match field_name.as_str() {
                 "symbol" => {
-                    match self.expect_string() {
-                        Ok(s) => symbol = Some(s),
+                    // v0.2.1: Reject quoted string literals. The symbol must be a
+                    // bare identifier (e.g. `symbol: Poly`, not `symbol: "Poly"`).
+                    if self.check(&Token::String(Default::default())) {
+                        collector.report(ParseError::General {
+                            span: span_to_source_span(&self.current_span()),
+                            message: "Material symbol must be a bare identifier (no quotes). \
+                                      Example: symbol: Poly (not symbol: \"Poly\")"
+                                .into(),
+                        });
+                        self.advance(); // consume the string token to recover
+                        self.skip_whitespace();
+                        continue;
+                    }
+                    match self.expect_identifier() {
+                        Ok(id) => symbol = Some(id.name.to_string()),
                         Err(e) => collector.report(e),
                     }
                     self.skip_whitespace();
@@ -231,20 +244,9 @@ impl super::super::Parser {
 
         let end_pos = self.previous_span().end;
 
-        // NO DEFAULTS: Process MUST be explicitly declared
-        let process = match process {
-            Some(p) => p,
-            None => {
-                collector.report(ParseError::General {
-                    span: span_to_source_span(&Span::new(start_pos, end_pos)),
-                    message: format!(
-                        "Material '{}' is missing required 'process' field. Manufacturing process must be explicitly declared - no defaults are permitted.",
-                        name.as_str()
-                    ).into(),
-                });
-                return None;
-            }
-        };
+        // v0.2.1: `process:` is now optional (Option<ManufacturingProcess>). When
+        // omitted, `MaterialDefinition::get_process()` defaults to `Deposited`.
+        // No mandatory-field validation is performed here.
 
         // Validate required fields
         let category = match category {

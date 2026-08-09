@@ -12,13 +12,13 @@ use crate::geometry::{BoundingBox, Point3D};
 ///
 /// # Arguments
 /// * `layout` - The layout block containing component placements
-/// * `resolution_nm` - The snapping resolution in nanometers
+/// * `manufacturing_grid_nm` - The snapping resolution in nanometers
 ///
 /// # Returns
 /// A `BoundingBox` that encompasses all components in the layout
 pub fn calculate_module_bounding_box(
     layout: &hwc_parser::ModuleLayoutBlock,
-    resolution_nm: i64,
+    manufacturing_grid_nm: i64,
     arena: &hwc_parser::ast::arena::AstArena,
 ) -> BoundingBox {
     // Extract all placements from layout statements (flattening for loops and if statements)
@@ -34,7 +34,7 @@ pub fn calculate_module_bounding_box(
     if placements.is_empty() {
         return BoundingBox::new(
             Point3D::new(0, 0, 0),
-            Point3D::new(resolution_nm, resolution_nm, resolution_nm),
+            Point3D::new(manufacturing_grid_nm, manufacturing_grid_nm, manufacturing_grid_nm),
         );
     }
 
@@ -52,7 +52,7 @@ pub fn calculate_module_bounding_box(
     // Convert to nanometers
     let first_x = first_x_val.to_nanometers().unwrap_or(0);
     let first_y = first_y_val.to_nanometers().unwrap_or(0);
-    let first_z = first_z_val.as_integer().unwrap_or(0) * resolution_nm;
+    let first_z = first_z_val.as_integer().unwrap_or(0) * manufacturing_grid_nm;
 
     let mut min_x = first_x;
     let mut max_x = first_x;
@@ -71,7 +71,7 @@ pub fn calculate_module_bounding_box(
 
         let x = x_val.to_nanometers().unwrap_or(0);
         let y = y_val.to_nanometers().unwrap_or(0);
-        let z = z_val.as_integer().unwrap_or(0) * resolution_nm;
+        let z = z_val.as_integer().unwrap_or(0) * manufacturing_grid_nm;
 
         min_x = min_x.min(x);
         max_x = max_x.max(x);

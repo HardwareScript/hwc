@@ -198,15 +198,3 @@ pub(super) fn resolve_clearance(space: &HardwareSpace) -> Result<i64, IrError> {
             hint: "Add a 'trace:' block to your profile with explicit min_spacing.\n\nExample:\n  trace:\n    min_spacing: 200nm".into(),
         })
 }
-
-pub(super) fn resolve_solder_mask_expansion(space: &HardwareSpace) -> Result<i64, IrError> {
-    space
-        .fabrication_constraints
-        .as_ref()
-        .and_then(|c| c.solder_mask_expansion_nm)
-        .ok_or_else(|| IrError::MissingAsicConstraint {
-            message: "PDK missing required 'solder_mask_expansion_nm' constraint".into(),
-            hint: "Add 'solder_mask_expansion_nm: <value>' to your profile manufacturing block."
-                .into(),
-        })
-}

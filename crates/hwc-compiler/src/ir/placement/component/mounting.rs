@@ -21,7 +21,6 @@ pub fn resolve_mounting_and_elevation(
     eval_context: &hwc_parser::EvaluationContext,
     stackup_manager: &StackupManager,
     mut position: Point3D,
-    origin: hwc_parser::OriginPoint,
 ) -> Result<MountingResult, IrError> {
     // Check if we're in ASIC mode (strict validation)
     let is_asic = space
@@ -49,13 +48,9 @@ pub fn resolve_mounting_and_elevation(
 
     // v0.1.7: Resolve elevation from 'on layer:' or 'on z:' prepositional syntax
     if let Some(elevation) = &component.elevation {
-        let z_user_nm = stackup_manager.resolve_elevation(elevation, symbol_table, eval_context)?;
-        let final_z = crate::ir::conversions::apply_z_origin_physical(
-            z_user_nm,
-            origin.z,
-            space.dimensions.depth_nm,
-        );
-        position.z = final_z;
+        // v0.2.1: Z is canonically bottom-up, so the resolved elevation is
+        // already the final absolute Z.
+        position.z = stackup_manager.resolve_elevation(elevation, symbol_table, eval_context)?;
     } else {
         return Err(if is_asic {
             IrError::MissingAsicConstraintWithSpan {

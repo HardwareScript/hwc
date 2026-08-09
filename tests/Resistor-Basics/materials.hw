@@ -1,143 +1,62 @@
-# materials.hw - Resistor-Basics Materials
-# Physical properties based on SkyWater SKY130 PDK specifications
-# Source: https://skywater-pdk.readthedocs.io/en/main/rules/device-details.html
-# Device: sky130_fd_pr__res_high_po (P+ Poly Precision Resistor)
+# materials.hw - SKY130 Material Definitions
 import * from @std/primitives/units
 
-# Polysilicon - P+ doped precision resistor material
-# Used for polyres layer (high-accuracy resistors)
-# 
-# SkyWater SKY130 P+ Poly Precision Resistor Specifications:
-# ============================================================
-# Device Model: sky130_fd_pr__res_high_po_0p35, 0p69, 1p41, 2p85, 5p73
-# Sheet Resistance: ~320-350 Ω/□ (typical across all widths)
-# E-test Data (20 squares, 0.35μm width): 7888Ω (typ), 6691-9086Ω (min-max)
-#   → Implies R_sheet = 7888Ω / 20 = 394.4 Ω/□ (measured)
-#   → Using 350 Ω/□ as conservative typical value
-#
-# Physical Layer Thickness: ~180-200nm (standard poly gate thickness)
-# Using 200nm for calculations: R_sheet = ρ/t → ρ = 350 Ω/□ × 200nm = 7×10⁻⁵ Ω·m
-#
-# Notes:
-# - P+ poly (high-sheet-resistance) for precision analog resistors
-# - N+ poly generic (sky130_fd_pr__res_generic_po) is only 48.2 Ω/□
-# - SiliWiz tutorial uses simplified 400 Ω/□ for education
-# - This implementation uses foundry-accurate 350 Ω/□ for tapeout readiness
-#
-# Reference: SkyWater SKY130 PDK Device Details § "P+ poly precision resistors"
 export material Polysilicon:
     category: conductor
-    symbol: "Poly"
+    symbol: Poly
     process: deposited
     properties:
-        color: "#FF6060"  # Red
+        color: "#FF6060"
         metallic: 0.3
         roughness: 0.8
-        opacity: 1.0      # Opaque - polysilicon is not transparent
-        resistivity: 7e-5ohm_m  # SKY130 P+ poly: 350 Ω/□ × 200nm thickness
+        resistivity: 7e-5ohm_m
         thermal_conductivity: 30.0W_mK
         max_current_density: 1e2A_mm2
 
-# Aluminum - Low resistance metal for interconnects
-# Used for metal1 layer (contacts and routing)
-#
-# SkyWater SKY130 Metal-1 Specifications:
-# ========================================
-# Material: Aluminum (Al)
-# Sheet Resistance (RSM1): 0.125 Ω/□ (typ), 0.105-0.145 Ω/□ (min-max)
-# Thickness: ~840nm (Metal-1 through Metal-4 in SKY130)
-# Resistivity: ρ = R_sheet × t = 0.125 Ω/□ × 840nm ≈ 1.05×10⁻⁷ Ω·m
-#   (Note: Pure aluminum is 2.82×10⁻⁸ Ω·m; process aluminum includes grain boundaries)
-#
-# Reference: SkyWater SKY130 PDK § "Generic resistors" RSM1 specification
 export material Aluminum:
     category: conductor
-    symbol: "Al"
+    symbol: Al
     process: deposited
     properties:
-        color: "#C0C0C0"  # Silver
-        opacity: 1.0      # Opaque - metals are not transparent
+        color: "#C0C0C0"
         metallic: 0.8
         roughness: 0.2
-        resistivity: 2.82e-8ohm_m  # Pure aluminum (process value ~1.05e-7ohm_m)
+        resistivity: 2.82e-8ohm_m
         thermal_conductivity: 237.0W_mK
         max_current_density: 1e3A_mm2
 
-# Tungsten - Via fill material
-# Used for connecting polyres to metal1 through licon (local interconnect contacts)
-#
-# SkyWater SKY130 Via/Contact Fill:
-# ==================================
-# Material: Tungsten (W) - standard via fill in modern CMOS
-# Typical via contact resistance dominated by interface, not bulk W
-# Pure tungsten: 5.6×10⁻⁸ Ω·m
-# Process tungsten (with barriers): higher effective resistivity
-#
-# Note: SKY130 uses licon (local interconnect contact) for poly-to-metal1
-# Contact resistance: dominated by silicide interface, not tungsten fill
 export material Tungsten:
     category: conductor
-    symbol: "W"
+    symbol: W
     process: deposited
     properties:
-        color: "#8080FF"  # Light Blue
-        opacity: 1.0      # Opaque - metals are not transparent
+        color: "#8080FF"
         metallic: 0.7
         roughness: 0.3
-        resistivity: 5.6e-8ohm_m  # Pure tungsten
+        resistivity: 5.6e-8ohm_m
         thermal_conductivity: 173.0W_mK
         max_current_density: 1e4A_mm2
 
-# Titanium Silicide - Contact interface material
-# Forms ohmic contact between polysilicon and tungsten via
-#
-# SkyWater SKY130 Silicide Process:
-# ==================================
-# Material: TiSi₂ (Titanium Disilicide) - self-aligned silicide (salicide)
-# Process: Forms at poly/diffusion surfaces to reduce contact resistance
-# Typical thickness: 5-10nm
-# Sheet resistance reduction: lowers poly contact resistance dramatically
-# Resistivity: ~1.5×10⁻⁷ Ω·m (typical for TiSi₂ thin films)
-#
-# Note: In SKY130, silicide forms automatically at licon contact regions
 export material Titanium_Silicide:
     category: conductor
-    symbol: "TiSi2"
+    symbol: TiSi2
     process: deposited
     properties:
-        color: "#404040"  # Very Dark Grey
-        opacity: 1.0      # Opaque - metallic compounds are not transparent
-        resistivity: 1.5e-7ohm_m  # Titanium disilicide thin film
+        color: "#404040"
+        resistivity: 1.5e-7ohm_m
         thermal_conductivity: 30.0W_mK
         max_current_density: 5e3A_mm2
 
-# Silicon Dioxide - Dielectric insulator
-# Inter-layer dielectric (ILD) between polysilicon and metal layers
-#
-# SkyWater SKY130 ILD Specifications:
-# ====================================
-# Material: SiO₂ (deposited oxide, typically PECVD or HDP-CVD)
-# Dielectric constant: εᵣ = 3.9 (thermal oxide)
-# Typical thickness between poly and metal1: ~300-400nm
-# Optically transparent in visible spectrum
-#
-# Reference: Standard CMOS ILD properties
 export material Silicon_Dioxide:
     category: insulator
-    symbol: "SiO2"
-    process: deposited
+    symbol: SiO2
     properties:
-        color: "#E0E8FF"  # Light blue-white
-        opacity: 0.05     # Nearly transparent - SiO2 is glass-like
-        relative_permittivity: 3.9  # Standard SiO₂ dielectric constant
+        color: "#E0E8FF"
+        opacity: 0.05
+        relative_permittivity: 3.9
 
-# Air - Empty space
-# Completely transparent
 export material Air:
     category: insulator
-    symbol: "Air"
-    process: deposited
+    symbol: Air
     properties:
-        color: "#F0F4FF"
-        opacity: 0.0      # Fully transparent - air is invisible
         relative_permittivity: 1.0

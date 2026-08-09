@@ -156,7 +156,6 @@ pub fn process_routes(
                 crate::ir::routing::route_trace(
                     space,
                     route,
-                    ctx.origin,
                     ctx.symbol_table,
                     item_eval_context,
                     ctx.stackup_manager,

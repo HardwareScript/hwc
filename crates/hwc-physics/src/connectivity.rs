@@ -16,6 +16,7 @@ use compact_str::CompactString;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 /// Type of substrate layer for proper physics validation (v0.1.8)
+/// v0.2.1: Removed SolderMask - mask layers are now ordinary stackup layers
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SubstrateLayerType {
     /// 2D copper pour (pad, plane, filled region)
@@ -24,8 +25,6 @@ pub enum SubstrateLayerType {
     Contact,
     /// 3D dielectric substrate (FR4, core, prepreg)
     Substrate,
-    /// Solder mask coating on top/bottom board faces
-    SolderMask,
 }
 
 /// Substrate layer metadata for connectivity checking.

@@ -52,7 +52,7 @@ impl GeometryRouter {
         radius_nm: i64,
         z_nm: i64,
     ) -> bool {
-        let half_thickness = self.resolution_nm / 2;
+        let half_thickness = self.manufacturing_grid_nm / 2;
         let bbox = BoundingBox::new(
             Point3D::new(
                 center.0 - radius_nm,
@@ -147,7 +147,7 @@ impl GeometryRouter {
         z_nm: i64,
         net_id: crate::netlist::NetId,
     ) {
-        let half_thickness = self.resolution_nm / 2;
+        let half_thickness = self.manufacturing_grid_nm / 2;
         let bbox = BoundingBox::new(
             Point3D::new(
                 center.0 - radius_nm,
@@ -189,7 +189,7 @@ impl GeometryRouter {
         radius_nm: i64,
         z_nm: i64,
     ) {
-        let half_thickness = self.resolution_nm / 2;
+        let half_thickness = self.manufacturing_grid_nm / 2;
         let bbox = BoundingBox::new(
             Point3D::new(
                 center.0 - radius_nm,

@@ -9,7 +9,7 @@ use crate::constraint_solver::ConstraintSolver;
 use crate::ir::errors::IrError;
 use compact_str::CompactString;
 use hwc_engine::geometry::{BoundingBox, Point3D};
-use hwc_parser::{OriginPoint, RegionDefinition};
+use hwc_parser::RegionDefinition;
 
 /// Parameters for `register_region` to avoid a long positional parameter list.
 ///
@@ -21,7 +21,6 @@ pub struct RegisterRegionParams<'a> {
     pub bbox_tracker: &'a mut BoundingBoxTracker,
     pub symbol_table: &'a crate::SymbolTable,
     pub eval_context: &'a hwc_parser::EvaluationContext,
-    pub origin: OriginPoint,
     pub space_dimensions: &'a hwc_engine::Dimensions,
     pub stackup_manager: &'a crate::ir::stackup_manager::StackupManager,
     pub profile: Option<&'a hwc_parser::ProfileDefinition>,
@@ -33,7 +32,6 @@ struct RegionResolveCtx<'a> {
     bbox_tracker: &'a BoundingBoxTracker,
     symbol_table: &'a crate::SymbolTable,
     eval_context: &'a hwc_parser::EvaluationContext,
-    origin: OriginPoint,
     space_dimensions: &'a hwc_engine::Dimensions,
     #[allow(dead_code)]
     stackup_manager: &'a crate::ir::stackup_manager::StackupManager,
@@ -48,7 +46,6 @@ pub fn register_region(params: RegisterRegionParams) -> Result<(), IrError> {
         bbox_tracker,
         symbol_table,
         eval_context,
-        origin,
         space_dimensions,
         stackup_manager,
         profile,
@@ -62,7 +59,6 @@ pub fn register_region(params: RegisterRegionParams) -> Result<(), IrError> {
         bbox_tracker,
         symbol_table,
         eval_context,
-        origin,
         space_dimensions,
         stackup_manager,
         profile,
@@ -156,7 +152,6 @@ fn resolve_region_from_constraints(ctx: &RegionResolveCtx) -> Result<Point3D, Ir
         bbox_tracker,
         symbol_table,
         eval_context,
-        origin,
         space_dimensions,
         ..
     } = *ctx;
@@ -191,13 +186,8 @@ fn resolve_region_from_constraints(ctx: &RegionResolveCtx) -> Result<Point3D, Ir
         (0, 0)
     };
 
-    // Derive origin-direction multipliers. These drive the unified formula lookup.
-    let (x_multiplier, y_multiplier) = match origin.xy {
-        hwc_parser::OriginXY::BL => (1i64, 1i64),
-        hwc_parser::OriginXY::TL => (1, -1),
-        hwc_parser::OriginXY::BR => (-1, 1),
-        hwc_parser::OriginXY::TR => (-1, -1),
-    };
+    // v0.2.1: Canonical Bottom-Left origin — +X rightward, +Y upward.
+    let (x_multiplier, y_multiplier) = (1i64, 1i64);
 
     use crate::ir::relational_resolver::{
         target_bbox_to_user_ranges, RelationalPlacementFormula, SpatialRelation,
@@ -219,7 +209,7 @@ fn resolve_region_from_constraints(ctx: &RegionResolveCtx) -> Result<Point3D, Ir
         // the double-coordinate-conversion bug (computing in physical space then
         // calling coordinate_to_point which flips again for non-BL origins).
         let (tx_min, tx_max, ty_min, ty_max) =
-            target_bbox_to_user_ranges(target_bbox, space_dimensions, origin.xy);
+            target_bbox_to_user_ranges(target_bbox, space_dimensions);
 
         // Evaluate spacing expression if present
         let spacing_nm = if let Some(spacing_expr) = &constraint.spacing {

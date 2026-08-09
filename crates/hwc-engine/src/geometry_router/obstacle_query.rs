@@ -122,8 +122,6 @@ pub enum ExemptionReason {
     SameNet,
     /// Dielectric/insulating layer (not a conductor)
     DielectricLayer,
-    /// Solder mask (cosmetic, not electrical)
-    SolderMask,
     /// Route endpoint is docking into this pad
     RoutingEndpoint,
     /// Device-bound terminals of same device instance
@@ -172,14 +170,6 @@ impl ObstacleQuery {
             SubstrateLayerType::Substrate => {
                 return Ok(ObstacleDecision::Exempt {
                     reason: ExemptionReason::DielectricLayer,
-                });
-            }
-
-            // Solder mask (cosmetic coating) is NEVER an obstacle
-            // Rationale: Not part of electrical connectivity
-            SubstrateLayerType::SolderMask => {
-                return Ok(ObstacleDecision::Exempt {
-                    reason: ExemptionReason::SolderMask,
                 });
             }
 

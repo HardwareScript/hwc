@@ -110,19 +110,14 @@ pub enum Token {
     #[token("grid")]
     Grid,
 
-    #[token("resolution")]
-    Resolution,
-
     #[token("path")]
     Path,
 
-    #[token("origin")]
-    Origin,
-
     // ========================================================================
-    // ORIGIN POINTS - REMOVED IN v0.2.1
-    // 'tl', 'bl', 'tr', 'br' are now parsed contextually as identifiers
-    // See: crates/hwc-parser/src/parser/context.rs
+    // ORIGIN / RESOLUTION - REMOVED IN v0.2.1 (Bloat Purge Category 1)
+    // `origin:` deleted: all spaces use the canonical Bottom-Left / Z-Up
+    // coordinate system. `resolution:` deleted: snapping is governed by the
+    // PDK profile's manufacturing grid.
     // ========================================================================
 
     // ========================================================================

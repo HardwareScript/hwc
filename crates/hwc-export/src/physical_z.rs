@@ -19,9 +19,30 @@ pub fn board_z_extent(space: &HardwareSpace) -> (i64, i64) {
 }
 
 /// Derive a 0-based slab index from physical Z (Excellon / Gerber display only).
+///
+/// v0.2.1: This is retained only for coarse display-layer bucketing. Logical
+/// via-to-layer classification should use [`via_layer_index`] against the
+/// `StackupManager` instead, so the mapping is canonical rather than a grid
+/// division.
 pub fn grid_index_from_z(z_nm: i64, slab_z_nm: i64) -> u8 {
     let slab_z_nm = slab_z_nm.max(1);
     ((z_nm / slab_z_nm).max(0)) as u8
+}
+
+/// Canonical via-layer index from physical Z, resolved against the stackup layers
+/// embedded in a `HardwareSpace` (its single source of truth for Z→layer mapping).
+///
+/// v0.2.1 (Bloat Purge Category 2): replaces grid-division heuristics for
+/// logical layer classification with the canonical stackup ordering.
+pub fn via_layer_index(space: &HardwareSpace, z_nm: i64) -> u8 {
+    for (i, layer) in space.stackup_layers.iter().enumerate() {
+        if z_nm >= layer.z_bottom && z_nm <= layer.z_top {
+            return i as u8;
+        }
+    }
+    // Outside any layer (e.g. on a board face) — fall back to coarse slab index.
+    let slab = space.dimensions.depth_nm.max(1);
+    ((z_nm / slab).max(0) as u8).min(space.stackup_layers.len().saturating_sub(1) as u8)
 }
 
 /// DXF layer name from physical elevation (mm) and material.

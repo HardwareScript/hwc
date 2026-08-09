@@ -77,7 +77,7 @@ impl GeometryRouter {
         // Pass route context to exempt active endpoints from obstacles
         let spatial_index = self.build_routing_spatial_index(entity_graph, route);
 
-        let track_pitch = self.resolution_nm; // Use snap-resolution for pitch
+        let track_pitch = self.manufacturing_grid_nm; // Use snap-resolution for pitch
 
         let path = if start.x == goal.x && start.y == goal.y && start.z == goal.z {
             vec![start, goal]

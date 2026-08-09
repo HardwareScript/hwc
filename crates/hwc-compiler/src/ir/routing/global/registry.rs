@@ -5,7 +5,7 @@ impl<'a> AutoRouter<'a> {
     pub(crate) fn resolve_sample_copper_id(
         &self,
     ) -> Result<hwc_engine::material::MaterialId, IrError> {
-        let sample_z = self.space.resolution_nm; // Default: bottom of board
+        let sample_z = self.space.manufacturing_grid_nm; // Default: bottom of board
         if let Some(layer_name) = self.stackup_manager.get_layer_name_at_z(sample_z) {
             let mat_name = self
                 .profile

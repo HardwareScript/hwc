@@ -20,7 +20,6 @@ use resolve::*;
 pub struct PlaceContactParams<'a> {
     pub space: &'a mut HardwareSpace,
     pub contact: &'a hwc_parser::ContactPlacement,
-    pub origin: hwc_parser::OriginPoint,
     pub symbol_table: &'a crate::SymbolTable,
     pub eval_context: &'a hwc_parser::EvaluationContext,
     pub stackup_manager: &'a StackupManager,
@@ -34,7 +33,6 @@ pub fn place_contact(params: PlaceContactParams) -> Result<(), IrError> {
     let PlaceContactParams {
         space,
         contact,
-        origin,
         symbol_table,
         eval_context,
         stackup_manager,
@@ -67,7 +65,6 @@ pub fn place_contact(params: PlaceContactParams) -> Result<(), IrError> {
             Point2D::new(point_3d.x, point_3d.y)
         } else {
             let ctx = crate::ir::conversions::CoordinateContext {
-                origin,
                 space_dimensions: &space.dimensions,
                 symbol_table,
                 eval_context,
@@ -104,7 +101,6 @@ pub fn place_contact(params: PlaceContactParams) -> Result<(), IrError> {
             Point2D::new(point_3d.x, point_3d.y)
         } else {
             let ctx = crate::ir::conversions::CoordinateContext {
-                origin,
                 space_dimensions: &space.dimensions,
                 symbol_table,
                 eval_context,
@@ -164,13 +160,13 @@ pub fn place_contact(params: PlaceContactParams) -> Result<(), IrError> {
         &contact.from_elevation,
         symbol_table,
         eval_context,
-        space.resolution_nm,
+        space.manufacturing_grid_nm,
     )?;
     let to_bottom_nm = stackup_manager.resolve_elevation_bottom(
         &contact.to_elevation,
         symbol_table,
         eval_context,
-        space.resolution_nm,
+        space.manufacturing_grid_nm,
     )?;
     let from_top_nm = stackup_manager.resolve_elevation_top(
         &contact.from_elevation,
@@ -465,7 +461,7 @@ pub fn place_contact(params: PlaceContactParams) -> Result<(), IrError> {
                 contact_name_debug: contact_name_debug.into(),
                 is_tented,
                 clearance_nm,
-                resolution_nm: space.resolution_nm,
+                resolution_nm: space.manufacturing_grid_nm,
             },
             bridge_material_id,
         )?;
@@ -488,7 +484,7 @@ pub fn place_contact(params: PlaceContactParams) -> Result<(), IrError> {
                 contact_name_debug: contact_name_debug.into(),
                 is_tented,
                 clearance_nm,
-                resolution_nm: space.resolution_nm,
+                resolution_nm: space.manufacturing_grid_nm,
             },
             bridge_mat,
         )?;
@@ -501,7 +497,7 @@ pub fn place_contact(params: PlaceContactParams) -> Result<(), IrError> {
         })?;
 
         // Process is now a required field (not Option), validated at parse time
-        let process = match material_def.process {
+        let process = match material_def.get_process() {
             hwc_parser::ManufacturingProcess::DrilledPlated => {
                 hwc_engine::ManufacturingProcess::DrilledPlated
             }
@@ -561,7 +557,7 @@ pub fn place_contact(params: PlaceContactParams) -> Result<(), IrError> {
                     contact_name_debug: contact_name_debug.into(),
                     is_tented,
                     clearance_nm,
-                    resolution_nm: space.resolution_nm,
+                    resolution_nm: space.manufacturing_grid_nm,
                 },
             )?;
         }
@@ -723,29 +719,19 @@ pub fn place_contact(params: PlaceContactParams) -> Result<(), IrError> {
             contact_bbox.max.z
         };
 
-        use hwc_parser::OriginXY;
-        let is_y_upward = matches!(origin.xy, OriginXY::BL | OriginXY::BR);
-
         // v0.1.9.4 BUG FIX: Use pad_bbox for interface geometry instead of contact_bbox.
         // Contact_bbox is just the drill hole, but pad_bbox includes the annular ring.
         // This ensures escape points are calculated from the pad surface, not the drill edge.
         let interface_bbox = pad_bbox;
 
-        let geometry = if is_y_upward {
-            InterfaceGeometry::Polygon(vec![
-                Point3D::new(interface_bbox.min.x, interface_bbox.min.y, connection_z_nm),
-                Point3D::new(interface_bbox.max.x, interface_bbox.min.y, connection_z_nm),
-                Point3D::new(interface_bbox.max.x, interface_bbox.max.y, connection_z_nm),
-                Point3D::new(interface_bbox.min.x, interface_bbox.max.y, connection_z_nm),
-            ])
-        } else {
-            InterfaceGeometry::Polygon(vec![
-                Point3D::new(interface_bbox.min.x, interface_bbox.min.y, connection_z_nm),
-                Point3D::new(interface_bbox.min.x, interface_bbox.max.y, connection_z_nm),
-                Point3D::new(interface_bbox.max.x, interface_bbox.max.y, connection_z_nm),
-                Point3D::new(interface_bbox.min.x, interface_bbox.min.y, connection_z_nm),
-            ])
-        };
+        // v0.2.1: Canonical Bottom-Left origin means Y always increases upward,
+        // so the interface polygon always uses CCW winding.
+        let geometry = InterfaceGeometry::Polygon(vec![
+            Point3D::new(interface_bbox.min.x, interface_bbox.min.y, connection_z_nm),
+            Point3D::new(interface_bbox.max.x, interface_bbox.min.y, connection_z_nm),
+            Point3D::new(interface_bbox.max.x, interface_bbox.max.y, connection_z_nm),
+            Point3D::new(interface_bbox.min.x, interface_bbox.max.y, connection_z_nm),
+        ]);
 
         let interface_id = space.entity_graph.allocate_interface_id();
         let intent = RoutingIntent::new("Default");

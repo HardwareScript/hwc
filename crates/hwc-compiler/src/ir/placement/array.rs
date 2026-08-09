@@ -227,7 +227,6 @@ fn calculate_pour_bboxes_for_array(
         };
 
         let coord_ctx = CoordinateContext {
-            origin: ctx.origin,
             space_dimensions: &space.dimensions,
             symbol_table: ctx.symbol_table,
             eval_context: ctx.eval_context,

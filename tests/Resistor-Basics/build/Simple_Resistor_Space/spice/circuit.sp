@@ -17,17 +17,13 @@ CC_sub2 MINUS BULK {{2fF * W} * L}
 * ========================================
 * NETS
 * ========================================
-* Net: In (pour: Resistor_Body_A, material: Polysilicon, z: 0.0000mm)
-* Net: Out (pour: Resistor_Body_B, material: Polysilicon, z: 0.0000mm)
-* Net: GND (pour: Resistor_Bulk, material: Air, z: 0.0000mm)
+* Net: GND (pour: Resistor_Body, material: Polysilicon, z: 0.0000mm)
 * Net: In (pour: Contact_A, material: Aluminum, z: 0.0005mm)
 * Net: Out (pour: Contact_B, material: Aluminum, z: 0.0005mm)
 * Net: In (pour: In_Pad, material: Aluminum, z: 0.0005mm)
 * Net: Out (pour: Out_Pad, material: Aluminum, z: 0.0005mm)
 * Net: In (width=300nm, material=Tungsten)
 *   Connected pins:
-*     - Resistor_Body_A.anchor
-*     - Resistor_Body_A.__virtual_Resistor_Body_A
 *     - Contact_A.anchor
 *     - Contact_A.__virtual_Contact_A
 *     - Via_A.__virtual_Via_A
@@ -35,8 +31,6 @@ CC_sub2 MINUS BULK {{2fF * W} * L}
 *     - In_Pad.__virtual_In_Pad
 * Net: Out (width=300nm, material=Tungsten)
 *   Connected pins:
-*     - Resistor_Body_B.anchor
-*     - Resistor_Body_B.__virtual_Resistor_Body_B
 *     - Contact_B.anchor
 *     - Contact_B.__virtual_Contact_B
 *     - Via_B.__virtual_Via_B
@@ -44,14 +38,14 @@ CC_sub2 MINUS BULK {{2fF * W} * L}
 *     - Out_Pad.__virtual_Out_Pad
 * Net: GND (width=300nm, material=Tungsten)
 *   Connected pins:
-*     - Resistor_Bulk.anchor
-*     - Resistor_Bulk.__virtual_Resistor_Bulk
+*     - Resistor_Body.anchor
+*     - Resistor_Body.__virtual_Resistor_Body
 
 
 * ========================================
 * EXTRACTED DEVICES
 * ========================================
-XR1 In Out GND sky130_fd_pr__res_high_po W=1.41u L=1.41u
+XR1 In Out GND sky130_fd_pr__res_high_po W=2.00u L=2.00u
 
 * ========================================
 * INTEGRATED TRACE PARASITICS

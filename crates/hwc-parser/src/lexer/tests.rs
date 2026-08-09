@@ -332,14 +332,13 @@ fn test_mixed_case_keyword_rejected() {
 }
 
 #[test]
-fn test_uppercase_origin_rejected() {
-    // Origin points must be lowercase
+fn test_uppercase_keyword_like_identifier() {
+    // `origin` is no longer a keyword (purged in v0.2.1); it lexes as an Identifier.
     let source = "origin: TL";
     let lexer = Lexer::new(source);
     let tokens = lexer.tokenize().unwrap();
 
-    // "TL" should be tokenized as Identifier, not TopLeft
-    assert_eq!(tokens[0].token, Token::Origin);
+    assert!(matches!(tokens[0].token, Token::Identifier(_)));
     assert_eq!(tokens[1].token, Token::Colon);
     assert!(matches!(tokens[2].token, Token::Identifier(_)));
     if let Token::Identifier(name) = &tokens[2].token {
@@ -350,7 +349,7 @@ fn test_uppercase_origin_rejected() {
 #[test]
 fn test_lowercase_keywords_accepted() {
     // v0.1.6: All lowercase keywords should be accepted (no 'define' keyword)
-    let source = "space component substrate dimensions grid path origin";
+    let source = "space component substrate dimensions grid path";
     let lexer = Lexer::new(source);
     let tokens = lexer.tokenize().unwrap();
 
@@ -360,7 +359,6 @@ fn test_lowercase_keywords_accepted() {
     assert_eq!(tokens[3].token, Token::Dimensions);
     assert_eq!(tokens[4].token, Token::Grid);
     assert_eq!(tokens[5].token, Token::Path);
-    assert_eq!(tokens[6].token, Token::Origin);
 }
 
 #[test]

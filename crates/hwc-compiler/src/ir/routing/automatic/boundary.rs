@@ -163,7 +163,7 @@ fn select_routable_port_core(
     //
     // WITH THIS: Ray passes through Pad_B1 (exempt net_id=2) and accurately measures
     // clearance to the next real obstacle, allowing optimal port selection.
-    let mut router = TopologicalRouter::new(trace_width_nm, space.resolution_nm, clearance_nm);
+    let mut router = TopologicalRouter::new(trace_width_nm, space.manufacturing_grid_nm, clearance_nm);
 
     if let Some(net) = from_net_id {
         router.exempt_net_ids.push(net.raw() as usize);

@@ -269,7 +269,6 @@ impl<'a> PivbSolver<'a> {
             SubstrateLayerType::Pour => "copper_pour".into(),
             SubstrateLayerType::Contact => "contact".into(),
             SubstrateLayerType::Substrate => "substrate".into(),
-            SubstrateLayerType::SolderMask => "solder_mask".into(),
         }
     }
 

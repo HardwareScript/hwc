@@ -25,7 +25,7 @@ impl GeometryRouter {
         constraints: ConstraintRulebook,
         material_registry: MaterialRegistry,
     ) -> Self {
-        let resolution_nm = constraints.resolution_nm;
+        let manufacturing_grid_nm = constraints.manufacturing_grid_nm;
 
         // Extract layer directions from constraints
         let num_layers = constraints.layer_directions.len();
@@ -37,13 +37,13 @@ impl GeometryRouter {
             bounds,
             constraints,
             layer_directions,
-            resolution_nm,
+            manufacturing_grid_nm,
             material_registry,
             vias: Vec::new(),
             copper_pours: Vec::new(),
             bounding_box_tracker: BoundingBoxTracker::new(),
             config: RouterConfig {
-                resolution_nm,
+                manufacturing_grid_nm,
                 ..Default::default()
             },
             substrate_layers: None,

@@ -30,7 +30,6 @@ pub fn resolve_boundary_coords(
     let solver = ConstraintSolver::new(bbox_tracker, ctx.eval_context);
 
     let coord_ctx = CoordinateContext {
-        origin: ctx.origin,
         space_dimensions,
         symbol_table: ctx.symbol_table,
         eval_context: ctx.eval_context,

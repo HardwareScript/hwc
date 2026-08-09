@@ -66,7 +66,7 @@ impl GeometryRouter {
         let escape_z = pin.z;
 
         // Use resolution/snap-step for coordinate snapping.
-        let _resolution_nm = self.resolution_nm;
+        let _manufacturing_grid_nm = self.manufacturing_grid_nm;
 
         // Calculate a proper cardinal port escape to ensure orthogonal "clean" entry
         // into the pad from the center of one of its faces.
@@ -195,7 +195,7 @@ impl GeometryRouter {
         );
 
         let spatial_index = self.build_routing_spatial_index(entity_graph, route);
-        let track_pitch = self.resolution_nm;
+        let track_pitch = self.manufacturing_grid_nm;
         let topo_router =
             TopologicalRouter::new(trace_width, track_pitch, fabrication.min_trace_spacing_nm);
         let exempt_net_ids = vec![route.net_id.raw() as usize];
