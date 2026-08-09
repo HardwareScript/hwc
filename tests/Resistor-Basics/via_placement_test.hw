@@ -1,0 +1,74 @@
+# via_placement_test.hw
+# Minimal test to diagnose via placement behavior
+# Tests whether vias are properly enclosed within their parent pours
+
+import * from @std/primitives/units
+import * from "./resistor_pdk"
+
+module ViaPlacementTest:
+    pins: [input A, output B]
+    route A to B
+
+space Via_Test implements ViaPlacementTest:
+    dimensions: 10.0um by 5.0um by 1200nm
+    resolution: 10nm
+    origin: bl by b
+    profile: Resistor_3D
+
+    nets:
+        A: { classification: signal, potential: 1.8V, current: 1.0uA }
+        B: { classification: signal, potential: 0.0V, current: 1.0uA }
+
+    # Test constants
+    let poly_width = 2.0um
+    let poly_height = 1.0um
+    let contact_size = 400nm
+    let via_diameter = 300nm
+    let required_enclosure = 80nm  # SKY130 requirement
+    
+    # Calculate minimum inset: via_radius + required_enclosure
+    let via_radius = via_diameter / 2
+    let min_inset = via_radius + required_enclosure  # Should be 150nm + 80nm = 230nm
+    
+    # Single anchor point for entire test (only absolute coordinate)
+    let base_x = 2.0um
+    let base_y = 2.5um
+    let spacing = 4.0um
+    
+    # ========================================================================
+    # TEST 1: Via placed at poly LEFT edge (WRONG - should violate)
+    # ========================================================================
+    
+    add pour(Polysilicon) named Poly_Left on layer: polyres:
+        dimensions: poly_width by poly_height
+        at: [x: base_x, y: base_y]
+        net: A
+    
+    add pour(Aluminum) named Contact_Left on layer: metal1:
+        dimensions: contact_size by contact_size
+        at: [x: Poly_Left.left, y: Poly_Left.center_y]
+        net: A
+    
+    add contact(Tungsten) named Via_Left spanning layer: polyres to metal1:
+        diameter: via_diameter
+        at: [x: Contact_Left.center_x, y: Contact_Left.center_y]
+        net: A
+    
+    # ========================================================================
+    # TEST 2: Via placed WITH proper inset (RIGHT - should be valid)
+    # ========================================================================
+    
+    add pour(Polysilicon) named Poly_Right on layer: polyres:
+        dimensions: poly_width by poly_height
+        at: [x: Poly_Left.right + spacing, y: Poly_Left.center_y]
+        net: B
+    
+    add pour(Aluminum) named Contact_Right on layer: metal1:
+        dimensions: contact_size by contact_size
+        at: [x: Poly_Right.left + min_inset, y: Poly_Right.center_y]
+        net: B
+    
+    add contact(Tungsten) named Via_Right spanning layer: polyres to metal1:
+        diameter: via_diameter
+        at: [x: Contact_Right.center_x, y: Contact_Right.center_y]
+        net: B

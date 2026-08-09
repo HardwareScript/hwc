@@ -1,37 +1,35 @@
 # variable_resistor_test.hw
-# Demonstrates how resistor geometry affects resistance
-# Based on sheet resistance formula: R = R_sheet × (L/W)
-# where L = length (direction of current flow), W = width (perpendicular to current)
+# Geometry-Dependent Resistance Demonstration
+# Based on SkyWater SKY130 PDK P+ Poly Precision Resistors
+# Reference: https://skywater-pdk.readthedocs.io/en/main/rules/device-details.html
 #
-# With polysilicon sheet resistance of 400 Ohms/square (from SiliWiz):
-# - R1 (Short Fat):  10μm × 10μm = L/W = 10/10 = 1 square  → 400 Ω
-# - R2 (Long Thin):  10μm × 1μm  = L/W = 10/1  = 10 squares → 4000 Ω  
-# - R3 (Very Long):  20μm × 1μm  = L/W = 20/1  = 20 squares → 8000 Ω
+# IMPORTANT: SkyWater SKY130 does NOT have voltage-tunable variable resistors.
+# This test demonstrates GEOMETRY-DEPENDENT resistance using fixed-value resistors.
+#
+# Physical Principle: R = R_sheet × (L/W)
+# - R_sheet: Sheet resistance (350 Ω/□ for SKY130 P+ poly)
+# - L: Length (direction of current flow)
+# - W: Width (perpendicular to current flow)
+#
+# Test Cases (using SKY130 P+ poly at 350 Ω/□):
+# - R1 (Square):      10μm × 10μm → L/W = 1  →  350 Ω  + ~724Ω contact = 1074 Ω
+# - R2 (Long Thin):   10μm × 1μm  → L/W = 10 → 3500 Ω  + ~724Ω contact = 4224 Ω  
+# - R3 (Very Long):   20μm × 1μm  → L/W = 20 → 7000 Ω  + ~724Ω contact = 7724 Ω
+#
+# Note: Contact resistance (~362Ω per end) is included in subcircuit model
 
 import * from @std/primitives/units
 import * from "./resistor_pdk"
 
-# Device definition for resistors
-device Resistor:
-    terminals: [A, B]
-    materials:
-        A: Polysilicon
-        B: Polysilicon
-    spice:
-        prefix: R
-        terminal_order: [A, B]
-        parameters: [R]
-        parameter_style: positional
-
-module VariableResistor:
+module GeometryVariableResistor:
     pins: [input In1, input In2, input In3, output Out1, output Out2, output Out3]
     route In1 to Out1
     route In2 to Out2
     route In3 to Out3
 
-space Variable_Resistor_Space implements VariableResistor:
-    # Large space to accommodate multiple resistors
-    dimensions: 30.0um by 15.0um by 1.0um
+space Geometry_Variable_Resistor_Space implements GeometryVariableResistor:
+    # Large space to accommodate multiple resistors with different geometries
+    dimensions: 40.0um by 20.0um by 1200nm  # Height for SKY130 stack
     resolution: 10nm
     origin: bl by b
     profile: Resistor_3D
@@ -43,10 +41,14 @@ space Variable_Resistor_Space implements VariableResistor:
         Out2: { classification: signal, potential: 0.0V, current: 1.0uA }
         In3:  { classification: signal, potential: 1.8V, current: 1.0uA }
         Out3: { classification: signal, potential: 0.0V, current: 1.0uA }
+        GND: { classification: ground, potential: 0.0V, current: 0.0uA }
 
     # ========================================================================
-    # RESISTOR 1: SHORT FAT (Low Resistance = 400 Ohms)
+    # RESISTOR 1: SQUARE GEOMETRY (Low Resistance ≈ 1074 Ω)
     # 10μm × 10μm = 1 square (L/W = 10μm/10μm = 1)
+    # Body: 350 Ω/□ × 1 = 350 Ω
+    # Contact: ~362Ω × 2 ends = 724 Ω
+    # Total: 350 + 724 = 1074 Ω (from SKY130 subcircuit model)
     # ========================================================================
 
     # Terminal A (left half of resistor body)
@@ -54,109 +56,142 @@ space Variable_Resistor_Space implements VariableResistor:
         device: R1.A
         dimensions: 5.0um by 10.0um
         at: [x: 7.0um, y: 3.0um]
+        net: In1
 
     # Terminal B (right half of resistor body)
     add pour(Polysilicon) named R1_Body_B on layer: polyres:
         device: R1.B
         dimensions: 5.0um by 10.0um
-        at: [x: R1_Body_A.right, y: 3.0um]  # ← Relational placement!
+        at: [x: R1_Body_A.right, y: 3.0um]
+        net: Out1
+    
+    # Terminal BULK - Virtual substrate terminal for 3-terminal model
+    add pour(Air) named R1_Bulk on layer: polyres:
+        device: R1.BULK
+        net: GND
+        dimensions: 1nm by 1nm
+        at: [x: 9.5um, y: 1.0um]
 
-    # Metal contacts for routing (NOT device-bound)
+    # Metal contacts for routing - using anchor arithmetic
     add pour(Aluminum) named R1_Contact_Left on layer: metal1:
         net: In1
         dimensions: 800nm by 800nm
-        align: center with R1_Body_A  # ← Relational placement!
+        at: [x: R1_Body_A.center_x, y: R1_Body_A.center_y]
 
     add pour(Aluminum) named R1_Contact_Right on layer: metal1:
         net: Out1
         dimensions: 800nm by 800nm
-        align: center with R1_Body_B  # ← Relational placement!
+        at: [x: R1_Body_B.center_x, y: R1_Body_B.center_y]
 
-    # Vias (NOT device-bound, using correct via fill material)
+    # Vias - using anchor arithmetic
     add contact(Tungsten) named R1_Via_Left spanning layer: polyres to metal1:
         net: In1
-        diameter: 400nm
-        align: center with R1_Contact_Left
+        diameter: 300nm
+        at: [x: R1_Contact_Left.center_x, y: R1_Contact_Left.center_y]
 
     add contact(Tungsten) named R1_Via_Right spanning layer: polyres to metal1:
         net: Out1
-        diameter: 400nm
-        align: center with R1_Contact_Right
+        diameter: 300nm
+        at: [x: R1_Contact_Right.center_x, y: R1_Contact_Right.center_y]
 
     # ========================================================================
-    # RESISTOR 2: LONG THIN (Medium Resistance = 4000 Ohms)
+    # RESISTOR 2: LONG THIN GEOMETRY (Medium Resistance ≈ 4224 Ω)
     # 10μm × 1μm = 10 squares (L/W = 10μm/1μm = 10)
+    # Body: 350 Ω/□ × 10 = 3500 Ω
+    # Contact: ~362Ω × 2 ends = 724 Ω
+    # Total: 3500 + 724 = 4224 Ω (from SKY130 subcircuit model)
     # ========================================================================
 
     # Terminal A (left half of resistor body)
     add pour(Polysilicon) named R2_Body_A on layer: polyres:
         device: R2.A
         dimensions: 5.0um by 1.0um
-        at: [x: 7.0um, y: 7.5um]
+        at: [x: 7.0um, y: 9.0um]
+        net: In2
 
     # Terminal B (right half of resistor body)
     add pour(Polysilicon) named R2_Body_B on layer: polyres:
         device: R2.B
         dimensions: 5.0um by 1.0um
-        at: [x: R2_Body_A.right, y: 7.5um]  # ← Relational placement!
+        at: [x: R2_Body_A.right, y: 9.0um]
+        net: Out2
+    
+    # Terminal BULK
+    add pour(Air) named R2_Bulk on layer: polyres:
+        device: R2.BULK
+        net: GND
+        dimensions: 1nm by 1nm
+        at: [x: 9.5um, y: 7.0um]
 
-    # Metal contacts for routing (NOT device-bound)
+    # Metal contacts - using anchor arithmetic
     add pour(Aluminum) named R2_Contact_Left on layer: metal1:
         net: In2
         dimensions: 800nm by 800nm
-        align: center with R2_Body_A  # ← Relational placement!
+        at: [x: R2_Body_A.center_x, y: R2_Body_A.center_y]
 
     add pour(Aluminum) named R2_Contact_Right on layer: metal1:
         net: Out2
         dimensions: 800nm by 800nm
-        align: center with R2_Body_B  # ← Relational placement!
+        at: [x: R2_Body_B.center_x, y: R2_Body_B.center_y]
 
-    # Vias (NOT device-bound, using correct via fill material)
+    # Vias - using anchor arithmetic
     add contact(Tungsten) named R2_Via_Left spanning layer: polyres to metal1:
         net: In2
-        diameter: 400nm
-        align: center with R2_Contact_Left
+        diameter: 300nm
+        at: [x: R2_Contact_Left.center_x, y: R2_Contact_Left.center_y]
 
     add contact(Tungsten) named R2_Via_Right spanning layer: polyres to metal1:
         net: Out2
-        diameter: 400nm
-        align: center with R2_Contact_Right
+        diameter: 300nm
+        at: [x: R2_Contact_Right.center_x, y: R2_Contact_Right.center_y]
 
     # ========================================================================
-    # RESISTOR 3: VERY LONG THIN (High Resistance = 8000 Ohms)
+    # RESISTOR 3: VERY LONG THIN GEOMETRY (High Resistance ≈ 7724 Ω)
     # 20μm × 1μm = 20 squares (L/W = 20μm/1μm = 20)
+    # Body: 350 Ω/□ × 20 = 7000 Ω
+    # Contact: ~362Ω × 2 ends = 724 Ω
+    # Total: 7000 + 724 = 7724 Ω (from SKY130 subcircuit model)
     # ========================================================================
 
     # Terminal A (left half of resistor body)
     add pour(Polysilicon) named R3_Body_A on layer: polyres:
         device: R3.A
         dimensions: 10.0um by 1.0um
-        at: [x: 10.0um, y: 12.0um]
+        at: [x: 10.0um, y: 15.0um]
+        net: In3
 
     # Terminal B (right half of resistor body)
     add pour(Polysilicon) named R3_Body_B on layer: polyres:
         device: R3.B
         dimensions: 10.0um by 1.0um
-        at: [x: R3_Body_A.right, y: 12.0um]  # ← Relational placement!
+        at: [x: R3_Body_A.right, y: 15.0um]
+        net: Out3
+    
+    # Terminal BULK
+    add pour(Air) named R3_Bulk on layer: polyres:
+        device: R3.BULK
+        net: GND
+        dimensions: 1nm by 1nm
+        at: [x: 15.0um, y: 13.0um]
 
-    # Metal contacts for routing (NOT device-bound)
+    # Metal contacts - using anchor arithmetic
     add pour(Aluminum) named R3_Contact_Left on layer: metal1:
         net: In3
         dimensions: 800nm by 800nm
-        align: center with R3_Body_A  # ← Relational placement!
+        at: [x: R3_Body_A.center_x, y: R3_Body_A.center_y]
 
     add pour(Aluminum) named R3_Contact_Right on layer: metal1:
         net: Out3
         dimensions: 800nm by 800nm
-        align: center with R3_Body_B  # ← Relational placement!
+        at: [x: R3_Body_B.center_x, y: R3_Body_B.center_y]
 
-    # Vias (NOT device-bound, using correct via fill material)
+    # Vias - using anchor arithmetic
     add contact(Tungsten) named R3_Via_Left spanning layer: polyres to metal1:
         net: In3
-        diameter: 400nm
-        align: center with R3_Contact_Left
+        diameter: 300nm
+        at: [x: R3_Contact_Left.center_x, y: R3_Contact_Left.center_y]
 
     add contact(Tungsten) named R3_Via_Right spanning layer: polyres to metal1:
         net: Out3
-        diameter: 400nm
-        align: center with R3_Contact_Right
+        diameter: 300nm
+        at: [x: R3_Contact_Right.center_x, y: R3_Contact_Right.center_y]

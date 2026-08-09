@@ -17,8 +17,13 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 
 /// Cached stdlib module
+/// 
+/// CRITICAL: Must store BOTH definitions AND arena together.
+/// Definitions contain arena IDs that reference data in the arena.
+/// Storing definitions without arena causes index-out-of-bounds panics.
 struct CachedModule {
     definitions: Vec<Definition>,
+    arena: hwc_parser::ast::arena::AstArena,
 }
 
 /// Runtime-loaded stdlib cache (lazy initialization)
@@ -78,6 +83,7 @@ fn parse_stdlib_module(module_path: &str) -> Result<CachedModule, String> {
 
     Ok(CachedModule {
         definitions: program.definitions,
+        arena: program.arena,
     })
 }
 
@@ -95,20 +101,25 @@ fn parse_stdlib_module(module_path: &str) -> Result<CachedModule, String> {
 /// Performance:
 /// - First access: ~50-200ms (parsing from disk)
 /// - Subsequent access: ~0.1ms (cache lookup)
-pub fn get_stdlib_definitions(path: &str) -> Option<Vec<Definition>> {
+///
+/// Returns: (definitions, arena) tuple. The arena must be kept alive as long as
+/// the definitions are being used, since Definition variants contain IDs that
+/// index into the arena.
+pub fn get_stdlib_definitions(path: &str) -> Option<(Vec<Definition>, hwc_parser::ast::arena::AstArena)> {
     let mut cache = STDLIB_CACHE.lock().unwrap();
 
     // Check cache first
     if let Some(cached) = cache.get(path) {
-        return Some(cached.definitions.clone());
+        return Some((cached.definitions.clone(), cached.arena.clone()));
     }
 
     // Not in cache - parse from disk
     match parse_stdlib_module(path) {
         Ok(cached_module) => {
             let defs = cached_module.definitions.clone();
+            let arena = cached_module.arena.clone();
             cache.insert(path.into(), cached_module);
-            Some(defs)
+            Some((defs, arena))
         }
         Err(e) => {
             eprintln!("[STDLIB ERROR] Failed to load {}: {}", path, e);

@@ -9,6 +9,7 @@ use crate::ir::errors::IrError;
 use crate::ir::stackup_manager::StackupManager;
 use hwc_engine::layer_connection_database::ViaRegistrationParams;
 use hwc_engine::{HardwareSpace, Point3D};
+use hwc_parser::Expression;
 use hwc_physics::geometry::Point2D;
 
 use helpers::*;
@@ -49,7 +50,44 @@ pub fn place_contact(params: PlaceContactParams) -> Result<(), IrError> {
         })?;
 
     // v0.2.0: Resolve position from either absolute coordinates or relational anchor
-    let xy_point = if let Some(ref anchor) = contact.relational_anchor {
+    // v0.2.1: Check properties block for 'at' field first (supports anchor arithmetic)
+    let xy_point = if let Some(Expression::Coordinate { coord, .. }) = contact.properties.get("at") {
+        // v0.2.1: Position specified in properties block with full expression support
+        // This enables: at: [x: Contact_A.center_x, y: Contact_A.center_y]
+        if coord.is_relative() {
+            let solver =
+                crate::constraint_solver::ConstraintSolver::new(bbox_tracker, eval_context);
+            let intent = solver.resolve_position(coord).map_err(|e| {
+                IrError::CoordinateResolutionFailed {
+                    coordinate_str: format!("contact '{}' at property", contact.name.base.as_str()),
+                    reason: e.to_string(),
+                }
+            })?;
+            let point_3d = intent.point();
+            Point2D::new(point_3d.x, point_3d.y)
+        } else {
+            let ctx = crate::ir::conversions::CoordinateContext {
+                origin,
+                space_dimensions: &space.dimensions,
+                symbol_table,
+                eval_context,
+                bbox_tracker: Some(bbox_tracker),
+                stackup_manager,
+                profile,
+            };
+            let point_3d =
+                crate::ir::conversions::coordinate_to_point(coord.as_ref(), &ctx).map_err(|e| {
+                    IrError::CoordinateResolutionFailed {
+                        coordinate_str: format!(
+                            "contact '{}' at property",
+                            contact.name.base.as_str()
+                        ),
+                        reason: e,
+                    }
+                })?;
+            Point2D::new(point_3d.x, point_3d.y)
+        }
+    } else if let Some(ref anchor) = contact.relational_anchor {
         // Resolve relational anchor (e.g., Region.center) - returns 2D point
         resolve_relational_anchor(anchor, bbox_tracker, &contact.name)?
     } else if let Some(ref position) = contact.position {

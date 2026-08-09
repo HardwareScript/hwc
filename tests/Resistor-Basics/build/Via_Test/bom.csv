@@ -1,0 +1,14 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,0.01x0.01x0.00mm,,,,,1
+
+# MATERIAL USAGE (Fabrication)
+Reference,Type,Material,Layer,Area_nm2,Volume_nm3
+Poly_Left,Pour,Polysilicon,polyres (z:0nm),2000000,400000000
+Contact_Left,Pour,Aluminum,d1 (z:500nm),160000,134400000
+Poly_Right,Pour,Polysilicon,polyres (z:0nm),2000000,400000000
+Contact_Right,Pour,Aluminum,d1 (z:500nm),160000,134400000
+
+# AGGREGATED MATERIAL TOTALS (Foundry Fabrication Summary)
+Material,Total_Area_nm2,Total_Volume_nm3,Layer_Count,Coverage_Percentage
+Aluminum,320000,268800000,2,0.6%
+Polysilicon,4000000,800000000,2,8.0%

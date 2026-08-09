@@ -260,10 +260,13 @@ impl NetlistArena {
             pin_data.connected_net = Some(net);
         }
 
-        // Add pin to net's pin list
+        // Add pin to net's pin list (avoid duplicates)
         if net.0 > 0 {
             if let Some(net_data) = self.nets.get_mut((net.0 - 1) as usize) {
-                net_data.pins.push(pin);
+                // Only add if not already in the list
+                if !net_data.pins.contains(&pin) {
+                    net_data.pins.push(pin);
+                }
             }
         }
     }

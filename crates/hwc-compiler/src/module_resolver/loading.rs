@@ -11,14 +11,14 @@ impl super::ModuleResolver {
         if path.starts_with("@std/") {
             // Embedded stdlib
             let module_name = path.strip_prefix("@std/").unwrap().to_str().unwrap();
-            let defs = self.load_stdlib_embedded(module_name)?;
+            let (defs, arena) = self.load_stdlib_embedded(module_name)?;
 
-            // Create a stub Program (stdlib has no imports/re-exports)
+            // Create a Program with the stdlib's own arena
             let program = Program {
                 imports: vec![],
                 re_exports: vec![],
                 definitions: defs,
-                arena: hwc_parser::ast::arena::AstArena::new(),
+                arena,  // Use the arena from stdlib, not a new empty one!
                 span: hwc_parser::Span::new(0, 0),
             };
 
@@ -61,10 +61,12 @@ impl super::ModuleResolver {
     }
 
     /// Load stdlib module from embedded source (uses its own internal cache)
+    /// 
+    /// Returns both definitions and the arena they reference.
     pub(super) fn load_stdlib_embedded(
         &mut self,
         name: &str,
-    ) -> Result<Vec<Definition>, ResolverError> {
+    ) -> Result<(Vec<Definition>, hwc_parser::ast::arena::AstArena), ResolverError> {
         embedded_stdlib::get_stdlib_definitions(name).ok_or_else(|| ResolverError::StdlibNotFound {
             path: name.into(),
             span: None,

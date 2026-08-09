@@ -33,10 +33,6 @@ CC_sub2 MINUS BULK {{2fF * W} * L}
 *     - Via_A.__virtual_Via_A
 *     - In_Pad.anchor
 *     - In_Pad.__virtual_In_Pad
-*     - In_Pad.__virtual_In_Pad
-*     - Contact_A.__virtual_Contact_A
-*     - In_Pad.__virtual_In_Pad
-*     - Contact_A.__virtual_Contact_A
 * Net: Out (width=300nm, material=Tungsten)
 *   Connected pins:
 *     - Resistor_Body_B.anchor
@@ -46,15 +42,10 @@ CC_sub2 MINUS BULK {{2fF * W} * L}
 *     - Via_B.__virtual_Via_B
 *     - Out_Pad.anchor
 *     - Out_Pad.__virtual_Out_Pad
-*     - Contact_B.__virtual_Contact_B
-*     - Out_Pad.__virtual_Out_Pad
-*     - Contact_B.__virtual_Contact_B
-*     - Out_Pad.__virtual_Out_Pad
 * Net: GND (width=300nm, material=Tungsten)
 *   Connected pins:
 *     - Resistor_Bulk.anchor
 *     - Resistor_Bulk.__virtual_Resistor_Bulk
-* Net: TEMP_NET (width=300nm, material=Tungsten)
 
 
 * ========================================
@@ -66,13 +57,13 @@ XR1 In Out GND sky130_fd_pr__res_high_po W=1.41u L=1.41u
 * INTEGRATED TRACE PARASITICS
 * ========================================
 * Trace resistance
-RRtr_In_0 nIn_entry In 2.909524e-1
+RRtr_In_0 nIn_entry In 3.692857e-1
 * Ground capacitance
-CCgnd_In_0 In GND 8.978146e-17
+CCgnd_In_0 In GND 1.139534e-16
 * Trace resistance
-RRtr_Out_0 nOut_entry Out 2.909524e-1
+RRtr_Out_0 nOut_entry Out 3.692857e-1
 * Ground capacitance
-CCgnd_Out_0 Out GND 8.978146e-17
+CCgnd_Out_0 Out GND 1.139534e-16
 
 * Total parasitic elements: 4
 

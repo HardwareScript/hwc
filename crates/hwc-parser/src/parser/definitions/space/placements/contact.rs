@@ -120,6 +120,20 @@ impl crate::parser::Parser {
 
                 if field_name == "net" {
                     net_in_block = Some(self.parse_net_name()?);
+                } else if field_name == "at" {
+                    // v0.2.1: Support at: [x: expr, y: expr] in properties block
+                    // This enables anchor arithmetic: at: [x: Contact_A.center_x, y: Contact_A.center_y]
+                    // Must be used INSTEAD of inline 'at' placement (not in addition to)
+                    let start_pos = self.current_span().start;
+                    let coord = self.parse_coordinate_optional_z()?;
+                    let end_pos = self.previous_span().end;
+                    props.insert(
+                        "at".into(),
+                        Expression::Coordinate {
+                            coord: Box::new(coord),
+                            span: Span::new(start_pos, end_pos),
+                        },
+                    );
                 } else if field_name == "align" {
                     // v0.2.1: Parse alignment constraints
                     let start_pos = self.current_span().start;

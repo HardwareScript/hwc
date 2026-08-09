@@ -62,9 +62,18 @@ pub fn try_load_lockfile(
                         );
                     }
 
+                    // **v0.2.3: CRITICAL FIX - Rebuild analytic_routes from routing database**
+                    // After lockfile loads routes into routing_database, we MUST sync analytic_routes
+                    // so DXF export and parasitic extraction can see the geometry.
+                    space.sync_analytic_routes_from_database();
+
                     eprintln!(
                         "[LOCK] Valid lockfile loaded for '{}'. Skipping all routing (manual + auto).",
                         space.name
+                    );
+                    eprintln!(
+                        "[LOCK] Synchronized analytic_routes: {} traces available for export",
+                        space.get_analytic_routes().len()
                     );
                     Ok(true)
                 }

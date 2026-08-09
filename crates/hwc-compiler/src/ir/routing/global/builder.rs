@@ -33,7 +33,7 @@ impl<'a> AutoRouter<'a> {
             let mut used_ports = FxHashMap::default();
 
             for route in &auto_routes {
-                let net_id = self.find_net_id_for_name("TEMP_NET")?;
+                // Don't create TEMP_NET - let register_net_for_route handle net creation
                 let actual_net_id = crate::ir::routing::register_net_for_route(
                     self.space,
                     route,
@@ -42,8 +42,7 @@ impl<'a> AutoRouter<'a> {
                     self.stackup_manager,
                     self.profile,
                     None,
-                )
-                .unwrap_or(net_id);
+                )?; // Propagate error instead of falling back to temp net
 
                 let net_name = self
                     .space

@@ -122,22 +122,25 @@ space Simple_Resistor_Space implements SimpleResistor:
     # This is NOT how Magic/SiliWiz works (they infer from geometry)
     # This IS how HardwareScript works (explicit, deterministic, fail-loudly)
     
+    # Base anchor for entire resistor structure - only absolute coordinate needed
+    let resistor_center_x = 10.0um
+    let resistor_center_y = 5.0um
+    
     # Terminal A - Left half of resistor (2μm × 1μm)
-    # Spans from 8μm to 10μm, centered at 9μm
+    # Uses comptime anchor arithmetic instead of hardcoded positions
     add pour(Polysilicon) named Resistor_Body_A on layer: polyres:
         device: R1.A
         net: In
         dimensions: res_length / 2 by res_width
-        at: [x: 10.0um - res_length / 4, y: 5.0um]  # Centered at 9μm
+        at: [x: resistor_center_x - res_length / 4, y: resistor_center_y]
     
     # Terminal B - Right half of resistor (2μm × 1μm)
-    # Spans from 10μm to 12μm, centered at 11μm
-    # Touches Terminal A edge-to-edge at x = 10μm
+    # Touches Terminal A edge-to-edge - uses anchor arithmetic to place at right edge + half width
     add pour(Polysilicon) named Resistor_Body_B on layer: polyres:
         device: R1.B
         net: Out
         dimensions: res_length / 2 by res_width
-        at: [x: 10.0um + res_length / 4, y: 5.0um]  # Centered at 11μm
+        at: [x: Resistor_Body_A.right + (res_length / 4), y: Resistor_Body_A.center_y]
     
     # Terminal BULK - Virtual terminal bound to ground net
     # This is a zero-area "phantom" pour that only exists to satisfy the
@@ -147,53 +150,58 @@ space Simple_Resistor_Space implements SimpleResistor:
         device: R1.BULK
         net: GND
         dimensions: 1nm by 1nm  # Minimal virtual footprint
-        at: [x: 10.0um, y: 3.0um]  # Below resistor body (arbitrary location)
+        at: [x: (Resistor_Body_A.center_x + Resistor_Body_B.center_x) / 2, y: resistor_center_y - 2.0um]
 
     # ========================================================================
-    # 2. METAL CONTACTS - HardwareScript: Explicit placement over terminals
+    # 2. METAL CONTACTS - Fully Relational Placement using Anchor Arithmetic
     # ========================================================================
     
-    # Contact A - Left end at 8μm (over Terminal A)
+    # Contact A - Left end, perfectly aligned with Terminal A left edge
     add pour(Aluminum) named Contact_A on layer: metal1:
         dimensions: contact_size by contact_size
-        at: [x: 10.0um - res_length / 2, y: 5.0um]  # At 8μm
+        at: [x: Resistor_Body_A.left, y: Resistor_Body_A.center_y]
         net: In
     
-    # Contact B - Right end at 12μm (over Terminal B)
+    # Contact B - Right end, perfectly aligned with Terminal B right edge
     add pour(Aluminum) named Contact_B on layer: metal1:
         dimensions: contact_size by contact_size
-        at: [x: 10.0um + res_length / 2, y: 5.0um]  # At 12μm
+        at: [x: Resistor_Body_B.right - contact_size, y: Resistor_Body_B.center_y]
         net: Out
 
     # ========================================================================
-    # 3. VIAS - Bridge polyres to metal1
+    # 3. VIAS - Bridge polyres to metal1 using relational alignment
     # ========================================================================
     # SKY130 minimum via diameter: 300nm (from Resistor_3D profile)
     
     add contact(Tungsten) named Via_A spanning layer: polyres to metal1:
         diameter: 300nm
-        align: center with Contact_A
+        at: [x: Contact_A.center_x, y: Contact_A.center_y]
         net: In
 
     add contact(Tungsten) named Via_B spanning layer: polyres to metal1:
         diameter: 300nm
-        align: center with Contact_B
+        at: [x: Contact_B.center_x, y: Contact_B.center_y]
         net: Out
 
     # ========================================================================
-    # 4. EXTERNAL CONNECTION PADS
+    # 4. EXTERNAL CONNECTION PADS - Fully Relational Placement
     # ========================================================================
     
-    # Input pad - Left side, 3μm spacing from resistor
+    let pad_spacing = 3.0um  # Clear spacing from resistor body
+    let pad_size = 1.0um
+    
+    # Input pad - Left side, spaced from Contact_A using anchor arithmetic
+    # Center is at: Contact_A.left - pad_spacing - (pad_size / 2)
     add pour(Aluminum) named In_Pad on layer: metal1:
-        dimensions: 1.0um by 1.0um
-        at: [x: 10.0um - res_length / 2 - 3.0um, y: 5.0um]  # Left at 4μm
+        dimensions: pad_size by pad_size
+        at: [x: Contact_A.left - pad_spacing - (pad_size / 2), y: Contact_A.center_y]
         net: In
 
-    # Output pad - Right side, 3μm spacing from resistor
+    # Output pad - Right side, spaced from Contact_B using anchor arithmetic
+    # Center is at: Contact_B.right + pad_spacing + (pad_size / 2)
     add pour(Aluminum) named Out_Pad on layer: metal1:
-        dimensions: 1.0um by 1.0um
-        at: [x: 10.0um + res_length / 2 + 3.0um, y: 5.0um]  # Right at 16μm
+        dimensions: pad_size by pad_size
+        at: [x: Contact_B.right + pad_spacing + (pad_size / 2), y: Contact_B.center_y]
         net: Out
 
     # ========================================================================
