@@ -247,7 +247,8 @@ pub fn extract_placements_from_layout_statements(
             } => {
                 placement_ids.extend(extract_placements_from_layout_statements(then_body));
                 if let Some(else_statements) = else_body {
-                    placement_ids.extend(extract_placements_from_layout_statements(else_statements));
+                    placement_ids
+                        .extend(extract_placements_from_layout_statements(else_statements));
                 }
             }
         }

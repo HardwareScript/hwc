@@ -105,7 +105,7 @@ pub fn manhattan_path_to_segments(
         let dx = (p2.x - start.x).abs();
         let dy = (p2.y - start.y).abs();
         let dz = (p2.z - start.z).abs();
-        let is_diagonal = (dx > 0 && dy > 0) || (dx > 0 && dz > 0) || (dy > 0 && dz > 0);
+        let is_diagonal = (dz > 0 || dy > 0) && dx > 0 || (dy > 0 && dz > 0);
 
         eprintln!("[MANHATTAN_TO_SEGMENTS] waypoint[{}] at {:?}:", i, p2);
         eprintln!("[MANHATTAN_TO_SEGMENTS]   is_collinear={}, is_short={} (seg_len_sq={} vs min={}), is_diagonal={}", 

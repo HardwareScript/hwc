@@ -55,7 +55,7 @@ pub fn register_plane_netlist(
     let center_z = (start_with_z.z + end_with_z.z) / 2;
 
     let plane_component_id = space.netlist.add_component(
-        plane.name.to_string().into(),
+        plane.name.to_string(),
         format!("Plane({})", plane.material).into(),
         (center_x, center_y, center_z),
     );

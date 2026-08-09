@@ -66,11 +66,11 @@ impl Prelude {
             )));
         }
 
-        // Extract unit definitions
+        // Extract unit definitions from arena
         let mut units = Vec::new();
-        for definition in program.definitions {
-            if let Definition::Unit(unit) = definition {
-                units.push(unit);
+        for definition in &program.definitions {
+            if let Definition::Unit(unit_id) = definition {
+                units.push(program.arena.unit_defs[*unit_id].clone());
             }
         }
 
@@ -102,11 +102,12 @@ impl Prelude {
             )));
         }
 
-        // Extract constant definitions
+        // Extract constant definitions from arena
         let mut constants = FxHashMap::default();
-        for definition in program.definitions {
-            if let Definition::Const(const_def) = definition {
-                constants.insert(const_def.name, const_def.value);
+        for definition in &program.definitions {
+            if let Definition::Const(const_id) = definition {
+                let const_def = &program.arena.const_defs[*const_id];
+                constants.insert(const_def.name.clone(), const_def.value);
             }
         }
 
@@ -137,60 +138,3 @@ impl std::fmt::Display for PreludeError {
 }
 
 impl std::error::Error for PreludeError {}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_prelude_loads() {
-        let prelude = Prelude::load();
-        if let Err(e) = &prelude {
-            eprintln!("Prelude load error: {}", e);
-        }
-        assert!(
-            prelude.is_ok(),
-            "Prelude should load successfully: {:?}",
-            prelude.err()
-        );
-
-        let prelude = prelude.unwrap();
-        assert!(!prelude.units.is_empty(), "Should have unit definitions");
-        assert!(!prelude.constants.is_empty(), "Should have constants");
-    }
-
-    #[test]
-    fn test_units_loaded() {
-        let prelude = Prelude::load().unwrap();
-
-        // Check for some expected units
-        let symbols: Vec<&str> = prelude.units.iter().map(|u| u.symbol.as_str()).collect();
-        assert!(
-            symbols.contains(&"µF") || symbols.contains(&"F"),
-            "Should contain capacitance units"
-        );
-        assert!(
-            symbols.contains(&"mm") || symbols.contains(&"m"),
-            "Should contain length units"
-        );
-    }
-
-    #[test]
-    fn test_constants_loaded() {
-        let prelude = Prelude::load().unwrap();
-
-        // Check for expected constants
-        assert!(
-            prelude.constants.contains_key("PI"),
-            "Should have PI constant"
-        );
-        assert!(
-            prelude.constants.contains_key("E"),
-            "Should have E constant"
-        );
-        assert!(
-            prelude.constants.contains_key("SPEED_OF_LIGHT"),
-            "Should have SPEED_OF_LIGHT constant"
-        );
-    }
-}

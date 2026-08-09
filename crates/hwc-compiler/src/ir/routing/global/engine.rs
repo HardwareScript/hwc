@@ -178,16 +178,16 @@ impl<'a> AutoRouter<'a> {
                         idx, resolved.net_name
                     );
 
-                    // Convert Point3D normals (i64) to Normal2D (i32) - safe for unit vectors scaled by 10^9
+                    // Normals are already i32 unit vectors scaled by 10^9
                     let start_normal_2d =
                         hwc_engine::geometry_router::connection_interface::Normal2D {
-                            x: start_normal.x as i32,
-                            y: start_normal.y as i32,
+                            x: start_normal.x,
+                            y: start_normal.y,
                         };
                     let goal_normal_2d =
                         hwc_engine::geometry_router::connection_interface::Normal2D {
-                            x: goal_normal.x as i32,
-                            y: goal_normal.y as i32,
+                            x: goal_normal.x,
+                            y: goal_normal.y,
                         };
                     net_normals.insert(resolved.net_id, (start_normal_2d, goal_normal_2d));
 
@@ -335,7 +335,7 @@ impl<'a> AutoRouter<'a> {
                 safety_factor: constraint_set.clearance.safety_factor,
                 stackup,
                 solder_mask_expansion_nm: constraint_set.solder_mask_expansion_nm,
-                technology: constraint_set.technology.clone(),
+                technology: constraint_set.technology,
             };
             constraints.set_fabrication_constraints(fab_constraints);
         }

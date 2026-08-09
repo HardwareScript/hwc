@@ -30,7 +30,10 @@ impl SymbolTable {
         self.hpm
             .last_mut()
             .unwrap()
-            .insert(name_str.clone().into(), Definition::Space(def));
+            .insert(name_str.clone().into(), {
+                let id = self.arena.space_defs.push(def);
+                Definition::Space(id)
+            });
 
         eprintln!(
             "[DEBUG] Space '{}' registered in HPM layer. Total HPM layers: {}",
@@ -48,10 +51,10 @@ impl SymbolTable {
             self.hpm.push(super::super::layer::SymbolLayer::new());
         }
 
-        self.hpm
-            .last_mut()
-            .unwrap()
-            .insert(key.into(), Definition::Bridge(def));
+        self.hpm.last_mut().unwrap().insert(key.into(), {
+            let id = self.arena.bridge_defs.push(def);
+            Definition::Bridge(id)
+        });
     }
 
     /// Register an imported material alias (in HPM layer)
@@ -63,10 +66,10 @@ impl SymbolTable {
             self.hpm.push(super::super::layer::SymbolLayer::new());
         }
 
-        self.hpm
-            .last_mut()
-            .unwrap()
-            .insert(name_str.into(), Definition::MaterialAlias(def));
+        self.hpm.last_mut().unwrap().insert(name_str.into(), {
+            let id = self.arena.material_alias_defs.push(def);
+            Definition::MaterialAlias(id)
+        });
     }
 
     /// Register an imported unit definition (in HPM layer)
@@ -76,10 +79,10 @@ impl SymbolTable {
         if self.hpm.is_empty() {
             self.hpm.push(super::super::layer::SymbolLayer::new());
         }
-        self.hpm
-            .last_mut()
-            .unwrap()
-            .insert(symbol, Definition::Unit(def));
+        self.hpm.last_mut().unwrap().insert(symbol, {
+            let id = self.arena.unit_defs.push(def);
+            Definition::Unit(id)
+        });
     }
 
     /// Register an imported device definition (in HPM layer)
@@ -89,10 +92,10 @@ impl SymbolTable {
         if self.hpm.is_empty() {
             self.hpm.push(super::super::layer::SymbolLayer::new());
         }
-        self.hpm
-            .last_mut()
-            .unwrap()
-            .insert(name.into(), Definition::Device(def));
+        self.hpm.last_mut().unwrap().insert(name.into(), {
+            let id = self.arena.device_defs.push(def);
+            Definition::Device(id)
+        });
     }
 
     /// Register an imported constant (in HPM layer)
@@ -102,10 +105,10 @@ impl SymbolTable {
         if self.hpm.is_empty() {
             self.hpm.push(super::super::layer::SymbolLayer::new());
         }
-        self.hpm
-            .last_mut()
-            .unwrap()
-            .insert(name, Definition::Const(def));
+        self.hpm.last_mut().unwrap().insert(name, {
+            let id = self.arena.const_defs.push(def);
+            Definition::Const(id)
+        });
     }
 
     /// Register an imported shape definition (in HPM layer)
@@ -115,10 +118,10 @@ impl SymbolTable {
         if self.hpm.is_empty() {
             self.hpm.push(super::super::layer::SymbolLayer::new());
         }
-        self.hpm
-            .last_mut()
-            .unwrap()
-            .insert(name_str.into(), Definition::Shape(def));
+        self.hpm.last_mut().unwrap().insert(name_str.into(), {
+            let id = self.arena.shape_defs.push(def);
+            Definition::Shape(id)
+        });
     }
 
     /// Register an imported material definition (in HPM layer)
@@ -135,10 +138,10 @@ impl SymbolTable {
             self.hpm.push(super::super::layer::SymbolLayer::new());
         }
 
-        self.hpm
-            .last_mut()
-            .unwrap()
-            .insert(name_str.into(), Definition::Material(def));
+        self.hpm.last_mut().unwrap().insert(name_str.into(), {
+            let id = self.arena.material_defs.push(def);
+            Definition::Material(id)
+        });
     }
 
     /// Register an imported profile definition (in HPM layer)
@@ -148,10 +151,10 @@ impl SymbolTable {
         if self.hpm.is_empty() {
             self.hpm.push(super::super::layer::SymbolLayer::new());
         }
-        self.hpm
-            .last_mut()
-            .unwrap()
-            .insert(name_str.into(), Definition::Profile(def));
+        self.hpm.last_mut().unwrap().insert(name_str.into(), {
+            let id = self.arena.profile_defs.push(def);
+            Definition::Profile(id)
+        });
     }
 
     /// Register an imported component definition (in HPM layer)
@@ -166,7 +169,10 @@ impl SymbolTable {
         self.hpm
             .last_mut()
             .unwrap()
-            .insert(name_str.clone().into(), Definition::Component(def));
+            .insert(name_str.clone().into(), {
+                let id = self.arena.component_defs.push(def);
+                Definition::Component(id)
+            });
     }
 
     /// Register an imported module definition (in HPM layer)
@@ -176,10 +182,10 @@ impl SymbolTable {
         if self.hpm.is_empty() {
             self.hpm.push(super::super::layer::SymbolLayer::new());
         }
-        self.hpm
-            .last_mut()
-            .unwrap()
-            .insert(name_str.into(), Definition::Module(def));
+        self.hpm.last_mut().unwrap().insert(name_str.into(), {
+            let id = self.arena.module_defs.push(def);
+            Definition::Module(id)
+        });
     }
 
     /// Register an imported mechanical definition (in HPM layer)
@@ -189,10 +195,10 @@ impl SymbolTable {
         if self.hpm.is_empty() {
             self.hpm.push(super::super::layer::SymbolLayer::new());
         }
-        self.hpm
-            .last_mut()
-            .unwrap()
-            .insert(name_str.into(), Definition::Mechanical(def));
+        self.hpm.last_mut().unwrap().insert(name_str.into(), {
+            let id = self.arena.mechanical_defs.push(def);
+            Definition::Mechanical(id)
+        });
     }
 
     /// Register an imported interface definition (in HPM layer)
@@ -202,10 +208,10 @@ impl SymbolTable {
         if self.hpm.is_empty() {
             self.hpm.push(super::super::layer::SymbolLayer::new());
         }
-        self.hpm
-            .last_mut()
-            .unwrap()
-            .insert(name_str.into(), Definition::Interface(def));
+        self.hpm.last_mut().unwrap().insert(name_str.into(), {
+            let id = self.arena.interface_defs.push(def);
+            Definition::Interface(id)
+        });
     }
 
     /// Register an imported signal group definition (in HPM layer)
@@ -215,10 +221,10 @@ impl SymbolTable {
         if self.hpm.is_empty() {
             self.hpm.push(super::super::layer::SymbolLayer::new());
         }
-        self.hpm
-            .last_mut()
-            .unwrap()
-            .insert(name_str.into(), Definition::SignalGroup(def));
+        self.hpm.last_mut().unwrap().insert(name_str.into(), {
+            let id = self.arena.signal_group_defs.push(def);
+            Definition::SignalGroup(id)
+        });
     }
 
     /// Register an imported pattern definition (in HPM layer)
@@ -228,10 +234,10 @@ impl SymbolTable {
         if self.hpm.is_empty() {
             self.hpm.push(super::super::layer::SymbolLayer::new());
         }
-        self.hpm
-            .last_mut()
-            .unwrap()
-            .insert(name_str.into(), Definition::Pattern(def));
+        self.hpm.last_mut().unwrap().insert(name_str.into(), {
+            let id = self.arena.pattern_defs.push(def);
+            Definition::Pattern(id)
+        });
     }
 
     /// Register an imported strategy definition (in HPM layer)
@@ -241,10 +247,10 @@ impl SymbolTable {
         if self.hpm.is_empty() {
             self.hpm.push(super::super::layer::SymbolLayer::new());
         }
-        self.hpm
-            .last_mut()
-            .unwrap()
-            .insert(name_str.into(), Definition::Strategy(def));
+        self.hpm.last_mut().unwrap().insert(name_str.into(), {
+            let id = self.arena.strategy_defs.push(def);
+            Definition::Strategy(id)
+        });
     }
 
     /// Register an imported logic block definition (in HPM layer)
@@ -254,10 +260,10 @@ impl SymbolTable {
         if self.hpm.is_empty() {
             self.hpm.push(super::super::layer::SymbolLayer::new());
         }
-        self.hpm
-            .last_mut()
-            .unwrap()
-            .insert(name_str.into(), Definition::Logic(def));
+        self.hpm.last_mut().unwrap().insert(name_str.into(), {
+            let id = self.arena.logic_defs.push(def);
+            Definition::Logic(id)
+        });
     }
 
     /// Register an imported enum definition (in HPM layer)
@@ -267,10 +273,10 @@ impl SymbolTable {
         if self.hpm.is_empty() {
             self.hpm.push(super::super::layer::SymbolLayer::new());
         }
-        self.hpm
-            .last_mut()
-            .unwrap()
-            .insert(name_str.into(), Definition::Enum(def));
+        self.hpm.last_mut().unwrap().insert(name_str.into(), {
+            let id = self.arena.enum_defs.push(def);
+            Definition::Enum(id)
+        });
     }
 
     /// Register an imported struct definition (in HPM layer)
@@ -280,10 +286,10 @@ impl SymbolTable {
         if self.hpm.is_empty() {
             self.hpm.push(super::super::layer::SymbolLayer::new());
         }
-        self.hpm
-            .last_mut()
-            .unwrap()
-            .insert(name_str.into(), Definition::Struct(def));
+        self.hpm.last_mut().unwrap().insert(name_str.into(), {
+            let id = self.arena.struct_defs.push(def);
+            Definition::Struct(id)
+        });
     }
 
     /// Register an imported test definition (in HPM layer)
@@ -293,10 +299,10 @@ impl SymbolTable {
         if self.hpm.is_empty() {
             self.hpm.push(super::super::layer::SymbolLayer::new());
         }
-        self.hpm
-            .last_mut()
-            .unwrap()
-            .insert(name_str.into(), Definition::Test(def));
+        self.hpm.last_mut().unwrap().insert(name_str.into(), {
+            let id = self.arena.test_defs.push(def);
+            Definition::Test(id)
+        });
     }
 
     /// Register an imported SPICE model definition (in HPM layer) (v0.2.1)
@@ -308,10 +314,10 @@ impl SymbolTable {
         if self.hpm.is_empty() {
             self.hpm.push(super::super::layer::SymbolLayer::new());
         }
-        self.hpm
-            .last_mut()
-            .unwrap()
-            .insert(name_str.into(), Definition::SpiceModel(def));
+        self.hpm.last_mut().unwrap().insert(name_str.into(), {
+            let id = self.arena.spice_model_defs.push(def);
+            Definition::SpiceModel(id)
+        });
     }
 
     /// Register an imported SPICE subcircuit definition (in HPM layer) (v0.2.2)
@@ -323,9 +329,9 @@ impl SymbolTable {
         if self.hpm.is_empty() {
             self.hpm.push(super::super::layer::SymbolLayer::new());
         }
-        self.hpm
-            .last_mut()
-            .unwrap()
-            .insert(name_str.into(), Definition::Subcircuit(def));
+        self.hpm.last_mut().unwrap().insert(name_str.into(), {
+            let id = self.arena.subcircuit_defs.push(def);
+            Definition::Subcircuit(id)
+        });
     }
 }

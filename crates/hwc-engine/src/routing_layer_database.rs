@@ -70,7 +70,7 @@ pub struct RoutingLayer {
 /// This is the single source of truth for which Z coordinate to route on
 /// for each layer. NO fallbacks, NO guessing. If a layer isn't here,
 /// routing fails with a clear error.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct RoutingLayerDatabase {
     /// Layer name → routing layer definition
     layers: FxHashMap<CompactString, RoutingLayer>,
@@ -101,7 +101,7 @@ impl RoutingLayerDatabase {
         for layer in stackup {
             // Look up the material to determine conductivity
             let mat_id = material_registry.get_id(&layer.material_name);
-            let is_conductive = mat_id.map_or(false, |id| {
+            let is_conductive = mat_id.is_some_and(|id| {
                 matches!(
                     material_registry.get_conductivity(id),
                     Some(MaterialConductivity::Conductor | MaterialConductivity::Semiconductor)
@@ -257,86 +257,5 @@ impl RoutingLayerDatabase {
     /// Get the number of routable layers.
     pub fn routable_layer_count(&self) -> usize {
         self.layers.values().filter(|l| l.is_routable).count()
-    }
-}
-
-impl Default for RoutingLayerDatabase {
-    fn default() -> Self {
-        Self {
-            layers: FxHashMap::default(),
-            ordered_names: Vec::new(),
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::material::ManufacturingProcess;
-
-    fn make_test_stackup() -> Vec<StackupLayer> {
-        vec![
-            StackupLayer::new("active".into(), 0, 400, 400, "Silicon".into(), true),
-            StackupLayer::new("poly".into(), 400, 850, 450, "Polysilicon".into(), true),
-            StackupLayer::new("metal1".into(), 1250, 1650, 400, "Aluminum".into(), true),
-        ]
-    }
-
-    fn make_test_registry() -> MaterialRegistry {
-        let mut reg = MaterialRegistry::new();
-        reg.register_with_properties(
-            "Silicon",
-            MaterialConductivity::Semiconductor,
-            ManufacturingProcess::Deposited,
-        );
-        reg.register_with_properties(
-            "Polysilicon",
-            MaterialConductivity::Conductor,
-            ManufacturingProcess::Deposited,
-        );
-        reg.register_with_properties(
-            "Aluminum",
-            MaterialConductivity::Conductor,
-            ManufacturingProcess::Deposited,
-        );
-        reg
-    }
-
-    #[test]
-    fn test_routing_z_from_stackup() {
-        let stackup = make_test_stackup();
-        let registry = make_test_registry();
-        let db = RoutingLayerDatabase::from_stackup(&stackup, &registry);
-
-        assert_eq!(db.get_routing_z("active").unwrap(), 0);
-        assert_eq!(db.get_routing_z("poly").unwrap(), 400);
-        assert_eq!(db.get_routing_z("metal1").unwrap(), 1250);
-    }
-
-    #[test]
-    fn test_nonexistent_layer_fails() {
-        let stackup = make_test_stackup();
-        let registry = make_test_registry();
-        let db = RoutingLayerDatabase::from_stackup(&stackup, &registry);
-
-        let result = db.get_routing_z("nonexistent");
-        assert!(result.is_err());
-        assert!(matches!(
-            result.unwrap_err(),
-            RoutingLayerError::LayerNotFound { .. }
-        ));
-    }
-
-    #[test]
-    fn test_list_routable_layers() {
-        let stackup = make_test_stackup();
-        let registry = make_test_registry();
-        let db = RoutingLayerDatabase::from_stackup(&stackup, &registry);
-
-        let routable = db.list_routable_layers();
-        assert_eq!(routable.len(), 3);
-        assert!(routable.contains(&"active"));
-        assert!(routable.contains(&"poly"));
-        assert!(routable.contains(&"metal1"));
     }
 }

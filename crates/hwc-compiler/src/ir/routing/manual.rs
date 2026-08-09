@@ -296,21 +296,22 @@ pub fn route_manual(
         .and_then(|s| space.find_layer_at_z(s.start.z))
         .map(|layer| (layer.z_bottom, layer.z_top));
 
-    let analytic_trace = hwc_engine::AnalyticTrace::with_layer_z_range(
-        net_id,
-        hwc_engine::space::CrossSection::new(trace_width_nm, thickness_nm),
-        segments,
-        copper_id,
-        net_name.clone(),
-        hwc_engine::space::CurrentRating::new(net_actual_current_ma, current_ma),
-        layer_z_range,
-        route_layer_name, // v0.2.2: Explicit layer lineage
-    );
+    let analytic_trace =
+        hwc_engine::AnalyticTrace::with_layer_z_range(hwc_engine::space::AnalyticTraceParams {
+            net_id,
+            cross_section: hwc_engine::space::CrossSection::new(trace_width_nm, thickness_nm),
+            segments,
+            material: copper_id,
+            net_name: net_name.clone(),
+            current: hwc_engine::space::CurrentRating::new(net_actual_current_ma, current_ma),
+            layer_z_range,
+            layer_name: route_layer_name, // v0.2.2: Explicit layer lineage
+        });
 
     // v0.2.0: Register parent-level route in hierarchical routing database
     // This is the single source of truth for all routing data.
-    let from_entity = format!("{}", super::helpers::endpoint_label(&route.from));
-    let to_entity = format!("{}", super::helpers::endpoint_label(&route.to));
+    let from_entity = super::helpers::endpoint_label(&route.from).to_string();
+    let to_entity = super::helpers::endpoint_label(&route.to).to_string();
 
     eprintln!(
         "[ROUTING DB MANUAL] Registering parent route: from='{}', to='{}', net='{}', net_id={:?}",

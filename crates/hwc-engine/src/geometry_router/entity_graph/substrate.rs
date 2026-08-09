@@ -9,6 +9,20 @@ use crate::netlist::NetId;
 
 use super::{EntityGraph, TubeLayerSpec};
 
+/// Configuration for checked substrate layer addition with clearance validation
+pub struct SubstrateLayerConfig<'a> {
+    pub material: MaterialId,
+    pub net: NetId,
+    pub bbox: BoundingBox,
+    pub layer_type: SubstrateLayerType,
+    pub min_clearance_nm: i64,
+    pub device_binding: Option<(
+        &'a compact_str::CompactString,
+        &'a compact_str::CompactString,
+    )>,
+    pub pours: &'a [crate::space::PourMetadata],
+}
+
 impl EntityGraph {
     /// Add a substrate layer with optional clearance validation.
     pub fn add_substrate_layer(
@@ -27,24 +41,18 @@ impl EntityGraph {
     /// v0.2.3: Layer-aware clearance - only check conductors on the same Z-layer
     pub fn add_substrate_layer_checked(
         &mut self,
-        material: MaterialId,
-        net: NetId,
-        bbox: BoundingBox,
-        layer_type: SubstrateLayerType,
-        min_clearance_nm: i64,
-        device_binding: Option<(&compact_str::CompactString, &compact_str::CompactString)>, // (device_name, terminal)
-        _pours: &[crate::space::PourMetadata],
+        config: SubstrateLayerConfig,
     ) -> Result<(), String> {
-        if net != NetId::UNCONNECTED {
+        if config.net != NetId::UNCONNECTED {
             for existing in self.substrate_layers.iter() {
                 // Skip same-net layers (can overlap your own pours)
-                if existing.net == NetId::UNCONNECTED || existing.net == net {
+                if existing.net == NetId::UNCONNECTED || existing.net == config.net {
                     continue;
                 }
 
                 // DEVICE TERMINAL EXEMPTION (v0.2.2): If both pours belong to same device instance,
                 // skip clearance check (intentional overlap for capacitors, transistors, etc.)
-                if let Some((dev_name, _terminal)) = device_binding {
+                if let Some((dev_name, _terminal)) = config.device_binding {
                     // Check if existing layer has device binding to same device
                     if let Some((ref existing_dev, ref _existing_term)) = existing.device_binding {
                         if existing_dev == dev_name {
@@ -65,29 +73,30 @@ impl EntityGraph {
                 //
                 // Two ranges overlap if: !(a.max <= b.min || b.max <= a.min)
                 // Simplified: a.max > b.min && b.max > a.min
-                let z_overlap =
-                    bbox.max.z > existing.bbox.min.z && existing.bbox.max.z > bbox.min.z;
+                let z_overlap = config.bbox.max.z > existing.bbox.min.z
+                    && existing.bbox.max.z > config.bbox.min.z;
 
                 if !z_overlap {
                     // No Z-overlap = different layers, skip clearance check
                     eprintln!(
                         "[PLACEMENT] Skipping clearance check: Z-separated layers (new Z={}-{}nm, existing Z={}-{}nm)",
-                        bbox.min.z, bbox.max.z, existing.bbox.min.z, existing.bbox.max.z
+                        config.bbox.min.z, config.bbox.max.z, existing.bbox.min.z, existing.bbox.max.z
                     );
                     continue;
                 }
 
-                let distance = bbox.distance_to(&existing.bbox);
-                if distance < min_clearance_nm {
+                let distance = config.bbox.distance_to(&existing.bbox);
+                if distance < config.min_clearance_nm {
                     return Err(format!(
                         "Clearance violation: Pour on net {} at {:?} is {}nm from net {} (required: {}nm)",
-                        net.raw(), bbox, distance, existing.net.raw(), min_clearance_nm
+                        config.net.raw(), config.bbox, distance, existing.net.raw(), config.min_clearance_nm
                     ));
                 }
             }
         }
-        let mut layer = SubstrateLayer::new(material, net, bbox, layer_type);
-        if let Some((dev_name, terminal)) = device_binding {
+        let mut layer =
+            SubstrateLayer::new(config.material, config.net, config.bbox, config.layer_type);
+        if let Some((dev_name, terminal)) = config.device_binding {
             layer.device_binding = Some((dev_name.to_string(), terminal.to_string()));
         }
         self.substrate_layers.push(layer);

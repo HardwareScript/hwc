@@ -9,16 +9,6 @@
 //! 1. **Extraction Functions**: Pure functions that calculate parameters from geometry + materials
 //! 2. **Registry**: Maps device names/patterns to extraction functions
 //! 3. **Fallback**: Returns empty parameters if no extractor is registered
-//!
-//! # Example Usage
-//!
-//! ```rust
-//! let mut registry = ParameterExtractionRegistry::new();
-//! registry.register_standard_extractors();
-//!
-//! let params = registry.extract("Capacitor", &terminal_pours, space)?;
-//! // Returns: {"C": 0.35e-12}
-//! ```
 
 use compact_str::CompactString;
 use hwc_engine::space::PourMetadata;

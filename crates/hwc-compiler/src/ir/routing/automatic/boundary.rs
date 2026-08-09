@@ -40,6 +40,20 @@ impl PortAnalysis {
     }
 }
 
+/// Inputs shared by the obstacle-aware port-selection entry points.
+///
+/// Zero-cost grouping: destructured at function entry so the bodies operate on
+/// plain locals, identical to passing the values individually.
+pub struct PortSelectionParams<'a> {
+    pub space: &'a HardwareSpace,
+    pub start_center: Point3D,
+    pub goal_center: Point3D,
+    pub trace_width_nm: i64,
+    pub clearance_nm: i64,
+    pub from_component_name: &'a CompactString,
+    pub to_component_name: &'a CompactString,
+}
+
 /// Select an escape port by analyzing obstacles and spatial clearance.
 ///
 /// Uses topological ray-casting to measure actual routing space availability
@@ -47,71 +61,11 @@ impl PortAnalysis {
 /// 1. Valid access region (interface constraint)
 /// 2. Maximum clearance from obstacles
 /// 3. Reasonable geometric alignment toward goal
-fn select_routable_port(
-    space: &HardwareSpace,
-    endpoint: &hwc_parser::RouteEndpointSpec,
-    start_center: Point3D,
-    goal_center: Point3D,
-    trace_width_nm: i64,
-    clearance_nm: i64,
-    from_component_name: &CompactString,
-    to_component_name: &CompactString,
-) -> Result<CardinalPort, IrError> {
-    select_routable_port_impl(
-        space,
-        endpoint,
-        start_center,
-        goal_center,
-        trace_width_nm,
-        clearance_nm,
-        from_component_name,
-        to_component_name,
-    )
-}
-
-/// Public wrapper for boundary_resolution.rs to call obstacle-aware port selection
-/// by entity name (CompactString) instead of RouteEndpointSpec.
-///
-/// v0.1.9.1: Added net_id exemptions to prevent ray-caster from treating the pad's
-/// own geometry as an obstacle during port selection.
-pub fn select_routable_port_from_resolution(
-    space: &HardwareSpace,
-    entity_name: &CompactString,
-    start_center: Point3D,
-    goal_center: Point3D,
-    trace_width_nm: i64,
-    clearance_nm: i64,
-    from_component_name: &CompactString,
-    to_component_name: &CompactString,
-    from_net_id: Option<hwc_engine::netlist::NetId>,
-    to_net_id: Option<hwc_engine::netlist::NetId>,
-) -> Result<CardinalPort, IrError> {
-    select_routable_port_core(
-        space,
-        entity_name,
-        start_center,
-        goal_center,
-        trace_width_nm,
-        clearance_nm,
-        from_component_name,
-        to_component_name,
-        from_net_id,
-        to_net_id,
-    )
-}
-
-/// Core implementation of obstacle-aware port selection.
 ///
 /// v0.1.9.1: Extracts net IDs from entity data for exemption during ray-casting.
-fn select_routable_port_impl(
-    space: &HardwareSpace,
+fn select_routable_port(
     endpoint: &hwc_parser::RouteEndpointSpec,
-    start_center: Point3D,
-    goal_center: Point3D,
-    trace_width_nm: i64,
-    clearance_nm: i64,
-    from_component_name: &CompactString,
-    to_component_name: &CompactString,
+    params: PortSelectionParams,
 ) -> Result<CardinalPort, IrError> {
     let entity_name = match endpoint {
         hwc_parser::RouteEndpointSpec::ComponentPin {
@@ -124,52 +78,62 @@ fn select_routable_port_impl(
 
     // v0.1.9.1: Extract net IDs from both source and destination for exemption
     let from_entity_id =
-        hwc_engine::EntityId::from_semantic(&format!("space:{}", from_component_name));
-    let to_entity_id = hwc_engine::EntityId::from_semantic(&format!("space:{}", to_component_name));
+        hwc_engine::EntityId::from_semantic(&format!("space:{}", params.from_component_name));
+    let to_entity_id =
+        hwc_engine::EntityId::from_semantic(&format!("space:{}", params.to_component_name));
 
-    let from_net_id = space
+    let from_net_id = params
+        .space
         .entity_graph
         .get_entity_data(from_entity_id)
         .ok()
         .and_then(|d| d.net_id);
-    let to_net_id = space
+    let to_net_id = params
+        .space
         .entity_graph
         .get_entity_data(to_entity_id)
         .ok()
         .and_then(|d| d.net_id);
 
-    select_routable_port_core(
-        space,
-        &entity_name,
-        start_center,
-        goal_center,
-        trace_width_nm,
-        clearance_nm,
-        from_component_name,
-        to_component_name,
-        from_net_id,
-        to_net_id,
-    )
+    select_routable_port_core(&entity_name, params, from_net_id, to_net_id)
+}
+
+/// Public wrapper for boundary_resolution.rs to call obstacle-aware port selection
+/// by entity name (CompactString) instead of RouteEndpointSpec.
+///
+/// v0.1.9.1: Added net_id exemptions to prevent ray-caster from treating the pad's
+/// own geometry as an obstacle during port selection.
+pub fn select_routable_port_from_resolution(
+    entity_name: &CompactString,
+    params: PortSelectionParams,
+    from_net_id: Option<hwc_engine::netlist::NetId>,
+    to_net_id: Option<hwc_engine::netlist::NetId>,
+) -> Result<CardinalPort, IrError> {
+    select_routable_port_core(entity_name, params, from_net_id, to_net_id)
 }
 
 /// Core logic for obstacle-aware port selection (shared by both wrappers).
 ///
 /// v0.1.9.1 BUG FIX: Net exemption propagation to prevent self-collision during port selection.
 fn select_routable_port_core(
-    space: &HardwareSpace,
     entity_name: &CompactString,
-    start_center: Point3D,
-    goal_center: Point3D,
-    trace_width_nm: i64,
-    clearance_nm: i64,
-    from_component_name: &CompactString,
-    to_component_name: &CompactString,
+    params: PortSelectionParams,
     from_net_id: Option<hwc_engine::netlist::NetId>,
     to_net_id: Option<hwc_engine::netlist::NetId>,
 ) -> Result<CardinalPort, IrError> {
+    let PortSelectionParams {
+        space,
+        start_center,
+        goal_center,
+        trace_width_nm,
+        clearance_nm,
+        from_component_name,
+        to_component_name,
+    } = params;
+
     let interface = space
         .entity_graph
-        .get_interface_by_entity_name(&entity_name)
+        .get_interface_by_entity_name(entity_name)
         .ok_or_else(|| IrError::InvalidRouteExpression {
             expression: entity_name.to_string(),
             reason: "Entity has no registered interface".into(),
@@ -243,15 +207,14 @@ fn select_routable_port_core(
                 &spatial_index,
                 &board_bounds.unwrap(),
             ) {
-                let distance = match ray_dir {
+                match ray_dir {
                     RayDirection::North | RayDirection::South => {
                         (ray_hit.point.y - escape_pt.point.y).abs()
                     }
                     RayDirection::East | RayDirection::West => {
                         (ray_hit.point.x - escape_pt.point.x).abs()
                     }
-                };
-                distance
+                }
             } else {
                 board_bounds.unwrap().max.x.max(board_bounds.unwrap().max.y)
             }
@@ -393,25 +356,29 @@ pub fn calculate_boundary_points(
     // v0.1.9: Obstacle-aware auto-port selection
     // Uses topological ray-casting to select escape ports with maximum clearance
     let auto_exit_port = select_routable_port(
-        space,
         &route.from,
-        start_pin_center,
-        goal_pin_center,
-        trace_width_nm,
-        clearance_nm,
-        &from_label,
-        &to_label,
+        PortSelectionParams {
+            space,
+            start_center: start_pin_center,
+            goal_center: goal_pin_center,
+            trace_width_nm,
+            clearance_nm,
+            from_component_name: &from_label,
+            to_component_name: &to_label,
+        },
     )?;
 
     let auto_enter_port = select_routable_port(
-        space,
         &route.to,
-        goal_pin_center,
-        start_pin_center,
-        trace_width_nm,
-        clearance_nm,
-        &from_label,
-        &to_label,
+        PortSelectionParams {
+            space,
+            start_center: goal_pin_center,
+            goal_center: start_pin_center,
+            trace_width_nm,
+            clearance_nm,
+            from_component_name: &from_label,
+            to_component_name: &to_label,
+        },
     )?;
 
     // v0.1.9 CIR: Query interface by entity name and use interface_escape

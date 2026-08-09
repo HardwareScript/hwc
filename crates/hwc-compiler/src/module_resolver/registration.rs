@@ -95,89 +95,114 @@ impl super::ModuleResolver {
     }
 
     /// Check if a definition is exported
-    pub(super) fn is_exported(&self, definition: &Definition, arena: &hwc_parser::ast::arena::AstArena) -> bool {
+    pub(super) fn is_exported(
+        &self,
+        definition: &Definition,
+        arena: &hwc_parser::ast::arena::AstArena,
+    ) -> bool {
         match definition {
-            Definition::Bridge(b) => b.is_exported,
-            Definition::Material(m) => m.is_exported,
-            Definition::Profile(p) => p.is_exported,
-            Definition::Component(c) => arena.component_defs[*c].is_exported,
-            Definition::Module(m) => m.is_exported,
-            Definition::Logic(l) => l.is_exported,
-            Definition::Enum(e) => e.is_exported,
-            Definition::Struct(s) => s.is_exported,
-            Definition::Mechanical(m) => m.is_exported,
-            Definition::Interface(i) => i.is_exported,
-            Definition::Test(t) => t.is_exported,
-            Definition::SignalGroup(sg) => sg.is_exported,
-            Definition::Pattern(p) => p.is_exported,
-            Definition::Strategy(s) => s.is_exported,
-            Definition::Unit(u) => u.is_exported,
-            Definition::Device(d) => d.is_exported,
-            Definition::Const(c) => c.is_exported,
-            Definition::Shape(s) => s.is_exported,
-            Definition::MaterialAlias(a) => a.is_exported,
-            Definition::Space(s) => s.is_exported, // v0.2.1: Hierarchical Space Composition
-            Definition::SpiceModel(sm) => sm.is_exported, // v0.2.1: SPICE model cards
-            Definition::Subcircuit(ss) => ss.is_exported, // v0.2.2: SPICE subcircuit cards
+            Definition::Bridge(id) => arena.bridge_defs[*id].is_exported,
+            Definition::Material(id) => arena.material_defs[*id].is_exported,
+            Definition::Profile(id) => arena.profile_defs[*id].is_exported,
+            Definition::Component(id) => arena.component_defs[*id].is_exported,
+            Definition::Module(id) => arena.module_defs[*id].is_exported,
+            Definition::Logic(l) => arena.logic_defs[*l].is_exported,
+            Definition::Enum(e) => arena.enum_defs[*e].is_exported,
+            Definition::Struct(s) => arena.struct_defs[*s].is_exported,
+            Definition::Mechanical(id) => arena.mechanical_defs[*id].is_exported,
+            Definition::Interface(id) => arena.interface_defs[*id].is_exported,
+            Definition::Test(id) => arena.test_defs[*id].is_exported,
+            Definition::SignalGroup(sg) => arena.signal_group_defs[*sg].is_exported,
+            Definition::Pattern(p) => arena.pattern_defs[*p].is_exported,
+            Definition::Strategy(s) => arena.strategy_defs[*s].is_exported,
+            Definition::Unit(id) => arena.unit_defs[*id].is_exported,
+            Definition::Device(id) => arena.device_defs[*id].is_exported,
+            Definition::Const(id) => arena.const_defs[*id].is_exported,
+            Definition::Shape(s) => arena.shape_defs[*s].is_exported,
+            Definition::MaterialAlias(a) => arena.material_alias_defs[*a].is_exported,
+            Definition::Space(id) => arena.space_defs[*id].is_exported, // v0.2.1: Hierarchical Space Composition
+            Definition::SpiceModel(sm) => arena.spice_model_defs[*sm].is_exported, // v0.2.1: SPICE model cards
+            Definition::Subcircuit(ss) => arena.subcircuit_defs[*ss].is_exported, // v0.2.2: SPICE subcircuit cards
             Definition::PolymorphicInterface(_) => true, // TODO: add is_exported field
         }
     }
 
     /// Check if a definition matches a name
-    pub(super) fn def_matches_name(&self, definition: &Definition, name: &str, arena: &hwc_parser::ast::arena::AstArena) -> bool {
+    pub(super) fn def_matches_name(
+        &self,
+        definition: &Definition,
+        name: &str,
+        arena: &hwc_parser::ast::arena::AstArena,
+    ) -> bool {
         match definition {
-            Definition::Bridge(b) => b.name.as_str() == name,
-            Definition::Material(m) => m.name.as_str() == name,
-            Definition::Profile(p) => p.name.as_str() == name,
+            Definition::Bridge(id) => arena.bridge_defs[*id].name.as_str() == name,
+            Definition::Material(id) => arena.material_defs[*id].name.as_str() == name,
+            Definition::Profile(id) => arena.profile_defs[*id].name.as_str() == name,
             Definition::Component(c) => arena.component_defs[*c].name.as_str() == name,
-            Definition::Module(m) => m.name.as_str() == name,
-            Definition::Logic(l) => l.name.as_str() == name,
-            Definition::Enum(e) => e.name.as_str() == name,
-            Definition::Struct(s) => s.name.as_str() == name,
-            Definition::Mechanical(m) => m.name.as_str() == name,
-            Definition::Interface(i) => i.name.as_str() == name,
-            Definition::Test(t) => t.name.as_str() == name,
-            Definition::SignalGroup(sg) => sg.name.as_str() == name,
-            Definition::Pattern(p) => p.name.as_str() == name,
-            Definition::Strategy(s) => s.name.as_str() == name,
-            Definition::Unit(u) => u.symbol.as_str() == name,
-            Definition::Device(d) => d.name.as_str() == name,
-            Definition::Const(c) => c.name.as_str() == name,
-            Definition::Shape(s) => s.name.as_str() == name,
-            Definition::MaterialAlias(a) => a.name.as_str() == name,
-            Definition::PolymorphicInterface(pi) => pi.name.as_str() == name,
-            Definition::Space(s) => s.name.as_str() == name, // v0.2.1: Hierarchical Space Composition
-            Definition::SpiceModel(sm) => sm.name.as_str() == name, // v0.2.1: SPICE model cards
-            Definition::Subcircuit(ss) => ss.name.as_str() == name, // v0.2.2: SPICE subcircuit cards
+            Definition::Module(id) => arena.module_defs[*id].name.as_str() == name,
+            Definition::Logic(l) => arena.logic_defs[*l].name.as_str() == name,
+            Definition::Enum(e) => arena.enum_defs[*e].name.as_str() == name,
+            Definition::Struct(s) => arena.struct_defs[*s].name.as_str() == name,
+            Definition::Mechanical(id) => arena.mechanical_defs[*id].name.as_str() == name,
+            Definition::Interface(id) => arena.interface_defs[*id].name.as_str() == name,
+            Definition::Test(id) => arena.test_defs[*id].name.as_str() == name,
+            Definition::SignalGroup(sg) => arena.signal_group_defs[*sg].name.as_str() == name,
+            Definition::Pattern(p) => arena.pattern_defs[*p].name.as_str() == name,
+            Definition::Strategy(s) => arena.strategy_defs[*s].name.as_str() == name,
+            Definition::Unit(id) => arena.unit_defs[*id].symbol.as_str() == name,
+            Definition::Device(id) => arena.device_defs[*id].name.as_str() == name,
+            Definition::Const(id) => arena.const_defs[*id].name.as_str() == name,
+            Definition::Shape(s) => arena.shape_defs[*s].name.as_str() == name,
+            Definition::MaterialAlias(a) => arena.material_alias_defs[*a].name.as_str() == name,
+            Definition::PolymorphicInterface(id) => arena.interface_defs[*id].name.as_str() == name,
+            Definition::Space(id) => arena.space_defs[*id].name.as_str() == name, // v0.2.1: Hierarchical Space Composition
+            Definition::SpiceModel(sm) => arena.spice_model_defs[*sm].name.as_str() == name, // v0.2.1: SPICE model cards
+            Definition::Subcircuit(ss) => arena.subcircuit_defs[*ss].name.as_str() == name, // v0.2.2: SPICE subcircuit cards
         }
     }
 
     /// Get a definition's name for debug output
-    pub(super) fn _def_name(&self, definition: &Definition, arena: &hwc_parser::ast::arena::AstArena) -> String {
+    pub(super) fn _def_name(
+        &self,
+        definition: &Definition,
+        arena: &hwc_parser::ast::arena::AstArena,
+    ) -> String {
         match definition {
-            Definition::Bridge(b) => format!("Bridge({})", b.name),
-            Definition::Material(m) => format!("Material({})", m.name),
-            Definition::Profile(p) => format!("Profile({})", p.name),
+            Definition::Bridge(id) => format!("Bridge({})", arena.bridge_defs[*id].name),
+            Definition::Material(id) => format!("Material({})", arena.material_defs[*id].name),
+            Definition::Profile(id) => format!("Profile({})", arena.profile_defs[*id].name),
             Definition::Component(c) => format!("Component({})", arena.component_defs[*c].name),
-            Definition::Module(m) => format!("Module({})", m.name),
-            Definition::Logic(l) => format!("Logic({})", l.name),
-            Definition::Enum(e) => format!("Enum({})", e.name),
-            Definition::Struct(s) => format!("Struct({})", s.name),
-            Definition::Mechanical(m) => format!("Mechanical({})", m.name),
-            Definition::Interface(i) => format!("Interface({})", i.name),
-            Definition::Test(t) => format!("Test({})", t.name),
-            Definition::SignalGroup(sg) => format!("SignalGroup({})", sg.name),
-            Definition::Pattern(p) => format!("Pattern({})", p.name),
-            Definition::Strategy(s) => format!("Strategy({})", s.name),
-            Definition::Unit(u) => format!("Unit({})", u.symbol),
-            Definition::Device(d) => format!("Device({})", d.name),
-            Definition::Const(c) => format!("Const({})", c.name),
-            Definition::Shape(s) => format!("Shape({})", s.name),
-            Definition::MaterialAlias(a) => format!("MaterialAlias({})", a.name),
-            Definition::PolymorphicInterface(pi) => format!("PolymorphicInterface({})", pi.name),
+            Definition::Module(id) => format!("Module({})", arena.module_defs[*id].name),
+            Definition::Logic(l) => format!("Logic({})", arena.logic_defs[*l].name),
+            Definition::Enum(e) => format!("Enum({})", arena.enum_defs[*e].name),
+            Definition::Struct(s) => format!("Struct({})", arena.struct_defs[*s].name),
+            Definition::Mechanical(id) => {
+                format!("Mechanical({})", arena.mechanical_defs[*id].name)
+            }
+            Definition::Interface(id) => format!("Interface({})", arena.interface_defs[*id].name),
+            Definition::Test(id) => format!("Test({})", arena.test_defs[*id].name),
+            Definition::SignalGroup(sg) => {
+                format!("SignalGroup({})", arena.signal_group_defs[*sg].name)
+            }
+            Definition::Pattern(p) => format!("Pattern({})", arena.pattern_defs[*p].name),
+            Definition::Strategy(s) => format!("Strategy({})", arena.strategy_defs[*s].name),
+            Definition::Unit(id) => format!("Unit({})", arena.unit_defs[*id].symbol),
+            Definition::Device(id) => format!("Device({})", arena.device_defs[*id].name),
+            Definition::Const(id) => format!("Const({})", arena.const_defs[*id].name),
+            Definition::Shape(s) => format!("Shape({})", arena.shape_defs[*s].name),
+            Definition::MaterialAlias(a) => {
+                format!("MaterialAlias({})", arena.material_alias_defs[*a].name)
+            }
+            Definition::PolymorphicInterface(id) => {
+                format!("PolymorphicInterface({})", arena.interface_defs[*id].name)
+            }
             Definition::Space(_) => "Space".to_string(),
-            Definition::SpiceModel(sm) => format!("SpiceModel({})", sm.name),
-            Definition::Subcircuit(ss) => format!("Subcircuit({})", ss.name),
+            Definition::SpiceModel(sm) => {
+                format!("SpiceModel({})", arena.spice_model_defs[*sm].name)
+            }
+            Definition::Subcircuit(ss) => {
+                format!("Subcircuit({})", arena.subcircuit_defs[*ss].name)
+            }
         }
     }
 }

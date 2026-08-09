@@ -65,13 +65,13 @@ impl ViaInstanceDatabase {
         // Index by net
         self.vias_by_net
             .entry(net_id)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(instance.clone());
 
         // Index by layer pair
         self.vias_by_layers
             .entry((from_layer.into(), to_layer.into()))
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(instance);
     }
 

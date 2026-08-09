@@ -3,6 +3,8 @@
 //! Based on v0.1.3 specification with indentation-based syntax.
 //! See `grammar/hardware.grammar` for complete syntax rules.
 
+use serde::{Deserialize, Serialize};
+
 pub mod arena;
 mod bridge;
 mod common;
@@ -58,8 +60,6 @@ pub use unit::*;
 // Re-export Span from lexer for use in AST
 pub use crate::lexer::Span;
 
-use arena::ComponentDefId;
-
 /// Root AST node representing a complete Hardware Script file (v0.1.4)
 ///
 /// v0.2.0: Adds re_exports for explicit symbol re-exporting (Rust-style pub use)
@@ -74,8 +74,8 @@ pub struct Program {
 
 /// Top-level definition (v0.1.4 unified syntax)
 /// v0.2.0: Adds Bridge as first-class definition
-/// v0.2.1: 100% Arena-based - all variants hold 4-byte IDs
-#[derive(Debug, Clone, PartialEq)]
+/// v0.2.1: 100% Arena-based - ALL variants hold 4-byte IDs (zero exceptions!)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Definition {
     Bridge(arena::BridgeDefId),
     Material(arena::MaterialDefId),
@@ -90,16 +90,17 @@ pub enum Definition {
     Unit(arena::UnitDefId),
     Device(arena::DeviceDefId),
     Const(arena::ConstDefId),
-    SignalGroup(arena::InterfaceDefId), // Reuse InterfaceDefId for signal groups
-    Pattern(arena::InterfaceDefId), // Reuse until dedicated type needed
-    Strategy(arena::InterfaceDefId), // Reuse until dedicated type needed
-    MaterialAlias(arena::MaterialDefId), // Points to aliased material
-    Enum(logic::EnumDefinition), // Keep as direct value (small)
-    Struct(logic::StructDefinition), // Keep as direct value (small)
-    Logic(logic::LogicDefinition), // Keep as direct value (small)
-    Shape(ShapeDefinition), // Keep as direct value (small)
-    SpiceModel(SpiceModelDefinition), // Keep as direct value (small)
-    Subcircuit(SubcircuitDefinition), // Keep as direct value (small)
+    // 100% uniform - all types are now 4-byte IDs!
+    SignalGroup(arena::SignalGroupDefId),
+    Pattern(arena::PatternDefId),
+    Strategy(arena::StrategyDefId),
+    MaterialAlias(arena::MaterialAliasDefId),
+    Enum(arena::EnumDefId),
+    Struct(arena::StructDefId),
+    Logic(arena::LogicDefId),
+    Shape(arena::ShapeDefId),
+    SpiceModel(arena::SpiceModelDefId),
+    Subcircuit(arena::SubcircuitDefId),
 }
 
 // REMOVED (pre-release cleanup): Legacy AST struct (the old non-Program wrapper).

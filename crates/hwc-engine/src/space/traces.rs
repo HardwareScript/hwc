@@ -3,6 +3,18 @@ use crate::material::MaterialId;
 use crate::netlist::NetId;
 use compact_str::CompactString;
 
+/// Parameters for creating an AnalyticTrace with layer Z-range
+pub struct AnalyticTraceParams {
+    pub net_id: NetId,
+    pub cross_section: CrossSection,
+    pub segments: Vec<LineSegment>,
+    pub material: MaterialId,
+    pub net_name: CompactString,
+    pub current: CurrentRating,
+    pub layer_z_range: Option<(i64, i64)>,
+    pub layer_name: CompactString,
+}
+
 /// **v0.1.7: ANALYTIC TRACE PRIMITIVES (GOD-TIER ARCHITECTURE)**
 ///
 /// A line segment in 3D space representing a Manhattan-routed trace segment.
@@ -230,25 +242,16 @@ impl AnalyticTrace {
     ///
     /// **v0.2.2 LAYER LINEAGE:**
     /// `layer_name` must be provided to maintain explicit layer lineage.
-    pub fn with_layer_z_range(
-        net_id: NetId,
-        cross_section: CrossSection,
-        segments: Vec<LineSegment>,
-        material: MaterialId,
-        net_name: CompactString,
-        current: CurrentRating,
-        layer_z_range: Option<(i64, i64)>,
-        layer_name: CompactString,
-    ) -> Self {
+    pub fn with_layer_z_range(params: AnalyticTraceParams) -> Self {
         Self {
-            net_id,
-            cross_section,
-            segments,
-            material,
-            net_name,
-            current,
-            layer_z_range,
-            layer_name,
+            net_id: params.net_id,
+            cross_section: params.cross_section,
+            segments: params.segments,
+            material: params.material,
+            net_name: params.net_name,
+            current: params.current,
+            layer_z_range: params.layer_z_range,
+            layer_name: params.layer_name,
         }
     }
 

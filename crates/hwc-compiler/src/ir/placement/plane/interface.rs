@@ -72,15 +72,17 @@ pub fn register_plane_interface(
     // Planes always use Derived orientation because the polygon winding
     // (determined by space origin) encodes the correct outward direction.
     let interface = PhysicalInterface::new(
-        interface_id,
-        pseudo_component_id,
-        geometry,
-        smallvec![],
-        intent,
-        Orientation::Derived,
+        hwc_engine::geometry_router::connection_interface::PhysicalInterfaceParams {
+            id: interface_id,
+            component_id: pseudo_component_id,
+            geometry,
+            capabilities: smallvec![],
+            routing_intent: intent,
+            orientation: Some(Orientation::Derived),
+            trace_width_nm,
+            escape_stub_length_nm: clearance_nm * 2,
+        },
         &db,
-        trace_width_nm,
-        clearance_nm * 2,
     );
 
     space

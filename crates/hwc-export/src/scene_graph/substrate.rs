@@ -59,10 +59,12 @@ pub fn add_substrate(
         let material_name = space
             .material_registry
             .get_name(contour_data.key.material)
-            .expect(&format!(
-                "Material ID {:?} not found in registry for substrate mesh",
-                contour_data.key.material
-            ));
+            .unwrap_or_else(|| {
+                panic!(
+                    "Material ID {:?} not found in registry for substrate mesh",
+                    contour_data.key.material
+                )
+            });
 
         eprintln!(
             "[SUBSTRATE MESH] Extruding {} contours for net={:?}, Z={}→{}nm, material={}",
@@ -114,10 +116,12 @@ pub fn add_substrate(
         let material_name = space
             .material_registry
             .get_name(via.material_id)
-            .expect(&format!(
-                "Material ID {:?} not found in registry for via {}",
-                via.material_id, via_idx
-            ));
+            .unwrap_or_else(|| {
+                panic!(
+                    "Material ID {:?} not found in registry for via {}",
+                    via.material_id, via_idx
+                )
+            });
 
         // Check if this is an IC via (deposited) or PCB via (drilled/plated)
         let is_ic_via = space
@@ -164,10 +168,12 @@ pub fn add_substrate(
         let material_name = space
             .material_registry
             .get_name(layer.material)
-            .expect(&format!(
-                "Material ID {:?} not found in registry for substrate base layer {}",
-                layer.material, idx
-            ));
+            .unwrap_or_else(|| {
+                panic!(
+                    "Material ID {:?} not found in registry for substrate base layer {}",
+                    layer.material, idx
+                )
+            });
 
         if material_name == "Void" || material_name == "Air" {
             continue;

@@ -50,33 +50,21 @@ pub enum DepthSpecification {
 }
 
 /// Context for evaluating depth expressions
-pub struct DepthEvaluationContext<'a> {
+pub struct DepthEvaluationContext {
     /// Lower layer thickness in nanometers
     pub lower_layer_thickness_nm: i64,
 
     /// Upper layer thickness in nanometers
     pub upper_layer_thickness_nm: i64,
 
-    /// Space resolution in nanometers (for minimal depths) - reserved for future use
-    #[allow(dead_code)]
-    pub resolution_nm: i64,
-
     /// Minimum allowed depth (safety bound)
     pub min_depth_nm: Option<i64>,
 
     /// Maximum allowed depth (safety bound)
     pub max_depth_nm: Option<i64>,
-
-    /// Symbol table for expression evaluation - reserved for future use
-    #[allow(dead_code)]
-    pub symbol_table: &'a crate::SymbolTable,
-
-    /// Evaluation context for expressions - reserved for future use
-    #[allow(dead_code)]
-    pub eval_context: &'a hwc_parser::EvaluationContext,
 }
 
-impl<'a> DepthEvaluationContext<'a> {
+impl DepthEvaluationContext {
     /// Evaluate a depth expression for a specific layer thickness
     ///
     /// # Arguments
@@ -193,6 +181,19 @@ impl<'a> DepthEvaluationContext<'a> {
     }
 }
 
+/// Parameters for contact depth resolution
+pub struct ContactDepthParams<'a> {
+    pub contact: &'a hwc_parser::ContactPlacement,
+    pub lower_layer_name: &'a str,
+    pub lower_layer_thickness_nm: i64,
+    pub lower_material: &'a str,
+    pub upper_layer_name: &'a str,
+    pub upper_layer_thickness_nm: i64,
+    pub upper_material: &'a str,
+    pub profile: &'a hwc_parser::ProfileDefinition,
+    pub context: &'a DepthEvaluationContext,
+}
+
 /// Resolve via penetration depths for both lower and upper layers
 ///
 /// # Lookup Hierarchy
@@ -201,32 +202,21 @@ impl<'a> DepthEvaluationContext<'a> {
 /// 2. Check material-specific depths in PDK
 /// 3. Use global PDK default
 ///
-/// # Arguments
-///
-/// * `contact` - The contact placement
-/// * `lower_layer_name` - Name of the lower layer
-/// * `lower_layer_thickness_nm` - Thickness of lower layer in nm
-/// * `lower_material` - Material of lower layer
-/// * `upper_layer_name` - Name of the upper layer
-/// * `upper_layer_thickness_nm` - Thickness of upper layer in nm
-/// * `upper_material` - Material of upper layer
-/// * `profile` - PDK profile definition
-/// * `context` - Depth evaluation context
-///
 /// # Returns
 ///
 /// `(lower_depth_nm, upper_depth_nm)` - Penetration depths in nanometers
-pub fn resolve_contact_depths(
-    contact: &hwc_parser::ContactPlacement,
-    lower_layer_name: &str,
-    lower_layer_thickness_nm: i64,
-    lower_material: &str,
-    upper_layer_name: &str,
-    upper_layer_thickness_nm: i64,
-    upper_material: &str,
-    profile: &hwc_parser::ProfileDefinition,
-    context: &DepthEvaluationContext,
-) -> Result<(i64, i64), IrError> {
+pub fn resolve_contact_depths(params: ContactDepthParams) -> Result<(i64, i64), IrError> {
+    let ContactDepthParams {
+        contact,
+        lower_layer_name,
+        lower_layer_thickness_nm,
+        lower_material,
+        upper_layer_name,
+        upper_layer_thickness_nm,
+        upper_material,
+        profile,
+        context,
+    } = params;
     // PRIORITY 1: Per-instance override
     if let Some(depth_prop) = get_contact_depth_property(contact) {
         println!(

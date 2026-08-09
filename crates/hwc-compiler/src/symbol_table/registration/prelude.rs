@@ -8,24 +8,29 @@ impl SymbolTable {
         &mut self,
         def: MaterialAliasDefinition,
     ) -> Result<(), SymbolError> {
-        let name_str = def.name.as_str();
-        if let Some(Definition::MaterialAlias(existing)) = self.prelude.get(name_str) {
+        let name_str = def.name.as_str().to_string();
+        if let Some(Definition::MaterialAlias(existing)) = self.prelude.get(name_str.as_str()) {
             return Err(SymbolError::duplicate(
                 def.name.to_string().into(),
                 "material_alias",
                 (def.span.start, def.span.end),
-                Some((existing.span.start, existing.span.end)),
+                Some((
+                    self.arena.material_alias_defs[*existing].span.start,
+                    self.arena.material_alias_defs[*existing].span.end,
+                )),
             ));
         }
+        let id = self.arena.material_alias_defs.push(def);
         self.prelude
-            .insert(name_str.into(), Definition::MaterialAlias(def));
+            .insert(name_str.into(), Definition::MaterialAlias(id));
         Ok(())
     }
 
     /// Register a unit definition in the prelude layer (for auto-loaded stdlib units)
     pub fn register_prelude_unit(&mut self, def: UnitDefinition) {
         let symbol = def.symbol.clone();
-        self.prelude.insert(symbol, Definition::Unit(def));
+        let id = self.arena.unit_defs.push(def);
+        self.prelude.insert(symbol, Definition::Unit(id));
     }
 
     /// Register a math constant in the prelude layer (for auto-loaded stdlib constants)
@@ -37,7 +42,8 @@ impl SymbolTable {
             is_exported: false,
             span: Span::new(0, 0),
         };
-        self.prelude.insert(name, Definition::Const(const_def));
+        let id = self.arena.const_defs.push(const_def);
+        self.prelude.insert(name, Definition::Const(id));
     }
 
     /// Register a definition in the prelude layer (for auto-loaded primitives)
@@ -45,17 +51,21 @@ impl SymbolTable {
         &mut self,
         def: MaterialDefinition,
     ) -> Result<(), SymbolError> {
-        let name_str = def.name.as_str();
-        if let Some(Definition::Material(existing)) = self.prelude.get(name_str) {
+        let name_str = def.name.as_str().to_string();
+        if let Some(Definition::Material(existing)) = self.prelude.get(name_str.as_str()) {
             return Err(SymbolError::duplicate(
                 def.name.to_string().into(),
                 "material",
                 (def.span.start, def.span.end),
-                Some((existing.span.start, existing.span.end)),
+                Some((
+                    self.arena.material_defs[*existing].span.start,
+                    self.arena.material_defs[*existing].span.end,
+                )),
             ));
         }
+        let id = self.arena.material_defs.push(def);
         self.prelude
-            .insert(name_str.into(), Definition::Material(def));
+            .insert(name_str.into(), Definition::Material(id));
         Ok(())
     }
 }

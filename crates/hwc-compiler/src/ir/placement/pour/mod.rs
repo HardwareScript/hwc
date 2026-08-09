@@ -26,6 +26,7 @@ use super::context::PlacementContext;
 use crate::bounding_box_tracker::BoundingBoxTracker;
 use crate::constraint_solver::ConstraintSolver;
 use hwc_engine::geometry::BoundingBox;
+use hwc_engine::geometry_router::entity_graph::SubstrateLayerConfig;
 use hwc_engine::space::HardwareSpace;
 use hwc_engine::Point3D;
 use hwc_parser::PourPlacement;
@@ -273,7 +274,7 @@ pub fn place_pour(
         z_start_nm,
         start_with_z,
         end_with_z,
-        material_id as u8,
+        material_id,
     );
 
     // Patch area into the pour metadata we just pushed
@@ -308,15 +309,18 @@ pub fn place_pour(
         // v0.2.1: Pass device binding for same-device terminal exemption (capacitors, etc.)
         let device_binding_ref = pour.device.as_ref().map(|b| (&b.device_name, &b.terminal));
 
-        if let Err(msg) = space.entity_graph.add_substrate_layer_checked(
-            material_id,
-            hwc_engine::NetId::new(net_id_raw),
-            bbox,
-            hwc_engine::geometry_router::entity_graph::SubstrateLayerType::Pour,
-            min_clearance_nm,
-            device_binding_ref,
-            &space.pours,
-        ) {
+        if let Err(msg) = space
+            .entity_graph
+            .add_substrate_layer_checked(SubstrateLayerConfig {
+                material: material_id,
+                net: hwc_engine::NetId::new(net_id_raw),
+                bbox,
+                layer_type: hwc_engine::geometry_router::entity_graph::SubstrateLayerType::Pour,
+                min_clearance_nm,
+                device_binding: device_binding_ref,
+                pours: &space.pours,
+            })
+        {
             return Err(IrError::ClearanceViolation {
                 entity_type: "pour".into(),
                 entity_name: pour.name.to_string(),

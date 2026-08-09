@@ -226,11 +226,13 @@ pub fn generate_copper_contours(space: &HardwareSpace) -> Vec<UnifiedCopperConto
             .stackup_layers
             .iter()
             .find(|layer| layer.is_routable && layer.contains_z(z_end))
-            .expect(&format!(
-                "Via landing at Z={}nm has no corresponding routable layer in stackup. \
+            .unwrap_or_else(|| {
+                panic!(
+                    "Via landing at Z={}nm has no corresponding routable layer in stackup. \
                 Stackup layers must cover all via landing points.",
-                z_end
-            ));
+                    z_end
+                )
+            });
 
         let top_z_min = top_layer.z_bottom;
         let top_z_max = top_layer.z_top;
@@ -240,11 +242,13 @@ pub fn generate_copper_contours(space: &HardwareSpace) -> Vec<UnifiedCopperConto
             .stackup_layers
             .iter()
             .find(|layer| layer.is_routable && layer.contains_z(z_start))
-            .expect(&format!(
-                "Via landing at Z={}nm has no corresponding routable layer in stackup. \
+            .unwrap_or_else(|| {
+                panic!(
+                    "Via landing at Z={}nm has no corresponding routable layer in stackup. \
                 Stackup layers must cover all via landing points.",
-                z_start
-            ));
+                    z_start
+                )
+            });
 
         let bottom_z_min = bottom_layer.z_bottom;
         let bottom_z_max = bottom_layer.z_top;

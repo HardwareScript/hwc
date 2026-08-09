@@ -64,7 +64,7 @@ pub fn instantiate_sub_space(
 
     // STEP 1: Look up the child space definition from symbol table
     // NO FALLBACK: If space doesn't exist, this is a compilation error
-    let child_space_def = symbol_table
+    let space_def = symbol_table
         .get_space(placement.space_name.as_str())
         .map_err(|_| {
             // DEBUG: List all available spaces
@@ -83,14 +83,14 @@ pub fn instantiate_sub_space(
 
     eprintln!(
         "[HIERARCHICAL] Found space definition '{}' with {} statements",
-        child_space_def.name,
-        child_space_def.statements.len()
+        space_def.name,
+        space_def.statements.len()
     );
 
     // STEP 2: Recursively compile the child space
     // This will populate a HardwareSpace with all entities
     let child_space =
-        compile_child_space(child_space_def, symbol_table, eval_context, unit_registry, arena)?;
+        compile_child_space(space_def, symbol_table, eval_context, unit_registry, arena)?;
 
     eprintln!(
         "[HIERARCHICAL] Child space compiled: {} substrate layers, {} routed segment groups",
@@ -125,7 +125,8 @@ pub fn instantiate_sub_space(
 
     // Register any internal nets of the child space that were not in net_map
     for child_net_id in child_space.netlist.all_net_ids() {
-        if !net_id_map.contains_key(&child_net_id) {
+        use std::collections::hash_map::Entry;
+        if let Entry::Vacant(e) = net_id_map.entry(child_net_id) {
             let child_net_data = child_space.netlist.get_net(child_net_id).ok_or_else(|| {
                 IrError::PlacementError(format!("Internal net ID {} not found", child_net_id.raw()))
             })?;
@@ -141,7 +142,7 @@ pub fn instantiate_sub_space(
                         child_net_data.material,
                     )
                 };
-            net_id_map.insert(child_net_id, parent_net_id);
+            e.insert(parent_net_id);
         }
     }
 

@@ -1,11 +1,11 @@
 use super::elevation::RoutingConfig;
 use super::layout::ModuleLayoutBlock;
 use super::nets::NetDeclaration;
-use super::placements::PolygonPlacement;
-use super::region::RegionDefinition;
 use super::routes::{Expose, Route};
-use super::substrate::SubstratePlacement;
-use crate::ast::arena::{ComponentId, ContactId, ForLoopId, PlaneId, PourId, RouteId, SpaceInstanceId};
+use crate::ast::arena::{
+    ComponentId, ContactId, ForLoopId, PlaneId, PolygonId, PourId, RegionId, RouteId,
+    SpaceInstanceId, SubstrateId,
+};
 use crate::ast::expression::Expression;
 use crate::lexer::Span;
 use compact_str::CompactString;
@@ -31,7 +31,7 @@ pub struct ConstBinding {
 
 /// Space definition: `space Name:` (v0.1.6)
 /// v0.2.0: Supports optional `export` keyword for visibility control
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SpaceDefinition {
     pub name: crate::ast::common::Identifier,
     pub is_exported: bool, // v0.2.0: Access control
@@ -41,7 +41,7 @@ pub struct SpaceDefinition {
     pub origin: Option<crate::ast::common::OriginPoint>,
     pub profile: Option<crate::ast::common::Identifier>,
     pub mechanical: Option<crate::ast::common::Identifier>,
-    pub substrate: Option<SubstratePlacement>,
+    pub substrate: Option<SubstrateId>,
     pub render: Option<crate::ast::component::RenderBlock>,
     pub routing_config: Option<RoutingConfig>,
     pub statements: Vec<SpaceTopLevelStatement>,
@@ -49,27 +49,28 @@ pub struct SpaceDefinition {
     pub routes: Vec<Route>,
     pub exposes: Vec<Expose>,
     pub nets: Vec<NetDeclaration>,
-    pub regions: Vec<RegionDefinition>, // v0.2.0: Region declarations
+    pub regions: Vec<RegionId>, // v0.2.0: Region declarations (arena-allocated)
     pub span: Span,
 }
 
 /// Top-level statement in a space block (v0.1.7)
-#[derive(Debug, Clone, PartialEq)]
+/// 100% Pure Arena IDs - Every variant is uniformly 8 bytes.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum SpaceTopLevelStatement {
-    Substrate(SubstratePlacement),
+    Substrate(SubstrateId),
     Component(ComponentId),
     Pour(PourId),
     Plane(PlaneId),
-    Polygon(PolygonPlacement),
+    Polygon(PolygonId), // ✅ Arena-allocated for zero-copy uniformity
     Contact(ContactId),
     SpaceInstance(SpaceInstanceId), // v0.2.1: Hierarchical space composition
     ForLoop(ForLoopId),
     Route(RouteId), // Arena-allocated for SoC-scale performance
     Expose(Expose),
     RouteNetPolicy(RouteNetPolicy),
-    Region(RegionDefinition), // v0.2.0: Region declaration
-    Let(LetBinding),          // v0.2.0: Local variable binding
-    Const(ConstBinding),      // v0.2.1: Immutable constant binding
+    Region(RegionId),    // v0.2.0: Region declaration (arena-allocated)
+    Let(LetBinding),     // v0.2.0: Local variable binding
+    Const(ConstBinding), // v0.2.1: Immutable constant binding
 }
 
 /// v0.1.8: Prescriptive net-scoped route policy
@@ -104,17 +105,19 @@ pub struct SpaceIfConditional {
 }
 
 /// Statement inside a space for loop
+/// 100% Pure Arena IDs - Zero Box<T>!
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum SpaceStatement {
     Component(ComponentId),
     Pour(PourId),
     Plane(PlaneId),
+    Polygon(PolygonId), // ✅ Arena-allocated
     Contact(ContactId),
     SpaceInstance(SpaceInstanceId), // v0.2.1: Hierarchical space composition
-    Route(RouteId), // Arena-allocated for SoC-scale performance
-    ForLoop(Box<SpaceForLoop>),
-    If(SpaceIfConditional), // v0.2.1: Compile-time conditional branching
-    Let(LetBinding),              // v0.2.1: Loop-scoped let bindings
+    Route(RouteId),                 // Arena-allocated for SoC-scale performance
+    ForLoop(ForLoopId),             // ✅ Pure Arena ID - Box<T> eliminated!
+    If(SpaceIfConditional),         // v0.2.1: Compile-time conditional branching
+    Let(LetBinding),                // v0.2.1: Loop-scoped let bindings
 }
 
 impl SpaceDefinition {
@@ -136,6 +139,12 @@ impl SpaceDefinition {
             _ => None,
         })
     }
+    pub fn polygon_ids(&self) -> impl Iterator<Item = PolygonId> + '_ {
+        self.statements.iter().filter_map(|s| match s {
+            SpaceTopLevelStatement::Polygon(id) => Some(*id),
+            _ => None,
+        })
+    }
     pub fn contact_ids(&self) -> impl Iterator<Item = ContactId> + '_ {
         self.statements.iter().filter_map(|s| match s {
             SpaceTopLevelStatement::Contact(id) => Some(*id),
@@ -154,9 +163,15 @@ impl SpaceDefinition {
             _ => None,
         })
     }
-    pub fn regions_from_statements(&self) -> impl Iterator<Item = &RegionDefinition> + '_ {
+    pub fn region_ids(&self) -> impl Iterator<Item = RegionId> + '_ {
         self.statements.iter().filter_map(|s| match s {
-            SpaceTopLevelStatement::Region(r) => Some(r),
+            SpaceTopLevelStatement::Region(id) => Some(*id),
+            _ => None,
+        })
+    }
+    pub fn substrate_ids(&self) -> impl Iterator<Item = SubstrateId> + '_ {
+        self.statements.iter().filter_map(|s| match s {
+            SpaceTopLevelStatement::Substrate(id) => Some(*id),
             _ => None,
         })
     }

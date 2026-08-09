@@ -137,14 +137,6 @@ impl super::super::super::Parser {
         })
     }
 
-    /// Parse material-specific depth map (v0.2.1)
-    /// Syntax:
-    /// ```
-    /// material_contact_depths:
-    ///     Aluminum: 33%
-    ///     Polysilicon: 75%
-    ///     Tungsten: 150nm
-    /// ```
     fn parse_material_depth_map(&mut self) -> Result<FxHashMap<String, Expression>, ParseError> {
         self.expect(&Token::Newline)?;
         self.expect(&Token::Indent)?;

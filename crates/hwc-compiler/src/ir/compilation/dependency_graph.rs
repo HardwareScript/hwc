@@ -1,311 +1,153 @@
+//! Build the spatial dependency graph and topologically sort placement items.
+//!
+//! v0.2.x (pure Arena): nodes are dense `usize` indices matching
+//! `ContextualPlacementItem::item_index`, and the sort returns `Vec<usize>`.
+//! Entity names are read straight from the arena during registration so no
+//! per-item string keys are allocated or stored.
+
 use crate::ir::errors::IrError;
 use crate::ir::placement_item::{ContextualPlacementItem, PlacementItem};
-use compact_str::CompactString;
+use hwc_parser::ast::arena::AstArena;
 
-/// Build the dependency graph from placement items and return topologically sorted IDs.
+/// Entity name an item can be referenced by, if it has one.
+///
+/// Substrates and routes are never referenced by name, so they register as
+/// anonymous nodes (which still participate in the sort).
+fn item_name<'a>(item: &PlacementItem, arena: &'a AstArena) -> Option<&'a str> {
+    match item {
+        PlacementItem::Region(id) => Some(arena.regions[*id].name.as_str()),
+        PlacementItem::Component(id) => {
+            arena.components[*id].name.as_ref().map(|n| n.base.as_str())
+        }
+        PlacementItem::Pour(id) => Some(arena.pours[*id].name.as_str()),
+        PlacementItem::Plane(id) => Some(arena.planes[*id].name.as_str()),
+        PlacementItem::Contact(id) => Some(arena.contacts[*id].name.base.as_str()),
+        PlacementItem::SpaceInstance(id) => {
+            Some(arena.space_instances[*id].instance_name.base.as_str())
+        }
+        PlacementItem::Substrate(_) | PlacementItem::Route(_) => None,
+    }
+}
+
+/// Build the dependency graph from placement items and return topologically
+/// sorted **item indices** (not names).
 pub fn build_and_sort(
     placement_items: &[ContextualPlacementItem],
     _symbol_table: &crate::SymbolTable,
-) -> Result<Vec<compact_str::CompactString>, IrError> {
-    let mut graph = crate::ir::spatial_dependency_graph::SpatialDependencyGraph::new();
-    let mut last_component_name: Option<compact_str::CompactString> = None;
+    arena: &AstArena,
+) -> Result<Vec<usize>, IrError> {
+    let mut graph = crate::ir::spatial_dependency_graph::SpatialDependencyGraph::with_capacity(
+        placement_items.len(),
+    );
+    let mut last_component: Option<usize> = None;
 
-    // Pass 1: Register all items
-    for (i, contextual_item) in placement_items.iter().enumerate() {
-        let item_id = contextual_item.item_id(i);
-        graph.add_component(item_id);
+    // Pass 1: Register all nodes (and the names they can be referenced by).
+    for contextual_item in placement_items.iter() {
+        let name = item_name(&contextual_item.item, arena);
+        graph.add_node(contextual_item.item_index, name);
     }
 
-    // Pass 2: Extract dependencies
-    for (i, contextual_item) in placement_items.iter().enumerate() {
-        let item_id = contextual_item.item_id(i);
+    // Pass 2: Extract dependencies.
+    for contextual_item in placement_items.iter() {
+        let node = contextual_item.item_index;
         let item = &contextual_item.item;
 
         match item {
-            PlacementItem::Region(r) => {
-                // v0.2.0: Process region dependencies
+            PlacementItem::Region(region_id) => {
+                let r = &arena.regions[*region_id];
                 if let Some(anchor) = &r.anchor {
                     match anchor {
-                        hwc_parser::RegionAnchor::Absolute(_) => {
-                            // No dependencies for absolute positioning
-                        }
+                        hwc_parser::RegionAnchor::Absolute(_) => {}
                         hwc_parser::RegionAnchor::Expression(expr) => {
-                            graph.extract_dependencies_from_expr(
-                                &item_id,
-                                expr,
-                                last_component_name.as_ref(),
-                            );
+                            graph.extract_dependencies_from_expr(node, expr, last_component);
                         }
                         hwc_parser::RegionAnchor::Offset { base, offset, .. } => {
-                            graph.extract_dependencies_from_expr(
-                                &item_id,
-                                base,
-                                last_component_name.as_ref(),
-                            );
-                            graph.extract_dependencies_from_coord(
-                                &item_id,
-                                offset,
-                                last_component_name.as_ref(),
-                            );
+                            graph.extract_dependencies_from_expr(node, base, last_component);
+                            graph.extract_dependencies_from_coord(node, offset, last_component);
                         }
                     }
                 }
-                // Process relational constraints
                 for constraint in &r.constraints {
-                    let target_name = CompactString::from(constraint.target.as_str());
-                    graph.add_dependency(item_id.clone(), target_name);
+                    graph.add_dependency(node, constraint.target.as_str());
                     if let Some(spacing) = &constraint.spacing {
-                        graph.extract_dependencies_from_expr(
-                            &item_id,
-                            spacing,
-                            last_component_name.as_ref(),
-                        );
+                        graph.extract_dependencies_from_expr(node, spacing, last_component);
                     }
                 }
             }
-            PlacementItem::Substrate(s) => {
-                graph.extract_dependencies_from_coord(
-                    &item_id,
-                    &s.from,
-                    last_component_name.as_ref(),
-                );
-                graph.extract_dependencies_from_coord(
-                    &item_id,
-                    &s.to,
-                    last_component_name.as_ref(),
-                );
+            PlacementItem::Substrate(substrate_id) => {
+                let s = &arena.substrates[*substrate_id];
+                graph.extract_dependencies_from_coord(node, &s.from, last_component);
+                graph.extract_dependencies_from_coord(node, &s.to, last_component);
             }
             PlacementItem::Component(c) => {
-                if let Some(position) = &c.position {
-                    graph.extract_dependencies_from_coord(
-                        &item_id,
-                        position,
-                        last_component_name.as_ref(),
-                    );
+                let comp = &arena.components[*c];
+                if let Some(position) = &comp.position {
+                    graph.extract_dependencies_from_coord(node, position, last_component);
                 }
-                for constraint in &c.relational_constraints {
-                    match constraint {
-                        hwc_parser::RelationalConstraint::Align { target, .. } => {
-                            // v0.2.1: AlignmentTarget is now an enum (Entity or Expression)
-                            match target {
-                                hwc_parser::AlignmentTarget::Entity(entity_name) => {
-                                    graph.add_dependency(item_id.clone(), entity_name.base.clone());
-                                }
-                                hwc_parser::AlignmentTarget::Expression(expr) => {
-                                    // Extract all entity references from the expression
-                                    graph.extract_dependencies_from_expr(
-                                        &item_id,
-                                        expr,
-                                        last_component_name.as_ref(),
-                                    );
-                                }
-                            }
-                        }
-                        hwc_parser::RelationalConstraint::Directional(dir) => {
-                            let target = match dir {
-                                hwc_parser::DirectionalConstraint::Above { target, .. }
-                                | hwc_parser::DirectionalConstraint::Below { target, .. }
-                                | hwc_parser::DirectionalConstraint::RightOf { target, .. }
-                                | hwc_parser::DirectionalConstraint::LeftOf { target, .. } => {
-                                    target
-                                }
-                            };
-                            graph.add_dependency(item_id.clone(), target.base.clone());
-                        }
-                    }
+                for constraint in &comp.relational_constraints {
+                    add_relational_constraint(&mut graph, node, constraint, last_component);
                 }
-                last_component_name = Some(item_id);
+                last_component = Some(node);
             }
             PlacementItem::Pour(p) => {
-                if let Some(boundary) = &p.boundary {
+                let pour = &arena.pours[*p];
+                if let Some(boundary) = &pour.boundary {
                     match boundary {
                         hwc_parser::PourBoundary::Rect(from, to) => {
-                            graph.extract_dependencies_from_coord(
-                                &item_id,
-                                from,
-                                last_component_name.as_ref(),
-                            );
-                            graph.extract_dependencies_from_coord(
-                                &item_id,
-                                to,
-                                last_component_name.as_ref(),
-                            );
+                            graph.extract_dependencies_from_coord(node, from, last_component);
+                            graph.extract_dependencies_from_coord(node, to, last_component);
                         }
                         hwc_parser::PourBoundary::Circle { center, radius } => {
-                            graph.extract_dependencies_from_coord(
-                                &item_id,
-                                center,
-                                last_component_name.as_ref(),
-                            );
-                            graph.extract_dependencies_from_expr(
-                                &item_id,
-                                radius,
-                                last_component_name.as_ref(),
-                            );
+                            graph.extract_dependencies_from_coord(node, center, last_component);
+                            graph.extract_dependencies_from_expr(node, radius, last_component);
                         }
                     }
                 }
-                // v0.2.1 FIX: Extract dependencies from relational constraints on pours.
-                // Without this, pours that use `align:` / `right_of:` / etc. are not
-                // ordered after the entities they reference, causing bbox_tracker misses.
-                for constraint in &p.relational_constraints {
-                    match constraint {
-                        hwc_parser::RelationalConstraint::Align { target, .. } => match target {
-                            hwc_parser::AlignmentTarget::Entity(entity_name) => {
-                                graph.add_dependency(item_id.clone(), entity_name.base.clone());
-                            }
-                            hwc_parser::AlignmentTarget::Expression(expr) => {
-                                graph.extract_dependencies_from_expr(
-                                    &item_id,
-                                    expr,
-                                    last_component_name.as_ref(),
-                                );
-                            }
-                        },
-                        hwc_parser::RelationalConstraint::Directional(dir) => {
-                            let target = match dir {
-                                hwc_parser::DirectionalConstraint::Above { target, .. }
-                                | hwc_parser::DirectionalConstraint::Below { target, .. }
-                                | hwc_parser::DirectionalConstraint::RightOf { target, .. }
-                                | hwc_parser::DirectionalConstraint::LeftOf { target, .. } => {
-                                    target
-                                }
-                            };
-                            graph.add_dependency(item_id.clone(), target.base.clone());
-                        }
-                    }
+                for constraint in &pour.relational_constraints {
+                    add_relational_constraint(&mut graph, node, constraint, last_component);
                 }
             }
             PlacementItem::Plane(p) => {
-                if let Some(from) = &p.from {
-                    graph.extract_dependencies_from_coord(
-                        &item_id,
-                        from,
-                        last_component_name.as_ref(),
-                    );
+                let plane = &arena.planes[*p];
+                if let Some(from) = &plane.from {
+                    graph.extract_dependencies_from_coord(node, from, last_component);
                 }
-                if let Some(to) = &p.to {
-                    graph.extract_dependencies_from_coord(
-                        &item_id,
-                        to,
-                        last_component_name.as_ref(),
-                    );
+                if let Some(to) = &plane.to {
+                    graph.extract_dependencies_from_coord(node, to, last_component);
                 }
             }
             PlacementItem::Contact(c) => {
-                if let Some(pos) = &c.position {
-                    graph.extract_dependencies_from_coord(
-                        &item_id,
-                        pos,
-                        last_component_name.as_ref(),
-                    );
+                let contact = &arena.contacts[*c];
+                if let Some(pos) = &contact.position {
+                    graph.extract_dependencies_from_coord(node, pos, last_component);
                 }
-                // v0.2.0: Handle relational anchor dependencies
-                if let Some(anchor) = &c.relational_anchor {
-                    graph.add_dependency(item_id.clone(), anchor.region_name.to_string().into());
+                if let Some(anchor) = &contact.relational_anchor {
+                    graph.add_dependency(node, anchor.region_name.as_str());
                 }
-                // v0.2.1 FIX: Extract dependencies from relational constraints on contacts.
-                // Contacts that use `align: center_x with SomeEntity` must be placed AFTER
-                // SomeEntity, but this edge was not being registered in the dependency graph.
-                for constraint in &c.relational_constraints {
-                    match constraint {
-                        hwc_parser::RelationalConstraint::Align { target, .. } => match target {
-                            hwc_parser::AlignmentTarget::Entity(entity_name) => {
-                                graph.add_dependency(item_id.clone(), entity_name.base.clone());
-                            }
-                            hwc_parser::AlignmentTarget::Expression(expr) => {
-                                graph.extract_dependencies_from_expr(
-                                    &item_id,
-                                    expr,
-                                    last_component_name.as_ref(),
-                                );
-                            }
-                        },
-                        hwc_parser::RelationalConstraint::Directional(dir) => {
-                            let target = match dir {
-                                hwc_parser::DirectionalConstraint::Above { target, .. }
-                                | hwc_parser::DirectionalConstraint::Below { target, .. }
-                                | hwc_parser::DirectionalConstraint::RightOf { target, .. }
-                                | hwc_parser::DirectionalConstraint::LeftOf { target, .. } => {
-                                    target
-                                }
-                            };
-                            graph.add_dependency(item_id.clone(), target.base.clone());
-                        }
-                    }
+                for constraint in &contact.relational_constraints {
+                    add_relational_constraint(&mut graph, node, constraint, last_component);
                 }
             }
             PlacementItem::SpaceInstance(space_inst) => {
-                // v0.2.1: Space instances may depend on other placement items through position expressions
-                // Extract dependencies from position coordinate expressions
-                graph.extract_dependencies_from_coord(
-                    &item_id,
-                    &space_inst.position,
-                    last_component_name.as_ref(),
-                );
-
-                // Note: net_map dependencies are handled during netlist compilation, not placement
+                let si = &arena.space_instances[*space_inst];
+                graph.extract_dependencies_from_coord(node, &si.position, last_component);
             }
             PlacementItem::Route(r) => {
-                let resolve_name =
-                    |endpoint: &hwc_parser::RouteEndpointSpec| -> compact_str::CompactString {
-                        match endpoint {
-                            hwc_parser::RouteEndpointSpec::ComponentPin {
-                                component_name,
-                                component_index,
-                                ..
-                            } => {
-                                if let Some(idx) = component_index {
-                                    if let Ok(val) =
-                                        crate::ir::routing::evaluate_index_expression(idx)
-                                    {
-                                        format!("{}[{}]", component_name, val).into()
-                                    } else {
-                                        component_name.clone()
-                                    }
-                                } else {
-                                    component_name.clone()
-                                }
-                            }
-                            hwc_parser::RouteEndpointSpec::SpaceEntity { name, index, .. } => {
-                                if let Some(idx) = index {
-                                    if let Ok(val) =
-                                        crate::ir::routing::evaluate_index_expression(idx)
-                                    {
-                                        format!("{}[{}]", name, val).into()
-                                    } else {
-                                        name.clone()
-                                    }
-                                } else {
-                                    name.clone()
-                                }
-                            }
-                        }
-                    };
-                let from_name = resolve_name(&r.from);
-                let to_name = resolve_name(&r.to);
-                graph.add_dependency(item_id.clone(), from_name);
-                graph.add_dependency(item_id.clone(), to_name);
+                let route = &arena.routes[*r];
+                add_route_endpoint_dependency(&mut graph, node, &route.from);
+                add_route_endpoint_dependency(&mut graph, node, &route.to);
 
-                if let Some(w) = &r.width {
-                    graph.extract_dependencies_from_expr(&item_id, w, last_component_name.as_ref());
+                if let Some(w) = &route.width {
+                    graph.extract_dependencies_from_expr(node, w, last_component);
                 }
 
-                for (_, expr) in &r.strategy_params {
-                    graph.extract_dependencies_from_expr(
-                        &item_id,
-                        expr,
-                        last_component_name.as_ref(),
-                    );
+                for (_, expr) in &route.strategy_params {
+                    graph.extract_dependencies_from_expr(node, expr, last_component);
                 }
 
-                if let Some(path) = &r.path {
+                if let Some(path) = &route.path {
                     for wp in path {
-                        graph.extract_dependencies_from_coord(
-                            &item_id,
-                            wp,
-                            last_component_name.as_ref(),
-                        );
+                        graph.extract_dependencies_from_coord(node, wp, last_component);
                     }
                 }
             }
@@ -313,4 +155,59 @@ pub fn build_and_sort(
     }
 
     graph.topological_sort()
+}
+
+/// Register the dependency implied by an `align:`/directional relational constraint.
+fn add_relational_constraint(
+    graph: &mut crate::ir::spatial_dependency_graph::SpatialDependencyGraph,
+    node: usize,
+    constraint: &hwc_parser::RelationalConstraint,
+    last_component: Option<usize>,
+) {
+    match constraint {
+        hwc_parser::RelationalConstraint::Align { target, .. } => match target {
+            hwc_parser::AlignmentTarget::Entity(entity_name) => {
+                graph.add_dependency(node, entity_name.base.as_str());
+            }
+            hwc_parser::AlignmentTarget::Expression(expr) => {
+                graph.extract_dependencies_from_expr(node, expr, last_component);
+            }
+        },
+        hwc_parser::RelationalConstraint::Directional(dir) => {
+            let target = match dir {
+                hwc_parser::DirectionalConstraint::Above { target, .. }
+                | hwc_parser::DirectionalConstraint::Below { target, .. }
+                | hwc_parser::DirectionalConstraint::RightOf { target, .. }
+                | hwc_parser::DirectionalConstraint::LeftOf { target, .. } => target,
+            };
+            graph.add_dependency(node, target.base.as_str());
+        }
+    }
+}
+
+/// Register the dependency on a route endpoint's referenced entity.
+fn add_route_endpoint_dependency(
+    graph: &mut crate::ir::spatial_dependency_graph::SpatialDependencyGraph,
+    node: usize,
+    endpoint: &hwc_parser::RouteEndpointSpec,
+) {
+    let (name, index) = match endpoint {
+        hwc_parser::RouteEndpointSpec::ComponentPin {
+            component_name,
+            component_index,
+            ..
+        } => (component_name, component_index),
+        hwc_parser::RouteEndpointSpec::SpaceEntity { name, index, .. } => (name, index),
+    };
+
+    if let Some(idx) = index {
+        if let Ok(val) = crate::ir::routing::evaluate_index_expression(idx) {
+            // Indexed reference (e.g. `J0[2]`): try the exact name first, then
+            // fall back to the base name inside `add_dependency`.
+            graph.add_dependency(node, &format!("{}[{}]", name, val));
+            return;
+        }
+    }
+
+    graph.add_dependency(node, name.as_str());
 }

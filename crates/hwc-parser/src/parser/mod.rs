@@ -62,27 +62,6 @@ impl Parser {
     /// When a definition fails to parse, the parser synchronizes to the next
     /// definition keyword and continues. This prevents cascading errors and
     /// allows the compiler to report all issues at once.
-    ///
-    /// # Example
-    ///
-    /// ```rust,no_run
-    /// use hwc_parser::{Parser, Lexer};
-    /// use hwc_diagnostics::DiagnosticCollector;
-    /// use bumpalo::Bump;
-    ///
-    /// let source = "component Test:\n    pins: [A, B]";
-    /// let lexer = Lexer::new(source);
-    /// let tokens = lexer.tokenize().expect("Tokenization failed");
-    /// let arena = Bump::new();
-    /// let mut parser = Parser::new(tokens, &arena);
-    /// let collector = DiagnosticCollector::new(source, 100);
-    /// let ast = parser.parse(&collector);
-    ///
-    /// if collector.has_errors() {
-    ///     collector.print_all();
-    ///     std::process::exit(1);
-    /// }
-    /// ```
     pub fn parse(&mut self, collector: &crate::DiagnosticCollector) -> Program {
         let start_pos = if let Some(first) = self.tokens.first() {
             first.span.start

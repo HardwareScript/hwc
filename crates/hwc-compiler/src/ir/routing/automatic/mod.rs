@@ -11,5 +11,7 @@ mod geometry;
 mod pipeline;
 mod verification;
 
-pub use boundary::{calculate_boundary_points, select_routable_port_from_resolution};
+pub use boundary::{
+    calculate_boundary_points, select_routable_port_from_resolution, PortSelectionParams,
+};
 pub use pipeline::route_automatic;

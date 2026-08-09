@@ -83,8 +83,8 @@ pub fn calculate_module_bounding_box(
 
     /// Helper function to extract all placement IDs from layout statements
     /// This recursively flattens for loops and if statements to get all placements
-    fn extract_placements_from_layout<'a>(
-        statements: &'a [hwc_parser::LayoutStatement],
+    fn extract_placements_from_layout(
+        statements: &[hwc_parser::LayoutStatement],
     ) -> Vec<hwc_parser::ast::arena::ModuleInternalId> {
         use hwc_parser::LayoutStatement;
 

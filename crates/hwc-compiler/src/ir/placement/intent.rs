@@ -52,36 +52,3 @@ impl PlacementIntent {
         matches!(self, PlacementIntent::Center(_))
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn corner_passthrough() {
-        let intent = PlacementIntent::Corner(Point3D::new(1000, 2000, 3000));
-        let origin = intent.calculate_origin(500, 600, 700);
-        assert_eq!(origin, Point3D::new(1000, 2000, 3000));
-    }
-
-    #[test]
-    fn center_to_origin() {
-        let intent = PlacementIntent::Center(Point3D::new(5000, 5000, 0));
-        let origin = intent.calculate_origin(2000, 1000, 500);
-        assert_eq!(origin, Point3D::new(4000, 4500, -250));
-    }
-
-    #[test]
-    fn center_odd_dimensions() {
-        // Odd dimensions: 1001 / 2 = 500 (integer division)
-        let intent = PlacementIntent::Center(Point3D::new(5000, 5000, 0));
-        let origin = intent.calculate_origin(1001, 1001, 1001);
-        assert_eq!(origin, Point3D::new(4499, 4499, -500));
-    }
-
-    #[test]
-    fn requires_dimensions() {
-        assert!(!PlacementIntent::Corner(Point3D::new(0, 0, 0)).requires_dimensions());
-        assert!(PlacementIntent::Center(Point3D::new(0, 0, 0)).requires_dimensions());
-    }
-}

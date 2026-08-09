@@ -1,20 +1,21 @@
 //! Unified Symbol Table - Zero Boilerplate Architecture
 //!
-//! Replaces 20+ separate HashMaps with ONE unified Definition enum.
-//! This eliminates struct field explosion and copy-paste boilerplate.
+//! v0.2.1 Arena Refactor: Stores 4-byte Definition IDs, arena holds actual data.
+//! This eliminates struct field explosion and achieves blazing fast speeds.
 
 use compact_str::CompactString;
+use hwc_parser::ast::AstArena;
 use rustc_hash::FxHashMap;
 
-use super::definition::Definition;
+use super::definition::{Definition, DefinitionExt};
 
 /// A single layer in the authority stack (Local / HPM / Prelude / Core)
 ///
-/// Unified architecture: ONE map instead of 20 separate HashMaps
+/// v0.2.1: Stores 4-byte Definition IDs (Copy types!) instead of full struct clones
 #[derive(Debug, Clone, Default)]
 pub struct SymbolLayer {
-    /// Universal symbol index: Name → Definition
-    /// This replaces materials, profiles, components, modules, etc. with ONE map
+    /// Universal symbol index: Name → Definition ID
+    /// Definition is now a Copy 4-byte ID pointing into the shared arena
     pub(super) symbols: FxHashMap<CompactString, Definition>,
 }
 
@@ -60,13 +61,16 @@ impl SymbolLayer {
 /// v0.1.6 Update: Implements layered authority stack (Local > HPM > Prelude > Core)
 /// for proper symbol resolution and property-level shadowing.
 ///
-/// v0.2.1 Refactoring: Unified Definition enum eliminates 20+ HashMap boilerplate
+/// v0.2.1 Arena Refactor: 100% arena-based - stores 4-byte Definition IDs, arena holds actual data
 ///
 /// v0.1.6 Performance: Semantic Baking Cache
 /// Components are "baked" (parsed once) during registration and cached as pure integers.
 /// This eliminates repeated lexer invocations during placement loops.
 #[derive(Debug, Clone)]
 pub struct SymbolTable {
+    // Shared arena containing all definition data
+    pub(super) arena: AstArena,
+
     // Core Layer: Hardcoded engine bootstraps (currently unused, reserved for future)
     pub(super) core: SymbolLayer,
 
@@ -86,15 +90,21 @@ pub struct SymbolTable {
 }
 
 impl SymbolTable {
-    /// Create a new empty symbol table
-    pub fn new() -> Self {
+    /// Create a new empty symbol table with a given arena
+    pub fn new(arena: AstArena) -> Self {
         Self {
+            arena,
             core: SymbolLayer::new(),
             prelude: SymbolLayer::new(),
             hpm: Vec::new(),
             local: SymbolLayer::new(),
             namespaces: FxHashMap::default(),
         }
+    }
+
+    /// Get immutable reference to the arena
+    pub fn arena(&self) -> &AstArena {
+        &self.arena
     }
 
     /// Add a new HPM layer (for imported libraries)
@@ -130,37 +140,40 @@ impl SymbolTable {
     ///
     /// Searches: Local > HPM (reverse order) > Prelude > Core
     /// Supports namespaced lookups ("Metals.Copper") and export filtering
-    pub fn get_symbol(&self, name: &str) -> Option<&Definition> {
+    ///
+    /// v0.2.1: Returns Definition by value (it's just a Copy 4-byte ID!)
+    pub fn get_symbol(&self, name: &str) -> Option<Definition> {
         // 1. Namespaced lookup (e.g. "Metals.Copper")
         if let Some((layer_index, identifier)) = self.resolve_namespace(name) {
             return self
                 .hpm
                 .get(layer_index)
                 .and_then(|layer| layer.get(identifier))
-                .filter(|def| def.is_exported());
+                .copied()
+                .filter(|def| def.is_exported(&self.arena));
         }
 
         // 2. Regular lookup: Local (highest priority)
-        if let Some(def) = self.local.get(name) {
+        if let Some(&def) = self.local.get(name) {
             return Some(def);
         }
 
         // 3. HPM Layers (reverse order, last import wins; filter exported only)
         for layer in self.hpm.iter().rev() {
-            if let Some(def) = layer.get(name) {
-                if def.is_exported() {
+            if let Some(&def) = layer.get(name) {
+                if def.is_exported(&self.arena) {
                     return Some(def);
                 }
             }
         }
 
         // 4. Prelude layer
-        if let Some(def) = self.prelude.get(name) {
+        if let Some(&def) = self.prelude.get(name) {
             return Some(def);
         }
 
         // 5. Core layer (lowest priority)
-        self.core.get(name)
+        self.core.get(name).copied()
     }
 
     /// Generic "has" check replacing 20 separate `has_xxx` methods!
@@ -196,6 +209,6 @@ impl SymbolTable {
 
 impl Default for SymbolTable {
     fn default() -> Self {
-        Self::new()
+        Self::new(AstArena::new())
     }
 }

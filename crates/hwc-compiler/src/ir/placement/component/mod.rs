@@ -71,11 +71,7 @@ pub fn place_component(
                     ctx.eval_context,
                 );
                 if let Some(resolved) = resolved_shape {
-                    if let Some(dims) = parse_rectangle_dimensions(&resolved, ctx.symbol_table) {
-                        dims
-                    } else {
-                        (0, 0, 0)
-                    }
+                    parse_rectangle_dimensions(&resolved, ctx.symbol_table).unwrap_or_default()
                 } else {
                     (0, 0, 0)
                 }
@@ -218,15 +214,17 @@ pub fn place_component(
 
             let interface =
                 hwc_engine::geometry_router::connection_interface::PhysicalInterface::new(
-                    id,
-                    component_id,
-                    geometry,
-                    smallvec![],
-                    intent,
-                    orientation,
+                    hwc_engine::geometry_router::connection_interface::PhysicalInterfaceParams {
+                        id,
+                        component_id,
+                        geometry,
+                        capabilities: smallvec![],
+                        routing_intent: intent,
+                        orientation: Some(orientation),
+                        trace_width_nm,
+                        escape_stub_length_nm: trace_width_nm * 2,
+                    },
                     &db,
-                    trace_width_nm,
-                    trace_width_nm * 2,
                 );
 
             space.entity_graph.register_interface_with_pin(

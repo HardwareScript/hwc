@@ -9,6 +9,18 @@ use rustc_hash::FxHashMap;
 
 pub use types::{RayDirection, RayIntersection, SearchRay, TopologicalPath};
 
+/// Parameters for perpendicular escape routing
+pub struct PerpendicularEscapeParams<'a> {
+    pub start: Point3D,
+    pub target: Point3D,
+    pub start_normal: crate::geometry_router::connection_interface::Normal2D,
+    pub target_normal: crate::geometry_router::connection_interface::Normal2D,
+    pub escape_stub_nm: i64,
+    pub obstacles: &'a DynamicSpatialIndex,
+    pub board_bounds: &'a BoundingBox,
+    pub exempt_net_ids: &'a [usize],
+}
+
 /// The Topological Line-Search Router.
 ///
 /// Projects orthogonal search rays from start and target ports.
@@ -68,51 +80,42 @@ impl TopologicalRouter {
     /// user-specified distance (escape_stub_nm).
     ///
     /// # Arguments
-    /// * `start` - Contact point (centerline at pad edge + trace_width/2)
-    /// * `target` - Contact point (centerline at pad edge + trace_width/2)
-    /// * `start_normal` - Normal vector at start (points away from pad)
-    /// * `target_normal` - Normal vector at target (points away from pad)
-    /// * `escape_stub_nm` - Perpendicular escape distance before turns are allowed (user-declared)
-    /// * `obstacles` - Spatial index of obstacles
-    /// * `board_bounds` - Board boundaries
-    /// * `exempt_net_ids` - Net IDs to exempt from collision checks
+    /// * `params` - Perpendicular escape routing parameters
     pub fn route_with_perpendicular_escape(
         &self,
-        start: Point3D,
-        target: Point3D,
-        start_normal: crate::geometry_router::connection_interface::Normal2D,
-        target_normal: crate::geometry_router::connection_interface::Normal2D,
-        escape_stub_nm: i64,
-        obstacles: &DynamicSpatialIndex,
-        board_bounds: &BoundingBox,
-        exempt_net_ids: &[usize],
+        params: PerpendicularEscapeParams,
     ) -> Option<TopologicalPath> {
         const SCALE: i64 = 1_000_000_000;
 
         // If escape_stub is 0, no perpendicular escape required - route directly
-        if escape_stub_nm == 0 {
+        if params.escape_stub_nm == 0 {
             let router = TopologicalRouter {
                 trace_width_nm: self.trace_width_nm,
                 layer_prefer_horizontal: self.layer_prefer_horizontal,
                 track_pitch_nm: self.track_pitch_nm,
                 min_clearance_nm: self.min_clearance_nm,
-                exempt_net_ids: exempt_net_ids.to_vec(),
+                exempt_net_ids: params.exempt_net_ids.to_vec(),
             };
-            return router.route(start, target, obstacles, board_bounds);
+            return router.route(
+                params.start,
+                params.target,
+                params.obstacles,
+                params.board_bounds,
+            );
         }
 
         // Generate mandatory start escape point
         let start_escape = Point3D::new(
-            start.x + (start_normal.x as i64 * escape_stub_nm) / SCALE,
-            start.y + (start_normal.y as i64 * escape_stub_nm) / SCALE,
-            start.z,
+            params.start.x + (params.start_normal.x as i64 * params.escape_stub_nm) / SCALE,
+            params.start.y + (params.start_normal.y as i64 * params.escape_stub_nm) / SCALE,
+            params.start.z,
         );
 
         // Generate mandatory target escape point
         let target_escape = Point3D::new(
-            target.x + (target_normal.x as i64 * escape_stub_nm) / SCALE,
-            target.y + (target_normal.y as i64 * escape_stub_nm) / SCALE,
-            target.z,
+            params.target.x + (params.target_normal.x as i64 * params.escape_stub_nm) / SCALE,
+            params.target.y + (params.target_normal.y as i64 * params.escape_stub_nm) / SCALE,
+            params.target.z,
         );
 
         // Create a router with exemptions
@@ -121,17 +124,20 @@ impl TopologicalRouter {
             layer_prefer_horizontal: self.layer_prefer_horizontal,
             track_pitch_nm: self.track_pitch_nm,
             min_clearance_nm: self.min_clearance_nm,
-            exempt_net_ids: exempt_net_ids.to_vec(),
+            exempt_net_ids: params.exempt_net_ids.to_vec(),
         };
 
         // Run the topological pathfinder from start_escape to target_escape
-        if let Some(mut intermediate_path) =
-            router.route(start_escape, target_escape, obstacles, board_bounds)
-        {
+        if let Some(mut intermediate_path) = router.route(
+            start_escape,
+            target_escape,
+            params.obstacles,
+            params.board_bounds,
+        ) {
             // Native Splice: prepend the start contact point and append the target contact point
-            let mut final_waypoints = vec![start];
+            let mut final_waypoints = vec![params.start];
             final_waypoints.append(&mut intermediate_path.waypoints);
-            final_waypoints.push(target);
+            final_waypoints.push(params.target);
 
             // Recalculate total length
             let total_length = final_waypoints

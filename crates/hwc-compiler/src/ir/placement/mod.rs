@@ -20,10 +20,10 @@ mod substrate;
 
 // Re-export public functions
 pub use component::place_component;
-pub use contact::place_contact;
+pub use contact::{place_contact, PlaceContactParams};
 pub use intent::PlacementIntent;
 pub use plane::place_plane;
 pub use pour::place_pour;
-pub use region::register_region; // v0.2.0: Region registration
+pub use region::{register_region, RegisterRegionParams}; // v0.2.0: Region registration
 pub use space_instance::instantiate_sub_space; // v0.2.1: Hierarchical space instantiation
 pub use substrate::place_substrate;

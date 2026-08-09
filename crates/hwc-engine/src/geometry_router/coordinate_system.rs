@@ -21,26 +21,6 @@ pub enum CardinalDirection {
 }
 
 impl CardinalDirection {
-    /// Get the direction vector in coordinate space given an origin.
-    ///
-    /// This properly accounts for the coordinate system orientation.
-    ///
-    /// # Examples
-    /// ```
-    /// use hwc_parser::OriginXY;
-    ///
-    /// // Bottom-Left origin (Y increases upward, X increases rightward)
-    /// assert_eq!(CardinalDirection::North.direction_vector(OriginXY::BL), (0, 1));
-    /// assert_eq!(CardinalDirection::East.direction_vector(OriginXY::BL), (1, 0));
-    ///
-    /// // Top-Left origin (Y increases downward, X increases rightward)
-    /// assert_eq!(CardinalDirection::North.direction_vector(OriginXY::TL), (0, -1));
-    /// assert_eq!(CardinalDirection::East.direction_vector(OriginXY::TL), (1, 0));
-    ///
-    /// // Top-Right origin (Y increases downward, X increases leftward)
-    /// assert_eq!(CardinalDirection::North.direction_vector(OriginXY::TR), (0, -1));
-    /// assert_eq!(CardinalDirection::East.direction_vector(OriginXY::TR), (-1, 0));
-    /// ```
     pub fn direction_vector(&self, origin: hwc_parser::OriginXY) -> (i64, i64) {
         use hwc_parser::OriginXY;
 

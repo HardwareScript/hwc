@@ -81,7 +81,7 @@ impl crate::parser::Parser {
         let mut origin: Option<OriginPoint> = None;
         let mut profile: Option<Identifier> = None;
         let mut mechanical: Option<Identifier> = None;
-        let mut substrate = None;
+        let mut substrate: Option<crate::ast::arena::SubstrateId> = None;
         let mut render = None;
         let mut routing_config = None;
 
@@ -94,7 +94,7 @@ impl crate::parser::Parser {
         let mut routes = Vec::new();
         let mut exposes = Vec::new();
         let mut nets = Vec::new();
-        let mut regions = Vec::new(); // v0.2.0: Region declarations
+        let mut regions: Vec<crate::ast::arena::RegionId> = Vec::new(); // v0.2.0: Region declarations
 
         // Parse space body
         let mut loop_iterations = 0;
@@ -155,8 +155,9 @@ impl crate::parser::Parser {
                 // v0.2.0: Parse region declaration
                 match self.parse_region() {
                     Ok(region) => {
-                        statements.push(SpaceTopLevelStatement::Region(region.clone()));
-                        regions.push(region);
+                        let region_id = self.arena.alloc_region(region);
+                        statements.push(SpaceTopLevelStatement::Region(region_id));
+                        regions.push(region_id);
                     }
                     Err(err) => {
                         collector.report(err);
@@ -172,9 +173,10 @@ impl crate::parser::Parser {
                         Token::Substrate => {
                             match self.parse_substrate() {
                                 Ok(sub) => {
-                                    statements.push(SpaceTopLevelStatement::Substrate(sub.clone()));
+                                    let sub_id = self.arena.alloc_substrate(sub);
+                                    statements.push(SpaceTopLevelStatement::Substrate(sub_id));
                                     if substrate.is_none() {
-                                        substrate = Some(sub); // Legacy field: store first substrate
+                                        substrate = Some(sub_id); // Legacy field: first substrate
                                     }
                                 }
                                 Err(err) => {
@@ -222,7 +224,8 @@ impl crate::parser::Parser {
                         },
                         Token::Polygon => {
                             if let Ok(polygon) = self.parse_polygon() {
-                                statements.push(SpaceTopLevelStatement::Polygon(polygon));
+                                let polygon_id = self.arena.alloc_polygon(polygon);
+                                statements.push(SpaceTopLevelStatement::Polygon(polygon_id));
                             }
                         }
                         Token::Contact => match self.parse_contact() {
@@ -290,7 +293,7 @@ impl crate::parser::Parser {
                                     continue;
                                 }
                             }
-                        } else                     if let Ok(route) = self.parse_route() {
+                        } else if let Ok(route) = self.parse_route() {
                             let route_id = self.arena.alloc_route(route.clone());
                             statements.push(SpaceTopLevelStatement::Route(route_id));
                             routes.push(route);

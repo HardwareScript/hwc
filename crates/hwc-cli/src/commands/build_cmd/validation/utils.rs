@@ -23,7 +23,7 @@ pub fn convert_metadata_to_physics(
     // v0.1.8: Preserve indices to maintain compatibility with the Unified Spatial Index.
     // We no longer skip Net 0 layers here; they are handled by the Conductive Island Gate
     // and Substrate Isolation logic in the IslandBuilder.
-    for (_idx, layer) in space.entity_graph.get_substrate_layers().iter().enumerate() {
+    for layer in space.entity_graph.get_substrate_layers().iter() {
         let net_name = if layer.net != hwc_engine::netlist::NetId::UNCONNECTED {
             space
                 .netlist
@@ -158,7 +158,7 @@ pub fn convert_metadata_to_physics(
     for (net_id, segments) in &all_routes {
         let net_name = space.netlist.get_net(*net_id).map(|n| n.name.clone());
 
-        for (_seg_idx, seg) in segments.iter().enumerate() {
+        for seg in segments.iter() {
             let is_vertical = seg.start.x == seg.end.x && seg.start.y == seg.end.y;
             let seg_bbox = seg.bounding_box();
 

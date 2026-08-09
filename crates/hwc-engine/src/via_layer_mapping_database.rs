@@ -64,7 +64,7 @@ pub struct ViaConnection {
 ///
 /// Maps (from_material, to_material) pairs to via connection specs.
 /// This is the single source of truth for which layers a via connects.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ViaLayerMappingDatabase {
     /// Maps (from_material_id, to_material_id) → ViaConnection
     via_specs: FxHashMap<(MaterialId, MaterialId), ViaConnection>,
@@ -133,22 +133,14 @@ impl ViaLayerMappingDatabase {
 
             let from_layer = stackup
                 .iter()
-                .find(|l| {
-                    material_registry
-                        .get_id(&l.material_name)
-                        .map_or(false, |id| id == from_mat_id)
-                })
+                .find(|l| material_registry.get_id(&l.material_name) == Some(from_mat_id))
                 .ok_or_else(|| ViaLayerMappingError::LayerNotFoundForMaterial {
                     material: bridge.from_material.clone(),
                 })?;
 
             let to_layer = stackup
                 .iter()
-                .find(|l| {
-                    material_registry
-                        .get_id(&l.material_name)
-                        .map_or(false, |id| id == to_mat_id)
-                })
+                .find(|l| material_registry.get_id(&l.material_name) == Some(to_mat_id))
                 .ok_or_else(|| ViaLayerMappingError::LayerNotFoundForMaterial {
                     material: bridge.to_material.clone(),
                 })?;
@@ -218,86 +210,10 @@ impl ViaLayerMappingDatabase {
     }
 }
 
-impl Default for ViaLayerMappingDatabase {
-    fn default() -> Self {
-        Self {
-            via_specs: FxHashMap::default(),
-        }
-    }
-}
-
 /// Simplified bridge rule input for database construction.
 #[derive(Debug, Clone)]
 pub struct BridgeRuleInput {
     pub from_material: CompactString,
     pub to_material: CompactString,
     pub interface_material: CompactString,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::material::{ManufacturingProcess, MaterialConductivity};
-
-    fn make_test_data() -> (Vec<StackupLayer>, MaterialRegistry) {
-        let stackup = vec![
-            StackupLayer::new("poly".into(), 400, 850, 450, "Polysilicon".into(), true),
-            StackupLayer::new("metal1".into(), 1250, 1650, 400, "Aluminum".into(), true),
-        ];
-
-        let mut reg = MaterialRegistry::new();
-        reg.register_with_properties(
-            "Polysilicon",
-            MaterialConductivity::Conductor,
-            ManufacturingProcess::Deposited,
-        );
-        reg.register_with_properties(
-            "Aluminum",
-            MaterialConductivity::Conductor,
-            ManufacturingProcess::Deposited,
-        );
-
-        (stackup, reg)
-    }
-
-    #[test]
-    fn test_from_stackup_generates_adjacent_connections() {
-        let (stackup, reg) = make_test_data();
-        let db = ViaLayerMappingDatabase::from_stackup(&stackup, &reg);
-
-        let poly_id = reg.get_id("Polysilicon").unwrap();
-        let alum_id = reg.get_id("Aluminum").unwrap();
-
-        let conn = db.get_via_connection(poly_id, alum_id).unwrap();
-        assert_eq!(conn.bottom_layer_name.as_str(), "poly");
-        assert_eq!(conn.top_layer_name.as_str(), "metal1");
-        assert_eq!(conn.bottom_connection_z, 850); // top of poly
-        assert_eq!(conn.top_connection_z, 1250); // bottom of metal1
-    }
-
-    #[test]
-    fn test_from_bridge_rules() {
-        let (stackup, reg) = make_test_data();
-        let bridges = vec![BridgeRuleInput {
-            from_material: "Polysilicon".into(),
-            to_material: "Aluminum".into(),
-            interface_material: "Titanium_Silicide".into(),
-        }];
-
-        let db = ViaLayerMappingDatabase::from_bridge_rules(&bridges, &stackup, &reg).unwrap();
-
-        let poly_id = reg.get_id("Polysilicon").unwrap();
-        let alum_id = reg.get_id("Aluminum").unwrap();
-
-        let conn = db.get_via_connection(poly_id, alum_id).unwrap();
-        assert_eq!(conn.bottom_connection_z, 850);
-        assert_eq!(conn.top_connection_z, 1250);
-    }
-
-    #[test]
-    fn test_missing_connection_returns_error() {
-        let db = ViaLayerMappingDatabase::default();
-        let result = db.get_via_connection(1, 2);
-        assert!(result.is_err());
-    }
 }

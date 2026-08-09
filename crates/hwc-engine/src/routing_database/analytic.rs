@@ -81,14 +81,16 @@ impl HierarchicalRoutingDatabase {
             };
 
             routes.push(AnalyticTrace::with_layer_z_range(
-                *net_id,
-                CrossSection::new(width_nm, 400),
-                line_segments,
-                material,
-                net_name,
-                CurrentRating::new(0.0, 0.0),
-                layer_z_range,
-                route_layer_name, // v0.2.2: Explicit layer lineage
+                crate::space::AnalyticTraceParams {
+                    net_id: *net_id,
+                    cross_section: CrossSection::new(width_nm, 400),
+                    segments: line_segments,
+                    material,
+                    net_name,
+                    current: CurrentRating::new(0.0, 0.0),
+                    layer_z_range,
+                    layer_name: route_layer_name, // v0.2.2: Explicit layer lineage
+                },
             ));
         }
 

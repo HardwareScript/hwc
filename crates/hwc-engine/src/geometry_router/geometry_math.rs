@@ -17,7 +17,7 @@ pub fn integer_sqrt(n: u128) -> u128 {
     }
     // Initial estimate based on bit position: sqrt(2^b) ~ 2^(b/2)
     let bits = 128 - n.leading_zeros();
-    let mut x = 1u128 << ((bits + 1) / 2);
+    let mut x = 1u128 << bits.div_ceil(2);
     loop {
         let y = (x + n / x) >> 1;
         if y >= x {

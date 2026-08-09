@@ -35,7 +35,7 @@ pub fn generate_spice_subcircuit(
         if let Some(ref default) = param.default_value {
             format_expression_for_spice(output, default)?;
         } else {
-            output.push_str("1"); // SPICE requires a default
+            output.push('1'); // SPICE requires a default
         }
     }
 

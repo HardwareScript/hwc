@@ -53,10 +53,12 @@ pub fn export(
                 let mat_name = space
                     .material_registry
                     .get_name(layer.material)
-                    .expect(&format!(
-                        "Material ID {:?} not found in registry during DXF layer definition",
-                        layer.material
-                    ));
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "Material ID {:?} not found in registry during DXF layer definition",
+                            layer.material
+                        )
+                    });
                 writeln!(w, "  0\nLAYER\n  2\n{}\n 70\n0\n 62\n7", mat_name)?;
             }
         }
@@ -93,18 +95,22 @@ pub fn export(
         let mat_name = space
             .material_registry
             .get_name(material_id)
-            .expect(&format!(
-                "Material ID {:?} not found in registry during DXF copper export",
-                material_id
-            ));
+            .unwrap_or_else(|| {
+                panic!(
+                    "Material ID {:?} not found in registry during DXF copper export",
+                    material_id
+                )
+            });
 
         let color_hex = symbol_table
             .get_material(mat_name)
             .map(|m| m.get_color())
-            .expect(&format!(
-                "Material '{}' not found in symbol table during DXF export",
-                mat_name
-            ));
+            .unwrap_or_else(|_| {
+                panic!(
+                    "Material '{}' not found in symbol table during DXF export",
+                    mat_name
+                )
+            });
         let true_color = parse_true_color(&color_hex);
 
         for path in &contour_data.contours {
@@ -138,10 +144,12 @@ pub fn export(
         let mat_name = space
             .material_registry
             .get_name(layer.material)
-            .expect(&format!(
-                "Material ID {:?} not found in registry during DXF substrate export",
-                layer.material
-            ));
+            .unwrap_or_else(|| {
+                panic!(
+                    "Material ID {:?} not found in registry during DXF substrate export",
+                    layer.material
+                )
+            });
 
         if mat_name.to_lowercase() == "void" || mat_name.to_lowercase() == "air" {
             continue;
@@ -156,10 +164,12 @@ pub fn export(
         let color_hex = symbol_table
             .get_material(mat_name)
             .map(|m| m.get_color())
-            .expect(&format!(
-                "Material '{}' not found in symbol table during DXF substrate export",
-                mat_name
-            ));
+            .unwrap_or_else(|_| {
+                panic!(
+                    "Material '{}' not found in symbol table during DXF substrate export",
+                    mat_name
+                )
+            });
         let true_color = parse_true_color(&color_hex);
 
         let layer_name = if is_asic { mat_name } else { "PCB_LAYERS" };
@@ -315,18 +325,12 @@ fn parse_true_color(hex: &str) -> u32 {
         );
     }
 
-    let r = u32::from_str_radix(&hex[1..3], 16).expect(&format!(
-        "Invalid red component in color '{}'. Must be 00-FF",
-        hex
-    ));
-    let g = u32::from_str_radix(&hex[3..5], 16).expect(&format!(
-        "Invalid green component in color '{}'. Must be 00-FF",
-        hex
-    ));
-    let b = u32::from_str_radix(&hex[5..7], 16).expect(&format!(
-        "Invalid blue component in color '{}'. Must be 00-FF",
-        hex
-    ));
+    let r = u32::from_str_radix(&hex[1..3], 16)
+        .unwrap_or_else(|_| panic!("Invalid red component in color '{}'. Must be 00-FF", hex));
+    let g = u32::from_str_radix(&hex[3..5], 16)
+        .unwrap_or_else(|_| panic!("Invalid green component in color '{}'. Must be 00-FF", hex));
+    let b = u32::from_str_radix(&hex[5..7], 16)
+        .unwrap_or_else(|_| panic!("Invalid blue component in color '{}'. Must be 00-FF", hex));
 
     (r << 16) | (g << 8) | b
 }

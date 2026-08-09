@@ -25,10 +25,11 @@ pub fn place_module_instance(
 
     println!("🔧 Flattening module: {}", module_placement.component_type);
 
-    let flattened = flatten_module(module_def, ctx.arena).map_err(|e| IrError::PlacementConstraint {
-        message: format!("Module flattening failed: {}", e),
-        component: module_placement.component_type.to_string(),
-    })?;
+    let flattened =
+        flatten_module(module_def, ctx.arena).map_err(|e| IrError::PlacementConstraint {
+            message: format!("Module flattening failed: {}", e),
+            component: module_placement.component_type.to_string(),
+        })?;
 
     println!("   ├─ Flattened {} components", flattened.components.len());
     println!("   └─ Flattened {} routes", flattened.routes.len());

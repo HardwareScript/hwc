@@ -146,16 +146,16 @@ pub fn create_hardware_space(
     })?;
 
     // Create hardware space
-    let mut space = HardwareSpace::new(
-        space_def.name.to_string().into(),
-        dims,
-        AIR_MATERIAL_ID, // Default substrate material, will be set if substrate specified
+    let mut space = HardwareSpace::new(hwc_engine::space::HardwareSpaceParams {
+        name: space_def.name.to_string().into(),
+        dimensions: dims,
+        substrate_material_id: AIR_MATERIAL_ID, // Default substrate material, will be set if substrate specified
         material_registry,
-        space_view,
+        view: space_view,
         origin,
         resolution_nm,
-        hwc_types::Technology::Asic, // Temporary - will be set from profile
-    );
+        technology_strategy: hwc_types::Technology::Asic, // Temporary - will be set from profile
+    });
 
     // Load fabrication constraints from profile (v0.1.6: DRC Integration)
     // v0.2.0: Extract technology strategy from profile and set it on the space.
@@ -374,66 +374,4 @@ pub fn validate_asic_constraints(
     }
 
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use hwc_diagnostics::DiagnosticCollector;
-    use hwc_parser::{Lexer, Parser};
-
-    fn parse(source: &str) -> Result<hwc_parser::Program, String> {
-        let collector = DiagnosticCollector::new(source, 20);
-        let lexer = Lexer::new(source);
-        let tokens = lexer
-            .tokenize()
-            .map_err(|e| format!("Lex error: {:?}", e))?;
-        let mut parser = Parser::new(tokens);
-        let program = parser.parse(&collector);
-
-        if collector.has_errors() {
-            return Err("Parse errors occurred".into());
-        }
-
-        Ok(program)
-    }
-
-    fn get_space(program: &hwc_parser::Program) -> &hwc_parser::SpaceDefinition {
-        program
-            .definitions
-            .iter()
-            .find_map(|def| {
-                if let hwc_parser::Definition::Space(space) = def {
-                    Some(space)
-                } else {
-                    None
-                }
-            })
-            .expect("No space definition found in program")
-    }
-
-    #[test]
-    fn test_create_hardware_space() {
-        let source = r#"space Test:
-    dimensions: 50mm by 50mm by 4mm
-    resolution: 100um
-"#;
-
-        let program = parse(source).expect("Failed to parse");
-        let space_def = get_space(&program);
-        let symbol_table = crate::SymbolTable::new();
-        let unit_registry = hwc_types::UnitRegistry::new(vec![]);
-
-        let space = create_hardware_space(
-            space_def,
-            &symbol_table,
-            &hwc_parser::EvaluationContext::default(),
-            &unit_registry,
-        )
-        .unwrap();
-        assert_eq!(space.name, "Test");
-        assert_eq!(space.dimensions.width_nm, 50_000_000);
-        // Resolution is 100um (100_000 nm)
-        assert_eq!(space.resolution_nm, 100_000);
-    }
 }

@@ -7,9 +7,7 @@ use smallvec::SmallVec;
 impl Parser {
     /// Parse component addition in module: `add ComponentType (params) named Instance`
     /// Returns arena-allocated reference for zero-copy AST
-    pub(super) fn parse_module_add(
-        &mut self,
-    ) -> Result<ModuleComponentId, ParseError> {
+    pub(super) fn parse_module_add(&mut self) -> Result<ModuleComponentId, ParseError> {
         let start = self.current_span();
 
         self.expect(&Token::Add)?;

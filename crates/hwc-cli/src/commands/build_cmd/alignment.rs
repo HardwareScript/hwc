@@ -19,16 +19,19 @@ pub fn validate_alignment(
         .definitions
         .iter()
         .find_map(|def| {
-            if let hwc_parser::Definition::Space(space) = def {
-                Some(space)
+            if let hwc_parser::Definition::Space(space_id) = def {
+                Some(*space_id)
             } else {
                 None
             }
         })
         .ok_or_else(|| miette::miette!("No space definition found in AST"))?;
 
+    // Lookup the actual SpaceDefinition from arena
+    let space_def_actual = &ast.arena.space_defs[space_def];
+
     // Check for Artist Mode vs Professional Mode
-    let is_artist_mode = space_def.implements_module.is_none();
+    let is_artist_mode = space_def_actual.implements_module.is_none();
 
     if is_artist_mode {
         println!("🎨 Artist Mode: No 'implements' clause - Alignment validation skipped");
@@ -73,7 +76,7 @@ pub fn validate_alignment(
         let extracted_netlist =
             hwc_compiler::ir::device_registry::device_instances_to_physical_netlist(
                 space,
-                Some(space_def),
+                Some(space_def_actual),
                 Some(symbol_table),
             );
 
@@ -94,7 +97,7 @@ pub fn validate_alignment(
         // Run alignment validation
         // println!($3"[DEBUG] Running alignment validation...");
         let alignment_result = hwc_compiler::AlignmentValidator::validate(
-            space_def,
+            space_def_actual,
             &extracted_netlist,
             symbol_table,
             space,

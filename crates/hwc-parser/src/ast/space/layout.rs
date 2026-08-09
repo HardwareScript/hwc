@@ -5,7 +5,7 @@ use compact_str::CompactString;
 use serde::{Deserialize, Serialize};
 
 /// Layout block for mapping module internals: `layout ModuleName:`
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ModuleLayoutBlock {
     pub module_instance: CompactString,
     pub statements: Vec<LayoutStatement>,
@@ -13,7 +13,7 @@ pub struct ModuleLayoutBlock {
 }
 
 /// Statement inside a layout block (mirrors ModuleStatement but for physical placement)
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum LayoutStatement {
     Placement(ModuleInternalId),
     For {

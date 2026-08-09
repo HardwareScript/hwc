@@ -161,7 +161,7 @@ pub fn export(
         bom.push_str("Material,Total_Area_nm2,Total_Volume_nm3,Layer_Count,Coverage_Percentage\n");
 
         // Calculate die area for coverage percentage
-        let die_area_nm2 = space.dimensions.width_nm as i64 * space.dimensions.height_nm as i64;
+        let die_area_nm2 = space.dimensions.width_nm * space.dimensions.height_nm;
 
         // Sort by material name for consistent output
         let mut materials: Vec<_> = material_totals.iter().collect();

@@ -64,16 +64,16 @@ impl GeometryRouter {
 
         // Step 2: Find closest tap point to start
         let closest_to_start = tap_points.iter().min_by_key(|(point, _, _)| {
-            ((point.x - route.start.x).pow(2)
+            (point.x - route.start.x).pow(2)
                 + (point.y - route.start.y).pow(2)
-                + (point.z - route.start.z).pow(2)) as i64
+                + (point.z - route.start.z).pow(2)
         });
 
         // Step 3: Find closest tap point to goal
         let closest_to_goal = tap_points.iter().min_by_key(|(point, _, _)| {
-            ((point.x - route.goal.x).pow(2)
+            (point.x - route.goal.x).pow(2)
                 + (point.y - route.goal.y).pow(2)
-                + (point.z - route.goal.z).pow(2)) as i64
+                + (point.z - route.goal.z).pow(2)
         });
 
         if let (

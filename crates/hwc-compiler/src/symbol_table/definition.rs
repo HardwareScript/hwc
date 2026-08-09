@@ -1,49 +1,36 @@
-//! Unified Definition Enum for Symbol Table
+//! Arena-based Definition References for Symbol Table
 //!
-//! This module provides a single enum that wraps all top-level AST definitions,
-//! eliminating the need for 20+ separate FxHashMap fields in SymbolLayer.
+//! v0.2.1 Arena Refactor: The compiler now uses the parser's arena-based Definition enum directly.
+//! No separate enum, no struct copying - just 4-byte IDs pointing into the shared arena.
+//!
+//! This provides:
+//! - Zero memory duplication
+//! - Blazing fast lookups (4-byte ID copy vs full struct clone)
+//! - Single source of truth (parser's AstArena)
 
-use hwc_parser::logic::{EnumDefinition, LogicDefinition, StructDefinition};
-use hwc_parser::{
-    BridgeDefinition, ComponentDefinition, ConstDefinition, DeviceDefinition, InterfaceDefinition,
-    MaterialAliasDefinition, MaterialDefinition, MechanicalDefinition, ModuleDefinition,
-    PatternDefinition, ProfileDefinition, ShapeDefinition, SignalGroupDefinition, SpaceDefinition,
-    SpiceModelDefinition, StrategyDefinition, SubcircuitDefinition, TestDefinition, UnitDefinition,
-};
+use hwc_parser::ast::AstArena;
 
-/// Unified enum representing any top-level declaration in HardwareScript
+// Re-export the parser's arena-based Definition enum
+pub use hwc_parser::ast::Definition;
+
+/// Arena-aware extension methods for `Definition`.
 ///
-/// This eliminates struct field explosion in SymbolLayer - instead of 20 separate
-/// FxHashMap fields, we have ONE map: FxHashMap<CompactString, Definition>
-#[derive(Debug, Clone)]
-pub enum Definition {
-    Material(MaterialDefinition),
-    MaterialAlias(MaterialAliasDefinition),
-    Profile(ProfileDefinition),
-    Component(ComponentDefinition),
-    Module(ModuleDefinition),
-    Mechanical(MechanicalDefinition),
-    Interface(InterfaceDefinition),
-    Test(TestDefinition),
-    SignalGroup(SignalGroupDefinition),
-    Pattern(PatternDefinition),
-    Strategy(StrategyDefinition),
-    Logic(LogicDefinition),
-    Enum(EnumDefinition),
-    Struct(StructDefinition),
-    Unit(UnitDefinition),
-    Device(DeviceDefinition),
-    Const(ConstDefinition),
-    Shape(ShapeDefinition),
-    Space(SpaceDefinition),
-    Bridge(BridgeDefinition),
-    SpiceModel(SpiceModelDefinition), // v0.2.1: SPICE model card definitions
-    Subcircuit(SubcircuitDefinition), // v0.3.0: Native typed subcircuit definitions (replaces raw SPICE strings)
+/// `Definition` is defined in the parser crate, so we cannot implement an
+/// inherent `impl` for it here. Instead we expose these helpers via a trait
+/// that must be imported (`use crate::symbol_table::definition::DefinitionExt;`)
+/// wherever `.kind_str()` or `.is_exported(..)` are needed.
+pub trait DefinitionExt {
+    /// Human-readable type name for diagnostics (e.g. "material", "component")
+    fn kind_str(&self) -> &'static str;
+
+    /// Check if the definition is marked as exported
+    /// Takes arena reference to look up actual definition data
+    fn is_exported(&self, arena: &AstArena) -> bool;
 }
 
-impl Definition {
+impl DefinitionExt for Definition {
     /// Human-readable type name for diagnostics (e.g. "material", "component")
-    pub fn kind_str(&self) -> &'static str {
+    fn kind_str(&self) -> &'static str {
         match self {
             Definition::Material(_) => "material",
             Definition::MaterialAlias(_) => "material alias",
@@ -51,7 +38,7 @@ impl Definition {
             Definition::Component(_) => "component",
             Definition::Module(_) => "module",
             Definition::Mechanical(_) => "mechanical",
-            Definition::Interface(_) => "interface",
+            Definition::Interface(_) | Definition::PolymorphicInterface(_) => "interface",
             Definition::Test(_) => "test",
             Definition::SignalGroup(_) => "signal_group",
             Definition::Pattern(_) => "pattern",
@@ -71,56 +58,31 @@ impl Definition {
     }
 
     /// Check if the definition is marked as exported
-    pub fn is_exported(&self) -> bool {
+    /// Takes arena reference to look up actual definition data
+    fn is_exported(&self, arena: &AstArena) -> bool {
         match self {
-            Definition::Material(d) => d.is_exported,
-            Definition::Profile(d) => d.is_exported,
-            Definition::Component(d) => d.is_exported,
-            Definition::Module(d) => d.is_exported,
-            Definition::Mechanical(d) => d.is_exported,
-            Definition::Interface(d) => d.is_exported,
-            Definition::Test(d) => d.is_exported,
-            Definition::SignalGroup(d) => d.is_exported,
-            Definition::Pattern(d) => d.is_exported,
-            Definition::Strategy(d) => d.is_exported,
-            Definition::Logic(d) => d.is_exported,
-            Definition::Enum(d) => d.is_exported,
-            Definition::Struct(d) => d.is_exported,
-            Definition::Device(d) => d.is_exported,
-            Definition::Shape(d) => d.is_exported,
-            Definition::Space(d) => d.is_exported,
-            Definition::SpiceModel(d) => d.is_exported,
-            Definition::Subcircuit(d) => d.is_exported,
-            // Local/prelude items without export flags are implicitly public
+            Definition::Material(id) => arena.material_defs[*id].is_exported,
+            Definition::Profile(id) => arena.profile_defs[*id].is_exported,
+            Definition::Component(id) => arena.component_defs[*id].is_exported,
+            Definition::Module(id) => arena.module_defs[*id].is_exported,
+            Definition::Mechanical(id) => arena.mechanical_defs[*id].is_exported,
+            Definition::Interface(id) | Definition::PolymorphicInterface(id) => {
+                arena.interface_defs[*id].is_exported
+            }
+            Definition::Test(id) => arena.test_defs[*id].is_exported,
+            Definition::SignalGroup(id) => arena.signal_group_defs[*id].is_exported,
+            Definition::Pattern(id) => arena.pattern_defs[*id].is_exported,
+            Definition::Strategy(id) => arena.strategy_defs[*id].is_exported,
+            Definition::Logic(id) => arena.logic_defs[*id].is_exported,
+            Definition::Enum(id) => arena.enum_defs[*id].is_exported,
+            Definition::Struct(id) => arena.struct_defs[*id].is_exported,
+            Definition::Device(id) => arena.device_defs[*id].is_exported,
+            Definition::Shape(id) => arena.shape_defs[*id].is_exported,
+            Definition::Space(id) => arena.space_defs[*id].is_exported,
+            Definition::SpiceModel(id) => arena.spice_model_defs[*id].is_exported,
+            Definition::Subcircuit(id) => arena.subcircuit_defs[*id].is_exported,
+            // Bridges and other types without export flags - implicitly public
             _ => true,
-        }
-    }
-
-    /// Get the name of the definition (for diagnostics)
-    pub fn name(&self) -> &str {
-        match self {
-            Definition::Material(d) => d.name.as_str(),
-            Definition::MaterialAlias(d) => d.name.as_str(),
-            Definition::Profile(d) => d.name.as_str(),
-            Definition::Component(d) => d.name.as_str(),
-            Definition::Module(d) => d.name.as_str(),
-            Definition::Mechanical(d) => d.name.as_str(),
-            Definition::Interface(d) => d.name.as_str(),
-            Definition::Test(d) => d.name.as_str(),
-            Definition::SignalGroup(d) => d.name.as_str(),
-            Definition::Pattern(d) => d.name.as_str(),
-            Definition::Strategy(d) => d.name.as_str(),
-            Definition::Logic(d) => d.name.as_str(),
-            Definition::Enum(d) => d.name.as_str(),
-            Definition::Struct(d) => d.name.as_str(),
-            Definition::Unit(d) => d.name.as_str(),
-            Definition::Device(d) => d.name.as_str(),
-            Definition::Const(d) => d.name.as_str(),
-            Definition::Shape(d) => d.name.as_str(),
-            Definition::Space(d) => d.name.as_str(),
-            Definition::SpiceModel(d) => d.name.as_str(),
-            Definition::Subcircuit(d) => d.name.as_str(),
-            Definition::Bridge(_) => "<bridge>", // Bridges don't have names
         }
     }
 }

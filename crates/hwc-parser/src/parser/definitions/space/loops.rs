@@ -13,9 +13,7 @@ impl crate::parser::Parser {
     ///     add Adder named Adder[i] at [x: i * 10mm, y: 0mm, z: 1]
     ///     route Adder[i].sum to Adder[i+1].carry
     /// ```
-    pub(in crate::parser) fn parse_space_for_loop(
-        &mut self,
-    ) -> Result<SpaceForLoop, ParseError> {
+    pub(in crate::parser) fn parse_space_for_loop(&mut self) -> Result<SpaceForLoop, ParseError> {
         let start_pos = self.current_span().start;
 
         self.expect(&Token::For)?;
@@ -127,7 +125,8 @@ impl crate::parser::Parser {
     fn parse_space_statement(&mut self) -> Result<SpaceStatement, ParseError> {
         if self.check(&Token::For) {
             let nested_loop = self.parse_space_for_loop()?;
-            Ok(SpaceStatement::ForLoop(Box::new(nested_loop)))
+            let for_id = self.arena.alloc_for_loop(nested_loop);
+            Ok(SpaceStatement::ForLoop(for_id))
         } else if self.check(&Token::If) {
             let if_stmt = self.parse_space_if_conditional()?;
             Ok(SpaceStatement::If(if_stmt))
@@ -149,6 +148,11 @@ impl crate::parser::Parser {
                         let plane = self.parse_plane()?;
                         let plane_id = self.arena.alloc_plane(plane);
                         Ok(SpaceStatement::Plane(plane_id))
+                    }
+                    Token::Polygon => {
+                        let polygon = self.parse_polygon()?;
+                        let polygon_id = self.arena.alloc_polygon(polygon);
+                        Ok(SpaceStatement::Polygon(polygon_id))
                     }
                     Token::Contact => {
                         let contact_id = self.parse_contact()?;

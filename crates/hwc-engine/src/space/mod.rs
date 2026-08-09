@@ -17,6 +17,18 @@ use compact_str::CompactString;
 use hwc_types::Technology;
 use rustc_hash::FxHashMap;
 
+/// Parameters for creating a new HardwareSpace
+pub struct HardwareSpaceParams {
+    pub name: CompactString,
+    pub dimensions: Dimensions,
+    pub substrate_material_id: MaterialId,
+    pub material_registry: MaterialRegistry,
+    pub view: SpaceView,
+    pub origin: hwc_parser::OriginPoint,
+    pub resolution_nm: i64,
+    pub technology_strategy: Technology,
+}
+
 /// **v0.2.0: Stackup layer information (single source of truth)**
 ///
 /// Minimal stackup metadata embedded in HardwareSpace so export and validation
@@ -185,26 +197,17 @@ pub struct HardwareSpace {
 
 impl HardwareSpace {
     /// Create a new hardware space with entity graph and netlist.
-    pub fn new(
-        name: CompactString,
-        dimensions: Dimensions,
-        substrate_material_id: MaterialId,
-        material_registry: MaterialRegistry,
-        view: SpaceView,
-        origin: hwc_parser::OriginPoint,
-        resolution_nm: i64,
-        technology_strategy: Technology,
-    ) -> Self {
+    pub fn new(params: HardwareSpaceParams) -> Self {
         let entity_graph = EntityGraph::new();
         let netlist = NetlistArena::new();
 
         Self {
-            name,
-            dimensions,
-            substrate_material_id,
-            material_registry,
-            view,
-            origin,
+            name: params.name,
+            dimensions: params.dimensions,
+            substrate_material_id: params.substrate_material_id,
+            material_registry: params.material_registry,
+            view: params.view,
+            origin: params.origin,
             entity_graph,
             netlist,
             vias: Vec::new(),
@@ -216,9 +219,9 @@ impl HardwareSpace {
             analytic_routes: Vec::new(),
             fabrication_constraints: None,
             keep_out_zones: Vec::new(),
-            resolution_nm,
+            resolution_nm: params.resolution_nm,
             stackup_layers: Vec::new(),
-            technology_strategy,
+            technology_strategy: params.technology_strategy,
             routing_database: crate::routing_database::HierarchicalRoutingDatabase::new(),
             layer_connection_db: crate::layer_connection_database::LayerConnectionDatabase::new(),
             routing_layer_db: crate::routing_layer_database::RoutingLayerDatabase::default(),

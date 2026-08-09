@@ -96,7 +96,7 @@ impl<'a> AutoRouter<'a> {
                                         net_layer_targets.insert(net_name.clone(), routing_z);
                                         net_layer_targets_by_id.insert(actual_net_id, routing_z);
                                         net_layer_names_by_id
-                                            .insert(actual_net_id, layer_id.name.clone().into()); // NEW: Store layer name
+                                            .insert(actual_net_id, layer_id.name.clone()); // NEW: Store layer name
                                         eprintln!("[ROUTING BUILDER] Route for net '{}' (id={}) targets layer '{}' at routing Z={}nm", 
                                             net_name, actual_net_id.raw(), layer_id.name, routing_z);
                                     }

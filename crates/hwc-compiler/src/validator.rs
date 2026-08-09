@@ -44,34 +44,37 @@ impl Validator {
             }
         };
 
-        self.check_physical_z_in_coordinates(collector, space, &program.arena);
+        // Lookup the actual SpaceDefinition from arena
+        let space_def = &program.arena.space_defs[*space];
+
+        self.check_physical_z_in_coordinates(collector, space_def, &program.arena);
 
         // Check for overlapping components
-        let components: Vec<ComponentPlacement> = space
+        let components: Vec<ComponentPlacement> = space_def
             .component_ids()
             .map(|id| program.arena.components[id].clone())
             .collect();
         self.check_collisions(
             collector,
             &components,
-            space,
+            space_def,
             symbol_table,
             eval_context,
         );
 
         // Check for unconnected pins
-        self.check_connectivity(collector, space, program, &program.arena);
+        self.check_connectivity(collector, space_def, program, &program.arena);
     }
 
     /// Validate materials for Minimum Physical Viability (MPV)
     /// This checks that all materials have the required physical properties
     pub fn validate_materials_mpv(&self, collector: &DiagnosticCollector, program: &Program) {
-        // Collect all material definitions
+        // Collect all material definitions from arena
         let materials: Vec<&MaterialDefinition> = program
             .definitions
             .iter()
             .filter_map(|def| match def {
-                Definition::Material(mat) => Some(mat),
+                Definition::Material(mat_id) => Some(&program.arena.material_defs[*mat_id]),
                 _ => None,
             })
             .collect();
@@ -313,7 +316,8 @@ impl Validator {
             }
         }
 
-        if let Some(substrate) = &space.substrate {
+        if let Some(substrate_id) = space.substrate {
+            let substrate = &arena.substrates[substrate_id];
             for coord in [&substrate.from, &substrate.to] {
                 if !coord.is_relative() && !crate::ir::conversions::z_expr_is_physical(coord.z()) {
                     collector.report(ValidationError::DimensionlessZCoordinate);

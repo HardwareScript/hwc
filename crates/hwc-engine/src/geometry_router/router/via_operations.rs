@@ -119,10 +119,7 @@ impl GeometryRouter {
 
         let _initial_via_count = vias.len();
         vias.retain(|via| {
-            let keep =
-                !self.has_existing_contact_at(via.position, via.from_z_nm, via.to_z_nm, net_id);
-            if !keep {}
-            keep
+            !self.has_existing_contact_at(via.position, via.from_z_nm, via.to_z_nm, net_id)
         });
 
         vias
@@ -158,7 +155,7 @@ impl GeometryRouter {
         };
 
         // Check all substrate layers for existing cylindrical contacts
-        for (_idx, layer) in substrate_layers.iter().enumerate() {
+        for layer in substrate_layers.iter() {
             // Must be on the same net
             if layer.net != net_id {
                 continue;

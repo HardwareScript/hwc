@@ -35,7 +35,6 @@ pub mod geometry_refinement;
 mod htree;
 pub mod i128_transforms;
 pub mod incremental_drc;
-pub mod integration_verification;
 pub mod interface_escape;
 mod layer_direction;
 pub mod legalizer;

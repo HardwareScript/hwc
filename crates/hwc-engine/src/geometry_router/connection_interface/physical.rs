@@ -62,47 +62,7 @@ impl PhysicalInterface {
     /// **IMPORTANT**: The `orientation` parameter should be passed from user
     /// declarations if available (via shape attributes or routing directives).
     /// Only use `Orientation::Derived` as a fallback when no user intent exists.
-    pub fn new(
-        id: InterfaceId,
-        component_id: ComponentId,
-        geometry: InterfaceGeometry,
-        capabilities: SmallVec<[InterfaceCapability; 4]>,
-        routing_intent: RoutingIntent,
-        orientation: Orientation, // Accept orientation from caller
-        db: &dyn RoutingDatabase,
-        trace_width_nm: i64,
-        escape_stub_length_nm: i64,
-    ) -> Self {
-        let boundary_normals = Arc::new(geometry.derive_normals(orientation));
-        let access_regions = Arc::new(Self::compute_access_regions(
-            &geometry,
-            &boundary_normals,
-            trace_width_nm,
-            escape_stub_length_nm,
-        ));
-        let expanded_keepouts = Arc::new(Self::compute_keepouts(&geometry, trace_width_nm));
-        let derived_constraints: SmallVec<[DerivedConstraint; 4]> = capabilities
-            .iter()
-            .map(|cap| cap.derive_constraint(db))
-            .filter(|c| !matches!(c, DerivedConstraint::None))
-            .collect();
-        let derived_constraints = Arc::new(derived_constraints.into_vec());
-
-        Self {
-            id,
-            component_id,
-            geometry,
-            capabilities,
-            routing_intent,
-            boundary_normals,
-            access_regions,
-            expanded_keepouts,
-            derived_constraints,
-        }
-    }
-
-    /// Create from a parameter bundle.
-    pub fn from_params(params: PhysicalInterfaceParams, db: &dyn RoutingDatabase) -> Self {
+    pub fn new(params: PhysicalInterfaceParams, db: &dyn RoutingDatabase) -> Self {
         // Determine orientation: use explicit if available, otherwise derive from geometry
         let orientation = if let Some(user_orient) = params.orientation {
             user_orient
@@ -113,17 +73,36 @@ impl PhysicalInterface {
             }
         };
 
-        Self::new(
-            params.id,
-            params.component_id,
-            params.geometry,
-            params.capabilities,
-            params.routing_intent,
-            orientation,
-            db,
+        let boundary_normals = Arc::new(params.geometry.derive_normals(orientation));
+        let access_regions = Arc::new(Self::compute_access_regions(
+            &params.geometry,
+            &boundary_normals,
             params.trace_width_nm,
             params.escape_stub_length_nm,
-        )
+        ));
+        let expanded_keepouts = Arc::new(Self::compute_keepouts(
+            &params.geometry,
+            params.trace_width_nm,
+        ));
+        let derived_constraints: SmallVec<[DerivedConstraint; 4]> = params
+            .capabilities
+            .iter()
+            .map(|cap| cap.derive_constraint(db))
+            .filter(|c| !matches!(c, DerivedConstraint::None))
+            .collect();
+        let derived_constraints = Arc::new(derived_constraints.into_vec());
+
+        Self {
+            id: params.id,
+            component_id: params.component_id,
+            geometry: params.geometry,
+            capabilities: params.capabilities,
+            routing_intent: params.routing_intent,
+            boundary_normals,
+            access_regions,
+            expanded_keepouts,
+            derived_constraints,
+        }
     }
 
     fn compute_access_regions(

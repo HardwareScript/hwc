@@ -7,6 +7,7 @@ mod resolve;
 
 use crate::ir::errors::IrError;
 use crate::ir::stackup_manager::StackupManager;
+use hwc_engine::layer_connection_database::ViaRegistrationParams;
 use hwc_engine::{HardwareSpace, Point3D};
 use hwc_physics::geometry::Point2D;
 
@@ -14,16 +15,32 @@ use helpers::*;
 use netlist_ops::*;
 use resolve::*;
 
-pub fn place_contact(
-    space: &mut HardwareSpace,
-    contact: &hwc_parser::ContactPlacement,
-    origin: hwc_parser::OriginPoint,
-    symbol_table: &crate::SymbolTable,
-    eval_context: &hwc_parser::EvaluationContext,
-    stackup_manager: &StackupManager,
-    profile: Option<&hwc_parser::ProfileDefinition>,
-    bbox_tracker: &crate::BoundingBoxTracker, // v0.2.0: Added for relational anchor resolution
-) -> Result<(), IrError> {
+/// Parameters for `place_contact` function to avoid too many arguments.
+pub struct PlaceContactParams<'a> {
+    pub space: &'a mut HardwareSpace,
+    pub contact: &'a hwc_parser::ContactPlacement,
+    pub origin: hwc_parser::OriginPoint,
+    pub symbol_table: &'a crate::SymbolTable,
+    pub eval_context: &'a hwc_parser::EvaluationContext,
+    pub stackup_manager: &'a StackupManager,
+    pub profile: Option<&'a hwc_parser::ProfileDefinition>,
+    pub bbox_tracker: &'a crate::BoundingBoxTracker,
+}
+
+pub fn place_contact(params: PlaceContactParams) -> Result<(), IrError> {
+    // Destructure immediately: zero-cost, and the body below reads exactly as it
+    // did when these were separate function parameters.
+    let PlaceContactParams {
+        space,
+        contact,
+        origin,
+        symbol_table,
+        eval_context,
+        stackup_manager,
+        profile,
+        bbox_tracker,
+    } = params;
+
     let material_id = space
         .material_registry
         .get_id(&contact.material)
@@ -222,31 +239,29 @@ pub fn place_contact(
     let depth_context = depth_resolver::DepthEvaluationContext {
         lower_layer_thickness_nm: lower_thickness_nm,
         upper_layer_thickness_nm: upper_thickness_nm,
-        resolution_nm: space.resolution_nm,
         min_depth_nm,
         max_depth_nm,
-        symbol_table,
-        eval_context,
     };
 
     // v0.2.1: Resolve depths using material-aware lookup
-    let (lower_depth_nm, upper_depth_nm) = depth_resolver::resolve_contact_depths(
-        contact,
-        &lower_layer_name,
-        lower_thickness_nm,
-        lower_material,
-        &upper_layer_name,
-        upper_thickness_nm,
-        upper_material,
-        profile.ok_or_else(|| IrError::MissingAsicConstraint {
-            message: format!(
-                "Contact '{}' requires a profile definition",
-                contact_name_debug
-            ),
-            hint: "Add a profile to your space definition".into(),
-        })?,
-        &depth_context,
-    )?;
+    let (lower_depth_nm, upper_depth_nm) =
+        depth_resolver::resolve_contact_depths(depth_resolver::ContactDepthParams {
+            contact,
+            lower_layer_name: &lower_layer_name,
+            lower_layer_thickness_nm: lower_thickness_nm,
+            lower_material,
+            upper_layer_name: &upper_layer_name,
+            upper_layer_thickness_nm: upper_thickness_nm,
+            upper_material,
+            profile: profile.ok_or_else(|| IrError::MissingAsicConstraint {
+                message: format!(
+                    "Contact '{}' requires a profile definition",
+                    contact_name_debug
+                ),
+                hint: "Add a profile to your space definition".into(),
+            })?,
+            context: &depth_context,
+        })?;
 
     println!(
         "[PLACE_CONTACT] '{}' resolved depths: lower={}nm upper={}nm",
@@ -473,7 +488,7 @@ pub fn place_contact(
                 contact_bbox,
                 diameter_nm,
                 net_id,
-                contact_name_debug: &contact_name_debug,
+                contact_name_debug,
                 symbol_table,
                 eval_context,
                 pad_bbox,
@@ -487,7 +502,7 @@ pub fn place_contact(
                 contact_bbox,
                 diameter_nm,
                 clearance_nm,
-                &contact_name_debug,
+                contact_name_debug,
             )?;
         } else {
             place_simple::place_deposited_via(
@@ -563,16 +578,19 @@ pub fn place_contact(
             let bottom_mat = from_mat_id.unwrap_or(0);
             let top_mat = to_mat_id.unwrap_or(from_mat_id.unwrap_or(0));
 
-            if let Err(e) = space.layer_connection_db.register_via(
-                contact_name_str,
-                from_name,
-                bottom_connection_z,
-                to_name,
-                top_connection_z,
-                (xy_point.x, xy_point.y),
-                bottom_mat,
-                top_mat,
-            ) {
+            if let Err(e) = space
+                .layer_connection_db
+                .register_via(ViaRegistrationParams {
+                    entity_name: contact_name_str,
+                    bottom_layer: from_name,
+                    bottom_z: bottom_connection_z,
+                    top_layer: to_name,
+                    top_z: top_connection_z,
+                    position_2d: (xy_point.x, xy_point.y),
+                    bottom_material: bottom_mat,
+                    top_material: top_mat,
+                })
+            {
                 eprintln!(
                     "[PLACE_CONTACT] WARNING: Failed to register via connections for '{}': {}",
                     contact_name_str, e
@@ -621,7 +639,7 @@ pub fn place_contact(
         pad_bbox,
         is_tented,
         bridge_material_name,
-        contact_name_debug: &contact_name_debug,
+        contact_name_debug,
         symbol_table,
         eval_context,
     });
@@ -659,13 +677,10 @@ pub fn place_contact(
             _ => None,
         } {
             // Try to get the routing Z from the routing layer database
-            space
-                .routing_layer_db
-                .get_routing_z(from_name)
-                .unwrap_or_else(|_| {
-                    // Fall back to top of via bbox if routing layer DB doesn't have this layer
-                    contact_bbox.max.z
-                })
+            space.routing_layer_db.get_routing_z(from_name).unwrap_or({
+                // Fall back to top of via bbox if routing layer DB doesn't have this layer
+                contact_bbox.max.z
+            })
         } else {
             contact_bbox.max.z
         };
@@ -701,15 +716,19 @@ pub fn place_contact(
         let pseudo_component_id = ComponentId::new(0xFFFF_0000 + interface_id.raw());
 
         let interface = PhysicalInterface::new(
-            interface_id,
-            pseudo_component_id,
-            geometry,
-            smallvec![],
-            intent,
-            hwc_engine::geometry_router::connection_interface::Orientation::Derived,
+            hwc_engine::geometry_router::connection_interface::PhysicalInterfaceParams {
+                id: interface_id,
+                component_id: pseudo_component_id,
+                geometry,
+                capabilities: smallvec![],
+                routing_intent: intent,
+                orientation: Some(
+                    hwc_engine::geometry_router::connection_interface::Orientation::Derived,
+                ),
+                trace_width_nm,
+                escape_stub_length_nm: clearance_nm * 2,
+            },
             &db,
-            trace_width_nm,
-            clearance_nm * 2,
         );
 
         space

@@ -38,7 +38,6 @@ pub fn resolve_pour_net(space: &HardwareSpace, pour: &PourPlacement) -> Option<C
 
 /// Push pour metadata and register all netlist components/pins/anchors for the
 /// placed pour. Returns the raw net id (0 if unnetted).
-#[allow(clippy::too_many_lines)]
 pub fn register_pour_netlist(
     space: &mut HardwareSpace,
     pour: &PourPlacement,
@@ -96,7 +95,7 @@ pub fn register_pour_netlist(
             } else {
                 space
                     .netlist
-                    .add_net(net_name.clone(), 100_000, material_id.into())
+                    .add_net(net_name.clone(), 100_000, material_id)
             };
 
         space.netlist.connect_pin(anchor_pin_id, net_id_handle);

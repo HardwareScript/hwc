@@ -15,7 +15,12 @@ pub fn create_space(
         eval_context,
         unit_registry,
     )?;
-    crate::ir::space_builder::validate_asic_constraints(space_def, symbol_table, eval_context, arena)?;
+    crate::ir::space_builder::validate_asic_constraints(
+        space_def,
+        symbol_table,
+        eval_context,
+        arena,
+    )?;
     Ok(space)
 }
 
@@ -181,9 +186,8 @@ pub fn build_eval_context(
                     if error_msg.contains("Cannot convert") || error_msg.contains("unit") {
                         return Err(IrError::DimensionalUnitMismatch {
                             expression: format!(
-                                "let {} = {}",
-                                let_binding.name,
-                                format!("{:?}", let_binding.value)
+                                "let {} = {:?}",
+                                let_binding.name, let_binding.value
                             ),
                             operation: "evaluate".to_string(),
                             detail: format!("Expression evaluation failed: {}", error_msg),
@@ -214,9 +218,8 @@ pub fn build_eval_context(
                     if error_msg.contains("Cannot convert") || error_msg.contains("unit") {
                         return Err(IrError::DimensionalUnitMismatch {
                             expression: format!(
-                                "const {} = {}",
-                                const_binding.name,
-                                format!("{:?}", const_binding.value)
+                                "const {} = {:?}",
+                                const_binding.name, const_binding.value
                             ),
                             operation: "evaluate".to_string(),
                             detail: format!("Expression evaluation failed: {}", error_msg),

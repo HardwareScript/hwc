@@ -11,21 +11,39 @@ use compact_str::CompactString;
 use hwc_engine::geometry::{BoundingBox, Point3D};
 use hwc_parser::{OriginPoint, RegionDefinition};
 
-/// Process a region declaration and register it as an anchor
-pub fn register_region(
-    region: &RegionDefinition,
-    bbox_tracker: &mut BoundingBoxTracker,
-    symbol_table: &crate::SymbolTable,
-    eval_context: &hwc_parser::EvaluationContext,
-    origin: OriginPoint,
-    space_dimensions: &hwc_engine::Dimensions,
-    stackup_manager: &crate::ir::stackup_manager::StackupManager,
-    profile: Option<&hwc_parser::ProfileDefinition>,
-) -> Result<(), IrError> {
-    let region_name: CompactString = region.name.to_string().into();
+/// Parameters for `register_region` to avoid a long positional parameter list.
+///
+/// This is a zero-cost grouping: it is destructured at function entry and the
+/// bodies operate on plain locals, so codegen is identical to passing the
+/// references individually.
+pub struct RegisterRegionParams<'a> {
+    pub region: &'a RegionDefinition,
+    pub bbox_tracker: &'a mut BoundingBoxTracker,
+    pub symbol_table: &'a crate::SymbolTable,
+    pub eval_context: &'a hwc_parser::EvaluationContext,
+    pub origin: OriginPoint,
+    pub space_dimensions: &'a hwc_engine::Dimensions,
+    pub stackup_manager: &'a crate::ir::stackup_manager::StackupManager,
+    pub profile: Option<&'a hwc_parser::ProfileDefinition>,
+}
 
-    // Resolve the region's position
-    let position = resolve_region_position(
+/// Read-only inputs shared by the region position-resolution helpers.
+struct RegionResolveCtx<'a> {
+    region: &'a RegionDefinition,
+    bbox_tracker: &'a BoundingBoxTracker,
+    symbol_table: &'a crate::SymbolTable,
+    eval_context: &'a hwc_parser::EvaluationContext,
+    origin: OriginPoint,
+    space_dimensions: &'a hwc_engine::Dimensions,
+    #[allow(dead_code)]
+    stackup_manager: &'a crate::ir::stackup_manager::StackupManager,
+    #[allow(dead_code)]
+    profile: Option<&'a hwc_parser::ProfileDefinition>,
+}
+
+/// Process a region declaration and register it as an anchor
+pub fn register_region(params: RegisterRegionParams) -> Result<(), IrError> {
+    let RegisterRegionParams {
         region,
         bbox_tracker,
         symbol_table,
@@ -34,7 +52,21 @@ pub fn register_region(
         space_dimensions,
         stackup_manager,
         profile,
-    )?;
+    } = params;
+
+    let region_name: CompactString = region.name.to_string().into();
+
+    // Resolve the region's position
+    let position = resolve_region_position(&RegionResolveCtx {
+        region,
+        bbox_tracker,
+        symbol_table,
+        eval_context,
+        origin,
+        space_dimensions,
+        stackup_manager,
+        profile,
+    })?;
 
     // Determine region size
     let (width, height, depth) = if let Some(boundary) = &region.boundary {
@@ -95,34 +127,19 @@ pub fn register_region(
 }
 
 /// Resolve a region's position from its anchor and constraints
-fn resolve_region_position(
-    region: &RegionDefinition,
-    bbox_tracker: &BoundingBoxTracker,
-    symbol_table: &crate::SymbolTable,
-    eval_context: &hwc_parser::EvaluationContext,
-    origin: OriginPoint,
-    space_dimensions: &hwc_engine::Dimensions,
-    stackup_manager: &crate::ir::stackup_manager::StackupManager,
-    profile: Option<&hwc_parser::ProfileDefinition>,
-) -> Result<Point3D, IrError> {
+fn resolve_region_position(ctx: &RegionResolveCtx) -> Result<Point3D, IrError> {
+    let region = ctx.region;
+
     // First, check for relational constraints (right_of, align, etc.)
     if !region.constraints.is_empty() {
         // Convert RegionConstraints to a coordinate using similar logic to component constraints
-        return resolve_region_from_constraints(
-            region,
-            bbox_tracker,
-            symbol_table,
-            eval_context,
-            origin,
-            space_dimensions,
-            stackup_manager,
-            profile,
-        );
+        return resolve_region_from_constraints(ctx);
     }
 
     // Otherwise, use the anchor if provided
     if let Some(anchor) = &region.anchor {
-        let intent = resolve_region_anchor(anchor, bbox_tracker, symbol_table, eval_context)?;
+        let intent =
+            resolve_region_anchor(anchor, ctx.bbox_tracker, ctx.symbol_table, ctx.eval_context)?;
 
         // PlacementIntent already contains the resolved point - no need for coordinate_to_point
         return Ok(intent.point());
@@ -133,16 +150,17 @@ fn resolve_region_position(
 }
 
 /// Resolve region position from relational constraints (right_of, align, etc.)
-fn resolve_region_from_constraints(
-    region: &RegionDefinition,
-    bbox_tracker: &BoundingBoxTracker,
-    symbol_table: &crate::SymbolTable,
-    eval_context: &hwc_parser::EvaluationContext,
-    origin: OriginPoint,
-    space_dimensions: &hwc_engine::Dimensions,
-    _stackup_manager: &crate::ir::stackup_manager::StackupManager,
-    _profile: Option<&hwc_parser::ProfileDefinition>,
-) -> Result<Point3D, IrError> {
+fn resolve_region_from_constraints(ctx: &RegionResolveCtx) -> Result<Point3D, IrError> {
+    let RegionResolveCtx {
+        region,
+        bbox_tracker,
+        symbol_table,
+        eval_context,
+        origin,
+        space_dimensions,
+        ..
+    } = *ctx;
+
     let mut x_nm: Option<i64> = None;
     let mut y_nm: Option<i64> = None;
     let z_nm: i64 = 0; // Regions are 2D, Z defaults to 0

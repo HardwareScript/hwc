@@ -247,14 +247,16 @@ pub fn lockfile_to_traces(
         };
 
         traces.push(crate::space::AnalyticTrace::with_layer_z_range(
-            net_id,
-            crate::space::CrossSection::new(width_nm, thickness_nm),
-            segments,
-            material_id,
-            net_name,
-            crate::space::CurrentRating::new(net_actual_current_ma, current_ma),
-            layer_z_range,
-            route_layer_name, // v0.2.2: Explicit layer lineage
+            crate::space::AnalyticTraceParams {
+                net_id,
+                cross_section: crate::space::CrossSection::new(width_nm, thickness_nm),
+                segments,
+                material: material_id,
+                net_name,
+                current: crate::space::CurrentRating::new(net_actual_current_ma, current_ma),
+                layer_z_range,
+                layer_name: route_layer_name, // v0.2.2: Explicit layer lineage
+            },
         ));
     }
 

@@ -439,7 +439,8 @@ impl Parser {
             // Token::Percent is NOT a valid operator - it's only valid as a unit suffix
             // The modulo operation uses the 'mod' keyword instead
             // v0.2.1: Comparison operators for compile-time conditionals
-            Token::DoubleEquals => Some(BinaryOperator::Equal),
+            // v0.1.6 ARENA Update: Single '=' is used for both assignment and comparison
+            Token::Equals => Some(BinaryOperator::Equal),
             Token::NotEquals => Some(BinaryOperator::NotEqual),
             Token::LessThan => Some(BinaryOperator::LessThan),
             Token::GreaterThan => Some(BinaryOperator::GreaterThan),

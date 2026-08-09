@@ -287,11 +287,12 @@ fn generate_substrate_with_vias(
 
     // 1. Build Clipper2 Subject (Substrate Boundary)
     let mut subject = Paths64::new();
-    let mut rect_path = Path64::new();
-    rect_path.push(Point64::new(bbox.min.x, bbox.min.y));
-    rect_path.push(Point64::new(bbox.max.x, bbox.min.y));
-    rect_path.push(Point64::new(bbox.max.x, bbox.max.y));
-    rect_path.push(Point64::new(bbox.min.x, bbox.max.y));
+    let rect_path = vec![
+        Point64::new(bbox.min.x, bbox.min.y),
+        Point64::new(bbox.max.x, bbox.min.y),
+        Point64::new(bbox.max.x, bbox.max.y),
+        Point64::new(bbox.min.x, bbox.max.y),
+    ];
     subject.push(rect_path);
 
     // 2. Build Clipper2 Clips (Via Circles AND Polygons)

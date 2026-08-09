@@ -350,13 +350,6 @@ pub struct ViaConstraints {
     /// Maps material name to depth expression. When a via connects two layers,
     /// the compiler looks up each layer's material and applies its specific depth.
     ///
-    /// Example:
-    /// ```
-    /// material_contact_depths:
-    ///     Aluminum: 33%
-    ///     Polysilicon: 75%
-    ///     Tungsten: 40%
-    /// ```
     pub material_contact_depths: Option<rustc_hash::FxHashMap<String, Expression>>,
 
     /// Minimum contact depth in nanometers (safety bound, v0.2.1).

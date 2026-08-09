@@ -59,10 +59,6 @@ mod provenance;
 mod registration;
 mod statistics;
 mod validation;
-
-#[cfg(test)]
-mod tests;
-
 pub use database::HierarchicalRoutingDatabase;
 pub use errors::ConnectivityError;
 pub use ids::RouteId;

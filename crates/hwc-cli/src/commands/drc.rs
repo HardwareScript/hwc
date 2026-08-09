@@ -44,7 +44,7 @@ pub fn execute(input: PathBuf, _build_dir: PathBuf) -> Result<()> {
     }
 
     // Transform AST to hardware space (includes routing)
-    let symbol_table = SymbolTable::new();
+    let symbol_table = SymbolTable::new(ast.arena.clone());
     let unit_registry = hwc_types::UnitRegistry::new(vec![]);
     let space = program_to_space(&ast, &symbol_table, &collector, &unit_registry)
         .map_err(|e| miette::miette!("Failed to create hardware space: {}", e))?;
@@ -77,7 +77,7 @@ pub fn execute(input: PathBuf, _build_dir: PathBuf) -> Result<()> {
             safety_factor: constraints.clearance.safety_factor,
             stackup,
             solder_mask_expansion_nm: constraints.solder_mask_expansion_nm,
-            technology: constraints.technology.clone(),
+            technology: constraints.technology,
         };
 
         constraint_rulebook.set_fabrication_constraints(fab_constraints);

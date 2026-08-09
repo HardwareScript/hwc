@@ -14,7 +14,6 @@ use hwc_parser::OriginXY;
 /// The interface polygon winding order is derived from the coordinate system
 /// origin (Y-up vs Y-down), and the routing intent is looked up from the
 /// profile's `net_type` declarations (no hardcoded fallbacks).
-#[allow(clippy::too_many_lines)]
 pub fn register_pour_interface(
     space: &mut HardwareSpace,
     pour_name: &str,
@@ -116,15 +115,17 @@ pub fn register_pour_interface(
 
     // Pours use Derived orientation - polygon winding encodes the correct outward direction
     let interface = PhysicalInterface::new(
-        interface_id,
-        pseudo_component_id,
-        geometry,
-        smallvec![],
-        intent,
-        Orientation::Derived,
+        hwc_engine::geometry_router::connection_interface::PhysicalInterfaceParams {
+            id: interface_id,
+            component_id: pseudo_component_id,
+            geometry,
+            capabilities: smallvec![],
+            routing_intent: intent,
+            orientation: Some(Orientation::Derived),
+            trace_width_nm,
+            escape_stub_length_nm: clearance_nm * 2,
+        },
         &db,
-        trace_width_nm,
-        clearance_nm * 2,
     );
 
     space

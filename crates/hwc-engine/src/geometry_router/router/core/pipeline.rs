@@ -48,12 +48,14 @@ impl GeometryRouter {
                                     && self.material_registry.is_conductor(layer.material)
                             })
                             .map(|layer| layer.material)
-                            .expect(&format!(
-                                "FATAL: No conductive substrate layer found at Z={} for route segment. \
-                                 Routes must be on conductive layers. Available layers: {:?}",
-                                segment_z,
-                                layers.iter().map(|l| (l.bbox.min.z, l.bbox.max.z, l.material)).collect::<Vec<_>>()
-                            ))
+                            .unwrap_or_else(|| {
+                                panic!(
+                                    "FATAL: No conductive substrate layer found at Z={} for route segment. \
+                                     Routes must be on conductive layers. Available layers: {:?}",
+                                    segment_z,
+                                    layers.iter().map(|l| (l.bbox.min.z, l.bbox.max.z, l.material)).collect::<Vec<_>>()
+                                )
+                            })
                     } else {
                         panic!("FATAL: substrate_layers not available in router for material lookup at Z={}", segment_z);
                     };

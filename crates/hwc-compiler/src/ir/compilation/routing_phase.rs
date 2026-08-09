@@ -125,13 +125,14 @@ pub fn process_routes(
 ) -> Result<Vec<hwc_parser::Route>, IrError> {
     let mut auto_routes = Vec::new();
 
-    for id in ctx.sorted_ids.iter() {
-        let &item_idx = ctx.item_map.get(id).unwrap();
-        let contextual_item = &ctx.placement_items[item_idx];
-        let item = &contextual_item.item;
-        let item_eval_context = &contextual_item.eval_context;
+    for &item_idx in ctx.sorted_indices.iter() {
+        let item = ctx.placement_items[item_idx].item;
+        // Loop variables are already substituted into arena nodes by the
+        // unroller, so every item shares the space-level evaluation context.
+        let item_eval_context = ctx.eval_context;
 
-        if let PlacementItem::Route(route) = item {
+        if let PlacementItem::Route(route_id) = item {
+            let route = &ctx.arena.routes[route_id];
             crate::ir::routing::register_net_for_route(
                 space,
                 route,
@@ -228,9 +229,12 @@ pub fn auto_route(
         eval_context,
         stackup_manager,
         profile,
-        rustc_hash::FxHashMap::default(),
-        auto_routes,
-        rustc_hash::FxHashMap::default(),
+        crate::ir::routing::RouterConfig::new(
+            rustc_hash::FxHashMap::default(),
+            auto_routes,
+            rustc_hash::FxHashMap::default(),
+            rustc_hash::FxHashMap::default(),
+        ),
     );
 
     auto_router.route_all_nets()?;

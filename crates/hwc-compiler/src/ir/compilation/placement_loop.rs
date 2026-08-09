@@ -1,18 +1,6 @@
 use crate::ir::errors::IrError;
 use crate::ir::placement_item::PlacementItem;
 
-/// Build the item_map from placement items.
-pub fn build_item_map(
-    placement_items: &[crate::ir::placement_item::ContextualPlacementItem],
-) -> rustc_hash::FxHashMap<compact_str::CompactString, usize> {
-    let mut item_map = rustc_hash::FxHashMap::default();
-    for (i, contextual_item) in placement_items.iter().enumerate() {
-        let item_id = contextual_item.item_id(i);
-        item_map.insert(item_id, i);
-    }
-    item_map
-}
-
 /// Execute the placement loop: place all non-route items.
 pub fn execute_placement(
     space: &mut hwc_engine::HardwareSpace,
@@ -23,16 +11,18 @@ pub fn execute_placement(
 
     eprintln!(
         "[DEBUG] Starting placement loop with {} sorted items",
-        ctx.sorted_ids.len()
+        ctx.sorted_indices.len()
     );
 
-    for id in ctx.sorted_ids.iter() {
-        let &item_idx = ctx.item_map.get(id).unwrap();
-        let contextual_item = &ctx.placement_items[item_idx];
-        let item = &contextual_item.item;
+    // Pure integer iteration: no string keys, no hash lookups. `item_index` is
+    // the item's own slot in `placement_items`, so this is a direct index.
+    for &item_idx in ctx.sorted_indices.iter() {
+        let item = ctx.placement_items[item_idx].item;
 
-        // v0.2.1: Use the item's evaluation context (contains loop-scoped let bindings)
-        let item_eval_context = &contextual_item.eval_context;
+        // Loop variables and loop-scoped `let` bindings are already substituted
+        // into each arena node during unrolling, so every item shares the
+        // space-level evaluation context.
+        let item_eval_context = ctx.eval_context;
 
         let place_ctx = crate::ir::placement::context::PlacementContext {
             symbol_table: ctx.symbol_table,
@@ -45,24 +35,29 @@ pub fn execute_placement(
         };
 
         match item {
-            PlacementItem::Region(region) => {
+            PlacementItem::Region(region_id) => {
+                let region = &ctx.arena.regions[region_id];
                 eprintln!("[DEBUG] Registering region: {}", region.name);
                 crate::ir::placement::register_region(
-                    region,
-                    bbox_tracker,
-                    ctx.symbol_table,
-                    item_eval_context,
-                    ctx.origin,
-                    &space.dimensions,
-                    ctx.stackup_manager,
-                    ctx.profile,
+                    crate::ir::placement::RegisterRegionParams {
+                        region,
+                        bbox_tracker,
+                        symbol_table: ctx.symbol_table,
+                        eval_context: item_eval_context,
+                        origin: ctx.origin,
+                        space_dimensions: &space.dimensions,
+                        stackup_manager: ctx.stackup_manager,
+                        profile: ctx.profile,
+                    },
                 )?;
             }
-            PlacementItem::Substrate(sub) => {
+            PlacementItem::Substrate(substrate_id) => {
                 eprintln!("[DEBUG] Placing substrate");
+                let sub = &ctx.arena.substrates[substrate_id];
                 crate::ir::placement::place_substrate(space, sub, bbox_tracker, &place_ctx)?;
             }
-            PlacementItem::Pour(pour) => {
+            PlacementItem::Pour(pour_id) => {
+                let pour = &ctx.arena.pours[pour_id];
                 eprintln!("[DEBUG] Placing pour: {}", pour.name);
 
                 let mut resolved_pour = pour.clone();
@@ -203,7 +198,8 @@ pub fn execute_placement(
                     space.entity_graph.iter_entity_ids().count()
                 );
             }
-            PlacementItem::Plane(plane) => {
+            PlacementItem::Plane(plane_id) => {
+                let plane = &ctx.arena.planes[plane_id];
                 eprintln!("[DEBUG] Placing plane: {}", plane.name);
 
                 let mut resolved_plane = plane.clone();
@@ -230,10 +226,10 @@ pub fn execute_placement(
                     &place_ctx,
                 )?;
             }
-            PlacementItem::Contact(contact) => {
+            PlacementItem::Contact(contact_id) => {
                 eprintln!("[DEBUG] Placing contact");
 
-                let mut resolved_contact = contact.clone();
+                let mut resolved_contact = ctx.arena.contacts[contact_id].clone();
 
                 // v0.2.1: Resolve relational constraints if present
                 if !resolved_contact.relational_constraints.is_empty()
@@ -269,18 +265,20 @@ pub fn execute_placement(
                     );
                 }
 
-                crate::ir::placement::place_contact(
+                crate::ir::placement::place_contact(crate::ir::placement::PlaceContactParams {
                     space,
-                    &resolved_contact,
-                    ctx.origin,
-                    ctx.symbol_table,
-                    item_eval_context,
-                    ctx.stackup_manager,
-                    ctx.profile,
-                    bbox_tracker, // v0.2.0: Added for relational anchor resolution
-                )?;
+                    contact: &resolved_contact,
+                    origin: ctx.origin,
+                    symbol_table: ctx.symbol_table,
+                    eval_context: item_eval_context,
+                    stackup_manager: ctx.stackup_manager,
+                    profile: ctx.profile,
+                    // v0.2.0: Added for relational anchor resolution
+                    bbox_tracker,
+                })?;
             }
-            PlacementItem::Component(component) => {
+            PlacementItem::Component(component_id) => {
+                let component = &ctx.arena.components[component_id];
                 eprintln!("[DEBUG] Placing component: {:?}", component.name);
                 component_count += 1;
 
@@ -309,8 +307,9 @@ pub fn execute_placement(
                     &place_ctx,
                 )?;
             }
-            PlacementItem::SpaceInstance(space_inst) => {
+            PlacementItem::SpaceInstance(space_inst_id) => {
                 // v0.2.1: Hierarchical space instantiation
+                let space_inst = &ctx.arena.space_instances[space_inst_id];
                 eprintln!(
                     "[DEBUG] Instantiating sub-space: {} as {}",
                     space_inst.space_name, space_inst.instance_name.base

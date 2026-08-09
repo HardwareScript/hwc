@@ -98,8 +98,7 @@ pub fn compile_source(
     );
 
     // Build symbol table
-    let (symbol_table, prelude) =
-        build_symbol_table(&ast, input, &collector, config, start_time)?;
+    let (symbol_table, prelude) = build_symbol_table(&ast, input, &collector, config, start_time)?;
 
     // Print warnings if any
     if collector.warning_count() > 0 {
@@ -128,7 +127,8 @@ fn build_symbol_table(
     config: &BuildConfig,
     start_time: Instant,
 ) -> Result<(SymbolTable, hwc_compiler::Prelude)> {
-    let mut symbol_table = SymbolTable::new();
+    // Create symbol table with the arena from the parsed AST
+    let mut symbol_table = SymbolTable::new(ast.arena.clone());
 
     // Load prelude
     let prelude = hwc_compiler::Prelude::load()
@@ -203,16 +203,20 @@ fn build_symbol_table(
                 let interface = &ast.arena.interface_defs[*id];
                 symbol_table.register_interface(collector, interface.clone());
             }
-            hwc_parser::Definition::Test(test) => {
+            hwc_parser::Definition::Test(test_id) => {
+                let test = &ast.arena.test_defs[*test_id];
                 symbol_table.register_test(collector, test.clone());
             }
-            hwc_parser::Definition::Shape(shape) => {
+            hwc_parser::Definition::Shape(shape_id) => {
+                let shape = &ast.arena.shape_defs[*shape_id];
                 symbol_table.register_shape(collector, shape.clone());
             }
-            hwc_parser::Definition::SpiceModel(spice_model) => {
+            hwc_parser::Definition::SpiceModel(spice_model_id) => {
+                let spice_model = &ast.arena.spice_model_defs[*spice_model_id];
                 symbol_table.register_spice_model(collector, spice_model.clone());
             }
-            hwc_parser::Definition::Subcircuit(subcircuit) => {
+            hwc_parser::Definition::Subcircuit(subcircuit_id) => {
+                let subcircuit = &ast.arena.subcircuit_defs[*subcircuit_id];
                 symbol_table.register_subcircuit(collector, subcircuit.clone());
             }
             _ => {}

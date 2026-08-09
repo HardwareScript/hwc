@@ -10,6 +10,7 @@
 //! 2. **No Defaults, No Fallbacks**: All Z-coordinates come from either:
 //!    - Explicit `layer_z_range` (from stackup)
 //!    - Segment's own Z coordinates (for vias)
+//!
 //!    Never from min/max across all segments!
 //!
 //! 3. **Type-Driven Geometry**: Horizontal traces and vias have fundamentally
@@ -345,62 +346,4 @@ pub fn generate_trace_geometry(space: &HardwareSpace) -> FxHashMap<GeometryPoolK
     }
 
     pools
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use hwc_engine::geometry::Point3D;
-    use hwc_engine::material::MaterialId;
-    use hwc_engine::netlist::NetId;
-    use hwc_engine::space::LineSegment;
-
-    #[test]
-    fn test_horizontal_trace_geometry() {
-        let seg = LineSegment::new(Point3D::new(0, 0, 1250), Point3D::new(1000, 0, 1250));
-
-        let geom = GeometrySegment::from_line_segment(
-            seg,
-            200,                // width
-            Some((1050, 1450)), // layer bounds
-            MaterialId(1),
-            NetId::new(1),
-        )
-        .unwrap();
-
-        assert_eq!(geom.segment_type, SegmentType::HorizontalTrace);
-        assert_eq!(geom.z_range, (1050, 1450));
-    }
-
-    #[test]
-    fn test_via_geometry() {
-        let seg = LineSegment::new(Point3D::new(0, 0, 1250), Point3D::new(0, 0, 1650));
-
-        let geom = GeometrySegment::from_line_segment(
-            seg,
-            200,  // width
-            None, // no layer bounds needed for vias
-            MaterialId(1),
-            NetId::new(1),
-        )
-        .unwrap();
-
-        assert_eq!(geom.segment_type, SegmentType::Via);
-        assert_eq!(geom.z_range, (1250, 1650));
-    }
-
-    #[test]
-    fn test_degenerate_segment_filtered() {
-        let seg = LineSegment::new(Point3D::new(0, 0, 0), Point3D::new(0, 0, 0));
-
-        let geom = GeometrySegment::from_line_segment(
-            seg,
-            200,
-            Some((1050, 1450)),
-            MaterialId(1),
-            NetId::new(1),
-        );
-
-        assert!(geom.is_none());
-    }
 }

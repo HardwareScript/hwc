@@ -10,25 +10,18 @@ pub use config::{AutoRouter, RouterConfig};
 
 impl<'a> AutoRouter<'a> {
     /// Create a new global automatic router.
+    ///
+    /// Value-typed routing inputs (frequencies, routes, policies, intents) are
+    /// grouped in `RouterConfig`, keeping this constructor to the borrowed
+    /// compilation context plus that one config.
     pub fn new(
         space: &'a mut hwc_engine::HardwareSpace,
         symbol_table: &'a crate::SymbolTable,
         eval_context: &'a hwc_parser::EvaluationContext,
         stackup_manager: &'a crate::ir::stackup_manager::StackupManager,
         profile: Option<&'a hwc_parser::ProfileDefinition>,
-        net_frequencies: rustc_hash::FxHashMap<hwc_engine::netlist::NetId, f64>,
-        auto_routes: Vec<hwc_parser::Route>,
-        route_net_policies: rustc_hash::FxHashMap<
-            hwc_engine::netlist::NetId,
-            hwc_engine::RoutingPattern,
-        >,
+        config: RouterConfig,
     ) -> Self {
-        let config = RouterConfig::new(
-            net_frequencies,
-            auto_routes,
-            route_net_policies,
-            rustc_hash::FxHashMap::default(),
-        );
         Self {
             space,
             symbol_table,

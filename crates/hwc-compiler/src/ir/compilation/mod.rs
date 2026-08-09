@@ -11,7 +11,19 @@ use crate::SymbolTable;
 use hwc_diagnostics::DiagnosticCollector;
 use hwc_engine::HardwareSpace;
 use hwc_parser::{EvaluationContext, OriginPoint, ProfileDefinition, SpaceDefinition};
-use rustc_hash::FxHashMap;
+
+/// Parameters for `compile_single_space` function to avoid too many arguments.
+pub struct CompileSpaceParams<'a> {
+    pub space_def: &'a SpaceDefinition,
+    pub symbol_table: &'a SymbolTable,
+    pub collector: &'a DiagnosticCollector,
+    pub lockfile_path: Option<&'a std::path::Path>,
+    pub source_content: Option<&'a str>,
+    pub force_reroute: bool,
+    pub query_store: Option<hwc_engine::geometry_router::query_engine::QueryStore>,
+    pub unit_registry: &'a hwc_types::UnitRegistry,
+    pub arena: &'a hwc_parser::ast::arena::AstArena,
+}
 
 /// Shared, read-only inputs threaded through the compilation passes.
 ///
@@ -19,9 +31,11 @@ use rustc_hash::FxHashMap;
 /// (`execute_placement`, `process_routes`, …) take a single context argument
 /// instead of a long parameter list.
 pub struct CompilationContext<'a> {
-    pub sorted_ids: &'a [compact_str::CompactString],
+    /// Topologically sorted placement-item indices. Iterating this and indexing
+    /// straight into `placement_items` keeps the placement hot path free of
+    /// string hashing and hash-map lookups.
+    pub sorted_indices: &'a [usize],
     pub placement_items: &'a [crate::ir::placement_item::ContextualPlacementItem],
-    pub item_map: &'a FxHashMap<compact_str::CompactString, usize>,
     pub origin: OriginPoint,
     pub symbol_table: &'a SymbolTable,
     pub eval_context: &'a EvaluationContext,
@@ -57,17 +71,17 @@ pub fn compile_space_recursive(
     let collector = DiagnosticCollector::new("", 100);
 
     // Compile the space without lockfile caching or query stores
-    let (space, _, _) = compile_single_space(
+    let (space, _, _) = compile_single_space(CompileSpaceParams {
         space_def,
         symbol_table,
-        &collector,
-        None, // No lockfile path
-        None, // No source content
-        true, // Force fresh routing
-        None, // No query store
+        collector: &collector,
+        lockfile_path: None,
+        source_content: None,
+        force_reroute: true,
+        query_store: None,
         unit_registry,
         arena,
-    )?;
+    })?;
 
     // Check if any errors were collected during child compilation
     if collector.has_errors() {
@@ -93,15 +107,7 @@ pub fn compile_space_recursive(
 /// cached results for incremental rebuilds), and a boolean indicating whether
 /// routes were loaded from the lockfile cache.
 pub fn compile_single_space(
-    space_def: &hwc_parser::SpaceDefinition,
-    symbol_table: &SymbolTable,
-    collector: &hwc_diagnostics::DiagnosticCollector,
-    lockfile_path: Option<&std::path::Path>,
-    _source_content: Option<&str>,
-    force_reroute: bool,
-    query_store: Option<hwc_engine::geometry_router::query_engine::QueryStore>,
-    unit_registry: &hwc_types::UnitRegistry,
-    arena: &hwc_parser::ast::arena::AstArena,
+    params: CompileSpaceParams,
 ) -> Result<
     (
         HardwareSpace,
@@ -110,19 +116,44 @@ pub fn compile_single_space(
     ),
     IrError,
 > {
+    // Destructure immediately: zero-cost, and the body below reads exactly as it
+    // did when these were separate function parameters.
+    let CompileSpaceParams {
+        space_def,
+        symbol_table,
+        collector,
+        lockfile_path,
+        source_content: _source_content,
+        force_reroute,
+        query_store,
+        unit_registry,
+        arena,
+    } = params;
+
     // Build eval context first (contains space-level let bindings)
     let eval_context_initial = space_setup::build_eval_context(symbol_table, None, space_def)?;
 
+    // Unrolling allocates new nodes (one per loop iteration) into the arena, so
+    // work against a local mutable copy. The caller's arena stays immutable,
+    // which is what lets hierarchical space instantiation recurse while the
+    // parent placement loop still holds a shared borrow of it.
+    let mut arena_owned = arena.clone();
+
     // Collect placement items (unroll loops with eval context)
-    let placement_items =
-        placement_items::collect_placement_items(space_def, symbol_table, &eval_context_initial, arena)?;
+    let placement_items = placement_items::collect_placement_items(
+        &space_def.statements,
+        symbol_table,
+        &eval_context_initial,
+        &mut arena_owned,
+    )?;
+    let arena = arena_owned;
 
     let mut space = space_setup::create_space(
         space_def,
         symbol_table,
         &eval_context_initial,
         unit_registry,
-        arena,
+        &arena,
     )?;
 
     let (profile, solder_mask_thickness_nm) =
@@ -154,10 +185,12 @@ pub fn compile_single_space(
             let material_id = space
                 .material_registry
                 .get_id(&stackup_layer.material_name)
-                .expect(&format!(
-                    "Material '{}' from stackup not found in material registry",
-                    stackup_layer.material_name
-                ));
+                .unwrap_or_else(|| {
+                    panic!(
+                        "Material '{}' from stackup not found in material registry",
+                        stackup_layer.material_name
+                    )
+                });
 
             let substrate_bbox = hwc_engine::geometry::BoundingBox::new(
                 hwc_engine::geometry::Point3D::new(0, 0, stackup_layer.z_bottom),
@@ -208,15 +241,13 @@ pub fn compile_single_space(
         symbol_table,
         &eval_context,
     );
-    let sorted_ids = dependency_graph::build_and_sort(&placement_items, symbol_table)?;
+    let sorted_indices = dependency_graph::build_and_sort(&placement_items, symbol_table, &arena)?;
 
     space_setup::generate_solder_mask(&mut space, solder_mask_thickness_nm, &stackup_manager)?;
 
-    let item_map = placement_loop::build_item_map(&placement_items);
     let compile_ctx = CompilationContext {
-        sorted_ids: &sorted_ids,
+        sorted_indices: &sorted_indices,
         placement_items: &placement_items,
-        item_map: &item_map,
         origin,
         symbol_table,
         eval_context: &eval_context,
@@ -225,7 +256,7 @@ pub fn compile_single_space(
         space_def,
         collector,
         unit_registry,
-        arena,
+        arena: &arena,
     };
     // Register 'space' as a special anchor representing the space boundaries
     // The 'space' anchor represents the absolute coordinate system of the design space.
@@ -329,29 +360,32 @@ pub fn program_to_space(
     unit_registry: &hwc_types::UnitRegistry,
 ) -> Result<HardwareSpace, IrError> {
     let arena = &program.arena;
-    let space_def = program
+    let space_def_id = program
         .definitions
         .iter()
         .find_map(|def| {
-            if let hwc_parser::Definition::Space(space) = def {
-                Some(space)
+            if let hwc_parser::Definition::Space(space_id) = def {
+                Some(*space_id)
             } else {
                 None
             }
         })
         .ok_or(IrError::NoSpaceDefinition)?;
 
-    let (space, _qs, _from_cache) = compile_single_space(
+    // Lookup the actual SpaceDefinition from arena
+    let space_def = &arena.space_defs[space_def_id];
+
+    let (space, _qs, _from_cache) = compile_single_space(CompileSpaceParams {
         space_def,
         symbol_table,
         collector,
-        None,
-        None,
-        false,
-        None,
+        lockfile_path: None,
+        source_content: None,
+        force_reroute: false,
+        query_store: None,
         unit_registry,
         arena,
-    )?;
+    })?;
     Ok(space)
 }
 
@@ -391,8 +425,9 @@ pub fn program_to_spaces_with_lockfile(
         .definitions
         .iter()
         .filter_map(|def| {
-            if let hwc_parser::Definition::Space(space) = def {
-                Some(&**space) // Unbox the Box<SpaceDefinition>
+            if let hwc_parser::Definition::Space(space_id) = def {
+                // Lookup SpaceDefinition from arena
+                Some(&program.arena.space_defs[*space_id])
             } else {
                 None
             }
@@ -408,17 +443,17 @@ pub fn program_to_spaces_with_lockfile(
 
     for space_def in space_defs {
         let space_name: compact_str::CompactString = space_def.name.to_string().into();
-        let (space, qs, _from_cache) = compile_single_space(
+        let (space, qs, _from_cache) = compile_single_space(CompileSpaceParams {
             space_def,
             symbol_table,
             collector,
             lockfile_path,
             source_content,
             force_reroute,
-            shared_qs.take(),
+            query_store: shared_qs.take(),
             unit_registry,
-            &program.arena,
-        )?;
+            arena: &program.arena,
+        })?;
 
         shared_qs = qs;
         spaces.insert(space_name, space);

@@ -189,7 +189,7 @@ pub(crate) fn z_expr_is_physical(z_expr: &Expression) -> bool {
         Expression::Coordinate { .. } => true,      // Coordinate literals are physical
         Expression::FunctionCall { arguments, .. } => {
             // Function call is physical if any argument is physical
-            arguments.iter().any(|arg| z_expr_is_physical(arg))
+            arguments.iter().any(z_expr_is_physical)
         }
     }
 }
@@ -361,9 +361,7 @@ pub fn spanning_coordinate_to_point(
         )
         .map_err(|e| e.to_string())?
     } else {
-        let result = evaluate_expression_to_nm(x_expr, ctx.symbol_table, ctx.eval_context)?;
-
-        result
+        evaluate_expression_to_nm(x_expr, ctx.symbol_table, ctx.eval_context)?
     };
 
     let y_nm = if has_anchor_refs && y_expr.contains_anchor_reference() {
@@ -380,9 +378,7 @@ pub fn spanning_coordinate_to_point(
         )
         .map_err(|e| e.to_string())?
     } else {
-        let result = evaluate_expression_to_nm(y_expr, ctx.symbol_table, ctx.eval_context)?;
-
-        result
+        evaluate_expression_to_nm(y_expr, ctx.symbol_table, ctx.eval_context)?
     };
 
     let z_nm = resolve_coordinate_z_nm(z_expr, ctx, has_anchor_refs)?;

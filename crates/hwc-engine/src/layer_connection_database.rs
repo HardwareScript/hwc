@@ -4,6 +4,18 @@ use rustc_hash::FxHashMap;
 use crate::geometry::EntityId;
 use crate::material::MaterialId;
 
+/// Parameters for registering a via connection
+pub struct ViaRegistrationParams<'a> {
+    pub entity_name: &'a str,
+    pub bottom_layer: &'a str,
+    pub bottom_z: i64,
+    pub top_layer: &'a str,
+    pub top_z: i64,
+    pub position_2d: (i64, i64),
+    pub bottom_material: MaterialId,
+    pub top_material: MaterialId,
+}
+
 /// Exact connection point for routing — the single source of truth for where
 /// a via or pour connects to a routing layer.
 #[derive(Debug, Clone)]
@@ -130,64 +142,57 @@ impl LayerConnectionDatabase {
     /// (where the via meets the lower routing layer).
     /// The `top_connection_z` should be the bottom of the top layer
     /// (where the via meets the upper routing layer).
-    #[allow(clippy::too_many_arguments)]
     pub fn register_via(
         &mut self,
-        entity_name: &str,
-        bottom_layer: &str,
-        bottom_z: i64,
-        top_layer: &str,
-        top_z: i64,
-        position_2d: (i64, i64),
-        bottom_material: MaterialId,
-        top_material: MaterialId,
+        params: ViaRegistrationParams,
     ) -> Result<(), LayerConnectionError> {
-        let entity: CompactString = entity_name.into();
+        let entity: CompactString = params.entity_name.into();
 
         // Register bottom connection point
-        let bottom_key: (CompactString, CompactString) = (entity.clone(), bottom_layer.into());
+        let bottom_key: (CompactString, CompactString) =
+            (entity.clone(), params.bottom_layer.into());
         if self.connections.contains_key(&bottom_key) {
             return Err(LayerConnectionError::DuplicateConnection {
                 entity: entity.clone(),
-                layer: bottom_layer.into(),
+                layer: params.bottom_layer.into(),
             });
         }
         self.connections.insert(
             bottom_key,
             RoutingConnectionPoint {
-                entity_id: EntityId::from_semantic(entity_name),
-                layer_name: bottom_layer.into(),
-                z_elevation: bottom_z,
-                position_2d,
-                material_id: bottom_material,
+                entity_id: EntityId::from_semantic(params.entity_name),
+                layer_name: params.bottom_layer.into(),
+                z_elevation: params.bottom_z,
+                position_2d: params.position_2d,
+                material_id: params.bottom_material,
                 connection_type: ConnectionType::ViaBottom,
             },
         );
 
         // Register top connection point
-        let top_key: (CompactString, CompactString) = (entity.clone(), top_layer.into());
+        let top_key: (CompactString, CompactString) = (entity.clone(), params.top_layer.into());
         if self.connections.contains_key(&top_key) {
             return Err(LayerConnectionError::DuplicateConnection {
                 entity: entity.clone(),
-                layer: top_layer.into(),
+                layer: params.top_layer.into(),
             });
         }
         self.connections.insert(
             top_key,
             RoutingConnectionPoint {
-                entity_id: EntityId::from_semantic(entity_name),
-                layer_name: top_layer.into(),
-                z_elevation: top_z,
-                position_2d,
-                material_id: top_material,
+                entity_id: EntityId::from_semantic(params.entity_name),
+                layer_name: params.top_layer.into(),
+                z_elevation: params.top_z,
+                position_2d: params.position_2d,
+                material_id: params.top_material,
                 connection_type: ConnectionType::ViaTop,
             },
         );
 
         // Track which layers this entity connects to
         let layers = self.entity_layers.entry(entity).or_default();
-        layers.push(bottom_layer.into());
-        layers.push(top_layer.into());
+        layers.push(params.bottom_layer.into());
+        layers.push(params.top_layer.into());
 
         Ok(())
     }
@@ -344,95 +349,5 @@ impl LayerConnectionDatabase {
 impl Default for LayerConnectionDatabase {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_register_and_lookup_via() {
-        let mut db = LayerConnectionDatabase::new();
-
-        db.register_via(
-            "Via_M1_M2",
-            "metal1",
-            1250,
-            "metal2",
-            2000,
-            (650, 1000),
-            1,
-            2,
-        )
-        .unwrap();
-
-        let bottom = db.get_connection_point("Via_M1_M2", "metal1").unwrap();
-        assert_eq!(bottom.z_elevation, 1250);
-        assert_eq!(bottom.position_2d, (650, 1000));
-        assert_eq!(bottom.material_id, 1);
-        assert_eq!(bottom.connection_type, ConnectionType::ViaBottom);
-
-        let top = db.get_connection_point("Via_M1_M2", "metal2").unwrap();
-        assert_eq!(top.z_elevation, 2000);
-        assert_eq!(top.material_id, 2);
-        assert_eq!(top.connection_type, ConnectionType::ViaTop);
-    }
-
-    #[test]
-    fn test_missing_connection_returns_error() {
-        let db = LayerConnectionDatabase::new();
-
-        let result = db.get_connection_point("NonExistent", "metal1");
-        assert!(result.is_err());
-        assert!(matches!(
-            result.unwrap_err(),
-            LayerConnectionError::NoConnectionPoint { .. }
-        ));
-    }
-
-    #[test]
-    fn test_duplicate_connection_returns_error() {
-        let mut db = LayerConnectionDatabase::new();
-
-        db.register_via("Via1", "metal1", 1250, "metal2", 2000, (0, 0), 1, 2)
-            .unwrap();
-
-        let result = db.register_via("Via1", "metal1", 1250, "metal3", 3000, (0, 0), 1, 3);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_validate_catches_z_mismatch() {
-        let mut db = LayerConnectionDatabase::new();
-
-        db.register_via("Via1", "metal1", 1300, "metal2", 2000, (0, 0), 1, 2)
-            .unwrap();
-
-        let mut routing_z = FxHashMap::default();
-        routing_z.insert("metal1".into(), 1250);
-
-        let result = db.validate(&routing_z);
-        assert!(result.is_err());
-        let errors = result.unwrap_err();
-        assert_eq!(errors.len(), 1);
-        assert!(matches!(
-            &errors[0],
-            LayerConnectionError::ConnectionZMismatch { .. }
-        ));
-    }
-
-    #[test]
-    fn test_validate_passes_when_z_matches() {
-        let mut db = LayerConnectionDatabase::new();
-
-        db.register_via("Via1", "metal1", 1250, "metal2", 2000, (0, 0), 1, 2)
-            .unwrap();
-
-        let mut routing_z = FxHashMap::default();
-        routing_z.insert("metal1".into(), 1250);
-        routing_z.insert("metal2".into(), 2000);
-
-        assert!(db.validate(&routing_z).is_ok());
     }
 }

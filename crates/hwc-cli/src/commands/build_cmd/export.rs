@@ -33,8 +33,8 @@ pub fn export_all(params: ExportParams) -> Result<()> {
 
     // Extract space definition for compiled output
     let space_def = ast.definitions.iter().find_map(|def| {
-        if let hwc_parser::Definition::Space(space) = def {
-            Some(space)
+        if let hwc_parser::Definition::Space(space_id) = def {
+            Some(&ast.arena.space_defs[*space_id])
         } else {
             None
         }
@@ -43,7 +43,7 @@ pub fn export_all(params: ExportParams) -> Result<()> {
     let compiled = CompiledOutput {
         space,
         symbol_table,
-        space_def: space_def.map(|b| *b.clone()),
+        space_def: space_def.cloned(),
         physical_netlist,
         unit_registry,
     };

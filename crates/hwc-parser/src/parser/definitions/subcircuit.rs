@@ -21,17 +21,6 @@ use crate::parser::error::{span_to_source_span, ParseError};
 use compact_str::CompactString;
 
 impl crate::parser::Parser {
-    /// Parse a subcircuit definition
-    ///
-    /// Expected format:
-    /// ```
-    /// subcircuit <name>:
-    ///     terminals: [<name>, ...]
-    ///     parameters: [<name> = <default>, ...]  # optional
-    ///     elements:
-    ///         <name>: <element_type>(<args>)
-    ///         ...
-    /// ```
     pub(in super::super) fn parse_subcircuit(
         &mut self,
         collector: &crate::DiagnosticCollector,

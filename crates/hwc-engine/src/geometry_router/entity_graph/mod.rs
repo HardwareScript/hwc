@@ -9,6 +9,7 @@ mod spatial;
 mod substrate;
 mod types;
 
+pub use substrate::SubstrateLayerConfig;
 pub use types::{CapType, LinerStack, SubstrateLayerType, TSVParams};
 pub use types::{EntityData, EntityType, TubeLayerSpec, ViaHoleSpec};
 

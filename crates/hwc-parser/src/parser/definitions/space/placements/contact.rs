@@ -1,5 +1,5 @@
-use crate::ast::*;
 use crate::ast::arena::ContactId;
+use crate::ast::*;
 use crate::lexer::{Span, Token};
 use crate::parser::error::ParseError;
 
@@ -9,9 +9,7 @@ impl crate::parser::Parser {
     /// - Relational: `add contact(Tungsten) at: Region.center spanning layer: l1 to l2`
     ///
     /// Returns arena-allocated reference for zero-copy AST
-    pub(in crate::parser) fn parse_contact(
-        &mut self,
-    ) -> Result<ContactId, ParseError> {
+    pub(in crate::parser) fn parse_contact(&mut self) -> Result<ContactId, ParseError> {
         let start_pos = self.current_span().start;
 
         self.expect(&Token::Add)?;

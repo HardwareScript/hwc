@@ -272,7 +272,7 @@ pub fn device_instances_to_physical_netlist(
         physical_netlist.devices.push(physical_device);
 
         // Register nets from terminal connections
-        for (_terminal, net_name) in &device_instance.terminal_nets {
+        for net_name in device_instance.terminal_nets.values() {
             physical_netlist
                 .nets
                 .entry(net_name.clone())

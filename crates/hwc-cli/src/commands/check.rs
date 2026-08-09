@@ -88,7 +88,7 @@ pub fn execute(
 
     // Build symbol table for semantic validation
     use hwc_compiler::{ModuleResolver, SymbolTable};
-    let mut symbol_table = SymbolTable::new();
+    let mut symbol_table = SymbolTable::new(ast.arena.clone());
     let mut unit_registry = hwc_types::UnitRegistry::new(vec![]);
 
     // Load prelude (units.hw, math.hw) for unit resolution and constant folding
@@ -238,7 +238,7 @@ fn run_foundry_validation(
     use hwc_compiler::{ModuleResolver, SymbolTable};
 
     // Build symbol table with imports resolved (so property merging happens)
-    let mut symbol_table = SymbolTable::new();
+    let mut symbol_table = SymbolTable::new(ast.arena.clone());
 
     // Load prelude (units.hw, math.hw) for unit resolution and constant folding
     match hwc_compiler::Prelude::load() {
@@ -267,7 +267,8 @@ fn run_foundry_validation(
 
     // Register local definitions (goes into Local layer, with property merging)
     for definition in &ast.definitions {
-        if let hwc_parser::Definition::Material(mat) = definition {
+        if let hwc_parser::Definition::Material(mat_id) = definition {
+            let mat = &ast.arena.material_defs[*mat_id];
             symbol_table.register_material(collector, mat.clone());
         }
     }

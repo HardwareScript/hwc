@@ -7,10 +7,7 @@ use std::path::Path;
 
 impl super::ModuleResolver {
     /// Parse a program from a path (always fresh - no caching)
-    pub(super) fn parse_program(
-        &mut self,
-        path: &Path,
-    ) -> Result<Program, ResolverError> {
+    pub(super) fn parse_program(&mut self, path: &Path) -> Result<Program, ResolverError> {
         if path.starts_with("@std/") {
             // Embedded stdlib
             let module_name = path.strip_prefix("@std/").unwrap().to_str().unwrap();
@@ -33,10 +30,7 @@ impl super::ModuleResolver {
     }
 
     /// Parse a file from disk
-    pub(super) fn parse_file(
-        &self,
-        path: &Path,
-    ) -> Result<Program, ResolverError> {
+    pub(super) fn parse_file(&self, path: &Path) -> Result<Program, ResolverError> {
         let source = std::fs::read_to_string(path).map_err(|e| ResolverError::FileReadError {
             path: path.display().to_string().into(),
             error: e.to_string(),

@@ -18,7 +18,7 @@ use compact_str::CompactString;
 ///
 /// Modules now support intrinsic physical layout (relative only) for Physical Macros.
 /// This cures the "Physical Pile" where logical modules instantiated sub-components at [0,0,0].
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ModuleDefinition {
     pub name: Identifier,
     pub is_exported: bool, // v0.2.0: Access control
@@ -80,7 +80,7 @@ pub struct PinDeclaration {
 /// - Comptime for loops
 /// - Comptime if conditionals
 /// - Nested module instantiation
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ModuleStatement {
     /// Add component: `add ComponentType (params) named Instance`
     /// Note: NO `at [x,y,z]` allowed in modules (that's in space layout blocks)
@@ -168,11 +168,11 @@ pub enum ArithmeticOp {
 /// Comptime for loop: `for i in 0..63:`
 ///
 /// Evaluated at compile time - generates multiple statements
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ForLoop {
-    pub variable: CompactString,          // Loop variable name (e.g., "i")
-    pub start: usize,                     // Start value (inclusive)
-    pub end: usize,                       // End value (inclusive, Ruby-style)
+    pub variable: CompactString,    // Loop variable name (e.g., "i")
+    pub start: usize,               // Start value (inclusive)
+    pub end: usize,                 // End value (inclusive, Ruby-style)
     pub body: Vec<ModuleStatement>, // Statements inside loop
     pub span: Span,
 }
@@ -180,7 +180,7 @@ pub struct ForLoop {
 /// Comptime if conditional: `if condition:`
 ///
 /// Evaluated at compile time - only one branch is kept
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct IfConditional {
     pub condition: Condition,
     pub then_body: Vec<ModuleStatement>,

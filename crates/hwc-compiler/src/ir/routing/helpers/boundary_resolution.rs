@@ -1,5 +1,5 @@
 use crate::ir::errors::IrError;
-use crate::ir::routing::automatic::select_routable_port_from_resolution;
+use crate::ir::routing::automatic::{select_routable_port_from_resolution, PortSelectionParams};
 use hwc_engine::geometry_router::port_escape::CardinalPort;
 use hwc_engine::{HardwareSpace, Point3D};
 
@@ -296,27 +296,31 @@ pub fn resolve_route_boundary_points(
 
     // Perform obstacle-aware port selection
     let exit_port = select_routable_port_from_resolution(
-        space,
         &from_entity_data.name,
-        from_center,
-        to_center,
-        trace_width_nm,
-        clearance_nm,
-        &from_entity_data.name,
-        &to_entity_data.name,
+        PortSelectionParams {
+            space,
+            start_center: from_center,
+            goal_center: to_center,
+            trace_width_nm,
+            clearance_nm,
+            from_component_name: &from_entity_data.name,
+            to_component_name: &to_entity_data.name,
+        },
         from_net_id,
         to_net_id,
     )?;
 
     let enter_port = select_routable_port_from_resolution(
-        space,
         &to_entity_data.name,
-        to_center,
-        from_center,
-        trace_width_nm,
-        clearance_nm,
-        &from_entity_data.name,
-        &to_entity_data.name,
+        PortSelectionParams {
+            space,
+            start_center: to_center,
+            goal_center: from_center,
+            trace_width_nm,
+            clearance_nm,
+            from_component_name: &from_entity_data.name,
+            to_component_name: &to_entity_data.name,
+        },
         from_net_id,
         to_net_id,
     )?;

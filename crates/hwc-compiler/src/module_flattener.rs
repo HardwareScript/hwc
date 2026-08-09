@@ -114,7 +114,10 @@ impl ComptimeContext {
     }
 }
 
-pub fn flatten_module(module: &ModuleDefinition, arena: &hwc_parser::ast::arena::AstArena) -> Result<FlattenedModule, FlattenError> {
+pub fn flatten_module(
+    module: &ModuleDefinition,
+    arena: &hwc_parser::ast::arena::AstArena,
+) -> Result<FlattenedModule, FlattenError> {
     let mut context = ComptimeContext::new();
     let mut components = Vec::new();
     let mut routes = Vec::new();

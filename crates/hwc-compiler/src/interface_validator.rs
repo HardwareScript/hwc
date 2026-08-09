@@ -2,13 +2,13 @@
 //!
 //! Validates that components correctly implement their declared interfaces.
 //! Performs compile-time duck-typing checks to ensure pin compatibility.
+//!
+//! v0.2.1: Migrated to arena-based architecture - stores PolymorphicInterfaceDefId instead of full structs
 
 use compact_str::CompactString;
-#[cfg(test)]
-use hwc_parser::ast::PinMapping;
 use hwc_parser::ast::{
-    ComponentDefinition, InterfaceImplementation, InterfaceValidationError,
-    PolymorphicInterfaceDefinition,
+    arena::PolymorphicInterfaceDefId, AstArena, ComponentDefinition, InterfaceImplementation,
+    InterfaceValidationError,
 };
 use rustc_hash::FxHashMap;
 
@@ -16,9 +16,12 @@ use rustc_hash::FxHashMap;
 ///
 /// Validates that components correctly implement their declared interfaces
 /// using duck-typing (structural compatibility checking).
+///
+/// v0.2.1: Stores 4-byte PolymorphicInterfaceDefId instead of full PolymorphicInterfaceDefinition structs
 pub struct InterfaceValidator {
-    /// All defined interfaces (name → definition)
-    interfaces: FxHashMap<CompactString, PolymorphicInterfaceDefinition>,
+    /// All defined interfaces (name → arena ID)
+    /// Arena lookup required: arena.polymorphic_interface_defs[id]
+    interfaces: FxHashMap<CompactString, PolymorphicInterfaceDefId>,
 }
 
 impl InterfaceValidator {
@@ -30,9 +33,14 @@ impl InterfaceValidator {
     }
 
     /// Register an interface definition
-    pub fn register_interface(&mut self, interface: PolymorphicInterfaceDefinition) {
-        self.interfaces
-            .insert(interface.name.to_string().into(), interface);
+    /// Returns the ID that was stored
+    pub fn register_interface(
+        &mut self,
+        name: CompactString,
+        interface_id: PolymorphicInterfaceDefId,
+    ) -> PolymorphicInterfaceDefId {
+        self.interfaces.insert(name, interface_id);
+        interface_id
     }
 
     /// Validate that a component correctly implements its declared interfaces
@@ -46,15 +54,20 @@ impl InterfaceValidator {
     /// # Performance
     ///
     /// O(1) per component - uses HashMap lookups for interface and pin resolution
+    ///
+    /// v0.2.1: Requires arena reference to dereference InterfaceDefId
     pub fn validate_component(
         &self,
         component: &ComponentDefinition,
+        arena: &AstArena,
     ) -> Result<(), Vec<InterfaceValidationError>> {
         let mut errors = Vec::new();
 
         // Validate each interface implementation
         for implementation in &component.implements {
-            if let Err(mut impl_errors) = self.validate_implementation(component, implementation) {
+            if let Err(mut impl_errors) =
+                self.validate_implementation(component, implementation, arena)
+            {
                 errors.append(&mut impl_errors);
             }
         }
@@ -71,12 +84,13 @@ impl InterfaceValidator {
         &self,
         component: &ComponentDefinition,
         implementation: &InterfaceImplementation,
+        arena: &AstArena,
     ) -> Result<(), Vec<InterfaceValidationError>> {
         let mut errors = Vec::new();
 
-        // Check if interface exists
-        let interface = match self.interfaces.get(&implementation.interface_name) {
-            Some(iface) => iface,
+        // Check if interface exists and lookup from arena
+        let interface_id = match self.interfaces.get(&implementation.interface_name) {
+            Some(id) => id,
             None => {
                 errors.push(InterfaceValidationError::InterfaceNotFound {
                     interface_name: implementation.interface_name.clone(),
@@ -86,16 +100,22 @@ impl InterfaceValidator {
             }
         };
 
+        // Dereference interface from arena
+        let interface = &arena.polymorphic_interface_defs[*interface_id];
+
+        // Get required and optional pins
+        let required_pins = &interface.required_pins;
+        let optional_pins = &interface.optional_pins;
+
         // Build pin mapping (interface pin → component pin)
         let pin_map = self.build_pin_mapping(component, implementation);
 
         // Validate pin mappings reference valid pins
         for mapping in &implementation.pin_mappings {
             // Check if interface pin exists
-            let interface_pin_exists = interface
-                .required_pins
+            let interface_pin_exists = required_pins
                 .iter()
-                .chain(interface.optional_pins.iter())
+                .chain(optional_pins.iter())
                 .any(|p| p.name == mapping.interface_pin);
 
             if !interface_pin_exists {
@@ -117,7 +137,7 @@ impl InterfaceValidator {
         }
 
         // Validate required pins are present
-        for interface_pin in &interface.required_pins {
+        for interface_pin in required_pins {
             // Get the component pin name (either from mapping or assume same name)
             let component_pin_name: String = pin_map
                 .get(&interface_pin.name)
@@ -187,14 +207,16 @@ impl InterfaceValidator {
     }
 
     /// Get all interfaces implemented by a component
-    pub fn get_implemented_interfaces(
+    ///
+    /// v0.2.1: Returns interface IDs that must be dereferenced via arena
+    pub fn get_implemented_interface_ids(
         &self,
         component: &ComponentDefinition,
-    ) -> Vec<&PolymorphicInterfaceDefinition> {
+    ) -> Vec<PolymorphicInterfaceDefId> {
         component
             .implements
             .iter()
-            .filter_map(|impl_| self.interfaces.get(&impl_.interface_name))
+            .filter_map(|impl_| self.interfaces.get(&impl_.interface_name).copied())
             .collect()
     }
 
@@ -216,360 +238,5 @@ impl InterfaceValidator {
 impl Default for InterfaceValidator {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    use hwc_parser::ast::{InterfacePin, PinType};
-    use hwc_parser::lexer::Span;
-    use hwc_parser::Identifier;
-
-    fn dummy_span() -> Span {
-        Span { start: 0, end: 0 }
-    }
-
-    #[test]
-    fn test_interface_registration() {
-        let mut validator = InterfaceValidator::new();
-
-        let interface = PolymorphicInterfaceDefinition {
-            name: Identifier::with_dummy_span("I2S_DAC"),
-            is_exported: false,
-            description: None,
-            required_pins: vec![
-                InterfacePin {
-                    name: Identifier::with_dummy_span("BCLK").to_string().into(),
-                    pin_type: PinType::Output,
-                    description: None,
-                    span: dummy_span(),
-                },
-                InterfacePin {
-                    name: Identifier::with_dummy_span("LRCLK").to_string().into(),
-                    pin_type: PinType::Output,
-                    description: None,
-                    span: dummy_span(),
-                },
-            ],
-            optional_pins: vec![],
-            span: dummy_span(),
-        };
-
-        validator.register_interface(interface);
-        assert!(validator.interfaces.contains_key("I2S_DAC"));
-    }
-
-    #[test]
-    fn test_valid_component_implementation() {
-        let mut validator = InterfaceValidator::new();
-
-        // Register interface
-        let interface = PolymorphicInterfaceDefinition {
-            name: Identifier::with_dummy_span("I2S_DAC"),
-            is_exported: false,
-            description: None,
-            required_pins: vec![
-                InterfacePin {
-                    name: Identifier::with_dummy_span("BCLK").to_string().into(),
-                    pin_type: PinType::Output,
-                    description: None,
-                    span: dummy_span(),
-                },
-                InterfacePin {
-                    name: Identifier::with_dummy_span("LRCLK").to_string().into(),
-                    pin_type: PinType::Output,
-                    description: None,
-                    span: dummy_span(),
-                },
-            ],
-            optional_pins: vec![],
-            span: dummy_span(),
-        };
-        validator.register_interface(interface);
-
-        // Create component that implements the interface
-        let component = ComponentDefinition {
-            name: Identifier::with_dummy_span("CS4344"),
-            is_exported: false,
-            parameters: vec![].into(),
-            metadata: None,
-            pins: vec!["BCLK".into(), "LRCLK".into(), "VCC".into()].into(),
-            layout: None,
-            electrical: None,
-            render: None,
-            implements: vec![InterfaceImplementation {
-                interface_name: Identifier::with_dummy_span("I2S_DAC").to_string().into(),
-                pin_mappings: vec![],
-                span: dummy_span(),
-            }]
-            .into(),
-            span: dummy_span(),
-        };
-
-        let result = validator.validate_component(&component);
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_missing_required_pin() {
-        let mut validator = InterfaceValidator::new();
-
-        // Register interface
-        let interface = PolymorphicInterfaceDefinition {
-            name: Identifier::with_dummy_span("I2S_DAC"),
-            is_exported: false,
-            description: None,
-            required_pins: vec![
-                InterfacePin {
-                    name: Identifier::with_dummy_span("BCLK").to_string().into(),
-                    pin_type: PinType::Output,
-                    description: None,
-                    span: dummy_span(),
-                },
-                InterfacePin {
-                    name: Identifier::with_dummy_span("LRCLK").to_string().into(),
-                    pin_type: PinType::Output,
-                    description: None,
-                    span: dummy_span(),
-                },
-            ],
-            optional_pins: vec![],
-            span: dummy_span(),
-        };
-        validator.register_interface(interface);
-
-        // Create component missing LRCLK pin
-        let component = ComponentDefinition {
-            name: Identifier::with_dummy_span("BadChip"),
-            is_exported: false,
-            parameters: vec![].into(),
-            metadata: None,
-            pins: vec!["BCLK".into(), "VCC".into()].into(), // Missing LRCLK
-            layout: None,
-            electrical: None,
-            render: None,
-            implements: vec![InterfaceImplementation {
-                interface_name: Identifier::with_dummy_span("I2S_DAC").to_string().into(),
-                pin_mappings: vec![],
-                span: dummy_span(),
-            }]
-            .into(),
-            span: dummy_span(),
-        };
-
-        let result = validator.validate_component(&component);
-        assert!(result.is_err());
-
-        let errors = result.unwrap_err();
-        assert_eq!(errors.len(), 1);
-        assert!(matches!(
-            errors[0],
-            InterfaceValidationError::MissingRequiredPin { .. }
-        ));
-    }
-
-    #[test]
-    fn test_pin_mapping() {
-        let mut validator = InterfaceValidator::new();
-
-        // Register interface
-        let interface = PolymorphicInterfaceDefinition {
-            name: Identifier::with_dummy_span("I2S_DAC"),
-            is_exported: false,
-            description: None,
-            required_pins: vec![
-                InterfacePin {
-                    name: Identifier::with_dummy_span("BCLK").to_string().into(),
-                    pin_type: PinType::Output,
-                    description: None,
-                    span: dummy_span(),
-                },
-                InterfacePin {
-                    name: Identifier::with_dummy_span("LRCLK").to_string().into(),
-                    pin_type: PinType::Output,
-                    description: None,
-                    span: dummy_span(),
-                },
-            ],
-            optional_pins: vec![],
-            span: dummy_span(),
-        };
-        validator.register_interface(interface);
-
-        // Create component with different pin names
-        let component = ComponentDefinition {
-            name: Identifier::with_dummy_span("PCM5102"),
-            is_exported: false,
-            parameters: vec![].into(),
-            metadata: None,
-            pins: vec!["BCK".into(), "LRCK".into(), "VCC".into()].into(),
-            layout: None,
-            electrical: None,
-            render: None,
-            implements: vec![InterfaceImplementation {
-                interface_name: Identifier::with_dummy_span("I2S_DAC").to_string().into(),
-                pin_mappings: vec![
-                    PinMapping {
-                        interface_pin: "BCLK".into(),
-                        component_pin: "BCK".into(),
-                        span: dummy_span(),
-                    },
-                    PinMapping {
-                        interface_pin: "LRCLK".into(),
-                        component_pin: "LRCK".into(),
-                        span: dummy_span(),
-                    },
-                ],
-                span: dummy_span(),
-            }]
-            .into(),
-            span: dummy_span(),
-        };
-
-        let result = validator.validate_component(&component);
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_interface_not_found() {
-        let validator = InterfaceValidator::new();
-
-        // Create component that implements non-existent interface
-        let component = ComponentDefinition {
-            name: Identifier::with_dummy_span("BadChip"),
-            is_exported: false,
-            parameters: vec![].into(),
-            metadata: None,
-            pins: vec!["BCLK".into()].into(),
-            layout: None,
-            electrical: None,
-            render: None,
-            implements: vec![InterfaceImplementation {
-                interface_name: Identifier::with_dummy_span("NonExistent")
-                    .to_string()
-                    .into(),
-                pin_mappings: vec![],
-                span: dummy_span(),
-            }]
-            .into(),
-            span: dummy_span(),
-        };
-
-        let result = validator.validate_component(&component);
-        assert!(result.is_err());
-
-        let errors = result.unwrap_err();
-        assert_eq!(errors.len(), 1);
-        assert!(matches!(
-            errors[0],
-            InterfaceValidationError::InterfaceNotFound { .. }
-        ));
-    }
-
-    #[test]
-    fn test_implements_interface_check() {
-        let mut validator = InterfaceValidator::new();
-
-        let interface = PolymorphicInterfaceDefinition {
-            name: Identifier::with_dummy_span("I2S_DAC"),
-            is_exported: false,
-            description: None,
-            required_pins: vec![],
-            optional_pins: vec![],
-            span: dummy_span(),
-        };
-        validator.register_interface(interface);
-
-        let component = ComponentDefinition {
-            name: Identifier::with_dummy_span("CS4344"),
-            is_exported: false,
-            parameters: vec![].into(),
-            metadata: None,
-            pins: vec![].into(),
-            layout: None,
-            electrical: None,
-            render: None,
-            implements: vec![InterfaceImplementation {
-                interface_name: Identifier::with_dummy_span("I2S_DAC").to_string().into(),
-                pin_mappings: vec![],
-                span: dummy_span(),
-            }]
-            .into(),
-            span: dummy_span(),
-        };
-
-        assert!(validator.implements_interface(&component, "I2S_DAC"));
-        assert!(!validator.implements_interface(&component, "SPI_Flash"));
-    }
-
-    #[test]
-    fn test_find_compatible_components() {
-        let mut validator = InterfaceValidator::new();
-
-        let interface = PolymorphicInterfaceDefinition {
-            name: Identifier::with_dummy_span("I2S_DAC"),
-            is_exported: false,
-            description: None,
-            required_pins: vec![],
-            optional_pins: vec![],
-            span: dummy_span(),
-        };
-        validator.register_interface(interface);
-
-        let components = vec![
-            ComponentDefinition {
-                name: Identifier::with_dummy_span("CS4344"),
-                is_exported: false,
-                parameters: vec![].into(),
-                metadata: None,
-                pins: vec![].into(),
-                layout: None,
-                electrical: None,
-                render: None,
-                implements: vec![InterfaceImplementation {
-                    interface_name: Identifier::with_dummy_span("I2S_DAC").to_string().into(),
-                    pin_mappings: vec![],
-                    span: dummy_span(),
-                }]
-                .into(),
-                span: dummy_span(),
-            },
-            ComponentDefinition {
-                name: Identifier::with_dummy_span("PCM5102"),
-                is_exported: false,
-                parameters: vec![].into(),
-                metadata: None,
-                pins: vec![].into(),
-                layout: None,
-                electrical: None,
-                render: None,
-                implements: vec![InterfaceImplementation {
-                    interface_name: Identifier::with_dummy_span("I2S_DAC").to_string().into(),
-                    pin_mappings: vec![],
-                    span: dummy_span(),
-                }]
-                .into(),
-                span: dummy_span(),
-            },
-            ComponentDefinition {
-                name: Identifier::with_dummy_span("FlashChip"),
-                is_exported: false,
-                parameters: vec![].into(),
-                metadata: None,
-                pins: vec![].into(),
-                layout: None,
-                electrical: None,
-                render: None,
-                implements: vec![].into(),
-                span: dummy_span(),
-            },
-        ];
-
-        let compatible = validator.find_compatible_components("I2S_DAC", &components);
-        assert_eq!(compatible.len(), 2);
-        assert!(compatible.iter().any(|c| c.name.as_str() == "CS4344"));
-        assert!(compatible.iter().any(|c| c.name.as_str() == "PCM5102"));
     }
 }

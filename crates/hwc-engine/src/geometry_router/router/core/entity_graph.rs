@@ -7,6 +7,36 @@ use crate::geometry_router::scene_graph::ComponentStamp;
 use crate::geometry_router::EntityGraph;
 use smallvec::SmallVec;
 
+/// Parameters for adding a component pin
+pub struct ComponentPinParams {
+    pub x_nm: i64,
+    pub y_nm: i64,
+    pub z_nm: i64,
+    pub component_name: compact_str::CompactString,
+    pub pin_name: compact_str::CompactString,
+    pub net: Option<compact_str::CompactString>,
+}
+
+impl ComponentPinParams {
+    pub fn new(
+        x_nm: i64,
+        y_nm: i64,
+        z_nm: i64,
+        component_name: compact_str::CompactString,
+        pin_name: compact_str::CompactString,
+        net: Option<compact_str::CompactString>,
+    ) -> Self {
+        Self {
+            x_nm,
+            y_nm,
+            z_nm,
+            component_name,
+            pin_name,
+            net,
+        }
+    }
+}
+
 impl GeometryRouter {
     /// Add a component obstacle (GAP3).
     pub fn add_component_obstacle(
@@ -24,14 +54,16 @@ impl GeometryRouter {
     pub fn add_component_pin(
         &mut self,
         entity_graph: &mut EntityGraph,
-        x_nm: i64,
-        y_nm: i64,
-        z_nm: i64,
-        component_name: compact_str::CompactString,
-        pin_name: compact_str::CompactString,
-        net: Option<compact_str::CompactString>,
+        params: ComponentPinParams,
     ) {
-        entity_graph.add_component_pin(x_nm, y_nm, z_nm, component_name, pin_name, net);
+        entity_graph.add_component_pin(
+            params.x_nm,
+            params.y_nm,
+            params.z_nm,
+            params.component_name,
+            params.pin_name,
+            params.net,
+        );
     }
 
     /// Build the Entity Graph spatial index from current component metadata.

@@ -16,43 +16,52 @@ impl super::ModuleResolver {
         symbol_table: &mut SymbolTable,
     ) -> Result<(), ResolverError> {
         match definition {
-            Definition::Bridge(bridge) => {
+            Definition::Bridge(bridge_id) => {
+                let bridge = &arena.bridge_defs[*bridge_id];
                 symbol_table.register_import_bridge(bridge.clone());
                 Ok(())
             }
-            Definition::Material(mat) => {
+            Definition::Material(mat_id) => {
+                let mat = &arena.material_defs[*mat_id];
                 symbol_table.register_import_material(mat.clone());
                 Ok(())
             }
-            Definition::Profile(profile) => {
-                symbol_table.register_import_profile(profile.as_ref().clone());
+            Definition::Profile(profile_id) => {
+                let profile = &arena.profile_defs[*profile_id];
+                symbol_table.register_import_profile(profile.clone());
                 Ok(())
             }
             Definition::Component(component) => {
                 symbol_table.register_import_component(arena.component_defs[*component].clone());
                 Ok(())
             }
-            Definition::Module(module) => {
+            Definition::Module(module_id) => {
+                let module = &arena.module_defs[*module_id];
                 symbol_table.register_import_module(module.clone());
                 Ok(())
             }
             Definition::Logic(logic_def) => {
-                symbol_table.register_import_logic(logic_def.clone());
+                let logic = &arena.logic_defs[*logic_def];
+                symbol_table.register_import_logic(logic.clone());
                 Ok(())
             }
             Definition::Enum(enum_def) => {
-                symbol_table.register_import_enum(enum_def.clone());
+                let enum_d = &arena.enum_defs[*enum_def];
+                symbol_table.register_import_enum(enum_d.clone());
                 Ok(())
             }
             Definition::Struct(struct_def) => {
-                symbol_table.register_import_struct(struct_def.clone());
+                let struct_d = &arena.struct_defs[*struct_def];
+                symbol_table.register_import_struct(struct_d.clone());
                 Ok(())
             }
-            Definition::Mechanical(mechanical) => {
+            Definition::Mechanical(mech_id) => {
+                let mechanical = &arena.mechanical_defs[*mech_id];
                 symbol_table.register_import_mechanical(mechanical.clone());
                 Ok(())
             }
-            Definition::Interface(interface) => {
+            Definition::Interface(iface_id) => {
+                let interface = &arena.interface_defs[*iface_id];
                 symbol_table.register_import_interface(interface.clone());
                 Ok(())
             }
@@ -60,55 +69,67 @@ impl super::ModuleResolver {
                 // TODO: Register polymorphic interfaces in symbol table
                 Ok(())
             }
-            Definition::Test(test) => {
+            Definition::Test(test_id) => {
+                let test = &arena.test_defs[*test_id];
                 symbol_table.register_import_test(test.clone());
                 Ok(())
             }
             Definition::SignalGroup(signal_group) => {
-                symbol_table.register_import_signal_group(signal_group.clone());
+                let sg = &arena.signal_group_defs[*signal_group];
+                symbol_table.register_import_signal_group(sg.clone());
                 Ok(())
             }
             Definition::Pattern(pattern) => {
-                symbol_table.register_import_pattern(pattern.clone());
+                let pat = &arena.pattern_defs[*pattern];
+                symbol_table.register_import_pattern(pat.clone());
                 Ok(())
             }
             Definition::Strategy(strategy) => {
-                symbol_table.register_import_strategy(strategy.clone());
+                let strat = &arena.strategy_defs[*strategy];
+                symbol_table.register_import_strategy(strat.clone());
                 Ok(())
             }
-            Definition::Unit(unit) => {
+            Definition::Unit(unit_id) => {
+                let unit = &arena.unit_defs[*unit_id];
                 symbol_table.register_import_unit(unit.clone());
                 Ok(())
             }
-            Definition::Device(device) => {
+            Definition::Device(device_id) => {
+                let device = &arena.device_defs[*device_id];
                 symbol_table.register_import_device(device.clone());
                 Ok(())
             }
-            Definition::Const(const_def) => {
+            Definition::Const(const_id) => {
+                let const_def = &arena.const_defs[*const_id];
                 symbol_table.register_import_constant(const_def.clone());
                 Ok(())
             }
             Definition::Shape(shape_def) => {
-                symbol_table.register_import_shape(shape_def.clone());
+                let shape = &arena.shape_defs[*shape_def];
+                symbol_table.register_import_shape(shape.clone());
                 Ok(())
             }
             Definition::MaterialAlias(alias) => {
-                symbol_table.register_import_material_alias(alias.clone());
+                let mat_alias = &arena.material_alias_defs[*alias];
+                symbol_table.register_import_material_alias(mat_alias.clone());
                 Ok(())
             }
-            Definition::Space(space_def) => {
+            Definition::Space(space_id) => {
                 // v0.2.1: Register imported space definitions for hierarchical composition
-                symbol_table.register_import_space((**space_def).clone());
+                let space_def = &arena.space_defs[*space_id];
+                symbol_table.register_import_space(space_def.clone());
                 Ok(())
             }
             Definition::SpiceModel(spice_model) => {
                 // v0.2.1: Register imported SPICE model cards for PDK physics
-                symbol_table.register_import_spice_model(spice_model.clone());
+                let sm = &arena.spice_model_defs[*spice_model];
+                symbol_table.register_import_spice_model(sm.clone());
                 Ok(())
             }
             Definition::Subcircuit(subcircuit) => {
                 // v0.3.0+: Register imported native typed subcircuit definitions (replaces raw SPICE)
-                symbol_table.register_import_subcircuit(subcircuit.clone());
+                let sub = &arena.subcircuit_defs[*subcircuit];
+                symbol_table.register_import_subcircuit(sub.clone());
                 Ok(())
             }
         }

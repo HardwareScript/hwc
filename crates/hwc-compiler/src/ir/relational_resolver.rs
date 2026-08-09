@@ -277,62 +277,11 @@ pub fn target_bbox_to_user_ranges(
 
 /// Resolve relational constraints for all components in the placement list.
 ///
-/// For each component with relational constraints but no explicit position,
-/// this computes the absolute position from the constraints and sets it.
-///
-/// Components must be processed in dependency order (topological sort ensures
-/// this) so that referenced targets have their bounding boxes available.
-pub fn resolve_relational_constraints(
-    placement_items: &mut [crate::ir::PlacementItem],
-    bbox_tracker: &BoundingBoxTracker,
-    symbol_table: &crate::SymbolTable,
-    eval_context: &hwc_parser::EvaluationContext,
-    origin: hwc_parser::OriginPoint,
-    space_dimensions: &hwc_engine::Dimensions,
-) -> Result<(), IrError> {
-    for item in placement_items.iter_mut() {
-        match item {
-            crate::ir::PlacementItem::Component(component) => {
-                if component.position.is_some() || component.relational_constraints.is_empty() {
-                    continue; // Already has position or no constraints
-                }
-
-                let resolved = compute_position_from_constraints(
-                    &component.relational_constraints,
-                    &component.name,
-                    bbox_tracker,
-                    symbol_table,
-                    eval_context,
-                    origin,
-                    space_dimensions,
-                )?;
-
-                component.position = Some(resolved);
-            }
-            crate::ir::PlacementItem::Plane(plane) => {
-                // v0.1.9: Handle relational constraints for planes
-                if plane.from.is_some() || plane.relational_constraints.is_empty() {
-                    continue; // Already has position or no constraints
-                }
-
-                let resolved = compute_position_from_constraints(
-                    &plane.relational_constraints,
-                    &Some(plane.name.clone()),
-                    bbox_tracker,
-                    symbol_table,
-                    eval_context,
-                    origin,
-                    space_dimensions,
-                )?;
-
-                plane.from = Some(resolved);
-            }
-            _ => {}
-        }
-    }
-    Ok(())
-}
-
+/// Removed in v0.2.x: relational constraints are now resolved inline in
+/// `compilation::placement_loop::execute_placement`, which already walks items
+/// in topological order and has the arena available to read each node in place.
+/// The old signature took `&mut [PlacementItem]`, which is impossible now that
+/// placement items are `Copy` arena IDs rather than owned AST nodes.
 /// Compute an absolute position from relational constraints.
 ///
 /// Evaluates alignment and directional constraints against the BoundingBoxTracker
@@ -490,8 +439,7 @@ pub fn compute_position_from_constraints(
                             bbox_tracker,
                             context_axis,
                             origin.z,
-                        )
-                        .map_err(|e| e)?
+                        )?
                     }
                 };
 

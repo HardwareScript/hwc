@@ -57,11 +57,12 @@ impl StdlibLoader {
             )));
         }
 
-        // Extract unit definitions
+        // Extract unit definitions from arena
         let mut units = Vec::new();
         for definition in program.definitions {
-            if let Definition::Unit(unit) = definition {
-                units.push(unit);
+            if let Definition::Unit(unit_id) = definition {
+                // Lookup the actual definition from the arena
+                units.push(program.arena.unit_defs[unit_id].clone());
             }
         }
 

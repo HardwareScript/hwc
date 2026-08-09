@@ -26,7 +26,7 @@ pub fn generate_circuit_body(
         "[NETLIST DEBUG] physical_netlist is_some: {}",
         physical_netlist.is_some()
     );
-    if let Some(ref netlist) = physical_netlist {
+    if let Some(netlist) = physical_netlist {
         eprintln!(
             "[NETLIST DEBUG] physical_netlist.devices.len(): {}",
             netlist.devices.len()

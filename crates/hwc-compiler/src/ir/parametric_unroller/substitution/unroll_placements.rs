@@ -3,7 +3,9 @@ use super::name_sub::{
     substitute_in_component_name, substitute_in_net_binding, substitute_in_net_name,
 };
 use crate::ir::errors::IrError;
-use hwc_parser::{ComponentPlacement, ContactPlacement, PlanePlacement, PourPlacement};
+use hwc_parser::{
+    ComponentPlacement, ContactPlacement, PlanePlacement, PolygonPlacement, PourPlacement,
+};
 
 pub fn unroll_component(
     component: &ComponentPlacement,
@@ -221,6 +223,25 @@ pub fn unroll_plane(
         relational_constraints: plane.relational_constraints.clone(),
         inside_region: plane.inside_region.clone(),
         span: plane.span,
+    })
+}
+
+pub fn unroll_polygon(
+    polygon: &PolygonPlacement,
+    variable: &str,
+    value: usize,
+) -> Result<PolygonPlacement, IrError> {
+    let name = substitute_in_component_name(&polygon.name, variable, value);
+    let position = substitute_in_coordinate(&polygon.position, variable, value)?;
+
+    // Points are relative coordinates, typically not parameterized in loops
+    // but we could extend this if needed
+    Ok(PolygonPlacement {
+        material: polygon.material.clone(),
+        name,
+        position,
+        points: polygon.points.clone(),
+        span: polygon.span,
     })
 }
 

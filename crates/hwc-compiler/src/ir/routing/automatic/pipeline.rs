@@ -180,14 +180,16 @@ pub fn route_automatic(
 
     let mut path = topo_router
         .route_with_perpendicular_escape(
-            start_boundary,
-            goal_boundary,
-            start_normal,
-            goal_normal,
-            escape_stub_nm,
-            &spatial_index,
-            &board_bounds,
-            &exempt_net_ids,
+            hwc_engine::geometry_router::topological_router::PerpendicularEscapeParams {
+                start: start_boundary,
+                target: goal_boundary,
+                start_normal,
+                target_normal: goal_normal,
+                escape_stub_nm,
+                obstacles: &spatial_index,
+                board_bounds: &board_bounds,
+                exempt_net_ids: &exempt_net_ids,
+            },
         )
         .ok_or_else(|| IrError::NoPathFound {
             net: format!(
@@ -324,7 +326,7 @@ pub fn route_automatic(
         .netlist
         .get_net(net_id)
         .and_then(|n| n.current_ma)
-        .unwrap_or(0.0);
+        .expect("Net should exist after registration and have current_ma defined");
 
     // **v0.2.0 STRUCTURAL FIX: Compute layer_z_range for horizontal traces**
     // Find the Z of the first horizontal segment (start.z == end.z) and look up its
@@ -358,16 +360,17 @@ pub fn route_automatic(
     let layer_z_range = (route_layer.z_bottom, route_layer.z_top);
     let route_layer_name = route_layer.name.clone();
 
-    let analytic_trace = hwc_engine::AnalyticTrace::with_layer_z_range(
-        net_id,
-        hwc_engine::space::CrossSection::new(trace_width_nm, trace_thickness_nm),
-        segments.clone(),
-        copper_id,
-        net_name.clone(),
-        hwc_engine::space::CurrentRating::new(net_actual_current_ma, current_ma),
-        Some(layer_z_range),
-        route_layer_name, // v0.2.2: Explicit layer lineage
-    );
+    let analytic_trace =
+        hwc_engine::AnalyticTrace::with_layer_z_range(hwc_engine::space::AnalyticTraceParams {
+            net_id,
+            cross_section: hwc_engine::space::CrossSection::new(trace_width_nm, trace_thickness_nm),
+            segments: segments.clone(),
+            material: copper_id,
+            net_name: net_name.clone(),
+            current: hwc_engine::space::CurrentRating::new(net_actual_current_ma, current_ma),
+            layer_z_range: Some(layer_z_range),
+            layer_name: route_layer_name, // v0.2.2: Explicit layer lineage
+        });
 
     eprintln!(
         "[ROUTER] Net '{}': {} segments registered (start_z={}, goal_z={}, target_z={:?})",
@@ -399,8 +402,8 @@ pub fn route_automatic(
 
     space.routing_database.register_parent_route(
         analytic_trace,
-        from_component_name.clone().into(),
-        to_component_name.clone().into(),
+        from_component_name.clone(),
+        to_component_name.clone(),
     );
 
     space.netlist.connect_pin(start_pin_id, net_id);

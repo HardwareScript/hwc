@@ -39,14 +39,13 @@ pub(super) fn transform_pours(
             None
         };
 
-        let parent_device_binding = if let Some(ref db) = pour.device_binding {
-            Some(hwc_engine::space::DeviceBinding {
-                device_name: format!("{}.{}", instance_name, db.device_name).into(),
-                terminal: db.terminal.clone(),
-            })
-        } else {
-            None
-        };
+        let parent_device_binding =
+            pour.device_binding
+                .as_ref()
+                .map(|db| hwc_engine::space::DeviceBinding {
+                    device_name: format!("{}.{}", instance_name, db.device_name).into(),
+                    terminal: db.terminal.clone(),
+                });
 
         parent_space.pours.push(hwc_engine::space::PourMetadata {
             name: parent_pour_name.into(),

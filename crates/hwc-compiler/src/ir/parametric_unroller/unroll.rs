@@ -3,48 +3,42 @@
 //! Handles the main loop expansion and delegates to specialized unrollers
 //! for each statement type (components, pours, contacts, routes).
 //!
-//! v0.2.1: Refactored to use UnrollContext + StatementProcessor pattern.
-//! - Eliminates deep nesting (5-6 levels → 2 levels max)
-//! - Removes code duplication across loop body, if-body, and nested-if processing
-//! - Each statement type processed by a dedicated `process_*` method
+//! v0.2.x: Unrolled nodes are allocated directly into the mutable `AstArena`
+//! and referenced by their type-safe arena ID. No AST node is cloned or boxed,
+//! and no `EvaluationContext` is cloned per item — loop variables are
+//! substituted into each node's fields as it is unrolled.
 
 use super::collision::{
     print_identity_collision_warning, print_same_iteration_collision_warnings, CollisionWarning,
 };
 use super::substitution::{
-    format_net_name,
-    unroll_component,
-    unroll_contact,
-    unroll_plane,
-    unroll_pour,
-    unroll_route,
-    unroll_space_instance, // v0.2.1
+    format_net_name, unroll_component, unroll_contact, unroll_plane, unroll_polygon, unroll_pour,
+    unroll_route, unroll_space_instance,
 };
 use crate::ir::errors::IrError;
 use crate::SymbolTable;
 use compact_str::CompactString;
-use hwc_parser::{
-    ComponentPlacement, ContactPlacement, PlanePlacement, PourPlacement, Route, SpaceForLoop,
-    SpaceStatement,
+use hwc_parser::ast::arena::{
+    AstArena, ComponentId, ContactId, ForLoopId, PlaneId, PolygonId, PourId, RouteId,
+    SpaceInstanceId,
 };
+use hwc_parser::{EvaluationContext, SpaceIfConditional, SpaceStatement, Value};
 use rustc_hash::{FxHashMap, FxHashSet};
 
-/// v0.2.1: Contextual item with its evaluation context
-#[derive(Debug, Clone)]
-pub struct ContextualItem<T> {
-    pub item: T,
-    pub eval_context: hwc_parser::EvaluationContext,
-}
-
-/// Result of unrolling a for loop
-/// v0.2.1: Each item carries its evaluation context from the loop iteration
+/// Result of unrolling a for loop.
+///
+/// Every item is a 4-byte arena ID. Loop variables (and loop-scoped `let`
+/// bindings) are already baked into the allocated nodes, so no per-item
+/// evaluation context needs to travel alongside them.
+#[derive(Debug, Default)]
 pub struct UnrolledStatements {
-    pub components: Vec<ContextualItem<ComponentPlacement>>,
-    pub pours: Vec<ContextualItem<PourPlacement>>,
-    pub planes: Vec<ContextualItem<PlanePlacement>>,
-    pub contacts: Vec<ContextualItem<ContactPlacement>>,
-    pub space_instances: Vec<ContextualItem<hwc_parser::SpaceInstancePlacement>>, // v0.2.1: Space instances
-    pub routes: Vec<ContextualItem<Route>>,
+    pub components: Vec<ComponentId>,
+    pub pours: Vec<PourId>,
+    pub planes: Vec<PlaneId>,
+    pub polygons: Vec<PolygonId>,
+    pub contacts: Vec<ContactId>,
+    pub space_instances: Vec<SpaceInstanceId>,
+    pub routes: Vec<RouteId>,
 }
 
 // ============================================================================
@@ -52,36 +46,20 @@ pub struct UnrolledStatements {
 // ============================================================================
 
 /// Tracks all state for a single loop iteration being unrolled.
-///
-/// Replaces scattered mutable vectors with a single struct that owns:
-/// - Loop variable and iteration value
-/// - Evaluation context (all variables in scope)
-/// - Accumulated results for each statement type
-/// - Net collision tracking
 struct UnrollContext<'a> {
-    /// Name of the loop variable (e.g., "i", "row", "col")
     loop_variable: CompactString,
-    /// Current iteration value
     iteration_value: usize,
-    /// Evaluation context with all variables in scope
-    eval_context: hwc_parser::EvaluationContext,
-    /// Arena for looking up AST nodes by ID
-    arena: &'a hwc_parser::ast::arena::AstArena,
-    /// Accumulated unrolled components
-    components: Vec<ContextualItem<ComponentPlacement>>,
-    /// Accumulated unrolled pours
-    pours: Vec<ContextualItem<PourPlacement>>,
-    /// Accumulated unrolled planes
-    planes: Vec<ContextualItem<PlanePlacement>>,
-    /// Accumulated unrolled contacts
-    contacts: Vec<ContextualItem<ContactPlacement>>,
-    /// Accumulated unrolled space instances
-    space_instances: Vec<ContextualItem<hwc_parser::SpaceInstancePlacement>>,
-    /// Accumulated unrolled routes
-    routes: Vec<ContextualItem<Route>>,
-    /// Nets used in this iteration (for collision detection)
+    eval_context: EvaluationContext,
+    /// Mutable arena so unrolled nodes can be allocated in place.
+    arena: &'a mut AstArena,
+    components: Vec<ComponentId>,
+    pours: Vec<PourId>,
+    planes: Vec<PlaneId>,
+    polygons: Vec<PolygonId>,
+    contacts: Vec<ContactId>,
+    space_instances: Vec<SpaceInstanceId>,
+    routes: Vec<RouteId>,
     nets_in_iteration: FxHashSet<CompactString>,
-    /// Collision warnings accumulated during processing
     collision_warnings: Vec<CollisionWarning>,
 }
 
@@ -89,8 +67,8 @@ impl<'a> UnrollContext<'a> {
     fn new(
         loop_variable: CompactString,
         iteration_value: usize,
-        eval_context: hwc_parser::EvaluationContext,
-        arena: &'a hwc_parser::ast::arena::AstArena,
+        eval_context: EvaluationContext,
+        arena: &'a mut AstArena,
     ) -> Self {
         Self {
             loop_variable,
@@ -100,6 +78,7 @@ impl<'a> UnrollContext<'a> {
             components: Vec::new(),
             pours: Vec::new(),
             planes: Vec::new(),
+            polygons: Vec::new(),
             contacts: Vec::new(),
             space_instances: Vec::new(),
             routes: Vec::new(),
@@ -108,12 +87,10 @@ impl<'a> UnrollContext<'a> {
         }
     }
 
-    /// Add a let binding to the evaluation context
-    fn add_let_binding(&mut self, name: CompactString, value: hwc_parser::Value) {
+    fn add_let_binding(&mut self, name: CompactString, value: Value) {
         self.eval_context.insert(name, value);
     }
 
-    /// Track a net name and detect collisions within this iteration
     fn track_net_collision(
         &mut self,
         net_name: CompactString,
@@ -130,24 +107,20 @@ impl<'a> UnrollContext<'a> {
         }
     }
 
-    /// Drain accumulated results into the final UnrolledStatements
+    #[allow(clippy::too_many_arguments)]
     fn drain_into(
         self,
-        components: &mut Vec<ContextualItem<ComponentPlacement>>,
-        pours: &mut Vec<ContextualItem<PourPlacement>>,
-        planes: &mut Vec<ContextualItem<PlanePlacement>>,
-        contacts: &mut Vec<ContextualItem<ContactPlacement>>,
-        space_instances: &mut Vec<ContextualItem<hwc_parser::SpaceInstancePlacement>>,
-        routes: &mut Vec<ContextualItem<Route>>,
+        out: &mut UnrolledStatements,
         all_collision_warnings: &mut Vec<CollisionWarning>,
         net_usage: &mut FxHashMap<usize, FxHashSet<CompactString>>,
     ) {
-        components.extend(self.components);
-        pours.extend(self.pours);
-        planes.extend(self.planes);
-        contacts.extend(self.contacts);
-        space_instances.extend(self.space_instances);
-        routes.extend(self.routes);
+        out.components.extend(self.components);
+        out.pours.extend(self.pours);
+        out.planes.extend(self.planes);
+        out.polygons.extend(self.polygons);
+        out.contacts.extend(self.contacts);
+        out.space_instances.extend(self.space_instances);
+        out.routes.extend(self.routes);
         all_collision_warnings.extend(self.collision_warnings);
         net_usage.insert(self.iteration_value, self.nets_in_iteration);
     }
@@ -157,33 +130,26 @@ impl<'a> UnrollContext<'a> {
 // StatementProcessor: Clean dispatch for each statement type
 // ============================================================================
 
-/// Trait for processing individual statement types within a loop iteration.
-///
-/// Each `process_*` method handles one statement type, keeping the logic
-/// flat and isolated. The `process_statement` method provides the main dispatch.
 trait StatementProcessor {
-    fn process_component(&mut self, comp: &ComponentPlacement) -> Result<(), IrError>;
-    fn process_pour(&mut self, pour: &PourPlacement) -> Result<(), IrError>;
-    fn process_plane(&mut self, plane: &PlanePlacement) -> Result<(), IrError>;
-    fn process_contact(&mut self, contact: &ContactPlacement) -> Result<(), IrError>;
-    fn process_space_instance(
-        &mut self,
-        inst: &hwc_parser::SpaceInstancePlacement,
-    ) -> Result<(), IrError>;
-    fn process_route(&mut self, route: &Route) -> Result<(), IrError>;
+    fn process_component(&mut self, comp: ComponentId) -> Result<(), IrError>;
+    fn process_pour(&mut self, pour: PourId) -> Result<(), IrError>;
+    fn process_plane(&mut self, plane: PlaneId) -> Result<(), IrError>;
+    fn process_polygon(&mut self, polygon: PolygonId) -> Result<(), IrError>;
+    fn process_contact(&mut self, contact: ContactId) -> Result<(), IrError>;
+    fn process_space_instance(&mut self, inst: SpaceInstanceId) -> Result<(), IrError>;
+    fn process_route(&mut self, route: RouteId) -> Result<(), IrError>;
     fn process_let(&mut self, let_binding: &hwc_parser::LetBinding) -> Result<(), IrError>;
     fn process_if(
         &mut self,
-        if_stmt: &hwc_parser::SpaceIfConditional,
+        if_stmt: &SpaceIfConditional,
         symbol_table: &SymbolTable,
     ) -> Result<(), IrError>;
     fn process_for_loop(
         &mut self,
-        for_loop: &SpaceForLoop,
+        for_loop_id: ForLoopId,
         symbol_table: &SymbolTable,
     ) -> Result<(), IrError>;
 
-    /// Main dispatch: process a single statement
     fn process_statement(
         &mut self,
         stmt: &SpaceStatement,
@@ -198,74 +164,94 @@ impl<'a> StatementProcessor for UnrollContext<'a> {
         symbol_table: &SymbolTable,
     ) -> Result<(), IrError> {
         match stmt {
-            SpaceStatement::Component(c) => self.process_component(&self.arena.components[*c]),
-            SpaceStatement::Pour(p) => self.process_pour(&self.arena.pours[*p]),
-            SpaceStatement::Plane(p) => self.process_plane(&self.arena.planes[*p]),
-            SpaceStatement::Contact(c) => self.process_contact(&self.arena.contacts[*c]),
-            SpaceStatement::SpaceInstance(si) => self.process_space_instance(&self.arena.space_instances[*si]),
-            SpaceStatement::Route(r) => self.process_route(&self.arena.routes[*r]),
+            SpaceStatement::Component(c) => self.process_component(*c),
+            SpaceStatement::Pour(p) => self.process_pour(*p),
+            SpaceStatement::Plane(p) => self.process_plane(*p),
+            SpaceStatement::Polygon(p) => self.process_polygon(*p),
+            SpaceStatement::Contact(c) => self.process_contact(*c),
+            SpaceStatement::SpaceInstance(si) => self.process_space_instance(*si),
+            SpaceStatement::Route(r) => self.process_route(*r),
             SpaceStatement::Let(l) => self.process_let(l),
             SpaceStatement::If(i) => self.process_if(i, symbol_table),
-            SpaceStatement::ForLoop(fl) => self.process_for_loop(fl, symbol_table),
+            SpaceStatement::ForLoop(fl) => self.process_for_loop(*fl, symbol_table),
         }
     }
 
-    fn process_component(&mut self, comp: &ComponentPlacement) -> Result<(), IrError> {
-        let unrolled = unroll_component(comp, &self.loop_variable, self.iteration_value)?;
-        self.components.push(ContextualItem {
-            item: unrolled,
-            eval_context: self.eval_context.clone(),
-        });
+    fn process_component(&mut self, comp_id: ComponentId) -> Result<(), IrError> {
+        let unrolled = unroll_component(
+            &self.arena.components[comp_id],
+            &self.loop_variable,
+            self.iteration_value,
+        )?;
+        let new_id = self.arena.alloc_component(unrolled);
+        self.components.push(new_id);
         Ok(())
     }
 
-    fn process_pour(&mut self, pour: &PourPlacement) -> Result<(), IrError> {
-        let unrolled = unroll_pour(pour, &self.loop_variable, self.iteration_value)?;
+    fn process_pour(&mut self, pour_id: PourId) -> Result<(), IrError> {
+        let unrolled = unroll_pour(
+            &self.arena.pours[pour_id],
+            &self.loop_variable,
+            self.iteration_value,
+        )?;
 
         if let Some(ref net) = unrolled.net {
             let net_str = format_net_name(net);
             self.track_net_collision(net_str, "pour", unrolled.name.to_string());
         }
 
-        self.pours.push(ContextualItem {
-            item: unrolled,
-            eval_context: self.eval_context.clone(),
-        });
+        let new_id = self.arena.alloc_pour(unrolled);
+        self.pours.push(new_id);
         Ok(())
     }
 
-    fn process_plane(&mut self, plane: &PlanePlacement) -> Result<(), IrError> {
-        let unrolled = unroll_plane(plane, &self.loop_variable, self.iteration_value)?;
-        self.planes.push(ContextualItem {
-            item: unrolled,
-            eval_context: self.eval_context.clone(),
-        });
+    fn process_plane(&mut self, plane_id: PlaneId) -> Result<(), IrError> {
+        let unrolled = unroll_plane(
+            &self.arena.planes[plane_id],
+            &self.loop_variable,
+            self.iteration_value,
+        )?;
+        let new_id = self.arena.alloc_plane(unrolled);
+        self.planes.push(new_id);
         Ok(())
     }
 
-    fn process_contact(&mut self, contact: &ContactPlacement) -> Result<(), IrError> {
-        let unrolled = unroll_contact(contact, &self.loop_variable, self.iteration_value)?;
+    fn process_polygon(&mut self, polygon_id: PolygonId) -> Result<(), IrError> {
+        let unrolled = unroll_polygon(
+            &self.arena.polygons[polygon_id],
+            &self.loop_variable,
+            self.iteration_value,
+        )?;
+        let new_id = self.arena.alloc_polygon(unrolled);
+        self.polygons.push(new_id);
+        Ok(())
+    }
+
+    fn process_contact(&mut self, contact_id: ContactId) -> Result<(), IrError> {
+        let unrolled = unroll_contact(
+            &self.arena.contacts[contact_id],
+            &self.loop_variable,
+            self.iteration_value,
+        )?;
 
         if let Some(ref net) = unrolled.net {
             let net_str = format_net_name(net);
             self.track_net_collision(net_str, "contact", unrolled.name.base.clone());
         }
 
-        self.contacts.push(ContextualItem {
-            item: unrolled,
-            eval_context: self.eval_context.clone(),
-        });
+        let new_id = self.arena.alloc_contact(unrolled);
+        self.contacts.push(new_id);
         Ok(())
     }
 
-    fn process_space_instance(
-        &mut self,
-        space_inst: &hwc_parser::SpaceInstancePlacement,
-    ) -> Result<(), IrError> {
-        let unrolled =
-            unroll_space_instance(space_inst, &self.loop_variable, self.iteration_value)?;
+    fn process_space_instance(&mut self, space_inst_id: SpaceInstanceId) -> Result<(), IrError> {
+        let unrolled = unroll_space_instance(
+            &self.arena.space_instances[space_inst_id],
+            &self.loop_variable,
+            self.iteration_value,
+        )?;
 
-        for (_child_net, parent_net) in &unrolled.net_map {
+        for parent_net in unrolled.net_map.values() {
             let net_str: CompactString = parent_net.clone();
             self.track_net_collision(
                 net_str,
@@ -274,19 +260,19 @@ impl<'a> StatementProcessor for UnrollContext<'a> {
             );
         }
 
-        self.space_instances.push(ContextualItem {
-            item: unrolled,
-            eval_context: self.eval_context.clone(),
-        });
+        let new_id = self.arena.alloc_space_instance(unrolled);
+        self.space_instances.push(new_id);
         Ok(())
     }
 
-    fn process_route(&mut self, route: &Route) -> Result<(), IrError> {
-        let unrolled = unroll_route(route, &self.loop_variable, self.iteration_value)?;
-        self.routes.push(ContextualItem {
-            item: unrolled,
-            eval_context: self.eval_context.clone(),
-        });
+    fn process_route(&mut self, route_id: RouteId) -> Result<(), IrError> {
+        let unrolled = unroll_route(
+            &self.arena.routes[route_id],
+            &self.loop_variable,
+            self.iteration_value,
+        )?;
+        let new_id = self.arena.alloc_route(unrolled);
+        self.routes.push(new_id);
         Ok(())
     }
 
@@ -307,7 +293,7 @@ impl<'a> StatementProcessor for UnrollContext<'a> {
 
     fn process_if(
         &mut self,
-        if_stmt: &hwc_parser::SpaceIfConditional,
+        if_stmt: &SpaceIfConditional,
         symbol_table: &SymbolTable,
     ) -> Result<(), IrError> {
         let condition_value = if_stmt
@@ -318,8 +304,8 @@ impl<'a> StatementProcessor for UnrollContext<'a> {
             })?;
 
         let is_true = match condition_value {
-            hwc_parser::Value::Number(n) => n != 0,
-            hwc_parser::Value::Float(f) => f != 0.0,
+            Value::Number(n) => n != 0,
+            Value::Float(f) => f != 0.0,
             _ => {
                 return Err(IrError::InvalidExpression(
                     "If condition must evaluate to a number (0 = false, non-zero = true)".into(),
@@ -342,172 +328,144 @@ impl<'a> StatementProcessor for UnrollContext<'a> {
 
     fn process_for_loop(
         &mut self,
-        nested_loop: &SpaceForLoop,
+        nested_loop_id: ForLoopId,
         symbol_table: &SymbolTable,
     ) -> Result<(), IrError> {
-        let nested_result =
-            unroll_for_loop_with_context(nested_loop, symbol_table, &self.eval_context, self.arena)?;
+        // Dereference the ForLoopId to get the actual SpaceForLoop data
+        let (start, end, variable) = {
+            let nested = &self.arena.for_loops[nested_loop_id];
+            (nested.start, nested.end, nested.variable.clone())
+        };
 
-        // Merge nested results, substituting the current loop variable
-        for contextual_comp in nested_result.components {
+        // Take the body (leaving an empty Vec behind) so the arena can be borrowed
+        // mutably during nested unroll. This is a 3-word move, not a deep clone.
+        let body = std::mem::take(&mut self.arena.for_loops[nested_loop_id].body);
+
+        let nested = run_unroll(
+            start,
+            end,
+            &body,
+            &variable,
+            symbol_table,
+            &self.eval_context,
+            self.arena,
+        );
+
+        // Restore the body unconditionally so the arena is never left mutated
+        self.arena.for_loops[nested_loop_id].body = body;
+
+        let nested = nested?;
+
+        // Merge nested results, substituting the current loop variable.
+        // The nested unroll already applied the inner loop variable; this
+        // second pass applies the *outer* loop variable (e.g. `{{i}}`).
+        for id in nested.components {
             let unrolled = unroll_component(
-                &contextual_comp.item,
+                &self.arena.components[id],
                 &self.loop_variable,
                 self.iteration_value,
             )?;
-            self.components.push(ContextualItem {
-                item: unrolled,
-                eval_context: contextual_comp.eval_context,
-            });
+            let new_id = self.arena.alloc_component(unrolled);
+            self.components.push(new_id);
         }
 
-        for contextual_pour in nested_result.pours {
+        for id in nested.pours {
             let unrolled = unroll_pour(
-                &contextual_pour.item,
+                &self.arena.pours[id],
                 &self.loop_variable,
                 self.iteration_value,
             )?;
-            self.pours.push(ContextualItem {
-                item: unrolled,
-                eval_context: contextual_pour.eval_context,
-            });
+            let new_id = self.arena.alloc_pour(unrolled);
+            self.pours.push(new_id);
         }
 
-        for contextual_plane in nested_result.planes {
+        for id in nested.planes {
             let unrolled = unroll_plane(
-                &contextual_plane.item,
+                &self.arena.planes[id],
                 &self.loop_variable,
                 self.iteration_value,
             )?;
-            self.planes.push(ContextualItem {
-                item: unrolled,
-                eval_context: contextual_plane.eval_context,
-            });
+            let new_id = self.arena.alloc_plane(unrolled);
+            self.planes.push(new_id);
         }
 
-        for contextual_contact in nested_result.contacts {
+        for id in nested.polygons {
+            let unrolled = unroll_polygon(
+                &self.arena.polygons[id],
+                &self.loop_variable,
+                self.iteration_value,
+            )?;
+            let new_id = self.arena.alloc_polygon(unrolled);
+            self.polygons.push(new_id);
+        }
+
+        for id in nested.contacts {
             let unrolled = unroll_contact(
-                &contextual_contact.item,
+                &self.arena.contacts[id],
                 &self.loop_variable,
                 self.iteration_value,
             )?;
-            self.contacts.push(ContextualItem {
-                item: unrolled,
-                eval_context: contextual_contact.eval_context,
-            });
+            let new_id = self.arena.alloc_contact(unrolled);
+            self.contacts.push(new_id);
         }
 
-        for contextual_space_inst in nested_result.space_instances {
+        for id in nested.space_instances {
             let unrolled = unroll_space_instance(
-                &contextual_space_inst.item,
+                &self.arena.space_instances[id],
                 &self.loop_variable,
                 self.iteration_value,
             )?;
-            self.space_instances.push(ContextualItem {
-                item: unrolled,
-                eval_context: contextual_space_inst.eval_context,
-            });
+            let new_id = self.arena.alloc_space_instance(unrolled);
+            self.space_instances.push(new_id);
         }
 
-        for contextual_route in nested_result.routes {
+        for id in nested.routes {
             let unrolled = unroll_route(
-                &contextual_route.item,
+                &self.arena.routes[id],
                 &self.loop_variable,
                 self.iteration_value,
             )?;
-            self.routes.push(ContextualItem {
-                item: unrolled,
-                eval_context: contextual_route.eval_context,
-            });
+            let new_id = self.arena.alloc_route(unrolled);
+            self.routes.push(new_id);
         }
 
         Ok(())
     }
 }
 
-// ============================================================================
-// Public API
-// ============================================================================
-
-/// Unroll a for loop into individual statements
-///
-/// **CRITICAL**: Hardware Script uses **inclusive ranges** (Ruby-style)
-/// - `0..7` means [0,1,2,3,4,5,6,7] (8 items, both endpoints included)
-/// - This matches hardware conventions (e.g., "bus bits 0..7" = 8 bits)
-///
-/// **v0.1.6 Sprint 3.4**: Supports `last` keyword for relative positioning
-/// - `last.right` refers to the most recently placed component in the space
-/// - Resolution happens during constraint solving, not during unrolling
-/// - This allows `last` to work across loop boundaries (God-Tier feature!)
-///
-/// **v0.2.1**: Accepts an evaluation context to support nested loops with conditionals
-/// - The context contains all loop variables from outer loops
-/// - This enables `if (row + col) mod 2 == 0` where both variables are in scope
-/// - Also contains space-level let bindings for loop-scoped expressions
-pub fn unroll_for_loop(
-    for_loop: &SpaceForLoop,
-    _symbol_table: &SymbolTable,
-    space_eval_context: &hwc_parser::EvaluationContext,
-    arena: &hwc_parser::ast::arena::AstArena,
+/// Shared iteration body for a single for-loop expansion.
+fn run_unroll(
+    start: usize,
+    end: usize,
+    body: &[SpaceStatement],
+    loop_variable: &CompactString,
+    symbol_table: &SymbolTable,
+    parent_context: &EvaluationContext,
+    arena: &mut AstArena,
 ) -> Result<UnrolledStatements, IrError> {
-    unroll_for_loop_with_context(for_loop, _symbol_table, space_eval_context, arena)
-}
-
-/// Internal unroller that maintains evaluation context through nested loops.
-///
-/// Uses `UnrollContext` + `StatementProcessor` to process each statement type
-/// in isolation, eliminating deep nesting and code duplication.
-fn unroll_for_loop_with_context(
-    for_loop: &SpaceForLoop,
-    _symbol_table: &SymbolTable,
-    parent_context: &hwc_parser::EvaluationContext,
-    arena: &hwc_parser::ast::arena::AstArena,
-) -> Result<UnrolledStatements, IrError> {
-    // Accumulators for all iterations
-    let mut all_components = Vec::new();
-    let mut all_pours = Vec::new();
-    let mut all_planes = Vec::new();
-    let mut all_contacts = Vec::new();
-    let mut all_space_instances = Vec::new();
-    let mut all_routes = Vec::new();
+    let mut out = UnrolledStatements::default();
     let mut all_collision_warnings = Vec::new();
     let mut net_usage_per_iteration: FxHashMap<usize, FxHashSet<CompactString>> =
         FxHashMap::default();
 
-    // INCLUSIVE range iteration (Hardware Engineering Convention): 0..4 = [0,1,2,3,4] (5 items)
-    // This matches hardware datasheets: "Resistors R1 through R5" means all 5 resistors
-    // Different from programming languages but natural for hardware engineers
-    for i in for_loop.start..=for_loop.end {
-        // Create context for this iteration by cloning parent and adding current variable
+    // INCLUSIVE range iteration (Hardware Engineering Convention): 0..4 = [0,1,2,3,4]
+    for i in start..=end {
         let mut iteration_context = parent_context.clone();
-        iteration_context.insert(
-            for_loop.variable.clone(),
-            hwc_parser::Value::Number(i as i64),
-        );
+        iteration_context.insert(loop_variable.clone(), Value::Number(i as i64));
 
-        // Create unroll context for this iteration
-        let mut ctx = UnrollContext::new(for_loop.variable.clone(), i, iteration_context, arena);
+        let mut ctx = UnrollContext::new(loop_variable.clone(), i, iteration_context, arena);
 
-        // Process all statements in loop body via trait dispatch
-        for statement in &for_loop.body {
-            ctx.process_statement(statement, _symbol_table)?;
+        for statement in body {
+            ctx.process_statement(statement, symbol_table)?;
         }
 
-        // Drain accumulated results into final vectors
         ctx.drain_into(
-            &mut all_components,
-            &mut all_pours,
-            &mut all_planes,
-            &mut all_contacts,
-            &mut all_space_instances,
-            &mut all_routes,
+            &mut out,
             &mut all_collision_warnings,
             &mut net_usage_per_iteration,
         );
     }
 
-    // Check for identity collisions across iterations
-    // (same net name generated by different loop values due to truncation/rounding)
     let mut all_nets_to_iterations: FxHashMap<CompactString, Vec<usize>> = FxHashMap::default();
     for (iteration, nets) in &net_usage_per_iteration {
         for net in nets {
@@ -518,24 +476,56 @@ fn unroll_for_loop_with_context(
         }
     }
 
-    // Warn about nets that appear in multiple iterations
     for (net_name, iterations) in &all_nets_to_iterations {
         if iterations.len() > 1 {
-            print_identity_collision_warning(net_name, iterations, &for_loop.variable);
+            print_identity_collision_warning(net_name, iterations, loop_variable);
         }
     }
 
-    // Warn about nets used multiple times within the same iteration
     if !all_collision_warnings.is_empty() {
         print_same_iteration_collision_warnings(&all_collision_warnings);
     }
 
-    Ok(UnrolledStatements {
-        components: all_components,
-        pours: all_pours,
-        planes: all_planes,
-        contacts: all_contacts,
-        space_instances: all_space_instances,
-        routes: all_routes,
-    })
+    Ok(out)
+}
+
+// ============================================================================
+// Public API
+// ============================================================================
+
+/// Unroll a for loop (referenced by ID) into individual arena-allocated items.
+///
+/// The loop body is **moved out of the arena and moved back**, never cloned:
+/// this splits the borrow (shared body vs. mutable arena) at O(1) cost
+/// regardless of body size, and the body is restored even on error.
+pub fn unroll_for_loop(
+    for_loop_id: ForLoopId,
+    symbol_table: &SymbolTable,
+    space_eval_context: &EvaluationContext,
+    arena: &mut AstArena,
+) -> Result<UnrolledStatements, IrError> {
+    let (start, end, variable) = {
+        let fl = &arena.for_loops[for_loop_id];
+        (fl.start, fl.end, fl.variable.clone())
+    };
+
+    // Take the body (leaving an empty Vec behind) so the arena can be borrowed
+    // mutably while we iterate. This is a 3-word move, not a deep clone.
+    let body = std::mem::take(&mut arena.for_loops[for_loop_id].body);
+
+    let result = run_unroll(
+        start,
+        end,
+        &body,
+        &variable,
+        symbol_table,
+        space_eval_context,
+        arena,
+    );
+
+    // Restore the body unconditionally so the arena is never left mutated,
+    // even when unrolling failed.
+    arena.for_loops[for_loop_id].body = body;
+
+    result
 }

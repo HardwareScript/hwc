@@ -10,6 +10,28 @@ use crate::geometry_router::connection_interface::InterfaceId;
 use crate::geometry_router::routing_intent::RoutingIntent;
 use crate::netlist::NetId;
 
+/// Source information for a net including source and sink interfaces
+#[derive(Debug, Clone)]
+pub struct NetSourceInfo {
+    pub net_id: NetId,
+    pub sources: Vec<(InterfaceId, Point3D)>,
+    pub sinks: Vec<(InterfaceId, Point3D)>,
+}
+
+impl NetSourceInfo {
+    pub fn new(
+        net_id: NetId,
+        sources: Vec<(InterfaceId, Point3D)>,
+        sinks: Vec<(InterfaceId, Point3D)>,
+    ) -> Self {
+        Self {
+            net_id,
+            sources,
+            sinks,
+        }
+    }
+}
+
 /// A potential connection between two interfaces.
 ///
 /// Represents one candidate pair for routing. The router evaluates candidates
@@ -113,19 +135,16 @@ pub fn select_connection_candidates(
 ///
 /// Returns a map from net ID to its ranked candidates.
 pub fn batch_select_candidates(
-    net_sources: &[(
-        NetId,
-        Vec<(InterfaceId, Point3D)>,
-        Vec<(InterfaceId, Point3D)>,
-    )],
+    net_sources: &[NetSourceInfo],
     routing_intent: &RoutingIntent,
     max_per_net: usize,
 ) -> rustc_hash::FxHashMap<NetId, Vec<ConnectionCandidate>> {
     let mut result = rustc_hash::FxHashMap::default();
 
-    for (net_id, sources, sinks) in net_sources {
-        let candidates = select_connection_candidates(sources, sinks, routing_intent, max_per_net);
-        result.insert(*net_id, candidates);
+    for info in net_sources {
+        let candidates =
+            select_connection_candidates(&info.sources, &info.sinks, routing_intent, max_per_net);
+        result.insert(info.net_id, candidates);
     }
 
     result

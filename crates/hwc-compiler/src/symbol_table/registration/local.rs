@@ -23,13 +23,17 @@ impl SymbolTable {
                 def.name.to_string().into(),
                 "material_alias",
                 (def.span.start, def.span.end),
-                Some((existing.span.start, existing.span.end)),
+                Some((
+                    self.arena.material_alias_defs[*existing].span.start,
+                    self.arena.material_alias_defs[*existing].span.end,
+                )),
             ));
             return;
         }
 
+        let id = self.arena.material_alias_defs.push(def);
         self.local
-            .insert(name_str.into(), Definition::MaterialAlias(def));
+            .insert(name_str.into(), Definition::MaterialAlias(id));
     }
 
     /// Register a material definition (in local layer)
@@ -48,7 +52,10 @@ impl SymbolTable {
                 def.name.to_string().into(),
                 "material",
                 (def.span.start, def.span.end),
-                Some((existing.span.start, existing.span.end)),
+                Some((
+                    self.arena.material_defs[*existing].span.start,
+                    self.arena.material_defs[*existing].span.end,
+                )),
             ));
             return;
         }
@@ -69,24 +76,24 @@ impl SymbolTable {
                 def
             };
 
-        self.local
-            .insert(name_str.into(), Definition::Material(material_to_register));
+        let id = self.arena.material_defs.push(material_to_register);
+        self.local.insert(name_str.into(), Definition::Material(id));
     }
 
     /// Find a material in lower layers (HPM > Prelude > Core), excluding local layer
     fn find_material_in_lower_layers(&self, name: &str) -> Option<&MaterialDefinition> {
         for layer in self.hpm.iter().rev() {
             if let Some(Definition::Material(mat)) = layer.get(name) {
-                return Some(mat);
+                return Some(&self.arena.material_defs[*mat]);
             }
         }
 
         if let Some(Definition::Material(mat)) = self.prelude.get(name) {
-            return Some(mat);
+            return Some(&self.arena.material_defs[*mat]);
         }
 
         if let Some(Definition::Material(mat)) = self.core.get(name) {
-            return Some(mat);
+            return Some(&self.arena.material_defs[*mat]);
         }
 
         None
@@ -160,18 +167,21 @@ impl SymbolTable {
     ///
     /// Rule 1 (GAP3): Local Beats Global - warns if shadowing an import
     pub fn register_profile(&mut self, collector: &DiagnosticCollector, def: ProfileDefinition) {
-        let name_str = def.name.as_str();
-        if let Some(Definition::Profile(existing)) = self.local.get(name_str) {
+        let name_str = def.name.as_str().to_string();
+        if let Some(Definition::Profile(existing)) = self.local.get(name_str.as_str()) {
             collector.report(SymbolError::duplicate(
                 def.name.to_string().into(),
                 "profile",
                 (def.span.start, def.span.end),
-                Some((existing.span.start, existing.span.end)),
+                Some((
+                    self.arena.profile_defs[*existing].span.start,
+                    self.arena.profile_defs[*existing].span.end,
+                )),
             ));
             return;
         }
 
-        if let Some(import_source) = self.check_profile_shadowing(name_str) {
+        if let Some(import_source) = self.check_profile_shadowing(&name_str) {
             collector.report(SymbolError::shadowing(
                 def.name.to_string().into(),
                 "profile",
@@ -180,7 +190,8 @@ impl SymbolTable {
             ));
         }
 
-        self.local.insert(name_str.into(), Definition::Profile(def));
+        let id = self.arena.profile_defs.push(def);
+        self.local.insert(name_str.into(), Definition::Profile(id));
     }
 
     /// Register a component definition (in local layer)
@@ -201,7 +212,10 @@ impl SymbolTable {
                 def.name.to_string().into(),
                 "component",
                 (def.span.start, def.span.end),
-                Some((existing.span.start, existing.span.end)),
+                Some((
+                    self.arena.component_defs[*existing].span.start,
+                    self.arena.component_defs[*existing].span.end,
+                )),
             ));
             return;
         }
@@ -215,30 +229,30 @@ impl SymbolTable {
             ));
         }
 
+        let id = self.arena.component_defs.push(def);
         self.local
-            .insert(name_str.clone().into(), Definition::Component(def));
+            .insert(name_str.clone().into(), Definition::Component(id));
     }
 
     /// Register a module definition (in local layer)
     ///
     /// Rule 1 (GAP3): Local Beats Global - warns if shadowing an import
-    pub fn register_module(
-        &mut self,
-        collector: &DiagnosticCollector,
-        def: ModuleDefinition,
-    ) {
-        let name_str = def.name.as_str();
-        if let Some(Definition::Module(existing)) = self.local.get(name_str) {
+    pub fn register_module(&mut self, collector: &DiagnosticCollector, def: ModuleDefinition) {
+        let name_str = def.name.as_str().to_string();
+        if let Some(Definition::Module(existing)) = self.local.get(name_str.as_str()) {
             collector.report(SymbolError::duplicate(
                 def.name.to_string().into(),
                 "module",
                 (def.span.start, def.span.end),
-                Some((existing.span.start, existing.span.end)),
+                Some((
+                    self.arena.module_defs[*existing].span.start,
+                    self.arena.module_defs[*existing].span.end,
+                )),
             ));
             return;
         }
 
-        if let Some(import_source) = self.check_module_shadowing(name_str) {
+        if let Some(import_source) = self.check_module_shadowing(&name_str) {
             collector.report(SymbolError::shadowing(
                 def.name.to_string().into(),
                 "module",
@@ -259,7 +273,8 @@ impl SymbolTable {
             }
         }
 
-        self.local.insert(name_str.into(), Definition::Module(def));
+        let id = self.arena.module_defs.push(def);
+        self.local.insert(name_str.into(), Definition::Module(id));
     }
 
     /// Register a mechanical definition (in local layer)
@@ -268,18 +283,22 @@ impl SymbolTable {
         collector: &DiagnosticCollector,
         def: MechanicalDefinition,
     ) {
-        let name_str = def.name.as_str();
-        if let Some(Definition::Mechanical(existing)) = self.local.get(name_str) {
+        let name_str = def.name.as_str().to_string();
+        if let Some(Definition::Mechanical(existing)) = self.local.get(name_str.as_str()) {
             collector.report(SymbolError::duplicate(
                 def.name.to_string().into(),
                 "mechanical",
                 (def.span.start, def.span.end),
-                Some((existing.span.start, existing.span.end)),
+                Some((
+                    self.arena.mechanical_defs[*existing].span.start,
+                    self.arena.mechanical_defs[*existing].span.end,
+                )),
             ));
             return;
         }
+        let id = self.arena.mechanical_defs.push(def);
         self.local
-            .insert(name_str.into(), Definition::Mechanical(def));
+            .insert(name_str.into(), Definition::Mechanical(id));
     }
 
     /// Register an interface definition (in local layer)
@@ -288,33 +307,41 @@ impl SymbolTable {
         collector: &DiagnosticCollector,
         def: InterfaceDefinition,
     ) {
-        let name_str = def.name.as_str();
-        if let Some(Definition::Interface(existing)) = self.local.get(name_str) {
+        let name_str = def.name.as_str().to_string();
+        if let Some(Definition::Interface(existing)) = self.local.get(name_str.as_str()) {
             collector.report(SymbolError::duplicate(
                 def.name.to_string().into(),
                 "interface",
                 (def.span.start, def.span.end),
-                Some((existing.span.start, existing.span.end)),
+                Some((
+                    self.arena.interface_defs[*existing].span.start,
+                    self.arena.interface_defs[*existing].span.end,
+                )),
             ));
             return;
         }
+        let id = self.arena.interface_defs.push(def);
         self.local
-            .insert(name_str.into(), Definition::Interface(def));
+            .insert(name_str.into(), Definition::Interface(id));
     }
 
     /// Register a test definition (in local layer)
     pub fn register_test(&mut self, collector: &DiagnosticCollector, def: TestDefinition) {
-        let name_str = def.name.as_str();
-        if let Some(Definition::Test(existing)) = self.local.get(name_str) {
+        let name_str = def.name.as_str().to_string();
+        if let Some(Definition::Test(existing)) = self.local.get(name_str.as_str()) {
             collector.report(SymbolError::duplicate(
                 def.name.to_string().into(),
                 "test",
                 (def.span.start, def.span.end),
-                Some((existing.span.start, existing.span.end)),
+                Some((
+                    self.arena.test_defs[*existing].span.start,
+                    self.arena.test_defs[*existing].span.end,
+                )),
             ));
             return;
         }
-        self.local.insert(name_str.into(), Definition::Test(def));
+        let id = self.arena.test_defs.push(def);
+        self.local.insert(name_str.into(), Definition::Test(id));
     }
 
     /// Register a signal group definition (in local layer)
@@ -323,109 +350,136 @@ impl SymbolTable {
         collector: &DiagnosticCollector,
         def: SignalGroupDefinition,
     ) {
-        let name_str = def.name.as_str();
-        if let Some(Definition::SignalGroup(existing)) = self.local.get(name_str) {
+        let name_str = def.name.as_str().to_string();
+        if let Some(Definition::SignalGroup(existing)) = self.local.get(name_str.as_str()) {
             collector.report(SymbolError::duplicate(
                 def.name.to_string().into(),
                 "signal_group",
                 (def.span.start, def.span.end),
-                Some((existing.span.start, existing.span.end)),
+                Some((
+                    self.arena.signal_group_defs[*existing].span.start,
+                    self.arena.signal_group_defs[*existing].span.end,
+                )),
             ));
             return;
         }
+        let id = self.arena.signal_group_defs.push(def);
         self.local
-            .insert(name_str.into(), Definition::SignalGroup(def));
+            .insert(name_str.into(), Definition::SignalGroup(id));
     }
 
     /// Register a pattern definition (in local layer)
     pub fn register_pattern(&mut self, collector: &DiagnosticCollector, def: PatternDefinition) {
-        let name_str = def.name.as_str();
-        if let Some(Definition::Pattern(existing)) = self.local.get(name_str) {
+        let name_str = def.name.as_str().to_string();
+        if let Some(Definition::Pattern(existing)) = self.local.get(name_str.as_str()) {
             collector.report(SymbolError::duplicate(
                 def.name.to_string().into(),
                 "pattern",
                 (def.span.start, def.span.end),
-                Some((existing.span.start, existing.span.end)),
+                Some((
+                    self.arena.pattern_defs[*existing].span.start,
+                    self.arena.pattern_defs[*existing].span.end,
+                )),
             ));
             return;
         }
-        self.local.insert(name_str.into(), Definition::Pattern(def));
+        let id = self.arena.pattern_defs.push(def);
+        self.local.insert(name_str.into(), Definition::Pattern(id));
     }
 
     /// Register a strategy definition (in local layer)
     pub fn register_strategy(&mut self, collector: &DiagnosticCollector, def: StrategyDefinition) {
-        let name_str = def.name.as_str();
-        if let Some(Definition::Strategy(existing)) = self.local.get(name_str) {
+        let name_str = def.name.as_str().to_string();
+        if let Some(Definition::Strategy(existing)) = self.local.get(name_str.as_str()) {
             collector.report(SymbolError::duplicate(
                 def.name.to_string().into(),
                 "strategy",
                 (def.span.start, def.span.end),
-                Some((existing.span.start, existing.span.end)),
+                Some((
+                    self.arena.strategy_defs[*existing].span.start,
+                    self.arena.strategy_defs[*existing].span.end,
+                )),
             ));
             return;
         }
-        self.local
-            .insert(name_str.into(), Definition::Strategy(def));
+        let id = self.arena.strategy_defs.push(def);
+        self.local.insert(name_str.into(), Definition::Strategy(id));
     }
 
     /// Register a logic block definition (in local layer)
     pub fn register_logic(&mut self, collector: &DiagnosticCollector, def: LogicDefinition) {
-        let name_str = def.name.as_str();
-        if let Some(Definition::Logic(existing)) = self.local.get(name_str) {
+        let name_str = def.name.as_str().to_string();
+        if let Some(Definition::Logic(existing)) = self.local.get(name_str.as_str()) {
             collector.report(SymbolError::duplicate(
                 def.name.to_string().into(),
                 "logic",
                 (def.span.start, def.span.end),
-                Some((existing.span.start, existing.span.end)),
+                Some((
+                    self.arena.logic_defs[*existing].span.start,
+                    self.arena.logic_defs[*existing].span.end,
+                )),
             ));
             return;
         }
-        self.local.insert(name_str.into(), Definition::Logic(def));
+        let id = self.arena.logic_defs.push(def);
+        self.local.insert(name_str.into(), Definition::Logic(id));
     }
 
     /// Register an enum definition (in local layer)
     pub fn register_enum(&mut self, collector: &DiagnosticCollector, def: EnumDefinition) {
-        let name_str = def.name.as_str();
-        if let Some(Definition::Enum(existing)) = self.local.get(name_str) {
+        let name_str = def.name.as_str().to_string();
+        if let Some(Definition::Enum(existing)) = self.local.get(name_str.as_str()) {
             collector.report(SymbolError::duplicate(
                 def.name.to_string().into(),
                 "enum",
                 (def.span.start, def.span.end),
-                Some((existing.span.start, existing.span.end)),
+                Some((
+                    self.arena.enum_defs[*existing].span.start,
+                    self.arena.enum_defs[*existing].span.end,
+                )),
             ));
             return;
         }
-        self.local.insert(name_str.into(), Definition::Enum(def));
+        let id = self.arena.enum_defs.push(def);
+        self.local.insert(name_str.into(), Definition::Enum(id));
     }
 
     /// Register a struct definition (in local layer)
     pub fn register_struct(&mut self, collector: &DiagnosticCollector, def: StructDefinition) {
-        let name_str = def.name.as_str();
-        if let Some(Definition::Struct(existing)) = self.local.get(name_str) {
+        let name_str = def.name.as_str().to_string();
+        if let Some(Definition::Struct(existing)) = self.local.get(name_str.as_str()) {
             collector.report(SymbolError::duplicate(
                 def.name.to_string().into(),
                 "struct",
                 (def.span.start, def.span.end),
-                Some((existing.span.start, existing.span.end)),
+                Some((
+                    self.arena.struct_defs[*existing].span.start,
+                    self.arena.struct_defs[*existing].span.end,
+                )),
             ));
             return;
         }
-        self.local.insert(name_str.into(), Definition::Struct(def));
+        let id = self.arena.struct_defs.push(def);
+        self.local.insert(name_str.into(), Definition::Struct(id));
     }
 
     /// Register a shape definition (in local layer)
     pub fn register_shape(&mut self, collector: &DiagnosticCollector, def: ShapeDefinition) {
-        let name_str = def.name.as_str();
-        if let Some(Definition::Shape(existing)) = self.local.get(name_str) {
+        let name_str = def.name.as_str().to_string();
+        if let Some(Definition::Shape(existing)) = self.local.get(name_str.as_str()) {
             collector.report(SymbolError::duplicate(
                 def.name.to_string().into(),
                 "shape",
                 (def.span.start, def.span.end),
-                Some((existing.span.start, existing.span.end)),
+                Some((
+                    self.arena.shape_defs[*existing].span.start,
+                    self.arena.shape_defs[*existing].span.end,
+                )),
             ));
             return;
         }
-        self.local.insert(name_str.into(), Definition::Shape(def));
+        let id = self.arena.shape_defs.push(def);
+        self.local.insert(name_str.into(), Definition::Shape(id));
     }
 
     /// Register a unit definition in the local layer (user-defined units in current file)
@@ -438,14 +492,14 @@ impl SymbolTable {
         if let Some(Definition::Unit(existing)) = self
             .local
             .iter()
-            .find(|(_, d)| matches!(d, Definition::Unit(u) if u.symbol == symbol))
+            .find(|(_, d)| matches!(d, Definition::Unit(u) if self.arena.unit_defs[*u].symbol == symbol))
             .map(|(_, d)| d)
         {
             collector.report(SymbolError::duplicate(
                 symbol.clone(),
                 "unit",
                 (def.span.start, def.span.end),
-                Some((existing.span.start, existing.span.end)),
+                Some((self.arena.unit_defs[*existing].span.start, self.arena.unit_defs[*existing].span.end)),
             ));
             return;
         }
@@ -459,7 +513,8 @@ impl SymbolTable {
             ));
         }
 
-        self.local.insert(symbol, Definition::Unit(def));
+        let id = self.arena.unit_defs.push(def);
+        self.local.insert(symbol, Definition::Unit(id));
     }
 
     /// Register a bridge definition (in local layer) (v0.2.0)
@@ -472,7 +527,8 @@ impl SymbolTable {
     /// appropriate one based on the stackup and manufacturing constraints.
     pub fn register_bridge(&mut self, _collector: &DiagnosticCollector, def: BridgeDefinition) {
         let key = CompactString::from(format!("{}_{}", def.from, def.to));
-        self.local.insert(key, Definition::Bridge(def));
+        let id = self.arena.bridge_defs.push(def);
+        self.local.insert(key, Definition::Bridge(id));
     }
 
     /// Register a device definition (in local layer)
@@ -483,19 +539,22 @@ impl SymbolTable {
     ///
     /// Rule 1 (GAP3): Local Beats Global - warns if shadowing an import
     pub fn register_device(&mut self, collector: &DiagnosticCollector, def: DeviceDefinition) {
-        let name_str = def.name.as_str();
-        if let Some(Definition::Device(existing)) = self.local.get(name_str) {
+        let name_str = def.name.as_str().to_string();
+        if let Some(Definition::Device(existing)) = self.local.get(name_str.as_str()) {
             collector.report(SymbolError::duplicate(
                 def.name.to_string().into(),
                 "device",
                 (def.span.start, def.span.end),
-                Some((existing.span.start, existing.span.end)),
+                Some((
+                    self.arena.device_defs[*existing].span.start,
+                    self.arena.device_defs[*existing].span.end,
+                )),
             ));
             return;
         }
 
         // Check if shadowing imported device
-        if self.check_device_shadowing(name_str) {
+        if self.check_device_shadowing(&name_str) {
             collector.report(SymbolError::shadowing(
                 def.name.to_string().into(),
                 "device",
@@ -504,7 +563,8 @@ impl SymbolTable {
             ));
         }
 
-        self.local.insert(name_str.into(), Definition::Device(def));
+        let id = self.arena.device_defs.push(def);
+        self.local.insert(name_str.into(), Definition::Device(id));
     }
 
     /// Check if a device exists in lower layers and return true if shadowing
@@ -526,18 +586,22 @@ impl SymbolTable {
         collector: &DiagnosticCollector,
         def: SpiceModelDefinition,
     ) {
-        let name_str = def.name.as_str();
-        if let Some(Definition::SpiceModel(existing)) = self.local.get(name_str) {
+        let name_str = def.name.as_str().to_string();
+        if let Some(Definition::SpiceModel(existing)) = self.local.get(name_str.as_str()) {
             collector.report(SymbolError::duplicate(
                 def.name.to_string().into(),
                 "spice_model",
                 (def.span.start, def.span.end),
-                Some((existing.span.start, existing.span.end)),
+                Some((
+                    self.arena.spice_model_defs[*existing].span.start,
+                    self.arena.spice_model_defs[*existing].span.end,
+                )),
             ));
             return;
         }
+        let id = self.arena.spice_model_defs.push(def);
         self.local
-            .insert(name_str.into(), Definition::SpiceModel(def));
+            .insert(name_str.into(), Definition::SpiceModel(id));
     }
 
     /// Register a subcircuit definition (in local layer)
@@ -560,17 +624,21 @@ impl SymbolTable {
         collector: &DiagnosticCollector,
         def: SubcircuitDefinition,
     ) {
-        let name_str = def.name.as_str();
-        if let Some(Definition::Subcircuit(existing)) = self.local.get(name_str) {
+        let name_str = def.name.as_str().to_string();
+        if let Some(Definition::Subcircuit(existing)) = self.local.get(name_str.as_str()) {
             collector.report(SymbolError::duplicate(
                 def.name.to_string().into(),
                 "subcircuit",
                 (def.span.start, def.span.end),
-                Some((existing.span.start, existing.span.end)),
+                Some((
+                    self.arena.subcircuit_defs[*existing].span.start,
+                    self.arena.subcircuit_defs[*existing].span.end,
+                )),
             ));
             return;
         }
+        let id = self.arena.subcircuit_defs.push(def);
         self.local
-            .insert(name_str.into(), Definition::Subcircuit(def));
+            .insert(name_str.into(), Definition::Subcircuit(id));
     }
 }

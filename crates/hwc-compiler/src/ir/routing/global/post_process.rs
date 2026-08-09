@@ -6,6 +6,20 @@ use hwc_engine::geometry::Point3D;
 use hwc_engine::geometry_router::RouteResult;
 use hwc_engine::netlist::NetId;
 
+/// Inputs for registering a pre-computed multi-segment analytic route.
+///
+/// Zero-cost grouping: destructured at function entry so the body operates on
+/// plain locals, identical to passing the values individually.
+pub(crate) struct AnalyticRouteSegments<'a> {
+    pub net_id: NetId,
+    pub net_name: &'a str,
+    pub segments: Vec<hwc_engine::LineSegment>,
+    pub routing_layer_name: &'a str,
+    pub thickness_nm: i64,
+    pub declared_width_nm: Option<i64>,
+    pub current_limit_ma: f64,
+}
+
 impl<'a> AutoRouter<'a> {
     pub(crate) fn post_process_routes(
         &mut self,
@@ -113,7 +127,9 @@ impl<'a> AutoRouter<'a> {
                         let dx = (w[1].x - w[0].x).abs();
                         let dy = (w[1].y - w[0].y).abs();
                         let dz = (w[1].z - w[0].z).abs();
-                        (dx > 0 && dy > 0) || (dx > 0 && dz > 0) || (dy > 0 && dz > 0)
+                        // A segment is diagonal when it moves along more than one axis.
+                        let moving_axes = (dx > 0) as u8 + (dy > 0) as u8 + (dz > 0) as u8;
+                        moving_axes > 1
                     });
 
                     let route_segments = if has_z_transitions || has_diagonal_segments {
@@ -157,15 +173,15 @@ impl<'a> AutoRouter<'a> {
                     })?;
 
                 // Create a single AnalyticTrace with all segments
-                self.register_analytic_route_from_segments(
-                    actual_net_id,
-                    &net_name,
-                    all_segments,
+                self.register_analytic_route_from_segments(AnalyticRouteSegments {
+                    net_id: actual_net_id,
+                    net_name: &net_name,
+                    segments: all_segments,
                     routing_layer_name,
-                    first_thickness,
-                    declared_width,
-                    current_ma,
-                )?;
+                    thickness_nm: first_thickness,
+                    declared_width_nm: declared_width,
+                    current_limit_ma: current_ma,
+                })?;
             }
         }
 
@@ -445,14 +461,18 @@ impl<'a> AutoRouter<'a> {
     /// This bypasses path concatenation to avoid false collinearity detection in manhattan_path_to_segments
     fn register_analytic_route_from_segments(
         &mut self,
-        net_id: NetId,
-        net_name: &str,
-        segments: Vec<hwc_engine::LineSegment>,
-        routing_layer_name: &str,
-        thickness_nm: i64,
-        declared_width_nm: Option<i64>,
-        current_limit_ma: f64,
+        params: AnalyticRouteSegments,
     ) -> Result<(), IrError> {
+        let AnalyticRouteSegments {
+            net_id,
+            net_name,
+            segments,
+            routing_layer_name,
+            thickness_nm,
+            declared_width_nm,
+            current_limit_ma,
+        } = params;
+
         use hwc_engine::AnalyticTrace;
 
         if segments.is_empty() {
@@ -496,12 +516,11 @@ impl<'a> AutoRouter<'a> {
                     .ok_or_else(|| IrError::UndeclaredMaterial {
                         material: mat_name.clone(),
                     })
-                    .map(|id| {
+                    .inspect(|&id| {
                         eprintln!(
                             "[REGISTRY MATERIAL DEBUG] Net '{}': routing_layer='{}', material='{}', material_id={}",
                             net_name, routing_layer_name, mat_name, id
                         );
-                        id
                     })
             })?;
 
@@ -519,16 +538,16 @@ impl<'a> AutoRouter<'a> {
             .and_then(|s| self.space.find_layer_at_z(s.start.z))
             .map(|layer| (layer.z_bottom, layer.z_top));
 
-        let trace = AnalyticTrace::with_layer_z_range(
+        let trace = AnalyticTrace::with_layer_z_range(hwc_engine::space::AnalyticTraceParams {
             net_id,
-            hwc_engine::space::CrossSection::new(trace_width_nm, thickness_nm),
+            cross_section: hwc_engine::space::CrossSection::new(trace_width_nm, thickness_nm),
             segments,
-            material_id,
-            net_name.into(),
-            hwc_engine::space::CurrentRating::new(net_actual_current_ma, current_limit_ma),
+            material: material_id,
+            net_name: net_name.into(),
+            current: hwc_engine::space::CurrentRating::new(net_actual_current_ma, current_limit_ma),
             layer_z_range,
-            routing_layer_name.into(), // v0.2.2: Explicit layer lineage
-        );
+            layer_name: routing_layer_name.into(), // v0.2.2: Explicit layer lineage
+        });
 
         let from_entity = format!("auto_route_{}_start", net_name);
         let to_entity = format!("auto_route_{}_end", net_name);
@@ -536,7 +555,7 @@ impl<'a> AutoRouter<'a> {
         self.space
             .routing_database
             .register_autorouter_route(trace, from_entity.into(), to_entity.into())
-            .map_err(|e| IrError::RoutingError(e))?;
+            .map_err(IrError::RoutingError)?;
 
         Ok(())
     }

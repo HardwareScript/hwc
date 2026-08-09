@@ -216,14 +216,16 @@ impl GeometryRouter {
                 );
 
                 match topo_router.route_with_perpendicular_escape(
-                    search_start,
-                    search_goal,
-                    start_normal,
-                    goal_normal,
-                    escape_stub_nm,
-                    &spatial_index,
-                    &board_bounds,
-                    &exempt_net_ids,
+                    crate::geometry_router::topological_router::PerpendicularEscapeParams {
+                        start: search_start,
+                        target: search_goal,
+                        start_normal,
+                        target_normal: goal_normal,
+                        escape_stub_nm,
+                        obstacles: &spatial_index,
+                        board_bounds: &board_bounds,
+                        exempt_net_ids: &exempt_net_ids,
+                    },
                 ) {
                     Some(topo_path) if topo_path.waypoints.len() >= 2 => topo_path.waypoints,
                     _ => {
