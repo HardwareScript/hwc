@@ -2,6 +2,7 @@
 
 use crate::ast::*;
 use crate::lexer::{Span, Token};
+use compact_str::CompactString;
 
 impl crate::parser::Parser {
     /// Parse space definition: `define space "Name":`
@@ -93,6 +94,7 @@ impl crate::parser::Parser {
         let mut exposes = Vec::new();
         let mut nets = Vec::new();
         let mut regions: Vec<crate::ast::arena::RegionId> = Vec::new(); // v0.2.0: Region declarations
+        let mut device_nets_map: rustc_hash::FxHashMap<CompactString, rustc_hash::FxHashMap<CompactString, CompactString>> = rustc_hash::FxHashMap::default(); // v0.2.1: Virtual terminal bindings
 
         // Parse space body
         let mut loop_iterations = 0;
@@ -337,6 +339,24 @@ impl crate::parser::Parser {
                         continue;
                     }
                 }
+            } else if self.check(&Token::Identifier("device_nets".into())) {
+                // Parse device_nets block for explicit virtual terminal bindings (v0.2.1)
+                match self.parse_device_nets_block() {
+                    Ok(dev_nets) => {
+                        // Merge into existing device_nets map
+                        for (device_name, terminal_map) in dev_nets {
+                            device_nets_map
+                                .entry(device_name)
+                                .or_insert_with(rustc_hash::FxHashMap::default)
+                                .extend(terminal_map);
+                        }
+                    }
+                    Err(e) => {
+                        collector.report(e);
+                        self.sync_to_next_definition();
+                        continue;
+                    }
+                }
             } else if self.check(&Token::Identifier("routing".into())) {
                 // Parse global routing policy (v0.1.7)
                 routing_config = self.parse_routing_config().ok();
@@ -411,6 +431,7 @@ impl crate::parser::Parser {
             exposes,
             nets,
             regions, // v0.2.0: Region declarations
+            device_nets: device_nets_map, // v0.2.1: Virtual terminal bindings
             span: Span::new(start_pos, end_pos),
         })
     }

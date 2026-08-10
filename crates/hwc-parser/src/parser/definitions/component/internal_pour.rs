@@ -217,13 +217,18 @@ impl super::super::super::Parser {
                 "device" => {
                     // Sprint 2.2: For component internal pours, device is just a terminal name
                     // (not DeviceName.terminal like in spaces)
-                    // Example: device: gate (refers to the component's gate terminal.into())
+                    // Example: device: gate (refers to the component's gate terminal)
                     let terminal = self.expect_identifier_string()?;
+
+                    let terminals = vec![terminal.into()];
+                    // v0.2.2: Infer priority from terminal count (single terminal = Contact)
+                    let priority = crate::ast::BindingPriority::infer_from_terminals(&terminals);
 
                     // Create a DeviceBinding with empty device_name (will be filled during placement)
                     device = Some(crate::ast::DeviceBinding {
                         device_name: String::new().into(), // Empty for now, filled during component instantiation
-                        terminal: terminal.into(),
+                        terminals,
+                        priority,
                         span: Span::new(start_pos, self.previous_span().end),
                     });
                 }

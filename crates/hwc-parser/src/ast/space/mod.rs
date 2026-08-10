@@ -12,6 +12,7 @@ pub use layout::{LayoutStatement, ModuleInternalPlacement, ModuleLayoutBlock};
 pub use nets::{MeasurementValue, NetClassification, NetDeclaration};
 pub use placements::{
     AnchorPoint,
+    BindingPriority,  // v0.2.2: Device binding priority
     CapType,
     ContactPlacement,
     CutoutShape,

@@ -9,6 +9,7 @@ use crate::ast::arena::{
 use crate::ast::expression::Expression;
 use crate::lexer::Span;
 use compact_str::CompactString;
+use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 
 /// Local variable binding in space block (v0.2.0)
@@ -31,6 +32,7 @@ pub struct ConstBinding {
 
 /// Space definition: `space Name:` (v0.1.6)
 /// v0.2.0: Supports optional `export` keyword for visibility control
+/// v0.2.1: Supports `device_nets` for explicit virtual terminal binding
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SpaceDefinition {
     pub name: crate::ast::common::Identifier,
@@ -48,6 +50,12 @@ pub struct SpaceDefinition {
     pub exposes: Vec<Expose>,
     pub nets: Vec<NetDeclaration>,
     pub regions: Vec<RegionId>, // v0.2.0: Region declarations (arena-allocated)
+    
+    /// v0.2.1: Explicit device terminal net bindings for virtual terminals
+    /// Maps device_name -> (terminal_name -> net_name)
+    /// Example: device_nets R1: { BULK: GND }
+    pub device_nets: FxHashMap<CompactString, FxHashMap<CompactString, CompactString>>,
+    
     pub span: Span,
 }
 

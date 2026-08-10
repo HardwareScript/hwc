@@ -17,60 +17,96 @@ space Simple_Resistor_Space implements SimpleResistor:
         Out: { classification: signal, potential: 0.0V, current: 1.0uA }
         GND: { classification: ground, potential: 0.0V, current: 0.0uA }
 
+    # Device virtual terminal bindings (v0.2.1)
+    device_nets R1:
+        BULK: GND
+
     let res_length = 4.0um
     let res_width = 1.0um
     let contact_size = 400nm
     let resistor_center_x = 10.0um
     let resistor_center_y = 5.0um
 
+    # 1. CONTINUOUS POLYSILICON RESISTOR BODY (PRIMARY RESISTIVE CHANNEL)
+    # The 4μm × 1μm Polysilicon channel forms the physical resistor
+    # Bound to BOTH Terminal A and Terminal B - this is ONE continuous channel
     add pour(Polysilicon) named Resistor_Body on layer: polyres:
-        device: R1.BULK
+        device: R1.A, R1.B
+        net: In
         dimensions: res_length by res_width
         at: [x: resistor_center_x, y: resistor_center_y]
-        net: GND
 
-    add pour(Aluminum) named Contact_A on layer: metal1:
+    # 2. LEFT CONTACT HEAD (TERMINAL A → NET IN)
+    # Titanium_Silicide contact on li1 layer binds Terminal A to net In
+    add pour(Titanium_Silicide) named Contact_A_LI on layer: li1:
         device: R1.A
+        net: In
         dimensions: contact_size by contact_size
         at: [x: Resistor_Body.left + contact_size / 2, y: Resistor_Body.center_y]
-        net: In
     
-    add pour(Aluminum) named Contact_B on layer: metal1:
+    # 3. RIGHT CONTACT HEAD (TERMINAL B → NET OUT)
+    # Titanium_Silicide contact on li1 layer binds Terminal B to net Out
+    add pour(Titanium_Silicide) named Contact_B_LI on layer: li1:
         device: R1.B
+        net: Out
         dimensions: contact_size by contact_size
         at: [x: Resistor_Body.right - contact_size / 2, y: Resistor_Body.center_y]
-        net: Out
 
-    add contact(Tungsten) named Via_A spanning layer: polyres to metal1:
-        diameter: 300nm
-        at: [x: Contact_A.center_x, y: Contact_A.center_y]
+    # 4. VIAS BRIDGING POLYRES → LI1
+    add contact(Tungsten) named Via_A_Poly spanning layer: polyres to li1:
+        diameter: 170nm
+        at: [x: Contact_A_LI.center_x, y: Contact_A_LI.center_y]
         net: In
 
-    add contact(Tungsten) named Via_B spanning layer: polyres to metal1:
-        diameter: 300nm
-        at: [x: Contact_B.center_x, y: Contact_B.center_y]
+    add contact(Tungsten) named Via_B_Poly spanning layer: polyres to li1:
+        diameter: 170nm
+        at: [x: Contact_B_LI.center_x, y: Contact_B_LI.center_y]
         net: Out
 
+    # 5. METAL1 PADS DIRECTLY ABOVE LI1 CONTACTS
+    add pour(Aluminum) named Contact_A_Metal on layer: metal1:
+        dimensions: contact_size by contact_size
+        at: [x: Contact_A_LI.center_x, y: Contact_A_LI.center_y]
+        net: In
+
+    add pour(Aluminum) named Contact_B_Metal on layer: metal1:
+        dimensions: contact_size by contact_size
+        at: [x: Contact_B_LI.center_x, y: Contact_B_LI.center_y]
+        net: Out
+
+    # 6. VIAS BRIDGING LI1 → METAL1
+    add contact(Tungsten) named Via_A_Metal spanning layer: li1 to metal1:
+        diameter: 170nm
+        at: [x: Contact_A_LI.center_x, y: Contact_A_LI.center_y]
+        net: In
+
+    add contact(Tungsten) named Via_B_Metal spanning layer: li1 to metal1:
+        diameter: 170nm
+        at: [x: Contact_B_LI.center_x, y: Contact_B_LI.center_y]
+        net: Out
+
+    # 7. EXTERNAL TEST PADS
     let pad_spacing = 3.0um
     let pad_size = 1.0um
     
     add pour(Aluminum) named In_Pad on layer: metal1:
         dimensions: pad_size by pad_size
-        at: [x: Contact_A.left - pad_spacing - (pad_size / 2), y: Contact_A.center_y]
+        at: [x: Contact_A_Metal.left - pad_spacing, y: Contact_A_Metal.center_y]
         net: In
 
     add pour(Aluminum) named Out_Pad on layer: metal1:
         dimensions: pad_size by pad_size
-        at: [x: Contact_B.right + pad_spacing + (pad_size / 2), y: Contact_B.center_y]
+        at: [x: Contact_B_Metal.right + pad_spacing, y: Contact_B_Metal.center_y]
         net: Out
 
-    route In_Pad to Contact_A:
+    # 8. METAL1 ROUTING FROM CONTACT PADS TO EXTERNAL TEST PADS
+    route In_Pad to Contact_A_Metal:
         net: In
         width: 300nm
         layer: metal1
         intent: Signal
 
-    route Contact_B to Out_Pad:
+    route Contact_B_Metal to Out_Pad:
         net: Out
         width: 300nm
         layer: metal1

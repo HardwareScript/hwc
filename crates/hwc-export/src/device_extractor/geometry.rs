@@ -9,11 +9,16 @@ use super::DeviceExtractor;
 impl<'a> DeviceExtractor<'a> {
     /// Group all pours by their device binding
     ///
-    /// Creates a map: DeviceName -> (Terminal -> PourMetadata)
+    /// Creates a map: DeviceName -> (Terminal -> Vec<PourMetadata>)
+    ///
+    /// A single terminal may have MULTIPLE pours bound to it (e.g. a resistor
+    /// terminal bound to both the Polysilicon channel body and a silicide contact
+    /// pad). All bound pours are retained so downstream extractors can decide
+    /// explicitly which pour serves which physical role.
     pub(super) fn group_pours_by_device_binding(
         &self,
-    ) -> FxHashMap<CompactString, FxHashMap<CompactString, PourMetadata>> {
-        let mut bindings: FxHashMap<CompactString, FxHashMap<CompactString, PourMetadata>> =
+    ) -> FxHashMap<CompactString, FxHashMap<CompactString, Vec<PourMetadata>>> {
+        let mut bindings: FxHashMap<CompactString, FxHashMap<CompactString, Vec<PourMetadata>>> =
             FxHashMap::default();
 
         println!(
@@ -29,17 +34,21 @@ impl<'a> DeviceExtractor<'a> {
 
             if let Some(ref device_binding) = pour.device_binding {
                 let device_name = &device_binding.device_name;
-                let terminal = &device_binding.terminal;
+                
+                // v0.2.2: Handle multi-terminal bindings
+                for terminal in &device_binding.terminals {
+                    bindings
+                        .entry(device_name.clone())
+                        .or_default()
+                        .entry(terminal.clone())
+                        .or_insert_with(Vec::new)
+                        .push(pour.clone());
 
-                bindings
-                    .entry(device_name.clone())
-                    .or_default()
-                    .insert(terminal.clone(), pour.clone());
-
-                println!(
-                    "      ├─ Bound: {}.{} → {} ({})",
-                    device_name, terminal, pour.name, pour.material_name
-                );
+                    println!(
+                        "      ├─ Bound: {}.{} → {} ({})",
+                        device_name, terminal, pour.name, pour.material_name
+                    );
+                }
             }
         }
 

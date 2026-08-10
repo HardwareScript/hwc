@@ -351,7 +351,7 @@ impl EntityGraph {
                     device_binding: layer.device_binding.as_ref().map(|(dev, term)| {
                         hwc_physics::connectivity::DeviceBinding {
                             device_name: dev.as_str().into(),
-                            terminal: term.as_str().into(),
+                            terminals: vec![term.as_str().into()], // v0.2.2: Wrap single terminal in Vec
                         }
                     }), // v0.2.2: Convert (String, String) to DeviceBinding
                 }

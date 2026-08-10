@@ -375,16 +375,22 @@ impl HardwareSpace {
                         .get_component_by_name(binding.device_name.as_str())?;
                     let pins = self.netlist.get_component_pins(comp_id);
 
-                    pins.iter().find_map(|&pin_id| {
-                        let pin_data = self.netlist.get_pin(pin_id)?;
-                        if pin_data.name == binding.terminal {
-                            let net_id = pin_data.connected_net?;
-                            let net_data = self.netlist.get_net(net_id)?;
-                            Some((net_data.name.to_string(), net_id))
-                        } else {
-                            None
+                    // v0.2.2: Check all terminals in the binding
+                    for terminal in &binding.terminals {
+                        if let Some(result) = pins.iter().find_map(|&pin_id| {
+                            let pin_data = self.netlist.get_pin(pin_id)?;
+                            if pin_data.name == *terminal {
+                                let net_id = pin_data.connected_net?;
+                                let net_data = self.netlist.get_net(net_id)?;
+                                Some((net_data.name.to_string(), net_id))
+                            } else {
+                                None
+                            }
+                        }) {
+                            return Some(result);
                         }
-                    })
+                    }
+                    None
                 })();
 
                 if let Some((net_name, net_id)) = resolved_opt {

@@ -41,10 +41,11 @@ pub struct SubstrateLayerMetadata {
 }
 
 /// Device binding for connectivity checking (v0.2.1)
+/// v0.2.2: Multi-terminal binding support
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DeviceBinding {
     pub device_name: CompactString,
-    pub terminal: CompactString,
+    pub terminals: Vec<CompactString>,
 }
 
 #[derive(Debug, Clone)]

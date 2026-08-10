@@ -42,11 +42,35 @@ pub struct PourMetadata {
 
 /// Device binding for explicit intent-based extraction (Phase 4: Silent Atom)
 ///
-/// Binds a pour to a specific device terminal, eliminating geometric guessing.
+/// Binding priority for device terminal assignments (v0.2.2)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum BindingPriority {
+    Channel = 0,
+    Contact = 100,
+}
+
+impl Default for BindingPriority {
+    fn default() -> Self {
+        Self::Contact
+    }
+}
+
+impl From<hwc_parser::BindingPriority> for BindingPriority {
+    fn from(parser_priority: hwc_parser::BindingPriority) -> Self {
+        match parser_priority {
+            hwc_parser::BindingPriority::Channel => Self::Channel,
+            hwc_parser::BindingPriority::Contact => Self::Contact,
+        }
+    }
+}
+
+/// Binds a pour to device terminal(s), eliminating geometric guessing.
+/// v0.2.2: Supports multi-terminal binding (e.g., R1.A and R1.B on same pour) with priority
 #[derive(Debug, Clone)]
 pub struct DeviceBinding {
-    pub device_name: CompactString, // e.g., "M1"
-    pub terminal: CompactString,    // e.g., "gate", "source", "drain", "bulk"
+    pub device_name: CompactString, // e.g., "M1", "R1"
+    pub terminals: Vec<CompactString>, // e.g., ["gate"], or ["A", "B"] for resistors
+    pub priority: BindingPriority, // v0.2.2: Processing order priority
 }
 
 /// Device instance metadata (v0.2.1: Native Device Support)

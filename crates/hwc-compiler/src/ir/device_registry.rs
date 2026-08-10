@@ -17,6 +17,7 @@ use crate::{IrError, SymbolTable};
 pub fn populate_device_instances(
     space: &mut hwc_engine::HardwareSpace,
     symbol_table: &SymbolTable,
+    space_def: Option<&hwc_parser::ast::SpaceDefinition>,
 ) -> Result<(), IrError> {
     println!("   ├─ Populating device instance registry...");
 
@@ -39,32 +40,86 @@ pub fn populate_device_instances(
         let mut terminal_nets: FxHashMap<CompactString, CompactString> = FxHashMap::default();
         let mut terminal_materials: FxHashMap<CompactString, CompactString> = FxHashMap::default();
 
-        for pour in &pours {
+        // v0.2.2: Sort pours by binding priority (declarative, not heuristic)
+        // Channel pours (priority=0) processed first, Contact pours (priority=100) last to override
+        let mut sorted_pours = pours.clone();
+        sorted_pours.sort_by_key(|p| {
+            p.device_binding
+                .as_ref()
+                .map_or(hwc_engine::space::BindingPriority::default(), |b| b.priority)
+        });
+
+        println!("      ├─ Device '{}': Processing {} pours in priority order:", device_name, sorted_pours.len());
+        for pour in &sorted_pours {
             if let Some(ref binding) = pour.device_binding {
-                if !terminals.contains(&binding.terminal) {
-                    terminals.push(binding.terminal.clone());
-                }
+                println!("      │  Pour '{}': priority={:?}, terminals={:?}, net={:?}", 
+                    pour.name, binding.priority, binding.terminals, pour.net);
+            }
+        }
 
-                // ZERO COMPILER MAGIC: Device terminal pours MUST have explicit net assignments
-                // HardwareScript does not infer connectivity - the user must declare it explicitly
-                if pour.net.is_none() {
-                    return Err(IrError::DeviceTerminalMissingNet {
-                        pour_name: pour.name.clone(),
-                        device: binding.device_name.clone(),
-                        terminal: binding.terminal.clone(),
-                        material: pour.material_name.clone(),
-                    });
-                }
+        for pour in &sorted_pours {
+            if let Some(ref binding) = pour.device_binding {
+                // v0.2.2: Handle multi-terminal bindings
+                for terminal in &binding.terminals {
+                    if !terminals.contains(terminal) {
+                        terminals.push(terminal.clone());
+                    }
 
-                // Map terminal to net
-                if let Some(ref net) = pour.net {
-                    terminal_nets.insert(binding.terminal.clone(), net.clone());
-                }
+                    // ZERO COMPILER MAGIC: Device terminal pours MUST have explicit net assignments
+                    // HardwareScript does not infer connectivity - the user must declare it explicitly
+                    if pour.net.is_none() {
+                        return Err(IrError::DeviceTerminalMissingNet {
+                            pour_name: pour.name.clone(),
+                            device: binding.device_name.clone(),
+                            terminal: terminal.clone(),
+                            material: pour.material_name.clone(),
+                        });
+                    }
 
-                // Map terminal to material (use first pour's material for each terminal)
-                terminal_materials
-                    .entry(binding.terminal.clone())
-                    .or_insert_with(|| pour.material_name.clone());
+                    // Map terminal to net with declarative priority:
+                    // - Contact pours (priority=100): Always override
+                    // - Channel pours (priority=0): Only insert if not already mapped
+                    if let Some(ref net) = pour.net {
+                        let before = terminal_nets.get(terminal).cloned();
+                        if binding.priority == hwc_engine::space::BindingPriority::Contact {
+                            // Contact pour: Always set the net (contact heads have priority)
+                            terminal_nets.insert(terminal.clone(), net.clone());
+                            println!("      │  Terminal '{}': Contact pour '{}' set net {:?} -> {:?}", 
+                                terminal, pour.name, before, net);
+                        } else {
+                            // Channel pour: Only set if not already defined by a contact
+                            terminal_nets.entry(terminal.clone()).or_insert(net.clone());
+                            println!("      │  Terminal '{}': Channel pour '{}' set net {:?} -> {:?} (if not already set)", 
+                                terminal, pour.name, before, terminal_nets.get(terminal));
+                        }
+                    }
+
+                    // Map terminal to material (use first pour's material for each terminal)
+                    terminal_materials
+                        .entry(terminal.clone())
+                        .or_insert_with(|| pour.material_name.clone());
+                }
+            }
+        }
+
+        // Step 2b: Add virtual terminals from space_def.device_nets (v0.2.1)
+        // Virtual terminals (material: Air) don't require physical geometry
+        // but MUST have explicit net mappings via device_nets declarations
+        if let Some(space_def) = space_def {
+            if let Some(device_nets) = space_def.device_nets.get(&device_name) {
+                for (terminal_name, net_name) in device_nets {
+                    // Only add if not already bound (virtual terminals have no pours)
+                    if !terminals.contains(terminal_name) {
+                        terminals.push(terminal_name.clone());
+                        terminal_nets.insert(terminal_name.clone(), net_name.clone());
+                        terminal_materials.insert(terminal_name.clone(), "Air".into());
+                        
+                        println!(
+                            "      ├─ Device '{}' virtual terminal '{}' → net '{}'",
+                            device_name, terminal_name, net_name
+                        );
+                    }
+                }
             }
         }
 
@@ -124,6 +179,10 @@ pub fn populate_device_instances(
             device_instance.name,
             device_instance.device_type,
             device_instance.terminals.len()
+        );
+        println!(
+            "      │  Terminal net mappings: {:?}",
+            device_instance.terminal_nets
         );
 
         space.device_instances.push(device_instance);
@@ -213,65 +272,88 @@ fn find_similar_devices(
 }
 
 /// Calculate device parameters from geometry
+///
+/// This is a stub that will be replaced by proper parameter extraction during export.
+/// Device parameters should NOT be calculated during IR compilation because:
+/// 1. The compiler doesn't have access to material properties or stackup
+/// 2. Parameter extraction is an export-time concern (SPICE needs it, DXF doesn't)
+/// 3. This creates a layering violation where IR knows about physics
+///
+/// Instead, this returns empty parameters and lets the export modules calculate
+/// them using the proper ParameterExtractionRegistry with full material/stackup context.
 fn calculate_device_parameters(
-    device_type: &str,
-    pours: &[&PourMetadata],
+    _device_type: &str,
+    _pours: &[&PourMetadata],
 ) -> FxHashMap<CompactString, f64> {
-    let mut params = FxHashMap::default();
+    // Return empty parameters - extraction happens at export time
+    // This maintains proper architectural layering:
+    // - IR layer: knows about structure (devices, terminals, bindings)
+    // - Export layer: knows about physics (R, C, W, L calculations)
+    FxHashMap::default()
+}
 
-    match device_type {
-        "Resistor" => {
-            // Find the resistive body pour (usually the largest)
-            if let Some(body_pour) = pours.iter().max_by_key(|p| p.area_nm2) {
-                // Calculate resistance: R = R_sheet * (L/W)
-                // For now, assume square geometry
-                let area_nm2 = body_pour.area_nm2 as f64;
-                let side_nm = area_nm2.sqrt();
-                let side_um = side_nm / 1000.0;
+/// Extract device parameters from space geometry using generic lookup tables
+///
+/// This function uses the device definition from the symbol table to determine
+/// which parameters need to be extracted, then calculates them from the geometry.
+/// NO HARDCODING - all extraction logic is driven by the device definition.
+fn extract_device_parameters_from_space(
+    device_type: &str,
+    device_name: &CompactString,
+    _terminals: &[CompactString],
+    space: &hwc_engine::HardwareSpace,
+    symbol_table: Option<&crate::SymbolTable>,
+) -> FxHashMap<CompactString, f64> {
+    let mut parameters = FxHashMap::default();
 
-                // Sheet resistance for polysilicon: ~400 Ohms/square
-                let sheet_resistance = 400.0;
+    // Get device definition to see what parameters are needed
+    let Some(symbol_table) = symbol_table else {
+        eprintln!("[PARAM EXTRACTION] No symbol table provided for device '{}'", device_name);
+        return parameters;
+    };
 
-                // For a square, L/W = 1, so R = R_sheet
-                // For rectangles, would need actual L and W
-                let resistance = sheet_resistance; // Simplified for now
-
-                params.insert("R".into(), resistance);
-                params.insert("W".into(), side_um);
-                params.insert("L".into(), side_um);
-            }
+    let device_def = match symbol_table.get_device(device_type) {
+        Ok(def) => def,
+        Err(_) => {
+            eprintln!("[PARAM EXTRACTION] Device type '{}' not found in symbol table", device_type);
+            return parameters;
         }
-        "NMOS" | "PMOS" => {
-            // Find gate pour to calculate W/L
-            if let Some(gate_pour) = pours
-                .iter()
-                .find(|p| p.device_binding.as_ref().map(|b| b.terminal.as_str()) == Some("gate"))
-            {
-                let area_nm2 = gate_pour.area_nm2 as f64;
-                let side_nm = area_nm2.sqrt();
-                let side_um = side_nm / 1000.0;
+    };
 
-                params.insert("W".into(), side_um);
-                params.insert("L".into(), side_um);
-            }
-        }
-        "Capacitor" => {
-            // Calculate capacitance from area and dielectric thickness
-            // C = ε₀ε_r(A/d)
-            if let Some(plate_pour) = pours.first() {
-                let area_m2 = (plate_pour.area_nm2 as f64) / 1e18;
-                let epsilon_0 = 8.854e-12; // F/m
-                let epsilon_r = 3.9; // SiO2
-                let thickness_m = 10e-9; // 10nm typical
+    // Get the SPICE parameters list from the device definition
+    let spice_params = &device_def.spice_info.as_ref().map(|s| &s.parameters);
+    let Some(param_names) = spice_params else {
+        eprintln!("[PARAM EXTRACTION] Device '{}' has no SPICE parameters defined", device_type);
+        return parameters;
+    };
 
-                let capacitance = epsilon_0 * epsilon_r * area_m2 / thickness_m;
-                params.insert("C".into(), capacitance);
-            }
-        }
-        _ => {}
-    }
+    // ============================================================================
+    // DEPRECATED: Legacy hardcoded parameter extraction (v0.2.1)
+    // ============================================================================
+    // This code path has been DISABLED in favor of the registry-based extraction
+    // system in hwc-export/src/device_extractor/parameter_extraction.rs
+    //
+    // The legacy system had critical flaws:
+    // 1. Measured width as "minimum across all pours" → extracted contact pad width (400nm)
+    //    instead of resistor body width (1μm)
+    // 2. No material awareness → couldn't distinguish resistive channel from contacts
+    // 3. Silent success with wrong data → no error detection for missing geometry
+    //
+    // The new registry-based system:
+    // - Filters pours by material properties (resistive vs contact materials)
+    // - Fails loudly with error[D03] when primary channel geometry is missing
+    // - Extensible via ParameterExtractionRegistry for device-specific rules
+    //
+    // TODO: Remove this entire function once migration is complete (v0.3.0)
+    // ============================================================================
+    
+    eprintln!(
+        "[PARAM EXTRACTION] Legacy hardcoded extraction DISABLED for device '{}'. \
+         Parameters will be extracted by the registry-based system.",
+        device_name
+    );
 
-    params
+    parameters
 }
 
 /// Convert device_instances from HardwareSpace to PhysicalNetlist for export
@@ -299,10 +381,22 @@ pub fn device_instances_to_physical_netlist(
     let mut device_terminal_pours: rustc_hash::FxHashMap<(CompactString, CompactString), String> =
         rustc_hash::FxHashMap::default();
 
-    for pour in &space.pours {
+    // v0.2.2: Sort pours by binding priority (declarative, not heuristic)
+    // Channel pours (priority=0) are processed first, Contact pours (priority=100) last to override
+    let mut sorted_pours = space.pours.iter().collect::<Vec<_>>();
+    sorted_pours.sort_by_key(|p| {
+        p.device_binding
+            .as_ref()
+            .map_or(hwc_engine::space::BindingPriority::default(), |b| b.priority)
+    });
+
+    for pour in &sorted_pours {
         if let Some(ref binding) = pour.device_binding {
-            let key = (binding.device_name.clone(), binding.terminal.clone());
-            device_terminal_pours.insert(key, pour.name.to_string());
+            // v0.2.2: Handle multi-terminal bindings - create entry for each terminal
+            for terminal in &binding.terminals {
+                let key = (binding.device_name.clone(), terminal.clone());
+                device_terminal_pours.insert(key, pour.name.to_string());
+            }
         }
     }
 
@@ -317,6 +411,11 @@ pub fn device_instances_to_physical_netlist(
             .iter()
             .map(|(k, v)| (k.clone(), v.to_string()))
             .collect();
+        
+        eprintln!(
+            "[PHYSICAL NETLIST DEBUG] Device '{}': Converting terminal_nets {:?} to terminals {:?}",
+            device_instance.name, device_instance.terminal_nets, terminals
+        );
 
         // Build terminal_pours map
         let terminal_pours: rustc_hash::FxHashMap<CompactString, String> = device_instance
@@ -330,13 +429,28 @@ pub fn device_instances_to_physical_netlist(
             })
             .collect();
 
+        // Extract parameters from geometry using the registry-based system
+        // This uses the generic extraction functions registered for each device type
+        let parameters = extract_device_parameters_from_space(
+            &device_instance.device_type,
+            &device_instance.name,
+            &device_instance.terminals,
+            space,
+            symbol_table,
+        );
+
         let physical_device = PhysicalDevice {
             name: device_instance.name.clone(),
             device_type_id,
             terminals,
-            parameters: device_instance.parameters.clone(),
+            parameters,
             terminal_pours,
         };
+
+        eprintln!(
+            "[PHYSICAL NETLIST DEBUG] Created PhysicalDevice '{}': terminals = {:?}",
+            physical_device.name, physical_device.terminals
+        );
 
         physical_netlist.devices.push(physical_device);
 

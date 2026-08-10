@@ -44,7 +44,8 @@ pub(super) fn transform_pours(
                 .as_ref()
                 .map(|db| hwc_engine::space::DeviceBinding {
                     device_name: format!("{}.{}", instance_name, db.device_name).into(),
-                    terminal: db.terminal.clone(),
+                    terminals: db.terminals.clone(), // v0.2.2: Clone all terminals
+                    priority: db.priority, // v0.2.2: Already engine type, no conversion needed
                 });
 
         parent_space.pours.push(hwc_engine::space::PourMetadata {

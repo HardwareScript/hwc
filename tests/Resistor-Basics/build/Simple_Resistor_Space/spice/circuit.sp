@@ -17,47 +17,54 @@ CC_sub2 MINUS BULK {{2fF * W} * L}
 * ========================================
 * NETS
 * ========================================
-* Net: GND (pour: Resistor_Body, material: Polysilicon, z: 0.0000mm)
-* Net: In (pour: Contact_A, material: Aluminum, z: 0.0005mm)
-* Net: Out (pour: Contact_B, material: Aluminum, z: 0.0005mm)
-* Net: In (pour: In_Pad, material: Aluminum, z: 0.0005mm)
-* Net: Out (pour: Out_Pad, material: Aluminum, z: 0.0005mm)
+* Net: In (pour: Resistor_Body, material: Polysilicon, z: 0.0000mm)
+* Net: In (pour: Contact_A_LI, material: Titanium_Silicide, z: 0.0004mm)
+* Net: Out (pour: Contact_B_LI, material: Titanium_Silicide, z: 0.0004mm)
+* Net: In (pour: Contact_A_Metal, material: Aluminum, z: 0.0006mm)
+* Net: Out (pour: Contact_B_Metal, material: Aluminum, z: 0.0006mm)
+* Net: In (pour: In_Pad, material: Aluminum, z: 0.0006mm)
+* Net: Out (pour: Out_Pad, material: Aluminum, z: 0.0006mm)
 * Net: In (width=300nm, material=Tungsten)
 *   Connected pins:
-*     - Contact_A.anchor
-*     - Contact_A.__virtual_Contact_A
-*     - Via_A.__virtual_Via_A
+*     - Resistor_Body.anchor
+*     - Resistor_Body.__virtual_Resistor_Body
+*     - Contact_A_LI.anchor
+*     - Contact_A_LI.__virtual_Contact_A_LI
+*     - Via_A_Poly.__virtual_Via_A_Poly
+*     - Contact_A_Metal.anchor
+*     - Contact_A_Metal.__virtual_Contact_A_Metal
+*     - Via_A_Metal.__virtual_Via_A_Metal
 *     - In_Pad.anchor
 *     - In_Pad.__virtual_In_Pad
 * Net: Out (width=300nm, material=Tungsten)
 *   Connected pins:
-*     - Contact_B.anchor
-*     - Contact_B.__virtual_Contact_B
-*     - Via_B.__virtual_Via_B
+*     - Contact_B_LI.anchor
+*     - Contact_B_LI.__virtual_Contact_B_LI
+*     - Via_B_Poly.__virtual_Via_B_Poly
+*     - Contact_B_Metal.anchor
+*     - Contact_B_Metal.__virtual_Contact_B_Metal
+*     - Via_B_Metal.__virtual_Via_B_Metal
 *     - Out_Pad.anchor
 *     - Out_Pad.__virtual_Out_Pad
 * Net: GND (width=300nm, material=Tungsten)
-*   Connected pins:
-*     - Resistor_Body.anchor
-*     - Resistor_Body.__virtual_Resistor_Body
 
 
 * ========================================
 * EXTRACTED DEVICES
 * ========================================
-XR1 In Out GND sky130_fd_pr__res_high_po W=2.00u L=2.00u
+XR1 In Out GND sky130_fd_pr__res_high_po W=1.00u L=4.00u
 
 * ========================================
 * INTEGRATED TRACE PARASITICS
 * ========================================
 * Trace resistance
-RRtr_In_0 nIn_entry In 3.692857e-1
+RRtr_In_0 nIn_entry In 7.311111e-1
 * Ground capacitance
-CCgnd_In_0 In GND 1.139534e-16
+CCgnd_In_0 In GND 1.933755e-16
 * Trace resistance
-RRtr_Out_0 nOut_entry Out 3.692857e-1
+RRtr_Out_0 nOut_entry Out 7.311111e-1
 * Ground capacitance
-CCgnd_Out_0 Out GND 1.139534e-16
+CCgnd_Out_0 Out GND 1.933755e-16
 
 * Total parasitic elements: 4
 

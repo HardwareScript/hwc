@@ -105,16 +105,30 @@ fn validate_array_collisions(
         })?;
 
     for pour in &layout.internal_pours {
-        let terminal_name = pour
+        // v0.2.2: For multi-terminal bindings, check all terminals
+        let terminal_names: Vec<&str> = pour
             .device
             .as_ref()
-            .map(|d| d.terminal.as_str())
-            .unwrap_or("");
-        if array_config
-            .merge_terminals
-            .iter()
-            .any(|t| t == terminal_name)
-        {
+            .map(|d| d.terminals.iter().map(|t| t.as_str()).collect())
+            .unwrap_or_else(|| vec![]);
+        
+        let should_merge = terminal_names.iter().any(|terminal_name| {
+            array_config
+                .merge_terminals
+                .iter()
+                .any(|merge_term| merge_term.as_str() == *terminal_name)
+        });
+        
+        if !should_merge && terminal_names.is_empty() {
+            // Check by pour name if no device binding
+            if !array_config
+                .merge_terminals
+                .iter()
+                .any(|merge_term| merge_term.as_str() == pour.name.as_str())
+            {
+                continue;
+            }
+        } else if !should_merge {
             continue;
         }
 
@@ -149,7 +163,7 @@ fn validate_array_collisions(
                             instance_a: i,
                             instance_b: j,
                             pour_name: pour.name.to_string(),
-                            terminal_name: terminal_name.into(),
+                            terminal_name: terminal_names.join(",").into(), // v0.2.2: Join all terminal names
                             bbox_a_min_x: bbox_a.min.x as f64 / 1_000_000.0,
                             bbox_a_min_y: bbox_a.min.y as f64 / 1_000_000.0,
                             bbox_a_max_x: bbox_a.max.x as f64 / 1_000_000.0,
@@ -302,7 +316,8 @@ fn merge_explicit_terminals(
             .iter()
             .filter(|pour| {
                 if let Some(binding) = &pour.device {
-                    binding.terminal == *terminal_name
+                    // v0.2.2: Check if any of the terminals match
+                    binding.terminals.iter().any(|t| t == terminal_name)
                 } else {
                     pour.name.as_str() == terminal_name
                 }
@@ -454,7 +469,8 @@ fn merge_pour_across_instances(
                 .as_ref()
                 .map(|binding| hwc_engine::space::DeviceBinding {
                     device_name: binding.device_name.clone(),
-                    terminal: binding.terminal.clone(),
+                    terminals: binding.terminals.clone(), // v0.2.2: Clone all terminals
+                    priority: binding.priority.into(), // v0.2.2: Convert parser priority to engine priority
                 }),
             merged_region_id,
             waivers: pour.waivers.clone(),

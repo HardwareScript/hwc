@@ -4,39 +4,69 @@ use crate::ast::MeasurementValue;
 use crate::ast::*;
 use crate::lexer::{Span, Token};
 use crate::parser::error::ParseError;
+use compact_str::CompactString;
 
 impl crate::parser::Parser {
-    /// Parse device binding: `device: DeviceName.terminal`
+    /// Parse device binding: `device: DeviceName.terminal` or `device: DeviceName.termA, DeviceName.termB`
     ///
     /// Phase 4 (Silent Atom): Explicit intent-based device binding
+    /// v0.2.2: Multi-terminal binding support for resistors and other 2-terminal devices
     ///
     /// # Syntax
+    /// Single terminal:
     /// ```hardware
     /// add pour(Polysilicon) named Gate on z:6:
     ///     device: M1.gate
     ///     net: VIN
-    ///     boundary: [x: 400um, y: 400um] to [x: 600um, y: 1400um]
+    /// ```
+    ///
+    /// Multiple terminals (resistor pattern):
+    /// ```hardware
+    /// add pour(Polysilicon) named Resistor_Body on layer: polyres:
+    ///     device: R1.A, R1.B
+    ///     net: nc
     /// ```
     ///
     /// # Returns
-    /// DeviceBinding with device name and terminal name
+    /// DeviceBinding with device name and terminal names
     pub(in crate::parser) fn parse_device_binding(&mut self) -> Result<DeviceBinding, ParseError> {
         let start_pos = self.current_span().start;
 
-        // Parse device name (e.g., "M1")
+        // Parse first device.terminal
         let device_name = self.expect_identifier_string()?;
-
-        // Expect dot separator
         self.expect(&Token::Dot)?;
+        let first_terminal = self.expect_identifier_string()?;
 
-        // Parse terminal name (e.g., "gate", "source", "drain", "bulk")
-        let terminal = self.expect_identifier_string()?;
+        let mut terminals = vec![first_terminal.into()];
+
+        // Check for additional terminals: device: R1.A, R1.B
+        while self.check(&Token::Comma) {
+            self.advance(); // consume comma
+            self.skip_whitespace();
+
+            // Expect same device name
+            let additional_device = self.expect_identifier_string()?;
+            if additional_device != device_name {
+                return Err(self.error(&format!(
+                    "Multi-terminal binding must use same device name. Expected '{}', found '{}'",
+                    device_name, additional_device
+                )));
+            }
+
+            self.expect(&Token::Dot)?;
+            let additional_terminal = self.expect_identifier_string()?;
+            terminals.push(additional_terminal.into());
+        }
 
         let end_pos = self.previous_span().end;
 
+        // v0.2.2: Infer priority from terminal count
+        let priority = crate::ast::BindingPriority::infer_from_terminals(&terminals);
+
         Ok(DeviceBinding {
             device_name: device_name.into(),
-            terminal: terminal.into(),
+            terminals,
+            priority,
             span: Span::new(start_pos, end_pos),
         })
     }
@@ -225,5 +255,62 @@ impl crate::parser::Parser {
         self.expect(&Token::Dedent)?;
 
         Ok(net_declarations)
+    }
+
+    /// Parse device_nets block for explicit virtual terminal bindings (v0.2.1)
+    ///
+    /// # Syntax
+    /// ```hardware
+    /// device_nets R1:
+    ///     BULK: GND
+    ///     SUBSTRATE: VSS
+    /// device_nets M1:
+    ///     bulk: AVSS
+    /// ```
+    ///
+    /// # Returns
+    /// Map of device_name -> (terminal_name -> net_name)
+    pub(in crate::parser) fn parse_device_nets_block(
+        &mut self,
+    ) -> Result<rustc_hash::FxHashMap<CompactString, rustc_hash::FxHashMap<CompactString, CompactString>>, ParseError> {
+        use rustc_hash::FxHashMap;
+        
+        let mut device_nets: FxHashMap<CompactString, FxHashMap<CompactString, CompactString>> = FxHashMap::default();
+
+        // Expect 'device_nets' identifier
+        self.expect_identifier_string()?;
+        
+        // Parse device name
+        let device_name = self.expect_identifier_string()?;
+        
+        self.expect(&Token::Colon)?;
+        self.expect(&Token::Newline)?;
+        self.expect(&Token::Indent)?;
+
+        let mut terminal_nets: FxHashMap<CompactString, CompactString> = FxHashMap::default();
+
+        while !self.is_at_end() && !self.check(&Token::Dedent) {
+            if self.check(&Token::Newline) {
+                self.advance();
+                continue;
+            }
+
+            // Parse terminal name
+            let terminal_name = self.expect_identifier_string()?;
+            self.expect(&Token::Colon)?;
+            
+            // Parse net name
+            let net_name = self.expect_identifier_string()?;
+            
+            terminal_nets.insert(terminal_name.into(), net_name.into());
+
+            self.skip_whitespace();
+        }
+
+        self.expect(&Token::Dedent)?;
+        
+        device_nets.insert(device_name.into(), terminal_nets);
+
+        Ok(device_nets)
     }
 }

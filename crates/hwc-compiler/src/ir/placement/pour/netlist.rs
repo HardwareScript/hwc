@@ -16,16 +16,22 @@ pub fn resolve_pour_net(space: &HardwareSpace, pour: &PourPlacement) -> Option<C
             let comp_id = netlist.get_component_by_name(binding.device_name.as_str())?;
             let pins = netlist.get_component_pins(comp_id);
 
-            pins.iter().find_map(|&pin_id| {
-                let pin_data = netlist.get_pin(pin_id)?;
-                if pin_data.name == binding.terminal {
-                    let net_id = pin_data.connected_net?;
-                    let net_data = netlist.get_net(net_id)?;
-                    Some(net_data.name.clone())
-                } else {
-                    None
+            // v0.2.2: Check all terminals in the binding
+            for terminal in &binding.terminals {
+                if let Some(net_name) = pins.iter().find_map(|&pin_id| {
+                    let pin_data = netlist.get_pin(pin_id)?;
+                    if pin_data.name == *terminal {
+                        let net_id = pin_data.connected_net?;
+                        let net_data = netlist.get_net(net_id)?;
+                        Some(net_data.name.clone())
+                    } else {
+                        None
+                    }
+                }) {
+                    return Some(net_name);
                 }
-            })
+            }
+            None
         })();
 
         if let Some(net_name) = resolved_opt {
@@ -49,7 +55,8 @@ pub fn register_pour_netlist(
 ) -> u32 {
     let device_binding = pour.device.as_ref().map(|binding| DeviceBinding {
         device_name: binding.device_name.clone(),
-        terminal: binding.terminal.clone(),
+        terminals: binding.terminals.clone(), // v0.2.2: Clone all terminals
+        priority: binding.priority.into(), // v0.2.2: Convert parser priority to engine priority
     });
 
     space.pours.push(PourMetadata {
@@ -104,16 +111,19 @@ pub fn register_pour_netlist(
         if let Some(binding) = &pour.device {
             if let Some(target_comp_id) = space.netlist.get_component_by_name(&binding.device_name)
             {
-                if let Some(target_pin_id) = space
-                    .netlist
-                    .get_pin_by_name(target_comp_id, &binding.terminal)
-                {
-                    space.netlist.connect_pin(target_pin_id, net_id_handle);
-                    space.entity_graph.set_pin_net(
-                        &binding.device_name,
-                        &binding.terminal,
-                        net_name.as_str(),
-                    );
+                // v0.2.2: Connect all terminals in the binding
+                for terminal in &binding.terminals {
+                    if let Some(target_pin_id) = space
+                        .netlist
+                        .get_pin_by_name(target_comp_id, terminal)
+                    {
+                        space.netlist.connect_pin(target_pin_id, net_id_handle);
+                        space.entity_graph.set_pin_net(
+                            &binding.device_name,
+                            terminal,
+                            net_name.as_str(),
+                        );
+                    }
                 }
             }
         }

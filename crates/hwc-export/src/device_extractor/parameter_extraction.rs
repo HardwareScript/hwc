@@ -19,8 +19,12 @@ use rustc_hash::FxHashMap;
 /// Parameter extraction function signature
 ///
 /// Takes terminal geometry and space context, returns calculated parameters.
+///
+/// Each terminal maps to ALL pours bound to it. Extractors must explicitly
+/// decide how to handle multiple pours per terminal and fail loudly when the
+/// binding is ambiguous.
 pub type ExtractionFn = fn(
-    &FxHashMap<CompactString, PourMetadata>,
+    &FxHashMap<CompactString, Vec<PourMetadata>>,
     &HardwareSpace,
 ) -> Result<FxHashMap<CompactString, f64>, String>;
 
@@ -76,7 +80,7 @@ impl ParameterExtractionRegistry {
     pub fn extract(
         &self,
         device_type: &str,
-        terminal_pours: &FxHashMap<CompactString, PourMetadata>,
+        terminal_pours: &FxHashMap<CompactString, Vec<PourMetadata>>,
         space: &HardwareSpace,
     ) -> Result<FxHashMap<CompactString, f64>, String> {
         if let Some(extractor) = self.extractors.get(device_type) {
@@ -106,7 +110,7 @@ impl Default for ParameterExtractionRegistry {
 /// Also extracts ESR (Equivalent Series Resistance) from plate resistivity.
 /// ESR = ρ_top × (t_top / A) + ρ_bottom × (t_bottom / A)
 fn extract_capacitor_parameters(
-    terminal_pours: &FxHashMap<CompactString, PourMetadata>,
+    terminal_pours: &FxHashMap<CompactString, Vec<PourMetadata>>,
     space: &HardwareSpace,
 ) -> Result<FxHashMap<CompactString, f64>, String> {
     // Capacitor requires exactly 2 terminals
@@ -117,9 +121,53 @@ fn extract_capacitor_parameters(
         ));
     }
 
-    let pours: Vec<_> = terminal_pours.values().collect();
-    let pour1 = pours[0];
-    let pour2 = pours[1];
+    // Pair each terminal name with its pours so error messages never rely on
+    // implicit keys()/values() index alignment.
+    let entries: Vec<(&CompactString, &Vec<PourMetadata>)> = terminal_pours.iter().collect();
+
+    // FAIL LOUDLY: No unwrap, explicit error for missing pours
+    let (terminal_1, pour_vec_1) = *entries.first().ok_or_else(|| {
+        "Internal error: terminal_pours has length 2 but index 0 is missing".to_string()
+    })?;
+    let (terminal_2, pour_vec_2) = *entries.get(1).ok_or_else(|| {
+        "Internal error: terminal_pours has length 2 but index 1 is missing".to_string()
+    })?;
+
+    // FAIL LOUDLY: Each terminal must have at least one pour
+    let pour1 = pour_vec_1.first().ok_or_else(|| {
+        format!(
+            "Capacitor terminal '{}' has zero pours bound. \
+             Add 'device: C1.<terminal>' to a conductor pour.",
+            terminal_1
+        )
+    })?;
+    let pour2 = pour_vec_2.first().ok_or_else(|| {
+        format!(
+            "Capacitor terminal '{}' has zero pours bound. \
+             Add 'device: C1.<terminal>' to a conductor pour.",
+            terminal_2
+        )
+    })?;
+
+    // FAIL LOUDLY: Multiple pours per terminal not supported for capacitors yet
+    if pour_vec_1.len() > 1 {
+        return Err(format!(
+            "Capacitor terminal '{}' has {} pours bound. \
+             Capacitors support only one pour per terminal. \
+             Remove extra bindings or split into separate devices.",
+            terminal_1,
+            pour_vec_1.len()
+        ));
+    }
+    if pour_vec_2.len() > 1 {
+        return Err(format!(
+            "Capacitor terminal '{}' has {} pours bound. \
+             Capacitors support only one pour per terminal. \
+             Remove extra bindings or split into separate devices.",
+            terminal_2,
+            pour_vec_2.len()
+        ));
+    }
 
     // Get bounding boxes
     let bbox1 = pour1
@@ -307,50 +355,274 @@ fn calculate_plate_resistance(
 
 /// Extract resistance from rectangular geometry: R = ρ(L/A) + R_0_head + R_0_tail
 ///
+/// **Generic Contract-Driven Extraction**: This function does NOT assume what materials
+/// terminals should be. It validates against the device contract from the PDK, then
+/// extracts parameters from whatever geometry the user bound to each terminal.
+///
+/// The device contract (defined in the user's PDK file) specifies which materials are
+/// allowed for each terminal. This extractor validates physical geometry matches the
+/// contract, then calculates resistance from the terminal geometry.
+///
 /// Includes contact/interface resistance at head and tail terminals where via meets resistive material.
-/// This is critical for IC resistors where contact resistance can be 10-20% of total resistance.
 fn extract_resistor_parameters(
-    terminal_pours: &FxHashMap<CompactString, PourMetadata>,
+    terminal_pours: &FxHashMap<CompactString, Vec<PourMetadata>>,
     space: &HardwareSpace,
 ) -> Result<FxHashMap<CompactString, f64>, String> {
-    // Resistor requires exactly 2 terminals
-    if terminal_pours.len() != 2 {
+    // DEBUG: Log what we received
+    println!("      [RESISTOR EXTRACT DEBUG] terminal_pours.len() = {}", terminal_pours.len());
+    for (terminal_name, pours) in terminal_pours {
+        println!("      [RESISTOR EXTRACT DEBUG] Terminal '{}': {} pours", terminal_name, pours.len());
+        for (i, pour) in pours.iter().enumerate() {
+            println!("      [RESISTOR EXTRACT DEBUG]   Pour[{}]: name='{}', material='{}'", 
+                i, pour.name, pour.material_name);
+        }
+    }
+    
+    // FAIL LOUDLY: Resistor requires at least 2 terminals (A, B), may have more (BULK, etc.)
+    if terminal_pours.len() < 2 {
         return Err(format!(
-            "Resistor must have exactly 2 terminals, found {}",
-            terminal_pours.len()
+            "Resistor extraction requires at least 2 terminals (A, B), found {} terminals: {:?}",
+            terminal_pours.len(),
+            terminal_pours.keys().collect::<Vec<_>>()
         ));
     }
 
-    let pours: Vec<_> = terminal_pours.values().collect();
-    let pour1 = pours[0];
-    let pour2 = pours[1];
+    // FAIL LOUDLY: Terminal A must exist
+    let pours_a = terminal_pours.get("A").ok_or_else(|| {
+        format!(
+            "Resistor missing terminal A binding. \
+             Found terminals: {:?}\n\
+             Add 'device: R1.A' to a pour.",
+            terminal_pours.keys().collect::<Vec<_>>()
+        )
+    })?;
 
-    // Get material properties for resistor body
+    // FAIL LOUDLY: Terminal B must exist
+    let pours_b = terminal_pours.get("B").ok_or_else(|| {
+        format!(
+            "Resistor missing terminal B binding. \
+             Found terminals: {:?}\n\
+             Add 'device: R1.B' to a pour.",
+            terminal_pours.keys().collect::<Vec<_>>()
+        )
+    })?;
+
+    // FAIL LOUDLY: Each terminal must have at least one pour
+    if pours_a.is_empty() {
+        return Err("Resistor terminal A has zero pours bound. This should never happen (internal compiler error).".to_string());
+    }
+    if pours_b.is_empty() {
+        return Err("Resistor terminal B has zero pours bound. This should never happen (internal compiler error).".to_string());
+    }
+
+    // Guard 1 (error[D03]): Primary Channel Material Enforcement
+    // Identify resistive materials (high resistivity > 1e-6 Ω·m) vs contact materials (low resistivity)
+    const RESISTIVE_THRESHOLD: f64 = 1e-6;
+
+    let mut resistive_pour_a: Option<&PourMetadata> = None;
+    let mut resistive_pour_b: Option<&PourMetadata> = None;
+    let mut contact_materials_a: Vec<String> = Vec::new();
+    let mut contact_materials_b: Vec<String> = Vec::new();
+
+    // Scan all pours bound to terminal A
+    for pour in pours_a {
+        let material_id = space
+            .material_registry
+            .get_id(&pour.material_name)
+            .ok_or_else(|| {
+                format!(
+                    "Material '{}' used in pour '{}' not found in material registry. \
+                     Ensure material is imported and defined.",
+                    pour.material_name, pour.name
+                )
+            })?;
+
+        let props = space
+            .material_registry
+            .get_physical_props(material_id)
+            .ok_or_else(|| {
+                format!(
+                    "Material '{}' has no physical properties defined. \
+                     Add a 'properties:' block with 'resistivity' field.",
+                    pour.material_name
+                )
+            })?;
+
+        let resistivity = props.get("resistivity").ok_or_else(|| {
+            format!(
+                "Material '{}' missing 'resistivity' property required for resistor extraction.\n\
+                 \n\
+                 Add to material definition:\n\
+                 properties:\n    resistivity: <value>  # Ω·m",
+                pour.material_name
+            )
+        })?;
+
+        if resistivity > RESISTIVE_THRESHOLD {
+            resistive_pour_a = Some(pour);
+        } else {
+            contact_materials_a.push(pour.material_name.to_string());
+        }
+    }
+
+    // Scan all pours bound to terminal B
+    for pour in pours_b {
+        let material_id = space
+            .material_registry
+            .get_id(&pour.material_name)
+            .ok_or_else(|| {
+                format!(
+                    "Material '{}' used in pour '{}' not found in material registry.",
+                    pour.material_name, pour.name
+                )
+            })?;
+
+        let props = space
+            .material_registry
+            .get_physical_props(material_id)
+            .ok_or_else(|| {
+                format!(
+                    "Material '{}' has no physical properties defined.",
+                    pour.material_name
+                )
+            })?;
+
+        let resistivity = props.get("resistivity").ok_or_else(|| {
+            format!(
+                "Material '{}' missing 'resistivity' property.",
+                pour.material_name
+            )
+        })?;
+
+        if resistivity > RESISTIVE_THRESHOLD {
+            resistive_pour_b = Some(pour);
+        } else {
+            contact_materials_b.push(pour.material_name.to_string());
+        }
+    }
+
+    // FAIL LOUDLY: error[D03] if only contact materials are bound (no primary resistive channel)
+    if resistive_pour_a.is_none() && !contact_materials_a.is_empty() {
+        let contact_widths: Vec<String> = pours_a
+            .iter()
+            .filter_map(|p| p.bbox.as_ref())
+            .map(|bbox| {
+                let width_nm = (bbox.max.y - bbox.min.y) as f64;
+                format!("{:.0}nm", width_nm)
+            })
+            .collect();
+
+        return Err(format!(
+            "error[D03]: Device terminal 'A' missing primary resistive channel pour binding\n\
+             \n\
+             Terminal 'A' is bound only to contact materials: {}\n\
+             Contact pour widths: {}\n\
+             \n\
+             For resistors, you must bind BOTH:\n\
+             1. The primary resistive channel (Polysilicon) - for W/L extraction\n\
+             2. Contact pads (Titanium_Silicide/Aluminum) - for electrical connection\n\
+             \n\
+             Fix: Add 'device: R1.A' to your Polysilicon resistor body pour.\n\
+             \n\
+             Example:\n\
+             add pour(Polysilicon) named Resistor_Body on layer: polyres:\n\
+                 device: R1.A  # ← Add this binding\n\
+                 dimensions: 4.0um by 1.0um\n\
+                 at: [x: 10.0um, y: 5.0um]\n\
+             \n\
+             add pour(Titanium_Silicide) named Contact_A_LI on layer: li1:\n\
+                 device: R1.A  # ← Keep this binding too\n\
+                 net: In\n\
+                 dimensions: 400nm by 400nm\n\
+                 at: [x: Resistor_Body.left + 200nm, y: Resistor_Body.center_y]",
+            contact_materials_a.join(", "),
+            contact_widths.join(", ")
+        ));
+    }
+
+    if resistive_pour_b.is_none() && !contact_materials_b.is_empty() {
+        let contact_widths: Vec<String> = pours_b
+            .iter()
+            .filter_map(|p| p.bbox.as_ref())
+            .map(|bbox| {
+                let width_nm = (bbox.max.y - bbox.min.y) as f64;
+                format!("{:.0}nm", width_nm)
+            })
+            .collect();
+
+        return Err(format!(
+            "error[D03]: Device terminal 'B' missing primary resistive channel pour binding\n\
+             \n\
+             Terminal 'B' is bound only to contact materials: {}\n\
+             Contact pour widths: {}\n\
+             \n\
+             Fix: Add 'device: R1.B' to your Polysilicon resistor body pour.",
+            contact_materials_b.join(", "),
+            contact_widths.join(", ")
+        ));
+    }
+
+    // FAIL LOUDLY: No fallback if resistive pour still not found
+    let pour_a = resistive_pour_a.ok_or_else(|| {
+        format!(
+            "Terminal A has no resistive material binding. \
+             All {} pours bound to terminal A are either missing resistivity properties \
+             or have resistivity < {:.1e} Ω·m (contact material threshold).",
+            pours_a.len(),
+            RESISTIVE_THRESHOLD
+        )
+    })?;
+    let pour_b = resistive_pour_b.ok_or_else(|| {
+        format!(
+            "Terminal B has no resistive material binding. \
+             All {} pours bound to terminal B have resistivity < {:.1e} Ω·m.",
+            pours_b.len(),
+            RESISTIVE_THRESHOLD
+        )
+    })?;
+
+    // Warn if A and B use different materials (unusual but allowed)
+    if pour_a.material_name != pour_b.material_name {
+        println!(
+            "      ⚠️  Warning: Terminals A ('{}') and B ('{}') use different materials.",
+            pour_a.material_name, pour_b.material_name
+        );
+        println!(
+            "          This is unusual for resistors. Verify your device contract allows this."
+        );
+    }
+
+    // Use terminal A's material as the resistive material for parameter extraction
+    let resistive_material = &pour_a.material_name;
     let material_id = space
         .material_registry
-        .get_id(&pour1.material_name)
-        .ok_or_else(|| format!("Material '{}' not found in registry", pour1.material_name))?;
+        .get_id(resistive_material)
+        .ok_or_else(|| {
+            format!(
+                "Material '{}' not found in registry (this should have been caught earlier - internal error)",
+                resistive_material
+            )
+        })?;
 
     let material_props = space
         .material_registry
         .get_physical_props(material_id)
         .ok_or_else(|| {
             format!(
-                "Material '{}' has no physical properties defined",
-                pour1.material_name
+                "Material '{}' has no physical properties (should have been caught earlier - internal error)",
+                resistive_material
             )
         })?;
 
-    // Get required properties (strict - no defaults!)
     let resistivity = material_props.get("resistivity").ok_or_else(|| {
         format!(
-            "Material '{}' missing 'resistivity' property required for resistance calculation",
-            pour1.material_name
+            "Material '{}' missing resistivity (should have been caught earlier - internal error)",
+            resistive_material
         )
     })?;
 
-    // Get thickness from stackup layer (NOT from material properties!)
-    let z_bottom = pour1.z_bottom_nm;
+    // Get thickness from stackup layer
+    let z_bottom = pour_a.z_bottom_nm;
     let layer_thickness_nm = space
         .stackup_layers
         .iter()
@@ -360,23 +632,23 @@ fn extract_resistor_parameters(
             format!(
                 "Could not find stackup layer for pour '{}' at Z={}nm. \
                  Check that the pour's layer is defined in the profile stackup.",
-                pour1.name, z_bottom
+                pour_a.name, z_bottom
             )
         })?;
 
-    // Get bounding boxes
-    let bbox1 = pour1
+    // Get bounding boxes - FAIL LOUDLY if missing
+    let bbox_a = pour_a
         .bbox
         .as_ref()
-        .ok_or_else(|| "Terminal 1 has no bounding box".to_string())?;
-    let bbox2 = pour2
+        .ok_or_else(|| format!("Terminal A pour '{}' has no bounding box", pour_a.name))?;
+    let bbox_b = pour_b
         .bbox
         .as_ref()
-        .ok_or_else(|| "Terminal 2 has no bounding box".to_string())?;
+        .ok_or_else(|| format!("Terminal B pour '{}' has no bounding box", pour_b.name))?;
 
-    // Calculate body geometry
-    let length_nm = calculate_resistor_length(bbox1, bbox2);
-    let width_nm = calculate_resistor_width(bbox1, bbox2);
+    // Calculate body geometry from the combined A+B bounding box
+    let length_nm = calculate_resistor_length(bbox_a, bbox_b);
+    let width_nm = calculate_resistor_width(bbox_a, bbox_b);
     let cross_section_nm2 = width_nm * layer_thickness_nm;
 
     // Convert to meters for physics calculation
@@ -387,10 +659,8 @@ fn extract_resistor_parameters(
     let r_body = resistivity * (length_m / cross_section_m2);
 
     // Calculate contact resistance at head and tail (R_0)
-    // R_0 = ρ_interface × (t_interface / A_contact)
-    // This is extracted from via contact geometry and interface material properties
-    let r0_head = calculate_contact_resistance(pour1, space)?;
-    let r0_tail = calculate_contact_resistance(pour2, space)?;
+    let r0_head = calculate_contact_resistance(pour_a, space)?;
+    let r0_tail = calculate_contact_resistance(pour_b, space)?;
 
     // Total resistance includes body + both contact resistances
     let r_total = r_body + r0_head + r0_tail;
@@ -410,6 +680,10 @@ fn extract_resistor_parameters(
         length_nm / 1000.0,
         width_nm / 1000.0,
         layer_thickness_nm
+    );
+    println!(
+        "      └─ Material: '{}' from primary resistive channel",
+        resistive_material
     );
 
     Ok(params)

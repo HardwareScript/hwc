@@ -19,15 +19,28 @@ export bridge Polysilicon to Aluminum:
     thickness: 5nm
     fill: Tungsten
 
-# Single unified profile with SKY130 layer thicknesses
+export bridge Polysilicon to Titanium_Silicide:
+    interface: Titanium_Silicide
+    thickness: 5nm
+    fill: Tungsten
+
+export bridge Titanium_Silicide to Aluminum:
+    interface: Titanium_Silicide
+    thickness: 5nm
+    fill: Tungsten
+
+# SKY130-compliant layer stackup with local interconnect (li1)
 export profile Resistor_3D:
     technology: "ASIC"
     substrate_net: GND
     
     stackup:
-        polyres:    [material: Polysilicon,      thickness: 200nm, routable: true]
-        d1:         [material: Silicon_Dioxide,  thickness: 300nm, routable: false]
-        metal1:     [material: Aluminum,         thickness: 840nm, routable: true]
+        polyres:    [material: Polysilicon,      thickness: 180nm, routable: true]
+        rpm:        [material: Silicon_Dioxide,  thickness: 10nm,  routable: false] # Resistor Poly Mask
+        ild0:       [material: Silicon_Dioxide,  thickness: 200nm, routable: false]
+        li1:        [material: Titanium_Silicide, thickness: 100nm, routable: true]
+        ild1:       [material: Silicon_Dioxide,  thickness: 150nm, routable: false]
+        metal1:     [material: Aluminum,         thickness: 360nm, routable: true]
 
     manufacturing:
         track_pitch: 10nm
@@ -35,7 +48,7 @@ export profile Resistor_3D:
         circle_segments: 64
 
     via:
-        min_diameter: 300nm
+        min_diameter: 170nm
         min_annular_ring: 50nm
         min_spacing: 400nm
         shape: SquareContact
@@ -43,6 +56,7 @@ export profile Resistor_3D:
         material_contact_depths:
             Aluminum: 30%
             Polysilicon: 30%
+            Titanium_Silicide: 30%
 
     trace:
         min_width: 300nm
@@ -94,9 +108,9 @@ export subcircuit sky130_fd_pr__res_high_po:
 export device Resistor:
     terminals: [A, B, BULK]
     materials:
-        A: Aluminum
-        B: Aluminum
-        BULK: Polysilicon
+        A: [Polysilicon, Titanium_Silicide, Aluminum]  # Accept resistor body OR contact materials
+        B: [Polysilicon, Titanium_Silicide, Aluminum]  # Accept resistor body OR contact materials
+        BULK: Air  # Virtual terminal - no geometry required
     spice:
         prefix: X
         subcircuit: sky130_fd_pr__res_high_po

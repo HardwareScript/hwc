@@ -41,11 +41,49 @@ pub enum PourBoundary {
     },
 }
 
+/// Binding priority for device terminal assignments (v0.2.2)
+/// 
+/// Determines the processing order when multiple pours bind to the same device terminal.
+/// Lower priority pours are processed first, higher priority pours override.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum BindingPriority {
+    /// Channel body pours (e.g., resistor body, transistor channel) - processed first
+    /// Typically multi-terminal bindings that span between contacts
+    Channel = 0,
+    
+    /// Contact head pours (e.g., terminal contacts, gate contacts) - processed last, override channel
+    /// Typically single-terminal bindings that provide precise electrical connection points
+    Contact = 100,
+}
+
+impl BindingPriority {
+    /// Infer priority from terminal count - multi-terminal = Channel, single-terminal = Contact
+    pub fn infer_from_terminals(terminals: &[CompactString]) -> Self {
+        match terminals.len() {
+            0 | 1 => Self::Contact,  // Single or no terminal = contact
+            _ => Self::Channel,       // Multi-terminal = channel body
+        }
+    }
+}
+
+impl Default for BindingPriority {
+    fn default() -> Self {
+        Self::Contact  // Default to contact (safer - won't be overridden)
+    }
+}
+
 /// Device binding for explicit intent-based extraction (Phase 4: Silent Atom)
+/// 
+/// Supports binding multiple terminals to a single pour:
+/// - Single terminal: `device: M1.gate`
+/// - Multiple terminals: `device: R1.A, R1.B` (both terminals on same pour)
+/// 
+/// v0.2.2: Added priority field for deterministic terminal assignment
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DeviceBinding {
     pub device_name: CompactString,
-    pub terminal: CompactString,
+    pub terminals: Vec<CompactString>, // Changed from single terminal to Vec<terminals>
+    pub priority: BindingPriority,     // v0.2.2: Explicit priority for processing order
     pub span: Span,
 }
 

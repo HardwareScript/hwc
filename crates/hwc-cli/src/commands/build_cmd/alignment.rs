@@ -1,4 +1,4 @@
-use crate::commands::build_cmd::BuildConfig;
+use crate::commands::build_cmd::{BuildConfig, BuildError};
 use hwc_compiler::{alignment::PhysicalNetlist, SymbolTable};
 use hwc_engine::HardwareSpace;
 use hwc_parser::Program;
@@ -70,15 +70,36 @@ pub fn validate_alignment(
         }
 
         // Extract physical netlist from geometry
-        // **v0.2.2: Use device_instances from compiler instead of re-extracting**
-        // The compiler already discovered devices during populate_device_instances(),
-        // so we just convert that to PhysicalNetlist format for alignment/export.
-        let extracted_netlist =
-            hwc_compiler::ir::device_registry::device_instances_to_physical_netlist(
-                space,
-                Some(space_def_actual),
-                Some(symbol_table),
-            );
+        // **v0.2.2+: Use NEW registry-based DeviceExtractor with error[D03] detection**
+        let module_def_id = ast.definitions.iter().find_map(|def| {
+            if let hwc_parser::Definition::Module(module_id) = def {
+                Some(*module_id)
+            } else {
+                None
+            }
+        });
+
+        // Resolve ModuleDefId to &ModuleDefinition through the arena
+        let module_def = module_def_id.map(|id| &ast.arena.module_defs[id]);
+
+        let mut device_extractor = hwc_export::DeviceExtractor::new(
+            space,
+            symbol_table,
+            &ast.arena,
+            Some(space_def_actual),
+        );
+
+        let extracted_netlist = device_extractor
+            .extract_devices_with_module(module_def)
+            .map_err(|errors| {
+                // Convert Vec<DeviceExtractionError> to BuildError
+                let error_messages: Vec<String> = errors.iter()
+                    .map(|e| format!("{}", e))
+                    .collect();
+                BuildError::DeviceExtractionFailed {
+                    message: format!("Device extraction failed:\n{}", error_messages.join("\n")),
+                }
+            })?;
 
         println!(
             "   ✅ Physical netlist extracted: {} devices",
@@ -86,13 +107,7 @@ pub fn validate_alignment(
         );
 
         // Extract module definition for alignment validation
-        let _module_def = ast.definitions.iter().find_map(|def| {
-            if let hwc_parser::Definition::Module(module) = def {
-                Some(module)
-            } else {
-                None
-            }
-        });
+        // (already extracted above for device extraction)
 
         // Run alignment validation
         // println!($3"[DEBUG] Running alignment validation...");

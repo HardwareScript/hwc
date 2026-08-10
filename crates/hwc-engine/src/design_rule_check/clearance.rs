@@ -106,13 +106,15 @@ pub fn validate_clearances(
             {
                 if entity_device.device_name == cand_device.device_name {
                     // Same device, different terminals - intentional interaction, not a short circuit
+                    // v0.2.2: Format terminals list for display
+                    let entity_terms = entity_device.terminals.join(",");
+                    let cand_terms = cand_device.terminals.join(",");
                     eprintln!("[DRC DEVICE EXEMPT] Skipping clearance check between {}.{} and {}.{} (same device)",
-                        entity_device.device_name, entity_device.terminal,
-                        cand_device.device_name, cand_device.terminal);
+                        entity_device.device_name, entity_terms,
+                        cand_device.device_name, cand_terms);
                     continue;
                 }
             }
-
             let (net_a, net_b) = if entity.net_id < cand.net_id {
                 (entity.net_id.raw(), cand.net_id.raw())
             } else {

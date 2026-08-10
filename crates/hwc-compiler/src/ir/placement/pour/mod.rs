@@ -306,7 +306,10 @@ pub fn place_pour(
     } else {
         // Use checked version to catch clearance violations early (v0.1.9)
         // v0.2.1: Pass device binding for same-device terminal exemption (capacitors, etc.)
-        let device_binding_ref = pour.device.as_ref().map(|b| (&b.device_name, &b.terminal));
+        // v0.2.2: For multi-terminal bindings, use first terminal for device binding reference
+        let device_binding_ref = pour.device.as_ref().and_then(|b| {
+            b.terminals.first().map(|first_term| (&b.device_name, first_term))
+        });
 
         if let Err(msg) = space
             .entity_graph

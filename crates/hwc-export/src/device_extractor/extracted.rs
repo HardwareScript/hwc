@@ -68,7 +68,7 @@ impl ExtractedDevices {
     pub fn from_pour_bindings(
         bindings: &FxHashMap<
             CompactString,
-            FxHashMap<CompactString, hwc_engine::space::PourMetadata>,
+            FxHashMap<CompactString, Vec<hwc_engine::space::PourMetadata>>,
         >,
         symbol_table: &hwc_compiler::SymbolTable,
     ) -> Self {
@@ -109,27 +109,53 @@ impl Default for ExtractedDevices {
 
 /// Find device type by matching terminal names against device definitions in symbol table
 ///
-/// This performs a precise match: the terminal names from pour bindings must exactly match
-/// the terminals defined in a device definition (order-independent).
+/// **v0.2.2: Partial Matching with Virtual Terminal Support**
+///
+/// This performs a **subset match**: the terminal names from pour bindings must be a subset
+/// of the terminals defined in a device definition. Missing terminals are allowed if they
+/// are virtual terminals (material: Air).
+///
+/// This allows devices with virtual terminals (like BULK, SUBSTRATE) to be discovered even
+/// when only physical terminals (A, B, GATE, etc.) have pour bindings.
 ///
 /// Returns the device type name if a match is found, None otherwise.
 fn find_device_type_by_terminals(
     terminals: &[CompactString],
     symbol_table: &hwc_compiler::SymbolTable,
 ) -> Option<CompactString> {
-    // Convert terminals to a sorted set for order-independent comparison
-    let mut terminal_set: Vec<&str> = terminals.iter().map(|s| s.as_str()).collect();
-    terminal_set.sort_unstable();
+    // Convert terminals to a set for fast lookup
+    let terminal_set: std::collections::HashSet<&str> = 
+        terminals.iter().map(|s| s.as_str()).collect();
 
     // Iterate through all device definitions in the symbol table
     for (device_name, device_def) in symbol_table.iter_all_devices() {
-        // Get terminals from device definition and sort them
-        let mut def_terminals: Vec<&str> =
-            device_def.terminals.iter().map(|t| t.as_str()).collect();
-        def_terminals.sort_unstable();
+        // Check if all bound terminals exist in the device definition
+        let all_bound_terminals_valid = terminal_set.iter().all(|t| {
+            device_def.terminals.iter().any(|def_t| def_t.as_str() == *t)
+        });
 
-        // If terminals match exactly, we found the device type
-        if terminal_set == def_terminals {
+        if !all_bound_terminals_valid {
+            // Some bound terminals don't exist in this device definition - skip
+            continue;
+        }
+
+        // Check if all missing terminals are virtual (material: Air)
+        let missing_terminals: Vec<&CompactString> = device_def
+            .terminals
+            .iter()
+            .filter(|t| !terminal_set.contains(t.as_str()))
+            .collect();
+
+        // All missing terminals must be virtual (allowed material: Air)
+        let all_missing_are_virtual = missing_terminals.iter().all(|terminal| {
+            if let Some(allowed_materials) = device_def.materials.get(*terminal) {
+                allowed_materials.iter().any(|mat| mat.as_str() == "Air" || mat.as_str() == "Vacuum")
+            } else {
+                false // No material constraint = physical terminal required
+            }
+        });
+
+        if all_missing_are_virtual {
             return Some(device_name.clone());
         }
     }

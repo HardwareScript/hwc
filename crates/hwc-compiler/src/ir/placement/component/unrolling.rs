@@ -490,7 +490,8 @@ pub fn unroll_internal_features(
                         unrolled_pour.device =
                             pour.device.as_ref().map(|d| hwc_parser::DeviceBinding {
                                 device_name: pd.name.clone().into(),
-                                terminal: d.terminal.clone(),
+                                terminals: d.terminals.clone(), // v0.2.2: Clone all terminals
+                                priority: d.priority, // v0.2.2: Already parser type, no conversion needed
                                 span: d.span,
                             });
 

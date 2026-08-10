@@ -249,10 +249,26 @@ pub fn build_physical_netlist_graph(
         // NOT to intermediate parasitic nodes (e.g., "nIn_dev").
         // This ensures clean SPICE output: RR1 In Out 1400.00
         if let Some(netlist) = physical_netlist {
+            eprintln!(
+                "[NETLIST PARASITIC DEBUG] Net '{}': Mapping device terminals to logical net",
+                net_name
+            );
             for device in &netlist.devices {
+                eprintln!(
+                    "[NETLIST PARASITIC DEBUG]   Device '{}': terminals = {:?}",
+                    device.name, device.terminals
+                );
                 for (terminal, terminal_net) in &device.terminals {
+                    eprintln!(
+                        "[NETLIST PARASITIC DEBUG]     Checking terminal '{}' -> '{}' (looking for net '{}')",
+                        terminal, terminal_net, net_name
+                    );
                     if terminal_net == net_name {
                         let key = (device.name.to_string(), terminal.to_string());
+                        eprintln!(
+                            "[NETLIST PARASITIC DEBUG]     ✓ MATCH! Adding device_nodes[{:?}] = '{}'",
+                            key, net_name
+                        );
                         // Use the logical net name, not the intermediate physical node
                         graph.device_nodes.insert(key, net_name.clone());
                     }

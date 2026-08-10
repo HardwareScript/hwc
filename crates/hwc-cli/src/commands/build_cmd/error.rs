@@ -21,6 +21,16 @@ pub enum BuildError {
         violation_count: usize,
         violations: String,
     },
+
+    /// Device extraction failed - missing geometry, material mismatch, or invalid binding
+    #[error("Device extraction failed")]
+    #[diagnostic(
+        code(hwc::build::device_extraction_failed),
+        help("{message}")
+    )]
+    DeviceExtractionFailed {
+        message: String,
+    },
 }
 
 impl BuildError {

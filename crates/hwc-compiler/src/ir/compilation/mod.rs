@@ -335,7 +335,7 @@ pub fn compile_single_space(
     // Extract device instances from pour bindings and populate the device registry.
     // This is the single source of truth for all device instances.
     // Export formats (SPICE, BOM, etc.) read from this registry - no re-inference needed.
-    crate::ir::device_registry::populate_device_instances(&mut space, symbol_table)?;
+    crate::ir::device_registry::populate_device_instances(&mut space, symbol_table, Some(space_def))?;
 
     Ok((space, query_store, routes_loaded_from_lock))
 }

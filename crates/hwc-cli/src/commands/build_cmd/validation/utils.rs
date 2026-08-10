@@ -56,7 +56,7 @@ pub fn convert_metadata_to_physics(
             let device_binding = layer.device_binding.as_ref().map(|(dev_name, terminal)| {
                 hwc_physics::connectivity::DeviceBinding {
                     device_name: dev_name.as_str().into(),
-                    terminal: terminal.as_str().into(),
+                    terminals: vec![terminal.as_str().into()],
                 }
             });
 
@@ -81,7 +81,7 @@ pub fn convert_metadata_to_physics(
                 let device_binding = layer.device_binding.as_ref().map(|(dev_name, terminal)| {
                     hwc_physics::connectivity::DeviceBinding {
                         device_name: dev_name.as_str().into(),
-                        terminal: terminal.as_str().into(),
+                        terminals: vec![terminal.as_str().into()],
                     }
                 });
 
