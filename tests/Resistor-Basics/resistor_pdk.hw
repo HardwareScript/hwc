@@ -1,7 +1,7 @@
 # resistor_pdk.hw - SkyWater SKY130 Resistor PDK
 # Device: sky130_fd_pr__res_high_po (P+ Poly Precision Resistor, 350 Ω/□)
 import * from @std/primitives/units
-import Polysilicon, Aluminum, Tungsten, Titanium_Silicide, Silicon_Dioxide, Air from "./materials"
+import Polysilicon, Aluminum, Tungsten, Titanium_Silicide, Silicon_Dioxide, Air, Resistor_Poly_Mask from "./materials"
 
 export Polysilicon
 export Aluminum
@@ -9,6 +9,7 @@ export Tungsten
 export Titanium_Silicide
 export Silicon_Dioxide
 export Air
+export Resistor_Poly_Mask
 
 export shape SquareContact(width: Measurement):
     geometry:
@@ -35,12 +36,12 @@ export profile Resistor_3D:
     substrate_net: GND
     
     stackup:
-        polyres:    [material: Polysilicon,      thickness: 180nm, routable: true]
-        rpm:        [material: Silicon_Dioxide,  thickness: 10nm,  routable: false] # Resistor Poly Mask
-        ild0:       [material: Silicon_Dioxide,  thickness: 200nm, routable: false]
-        li1:        [material: Titanium_Silicide, thickness: 100nm, routable: true]
-        ild1:       [material: Silicon_Dioxide,  thickness: 150nm, routable: false]
-        metal1:     [material: Aluminum,         thickness: 360nm, routable: true]
+        polyres:    [material: Polysilicon,        thickness: 180nm, routable: true]
+        rpm:        [material: Resistor_Poly_Mask, thickness: 0nm,   routable: false] # Zero-thickness mask layer
+        ild0:       [material: Silicon_Dioxide,    thickness: 200nm, routable: false]
+        li1:        [material: Titanium_Silicide,  thickness: 100nm, routable: true]
+        ild1:       [material: Silicon_Dioxide,    thickness: 150nm, routable: false]
+        metal1:     [material: Aluminum,           thickness: 360nm, routable: true]
 
     manufacturing:
         track_pitch: 10nm
@@ -95,15 +96,26 @@ export profile Resistor_3D:
 
 # SKY130 P+ Poly Precision Resistor Subcircuit
 # Sheet resistance: 350 Ω/□, End contacts: 362 Ω each, Parasitic cap: 2 fF/μm²
+#
+# v0.2.1: TRUE FOUNDRY SPICE INTEGRATION (Architecture Proposal Section 4)
+# Uses `spice_include` to defer physics to the foundry model instead of
+# inline element synthesis. This is the CORRECT approach for production ASICs.
 export subcircuit sky130_fd_pr__res_high_po:
     terminals: [PLUS, MINUS, BULK]
     parameters: [W = 1.0um, L = 1.0um]
-    elements:
-        R_head: Resistor(nodes: [PLUS, node_1], value: 362.0ohm)
-        R_tail: Resistor(nodes: [node_2, MINUS], value: 362.0ohm)
-        R_body: Resistor(nodes: [node_1, node_2], value: 350.0ohm * (L / W))
-        C_sub1: Capacitor(nodes: [PLUS, BULK], value: 2.0fF * W * L)
-        C_sub2: Capacitor(nodes: [MINUS, BULK], value: 2.0fF * W * L)
+    spice_include: "sky130_fd_pr/models/sky130_fd_pr__res_high_po.model.spice"
+
+# LEGACY: Inline Elements Mode (for reference only)
+# Uncomment to use compiler-synthesized subcircuit instead of foundry model
+# export subcircuit sky130_fd_pr__res_high_po:
+#     terminals: [PLUS, MINUS, BULK]
+#     parameters: [W = 1.0um, L = 1.0um]
+#     elements:
+#         R_head: Resistor(nodes: [PLUS, node_1], value: 362.0ohm)
+#         R_tail: Resistor(nodes: [node_2, MINUS], value: 362.0ohm)
+#         R_body: Resistor(nodes: [node_1, node_2], value: 350.0ohm * (L / W))
+#         C_sub1: Capacitor(nodes: [PLUS, BULK], value: 2.0fF * W * L)
+#         C_sub2: Capacitor(nodes: [MINUS, BULK], value: 2.0fF * W * L)
 
 export device Resistor:
     terminals: [A, B, BULK]

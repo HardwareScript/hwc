@@ -205,14 +205,17 @@ pub fn validate_and_register(
                                     pd.name
                                 )));
                             } else {
-                                let is_substrate_insulator = space
-                                    .material_registry
-                                    .is_insulator(space.substrate_material_id)
-                                    || space
+                                let is_substrate_dielectric = matches!(
+                                    space
                                         .material_registry
-                                        .is_semiconductor(space.substrate_material_id);
+                                        .get_category(space.substrate_material_id),
+                                    Some(
+                                        hwc_parser::MaterialCategory::Insulator
+                                            | hwc_parser::MaterialCategory::Semiconductor
+                                    )
+                                );
 
-                                if is_substrate_insulator {
+                                if is_substrate_dielectric {
                                     println!(
                                         "   ├─ Resolved top/bottom boundary handshake for pad '{}'",
                                         pd.name

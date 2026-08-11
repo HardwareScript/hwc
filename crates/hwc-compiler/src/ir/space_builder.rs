@@ -65,21 +65,14 @@ pub fn create_hardware_space(
     let mut material_registry = MaterialRegistry::new();
 
     // Populate registry from symbol table material definitions.
-    // This ensures every declared/imported material has correct conductivity
+    // This ensures every declared/imported material has its full category
     // BEFORE any pours or contacts call get_or_register().
+    //
+    // The full MaterialCategory is passed through verbatim — no lossy
+    // translation to a simplified conductivity model. Semantics (Mask,
+    // OhmicContact, BarrierLayer, ...) are preserved for call sites to handle.
     for (name, mat_def) in symbol_table.materials() {
-        let conductivity = match mat_def.category {
-            hwc_parser::MaterialCategory::Conductor
-            | hwc_parser::MaterialCategory::OhmicContact
-            | hwc_parser::MaterialCategory::DieInterconnect
-            | hwc_parser::MaterialCategory::PcbSolder
-            | hwc_parser::MaterialCategory::BarrierLayer
-            | hwc_parser::MaterialCategory::Adhesive => hwc_engine::MaterialConductivity::Conductor,
-            hwc_parser::MaterialCategory::Semiconductor => {
-                hwc_engine::MaterialConductivity::Semiconductor
-            }
-            hwc_parser::MaterialCategory::Insulator => hwc_engine::MaterialConductivity::Insulator,
-        };
+        let category = mat_def.category.clone();
         let process = match mat_def.get_process() {
             hwc_parser::ManufacturingProcess::DrilledPlated => {
                 hwc_engine::ManufacturingProcess::DrilledPlated
@@ -89,7 +82,7 @@ pub fn create_hardware_space(
             }
             hwc_parser::ManufacturingProcess::Etched => hwc_engine::ManufacturingProcess::Etched,
         };
-        material_registry.register_with_properties(&name, conductivity, process);
+        material_registry.register_with_properties(&name, category, process);
 
         // Extract ALL physical properties dynamically (no hardcoding!)
         let mut props = hwc_engine::material::MaterialPhysicalProps::new();

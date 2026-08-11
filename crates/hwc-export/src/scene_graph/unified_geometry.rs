@@ -207,7 +207,7 @@ pub fn generate_copper_contours(space: &HardwareSpace) -> Vec<UnifiedCopperConto
         let pad_radius = via.diameter_nm / 2 + via.annular_ring_nm.max(via.diameter_nm / 4);
 
         // Find the conductor material for pads
-        let pad_material_id = if space.material_registry.is_conductor(via.material_id) {
+        let pad_material_id = if space.material_registry.is_conductive(via.material_id) {
             via.material_id
         } else {
             // Find first conductive material
@@ -215,7 +215,7 @@ pub fn generate_copper_contours(space: &HardwareSpace) -> Vec<UnifiedCopperConto
                 .material_registry
                 .all_materials()
                 .into_iter()
-                .find(|(id, _name)| space.material_registry.is_conductor(*id))
+                .find(|(id, _name)| space.material_registry.is_conductive(*id))
                 .map(|(id, _)| id)
                 .expect("No conductive material found in material registry for via pads")
         };

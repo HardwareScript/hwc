@@ -119,17 +119,8 @@ pub fn export(
             continue;
         }
 
-        // Refinement 2: Get layer name from stackup
-        let layer_name = space
-            .stackup_layers
-            .iter()
-            .find(|layer| {
-                let layer_z_min = layer.z_bottom;
-                let layer_z_max = layer.z_top;
-                pour.z_bottom_nm >= layer_z_min && pour.z_bottom_nm <= layer_z_max
-            })
-            .map(|layer| format!("{} (z:{}nm)", layer.name, pour.z_bottom_nm))
-            .unwrap_or_else(|| format!("z:{}nm", pour.z_bottom_nm));
+        // Refinement 2: Get layer name from stackup, prioritizing routable layers at boundary
+        let layer_name = resolve_layer_name(&space.stackup_layers, pour.z_bottom_nm, &pour.name)?;
 
         physical_pours.push((
             pour.name.to_string(),
@@ -153,6 +144,52 @@ pub fn export(
             "{},Pour,{},{},{},{}\n",
             name, material, layer, area, volume
         ));
+    }
+
+    // v0.2.2: Include contacts/vias (Tungsten plugs) in material usage
+    for contact in &space.contacts {
+        // Calculate volume from bbox
+        let volume_nm3: u64 = if let Some(bbox) = &contact.bbox {
+            let width = (bbox.max.x - bbox.min.x).unsigned_abs() as u128;
+            let height = (bbox.max.y - bbox.min.y).unsigned_abs() as u128;
+            let depth = (bbox.max.z - bbox.min.z).unsigned_abs() as u128;
+            (width * height * depth).min(u64::MAX as u128) as u64
+        } else {
+            0
+        };
+
+        // Skip zero-volume contacts
+        if volume_nm3 == 0 {
+            continue;
+        }
+
+        // Calculate area from bbox (top surface)
+        let area_nm2: i64 = if let Some(bbox) = &contact.bbox {
+            let width = (bbox.max.x - bbox.min.x).unsigned_abs();
+            let height = (bbox.max.y - bbox.min.y).unsigned_abs();
+            (width * height) as i64
+        } else {
+            0
+        };
+
+        if area_nm2 == 0 {
+            continue;
+        }
+
+        // Get layer name from Z start (lower connection point)
+        let layer_name = resolve_layer_name(&space.stackup_layers, contact.z_start_nm, &contact.name)?;
+
+        bom.push_str(&format!(
+            "{},Contact,{},{},{},{}\n",
+            contact.name, contact.material_name, layer_name, area_nm2, volume_nm3
+        ));
+
+        // Accumulate material totals
+        let material_key = contact.material_name.to_string();
+        let entry = material_totals.entry(material_key).or_insert((0, 0, 0));
+        entry.0 += area_nm2;
+        entry.1 += volume_nm3;
+        entry.2 += 1;
     }
 
     // Refinement 3: Add aggregated material totals
@@ -183,7 +220,7 @@ pub fn export(
 
     std::fs::write(&path, bom)?;
 
-    let physical_material_count = physical_pours.len();
+    let physical_material_count = physical_pours.len() + space.contacts.len();
     println!(
         "   ✅ BOM: {} ({} discrete items, {} material items)",
         path.display(),
@@ -192,4 +229,49 @@ pub fn export(
     );
 
     Ok(())
+}
+
+/// Resolve layer name from Z coordinate, prioritizing routable layers at boundaries.
+///
+/// **BOM Layer Resolution Rules (v0.2.2 - External Audit Fix):**
+/// 1. If the Z coordinate matches exactly at a boundary between dielectric and routable layer,
+///    prioritize the routable layer (e.g., li1, metal1) over the dielectric (ild0, ild1).
+/// 2. Otherwise, return the layer whose Z range contains the coordinate.
+/// 3. This fixes the "Contact_A_LI reports ild0 instead of li1" bug.
+/// 4. Returns an error if no matching layer is found (no silent failures).
+fn resolve_layer_name(
+    stackup: &[hwc_engine::space::StackupLayer],
+    z_nm: i64,
+    entity_name: &str,
+) -> Result<String, Box<dyn std::error::Error>> {
+    // First pass: Look for a routable layer starting exactly at this Z
+    if let Some(layer) = stackup
+        .iter()
+        .find(|layer| layer.is_routable && layer.z_bottom == z_nm)
+    {
+        return Ok(format!("{} (z:{}nm)", layer.name, z_nm));
+    }
+
+    // Second pass: Look for any layer containing this Z (inclusive on both ends)
+    if let Some(layer) = stackup.iter().find(|layer| {
+        let layer_z_min = layer.z_bottom;
+        let layer_z_max = layer.z_top;
+        z_nm >= layer_z_min && z_nm <= layer_z_max
+    }) {
+        return Ok(format!("{} (z:{}nm)", layer.name, z_nm));
+    }
+
+    // Error: No matching layer found - this indicates a serious stackup configuration issue
+    Err(format!(
+        "BOM Export Error: Entity '{}' at Z={}nm does not match any layer in stackup. \
+        Available layers: {}",
+        entity_name,
+        z_nm,
+        stackup
+            .iter()
+            .map(|l| format!("{} ({}nm-{}nm)", l.name, l.z_bottom, l.z_top))
+            .collect::<Vec<_>>()
+            .join(", ")
+    )
+    .into())
 }

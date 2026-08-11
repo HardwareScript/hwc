@@ -1,6 +1,6 @@
 //! Resolves `Elevation::Physical` and `Elevation::Semantic` to absolute Z in nanometers.
 
-use std::collections::HashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use hwc_parser::ast::{Elevation, Expression, LayerStackup, MountingSide, Span, Unit};
 
@@ -12,31 +12,36 @@ use crate::SymbolTable;
 #[derive(Debug, Clone)]
 pub struct StackupManager {
     /// Maps semantic layer name (e.g. "l1", "d1") to the absolute Z starting height (bottom of the layer) in nm.
-    layer_start_z_nm: HashMap<String, i64>,
+    layer_start_z_nm: FxHashMap<String, i64>,
 
     /// Maps semantic layer name to its thickness in nanometers.
-    layer_thickness_nm: HashMap<String, i64>,
+    layer_thickness_nm: FxHashMap<String, i64>,
 
     /// Ordered list of layer names (bottom-to-top) for index-based lookup.
     ordered_layers: Vec<String>,
 
     /// Maps semantic layer name to its material name.
-    layer_materials: HashMap<String, String>,
+    layer_materials: FxHashMap<String, String>,
 
     /// Set of layer names that are conductive (Conductor or Semiconductor).
     /// v0.1.8: Determined at construction by looking up materials in the Symbol Table.
-    conductive_layers: std::collections::HashSet<String>,
+    conductive_layers: FxHashSet<String>,
+
+    /// Set of layer names that are zero-thickness masks (v0.2.1).
+    /// These layers have Z-coordinates but contribute 0nm to stackup height.
+    mask_layers: FxHashSet<String>,
 }
 
 impl StackupManager {
     /// Create an empty stackup manager for tests or fallbacks.
     pub fn new_empty() -> Self {
         Self {
-            layer_start_z_nm: HashMap::new(),
-            layer_thickness_nm: HashMap::new(),
+            layer_start_z_nm: FxHashMap::default(),
+            layer_thickness_nm: FxHashMap::default(),
             ordered_layers: Vec::new(),
-            layer_materials: HashMap::new(),
-            conductive_layers: std::collections::HashSet::new(),
+            layer_materials: FxHashMap::default(),
+            conductive_layers: FxHashSet::default(),
+            mask_layers: FxHashSet::default(),
         }
     }
 
@@ -47,20 +52,26 @@ impl StackupManager {
     /// (the absolute floor) and each subsequent layer stacks upward. There are
     /// no special cases: solder mask, coverlay, and passivation are ordinary
     /// declared layers in `profile.stackup`.
+    ///
+    /// v0.2.1 (Zero-Thickness Masks): Layers whose material category is `mask`
+    /// have no physical Z-height. They anchor to the current cumulative Z
+    /// (Z-Plane Surface Locking) without incrementing it, so the total board
+    /// thickness is unaffected by mask layers.
     pub fn new(
         stackup_opt: Option<&LayerStackup>,
         symbol_table: &SymbolTable,
         eval_context: &hwc_parser::EvaluationContext,
     ) -> Result<Self, IrError> {
-        let mut layer_start_z_nm = HashMap::new();
-        let mut layer_thickness_nm = HashMap::new();
+        let mut layer_start_z_nm = FxHashMap::default();
+        let mut layer_thickness_nm = FxHashMap::default();
         let mut ordered_layers = Vec::new();
-        let mut layer_materials = HashMap::new();
-        let mut conductive_layers = std::collections::HashSet::new();
+        let mut layer_materials = FxHashMap::default();
+        let mut conductive_layers = FxHashSet::default();
+        let mut mask_layers = FxHashSet::default();
 
         if let Some(stackup) = stackup_opt {
-            // Step 1: Resolve all thicknesses and conductivity
-            let mut resolved: Vec<(String, i64, bool, String)> = Vec::new();
+            // Step 1: Resolve all thicknesses, conductivity, and mask status.
+            let mut resolved: Vec<(String, i64, bool, bool, String)> = Vec::new();
 
             for layer in &stackup.layers {
                 let thickness_nm =
@@ -72,46 +83,69 @@ impl StackupManager {
 
                 // v0.1.8: Determine conductivity by looking up the material in the Symbol Table.
                 // No hardcoded names or fallbacks.
-                let is_conductive = if let Ok(mat_def) = symbol_table.get_material(&layer.material)
-                {
-                    match mat_def.category {
-                        hwc_parser::MaterialCategory::Conductor
-                        | hwc_parser::MaterialCategory::OhmicContact
-                        | hwc_parser::MaterialCategory::DieInterconnect
-                        | hwc_parser::MaterialCategory::PcbSolder
-                        | hwc_parser::MaterialCategory::BarrierLayer
-                        | hwc_parser::MaterialCategory::Adhesive
-                        | hwc_parser::MaterialCategory::Semiconductor => true,
-                        hwc_parser::MaterialCategory::Insulator => false,
-                    }
-                } else {
+                let Ok(mat_def) = symbol_table.get_material(&layer.material) else {
                     // Material not found in symbol table - this is an error in the design.
                     return Err(IrError::UndeclaredMaterial {
                         material: layer.material.clone(),
                     });
                 };
 
+                // v0.2.1: Masks are zero-thickness fabrication instructions.
+                // They are never conductive and never routable.
+                let is_mask = mat_def.category.is_zero_thickness();
+
+                let is_conductive = match mat_def.category {
+                    hwc_parser::MaterialCategory::Conductor
+                    | hwc_parser::MaterialCategory::OhmicContact
+                    | hwc_parser::MaterialCategory::DieInterconnect
+                    | hwc_parser::MaterialCategory::PcbSolder
+                    | hwc_parser::MaterialCategory::BarrierLayer
+                    | hwc_parser::MaterialCategory::Adhesive
+                    | hwc_parser::MaterialCategory::Semiconductor => true,
+                    hwc_parser::MaterialCategory::Insulator
+                    | hwc_parser::MaterialCategory::Mask => false,
+                };
+
                 resolved.push((
                     layer.name.name.to_string(),
                     thickness_nm,
                     is_conductive,
+                    is_mask,
                     layer.material.to_string(),
                 ));
             }
 
-            // Step 2: Assign absolute Z positions, bottom-up from Z=0.
+            // Step 2: Assign absolute Z positions with Z-Plane Surface Locking (v0.2.1).
             // The first layer in the stackup block is the PHYSICAL BOTTOM.
+            // Physical layers accumulate Z-height; mask layers anchor to the current
+            // Z_cumulative without incrementing it.
             // ZERO SPECIAL CASES. ZERO MAGIC.
             let mut current_z = 0i64;
-            for (name, thickness_nm, is_conductive, material) in resolved {
+            for (name, thickness_nm, is_conductive, is_mask, material) in resolved {
+                // Z-PLANE SURFACE LOCKING THEOREM:
+                // Mask layers lock to current Z_cumulative without incrementing height.
                 layer_start_z_nm.insert(name.clone(), current_z);
                 layer_thickness_nm.insert(name.clone(), thickness_nm);
                 layer_materials.insert(name.clone(), material);
                 ordered_layers.push(name.clone());
-                if is_conductive {
-                    conductive_layers.insert(name);
+
+                if is_mask {
+                    // FAIL-FAST: Masks MUST have zero thickness.
+                    if thickness_nm != 0 {
+                        return Err(IrError::InvalidMaskThickness {
+                            layer_name: name.as_str().into(),
+                            declared_nm: thickness_nm,
+                        });
+                    }
+                    mask_layers.insert(name);
+                    // DO NOT increment current_z (Z-plane surface lock).
+                } else {
+                    // Physical layer: accumulate Z-height normally.
+                    if is_conductive {
+                        conductive_layers.insert(name);
+                    }
+                    current_z += thickness_nm;
                 }
-                current_z += thickness_nm;
             }
         }
 
@@ -121,7 +155,19 @@ impl StackupManager {
             ordered_layers,
             layer_materials,
             conductive_layers,
+            mask_layers,
         })
+    }
+
+    /// Returns true if the named layer is a zero-thickness mask layer (v0.2.1).
+    #[inline(always)]
+    pub fn is_mask_layer(&self, layer_name: &str) -> bool {
+        self.mask_layers.contains(layer_name)
+    }
+
+    /// Returns the set of all mask layer names (v0.2.1).
+    pub fn get_mask_layers(&self) -> &FxHashSet<String> {
+        &self.mask_layers
     }
 
     /// Returns the total board thickness in nm (sum of ALL stackup layers).
@@ -215,7 +261,10 @@ impl StackupManager {
                 let z_bottom = self.layer_start_z_nm.get(name)?;
                 let thickness = self.layer_thickness_nm.get(name)?;
                 let material_name = self.layer_materials.get(name)?;
-                let is_routable = self.conductive_layers.contains(name);
+                let is_mask = self.mask_layers.contains(name);
+                // v0.2.1: Mask layers are never routable, regardless of material
+                // conductivity, because they carry no physical Z-height.
+                let is_routable = !is_mask && self.conductive_layers.contains(name);
 
                 Some(hwc_engine::space::StackupLayer::new(
                     name.as_str().into(),
@@ -224,6 +273,7 @@ impl StackupManager {
                     *thickness,
                     material_name.as_str().into(),
                     is_routable,
+                    is_mask,
                 ))
             })
             .collect()

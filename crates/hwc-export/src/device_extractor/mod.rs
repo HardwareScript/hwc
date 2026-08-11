@@ -464,8 +464,8 @@ impl<'a> DeviceExtractor<'a> {
                     if matches!(
                         self.space
                             .material_registry
-                            .get_conductivity_by_name(&pour.material_name),
-                        Some(hwc_engine::MaterialConductivity::Semiconductor)
+                            .get_category_by_name(&pour.material_name),
+                        Some(hwc_parser::MaterialCategory::Semiconductor)
                     ) {
                         has_active_region = true;
                         break;

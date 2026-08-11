@@ -14,6 +14,12 @@ pub fn populate_material_database(
 
     for (name, material_def) in symbol_table.materials() {
         match material_def.category {
+            // v0.2.1: Zero-thickness masks are fabrication instructions, not physical
+            // materials. They carry no bulk physical properties (no resistivity,
+            // permittivity, density) and therefore are never entered into the physics
+            // material database.
+            MaterialCategory::Mask => continue,
+
             MaterialCategory::Conductor => {
                 let mut resistivity_ohm_m = None;
                 let mut thermal_conductivity_w_mk = None;

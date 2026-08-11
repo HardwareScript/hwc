@@ -127,6 +127,8 @@ pub fn add_materials_from_symbol_table(
                     4
                 }
             }
+            // v0.2.1: Zero-thickness masks are protective/process overlay layers.
+            hwc_parser::MaterialCategory::Mask => 3,
         };
 
         materials.insert(

@@ -10,8 +10,8 @@ mod commands;
 
 #[derive(Parser)]
 #[command(name = "hwc")]
-#[command(about = "Hardware Script Language Compiler and Engine (v0.1.6 - Syntax Unification)", long_about = None)]
-#[command(version = "0.1.6")]
+#[command(about = "Hardware Script Language Compiler and Engine (Syntax Unification)", long_about = None)]
+#[command(version)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,

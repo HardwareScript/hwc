@@ -40,15 +40,17 @@ fn check_substrate_interpenetration(
         return Ok(());
     }
 
-    let is_conductor = space.material_registry.is_conductor(material_id);
-    let is_substrate_insulator = space
-        .material_registry
-        .is_insulator(space.substrate_material_id)
-        || space
+    let is_conductive = space.material_registry.is_conductive(material_id);
+    let is_substrate_dielectric = matches!(
+        space
             .material_registry
-            .is_semiconductor(space.substrate_material_id);
+            .get_category(space.substrate_material_id),
+        Some(
+            hwc_parser::MaterialCategory::Insulator | hwc_parser::MaterialCategory::Semiconductor
+        )
+    );
 
-    if is_conductor && is_substrate_insulator {
+    if is_conductive && is_substrate_dielectric {
         let plane_net_id = plane
             .net
             .as_ref()

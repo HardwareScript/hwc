@@ -27,10 +27,21 @@ use super::mesh_generation::{create_via_mesh, ViaMeshParams};
 use super::types::{MaterialNode, MeshNode};
 use crate::mesh_extrusion::extrude_polygon_mesh;
 use compact_str::CompactString;
+use hwc_compiler::SymbolTable;
 use hwc_engine::geometry_router::entity_graph::CapType;
 use hwc_engine::HardwareSpace;
 use hwc_parser::ProfileDefinition;
 use rustc_hash::FxHashMap;
+
+/// Returns true if the named material is a zero-thickness mask (v0.2.1).
+///
+/// Mask materials are 2D fabrication instructions and must never produce a 3D mesh.
+fn is_mask_material(symbol_table: &SymbolTable, material_name: &str) -> bool {
+    symbol_table
+        .get_material(material_name)
+        .map(|mat_def| mat_def.category.is_zero_thickness())
+        .unwrap_or(false)
+}
 
 /// Add substrate mesh (FR4 base) from analytic routes
 pub fn add_substrate(
@@ -38,6 +49,7 @@ pub fn add_substrate(
     space: &HardwareSpace,
     _materials: &FxHashMap<CompactString, MaterialNode>,
     _profile: Option<&ProfileDefinition>,
+    symbol_table: &SymbolTable,
 ) {
     let substrate_layers = space.entity_graph.get_substrate_layers();
 
@@ -65,6 +77,16 @@ pub fn add_substrate(
                     contour_data.key.material
                 )
             });
+
+        // v0.2.1: Skip zero-thickness masks in 3D GLB export.
+        // Masks are 2D-only fabrication instructions (preserved in DXF).
+        if is_mask_material(symbol_table, material_name) {
+            eprintln!(
+                "[SUBSTRATE MESH] Skipping mask layer '{}' (zero-thickness, 2D-only)",
+                material_name
+            );
+            continue;
+        }
 
         eprintln!(
             "[SUBSTRATE MESH] Extruding {} contours for net={:?}, Z={}→{}nm, material={}",
@@ -123,6 +145,15 @@ pub fn add_substrate(
                 )
             });
 
+        // v0.2.1: A zero-thickness mask can never be a physical via barrel.
+        if is_mask_material(symbol_table, material_name) {
+            eprintln!(
+                "[SUBSTRATE MESH] Skipping mask via barrel '{}' (zero-thickness, 2D-only)",
+                material_name
+            );
+            continue;
+        }
+
         // Check if this is an IC via (deposited) or PCB via (drilled/plated)
         let is_ic_via = space
             .material_registry
@@ -176,6 +207,15 @@ pub fn add_substrate(
             });
 
         if material_name == "Void" || material_name == "Air" {
+            continue;
+        }
+
+        // v0.2.1: Zero-thickness masks never produce a 3D substrate body.
+        if is_mask_material(symbol_table, material_name) {
+            eprintln!(
+                "[SUBSTRATE BASE] Skipping mask layer '{}' (zero-thickness, 2D-only)",
+                material_name
+            );
             continue;
         }
 

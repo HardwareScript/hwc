@@ -374,11 +374,21 @@ impl<'a> AutoRouter<'a> {
 
         if let Some(profile) = self.profile {
             let is_manhattan = profile.is_asic();
-            let profile_layers = self.stackup_manager.ordered_layers();
+            // v0.2.1: Zero-thickness mask layers are NEVER routing planes. They share
+            // their Z-coordinate with the physical layer below them (Z-Plane Surface
+            // Locking), so admitting them would create ambiguous duplicate routing
+            // planes and allow traces to be placed on a non-physical layer.
+            let profile_layers: Vec<String> = self
+                .stackup_manager
+                .ordered_layers()
+                .iter()
+                .filter(|name| !self.stackup_manager.is_mask_layer(name))
+                .cloned()
+                .collect();
             let mut layer_z_positions = Vec::new();
             let mut layer_materials = Vec::new();
 
-            for name in profile_layers {
+            for name in &profile_layers {
                 let z = self
                     .stackup_manager
                     .get_layer_start_z(name)
@@ -406,7 +416,7 @@ impl<'a> AutoRouter<'a> {
             geo_router.set_profile_mode(
                 &mut self.space.entity_graph,
                 is_manhattan,
-                profile_layers.to_vec(),
+                profile_layers,
                 layer_z_positions,
                 layer_materials,
             );

@@ -282,6 +282,18 @@ pub fn check_non_routable_layers(
 
             // For horizontal segments, enforce layer routability at the segment's Z coordinate
             if let Some(layer_name) = stackup_manager.get_layer_name_at_z(start.z) {
+                // v0.2.1: Zero-thickness mask layers can never carry a horizontal trace.
+                if stackup_manager.is_mask_layer(&layer_name) {
+                    let material = stackup_manager
+                        .get_layer_material(&layer_name)
+                        .unwrap_or_default()
+                        .into();
+                    return Err(IrError::NonRoutableLayer {
+                        layer: layer_name.into(),
+                        material,
+                    });
+                }
+
                 if let Some(layer_def) = stackup.layers.iter().find(|l| l.name.name == layer_name) {
                     if let Some(hwc_parser::RoutableMode::False) = layer_def.routable {
                         let material = layer_def.material.clone();

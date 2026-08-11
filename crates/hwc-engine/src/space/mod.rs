@@ -49,6 +49,13 @@ pub struct StackupLayer {
     pub material_name: CompactString,
     /// Whether this layer is routable (conductive)
     pub is_routable: bool,
+    /// **v0.2.1: Whether this layer is a zero-thickness mask.**
+    ///
+    /// Mask layers are 2D fabrication instructions (chemical process masks,
+    /// passivation openings). They anchor to a Z-plane but have 0nm thickness,
+    /// never participate in routing, and are excluded from physical collision
+    /// and 3D mesh generation.
+    pub is_mask: bool,
 }
 
 impl StackupLayer {
@@ -59,6 +66,7 @@ impl StackupLayer {
         thickness: i64,
         material_name: CompactString,
         is_routable: bool,
+        is_mask: bool,
     ) -> Self {
         Self {
             name,
@@ -67,6 +75,7 @@ impl StackupLayer {
             thickness,
             material_name,
             is_routable,
+            is_mask,
         }
     }
 

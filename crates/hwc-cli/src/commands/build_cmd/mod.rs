@@ -25,7 +25,7 @@ pub fn execute(
     config: BuildConfig,
 ) -> Result<()> {
     let start_time = Instant::now();
-    println!("🔥 hwc COMPILER v0.1.6 (Syntax Unification)");
+    println!("🔥 hwc COMPILER v{} (Syntax Unification)", env!("CARGO_PKG_VERSION"));
     println!("==================================================\n");
 
     // Resolve output directory relative to input file location

@@ -491,6 +491,7 @@ impl super::super::Parser {
     ///
     /// Fundamental: conductor, insulator, semiconductor
     /// Bridge (Phase 1): ohmic_contact, die_interconnect, pcb_solder, barrier_layer, adhesive
+    /// Zero-thickness (v0.2.1): mask
     fn parse_material_category(&mut self) -> Result<MaterialCategory, ParseError> {
         let ident = self.expect_identifier()?;
         match ident.name.to_lowercase().as_str() {
@@ -504,9 +505,11 @@ impl super::super::Parser {
             "pcb_solder" => Ok(MaterialCategory::PcbSolder),
             "barrier_layer" => Ok(MaterialCategory::BarrierLayer),
             "adhesive" => Ok(MaterialCategory::Adhesive),
+            // Zero-thickness fabrication instruction (v0.2.1)
+            "mask" => Ok(MaterialCategory::Mask),
             _ => Err(self.error(&format!(
                 "Invalid material category '{}'. Expected: conductor, insulator, semiconductor, \
-                 ohmic_contact, die_interconnect, pcb_solder, barrier_layer, or adhesive",
+                 ohmic_contact, die_interconnect, pcb_solder, barrier_layer, adhesive, or mask",
                 ident
             ))),
         }

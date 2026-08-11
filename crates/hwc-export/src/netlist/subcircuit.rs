@@ -11,10 +11,25 @@ use hwc_parser::{
 ///
 /// Converts the compositional SubcircuitDefinition into SPICE netlist format.
 /// This replaces the old raw string body emission with proper code generation.
+///
+/// v0.2.1: Supports `spice_include` for foundry model trust mode.
+/// When `spice_include` is present, emits `.include` directive instead of
+/// generating inline elements, deferring physics to the foundry model.
 pub fn generate_spice_subcircuit(
     output: &mut String,
     subckt: &SubcircuitDefinition,
 ) -> Result<(), String> {
+    // If spice_include is present, emit .include directive only (foundry trust mode)
+    if let Some(ref model_path) = subckt.spice_include {
+        output.push_str(&format!(
+            "* Subcircuit '{}' uses foundry model\n",
+            subckt.name.name
+        ));
+        output.push_str(&format!(".include \"{}\"\n", model_path));
+        return Ok(());
+    }
+
+    // Otherwise, generate inline .subckt definition
     // Generate .subckt header
     output.push_str(".subckt ");
     output.push_str(&subckt.name.name);

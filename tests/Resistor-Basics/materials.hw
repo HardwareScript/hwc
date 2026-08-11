@@ -60,3 +60,13 @@ export material Air:
     symbol: Air
     properties:
         relative_permittivity: 1.0
+
+# Zero-Thickness Mask Material (v0.2.1 - Zero-Thickness Mask System)
+# RPM (Resistor Poly Mask) blocks silicide formation on polysilicon
+# This is a fabrication instruction, not a physical layer
+export material Resistor_Poly_Mask:
+    category: mask
+    symbol: RPM
+    properties:
+        color: "#FF4040"
+        opacity: 0.3

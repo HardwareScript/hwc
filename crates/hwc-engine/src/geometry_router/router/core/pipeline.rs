@@ -45,7 +45,7 @@ impl GeometryRouter {
                             .find(|layer| {
                                 // Check if this segment's Z is within the layer's Z range
                                 segment_z >= layer.bbox.min.z && segment_z <= layer.bbox.max.z
-                                    && self.material_registry.is_conductor(layer.material)
+                                    && self.material_registry.is_conductive(layer.material)
                             })
                             .map(|layer| layer.material)
                             .unwrap_or_else(|| {

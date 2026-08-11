@@ -13,6 +13,27 @@ use super::extracted_devices::{emit_extracted_devices, emit_parasitics};
 use super::subcircuit::generate_spice_subcircuit;
 use super::types::PhysicalNetlistGraph;
 
+/// Format a Z coordinate with appropriate unit selection for maximum precision.
+///
+/// **Unit Selection Rules (v0.2.2 - External Audit Precision Fix):**
+/// - Values >= 1000nm: Format as micrometers (µm) with up to 6 decimal places
+/// - Values < 1000nm: Format as nanometers (nm) as integer
+///
+/// This avoids precision loss from rounding (e.g., 380nm → 0.38µm exact, not 0.0004mm).
+fn format_z_coordinate(z_nm: i64) -> String {
+    if z_nm.abs() >= 1000 {
+        // Format as micrometers for readability when >= 1µm
+        let um = z_nm as f64 / 1000.0;
+        let formatted = format!("{:.6}", um);
+        // Trim trailing zeros and decimal point if no fractional part
+        let trimmed = formatted.trim_end_matches('0').trim_end_matches('.');
+        format!("{}µm", trimmed)
+    } else {
+        // Keep as nanometers for sub-micron precision
+        format!("{}nm", z_nm)
+    }
+}
+
 /// Generate the circuit body (devices and nets) - reused by all SPICE variants
 pub fn generate_circuit_body(
     space: &HardwareSpace,
@@ -174,13 +195,13 @@ fn emit_net_comments(netlist_str: &mut String, space: &HardwareSpace) {
                     let total_area: i64 = pours.iter().map(|p| p.area_nm2).sum();
 
                     netlist_str.push_str(&format!(
-                        "* Net: {} (merged region: {}, {} instances, total area: {} nm², material: {}, z: {:.4}mm)\n",
+                        "* Net: {} (merged region: {}, {} instances, total area: {} nm², material: {}, z: {})\n",
                         net_name,
                         merged_id,
                         pours.len(),
                         total_area,
                         first_pour.material_name,
-                        first_pour.z_bottom_nm as f64 / 1_000_000.0
+                        format_z_coordinate(first_pour.z_bottom_nm)
                     ));
                     netlist_str
                         .push_str("*   Parasitic extraction: Treat as single electrical node\n");
@@ -192,11 +213,11 @@ fn emit_net_comments(netlist_str: &mut String, space: &HardwareSpace) {
         for pour in standalone_pours {
             if let Some(ref net_name) = pour.net {
                 netlist_str.push_str(&format!(
-                    "* Net: {} (pour: {}, material: {}, z: {:.4}mm)\n",
+                    "* Net: {} (pour: {}, material: {}, z: {})\n",
                     net_name,
                     pour.name,
                     pour.material_name,
-                    pour.z_bottom_nm as f64 / 1_000_000.0
+                    format_z_coordinate(pour.z_bottom_nm)
                 ));
             }
         }

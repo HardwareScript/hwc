@@ -67,7 +67,10 @@ pub fn populate_device_instances(
 
                     // ZERO COMPILER MAGIC: Device terminal pours MUST have explicit net assignments
                     // HardwareScript does not infer connectivity - the user must declare it explicitly
-                    if pour.net.is_none() {
+                    // 
+                    // v0.2.2 EXEMPTION: Multi-terminal device bodies (e.g., resistor channel) are exempt.
+                    // These pours span multiple terminals and cannot belong to a single net.
+                    if pour.net.is_none() && binding.terminals.len() == 1 {
                         return Err(IrError::DeviceTerminalMissingNet {
                             pour_name: pour.name.clone(),
                             device: binding.device_name.clone(),
@@ -301,7 +304,7 @@ fn extract_device_parameters_from_space(
     device_type: &str,
     device_name: &CompactString,
     _terminals: &[CompactString],
-    space: &hwc_engine::HardwareSpace,
+    _space: &hwc_engine::HardwareSpace,
     symbol_table: Option<&crate::SymbolTable>,
 ) -> FxHashMap<CompactString, f64> {
     let mut parameters = FxHashMap::default();
@@ -322,7 +325,7 @@ fn extract_device_parameters_from_space(
 
     // Get the SPICE parameters list from the device definition
     let spice_params = &device_def.spice_info.as_ref().map(|s| &s.parameters);
-    let Some(param_names) = spice_params else {
+    let Some(_param_names) = spice_params else {
         eprintln!("[PARAM EXTRACTION] Device '{}' has no SPICE parameters defined", device_type);
         return parameters;
     };

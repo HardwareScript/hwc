@@ -78,7 +78,7 @@ pub use layer_connection_database::{
     ConnectionType, LayerConnectionDatabase, LayerConnectionError, RoutingConnectionPoint,
 };
 pub use material::{
-    ManufacturingProcess, MaterialConductivity, MaterialId, MaterialRegistry, AIR_MATERIAL_ID,
+    ManufacturingProcess, MaterialCategory, MaterialId, MaterialRegistry, AIR_MATERIAL_ID,
 };
 pub use netlist::{
     ArenaStats, ComponentData, ComponentId, NetData, NetId, NetlistArena, PinData, PinId,

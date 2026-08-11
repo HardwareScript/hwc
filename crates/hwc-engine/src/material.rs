@@ -7,31 +7,23 @@
 //!
 //! If a material is referenced but not declared, lookups return `None`,
 //! forcing a compiler halt with a clear diagnostic.
+//!
+//! # Architecture: MaterialCategory Direct Storage
+//! The registry stores the full MaterialCategory from the AST. This preserves
+//! semantic information (Mask, OhmicContact, BarrierLayer) and enables proper
+//! category-specific behavior without lossy translation.
 
 use compact_str::CompactString;
 use rustc_hash::FxHashMap;
+
+// Re-export MaterialCategory from parser for use in engine
+pub use hwc_parser::MaterialCategory;
 
 /// Material ID type — u8 for compact storage. Supports up to 256 materials.
 pub type MaterialId = u8;
 
 /// Reserved material ID for Air.
 pub const AIR_MATERIAL_ID: MaterialId = 0;
-
-/// Material conductivity classification.
-///
-/// Determines how the router traverses materials:
-/// - **Conductor**: Metal, doped poly — router must avoid if different net
-/// - **Semiconductor**: Silicon — router can traverse (substrate material)
-/// - **Insulator**: SiO2, Air, FR4 — router can traverse freely
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum MaterialConductivity {
-    /// Conductive materials (metals, doped polysilicon)
-    Conductor,
-    /// Semiconductor materials (silicon substrates)
-    Semiconductor,
-    /// Insulating materials (oxides, air, dielectrics)
-    Insulator,
-}
 
 /// Manufacturing process behavior for Z-axis placement.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -91,24 +83,28 @@ impl Default for MaterialPhysicalProps {
     }
 }
 
-/// Strict material registry — maps material names to IDs and conductivity classes.
+/// Strict material registry — maps material names to IDs and material categories.
 ///
 /// # Design Philosophy
 /// No heuristics. No guessing. If a material is used but not declared,
 /// `get_id()` returns `None`, forcing a compiler halt.
 ///
-/// # Architecture
-/// - Script Layer: `material N_Doped: semiconductor`
-/// - Registry Layer: First encounter assigns `N_Doped → ID 1` + conductivity class
-/// - Export Layer: `ID 1 → "N_Doped" → Layer 17`
+/// # Architecture (v0.2.1)
+/// - Script Layer: `material RPM: mask`
+/// - Registry Layer: First encounter assigns `RPM → ID 5` + MaterialCategory::Mask
+/// - Export Layer: `ID 5 → "RPM" → Layer 86` (GDSII)
+///
+/// The registry stores the full MaterialCategory from the AST, preserving
+/// semantic distinctions (Mask vs Insulator, OhmicContact vs Conductor, etc.)
 #[derive(Debug, Clone)]
 pub struct MaterialRegistry {
     /// Fast lookup: Name → ID
     name_to_id: FxHashMap<CompactString, MaterialId>,
     /// Fast lookup for export: ID → Name (Vec for O(1) indexing)
     id_to_name: Vec<CompactString>,
-    /// Fast lookup for routing: ID → Conductivity (Vec for O(1) indexing)
-    id_to_conductivity: Vec<MaterialConductivity>,
+    /// Fast lookup for category: ID → MaterialCategory (Vec for O(1) indexing)
+    /// v0.2.1: Stores full category instead of simplified conductivity
+    id_to_category: Vec<MaterialCategory>,
     /// Fast lookup for manufacturing: ID → Process (Vec for O(1) indexing)
     id_to_process: Vec<ManufacturingProcess>,
     /// Fast lookup for physics: ID → Physical properties (resistivity, thermal conductivity)
@@ -125,7 +121,7 @@ impl MaterialRegistry {
         let mut registry = Self {
             name_to_id: FxHashMap::default(),
             id_to_name: vec!["Air".into()],
-            id_to_conductivity: vec![MaterialConductivity::Insulator],
+            id_to_category: vec![MaterialCategory::Insulator],
             id_to_process: vec![ManufacturingProcess::Deposited],
             id_to_physical: FxHashMap::default(),
         };
@@ -133,19 +129,21 @@ impl MaterialRegistry {
         registry
     }
 
-    /// Register a material with explicit conductivity and manufacturing process.
+    /// Register a material with explicit category and manufacturing process.
+    ///
+    /// v0.2.1: Stores full MaterialCategory instead of simplified conductivity.
     ///
     /// Returns the assigned `MaterialId`. If the material is already registered,
     /// updates its properties and returns the existing ID.
     pub fn register_with_properties(
         &mut self,
         name: &str,
-        conductivity: MaterialConductivity,
+        category: MaterialCategory,
         process: ManufacturingProcess,
     ) -> MaterialId {
         if let Some(&id) = self.name_to_id.get(name) {
-            if self.id_to_conductivity[id as usize] != conductivity {
-                self.id_to_conductivity[id as usize] = conductivity;
+            if self.id_to_category[id as usize] != category {
+                self.id_to_category[id as usize] = category;
             }
             if self.id_to_process[id as usize] != process {
                 self.id_to_process[id as usize] = process;
@@ -157,19 +155,10 @@ impl MaterialRegistry {
         }
         let id = self.id_to_name.len() as u8;
         self.id_to_name.push(name.into());
-        self.id_to_conductivity.push(conductivity);
+        self.id_to_category.push(category);
         self.id_to_process.push(process);
         self.name_to_id.insert(name.into(), id);
         id
-    }
-
-    /// Register a material with explicit conductivity classification.
-    pub fn register_with_conductivity(
-        &mut self,
-        name: &str,
-        conductivity: MaterialConductivity,
-    ) -> MaterialId {
-        self.register_with_properties(name, conductivity, ManufacturingProcess::Deposited)
     }
 
     /// Get material ID by name. Returns `None` if not registered.
@@ -196,39 +185,50 @@ impl MaterialRegistry {
             .collect()
     }
 
-    /// Get conductivity classification for a material ID.
+    /// Get the full material category for a material ID.
+    ///
+    /// Returns `None` if the ID is out of range (unregistered).
     #[inline]
-    pub fn get_conductivity(&self, id: MaterialId) -> Option<MaterialConductivity> {
-        self.id_to_conductivity.get(id as usize).copied()
+    pub fn get_category(&self, id: MaterialId) -> Option<MaterialCategory> {
+        self.id_to_category.get(id as usize).cloned()
     }
 
-    /// Get conductivity classification strictly by material name.
+    /// Get the full material category strictly by material name.
     ///
     /// # Returns
-    /// - `Some(MaterialConductivity)` if the material was explicitly declared/imported
+    /// - `Some(MaterialCategory)` if the material was explicitly declared/imported
     /// - `None` if the material is unregistered (forces compiler halt)
-    pub fn get_conductivity_by_name(&self, name: &str) -> Option<MaterialConductivity> {
+    pub fn get_category_by_name(&self, name: &str) -> Option<MaterialCategory> {
         let name_clean = name.trim();
 
         // 1. Direct lookup
         if let Some(id) = self.name_to_id.get(name_clean) {
-            return self.get_conductivity(*id);
+            return self.get_category(*id);
         }
 
         // 2. Case-insensitive lookup
         let name_lower = name_clean.to_lowercase();
         if let Some(id) = self.name_to_id.get(name_lower.as_str()) {
-            return self.get_conductivity(*id);
+            return self.get_category(*id);
         }
 
         // No guessing. No heuristics. If not registered, return None.
         None
     }
 
-    /// Check if a material is a conductor.
+    /// Check if a material is electrically conductive (semiconductor or conductor
+    /// or any bridge category). Mirrors `MaterialCategory::is_conductive()`.
+    #[inline]
+    pub fn is_conductive(&self, id: MaterialId) -> bool {
+        self.get_category(id)
+            .map(|c| c.is_conductive())
+            .unwrap_or(false)
+    }
+
+    /// Check if a material is a conductor (fundamental conductor category only).
     #[inline]
     pub fn is_conductor(&self, id: MaterialId) -> bool {
-        self.get_conductivity(id) == Some(MaterialConductivity::Conductor)
+        self.get_category(id) == Some(MaterialCategory::Conductor)
     }
 
     /// Check the manufacturing process for a material ID.
@@ -244,22 +244,20 @@ impl MaterialRegistry {
         }
     }
 
-    /// Check if a material is a semiconductor.
+    /// Check if a material is a semiconductor (fundamental semiconductor category only).
     #[inline]
     pub fn is_semiconductor(&self, id: MaterialId) -> bool {
-        matches!(
-            self.get_conductivity(id),
-            Some(MaterialConductivity::Semiconductor)
-        )
+        self.get_category(id) == Some(MaterialCategory::Semiconductor)
     }
 
-    /// Check if a material is an insulator.
+    /// Check if a material is an insulator (fundamental insulator category only).
+    ///
+    /// Explicitly checks for `MaterialCategory::Insulator` and EXCLUDES masks,
+    /// barrier layers, and other non-fundamental categories. This prevents the
+    /// parasitic extractor from treating fabrication masks as dielectrics.
     #[inline]
     pub fn is_insulator(&self, id: MaterialId) -> bool {
-        matches!(
-            self.get_conductivity(id),
-            Some(MaterialConductivity::Insulator)
-        )
+        self.get_category(id) == Some(MaterialCategory::Insulator)
     }
 
     /// Store physical properties for a material (dynamic key-value pairs)

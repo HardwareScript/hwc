@@ -208,6 +208,17 @@ pub enum IrError {
     )]
     UndeclaredMaterial { material: CompactString },
 
+    #[error("Mask layer '{layer_name}' declared with non-zero thickness ({declared_nm}nm)")]
+    #[diagnostic(
+        code(M02),
+        url("https://docs.hw-script.org/errors/M02"),
+        help("Mask materials (category: mask) are zero-thickness fabrication instructions and MUST be declared with 'thickness: 0nm'. Layer '{layer_name}' declares {declared_nm}nm. Either set the thickness to 0nm, or use a physical material category if this layer has real Z-height.")
+    )]
+    InvalidMaskThickness {
+        layer_name: CompactString,
+        declared_nm: i64,
+    },
+
     #[error("Material interpenetration detected at z = {z_nm} nm")]
     #[diagnostic(
         code(P43),
@@ -233,6 +244,19 @@ pub enum IrError {
         device: CompactString,
         terminal: CompactString,
         material: CompactString,
+    },
+
+    #[error("Multi-terminal device body '{pour_name}' cannot have net assignment")]
+    #[diagnostic(
+        code(D02),
+        url("https://docs.hw-script.org/errors/D02"),
+        help("LVS Logic Bomb: Device '{device_name}' spans terminals {terminals:?}, connecting different nets. A device body that bridges multiple terminals cannot itself belong to a single net without creating a logical short circuit.\n\nYour pour is assigned to net '{assigned_net}', but it connects to multiple device terminals. This creates a semantic paradox: when contact pours on different nets physically touch this body, LVS tools will flag a SHORT CIRCUIT.\n\nFix: Remove the 'net:' assignment from the device body:\n\n  add pour(...) named {pour_name}:\n      device: {device_name}.A, {device_name}.B\n      # net: {assigned_net}  ← REMOVE THIS LINE\n      dimensions: ...\n\nThe device body connects to the circuit exclusively through its terminal bindings. Only the contact pours at each terminal should have net assignments.")
+    )]
+    DeviceNetConflict {
+        pour_name: String,
+        device_name: String,
+        terminals: Vec<String>,
+        assigned_net: String,
     },
 
     #[error("Invalid expression in loop: {0}")]

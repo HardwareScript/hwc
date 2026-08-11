@@ -83,6 +83,11 @@ pub enum MaterialCategory {
     BarrierLayer,
     /// Conductive adhesives (silver epoxy, ACF, conductive films)
     Adhesive,
+
+    // === Zero-thickness fabrication instruction (v0.2.1) ===
+    /// Chemical process mask or passivation layer.
+    /// Zero Z-thickness, 2D-only, never participates in routing or 3D mesh generation.
+    Mask,
 }
 
 impl MaterialCategory {
@@ -97,7 +102,15 @@ impl MaterialCategory {
                 | MaterialCategory::PcbSolder
                 | MaterialCategory::BarrierLayer
                 | MaterialCategory::Adhesive
+            // Mask intentionally EXCLUDED - not physical, not conductive
         )
+    }
+
+    /// Returns true if this material category has zero physical Z-thickness.
+    /// Zero-thickness materials exist purely as 2D fabrication instructions.
+    #[inline(always)]
+    pub fn is_zero_thickness(&self) -> bool {
+        matches!(self, MaterialCategory::Mask)
     }
 
     /// Returns true if this is a bridge category (not a fundamental category).
@@ -124,6 +137,7 @@ impl std::fmt::Display for MaterialCategory {
             MaterialCategory::PcbSolder => write!(f, "pcb_solder"),
             MaterialCategory::BarrierLayer => write!(f, "barrier_layer"),
             MaterialCategory::Adhesive => write!(f, "adhesive"),
+            MaterialCategory::Mask => write!(f, "mask"),
         }
     }
 }

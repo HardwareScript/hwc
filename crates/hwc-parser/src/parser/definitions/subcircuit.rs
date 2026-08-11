@@ -2,17 +2,27 @@
 //!
 //! Parses native typed subcircuit definitions with validated AST elements.
 //!
-//! Syntax:
+//! v0.2.1: Added `spice_include` for foundry trust mode.
+//!
+//! Syntax (Inline Elements):
 //! ```hw
 //! export subcircuit sky130_fd_pr__res_high_po:
 //!     terminals: [PLUS, MINUS, BULK]
 //!     parameters: [W = 1.0um, L = 1.0um]
 //!     elements:
-//!         R_head: Resistor(PLUS, node_1, val: 362.0ohm)
-//!         R_body: Resistor(node_1, node_2, val: 350.0ohm_sq * (L / W))
-//!         R_tail: Resistor(node_2, MINUS, val: 362.0ohm)
-//!         C_sub1: Capacitor(PLUS, BULK, val: 2.0fF_um2 * W * L)
-//!         C_sub2: Capacitor(MINUS, BULK, val: 2.0fF_um2 * W * L)
+//!         R_head: Resistor(nodes: [PLUS, node_1], value: 362.0ohm)
+//!         R_body: Resistor(nodes: [node_1, node_2], value: 350.0ohm * (L / W))
+//!         R_tail: Resistor(nodes: [node_2, MINUS], value: 362.0ohm)
+//!         C_sub1: Capacitor(nodes: [PLUS, BULK], value: 2.0fF * W * L)
+//!         C_sub2: Capacitor(nodes: [MINUS, BULK], value: 2.0fF * W * L)
+//! ```
+//!
+//! Syntax (Foundry Trust Mode):
+//! ```hw
+//! export subcircuit sky130_fd_pr__res_high_po:
+//!     terminals: [PLUS, MINUS, BULK]
+//!     parameters: [W = 1.0um, L = 1.0um]
+//!     spice_include: "sky130_fd_pr/models/sky130_fd_pr__res_high_po.model.spice"
 //! ```
 
 use crate::ast::{Identifier, Node, SubcircuitDefinition, SubcircuitElement, SubcircuitParameter};
@@ -63,6 +73,7 @@ impl crate::parser::Parser {
         let mut terminals = Vec::new();
         let mut parameters = Vec::new();
         let mut elements = Vec::new();
+        let mut spice_include = None;
 
         // Parse properties
         while !self.check(&Token::Dedent) && !self.is_at_end() {
@@ -93,10 +104,13 @@ impl crate::parser::Parser {
                             "elements" => {
                                 elements = self.parse_subcircuit_elements(collector, &name)?;
                             }
+                            "spice_include" => {
+                                spice_include = self.parse_spice_include(collector, &name)?;
+                            }
                             _ => {
                                 collector.report(ParseError::UnexpectedToken {
                                     span: span_to_source_span(&self.current_span()),
-                                    expected: "terminals, parameters, or elements".into(),
+                                    expected: "terminals, parameters, elements, or spice_include".into(),
                                     found: format!("field '{}'", prop_name).into(),
                                 });
                                 self.sync_to_next_definition();
@@ -107,7 +121,7 @@ impl crate::parser::Parser {
                     _ => {
                         collector.report(ParseError::UnexpectedToken {
                             span: span_to_source_span(&self.current_span()),
-                            expected: "terminals, parameters, or elements".into(),
+                            expected: "terminals, parameters, elements, or spice_include".into(),
                             found: format!("{:?}", current.token).into(),
                         });
                         self.sync_to_next_definition();
@@ -139,15 +153,16 @@ impl crate::parser::Parser {
             return None;
         }
 
-        if elements.is_empty() {
+        // Elements are required ONLY if spice_include is not provided
+        if elements.is_empty() && spice_include.is_none() {
             collector.report(ParseError::UnexpectedToken {
                 span: span_to_source_span(&span),
                 expected: format!(
-                    "subcircuit '{}' requires 'elements' field. Add 'elements:' block",
+                    "subcircuit '{}' requires either 'elements' block or 'spice_include' field",
                     name.name
                 )
                 .into(),
-                found: "missing elements".into(),
+                found: "missing elements and spice_include".into(),
             });
             return None;
         }
@@ -157,6 +172,7 @@ impl crate::parser::Parser {
             terminals,
             parameters,
             elements,
+            spice_include,
             is_exported,
             span,
         })
@@ -262,6 +278,43 @@ impl crate::parser::Parser {
         }
 
         Some(parameters)
+    }
+
+    /// Parse spice_include field: spice_include: "path/to/model.spice"
+    fn parse_spice_include(
+        &mut self,
+        collector: &crate::DiagnosticCollector,
+        _subcircuit_name: &Identifier,
+    ) -> Option<Option<CompactString>> {
+        // Expect colon
+        if let Err(e) = self.expect(&Token::Colon) {
+            collector.report(e);
+            return None;
+        }
+
+        // Parse string literal
+        if let Some(current) = self.current() {
+            if let Token::String(path) = &current.token {
+                let path_str = path.clone();
+                self.advance();
+
+                // Consume newline
+                if self.check(&Token::Newline) {
+                    self.advance();
+                }
+
+                return Some(Some(path_str.into()));
+            } else {
+                collector.report(ParseError::UnexpectedToken {
+                    span: span_to_source_span(&self.current_span()),
+                    expected: "string literal (path to SPICE model file)".into(),
+                    found: format!("{:?}", current.token).into(),
+                });
+                return None;
+            }
+        }
+
+        None
     }
 
     /// Parse elements block

@@ -44,6 +44,24 @@ pub fn place_pour(
             material: pour.material.clone(),
         })?;
 
+    // v0.2.2: EXTERNAL AUDIT FIX - Validate multi-terminal device bodies don't have net assignments
+    // A resistor body connecting terminals A and B cannot belong to a single net without creating
+    // a logical short circuit. Device bodies spanning multiple terminals must only use device bindings.
+    if let Some(ref device_binding) = pour.device {
+        if device_binding.terminals.len() > 1 && pour.net.is_some() {
+            return Err(IrError::DeviceNetConflict {
+                pour_name: pour.name.to_string().into(),
+                device_name: device_binding.device_name.to_string().into(),
+                terminals: device_binding
+                    .terminals
+                    .iter()
+                    .map(|t| format!("{}.{}", device_binding.device_name, t))
+                    .collect(),
+                assigned_net: pour.net.as_ref().unwrap().to_string().into(),
+            });
+        }
+    }
+
     // v0.2.1: Boundary is optional if relational constraints OR (position + dimensions) are provided
     // The relational resolver/compiler will compute the boundary from constraints or position + dimensions
     let has_dimensions = pour.width.is_some() && pour.height.is_some();
@@ -176,6 +194,11 @@ pub fn place_pour(
         _ => "top_copper".to_string(),
     };
 
+    // Resolve thickness with proper fail-fast validation (v0.2.1)
+    // 1. Explicit thickness on pour
+    // 2. Profile layer thickness expression
+    // 3. StackupManager layer thickness (includes 0nm for masks)
+    // NO FALLBACKS - must be explicitly defined somewhere
     let thickness_nm = if let Some(t_expr) = &pour.thickness {
         crate::ir::conversions::evaluate_expression_to_nm(
             t_expr,
@@ -186,34 +209,32 @@ pub fn place_pour(
             coordinate_str: format!("pour '{}' thickness", pour.name),
             reason: e.to_string(),
         })?
+    } else if let Some(t_expr) = ctx.profile.and_then(|p| p.get_layer_thickness(&layer_name)) {
+        crate::ir::conversions::evaluate_expression_to_nm(
+            t_expr,
+            ctx.symbol_table,
+            ctx.eval_context,
+        )
+        .map_err(|e| IrError::CoordinateResolutionFailed {
+            coordinate_str: format!("profile layer '{}' thickness", layer_name),
+            reason: e.to_string(),
+        })?
+    } else if let Some(thickness) = ctx.stackup_manager.get_layer_thickness(&layer_name) {
+        // StackupManager returns Some(0) for zero-thickness masks
+        // This is valid and intentional, not a fallback
+        thickness
     } else {
-        ctx.profile
-            .and_then(|p| p.get_layer_thickness(&layer_name))
-            .and_then(|t_expr| {
-                crate::ir::conversions::evaluate_expression_to_nm(
-                    t_expr,
-                    ctx.symbol_table,
-                    ctx.eval_context,
-                )
-                .ok()
-            })
-            .unwrap_or_else(|| {
-                ctx.stackup_manager
-                    .get_layer_thickness(&layer_name)
-                    .unwrap_or(0)
-            })
-    };
-
-    if thickness_nm == 0 && pour.thickness.is_none() {
         return Err(IrError::PlacementConstraint {
             message: format!(
-                "Could not resolve physical thickness for pour '{}' on layer '{}'. \
-                 Ensure the layer is defined in the profile stackup or provide an explicit 'thickness:' property.",
+                "Could not resolve thickness for pour '{}' on layer '{}'. \
+                 Layer not found in stackup. Ensure the layer is defined in profile.stackup.",
                 pour.name, layer_name
             ),
             component: pour.name.to_string().into(),
         });
-    }
+    };
+
+    // No special handling needed - 0nm is valid for mask materials
 
     let z_start_nm = ctx.stackup_manager.resolve_elevation(
         &pour.elevation,

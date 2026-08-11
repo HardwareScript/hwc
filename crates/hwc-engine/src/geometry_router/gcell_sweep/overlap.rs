@@ -188,13 +188,13 @@ pub fn classify_junction(
     registry: &MaterialRegistry,
     bridge_table: &BridgeTable,
 ) -> JunctionClassification {
-    use crate::material::MaterialConductivity;
+    use crate::material::MaterialCategory;
 
-    let cat_a = match registry.get_conductivity(mat_a_id) {
+    let cat_a = match registry.get_category(mat_a_id) {
         Some(c) => c,
         None => return JunctionClassification::Allowed,
     };
-    let cat_b = match registry.get_conductivity(mat_b_id) {
+    let cat_b = match registry.get_category(mat_b_id) {
         Some(c) => c,
         None => return JunctionClassification::Allowed,
     };
@@ -203,8 +203,8 @@ pub fn classify_junction(
     let name_b = registry.get_name(mat_b_id).unwrap_or("Unknown");
 
     match (cat_a, cat_b) {
-        (MaterialConductivity::Conductor, MaterialConductivity::Semiconductor)
-        | (MaterialConductivity::Semiconductor, MaterialConductivity::Conductor) => {
+        (MaterialCategory::Conductor, MaterialCategory::Semiconductor)
+        | (MaterialCategory::Semiconductor, MaterialCategory::Conductor) => {
             let key: CompactString = format!("{}:{}", name_a, name_b).into();
             if let Some(bridge_name) = bridge_table.get(key.as_str()) {
                 JunctionClassification::BridgeRequired {

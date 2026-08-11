@@ -33,7 +33,7 @@ pub fn export_with_space_def(
         .and_then(|sd| sd.profile.as_ref())
         .and_then(|profile_name| symbol_table.get_profile(profile_name.as_str()).ok());
 
-    scene.add_substrate(space, profile);
+    scene.add_substrate(space, profile, symbol_table);
     scene.add_traces(space);
 
     // Add components from HardwareSpace

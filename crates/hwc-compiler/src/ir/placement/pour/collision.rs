@@ -29,15 +29,13 @@ pub fn check_pour_collisions(
             && !skip_substrate_check
             && space.substrate_material_id != material_id
         {
-            let is_conductor = space.material_registry.is_conductor(material_id);
-            let is_substrate_insulator = space
-                .material_registry
-                .is_insulator(space.substrate_material_id)
-                || space
-                    .material_registry
-                    .is_semiconductor(space.substrate_material_id);
+            let is_conductive = space.material_registry.is_conductive(material_id);
+            let is_substrate_dielectric = matches!(
+                space.material_registry.get_category(space.substrate_material_id),
+                Some(hwc_parser::MaterialCategory::Insulator | hwc_parser::MaterialCategory::Semiconductor)
+            );
 
-            if is_conductor && is_substrate_insulator {
+            if is_conductive && is_substrate_dielectric {
                 let pour_net_id = if let Some(net_name) = &pour.net {
                     space
                         .netlist

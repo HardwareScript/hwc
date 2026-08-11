@@ -20,10 +20,29 @@ pub fn convert_metadata_to_physics(
             .unwrap_or(0),
     );
 
+    // v0.2.1: Collect the material names of zero-thickness mask layers. Mask geometry
+    // is a 2D fabrication instruction with no physical body, so it must never take part
+    // in connectivity, clearance, or collision analysis.
+    let mask_material_names: rustc_hash::FxHashSet<&str> = space
+        .stackup_layers
+        .iter()
+        .filter(|l| l.is_mask)
+        .map(|l| l.material_name.as_str())
+        .collect();
+
     // v0.1.8: Preserve indices to maintain compatibility with the Unified Spatial Index.
     // We no longer skip Net 0 layers here; they are handled by the Conductive Island Gate
     // and Substrate Isolation logic in the IslandBuilder.
     for layer in space.entity_graph.get_substrate_layers().iter() {
+        // v0.2.1: Exclude zero-thickness mask geometry from physical analysis.
+        if !mask_material_names.is_empty() {
+            if let Some(mat_name) = space.material_registry.get_name(layer.material) {
+                if mask_material_names.contains(mat_name) {
+                    continue;
+                }
+            }
+        }
+
         let net_name = if layer.net != hwc_engine::netlist::NetId::UNCONNECTED {
             space
                 .netlist

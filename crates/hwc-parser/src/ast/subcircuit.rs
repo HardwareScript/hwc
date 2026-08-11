@@ -9,17 +9,30 @@
 //! - Expressions are evaluated with dimensional analysis
 //! - SPICE/Spectre/Verilog-A export is generated from AST
 //!
-//! Example:
+//! v0.2.1: True Foundry SPICE Integration
+//! - Added `spice_include` field for foundry model trust mode
+//! - When `spice_include` is present, compiler emits `.include` directive
+//! - Inline `elements` are bypassed, deferring physics to foundry model
+//!
+//! Example (Inline Elements Mode):
 //! ```hw
 //! export subcircuit sky130_fd_pr__res_high_po:
 //!     terminals: [PLUS, MINUS, BULK]
 //!     parameters: [W = 1.0um, L = 1.0um]
 //!     elements:
-//!         R_head: Resistor(PLUS, node_1, val: 362.0ohm)
-//!         R_body: Resistor(node_1, node_2, val: 350.0ohm_sq * (L / W))
-//!         R_tail: Resistor(node_2, MINUS, val: 362.0ohm)
-//!         C_sub1: Capacitor(PLUS, BULK, val: 2.0fF_um2 * W * L)
-//!         C_sub2: Capacitor(MINUS, BULK, val: 2.0fF_um2 * W * L)
+//!         R_head: Resistor(nodes: [PLUS, node_1], value: 362.0ohm)
+//!         R_body: Resistor(nodes: [node_1, node_2], value: 350.0ohm * (L / W))
+//!         R_tail: Resistor(nodes: [node_2, MINUS], value: 362.0ohm)
+//!         C_sub1: Capacitor(nodes: [PLUS, BULK], value: 2.0fF * W * L)
+//!         C_sub2: Capacitor(nodes: [MINUS, BULK], value: 2.0fF * W * L)
+//! ```
+//!
+//! Example (Foundry Trust Mode):
+//! ```hw
+//! export subcircuit sky130_fd_pr__res_high_po:
+//!     terminals: [PLUS, MINUS, BULK]
+//!     parameters: [W = 1.0um, L = 1.0um]
+//!     spice_include: "sky130_fd_pr/models/sky130_fd_pr__res_high_po.model.spice"
 //! ```
 
 use compact_str::CompactString;
@@ -44,7 +57,13 @@ pub struct SubcircuitDefinition {
     pub parameters: Vec<SubcircuitParameter>,
 
     /// Internal circuit elements (resistors, capacitors, etc.)
+    /// Empty when `spice_include` is used (foundry model trust mode)
     pub elements: Vec<SubcircuitElement>,
+
+    /// Path to foundry-provided SPICE model file (v0.2.1: True Foundry Integration)
+    /// When present, replaces inline `elements` with `.include` directive
+    /// Example: "sky130_fd_pr/models/sky130_fd_pr__res_high_po.model.spice"
+    pub spice_include: Option<CompactString>,
 
     /// Whether this subcircuit is exported
     pub is_exported: bool,
@@ -115,12 +134,21 @@ impl SubcircuitDefinition {
             ));
         }
 
-        // Elements must not be empty
-        if self.elements.is_empty() {
+        // Elements must not be empty UNLESS spice_include is provided (foundry trust mode)
+        if self.elements.is_empty() && self.spice_include.is_none() {
             return Err(format!(
-                "Subcircuit '{}' must contain at least one element",
+                "Subcircuit '{}' must contain at least one element or specify 'spice_include'",
                 self.name.name
             ));
+        }
+
+        // If both elements and spice_include are provided, warn (elements will be ignored)
+        if !self.elements.is_empty() && self.spice_include.is_some() {
+            eprintln!(
+                "Warning: Subcircuit '{}' has both 'elements' and 'spice_include'. \
+                 The foundry model will be used and inline elements will be ignored.",
+                self.name.name
+            );
         }
 
         // Validate that all node references are either terminals or internal nodes

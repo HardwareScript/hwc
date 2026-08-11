@@ -1,7 +1,7 @@
 use compact_str::CompactString;
 use rustc_hash::FxHashMap;
 
-use crate::material::{MaterialConductivity, MaterialId, MaterialRegistry};
+use crate::material::{MaterialId, MaterialRegistry};
 use crate::space::StackupLayer;
 
 /// Errors from the routing layer database.
@@ -101,12 +101,7 @@ impl RoutingLayerDatabase {
         for layer in stackup {
             // Look up the material to determine conductivity
             let mat_id = material_registry.get_id(&layer.material_name);
-            let is_conductive = mat_id.is_some_and(|id| {
-                matches!(
-                    material_registry.get_conductivity(id),
-                    Some(MaterialConductivity::Conductor | MaterialConductivity::Semiconductor)
-                )
-            });
+            let is_conductive = mat_id.is_some_and(|id| material_registry.is_conductive(id));
 
             let is_routable = is_conductive && layer.is_routable;
 

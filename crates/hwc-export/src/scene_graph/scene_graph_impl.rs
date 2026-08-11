@@ -35,8 +35,13 @@ impl SceneGraph {
     }
 
     /// Add substrate mesh (FR4 base) from actual substrate layers
-    pub fn add_substrate(&mut self, space: &HardwareSpace, profile: Option<&ProfileDefinition>) {
-        add_substrate(&mut self.meshes, space, &self.materials, profile);
+    pub fn add_substrate(
+        &mut self,
+        space: &HardwareSpace,
+        profile: Option<&ProfileDefinition>,
+        symbol_table: &SymbolTable,
+    ) {
+        add_substrate(&mut self.meshes, space, &self.materials, profile, symbol_table);
     }
 
     /// Helper: Add a box mesh to the scene

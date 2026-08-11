@@ -30,10 +30,18 @@ space Simple_Resistor_Space implements SimpleResistor:
     # 1. CONTINUOUS POLYSILICON RESISTOR BODY (PRIMARY RESISTIVE CHANNEL)
     # The 4μm × 1μm Polysilicon channel forms the physical resistor
     # Bound to BOTH Terminal A and Terminal B - this is ONE continuous channel
+    # v0.2.2: Multi-terminal device bodies do NOT have net assignments
     add pour(Polysilicon) named Resistor_Body on layer: polyres:
         device: R1.A, R1.B
-        net: In
         dimensions: res_length by res_width
+        at: [x: resistor_center_x, y: resistor_center_y]
+
+    # 1a. RESISTOR POLY MASK (RPM) - ZERO-THICKNESS FABRICATION INSTRUCTION
+    # This mask blocks silicide formation on the polysilicon resistor body
+    # Category: mask → Z-thickness = 0nm, anchored to Z=180nm (top of polyres)
+    # Exported to DXF as 2D polyline, skipped in GLB 3D mesh generation
+    add pour(Resistor_Poly_Mask) named RPM_Block on layer: rpm:
+        dimensions: res_length + 200nm by res_width + 200nm
         at: [x: resistor_center_x, y: resistor_center_y]
 
     # 2. LEFT CONTACT HEAD (TERMINAL A → NET IN)
