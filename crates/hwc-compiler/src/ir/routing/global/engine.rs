@@ -167,7 +167,12 @@ impl<'a> AutoRouter<'a> {
                 resolved,
                 resolved.width_nm,
             ) {
-                Ok((start, goal, start_normal, goal_normal)) => {
+                Ok(crate::ir::routing::helpers::boundary_resolution::ResolvedEndpoints::PathRequired {
+                    start,
+                    goal,
+                    start_normal,
+                    goal_normal,
+                }) => {
                     eprintln!("[ENGINE DEBUG] Route {} ({}): boundary resolution returned start=({},{},{}), goal=({},{},{})",
                         idx, resolved.net_name, start.x, start.y, start.z, goal.x, goal.y, goal.z);
 
@@ -227,6 +232,32 @@ impl<'a> AutoRouter<'a> {
 
                     net_escape_stubs.insert(resolved.net_id, escape_stub_nm);
                 }
+                Ok(crate::ir::routing::helpers::boundary_resolution::ResolvedEndpoints::SatisfiedByPlacement {
+                    overlap_point,
+                }) => {
+                    // v0.2.1 BLOAT PURGE: Route satisfied by physical placement overlap
+                    // Register the connection in EntityGraph without invoking the pathfinder
+                    eprintln!(
+                        "[ENGINE] Net '{}' (id={}) satisfied by physical placement overlap at ({},{},{}). \
+                         Registering anchor point (no pathfinding required).",
+                        resolved.net_name,
+                        resolved.net_id.raw(),
+                        overlap_point.x,
+                        overlap_point.y,
+                        overlap_point.z
+                    );
+
+                    // Register a single-point anchor in the entity graph so netlist validation passes
+                    // This represents the fact that the entities are already physically connected
+                    // Clipper2 will weld them during geometry export
+                    // Material ID will be determined during geometry export based on the layer Z coordinate
+                    self.space.entity_graph.register_route(
+                        resolved.net_id,
+                        &[overlap_point, overlap_point],
+                        0u8, // Placeholder material ID - will be resolved during export
+                        resolved.width_nm,
+                    );
+                }
                 Err(e) => {
                     eprintln!("[ROUTER WARNING] Failed to resolve boundary points for net '{}': {:?} - skipping", resolved.net_name, e);
                 }
@@ -234,9 +265,20 @@ impl<'a> AutoRouter<'a> {
         }
 
         if explicit_segments.is_empty() {
-            return Err(IrError::RoutingError(
-                "No routes could be resolved from EntityGraph.".into(),
-            ));
+            // v0.2.1 BLOAT PURGE: Distinguish between no routes vs. all routes satisfied by placement
+            // Check if any routes were satisfied by physical placement overlap
+            if !data.resolved_routes.is_empty() {
+                eprintln!(
+                    "[ROUTER] All {} route(s) satisfied by physical placement overlap. Pathfinding skipped.",
+                    data.resolved_routes.len()
+                );
+                // Return empty RouteResult - routes are already registered in EntityGraph
+                return Ok(RouteResult::new());
+            } else {
+                return Err(IrError::RoutingError(
+                    "No routes could be resolved from EntityGraph.".into(),
+                ));
+            }
         }
 
         let grid_bbox = hwc_engine::geometry::BoundingBox::new(

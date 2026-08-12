@@ -50,13 +50,13 @@ XR1 In Out GND sky130_fd_pr__res_high_po W=1.00u L=4.00u
 * INTEGRATED TRACE PARASITICS
 * ========================================
 * Trace resistance
-RRtr_In_0 nIn_entry In 7.311111e-1
+RRtr_In_0 nIn_entry In 8.355556e-1
 * Ground capacitance
-CCgnd_In_0 In GND 1.933755e-16
+CCgnd_In_0 In GND 2.210005e-16
 * Trace resistance
-RRtr_Out_0 nOut_entry Out 7.311111e-1
+RRtr_Out_0 nOut_entry Out 8.355556e-1
 * Ground capacitance
-CCgnd_Out_0 Out GND 1.933755e-16
+CCgnd_Out_0 Out GND 2.210005e-16
 
 * Total parasitic elements: 4
 

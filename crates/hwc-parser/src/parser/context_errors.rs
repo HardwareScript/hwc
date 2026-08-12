@@ -6,6 +6,9 @@
 use crate::lexer::{Span, Token};
 use crate::parser::error::ParseError;
 
+/// Current version from Cargo.toml workspace
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 /// Parsing context to track what structural element we're inside
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ParsingContext {
@@ -214,17 +217,21 @@ impl ContextErrorGenerator {
                         .to_string();
                 }
                 "grid" | "resolution" => {
-                    return "Found 'grid'/'resolution'. Both were removed in v0.2.1.\n\
-                            Manufacturing snapping is governed by the PDK profile\n\
-                            (manufacturing.track_pitch / manufacturing.min_feature_size).\n\
-                            Remove this line and declare 'profile: <ProfileName>' instead."
-                        .to_string();
+                    return format!(
+                        "Found 'grid'/'resolution'. Both were removed in v{}.\n\
+                        Manufacturing snapping is governed by the PDK profile\n\
+                        (manufacturing.track_pitch / manufacturing.min_feature_size).\n\
+                        Remove this line and declare 'profile: <ProfileName>' instead.",
+                        VERSION
+                    );
                 }
                 "origin" => {
-                    return "Found 'origin'. It was removed in v0.2.1.\n\
-                            All spaces now use the canonical Bottom-Left / Z-Up coordinate\n\
-                            system (X >= 0, Y >= 0, Z >= 0). Simply remove this line."
-                        .to_string();
+                    return format!(
+                        "Found 'origin'. It was removed in v{}.\n\
+                        All spaces now use the canonical Bottom-Left / Z-Up coordinate\n\
+                        system (X >= 0, Y >= 0, Z >= 0). Simply remove this line.",
+                        VERSION
+                    );
                 }
                 _ => {}
             }

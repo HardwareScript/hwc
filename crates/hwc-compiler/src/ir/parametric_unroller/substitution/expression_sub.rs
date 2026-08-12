@@ -3,6 +3,82 @@ use crate::ir::errors::IrError;
 use compact_str::CompactString;
 use hwc_parser::Expression;
 
+/// Substitute loop variable in relational constraints
+pub fn substitute_in_relational_constraints(
+    constraints: &[hwc_parser::RelationalConstraint],
+    variable: &str,
+    value: usize,
+) -> Result<smallvec::SmallVec<[hwc_parser::RelationalConstraint; 2]>, crate::IrError> {
+    let mut result = smallvec::SmallVec::new();
+    
+    for constraint in constraints {
+        let substituted = match constraint {
+            hwc_parser::RelationalConstraint::Align { axis, target, span } => {
+                let substituted_target = match target {
+                    hwc_parser::AlignmentTarget::Entity(name) => {
+                        hwc_parser::AlignmentTarget::Entity(
+                            super::name_sub::substitute_in_component_name(name, variable, value)
+                        )
+                    }
+                    hwc_parser::AlignmentTarget::Expression(expr) => {
+                        hwc_parser::AlignmentTarget::Expression(
+                            substitute_in_expression(expr, variable, value)?
+                        )
+                    }
+                };
+                
+                hwc_parser::RelationalConstraint::Align {
+                    axis: *axis,
+                    target: substituted_target,
+                    span: *span,
+                }
+            }
+            hwc_parser::RelationalConstraint::Directional(dir) => {
+                let substituted_dir = match dir {
+                    hwc_parser::DirectionalConstraint::Above { target, spacing } => {
+                        hwc_parser::DirectionalConstraint::Above {
+                            target: super::name_sub::substitute_in_component_name(target, variable, value),
+                            spacing: spacing.as_ref()
+                                .map(|s| substitute_in_expression(s, variable, value))
+                                .transpose()?,
+                        }
+                    }
+                    hwc_parser::DirectionalConstraint::Below { target, spacing } => {
+                        hwc_parser::DirectionalConstraint::Below {
+                            target: super::name_sub::substitute_in_component_name(target, variable, value),
+                            spacing: spacing.as_ref()
+                                .map(|s| substitute_in_expression(s, variable, value))
+                                .transpose()?,
+                        }
+                    }
+                    hwc_parser::DirectionalConstraint::LeftOf { target, spacing } => {
+                        hwc_parser::DirectionalConstraint::LeftOf {
+                            target: super::name_sub::substitute_in_component_name(target, variable, value),
+                            spacing: spacing.as_ref()
+                                .map(|s| substitute_in_expression(s, variable, value))
+                                .transpose()?,
+                        }
+                    }
+                    hwc_parser::DirectionalConstraint::RightOf { target, spacing } => {
+                        hwc_parser::DirectionalConstraint::RightOf {
+                            target: super::name_sub::substitute_in_component_name(target, variable, value),
+                            spacing: spacing.as_ref()
+                                .map(|s| substitute_in_expression(s, variable, value))
+                                .transpose()?,
+                        }
+                    }
+                };
+                
+                hwc_parser::RelationalConstraint::Directional(substituted_dir)
+            }
+        };
+        
+        result.push(substituted);
+    }
+    
+    Ok(result)
+}
+
 pub fn substitute_in_anchor_name(
     anchor_name: &str,
     variable: &str,

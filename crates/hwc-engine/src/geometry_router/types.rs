@@ -366,7 +366,7 @@ pub enum RoutingError {
     #[diagnostic(
         code(R25),
         url("https://docs.hw-script.org/errors/R25"),
-        help("Physical Explanation: The routing engine requires fabrication constraints (trace width, clearance, etc.) from the PDK profile, but none are loaded or the profile is incomplete.\n\nThe v0.1.8 architecture enforces PDK-driven execution: all routing parameters must come from the profile's BridgeRegistry and fabrication rules. No hardcoded fallbacks are permitted.\n\nSolution:\n1. Ensure a profile with 'trace:' and 'clearance:' constraints is declared in the space definition\n2. Verify the profile file contains all required fabrication rules\n3. Check that the profile is correctly loaded before routing begins")
+        help("Physical Explanation: The routing engine requires fabrication constraints (trace width, clearance, etc.) from the PDK profile, but none are loaded or the profile is incomplete.\n\nThe current architecture enforces PDK-driven execution: all routing parameters must come from the profile's BridgeRegistry and fabrication rules. No hardcoded fallbacks are permitted.\n\nSolution:\n1. Ensure a profile with 'trace:' and 'clearance:' constraints is declared in the space definition\n2. Verify the profile file contains all required fabrication rules\n3. Check that the profile is correctly loaded before routing begins")
     )]
     MissingFabricationConstraints { net_id: NetId, message: String },
 }

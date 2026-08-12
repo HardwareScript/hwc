@@ -57,12 +57,12 @@ impl ParameterExtractionRegistry {
     /// Register all standard extraction functions
     ///
     /// This includes built-in support for common passive components:
-    /// - Resistor: R = ρ(L/A)
-    /// - Capacitor: C = ε₀εᵣ(A/d)
+    /// - Resistor: R = ρ(L/A) + W/L for subcircuits
+    /// - Capacitor: W/L geometry for foundry models
     pub fn register_standard_extractors(&mut self) {
         self.register("Resistor", extract_resistor_parameters);
         self.register("PolyResistor", extract_resistor_parameters);
-        self.register("Capacitor", extract_capacitor_parameters);
+        self.register("Capacitor", extract_geometry_wl_parameters);
     }
 
     /// Extract parameters for a device
@@ -770,6 +770,87 @@ fn calculate_contact_resistance(pour: &PourMetadata, space: &HardwareSpace) -> R
     // No contact found on this terminal - return 0
     // This occurs for pours that don't have vias (e.g., direct metal connections)
     Ok(0.0)
+}
+
+/// Extract W and L parameters from terminal geometry for foundry PDK models
+///
+/// **FOUNDRY MODEL EXTRACTION (TYPE A in NETLIST-ARCHITECTURE.md)**
+///
+/// For devices with `spice_include` (foundry subcircuits), the compiler:
+/// 1. Reads what parameters the subcircuit declares (parameters: [W, L])
+/// 2. Measures the physical pour geometry (bounding box width and length)
+/// 3. Passes W and L to the foundry SPICE model
+/// 4. Does NOT calculate physics (C, R, etc.) - the foundry model handles that
+///
+/// This is the Zero-Magic approach:
+/// - No string pattern matching ("Width", "LENGTH", "area")
+/// - No physics formulas (C = εA/d is in the foundry model, not the compiler)
+/// - Direct geometric measurement from user's explicit device bindings
+///
+/// Example:
+/// ```
+/// export subcircuit sky130_fd_pr__cap_mim:
+///     terminals: [top, bottom]
+///     parameters: [W = 10.0um, L = 10.0um]  # ← Declares W and L
+///     spice_include: "path/to/model.spice"
+/// ```
+///
+/// Compiler extracts: W = bbox.width, L = bbox.length
+/// Output SPICE: `XC1 top bottom sky130_fd_pr__cap_mim W=10.0u L=10.0u`
+fn extract_geometry_wl_parameters(
+    terminal_pours: &FxHashMap<CompactString, Vec<PourMetadata>>,
+    _space: &HardwareSpace,
+) -> Result<FxHashMap<CompactString, f64>, String> {
+    // Find the largest terminal pour to measure geometry from
+    // For capacitors: typically the overlapping plates
+    // For other devices: the primary active region
+    
+    let mut largest_pour: Option<&PourMetadata> = None;
+    let mut largest_area = 0.0;
+    
+    for (_terminal_name, pours) in terminal_pours {
+        for pour in pours {
+            if let Some(bbox) = &pour.bbox {
+                let width = (bbox.max.x - bbox.min.x) as f64;
+                let length = (bbox.max.y - bbox.min.y) as f64;
+                let area = width * length;
+                
+                if area > largest_area {
+                    largest_area = area;
+                    largest_pour = Some(pour);
+                }
+            }
+        }
+    }
+    
+    let pour = largest_pour.ok_or_else(|| {
+        "No terminal pours with bounding boxes found for geometry extraction".to_string()
+    })?;
+    
+    let bbox = pour.bbox.as_ref().ok_or_else(|| {
+        format!("Pour '{}' has no bounding box", pour.name)
+    })?;
+    
+    // Extract width and length from bounding box
+    // Convention: X dimension = L (length), Y dimension = W (width)
+    let width_nm = (bbox.max.y - bbox.min.y) as f64;
+    let length_nm = (bbox.max.x - bbox.min.x) as f64;
+    
+    let mut params = FxHashMap::default();
+    params.insert("W".into(), width_nm / 1000.0); // Convert to micrometers
+    params.insert("L".into(), length_nm / 1000.0); // Convert to micrometers
+    
+    println!(
+        "      ├─ Geometry: W={:.2}um, L={:.2}um (from pour '{}')",
+        width_nm / 1000.0,
+        length_nm / 1000.0,
+        pour.name
+    );
+    println!(
+        "      └─ Foundry model will calculate C, R, and parasitics from W/L"
+    );
+    
+    Ok(params)
 }
 
 // ============================================================================

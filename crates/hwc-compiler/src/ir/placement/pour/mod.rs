@@ -110,25 +110,54 @@ pub fn place_pour(
                     })?
                 };
 
-                // Evaluate dimensions
-                let width_nm = crate::ir::conversions::evaluate_expression_to_nm(
-                    w,
-                    ctx.symbol_table,
-                    ctx.eval_context,
-                )
-                .map_err(|e| IrError::CoordinateResolutionFailed {
-                    coordinate_str: format!("pour '{}' width", pour.name),
-                    reason: e,
-                })?;
-                let height_nm = crate::ir::conversions::evaluate_expression_to_nm(
-                    h,
-                    ctx.symbol_table,
-                    ctx.eval_context,
-                )
-                .map_err(|e| IrError::CoordinateResolutionFailed {
-                    coordinate_str: format!("pour '{}' height", pour.name),
-                    reason: e,
-                })?;
+                // Evaluate dimensions with anchor support
+                let width_nm = if w.contains_anchor_reference() {
+                    crate::ir::placement::coordinate_evaluation::evaluate_coordinate_with_anchors(
+                        w,
+                        ctx.symbol_table,
+                        ctx.eval_context,
+                        bbox_tracker,
+                        crate::ir::placement::coordinate_evaluation::CoordinateAxis::X,
+                    )
+                    .map_err(|e| IrError::CoordinateResolutionFailed {
+                        coordinate_str: format!("pour '{}' width", pour.name),
+                        reason: e.to_string(),
+                    })?
+                } else {
+                    crate::ir::conversions::evaluate_expression_to_nm(
+                        w,
+                        ctx.symbol_table,
+                        ctx.eval_context,
+                    )
+                    .map_err(|e| IrError::CoordinateResolutionFailed {
+                        coordinate_str: format!("pour '{}' width", pour.name),
+                        reason: e,
+                    })?
+                };
+                
+                let height_nm = if h.contains_anchor_reference() {
+                    crate::ir::placement::coordinate_evaluation::evaluate_coordinate_with_anchors(
+                        h,
+                        ctx.symbol_table,
+                        ctx.eval_context,
+                        bbox_tracker,
+                        crate::ir::placement::coordinate_evaluation::CoordinateAxis::Y,
+                    )
+                    .map_err(|e| IrError::CoordinateResolutionFailed {
+                        coordinate_str: format!("pour '{}' height", pour.name),
+                        reason: e.to_string(),
+                    })?
+                } else {
+                    crate::ir::conversions::evaluate_expression_to_nm(
+                        h,
+                        ctx.symbol_table,
+                        ctx.eval_context,
+                    )
+                    .map_err(|e| IrError::CoordinateResolutionFailed {
+                        coordinate_str: format!("pour '{}' height", pour.name),
+                        reason: e,
+                    })?
+                };
 
                 // Create boundary from center + dimensions
                 let from =

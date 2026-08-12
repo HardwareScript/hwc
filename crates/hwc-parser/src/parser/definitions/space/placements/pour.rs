@@ -104,17 +104,21 @@ impl crate::parser::Parser {
                     position = Some(self.parse_coordinate_optional_z()?);
                 }
                 "align" => {
-                    // v0.2.1: Alignment constraints
+                    // v0.2.1: Alignment constraints with edge support
                     let start_pos = self.current_span().start;
                     let axis_name = self.expect_identifier()?;
                     let axis = match axis_name.as_str() {
                         "center" => AlignmentAxis::Center,
-                        "x" => AlignmentAxis::X,
-                        "y" => AlignmentAxis::Y,
-                        "z" => AlignmentAxis::Z,
+                        "x" | "center_x" => AlignmentAxis::X,
+                        "y" | "center_y" => AlignmentAxis::Y,
+                        "z" | "center_z" => AlignmentAxis::Z,
+                        "left" => AlignmentAxis::Left,
+                        "right" => AlignmentAxis::Right,
+                        "top" => AlignmentAxis::Top,
+                        "bottom" => AlignmentAxis::Bottom,
                         _ => {
                             return Err(self.error(&format!(
-                                "Unknown alignment axis: {}. Expected: center, x, y, or z",
+                                "Unknown alignment axis: {}. Expected: center, x, y, z, left, right, top, or bottom",
                                 axis_name
                             )))
                         }

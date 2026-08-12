@@ -10,9 +10,7 @@ module ViaPlacementTest:
     route A to B
 
 space Via_Test implements ViaPlacementTest:
-    dimensions: 10.0um by 5.0um by 1200nm
-    resolution: 10nm
-    origin: bl by b
+    dimensions: 10.0um by 5.0um
     profile: Resistor_3D
 
     nets:
@@ -46,12 +44,14 @@ space Via_Test implements ViaPlacementTest:
     
     add pour(Aluminum) named Contact_Left on layer: metal1:
         dimensions: contact_size by contact_size
-        at: [x: Poly_Left.left, y: Poly_Left.center_y]
+        align: left with Poly_Left.left
+        align: center_y with Poly_Left
         net: A
     
     add contact(Tungsten) named Via_Left spanning layer: polyres to metal1:
         diameter: via_diameter
-        at: [x: Contact_Left.center_x, y: Contact_Left.center_y]
+        align: center_x with Contact_Left
+        align: center_y with Contact_Left
         net: A
     
     # ========================================================================
@@ -65,10 +65,12 @@ space Via_Test implements ViaPlacementTest:
     
     add pour(Aluminum) named Contact_Right on layer: metal1:
         dimensions: contact_size by contact_size
-        at: [x: Poly_Right.left + min_inset, y: Poly_Right.center_y]
+        align: left with Poly_Right.left + min_inset
+        align: center_y with Poly_Right
         net: B
     
     add contact(Tungsten) named Via_Right spanning layer: polyres to metal1:
         diameter: via_diameter
-        at: [x: Contact_Right.center_x, y: Contact_Right.center_y]
+        align: center_x with Contact_Right
+        align: center_y with Contact_Right
         net: B

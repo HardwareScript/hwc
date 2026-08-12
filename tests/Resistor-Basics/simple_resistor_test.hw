@@ -42,69 +42,82 @@ space Simple_Resistor_Space implements SimpleResistor:
     # Exported to DXF as 2D polyline, skipped in GLB 3D mesh generation
     add pour(Resistor_Poly_Mask) named RPM_Block on layer: rpm:
         dimensions: res_length + 200nm by res_width + 200nm
-        at: [x: resistor_center_x, y: resistor_center_y]
+        align: center_x with Resistor_Body
+        align: center_y with Resistor_Body
 
     # 2. LEFT CONTACT HEAD (TERMINAL A → NET IN)
     # Titanium_Silicide contact on li1 layer binds Terminal A to net In
+    # Contact center positioned at resistor left edge + half contact width for proper overlap
     add pour(Titanium_Silicide) named Contact_A_LI on layer: li1:
         device: R1.A
         net: In
         dimensions: contact_size by contact_size
-        at: [x: Resistor_Body.left + contact_size / 2, y: Resistor_Body.center_y]
+        align: center_x with Resistor_Body.left + contact_size / 2
+        align: center_y with Resistor_Body
     
     # 3. RIGHT CONTACT HEAD (TERMINAL B → NET OUT)
     # Titanium_Silicide contact on li1 layer binds Terminal B to net Out
+    # Contact center positioned at resistor right edge - half contact width for proper overlap
     add pour(Titanium_Silicide) named Contact_B_LI on layer: li1:
         device: R1.B
         net: Out
         dimensions: contact_size by contact_size
-        at: [x: Resistor_Body.right - contact_size / 2, y: Resistor_Body.center_y]
+        align: center_x with Resistor_Body.right - contact_size / 2
+        align: center_y with Resistor_Body
 
     # 4. VIAS BRIDGING POLYRES → LI1
     add contact(Tungsten) named Via_A_Poly spanning layer: polyres to li1:
         diameter: 170nm
-        at: [x: Contact_A_LI.center_x, y: Contact_A_LI.center_y]
+        align: center_x with Contact_A_LI
+        align: center_y with Contact_A_LI
         net: In
 
     add contact(Tungsten) named Via_B_Poly spanning layer: polyres to li1:
         diameter: 170nm
-        at: [x: Contact_B_LI.center_x, y: Contact_B_LI.center_y]
+        align: center_x with Contact_B_LI
+        align: center_y with Contact_B_LI
         net: Out
 
     # 5. METAL1 PADS DIRECTLY ABOVE LI1 CONTACTS
     add pour(Aluminum) named Contact_A_Metal on layer: metal1:
         dimensions: contact_size by contact_size
-        at: [x: Contact_A_LI.center_x, y: Contact_A_LI.center_y]
+        align: center_x with Contact_A_LI
+        align: center_y with Contact_A_LI
         net: In
 
     add pour(Aluminum) named Contact_B_Metal on layer: metal1:
         dimensions: contact_size by contact_size
-        at: [x: Contact_B_LI.center_x, y: Contact_B_LI.center_y]
+        align: center_x with Contact_B_LI
+        align: center_y with Contact_B_LI
         net: Out
 
     # 6. VIAS BRIDGING LI1 → METAL1
     add contact(Tungsten) named Via_A_Metal spanning layer: li1 to metal1:
         diameter: 170nm
-        at: [x: Contact_A_LI.center_x, y: Contact_A_LI.center_y]
+        align: center_x with Contact_A_LI
+        align: center_y with Contact_A_LI
         net: In
 
     add contact(Tungsten) named Via_B_Metal spanning layer: li1 to metal1:
         diameter: 170nm
-        at: [x: Contact_B_LI.center_x, y: Contact_B_LI.center_y]
+        align: center_x with Contact_B_LI
+        align: center_y with Contact_B_LI
         net: Out
 
-    # 7. EXTERNAL TEST PADS
+    # 7. EXTERNAL TEST PADS (Using anchor alignment with spacing)
     let pad_spacing = 3.0um
     let pad_size = 1.0um
     
     add pour(Aluminum) named In_Pad on layer: metal1:
         dimensions: pad_size by pad_size
-        at: [x: Contact_A_Metal.left - pad_spacing, y: Contact_A_Metal.center_y]
+        align: center_x with Contact_A_Metal.left - pad_spacing
+        align: center_y with Contact_A_Metal
         net: In
 
     add pour(Aluminum) named Out_Pad on layer: metal1:
         dimensions: pad_size by pad_size
-        at: [x: Contact_B_Metal.right + pad_spacing, y: Contact_B_Metal.center_y]
+        align: center_x with Contact_B_Metal.right + pad_spacing
+        align: center_y with Contact_B_Metal
         net: Out
 
     # 8. METAL1 ROUTING FROM CONTACT PADS TO EXTERNAL TEST PADS

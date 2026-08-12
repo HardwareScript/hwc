@@ -1,4 +1,4 @@
-use super::expression_sub::{substitute_in_coordinate, substitute_in_expression};
+use super::expression_sub::{substitute_in_coordinate, substitute_in_expression, substitute_in_relational_constraints};
 use super::name_sub::{
     substitute_in_component_name, substitute_in_net_binding, substitute_in_net_name,
 };
@@ -52,6 +52,8 @@ pub fn unroll_component(
         None
     };
 
+    let relational_constraints = substitute_in_relational_constraints(&component.relational_constraints, variable, value)?;
+
     Ok(ComponentPlacement {
         component_type: component.component_type.clone(),
         parameters: component.parameters.clone(),
@@ -64,7 +66,7 @@ pub fn unroll_component(
         array_config: component.array_config.clone(),
         pin_net_bindings,
         waivers: component.waivers.clone(),
-        relational_constraints: component.relational_constraints.clone(),
+        relational_constraints,
         span: component.span,
     })
 }
@@ -123,6 +125,8 @@ pub fn unroll_pour(
         .map(|t| substitute_in_expression(t, variable, value))
         .transpose()?;
 
+    let relational_constraints = substitute_in_relational_constraints(&pour.relational_constraints, variable, value)?;
+
     Ok(PourPlacement {
         material: pour.material.clone(),
         name,
@@ -136,7 +140,7 @@ pub fn unroll_pour(
         device: pour.device.clone(),
         thermal_relief: pour.thermal_relief,
         waivers: pour.waivers.clone(),
-        relational_constraints: pour.relational_constraints.clone(),
+        relational_constraints,
         inside_region: pour.inside_region.clone(),
         span: pour.span,
     })
@@ -210,6 +214,8 @@ pub fn unroll_plane(
         })
         .collect::<Result<Vec<_>, IrError>>()?;
 
+    let relational_constraints = substitute_in_relational_constraints(&plane.relational_constraints, variable, value)?;
+
     Ok(PlanePlacement {
         material: plane.material.clone(),
         name,
@@ -220,7 +226,7 @@ pub fn unroll_plane(
         to,
         net,
         cutouts,
-        relational_constraints: plane.relational_constraints.clone(),
+        relational_constraints,
         inside_region: plane.inside_region.clone(),
         span: plane.span,
     })
@@ -295,6 +301,8 @@ pub fn unroll_contact(
         );
     }
 
+    let relational_constraints = substitute_in_relational_constraints(&contact.relational_constraints, variable, value)?;
+
     Ok(ContactPlacement {
         material: contact.material.clone(),
         name,
@@ -304,7 +312,7 @@ pub fn unroll_contact(
         to_elevation,
         net,
         properties,
-        relational_constraints: contact.relational_constraints.clone(), // v0.2.1: Preserve relational constraints
+        relational_constraints,
         contour: contact.contour.clone(),
         span: contact.span,
     })

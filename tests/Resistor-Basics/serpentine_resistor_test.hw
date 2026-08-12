@@ -1,143 +1,222 @@
-# serpentine_resistor_test.hw
-# A simple U-shaped serpentine resistor demonstrating multi-segment resistive paths
-# Based on working simple_resistor_test.hw pattern
+# serpentine_resistor_test.hw - SKY130 Serpentine (Meandering) Resistor
+# Device: sky130_fd_pr__res_high_po (P+ Poly Precision Resistor, 350 Ω/□)
+# 
+# SERPENTINE/MEANDERING RESISTOR: Folded resistive path for high resistance in compact area
+# Physical principle: Multiple connected segments form continuous resistive channel
+# Total resistance = (Total_Length / Width) × R_sheet + R_contact
+#
+# This design: 5 horizontal segments (10μm each) + 4 vertical connectors (2μm each)
+# Total path length: (5×10μm) + (4×2μm) = 58μm
+# Width: 1μm
+# Expected resistance: (58μm/1μm) × 350Ω/□ + 724Ω = 20,300Ω + 724Ω = 21,024Ω
+#
+# Reference: https://patents.justia.com/patent/20220271116
 
 import * from @std/primitives/units
 import * from "./resistor_pdk"
-
-device Resistor:
-    terminals: [A, B]
-    materials:
-        A: Polysilicon
-        B: Polysilicon
 
 module SerpentineResistor:
     pins: [input In, output Out]
     route In to Out
 
 space Serpentine_Resistor_Space implements SerpentineResistor:
-    dimensions: 15.0um by 12.0um by 500nm
-    resolution: 10nm
-    origin: bl by b
-    profile: Resistor_Flattened
+    dimensions: 20.0um by 15.0um
+    profile: Resistor_3D
 
     nets:
         In:  { classification: signal, potential: 1.8V, current: 1.0uA }
         Out: { classification: signal, potential: 0.0V, current: 1.0uA }
+        GND: { classification: ground, potential: 0.0V, current: 0.0uA }
+
+    # Device virtual terminal bindings (v0.2.1)
+    device_nets R1:
+        BULK: GND
 
     # ========================================================================
-    # POLYSILICON SERPENTINE PATH
-    # Creates an S-shaped meandering resistor path
-    # 5 horizontal segments with 4 vertical connectors
+    # PARAMETRIC SERPENTINE GEOMETRY (Manual, Relational Positioning)
+    # All 5 horizontal bars share center_x = 8.0um (X span: 3.0um to 13.0um)
+    # Version 1: Fully manual (no loops), minimal at: usage
     # ========================================================================
 
-    # Segment 1: Bottom horizontal (left to right) - Terminal A
+    let seg_length = 10.0um
+    let seg_width = 1.0um
+    let vert_length = 2.0um
+    let vert_width = 1.0um
+    let center_x = 8.0um   # Center X for horizontal segments (3.0um to 13.0um)
+    
+    # Derived X coordinates (calculated from geometry, not absolute)
+    let right_x = center_x + seg_length/2 - vert_width/2  # = 12.5um
+    let left_x = center_x - seg_length/2 + vert_width/2   # = 3.5um
+
+    # Segment 1: Bottom horizontal (THE ONLY at: STATEMENT - anchor point)
     add pour(Polysilicon) named Seg1 on layer: polyres:
-        device: R1.A
-        dimensions: 10.0um by 1.0um
-        at: [x: 5.0um, y: 2.0um]
+        device: R1.A, R1.B
+        dimensions: seg_length by seg_width
+        at: [x: center_x, y: 2.0um]
 
-    # Vertical connector 1: Right side going up
+    # Vertical connector 1: Right side going up (Y = 3.5um)
     add pour(Polysilicon) named Vert1 on layer: polyres:
-        device: R1.A
-        dimensions: 1.0um by 2.0um
-        at: [x: 9.5um, y: 3.0um]
+        device: R1.A, R1.B
+        dimensions: vert_width by vert_length
+        align: center_x with Seg1.right - vert_width/2
+        align: center_y with Seg1.center_y + 1.5um
 
-    # Segment 2: Second horizontal (right to left)
+    # Segment 2: Second horizontal (Y = 5.0um)
     add pour(Polysilicon) named Seg2 on layer: polyres:
-        device: R1.A
-        dimensions: 10.0um by 1.0um
-        at: [x: 5.0um, y: 4.0um]
+        device: R1.A, R1.B
+        dimensions: seg_length by seg_width
+        align: center_x with Seg1
+        align: center_y with Seg1.center_y + 3.0um
 
-    # Vertical connector 2: Left side going up
+    # Vertical connector 2: Left side going up (Y = 6.5um)
     add pour(Polysilicon) named Vert2 on layer: polyres:
-        device: R1.A
-        dimensions: 1.0um by 2.0um
-        at: [x: 0.5um, y: 5.0um]
+        device: R1.A, R1.B
+        dimensions: vert_width by vert_length
+        align: center_x with Seg1.left + vert_width/2
+        align: center_y with Seg1.center_y + 4.5um
 
-    # Segment 3: Middle horizontal (left to right)
+    # Segment 3: Middle horizontal (Y = 8.0um)
     add pour(Polysilicon) named Seg3 on layer: polyres:
-        device: R1.A
-        dimensions: 10.0um by 1.0um
-        at: [x: 5.0um, y: 6.0um]
+        device: R1.A, R1.B
+        dimensions: seg_length by seg_width
+        align: center_x with Seg1
+        align: center_y with Seg1.center_y + 6.0um
 
-    # Vertical connector 3: Right side going up
+    # Vertical connector 3: Right side going up (Y = 9.5um)
     add pour(Polysilicon) named Vert3 on layer: polyres:
-        device: R1.A
-        dimensions: 1.0um by 2.0um
-        at: [x: 9.5um, y: 7.0um]
+        device: R1.A, R1.B
+        dimensions: vert_width by vert_length
+        align: center_x with Seg1.right - vert_width/2
+        align: center_y with Seg1.center_y + 7.5um
 
-    # Segment 4: Fourth horizontal (right to left)
+    # Segment 4: Fourth horizontal (Y = 11.0um)
     add pour(Polysilicon) named Seg4 on layer: polyres:
-        device: R1.A
-        dimensions: 10.0um by 1.0um
-        at: [x: 5.0um, y: 8.0um]
+        device: R1.A, R1.B
+        dimensions: seg_length by seg_width
+        align: center_x with Seg1
+        align: center_y with Seg1.center_y + 9.0um
 
-    # Vertical connector 4: Left side going up
+    # Vertical connector 4: Left side going up (Y = 12.5um)
     add pour(Polysilicon) named Vert4 on layer: polyres:
-        device: R1.A
-        dimensions: 1.0um by 2.0um
-        at: [x: 0.5um, y: 9.0um]
+        device: R1.A, R1.B
+        dimensions: vert_width by vert_length
+        align: center_x with Seg1.left + vert_width/2
+        align: center_y with Seg1.center_y + 10.5um
 
-    # Segment 5: Top horizontal (left to right) - Terminal B
+    # Segment 5: Top horizontal (Y = 14.0um)
     add pour(Polysilicon) named Seg5 on layer: polyres:
+        device: R1.A, R1.B
+        dimensions: seg_length by seg_width
+        align: center_x with Seg1
+        align: center_y with Seg1.center_y + 12.0um
+
+    # RPM MASK - covers entire serpentine path (aligned to middle segment)
+    add pour(Resistor_Poly_Mask) named RPM_Serpentine on layer: rpm:
+        dimensions: 10.4um by 13.4um
+        align: center_x with Seg1
+        align: center_y with Seg1.center_y + 6.0um  # Centers at 8.0um
+
+    # ========================================================================
+    # TERMINAL A CONTACT (LEFT END OF BOTTOM SEGMENT)
+    # ========================================================================
+
+    let contact_size = 400nm
+
+    # LI1 contact pad for Terminal A
+    add pour(Titanium_Silicide) named Contact_A_LI on layer: li1:
+        device: R1.A
+        net: In
+        dimensions: contact_size by contact_size
+        align: center_x with Seg1.left + contact_size / 2
+        align: center_y with Seg1
+
+    # Via bridging polyres → li1
+    add contact(Tungsten) named Via_A_Poly spanning layer: polyres to li1:
+        diameter: 170nm
+        align: center_x with Contact_A_LI
+        align: center_y with Contact_A_LI
+        net: In
+
+    # Metal1 pad above LI1
+    add pour(Aluminum) named Contact_A_Metal on layer: metal1:
+        dimensions: contact_size by contact_size
+        align: center_x with Contact_A_LI
+        align: center_y with Contact_A_LI
+        net: In
+
+    # Via bridging li1 → metal1
+    add contact(Tungsten) named Via_A_Metal spanning layer: li1 to metal1:
+        diameter: 170nm
+        align: center_x with Contact_A_LI
+        align: center_y with Contact_A_LI
+        net: In
+
+    # ========================================================================
+    # TERMINAL B CONTACT (RIGHT END OF TOP SEGMENT)
+    # ========================================================================
+
+    # LI1 contact pad for Terminal B
+    add pour(Titanium_Silicide) named Contact_B_LI on layer: li1:
         device: R1.B
-        dimensions: 10.0um by 1.0um
-        at: [x: 5.0um, y: 10.0um]
-
-    # ========================================================================
-    # METAL CONTACTS FOR TERMINALS
-    # ========================================================================
-
-    # Input contact - overlaps left end of Seg1
-    add pour(Aluminum) named Contact_In on layer: metal1:
-        net: In
-        dimensions: 800nm by 800nm
-        at: [x: 500nm, y: 2.0um]
-
-    # Output contact - overlaps right end of Seg5
-    add pour(Aluminum) named Contact_Out on layer: metal1:
         net: Out
-        dimensions: 800nm by 800nm
-        at: [x: 9.5um, y: 10.0um]
+        dimensions: contact_size by contact_size
+        align: center_x with Seg5.right - contact_size / 2
+        align: center_y with Seg5
 
-    # Vias connecting contacts to polysilicon
-    add contact(Tungsten) named Via_In spanning layer: polyres to metal1:
-        net: In
-        diameter: 400nm
-        align: center with Contact_In
-
-    add contact(Tungsten) named Via_Out spanning layer: polyres to metal1:
+    # Via bridging polyres → li1
+    add contact(Tungsten) named Via_B_Poly spanning layer: polyres to li1:
+        diameter: 170nm
+        align: center_x with Contact_B_LI
+        align: center_y with Contact_B_LI
         net: Out
-        diameter: 400nm
-        align: center with Contact_Out
+
+    # Metal1 pad above LI1
+    add pour(Aluminum) named Contact_B_Metal on layer: metal1:
+        dimensions: contact_size by contact_size
+        align: center_x with Contact_B_LI
+        align: center_y with Contact_B_LI
+        net: Out
+
+    # Via bridging li1 → metal1
+    add contact(Tungsten) named Via_B_Metal spanning layer: li1 to metal1:
+        diameter: 170nm
+        align: center_x with Contact_B_LI
+        align: center_y with Contact_B_LI
+        net: Out
 
     # ========================================================================
-    # EXTERNAL CONNECTION PADS
+    # EXTERNAL TEST PADS
     # ========================================================================
 
+    let pad_size = 1.0um
+    let overlap = 300nm
+
+    # External Pad A (Left of Contact_A_Metal)
     add pour(Aluminum) named In_Pad on layer: metal1:
+        dimensions: pad_size by pad_size
+        align: right with Contact_A_Metal.left + overlap
+        align: center_y with Contact_A_Metal
         net: In
-        dimensions: 1.0um by 1.0um
-        at: [x: 1.0um, y: 2.0um]
 
+    # External Pad B (Right of Contact_B_Metal)
     add pour(Aluminum) named Out_Pad on layer: metal1:
+        dimensions: pad_size by pad_size
+        align: left with Contact_B_Metal.right - overlap
+        align: center_y with Contact_B_Metal
         net: Out
-        dimensions: 1.0um by 1.0um
-        at: [x: 13.0um, y: 10.0um]
 
     # ========================================================================
-    # ROUTING
+    # METAL1 ROUTING
     # ========================================================================
 
-    route In_Pad to Contact_In:
+    route In_Pad to Contact_A_Metal:
         net: In
-        width: 500nm
+        width: 800nm
         layer: metal1
         intent: Signal
 
-    route Contact_Out to Out_Pad:
+    route Contact_B_Metal to Out_Pad:
         net: Out
-        width: 500nm
+        width: 800nm
         layer: metal1
         intent: Signal

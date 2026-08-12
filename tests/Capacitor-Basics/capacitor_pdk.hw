@@ -1,5 +1,5 @@
-# capacitor_pdk.hw - Process Design Kit for Capacitor Testing
-# Simplified PDK focused on parallel-plate capacitors (MIM structures)
+# capacitor_pdk.hw - SKY130 Capacitor PDK
+# Device: MIM (Metal-Insulator-Metal) Capacitor
 import * from @std/primitives/units
 import Polysilicon, Aluminum, Tungsten, Titanium_Silicide, Silicon_Dioxide, Air, MIMCap from "./materials"
 
@@ -11,12 +11,10 @@ export Silicon_Dioxide
 export Air
 export MIMCap
 
-# Define square contact shape for vias
 export shape SquareContact(width: Measurement):
     geometry:
         Rectangle(width: width, height: width)
 
-# Define bridges for layer transitions
 export bridge Polysilicon to Aluminum:
     interface: Titanium_Silicide
     thickness: 5nm
@@ -32,42 +30,50 @@ export bridge MIMCap to Aluminum:
     thickness: 2nm
     fill: Tungsten
 
-# MIM Capacitor profile - Matches SiliWiz tutorial structure
-# Critical: mimcap_dielectric layer is 5nm thick - optimized for high capacitance!
+export bridge Polysilicon to Titanium_Silicide:
+    interface: Titanium_Silicide
+    thickness: 5nm
+    fill: Tungsten
+
+export bridge Titanium_Silicide to Aluminum:
+    interface: Titanium_Silicide
+    thickness: 5nm
+    fill: Tungsten
+
+# SKY130-compliant MIM capacitor stackup
+# Critical: mimcap_dielectric layer is 5nm thick - optimized for high capacitance
 # For C = ε₀εᵣ(A/d), thin dielectric = higher capacitance
 export profile Capacitor_MIM:
     technology: "ASIC"
+    substrate_net: GND
     
     stackup:
-        metal1:            [material: Aluminum,         thickness: 20nm, routable: true]   # Z: 0-20nm   (Bottom Plate)
-        mimcap_dielectric: [material: Silicon_Dioxide,  thickness: 5nm,  routable: false]  # Z: 20-25nm  (Thin Dielectric!)
-        mimcap:            [material: MIMCap,           thickness: 15nm, routable: true]   # Z: 25-40nm  (Top Capacitor Plate)
-        d2:                [material: Silicon_Dioxide,  thickness: 30nm, routable: false]  # Z: 40-70nm  (Inter-metal Dielectric)
-        metal2:            [material: Aluminum,         thickness: 30nm, routable: true]   # Z: 70-100nm (Top Metal Layer)
+        metal1:            [material: Aluminum,         thickness: 20nm, routable: true]
+        mimcap_dielectric: [material: Silicon_Dioxide,  thickness: 5nm,  routable: false]
+        mimcap:            [material: MIMCap,           thickness: 15nm, routable: true]
+        d2:                [material: Silicon_Dioxide,  thickness: 30nm, routable: false]
+        metal2:            [material: Aluminum,         thickness: 30nm, routable: true]
+
+    manufacturing:
+        track_pitch: 10nm
+        copper_thickness: 10nm
+        circle_segments: 64
 
     via:
         min_diameter: 200nm
         min_annular_ring: 50nm
         min_spacing: 300nm
         shape: SquareContact
-        contact_depth: 30%  # Global default for capacitor contacts
-        
-        # v0.2.1: Material-specific penetration depths for capacitor structures
-        # Shallow penetration preserves plate geometry and uniform E-field
+        contact_depth: 30%
         material_contact_depths:
-            Aluminum: 30%      # Shallow penetration into top plate
-            Polysilicon: 30%   # Shallow penetration into bottom plate
+            Aluminum: 30%
+            Polysilicon: 30%
+            MIMCap: 30%
 
     trace:
         min_width: 200nm
         min_spacing: 200nm
         edge_clearance: 100nm
-
-    manufacturing:
-        copper_thickness: 10nm
-        circle_segments: 64
-        solder_mask_thickness: 0nm
-        solder_mask_expansion: 0nm
 
     clearance:
         high_voltage: 500nm
@@ -85,7 +91,6 @@ export profile Capacitor_MIM:
         allowed_dielectrics: [Silicon_Dioxide, Air]
 
     routing:
-        max_local_route_length: 50um
         min_segment_length: 200nm
         escape_stub: 0nm
         base_cost: 1
@@ -100,67 +105,21 @@ export profile Capacitor_MIM:
         routing_style: auto
         escape_stub: 0nm
 
-# Legacy profile for backward compatibility (poly-based capacitors)
-# Not recommended - use Capacitor_MIM for better performance
-export profile Capacitor_Legacy:
-    technology: "ASIC"
-    
-    stackup:
-        polyres:    [material: Polysilicon,      thickness: 200nm, routable: true]   # Bottom Plate
-        d1:         [material: Silicon_Dioxide,  thickness: 300nm, routable: false]  # Dielectric
-        metal1:     [material: Aluminum,         thickness: 500nm, routable: true]   # Top Plate
+# MIM Capacitor Subcircuit (v0.2.1)
+# Uses spice_include to defer physics to foundry model
+export subcircuit sky130_fd_pr__cap_mim:
+    terminals: [top, bottom]
+    parameters: [W = 10.0um, L = 10.0um]
+    spice_include: "sky130_fd_pr/models/sky130_fd_pr__cap_mim.model.spice"
 
-    via:
-        min_diameter: 300nm
-        min_annular_ring: 50nm
-        min_spacing: 400nm
-        shape: SquareContact
-        contact_depth: 30%  # Global default for capacitor contacts
-        
-        # v0.2.1: Material-specific penetration depths for capacitor structures
-        # Shallow penetration preserves plate geometry and uniform E-field
-        material_contact_depths:
-            Aluminum: 30%      # Shallow penetration into top plate
-            Polysilicon: 30%   # Shallow penetration into bottom plate
-
-    trace:
-        min_width: 300nm
-        min_spacing: 300nm
-        edge_clearance: 200nm
-
-    manufacturing:
-        copper_thickness: 500nm
-        circle_segments: 64
-        solder_mask_thickness: 0nm
-        solder_mask_expansion: 0nm
-
-    clearance:
-        high_voltage: 1um
-        safety_factor: 2.0
-
-    thermal:
-        ambient_temp: 25C
-        max_operating_temp: 125C
-        max_temp_rise: 50C
-        clustering_threshold: 10um
-
-    layer:
-        min_thickness: 50nm
-        allowed_conductors: [Aluminum, Polysilicon]
-        allowed_dielectrics: [Silicon_Dioxide, Air]
-
-    routing:
-        max_local_route_length: 50um
-        min_segment_length: 300nm
-        escape_stub: 0nm
-        base_cost: 1
-        via_penalty: 50
-        direction_penalty: 10
-        tight_clearance_penalty: 2
-        crosstalk_penalty: 3
-        impedance_penalty: 1
-        reference_void_penalty: 5000000
-
-    net_type Signal:
-        routing_style: auto
-        escape_stub: 0nm
+export device Capacitor:
+    terminals: [top, bottom]
+    materials:
+        top: [MIMCap, Aluminum]
+        bottom: [Aluminum, MIMCap]
+    spice:
+        prefix: X
+        subcircuit: sky130_fd_pr__cap_mim
+        terminal_order: [top, bottom]
+        parameters: [W, L]
+        parameter_style: named

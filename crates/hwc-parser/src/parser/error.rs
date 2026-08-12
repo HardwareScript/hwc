@@ -5,6 +5,9 @@ use compact_str::CompactString;
 use miette::{Diagnostic, SourceSpan};
 use thiserror::Error;
 
+/// Current version from Cargo.toml workspace
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 /// Parser errors with authoritative, professional miette diagnostics
 #[derive(Debug, Clone, Error, Diagnostic)]
 pub enum ParseError {
@@ -202,22 +205,24 @@ pub enum ParseError {
     #[diagnostic(
         code(S23),
         url("https://docs.hw-script.org/errors/S23"),
-        help("v0.1.6 uses bare identifiers for type names.\nExample: component Resistor: (not component \"Resistor\":)")
+        help("{help_message}")
     )]
     ExpectedIdentifierNotString {
         #[label("Remove quotes")]
         span: SourceSpan,
+        help_message: String,
     },
 
-    #[error("The 'define' keyword was removed in v0.1.6")]
+    #[error("The 'define' keyword was removed")]
     #[diagnostic(
         code(S24),
         url("https://docs.hw-script.org/errors/S24"),
-        help("Type keywords are now first-class. Use them directly.\nMigration: define component \"Name\": → component Name:")
+        help("{help_message}")
     )]
     DefineKeywordRemoved {
         #[label("Remove 'define' keyword")]
         span: SourceSpan,
+        help_message: String,
     },
 
     #[error("'%' cannot be used as a binary operator")]
@@ -250,13 +255,21 @@ pub(crate) fn error_expected_colon_in_property(span: &Span) -> ParseError {
 pub(crate) fn error_expected_identifier_not_string(span: &Span) -> ParseError {
     ParseError::ExpectedIdentifierNotString {
         span: span_to_source_span(span),
+        help_message: format!(
+            "v{} uses bare identifiers for type names.\nExample: component Resistor: (not component \"Resistor\":)",
+            VERSION
+        ),
     }
 }
 
-/// Create error for 'define' keyword (removed in v0.1.6)
+/// Create error for 'define' keyword (removed in current version)
 pub(crate) fn error_define_keyword_removed(span: &Span) -> ParseError {
     ParseError::DefineKeywordRemoved {
         span: span_to_source_span(span),
+        help_message: format!(
+            "Type keywords are now first-class in v{}. Use them directly.\nMigration: define component \"Name\": → component Name:",
+            VERSION
+        ),
     }
 }
 

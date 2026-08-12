@@ -3,6 +3,26 @@ use crate::ir::routing::automatic::{select_routable_port_from_resolution, PortSe
 use hwc_engine::geometry_router::port_escape::CardinalPort;
 use hwc_engine::{HardwareSpace, Point3D};
 
+/// Result of boundary resolution for a route.
+///
+/// v0.2.1 BLOAT PURGE: Explicit discrimination between routes that need pathfinding
+/// versus routes that are already satisfied by physical placement overlap.
+#[derive(Debug, Clone)]
+pub enum ResolvedEndpoints {
+    /// Entities are spatially separated and require pathfinding
+    PathRequired {
+        start: Point3D,
+        goal: Point3D,
+        start_normal: hwc_engine::geometry_router::connection_interface::Normal2D,
+        goal_normal: hwc_engine::geometry_router::connection_interface::Normal2D,
+    },
+    /// Entities already overlap in 2D on the same layer — route is satisfied by placement!
+    /// Clipper2 will weld the overlapping copper automatically during geometry export.
+    SatisfiedByPlacement {
+        overlap_point: Point3D,
+    },
+}
+
 /// Map a CardinalPort to its corresponding AccessRegion.
 ///
 /// v0.1.9: This replaces geometric-only selection with obstacle-aware port mapping.
@@ -69,24 +89,19 @@ fn select_access_region_by_port<'a>(
 /// v0.2.0: Contact-Aware Routing - if an explicit contact exists on a pad,
 /// use its position as the routing point instead of the pad boundary edge.
 ///
+/// v0.2.1 BLOAT PURGE: Returns `ResolvedEndpoints` enum to explicitly discriminate
+/// between routes that need pathfinding versus routes satisfied by placement overlap.
+///
 /// This function applies **Dynamic Boundary Resolution** with Zero-Gap Contact Lock
 /// to correct for trace width mismatch between cached AccessRegions (computed with
 /// PDK min_width) and actual routed trace widths.
 ///
-/// Returns: (start_point, goal_point, start_normal, goal_normal)
+/// Returns: ResolvedEndpoints (PathRequired or SatisfiedByPlacement)
 pub fn resolve_route_boundary_points(
     space: &HardwareSpace,
     route: &super::super::types::ResolvedRoute,
     trace_width_nm: i64,
-) -> Result<
-    (
-        Point3D,
-        Point3D,
-        hwc_engine::geometry_router::connection_interface::Normal2D,
-        hwc_engine::geometry_router::connection_interface::Normal2D,
-    ),
-    IrError,
-> {
+) -> Result<ResolvedEndpoints, IrError> {
     // Query entity names from EntityGraph
     let from_entity_data = space
         .entity_graph
@@ -267,6 +282,48 @@ pub fn resolve_route_boundary_points(
             }
         })?;
 
+    // ============================================================================
+    // STEP 1: SAME-NET OVERLAP PRUNING (v0.2.1 Bloat Purge)
+    // ============================================================================
+    // If both entities are on the same net and same routing layer, and their
+    // bounding boxes overlap in 2D (have interior intersection), there is NO NEED
+    // to route between them. Clipper2 will automatically weld overlapping copper.
+    // Return SatisfiedByPlacement to skip pathfinding and register the connection.
+    //
+    // NOTE: Edge-touching (bbox1.max == bbox2.min) is NOT overlap - we need
+    // INTERIOR intersection (bbox1.max > bbox2.min AND bbox1.min < bbox2.max)
+
+    if from_entity_data.net_id == to_entity_data.net_id && from_z == to_z {
+        // Check 2D XY interior intersection (strict > and <, not >= and <=)
+        let x_overlap = from_entity_data.bbox.max.x > to_entity_data.bbox.min.x
+            && from_entity_data.bbox.min.x < to_entity_data.bbox.max.x;
+        let y_overlap = from_entity_data.bbox.max.y > to_entity_data.bbox.min.y
+            && from_entity_data.bbox.min.y < to_entity_data.bbox.max.y;
+
+        if x_overlap && y_overlap {
+            // Calculate the center of the overlapping region
+            let overlap_center = Point3D::new(
+                (from_entity_data.bbox.min.x.max(to_entity_data.bbox.min.x)
+                    + from_entity_data.bbox.max.x.min(to_entity_data.bbox.max.x))
+                    / 2,
+                (from_entity_data.bbox.min.y.max(to_entity_data.bbox.min.y)
+                    + from_entity_data.bbox.max.y.min(to_entity_data.bbox.max.y))
+                    / 2,
+                from_z,
+            );
+
+            eprintln!(
+                "[ROUTE SATISFIED] Entities '{}' and '{}' on net '{}' already physically overlap on layer '{}'. \
+                 Marked as SatisfiedByPlacement (Clipper2 will weld the copper).",
+                from_entity_data.name, to_entity_data.name, route.net_name, routing_layer
+            );
+
+            return Ok(ResolvedEndpoints::SatisfiedByPlacement {
+                overlap_point: overlap_center,
+            });
+        }
+    }
+
     let from_center = Point3D::new(
         (from_entity_data.bbox.min.x + from_entity_data.bbox.max.x) / 2,
         (from_entity_data.bbox.min.y + from_entity_data.bbox.max.y) / 2,
@@ -407,46 +464,50 @@ pub fn resolve_route_boundary_points(
         goal_point
     };
 
-    Ok((
-        final_start_point,
-        final_goal_point,
-        from_region.normal,
-        to_region.normal,
-    ))
+    Ok(ResolvedEndpoints::PathRequired {
+        start: final_start_point,
+        goal: final_goal_point,
+        start_normal: from_region.normal,
+        goal_normal: to_region.normal,
+    })
 }
 
-/// Apply dynamic boundary offset scaling with Zero-Gap Contact Lock.
+/// Apply direct edge-anchor projection with Zero-Gap Contact Lock.
 ///
-/// The entry_point was pre-computed with `default_width_nm`. This function:
-/// 1. Reverses the default shift to find the true pad edge
-/// 2. Projects outward by EXACTLY (actual_width/2) for perfect 0nm gap contact
-/// 3. Uses the database-provided Z elevation (v0.2.0) instead of cached entry_point.z
+/// v0.2.1 BLOAT PURGE: Eliminated fragile reverse-math guesswork.
+/// The entry_point from AccessRegion is the edge midpoint.
+/// 
+/// This function:
+/// 1. Takes the edge center directly (no reverse calculation)
+/// 2. Steps INWARD by exactly (trace_width/2) along the normal to position
+///    the trace centerline so that its edge touches the pad edge with 0nm gap
+/// 3. Uses the database-provided Z elevation
 ///
-/// This ensures the trace edge touches the pad edge exactly, with no gap and no overlap.
+/// INVARIANT: Position the trace centerline flush with the pad boundary edge.
+/// Normal points OUTWARD from the pad, so stepping INWARD requires subtracting normal * half_width.
 fn resolve_boundary_entry(
     entry_point: Point3D,
     normal: hwc_engine::geometry_router::connection_interface::Normal2D,
-    default_width_nm: i64,
+    _default_width_nm: i64, // DEPRECATED: No longer used (v0.2.1)
     actual_width_nm: i64,
     database_z: i64, // v0.2.0: Use database-queried Z, not cached AccessRegion Z
 ) -> Point3D {
-    const SCALE: i64 = 1_000_000_000;
+    let (nx, ny) = normal.to_unit_direction(); // nx, ny in {-1, 0, 1}
+    let half_width = actual_width_nm / 2;
 
-    let default_half_width = default_width_nm / 2;
-    let actual_half_width = actual_width_nm / 2;
+    eprintln!("[BOUNDARY DEBUG] resolve_boundary_entry (v0.2.1 DEBLOATED):");
+    eprintln!("  entry_point (edge center): ({},{},{})", entry_point.x, entry_point.y, entry_point.z);
+    eprintln!("  normal: ({},{}) -> unit direction: ({},{})", normal.x, normal.y, nx, ny);
+    eprintln!("  actual_width_nm: {}, half_width: {}", actual_width_nm, half_width);
 
-    // 1. Reverse the pre-cached default shift to find the true pad edge coordinate
-    //    (Since normal points outward, we subtract the default half-width)
-    let edge_x = entry_point.x - (normal.x as i64 * default_half_width) / SCALE;
-    let edge_y = entry_point.y - (normal.y as i64 * default_half_width) / SCALE;
+    // Step INWARD by half_width to position trace centerline so edge touches pad edge
+    // Since normal points outward, we SUBTRACT to move inward
+    let corrected_x = entry_point.x - nx * half_width;
+    let corrected_y = entry_point.y - ny * half_width;
 
-    // 2. Project INWARD by EXACTLY the actual trace half-width (Zero-Gap Contact Lock)
-    //    For the trace edge to touch the pad edge, the centerline must be INSIDE by half-width
-    //    Since normal points outward, we SUBTRACT to move inward
-    let corrected_x = edge_x - (normal.x as i64 * actual_half_width) / SCALE;
-    let corrected_y = edge_y - (normal.y as i64 * actual_half_width) / SCALE;
+    eprintln!("  corrected position (centerline): ({},{},{})", corrected_x, corrected_y, database_z);
 
-    Point3D::new(corrected_x, corrected_y, database_z) // v0.2.0: Use database Z
+    Point3D::new(corrected_x, corrected_y, database_z)
 }
 
 /// Resolve pin center positions from a ResolvedRoute by querying the EntityGraph.
@@ -500,12 +561,15 @@ pub fn resolve_route_pin_centers(
     Ok((start, goal))
 }
 
-/// Find an explicit circular contact (via) on a pad that spans to a target Z layer.
+/// Find an explicit contact (via) on a pad that spans to a target Z layer.
 ///
 /// v0.2.0: Contact-Aware Routing - checks if the user has placed an explicit
 /// contact on a pad that already provides the layer transition. If found, returns
 /// the contact's XY center position so the router can use it instead of creating
 /// a new via at the pad edge.
+///
+/// v0.2.1 BLOAT PURGE: Removed shape-specific discrimination. Queries any contact
+/// (Circle, Rect, Polygon) registered in LayerConnectionDatabase generically.
 ///
 /// Returns: Some((x, y)) if a contact exists, None otherwise
 fn find_contact_on_pad(
@@ -514,24 +578,18 @@ fn find_contact_on_pad(
     target_z: i64,
     net_id: Option<hwc_engine::netlist::NetId>,
 ) -> Option<(i64, i64)> {
-    use hwc_engine::geometry_router::substrate_types::SubstrateLayerShape;
-
     let net_id = net_id?; // Return None if no net_id provided
     let net_raw = net_id.raw();
 
-    // Search all substrate layers for circular contacts that:
+    // Search all substrate layers for contacts that:
     // 1. Are on the same net
     // 2. Have XY center within the pad's XY bbox
     // 3. Span vertically to include the target Z layer
+    //
+    // v0.2.1: NO SHAPE FILTERING - accept any geometry (Circle, Rect, Polygon)
     for (idx, layer) in space.entity_graph.get_substrate_layers().iter().enumerate() {
         // Must be on the same net
         if layer.net != hwc_engine::NetId::new(net_raw) {
-            continue;
-        }
-
-        // Must be circular (contact shape, not rectangular pour)
-        let is_circular = matches!(layer.shape, SubstrateLayerShape::Circle { .. });
-        if !is_circular {
             continue;
         }
 

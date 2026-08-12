@@ -2,9 +2,16 @@ Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
 Wafer,Substrate,0.03x0.02x0.00mm,,,,,1
 
 # MATERIAL USAGE (Fabrication)
-Reference,Type,Material,Layer_Z_nm,Area_nm2,Volume_nm3
-Bottom_Plate,Pour,Aluminum,z:0,121000000,2420000000
-Top_Plate,Pour,MIMCap,z:25,100000000,1500000000
-Top_Contact_Metal2,Pour,Aluminum,z:70,1000000,30000000
-Out_Pad,Pour,Aluminum,z:0,4000000,80000000
-In_Pad,Pour,Aluminum,z:70,4000000,120000000
+Reference,Type,Material,Layer,Area_nm2,Volume_nm3
+Bottom_Plate,Pour,Aluminum,metal1 (z:0nm),121000000,2420000000
+Top_Plate,Pour,MIMCap,mimcap (z:25nm),100000000,1500000000
+Top_Contact_Metal2,Pour,Aluminum,metal2 (z:70nm),1000000,30000000
+Out_Pad,Pour,Aluminum,metal1 (z:0nm),4000000,80000000
+In_Pad,Pour,Aluminum,metal2 (z:70nm),4000000,120000000
+Via_Top,Contact,Tungsten,mimcap (z:25nm),250000,11000000
+
+# AGGREGATED MATERIAL TOTALS (Foundry Fabrication Summary)
+Material,Total_Area_nm2,Total_Volume_nm3,Layer_Count,Coverage_Percentage
+Aluminum,130000000,2650000000,4,21.7%
+MIMCap,100000000,1500000000,1,16.7%
+Tungsten,250000,11000000,1,0.0%

@@ -1,118 +1,93 @@
-# simple_capacitor_test.hw
-# MIM Capacitor Test - Following SiliWiz Tutorial Structure
-# https://tinytapeout.com/siliwiz/capacitors/
-#
-# SiliWiz Key Points:
-# 1. metal1 (bottom plate) extends beyond mimcap on all sides (DRC requirement)
-# 2. mimcap sits on top of metal1 with small gap around edges
-# 3. metal2 via connects mimcap to metal2 for routing
-# 4. External pads use relational placement (not hardcoded coordinates)
-#
+# simple_capacitor_test.hw - SKY130 MIM Capacitor Test
+# Device: MIM (Metal-Insulator-Metal) Capacitor
 # Physics: C = ε₀εᵣ(A/d)
 # - Area (A): ~10μm × 10μm = 100μm² (mimcap overlap)
 # - Thickness (d): 5nm (mimcap_dielectric layer)
 # - εᵣ (SiO2): 3.9
 # - Expected C ≈ 690fF
-
 import * from @std/primitives/units
 import * from "./capacitor_pdk"
-
-# Native device contract for MIM capacitor
-device Capacitor:
-    terminals: [top, bottom]
-    materials:
-        top: MIMCap
-        bottom: Aluminum
-    spice:
-        prefix: C
-        terminal_order: [top, bottom]
-        parameters: [C]
-        parameter_style: positional
 
 module SimpleCapacitor:
     pins: [input In, output Out]
     route In to Out
 
 space Simple_Capacitor_Space implements SimpleCapacitor:
-    dimensions: 30.0um by 20.0um by 100nm
-    resolution: 10nm
-    origin: bl by b
+    dimensions: 30.0um by 20.0um
     profile: Capacitor_MIM
 
     nets:
         In:  { classification: signal, potential: 1.8V, current: 1.0nA }
         Out: { classification: signal, potential: 0.0V, current: 1.0nA }
 
-    # ========================================================================
-    # MIM CAPACITOR - Following SiliWiz Tutorial Pattern
-    # ========================================================================
-    
     let cap_area = 10.0um          # Target capacitor overlap area
     let metal1_overhang = 500nm    # metal1 extends beyond mimcap (DRC requirement)
     let metal1_size = cap_area + (2 * metal1_overhang)  # 11μm total
     let mimcap_size = cap_area     # 10μm (sits inside metal1)
-    
-    # ========================================================================
-    # 1. BOTTOM PLATE (metal1) - Device terminal, extends beyond mimcap
-    # ========================================================================
+    let capacitor_center_x = 15.0um
+    let capacitor_center_y = 10.0um
+    let pad_spacing = 4.0um
+    let pad_size = 2.0um
+    let contact_size = 1.0um
+    let via_diameter = 400nm
+
+    # 1. BOTTOM PLATE (METAL1) - DEVICE TERMINAL
+    # Metal1 bottom plate extends beyond mimcap on all sides (DRC requirement)
+    # Bound to Terminal bottom and net Out
     add pour(Aluminum) named Bottom_Plate on layer: metal1:
         device: C1.bottom
         net: Out
         dimensions: metal1_size by metal1_size
-        at: [x: 15.0um, y: 10.0um]  # Centered in space
+        at: [x: capacitor_center_x, y: capacitor_center_y]
 
-    # ========================================================================
-    # 2. TOP PLATE (mimcap) - Device terminal, smaller than metal1
-    # ========================================================================
+    # 2. TOP PLATE (MIMCAP) - DEVICE TERMINAL
+    # MIMCap top plate sits centered on metal1 with overhang clearance
+    # Bound to Terminal top and net In
     add pour(MIMCap) named Top_Plate on layer: mimcap:
         device: C1.top
         net: In
         dimensions: mimcap_size by mimcap_size
-        align: center with Bottom_Plate  # ← Relational placement!
+        align: center_x with Bottom_Plate
+        align: center_y with Bottom_Plate
 
-    # ========================================================================
-    # 3. TOP PLATE CONNECTION - metal2 via + metal2 pad
-    # ========================================================================
+    # 3. TOP PLATE CONTACT PAD (METAL2)
+    # Metal2 pad provides connection point for routing to top plate
     add pour(Aluminum) named Top_Contact_Metal2 on layer: metal2:
-        net: In  # ← NOT device-bound! This is just a routing contact
-        dimensions: 1.0um by 1.0um
-        align: center with Top_Plate  # ← Relational placement!
+        net: In
+        dimensions: contact_size by contact_size
+        align: center_x with Top_Plate
+        align: center_y with Top_Plate
 
+    # 4. VIA CONNECTING MIMCAP → METAL2
     add contact(Tungsten) named Via_Top spanning layer: mimcap to metal2:
-        net: In  # ← NOT device-bound! This is just a via for routing
-        diameter: 400nm
-        align: center with Top_Contact_Metal2  # ← Relational placement!
+        net: In
+        diameter: via_diameter
+        align: center_x with Top_Contact_Metal2
+        align: center_y with Top_Contact_Metal2
 
-    # ========================================================================
-    # 4. EXTERNAL CONNECTION PADS - Relational placement, FURTHER away
-    # ========================================================================
-    
-    # Output pad - connects to bottom plate (metal1)
-    # Place to the LEFT of the capacitor with MORE spacing
+    # 5. EXTERNAL TEST PADS (Using anchor alignment with spacing)
+    # Output pad - connects to bottom plate (metal1), positioned to the left
     add pour(Aluminum) named Out_Pad on layer: metal1:
         net: Out
-        dimensions: 2.0um by 2.0um
-        at: [x: Bottom_Plate.left - 4.0um, y: Bottom_Plate.center_y]  # ← More space!
+        dimensions: pad_size by pad_size
+        align: center_x with Bottom_Plate.left - pad_spacing
+        align: center_y with Bottom_Plate
 
-    # Input pad - connects to top plate (metal2)  
-    # Place to the RIGHT of the capacitor with MORE spacing
+    # Input pad - connects to top plate via metal2, positioned to the right
     add pour(Aluminum) named In_Pad on layer: metal2:
         net: In
-        dimensions: 2.0um by 2.0um
-        at: [x: Bottom_Plate.right + 4.0um, y: Bottom_Plate.center_y]  # ← More space!
+        dimensions: pad_size by pad_size
+        align: center_x with Bottom_Plate.right + pad_spacing
+        align: center_y with Bottom_Plate
 
-    # ========================================================================
-    # 5. ROUTING - Simple horizontal traces
-    # ========================================================================
-
-    # Connect output pad to bottom plate (both on metal1)
+    # 6. METAL1 ROUTING FROM OUT PAD TO BOTTOM PLATE
     route Out_Pad to Bottom_Plate:
         net: Out
         width: 500nm
         layer: metal1
         intent: Signal
 
-    # Connect top contact to input pad (both on metal2)
+    # 7. METAL2 ROUTING FROM TOP CONTACT TO IN PAD
     route Top_Contact_Metal2 to In_Pad:
         net: In
         width: 500nm

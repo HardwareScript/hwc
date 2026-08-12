@@ -15,6 +15,9 @@ use compact_str::CompactString;
 use miette::Diagnostic;
 use thiserror::Error;
 
+/// Current version from Cargo.toml workspace
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 #[derive(Error, Diagnostic, Debug)]
 pub enum StackupError {
     #[error("Stackup profile not found: {0}")]
@@ -29,7 +32,7 @@ pub enum StackupError {
     #[diagnostic(
         code(M31),
         url("https://docs.hw-script.org/errors/M31"),
-        help("Stackup definitions are not yet supported in v0.1.4 - use default or programmatic creation")
+        help("Stackup definitions are not yet supported - use default or programmatic creation")
     )]
     ParseError(String),
 

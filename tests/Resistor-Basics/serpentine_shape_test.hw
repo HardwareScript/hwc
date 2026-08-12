@@ -1,0 +1,52 @@
+# serpentine_shape_test.hw
+# PURE SERPENTINE GEOMETRY TEST (Artist Mode)
+# No modules, no devices, no contacts - just the shape itself
+
+import * from @std/primitives/units
+import * from "./resistor_pdk"
+
+space Serpentine_Shape_Test:
+    dimensions: 20.0um by 20.0um
+    profile: Resistor_3D
+
+    # ========================================================================
+    # PARAMETRIC CONFIGURATION
+    # ========================================================================
+    
+    let seg_len = 10.0um        # Length of each horizontal segment
+    let seg_width = 1.0um       # Width of segments
+    let vert_spacing = 3.0um    # Vertical spacing between segments
+    let center_x = 10.0um       # Center X position
+    let start_y = 4.0um         # Starting Y position
+    
+    # ========================================================================
+    # SERPENTINE GENERATION USING LOOPS
+    # Create 5 horizontal segments + 4 vertical connectors
+    # ========================================================================
+    
+    # Horizontal segments (5 total)
+    for i in 0..4:
+        add pour(Polysilicon) named Seg{i} on layer: polyres:
+            dimensions: seg_len by seg_width
+            at: [x: center_x, y: start_y + i * vert_spacing]
+    
+    # Vertical connectors (4 total, alternating left/right)
+    for i in 0..3:
+        if i mod 2 = 0:
+            # Right-side connectors (i = 0, 2)
+            add pour(Polysilicon) named Vert{i} on layer: polyres:
+                dimensions: seg_width by (vert_spacing - seg_width)
+                at: [x: center_x + seg_len/2 - seg_width/2, y: start_y + i * vert_spacing + vert_spacing/2]
+        else:
+            # Left-side connectors (i = 1, 3)
+            add pour(Polysilicon) named Vert{i} on layer: polyres:
+                dimensions: seg_width by (vert_spacing - seg_width)
+                at: [x: center_x - seg_len/2 + seg_width/2, y: start_y + i * vert_spacing + vert_spacing/2]
+
+# ============================================================================
+# THAT'S IT! Just the serpentine shape.
+# Change parameters to see different serpentines:
+# - More segments: change "for i in 0..9" for 10 segments
+# - Tighter spacing: change "vert_spacing = 2.0um"
+# - Longer segments: change "seg_len = 15.0um"
+# ============================================================================

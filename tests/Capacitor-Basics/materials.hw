@@ -1,96 +1,72 @@
-# materials.hw - Capacitor-Basics Materials
-# Realistic physical opacity values for accurate visualization
+# materials.hw - SKY130 Material Definitions
 import * from @std/primitives/units
 
-# Polysilicon - Bottom plate material
-# Opaque crystalline semiconductor
 export material Polysilicon:
     category: conductor
-    symbol: "Poly"
+    symbol: Poly
     process: deposited
     properties:
-        color: "#FF6060"  # Red
+        color: "#FF6060"
         metallic: 0.3
         roughness: 0.8
-        opacity: 1.0      # Opaque - polysilicon is not transparent
-        resistivity: 4e-4ohm_m
+        resistivity: 7e-5ohm_m
         thermal_conductivity: 30.0W_mK
         max_current_density: 1e2A_mm2
 
-# Aluminum - Top plate material
-# Opaque metal with high reflectivity
 export material Aluminum:
     category: conductor
-    symbol: "Al"
+    symbol: Al
     process: deposited
     properties:
-        color: "#C0C0C0"  # Silver
-        opacity: 1.0      # Opaque - metals are not transparent
+        color: "#C0C0C0"
         metallic: 0.8
         roughness: 0.2
         resistivity: 2.82e-8ohm_m
         thermal_conductivity: 237.0W_mK
         max_current_density: 1e3A_mm2
 
-# Tungsten - Via fill material
-# Opaque refractory metal
 export material Tungsten:
     category: conductor
-    symbol: "W"
+    symbol: W
     process: deposited
     properties:
-        color: "#8080FF"  # Light Blue
-        opacity: 1.0      # Opaque - metals are not transparent
+        color: "#8080FF"
         metallic: 0.7
         roughness: 0.3
         resistivity: 5.6e-8ohm_m
         thermal_conductivity: 173.0W_mK
         max_current_density: 1e4A_mm2
 
-# Titanium Silicide - Contact interface material
-# Opaque metallic compound
 export material Titanium_Silicide:
     category: conductor
-    symbol: "TiSi2"
+    symbol: TiSi2
     process: deposited
     properties:
-        color: "#404040"  # Very Dark Grey
-        opacity: 1.0      # Opaque - metallic compounds are not transparent
+        color: "#404040"
         resistivity: 1.5e-7ohm_m
         thermal_conductivity: 30.0W_mK
         max_current_density: 5e3A_mm2
 
-# Silicon Dioxide - Dielectric insulator
-# Transparent in visible light (like glass), but thin films scatter light
 export material Silicon_Dioxide:
     category: insulator
-    symbol: "SiO2"
-    process: deposited
+    symbol: SiO2
     properties:
-        color: "#E0E8FF"  # Light blue-white
-        opacity: 0.05     # Nearly transparent - SiO2 is glass-like, minimal light scattering
+        color: "#E0E8FF"
+        opacity: 0.05
         relative_permittivity: 3.9
 
-# Air - Empty space
-# Completely transparent
 export material Air:
     category: insulator
-    symbol: "Air"
-    process: deposited
+    symbol: Air
     properties:
-        color: "#F0F4FF"
-        opacity: 0.0      # Fully transparent - air is invisible
         relative_permittivity: 1.0
 
-# MIMCap - Special capacitor metal layer
-# Opaque metal optimized for capacitance
 export material MIMCap:
     category: conductor
-    symbol: "MIM"
+    symbol: MIM
     process: deposited
     properties:
-        color: "#FFD700"  # Gold color
-        opacity: 1.0      # Opaque - metal layer is not transparent
+        color: "#FFD700"
         metallic: 0.85
         roughness: 0.15
         resistivity: 3.5e-8ohm_m

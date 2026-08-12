@@ -140,12 +140,16 @@ impl crate::parser::Parser {
                     let axis_name = self.expect_identifier()?;
                     let axis = match axis_name.as_str() {
                         "center" => AlignmentAxis::Center,
-                        "x" => AlignmentAxis::X,
-                        "y" => AlignmentAxis::Y,
-                        "z" => AlignmentAxis::Z,
+                        "x" | "center_x" => AlignmentAxis::X,
+                        "y" | "center_y" => AlignmentAxis::Y,
+                        "z" | "center_z" => AlignmentAxis::Z,
+                        "left" => AlignmentAxis::Left,
+                        "right" => AlignmentAxis::Right,
+                        "top" => AlignmentAxis::Top,
+                        "bottom" => AlignmentAxis::Bottom,
                         _ => {
                             return Err(self.error(&format!(
-                                "Unknown alignment axis: {}. Expected: center, x, y, or z",
+                                "Unknown alignment axis: {}. Expected: center, x, y, z, left, right, top, or bottom",
                                 axis_name
                             )))
                         }

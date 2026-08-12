@@ -359,10 +359,13 @@ impl GeometryRouter {
             let mut net_vias = Vec::new();
 
             for i in 0..points.len() - 1 {
+                let start = points[i];
+                let goal = points[i + 1];
+
                 let route = NetRoute {
                     net_id: *net_id,
-                    start: points[i],
-                    goal: points[i + 1],
+                    start,
+                    goal,
                 };
 
                 let routed = self.route_net_global(entity_graph, &route)?;
