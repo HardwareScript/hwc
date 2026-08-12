@@ -1,7 +1,7 @@
 # resistor_pdk.hw - SkyWater SKY130 Resistor PDK
 # Device: sky130_fd_pr__res_high_po (P+ Poly Precision Resistor, 350 Ω/□)
 import * from @std/primitives/units
-import Polysilicon, Aluminum, Tungsten, Titanium_Silicide, Silicon_Dioxide, Air, Resistor_Poly_Mask from "./materials"
+import Polysilicon, Aluminum, Tungsten, Titanium_Silicide, Silicon_Dioxide, Air, Resistor_Poly_Mask, P_Plus_Diffusion from "./materials"
 
 export Polysilicon
 export Aluminum
@@ -10,6 +10,7 @@ export Titanium_Silicide
 export Silicon_Dioxide
 export Air
 export Resistor_Poly_Mask
+export P_Plus_Diffusion
 
 export shape SquareContact(width: Measurement):
     geometry:
@@ -30,12 +31,18 @@ export bridge Titanium_Silicide to Aluminum:
     thickness: 5nm
     fill: Tungsten
 
+export bridge P_Plus_Diffusion to Titanium_Silicide:
+    interface: Titanium_Silicide
+    thickness: 5nm
+    fill: Tungsten
+
 # SKY130-compliant layer stackup with local interconnect (li1)
 export profile Resistor_3D:
     technology: "ASIC"
     substrate_net: GND
     
     stackup:
+        pdiff:      [material: P_Plus_Diffusion,   thickness: 200nm, routable: true]
         polyres:    [material: Polysilicon,        thickness: 180nm, routable: true]
         rpm:        [material: Resistor_Poly_Mask, thickness: 0nm,   routable: false] # Zero-thickness mask layer
         ild0:       [material: Silicon_Dioxide,    thickness: 200nm, routable: false]
@@ -58,6 +65,7 @@ export profile Resistor_3D:
             Aluminum: 30%
             Polysilicon: 30%
             Titanium_Silicide: 30%
+            P_Plus_Diffusion: 30%
 
     trace:
         min_width: 300nm
@@ -122,7 +130,7 @@ export device Resistor:
     materials:
         A: [Polysilicon, Titanium_Silicide, Aluminum]  # Accept resistor body OR contact materials
         B: [Polysilicon, Titanium_Silicide, Aluminum]  # Accept resistor body OR contact materials
-        BULK: Air  # Virtual terminal - no geometry required
+        BULK: [Air, P_Plus_Diffusion, Titanium_Silicide]  # Virtual terminal (Air) OR physical substrate tap (P+ + TiSi2)
     spice:
         prefix: X
         subcircuit: sky130_fd_pr__res_high_po

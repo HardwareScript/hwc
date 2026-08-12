@@ -1,6 +1,6 @@
 # simple_resistor_test.hw - SKY130 P+ Poly Resistor Test
 # Device: sky130_fd_pr__res_high_po (350 Ω/□)
-# Geometry: 4μm × 1μm = 1400Ω expected
+# Geometry: 4μm × 1.41μm = ~1.0kΩ expected (using PDK-compliant quantized width)
 import * from @std/primitives/units
 import * from "./resistor_pdk"
 
@@ -22,7 +22,7 @@ space Simple_Resistor_Space implements SimpleResistor:
         BULK: GND
 
     let res_length = 4.0um
-    let res_width = 1.0um
+    let res_width = 1.41um  # SKY130 quantized width (W ∈ {0.35, 0.69, 1.41, 2.85, 5.73}μm)
     let contact_size = 400nm
     let resistor_center_x = 10.0um
     let resistor_center_y = 5.0um
@@ -39,9 +39,10 @@ space Simple_Resistor_Space implements SimpleResistor:
     # 1a. RESISTOR POLY MASK (RPM) - ZERO-THICKNESS FABRICATION INSTRUCTION
     # This mask blocks silicide formation on the polysilicon resistor body
     # Category: mask → Z-thickness = 0nm, anchored to Z=180nm (top of polyres)
-    # Exported to DXF as 2D polyline, skipped in GLB 3D mesh generation
+    # Exported to GDSII for fabrication, skipped in DXF/GLB by structural filter
+    # SKY130 DRC: rpm.1 requires ≥180nm enclosure on all sides (360nm total extension)
     add pour(Resistor_Poly_Mask) named RPM_Block on layer: rpm:
-        dimensions: res_length + 200nm by res_width + 200nm
+        dimensions: res_length + 360nm by res_width + 360nm
         align: center_x with Resistor_Body
         align: center_y with Resistor_Body
 
@@ -132,3 +133,34 @@ space Simple_Resistor_Space implements SimpleResistor:
         width: 300nm
         layer: metal1
         intent: Signal
+
+    # 9. SUBSTRATE TAP FOR BULK CONNECTION (SKY130 LVS Requirement)
+    # Precision poly resistors require physical bulk contact for LVS to pass.
+    # In SKY130, a proper substrate tap requires THREE layers:
+    #   1. P+ diffusion region (pdiff layer) - physical implant in substrate
+    #   2. Local interconnect contact (licon) - via connecting pdiff to li1
+    #   3. Local interconnect metal (li1) - connects to GND net
+    let tap_size = 400nm
+    let tap_y_offset = 2.5um
+    
+    # 9a. P+ DIFFUSION REGION (Physical substrate implant)
+    add pour(P_Plus_Diffusion) named Bulk_Tap_Diff on layer: pdiff:
+        dimensions: tap_size by tap_size
+        align: center_x with Resistor_Body
+        align: center_y with Resistor_Body.center_y + tap_y_offset
+        net: GND
+        device: R1.BULK
+    
+    # 9b. LOCAL INTERCONNECT CONTACT (licon - connects pdiff to li1)
+    add contact(Tungsten) named Bulk_Tap_Contact spanning layer: pdiff to li1:
+        diameter: 170nm
+        align: center_x with Bulk_Tap_Diff
+        align: center_y with Bulk_Tap_Diff
+        net: GND
+    
+    # 9c. LOCAL INTERCONNECT METAL (li1 layer)
+    add pour(Titanium_Silicide) named Bulk_Tap_LI on layer: li1:
+        dimensions: tap_size by tap_size
+        align: center_x with Bulk_Tap_Diff
+        align: center_y with Bulk_Tap_Diff
+        net: GND

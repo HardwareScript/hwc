@@ -26,9 +26,12 @@ pub fn export(
     writeln!(w, "<?xml version=\"1.0\" encoding=\"utf-8\"?>")?;
     writeln!(w, "<layer-properties>")?;
 
-    let substrate_layers = space.entity_graph.get_substrate_layers();
-    
-    for layer in substrate_layers.iter() {
+    // v0.2.2 STRUCTURAL FIX: Use get_physical_substrate_layers() to exclude zero-thickness masks
+    // Masks shouldn't appear in KLayout layer properties since they're fabrication instructions
+    for layer in space
+        .entity_graph
+        .get_physical_substrate_layers(&space.material_registry)
+    {
         let mat_name = space
             .material_registry
             .get_name(layer.material)

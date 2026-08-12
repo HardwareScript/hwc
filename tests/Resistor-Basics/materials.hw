@@ -70,3 +70,16 @@ export material Resistor_Poly_Mask:
     properties:
         color: "#FF4040"
         opacity: 0.3
+
+# P+ Diffusion for Substrate/Bulk Taps
+# Used to form physical substrate contacts (P+ implant in P-substrate)
+export material P_Plus_Diffusion:
+    category: semiconductor
+    symbol: PDiff
+    process: deposited
+    properties:
+        color: "#80FF80"
+        opacity: 0.6
+        resistivity: 5e-4ohm_m
+        thermal_conductivity: 148.0W_mK
+        max_current_density: 1e3A_mm2

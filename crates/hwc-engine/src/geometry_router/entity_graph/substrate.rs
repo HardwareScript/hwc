@@ -103,7 +103,10 @@ impl EntityGraph {
         Ok(())
     }
 
-    /// Get a reference to all substrate layers.
+    /// Get a reference to all substrate layers (includes masks and physical layers).
+    /// 
+    /// **WARNING**: This returns ALL layers including zero-thickness masks.
+    /// For export operations (DXF, GDSII, GLB), use `get_physical_substrate_layers()` instead.
     pub fn get_substrate_layers(&self) -> &[SubstrateLayer] {
         &self.substrate_layers
     }
@@ -111,6 +114,30 @@ impl EntityGraph {
     /// Get a mutable reference to all substrate layers.
     pub fn get_substrate_layers_mut(&mut self) -> &mut Vec<SubstrateLayer> {
         &mut self.substrate_layers
+    }
+
+    /// Get an iterator over only physical substrate layers (excludes zero-thickness masks).
+    /// 
+    /// This is the CORRECT method for export operations (DXF, GDSII, GLB, STL).
+    /// Mask materials are fabrication instructions and must never be exported as physical geometry.
+    /// 
+    /// **Architecture (v0.2.2 - Mask Filtering)**:
+    /// - Masks are stored alongside physical layers in substrate_layers
+    /// - This method filters them out at the boundary (export layer)
+    /// - Makes invalid states unrepresentable: exporters can't accidentally export masks
+    pub fn get_physical_substrate_layers<'a>(
+        &'a self,
+        material_registry: &'a crate::material::MaterialRegistry,
+    ) -> impl Iterator<Item = &'a SubstrateLayer> + 'a {
+        self.substrate_layers.iter().filter(move |layer| {
+            // Filter out zero-thickness mask materials
+            if let Some(category) = material_registry.get_category(layer.material) {
+                !category.is_zero_thickness()
+            } else {
+                // If category lookup fails, include by default (fail-safe for legacy materials)
+                true
+            }
+        })
     }
 
     /// Add component metadata.

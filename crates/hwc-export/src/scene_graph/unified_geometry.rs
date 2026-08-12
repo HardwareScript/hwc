@@ -117,9 +117,11 @@ pub fn generate_copper_contours(space: &HardwareSpace) -> Vec<UnifiedCopperConto
 
     // 1. Add substrate layers (pads, pours, contacts)
     //    These are already realized by the compiler into the entity_graph
-    let substrate_layers = space.entity_graph.get_substrate_layers();
-
-    for layer in substrate_layers {
+    //    v0.2.2 STRUCTURAL FIX: Use get_physical_substrate_layers() to exclude zero-thickness masks
+    for layer in space
+        .entity_graph
+        .get_physical_substrate_layers(&space.material_registry)
+    {
         // **v0.2.2 PROPER FIX**: Segment Contact layers by stackup
         //
         // Contact layers (vias) span multiple stackup layers. We need to split them

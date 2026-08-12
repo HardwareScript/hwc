@@ -46,9 +46,13 @@ pub fn export(
 
     if is_asic {
         // ASIC Mode: Write only the physical semiconductor mask layers from the stackup
-        let substrate_layers = space.entity_graph.get_substrate_layers();
+        // v0.2.2: Use get_physical_substrate_layers() to exclude zero-thickness masks
+        let physical_layers: Vec<_> = space
+            .entity_graph
+            .get_physical_substrate_layers(&space.material_registry)
+            .collect();
         let mut seen_materials = rustc_hash::FxHashSet::default();
-        for layer in substrate_layers {
+        for layer in &physical_layers {
             if seen_materials.insert(layer.material) {
                 let mat_name = space
                     .material_registry
@@ -69,8 +73,6 @@ pub fn export(
         writeln!(w, "  0\nLAYER\n  2\nBOTTOM_COMPONENTS\n 70\n0\n 62\n7")?;
         writeln!(w, "  0\nLAYER\n  2\nPCB_LAYERS\n 70\n0\n 62\n7")?;
     }
-
-    let substrate_layers = space.entity_graph.get_substrate_layers();
 
     writeln!(w, "  0\nENDTAB\n  0\nENDSEC")?;
 
@@ -140,7 +142,12 @@ pub fn export(
     }
 
     // Export substrate base, pads, and via drill holes (non-trace geometry)
-    for layer in substrate_layers {
+    // v0.2.2 STRUCTURAL FIX: Use get_physical_substrate_layers() instead of get_substrate_layers()
+    // This ensures zero-thickness masks are NEVER exported as physical geometry.
+    for layer in space
+        .entity_graph
+        .get_physical_substrate_layers(&space.material_registry)
+    {
         let mat_name = space
             .material_registry
             .get_name(layer.material)

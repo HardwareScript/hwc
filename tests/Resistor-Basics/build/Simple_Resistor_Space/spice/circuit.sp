@@ -12,12 +12,14 @@
 * ========================================
 * NETS
 * ========================================
-* Net: In (pour: Contact_A_LI, material: Titanium_Silicide, z: 380nm)
-* Net: Out (pour: Contact_B_LI, material: Titanium_Silicide, z: 380nm)
-* Net: In (pour: Contact_A_Metal, material: Aluminum, z: 630nm)
-* Net: Out (pour: Contact_B_Metal, material: Aluminum, z: 630nm)
-* Net: In (pour: In_Pad, material: Aluminum, z: 630nm)
-* Net: Out (pour: Out_Pad, material: Aluminum, z: 630nm)
+* Net: In (pour: Contact_A_LI, material: Titanium_Silicide, z: 580nm)
+* Net: Out (pour: Contact_B_LI, material: Titanium_Silicide, z: 580nm)
+* Net: In (pour: Contact_A_Metal, material: Aluminum, z: 830nm)
+* Net: Out (pour: Contact_B_Metal, material: Aluminum, z: 830nm)
+* Net: In (pour: In_Pad, material: Aluminum, z: 830nm)
+* Net: Out (pour: Out_Pad, material: Aluminum, z: 830nm)
+* Net: GND (pour: Bulk_Tap_Diff, material: P_Plus_Diffusion, z: 0nm)
+* Net: GND (pour: Bulk_Tap_LI, material: Titanium_Silicide, z: 580nm)
 * Net: In (width=300nm, material=Tungsten)
 *   Connected pins:
 *     - Contact_A_LI.anchor
@@ -39,12 +41,18 @@
 *     - Out_Pad.anchor
 *     - Out_Pad.__virtual_Out_Pad
 * Net: GND (width=300nm, material=Tungsten)
+*   Connected pins:
+*     - Bulk_Tap_Diff.anchor
+*     - Bulk_Tap_Diff.__virtual_Bulk_Tap_Diff
+*     - Bulk_Tap_Contact.__virtual_Bulk_Tap_Contact
+*     - Bulk_Tap_LI.anchor
+*     - Bulk_Tap_LI.__virtual_Bulk_Tap_LI
 
 
 * ========================================
 * EXTRACTED DEVICES
 * ========================================
-XR1 In Out GND sky130_fd_pr__res_high_po W=1.00u L=4.00u
+XR1 In Out GND sky130_fd_pr__res_high_po W=1.41u L=4.00u
 
 * ========================================
 * INTEGRATED TRACE PARASITICS

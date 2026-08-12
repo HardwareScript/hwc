@@ -51,7 +51,8 @@ pub fn add_substrate(
     _profile: Option<&ProfileDefinition>,
     symbol_table: &SymbolTable,
 ) {
-    let substrate_layers = space.entity_graph.get_substrate_layers();
+    // v0.2.2 STRUCTURAL FIX: We don't actually need substrate_layers here anymore
+    // since unified_geometry handles everything. Removed unused variable.
 
     // **v0.2.2: USE UNIFIED GEOMETRY (SINGLE SOURCE OF TRUTH)**
     // All copper contours come from unified_geometry module.
@@ -189,7 +190,12 @@ pub fn add_substrate(
     }
 
     // **SUBSTRATE BASE**: Render the FR4 or silicon substrate base with via cutouts
-    for (idx, layer) in substrate_layers.iter().enumerate() {
+    // v0.2.2 STRUCTURAL FIX: Use get_physical_substrate_layers() to exclude zero-thickness masks
+    for (idx, layer) in space
+        .entity_graph
+        .get_physical_substrate_layers(&space.material_registry)
+        .enumerate()
+    {
         if layer.layer_type
             != hwc_engine::geometry_router::entity_graph::SubstrateLayerType::Substrate
         {
@@ -232,10 +238,10 @@ pub fn add_substrate(
             .enumerate()
             .filter_map(|(via_idx, via)| {
                 // Get the via's substrate layer representation to check its shape
+                // v0.2.2: Use get_physical_substrate_layers() to exclude masks
                 let via_substrate_layer = space
                     .entity_graph
-                    .get_substrate_layers()
-                    .iter()
+                    .get_physical_substrate_layers(&space.material_registry)
                     .find(|layer| {
                         layer.layer_type == hwc_engine::geometry_router::entity_graph::SubstrateLayerType::Contact
                             && layer.net == via.net_id

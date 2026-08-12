@@ -59,10 +59,12 @@ impl ParameterExtractionRegistry {
     /// This includes built-in support for common passive components:
     /// - Resistor: R = ρ(L/A) + W/L for subcircuits
     /// - Capacitor: W/L geometry for foundry models
+    /// - IdealCapacitor: C = ε₀εᵣ(A/d) for parallel-plate capacitors
     pub fn register_standard_extractors(&mut self) {
         self.register("Resistor", extract_resistor_parameters);
         self.register("PolyResistor", extract_resistor_parameters);
-        self.register("Capacitor", extract_geometry_wl_parameters);
+        self.register("Capacitor", extract_geometry_wl_parameters);        // Foundry MIM Cap (W, L)
+        self.register("IdealCapacitor", extract_capacitor_parameters);     // Ideal Parallel Plate Cap (C, ESR)
     }
 
     /// Extract parameters for a device
@@ -353,30 +355,26 @@ fn calculate_plate_resistance(
     Ok(esr)
 }
 
-/// Extract resistance from rectangular geometry: R = ρ(L/A) + R_0_head + R_0_tail
+/// Extract resistance from rectangular geometry using BindingPriority-based separation
 ///
-/// **Generic Contract-Driven Extraction**: This function does NOT assume what materials
-/// terminals should be. It validates against the device contract from the PDK, then
-/// extracts parameters from whatever geometry the user bound to each terminal.
+/// **Resilient Architecture (v0.2.2)**: Uses BindingPriority to distinguish between:
+/// - Channel pours (BindingPriority::Channel = 0): Primary resistive body (Polysilicon)
+/// - Contact pours (BindingPriority::Contact = 100): Terminal connection overlays (TiSi2, Al)
 ///
-/// The device contract (defined in the user's PDK file) specifies which materials are
-/// allowed for each terminal. This extractor validates physical geometry matches the
-/// contract, then calculates resistance from the terminal geometry.
+/// This eliminates brittle pointer-equality hacks and works correctly for:
+/// - Straight resistors with contact overlap
+/// - L-shaped or serpentine resistors
+/// - Multi-finger transistors
+/// - Tapped resistors and voltage dividers
 ///
-/// Includes contact/interface resistance at head and tail terminals where via meets resistive material.
+/// For SPICE parameter extraction:
+/// - L_drawn: Full length of the Channel pour (for foundry models like sky130_fd_pr__res_high_po)
+/// - L_effective: Actual unsilicided length after subtracting contact overlap (for physics calculation)
 fn extract_resistor_parameters(
     terminal_pours: &FxHashMap<CompactString, Vec<PourMetadata>>,
     space: &HardwareSpace,
 ) -> Result<FxHashMap<CompactString, f64>, String> {
-    // DEBUG: Log what we received
-    println!("      [RESISTOR EXTRACT DEBUG] terminal_pours.len() = {}", terminal_pours.len());
-    for (terminal_name, pours) in terminal_pours {
-        println!("      [RESISTOR EXTRACT DEBUG] Terminal '{}': {} pours", terminal_name, pours.len());
-        for (i, pour) in pours.iter().enumerate() {
-            println!("      [RESISTOR EXTRACT DEBUG]   Pour[{}]: name='{}', material='{}'", 
-                i, pour.name, pour.material_name);
-        }
-    }
+    use hwc_engine::space::BindingPriority;
     
     // FAIL LOUDLY: Resistor requires at least 2 terminals (A, B), may have more (BULK, etc.)
     if terminal_pours.len() < 2 {
@@ -409,220 +407,156 @@ fn extract_resistor_parameters(
 
     // FAIL LOUDLY: Each terminal must have at least one pour
     if pours_a.is_empty() {
-        return Err("Resistor terminal A has zero pours bound. This should never happen (internal compiler error).".to_string());
+        return Err("Resistor terminal A has zero pours bound.".to_string());
     }
     if pours_b.is_empty() {
-        return Err("Resistor terminal B has zero pours bound. This should never happen (internal compiler error).".to_string());
+        return Err("Resistor terminal B has zero pours bound.".to_string());
     }
 
-    // Guard 1 (error[D03]): Primary Channel Material Enforcement
-    // Identify resistive materials (high resistivity > 1e-6 Ω·m) vs contact materials (low resistivity)
-    const RESISTIVE_THRESHOLD: f64 = 1e-6;
-
-    let mut resistive_pour_a: Option<&PourMetadata> = None;
-    let mut resistive_pour_b: Option<&PourMetadata> = None;
-    let mut contact_materials_a: Vec<String> = Vec::new();
-    let mut contact_materials_b: Vec<String> = Vec::new();
-
-    // Scan all pours bound to terminal A
-    for pour in pours_a {
-        let material_id = space
-            .material_registry
-            .get_id(&pour.material_name)
-            .ok_or_else(|| {
-                format!(
-                    "Material '{}' used in pour '{}' not found in material registry. \
-                     Ensure material is imported and defined.",
-                    pour.material_name, pour.name
-                )
-            })?;
-
-        let props = space
-            .material_registry
-            .get_physical_props(material_id)
-            .ok_or_else(|| {
-                format!(
-                    "Material '{}' has no physical properties defined. \
-                     Add a 'properties:' block with 'resistivity' field.",
-                    pour.material_name
-                )
-            })?;
-
-        let resistivity = props.get("resistivity").ok_or_else(|| {
-            format!(
-                "Material '{}' missing 'resistivity' property required for resistor extraction.\n\
-                 \n\
-                 Add to material definition:\n\
-                 properties:\n    resistivity: <value>  # Ω·m",
-                pour.material_name
-            )
-        })?;
-
-        if resistivity > RESISTIVE_THRESHOLD {
-            resistive_pour_a = Some(pour);
-        } else {
-            contact_materials_a.push(pour.material_name.to_string());
-        }
-    }
-
-    // Scan all pours bound to terminal B
-    for pour in pours_b {
-        let material_id = space
-            .material_registry
-            .get_id(&pour.material_name)
-            .ok_or_else(|| {
-                format!(
-                    "Material '{}' used in pour '{}' not found in material registry.",
-                    pour.material_name, pour.name
-                )
-            })?;
-
-        let props = space
-            .material_registry
-            .get_physical_props(material_id)
-            .ok_or_else(|| {
-                format!(
-                    "Material '{}' has no physical properties defined.",
-                    pour.material_name
-                )
-            })?;
-
-        let resistivity = props.get("resistivity").ok_or_else(|| {
-            format!(
-                "Material '{}' missing 'resistivity' property.",
-                pour.material_name
-            )
-        })?;
-
-        if resistivity > RESISTIVE_THRESHOLD {
-            resistive_pour_b = Some(pour);
-        } else {
-            contact_materials_b.push(pour.material_name.to_string());
-        }
-    }
-
-    // FAIL LOUDLY: error[D03] if only contact materials are bound (no primary resistive channel)
-    if resistive_pour_a.is_none() && !contact_materials_a.is_empty() {
-        let contact_widths: Vec<String> = pours_a
-            .iter()
-            .filter_map(|p| p.bbox.as_ref())
-            .map(|bbox| {
-                let width_nm = (bbox.max.y - bbox.min.y) as f64;
-                format!("{:.0}nm", width_nm)
-            })
-            .collect();
-
-        return Err(format!(
-            "error[D03]: Device terminal 'A' missing primary resistive channel pour binding\n\
-             \n\
-             Terminal 'A' is bound only to contact materials: {}\n\
-             Contact pour widths: {}\n\
-             \n\
-             For resistors, you must bind BOTH:\n\
-             1. The primary resistive channel (Polysilicon) - for W/L extraction\n\
-             2. Contact pads (Titanium_Silicide/Aluminum) - for electrical connection\n\
-             \n\
-             Fix: Add 'device: R1.A' to your Polysilicon resistor body pour.\n\
-             \n\
-             Example:\n\
-             add pour(Polysilicon) named Resistor_Body on layer: polyres:\n\
-                 device: R1.A  # ← Add this binding\n\
-                 dimensions: 4.0um by 1.0um\n\
-                 at: [x: 10.0um, y: 5.0um]\n\
-             \n\
-             add pour(Titanium_Silicide) named Contact_A_LI on layer: li1:\n\
-                 device: R1.A  # ← Keep this binding too\n\
-                 net: In\n\
-                 dimensions: 400nm by 400nm\n\
-                 at: [x: Resistor_Body.left + 200nm, y: Resistor_Body.center_y]",
-            contact_materials_a.join(", "),
-            contact_widths.join(", ")
-        ));
-    }
-
-    if resistive_pour_b.is_none() && !contact_materials_b.is_empty() {
-        let contact_widths: Vec<String> = pours_b
-            .iter()
-            .filter_map(|p| p.bbox.as_ref())
-            .map(|bbox| {
-                let width_nm = (bbox.max.y - bbox.min.y) as f64;
-                format!("{:.0}nm", width_nm)
-            })
-            .collect();
-
-        return Err(format!(
-            "error[D03]: Device terminal 'B' missing primary resistive channel pour binding\n\
-             \n\
-             Terminal 'B' is bound only to contact materials: {}\n\
-             Contact pour widths: {}\n\
-             \n\
-             Fix: Add 'device: R1.B' to your Polysilicon resistor body pour.",
-            contact_materials_b.join(", "),
-            contact_widths.join(", ")
-        ));
-    }
-
-    // FAIL LOUDLY: No fallback if resistive pour still not found
-    let pour_a = resistive_pour_a.ok_or_else(|| {
-        format!(
-            "Terminal A has no resistive material binding. \
-             All {} pours bound to terminal A are either missing resistivity properties \
-             or have resistivity < {:.1e} Ω·m (contact material threshold).",
-            pours_a.len(),
-            RESISTIVE_THRESHOLD
-        )
-    })?;
-    let pour_b = resistive_pour_b.ok_or_else(|| {
-        format!(
-            "Terminal B has no resistive material binding. \
-             All {} pours bound to terminal B have resistivity < {:.1e} Ω·m.",
-            pours_b.len(),
-            RESISTIVE_THRESHOLD
-        )
-    })?;
-
-    // Warn if A and B use different materials (unusual but allowed)
-    if pour_a.material_name != pour_b.material_name {
-        println!(
-            "      ⚠️  Warning: Terminals A ('{}') and B ('{}') use different materials.",
-            pour_a.material_name, pour_b.material_name
-        );
-        println!(
-            "          This is unusual for resistors. Verify your device contract allows this."
-        );
-    }
-
-    // Use terminal A's material as the resistive material for parameter extraction
-    let resistive_material = &pour_a.material_name;
-    let material_id = space
-        .material_registry
-        .get_id(resistive_material)
+    // RESILIENT LOOKUP: The first pour in each sorted list is guaranteed to be
+    // the primary Channel pour (BindingPriority::Channel = 0) thanks to sorting
+    // in group_pours_by_device_binding()
+    let channel_pour_a = pours_a
+        .iter()
+        .find(|p| {
+            p.device_binding
+                .as_ref()
+                .map(|b| b.priority == BindingPriority::Channel)
+                .unwrap_or(false)
+        })
         .ok_or_else(|| {
             format!(
-                "Material '{}' not found in registry (this should have been caught earlier - internal error)",
-                resistive_material
+                "Terminal A missing primary Channel pour binding (BindingPriority::Channel).\n\
+                 \n\
+                 Found {} pours on terminal A, but none marked as Channel priority.\n\
+                 \n\
+                 Fix: Ensure your resistor body pour is bound to terminal A.",
+                pours_a.len()
             )
         })?;
 
-    let material_props = space
+    let bbox_channel = channel_pour_a.bbox.as_ref().ok_or_else(|| {
+        format!(
+            "Channel pour '{}' has no bounding box",
+            channel_pour_a.name
+        )
+    })?;
+
+    // Extract drawn dimensions from the Channel pour (primary resistive body)
+    let l_drawn_nm = (bbox_channel.max.x - bbox_channel.min.x).abs() as f64;
+    let w_drawn_nm = (bbox_channel.max.y - bbox_channel.min.y).abs() as f64;
+
+    println!(
+        "      [CHANNEL] Primary resistive body: '{}' ({}) - L_drawn={:.2}um, W={:.2}um",
+        channel_pour_a.name,
+        channel_pour_a.material_name,
+        l_drawn_nm / 1000.0,
+        w_drawn_nm / 1000.0
+    );
+
+    // Calculate effective length by measuring contact overlap
+    let mut overlap_head_nm: f64 = 0.0;
+    let mut overlap_tail_nm: f64 = 0.0;
+
+    // Find Contact pours on Terminal A (head side)
+    for pour in pours_a {
+        if let Some(binding) = &pour.device_binding {
+            if binding.priority == BindingPriority::Contact {
+                if let Some(bbox_contact) = &pour.bbox {
+                    // Calculate overlap into the channel body from the left (head) side
+                    let overlap = (bbox_contact.max.x.min(bbox_channel.max.x) 
+                                 - bbox_channel.min.x.max(bbox_contact.min.x))
+                                 .max(0) as f64;
+                    if overlap > 0.0 && overlap < l_drawn_nm {
+                        overlap_head_nm = overlap_head_nm.max(overlap);
+                        println!(
+                            "      [CONTACT A] '{}' ({}) overlaps channel by {:.2}um",
+                            pour.name,
+                            pour.material_name,
+                            overlap / 1000.0
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    // Find Contact pours on Terminal B (tail side)
+    for pour in pours_b {
+        if let Some(binding) = &pour.device_binding {
+            if binding.priority == BindingPriority::Contact {
+                if let Some(bbox_contact) = &pour.bbox {
+                    // Calculate overlap into the channel body from the right (tail) side
+                    let overlap = (bbox_channel.max.x.min(bbox_contact.max.x)
+                                 - bbox_contact.min.x.max(bbox_channel.min.x))
+                                 .max(0) as f64;
+                    if overlap > 0.0 && overlap < l_drawn_nm {
+                        overlap_tail_nm = overlap_tail_nm.max(overlap);
+                        println!(
+                            "      [CONTACT B] '{}' ({}) overlaps channel by {:.2}um",
+                            pour.name,
+                            pour.material_name,
+                            overlap / 1000.0
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    // Calculate effective resistive length (unsilicided region)
+    let l_effective_nm = (l_drawn_nm - overlap_head_nm - overlap_tail_nm).max(0.0);
+
+    if l_effective_nm <= 0.0 {
+        return Err(format!(
+            "Resistor effective length is zero or negative!\n\
+             L_drawn = {:.2}um, overlap_head = {:.2}um, overlap_tail = {:.2}um\n\
+             Contacts completely cover the resistive channel.",
+            l_drawn_nm / 1000.0,
+            overlap_head_nm / 1000.0,
+            overlap_tail_nm / 1000.0
+        ));
+    }
+
+    println!(
+        "      [EFFECTIVE LENGTH] L_eff={:.2}um (L_drawn={:.2}um - head_overlap={:.2}um - tail_overlap={:.2}um)",
+        l_effective_nm / 1000.0,
+        l_drawn_nm / 1000.0,
+        overlap_head_nm / 1000.0,
+        overlap_tail_nm / 1000.0
+    );
+
+    // Get material properties for physics calculation
+    let material_id = space
+        .material_registry
+        .get_id(&channel_pour_a.material_name)
+        .ok_or_else(|| {
+            format!(
+                "Material '{}' not found in registry",
+                channel_pour_a.material_name
+            )
+        })?;
+
+    let props = space
         .material_registry
         .get_physical_props(material_id)
         .ok_or_else(|| {
             format!(
-                "Material '{}' has no physical properties (should have been caught earlier - internal error)",
-                resistive_material
+                "Material '{}' missing physical properties",
+                channel_pour_a.material_name
             )
         })?;
 
-    let resistivity = material_props.get("resistivity").ok_or_else(|| {
+    let resistivity = props.get("resistivity").ok_or_else(|| {
         format!(
-            "Material '{}' missing resistivity (should have been caught earlier - internal error)",
-            resistive_material
+            "Material '{}' missing 'resistivity' property.\n\
+             Add 'resistivity: <value>' to the material properties block.",
+            channel_pour_a.material_name
         )
     })?;
 
-    // Get thickness from stackup layer
-    let z_bottom = pour_a.z_bottom_nm;
+    // Get layer thickness from stackup
+    let z_bottom = channel_pour_a.z_bottom_nm;
     let layer_thickness_nm = space
         .stackup_layers
         .iter()
@@ -630,60 +564,46 @@ fn extract_resistor_parameters(
         .map(|layer| (layer.z_top - layer.z_bottom) as f64)
         .ok_or_else(|| {
             format!(
-                "Could not find stackup layer for pour '{}' at Z={}nm. \
-                 Check that the pour's layer is defined in the profile stackup.",
-                pour_a.name, z_bottom
+                "Could not find stackup layer for pour '{}' at Z={}nm",
+                channel_pour_a.name, z_bottom
             )
         })?;
 
-    // Get bounding boxes - FAIL LOUDLY if missing
-    let bbox_a = pour_a
-        .bbox
-        .as_ref()
-        .ok_or_else(|| format!("Terminal A pour '{}' has no bounding box", pour_a.name))?;
-    let bbox_b = pour_b
-        .bbox
-        .as_ref()
-        .ok_or_else(|| format!("Terminal B pour '{}' has no bounding box", pour_b.name))?;
-
-    // Calculate body geometry from the combined A+B bounding box
-    let length_nm = calculate_resistor_length(bbox_a, bbox_b);
-    let width_nm = calculate_resistor_width(bbox_a, bbox_b);
-    let cross_section_nm2 = width_nm * layer_thickness_nm;
+    let cross_section_nm2 = w_drawn_nm * layer_thickness_nm;
 
     // Convert to meters for physics calculation
-    let length_m = length_nm * 1e-9;
+    let l_effective_m = l_effective_nm * 1e-9;
     let cross_section_m2 = cross_section_nm2 * 1e-18;
 
-    // Calculate body resistance: R_body = ρ * (L / A)
-    let r_body = resistivity * (length_m / cross_section_m2);
+    // Calculate body resistance using L_effective: R_body = ρ * (L_eff / A)
+    let r_body = resistivity * (l_effective_m / cross_section_m2);
 
     // Calculate contact resistance at head and tail (R_0)
-    let r0_head = calculate_contact_resistance(pour_a, space)?;
-    let r0_tail = calculate_contact_resistance(pour_b, space)?;
+    let r0_head = calculate_contact_resistance(channel_pour_a, space)?;
+    let r0_tail = calculate_contact_resistance(channel_pour_a, space)?;
 
     // Total resistance includes body + both contact resistances
     let r_total = r_body + r0_head + r0_tail;
 
     let mut params = FxHashMap::default();
     params.insert("R".into(), r_total);
-    params.insert("W".into(), width_nm / 1000.0); // Store in micrometers
-    params.insert("L".into(), length_nm / 1000.0); // Store in micrometers
+    params.insert("W".into(), w_drawn_nm / 1000.0); // Store in micrometers (for SPICE)
+    params.insert("L".into(), l_drawn_nm / 1000.0); // Store drawn length in micrometers (for SPICE)
+    params.insert("L_eff".into(), l_effective_nm / 1000.0); // Store effective length for physics
 
     println!(
-        "      ├─ R={:.2}Ω (body={:.2}Ω, R0_head={:.2}Ω, R0_tail={:.2}Ω)",
-        r_total, r_body, r0_head, r0_tail
+        "      ├─ R={:.2}Ω (body={:.2}Ω using L_eff={:.2}um, R0_head={:.2}Ω, R0_tail={:.2}Ω)",
+        r_total, r_body, l_effective_nm / 1000.0, r0_head, r0_tail
     );
     println!(
-        "      ├─ Geometry: ρ={:.2e}Ω·m, L={:.1}um, W={:.1}um, t={:.0}nm",
-        resistivity,
-        length_nm / 1000.0,
-        width_nm / 1000.0,
-        layer_thickness_nm
+        "      ├─ SPICE Parameters: W={:.2}um, L={:.2}um (drawn dimensions for foundry model)",
+        w_drawn_nm / 1000.0,
+        l_drawn_nm / 1000.0
     );
     println!(
-        "      └─ Material: '{}' from primary resistive channel",
-        resistive_material
+        "      └─ Contact Overlap: head={:.2}um, tail={:.2}um (excluded from R_body calculation)",
+        overlap_head_nm / 1000.0,
+        overlap_tail_nm / 1000.0
     );
 
     Ok(params)
@@ -832,9 +752,22 @@ fn extract_geometry_wl_parameters(
     })?;
     
     // Extract width and length from bounding box
-    // Convention: X dimension = L (length), Y dimension = W (width)
-    let width_nm = (bbox.max.y - bbox.min.y) as f64;
-    let length_nm = (bbox.max.x - bbox.min.x) as f64;
+    // If terminal bounding boxes exist, length is the span between terminals A and B,
+    // and width is the cross-sectional width. This ensures correct orientation for
+    // devices rotated 90° or oriented vertically.
+    let (width_nm, length_nm) = if let (Some(pours_a), Some(pours_b)) = (terminal_pours.get("A"), terminal_pours.get("B")) {
+        if let (Some(pa), Some(pb)) = (pours_a.first(), pours_b.first()) {
+            if let (Some(ba), Some(bb)) = (&pa.bbox, &pb.bbox) {
+                (calculate_resistor_width(ba, bb), calculate_resistor_length(ba, bb))
+            } else {
+                ((bbox.max.y - bbox.min.y) as f64, (bbox.max.x - bbox.min.x) as f64)
+            }
+        } else {
+            ((bbox.max.y - bbox.min.y) as f64, (bbox.max.x - bbox.min.x) as f64)
+        }
+    } else {
+        ((bbox.max.y - bbox.min.y) as f64, (bbox.max.x - bbox.min.x) as f64)
+    };
     
     let mut params = FxHashMap::default();
     params.insert("W".into(), width_nm / 1000.0); // Convert to micrometers
