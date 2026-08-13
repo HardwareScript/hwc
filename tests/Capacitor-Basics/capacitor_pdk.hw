@@ -1,15 +1,16 @@
-# capacitor_pdk.hw - SKY130 Capacitor PDK
-# Device: MIM (Metal-Insulator-Metal) Capacitor
+# capacitor_pdk.hw - SkyWater SKY130 MIM Capacitor PDK
+# Device: sky130_fd_pr__cap_mim_m3_1/m3_2 (Metal-Insulator-Metal Capacitor)
+# Capacitance: 2.0 fF/μm² (area) + 0.19 fF/μm (periphery)
+# Construction: CAPM over Metal-3 (or CAP2M over Metal-4)
 import * from @std/primitives/units
-import Polysilicon, Aluminum, Tungsten, Titanium_Silicide, Silicon_Dioxide, Air, MIMCap from "./materials"
+import Aluminum, Tungsten, Titanium_Silicide, Silicon_Dioxide, Air, CAPM from "./materials"
 
-export Polysilicon
 export Aluminum
 export Tungsten
 export Titanium_Silicide
 export Silicon_Dioxide
 export Air
-export MIMCap
+export CAPM
 
 export shape SquareContact(width: Measurement):
     geometry:
@@ -20,14 +21,24 @@ export bridge Polysilicon to Aluminum:
     thickness: 5nm
     fill: Tungsten
 
-export bridge Aluminum to MIMCap:
+export bridge Aluminum to CAPM:
     interface: Titanium_Silicide
-    thickness: 2nm
+    thickness: 3nm
     fill: Tungsten
 
-export bridge MIMCap to Aluminum:
+export bridge CAPM to Aluminum:
     interface: Titanium_Silicide
-    thickness: 2nm
+    thickness: 3nm
+    fill: Tungsten
+
+export bridge Titanium_Silicide to CAPM:
+    interface: Titanium_Silicide
+    thickness: 3nm
+    fill: Tungsten
+
+export bridge CAPM to Titanium_Silicide:
+    interface: Titanium_Silicide
+    thickness: 3nm
     fill: Tungsten
 
 export bridge Polysilicon to Titanium_Silicide:
@@ -40,44 +51,51 @@ export bridge Titanium_Silicide to Aluminum:
     thickness: 5nm
     fill: Tungsten
 
-# SKY130-compliant MIM capacitor stackup
-# Critical: mimcap_dielectric layer is 5nm thick - optimized for high capacitance
-# For C = ε₀εᵣ(A/d), thin dielectric = higher capacitance
+# SKY130-compliant MIM capacitor stackup with local interconnect (li1)
+# CAPM Construction: Metal-3 (bottom plate) → thin oxide → CAPM (top plate)
+# Capacitance density: 2.0 fF/μm² (area) + 0.19 fF/μm (periphery)
+# Top plate (CAPM) sheet resistance: 5.8 Ω/□
 export profile Capacitor_MIM:
     technology: "ASIC"
     substrate_net: GND
     
     stackup:
-        metal1:            [material: Aluminum,         thickness: 20nm, routable: true]
-        mimcap_dielectric: [material: Silicon_Dioxide,  thickness: 5nm,  routable: false]
-        mimcap:            [material: MIMCap,           thickness: 15nm, routable: true]
-        d2:                [material: Silicon_Dioxide,  thickness: 30nm, routable: false]
-        metal2:            [material: Aluminum,         thickness: 30nm, routable: true]
+        metal1:     [material: Aluminum,          thickness: 360nm, routable: true]
+        ild1:       [material: Silicon_Dioxide,   thickness: 150nm, routable: false]
+        li1:        [material: Titanium_Silicide, thickness: 100nm, routable: true]
+        ild2:       [material: Silicon_Dioxide,   thickness: 200nm, routable: false]
+        metal2:     [material: Aluminum,          thickness: 360nm, routable: true]
+        ild3:       [material: Silicon_Dioxide,   thickness: 150nm, routable: false]
+        metal3:     [material: Aluminum,          thickness: 845nm, routable: true]
+        capm_ox:    [material: Silicon_Dioxide,   thickness: 5nm,   routable: false]
+        capm:       [material: CAPM,              thickness: 100nm, routable: true]
+        ild4:       [material: Silicon_Dioxide,   thickness: 150nm, routable: false]
+        metal4:     [material: Aluminum,          thickness: 845nm, routable: true]
 
     manufacturing:
         track_pitch: 10nm
-        copper_thickness: 10nm
+        copper_thickness: 500nm
         circle_segments: 64
 
     via:
-        min_diameter: 200nm
+        min_diameter: 170nm
         min_annular_ring: 50nm
-        min_spacing: 300nm
+        min_spacing: 400nm
         shape: SquareContact
         contact_depth: 30%
         material_contact_depths:
             Aluminum: 30%
-            Polysilicon: 30%
-            MIMCap: 30%
+            Titanium_Silicide: 30%
+            CAPM: 30%
 
     trace:
-        min_width: 200nm
-        min_spacing: 200nm
-        edge_clearance: 100nm
+        min_width: 300nm
+        min_spacing: 300nm
+        edge_clearance: 200nm
 
     clearance:
-        high_voltage: 500nm
-        safety_factor: 1.5
+        high_voltage: 1um
+        safety_factor: 2.0
 
     thermal:
         ambient_temp: 25C
@@ -86,12 +104,12 @@ export profile Capacitor_MIM:
         clustering_threshold: 10um
 
     layer:
-        min_thickness: 5nm
-        allowed_conductors: [Aluminum, MIMCap]
+        min_thickness: 50nm
+        allowed_conductors: [Aluminum, CAPM, Titanium_Silicide]
         allowed_dielectrics: [Silicon_Dioxide, Air]
 
     routing:
-        min_segment_length: 200nm
+        min_segment_length: 300nm
         escape_stub: 0nm
         base_cost: 1
         via_penalty: 50
@@ -105,21 +123,38 @@ export profile Capacitor_MIM:
         routing_style: auto
         escape_stub: 0nm
 
-# MIM Capacitor Subcircuit (v0.2.1)
-# Uses spice_include to defer physics to foundry model
-export subcircuit sky130_fd_pr__cap_mim:
-    terminals: [top, bottom]
+# SKY130 MIM Capacitor Subcircuit (sky130_fd_pr__cap_mim_m3_1)
+# Capacitance: C_area × A + C_perimeter × P
+# - C_area = 2.0 fF/μm² (area capacitance)
+# - C_perimeter = 0.19 fF/μm (edge/fringe capacitance)
+# - Top plate sheet resistance: 5.8 Ω/□ (CAPM layer)
+#
+# v0.2.1: TRUE FOUNDRY SPICE INTEGRATION
+# Uses `spice_include` to defer physics to the foundry model instead of
+# inline element synthesis. This is the CORRECT approach for production ASICs.
+export subcircuit sky130_fd_pr__cap_mim_m3_1:
+    terminals: [c0, c1]
     parameters: [W = 10.0um, L = 10.0um]
-    spice_include: "sky130_fd_pr/models/sky130_fd_pr__cap_mim.model.spice"
+    spice_include: "sky130_fd_pr/models/sky130_fd_pr__cap_mim_m3_1.model.spice"
+
+# LEGACY: Inline Elements Mode (for reference only)
+# Uncomment to use compiler-synthesized subcircuit instead of foundry model
+# export subcircuit sky130_fd_pr__cap_mim_m3_1:
+#     terminals: [c0, c1]
+#     parameters: [W = 10.0um, L = 10.0um]
+#     elements:
+#         C_area: Capacitor(nodes: [c0, c1], value: 2.0fF * W * L)
+#         C_perimeter: Capacitor(nodes: [c0, c1], value: 0.19fF * 2 * (W + L))
+#         R_top: Resistor(nodes: [c0, node_1], value: 5.8ohm * L / W)
 
 export device Capacitor:
-    terminals: [top, bottom]
+    terminals: [c0, c1]
     materials:
-        top: [MIMCap, Aluminum]
-        bottom: [Aluminum, MIMCap]
+        c0: [CAPM, Titanium_Silicide, Aluminum]        # Top plate: CAPM OR contact materials
+        c1: [Aluminum, Titanium_Silicide, CAPM]        # Bottom plate: Metal-3 OR contact materials
     spice:
         prefix: X
-        subcircuit: sky130_fd_pr__cap_mim
-        terminal_order: [top, bottom]
+        subcircuit: sky130_fd_pr__cap_mim_m3_1
+        terminal_order: [c0, c1]
         parameters: [W, L]
         parameter_style: named

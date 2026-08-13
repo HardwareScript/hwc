@@ -413,48 +413,147 @@ fn extract_resistor_parameters(
         return Err("Resistor terminal B has zero pours bound.".to_string());
     }
 
-    // RESILIENT LOOKUP: The first pour in each sorted list is guaranteed to be
-    // the primary Channel pour (BindingPriority::Channel = 0) thanks to sorting
-    // in group_pours_by_device_binding()
-    let channel_pour_a = pours_a
+    // SERPENTINE RESISTOR SUPPORT (v0.2.3):
+    // Collect ALL Channel pours bound to BOTH terminals A and B (intersection)
+    // For serpentine resistors, all segments (Seg1..Seg5, Vert1..Vert4) are bound to both A and B
+    // We need to sum their lengths to get the total resistive path length
+    
+    // Collect channel pours from terminal A
+    let channel_pours_a: Vec<&PourMetadata> = pours_a
         .iter()
-        .find(|p| {
+        .filter(|p| {
             p.device_binding
                 .as_ref()
                 .map(|b| b.priority == BindingPriority::Channel)
                 .unwrap_or(false)
         })
-        .ok_or_else(|| {
-            format!(
-                "Terminal A missing primary Channel pour binding (BindingPriority::Channel).\n\
-                 \n\
-                 Found {} pours on terminal A, but none marked as Channel priority.\n\
-                 \n\
-                 Fix: Ensure your resistor body pour is bound to terminal A.",
-                pours_a.len()
-            )
-        })?;
+        .collect();
 
-    let bbox_channel = channel_pour_a.bbox.as_ref().ok_or_else(|| {
+    if channel_pours_a.is_empty() {
+        return Err(format!(
+            "Terminal A missing Channel pour bindings (BindingPriority::Channel).\n\
+             \n\
+             Found {} pours on terminal A, but none marked as Channel priority.\n\
+             \n\
+             Fix: Ensure your resistor body pour is bound to terminal A.",
+            pours_a.len()
+        ));
+    }
+
+    // Collect channel pours from terminal B
+    let channel_pours_b: Vec<&PourMetadata> = pours_b
+        .iter()
+        .filter(|p| {
+            p.device_binding
+                .as_ref()
+                .map(|b| b.priority == BindingPriority::Channel)
+                .unwrap_or(false)
+        })
+        .collect();
+
+    if channel_pours_b.is_empty() {
+        return Err(format!(
+            "Terminal B missing Channel pour bindings (BindingPriority::Channel).\n\
+             \n\
+             Found {} pours on terminal B, but none marked as Channel priority.\n\
+             \n\
+             Fix: Ensure your resistor body pour is bound to terminal B.",
+            pours_b.len()
+        ));
+    }
+
+    // Find common channel pours (bound to BOTH A and B)
+    // For serpentine resistors, all segments should be in this intersection
+    let mut common_channel_pours: Vec<&PourMetadata> = Vec::new();
+    for pour_a in &channel_pours_a {
+        if channel_pours_b.iter().any(|p| p.name == pour_a.name) {
+            common_channel_pours.push(pour_a);
+        }
+    }
+
+    if common_channel_pours.is_empty() {
+        return Err(format!(
+            "No common Channel pours found bound to BOTH terminals A and B.\n\
+             \n\
+             Terminal A has {} channel pours: {:?}\n\
+             Terminal B has {} channel pours: {:?}\n\
+             \n\
+             Fix: For a resistor, channel pours must be bound to BOTH A and B.",
+            channel_pours_a.len(),
+            channel_pours_a.iter().map(|p| p.name.as_str()).collect::<Vec<_>>(),
+            channel_pours_b.len(),
+            channel_pours_b.iter().map(|p| p.name.as_str()).collect::<Vec<_>>()
+        ));
+    }
+
+    // Use the first pour as the reference for width and material
+    let reference_pour = common_channel_pours[0];
+    let reference_bbox = reference_pour.bbox.as_ref().ok_or_else(|| {
         format!(
             "Channel pour '{}' has no bounding box",
-            channel_pour_a.name
+            reference_pour.name
         )
     })?;
 
-    // Extract drawn dimensions from the Channel pour (primary resistive body)
-    let l_drawn_nm = (bbox_channel.max.x - bbox_channel.min.x).abs() as f64;
-    let w_drawn_nm = (bbox_channel.max.y - bbox_channel.min.y).abs() as f64;
+    // Calculate TOTAL drawn length by summing all segment lengths
+    // For simple resistors: 1 segment with its full length
+    // For serpentine resistors: Sum of all horizontal + vertical segments
+    let mut total_l_drawn_nm = 0.0;
+    let mut segment_count = 0;
+    
+    for pour in &common_channel_pours {
+        if let Some(bbox) = &pour.bbox {
+            // For each segment, the "length" is the longer dimension (X or Y)
+            let length_x = (bbox.max.x - bbox.min.x).abs() as f64;
+            let length_y = (bbox.max.y - bbox.min.y).abs() as f64;
+            
+            // Take the maximum dimension as the segment length
+            let segment_length = length_x.max(length_y);
+            total_l_drawn_nm += segment_length;
+            segment_count += 1;
+            
+            println!(
+                "      [CHANNEL SEGMENT] '{}' ({}) - L={:.2}um x W={:.2}um",
+                pour.name,
+                pour.material_name,
+                length_x / 1000.0,
+                length_y / 1000.0
+            );
+        }
+    }
+
+    // Use the minimum dimension of the reference pour as the channel width
+    // (For serpentine: all segments should have the same width)
+    let reference_length_x = (reference_bbox.max.x - reference_bbox.min.x).abs() as f64;
+    let reference_length_y = (reference_bbox.max.y - reference_bbox.min.y).abs() as f64;
+    let w_drawn_nm = reference_length_x.min(reference_length_y);
 
     println!(
-        "      [CHANNEL] Primary resistive body: '{}' ({}) - L_drawn={:.2}um, W={:.2}um",
-        channel_pour_a.name,
-        channel_pour_a.material_name,
-        l_drawn_nm / 1000.0,
+        "      [CHANNEL TOTAL] {} segments, Total L_drawn={:.2}um, W={:.2}um",
+        segment_count,
+        total_l_drawn_nm / 1000.0,
         w_drawn_nm / 1000.0
     );
 
+    let l_drawn_nm = total_l_drawn_nm;
+
     // Calculate effective length by measuring contact overlap
+    // For serpentine resistors with multiple segments, we need to find the 
+    // overall bounding box of all channel segments to measure contact overlap
+    let mut channel_min_x = i64::MAX;
+    let mut channel_max_x = i64::MIN;
+    let mut channel_min_y = i64::MAX;
+    let mut channel_max_y = i64::MIN;
+    
+    for pour in &common_channel_pours {
+        if let Some(bbox) = &pour.bbox {
+            channel_min_x = channel_min_x.min(bbox.min.x);
+            channel_max_x = channel_max_x.max(bbox.max.x);
+            channel_min_y = channel_min_y.min(bbox.min.y);
+            channel_max_y = channel_max_y.max(bbox.max.y);
+        }
+    }
+    
     let mut overlap_head_nm: f64 = 0.0;
     let mut overlap_tail_nm: f64 = 0.0;
 
@@ -464,8 +563,8 @@ fn extract_resistor_parameters(
             if binding.priority == BindingPriority::Contact {
                 if let Some(bbox_contact) = &pour.bbox {
                     // Calculate overlap into the channel body from the left (head) side
-                    let overlap = (bbox_contact.max.x.min(bbox_channel.max.x) 
-                                 - bbox_channel.min.x.max(bbox_contact.min.x))
+                    let overlap = (bbox_contact.max.x.min(channel_max_x) 
+                                 - channel_min_x.max(bbox_contact.min.x))
                                  .max(0) as f64;
                     if overlap > 0.0 && overlap < l_drawn_nm {
                         overlap_head_nm = overlap_head_nm.max(overlap);
@@ -487,8 +586,8 @@ fn extract_resistor_parameters(
             if binding.priority == BindingPriority::Contact {
                 if let Some(bbox_contact) = &pour.bbox {
                     // Calculate overlap into the channel body from the right (tail) side
-                    let overlap = (bbox_channel.max.x.min(bbox_contact.max.x)
-                                 - bbox_contact.min.x.max(bbox_channel.min.x))
+                    let overlap = (channel_max_x.min(bbox_contact.max.x)
+                                 - bbox_contact.min.x.max(channel_min_x))
                                  .max(0) as f64;
                     if overlap > 0.0 && overlap < l_drawn_nm {
                         overlap_tail_nm = overlap_tail_nm.max(overlap);
@@ -529,11 +628,11 @@ fn extract_resistor_parameters(
     // Get material properties for physics calculation
     let material_id = space
         .material_registry
-        .get_id(&channel_pour_a.material_name)
+        .get_id(&reference_pour.material_name)
         .ok_or_else(|| {
             format!(
                 "Material '{}' not found in registry",
-                channel_pour_a.material_name
+                reference_pour.material_name
             )
         })?;
 
@@ -543,7 +642,7 @@ fn extract_resistor_parameters(
         .ok_or_else(|| {
             format!(
                 "Material '{}' missing physical properties",
-                channel_pour_a.material_name
+                reference_pour.material_name
             )
         })?;
 
@@ -551,12 +650,12 @@ fn extract_resistor_parameters(
         format!(
             "Material '{}' missing 'resistivity' property.\n\
              Add 'resistivity: <value>' to the material properties block.",
-            channel_pour_a.material_name
+            reference_pour.material_name
         )
     })?;
 
     // Get layer thickness from stackup
-    let z_bottom = channel_pour_a.z_bottom_nm;
+    let z_bottom = reference_pour.z_bottom_nm;
     let layer_thickness_nm = space
         .stackup_layers
         .iter()
@@ -565,7 +664,7 @@ fn extract_resistor_parameters(
         .ok_or_else(|| {
             format!(
                 "Could not find stackup layer for pour '{}' at Z={}nm",
-                channel_pour_a.name, z_bottom
+                reference_pour.name, z_bottom
             )
         })?;
 
@@ -579,8 +678,8 @@ fn extract_resistor_parameters(
     let r_body = resistivity * (l_effective_m / cross_section_m2);
 
     // Calculate contact resistance at head and tail (R_0)
-    let r0_head = calculate_contact_resistance(channel_pour_a, space)?;
-    let r0_tail = calculate_contact_resistance(channel_pour_a, space)?;
+    let r0_head = calculate_contact_resistance(reference_pour, space)?;
+    let r0_tail = calculate_contact_resistance(reference_pour, space)?;
 
     // Total resistance includes body + both contact resistances
     let r_total = r_body + r0_head + r0_tail;
@@ -591,9 +690,18 @@ fn extract_resistor_parameters(
     params.insert("L".into(), l_drawn_nm / 1000.0); // Store drawn length in micrometers (for SPICE)
     params.insert("L_eff".into(), l_effective_nm / 1000.0); // Store effective length for physics
 
+    // Log format distinguishes between extracted parameters and PDK-managed physics
+    // to prevent engineers from confusing compiler-extracted body resistance with
+    // the actual DC resistance in silicon (which includes PDK subcircuit contact resistance)
     println!(
-        "      ├─ R={:.2}Ω (body={:.2}Ω using L_eff={:.2}um, R0_head={:.2}Ω, R0_tail={:.2}Ω)",
-        r_total, r_body, l_effective_nm / 1000.0, r0_head, r0_tail
+        "      ├─ [EXTRACTED] R_body = {:.2}Ω (L_eff={:.2}um) | R_contact = {}",
+        r_body, 
+        l_effective_nm / 1000.0,
+        if r0_head > 0.0 || r0_tail > 0.0 {
+            format!("head={:.2}Ω, tail={:.2}Ω", r0_head, r0_tail)
+        } else {
+            "[PDK Subcircuit Managed]".to_string()
+        }
     );
     println!(
         "      ├─ SPICE Parameters: W={:.2}um, L={:.2}um (drawn dimensions for foundry model)",
@@ -721,31 +829,55 @@ fn extract_geometry_wl_parameters(
     terminal_pours: &FxHashMap<CompactString, Vec<PourMetadata>>,
     _space: &HardwareSpace,
 ) -> Result<FxHashMap<CompactString, f64>, String> {
-    // Find the largest terminal pour to measure geometry from
-    // For capacitors: typically the overlapping plates
-    // For other devices: the primary active region
+    // For MIM capacitors: the active capacitance area is determined by the 
+    // OVERLAPPING region = the smaller plate, NOT the larger plate with overhang.
+    //
+    // Strategy:
+    // 1. Each terminal may have multiple pours (main plate + contact pads)
+    // 2. Find the LARGEST pour per terminal (ignore small contact pads)
+    // 3. Use the SMALLER of the two main plates (this is the overlap area)
+    //
+    // Physics: C = C_area × A_overlap
+    // Example: top plate = 10μm × 10μm, bottom = 11μm × 11μm
+    //   - WRONG: Using 11μm × 11μm → 20.6% capacitance error
+    //   - CORRECT: Using 10μm × 10μm (the actual overlap area)
     
-    let mut largest_pour: Option<&PourMetadata> = None;
-    let mut largest_area = 0.0;
+    // Step 1: Find largest pour per terminal
+    let mut largest_per_terminal: FxHashMap<&CompactString, (&PourMetadata, f64)> = FxHashMap::default();
     
-    for (_terminal_name, pours) in terminal_pours {
+    for (terminal_name, pours) in terminal_pours {
+        let mut max_area = 0.0;
+        let mut max_pour: Option<&PourMetadata> = None;
+        
         for pour in pours {
             if let Some(bbox) = &pour.bbox {
                 let width = (bbox.max.x - bbox.min.x) as f64;
                 let length = (bbox.max.y - bbox.min.y) as f64;
                 let area = width * length;
                 
-                if area > largest_area {
-                    largest_area = area;
-                    largest_pour = Some(pour);
+                if area > max_area {
+                    max_area = area;
+                    max_pour = Some(pour);
                 }
             }
         }
+        
+        if let Some(pour) = max_pour {
+            largest_per_terminal.insert(terminal_name, (pour, max_area));
+        }
     }
     
-    let pour = largest_pour.ok_or_else(|| {
-        "No terminal pours with bounding boxes found for geometry extraction".to_string()
-    })?;
+    if largest_per_terminal.is_empty() {
+        return Err("No terminal pours with bounding boxes found for geometry extraction".to_string());
+    }
+    
+    // Step 2: Find the smallest of the largest pours (the limiting plate)
+    let (pour, _area) = largest_per_terminal
+        .values()
+        .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
+        .ok_or_else(|| {
+            "Could not determine smallest terminal plate".to_string()
+        })?;
     
     let bbox = pour.bbox.as_ref().ok_or_else(|| {
         format!("Pour '{}' has no bounding box", pour.name)

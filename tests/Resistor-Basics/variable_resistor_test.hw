@@ -10,10 +10,12 @@
 # - W: Width of resistor body (perpendicular to current)
 # - R_contact: ~362Ω per contact (built into sky130_fd_pr__res_high_po subcircuit)
 #
-# Test Cases:
-# - R1 (Square):      4μm × 4μm  → L/W = 1  →  350Ω  + 724Ω contact = 1074Ω
-# - R2 (Long Thin):   4μm × 1μm  → L/W = 4  → 1400Ω  + 724Ω contact = 2124Ω
-# - R3 (Very Long):   4μm × 0.5μm → L/W = 8 → 2800Ω  + 724Ω contact = 3524Ω
+# SKY130 Width Quantization: W must be one of {0.35, 0.69, 1.41, 2.85, 5.73}μm
+#
+# Test Cases (using quantized widths):
+# - R1 (Square):      4μm × 2.85μm → L/W ≈ 1.4  →  490Ω  + 724Ω contact = 1214Ω
+# - R2 (Long Thin):   4μm × 1.41μm → L/W ≈ 2.8  →  980Ω  + 724Ω contact = 1704Ω
+# - R3 (Very Long):   4μm × 0.69μm → L/W ≈ 5.8  → 2030Ω  + 724Ω contact = 2754Ω
 #
 # Reference: https://skywater-pdk.readthedocs.io/en/main/rules/device-details.html
 
@@ -50,20 +52,22 @@ space Geometry_Variable_Resistor_Space implements GeometryVariableResistor:
         BULK: GND
 
     # ========================================================================
-    # RESISTOR 1: SQUARE GEOMETRY (Low Resistance ≈ 1074Ω)
-    # 4μm × 4μm = 1 square (L/W = 4μm/4μm = 1)
-    # Body: 350 Ω/□ × 1 = 350Ω
+    # RESISTOR 1: LOW RESISTANCE (≈ 1214Ω)
+    # 4μm × 2.85μm → L/W ≈ 1.4 squares
+    # Body: 350 Ω/□ × 1.4 ≈ 490Ω
     # Contact: ~362Ω × 2 ends = 724Ω
-    # Total: 350 + 724 = 1074Ω (from SKY130 subcircuit model)
+    # Total: 490 + 724 = 1214Ω (from SKY130 subcircuit model)
     # ========================================================================
 
     let r1_length = 4.0um
-    let r1_width = 4.0um
+    let r1_width = 2.85um  # SKY130 quantized width
     let r1_contact_size = 400nm
     let r1_center_x = 7.0um
     let r1_center_y = 3.0um
 
     # 1. CONTINUOUS POLYSILICON RESISTOR BODY (PRIMARY RESISTIVE CHANNEL)
+    # The resistor body forms the physical resistive element
+    # Bound to BOTH Terminal A and Terminal B - this is ONE continuous channel
     # v0.2.2: Multi-terminal device bodies do NOT have net assignments
     add pour(Polysilicon) named R1_Body on layer: polyres:
         device: R1.A, R1.B
@@ -71,13 +75,18 @@ space Geometry_Variable_Resistor_Space implements GeometryVariableResistor:
         at: [x: r1_center_x, y: r1_center_y]
 
     # 1a. RESISTOR POLY MASK (RPM) - ZERO-THICKNESS FABRICATION INSTRUCTION
+    # This mask blocks silicide formation on the polysilicon resistor body
+    # Category: mask → Z-thickness = 0nm, anchored to Z=180nm (top of polyres)
+    # Exported to GDSII for fabrication, skipped in DXF/GLB by structural filter
+    # SKY130 DRC: rpm.1 requires ≥180nm enclosure on all sides (360nm total extension)
     add pour(Resistor_Poly_Mask) named R1_RPM_Block on layer: rpm:
-        dimensions: r1_length + 200nm by r1_width + 200nm
+        dimensions: r1_length + 360nm by r1_width + 360nm
         align: center_x with R1_Body
         align: center_y with R1_Body
 
     # 2. LEFT CONTACT HEAD (TERMINAL A → NET IN1)
-    # Center positioned inset from left edge for proper overlap
+    # Titanium_Silicide contact on li1 layer binds Terminal A to net In1
+    # Contact center positioned at resistor left edge + half contact width for proper overlap
     add pour(Titanium_Silicide) named R1_Contact_A_LI on layer: li1:
         device: R1.A
         net: In1
@@ -86,7 +95,8 @@ space Geometry_Variable_Resistor_Space implements GeometryVariableResistor:
         align: center_y with R1_Body
     
     # 3. RIGHT CONTACT HEAD (TERMINAL B → NET OUT1)
-    # Center positioned inset from right edge for proper overlap
+    # Titanium_Silicide contact on li1 layer binds Terminal B to net Out1
+    # Contact center positioned at resistor right edge - half contact width for proper overlap
     add pour(Titanium_Silicide) named R1_Contact_B_LI on layer: li1:
         device: R1.B
         net: Out1
@@ -134,32 +144,34 @@ space Geometry_Variable_Resistor_Space implements GeometryVariableResistor:
         net: Out1
 
     # ========================================================================
-    # RESISTOR 2: LONG THIN GEOMETRY (Medium Resistance ≈ 2124Ω)
-    # 4μm × 1μm = 4 squares (L/W = 4μm/1μm = 4)
-    # Body: 350 Ω/□ × 4 = 1400Ω
+    # RESISTOR 2: MEDIUM RESISTANCE (≈ 1704Ω)
+    # 4μm × 1.41μm → L/W ≈ 2.8 squares
+    # Body: 350 Ω/□ × 2.8 ≈ 980Ω
     # Contact: ~362Ω × 2 ends = 724Ω
-    # Total: 1400 + 724 = 2124Ω (from SKY130 subcircuit model)
+    # Total: 980 + 724 = 1704Ω (from SKY130 subcircuit model)
     # ========================================================================
 
     let r2_length = 4.0um
-    let r2_width = 1.0um
+    let r2_width = 1.41um  # SKY130 quantized width
     let r2_contact_size = 400nm
     let r2_center_x = 15.0um
     let r2_center_y = 3.0um
 
-    # 1. CONTINUOUS POLYSILICON RESISTOR BODY
+    # 1. CONTINUOUS POLYSILICON RESISTOR BODY (PRIMARY RESISTIVE CHANNEL)
     add pour(Polysilicon) named R2_Body on layer: polyres:
         device: R2.A, R2.B
         dimensions: r2_length by r2_width
         at: [x: r2_center_x, y: r2_center_y]
 
-    # 1a. RESISTOR POLY MASK (RPM)
+    # 1a. RESISTOR POLY MASK (RPM) - ZERO-THICKNESS FABRICATION INSTRUCTION
+    # SKY130 DRC: rpm.1 requires ≥180nm enclosure on all sides (360nm total extension)
     add pour(Resistor_Poly_Mask) named R2_RPM_Block on layer: rpm:
-        dimensions: r2_length + 200nm by r2_width + 200nm
+        dimensions: r2_length + 360nm by r2_width + 360nm
         align: center_x with R2_Body
         align: center_y with R2_Body
 
     # 2. LEFT CONTACT HEAD (TERMINAL A → NET IN2)
+    # Titanium_Silicide contact on li1 layer binds Terminal A to net In2
     add pour(Titanium_Silicide) named R2_Contact_A_LI on layer: li1:
         device: R2.A
         net: In2
@@ -168,6 +180,7 @@ space Geometry_Variable_Resistor_Space implements GeometryVariableResistor:
         align: center_y with R2_Body
     
     # 3. RIGHT CONTACT HEAD (TERMINAL B → NET OUT2)
+    # Titanium_Silicide contact on li1 layer binds Terminal B to net Out2
     add pour(Titanium_Silicide) named R2_Contact_B_LI on layer: li1:
         device: R2.B
         net: Out2
@@ -215,32 +228,34 @@ space Geometry_Variable_Resistor_Space implements GeometryVariableResistor:
         net: Out2
 
     # ========================================================================
-    # RESISTOR 3: VERY LONG THIN GEOMETRY (High Resistance ≈ 3524Ω)
-    # 4μm × 0.5μm = 8 squares (L/W = 4μm/0.5μm = 8)
-    # Body: 350 Ω/□ × 8 = 2800Ω
+    # RESISTOR 3: HIGH RESISTANCE (≈ 2754Ω)
+    # 4μm × 0.69μm → L/W ≈ 5.8 squares
+    # Body: 350 Ω/□ × 5.8 ≈ 2030Ω
     # Contact: ~362Ω × 2 ends = 724Ω
-    # Total: 2800 + 724 = 3524Ω (from SKY130 subcircuit model)
+    # Total: 2030 + 724 = 2754Ω (from SKY130 subcircuit model)
     # ========================================================================
 
     let r3_length = 4.0um
-    let r3_width = 0.5um
+    let r3_width = 0.69um  # SKY130 quantized width
     let r3_contact_size = 400nm
     let r3_center_x = 23.0um
     let r3_center_y = 3.0um
 
-    # 1. CONTINUOUS POLYSILICON RESISTOR BODY
+    # 1. CONTINUOUS POLYSILICON RESISTOR BODY (PRIMARY RESISTIVE CHANNEL)
     add pour(Polysilicon) named R3_Body on layer: polyres:
         device: R3.A, R3.B
         dimensions: r3_length by r3_width
         at: [x: r3_center_x, y: r3_center_y]
 
-    # 1a. RESISTOR POLY MASK (RPM)
+    # 1a. RESISTOR POLY MASK (RPM) - ZERO-THICKNESS FABRICATION INSTRUCTION
+    # SKY130 DRC: rpm.1 requires ≥180nm enclosure on all sides (360nm total extension)
     add pour(Resistor_Poly_Mask) named R3_RPM_Block on layer: rpm:
-        dimensions: r3_length + 200nm by r3_width + 200nm
+        dimensions: r3_length + 360nm by r3_width + 360nm
         align: center_x with R3_Body
         align: center_y with R3_Body
 
     # 2. LEFT CONTACT HEAD (TERMINAL A → NET IN3)
+    # Titanium_Silicide contact on li1 layer binds Terminal A to net In3
     add pour(Titanium_Silicide) named R3_Contact_A_LI on layer: li1:
         device: R3.A
         net: In3
@@ -249,6 +264,7 @@ space Geometry_Variable_Resistor_Space implements GeometryVariableResistor:
         align: center_y with R3_Body
     
     # 3. RIGHT CONTACT HEAD (TERMINAL B → NET OUT3)
+    # Titanium_Silicide contact on li1 layer binds Terminal B to net Out3
     add pour(Titanium_Silicide) named R3_Contact_B_LI on layer: li1:
         device: R3.B
         net: Out3

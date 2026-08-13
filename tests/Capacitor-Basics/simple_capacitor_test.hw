@@ -1,10 +1,31 @@
 # simple_capacitor_test.hw - SKY130 MIM Capacitor Test
-# Device: MIM (Metal-Insulator-Metal) Capacitor
-# Physics: C = ε₀εᵣ(A/d)
-# - Area (A): ~10μm × 10μm = 100μm² (mimcap overlap)
-# - Thickness (d): 5nm (mimcap_dielectric layer)
-# - εᵣ (SiO2): 3.9
-# - Expected C ≈ 690fF
+# Device: sky130_fd_pr__cap_mim_m3_1 (Metal-Insulator-Metal Capacitor over Metal-3)
+# 
+# PHYSICS: C = C_area × A + C_perimeter × P
+# - Area (A): 10μm × 10μm = 100μm² (overlap between metal3 bottom plate and CAPM top plate)
+# - Perimeter (P): 2 × (10μm + 10μm) = 40μm
+# - C_area: 2.0 fF/μm² (SKY130 spec)
+# - C_perimeter: 0.19 fF/μm (edge/fringe capacitance)
+# 
+# Expected capacitance:
+# C = (2.0 fF/μm² × 100μm²) + (0.19 fF/μm × 40μm)
+# C = 200 fF + 7.6 fF = 207.6 fF
+#
+# SKY130 MIM CAPACITOR STRUCTURE (CAPM over Metal-3):
+# - Bottom plate: metal3 layer (Aluminum, 845nm thick)
+# - Dielectric: Ultra-thin oxide (~5nm equivalent)
+# - Top plate: CAPM layer (special capacitor metal, 100nm thick, 5.8 Ω/□)
+# - Top plate requires metal4 routing for external connection
+#
+# v0.2.2 COMPLIANCE:
+# - Device terminal bindings via device_nets (if virtual terminals needed)
+# - Multi-terminal device bodies do NOT have net assignments
+# - Contact heads bind device terminals to nets
+# - Proper SKY130 layer stackup: metal1 → li1 → metal2 → metal3 → CAPM → metal4
+# - Alignment-based positioning (minimal at: usage)
+#
+# Reference: https://skywater-pdk.readthedocs.io/en/main/rules/device-details.html#mim-capacitors
+
 import * from @std/primitives/units
 import * from "./capacitor_pdk"
 
@@ -20,76 +41,119 @@ space Simple_Capacitor_Space implements SimpleCapacitor:
         In:  { classification: signal, potential: 1.8V, current: 1.0nA }
         Out: { classification: signal, potential: 0.0V, current: 1.0nA }
 
-    let cap_area = 10.0um          # Target capacitor overlap area
-    let metal1_overhang = 500nm    # metal1 extends beyond mimcap (DRC requirement)
-    let metal1_size = cap_area + (2 * metal1_overhang)  # 11μm total
-    let mimcap_size = cap_area     # 10μm (sits inside metal1)
-    let capacitor_center_x = 15.0um
-    let capacitor_center_y = 10.0um
-    let pad_spacing = 4.0um
-    let pad_size = 2.0um
-    let contact_size = 1.0um
-    let via_diameter = 400nm
+    # ========================================================================
+    # PARAMETRIC MIM CAPACITOR GEOMETRY
+    # ========================================================================
+    
+    let cap_area = 10.0um              # Target capacitor overlap area (10μm × 10μm)
+    let metal3_overhang = 500nm        # Bottom plate extends beyond top plate (DRC requirement)
+    let metal3_size = cap_area + (2 * metal3_overhang)  # 11μm total
+    let capm_size = cap_area           # 10μm (sits inside metal3)
+    let capacitor_center_x = 15.0um    # Center X position
+    let capacitor_center_y = 10.0um    # Center Y position
+    let contact_size = 400nm           # Contact pad size
+    let via_diameter = 170nm           # Via diameter (SKY130 minimum)
+    let pad_spacing = 4.0um            # Distance from capacitor to external pads
+    let pad_size = 2.0um               # External test pad size
 
-    # 1. BOTTOM PLATE (METAL1) - DEVICE TERMINAL
-    # Metal1 bottom plate extends beyond mimcap on all sides (DRC requirement)
-    # Bound to Terminal bottom and net Out
-    add pour(Aluminum) named Bottom_Plate on layer: metal1:
-        device: C1.bottom
+    # ========================================================================
+    # 1. BOTTOM PLATE (METAL3) - DEVICE TERMINAL
+    # Metal3 bottom plate extends beyond CAPM on all sides (DRC requirement)
+    # Bound to Terminal c1 and assigned to net Out
+    # ========================================================================
+    add pour(Aluminum) named Bottom_Plate on layer: metal3:
+        device: C1.c1
         net: Out
-        dimensions: metal1_size by metal1_size
+        dimensions: metal3_size by metal3_size
         at: [x: capacitor_center_x, y: capacitor_center_y]
 
-    # 2. TOP PLATE (MIMCAP) - DEVICE TERMINAL
-    # MIMCap top plate sits centered on metal1 with overhang clearance
-    # Bound to Terminal top and net In
-    add pour(MIMCap) named Top_Plate on layer: mimcap:
-        device: C1.top
+    # ========================================================================
+    # 2. TOP PLATE (CAPM) - DEVICE TERMINAL
+    # CAPM top plate sits centered on metal3 with overhang clearance
+    # Bound to Terminal c0 and assigned to net In
+    # ========================================================================
+    add pour(CAPM) named Top_Plate on layer: capm:
+        device: C1.c0
         net: In
-        dimensions: mimcap_size by mimcap_size
+        dimensions: capm_size by capm_size
         align: center_x with Bottom_Plate
         align: center_y with Bottom_Plate
 
-    # 3. TOP PLATE CONTACT PAD (METAL2)
-    # Metal2 pad provides connection point for routing to top plate
-    add pour(Aluminum) named Top_Contact_Metal2 on layer: metal2:
+    # ========================================================================
+    # 3. TERMINAL CONTACTS (Bind device terminals to nets)
+    # ========================================================================
+    
+    # 3a. BOTTOM PLATE CONTACT (TERMINAL c1 → NET Out)
+    # Metal3 contact directly on bottom plate (simplest connection)
+    add pour(Aluminum) named Contact_Bottom_Metal3 on layer: metal3:
+        device: C1.c1
+        net: Out
+        dimensions: contact_size by contact_size
+        align: center_x with Bottom_Plate.left + contact_size / 2
+        align: center_y with Bottom_Plate
+    
+    # 3b. TOP PLATE CONTACT (TERMINAL c0 → NET In)
+    # CAPM contact at the EDGE of top plate (SKY130 MIM best practice)
+    # Avoids Metal 4 routing over the active capacitor body
+    add pour(CAPM) named Contact_Top_CAPM on layer: capm:
+        device: C1.c0
         net: In
         dimensions: contact_size by contact_size
-        align: center_x with Top_Plate
+        align: center_x with Top_Plate.right - contact_size / 2
         align: center_y with Top_Plate
 
-    # 4. VIA CONNECTING MIMCAP → METAL2
-    add contact(Tungsten) named Via_Top spanning layer: mimcap to metal2:
+    # ========================================================================
+    # 4. METAL4 PAD FOR TOP PLATE ROUTING
+    # CAPM top plate connects to metal4 for external routing
+    # Positioned at edge to minimize routing over MIM dielectric
+    # ========================================================================
+    add pour(Aluminum) named Top_Contact_Metal4 on layer: metal4:
         net: In
-        diameter: via_diameter
-        align: center_x with Top_Contact_Metal2
-        align: center_y with Top_Contact_Metal2
+        dimensions: contact_size by contact_size
+        align: center_x with Contact_Top_CAPM
+        align: center_y with Contact_Top_CAPM
 
-    # 5. EXTERNAL TEST PADS (Using anchor alignment with spacing)
-    # Output pad - connects to bottom plate (metal1), positioned to the left
-    add pour(Aluminum) named Out_Pad on layer: metal1:
+    # ========================================================================
+    # 5. VIA BRIDGING CAPM → METAL4 (Top plate connection)
+    # ========================================================================
+    add contact(Tungsten) named Via_Top_CAPM spanning layer: capm to metal4:
+        diameter: via_diameter
+        align: center_x with Contact_Top_CAPM
+        align: center_y with Contact_Top_CAPM
+        net: In
+
+    # ========================================================================
+    # 6. EXTERNAL TEST PADS (Using anchor alignment with spacing)
+    # ========================================================================
+    
+    # 6a. Output pad - connects to bottom plate (metal3), positioned to the left
+    add pour(Aluminum) named Out_Pad on layer: metal3:
         net: Out
         dimensions: pad_size by pad_size
         align: center_x with Bottom_Plate.left - pad_spacing
         align: center_y with Bottom_Plate
 
-    # Input pad - connects to top plate via metal2, positioned to the right
-    add pour(Aluminum) named In_Pad on layer: metal2:
+    # 6b. Input pad - connects to top plate via metal4, positioned to the right
+    add pour(Aluminum) named In_Pad on layer: metal4:
         net: In
         dimensions: pad_size by pad_size
         align: center_x with Bottom_Plate.right + pad_spacing
         align: center_y with Bottom_Plate
 
-    # 6. METAL1 ROUTING FROM OUT PAD TO BOTTOM PLATE
-    route Out_Pad to Bottom_Plate:
+    # ========================================================================
+    # 7. ROUTING FROM CONTACT PADS TO EXTERNAL TEST PADS
+    # ========================================================================
+    
+    # 7a. METAL3 ROUTING: Out pad → Bottom plate contact
+    route Out_Pad to Contact_Bottom_Metal3:
+        layer: metal3
         net: Out
-        width: 500nm
-        layer: metal1
+        width: 300nm
         intent: Signal
 
-    # 7. METAL2 ROUTING FROM TOP CONTACT TO IN PAD
-    route Top_Contact_Metal2 to In_Pad:
+    # 7b. METAL4 ROUTING: Top plate contact → In pad
+    route Top_Contact_Metal4 to In_Pad:
+        layer: metal4
         net: In
-        width: 500nm
-        layer: metal2
+        width: 300nm
         intent: Signal

@@ -1,18 +1,6 @@
 # materials.hw - SKY130 Material Definitions
 import * from @std/primitives/units
 
-export material Polysilicon:
-    category: conductor
-    symbol: Poly
-    process: deposited
-    properties:
-        color: "#FF6060"
-        metallic: 0.3
-        roughness: 0.8
-        resistivity: 7e-5ohm_m
-        thermal_conductivity: 30.0W_mK
-        max_current_density: 1e2A_mm2
-
 export material Aluminum:
     category: conductor
     symbol: Al
@@ -61,14 +49,17 @@ export material Air:
     properties:
         relative_permittivity: 1.0
 
-export material MIMCap:
+# CAPM Material (MIM Capacitor Top Plate)
+# SKY130 dedicated capacitor metal layer over Metal-3
+# Sheet resistance: 5.8 Ω/□
+export material CAPM:
     category: conductor
-    symbol: MIM
+    symbol: CAPM
     process: deposited
     properties:
         color: "#FFD700"
         metallic: 0.85
         roughness: 0.15
-        resistivity: 3.5e-8ohm_m
+        resistivity: 5.8e-7ohm_m
         thermal_conductivity: 200.0W_mK
         max_current_density: 8e2A_mm2

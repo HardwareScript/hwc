@@ -3,37 +3,37 @@ Wafer,Substrate,0.03x0.01x0.00mm,,,,,1
 
 # MATERIAL USAGE (Fabrication)
 Reference,Type,Material,Layer,Area_nm2,Volume_nm3
-R1_Body,Pour,Polysilicon,polyres (z:0nm),16000000,2880000000
-R1_Contact_A_LI,Pour,Titanium_Silicide,li1 (z:380nm),160000,16000000
-R1_Contact_B_LI,Pour,Titanium_Silicide,li1 (z:380nm),160000,16000000
-R1_Contact_A_Metal,Pour,Aluminum,metal1 (z:630nm),160000,57600000
-R1_Contact_B_Metal,Pour,Aluminum,metal1 (z:630nm),160000,57600000
-R2_Body,Pour,Polysilicon,polyres (z:0nm),4000000,720000000
-R2_Contact_A_LI,Pour,Titanium_Silicide,li1 (z:380nm),160000,16000000
-R2_Contact_B_LI,Pour,Titanium_Silicide,li1 (z:380nm),160000,16000000
-R2_Contact_A_Metal,Pour,Aluminum,metal1 (z:630nm),160000,57600000
-R2_Contact_B_Metal,Pour,Aluminum,metal1 (z:630nm),160000,57600000
-R3_Body,Pour,Polysilicon,polyres (z:0nm),2000000,360000000
-R3_Contact_A_LI,Pour,Titanium_Silicide,li1 (z:380nm),160000,16000000
-R3_Contact_B_LI,Pour,Titanium_Silicide,li1 (z:380nm),160000,16000000
-R3_Contact_A_Metal,Pour,Aluminum,metal1 (z:630nm),160000,57600000
-R3_Contact_B_Metal,Pour,Aluminum,metal1 (z:630nm),160000,57600000
-R1_Via_A_Poly,Contact,Tungsten,polyres (z:0nm),72900,20703600
-R1_Via_B_Poly,Contact,Tungsten,polyres (z:0nm),72900,20703600
-R1_Via_A_Metal,Contact,Tungsten,li1 (z:380nm),72900,20995200
-R1_Via_B_Metal,Contact,Tungsten,li1 (z:380nm),72900,20995200
-R2_Via_A_Poly,Contact,Tungsten,polyres (z:0nm),72900,20703600
-R2_Via_B_Poly,Contact,Tungsten,polyres (z:0nm),72900,20703600
-R2_Via_A_Metal,Contact,Tungsten,li1 (z:380nm),72900,20995200
-R2_Via_B_Metal,Contact,Tungsten,li1 (z:380nm),72900,20995200
-R3_Via_A_Poly,Contact,Tungsten,polyres (z:0nm),72900,20703600
-R3_Via_B_Poly,Contact,Tungsten,polyres (z:0nm),72900,20703600
-R3_Via_A_Metal,Contact,Tungsten,li1 (z:380nm),72900,20995200
-R3_Via_B_Metal,Contact,Tungsten,li1 (z:380nm),72900,20995200
+R1_Body,Pour,Polysilicon,polyres (z:200nm),11400000,2052000000
+R1_Contact_A_LI,Pour,Titanium_Silicide,li1 (z:580nm),160000,16000000
+R1_Contact_B_LI,Pour,Titanium_Silicide,li1 (z:580nm),160000,16000000
+R1_Contact_A_Metal,Pour,Aluminum,metal1 (z:830nm),160000,57600000
+R1_Contact_B_Metal,Pour,Aluminum,metal1 (z:830nm),160000,57600000
+R2_Body,Pour,Polysilicon,polyres (z:200nm),5640000,1015200000
+R2_Contact_A_LI,Pour,Titanium_Silicide,li1 (z:580nm),160000,16000000
+R2_Contact_B_LI,Pour,Titanium_Silicide,li1 (z:580nm),160000,16000000
+R2_Contact_A_Metal,Pour,Aluminum,metal1 (z:830nm),160000,57600000
+R2_Contact_B_Metal,Pour,Aluminum,metal1 (z:830nm),160000,57600000
+R3_Body,Pour,Polysilicon,polyres (z:200nm),2756000,496080000
+R3_Contact_A_LI,Pour,Titanium_Silicide,li1 (z:580nm),160000,16000000
+R3_Contact_B_LI,Pour,Titanium_Silicide,li1 (z:580nm),160000,16000000
+R3_Contact_A_Metal,Pour,Aluminum,metal1 (z:830nm),160000,57600000
+R3_Contact_B_Metal,Pour,Aluminum,metal1 (z:830nm),160000,57600000
+R1_Via_A_Poly,Contact,Tungsten,polyres (z:200nm),72900,20703600
+R1_Via_B_Poly,Contact,Tungsten,polyres (z:200nm),72900,20703600
+R1_Via_A_Metal,Contact,Tungsten,li1 (z:580nm),72900,20995200
+R1_Via_B_Metal,Contact,Tungsten,li1 (z:580nm),72900,20995200
+R2_Via_A_Poly,Contact,Tungsten,polyres (z:200nm),72900,20703600
+R2_Via_B_Poly,Contact,Tungsten,polyres (z:200nm),72900,20703600
+R2_Via_A_Metal,Contact,Tungsten,li1 (z:580nm),72900,20995200
+R2_Via_B_Metal,Contact,Tungsten,li1 (z:580nm),72900,20995200
+R3_Via_A_Poly,Contact,Tungsten,polyres (z:200nm),72900,20703600
+R3_Via_B_Poly,Contact,Tungsten,polyres (z:200nm),72900,20703600
+R3_Via_A_Metal,Contact,Tungsten,li1 (z:580nm),72900,20995200
+R3_Via_B_Metal,Contact,Tungsten,li1 (z:580nm),72900,20995200
 
 # AGGREGATED MATERIAL TOTALS (Foundry Fabrication Summary)
 Material,Total_Area_nm2,Total_Volume_nm3,Layer_Count,Coverage_Percentage
 Aluminum,960000,345600000,6,0.2%
-Polysilicon,22000000,3960000000,3,4.9%
+Polysilicon,19796000,3563280000,3,4.4%
 Titanium_Silicide,960000,96000000,6,0.2%
 Tungsten,874800,250192800,12,0.2%

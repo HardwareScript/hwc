@@ -12,18 +12,18 @@
 * ========================================
 * NETS
 * ========================================
-* Net: In1 (pour: R1_Contact_A_LI, material: Titanium_Silicide, z: 380nm)
-* Net: Out1 (pour: R1_Contact_B_LI, material: Titanium_Silicide, z: 380nm)
-* Net: In1 (pour: R1_Contact_A_Metal, material: Aluminum, z: 630nm)
-* Net: Out1 (pour: R1_Contact_B_Metal, material: Aluminum, z: 630nm)
-* Net: In2 (pour: R2_Contact_A_LI, material: Titanium_Silicide, z: 380nm)
-* Net: Out2 (pour: R2_Contact_B_LI, material: Titanium_Silicide, z: 380nm)
-* Net: In2 (pour: R2_Contact_A_Metal, material: Aluminum, z: 630nm)
-* Net: Out2 (pour: R2_Contact_B_Metal, material: Aluminum, z: 630nm)
-* Net: In3 (pour: R3_Contact_A_LI, material: Titanium_Silicide, z: 380nm)
-* Net: Out3 (pour: R3_Contact_B_LI, material: Titanium_Silicide, z: 380nm)
-* Net: In3 (pour: R3_Contact_A_Metal, material: Aluminum, z: 630nm)
-* Net: Out3 (pour: R3_Contact_B_Metal, material: Aluminum, z: 630nm)
+* Net: In1 (pour: R1_Contact_A_LI, material: Titanium_Silicide, z: 580nm)
+* Net: Out1 (pour: R1_Contact_B_LI, material: Titanium_Silicide, z: 580nm)
+* Net: In1 (pour: R1_Contact_A_Metal, material: Aluminum, z: 830nm)
+* Net: Out1 (pour: R1_Contact_B_Metal, material: Aluminum, z: 830nm)
+* Net: In2 (pour: R2_Contact_A_LI, material: Titanium_Silicide, z: 580nm)
+* Net: Out2 (pour: R2_Contact_B_LI, material: Titanium_Silicide, z: 580nm)
+* Net: In2 (pour: R2_Contact_A_Metal, material: Aluminum, z: 830nm)
+* Net: Out2 (pour: R2_Contact_B_Metal, material: Aluminum, z: 830nm)
+* Net: In3 (pour: R3_Contact_A_LI, material: Titanium_Silicide, z: 580nm)
+* Net: Out3 (pour: R3_Contact_B_LI, material: Titanium_Silicide, z: 580nm)
+* Net: In3 (pour: R3_Contact_A_Metal, material: Aluminum, z: 830nm)
+* Net: Out3 (pour: R3_Contact_B_Metal, material: Aluminum, z: 830nm)
 * Net: In1 (width=300nm, material=Tungsten)
 *   Connected pins:
 *     - R1_Contact_A_LI.anchor
@@ -78,8 +78,8 @@
 * ========================================
 * EXTRACTED DEVICES
 * ========================================
-XR2 In2 Out2 GND sky130_fd_pr__res_high_po W=1.00u L=4.00u
-XR3 In3 Out3 GND sky130_fd_pr__res_high_po W=0.50u L=4.00u
-XR1 In1 Out1 GND sky130_fd_pr__res_high_po W=4.00u L=4.00u
+XR2 In2 Out2 GND sky130_fd_pr__res_high_po W=1.41u L=4.00u
+XR3 In3 Out3 GND sky130_fd_pr__res_high_po W=0.69u L=4.00u
+XR1 In1 Out1 GND sky130_fd_pr__res_high_po W=2.85u L=4.00u
 
 .end

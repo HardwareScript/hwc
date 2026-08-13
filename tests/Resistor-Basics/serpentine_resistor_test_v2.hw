@@ -1,11 +1,19 @@
-# serpentine_resistor_test_v2.hw
-# v0.2.1+ PARAMETRIC SERPENTINE RESISTOR (Corrected & Streamlined)
+# serpentine_resistor_test_v2.hw - SKY130 Serpentine Resistor (Parametric)
+# Device: sky130_fd_pr__res_high_po (P+ Poly Precision Resistor, 350 Ω/□)
+# 
+# VERSION 2: PARAMETRIC SERPENTINE RESISTOR (Loop-Based Implementation)
 # 
 # Demonstrates mid-level parametric generation:
 # 1. Loop-based segment generation (for i in 0..4)
 # 2. Conditional geometry placement (if i mod 2 = 0)
 # 3. Inline coordinate expressions with proper device bindings
 # 4. Simplified vertical connector positioning (1.5um offset)
+#
+# This design: 5 horizontal segments (10μm each) + 4 vertical connectors (2μm each)
+# Pitch: 3μm center-to-center between parallel segments (provides 2μm clearance)
+# Total path length: (5×10μm) + (4×2μm) = 58μm
+# Width: 1μm
+# Expected resistance: (58μm/1μm) × 350Ω/□ + 724Ω = 20,300Ω + 724Ω = 21,024Ω
 #
 # Design Philosophy:
 # - Single '=' is the canonical HardwareScript equality operator
@@ -14,6 +22,8 @@
 #
 # Note: Version 2 still has repetitive contact stacks. Version 3 (PCell)
 # would encapsulate this entire serpentine into a 1-line instantiation.
+#
+# Reference: https://patents.justia.com/patent/20220271116
 
 import * from @std/primitives/units
 import * from "./resistor_pdk"
@@ -23,7 +33,7 @@ module SerpentineResistor:
     route In to Out
 
 space Serpentine_Resistor_Space_V2 implements SerpentineResistor:
-    dimensions: 20.0um by 15.0um
+    dimensions: 20.0um by 20.0um
     profile: Resistor_3D
 
     nets:
@@ -31,7 +41,7 @@ space Serpentine_Resistor_Space_V2 implements SerpentineResistor:
         Out: { classification: signal, potential: 0.0V, current: 1.0uA }
         GND: { classification: ground, potential: 0.0V, current: 0.0uA }
 
-    # Device virtual terminal bindings (v0.2.2+)
+    # Device virtual terminal bindings (v0.2.2)
     device_nets R1:
         BULK: GND
 
@@ -43,23 +53,26 @@ space Serpentine_Resistor_Space_V2 implements SerpentineResistor:
     let seg_width = 1.0um
     let vert_len = 2.0um
     let vert_width = 1.0um
-    let vert_spacing = 3.0um
-    let center_x = 8.0um
+    let pitch = 3.0um  # Center-to-center spacing between parallel segments (3x trace width)
+    let center_x = 10.0um
     let start_y = 2.0um
     
     # Derived X coordinates (calculated from geometry, not absolute)
-    let right_x = center_x + seg_len/2 - vert_width/2  # = 8 + 5 - 0.5 = 12.5um
-    let left_x = center_x - seg_len/2 + vert_width/2   # = 8 - 5 + 0.5 = 3.5um
+    let right_x = center_x + seg_len/2 - vert_width/2  # = 10 + 5 - 0.5 = 14.5um
+    let left_x = center_x - seg_len/2 + vert_width/2   # = 10 - 5 + 0.5 = 5.5um
     
     # ========================================================================
-    # POLYSILICON SERPENTINE PATH (Single at: + Relational Positioning)
+    # 1. CONTINUOUS POLYSILICON SERPENTINE PATH (Loop-Based Generation)
     # Creates 5 horizontal segments with 4 vertical connectors
+    # All segments are bound to BOTH Terminal A and Terminal B
+    # v0.2.2: Multi-terminal device bodies do NOT have net assignments
+    # Pitch = 3μm provides 2μm clearance between 1μm-wide parallel segments
     # 
-    # Design Change (v0.2.2+):
+    # Design Change (v0.2.2):
     # - Seg0 uses ONE absolute at: statement (the required anchor)
-    # - Seg1-4 use align: with loop variable offsets
+    # - Seg1-4 use align: with loop variable offsets (pitch-based spacing)
     # - Vertical connectors use align: relative to Seg0 edges
-    # - left_x and right_x are now DERIVED from geometry, not absolute
+    # - Connectors overlap adjacent segments to form continuous path
     # ========================================================================
     
     # 1a. Anchor Segment (Seg0) - THE ONLY at: STATEMENT
@@ -69,84 +82,106 @@ space Serpentine_Resistor_Space_V2 implements SerpentineResistor:
         device: R1.A, R1.B
     
     # 1b. Remaining Horizontal Segments (Seg1-4) - Aligned to Seg0
+    # Each segment is positioned at i * pitch from Seg0
     for i in 1..4:
         add pour(Polysilicon) named Seg{i} on layer: polyres:
             dimensions: seg_len by seg_width
             align: center_x with Seg0
-            align: center_y with Seg0.center_y + i * vert_spacing
+            align: center_y with Seg0.center_y + i * pitch
             device: R1.A, R1.B
     
-    # 2. Generate 4 Vertical Connectors (Aligned to Seg0 edges)
+    # 1c. Generate 4 Vertical Connectors (Aligned to Seg0 edges)
+    # Connectors positioned to overlap adjacent segments, alternating left/right
     for i in 0..3:
         if i mod 2 = 0:
             add pour(Polysilicon) named Vert{i} on layer: polyres:
                 dimensions: vert_width by vert_len
                 align: center_x with Seg0.right - vert_width/2
-                align: center_y with Seg0.center_y + i * vert_spacing + 1.5um
+                align: center_y with Seg0.center_y + i * pitch + 1.5um
                 device: R1.A, R1.B
         else:
             add pour(Polysilicon) named Vert{i} on layer: polyres:
                 dimensions: vert_width by vert_len
                 align: center_x with Seg0.left + vert_width/2
-                align: center_y with Seg0.center_y + i * vert_spacing + 1.5um
+                align: center_y with Seg0.center_y + i * pitch + 1.5um
                 device: R1.A, R1.B
     
-    # 3. Resistor Poly Mask (RPM) - Aligned to middle segment (Seg2)
+    # ========================================================================
+    # 1d. RESISTOR POLY MASK (RPM) - ZERO-THICKNESS FABRICATION INSTRUCTION
+    # This mask blocks silicide formation on the polysilicon resistor body
+    # Category: mask → Z-thickness = 0nm, anchored to Z=180nm (top of polyres)
+    # Exported to GDSII for fabrication, skipped in DXF/GLB by structural filter
+    # SKY130 DRC: rpm.1 requires ≥180nm enclosure on all sides (360nm total extension)
+    # Total height: 5 segments @ 3μm pitch = 12μm + 1 segment height = 13μm
+    # ========================================================================
     add pour(Resistor_Poly_Mask) named RPM_Serpentine on layer: rpm:
-        dimensions: 10.4um by 13.4um
-        align: center_x with Seg0
+        dimensions: seg_len + 360nm by 13.0um + 360nm
+        align: center_x with Seg2
         align: center_y with Seg2  # Center on Seg2 (middle of 5 segments)
     # ========================================================================
-    # TERMINAL CONTACTS
+    # 2. TERMINAL CONTACTS (LEFT END OF BOTTOM SEGMENT → RIGHT END OF TOP)
     # ========================================================================
     
     let contact_size = 400nm
     
-    # Terminal A (Bottom Left - aligned to Seg0)
+    # 2a. LEFT CONTACT HEAD (TERMINAL A → NET IN)
+    # Titanium_Silicide contact on li1 layer binds Terminal A to net In
+    # Contact center positioned at resistor left edge + half contact width for proper overlap
     add pour(Titanium_Silicide) named Contact_A_LI on layer: li1:
-        net: In
         device: R1.A
+        net: In
         dimensions: contact_size by contact_size
         align: center_x with Seg0.left + contact_size / 2
         align: center_y with Seg0
     
+    # 2b. RIGHT CONTACT HEAD (TERMINAL B → NET OUT)
+    # Titanium_Silicide contact on li1 layer binds Terminal B to net Out
+    # Contact center positioned at resistor right edge - half contact width for proper overlap
+    add pour(Titanium_Silicide) named Contact_B_LI on layer: li1:
+        device: R1.B
+        net: Out
+        dimensions: contact_size by contact_size
+        align: center_x with Seg4.right - contact_size / 2
+        align: center_y with Seg4
+
+    # ========================================================================
+    # 3. VIAS BRIDGING POLYRES → LI1
+    # ========================================================================
     add contact(Tungsten) named Via_A_Poly spanning layer: polyres to li1:
         diameter: 170nm
         align: center_x with Contact_A_LI
         align: center_y with Contact_A_LI
         net: In
     
+    add contact(Tungsten) named Via_B_Poly spanning layer: polyres to li1:
+        diameter: 170nm
+        align: center_x with Contact_B_LI
+        align: center_y with Contact_B_LI
+        net: Out
+
+    # ========================================================================
+    # 4. METAL1 PADS DIRECTLY ABOVE LI1 CONTACTS
+    # ========================================================================
     add pour(Aluminum) named Contact_A_Metal on layer: metal1:
         dimensions: contact_size by contact_size
         align: center_x with Contact_A_LI
         align: center_y with Contact_A_LI
         net: In
     
-    add contact(Tungsten) named Via_A_Metal spanning layer: li1 to metal1:
-        diameter: 170nm
-        align: center_x with Contact_A_LI
-        align: center_y with Contact_A_LI
-        net: In
-    
-    # Terminal B (Top Right - aligned to Seg4)
-    add pour(Titanium_Silicide) named Contact_B_LI on layer: li1:
-        net: Out
-        device: R1.B
-        dimensions: contact_size by contact_size
-        align: center_x with Seg4.right - contact_size / 2
-        align: center_y with Seg4
-    
-    add contact(Tungsten) named Via_B_Poly spanning layer: polyres to li1:
-        diameter: 170nm
-        align: center_x with Contact_B_LI
-        align: center_y with Contact_B_LI
-        net: Out
-    
     add pour(Aluminum) named Contact_B_Metal on layer: metal1:
         dimensions: contact_size by contact_size
         align: center_x with Contact_B_LI
         align: center_y with Contact_B_LI
         net: Out
+
+    # ========================================================================
+    # 5. VIAS BRIDGING LI1 → METAL1
+    # ========================================================================
+    add contact(Tungsten) named Via_A_Metal spanning layer: li1 to metal1:
+        diameter: 170nm
+        align: center_x with Contact_A_LI
+        align: center_y with Contact_A_LI
+        net: In
     
     add contact(Tungsten) named Via_B_Metal spanning layer: li1 to metal1:
         diameter: 170nm
@@ -155,32 +190,68 @@ space Serpentine_Resistor_Space_V2 implements SerpentineResistor:
         net: Out
 
     # ========================================================================
-    # EXTERNAL TEST PADS & ROUTING
+    # 6. EXTERNAL TEST PADS (Using anchor alignment with spacing)
     # ========================================================================
-    
     let pad_size = 1.0um
-    let overlap = 300nm
+    let pad_spacing = 3.0um
     
     add pour(Aluminum) named In_Pad on layer: metal1:
         dimensions: pad_size by pad_size
-        align: right with Contact_A_Metal.left + overlap
+        align: center_x with Contact_A_Metal.left - pad_spacing
         align: center_y with Contact_A_Metal
         net: In
     
     add pour(Aluminum) named Out_Pad on layer: metal1:
         dimensions: pad_size by pad_size
-        align: left with Contact_B_Metal.right - overlap
+        align: center_x with Contact_B_Metal.right + pad_spacing
         align: center_y with Contact_B_Metal
         net: Out
     
+    # ========================================================================
+    # 7. METAL1 ROUTING FROM CONTACT PADS TO EXTERNAL TEST PADS
+    # ========================================================================
     route In_Pad to Contact_A_Metal:
         net: In
-        width: 800nm
+        width: 300nm
         layer: metal1
         intent: Signal
     
     route Contact_B_Metal to Out_Pad:
         net: Out
-        width: 800nm
+        width: 300nm
         layer: metal1
         intent: Signal
+
+    # ========================================================================
+    # 8. SUBSTRATE TAP FOR BULK CONNECTION (SKY130 LVS Requirement)
+    # Precision poly resistors require physical bulk contact for LVS to pass.
+    # In SKY130, a proper substrate tap requires THREE layers:
+    #   1. P+ diffusion region (pdiff layer) - physical implant in substrate
+    #   2. Local interconnect contact (licon) - via connecting pdiff to li1
+    #   3. Local interconnect metal (li1) - connects to GND net
+    # Positioned below the middle segment (Seg2) for central placement
+    # ========================================================================
+    let tap_size = 400nm
+    let tap_x_pos = 10.0um  # Centered in X direction
+    let tap_y_pos = 11.0um  # Below Seg2, clear of serpentine path
+    
+    # 8a. P+ DIFFUSION REGION (Physical substrate implant)
+    add pour(P_Plus_Diffusion) named Bulk_Tap_Diff on layer: pdiff:
+        dimensions: tap_size by tap_size
+        at: [x: tap_x_pos, y: tap_y_pos]
+        net: GND
+        device: R1.BULK
+    
+    # 8b. LOCAL INTERCONNECT CONTACT (licon - connects pdiff to li1)
+    add contact(Tungsten) named Bulk_Tap_Contact spanning layer: pdiff to li1:
+        diameter: 170nm
+        align: center_x with Bulk_Tap_Diff
+        align: center_y with Bulk_Tap_Diff
+        net: GND
+    
+    # 8c. LOCAL INTERCONNECT METAL (li1 layer)
+    add pour(Titanium_Silicide) named Bulk_Tap_LI on layer: li1:
+        dimensions: tap_size by tap_size
+        align: center_x with Bulk_Tap_Diff
+        align: center_y with Bulk_Tap_Diff
+        net: GND

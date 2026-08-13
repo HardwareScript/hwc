@@ -12,5 +12,11 @@ V_In1 In1 0 DC 1.800
 V_In2 In2 0 DC 1.800
 V_In3 In3 0 DC 1.800
 V_GND GND 0 DC 0.000
+V_Out1 Out1 0 DC 0.000
+V_Out2 Out2 0 DC 0.000
+V_Out3 Out3 0 DC 0.000
+.measure dc R1_actual param='1.800 / abs(i(V_Out1))'
+.measure dc R2_actual param='1.800 / abs(i(V_Out2))'
+.measure dc R3_actual param='1.800 / abs(i(V_Out3))'
 .op
 .end

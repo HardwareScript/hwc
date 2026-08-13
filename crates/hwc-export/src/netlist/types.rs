@@ -53,6 +53,9 @@ impl Default for PhysicalNetlistGraph {
 pub enum StimulusMode {
     /// DC voltage sources with .op directive
     DcOperatingPoint,
+    /// AC frequency sweep with .ac directive
+    /// Policy-compliant expansion (v0.2.1): Separate file for frequency response
+    AcFrequencyResponse,
     /// Pulsed voltage sources with .tran directive
     Transient,
 }
