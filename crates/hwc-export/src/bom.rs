@@ -146,6 +146,53 @@ pub fn export(
         ));
     }
 
+    // v0.2.2: Include routed traces from analytic_routes
+    for (trace_idx, trace) in space.analytic_routes.iter().enumerate() {
+        // Calculate total trace length
+        let total_length_nm: i64 = trace.segments.iter().map(|s| s.length()).sum();
+        
+        if total_length_nm == 0 {
+            continue; // Skip zero-length traces
+        }
+
+        // Calculate trace volume: length × width × thickness
+        let width_nm = trace.cross_section.width_nm;
+        let thickness_nm = trace.cross_section.thickness_nm;
+        let volume_nm3 = (total_length_nm as u128 * width_nm as u128 * thickness_nm as u128)
+            .min(u64::MAX as u128) as u64;
+        
+        // Calculate trace area: length × width
+        let area_nm2 = total_length_nm * width_nm;
+
+        if volume_nm3 == 0 || area_nm2 == 0 {
+            continue; // Skip invalid traces
+        }
+
+        // Get material name
+        let material_name = space
+            .material_registry
+            .get_name(trace.material)
+            .unwrap_or("Unknown");
+
+        // Generate trace reference name
+        let trace_name = format!("Route_{}_on_{}", trace.net_name, trace.layer_name);
+
+        // Get layer information
+        let layer_info = format!("{} (trace)", trace.layer_name);
+
+        bom.push_str(&format!(
+            "{},Route,{},{},{},{}\n",
+            trace_name, material_name, layer_info, area_nm2, volume_nm3
+        ));
+
+        // Accumulate material totals for routes
+        let material_key = material_name.to_string();
+        let entry = material_totals.entry(material_key).or_insert((0, 0, 0));
+        entry.0 += area_nm2;
+        entry.1 += volume_nm3;
+        entry.2 += 1;
+    }
+
     // v0.2.2: Include contacts/vias (Tungsten plugs) in material usage
     for contact in &space.contacts {
         // Calculate volume from bbox
@@ -220,12 +267,16 @@ pub fn export(
 
     std::fs::write(&path, bom)?;
 
-    let physical_material_count = physical_pours.len() + space.contacts.len();
+    let route_count = space.analytic_routes.len();
+    let physical_material_count = physical_pours.len() + route_count + space.contacts.len();
     println!(
-        "   ✅ BOM: {} ({} discrete items, {} material items)",
+        "   ✅ BOM: {} ({} discrete items, {} material items: {} pours, {} routes, {} contacts)",
         path.display(),
         discrete_count,
-        physical_material_count
+        physical_material_count,
+        physical_pours.len(),
+        route_count,
+        space.contacts.len()
     );
 
     Ok(())

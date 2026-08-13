@@ -571,6 +571,10 @@ pub fn resolve_route_pin_centers(
 /// v0.2.1 BLOAT PURGE: Removed shape-specific discrimination. Queries any contact
 /// (Circle, Rect, Polygon) registered in LayerConnectionDatabase generically.
 ///
+/// v0.2.1 FIX: Only match SubstrateLayerType::Contact layers.
+/// Prevents planar pours (like Bottom_Plate) from being misidentified as "via contacts",
+/// which caused routes to target the center of large pour plates instead of contact heads or pad edges.
+///
 /// Returns: Some((x, y)) if a contact exists, None otherwise
 fn find_contact_on_pad(
     space: &HardwareSpace,
@@ -582,12 +586,18 @@ fn find_contact_on_pad(
     let net_raw = net_id.raw();
 
     // Search all substrate layers for contacts that:
-    // 1. Are on the same net
-    // 2. Have XY center within the pad's XY bbox
-    // 3. Span vertically to include the target Z layer
+    // 1. Are vertical contacts (NOT planar pours)
+    // 2. Are on the same net
+    // 3. Have XY center within the pad's XY bbox
+    // 4. Span vertically to include the target Z layer
     //
-    // v0.2.1: NO SHAPE FILTERING - accept any geometry (Circle, Rect, Polygon)
+    // v0.2.1: Filter by SubstrateLayerType::Contact to exclude planar pours
     for (idx, layer) in space.entity_graph.get_substrate_layers().iter().enumerate() {
+        // FIX: Must be a Contact layer, NOT a planar Pour!
+        if layer.layer_type != hwc_engine::geometry_router::substrate_types::SubstrateLayerType::Contact {
+            continue;
+        }
+
         // Must be on the same net
         if layer.net != hwc_engine::NetId::new(net_raw) {
             continue;
@@ -609,7 +619,7 @@ fn find_contact_on_pad(
 
         if contact_spans_target {
             eprintln!(
-                "[CONTACT FOUND] Layer {} at ({},{}) Z={}→{}nm spans target Z={}nm",
+                "[CONTACT FOUND] Explicit contact layer {} at ({},{}) Z={}→{}nm spans target Z={}nm",
                 idx, layer_center_x, layer_center_y, layer.bbox.min.z, layer.bbox.max.z, target_z
             );
             return Some((layer_center_x, layer_center_y));

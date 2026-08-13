@@ -1,0 +1,20 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,0.03x0.02x0.00mm,,,,,1
+
+# MATERIAL USAGE (Fabrication)
+Reference,Type,Material,Layer,Area_nm2,Volume_nm3
+Bottom_Plate,Pour,Aluminum,metal3 (z:1320nm),121000000,102245000000
+Top_Plate,Pour,CAPM,capm (z:2170nm),100000000,10000000000
+Bulk_Tie,Pour,Aluminum,metal1 (z:0nm),1000000,360000000
+Top_Contact_Metal4,Pour,Aluminum,metal4 (z:2420nm),160000,135200000
+Out_Pad,Pour,Aluminum,metal3 (z:1320nm),4000000,3380000000
+In_Pad,Pour,Aluminum,metal4 (z:2420nm),4000000,3380000000
+Route_In_on_metal4,Route,Aluminum,metal4 (trace),1050000,887250000
+Route_Out_on_metal3,Route,Aluminum,metal3 (trace),900000,760500000
+Via_Top_CAPM,Contact,Tungsten,capm (z:2170nm),72900,31638600
+
+# AGGREGATED MATERIAL TOTALS (Foundry Fabrication Summary)
+Material,Total_Area_nm2,Total_Volume_nm3,Layer_Count,Coverage_Percentage
+Aluminum,132110000,111147950000,7,22.0%
+CAPM,100000000,10000000000,1,16.7%
+Tungsten,72900,31638600,1,0.0%

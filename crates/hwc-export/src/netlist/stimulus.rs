@@ -6,7 +6,8 @@
 use hwc_compiler::alignment::PhysicalNetlist;
 use hwc_compiler::SymbolTable;
 use hwc_parser::{
-    ModuleDefinition, NetClassification, NetDeclaration, PinDirection, SpaceDefinition,
+    AcSweepType, ModuleDefinition, NetClassification, NetDeclaration, PinDirection, SpaceDefinition,
+    TestDefinition,
 };
 use hwc_types::UnitRegistry;
 
@@ -67,6 +68,7 @@ pub fn generate_stimulus(
     unit_registry: &UnitRegistry,
     physical_graph: &PhysicalNetlistGraph,
     symbol_table: Option<&SymbolTable>,
+    test_def: Option<&TestDefinition>,
 ) -> Result<String, String> {
     let mut stimulus = String::new();
 
@@ -80,10 +82,10 @@ pub fn generate_stimulus(
             generate_dc_stimulus(space_def, unit_registry, physical_graph, module_def, physical_netlist, symbol_table, &mut stimulus)?;
         }
         StimulusMode::AcFrequencyResponse => {
-            generate_ac_stimulus(space_def, unit_registry, physical_graph, module_def, &mut stimulus);
+            generate_ac_stimulus(space_def, unit_registry, physical_graph, module_def, test_def, &mut stimulus)?;
         }
         StimulusMode::Transient => {
-            generate_transient_stimulus(space_def, unit_registry, physical_graph, module_def, &mut stimulus);
+            generate_transient_stimulus(space_def, unit_registry, physical_graph, module_def, test_def, &mut stimulus)?;
         }
     }
 
@@ -239,6 +241,22 @@ fn generate_dc_stimulus(
     Ok(())
 }
 
+/// Resolve a test `Measurement` to its base SI value via the `UnitRegistry` table.
+///
+/// Data-driven conversion (HardwareScript Bloat Purge): no hardcoded unit lists.
+/// The AST `Unit` is mapped to its canonical symbol string and looked up in the
+/// registry, so user-defined / foundry PDK units work identically to built-ins.
+fn measurement_to_base_si(
+    m: &hwc_parser::Measurement,
+    unit_registry: &UnitRegistry,
+    expected_dimension: &str,
+) -> Result<f64, String> {
+    let symbol = m.unit.to_symbol();
+    unit_registry
+        .convert_with_validation(m.value, &symbol, expected_dimension)
+        .map_err(|e| format!("Failed to resolve measurement '{}' ({}): {}", m.value, symbol, e))
+}
+
 /// Generate AC frequency response stimulus
 ///
 /// Policy-compliant implementation (v0.2.1):
@@ -246,13 +264,52 @@ fn generate_dc_stimulus(
 /// - AC small-signal analysis for impedance, phase, gain measurements
 /// - Compatible with capacitors, inductors, and reactive devices
 /// - DC bias must be set with separate .op or DC sources
+///
+/// Frequency range / sweep type / points are taken from the testbench's `ac:`
+/// block. The compiler FAILS LOUDLY if no explicit testbench AC configuration is
+/// provided (Zero-Hidden-Fallbacks mandate) — no guessed defaults.
 fn generate_ac_stimulus(
     space_def: Option<&SpaceDefinition>,
     unit_registry: &UnitRegistry,
     physical_graph: &PhysicalNetlistGraph,
     module_def: Option<&ModuleDefinition>,
+    test_def: Option<&TestDefinition>,
     stimulus: &mut String,
-) {
+) -> Result<(), String> {
+    let space_name = space_def.map(|s| s.name.as_str()).unwrap_or("<unknown>");
+
+    // FAIL LOUDLY: Require an explicit test definition with an `ac:` block.
+    let test = test_def.ok_or_else(|| {
+        format!(
+            "Space '{}' missing test definition for AC SPICE export.\n\
+             \n\
+             HardwareScript Mandate: Zero Hidden Fallbacks & Absolute Determinism.\n\
+             The compiler will never guess frequency sweeps or test stimulus.\n\
+             \n\
+             FIX: Declare an explicit testbench with ac: configuration:\n\
+             \n\
+             test {}_AC_Test for {}:\n\
+                 ac: {{ sweep: dec, points: 20, freq: 100Hz..100MHz }}\n\
+             \n\
+             OR: If you don't need AC analysis, omit the ac: block and only ac.sp won't be generated.",
+            space_name, space_name, space_name
+        )
+    })?;
+
+    let ac = test.ac_config.as_ref().ok_or_else(|| {
+        format!(
+            "Testbench '{}' missing 'ac:' configuration block for AC SPICE export.\n\
+             \n\
+             FIX: Add AC configuration to testbench:\n\
+             \n\
+             test {} for {}:\n\
+                 ac: {{ sweep: dec, points: 20, freq: 100Hz..100MHz }}\n\
+             \n\
+             OR: If you don't need AC frequency analysis, this is normal - only dc.sp will be generated.",
+            test.name.as_str(), test.name.as_str(), space_name
+        )
+    })?;
+
     // AC analysis requires DC bias point + AC small-signal stimulus
     // Generate DC sources for biasing (same as DC analysis)
     if let Some(space_def) = space_def {
@@ -290,10 +347,10 @@ fn generate_ac_stimulus(
                             }
                         }
                         Err(e) => {
-                            eprintln!(
-                                "Warning: Skipping voltage source for net '{}': {}",
+                            return Err(format!(
+                                "Failed to convert potential for net '{}': {}",
                                 net_decl.name, e
-                            );
+                            ));
                         }
                     }
                 }
@@ -305,7 +362,7 @@ fn generate_ac_stimulus(
             for pin in &module.pins {
                 if pin.direction == PinDirection::Output {
                     let net_name = pin.name.as_str();
-                    
+
                     let node_name = physical_graph
                         .net_entry_points
                         .get(net_name)
@@ -321,23 +378,72 @@ fn generate_ac_stimulus(
         }
     }
 
-    // AC frequency sweep: decade sweep from 100Hz to 100MHz, 20 points per decade
-    // TODO: Make frequency range configurable via PDK profile or testbench properties
-    // For now, use reasonable defaults for passive component characterization
-    stimulus.push_str("* AC Small-Signal Frequency Response\n");
-    stimulus.push_str(".ac dec 20 100 100MEG\n");
-    stimulus.push_str("* Frequency range: 100Hz - 100MHz (decade sweep, 20 pts/decade)\n");
-    stimulus.push_str("* Note: Adjust frequency range in PDK profile for RF/audio applications\n");
+    // DATA-DRIVEN UNIT CONVERSION USING UNIT REGISTRY LOOKUP TABLE
+    let start_hz = measurement_to_base_si(&ac.start_freq, unit_registry, "frequency")
+        .map_err(|e| format!("Failed to resolve AC start frequency: {}", e))?;
+    let stop_hz = measurement_to_base_si(&ac.stop_freq, unit_registry, "frequency")
+        .map_err(|e| format!("Failed to resolve AC stop frequency: {}", e))?;
+
+    let sweep_str = match ac.sweep_type {
+        AcSweepType::Decade => "dec",
+        AcSweepType::Octave => "oct",
+        AcSweepType::Linear => "lin",
+    };
+
+    stimulus.push_str("* AC Small-Signal Frequency Response (Configured via Testbench)\n");
+    stimulus.push_str(&format!(
+        ".ac {} {} {:.3e} {:.3e}\n",
+        sweep_str, ac.points, start_hz, stop_hz
+    ));
+    stimulus.push_str("* Frequency range configured from testbench 'ac:' block\n");
+
+    Ok(())
 }
 
 /// Generate transient analysis stimulus
+///
+/// Transient step/stop (and optional start) are taken from the testbench's
+/// `tran:` block. The compiler FAILS LOUDLY if no explicit `tran:` configuration
+/// is provided (Zero-Hidden-Fallbacks mandate).
 fn generate_transient_stimulus(
     space_def: Option<&SpaceDefinition>,
     unit_registry: &UnitRegistry,
     physical_graph: &PhysicalNetlistGraph,
     module_def: Option<&ModuleDefinition>,
+    test_def: Option<&TestDefinition>,
     stimulus: &mut String,
-) {
+) -> Result<(), String> {
+    let space_name = space_def.map(|s| s.name.as_str()).unwrap_or("<unknown>");
+
+    // FAIL LOUDLY: Require an explicit test definition with a `tran:` block.
+    let test = test_def.ok_or_else(|| {
+        format!(
+            "Space '{}' missing test definition for transient SPICE export.\n\
+             \n\
+             FIX: Declare an explicit testbench with tran: configuration:\n\
+             \n\
+             test {}_Tran_Test for {}:\n\
+                 tran: {{ step: 10ps, stop: 200ns }}\n\
+             \n\
+             OR: If you don't need transient analysis, omit the tran: block and only tran.sp won't be generated.",
+            space_name, space_name, space_name
+        )
+    })?;
+
+    let tran = test.tran_config.as_ref().ok_or_else(|| {
+        format!(
+            "Testbench '{}' missing 'tran:' configuration block for transient SPICE export.\n\
+             \n\
+             FIX: Add transient configuration:\n\
+             \n\
+             test {} for {}:\n\
+                 tran: {{ step: 10ps, stop: 200ns }}\n\
+             \n\
+             OR: If you don't need time-domain analysis, this is normal - only dc.sp and ac.sp will be generated.",
+            test.name.as_str(), test.name.as_str(), space_name
+        )
+    })?;
+
     // Generate voltage sources for transient analysis
     if let Some(space_def) = space_def {
         for net_decl in &space_def.nets {
@@ -363,18 +469,33 @@ fn generate_transient_stimulus(
                             ));
                         }
                         Err(e) => {
-                            eprintln!(
+                            return Err(format!(
                                 "[STIMULUS ERROR] Failed to convert potential for net '{}': {}",
                                 net_decl.name, e
-                            );
+                            ));
                         }
                     }
                 }
             }
         }
     }
-    stimulus.push_str(".tran 200ns\n");
+
+    // DATA-DRIVEN UNIT CONVERSION USING UNIT REGISTRY LOOKUP TABLE
+    let step_s = measurement_to_base_si(&tran.step, unit_registry, "time")
+        .map_err(|e| format!("Failed to resolve transient step time: {}", e))?;
+    let stop_s = measurement_to_base_si(&tran.stop, unit_registry, "time")
+        .map_err(|e| format!("Failed to resolve transient stop time: {}", e))?;
+
+    if let Some(ref start) = tran.start {
+        let start_s = measurement_to_base_si(start, unit_registry, "time")
+            .map_err(|e| format!("Failed to resolve transient start time: {}", e))?;
+        stimulus.push_str(&format!(".tran {:.3e} {:.3e} {:.3e}\n", step_s, stop_s, start_s));
+    } else {
+        stimulus.push_str(&format!(".tran {:.3e} {:.3e}\n", step_s, stop_s));
+    }
 
     // Don't use .plot - LTspice ignores it
     // Instead, we'll generate a .plt file separately for automatic waveform display
+
+    Ok(())
 }

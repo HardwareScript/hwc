@@ -164,3 +164,12 @@ space Simple_Resistor_Space implements SimpleResistor:
         align: center_x with Bulk_Tap_Diff
         align: center_y with Bulk_Tap_Diff
         net: GND
+
+# ========================================================================
+# TEST DEFINITION: AC FREQUENCY RESPONSE & TRANSIENT ANALYSIS
+# ========================================================================
+# v0.2.1 Zero-Fallback Compliance: Explicit testbench configuration required
+# for AC and Transient SPICE export. The compiler FAILS LOUDLY without this.
+test Simple_Resistor_AC_Test for Simple_Resistor_Space:
+    ac: { sweep: dec, points: 20, freq: 100Hz..100MHz }
+    tran: { step: 10ps, stop: 200ns }

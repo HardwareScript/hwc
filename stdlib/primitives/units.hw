@@ -237,6 +237,7 @@ unit Nanohenry:
 unit Hertz:
     symbol: "Hz"
     base_si: "Hz"
+    multiplier: 1
     dimension: frequency
     description: "SI unit of frequency"
 

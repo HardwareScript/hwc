@@ -835,17 +835,32 @@ fn extract_geometry_wl_parameters(
     // Strategy:
     // 1. Each terminal may have multiple pours (main plate + contact pads)
     // 2. Find the LARGEST pour per terminal (ignore small contact pads)
-    // 3. Use the SMALLER of the two main plates (this is the overlap area)
+    // 3. EXCLUDE non-active terminals (b, body, bulk, BULK, sub, substrate)
+    // 4. Use the SMALLER of the two active plates (this is the overlap area)
     //
     // Physics: C = C_area × A_overlap
-    // Example: top plate = 10μm × 10μm, bottom = 11μm × 11μm
+    // Example: top plate = 10μm × 10μm, bottom = 11μm × 11μm, bulk = 1μm × 1μm
+    //   - WRONG: Using 1μm × 1μm (bulk tie) → 98.7% capacitance error! 
     //   - WRONG: Using 11μm × 11μm → 20.6% capacitance error
     //   - CORRECT: Using 10μm × 10μm (the actual overlap area)
     
-    // Step 1: Find largest pour per terminal
+    // List of terminal names that are NOT active device plates/channels
+    // These are substrate/bulk ties and should be excluded from geometry extraction
+    const NON_ACTIVE_TERMINALS: &[&str] = &["b", "body", "bulk", "BULK", "sub", "substrate", "SUBSTRATE"];
+    
+    // Step 1: Find largest pour per terminal (EXCLUDING non-active terminals)
     let mut largest_per_terminal: FxHashMap<&CompactString, (&PourMetadata, f64)> = FxHashMap::default();
     
     for (terminal_name, pours) in terminal_pours {
+        // Skip non-active terminals (bulk ties, substrate connections)
+        if NON_ACTIVE_TERMINALS.contains(&terminal_name.as_str()) {
+            println!(
+                "      [SKIPPED] Terminal '{}' excluded from W/L extraction (non-active terminal)",
+                terminal_name
+            );
+            continue;
+        }
+        
         let mut max_area = 0.0;
         let mut max_pour: Option<&PourMetadata> = None;
         
@@ -864,20 +879,37 @@ fn extract_geometry_wl_parameters(
         
         if let Some(pour) = max_pour {
             largest_per_terminal.insert(terminal_name, (pour, max_area));
+            println!(
+                "      [CANDIDATE] Terminal '{}': pour '{}' ({:.2}um x {:.2}um, area={:.2}um²)",
+                terminal_name,
+                pour.name,
+                (pour.bbox.as_ref().unwrap().max.x - pour.bbox.as_ref().unwrap().min.x) as f64 / 1000.0,
+                (pour.bbox.as_ref().unwrap().max.y - pour.bbox.as_ref().unwrap().min.y) as f64 / 1000.0,
+                max_area / 1_000_000.0
+            );
         }
     }
     
     if largest_per_terminal.is_empty() {
-        return Err("No terminal pours with bounding boxes found for geometry extraction".to_string());
+        return Err(
+            "No ACTIVE terminal pours with bounding boxes found for geometry extraction.\n\
+             All terminals were either non-active (b, body, bulk) or had no geometry.".to_string()
+        );
     }
     
-    // Step 2: Find the smallest of the largest pours (the limiting plate)
-    let (pour, _area) = largest_per_terminal
+    // Step 2: Find the smallest of the active terminal plates (the limiting plate)
+    let (pour, area) = largest_per_terminal
         .values()
         .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
         .ok_or_else(|| {
-            "Could not determine smallest terminal plate".to_string()
+            "Could not determine smallest active terminal plate".to_string()
         })?;
+    
+    println!(
+        "      [SELECTED] Using pour '{}' for W/L extraction (smallest active plate, area={:.2}um²)",
+        pour.name,
+        area / 1_000_000.0
+    );
     
     let bbox = pour.bbox.as_ref().ok_or_else(|| {
         format!("Pour '{}' has no bounding box", pour.name)

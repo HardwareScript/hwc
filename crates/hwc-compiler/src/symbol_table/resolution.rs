@@ -121,6 +121,24 @@ impl SymbolTable {
         }
     }
 
+    /// Find the test definition that targets a given space.
+    ///
+    /// A test targets a space via its `for SpaceName` clause (`target_space`).
+    /// If no test declares a matching target, returns the first registered test
+    /// (for single-test designs). Returns `None` if no tests are defined.
+    pub fn find_test_for_space(&self, space_name: &str) -> Option<&TestDefinition> {
+        let mut fallback: Option<&TestDefinition> = None;
+        for test in self.arena.test_defs.iter() {
+            if test.target_space.as_ref().map(|t| t.as_str()) == Some(space_name) {
+                return Some(test);
+            }
+            if fallback.is_none() {
+                fallback = Some(test);
+            }
+        }
+        fallback
+    }
+
     /// Get a signal group definition by name
     pub fn get_signal_group(&self, name: &str) -> Result<&SignalGroupDefinition, SymbolError> {
         match self.get_symbol(name) {

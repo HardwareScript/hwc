@@ -32,6 +32,21 @@ impl super::super::Parser {
             }
         };
 
+        // Optional target space: "for SpaceName"
+        let target_space = if self.check_identifier("for") {
+            self.advance();
+            match self.expect_identifier() {
+                Ok(id) => Some(id),
+                Err(e) => {
+                    collector.report(e);
+                    self.sync_to_next_definition();
+                    return None;
+                }
+            }
+        } else {
+            None
+        };
+
         if let Err(e) = self.expect(&Token::Colon) {
             collector.report(e);
             self.sync_to_next_definition();
@@ -51,6 +66,8 @@ impl super::super::Parser {
         let mut setup = Vec::new();
         let mut execute = Vec::new();
         let mut assertions = Vec::new();
+        let mut ac_config = None;
+        let mut tran_config = None;
 
         // Parse test blocks
         let mut loop_iterations = 0;
@@ -72,7 +89,8 @@ impl super::super::Parser {
                 break;
             }
 
-            // v0.1.6: Check for test block identifiers
+            // v0.1.6: Check for test block identifiers (context-aware: ac/tran are
+            // also parsed as identifiers, zero new lexer tokens per the Bloat Purge)
             if let Some(current) = self.current() {
                 if let Token::Identifier(name) = &current.token {
                     match name.as_str() {
@@ -106,6 +124,26 @@ impl super::super::Parser {
                             assertions = self.parse_test_assertions().unwrap_or_default();
                             continue;
                         }
+                        "ac" => {
+                            self.advance();
+                            if let Err(e) = self.expect(&Token::Colon) {
+                                collector.report(e);
+                                self.sync_to_next_definition();
+                                continue;
+                            }
+                            ac_config = Some(self.parse_ac_config());
+                            continue;
+                        }
+                        "tran" => {
+                            self.advance();
+                            if let Err(e) = self.expect(&Token::Colon) {
+                                collector.report(e);
+                                self.sync_to_next_definition();
+                                continue;
+                            }
+                            tran_config = Some(self.parse_tran_config());
+                            continue;
+                        }
                         _ => {
                             let field_name = name.clone();
                             let err = self.error(&format!("Unknown test field: '{}'", field_name));
@@ -137,11 +175,185 @@ impl super::super::Parser {
         Some(TestDefinition {
             name,
             is_exported,
+            target_space,
+            ac_config,
+            tran_config,
             setup,
             execute,
             assertions,
             span: Span::new(start_pos, end_pos),
         })
+    }
+
+    /// Parse AC sweep config: { sweep: dec, points: 20, freq: 100Hz..100MHz }
+    ///
+    /// Context-aware: `sweep`, `points`, `freq`, `dec`/`oct`/`lin` are all parsed
+    /// as identifiers. Zero new lexer tokens (HardwareScript Bloat Purge).
+    fn parse_ac_config(&mut self) -> AcConfig {
+        let start_span = self.current_span();
+        // Mandatory braces; report and return a default on failure so the parent
+        // loop can continue instead of getting stuck.
+        if self.expect(&Token::OpenBrace).is_err() {
+            return AcConfig {
+                sweep_type: AcSweepType::Decade,
+                points: 20,
+                start_freq: Measurement {
+                    value: 100.0,
+                    unit: crate::ast::Unit::Custom("Hz".into()),
+                    span: start_span,
+                },
+                stop_freq: Measurement {
+                    value: 100_000_000.0,
+                    unit: crate::ast::Unit::Custom("Hz".into()),
+                    span: start_span,
+                },
+                span: start_span,
+            };
+        }
+
+        let mut sweep_type = AcSweepType::Decade;
+        let mut points = 20u32;
+        let mut start_freq = None;
+        let mut stop_freq = None;
+
+        while !self.check(&Token::CloseBrace) && !self.is_at_end() {
+            self.skip_whitespace();
+            if self.check(&Token::CloseBrace) || self.is_at_end() {
+                break;
+            }
+
+            let key = match self.expect_identifier() {
+                Ok(k) => k,
+                Err(_) => break,
+            };
+            let _ = self.expect(&Token::Colon);
+
+            match key.as_str() {
+                "sweep" => {
+                    if let Some(sweep_str) = self.current() {
+                        if let Token::Identifier(s) = &sweep_str.token {
+                            sweep_type = match s.as_str() {
+                                "dec" => AcSweepType::Decade,
+                                "oct" => AcSweepType::Octave,
+                                "lin" => AcSweepType::Linear,
+                                _ => AcSweepType::Decade,
+                            };
+                            self.advance();
+                        }
+                    }
+                }
+                "points" => {
+                    if let Ok(p) = self.expect_number() {
+                        points = p as u32;
+                    }
+                }
+                "freq" => {
+                    start_freq = self.parse_measurement().ok();
+                    let _ = self.expect(&Token::Range); // existing Token::Range ('..')
+                    stop_freq = self.parse_measurement().ok();
+                }
+                _ => {
+                    // Unknown AC property: skip a value token to maintain progress
+                    self.advance();
+                }
+            }
+
+            if self.check(&Token::Comma) {
+                self.advance();
+            }
+        }
+
+        let _ = self.expect(&Token::CloseBrace);
+
+        let start_freq = start_freq.unwrap_or(Measurement {
+            value: 100.0,
+            unit: crate::ast::Unit::Custom("Hz".into()),
+            span: start_span,
+        });
+        let stop_freq = stop_freq.unwrap_or(Measurement {
+            value: 100_000_000.0,
+            unit: crate::ast::Unit::Custom("Hz".into()),
+            span: start_span,
+        });
+
+        AcConfig {
+            sweep_type,
+            points,
+            start_freq,
+            stop_freq,
+            span: start_span,
+        }
+    }
+
+    /// Parse transient config: { step: 10ps, stop: 200ns }
+    fn parse_tran_config(&mut self) -> TranConfig {
+        let start_span = self.current_span();
+        if self.expect(&Token::OpenBrace).is_err() {
+            return TranConfig {
+                step: Measurement {
+                    value: 1.0,
+                    unit: crate::ast::Unit::Custom("ns".into()),
+                    span: start_span,
+                },
+                stop: Measurement {
+                    value: 200.0,
+                    unit: crate::ast::Unit::Custom("ns".into()),
+                    span: start_span,
+                },
+                start: None,
+                span: start_span,
+            };
+        }
+
+        let mut step = None;
+        let mut stop = None;
+        let mut start = None;
+
+        while !self.check(&Token::CloseBrace) && !self.is_at_end() {
+            self.skip_whitespace();
+            if self.check(&Token::CloseBrace) || self.is_at_end() {
+                break;
+            }
+
+            let key = match self.expect_identifier() {
+                Ok(k) => k,
+                Err(_) => break,
+            };
+            let _ = self.expect(&Token::Colon);
+
+            match key.as_str() {
+                "step" => step = self.parse_measurement().ok(),
+                "stop" => stop = self.parse_measurement().ok(),
+                "start" => start = self.parse_measurement().ok(),
+                _ => {
+                    self.advance();
+                }
+            }
+
+            if self.check(&Token::Comma) {
+                self.advance();
+            }
+        }
+
+        let _ = self.expect(&Token::CloseBrace);
+
+        let step = step.unwrap_or(Measurement {
+            value: 1.0,
+            unit: crate::ast::Unit::Custom("ns".into()),
+            span: start_span,
+        });
+        let stop = stop.unwrap_or(Measurement {
+            value: 200.0,
+            unit: crate::ast::Unit::Custom("ns".into()),
+            span: start_span,
+        });
+
+        TranConfig {
+            step,
+            stop,
+            start,
+            span: start_span,
+        }
     }
 
     /// Parse test actions (setup or execute block)

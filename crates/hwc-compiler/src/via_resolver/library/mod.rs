@@ -123,9 +123,11 @@ impl ViaLibrary {
                 crate::shape_generators::circle_contour(size_nm, 16)
             };
 
-            // v0.1.8 Native PDK-Driven Via Generation
-            // Instead of guessing layer adjacencies, we strictly follow the 'bridge' rules
-            // defined in the profile. Each bridge rule defines a valid physical transition.
+            // v0.2.1: Zero-Magic Via Generation with Exact Material Matching
+            // Each layer in profile.stackup has an explicit material assignment.
+            // Bridge rules explicitly define allowed transitions (e.g. "Aluminum -> CAPM").
+            // Vias are generated ONLY between layers whose declared materials match the bridge rule.
+            // NO wildcard category matching. NO heuristic guessing. Pure physical determinism.
             if profile.is_asic() {
                 println!("\n🔍 [VIA LIBRARY] Building via library from bridge rules...");
                 println!(
@@ -141,139 +143,74 @@ impl ViaLibrary {
                     let from_material = parts[0];
                     let to_material = parts[1];
 
-                    println!(
-                        "   Processing bridge rule: {} -> {}",
-                        from_material, to_material
-                    );
-                    println!(
-                        "     Interface: {}, Fill: {}",
-                        stack.interface_material, stack.fill_material
-                    );
-
-                    // v0.1.8: For same-material bridges (e.g. Aluminum->Aluminum), only use exact matches.
-                    // Category matching should only apply to different materials that are physically compatible.
-                    let allow_category_match = from_material != to_material;
-
-                    // Find all layers that match these materials or compatible categories
+                    // 1. Find layers whose declared material EXACTLY matches `from_material`
                     let from_layers: Vec<usize> = stackup_manager
                         .ordered_layers()
                         .iter()
                         .enumerate()
-                        .filter(|(i, layer_name)| {
-                            let stack_mat = stackup_manager.get_material_for_layer_index(*i);
-                            if let (Some(stack_mat_name), Some(st)) = (stack_mat, symbol_table) {
-                                println!(
-                                    "       Checking layer {} ({}): material = {}",
-                                    i, layer_name, stack_mat_name
-                                );
-
-                                if stack_mat_name == from_material {
-                                    println!("         ✓ Exact match!");
-                                    return true;
-                                }
-
-                                // v0.1.8: Category-based compatibility
-                                // If materials share the same category (e.g. both are Semiconductors),
-                                // they are physically compatible for the same stackup layer.
-                                // IMPORTANT: Only use category matching for different materials!
-                                if allow_category_match {
-                                    let stack_cat =
-                                        st.get_material(&stack_mat_name).map(|m| &m.category);
-                                    let from_cat =
-                                        st.get_material(from_material).map(|m| &m.category);
-
-                                    if let (Ok(sc), Ok(fc)) = (stack_cat, from_cat) {
-                                        if sc == fc {
-                                            println!(
-                                                "         ✓ Category match: {:?} == {:?}",
-                                                sc, fc
-                                            );
-                                            return true;
-                                        }
-                                    }
-                                }
+                        .filter(|(i, _layer_name)| {
+                            if let Some(stack_mat_name) = stackup_manager.get_material_for_layer_index(*i) {
+                                stack_mat_name == from_material
+                            } else {
+                                false
                             }
-                            false
                         })
                         .map(|(i, _)| i)
                         .collect();
 
-                    println!(
-                        "     Found {} matching 'from' layers: {:?}",
-                        from_layers.len(),
-                        from_layers
-                    );
-
+                    // 2. Find layers whose declared material EXACTLY matches `to_material`
                     let to_layers: Vec<usize> = stackup_manager
                         .ordered_layers()
                         .iter()
                         .enumerate()
-                        .filter(|(i, _)| {
-                            let stack_mat = stackup_manager.get_material_for_layer_index(*i);
-                            if let (Some(stack_mat_name), Some(st)) = (stack_mat, symbol_table) {
-                                if stack_mat_name == to_material {
-                                    return true;
-                                }
-
-                                // Only use category matching for different materials
-                                if allow_category_match {
-                                    let stack_cat =
-                                        st.get_material(&stack_mat_name).map(|m| &m.category);
-                                    let to_cat = st.get_material(to_material).map(|m| &m.category);
-
-                                    if let (Ok(sc), Ok(tc)) = (stack_cat, to_cat) {
-                                        return sc == tc;
-                                    }
-                                }
+                        .filter(|(i, _layer_name)| {
+                            if let Some(stack_mat_name) = stackup_manager.get_material_for_layer_index(*i) {
+                                stack_mat_name == to_material
+                            } else {
+                                false
                             }
-                            false
                         })
                         .map(|(i, _)| i)
                         .collect();
 
-                    println!(
-                        "     Found {} matching 'to' layers: {:?}",
-                        to_layers.len(),
-                        to_layers
-                    );
+                    if from_layers.is_empty() || to_layers.is_empty() {
+                        continue; // Bridge rule applies to materials not present in this stackup
+                    }
 
+                    // 3. Generate via transitions for valid ascending layer pairs (from_idx < to_idx)
                     for &from_idx in &from_layers {
                         for &to_idx in &to_layers {
-                            // Only bridge in the direction defined (or handle both if intended)
-                            // Usually bridges are bottom-to-top in the stackup.
                             if from_idx >= to_idx {
-                                println!(
-                                    "     Skipping: Layer {} >= Layer {} (must be ascending)",
-                                    from_idx, to_idx
-                                );
-                                continue;
+                                continue; // Ascending stackup order only
                             }
 
                             let from_layer_name = &stackup_manager.ordered_layers()[from_idx];
                             let to_layer_name = &stackup_manager.ordered_layers()[to_idx];
 
-                            let from_bottom_z =
-                                stackup_manager.get_layer_bottom_z(from_idx).unwrap_or(0);
-                            let to_top_z = stackup_manager.get_layer_top_z(to_idx).unwrap_or(0);
+                            let from_bottom_z = stackup_manager
+                                .get_layer_bottom_z(from_idx)
+                                .expect("FATAL: via library builder encountered missing layer bottom_z. This is a compiler bug.");
+                            let to_top_z = stackup_manager
+                                .get_layer_top_z(to_idx)
+                                .expect("FATAL: via library builder encountered missing layer top_z. This is a compiler bug.");
 
                             let via_name = format!("via_{}_to_{}", from_layer_name, to_layer_name);
 
                             println!(
-                                "     ✅ Creating via: {} (Layer {} -> Layer {})",
-                                via_name, from_idx, to_idx
+                                "   ✅ Created via: {} ({} [{}] -> {} [{}])",
+                                via_name, from_material, from_layer_name, to_material, to_layer_name
                             );
-                            println!("        Z range: {} to {}", from_bottom_z, to_top_z);
 
                             vias.push(ViaType::new(ViaTypeSpec {
                                 name: via_name.into(),
                                 material: stack.fill_material.clone(),
                                 from_material: from_material.into(),
                                 to_material: to_material.into(),
-                                interface_material: Some(stack.interface_material.clone()), // Store the interface material!
+                                interface_material: Some(stack.interface_material.clone()),
                                 from_layer: from_idx,
                                 to_layer: to_idx,
                                 diameter_mm: min_diameter_mm,
-                                min_enclosure_mm: 0.0, // enclosure handled by annular ring
+                                min_enclosure_mm: 0.0,
                                 z_start_nm: from_bottom_z,
                                 z_end_nm: to_top_z,
                                 contour: default_contour.clone(),
@@ -282,11 +219,17 @@ impl ViaLibrary {
                     }
                 }
 
-                println!("\n   📊 Total vias generated: {}", vias.len());
+                println!("\n   📊 Total vias generated: {} (Exact Material Matching)", vias.len());
                 for (i, via) in vias.iter().enumerate() {
                     println!(
-                        "   Via {}: {} -> {} (Layer {} -> Layer {})",
-                        i, via.from_material, via.to_material, via.from_layer, via.to_layer
+                        "   Via {}: {} [{}] -> {} [{}] (Layer {} -> Layer {})",
+                        i,
+                        via.from_material,
+                        stackup_manager.ordered_layers()[via.from_layer],
+                        via.to_material,
+                        stackup_manager.ordered_layers()[via.to_layer],
+                        via.from_layer,
+                        via.to_layer
                     );
                 }
             }

@@ -80,60 +80,62 @@ space Simple_Capacitor_Space implements SimpleCapacitor:
         align: center_y with Bottom_Plate
 
     # ========================================================================
-    # 3. TERMINAL CONTACTS (Bind device terminals to nets)
+    # 3. BULK/SUBSTRATE TERMINAL (DEVICE TERMINAL b → GND)
+    # The bulk terminal must be tied to GND for proper substrate coupling
+    # This is a virtual terminal that doesn't correspond to physical geometry
+    # but is required by the PDK model
+    # ========================================================================
+    add pour(Aluminum) named Bulk_Tie on layer: metal1:
+        device: C1.b
+        net: GND
+        dimensions: 1.0um by 1.0um
+        at: [x: 2.0um, y: 2.0um]
+
+    # ========================================================================
+    # 4. TERMINAL CONTACTS (Bind device terminals to nets)
     # ========================================================================
     
-    # 3a. BOTTOM PLATE CONTACT (TERMINAL c1 → NET Out)
-    # Metal3 contact directly on bottom plate (simplest connection)
-    add pour(Aluminum) named Contact_Bottom_Metal3 on layer: metal3:
-        device: C1.c1
-        net: Out
-        dimensions: contact_size by contact_size
-        align: center_x with Bottom_Plate.left + contact_size / 2
-        align: center_y with Bottom_Plate
+    # 4a. BOTTOM PLATE CONTACT (TERMINAL c1 → NET Out)
+    # Bottom plate itself provides metal3 connectivity - no separate contact needed
+    # Routing can connect directly to Bottom_Plate pour
     
-    # 3b. TOP PLATE CONTACT (TERMINAL c0 → NET In)
-    # CAPM contact at the EDGE of top plate (SKY130 MIM best practice)
-    # Avoids Metal 4 routing over the active capacitor body
-    add pour(CAPM) named Contact_Top_CAPM on layer: capm:
-        device: C1.c0
+    # 4b. TOP PLATE CONTACT (TERMINAL c0 → NET In)
+    # Top plate itself provides CAPM connectivity - no separate contact needed
+    # Metal4 routing pad positioned at edge to minimize routing over MIM dielectric
+    
+    # ========================================================================
+    # 5. METAL4 PAD FOR TOP PLATE ROUTING
+    # CAPM top plate connects to metal4 for external routing
+    # Positioned at edge of top plate for via connection
+    # ========================================================================
+    add pour(Aluminum) named Top_Contact_Metal4 on layer: metal4:
         net: In
         dimensions: contact_size by contact_size
         align: center_x with Top_Plate.right - contact_size / 2
         align: center_y with Top_Plate
 
     # ========================================================================
-    # 4. METAL4 PAD FOR TOP PLATE ROUTING
-    # CAPM top plate connects to metal4 for external routing
-    # Positioned at edge to minimize routing over MIM dielectric
-    # ========================================================================
-    add pour(Aluminum) named Top_Contact_Metal4 on layer: metal4:
-        net: In
-        dimensions: contact_size by contact_size
-        align: center_x with Contact_Top_CAPM
-        align: center_y with Contact_Top_CAPM
-
-    # ========================================================================
-    # 5. VIA BRIDGING CAPM → METAL4 (Top plate connection)
+    # 6. VIA BRIDGING CAPM → METAL4 (Top plate connection)
+    # Via connects Top_Plate directly to Metal4 routing pad
     # ========================================================================
     add contact(Tungsten) named Via_Top_CAPM spanning layer: capm to metal4:
         diameter: via_diameter
-        align: center_x with Contact_Top_CAPM
-        align: center_y with Contact_Top_CAPM
+        align: center_x with Top_Contact_Metal4
+        align: center_y with Top_Contact_Metal4
         net: In
 
     # ========================================================================
-    # 6. EXTERNAL TEST PADS (Using anchor alignment with spacing)
+    # 7. EXTERNAL TEST PADS (Using anchor alignment with spacing)
     # ========================================================================
     
-    # 6a. Output pad - connects to bottom plate (metal3), positioned to the left
+    # 7a. Output pad - connects to bottom plate (metal3), positioned to the left
     add pour(Aluminum) named Out_Pad on layer: metal3:
         net: Out
         dimensions: pad_size by pad_size
         align: center_x with Bottom_Plate.left - pad_spacing
         align: center_y with Bottom_Plate
 
-    # 6b. Input pad - connects to top plate via metal4, positioned to the right
+    # 7b. Input pad - connects to top plate via metal4, positioned to the right
     add pour(Aluminum) named In_Pad on layer: metal4:
         net: In
         dimensions: pad_size by pad_size
@@ -141,19 +143,40 @@ space Simple_Capacitor_Space implements SimpleCapacitor:
         align: center_y with Bottom_Plate
 
     # ========================================================================
-    # 7. ROUTING FROM CONTACT PADS TO EXTERNAL TEST PADS
+    # 8. ROUTING FROM CONTACT PADS TO EXTERNAL TEST PADS
     # ========================================================================
     
-    # 7a. METAL3 ROUTING: Out pad → Bottom plate contact
-    route Out_Pad to Contact_Bottom_Metal3:
+    # 8a. METAL3 ROUTING: Out pad → Bottom plate (direct connection)
+    route Out_Pad to Bottom_Plate:
         layer: metal3
         net: Out
         width: 300nm
         intent: Signal
 
-    # 7b. METAL4 ROUTING: Top plate contact → In pad
+    # 8b. METAL4 ROUTING: Top plate contact → In pad
     route Top_Contact_Metal4 to In_Pad:
         layer: metal4
         net: In
         width: 300nm
         intent: Signal
+
+# ========================================================================
+# TEST DEFINITION: FULL CHARACTERIZATION (Scenario A - Recommended)
+# ========================================================================
+# v0.2.1 Zero-Fallback Compliance: Explicit testbench configuration.
+# This test requests BOTH AC and transient analysis for complete characterization.
+# 
+# AC analysis proves:
+#   - Extracted capacitance C across frequency (C = 1/(2πf|Z|))
+#   - Equivalent Series Resistance (ESR) and Quality Factor (Q)
+#   - Self-Resonant Frequency (SRF) from parasitic inductance
+# 
+# Transient analysis proves:
+#   - RC time constants (τ = RC)
+#   - Charging/discharging voltage slopes and slew rates
+#   - Voltage ripple on power supply rails during switching
+# 
+# Outputs: circuit.sp, dc.sp, ac.sp, tran.sp (4 files)
+test Simple_Capacitor_AC_Test for Simple_Capacitor_Space:
+    ac: { sweep: dec, points: 20, freq: 100Hz..100MHz }
+    tran: { step: 10ps, stop: 200ns }

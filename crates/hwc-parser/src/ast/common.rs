@@ -1,6 +1,7 @@
 //! Common types shared across AST nodes
 
 use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 
 use crate::lexer::Span;
 
@@ -153,6 +154,41 @@ pub enum Unit {
 }
 
 impl Unit {
+    /// Convert unit to its canonical symbol string for `UnitRegistry` lookup.
+    ///
+    /// This is the data-driven bridge between the AST `Unit` enum and the
+    /// compiler's `UnitRegistry` table. Built-in units map to their base symbol
+    /// (e.g. `Unit::Volt` -> `"V"`); library/custom units (`Unit::Custom(s)`)
+    /// pass their string through verbatim (e.g. `"Hz"`, `"ns"`, `"GHz"`).
+    ///
+    /// This lets the exporter resolve any unit via the registry instead of
+    /// hardcoding a fixed list of unit strings (per the Bloat Purge).
+    pub fn to_symbol(&self) -> Cow<'static, str> {
+        use std::borrow::Cow;
+        match self {
+            // Distance units
+            Unit::Millimeter => Cow::Borrowed("mm"),
+            Unit::Centimeter => Cow::Borrowed("cm"),
+            Unit::Micrometer => Cow::Borrowed("um"),
+            Unit::Nanometer => Cow::Borrowed("nm"),
+            Unit::Picometer => Cow::Borrowed("pm"),
+
+            // Electrical units
+            Unit::Volt => Cow::Borrowed("V"),
+            Unit::Millivolt => Cow::Borrowed("mV"),
+            Unit::Kilovolt => Cow::Borrowed("kV"),
+            Unit::Ampere => Cow::Borrowed("A"),
+            Unit::Milliampere => Cow::Borrowed("mA"),
+            Unit::Microampere => Cow::Borrowed("uA"),
+
+            // Temperature
+            Unit::Celsius => Cow::Borrowed("C"),
+
+            // Custom/library units: pass the symbol through for registry lookup
+            Unit::Custom(s) => Cow::Owned(s.to_string()),
+        }
+    }
+
     /// Convert unit to SPICE suffix
     ///
     /// SPICE uses: f (femto), p (pico), n (nano), u (micro), m (milli), k (kilo), meg (mega), g (giga)

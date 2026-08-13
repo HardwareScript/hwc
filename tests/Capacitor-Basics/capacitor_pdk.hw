@@ -132,8 +132,11 @@ export profile Capacitor_MIM:
 # v0.2.1: TRUE FOUNDRY SPICE INTEGRATION
 # Uses `spice_include` to defer physics to the foundry model instead of
 # inline element synthesis. This is the CORRECT approach for production ASICs.
+#
+# TERMINALS: c0 (top plate), c1 (bottom plate), b (bulk/substrate)
+# The bulk terminal is typically connected to GND for proper substrate coupling
 export subcircuit sky130_fd_pr__cap_mim_m3_1:
-    terminals: [c0, c1]
+    terminals: [c0, c1, b]
     parameters: [W = 10.0um, L = 10.0um]
     spice_include: "sky130_fd_pr/models/sky130_fd_pr__cap_mim_m3_1.model.spice"
 
@@ -148,13 +151,14 @@ export subcircuit sky130_fd_pr__cap_mim_m3_1:
 #         R_top: Resistor(nodes: [c0, node_1], value: 5.8ohm * L / W)
 
 export device Capacitor:
-    terminals: [c0, c1]
+    terminals: [c0, c1, b]
     materials:
         c0: [CAPM, Titanium_Silicide, Aluminum]        # Top plate: CAPM OR contact materials
         c1: [Aluminum, Titanium_Silicide, CAPM]        # Bottom plate: Metal-3 OR contact materials
+        b: [Aluminum, Titanium_Silicide]               # Bulk/substrate terminal (typically GND)
     spice:
         prefix: X
         subcircuit: sky130_fd_pr__cap_mim_m3_1
-        terminal_order: [c0, c1]
+        terminal_order: [c0, c1, b]
         parameters: [W, L]
         parameter_style: named
