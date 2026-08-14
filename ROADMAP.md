@@ -36,75 +36,63 @@ To make hardware development feel like software development, we must solve these
 
 ## Version Roadmap
 
-### ✅ v0.1.8 - Active Development (Q2 2026 – Present)
+### ✅ v0.2.1 - Active Release (Current Version)
 
-**Theme**: Vector-First Architecture & Advanced Physical Synthesis
+**Theme**: Database-Driven AST Arena Architecture & High-Performance Physical Synthesis
 
-**Completed:**
-- Unified v0.1.6 syntax (bare identifiers, `[]` lists, `:` vs `=` boundary)
-- Semantic layer abstraction (`on layer: metal1` replaces raw Z coordinates)
-- Picometer-precision coordinate database (64-bit integer pm, ±9,220 km range)
-- Native Rust compiler with 7+ specialized crates
-- Symbol table with stackup, materials, profiles, components
-- Two-pass compilation (resolution → IR generation)
-- Logical netlist synthesis from `module` blocks
-- Physical layout validation (LVS, continuity, DRC)
-- PIVB solver for connectivity analysis
-- Device binding validation (physical pours → logical terminals)
-- Manual routing with explicit `path:` statements
-- Pour generation with boundary definitions
-- Via resolver infrastructure
-- Bridge rule parsing and storage
-- Standard library auto-loading (`@std/units.hw`)
-- Export: SPICE (`.sp`), BOM (`.csv`), GLB (`.glb`), DXF (`.dxf`)
-- Comprehensive test suite (ASIC designs, capacitors, traces)
-- `miette`-powered error diagnostics with context
-
-**In Active Development:**
-- **Vector-first routing engine** — Transition from voxel grid to continuous coordinates
-- **Zero-stamping scene graph** — ComponentStamp + FixedTransform2D instances
-- **Hybrid spatial indexing** — `rstar` (dynamic macro-placement) + `geo-index` (static detailed routing)
-- **Topological line-search router** — Axis-Aligned Slab Method for $O(\log N)$ obstacle queries
-- **Multi-layer automatic routing** — Via/contact insertion with bridge rule application
-- **Pattern-guided meander injection** — Closed-form polar decomposition for length matching
-- **Convex legalization** — Hybrid `clarabel` (macro) + active-set/DAG (micro) solvers
-- **G-cell-local unified sweep** — SIMD-accelerated DRC + same-net topology in single pass
-- **Wheeler-Sakurai-Greenhouse BEM** — Analytic parasitic extraction (R/C/L/M)
+**Completed & Active Capabilities:**
+- **Compiler Core & AST Arena**:
+  - Database-driven architecture with Salsa-inspired query-based incremental execution
+  - AST Arena allocation with zero-copy symbol interning and fast node indexing
+  - Picometer-precision coordinate database (64-bit integer pm, ±9,220 km addressable range)
+  - Memory-mapped zero-copy `.hsx` binary exchange format
+- **Language & Syntax Specifications (UHWSL v0.2.1)**:
+  - Range syntax & signal indexing (`bus[0..7]`, `pin[1..4]`)
+  - Dedicated `device` keyword for multi-gate ICs and precise footprint pin bindings
+  - Multi-line block declarations for spaces, modules, and components
+  - Explicit symbol export (`export module`, `export component`)
+  - Relational placement determinism (`named B at 5mm right of A`)
+- **Clippy-Level Error Intelligence**:
+  - `hwsd`-powered diagnostic engine with inline code context, structured error codes, actionable fix hints, and JSON output formatting for LLM feedback loops
+  - Compile-time parasitic error intelligence (high resistance, crosstalk bounds, impedance mismatch)
+- **Physical Synthesis & Routing Engine**:
+  - Topological obstacle-aware router using Axis-Aligned Slab Method for $O(\log N)$ obstacle queries
+  - Connection interface routing & spatial synthesis abstraction
+  - Material-Specific Via Depth & Dielectric Substrate Cutout Resolver (calculates upper/lower layer conductor penetrations vs dielectric Boolean mesh cutouts)
+  - Via array specifications (multi-via structures for high-current traces)
+  - Via depth control (blind and buried via depth limits across substrate stackup layers)
+  - Polygon copper pour generation with thermal relief boundaries
+- **Physics & Validation**:
+  - Full DRC (Design Rule Checking) & LVS (Layout-Versus-Schematic) verification
+  - Automated Silicon PDK Geometry Extraction ($AD, AS, PD, PS$ calculation from physical pours)
+  - Crosstalk analysis engine for coupled parallel trace lines
+  - Electromigration & Thermal current-density checks
+  - Wheeler-Sakurai BEM parasitic extraction (R/C/L/M)
+- **Manufacturing & Export Suite**:
+  - Complete Gerber X3 package (copper layers, silkscreen, solder mask, board edge)
+  - Excellon drill files (plated/non-plated via drills & mounting holes)
+  - Extended BOM (`.csv`) with manufacturer part numbers, material volumetric breakdowns, pricing, and tolerances
+  - SPICE netlists (`.sp`) & automated multi-analysis testbench suite (`circuit.sp`, `dc.sp`, `ac.sp`, `tran.sp`), DXF CAD drawings (`.dxf`), GLB 3D models (`.glb`), GDSII silicon layout format (`.gds`)
 
 ---
 
-### 🔄 v0.2 - Production Release (Target: Q3-Q4 2026)
+### 🔄 v0.2.2+ - Near-Term Roadmap Targets
 
-**Theme**: Production-Ready Routing & Complete Export Pipeline
+**Theme**: Auto-Routing Refinements & Public Ecosystem Integration
 
-#### Physical Synthesis
-- [ ] **Multi-layer auto-router** — Complete via/contact insertion with bridge rule application
-- [ ] **Pattern system** — `pattern` and `strategy` definitions for meander injection
-- [ ] **Miter pass** — Automatic 45° chamfering for impedance-stable corners
+#### Physical Synthesis & Routing
+- [ ] **Automatic BGA escape routing** — Fan-out patterns for high-density IC packages
+- [ ] **Pattern system & length matching** — Meander injection for differential pairs and timing constraints
+- [ ] **Miter pass** — Automatic 45° chamfering for impedance-stable trace corners
 - [ ] **Port-aware routing** — Outer bounding box edge docking (no inside-routing)
-- [ ] **Boundary track buffering** — G-cell interface port negotiation
-- [ ] **Diagonal grid-snapping** — $L_{\text{snapped}} = \text{round}(N \cdot \text{pitch} / \sin(45°))$
 
-#### Export & Manufacturing
-- [ ] **Complete Gerber package** — All copper layers, silkscreen, solder mask, board edge
-- [ ] **Excellon drill files** — Via drills, mounting holes, proper tooling
-- [ ] **Pick-and-place** — CPL format with component positions and rotations
-- [ ] **Enhanced BOM** — Manufacturer part numbers, datasheets, pricing
-- [ ] **GDSII export** — Full silicon foundry format for ASIC manufacturing
-
-#### Language & Syntax  
-- [ ] **Formal UHWSL v1.0 spec** — Language specification freeze
-- [ ] **Signal groups** — Differential pairs, impedance matching, timing constraints
-- [ ] **Interface blocks** — Firmware bindings for hardware↔software API
-- [ ] **Test blocks** — CI/CD physics assertions for automated validation
-
-#### Tooling
-- [ ] **HPM package registry** — Launch public GitHub-based component registry
-- [ ] **HWSD documentation** — Auto-generate docs from `##` comments
-- [ ] **Binary lockfile** — `rkyv` + `memmap2` zero-copy deserialization
+#### Ecosystem & Tooling
+- [ ] **HPM public registry** — Launch community package registry on GitHub
+- [ ] **Language Server Protocol (LSP)** — Real-time auto-complete, diagnostics, and hover docs in VS Code
+- [ ] **HWSD auto-documentation** — Generate full HTML doc sites from `##` doc comments
 - [ ] **CLI inspect tool** — `hwc lock inspect` for human-readable lockfile viewing
 
-**Target**: First production PCBs manufactured from HardwareScript source code
+**Target**: Production-ready PCB manufacturing pipeline and published HPM component registry
 
 ---
 
@@ -185,13 +173,14 @@ To make hardware development feel like software development, we must solve these
 
 ## Success Metrics
 
-### v0.1 (Active)
-- ✅ Unified Rust compiler workspace.
-- ✅ Multi-format export (Gerber, GDSII, OBJ, GLB, SPICE, DXF).
-- ✅ Deterministic builds.
-- ✅ Hardware-Script-driven test suite.
+### v0.2.1 (Active Release)
+- ✅ Unified Rust compiler workspace with AST Arena & Query engine.
+- ✅ Multi-format export (Gerber X3, Excellon, GDSII, OBJ, GLB, SPICE, DXF, BOM).
+- ✅ Topological obstacle-aware routing & via depth/array controls.
+- ✅ Clippy-level error diagnostics & physics checks (DRC, LVS, crosstalk, thermal/EM).
+- ✅ Deterministic compilation & Hardware-Script-driven test suite.
 
-### v0.2 (Target)
+### v0.2.2+ (Target)
 - 100+ GitHub stars.
 - 10+ community contributors.
 - 50+ components in registry.

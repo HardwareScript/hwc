@@ -1,39 +1,42 @@
 # Hardware Script - The Vision
 
-**The Evolution**: From discrete 3D tensor grids to continuous vector-first architecture with picometer precision.
+**The Evolution**: From discrete 3D tensor grids to AST Arena Database-Driven architecture with picometer precision.
 
 ---
 
-## The Current Reality (v0.1.8-alpha)
+## The Current Reality (v0.2.1)
 
-Hardware Script has proven that hardware design can be text-based, deterministic, and Git-friendly. The v0.1.8 compiler successfully:
+Hardware Script has proven that hardware design can be text-based, deterministic, and Git-friendly. The v0.2.1 compiler successfully:
 
-- Compiles `.hw` text files to SPICE, BOM, GLB, and DXF formats
-- Validates physical continuity and logical correctness (LVS)
-- Performs design rule checking (DRC)
-- Handles ASIC and PCB designs with semantic layer abstraction
-- Provides clear, structured error messages for debugging
+- Compiles `.hw` source to SPICE (`.sp`), BOM (`.csv`), GLB, DXF, Gerber X3, Excellon, and GDSII formats
+- Evaluates AST queries with an arena-based incremental compiler engine
+- Provides Clippy-level diagnostic intelligence (`hwsd`) with fix suggestions and JSON mode for LLM agents
+- Enforces topological obstacle-aware routing, via depth controls (blind/buried vias), and multi-via arrays
+- Validates physical continuity, LVS, DRC, crosstalk limits, electromigration, and thermal current density
 
-**The foundation works.** Now we're building the advanced routing and synthesis pipeline.
+**The foundation works.** We are expanding physical synthesis capabilities and public registry tooling.
 
 ---
 
 ## The Architectural Evolution
 
-### From Voxels to Vectors (v0.1.5-v0.1.7 → v0.1.8)
+### From Voxels to Vectors to Database-Driven Arenas (v0.1.5 → v0.1.8 → v0.2.1)
 
-**The Voxel Era (v0.1.5-v0.1.7):**
+**1. The Voxel Era (v0.1.5-v0.1.7):**
 - Proved the concept with discrete 3D tensor grid
 - Morton Z-curve encoding for spatial efficiency
 - $O(1)$ collision detection via grid lookups
-- Successfully validated deterministic compilation
 
-**The Vector Evolution (v0.1.8):**
+**2. The Vector Evolution (v0.1.8):**
 - **Picometer-precision database** — All coordinates as 64-bit integer picometers (1pm = 10⁻¹² m)
-- **Zero-stamping scene graph** — Components stored once with FixedTransform2D instances
-- **Continuous coordinates** — No grid quantization, no staircase artifacts
-- **Hybrid spatial indexing** — `rstar` (dynamic) + `geo-index` (static) for $O(\log N)$ queries
-- **Scale invariance preserved** — From PCBs to sub-nanometer silicon in the same tool
+- **Zero-stamping scene graph** — Components stored once with lightweight transform instances
+- **Continuous coordinates** — No grid quantization artifacts
+
+**3. The AST Arena & Database Era (v0.2.0-v0.2.1):**
+- **Arena Allocation & Zero-Copy Interning** — AST Arena eliminates pointer chasing and memory fragmentation
+- **Salsa-Inspired Query Engine** — Incremental re-computation of netlists, layout positions, and DRC rules
+- **Clippy-Level Error Intelligence** — Structured error diagnostics with context snippets, fix hints, and JSON output mode
+- **Relational Placement & Range Syntax** — High-level layout constraints (`named B at 5mm right of A`) and signal slicing (`bus[0..7]`)
 
 ### Why This Matters
 
@@ -50,12 +53,11 @@ Hardware Script has proven that hardware design can be text-based, deterministic
 **Deterministic Compilation:**
 - FixedTransform2D with i128 intermediate arithmetic
 - Integer-only coordinate transforms prevent platform-specific results
-- Same `.hw` source = identical output across all machines
+- Same `.hw` source = bit-identical output across all machines
 
-**Developer Experience:**
+**Developer:**
 - Plain text `.hw` files (Git-friendly, diff-friendly, merge-friendly)
-- AI-readable and AI-writable (LLMs can generate valid hardware)
-- Import system for modular, reusable designs
+- Modular `export module` / `export component` symbol scoping
 
 ---
 
@@ -69,10 +71,10 @@ Space × Materials × Routing × Physics
 ```
 
 Where:
-- **Space** = 3D tensor grid (discrete coordinates).
-- **Materials** = Database of physical properties.
-- **Routing** = Analytical mathematical paths.
-- **Physics** = Validation rules (Ohm's law, thermal limits, etc.).
+- **Space** = Continuous picometer spatial coordinate system.
+- **Materials** = Database of atomic, thermal, and electrical properties.
+- **Routing** = Analytical mathematical paths & topological slab search.
+- **Physics** = Validation rules (Ohm's law, DRC, LVS, crosstalk, thermal/EM limits).
 
 **This is pure mathematics.** It's deterministic, provable, and AI-native.
 
@@ -84,7 +86,7 @@ Where:
 User: "Design a 5V to 3.3V LDO regulator"
 
 LLM: [Reads component database]
-     [Calculates optimal layout]
+     [Calculates optimal layout & relative placement]
      [Generates .hw code]
      [hwc validates physics & rules]
      [Outputs compiled .hsx]
@@ -133,24 +135,22 @@ space System:
 
 ## The Roadmap to This Vision
 
-### v0.1 (Current Series) - The Foundation ✅
+### v0.2.1 (Current Release) - AST Arena & Synthesis Foundation ✅
 - Unified 3-File Architecture (`hw.toml`, `hw.lock`, `.hw`).
-- Rust compiler core (`hwc`) with zero-copy exchange binaries (`.hsx`).
+- AST Arena & Salsa query engine with zero-copy binary exchange (`.hsx`).
 - High-performance live visualizer (**Hardware Script Monitor** `hsm`) with Babylon.js.
-- Continuous mathematical lines (`AnalyticTrace`) and cylindrical vias.
-- Standard Library (`@std`) and public HPM Package Registry.
-- Comptime module flattening, loop unrolling, and logic synthesis.
+- Continuous mathematical lines (`AnalyticTrace`), via depth controls, and via arrays.
+- Range syntax, device definitions, and BOM export engine (`.csv`).
+- Physics & validation engine (DRC, LVS, Crosstalk, Electromigration, Thermal checks).
 
-### v0.2 (Planned Q2 2026) - Stabilization & Release
-- First production-ready compiler release.
-- Complete vendor package database.
-- Multi-layer substrate and power planes.
-- Signal timing, differential pairs, and impedance constraints.
+### v0.2.2+ (Target Q3-Q4 2026) - Production Auto-Routing & Public Registry
+- Public HPM component registry launch.
+- Automatic BGA escape routing and meander length matching.
+- Language Server Protocol (LSP) for IDE integration.
 
-### v0.3 (Planned Q3 2026) - Advanced Optimization
-- Automatic BGA escape routing.
-- Advanced thermal simulation (Ngspice waveform integration).
-- Real-time physics visual debugging overlays.
+### v0.3 (Target 2027) - Advanced Optimization & Simulation
+- Full SPICE waveform simulation integration.
+- Advanced RF parasitic extraction and thermal finite-element modeling.
 
 ---
 

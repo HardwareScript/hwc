@@ -2,7 +2,7 @@
 
 **Text-Based Hardware Design Language**
 
-[![Status](https://img.shields.io/badge/status-Alpha%20v0.1.8-orange)]()
+[![Status](https://img.shields.io/badge/status-v0.2.1-orange)]()
 [![Rust](https://img.shields.io/badge/compiler-Rust-orange)]()
 [![License](https://img.shields.io/badge/license-AGPLv3-blue)]()
 
@@ -10,33 +10,58 @@
 
 ## What is Hardware Script?
 
-Hardware Script (`.hw`) is an experimental text-based hardware design language that compiles to industry-standard formats. The goal is to design PCBs, silicon chips, and electronic systems from human-readable, Git-friendly text.
+Hardware Script (`.hw`) is a text-based hardware design language that compiles to industry-standard formats. The goal is to design PCBs, silicon chips, and electronic systems from human-readable, Git-friendly text.
 
 **The Vision**: Bring the npm/software workflow to hardware. Write hardware like code, compile it deterministically, and manufacture real boards from a single source of truth.
 
-**Current Reality (v0.1.8-alpha)**: The compiler successfully handles single-layer designs and basic ASIC layouts. Multi-layer routing with automatic via insertion is under active development.
+**Current Reality (v0.2.1)**: Powered by an AST Arena database-driven compiler, `hwc` supports high-performance physical synthesis, topological obstacle-aware routing, via depth & array controls, Clippy-level error intelligence, range syntax, device definitions, BOM export, and comprehensive physics checks (DRC, LVS, crosstalk, thermal/EM, parasitic extraction).
 
 ```hw
-space MyBoard:
-    dimensions: 20mm by 20mm by 2.0mm
-    grid: 200 by 200 by 4
-    profile: JLCPCB_2Layer
-    origin: tl by t
+space Simple_Resistor_Space implements SimpleResistor:
+    dimensions: 20.0um by 10.0um
+    profile: Resistor_3D
 
-    add Transistor_NPN named Switch at [x: 5mm, y: 5mm, layer: l1]
+    # 1. Single Anchor: Resistor Body
+    add pour(Polysilicon) named Resistor_Body on layer: polyres:
+        device: R1.A, R1.B
+        dimensions: 4.0um by 1.41um
+        at: [x: 10.0um, y: 5.0um]
 
-    route Switch.Collector to Power.Out:
-        path:
-            - [x: 5mm, y: 6mm, layer: l1]
-            - [x: 15mm, y: 6mm, layer: l1]
-            - [x: 15mm, y: 15mm, layer: l1]
+    # 2. Relational Contact (Anchored to Body Edge)
+    add pour(Titanium_Silicide) named Contact_A_LI on layer: li1:
+        device: R1.A
+        net: In
+        dimensions: 400nm by 1.41um
+        align: center_x with Resistor_Body.left + 200nm
+        align: center_y with Resistor_Body
+
+    # 3. Comptime Via Array Loop (polyres → li1)
+    for i in 0..3:
+        add contact(Tungsten) named Via_A_Poly_{i} spanning layer: polyres to li1:
+            diameter: 170nm
+            align: center_x with Contact_A_LI
+            align: center_y with Contact_A_LI.center_y + (i - 1) * 400nm
+            net: In
+
+# SPICE Testbench (Auto-generates circuit.sp, dc.sp, ac.sp, tran.sp)
+test Simple_Resistor_AC_Test for Simple_Resistor_Space:
+    ac: { sweep: dec, points: 20, freq: 100Hz..100MHz }
+    tran: { step: 10ps, stop: 200ns }
 ```
 
-**Compiles to** (with limitations):
-- ✅ SPICE netlist (analog simulation) — Fully functional
-- ✅ BOM (Bill of Materials) — CSV format
-- ✅ GLB (3D models) — Basic geometry visualization
-- ✅ DXF (2D CAD) — Board outlines
+**Compiles to**:
+- ✅ SPICE netlist (`.sp`) — Analog simulation & node verification
+- ✅ BOM (Bill of Materials) (`.csv`) — Manufacturer part numbers, pricing, tolerances
+- ✅ GLB / OBJ — 3D scene geometry visualization
+- ✅ DXF (2D CAD) — Board outlines & mechanical boundaries
+- ✅ Gerber X3 & Excellon — Industry manufacturing packages
+- ✅ GDSII — Silicon IC layout output
+
+| 2D Layout View (PixiJS Engine) | 3D Rendered View (Babylon.js Engine) |
+| :---: | :---: |
+| ![2D Resistor View](assets/resistor_2d_view.png) | ![3D Resistor View](assets/resistor_3d_view.png) |
+
+> 💡 **Full Example**: View the complete source file [`tests/Resistor-Basics/simple_resistor_test.hw`](tests/Resistor-Basics/simple_resistor_test.hw)
 
 
 ---
@@ -132,15 +157,16 @@ space MyRobot:
     route PowerSupply.VOUT to ESP32.VIN
 ```
 
-**That's where we're headed.** v0.1.8-alpha has the foundation working with active development on advanced routing features.
+**That's where we are in v0.2.1.** The AST Arena database-driven architecture powers full physical synthesis and advanced routing engine features.
 
 ### The "Matrix Moment"
 
-Hardware Script v0.1.8 is transitioning to a **vector-first continuous coordinate architecture** with picometer precision. This architectural evolution unlocks capabilities impossible in traditional tools:
+Hardware Script **v0.2.1** uses an **AST Arena database-driven architecture** with picometer precision. This architectural evolution unlocks capabilities impossible in traditional tools:
 
+- **AST Arena Database** — Zero-copy interning, arena-allocated nodes, and instant incremental query execution
 - **Picometer-precision database** — All coordinates stored as 64-bit integer picometers (1pm = 10⁻¹² m)
 - **Scale invariance** — Same tool for PCBs (millimeters) and silicon chips (nanometers)
-- **Deterministic compilation** — Same input always produces identical output
+- **Deterministic compilation** — Same input always produces bit-identical output
 - **Zero-stamping scene graph** — Components stored once, instances as lightweight transforms
 - **Plain-text source** — Git-friendly, LLM-readable, human-editable
 
@@ -150,58 +176,51 @@ Hardware Script v0.1.8 is transitioning to a **vector-first continuous coordinat
 
 ## Features
 
-### ✅ Core Compiler (v0.1.8-alpha)
+### ✅ Core Compiler (v0.2.1)
 
-**Syntax & Language:**
+**Syntax & Language (UHWSL v0.2.1):**
 - **Text-based design** — Write hardware like code in `.hw` files
 - **Unified 3-File Architecture** — `hw.toml`, `hw.lock`, and `.hw` source
-- **Unified syntax (v0.1.6)** — Bare identifiers, `[]` lists, `:` for structure, `=` for logic
+- **Range Syntax** — Indexing and vector slicing for signals and buses (`bus[0..7]`, `pin[1..4]`)
+- **Device Definitions** — Dedicated `device` keyword for multi-gate ICs and precise pin bindings
+- **Multi-Line Declarations** — Clean block definitions for modules, spaces, and components
+- **Export Control** — Explicit symbol export using `export module` and `export component`
 - **Native SI unit parsing** — `254µm`, `4.7kΩ`, `100nF` parsed directly in lexer
-- **Parametric components** — Components accept measurement parameters
 
 **Compilation Pipeline:**
-- **Rust compiler workspace** — `logos` lexer, `miette` error reporting, 7+ crates
-- **Symbol table** — Component, material, profile, stackup management
-- **Logical netlist synthesis** — Module-to-schematic extraction
+- **AST Arena & Query Engine** — High-performance arena allocation with Salsa-inspired incremental queries
+- **Symbol table & Relational Placement** — Relative layout positioning (`named B at 5mm right of A`)
+- **Logical netlist synthesis** — `NetlistArena` module-to-schematic extraction
 - **Device binding validation** — Physical layout matches logical schematic (LVS)
 - **Physical continuity checking** — Verifies all nets are connected (no floating islands)
-- **DRC validation** — Design rule checking (spacing, width, clearances)
+- **Clippy-Level Error Intelligence** — `hwsd`-powered diagnostic engine with inline context snippets, fix hints, and JSON output mode for AI agents
 
 **Routing & Physical Synthesis:**
-- **Manual routing** — Full path specification with `route ... path:` statements
-- **Single-layer auto-routing** — ✅ Working for simple designs
-- **Layer abstraction** — `on layer: <name>` semantic layer references
-- **Trace geometry** — Width, spacing, clearance validation
-- **Pour support** — Copper pours with boundary definitions
+- **Topological Obstacle-Aware Router** — Axis-Aligned Slab Method with connection interface routing
+- **Via Array & Depth Controls** — Multi-via arrays for high current and explicit blind/buried via depth limits across stackup layers
+- **Trace geometry** — Dynamic width, clearance, and spacing rule enforcement
+- **Pour support** — Polygon copper pours with thermal relief boundary definitions
+
+**Physics & Electrical Validation:**
+- **DRC & LVS** — Full physical rule checking and layout-versus-schematic verification
+- **Crosstalk Analysis** — Analytical parallel trace coupling and interference bounds
+- **Electromigration & Thermal** — Trace current-density checks against thermal limits
+- **RF Parasitics** — Wheeler-Sakurai BEM parasitic extraction (R/C/L/M)
 
 **Export Formats:**
-- **SPICE netlist** — `.sp` files with device parameters
-- **BOM (Bill of Materials)** — `.csv` component lists
-- **GLB 3D models** — Visual preview (basic geometry)
-- **DXF 2D drawings** — Board outlines
+- **SPICE netlist (`.sp`)** — Full circuit netlist output
+- **BOM (`.csv`)** — Extended Bill of Materials with manufacturer part numbers, pricing, and tolerances
+- **Gerber X3 & Excellon** — Production-ready copper layers, silkscreen, solder mask, drill files
+- **GLB / OBJ** — 3D scene model export
+- **DXF 2D drawings** — Mechanical CAD outlines
+- **GDSII** — Silicon foundry IC format
 
-**Development Tools:**
-- **Standard library** — SI units (`@std/units.hw`)
-- **Test suite** — Integration tests in `.hw` format
-- **Error diagnostics** — Clear error messages with suggestions
+### 🔄 Active Development (v0.2.2+)
 
-
-
-**In Development:**
-- Vector-first routing engine (migration from voxel-based)
-- Topological line-search router with Axis-Aligned Slab Method
-- Hybrid spatial indexing (`rstar` + `geo-index`)
-- Pattern-guided meander injection
-- Wheeler-Sakurai BEM parasitic extraction
-
-### � Roadmap (v0.2+)
-
-- **Multi-layer auto-router** — Automatic via generation with bridge rule application
-- **HPM package registry** — Public component library
-- **Complete export suite** — Full Gerber, Excellon drill, pick-and-place
-- **Advanced routing** — Length matching, differential pairs, RF features
-- **LSP integration** — VS Code language server
-- **Live monitor (`hsm`)** — Tauri-based visual preview with hot-reload
+- **Automatic BGA escape routing**
+- **Public HPM package registry deployment**
+- **Language Server Protocol (LSP) for VS Code**
+- **Live monitor (`hsm`) enhancements** — Babylon.js hot-reload performance improvements
 
 ---
 
@@ -376,4 +395,4 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) for the full guide.
 
 ---
 
-**Hardware Script v0.1.7** — Making hardware design as simple as writing code.
+**Hardware Script v0.2.1** — Making hardware design as simple as writing code.

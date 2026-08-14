@@ -145,7 +145,8 @@ space MyRobot:
 **Implementation**:
 - **v0.1.0**: Python proof-of-concept (NumPy, PyYAML).
 - **v0.1.4+**: Native Rust rewrite for blazing sub-millisecond compilation, strictly sandboxed.
-- **v0.1.7**: Continuous analytic trace rendering (`AnalyticTrace`), high-performance memory-mapped binary (.hsx) generation.
+- **v0.1.7**: Continuous analytic trace rendering (`AnalyticTrace`), high-performance memory-mapped binary (`.hsx`) generation.
+- **v0.2.0-v0.2.1**: AST Arena database-driven query architecture (Salsa-inspired incremental engine), Relational Topological Placement Engine (Single Anchor Law, intra-device DRC exemptions), Material-Specific Via Depth & Substrate Cutout Resolver, Automated PDK Geometry Extraction ($AD, AS, PD, PS$), Clippy-level error diagnostics (`hwsd`), range syntax (`[0..7]`), device definitions, via depth/array controls, BOM export (`.csv`), automated SPICE testbench suite generation (`ac.sp`, `dc.sp`, `tran.sp`), and full DRC/LVS/crosstalk/thermal physics validation.
 
 ### Commands
 
@@ -693,5 +694,5 @@ Hardware Script isn't just a compiler—it's a complete ecosystem:
 ---
 
 **Document Status**: Ecosystem Architecture  
-**Last Updated**: Q2 2026  
+**Last Updated**: v0.2.1 (Q3 2026)  
 **This is how we define a standard.**
