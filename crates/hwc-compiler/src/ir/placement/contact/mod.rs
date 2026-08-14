@@ -662,21 +662,27 @@ pub fn place_contact(params: PlaceContactParams) -> Result<(), IrError> {
                 );
             }
         }
-    }
+        
+        // v0.2.2: Extract layer names for DRC (convert &str to CompactString)
+        let from_layer_for_drc = from_layer_name.map(|s| s.into());
+        let to_layer_for_drc = to_layer_name.map(|s| s.into());
 
-    store_contact_metadata(netlist_ops::ContactMetadataStorage {
-        space,
-        contact,
-        from_bottom_nm,
-        to_bottom_nm,
-        diameter_nm,
-        pad_bbox,
-        is_tented,
-        bridge_material_name,
-        contact_name_debug,
-        symbol_table,
-        eval_context,
-    });
+        store_contact_metadata(netlist_ops::ContactMetadataStorage {
+            space,
+            contact,
+            from_bottom_nm,
+            to_bottom_nm,
+            diameter_nm,
+            pad_bbox,
+            is_tented,
+            bridge_material_name,
+            contact_name_debug,
+            symbol_table,
+            eval_context,
+            from_layer: from_layer_for_drc,
+            to_layer: to_layer_for_drc,
+        });
+    }
 
     space.entity_graph.register_space_entity(
         contact_name_str,

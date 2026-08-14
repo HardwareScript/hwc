@@ -307,7 +307,7 @@ fn extract_device_parameters_from_space(
     _space: &hwc_engine::HardwareSpace,
     symbol_table: Option<&crate::SymbolTable>,
 ) -> FxHashMap<CompactString, f64> {
-    let mut parameters = FxHashMap::default();
+    let parameters = FxHashMap::default();
 
     // Get device definition to see what parameters are needed
     let Some(symbol_table) = symbol_table else {

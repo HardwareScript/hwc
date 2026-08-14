@@ -118,11 +118,17 @@ impl std::error::Error for LayerConnectionError {}
 ///
 /// Populated during placement when vias and contacts are placed.
 /// Queried during routing to determine exact connection Z coordinates.
+///
+/// v0.2.2: Uses composite key (entity_name, layer_name, position) for physical
+/// identity instead of name-only key. This prevents false collisions when
+/// multiple vias share a name (e.g., template interpolation failures or
+/// auto-generated contacts).
 #[derive(Debug, Clone)]
 pub struct LayerConnectionDatabase {
-    /// Connection points indexed by entity name + layer name
-    connections: FxHashMap<(CompactString, CompactString), RoutingConnectionPoint>,
-    /// All layers an entity connects to
+    /// Connection points indexed by (entity name, layer name, XY position)
+    /// v0.2.2: Position added to key for physical identity
+    connections: FxHashMap<(CompactString, CompactString, (i64, i64)), RoutingConnectionPoint>,
+    /// All layers an entity connects to (for lookup by entity name)
     entity_layers: FxHashMap<CompactString, Vec<CompactString>>,
 }
 
@@ -142,15 +148,20 @@ impl LayerConnectionDatabase {
     /// (where the via meets the lower routing layer).
     /// The `top_connection_z` should be the bottom of the top layer
     /// (where the via meets the upper routing layer).
+    ///
+    /// v0.2.2: Uses (entity_name, layer_name, position) as key for physical
+    /// identity. Multiple vias with the same name at different positions are
+    /// distinct physical objects and register successfully.
     pub fn register_via(
         &mut self,
         params: ViaRegistrationParams,
     ) -> Result<(), LayerConnectionError> {
         let entity: CompactString = params.entity_name.into();
+        let pos = params.position_2d;
 
         // Register bottom connection point
-        let bottom_key: (CompactString, CompactString) =
-            (entity.clone(), params.bottom_layer.into());
+        // v0.2.2: Include position in key for physical identity
+        let bottom_key = (entity.clone(), params.bottom_layer.into(), pos);
         if self.connections.contains_key(&bottom_key) {
             return Err(LayerConnectionError::DuplicateConnection {
                 entity: entity.clone(),
@@ -170,7 +181,8 @@ impl LayerConnectionDatabase {
         );
 
         // Register top connection point
-        let top_key: (CompactString, CompactString) = (entity.clone(), params.top_layer.into());
+        // v0.2.2: Include position in key for physical identity
+        let top_key = (entity.clone(), params.top_layer.into(), pos);
         if self.connections.contains_key(&top_key) {
             return Err(LayerConnectionError::DuplicateConnection {
                 entity: entity.clone(),
@@ -198,6 +210,8 @@ impl LayerConnectionDatabase {
     }
 
     /// Register a pour or pad surface connection (single Z plane).
+    ///
+    /// v0.2.2: Uses (entity_name, layer_name, position) as key for physical identity.
     pub fn register_surface(
         &mut self,
         entity_name: &str,
@@ -209,7 +223,8 @@ impl LayerConnectionDatabase {
     ) -> Result<(), LayerConnectionError> {
         let entity: CompactString = entity_name.into();
         let layer: CompactString = layer_name.into();
-        let key = (entity.clone(), layer.clone());
+        // v0.2.2: Include position in key for physical identity
+        let key = (entity.clone(), layer.clone(), position_2d);
 
         if self.connections.contains_key(&key) {
             return Err(LayerConnectionError::DuplicateConnection { entity, layer });
@@ -235,12 +250,38 @@ impl LayerConnectionDatabase {
     /// Get the connection point for an entity on a specific layer.
     ///
     /// Returns `Err` if no connection exists — never falls back to guessing.
+    ///
+    /// v0.2.2: If multiple connections exist (same entity+layer, different positions),
+    /// returns the first one found. For precise lookup, use `get_connection_at_position`.
     pub fn get_connection_point(
         &self,
         entity_name: &str,
         layer_name: &str,
     ) -> Result<&RoutingConnectionPoint, LayerConnectionError> {
-        let key: (CompactString, CompactString) = (entity_name.into(), layer_name.into());
+        // v0.2.2: Search for any connection matching entity+layer (position varies)
+        let entity: CompactString = entity_name.into();
+        let layer: CompactString = layer_name.into();
+        
+        self.connections
+            .iter()
+            .find(|((e, l, _pos), _conn)| e == &entity && l == &layer)
+            .map(|(_key, conn)| conn)
+            .ok_or_else(|| LayerConnectionError::NoConnectionPoint {
+                entity: entity_name.into(),
+                layer: layer_name.into(),
+            })
+    }
+
+    /// Get the connection point for an entity on a specific layer at a specific position.
+    ///
+    /// v0.2.2: Precise lookup by (entity, layer, position) triple.
+    pub fn get_connection_at_position(
+        &self,
+        entity_name: &str,
+        layer_name: &str,
+        position: (i64, i64),
+    ) -> Result<&RoutingConnectionPoint, LayerConnectionError> {
+        let key = (entity_name.into(), layer_name.into(), position);
         self.connections
             .get(&key)
             .ok_or_else(|| LayerConnectionError::NoConnectionPoint {
@@ -249,15 +290,39 @@ impl LayerConnectionDatabase {
             })
     }
 
+    /// Get all connection points for an entity on a specific layer.
+    ///
+    /// v0.2.2: Returns all connections (multiple positions may exist).
+    pub fn get_all_connections_on_layer(
+        &self,
+        entity_name: &str,
+        layer_name: &str,
+    ) -> Vec<&RoutingConnectionPoint> {
+        let entity: CompactString = entity_name.into();
+        let layer: CompactString = layer_name.into();
+        
+        self.connections
+            .iter()
+            .filter(|((e, l, _pos), _conn)| e == &entity && l == &layer)
+            .map(|(_key, conn)| conn)
+            .collect()
+    }
+
     /// Get all connection points for an entity (across all layers).
     pub fn get_entity_connections(&self, entity_name: &str) -> Option<&[CompactString]> {
         self.entity_layers.get(entity_name).map(|v| v.as_slice())
     }
 
     /// Check if an entity has a connection on a specific layer.
+    ///
+    /// v0.2.2: Returns true if ANY connection exists for entity+layer (any position).
     pub fn has_connection(&self, entity_name: &str, layer_name: &str) -> bool {
-        let key: (CompactString, CompactString) = (entity_name.into(), layer_name.into());
-        self.connections.contains_key(&key)
+        let entity: CompactString = entity_name.into();
+        let layer: CompactString = layer_name.into();
+        
+        self.connections
+            .keys()
+            .any(|(e, l, _pos)| e == &entity && l == &layer)
     }
 
     /// Get all registered entity names.
@@ -265,13 +330,13 @@ impl LayerConnectionDatabase {
         self.entity_layers.keys()
     }
 
-    /// Validate that all connection Z values match expected routing layer Z values.
-    ///
     /// Validate that all via connections are compatible with their routing layers.
     ///
     /// v0.2.0: Data-driven validation using stackup information.
     /// - For ROUTABLE layers: via connection Z must match the routing Z (strict check)
     /// - For NON-ROUTABLE layers: via connections at interfaces are valid (no check needed)
+    ///
+    /// v0.2.2: Updated to work with position-based keys.
     ///
     /// Call this before routing to catch via-layer mismatches early.
     pub fn validate(
@@ -287,7 +352,7 @@ impl LayerConnectionDatabase {
             .map(|layer| (layer.name.as_str(), layer.is_routable))
             .collect();
 
-        for ((entity, layer), conn) in &self.connections {
+        for ((_entity, layer, _pos), conn) in &self.connections {
             // Only validate routable layers - non-routable layers connect at interfaces
             let is_routable = routable_map.get(layer.as_str()).copied().unwrap_or(false);
 
@@ -309,7 +374,7 @@ impl LayerConnectionDatabase {
                             || conn.z_elevation > layer_info.z_top
                         {
                             errors.push(LayerConnectionError::ConnectionZMismatch {
-                                entity: entity.clone(),
+                                entity: conn.entity_id.to_string().into(),
                                 connection_z: conn.z_elevation,
                                 expected_routing_z: layer_info.z_bottom, // Use z_bottom as reference in error message
                                 layer: layer.clone(),
@@ -322,7 +387,7 @@ impl LayerConnectionDatabase {
                     if let Some(&expected_z) = routing_z_map.get(layer) {
                         if conn.z_elevation != expected_z {
                             errors.push(LayerConnectionError::ConnectionZMismatch {
-                                entity: entity.clone(),
+                                entity: conn.entity_id.to_string().into(),
                                 connection_z: conn.z_elevation,
                                 expected_routing_z: expected_z,
                                 layer: layer.clone(),

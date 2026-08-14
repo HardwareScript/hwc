@@ -43,6 +43,14 @@ pub fn profile_to_constraints(
 
         let max_contact_depth_nm = via_def.max_contact_depth.as_ref().map(measurement_to_nm);
 
+        // v0.2.2: Extract layer-specific via enclosure requirements
+        let mut layer_enclosures_nm = rustc_hash::FxHashMap::default();
+        if let Some(ref enclosures_map) = via_def.enclosures {
+            for (layer_name, measurement) in enclosures_map {
+                layer_enclosures_nm.insert(layer_name.clone().into(), measurement_to_nm(measurement));
+            }
+        }
+
         ViaConstraints {
             min_diameter_nm: measurement_to_nm(&via_def.min_diameter),
             max_diameter_nm: 0,
@@ -62,6 +70,7 @@ pub fn profile_to_constraints(
             min_contact_depth_nm,
             max_contact_depth_nm,
             shape: via_def.shape.as_ref().map(|s| s.name.clone()),
+            layer_enclosures_nm,
         }
     } else {
         return Err(ConversionError::MissingProfileConstraint(

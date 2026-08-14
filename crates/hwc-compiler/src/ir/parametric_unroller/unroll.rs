@@ -9,10 +9,10 @@
 //! substituted into each node's fields as it is unrolled.
 
 use super::collision::{
-    print_identity_collision_warning, print_same_iteration_collision_warnings, CollisionWarning,
+    print_same_iteration_collision_warnings, CollisionWarning,
 };
 use super::substitution::{
-    format_net_name, unroll_component, unroll_contact, unroll_plane, unroll_polygon, unroll_pour,
+    unroll_component, unroll_contact, unroll_plane, unroll_polygon, unroll_pour,
     unroll_route, unroll_space_instance,
 };
 use crate::ir::errors::IrError;
@@ -23,7 +23,6 @@ use hwc_parser::ast::arena::{
     SpaceInstanceId,
 };
 use hwc_parser::{EvaluationContext, SpaceIfConditional, SpaceStatement, Value};
-use rustc_hash::{FxHashMap, FxHashSet};
 
 /// Result of unrolling a for loop.
 ///
@@ -59,7 +58,6 @@ struct UnrollContext<'a> {
     contacts: Vec<ContactId>,
     space_instances: Vec<SpaceInstanceId>,
     routes: Vec<RouteId>,
-    nets_in_iteration: FxHashSet<CompactString>,
     collision_warnings: Vec<CollisionWarning>,
 }
 
@@ -82,7 +80,6 @@ impl<'a> UnrollContext<'a> {
             contacts: Vec::new(),
             space_instances: Vec::new(),
             routes: Vec::new(),
-            nets_in_iteration: FxHashSet::default(),
             collision_warnings: Vec::new(),
         }
     }
@@ -91,28 +88,10 @@ impl<'a> UnrollContext<'a> {
         self.eval_context.insert(name, value);
     }
 
-    fn track_net_collision(
-        &mut self,
-        net_name: CompactString,
-        object_type: &str,
-        object_name: CompactString,
-    ) {
-        if !self.nets_in_iteration.insert(net_name.clone()) {
-            self.collision_warnings.push(CollisionWarning {
-                iteration: self.iteration_value,
-                net_name,
-                object_type: object_type.into(),
-                object_name,
-            });
-        }
-    }
-
-    #[allow(clippy::too_many_arguments)]
     fn drain_into(
         self,
         out: &mut UnrolledStatements,
         all_collision_warnings: &mut Vec<CollisionWarning>,
-        net_usage: &mut FxHashMap<usize, FxHashSet<CompactString>>,
     ) {
         out.components.extend(self.components);
         out.pours.extend(self.pours);
@@ -122,7 +101,8 @@ impl<'a> UnrollContext<'a> {
         out.space_instances.extend(self.space_instances);
         out.routes.extend(self.routes);
         all_collision_warnings.extend(self.collision_warnings);
-        net_usage.insert(self.iteration_value, self.nets_in_iteration);
+        // Note: nets_in_iteration tracking removed - sharing nets across iterations
+        // is the expected behavior for via arrays, power grids, and multi-finger devices
     }
 }
 
@@ -195,11 +175,7 @@ impl<'a> StatementProcessor for UnrollContext<'a> {
             self.iteration_value,
         )?;
 
-        if let Some(ref net) = unrolled.net {
-            let net_str = format_net_name(net);
-            self.track_net_collision(net_str, "pour", unrolled.name.to_string());
-        }
-
+        // Note: Net tracking removed - via arrays sharing the same net is expected behavior
         let new_id = self.arena.alloc_pour(unrolled);
         self.pours.push(new_id);
         Ok(())
@@ -234,11 +210,7 @@ impl<'a> StatementProcessor for UnrollContext<'a> {
             self.iteration_value,
         )?;
 
-        if let Some(ref net) = unrolled.net {
-            let net_str = format_net_name(net);
-            self.track_net_collision(net_str, "contact", unrolled.name.base.clone());
-        }
-
+        // Note: Net tracking removed - contact arrays sharing the same net is expected behavior
         let new_id = self.arena.alloc_contact(unrolled);
         self.contacts.push(new_id);
         Ok(())
@@ -251,15 +223,7 @@ impl<'a> StatementProcessor for UnrollContext<'a> {
             self.iteration_value,
         )?;
 
-        for parent_net in unrolled.net_map.values() {
-            let net_str: CompactString = parent_net.clone();
-            self.track_net_collision(
-                net_str,
-                "space_instance",
-                unrolled.instance_name.base.clone(),
-            );
-        }
-
+        // Note: Net tracking removed - multiple space instances sharing nets is expected
         let new_id = self.arena.alloc_space_instance(unrolled);
         self.space_instances.push(new_id);
         Ok(())
@@ -332,9 +296,9 @@ impl<'a> StatementProcessor for UnrollContext<'a> {
         symbol_table: &SymbolTable,
     ) -> Result<(), IrError> {
         // Dereference the ForLoopId to get the actual SpaceForLoop data
-        let (start, end, variable) = {
+        let (start, end, inclusive, variable) = {
             let nested = &self.arena.for_loops[nested_loop_id];
-            (nested.start, nested.end, nested.variable.clone())
+            (nested.start, nested.end, nested.inclusive, nested.variable.clone())
         };
 
         // Take the body (leaving an empty Vec behind) so the arena can be borrowed
@@ -344,6 +308,7 @@ impl<'a> StatementProcessor for UnrollContext<'a> {
         let nested = run_unroll(
             start,
             end,
+            inclusive,
             &body,
             &variable,
             symbol_table,
@@ -437,6 +402,7 @@ impl<'a> StatementProcessor for UnrollContext<'a> {
 fn run_unroll(
     start: usize,
     end: usize,
+    inclusive: bool,
     body: &[SpaceStatement],
     loop_variable: &CompactString,
     symbol_table: &SymbolTable,
@@ -445,11 +411,17 @@ fn run_unroll(
 ) -> Result<UnrolledStatements, IrError> {
     let mut out = UnrolledStatements::default();
     let mut all_collision_warnings = Vec::new();
-    let mut net_usage_per_iteration: FxHashMap<usize, FxHashSet<CompactString>> =
-        FxHashMap::default();
 
-    // INCLUSIVE range iteration (Hardware Engineering Convention): 0..4 = [0,1,2,3,4]
-    for i in start..=end {
+    // Range semantics (Rust/Swift-style explicit):
+    // - `0..3` (exclusive): Iterates 3 times [0, 1, 2] - count-driven
+    // - `0..=3` (inclusive): Iterates 4 times [0, 1, 2, 3] - bound-driven
+    let iteration_range: Box<dyn Iterator<Item = usize>> = if inclusive {
+        Box::new(start..=end)
+    } else {
+        Box::new(start..end)
+    };
+
+    for i in iteration_range {
         let mut iteration_context = parent_context.clone();
         iteration_context.insert(loop_variable.clone(), Value::Number(i as i64));
 
@@ -459,29 +431,11 @@ fn run_unroll(
             ctx.process_statement(statement, symbol_table)?;
         }
 
-        ctx.drain_into(
-            &mut out,
-            &mut all_collision_warnings,
-            &mut net_usage_per_iteration,
-        );
+        ctx.drain_into(&mut out, &mut all_collision_warnings);
     }
 
-    let mut all_nets_to_iterations: FxHashMap<CompactString, Vec<usize>> = FxHashMap::default();
-    for (iteration, nets) in &net_usage_per_iteration {
-        for net in nets {
-            all_nets_to_iterations
-                .entry(net.clone())
-                .or_default()
-                .push(*iteration);
-        }
-    }
-
-    for (net_name, iterations) in &all_nets_to_iterations {
-        if iterations.len() > 1 {
-            print_identity_collision_warning(net_name, iterations, loop_variable);
-        }
-    }
-
+    // Print same-iteration collision warnings (multiple objects with same net in one iteration)
+    // This is usually intentional (via arrays connecting to the same net)
     if !all_collision_warnings.is_empty() {
         print_same_iteration_collision_warnings(&all_collision_warnings);
     }
@@ -504,9 +458,9 @@ pub fn unroll_for_loop(
     space_eval_context: &EvaluationContext,
     arena: &mut AstArena,
 ) -> Result<UnrolledStatements, IrError> {
-    let (start, end, variable) = {
+    let (start, end, inclusive, variable) = {
         let fl = &arena.for_loops[for_loop_id];
-        (fl.start, fl.end, fl.variable.clone())
+        (fl.start, fl.end, fl.inclusive, fl.variable.clone())
     };
 
     // Take the body (leaving an empty Vec behind) so the arena can be borrowed
@@ -516,6 +470,7 @@ pub fn unroll_for_loop(
     let result = run_unroll(
         start,
         end,
+        inclusive,
         &body,
         &variable,
         symbol_table,

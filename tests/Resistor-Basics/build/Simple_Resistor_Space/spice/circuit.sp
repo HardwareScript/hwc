@@ -6,8 +6,13 @@
 * ========================================
 * PDK SUBCIRCUIT: sky130_fd_pr__res_high_po
 * ========================================
-* Subcircuit 'sky130_fd_pr__res_high_po' uses foundry model
-.include "sky130_fd_pr/models/sky130_fd_pr__res_high_po.model.spice"
+.subckt sky130_fd_pr__res_high_po A B BULK W=1u L=1u
+RR_head A node_1 362ohm
+RR_tail node_2 B 362ohm
+RR_body node_1 node_2 {350ohm * ({L / W})}
+CC_sub1 A BULK {{2fF * W} * L}
+CC_sub2 B BULK {{2fF * W} * L}
+.ends sky130_fd_pr__res_high_po
 
 * ========================================
 * NETS
@@ -24,20 +29,28 @@
 *   Connected pins:
 *     - Contact_A_LI.anchor
 *     - Contact_A_LI.__virtual_Contact_A_LI
-*     - Via_A_Poly.__virtual_Via_A_Poly
+*     - Via_A_Poly_0.__virtual_Via_A_Poly_0
+*     - Via_A_Poly_1.__virtual_Via_A_Poly_1
+*     - Via_A_Poly_2.__virtual_Via_A_Poly_2
 *     - Contact_A_Metal.anchor
 *     - Contact_A_Metal.__virtual_Contact_A_Metal
-*     - Via_A_Metal.__virtual_Via_A_Metal
+*     - Via_A_Metal_0.__virtual_Via_A_Metal_0
+*     - Via_A_Metal_1.__virtual_Via_A_Metal_1
+*     - Via_A_Metal_2.__virtual_Via_A_Metal_2
 *     - In_Pad.anchor
 *     - In_Pad.__virtual_In_Pad
 * Net: Out (width=300nm, material=Tungsten)
 *   Connected pins:
 *     - Contact_B_LI.anchor
 *     - Contact_B_LI.__virtual_Contact_B_LI
-*     - Via_B_Poly.__virtual_Via_B_Poly
+*     - Via_B_Poly_0.__virtual_Via_B_Poly_0
+*     - Via_B_Poly_1.__virtual_Via_B_Poly_1
+*     - Via_B_Poly_2.__virtual_Via_B_Poly_2
 *     - Contact_B_Metal.anchor
 *     - Contact_B_Metal.__virtual_Contact_B_Metal
-*     - Via_B_Metal.__virtual_Via_B_Metal
+*     - Via_B_Metal_0.__virtual_Via_B_Metal_0
+*     - Via_B_Metal_1.__virtual_Via_B_Metal_1
+*     - Via_B_Metal_2.__virtual_Via_B_Metal_2
 *     - Out_Pad.anchor
 *     - Out_Pad.__virtual_Out_Pad
 * Net: GND (width=300nm, material=Tungsten)
@@ -52,19 +65,19 @@
 * ========================================
 * EXTRACTED DEVICES
 * ========================================
-XR1 In Out GND sky130_fd_pr__res_high_po W=1.41u L=4.00u
+XR1 In Out GND sky130_fd_pr__res_high_po W=1.41u L=3.20u
 
 * ========================================
 * INTEGRATED TRACE PARASITICS
 * ========================================
 * Trace resistance
-RRtr_In_0 nIn_entry In 8.355556e-1
+RRtr_In_0 nIn_entry In 6.527778e-1
 * Ground capacitance
-CCgnd_In_0 In GND 2.210005e-16
+CCgnd_In_0 In GND 1.726567e-16
 * Trace resistance
-RRtr_Out_0 nOut_entry Out 8.355556e-1
+RRtr_Out_0 nOut_entry Out 6.527778e-1
 * Ground capacitance
-CCgnd_Out_0 Out GND 2.210005e-16
+CCgnd_Out_0 Out GND 1.726567e-16
 
 * Total parasitic elements: 4
 

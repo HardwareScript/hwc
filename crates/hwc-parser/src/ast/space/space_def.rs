@@ -90,11 +90,16 @@ pub struct RouteNetPolicy {
 }
 
 /// For loop in space block (Sprint 3.4: Parametric Unrolling)
+///
+/// Range Semantics (Rust/Swift-style explicit):
+/// - `0..3` (exclusive): Iterates 3 times [0, 1, 2] - count-driven
+/// - `0..=3` (inclusive): Iterates 4 times [0, 1, 2, 3] - bound-driven
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SpaceForLoop {
     pub variable: CompactString,
     pub start: usize,
     pub end: usize,
+    pub inclusive: bool,            // true for ..= (inclusive), false for .. (exclusive)
     pub body: Vec<SpaceStatement>,
     pub span: Span,
 }

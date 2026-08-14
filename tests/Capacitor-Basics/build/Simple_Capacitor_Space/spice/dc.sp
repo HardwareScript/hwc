@@ -9,6 +9,5 @@
 * STIMULUS & ANALYSIS
 * ========================================
 V_In nIn_entry 0 DC 1.800
-V_Out nOut_entry 0 DC 0.000
 .op
 .end

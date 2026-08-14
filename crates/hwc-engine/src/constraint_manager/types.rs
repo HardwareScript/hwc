@@ -131,6 +131,12 @@ pub struct FabricationConstraints {
     /// clearance rules, and manufacturing constraints throughout the entire pipeline.
     /// Must be explicitly declared in every profile.
     pub technology: hwc_types::Technology,
+
+    /// Layer-specific via enclosure requirements (v0.2.2).
+    /// Maps layer name to minimum enclosure distance in nanometers.
+    /// Used for ASIC device layers that require larger enclosure than standard annular ring.
+    /// Example: SKY130 capm.5 rule requires 500nm enclosure of Via3 by CAPM layer.
+    pub layer_via_enclosures: rustc_hash::FxHashMap<compact_str::CompactString, i64>,
 }
 
 /// Complete constraint rulebook for the routing engine.

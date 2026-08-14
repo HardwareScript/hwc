@@ -377,6 +377,7 @@ impl<'a> AutoRouter<'a> {
                 safety_factor: constraint_set.clearance.safety_factor,
                 stackup,
                 technology: constraint_set.technology,
+                layer_via_enclosures: constraint_set.via.layer_enclosures_nm.clone(),
             };
             constraints.set_fabrication_constraints(fab_constraints);
         }

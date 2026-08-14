@@ -8,7 +8,6 @@ use super::constraint_generation::{
     generate_clearance_zone, generate_net_constraints, NetConstraintParams,
 };
 use super::electrical_analysis;
-use super::fabrication::load_fabrication_constraints;
 use super::impedance::calculate_trace_impedance;
 use super::layer_assignment::assign_layer_directions;
 use super::net_classification::classify_nets;
@@ -114,17 +113,6 @@ impl ConstraintManager {
     /// Delegates to the layer_assignment module.
     pub fn assign_layer_directions(&self, num_layers: usize) -> FxHashMap<usize, LayerDirection> {
         assign_layer_directions(num_layers)
-    }
-
-    /// Load fabrication constraints from profile definition.
-    ///
-    /// Delegates to the fabrication module.
-    pub fn load_fabrication_constraints<S: SymbolTableTrait>(
-        &self,
-        profile_name: &str,
-        symbol_table: &S,
-    ) -> Result<FabricationConstraints, String> {
-        load_fabrication_constraints(profile_name, symbol_table)
     }
 
     /// Generate complete constraint rulebook for routing.

@@ -88,7 +88,18 @@ impl crate::parser::Parser {
         let variable = self.expect_identifier_string()?;
         self.expect(&Token::In)?;
         let start = self.expect_number()? as usize;
-        self.expect(&Token::Range)?;
+        
+        // Check for inclusive or exclusive range
+        let inclusive = if self.check(&Token::RangeInclusive) {
+            self.advance();
+            true
+        } else if self.check(&Token::Range) {
+            self.advance();
+            false
+        } else {
+            return Err(self.error("Expected '..' or '..=' in for loop range"));
+        };
+        
         let end = self.expect_number()? as usize;
         self.expect(&Token::Colon)?;
         self.expect(&Token::Newline)?;
@@ -114,6 +125,7 @@ impl crate::parser::Parser {
             variable: variable.into(),
             start,
             end,
+            inclusive,
             body,
             span: Span::new(start_pos, self.previous_span().end),
         })

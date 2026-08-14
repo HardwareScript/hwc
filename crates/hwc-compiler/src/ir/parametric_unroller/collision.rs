@@ -14,37 +14,6 @@ pub struct CollisionWarning {
     pub object_name: CompactString,
 }
 
-/// Format a NetName for display
-pub fn format_net_name(net: &hwc_parser::NetName) -> CompactString {
-    if let Some(ref index) = net.index {
-        // Try to evaluate the index to get a concrete value
-        match index.evaluate_const() {
-            Ok(hwc_parser::Value::Number(n)) => format!("{}[{}]", net.base, n).into(),
-            _ => format!("{}[...]", net.base).into(),
-        }
-    } else {
-        net.base.clone()
-    }
-}
-
-/// Print warning about identity collision across iterations
-pub fn print_identity_collision_warning(net_name: &str, iterations: &[usize], variable: &str) {
-    eprintln!("\n⚠️  IDENTITY COLLISION WARNING");
-    eprintln!("   Net: {}", net_name);
-    eprintln!(
-        "   Loop variable '{}' produced the same net in {} iterations:",
-        variable,
-        iterations.len()
-    );
-    eprintln!("   Iterations: {:?}", iterations);
-    eprintln!("\n   Common causes:");
-    eprintln!("   - Integer division truncation: i/2 where i=0,1 both → 0");
-    eprintln!("   - Modulo operations: i%3 repeats every 3 iterations");
-    eprintln!("   - Intentional net sharing (this may be correct!)");
-    eprintln!("\n   If intentional: This warning is informational only.");
-    eprintln!("   If accidental: Check your index expression for truncation.\n");
-}
-
 /// Print warnings about same-iteration collisions
 pub fn print_same_iteration_collision_warnings(warnings: &[CollisionWarning]) {
     eprintln!("\n⚠️  SAME-ITERATION NET COLLISION");

@@ -1,24 +1,33 @@
 # test_thermal_violation.hw
 # Parasitic Validation Test 2: Thermal Rise Violation (Error P22)
 #
-# PURPOSE: Verify that the compiler HALTS with Error P22 when I_RMS through
-# parasitic trace resistance generates temperature rise ΔT exceeding thermal limits
+# PURPOSE: Verify that the compiler HALTS with Error P22 when I²R Joule heating
+# causes temperature rise ΔT to exceed the thermal budget (typically 20°C)
+#
+# PHYSICAL SCENARIO:
+# - High-resistance polysilicon resistor (ρ = 10 μΩ·m, very resistive!)
+# - Moderate current causing significant power dissipation
+# - Poor thermal dissipation leads to localized heating
 #
 # EXPECTED BEHAVIOR:
-# - Material: Polysilicon with ρ = 4.0e-6 Ω·m (very high resistivity)
-# - Trace geometry: L = 5μm, W = 200nm, t = 50nm
-# - Trace resistance: R = ρ(L/Wt) = 4e-6 × (5e-6)/(200e-9 × 50e-9) = 2000Ω
-# - RMS current: I_RMS = 100 μA (declared in net)
-# - Power dissipation: P = I²R = (100e-6)² × 2000 = 20 μW
-# - Profile thermal limit: max_temp_rise = 20°C (very strict)
-# - Poor thermal conductivity of polysilicon (30 W/mK) + high power
-# - VIOLATION: ΔT exceeds 20°C → Compiler should HALT with Error P22
+# - Material: Polysilicon (high resistivity = 10 μΩ·m)
+# - Trace: 200nm width × 180nm thickness × 5000nm length
+# - Cross-section: A = 200nm × 180nm = 0.036 μm²
+# - Resistance: R = ρ × (L/A) = 10e-6 × (5e-6 / 36e-15) ≈ 1.39 Ω
+# - RMS current: 50 μA
+# - Power: P = I²R = (50μA)² × 1.39Ω ≈ 3.47 μW
+# - Surface area: 2 × 5000nm × 200nm = 2 μm²
+# - Thermal conductivity: k = 30 W/(m·K) (poor for polysilicon)
+# - Temperature rise: ΔT = P / (k × Area) = 3.47e-6 / (30 × 2e-12) ≈ 57.8°C
+# - Thermal limit: 20°C (default JEDEC standard)
+# - VIOLATION: ΔT = 57.8°C > 20°C → Compiler should HALT with Error P22
 #
 # The compiler should report:
 # "Error P22: Thermal rise violation at trace segment (coordinates)
-#  Temperature rise ΔT = XX°C exceeds limit 20°C
-#  Power dissipation P = 20μW through R = 2000Ω
-#  Reduce current or increase trace width"
+#  Temperature rise ΔT = 57.8°C exceeds limit 20.0°C
+#  Power dissipation: 3.47 μW
+#  Trace resistance: 1.39 Ω
+#  Solution: Reduce current, increase width, or shorten trace length"
 
 import * from @std/primitives/units
 import * from "./parasitic_pdk"
@@ -39,69 +48,58 @@ module ThermalTest:
     route In to Out
 
 space Thermal_Violation_Space implements ThermalTest:
-    dimensions: 8.0um by 4.0um by 300nm
-    resolution: 10nm
-    origin: bl by b
-    profile: Thermal_Test_Profile  # Strict thermal limits: max_temp_rise = 20°C
+    dimensions: 10.0um by 5.0um
+    profile: Thermal_Test_Profile
 
-    # Declare high RMS current through resistive polysilicon
+    # Declare moderate current through high-resistance trace
     # This will cause significant I²R heating
     nets:
-        In:  { classification: signal, potential: 1.8V, current: 100uA }
-        Out: { classification: signal, potential: 0.0V, current: 100uA }
+        In:  { classification: signal, potential: 3.3V, current: 50uA }
+        Out: { classification: signal, potential: 0.0V, current: 50uA }
 
     # ========================================================================
-    # HIGH RESISTANCE POLYSILICON TRACE
+    # HIGH-RESISTANCE POLYSILICON TRACE - Will violate thermal limits
     # ========================================================================
     
-    # Left terminal (polysilicon)
-    add pour(Polysilicon) named Left_Terminal on layer: polyres:
+    # Left pad
+    add pour(Polysilicon) named In_Pad on layer: poly:
         net: In
-        dimensions: 500nm by 500nm
-        at: [x: 1.0um, y: 2.0um]
+        dimensions: 1.0um by 1.0um
+        at: [x: 1.0um, y: 2.5um]
 
-    # Right terminal (polysilicon)
-    add pour(Polysilicon) named Right_Terminal on layer: polyres:
+    # Right pad - 5μm away (long resistive path)
+    add pour(Polysilicon) named Out_Pad on layer: poly:
         net: Out
-        dimensions: 500nm by 500nm
-        at: [x: 7.0um, y: 2.0um]
-
-    # Metal contact pads for external connections
-    add pour(Aluminum) named In_Pad on layer: metal1:
-        net: In
-        dimensions: 800nm by 800nm
-        at: [x: 1.0um, y: 2.0um]
-
-    add pour(Aluminum) named Out_Pad on layer: metal1:
-        net: Out
-        dimensions: 800nm by 800nm
-        at: [x: 7.0um, y: 2.0um]
-
-    # Vias connecting metal to polysilicon
-    add contact(Titanium_Silicide) named Via_In spanning layer: polyres to metal1:
-        net: In
-        diameter: 200nm
-        plating_thickness: 5nm
-        align: center with In_Pad
-
-    add contact(Titanium_Silicide) named Via_Out spanning layer: polyres to metal1:
-        net: Out
-        diameter: 200nm
-        plating_thickness: 5nm
-        align: center with Out_Pad
+        dimensions: 1.0um by 1.0um
+        align: center_x with In_Pad.right + 5.0um
+        align: center_y with In_Pad
 
     # ========================================================================
-    # CRITICAL ROUTING - Long thin polysilicon trace with high current
+    # CRITICAL ROUTING - Polysilicon trace with poor thermal dissipation
     # ========================================================================
-    # This should trigger Error P22 during physical verification
-    # Polysilicon: ρ = 4.0e-6 Ω·m, thermal_conductivity = 30 W/mK (poor)
-    # Long trace (5μm) with narrow width (200nm) → high resistance
-    # High current (100μA RMS) → significant I²R heating
-    # Profile limit: max_temp_rise = 20°C (strict)
-    # Expected: ΔT > 20°C → P22 Error
+    # This routing should trigger Error P22 during physical verification
+    # Trace: 200nm width × 180nm thickness × 5000nm length
+    # Resistance: R ≈ 1.39 Ω (high!)
+    # Power: P = (50μA)² × 1.39Ω ≈ 3.47 μW
+    # Temperature rise: ΔT ≈ 57.8°C (exceeds 20°C limit)
+    # VIOLATION: ΔT > 20°C → P22 Error
     
-    route Left_Terminal to Right_Terminal:
+    route In_Pad to Out_Pad:
         net: In
-        width: 200nm        # Narrow width → high resistance
-        layer: polyres
+        width: 200nm        # Narrow trace = high resistance
+        layer: poly
         intent: Signal
+
+# ============================================================================
+# COMPARISON: Non-Violating Case (for reference)
+# ============================================================================
+# To demonstrate the difference, here's what would PASS:
+# - Same geometry, but only 10 μA current:
+#   P = (10μA)² × 1.39Ω ≈ 0.14 μW
+#   ΔT ≈ 2.3°C < 20°C → PASS ✓
+#
+# Or, wider trace at same current:
+# - Width: 1000nm (5× wider)
+#   R = 10e-6 × (5e-6 / 180e-15) ≈ 0.28 Ω (5× lower)
+#   P = (50μA)² × 0.28Ω ≈ 0.70 μW
+#   ΔT ≈ 11.7°C < 20°C → PASS ✓

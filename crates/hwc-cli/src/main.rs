@@ -53,10 +53,6 @@ enum Commands {
         #[arg(long)]
         skip_physical_continuity: bool,
 
-        /// Skip bulk connection validation (for testing individual stages)
-        #[arg(long)]
-        skip_bulk_validation: bool,
-
         /// Skip route lockfile (disables incremental routing)
         #[arg(long)]
         no_lockfile: bool,
@@ -244,7 +240,6 @@ fn run() -> Result<()> {
             skip_physics,
             skip_connectivity_check,
             skip_physical_continuity,
-            skip_bulk_validation,
             no_lockfile,
             force_reroute,
             force_export,
@@ -264,7 +259,6 @@ fn run() -> Result<()> {
                 skip_physics,
                 skip_connectivity_check,
                 skip_physical_continuity,
-                skip_bulk_validation,
                 no_lockfile,
                 force_reroute,
                 force_export,

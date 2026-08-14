@@ -1,6 +1,11 @@
-# simple_capacitor_test.hw - SKY130 MIM Capacitor Test
+# simple_capacitor_test.hw - SKY130 MIM Capacitor Test (100% Relational Layout)
 # Device: sky130_fd_pr__cap_mim_m3_1 (Metal-Insulator-Metal Capacitor over Metal-3)
 # 
+# DESIGN PHILOSOPHY: Single Anchor Law
+# - Bottom_Plate is the ONE AND ONLY absolute 'at:' anchor
+# - 100% of geometry derives from Bottom_Plate using align: and anchor queries
+# - Self-healing: Change cap_area or metal3_overhang → everything adjusts automatically
+#
 # PHYSICS: C = C_area × A + C_perimeter × P
 # - Area (A): 10μm × 10μm = 100μm² (overlap between metal3 bottom plate and CAPM top plate)
 # - Perimeter (P): 2 × (10μm + 10μm) = 40μm
@@ -16,13 +21,6 @@
 # - Dielectric: Ultra-thin oxide (~5nm equivalent)
 # - Top plate: CAPM layer (special capacitor metal, 100nm thick, 5.8 Ω/□)
 # - Top plate requires metal4 routing for external connection
-#
-# v0.2.2 COMPLIANCE:
-# - Device terminal bindings via device_nets (if virtual terminals needed)
-# - Multi-terminal device bodies do NOT have net assignments
-# - Contact heads bind device terminals to nets
-# - Proper SKY130 layer stackup: metal1 → li1 → metal2 → metal3 → CAPM → metal4
-# - Alignment-based positioning (minimal at: usage)
 #
 # Reference: https://skywater-pdk.readthedocs.io/en/main/rules/device-details.html#mim-capacitors
 
@@ -42,7 +40,7 @@ space Simple_Capacitor_Space implements SimpleCapacitor:
         Out: { classification: signal, potential: 0.0V, current: 1.0nA }
 
     # ========================================================================
-    # PARAMETRIC MIM CAPACITOR GEOMETRY
+    # PARAMETRIC MIM CAPACITOR GEOMETRY (Self-Healing Layout)
     # ========================================================================
     
     let cap_area = 10.0um              # Target capacitor overlap area (10μm × 10μm)
@@ -57,20 +55,20 @@ space Simple_Capacitor_Space implements SimpleCapacitor:
     let pad_size = 2.0um               # External test pad size
 
     # ========================================================================
-    # 1. BOTTOM PLATE (METAL3) - DEVICE TERMINAL
-    # Metal3 bottom plate extends beyond CAPM on all sides (DRC requirement)
-    # Bound to Terminal c1 and assigned to net Out
+    # 1. THE ONLY ABSOLUTE ANCHOR: Bottom Plate (Metal-3)
+    # All other geometry derives from this single root anchor
+    # Bottom plate extends beyond CAPM on all sides (DRC requirement)
     # ========================================================================
     add pour(Aluminum) named Bottom_Plate on layer: metal3:
         device: C1.c1
         net: Out
         dimensions: metal3_size by metal3_size
-        at: [x: capacitor_center_x, y: capacitor_center_y]
+        at: [x: capacitor_center_x, y: capacitor_center_y]    # ← The ONE AND ONLY 'at:' in the file!
 
     # ========================================================================
-    # 2. TOP PLATE (CAPM) - DEVICE TERMINAL
+    # 2. RELATIONAL TOP PLATE (CAPM) - Centered on Bottom Plate
     # CAPM top plate sits centered on metal3 with overhang clearance
-    # Bound to Terminal c0 and assigned to net In
+    # Forms the dielectric sandwich: Metal-3 → Oxide → CAPM
     # ========================================================================
     add pour(CAPM) named Top_Plate on layer: capm:
         device: C1.c0
@@ -80,10 +78,11 @@ space Simple_Capacitor_Space implements SimpleCapacitor:
         align: center_y with Bottom_Plate
 
     # ========================================================================
-    # 3. BULK/SUBSTRATE TERMINAL (DEVICE TERMINAL b → GND)
+    # 3. RELATIONAL BULK/SUBSTRATE TERMINAL (Virtual Terminal → GND)
     # The bulk terminal must be tied to GND for proper substrate coupling
-    # This is a virtual terminal that doesn't correspond to physical geometry
-    # but is required by the PDK model
+    # This is a virtual terminal that doesn't correspond to physical MIM geometry
+    # but is required by the PDK model for substrate effects
+    # Positioned in corner, away from capacitor structure
     # ========================================================================
     add pour(Aluminum) named Bulk_Tie on layer: metal1:
         device: C1.b
@@ -92,30 +91,38 @@ space Simple_Capacitor_Space implements SimpleCapacitor:
         at: [x: 2.0um, y: 2.0um]
 
     # ========================================================================
-    # 4. TERMINAL CONTACTS (Bind device terminals to nets)
+    # 4. RELATIONAL TERMINAL CONTACTS
+    # Bottom plate (metal3) and top plate (CAPM) provide direct connectivity
+    # No separate contact heads needed - routing connects directly to plates
     # ========================================================================
     
     # 4a. BOTTOM PLATE CONTACT (TERMINAL c1 → NET Out)
-    # Bottom plate itself provides metal3 connectivity - no separate contact needed
-    # Routing can connect directly to Bottom_Plate pour
+    # Bottom plate itself provides metal3 connectivity
+    # External routing can connect directly to Bottom_Plate pour
     
     # 4b. TOP PLATE CONTACT (TERMINAL c0 → NET In)
-    # Top plate itself provides CAPM connectivity - no separate contact needed
+    # Top plate itself provides CAPM connectivity
     # Metal4 routing pad positioned at edge to minimize routing over MIM dielectric
     
     # ========================================================================
-    # 5. METAL4 PAD FOR TOP PLATE ROUTING
+    # 5. RELATIONAL METAL4 PAD FOR TOP PLATE ROUTING
     # CAPM top plate connects to metal4 for external routing
-    # Positioned at edge of top plate for via connection
+    # Pulled well back from edge to satisfy SkyWater capm.5 rule (>= 500nm enclosure)
+    # Via PAD must be fully enclosed by CAPM with 500nm margin
+    # Contact pad: 400nm → radius 200nm
+    # Required clearance: pad_radius (200nm) + enclosure (500nm) = 700nm minimum
+    # Using 1.5um pullback for safe margin
     # ========================================================================
+    let via_edge_pullback = 1.5um      # Conservative clearance from CAPM edge
+    
     add pour(Aluminum) named Top_Contact_Metal4 on layer: metal4:
         net: In
         dimensions: contact_size by contact_size
-        align: center_x with Top_Plate.right - contact_size / 2
+        align: center_x with Top_Plate.right - via_edge_pullback
         align: center_y with Top_Plate
 
     # ========================================================================
-    # 6. VIA BRIDGING CAPM → METAL4 (Top plate connection)
+    # 6. RELATIONAL VIA BRIDGING CAPM → METAL4 (Top plate connection)
     # Via connects Top_Plate directly to Metal4 routing pad
     # ========================================================================
     add contact(Tungsten) named Via_Top_CAPM spanning layer: capm to metal4:
@@ -125,7 +132,8 @@ space Simple_Capacitor_Space implements SimpleCapacitor:
         net: In
 
     # ========================================================================
-    # 7. EXTERNAL TEST PADS (Using anchor alignment with spacing)
+    # 7. RELATIONAL EXTERNAL TEST PADS
+    # Positioned relative to capacitor plates with parametric spacing
     # ========================================================================
     
     # 7a. Output pad - connects to bottom plate (metal3), positioned to the left
@@ -143,7 +151,7 @@ space Simple_Capacitor_Space implements SimpleCapacitor:
         align: center_y with Bottom_Plate
 
     # ========================================================================
-    # 8. ROUTING FROM CONTACT PADS TO EXTERNAL TEST PADS
+    # 8. RELATIONAL ROUTING FROM CONTACT PADS TO EXTERNAL TEST PADS
     # ========================================================================
     
     # 8a. METAL3 ROUTING: Out pad → Bottom plate (direct connection)

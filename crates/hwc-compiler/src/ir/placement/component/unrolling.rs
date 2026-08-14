@@ -429,6 +429,12 @@ pub fn unroll_internal_features(
                                 absolute_z_nm
                             ));
 
+                            // v0.2.2: Extract layer names from Z coordinates for DRC
+                            let from_layer_name = ctx.stackup_manager.get_layer_name_at_z(substrate_bbox.min.z)
+                                .map(|s| s.into());
+                            let to_layer_name = ctx.stackup_manager.get_layer_name_at_z(substrate_bbox.max.z)
+                                .map(|s| s.into());
+
                             space.contacts.push(ContactMetadata {
                                 name: format!("{}_{}_via", pd.name, pin_name).into(),
                                 material_name: resolved_material_name,
@@ -440,6 +446,8 @@ pub fn unroll_internal_features(
                                 drill_diameter_nm: Some(drill_diameter_nm),
                                 is_tented: false,
                                 mask_clearance_diameter_nm: None,
+                                from_layer: from_layer_name,
+                                to_layer: to_layer_name,
                             });
                         }
                     }

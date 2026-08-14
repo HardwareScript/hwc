@@ -24,40 +24,38 @@ use super::types::{PhysicalNetlistGraph, StimulusMode};
 /// `potential:` on an output/signal net is an Expected Operating Constraint for DRC/LVS,
 /// NOT an active driving source. Generating a voltage source on an output would short-circuit
 /// the resistor network and destroy the simulation.
+///
+/// **Precedence Rule (Bug Fix for Finding D):**
+/// Module pin direction ALWAYS takes precedence over net classification.
+/// Example: An LDO regulator with `pins: [output VDD_OUT]` and `nets: VDD_OUT: { classification: power }`
+/// must NOT have a testbench voltage source attached, even though it's classified as power.
+/// The pin direction (Output) overrides the classification (Power).
 pub fn should_generate_voltage_source(
     net_decl: &NetDeclaration,
     module_def: Option<&ModuleDefinition>,
 ) -> bool {
-    // Rule 1: Ground nets always get a ground reference (0V source)
-    if net_decl.classification == NetClassification::Ground {
-        return true;
-    }
-
-    // Rule 2: Power nets always get a driving source
-    if net_decl.classification == NetClassification::Power {
-        return true;
-    }
-
-    // Rule 3: If there's a module definition, check pin direction
+    // Priority 1: Check Module Pin Direction FIRST (Module contract is king)
     if let Some(module) = module_def {
-        // Find the pin that corresponds to this net
-        for pin in &module.pins {
-            if pin.name.as_str() == net_decl.name.as_str() {
-                return match pin.direction {
-                    PinDirection::Input => true,    // Input pins need driving sources
-                    PinDirection::Power => true,    // Power pins need driving sources
-                    PinDirection::Ground => true,   // Ground pins need ground references
-                    PinDirection::Output => false,  // Output pins are circuit-determined
-                    PinDirection::Inout => true, // Bidirectional pins get sources (can be overridden later)
-                    PinDirection::Passive => false, // Passive pins are circuit-determined
-                };
-            }
+        if let Some(pin) = module.pins.iter().find(|p| p.name.as_str() == net_decl.name.as_str()) {
+            return match pin.direction {
+                PinDirection::Input => true,     // Always drive inputs
+                PinDirection::Power => true,     // External supply inputs
+                PinDirection::Ground => true,    // External ground references
+                PinDirection::Output => false,   // NEVER drive outputs (circuit-determined)
+                PinDirection::Inout => false,    // Inout defaults to circuit-determined (avoid contention)
+                PinDirection::Passive => false,  // Passive pins are circuit-determined
+            };
         }
     }
 
-    // Rule 4: Artist Mode (no module) - only generate sources for power/ground classification
-    // Signal nets without module context are assumed to be internal/circuit-determined
-    false
+    // Priority 2: Standalone Space / Artist Mode (Fallback to net classifications)
+    match net_decl.classification {
+        NetClassification::Ground => true,
+        NetClassification::Power => true,
+        NetClassification::HighVoltage => true, // High voltage supplies need sources
+        NetClassification::Signal => false, // Signal nets without input declarations are internal
+        NetClassification::Unclassified => false, // Unclassified nets are circuit-determined
+    }
 }
 
 /// Generate stimulus section based on mode
@@ -135,36 +133,6 @@ fn generate_dc_stimulus(
                 }
             }
         }
-        
-        // DC Operating Point Output Termination (v0.2.1)
-        // For output pins, add 0V voltage sources to ground them for DC measurement.
-        // This allows current to flow through 2-terminal devices like resistors.
-        // Without termination, outputs float and no DC current flows.
-        //
-        // Physics: A 0V DC source acts as both:
-        // 1. A perfect ground connection (allows current flow)
-        // 2. A current meter (ngspice tracks i(V_Out) automatically)
-        //
-        // This enables .measure statements like: R_actual = V_in / i(V_Out)
-        if let Some(module) = module_def {
-            for pin in &module.pins {
-                if pin.direction == PinDirection::Output {
-                    let net_name = pin.name.as_str();
-                    
-                    // Use physical entry node if routing exists
-                    let node_name = physical_graph
-                        .net_entry_points
-                        .get(net_name)
-                        .map(|s| s.as_str())
-                        .unwrap_or(net_name);
-
-                    stimulus.push_str(&format!(
-                        "V_{} {} 0 DC 0.000\n",
-                        net_name, node_name
-                    ));
-                }
-            }
-        }
     }
     
     // ZERO-MAGIC MEASUREMENT GUARD (v0.2.1):
@@ -217,17 +185,28 @@ fn generate_dc_stimulus(
         
         // For each input-output pair, generate a resistance measurement
         // Assumes In1→Out1, In2→Out2, etc. (same index pairing)
+        // 
+        // FIXED (v0.2.1): Use current through input source instead of non-existent output source
+        // R = V_in / I_in (Ohm's law for 2-terminal device)
+        //
+        // SAFETY: Only generate .measure if the circuit topology allows DC current flow.
+        // For 2-terminal open-circuit outputs, I_in = 0A → division by zero.
+        // The .measure statement will still be generated, but SPICE will report "failed" 
+        // rather than crashing. Users must add proper load termination if needed.
         if has_resistive_devices {
-            for (idx, (input, output)) in input_pins.iter().zip(output_pins.iter()).enumerate() {
+            for (idx, (input, _output)) in input_pins.iter().zip(output_pins.iter()).enumerate() {
                 if let Some(space_def) = space_def {
                     // Find the input net voltage
                     if let Some(net_decl) = space_def.nets.iter().find(|n| n.name.as_str() == *input) {
                         if let Some(ref potential) = net_decl.potential {
                             if let Ok(voltage_mv) = potential.to_millivolts(unit_registry) {
                                 let voltage_v = voltage_mv as f64 / 1000.0;
+                                // Note: If output is open-circuit (no load), i(V_input) = 0A
+                                // SPICE will report measurement failure, not crash
                                 stimulus.push_str(&format!(
-                                    ".measure dc R{}_actual param='{:.3} / abs(i(V_{}))'\n",
-                                    idx + 1, voltage_v, output
+                                    "* Resistance measurement (requires closed circuit path)\n\
+                                     .measure dc R{}_actual param='{:.3} / abs(i(V_{}))'\n",
+                                    idx + 1, voltage_v, input
                                 ));
                             }
                         }
@@ -313,6 +292,13 @@ fn generate_ac_stimulus(
     // AC analysis requires DC bias point + AC small-signal stimulus
     // Generate DC sources for biasing (same as DC analysis)
     if let Some(space_def) = space_def {
+        // Determine which input should receive AC excitation (only ONE input at a time)
+        // Default: First input pin in module declaration
+        // TODO: Allow testbench to specify which input receives AC stimulus
+        let primary_input = module_def
+            .and_then(|m| m.pins.iter().find(|p| p.direction == PinDirection::Input))
+            .map(|p| p.name.as_str());
+
         for net_decl in &space_def.nets {
             if let Some(ref potential) = net_decl.potential {
                 if should_generate_voltage_source(net_decl, module_def) {
@@ -329,12 +315,13 @@ fn generate_ac_stimulus(
 
                             // For input pins: DC bias + AC small-signal excitation
                             // For other pins: DC bias only
-                            let is_input = module_def
+                            // BUG FIX: Only apply AC 1.0 to PRIMARY input to avoid multi-source superposition
+                            let is_primary_input = module_def
                                 .and_then(|m| m.pins.iter().find(|p| p.name.as_str() == net_name))
-                                .map(|p| p.direction == PinDirection::Input)
+                                .map(|p| p.direction == PinDirection::Input && Some(net_name) == primary_input)
                                 .unwrap_or(false);
 
-                            if is_input {
+                            if is_primary_input {
                                 stimulus.push_str(&format!(
                                     "V_{} {} 0 DC {:.3} AC 1.0\n",
                                     net_name, node_name, voltage_v
@@ -353,26 +340,6 @@ fn generate_ac_stimulus(
                             ));
                         }
                     }
-                }
-            }
-        }
-
-        // AC analysis output termination
-        if let Some(module) = module_def {
-            for pin in &module.pins {
-                if pin.direction == PinDirection::Output {
-                    let net_name = pin.name.as_str();
-
-                    let node_name = physical_graph
-                        .net_entry_points
-                        .get(net_name)
-                        .map(|s| s.as_str())
-                        .unwrap_or(net_name);
-
-                    stimulus.push_str(&format!(
-                        "V_{} {} 0 DC 0.000\n",
-                        net_name, node_name
-                    ));
                 }
             }
         }

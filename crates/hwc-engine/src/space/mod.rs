@@ -324,6 +324,126 @@ impl HardwareSpace {
         &self.analytic_routes
     }
 
+    /// **v0.2.1: Query crosstalk budget for a net from PDK routing intent.**
+    ///
+    /// Returns the maximum allowed crosstalk coupling in dB for the given net.
+    /// Used by the crosstalk DRC engine to enforce signal integrity budgets.
+    ///
+    /// **Architectural Law: Zero Magic**  
+    /// This method queries explicit PDK intent declarations, eliminating the need
+    /// for string-matching heuristics like `net_name.contains("Clock")`.
+    ///
+    /// # Arguments
+    /// * `net_name` - The net to query (e.g., "Clock", "Data", "Power")
+    ///
+    /// # Returns
+    /// * `Some(f64)` - Maximum crosstalk budget in dB (e.g., -40.0 for sensitive signals)
+    /// * `None` - No explicit budget declared (net can use default or skip validation)
+    ///
+    /// # Implementation Note (v0.2.1)
+    /// Currently returns a hardcoded -40dB budget for nets containing "Clock" as a
+    /// transitional implementation. Full PDK integration requires:
+    /// 1. Adding `max_crosstalk_db` field to `IntentCostWeights` in hwc-materials
+    /// 2. Populating this field from PDK profile `intent:` declarations
+    /// 3. Querying `fabrication_constraints.intents` to resolve net intent
+    pub fn get_net_max_crosstalk_db(&self, net_name: &str) -> Option<f64> {
+        // v0.2.1 Transitional Implementation: Hardcoded Clock budget
+        // TODO(v0.3.0): Replace with actual PDK intent query:
+        //   1. Look up net classification from self.net_classifications
+        //   2. Resolve routing intent from self.fabrication_constraints
+        //   3. Return intent.cost_weights.max_crosstalk_db
+        if net_name.contains("Clock") {
+            Some(-40.0) // Clock nets require strict isolation
+        } else {
+            None // No budget specified, skip crosstalk validation
+        }
+    }
+
+    /// **v0.2.1: Query stackup dielectric context for a routing layer.**
+    ///
+    /// Returns the relative permittivity and ground-plane Z-coordinate for a given
+    /// routing layer, enabling physics-accurate capacitance calculations.
+    ///
+    /// **Architectural Law: Stackup Truth**  
+    /// This method queries the stackup layers (single source of truth for layer
+    /// geometry) and material registry (source of truth for electrical properties),
+    /// eliminating hardcoded dielectric constants.
+    ///
+    /// # Arguments
+    /// * `layer_name` - The routing layer to query (e.g., "metal1", "poly")
+    ///
+    /// # Returns
+    /// * `Some((epsilon_r, substrate_z_nm))` - Dielectric constant and ground plane Z
+    /// * `None` - Layer not found or no dielectric context available
+    ///
+    /// # Implementation Note
+    /// Currently uses simplified logic: returns (3.9, 0) as SiO₂ default if layer
+    /// is not found. Full implementation should:
+    /// 1. Find the layer in `self.stackup_layers`
+    /// 2. Identify the inter-layer dielectric material below the routing layer
+    /// 3. Query `self.material_registry` for the ILD's relative permittivity
+    /// 4. Find the nearest reference/ground plane below the layer
+    /// 5. Return (εᵣ, z_ground)
+    pub fn get_stackup_dielectric_context(&self, layer_name: &str) -> Option<(f64, i64)> {
+        // Find the requested routing layer
+        let layer = self.get_layer_by_name(layer_name)?;
+
+        // v0.2.1: Simplified implementation - assume substrate at Z=0
+        // Full implementation would:
+        // 1. Search downward from layer.z_bottom to find the nearest ground plane
+        // 2. Query the ILD material between layer and ground plane
+        // 3. Look up εᵣ from material_registry
+
+        // For now, use the layer's own material as a proxy for the surrounding dielectric
+        let material_id = self.material_registry.get_id(&layer.material_name)?;
+        let material_props = self.material_registry.get_material(material_id)?;
+
+        // Try to get permittivity from material properties
+        // Default to SiO₂ (εᵣ = 3.9) if not specified
+        let epsilon_r = material_props
+            .get("relative_permittivity")
+            .unwrap_or(3.9);
+
+        // Assume substrate ground plane at Z=0 for simplicity
+        // Full implementation would find the actual ground plane layer
+        let substrate_z = 0;
+
+        Some((epsilon_r, substrate_z))
+    }
+
+    /// **v0.2.1: Query routing centerline Z-coordinate for a layer.**
+    ///
+    /// Returns the Z-coordinate where routing occurs on the specified layer.
+    /// This is used by the crosstalk engine to compute the height above the
+    /// reference ground plane (H in the coupling equations).
+    ///
+    /// **Architectural Law: Physical Reality**  
+    /// This method returns the exact physical Z-coordinate from the stackup,
+    /// eliminating hardcoded layer heights.
+    ///
+    /// # Arguments
+    /// * `layer_name` - The routing layer to query (e.g., "metal1", "poly")
+    ///
+    /// # Returns
+    /// * `Some(i64)` - Routing centerline Z-coordinate in nanometers
+    /// * `None` - Layer not found or not routable
+    ///
+    /// # Implementation Note
+    /// Returns the centerline Z-coordinate of the layer from `stackup_layers`.
+    /// For horizontal traces, this is where the route's mathematical centerline
+    /// sits in 3D space.
+    pub fn get_layer_routing_z(&self, layer_name: &str) -> Option<i64> {
+        let layer = self.get_layer_by_name(layer_name)?;
+
+        // Only routable layers have meaningful routing Z-coordinates
+        if !layer.is_routable {
+            return None;
+        }
+
+        // Return the centerline Z (midpoint between z_bottom and z_top)
+        Some(layer.centerline_z())
+    }
+
     /// **v0.2.0: Rebuild analytic_routes from routing database**
     ///
     /// Called after routing operations complete to sync the derived view.

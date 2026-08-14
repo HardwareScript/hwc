@@ -1,8 +1,21 @@
-//! Current density validation — validates actual current against route capability and material limits.
+//! Thermal rise validation — P22: Self-heating validation (I²R Joule heating).
 //!
-//! v0.1.8: Fixed fundamental architecture flaw. Now validates:
-//! 1. Actual operating current ≤ route's declared capability
-//! 2. Route's capability ≤ material's physical limit (given geometry)
+//! **Physical Phenomenon:**
+//! - High RMS current through resistive traces generates Joule heat: P = I²R
+//! - Heat trapped in dielectric layers causes local temperature rise: ΔT
+//! - Excessive ΔT causes:
+//!   - Dielectric delamination
+//!   - Dopant drift in semiconductors
+//!   - Thermal runaway in high-resistance materials
+//!
+//! **Governing Equations:**
+//!   R = ρ × (L / A)               [Trace resistance]
+//!   P = I_RMS² × R                [Joule heating power]
+//!   ΔT = P / (k × Surface_Area)   [1D substrate diffusion model]
+//!
+//! **Check:** ΔT ≤ Profile.max_temp_rise (user-declared, e.g., 20°C)
+//!
+//! **No Defaults:** The profile MUST declare max_temp_rise explicitly.
 
 use crate::geometry::Point3D;
 use crate::material::MaterialRegistry;
@@ -10,17 +23,19 @@ use crate::space::AnalyticTrace;
 
 use super::types::DrcViolation;
 
-/// Validate current density for all analytic routes.
+/// Validate thermal rise (ΔT) for all analytic routes.
 ///
-/// Implements two-tier validation:
-/// 1. **Netlist check**: actual_current ≤ route.current_limit
-/// 2. **Physical check**: route.current_limit ≤ material.max_density × cross_section
+/// Calculates self-heating from I²R power dissipation and checks against thermal budget.
+/// This is separate from electromigration (P21) which checks current density limits.
 ///
-/// This ensures both electrical correctness (nets don't exceed trace capacity)
-/// and manufacturing feasibility (traces can physically handle their declared capacity).
-pub fn validate_current_density(
+/// # Arguments
+/// * `routes` - All analytic traces in the design
+/// * `material_registry` - Material properties (resistivity, thermal_conductivity)
+/// * `max_temp_rise_c` - Maximum allowed temperature rise in °C (from profile, REQUIRED)
+pub fn validate_thermal_rise(
     routes: &[AnalyticTrace],
     material_registry: &MaterialRegistry,
+    max_temp_rise_c: f64,
 ) -> Result<Vec<DrcViolation>, String> {
     let cpu_cores = std::thread::available_parallelism()
         .map(|n| n.get())
@@ -36,81 +51,103 @@ pub fn validate_current_density(
             let handle = s.spawn(move || {
                 let mut local_violations: Vec<DrcViolation> = Vec::new();
                 for route in chunk {
-                    // Skip routes with no current limit declared (Artist Mode)
-                    if route.current.limit_ma <= 0.0 {
+                    // Skip routes with no current (Artist Mode)
+                    if route.current.actual_ma <= 0.0 {
                         continue;
                     }
 
-                    let area_nm2 = route.cross_section.width_nm as f64
-                        * route.cross_section.thickness_nm as f64;
+                    // Calculate trace geometry
+                    let width_nm = route.cross_section.width_nm as f64;
+                    let thickness_nm = route.cross_section.thickness_nm as f64;
+                    let area_nm2 = width_nm * thickness_nm;
+                    
                     if area_nm2 <= 0.0 {
                         return Err(format!(
-                            "[DRC] FATAL: trace on net '{}' has zero cross-sectional area (width={}nm, thickness={}nm).",
-                            route.net_name, route.cross_section.width_nm, route.cross_section.thickness_nm
+                            "[DRC THERMAL] FATAL: trace on net '{}' has zero cross-sectional area (width={}nm, thickness={}nm).",
+                            route.net_name, width_nm, thickness_nm
                         ));
                     }
 
+                    // Calculate trace length (sum of all segment lengths)
+                    let length_nm: f64 = route.segments.iter()
+                        .map(|seg| {
+                            let dx = (seg.end.x - seg.start.x) as f64;
+                            let dy = (seg.end.y - seg.start.y) as f64;
+                            let dz = (seg.end.z - seg.start.z) as f64;
+                            (dx * dx + dy * dy + dz * dz).sqrt()
+                        })
+                        .sum();
+
+                    if length_nm <= 0.0 {
+                        continue; // Zero-length trace, no thermal concern
+                    }
+
+                    // Get material properties
                     let props = material_registry.get_physical_props(route.material)
                         .ok_or_else(|| format!(
-                            "[DRC] FATAL: material_id {} not found in registry for net '{}'.",
+                            "[DRC THERMAL] FATAL: material_id {} not found in registry for net '{}'.",
                             route.material, route.net_name
                         ))?;
+                    
                     let resistivity = props.get("resistivity").ok_or_else(|| format!(
-                        "[DRC] FATAL: material for net '{}' has no 'resistivity' property. \
+                        "[DRC THERMAL] FATAL: material for net '{}' has no 'resistivity' property. \
                          Add resistivity to your material definition.",
                         route.net_name
                     ))?;
+                    
                     let thermal_k = props.get("thermal_conductivity").ok_or_else(|| format!(
-                        "[DRC] FATAL: material for net '{}' has no 'thermal_conductivity' property. \
+                        "[DRC THERMAL] FATAL: material for net '{}' has no 'thermal_conductivity' property. \
                          Add thermal_conductivity to your material definition.",
                         route.net_name
                     ))?;
-                    let max_density_a_mm2 = props.get("max_current_density").ok_or_else(|| format!(
-                        "[DRC] FATAL: material for net '{}' has no 'max_current_density' property. \
-                         Add max_current_density to your material definition.",
-                        route.net_name
-                    ))?;
 
-                    eprintln!("[DRC THERMAL DEBUG] Found props for material {} (net '{}'): resistivity={}, thermal_k={}, max_i={}", 
-                        route.material, route.net_name, resistivity, thermal_k, max_density_a_mm2);
-                    // CHECK 1: Does actual operating current exceed the route's declared capability?
-                    if route.current.actual_ma > route.current.limit_ma {
-                        let location = route
-                            .segments
-                            .first()
-                            .map(|s| s.start)
-                            .unwrap_or(Point3D::new(0, 0, 0));
+                    eprintln!("[DRC THERMAL DEBUG] Checking net '{}': material_id={}, ρ={:.2e} Ω·m, k={} W/(m·K)", 
+                        route.net_name, route.material, resistivity, thermal_k);
 
-                        local_violations.push(DrcViolation::CurrentDensityViolation {
-                            net: route.net_name.clone(),
-                            actual_density_a_mm2: route.current.actual_ma,
-                            max_density_a_mm2: route.current.limit_ma,
-                            location,
-                        });
-                        continue;
+                    // Convert to SI units
+                    let length_m = length_nm * 1e-9;
+                    let width_m = width_nm * 1e-9;
+                    let _thickness_m = thickness_nm * 1e-9; // Unused but kept for clarity
+                    let area_m2 = area_nm2 * 1e-18;
+
+                    // STEP 1: Calculate trace resistance: R = ρ × (L / A)
+                    let resistance_ohms = resistivity * (length_m / area_m2);
+
+                    // STEP 2: Calculate Joule heating power: P = I_RMS² × R
+                    let current_rms_a = route.current.actual_ma * 1e-3;
+                    let power_watts = current_rms_a * current_rms_a * resistance_ohms;
+
+                    // STEP 3: Calculate temperature rise using 1D substrate diffusion model
+                    // ΔT = P / (k × Surface_Area)
+                    // Surface area = 2 × length × width (top and bottom heat dissipation)
+                    let surface_area_m2 = 2.0 * length_m * width_m;
+                    
+                    if surface_area_m2 <= 0.0 {
+                        continue; // Degenerate geometry
                     }
 
-                    // CHECK 2: Does the route's declared capability exceed the material's physical limit?
-                    // Calculate maximum current the geometry can physically handle
-                    let current_limit_a = route.current.limit_ma / 1000.0;
-                    let area_m2 = area_nm2 * 1e-18; // nm² → m²
-                    let capability_density_a_m2 = current_limit_a / area_m2;
-                    let capability_density_a_mm2 = capability_density_a_m2 / 1e6;
+                    let delta_t_celsius = power_watts / (thermal_k * surface_area_m2);
 
-                    // Convert material limit to A/m² for comparison
-                    let max_density_a_m2 = max_density_a_mm2 * 1e6;
+                    eprintln!("[DRC THERMAL DEBUG] • Net '{}': R={:.2e}Ω, P={:.2e}W, ΔT={:.2}°C (limit: {:.2}°C)", 
+                        route.net_name, resistance_ohms, power_watts, delta_t_celsius, max_temp_rise_c);
 
-                    if capability_density_a_m2 > max_density_a_m2 {
+                    // STEP 4: Check against thermal budget
+                    if delta_t_celsius > max_temp_rise_c {
                         let location = route
                             .segments
                             .first()
                             .map(|s| s.start)
                             .unwrap_or(Point3D::new(0, 0, 0));
 
-                        local_violations.push(DrcViolation::CurrentDensityViolation {
+                        eprintln!("[DRC THERMAL DEBUG] • Thermal violation for {}: ΔT={:.2}°C > {:.2}°C", 
+                            route.net_name, delta_t_celsius, max_temp_rise_c);
+
+                        local_violations.push(DrcViolation::ThermalRiseViolation {
                             net: route.net_name.clone(),
-                            actual_density_a_mm2: capability_density_a_mm2,
-                            max_density_a_mm2,
+                            actual_temp_rise_c: delta_t_celsius,
+                            max_temp_rise_c,
+                            power_uw: power_watts * 1e6,
+                            resistance_ohms,
                             location,
                         });
                     }

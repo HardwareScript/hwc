@@ -28,7 +28,6 @@ pub struct DeviceExtractor<'a> {
     pub(super) arena: &'a hwc_parser::ast::AstArena,
     pub(super) space_def: Option<&'a hwc_parser::SpaceDefinition>, // v0.2.1: For device_nets access
     pub(super) device_registry: DeviceTypeRegistry,
-    pub(super) parameter_registry: parameter_extraction::ParameterExtractionRegistry,
 }
 
 impl<'a> DeviceExtractor<'a> {
@@ -44,7 +43,6 @@ impl<'a> DeviceExtractor<'a> {
             arena,
             space_def,
             device_registry: DeviceTypeRegistry::new(),
-            parameter_registry: parameter_extraction::ParameterExtractionRegistry::default(),
         }
     }
 
@@ -438,135 +436,34 @@ impl<'a> DeviceExtractor<'a> {
             }
         }
 
-        // Extract parameters using the registry-based system
+        // ✅ UNIVERSAL PARAMETER EXTRACTION: Driven by device contract, not device type
+        // Extract parameters using the universal parameter-driven system
         // FAIL LOUDLY: Parameter extraction errors are NOT swallowed
-        let parameters = self
-            .parameter_registry
-            .extract(device_type, terminal_pours, self.space)
-            .map_err(|err| {
-                DeviceExtractionError::InvalidGeometry {
-                    device_name: device_name.to_string().into(),
-                    device_type: device_type.to_string().into(),
-                    reason: err.into(),
-                }
-            })?;
-
-        // Special handling for MOSFETs (if they have gate terminal)
-        let mut mosfet_parameters = FxHashMap::default();
-        if terminal_pours.contains_key("gate") {
-            let is_ic_package = device_type.starts_with('U')
-                || device_type.contains("SOIC")
-                || device_type.contains("QFN");
-
-            let mut has_active_region = false;
-            for pours in terminal_pours.values() {
-                for pour in pours {
-                    if matches!(
-                        self.space
-                            .material_registry
-                            .get_category_by_name(&pour.material_name),
-                        Some(hwc_parser::MaterialCategory::Semiconductor)
-                    ) {
-                        has_active_region = true;
-                        break;
-                    }
-                }
-                if has_active_region {
-                    break;
-                }
+        let parameters = parameter_extraction::extract_parameters_universal(
+            device_type,
+            terminal_pours,
+            self.space,
+            self.symbol_table,
+        )
+        .map_err(|err| {
+            DeviceExtractionError::InvalidGeometry {
+                device_name: device_name.to_string().into(),
+                device_type: device_type.to_string().into(),
+                reason: err.into(),
             }
+        })?;
 
-            if !is_ic_package && has_active_region {
-                let drain_net = terminals.get("drain").map(|s| s.as_str()).unwrap_or("nc");
-                let gate_net = terminals.get("gate").map(|s| s.as_str()).unwrap_or("nc");
-                let source_net = terminals.get("source").map(|s| s.as_str()).unwrap_or("nc");
-                let bulk_net = terminals.get("bulk").map(|s| s.as_str()).unwrap_or("nc");
-
-                if drain_net == gate_net
-                    && gate_net == source_net
-                    && source_net == bulk_net
-                    && drain_net != "nc"
-                {
-                    println!(
-                        "      ⚠️  Skipping MOSFET extraction for {}: Terminals are shorted",
-                        device_name
-                    );
-                    return Ok(());
-                }
-
-                // FAIL LOUDLY: MOSFET geometry extraction requires exactly one pour per
-                // terminal. Multiple pours per terminal are ambiguous for W/L and
-                // parasitic extraction, so we refuse to guess.
-                let single_pour = |terminal: &str|
-                 -> Result<Option<&hwc_engine::space::PourMetadata>, DeviceExtractionError> {
-                    match terminal_pours.get(terminal) {
-                        None => Ok(None),
-                        Some(pours) if pours.len() == 1 => Ok(pours.first()),
-                        Some(pours) => Err(DeviceExtractionError::InvalidGeometry {
-                            device_name: device_name.to_string().into(),
-                            device_type: device_type.to_string().into(),
-                            reason: format!(
-                                "MOSFET terminal '{}' has {} pours bound ({}). \
-                                 MOSFET extraction supports only one pour per terminal \
-                                 because W/L and parasitics would otherwise be ambiguous.\n\
-                                 \n\
-                                 Fix: Bind exactly one pour to {}.{}, or split into separate devices.",
-                                terminal,
-                                pours.len(),
-                                pours
-                                    .iter()
-                                    .map(|p| p.name.to_string())
-                                    .collect::<Vec<_>>()
-                                    .join(", "),
-                                device_name,
-                                terminal
-                            )
-                            .into(),
-                        }),
-                    }
-                };
-
-                if let Some(gate_pour) = single_pour("gate")? {
-                    let (width_um, length_um) = self.calculate_channel_dimensions(gate_pour)?;
-                    mosfet_parameters.insert("W".into(), width_um);
-                    mosfet_parameters.insert("L".into(), length_um);
-                    println!("      ├─ W={:.1}um L={:.1}um", width_um, length_um);
-
-                    let source_pour = single_pour("source")?;
-                    let drain_pour = single_pour("drain")?;
-                    if let (Some(s), Some(d)) = (source_pour, drain_pour) {
-                        let (as_m2, ad_m2, ps_m, pd_m) = self
-                            .calculate_parasitics_from_pours(s, d)
-                            .unwrap_or((0.0, 0.0, 0.0, 0.0));
-                        mosfet_parameters.insert("AS".into(), as_m2);
-                        mosfet_parameters.insert("AD".into(), ad_m2);
-                        mosfet_parameters.insert("PS".into(), ps_m);
-                        mosfet_parameters.insert("PD".into(), pd_m);
-                        println!(
-                            "      └─ Parasitics: AS={:.2e}m² AD={:.2e}m² PS={:.2e}m PD={:.2e}m",
-                            as_m2, ad_m2, ps_m, pd_m
-                        );
-                    }
-
-                    let bulk_pour = single_pour("bulk")?;
-                    self.validate_bulk_biasing_from_material(
-                        bulk_net,
-                        device_type,
-                        bulk_pour,
-                        device_name,
-                    )?;
-                }
-            } else {
-                println!(
-                    "      ├─ Skipping MOSFET extraction for {}: Not a silicon-level transistor",
-                    device_name
-                );
-            }
-        }
-
-        // Merge MOSFET parameters with extracted parameters (MOSFET takes precedence)
-        let mut final_parameters = parameters;
-        final_parameters.extend(mosfet_parameters);
+        // ✅ ZERO-MAGIC ARCHITECTURE: All parameter extraction now delegated to
+        // parameter_extraction::extract_parameters_universal() which uses ONLY
+        // spice.prefix to dispatch to the correct extractor.
+        //
+        // NO MORE:
+        // - is_mosfet_device heuristic (checking for W/L parameters)
+        // - is_ic_package string matching (starts_with('U'), contains("SOIC"))
+        // - gate terminal insulator detection hack
+        // - dual-authority parameter extraction
+        //
+        // The spice.prefix is the single source of truth.
 
         self.validate_device_materials(device_name, device_type, terminal_pours)?;
 
@@ -593,7 +490,7 @@ impl<'a> DeviceExtractor<'a> {
             name: device_name.into(),
             device_type_id,
             terminals,
-            parameters: final_parameters,
+            parameters,
             terminal_pours: terminal_pours_map,
         };
 

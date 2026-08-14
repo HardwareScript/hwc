@@ -179,11 +179,22 @@ fn flatten_for_loop(
         return Err(FlattenError::InvalidRange { start, end });
     }
 
-    // INCLUSIVE range (Hardware Engineering Convention): 0..4 = [0,1,2,3,4] (5 items)
-    for i in start..=end {
-        context.set_variable(for_loop.variable.clone(), i);
-        for statement in &for_loop.body {
-            flatten_statement(statement, context, components, routes, arena)?;
+    // Range semantics (Rust/Swift-style explicit):
+    // - `0..3` (exclusive): Iterates 3 times [0, 1, 2] - count-driven
+    // - `0..=3` (inclusive): Iterates 4 times [0, 1, 2, 3] - bound-driven
+    if for_loop.inclusive {
+        for i in start..=end {
+            context.set_variable(for_loop.variable.clone(), i);
+            for statement in &for_loop.body {
+                flatten_statement(statement, context, components, routes, arena)?;
+            }
+        }
+    } else {
+        for i in start..end {
+            context.set_variable(for_loop.variable.clone(), i);
+            for statement in &for_loop.body {
+                flatten_statement(statement, context, components, routes, arena)?;
+            }
         }
     }
 

@@ -147,7 +147,7 @@ pub fn export(
     }
 
     // v0.2.2: Include routed traces from analytic_routes
-    for (trace_idx, trace) in space.analytic_routes.iter().enumerate() {
+    for (_trace_idx, trace) in space.analytic_routes.iter().enumerate() {
         // Calculate total trace length
         let total_length_nm: i64 = trace.segments.iter().map(|s| s.length()).sum();
         

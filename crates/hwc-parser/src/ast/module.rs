@@ -165,14 +165,19 @@ pub enum ArithmeticOp {
     Divide,   // /
 }
 
-/// Comptime for loop: `for i in 0..63:`
+/// Comptime for loop: `for i in 0..63:` or `for i in 0..=63:`
 ///
 /// Evaluated at compile time - generates multiple statements
+///
+/// Range Semantics (Rust/Swift-style explicit):
+/// - `0..3` (exclusive): Iterates 3 times [0, 1, 2] - count-driven
+/// - `0..=3` (inclusive): Iterates 4 times [0, 1, 2, 3] - bound-driven
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ForLoop {
     pub variable: CompactString,    // Loop variable name (e.g., "i")
-    pub start: usize,               // Start value (inclusive)
-    pub end: usize,                 // End value (inclusive, Ruby-style)
+    pub start: usize,               // Start value (always inclusive)
+    pub end: usize,                 // End value
+    pub inclusive: bool,            // true for ..= (inclusive), false for .. (exclusive)
     pub body: Vec<ModuleStatement>, // Statements inside loop
     pub span: Span,
 }

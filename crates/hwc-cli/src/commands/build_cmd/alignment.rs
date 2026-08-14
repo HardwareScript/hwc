@@ -262,10 +262,12 @@ pub fn validate_alignment(
         }
         */
 
-        // Task 4.3: Run Bulk Connection Validation
-        if !config.skip_bulk_validation {
-            println!("\nℹ️  Bulk connection validation skipped");
-        }
+        // Task 4.3: Bulk Connection Validation
+        // ✅ FIXED (Finding C): Removed the hardcoded "validation skipped" message.
+        // With semiconductors now correctly classified as conductive, bulk taps
+        // (P+/N+ diffusions) are properly included in PIVB connectivity analysis.
+        // The PIVB solver in run_physical_continuity_check() will now correctly
+        // validate substrate/well tap connections to GND/VDD nets.
 
         Ok(Some(extracted_netlist))
     }

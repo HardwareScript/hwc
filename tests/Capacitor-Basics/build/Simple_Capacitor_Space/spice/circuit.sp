@@ -14,7 +14,7 @@
 * ========================================
 * Net: Out (pour: Bottom_Plate, material: Aluminum, z: 1.32µm)
 * Net: In (pour: Top_Plate, material: CAPM, z: 2.17µm)
-* Net: GND (pour: Bulk_Tie, material: Aluminum, z: 0nm)
+* Net: GND (pour: Bulk_Tie, material: Aluminum, z: 250nm)
 * Net: In (pour: Top_Contact_Metal4, material: Aluminum, z: 2.42µm)
 * Net: Out (pour: Out_Pad, material: Aluminum, z: 1.32µm)
 * Net: In (pour: In_Pad, material: Aluminum, z: 2.42µm)
@@ -48,9 +48,9 @@ XC1 In Out GND sky130_fd_pr__cap_mim_m3_1 W=10.00u L=10.00u
 * INTEGRATED TRACE PARASITICS
 * ========================================
 * Trace resistance
-RRtr_In_0 nIn_entry In 3.893491e-1
+RRtr_In_0 nIn_entry In 5.339645e-1
 * Ground capacitance
-CCgnd_In_0 In GND 2.417193e-16
+CCgnd_In_0 In GND 3.315008e-16
 * Trace resistance
 RRtr_Out_0 nOut_entry Out 3.337278e-1
 * Ground capacitance

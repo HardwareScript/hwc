@@ -13,6 +13,10 @@ pub struct ModuleLayoutBlock {
 }
 
 /// Statement inside a layout block (mirrors ModuleStatement but for physical placement)
+///
+/// Range semantics (Rust/Swift-style explicit):
+/// - `0..3` (exclusive): Iterates 3 times [0, 1, 2] - count-driven
+/// - `0..=3` (inclusive): Iterates 4 times [0, 1, 2, 3] - bound-driven
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum LayoutStatement {
     Placement(ModuleInternalId),
@@ -20,6 +24,7 @@ pub enum LayoutStatement {
         variable: CompactString,
         start: usize,
         end: usize,
+        inclusive: bool,
         body: Vec<LayoutStatement>,
         span: Span,
     },

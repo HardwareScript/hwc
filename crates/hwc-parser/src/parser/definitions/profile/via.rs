@@ -82,8 +82,16 @@ impl super::super::super::Parser {
                 }
                 // v0.1.7 ASIC Extensions
                 "enclosures" => {
-                    // Parse array: [m1: 30nm, m2: 40nm, m3: 50nm]
-                    enclosures = Some(self.parse_enclosure_map()?);
+                    // v0.2.2: Support both bracket and indented block syntax
+                    // Bracket: enclosures: [m1: 30nm, m2: 40nm]
+                    // Indented: enclosures:
+                    //               capm: 500nm
+                    //               metal4: 50nm
+                    if self.check(&Token::OpenBracket) {
+                        enclosures = Some(self.parse_enclosure_map_bracket()?);
+                    } else {
+                        enclosures = Some(self.parse_enclosure_map_indented()?);
+                    }
                     self.skip_whitespace();
                 }
                 "allow_stacked_vias" => {
@@ -163,8 +171,8 @@ impl super::super::super::Parser {
         Ok(map)
     }
 
-    /// Parse enclosure map: [m1: 30nm, m2: 40nm, m3: 50nm]
-    fn parse_enclosure_map(&mut self) -> Result<FxHashMap<String, Measurement>, ParseError> {
+    /// Parse enclosure map with bracket syntax: [m1: 30nm, m2: 40nm, m3: 50nm]
+    fn parse_enclosure_map_bracket(&mut self) -> Result<FxHashMap<String, Measurement>, ParseError> {
         self.expect(&Token::OpenBracket)?;
         let mut map = FxHashMap::default();
 
@@ -189,6 +197,36 @@ impl super::super::super::Parser {
         }
 
         self.expect(&Token::CloseBracket)?;
+        Ok(map)
+    }
+
+    /// Parse enclosure map with indented block syntax (v0.2.2):
+    /// enclosures:
+    ///     capm: 500nm
+    ///     metal4: 50nm
+    fn parse_enclosure_map_indented(&mut self) -> Result<FxHashMap<String, Measurement>, ParseError> {
+        self.expect(&Token::Newline)?;
+        self.expect(&Token::Indent)?;
+
+        let mut map = FxHashMap::default();
+
+        while !self.check(&Token::Dedent) && !self.is_at_end() {
+            self.skip_whitespace();
+
+            if self.check(&Token::Dedent) {
+                break;
+            }
+
+            let layer_name = self.expect_identifier()?.to_string();
+            self.expect(&Token::Colon)?;
+            self.skip_whitespace();
+            let measurement = self.parse_measurement()?;
+            map.insert(layer_name, measurement);
+
+            self.skip_whitespace();
+        }
+
+        self.expect(&Token::Dedent)?;
         Ok(map)
     }
 

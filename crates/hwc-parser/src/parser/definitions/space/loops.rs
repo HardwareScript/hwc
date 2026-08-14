@@ -9,9 +9,11 @@ impl crate::parser::Parser {
     ///
     /// Syntax:
     /// ```hardware
-    /// for i in 0..8:
+    /// for i in 0..8:     # Exclusive: 8 iterations [0,1,2,3,4,5,6,7]
     ///     add Adder named Adder[i] at [x: i * 10mm, y: 0mm, z: 1]
-    ///     route Adder[i].sum to Adder[i+1].carry
+    ///
+    /// for i in 0..=7:    # Inclusive: 8 iterations [0,1,2,3,4,5,6,7]
+    ///     add Adder named Adder[i] at [x: i * 10mm, y: 0mm, z: 1]
     /// ```
     pub(in crate::parser) fn parse_space_for_loop(&mut self) -> Result<SpaceForLoop, ParseError> {
         let start_pos = self.current_span().start;
@@ -20,7 +22,18 @@ impl crate::parser::Parser {
         let variable = self.expect_identifier_string()?;
         self.expect(&Token::In)?;
         let start = self.expect_number()? as usize;
-        self.expect(&Token::Range)?;
+        
+        // Check for inclusive or exclusive range
+        let inclusive = if self.check(&Token::RangeInclusive) {
+            self.advance();
+            true
+        } else if self.check(&Token::Range) {
+            self.advance();
+            false
+        } else {
+            return Err(self.error("Expected '..' or '..=' in for loop range"));
+        };
+        
         let end = self.expect_number()? as usize;
         self.expect(&Token::Colon)?;
         self.expect(&Token::Newline)?;
@@ -49,6 +62,7 @@ impl crate::parser::Parser {
             variable: variable.into(),
             start,
             end,
+            inclusive,
             body,
             span: Span::new(start_pos, self.previous_span().end),
         })

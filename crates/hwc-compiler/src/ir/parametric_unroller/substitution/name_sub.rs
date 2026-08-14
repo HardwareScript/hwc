@@ -169,3 +169,85 @@ pub fn substitute_in_component_name(
     // Simple name - no substitution needed
     name.clone()
 }
+
+/// Resolve a ComponentName to a concrete string by evaluating all template expressions.
+///
+/// This function converts:
+/// - Template names like "Via_A_Poly_{i}" with substituted expressions into "Via_A_Poly_0"
+/// - Array-indexed names like "Contact[i]" with substituted expressions into "Contact[0]"
+/// - Simple names pass through unchanged
+///
+/// This is the critical step that fixes the Via_A_Poly_{expr} bug - after loop variable
+/// substitution, expressions must be evaluated to produce unique concrete names.
+pub fn resolve_component_name_to_string(
+    name: &hwc_parser::ComponentName,
+) -> Result<CompactString, IrError> {
+    // Handle template interpolation (v0.2.1)
+    if let Some(ref template_parts) = name.template_parts {
+        let mut result = String::new();
+
+        for part in template_parts {
+            match part {
+                hwc_parser::TemplateNamePart::Literal(lit) => {
+                    result.push_str(lit.as_str());
+                }
+                hwc_parser::TemplateNamePart::Expression(expr) => {
+                    // Evaluate the expression to a concrete value
+                    match expr.evaluate_const() {
+                        Ok(hwc_parser::Value::Number(n)) => {
+                            result.push_str(&n.to_string());
+                        }
+                        Ok(hwc_parser::Value::Float(f)) => {
+                            result.push_str(&f.to_string());
+                        }
+                        Ok(val) => {
+                            return Err(IrError::InvalidExpression(format!(
+                                "Cannot interpolate value '{:?}' into entity name - only numbers are supported",
+                                val
+                            )));
+                        }
+                        Err(e) => {
+                            return Err(IrError::InvalidExpression(format!(
+                                "Failed to evaluate template expression in name: {}",
+                                e
+                            )));
+                        }
+                    }
+                }
+            }
+        }
+
+        return Ok(result.into());
+    }
+
+    // Handle array indexing
+    if let Some(ref index_expr) = name.index {
+        let evaluated_index = match index_expr.evaluate_const() {
+            Ok(hwc_parser::Value::Number(n)) => {
+                if n < 0 {
+                    return Err(IrError::InvalidExpression(format!(
+                        "Negative array index in component name: {}[{}]",
+                        name.base, n
+                    )));
+                }
+                n
+            }
+            Ok(_) => {
+                return Err(IrError::InvalidExpression(
+                    "Array index must evaluate to an integer".into(),
+                ));
+            }
+            Err(e) => {
+                return Err(IrError::InvalidExpression(format!(
+                    "Failed to evaluate array index in component name: {}",
+                    e
+                )));
+            }
+        };
+
+        return Ok(format!("{}[{}]", name.base, evaluated_index).into());
+    }
+
+    // Simple name - return base as-is
+    Ok(name.base.clone())
+}

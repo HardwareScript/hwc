@@ -131,8 +131,15 @@ pub enum BlockOrExpr {
 pub enum Range {
     /// Single bit: Bus[5]
     Single(usize),
-    /// Bit range: Bus[7..0]
-    Slice { high: usize, low: usize },
+    /// Bit range: Bus[7..0] or Bus[7..=0]
+    /// In hardware contexts, bit slices are typically inclusive (e.g., [7:0] in Verilog)
+    /// The `inclusive` flag determines iteration behavior
+    Slice { 
+        high: usize, 
+        low: usize,
+        /// true for ..= (inclusive), false for .. (exclusive)
+        inclusive: bool,
+    },
 }
 
 /// Expression in logic context

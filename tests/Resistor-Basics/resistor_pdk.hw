@@ -57,14 +57,14 @@ export profile Resistor_3D:
 
     via:
         min_diameter: 170nm
-        min_annular_ring: 50nm
-        min_spacing: 400nm
+        min_annular_ring: 0nm        # Silicon contact plugs (no PCB pad overhang)
+        min_spacing: 200nm           # SKY130 DRC compliant (licon.2/mcon.2)
         shape: SquareContact
         contact_depth: 30%
         material_contact_depths:
             Aluminum: 30%
             Polysilicon: 30%
-            Titanium_Silicide: 30%
+            Titanium_Silicide: 50%
             P_Plus_Diffusion: 30%
 
     trace:
@@ -105,25 +105,16 @@ export profile Resistor_3D:
 # SKY130 P+ Poly Precision Resistor Subcircuit
 # Sheet resistance: 350 Ω/□, End contacts: 362 Ω each, Parasitic cap: 2 fF/μm²
 #
-# v0.2.1: TRUE FOUNDRY SPICE INTEGRATION (Architecture Proposal Section 4)
-# Uses `spice_include` to defer physics to the foundry model instead of
-# inline element synthesis. This is the CORRECT approach for production ASICs.
+# Self-contained subcircuit: allows LTSpice to simulate without external PDK files
 export subcircuit sky130_fd_pr__res_high_po:
-    terminals: [PLUS, MINUS, BULK]
+    terminals: [A, B, BULK]
     parameters: [W = 1.0um, L = 1.0um]
-    spice_include: "sky130_fd_pr/models/sky130_fd_pr__res_high_po.model.spice"
-
-# LEGACY: Inline Elements Mode (for reference only)
-# Uncomment to use compiler-synthesized subcircuit instead of foundry model
-# export subcircuit sky130_fd_pr__res_high_po:
-#     terminals: [PLUS, MINUS, BULK]
-#     parameters: [W = 1.0um, L = 1.0um]
-#     elements:
-#         R_head: Resistor(nodes: [PLUS, node_1], value: 362.0ohm)
-#         R_tail: Resistor(nodes: [node_2, MINUS], value: 362.0ohm)
-#         R_body: Resistor(nodes: [node_1, node_2], value: 350.0ohm * (L / W))
-#         C_sub1: Capacitor(nodes: [PLUS, BULK], value: 2.0fF * W * L)
-#         C_sub2: Capacitor(nodes: [MINUS, BULK], value: 2.0fF * W * L)
+    elements:
+        R_head: Resistor(nodes: [A, node_1], value: 362.0ohm)
+        R_tail: Resistor(nodes: [node_2, B], value: 362.0ohm)
+        R_body: Resistor(nodes: [node_1, node_2], value: 350.0ohm * (L / W))
+        C_sub1: Capacitor(nodes: [A, BULK], value: 2.0fF * W * L)
+        C_sub2: Capacitor(nodes: [B, BULK], value: 2.0fF * W * L)
 
 export device Resistor:
     terminals: [A, B, BULK]

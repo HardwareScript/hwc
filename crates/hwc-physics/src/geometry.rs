@@ -179,6 +179,21 @@ impl BoundingBox {
         )
     }
 
+    #[inline]
+    pub fn center_x(&self) -> i64 {
+        (self.min.x + self.max.x) / 2
+    }
+
+    #[inline]
+    pub fn center_y(&self) -> i64 {
+        (self.min.y + self.max.y) / 2
+    }
+
+    #[inline]
+    pub fn center_z(&self) -> i64 {
+        (self.min.z + self.max.z) / 2
+    }
+
     pub fn volume(&self) -> i128 {
         if self.is_empty() {
             return 0;

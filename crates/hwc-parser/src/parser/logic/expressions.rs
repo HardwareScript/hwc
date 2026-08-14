@@ -7,14 +7,26 @@ impl Parser {
     pub fn parse_range(&mut self) -> Result<Range, ParseError> {
         let first = self.expect_integer()?;
 
-        if self.check(&Token::Range) {
+        if self.check(&Token::RangeInclusive) {
+            // Inclusive range: 7..=0
             self.advance();
             let second = self.expect_integer()?;
             Ok(Range::Slice {
                 high: first,
                 low: second,
+                inclusive: true,
+            })
+        } else if self.check(&Token::Range) {
+            // Exclusive range: 7..0 
+            self.advance();
+            let second = self.expect_integer()?;
+            Ok(Range::Slice {
+                high: first,
+                low: second,
+                inclusive: false,
             })
         } else {
+            // Single bit: [5]
             Ok(Range::Single(first))
         }
     }

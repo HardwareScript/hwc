@@ -15,9 +15,6 @@ use compact_str::CompactString;
 use miette::Diagnostic;
 use thiserror::Error;
 
-/// Current version from Cargo.toml workspace
-const VERSION: &str = env!("CARGO_PKG_VERSION");
-
 #[derive(Error, Diagnostic, Debug)]
 pub enum StackupError {
     #[error("Stackup profile not found: {0}")]

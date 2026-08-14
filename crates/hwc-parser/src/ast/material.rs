@@ -92,18 +92,31 @@ pub enum MaterialCategory {
 
 impl MaterialCategory {
     /// Returns true if this category is electrically conductive.
-    /// All bridge categories conduct electricity.
+    /// Includes conductors, semiconductors, and all bridge categories.
+    ///
+    /// **CRITICAL FIX (Finding C):** Semiconductors MUST be classified as conductive.
+    /// P+/N+ diffusions in CMOS processes carry current and form valid planar islands
+    /// for PIVB connectivity analysis. Excluding semiconductors would cause substrate
+    /// taps (bulk connections) to be discarded, creating a catastrophic LVS blind spot.
     pub fn is_conductive(&self) -> bool {
         matches!(
             self,
             MaterialCategory::Conductor
+                | MaterialCategory::Semiconductor // ✅ FIXED: Semiconductors ARE conductive
                 | MaterialCategory::OhmicContact
                 | MaterialCategory::DieInterconnect
                 | MaterialCategory::PcbSolder
                 | MaterialCategory::BarrierLayer
                 | MaterialCategory::Adhesive
-            // Mask intentionally EXCLUDED - not physical, not conductive
+            // Mask and Insulator intentionally EXCLUDED - not conductive
         )
+    }
+
+    /// Returns true strictly for non-conductive dielectrics.
+    /// Useful for explicit insulator checks in collision detection and DRC.
+    #[inline]
+    pub fn is_insulator(&self) -> bool {
+        matches!(self, MaterialCategory::Insulator)
     }
 
     /// Returns true if this material category has zero physical Z-thickness.

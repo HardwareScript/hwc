@@ -24,9 +24,11 @@
 // Submodules
 mod checker;
 mod clearance;
+mod crosstalk; // v0.3.0: Signal integrity validation
+mod electromigration; // P21: Electromigration validation
 mod error;
 mod parallel;
-mod thermal;
+mod thermal; // P22: Thermal rise validation
 mod trace_width;
 mod types;
 mod via_checks; // Task 4.2: DRC Engine
@@ -34,12 +36,14 @@ mod via_checks; // Task 4.2: DRC Engine
 // Re-export public API
 pub use checker::DesignRuleChecker;
 pub use clearance::validate_clearances;
+pub use crosstalk::validate_crosstalk; // v0.3.0
+pub use electromigration::validate_electromigration; // P21
 pub use error::{report_to_errors, violation_to_error, DrcError};
 pub use parallel::validate_physics_parallel;
-pub use thermal::validate_current_density;
+pub use thermal::validate_thermal_rise; // P22
 pub use trace_width::validate_trace_widths;
 pub use types::{DrcReport, DrcViolation};
 pub use via_checks::{
-    validate_drill_to_drill_clearance, validate_via_diameters_analytic,
-    validate_via_enclosure_analytic,
+    validate_drill_to_drill_clearance, validate_layer_specific_via_enclosure,
+    validate_via_diameters_analytic, validate_via_enclosure_analytic,
 }; // Task 4.2

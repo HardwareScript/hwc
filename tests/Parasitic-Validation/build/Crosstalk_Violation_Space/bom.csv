@@ -1,0 +1,15 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,0.01x0.01x0.00mm,,,,,1
+
+# MATERIAL USAGE (Fabrication)
+Reference,Type,Material,Layer,Area_nm2,Volume_nm3
+Clock_In_Pad,Pour,Aluminum_Met1,metal1 (z:0nm),640000,230400000
+Clock_Out_Pad,Pour,Aluminum_Met1,metal1 (z:0nm),640000,230400000
+Data_In_Pad,Pour,Aluminum_Met1,metal1 (z:0nm),640000,230400000
+Data_Out_Pad,Pour,Aluminum_Met1,metal1 (z:0nm),640000,230400000
+Route_Clock_on_metal1,Route,Aluminum_Met1,metal1 (trace),1920000,691200000
+Route_Data_on_metal1,Route,Aluminum_Met1,metal1 (trace),1920000,691200000
+
+# AGGREGATED MATERIAL TOTALS (Foundry Fabrication Summary)
+Material,Total_Area_nm2,Total_Volume_nm3,Layer_Count,Coverage_Percentage
+Aluminum_Met1,6400000,2304000000,6,8.9%

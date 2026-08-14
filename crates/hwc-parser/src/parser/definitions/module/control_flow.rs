@@ -3,7 +3,7 @@ use crate::lexer::Token;
 use crate::parser::{ParseError, Parser};
 
 impl Parser {
-    /// Parse for loop: `for i in 0..63:`
+    /// Parse for loop: `for i in 0..63:` or `for i in 0..=63:`
     pub(super) fn parse_for_loop(&mut self) -> Result<ForLoop, ParseError> {
         let start = self.current_span();
 
@@ -17,9 +17,18 @@ impl Parser {
         // Parse range start
         let range_start = self.expect_integer()?;
 
-        self.expect(&Token::Range)?;
+        // Check for inclusive or exclusive range
+        let inclusive = if self.check(&Token::RangeInclusive) {
+            self.advance();
+            true
+        } else if self.check(&Token::Range) {
+            self.advance();
+            false
+        } else {
+            return Err(self.error("Expected '..' or '..=' in for loop range"));
+        };
 
-        // Parse range end (inclusive)
+        // Parse range end
         let range_end = self.expect_integer()?;
 
         self.expect(&Token::Colon)?;
@@ -64,6 +73,7 @@ impl Parser {
             variable: variable.into(),
             start: range_start,
             end: range_end,
+            inclusive,
             body,
             span,
         })

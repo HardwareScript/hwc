@@ -7,7 +7,6 @@ pub struct BuildConfig {
     pub skip_connectivity_check: bool,
 
     pub skip_physical_continuity: bool, // Task 4.3: Skip physical continuity check (P41/P42/P43)
-    pub skip_bulk_validation: bool,     // Task 4.3: Skip bulk connection validation
     pub no_lockfile: bool,
     pub force_reroute: bool,
     pub force_export: bool, // Task 5.3: Override Commit Gate for debugging

@@ -1,106 +1,256 @@
-# materials.hw - Parasitic Validation Materials
-# Materials with well-defined electrical properties for parasitic testing
+# materials.hw - SKY130 PDK Materials Database
+# SkyWater SKY130 (130nm) CMOS Process - Physical Properties
+# Reference: SkyWater PDK Documentation & Foundry Design Manual
 # Focus: Electromigration, thermal rise, crosstalk, and coupling capacitance
 import * from @std/primitives/units
 
-# Copper - Low resistivity conductor with strict EM limits
-# Used for testing electromigration (P21) and thermal (P22) checks
-export material Copper:
-    category: conductor
-    symbol: "Cu"
-    process: deposited
-    properties:
-        color: "#B87333"  # Copper color
-        metallic: 0.9
-        roughness: 0.1
-        opacity: 1.0
-        resistivity: 1.68e-8ohm_m  # Very low - standard copper
-        thermal_conductivity: 400.0W_mK
-        max_current_density: 2.0mA_um2  # Strict limit for EM testing (2 mA/μm²)
+# ============================================================================
+# BACK-END-OF-LINE (BEOL) METALLIZATION - ALUMINUM INTERCONNECT
+# ============================================================================
+# SKY130 uses Aluminum (Al) with Ti/TiN barrier/liner, NOT Copper
+# Aluminum has lower EM resistance than Copper and different failure modes
 
-# Aluminum - Standard interconnect metal
-# Higher resistivity than copper, moderate EM limits
-export material Aluminum:
+# Aluminum_Met1 - Metal Layer 1 (360nm nominal thickness)
+# Sheet Resistance: ~0.125 Ω/□
+# EM Limit: Lower than Copper due to grain boundary diffusion
+export material Aluminum_Met1:
     category: conductor
-    symbol: "Al"
+    symbol: Al_M1
     process: deposited
     properties:
-        color: "#C0C0C0"  # Silver
-        opacity: 1.0
+        color: "#C0C0C0"
+        metallic: 0.8
+        roughness: 0.2
+        resistivity: 2.82e-8ohm_m        # Pure aluminum
+        thermal_conductivity: 237.0W_mK
+        max_current_density: 1e3A_mm2    # 1.0 mA/μm² DC limit for aluminum
+        max_current_density_rms: 1.4e3A_mm2   # 1.4 mA/μm² RMS limit
+        max_current_density_peak: 2e3A_mm2    # 2.0 mA/μm² peak pulse limit
+
+# Aluminum_Met2 - Metal Layer 2 (360nm nominal thickness)
+export material Aluminum_Met2:
+    category: conductor
+    symbol: Al_M2
+    process: deposited
+    properties:
+        color: "#C8C8C8"
         metallic: 0.8
         roughness: 0.2
         resistivity: 2.82e-8ohm_m
         thermal_conductivity: 237.0W_mK
-        max_current_density: 1.0mA_um2  # Lower than copper
+        max_current_density: 1e3A_mm2
+        max_current_density_rms: 1.4e3A_mm2
+        max_current_density_peak: 2e3A_mm2
 
-# Polysilicon - High resistivity for testing thermal rise
-# Sheet resistance will cause significant heating under current
+# Aluminum_Met3 - Metal Layer 3 (845nm thicker layer)
+# Sheet Resistance: ~0.047 Ω/□
+export material Aluminum_Met3:
+    category: conductor
+    symbol: Al_M3
+    process: deposited
+    properties:
+        color: "#D0D0D0"
+        metallic: 0.8
+        roughness: 0.2
+        resistivity: 2.82e-8ohm_m
+        thermal_conductivity: 237.0W_mK
+        max_current_density: 1.2e3A_mm2  # Slightly higher due to thickness
+        max_current_density_rms: 1.6e3A_mm2
+        max_current_density_peak: 2.2e3A_mm2
+
+# Aluminum_Met4 - Metal Layer 4 (845nm thicker layer)
+export material Aluminum_Met4:
+    category: conductor
+    symbol: Al_M4
+    process: deposited
+    properties:
+        color: "#D8D8D8"
+        metallic: 0.8
+        roughness: 0.2
+        resistivity: 2.82e-8ohm_m
+        thermal_conductivity: 237.0W_mK
+        max_current_density: 1.2e3A_mm2
+        max_current_density_rms: 1.6e3A_mm2
+        max_current_density_peak: 2.2e3A_mm2
+
+# Aluminum_Met5 - Metal Layer 5 (1.26μm top thick metal / RDL)
+# Sheet Resistance: ~0.028 Ω/□
+# Used for power distribution and top-level routing
+export material Aluminum_Met5:
+    category: conductor
+    symbol: Al_M5
+    process: deposited
+    properties:
+        color: "#E0E0E0"
+        metallic: 0.8
+        roughness: 0.2
+        resistivity: 2.82e-8ohm_m
+        thermal_conductivity: 237.0W_mK
+        max_current_density: 1.5e3A_mm2  # Higher current capacity
+        max_current_density_rms: 2e3A_mm2
+        max_current_density_peak: 3e3A_mm2
+
+# ============================================================================
+# LOCAL INTERCONNECT & VIA MATERIALS
+# ============================================================================
+
+# Local Interconnect (li1) - TiN-based lowest-level routing
+# Sheet Resistance: ~12.0 Ω/□ (very high resistance)
+export material Local_Interconnect:
+    category: conductor
+    symbol: Li1
+    process: deposited
+    properties:
+        color: "#8080C0"
+        metallic: 0.6
+        roughness: 0.4
+        resistivity: 4.0e-7ohm_m         # TiN has high resistivity
+        thermal_conductivity: 19.0W_mK   # Poor thermal conductor
+        max_current_density: 5e2A_mm2    # 0.5 mA/μm² - very limited
+        max_current_density_rms: 7e2A_mm2
+        max_current_density_peak: 1e3A_mm2
+
+# Polysilicon - Gate material and resistors
+# Sheet Resistance: ~48 Ω/□ for undoped, ~7-9 Ω/□ for n+ doped
+# Used for thermal rise testing due to high resistivity
 export material Polysilicon:
     category: conductor
-    symbol: "Poly"
+    symbol: Poly
     process: deposited
     properties:
-        color: "#FF6060"  # Red
+        color: "#FF6060"
         metallic: 0.3
         roughness: 0.8
-        opacity: 1.0
-        resistivity: 4.0e-6ohm_m  # 1000x higher than aluminum
-        thermal_conductivity: 30.0W_mK  # Poor thermal conductivity
-        max_current_density: 0.1mA_um2  # Very strict EM limit
+        resistivity: 1.0e-5ohm_m         # Lightly doped polysilicon
+        thermal_conductivity: 30.0W_mK   # Poor thermal conductor
+        max_current_density: 1e2A_mm2    # 0.1 mA/μm² - very limited
 
-# Tungsten - Via fill material with moderate properties
+# Tungsten - Via and contact plug fill material
+# Used in licon (local interconnect contact) and standard vias
 export material Tungsten:
     category: conductor
-    symbol: "W"
+    symbol: W
     process: deposited
     properties:
-        color: "#8080FF"  # Light Blue
-        opacity: 1.0
+        color: "#606080"
         metallic: 0.7
         roughness: 0.3
         resistivity: 5.6e-8ohm_m
         thermal_conductivity: 173.0W_mK
-        max_current_density: 10.0mA_um2
+        max_current_density: 5e3A_mm2    # Via plugs have higher density limits
 
-# Titanium Silicide - Contact interface material
+# Titanium Nitride - Barrier layer and contact interface
+export material Titanium_Nitride:
+    category: conductor
+    symbol: TiN
+    process: deposited
+    properties:
+        color: "#806040"
+        resistivity: 2.5e-7ohm_m
+        thermal_conductivity: 19.0W_mK
+        max_current_density: 1e3A_mm2
+
+# Titanium Silicide - Silicide contact interface (not used in SKY130 contacts)
 export material Titanium_Silicide:
     category: conductor
-    symbol: "TiSi2"
+    symbol: TiSi2
     process: deposited
     properties:
-        color: "#404040"  # Very Dark Grey
-        opacity: 1.0
+        color: "#404040"
         resistivity: 1.5e-7ohm_m
         thermal_conductivity: 30.0W_mK
-        max_current_density: 5.0mA_um2
+        max_current_density: 2e3A_mm2
 
-# Silicon Dioxide - Standard dielectric with εr = 3.9
-# Critical for crosstalk and coupling capacitance calculations
+# ============================================================================
+# DIELECTRIC MATERIALS - ONLY SiO2 AND SiN IN SKY130 BEOL
+# ============================================================================
+
+# Silicon Dioxide - Primary interlayer dielectric (ILD)
+# εr = 3.9 (standard TEOS oxide)
+# Used throughout BEOL stack between metal layers
 export material Silicon_Dioxide:
     category: insulator
-    symbol: "SiO2"
-    process: deposited
+    symbol: SiO2
     properties:
-        color: "#E0E8FF"  # Light blue-white
-        opacity: 0.6
-        relative_permittivity: 3.9  # Standard SiO2
+        color: "#E0E8FF"
+        opacity: 0.05
+        relative_permittivity: 3.9
+        thermal_conductivity: 1.4W_mK    # Poor thermal conductor
 
-# High-K Dielectric - For testing high coupling capacitance
-export material High_K_Dielectric:
+# Silicon Nitride - Passivation and etch-stop layers
+# εr = 7.0 (higher than oxide)
+# Used for passivation and stress control
+export material Silicon_Nitride:
     category: insulator
-    symbol: "HfO2"
-    process: deposited
+    symbol: Si3N4
     properties:
-        color: "#FFE0FF"  # Light pink
-        opacity: 0.6
-        relative_permittivity: 25.0  # Very high εr - strong coupling
+        color: "#FFE8E0"
+        opacity: 0.05
+        relative_permittivity: 7.0
+        thermal_conductivity: 30.0W_mK
 
-# Air - Default dielectric
+# NOTE: SKY130 DOES NOT SUPPORT High-K Dielectrics (HfO2, εr=25) in BEOL
+# High-K is only used in specialized HKMG (high-k metal gate) processes
+# For crosstalk testing, use tight spacing with SiO2 (εr=3.9) or SiN (εr=7.0)
+
+# Air - Default dielectric for gap regions
 export material Air:
     category: insulator
-    symbol: "Air"
-    process: deposited
+    symbol: Air
     properties:
-        color: "#F0F4FF"
-        opacity: 0.3
         relative_permittivity: 1.0
+        thermal_conductivity: 0.026W_mK
+
+# ============================================================================
+# SEMICONDUCTOR MATERIALS - For Junction Testing
+# ============================================================================
+
+# P-Type Silicon Substrate
+export material P_Substrate:
+    category: semiconductor
+    symbol: p_Si
+    properties:
+        color: "#8B4513"
+        resistivity: 1e-2ohm_m           # ~10 Ω·cm substrate
+        thermal_conductivity: 148.0W_mK  # Excellent heat sink!
+        max_junction_voltage: 1.98V      # 1.8V + 10% safety margin
+
+# N-Well diffusion region
+export material N_Well:
+    category: semiconductor
+    symbol: nwell
+    properties:
+        color: "#FFD700"
+        resistivity: 1e-3ohm_m
+        thermal_conductivity: 148.0W_mK
+        max_junction_voltage: 1.98V      # Standard digital 1.8V domain
+
+# High Voltage N-Well (for 5V I/O)
+export material HV_N_Well:
+    category: semiconductor
+    symbol: hvnwell
+    properties:
+        color: "#FFEC8B"
+        resistivity: 2e-3ohm_m
+        thermal_conductivity: 148.0W_mK
+        max_junction_voltage: 11.0V      # High voltage domain (10.5V + margin)
+
+# N+ Diffusion (source/drain regions)
+export material N_Diffusion:
+    category: semiconductor
+    symbol: ndiff
+    properties:
+        color: "#90EE90"
+        resistivity: 5e-5ohm_m
+        thermal_conductivity: 148.0W_mK
+        max_junction_voltage: 1.98V
+
+# P+ Diffusion (source/drain regions)
+export material P_Diffusion:
+    category: semiconductor
+    symbol: pdiff
+    properties:
+        color: "#FFB6C1"
+        resistivity: 5e-5ohm_m
+        thermal_conductivity: 148.0W_mK
+        max_junction_voltage: 1.98V

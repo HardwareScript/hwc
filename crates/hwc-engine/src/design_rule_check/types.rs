@@ -31,10 +31,22 @@ pub enum DrcViolation {
     },
 
     /// Current density exceeds material limit (electromigration/ampacity)
-    CurrentDensityViolation {
+    /// **P21: Electromigration - Metal atom migration under high current density**
+    ElectromigrationViolation {
         net: CompactString,
         actual_density_a_mm2: f64,
         max_density_a_mm2: f64,
+        location: Point3D,
+    },
+
+    /// Thermal rise violation (I²R heating exceeds temperature budget)
+    /// **P22: Self-Heating Validation**
+    ThermalRiseViolation {
+        net: CompactString,
+        actual_temp_rise_c: f64,
+        max_temp_rise_c: f64,
+        power_uw: f64,
+        resistance_ohms: f64,
         location: Point3D,
     },
 
@@ -86,6 +98,17 @@ pub enum DrcViolation {
         required_nm: i64,
         location: Point3D,
     },
+
+    /// Crosstalk/signal integrity violation (coupling capacitance exceeds budget) (v0.3.0)
+    CrosstalkViolation {
+        aggressor_net: CompactString,
+        victim_net: CompactString,
+        crosstalk_db: f64,
+        max_crosstalk_db: f64,
+        parallel_length_nm: i64,
+        spacing_nm: i64,
+        location: Point3D,
+    },
 }
 
 impl fmt::Display for DrcViolation {
@@ -123,7 +146,7 @@ impl fmt::Display for DrcViolation {
                     *required_nm as f64 / 1_000_000.0
                 )
             }
-            DrcViolation::CurrentDensityViolation {
+            DrcViolation::ElectromigrationViolation {
                 net,
                 actual_density_a_mm2,
                 max_density_a_mm2,
@@ -131,7 +154,7 @@ impl fmt::Display for DrcViolation {
             } => {
                 write!(
                     f,
-                    "Current density violation for {} at {}: {:.2} A/mm² actual, {:.2} A/mm² max",
+                    "Electromigration violation for {} at {}: {:.2} A/mm² actual, {:.2} A/mm² max",
                     net, location, actual_density_a_mm2, max_density_a_mm2
                 )
             }
@@ -214,6 +237,41 @@ impl fmt::Display for DrcViolation {
                     location,
                     *actual_nm as f64 / 1_000_000.0,
                     *required_nm as f64 / 1_000_000.0
+                )
+            }
+            DrcViolation::CrosstalkViolation {
+                aggressor_net,
+                victim_net,
+                crosstalk_db,
+                max_crosstalk_db,
+                parallel_length_nm,
+                spacing_nm,
+                location,
+            } => {
+                write!(
+                    f,
+                    "Crosstalk violation: {} → {} at {}: {:.1}dB coupling (max: {:.1}dB), {:.1}μm parallel, {:.0}nm spacing",
+                    aggressor_net,
+                    victim_net,
+                    location,
+                    crosstalk_db,
+                    max_crosstalk_db,
+                    *parallel_length_nm as f64 / 1_000.0,
+                    spacing_nm
+                )
+            }
+            DrcViolation::ThermalRiseViolation {
+                net,
+                actual_temp_rise_c,
+                max_temp_rise_c,
+                power_uw,
+                resistance_ohms,
+                location,
+            } => {
+                write!(
+                    f,
+                    "Thermal rise violation for {} at {}: ΔT={:.1}°C (max: {:.1}°C), P={:.2}μW, R={:.2}Ω",
+                    net, location, actual_temp_rise_c, max_temp_rise_c, power_uw, resistance_ohms
                 )
             }
         }

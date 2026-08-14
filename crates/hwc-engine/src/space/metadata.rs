@@ -110,4 +110,8 @@ pub struct ContactMetadata {
     pub is_tented: bool,
     /// Optional explicit solder mask opening diameter in nanometers — v0.1.7
     pub mask_clearance_diameter_nm: Option<i64>,
+    /// Bottom landing layer name (e.g., "metal3", "poly") — v0.2.2
+    pub from_layer: Option<CompactString>,
+    /// Top landing layer name (e.g., "metal4", "capm") — v0.2.2
+    pub to_layer: Option<CompactString>,
 }

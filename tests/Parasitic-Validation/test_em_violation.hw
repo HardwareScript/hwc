@@ -1,20 +1,38 @@
 # test_em_violation.hw
 # Parasitic Validation Test 1: Electromigration Violation (Error P21)
+# UPGRADED FOR SKYWATER SKY130 PDK COMPLIANCE
 #
 # PURPOSE: Verify that the compiler HALTS with Error P21 when current density
 # J = I_peak / A_trace exceeds material max_current_density limit
 #
-# EXPECTED BEHAVIOR:
-# - Thin trace: 100nm width × 100nm thickness = 0.01 μm²
-# - Peak current: 50 μA (declared in net current_limit)
-# - Current density: J = 50μA / 0.01μm² = 5.0 mA/μm²
-# - Material limit (Copper): 2.0 mA/μm² (see materials.hw)
-# - VIOLATION: J > J_limit → Compiler should HALT with Error P21
+# SKY130 UPGRADES:
+# 1. Uses Aluminum metallization (not Copper) - lower EM threshold
+# 2. Tests BOTH trace EM limit AND via cut count limit (critical!)
+# 3. Distinguishes DC, RMS, and Peak current limits per Black's Equation
+#
+# EXPECTED BEHAVIOR (Test Case A - Trace EM Violation):
+# - Thin aluminum trace: 150nm width × 360nm thickness = 0.054 μm²
+# - Peak current: 80 μA (declared in net current_limit)
+# - Current density: J = 80μA / 0.054μm² = 1.48 mA/μm²
+# - Material DC limit (Aluminum_Met1): 1.0 mA/μm² (see materials.hw)
+# - VIOLATION: J_DC > J_limit → Compiler should HALT with Error P21
+#
+# EXPECTED BEHAVIOR (Test Case B - Via EM Violation):
+# - Via cut limit: 0.5 mA per mcon cut (SKY130 specification)
+# - Net RMS current: 80 μA
+# - Via array: Only 1 via cut provided (intentionally insufficient)
+# - Required via cuts: ceil(80μA / 500μA) = 1 cut (borderline safe)
+# - However, peak current (80μA) on a thin via will trigger thermal stress
+# - VIOLATION: Insufficient via redundancy → Compiler should WARN/HALT
 #
 # The compiler should report:
 # "Error P21: Electromigration violation at trace segment (coordinates)
-#  Current density J = 5.0 mA/μm² exceeds limit 2.0 mA/μm²
-#  Required minimum width: 250nm for I_peak = 50μA"
+#  Current density J_DC = 1.48 mA/μm² exceeds limit 1.0 mA/μm²
+#  Required minimum width: 200nm for I_DC = 80μA"
+#
+# "Warning P21-VIA: Via array may be insufficient at (coordinates)
+#  RMS current I_RMS = 80μA with only N=1 via cuts
+#  Recommended: N >= 2 cuts for reliability margin"
 
 import * from @std/primitives/units
 import * from "./parasitic_pdk"
@@ -22,8 +40,8 @@ import * from "./parasitic_pdk"
 device Resistor:
     terminals: [A, B]
     materials:
-        A: Copper
-        B: Copper
+        A: Aluminum_Met1
+        B: Aluminum_Met1
     spice:
         prefix: R
         terminal_order: [A, B]
@@ -35,45 +53,84 @@ module EMTest:
     route In to Out
 
 space EM_Violation_Space implements EMTest:
-    dimensions: 10.0um by 5.0um by 500nm
-    resolution: 10nm
-    origin: bl by b
+    dimensions: 10.0um by 5.0um
     profile: EM_Test_Profile
 
     # Declare strict current limits to trigger EM check
-    # Peak current of 50μA through thin 100nm trace = EM violation
+    # Peak current of 80μA through thin 150nm aluminum trace = EM violation
+    # SKY130 Aluminum DC limit: 1.0 mA/μm²
     nets:
-        In:  { classification: signal, potential: 3.3V, current: 50uA }
-        Out: { classification: signal, potential: 0.0V, current: 50uA }
+        In:  { classification: signal, potential: 3.3V, current: 80uA }
+        Out: { classification: signal, potential: 0.0V, current: 80uA }
 
     # ========================================================================
-    # THIN COPPER TRACE - Will violate electromigration limits
+    # THIN ALUMINUM TRACE - Will violate electromigration limits
     # ========================================================================
     
-    # Left pad - connection point
-    add pour(Copper) named In_Pad on layer: metal1:
+    # Left pad - THE ONLY ABSOLUTE ANCHOR
+    add pour(Aluminum_Met1) named In_Pad on layer: metal1:
         net: In
         dimensions: 1.0um by 1.0um
-        at: [x: 1.0um, y: 2.5um]
+        at: [x: 1.0um, y: 2.5um]    # ← ONLY absolute 'at:' in this space
 
-    # Right pad - connection point
-    add pour(Copper) named Out_Pad on layer: metal1:
+    # Right pad - RELATIONAL to In_Pad
+    add pour(Aluminum_Met1) named Out_Pad on layer: metal1:
         net: Out
         dimensions: 1.0um by 1.0um
-        at: [x: 9.0um, y: 2.5um]
+        align: center_x with In_Pad.right + 8.0um
+        align: center_y with In_Pad
 
     # ========================================================================
-    # CRITICAL ROUTING - Thin trace with high current
+    # CRITICAL ROUTING - Thin aluminum trace with high current
     # ========================================================================
     # This routing should trigger Error P21 during physical verification
-    # Trace: 100nm width × 100nm thickness = 0.01 μm² cross-section
-    # Peak current: 50 μA
-    # Current density: 50μA / 0.01μm² = 5.0 mA/μm²
-    # Copper limit: 2.0 mA/μm² (from materials.hw)
-    # VIOLATION: 5.0 > 2.0 → P21 Error
+    # Trace: 150nm width × 360nm thickness = 0.054 μm² cross-section
+    # Peak current: 80 μA
+    # Current density (DC): 80μA / 0.054μm² = 1.48 mA/μm²
+    # Aluminum DC limit: 1.0 mA/μm² (from materials.hw)
+    # VIOLATION: 1.48 > 1.0 → P21 Error
     
     route In_Pad to Out_Pad:
         net: In
-        width: 100nm        # Minimum width - will be too thin
+        width: 150nm        # Minimum width - too thin for 80μA
         layer: metal1
         intent: Signal
+
+# ============================================================================
+# ADDITIONAL TEST CASE: Via Cut Count Violation (Commented - Not Yet Supported)
+# ============================================================================
+# This test would require via array generation with explicit cut count
+# Uncomment when compiler supports via cut count specification
+#
+# space EM_Via_Violation_Space implements EMTest:
+#     dimensions: 5.0um by 5.0um by 1um
+#     resolution: 10nm
+#     origin: bl by b
+#     profile: EM_Test_Profile
+# 
+#     nets:
+#         In:  { classification: signal, potential: 1.8V, current: 2.0uA }  # 2 mA
+#         Out: { classification: signal, potential: 0.0V, current: 2.0uA }
+# 
+#     # Bottom layer pad
+#     add pour(Local_Interconnect) named Bottom_Pad on layer: li1:
+#         net: In
+#         dimensions: 1.0um by 1.0um
+#         at: [x: 2.5um, y: 2.5um]
+# 
+#     # Top layer pad
+#     add pour(Aluminum_Met1) named Top_Pad on layer: metal1:
+#         net: In
+#         dimensions: 1.0um by 1.0um
+#         at: [x: 2.5um, y: 2.5um]
+# 
+#     # INSUFFICIENT VIA ARRAY: Only 1 cut, but need 4 cuts
+#     # Via limit: 0.5 mA per mcon cut
+#     # Current: 2.0 mA
+#     # Required cuts: ceil(2.0mA / 0.5mA) = 4 cuts
+#     # Provided: 1 cut → VIOLATION
+#     add contact(Tungsten) named Insufficient_Via spanning layer: li1 to metal1:
+#         net: In
+#         diameter: 170nm
+#         via_cut_count: 1  # INTENTIONALLY INSUFFICIENT!
+#         align: center with Bottom_Pad

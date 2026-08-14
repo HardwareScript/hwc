@@ -21,10 +21,7 @@ pub fn run_physical_continuity_check(
     for (id, name) in space.material_registry.all_materials() {
         let is_conductive = space.material_registry.is_conductive(id);
 
-        eprintln!(
-            "[PIVB MATERIAL DEBUG] Material {} ('{}'): conductive={}",
-            id, name, is_conductive
-        );
+       
 
         if is_conductive {
             conductive_material_ids.insert(id);
@@ -33,27 +30,10 @@ pub fn run_physical_continuity_check(
 
     // Convert physics_route_segments to SubstrateLayerMetadata for PIVB Pass 1
     let mut all_substrate_layers = physics_substrate_layers.to_vec();
-    eprintln!(
-        "[PIVB DEBUG] Starting with {} substrate layers",
-        all_substrate_layers.len()
-    );
-    eprintln!(
-        "[PIVB DEBUG] Converting {} route segments to substrate layers",
-        physics_route_segments.len()
-    );
+    
 
     for route in physics_route_segments {
-        eprintln!(
-            "[PIVB DEBUG]   Route net={:?} material={} bbox=({},{},{}) -> ({},{},{})",
-            route.net,
-            route.material,
-            route.bbox.min.x,
-            route.bbox.min.y,
-            route.bbox.min.z,
-            route.bbox.max.x,
-            route.bbox.max.y,
-            route.bbox.max.z
-        );
+     
         all_substrate_layers.push(hwc_physics::connectivity::SubstrateLayerMetadata {
             material: route.material,
             net: route.net,
@@ -64,10 +44,7 @@ pub fn run_physical_continuity_check(
         });
     }
 
-    eprintln!(
-        "[PIVB DEBUG] Total substrate layers after route conversion: {}",
-        all_substrate_layers.len()
-    );
+
 
     // Prepare ContactPlacement for PIVB Pass 2
     let mut contact_placements = Vec::new();

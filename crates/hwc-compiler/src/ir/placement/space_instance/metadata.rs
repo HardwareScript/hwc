@@ -109,6 +109,8 @@ pub(super) fn transform_contacts(
                 drill_diameter_nm: contact.drill_diameter_nm,
                 is_tented: contact.is_tented,
                 mask_clearance_diameter_nm: contact.mask_clearance_diameter_nm,
+                from_layer: contact.from_layer.clone(),
+                to_layer: contact.to_layer.clone(),
             });
     }
 

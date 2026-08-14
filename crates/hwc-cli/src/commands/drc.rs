@@ -77,6 +77,7 @@ pub fn execute(input: PathBuf, _build_dir: PathBuf) -> Result<()> {
             safety_factor: constraints.clearance.safety_factor,
             stackup,
             technology: constraints.technology,
+            layer_via_enclosures: constraints.via.layer_enclosures_nm.clone(),
         };
 
         constraint_rulebook.set_fabrication_constraints(fab_constraints);

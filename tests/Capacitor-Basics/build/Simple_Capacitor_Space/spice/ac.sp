@@ -9,7 +9,6 @@
 * STIMULUS & ANALYSIS
 * ========================================
 V_In nIn_entry 0 DC 1.800 AC 1.0
-V_Out nOut_entry 0 DC 0.000
 * AC Small-Signal Frequency Response (Configured via Testbench)
 .ac dec 20 1.000e2 1.000e8
 * Frequency range configured from testbench 'ac:' block

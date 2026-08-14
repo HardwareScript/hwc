@@ -7,7 +7,6 @@ pub mod bounding_box;
 pub mod constraint_generation;
 pub mod domain;
 pub mod electrical_analysis;
-pub mod fabrication;
 pub mod impedance;
 pub mod layer_assignment;
 pub mod manager;

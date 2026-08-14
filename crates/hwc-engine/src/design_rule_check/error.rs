@@ -40,17 +40,33 @@ pub enum DrcError {
         location: Point3D,
     },
 
-    /// P22: Current Density Exceeds Material Limit
-    #[error("Current density violation for '{net}'")]
+    /// P21: Electromigration - Metal Atom Migration
+    #[error("Electromigration violation for '{net}'")]
     #[diagnostic(
-        code(P22),
-        url("https://docs.hw-script.org/errors/P22"),
-        help("Physical Explanation: Current density exceeds the material's maximum allowed limit, risking electromigration or trace burnout.\n\nActual Density: {actual_density_a_mm2:.2} A/mm²\nMaximum Allowed: {max_density_a_mm2:.2} A/mm²\n\nSolution: Increase trace width or reduce current.\n\nMaterial current density limit is defined in materials.hw via max_current_density.")
+        code(P21),
+        url("https://docs.hw-script.org/errors/P21"),
+        help("Physical Explanation: High current density causes electron momentum transfer that physically pushes metal atoms downstream (electron wind). Over time, this creates voids (opens) where atoms leave and hillocks (shorts) where they accumulate.\n\nActual Current Density: {actual_density_a_mm2:.2} A/mm²\nMaximum Allowed: {max_density_a_mm2:.2} A/mm²\n\nGoverning Equation: Black's Equation\n  MTTF = A / J^n × exp(Ea / kT)\n  Mean Time To Failure decreases exponentially with J and T\n\nSolution:\n1. Increase trace width (reduces current density)\n2. Reduce operating current\n3. Use material with higher EM threshold (e.g., Copper > Aluminum)\n\nTypical Limits:\n  • Aluminum: 1.0 mA/μm² (1000 A/mm²)\n  • Copper: 2.0 mA/μm² (2000 A/mm²)\n  • Polysilicon: 0.1 mA/μm² (100 A/mm²)")
     )]
-    CurrentDensityViolation {
+    ElectromigrationViolation {
         net: CompactString,
         actual_density_a_mm2: f64,
         max_density_a_mm2: f64,
+        location: Point3D,
+    },
+
+    /// P22: Thermal Rise Violation (I²R self-heating)
+    #[error("Thermal rise violation for '{net}'")]
+    #[diagnostic(
+        code(P22),
+        url("https://docs.hw-script.org/errors/P22"),
+        help("Physical Explanation: High current through a resistive trace generates Joule heat (P = I²R). When this heat cannot dissipate fast enough, local temperature rises above safe limits, causing dielectric delamination, dopant drift, or thermal runaway.\n\nTemperature Rise: {actual_temp_rise_c:.1}°C\nMaximum Allowed: {max_temp_rise_c:.1}°C\nPower Dissipation: {power_uw:.2}μW\nTrace Resistance: {resistance_ohms:.2}Ω\nLocation: {location}\n\nSolution:\n1. Reduce current (lower power)\n2. Increase trace width (lower resistance)\n3. Shorten trace length (lower resistance)\n4. Improve thermal path to substrate\n5. Use material with lower resistivity\n\nFormula: ΔT = (I²×R) / (k×Surface_Area) where k = thermal conductivity")
+    )]
+    ThermalRiseViolation {
+        net: CompactString,
+        actual_temp_rise_c: f64,
+        max_temp_rise_c: f64,
+        power_uw: f64,
+        resistance_ohms: f64,
         location: Point3D,
     },
 
@@ -136,6 +152,23 @@ pub enum DrcError {
         required_mm: f64,
         location: Point3D,
     },
+
+    /// P24: Crosstalk/Signal Integrity Violation (v0.3.0)
+    #[error("Crosstalk violation: '{aggressor_net}' → '{victim_net}'")]
+    #[diagnostic(
+        code(P24),
+        url("https://docs.hw-script.org/errors/P24"),
+        help("Physical Explanation: When two traces run parallel for an extended distance, AC currents in the aggressor trace induce noise voltage in the victim trace via capacitive coupling (C_12). This coupling is proportional to ε₀×εᵣ×(H/S)×L.\n\nCrosstalk Coupling: {crosstalk_db:.1}dB\nMaximum Budget: {max_crosstalk_db:.1}dB\nParallel Length: {parallel_length_um:.1}μm\nSpacing: {spacing_nm}nm\nLocation: {location}\n\nSolution:\n1. Increase spacing between traces (reduces C_12)\n2. Reduce parallel run length (route on different layers)\n3. Add ground shield trace between signals\n4. Use differential signaling for noise immunity\n\nFormula: C_12 ≈ ε₀×εᵣ×(H/S)×L where H=trace height, S=spacing, L=length")
+    )]
+    CrosstalkViolation {
+        aggressor_net: CompactString,
+        victim_net: CompactString,
+        crosstalk_db: f64,
+        max_crosstalk_db: f64,
+        parallel_length_um: f64,
+        spacing_nm: i64,
+        location: Point3D,
+    },
 }
 
 /// Convert DRC violations to miette errors.
@@ -175,12 +208,12 @@ impl From<&DrcViolation> for DrcError {
                 required_mm: *required_nm as f64 / 1_000_000.0,
                 location: *location,
             },
-            DrcViolation::CurrentDensityViolation {
+            DrcViolation::ElectromigrationViolation {
                 net,
                 actual_density_a_mm2,
                 max_density_a_mm2,
                 location,
-            } => DrcError::CurrentDensityViolation {
+            } => DrcError::ElectromigrationViolation {
                 net: net.clone(),
                 actual_density_a_mm2: *actual_density_a_mm2,
                 max_density_a_mm2: *max_density_a_mm2,
@@ -248,6 +281,38 @@ impl From<&DrcViolation> for DrcError {
                 via_b: via_b.clone(),
                 actual_mm: *actual_nm as f64 / 1_000_000.0,
                 required_mm: *required_nm as f64 / 1_000_000.0,
+                location: *location,
+            },
+            DrcViolation::CrosstalkViolation {
+                aggressor_net,
+                victim_net,
+                crosstalk_db,
+                max_crosstalk_db,
+                parallel_length_nm,
+                spacing_nm,
+                location,
+            } => DrcError::CrosstalkViolation {
+                aggressor_net: aggressor_net.clone(),
+                victim_net: victim_net.clone(),
+                crosstalk_db: *crosstalk_db,
+                max_crosstalk_db: *max_crosstalk_db,
+                parallel_length_um: *parallel_length_nm as f64 / 1_000.0,
+                spacing_nm: *spacing_nm,
+                location: *location,
+            },
+            DrcViolation::ThermalRiseViolation {
+                net,
+                actual_temp_rise_c,
+                max_temp_rise_c,
+                power_uw,
+                resistance_ohms,
+                location,
+            } => DrcError::ThermalRiseViolation {
+                net: net.clone(),
+                actual_temp_rise_c: *actual_temp_rise_c,
+                max_temp_rise_c: *max_temp_rise_c,
+                power_uw: *power_uw,
+                resistance_ohms: *resistance_ohms,
                 location: *location,
             },
         }

@@ -317,22 +317,35 @@ impl super::super::super::Parser {
     ///
     /// Syntax:
     /// ```hardware
-    /// for i in 0..7:
+    /// for i in 0..8:     # Exclusive: 8 iterations [0,1,2,3,4,5,6,7]
+    ///     P[i] at [i * 2.5mm, 0mm, 0mm]
+    ///
+    /// for i in 0..=7:    # Inclusive: 8 iterations [0,1,2,3,4,5,6,7]
     ///     P[i] at [i * 2.5mm, 0mm, 0mm]
     /// ```
     ///
-    /// The range is inclusive (Ruby-style): `0..7` produces i = 0,1,2,3,4,5,6,7 (8 items).
     /// Pin names and coordinate expressions can reference the loop variable.
     fn parse_pin_positions_for_loop(
         &mut self,
         pin_positions: &mut rustc_hash::FxHashMap<CompactString, PinPosition>,
     ) -> Result<(), ParseError> {
-        // Parse for loop header: for variable in start..end:
+        // Parse for loop header: for variable in start..end: or start..=end:
         self.expect(&Token::For)?;
         let variable = self.expect_identifier_string()?;
         self.expect(&Token::In)?;
         let range_start = self.expect_number()? as usize;
-        self.expect(&Token::Range)?;
+        
+        // Check for inclusive or exclusive range
+        let inclusive = if self.check(&Token::RangeInclusive) {
+            self.advance();
+            true
+        } else if self.check(&Token::Range) {
+            self.advance();
+            false
+        } else {
+            return Err(self.error("Expected '..' or '..=' in for loop range"));
+        };
+        
         let range_end = self.expect_number()? as usize;
         self.expect(&Token::Colon)?;
         self.expect(&Token::Newline)?;
@@ -401,10 +414,16 @@ impl super::super::super::Parser {
         self.expect(&Token::Dedent)?;
 
         // Expand the for loop: substitute variable and evaluate expressions
-        // INCLUSIVE range (Hardware Engineering Convention): 0..4 = [0,1,2,3,4] (5 items)
-        // This matches hardware datasheets: "Layers 1 through 5" means all 5 layers
-        // Different from programming languages (Rust/Python) but natural for engineers
-        for i in range_start..=range_end {
+        // Range semantics (Rust/Swift-style explicit):
+        // - `0..8` (exclusive): 8 iterations [0,1,2,3,4,5,6,7] - count-driven
+        // - `0..=7` (inclusive): 8 iterations [0,1,2,3,4,5,6,7] - bound-driven
+        let iteration_range: Box<dyn Iterator<Item = usize>> = if inclusive {
+            Box::new(range_start..=range_end)
+        } else {
+            Box::new(range_start..range_end)
+        };
+        
+        for i in iteration_range {
             let mut context: EvaluationContext = rustc_hash::FxHashMap::default();
             context.insert(variable.clone().into(), Value::Number(i as i64));
 

@@ -341,8 +341,16 @@ pub enum Token {
     #[token(">")]
     GreaterThan,
 
+    /// Range operator (exclusive upper bound): 0..3 = [0, 1, 2]
+    /// Used for count-based iteration where N means "N items"
     #[token("..")]
     Range,
+
+    /// Inclusive range operator: 0..=3 = [0, 1, 2, 3]
+    /// Used for explicit bound specification in hardware (e.g., bit ranges, hardware bounds)
+    /// Must come AFTER Range to prevent ".." from being greedily matched first
+    #[token("..=")]
+    RangeInclusive,
 
     #[token("!=")]
     NotEquals,

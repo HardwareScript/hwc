@@ -81,6 +81,10 @@ pub(super) struct ContactMetadataStorage<'a> {
     pub contact_name_debug: &'a str,
     pub symbol_table: &'a SymbolTable,
     pub eval_context: &'a EvaluationContext,
+    /// v0.2.2: Bottom landing layer name for DRC
+    pub from_layer: Option<compact_str::CompactString>,
+    /// v0.2.2: Top landing layer name for DRC
+    pub to_layer: Option<compact_str::CompactString>,
 }
 
 pub(super) fn store_contact_metadata(args: ContactMetadataStorage) {
@@ -96,11 +100,13 @@ pub(super) fn store_contact_metadata(args: ContactMetadataStorage) {
         contact_name_debug,
         symbol_table,
         eval_context,
+        from_layer,
+        to_layer,
     } = args;
     let contact_name: compact_str::CompactString = contact.name.base.clone();
 
     println!(
-        "[PLACE_CONTACT] '{}' Storing contact metadata: bbox=({},{}-{},{}), z={}→{}nm, net={:?}",
+        "[PLACE_CONTACT] '{}' Storing contact metadata: bbox=({},{}-{},{}), z={}→{}nm, net={:?}, layers={:?}→{:?}",
         contact_name_debug,
         pad_bbox.min.x,
         pad_bbox.min.y,
@@ -108,7 +114,9 @@ pub(super) fn store_contact_metadata(args: ContactMetadataStorage) {
         pad_bbox.max.y,
         from_bottom_nm,
         to_bottom_nm,
-        contact.net
+        contact.net,
+        from_layer,
+        to_layer
     );
     space.contacts.push(hwc_engine::ContactMetadata {
         name: contact_name,
@@ -126,5 +134,7 @@ pub(super) fn store_contact_metadata(args: ContactMetadataStorage) {
             symbol_table,
             eval_context,
         ),
+        from_layer,
+        to_layer,
     });
 }

@@ -24,9 +24,9 @@ pub use constraint_manager::{
     RouteConstraints, SymbolTableTrait,
 };
 pub use design_rule_check::{
-    report_to_errors, validate_clearances, validate_current_density, validate_physics_parallel,
-    validate_trace_widths, violation_to_error, DesignRuleChecker, DrcError, DrcReport,
-    DrcViolation,
+    report_to_errors, validate_clearances, validate_electromigration, validate_physics_parallel,
+    validate_thermal_rise, validate_trace_widths, violation_to_error, DesignRuleChecker, DrcError,
+    DrcReport, DrcViolation,
 };
 pub use geometry::entity_ids::{
     ComponentGraphId, EntityId, GeometryGraphId, JunctionGraphId, NetGraphId, PinGraphId,

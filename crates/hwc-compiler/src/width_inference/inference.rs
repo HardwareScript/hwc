@@ -93,9 +93,27 @@ impl<'a> WidthInference<'a> {
                 base, range, span, ..
             } => match range {
                 Range::Single(_) => Ok(1),
-                Range::Slice { high, low } => {
-                    if high >= low {
-                        Ok(high - low + 1)
+                Range::Slice { high, low, inclusive } => {
+                    // For bit slices, the width calculation depends on inclusivity:
+                    // - Exclusive (0..3): width = 3 - 0 = 3 bits
+                    // - Inclusive (0..=3): width = 3 - 0 + 1 = 4 bits
+                    // In hardware, bit slices are typically inclusive (e.g., [7:0] in Verilog means 8 bits)
+                    let width = if *inclusive {
+                        if high >= low {
+                            high - low + 1
+                        } else {
+                            0
+                        }
+                    } else {
+                        if high > low {
+                            high - low
+                        } else {
+                            0
+                        }
+                    };
+                    
+                    if high >= low && width > 0 {
+                        Ok(width)
                     } else {
                         let base_name = match base.as_ref() {
                             LogicExpression::Variable { name, .. } => name.clone(),

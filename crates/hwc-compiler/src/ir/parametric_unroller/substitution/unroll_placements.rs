@@ -15,7 +15,13 @@ pub fn unroll_component(
     let name = component
         .name
         .as_ref()
-        .map(|n| substitute_in_component_name(n, variable, value));
+        .map(|n| {
+            let substituted_name = substitute_in_component_name(n, variable, value);
+            // FIX: Resolve template name to concrete string
+            let resolved_name_string = super::name_sub::resolve_component_name_to_string(&substituted_name)?;
+            Ok::<hwc_parser::ComponentName, IrError>(hwc_parser::ComponentName::simple(resolved_name_string, substituted_name.span))
+        })
+        .transpose()?;
 
     let position = component
         .position
@@ -76,7 +82,13 @@ pub fn unroll_pour(
     variable: &str,
     value: usize,
 ) -> Result<PourPlacement, IrError> {
-    let name = substitute_in_component_name(&pour.name, variable, value);
+    let substituted_name = substitute_in_component_name(&pour.name, variable, value);
+    
+    // FIX: Resolve template name to concrete string
+    let resolved_name_string = super::name_sub::resolve_component_name_to_string(&substituted_name)?;
+    
+    // Create a simple ComponentName with the resolved concrete string
+    let name = hwc_parser::ComponentName::simple(resolved_name_string, substituted_name.span);
 
     let net = pour
         .net
@@ -151,7 +163,13 @@ pub fn unroll_plane(
     variable: &str,
     value: usize,
 ) -> Result<PlanePlacement, IrError> {
-    let name = substitute_in_component_name(&plane.name, variable, value);
+    let substituted_name = substitute_in_component_name(&plane.name, variable, value);
+    
+    // FIX: Resolve template name to concrete string
+    let resolved_name_string = super::name_sub::resolve_component_name_to_string(&substituted_name)?;
+    
+    // Create a simple ComponentName with the resolved concrete string
+    let name = hwc_parser::ComponentName::simple(resolved_name_string, substituted_name.span);
 
     let net = plane
         .net
@@ -237,7 +255,14 @@ pub fn unroll_polygon(
     variable: &str,
     value: usize,
 ) -> Result<PolygonPlacement, IrError> {
-    let name = substitute_in_component_name(&polygon.name, variable, value);
+    let substituted_name = substitute_in_component_name(&polygon.name, variable, value);
+    
+    // FIX: Resolve template name to concrete string
+    let resolved_name_string = super::name_sub::resolve_component_name_to_string(&substituted_name)?;
+    
+    // Create a simple ComponentName with the resolved concrete string
+    let name = hwc_parser::ComponentName::simple(resolved_name_string, substituted_name.span);
+    
     let position = substitute_in_coordinate(&polygon.position, variable, value)?;
 
     // Points are relative coordinates, typically not parameterized in loops
@@ -256,7 +281,13 @@ pub fn unroll_contact(
     variable: &str,
     value: usize,
 ) -> Result<ContactPlacement, IrError> {
-    let name = substitute_in_component_name(&contact.name, variable, value);
+    let substituted_name = substitute_in_component_name(&contact.name, variable, value);
+    
+    // FIX: Resolve template name to concrete string (fixes Via_A_Poly_{expr} bug)
+    let resolved_name_string = super::name_sub::resolve_component_name_to_string(&substituted_name)?;
+    
+    // Create a simple ComponentName with the resolved concrete string
+    let name = hwc_parser::ComponentName::simple(resolved_name_string, substituted_name.span);
 
     let net = contact
         .net
@@ -326,7 +357,13 @@ pub fn unroll_space_instance(
     value: usize,
 ) -> Result<hwc_parser::SpaceInstancePlacement, IrError> {
     // Substitute instance name (e.g., "Cell_{{i}}" -> "Cell_0")
-    let instance_name = substitute_in_component_name(&space_inst.instance_name, variable, value);
+    let substituted_name = substitute_in_component_name(&space_inst.instance_name, variable, value);
+    
+    // FIX: Resolve template name to concrete string
+    let resolved_name_string = super::name_sub::resolve_component_name_to_string(&substituted_name)?;
+    
+    // Create a simple ComponentName with the resolved concrete string
+    let instance_name = hwc_parser::ComponentName::simple(resolved_name_string, substituted_name.span);
 
     // Substitute position coordinates - x(), y(), z() are methods on Coordinate
     let position = substitute_in_coordinate(&space_inst.position, variable, value)?;

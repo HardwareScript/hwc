@@ -196,6 +196,12 @@ pub struct ViaConstraints {
 
     /// Via shape: "square" or "cylinder" (optional, defaults to cylinder)
     pub shape: Option<CompactString>,
+
+    /// Layer-specific via enclosure requirements (v0.2.2).
+    /// Maps layer name to minimum enclosure distance in nanometers.
+    /// Used for ASIC device layers that require larger enclosure than standard annular ring.
+    /// Example: SKY130 capm.5 rule requires 500nm enclosure of Via3 by CAPM layer.
+    pub layer_enclosures_nm: rustc_hash::FxHashMap<CompactString, i64>,
 }
 
 /// Clearance constraints based on voltage
