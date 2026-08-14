@@ -18,7 +18,7 @@ pub fn run_physical_continuity_check(
     }
 
     let mut conductive_material_ids = rustc_hash::FxHashSet::default();
-    for (id, name) in space.material_registry.all_materials() {
+    for (id, _name) in space.material_registry.all_materials() {
         let is_conductive = space.material_registry.is_conductive(id);
 
        

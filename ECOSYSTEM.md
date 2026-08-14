@@ -1,698 +1,241 @@
-# Hardware Script - Ecosystem Architecture
+# Hardware Script — Ecosystem Architecture
 
-**From a "cool script" to an industry standard**
-
----
-
-## The Complete Ecosystem
-
-Hardware Script isn't just a compiler—it's a complete ecosystem for hardware development, inspired by the best parts of modern software tooling (Rust, Elixir, Node.js). It unifies logical schematics, physical layouts, mechanical rules, and materials databases into a singular, highly efficient developer workflow.
+**Unified Hardware Engineering Toolchain & Standard (v0.2.1)**
 
 ---
 
-## 1. UHWSL - The Formal Specification
+## Overview
 
-**Universal Hardware Scripting Language**
-
-**Purpose**: The formal language specification (like ECMAScript for JavaScript or IEEE 1364 for Verilog).
-
-**Usage**:
-- **Formal**: "This board is written in UHWSL."
-- **Casual**: "I'm using Hardware Script" or "HWS."
-
-**Why**: Establishes Hardware Script as a legitimate standard, not just a one-off tool.
-
-**Comparison**:
-- **VHDL** = VHSIC Hardware Description Language
-- **HTML** = HyperText Markup Language
-- **UHWSL** = Universal Hardware Scripting Language
+Hardware Script is a complete toolchain and formal language standard for text-based physical hardware synthesis. Inspired by modern software engineering paradigms (Rust, Cargo, TypeScript), Hardware Script unifies logical schematics, physical layer layout, material properties, PDK stackups, physics verification, and manufacturing export into a deterministic, Git-friendly workflow.
 
 ---
 
-## 2. The Unified File Architecture
+## 1. Universal Hardware Scripting Language (UHWSL)
 
-Hardware Script eliminates file-type fragmentation by adopting a unified **3-File Architecture** for development, plus a single compiled binary exchange format:
+**UHWSL** is the formal specification defining the syntax, grammar, and physical database semantics of `.hw` source code.
 
-*   **`hw.toml`**: The Project Manifest. Stores metadata, build targets, profile references, and package dependencies.
-*   **`hw.lock`**: The Version Lockfile. Auto-generated to secure exact versions, cryptographic hashes, and dependency trees for reproducible builds.
-*   **`.hw`**: The Universal Source File. Everything that defines physical or logical reality—materials, profiles, components, modules, constraints, and tests—is authored in standard `.hw` files.
-*   **`.hsx`**: The Hardware Script eXchange Binary. The unified compiler output that packs all 2D/3D visual geometry, SPICE netlists, and logical `NetlistArena` connections into a high-performance, memory-mappable binary.
-
----
-
-### `.hw` - The Universal Source File
-
-In Hardware Script, there are no separate file types for materials, footprints, or schematics. Everything is defined using clean, top-level blocks inside `.hw` source files. This design utilizes the **Logical/Physical Duality** principle to separate concerns while keeping the ecosystem unified:
-
-*   **Logical Layers (Pure Intent)**:
-    *   `module`: Electrical schematics containing logic blocks and logical net routes with no coordinates.
-*   **Physical Layers (Absolute Reality)**:
-    *   `space`: The physical board assembly, defining physical boundaries, component placement coordinates, and trace routing.
-    *   `component`: Parametric footprint definitions, local pin grids, and physical bodies.
-    *   `material`: Atomic, thermal, and electrical properties of chemical compounds.
-    *   `profile`: Factory capabilities, fabrication limits, and via stackup rules.
-*   **Constraints Layers (Rules)**:
-    *   `mechanical`: Physical enclosure keep-outs and mounting rules.
-    *   `signal_group`: Differential pairs, RF properties, and signal timing bounds.
-    *   `interface`: Logical-to-firmware pin bindings.
-    *   `test`: CI/CD physics and continuity assertions.
+*   **Formal Specification**: UHWSL v0.2.1 (Picometer-Precision Vector Database Specification)
+*   **Source File Extension**: `.hw`
+*   **Primary Execution Engine**: `hwc` (Rust Compiler Workspace)
 
 ---
 
-### `.hsx` - The Hardware Script eXchange Binary
+## 2. Unified 3-File Architecture
 
-**Purpose**: A unified zero-copy-ready binary representation of the compiled system.
+Hardware Script eliminates file-format fragmentation by consolidating design input into three canonical files, plus a single compiled binary exchange format:
 
-**Contains**:
-- Embedded 3D mesh data (AnalyticTrace primitives: LineSegments and Rectangular Prisms).
-- Embedded 2D vector data (traces, outlines).
-- Embedded logical netlist (`NetlistArena` database).
-- Embedded SPICE definitions.
-- Visual Preview and diagnostic states (dirty chunks, dirty vectors).
-
-**Usage**:
-The `.hsx` file is consumed directly by the live-preview companion, **Hardware Script Monitor** (`hsm`), which watches the file for compiler refreshes, providing hot-reload feedback in under 50ms.
+| File | Purpose | Description |
+|------|---------|-------------|
+| `hw.toml` | Project Manifest | Declares project metadata, manufacturing targets, active PDK profiles, and HPM package dependencies. |
+| `hw.lock` | Version & Route Lockfile | Cryptographically hashes dependencies and caches physical route geometries using `rkyv` zero-copy binary serialization for sub-millisecond incremental builds. |
+| `.hw` | Universal Source | Human-readable source defining materials, profiles, devices, subcircuits, modules, spaces, and testbenches. |
+| `.hsx` | Compiled Exchange Binary | Binary payload emitted by `hwc` containing 2D vector shapes, 3D meshes, logical netlist graphs, and diagnostic states for `hsm` hot-reload. |
 
 ---
 
-### `.hw` Libraries - The Sub-Assembly Concept
+### `.hw` — Universal Source Declarations
 
-**Purpose**: Pre-routed modules (the "holy grail" of hardware reusability)
+In Hardware Script, there are no proprietary binary files for footprints, schematics, or stackups. Everything is authored as clean, top-level blocks inside `.hw` source files:
 
-**The Problem**: Nobody wants to place 15 tiny components just to regulate power. They want a complete, tested, pre-wired module.
+#### 1. Logical Layer (Electrical Contracts)
+*   `module`: Abstract electrical netlist contracts with pin interfaces and logical routes.
+*   `subcircuit`: PDK-provided SPICE equivalent circuits (e.g. SKY130 resistor or transistor models).
 
-**The Solution**: Treat a `.hw` file as a reusable library. A library is a fully routed mini-board on its own local grid that can be imported and placed as a single unit.
+#### 2. Physical Layer (Absolute Reality)
+*   `space`: The concrete 2D/3D physical layout, implementing a `module`.
+*   `device`: Multi-terminal semiconductor component definitions (resistors, capacitors, MOSFETs) with terminal-to-material contracts.
+*   `pour`: Conductor, semiconductor, or mask polygons bound to layers and nets.
+*   `contact`: Layer-spanning vias with material-specific penetration depth control.
+*   `route`: Interconnect traces routed by the topological line-search engine.
+*   `material`: Atomic, electrical, thermal, and optical properties of physical elements and alloys.
+*   `profile`: Stackup layer definitions, PDK clearance constraints, trace widths, and via rules.
 
-**Example Library (`@power/5v-regulator.hw`)**:
+#### 3. Verification & Testing
+*   `test`: SPICE testbench declarations (DC operating point, AC frequency response, transient analysis).
+*   `region`: Placement floorplanning partitions and DRC parallelization zones.
+
+---
+
+### Reusable Sub-Assembly Libraries (`.hw` Packages)
+
+Hardware Script allows entire routed sub-circuits (e.g. voltage regulators, RF front-ends, sensor modules) to be packaged as reusable `.hw` libraries.
+
+#### Example: Power Regulator Library (`@power/5v-regulator.hw`)
+
 ```hw
-# This is a complete, reusable 5V voltage regulator module
-module Regulator5V:
-    pins: [VIN, VOUT, GND]
+import * from @std/primitives/units
 
-    # Internal components
-    add LM7805 named Regulator
-    add Capacitor (val: 10uF) named C1
-    add Capacitor (val: 1uF) named C2
+export module Regulator5V:
+    pins: [input VIN, output VOUT, ground GND]
+    route VIN to VOUT
 
-    # Logical connections
-    route C1.Plus to Regulator.In
-    route Regulator.Out to C2.Plus
-    route C1.Minus to Regulator.GND
-    route C2.Minus to Regulator.GND
+export space Regulator5V_Space implements Regulator5V:
+    dimensions: 10mm by 10mm
+    resolution: 1nm
+    profile: StandardPCB
 
-    # Exposed pins
-    VIN = Regulator.In
-    VOUT = Regulator.Out
-    GND = Regulator.GND
+    nets:
+        VIN:  { classification: power, potential: 12.0V, current: 1.5A }
+        VOUT: { classification: power, potential: 5.0V,  current: 1.5A }
+        GND:  { classification: ground, potential: 0.0V,  current: 1.5A }
+
+    # Component placements and interconnects defined parametrically
 ```
 
-**Usage in Main Board (`main.hw`)**:
+#### Usage in System Layout (`main.hw`)
+
 ```hw
 import Regulator5V from "@power/5v-regulator"
 
-space MyRobot:
-    dimensions: 100mm by 100mm by 2.0mm
-    grid: 1000 by 1000 by 4
-    profile: JLCPCB_4Layer
-    origin: tl by t
+space MainBoard:
+    dimensions: 100mm by 100mm
+    resolution: 1nm
+    profile: StandardPCB
 
-    # Place the entire pre-routed module as one piece
-    add Regulator5V named PowerSupply at [x: 50mm, y: 50mm, layer: l1]
-
-    # Connect to the exposed pins
-    route Battery.Plus to PowerSupply.VIN
-    route PowerSupply.VOUT to ESP32.VIN
+    # Instantiate reusable sub-assembly
+    add Regulator5V_Space named PowerSupply at [x: 50mm, y: 50mm]
 ```
-
-**What Happens**: The compiler drops the entire regulator module (with all internal components and routing) into the main board's layout.
-
-**Why This Is Revolutionary**:
-- Junior developers can build complex systems by snapping together pre-built modules.
-- Modules are tested once, reused everywhere.
-- Same concept as npm packages, but for physical hardware.
-- AI can reason about high-level architecture instead of individual resistors.
-
-**Analogy**: Like importing a React component library vs writing raw HTML/CSS.
 
 ---
 
-## 3. hwc - The Core Compiler
+## 3. The Core Toolchain Components
 
-**Hardware Script Compiler**
-
-**Purpose**: The main compilation toolchain, written entirely in Rust.
-
-**Implementation**:
-- **v0.1.0**: Python proof-of-concept (NumPy, PyYAML).
-- **v0.1.4+**: Native Rust rewrite for blazing sub-millisecond compilation, strictly sandboxed.
-- **v0.1.7**: Continuous analytic trace rendering (`AnalyticTrace`), high-performance memory-mapped binary (`.hsx`) generation.
-- **v0.2.0-v0.2.1**: AST Arena database-driven query architecture (Salsa-inspired incremental engine), Relational Topological Placement Engine (Single Anchor Law, intra-device DRC exemptions), Material-Specific Via Depth & Substrate Cutout Resolver, Automated PDK Geometry Extraction ($AD, AS, PD, PS$), Clippy-level error diagnostics (`hwsd`), range syntax (`[0..7]`), device definitions, via depth/array controls, BOM export (`.csv`), automated SPICE testbench suite generation (`ac.sp`, `dc.sp`, `tran.sp`), and full DRC/LVS/crosstalk/thermal physics validation.
-
-### Commands
-
-```bash
-# Compile a board to unified .hsx representation
-hwc build board.hw
-
-# Validate syntax and design rules without building
-hwc check board.hw
-
-# Generate specific manufacturing outputs
-hwc build board.hw --target pcb     # Gerbers, drills, DXF outline
-hwc build board.hw --target spice   # SPICE netlist (.cir)
-hwc build board.hw --target viz     # Static 3D models (.glb, .obj)
-
-# Run CI/CD physics validation tests
-hwc test tests.hw
-
-# Watch mode (recompile on changes)
-hwc watch board.hw
-
-# Show version
-hwc --version
-
-# Get help
-hwc --help
 ```
-
-**Analogy**: Like `rustc` (Rust compiler) or `tsc` (TypeScript compiler).
+                     ┌───────────────────────────────┐
+                     │          UHWSL (.hw)          │
+                     │   Universal Hardware Source   │
+                     └───────────────┬───────────────┘
+                                     │
+                                     ▼
+                     ┌───────────────────────────────┐
+                     │          hwc Compiler         │
+                     │    (Rust Multi-Crate Engine)  │
+                     └───────────────┬───────────────┘
+                                     │
+                      ┌──────────────┴──────────────┐
+                      │                             │
+                      ▼                             ▼
+             ┌─────────────────┐           ┌─────────────────┐
+             │       hsm       │           │       hpm       │
+             │  Live Monitor   │           │ Package Manager │
+             │ (Tauri / 3D/2D) │           │ (Soft IP / PDKs)│
+             └─────────────────┘           └─────────────────┘
+```
 
 ---
 
-## 4. hpm - The Package Manager
+### 3.1 `hwc` — Core Compiler
 
-**Hardware Package Manager** (or Hardware Script Package Manager)
+The **Hardware Script Compiler** (`hwc`) is written entirely in high-performance Rust (`logos`, `miette`, `rayon`, `rkyv`, `rstar`, `geo-index`, `clarabel`, `clipper2`).
 
-**Purpose**: Install, manage, and publish hardware components and Soft IP libraries.
+Like professional software compilers (`rustc`, `gcc`), `hwc` provides detailed diagnostic error feedback with source line snippets, exact physical measurement deltas, and fix guidance directly to terminal stdout or stderr.
 
-**Why "hpm"**: Instantly recognizable to anyone who's used `npm` (Node Package Manager) or `cargo` (Rust package manager).
+#### Sub-Crates
+*   **`hwc-cli`**: Command-line interface and target orchestration.
+*   **`hwc-parser`**: Logos DFA lexer and recursive AST parser with inline SI unit tokenization (`1.41um`, `400nm`, `1.8V`).
+*   **`hwc-compiler`**: Two-pass semantic analyzer, symbol table manager, and Salsa-inspired incremental query engine.
+*   **`hwc-engine`**: 64-bit picometer vector database, Topological Line-Search Router (Axis-Aligned Slab Method), and `clarabel` / DAG legalization engine.
+*   **`hwc-physics`**: DRC, LVS, PIVB connectivity, Wheeler–Sakurai BEM parasitic extraction, crosstalk, electromigration, and IPC-2152 thermal checks.
+*   **`hwc-export`**: Multi-format emitters for Gerber X3, Excellon drill, GDSII, SPICE netlists (`circuit.sp`, `dc.sp`, `ac.sp`, `tran.sp`), DXF 2D drawings, GLB 3D meshes, and BOM CSV files.
 
-### Commands
+#### CLI Commands
 
 ```bash
-# Initialize a new project (creates hw.toml, main.hw, and .hw-llm-index.md)
+# Compile design to binary exchange format (.hsx)
+hwc build main.hw
+
+# Check syntax and physics rules without generating outputs
+hwc check main.hw
+
+# Run Design Rule Check (DRC) on build outputs
+hwc drc main.hw
+
+# Run physics validation pass (EM, thermal, parasitic extraction)
+hwc physics main.hw
+
+# Run circuit simulation
+hwc simulate main.hw
+
+# Export production manufacturing targets
+hwc build main.hw --target pcb     # Gerber X3, Excellon drill, DXF outline
+hwc build main.hw --target spice   # SPICE netlist suite (circuit.sp, dc.sp, ac.sp, tran.sp)
+hwc build main.hw --target gds     # Silicon IC GDSII stream
+hwc build main.hw --target viz     # 3D assets (.glb, .obj)
+
+# Inspect binary lockfile
+hwc lock inspect build/main.hsx
+```
+
+---
+
+### 3.2 `hsm` — Hardware Script Monitor
+
+`hsm` is the companion GUI application for real-time design inspection and live hot-reloading (under 50ms refresh upon recompilation).
+
+#### Technical Stack & Viewports
+*   **App Shell**: Tauri v2 + SolidJS
+*   **3D Viewport**: Babylon.js renderer with physically-based rendering (PBR) for board materials, vias, trace depth, and component geometry.
+*   **2D Vector Viewport**: PixiJS WebWorker pipeline utilizing `OffscreenCanvas` for smooth 60 FPS pan/zoom over 1M+ trace segments.
+*   **DXF & Mechanical Viewport**: Three.js orthographic renderer for mechanical boundary verification.
+*   **SPICE Waveform Viewer**: `uPlot` engine capable of rendering 10M-point transient and AC frequency response waveforms in under 1ms.
+
+---
+
+### 3.3 `hpm` — Hardware Package Manager
+
+`hpm` manages component footprints, Soft IP sub-assemblies, PDK profiles, and material libraries.
+
+#### Key Workflows
+
+```bash
+# Initialize project workspace (creates hw.toml, main.hw)
 hpm init
 
-# Install a single component
+# Install discrete component packages
 hpm install passive/resistor_0805
 hpm install ics/esp32_c3
-hpm install active/transistor_2n2222
 
-# Install a library/sub-assembly module
-hpm install @power/5v-regulator      # Complete voltage regulator module
-hpm install @motor/h-bridge          # Complete motor driver circuit
-hpm install @sensors/imu-module      # IMU with all support components
+# Install Soft IP sub-assembly libraries
+hpm install @power/5v-regulator
+hpm install @rf/balun_filter
 
-# Install with options
-hpm install ics/esp32_c3 --full    # Full component with 3D models
-hpm install ics/esp32_c3 --lite    # Minimal (pins and behavior only)
+# Search community registry
+hpm search regulator
 
-# Search for components or libraries
-hpm search voltage regulator
-hpm search motor driver
+# Publish package to registry
+hpm publish @power/5v-regulator
 
-# Publish a component or library (.hw source format)
-hpm publish transistor_2n2222.hw
-hpm publish @power/5v-regulator.hw
-
-# Update all components (respects hw.toml bounds and updates hw.lock)
+# Update project dependencies
 hpm update
-
-# List installed components and libraries
-hpm list
-
-# Show component/library info
-hpm info ics/esp32_c3
-hpm info @power/5v-regulator
 ```
 
-### Package Registry Structure
-
-**GitHub-based (Public Community Registry)**:
-```
-hardwarescript-registry/
-├── registry.yaml
-└── packages/
-    ├── passive/
-    │   ├── resistor_0805.yaml
-    │   └── capacitor_0603.yaml
-    ├── active/
-    │   └── transistor_2n2222.yaml
-    └── ics/
-        └── esp32_c3.yaml
-```
-
-**Registry Entry**:
-```yaml
-packages:
-  # Single component
-  "ics/esp32_c3":
-    type: "component"
-    url: "https://github.com/hw-components/esp32-c3"
-    version: "2.1.0"
-    description: "ESP32-C3 RISC-V WiFi/BLE microcontroller"
-    author: "Hardware Script Community"
-    license: "MIT"
-    verified: true
-    downloads: 15420
-  
-  # Library/sub-assembly
-  "@power/5v-regulator":
-    type: "library"
-    url: "https://github.com/hw-libraries/5v-regulator"
-    version: "1.0.3"
-    description: "Complete 5V voltage regulator with LM7805, capacitors, and routing"
-    author: "Hardware Script Community"
-    license: "MIT"
-    verified: true
-    downloads: 8932
-    dependencies:
-      - "ics/lm7805"
-      - "passive/capacitor_electrolytic"
-```
-
-**Installation Flow**:
-1. `hpm install ics/esp32_c3`
-2. `hpm` fetches `registry.yaml` from GitHub.
-3. `hpm` finds package URL.
-4. `hpm` clones component repo to `~/.hw/components/ics/`.
-5. Component is available for import.
-
-**Cost**: $0 (GitHub hosts everything).
+#### Package Registry Infrastructure
+`hpm` uses a lightweight, Git-backed registry model (similar to Homebrew or Cargo index), hosting package manifests on GitHub with zero infrastructure overhead.
 
 ---
 
-## 5. hwsd - The Documentation & Error Engine
+## 4. Ecosystem Tooling Comparison
 
-**Hardware Script Documentation** (and LLM Feedback System)
+Hardware Script provides a unified toolchain equivalent to modern software stacks:
 
-**Purpose**: AI-native structured error handling and auto-generated documentation.
-
-### The Documentation Syntax: # vs ##
-
-**Inspired by**: Rust's `///` and Elixir's `@doc` system.
-
-**Two types of comments**:
-- `#` - Ignored by compiler, for humans reading the code.
-- `##` - Intercepted by `hwsd`, becomes auto-generated documentation.
-
-**Example (`motor_controller.hw`)**:
-```hw
-## The Main Motor Controller
-## Accepts standard 3.3V PWM signals and drives up to 2A DC motors.
-## WARNING: Ensure the main trace is at least 2mm wide for current capacity.
-module MotorController:
-    # I used the cheaper L298N here to save costs for the MVP
-    add Driver_L298N named Driver at [x: 5mm, y: 5mm, layer: l1]
-    
-    ## Input: PWM signal from microcontroller (3.3V logic)
-    ControlSignal = Driver.PWM_IN
-    
-    ## Output: High-current motor connection (up to 2A)
-    MotorPower = Driver.MOTOR_OUT
-```
-
-**When you run**:
-```bash
-hwsd generate motor_controller.hw
-```
-
-**hwsd outputs**:
-- Beautiful HTML documentation (like Rust's `rustdoc` or Elixir's `HexDocs`).
-- Searchable API reference.
-- All `##` comments extracted and formatted.
-- Pin descriptions, warnings, and usage examples.
-
-**Why This Is a Superpower**:
-- LLMs can read the auto-generated docs to learn how to use any library.
-- No separate documentation to maintain (docs live in the code).
-- AI instantly knows all inputs, outputs, warnings, and constraints.
-- Community libraries are self-documenting.
-
-### The Problem hwsd Solves
-
-**Traditional compiler errors**:
-```
-Error at line 42: Voltage mismatch
-```
-
-**LLM response**: "I don't know what to do."
-
-**hwsd errors**:
-```
-[Error] Voltage mismatch at [x: 10mm, y: 20mm, layer: l1]
-  Expected: 3.3V
-  Got: 5V
-  Component: ESP32_C3 (max input: 3.6V)
-
-[Hint] Insert a voltage regulator between Battery.Out and ESP32.VIN
-  Suggested component: LDO_3V3
-  Install: hpm install power/ldo_3v3
-  
-[Example]
-  add LDO_3V3 named Regulator at [x: 8mm, y: 20mm, layer: l1]
-  route Battery.Out to Regulator.In
-  route Regulator.Out to ESP32.VIN
-```
-
-**LLM response**: Instantly fixes the code and recompiles.
-
-### The AI Feedback Loop
-
-```
-1. LLM generates .hw code
-2. hwc compiles with hwsd validation
-3. hwsd outputs structured errors + hints
-4. LLM reads errors, understands problem
-5. LLM modifies code based on hints
-6. Repeat until compilation succeeds
-```
-
-**Result**: AI can debug its own hardware designs autonomously.
-
-### hwsd Commands
-
-```bash
-# Generate documentation for a component
-hwsd doc transistor_2n2222.hw
-
-# Explain an error code
-hwsd explain E0042
-
-# Show all error codes
-hwsd errors
-
-# Check for common mistakes
-hwsd lint board.hw
-```
-
-### Error Format (Structured for AI)
-
-```json
-{
-  "error_code": "E0042",
-  "severity": "error",
-  "location": {
-    "file": "board.hw",
-    "line": 15,
-    "column": 5,
-    "coordinates": [10000000, 20000000, 1]
-  },
-  "message": "Voltage mismatch",
-  "details": {
-    "expected": "3.3V",
-    "got": "5V",
-    "component": "ESP32_C3",
-    "max_input": "3.6V"
-  },
-  "hint": "Insert a voltage regulator",
-  "suggestion": {
-    "component": "LDO_3V3",
-    "install": "hpm install power/ldo_3v3",
-    "example": "add LDO_3V3 named Regulator at [x: 8mm, y: 20mm, layer: l1]"
-  },
-  "documentation": "https://docs.hardwarescript.org/errors/E0042"
-}
-```
+| Domain | Rust | TypeScript / Node.js | Hardware Script |
+|--------|------|----------------------|-----------------|
+| **Specification** | Rust Reference | ECMAScript | UHWSL |
+| **Source File** | `.rs` | `.ts` / `.js` | `.hw` |
+| **Compiler** | `rustc` | `tsc` | `hwc` |
+| **Package Manager** | `cargo` | `npm` / `pnpm` | `hpm` |
+| **Live Monitor** | — | Vite / HMR | `hsm` |
+| **Lockfile** | `Cargo.lock` | `package-lock.json` | `hw.lock` (`.hsx`) |
 
 ---
 
-## 6. hsm - The Live-Preview Monitor
-
-**Hardware Script Monitor**
-
-**Purpose**: The live-preview companion application, built with Tauri v2 + SolidJS.
-
-**Workflow**:
-1. You edit and save your Hardware Script source file (`main.hw`).
-2. The `hwc` compiler triggers in the background, updating the high-performance binary exchange format (`project.hsx`).
-3. **`hsm` watches the `.hsx` file and refreshes instantly** (under 50ms).
-
-### Core Viewports & Technologies
-
-*   **3D Viewport**: Uses **Babylon.js** for high-end PBR materials, shadows, and environment reflections. It renders connected `.glb` package meshes positioned precisely in space.
-*   **2D Vector Viewport**: Uses **PixiJS** (running in a Web Worker via OffscreenCanvas) to render massive layouts (1M+ copper trace segments) at 60 FPS.
-*   **DXF Viewport**: Uses Three.js orthographic rendering to visualize compiled DXF 2D vectors for mechanical checks.
-*   **SPICE Waveforms**: Uses **uPlot** to render 10M-point analog/digital waveform data from SPICE simulation tests in under 1ms.
-*   **Netlist Inspector**: Interactive tree of connections, showing structural properties and bindings.
-
----
-
-## 7. The Complete Workflow
-
-### For Humans
-
-```bash
-# 1. Initialize project (creates manifest, main board, and AI index)
-hpm init
-
-# 2. Install components
-hpm install ics/esp32_c3
-hpm install power/lm7805
-
-# 3. Write hardware code (modules, components, and layout spaces)
-vim board.hw
-
-# 4. Check for design rule violations
-hwc check board.hw
-
-# 5. Compile to exchange binary
-hwc build board.hw
-
-# 6. Visualize and hot-reload changes
-hsm build/board.hsx
-
-# 7. Generate industry manufacturing packages
-hwc build board.hw --target pcb
-```
-
-### For AI (LLMs)
-
-```bash
-# 1. LLM generates code
-echo "space MainBoard..." > board.hw
-
-# 2. Compile with structured JSON errors
-hwc build board.hw --format json > errors.json
-
-# 3. LLM reads errors and hints
-cat errors.json
-
-# 4. LLM updates the code based on the generated hint examples
-echo "add LDO_3V3..." >> board.hw
-
-# 5. Recompile
-hwc build board.hw --format json
-
-# 6. Repeat until compilation succeeds
-```
-
----
-
-## 8. The Ecosystem Map
-
-```
-┌─────────────────────────────────────────────────┐
-│                    UHWSL                        │
-│         (Universal Hardware Scripting           │
-│              Language Specification)            │
-└─────────────────────────────────────────────────┘
-                         │
-         ┌───────────────┼───────────────┐
-         │               │               │
-     ┌───▼───┐       ┌───▼───┐       ┌───▼───┐
-     │hw.toml│       │ .hw   │       │ .hsx  │
-     │Manifest│      │Source │       │Binary │
-     └───┬───┘       └───┬───┘       └───▲───┘
-         │               │               │
-         └───────┬───────┘               │
-                 │                       │
-            ┌────▼────┐             ┌────┴────┐
-            │   hwc   │────────────▶│  Build  │
-            │Compiler │             │ Outputs │
-            └────┬────┘             └─────────┘
-                 │
-         ┌───────┼───────┐
-         │       │       │
-     ┌───▼──┐  ┌─▼──┐  ┌─▼──┐
-     │ hpm  │  │hwsd│  │hsm │
-     │Pkgs  │  │Docs│  │Mon │
-     └──────┘  └────┘  └────┘
-```
-
----
-
-## 9. Comparison to Other Ecosystems
-
-### JavaScript/Node.js
-
-| JavaScript | Hardware Script |
-|------------|----------------|
-| ECMAScript | UHWSL |
-| `.js` | `.hw` |
-| `node` | `hwc` / `hsm` |
-| `npm` | `hpm` |
-| JSDoc | `hwsd` |
-
-### Rust
-
-| Rust | Hardware Script |
-|------|----------------|
-| Rust Language | UHWSL |
-| `.rs` | `.hw` |
-| `rustc` | `hwc` |
-| `cargo` | `hpm` |
-| `rustdoc` | `hwsd` |
-
-### Python
-
-| Python | Hardware Script |
-|--------|----------------|
-| Python Language | UHWSL |
-| `.py` | `.hw` |
-| `python` | `hwc` |
-| `pip` | `hpm` |
-| Sphinx | `hwsd` |
-
----
-
-## 10. Secondary Ecosystem Tools
-
-### hwcf - Hardware Script Formatter
-
-**Purpose**: Auto-format `.hw` source files (like `rustfmt` or `prettier`).
-
-```bash
-hwcf board.hw
-```
-
-### hwcl - Hardware Script Linter
-
-**Purpose**: Check for design style issues, unused definitions, and best practices.
-
-```bash
-hwcl board.hw
-```
-
-### hwc test - Built-In Test Framework
-
-**Purpose**: Automatically execute `.hw` physics test suites and logical assertions.
-
-```bash
-hwc test tests.hw
-```
-
----
-
-## 11. Installation & Platforms
-
-### One-Line Install
-
-```bash
-curl -sSf https://hardwarescript.org/install.sh | sh
-```
-
-**Installs**:
-- `hwc` (compiler)
-- `hpm` (package manager)
-- `hwsd` (documentation & error system)
-- Standard library components (`@std`)
-
-### Platform Support
-
-- **Linux**: Native binary.
-- **macOS**: Native binary.
-- **Windows**: Native binary + WSL.
-- **Web**: WebAssembly (for browser-based sandboxed builds).
-
----
-
-## 12. The Naming Philosophy
-
-### Why These Names Work
-
-1. **Familiar**: Developers instantly recognize the pattern (`hpm`, `hwc`, etc.).
-2. **Consistent**: All tools start with "hw" prefixes.
-3. **Memorable**: Short, punchy, easy to type.
-4. **Professional**: Sounds like an industry standard, not a hobby script project.
-5. **Scalable**: Easy to add new unified tools (`hwcf`, `hwcl`).
-
-### The Psychological Advantage
-
-When developers see:
-```bash
-hpm install ics/esp32_c3
-```
-They immediately think: *"Oh, this is like cargo or npm for hardware. I already know how to use this."*
-
-**Result**: Zero learning curve for the tooling, only for the unified language syntax.
-
----
-
-## 13. The AI Integration
-
-### Why hwsd Is Revolutionary
-
-**Traditional EDA tools**:
-- Binary error codes.
-- Cryptic messages.
-- No actionable hints.
-- AI cannot parse or fix designs.
-
-**Hardware Script with hwsd**:
-- Structured JSON errors.
-- Clear explanations.
-- Actionable hints with complete examples.
-- Package install commands included.
-- AI can parse, understand, and automatically fix errors.
-
-**The Loop**:
-```
-Human: "Design an LDO motor driver"
-    ↓
-AI: Generates main.hw
-    ↓
-hwc: Compiles with hwsd validation
-    ↓
-hwsd: "Error: Voltage mismatch on pin X. Hint: Use 3.3V LDO."
-    ↓
-AI: Ingests hint example, adds LDO, and connects traces
-    ↓
-hwc: Compiles successfully to board.hsx
-    ↓
-hsm: Instant preview update
-    ↓
-Human: Gets verified and physically correct board
-```
-
-**Time**: Seconds (vs hours of manual debugging).
-
----
-
-## Conclusion
-
-Hardware Script isn't just a compiler—it's a complete ecosystem:
-
-- **UHWSL**: The formal specification.
-- **`hw.toml` / `hw.lock` / `.hw`**: The unified 3-File Architecture.
-- **`.hsx`**: The memory-mappable binary exchange format.
-- **`hwc`**: The Rust compiler.
-- **`hpm`**: The package manager.
-- **`hwsd`**: The documentation & error engine.
-- **`hsm`**: The live-preview monitor.
-
-**This is how you build a standard, not just a tool.**
-
-**Inspired by the best**:
-- Rust's helpful compiler errors.
-- Elixir's documentation and FSM syntax.
-- Node.js's package ecosystem.
-- Git's lockfiles and version control.
-
-**Result**: Hardware development that feels like modern software development.
-
----
-
-**Document Status**: Ecosystem Architecture  
-**Last Updated**: v0.2.1 (Q3 2026)  
-**This is how we define a standard.**
+## Summary
+
+The Hardware Script ecosystem delivers a deterministic, software-grade environment for hardware design:
+
+*   **`UHWSL`**: The formal picometer vector language specification.
+*   **`hw.toml` / `hw.lock` / `.hw`**: The unified 3-File Architecture.
+*   **`.hsx`**: Zero-copy binary exchange payload.
+*   **`hwc`**: Rust compiler workspace with built-in physics engines.
+*   **`hsm`**: 50ms live preview monitor with 2D, 3D, and SPICE viewports.
+*   **`hpm`**: Git-backed hardware package manager.

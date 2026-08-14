@@ -35,13 +35,9 @@ pub struct DielectricContext {
 /// A resolved parallel coupling interaction between two discrete trace segments.
 #[derive(Debug, Clone)]
 pub struct SegmentCoupling {
-    pub victim_net: CompactString,
-    pub aggressor_net: CompactString,
     pub parallel_length_nm: i64,
     pub edge_to_edge_spacing_nm: i64,
     pub center_point: Point3D,
-    pub c_12_farads: f64,
-    pub c_gnd_farads: f64,
     pub coupling_ratio_db: f64,
 }
 
@@ -228,13 +224,9 @@ fn evaluate_segment_pair(
     };
 
     Some(SegmentCoupling {
-        victim_net: trace_a.net_name.clone(),
-        aggressor_net: trace_b.net_name.clone(),
         parallel_length_nm: parallel_len_nm,
         edge_to_edge_spacing_nm: edge_spacing_nm,
         center_point: center_pt,
-        c_12_farads: c_12,
-        c_gnd_farads: c_gnd,
         coupling_ratio_db: coupling_db,
     })
 }

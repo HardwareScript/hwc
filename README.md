@@ -1,398 +1,680 @@
 # Hardware Script
 
-**Text-Based Hardware Design Language**
+**Text-Based Hardware Design Language** — `.hw`
 
-[![Status](https://img.shields.io/badge/status-v0.2.1-orange)]()
-[![Rust](https://img.shields.io/badge/compiler-Rust-orange)]()
+[![Version](https://img.shields.io/badge/version-v0.2.1-orange)]()
+[![Compiler](https://img.shields.io/badge/compiler-Rust-orange)]()
 [![License](https://img.shields.io/badge/license-AGPLv3-blue)]()
 
 ---
 
 ## What is Hardware Script?
 
-Hardware Script (`.hw`) is a text-based hardware design language that compiles to industry-standard formats. The goal is to design PCBs, silicon chips, and electronic systems from human-readable, Git-friendly text.
+Hardware Script (`.hw`) is a declarative, text-based hardware description language that compiles to industry-standard formats. Write PCB layouts and silicon IC designs as human-readable, Git-friendly text files — then compile to SPICE netlists, Gerber files, DXF drawings, GDSII, BOM, and 3D models.
 
-**The Vision**: Bring the npm/software workflow to hardware. Write hardware like code, compile it deterministically, and manufacture real boards from a single source of truth.
+The compiler (`hwc`) is written in Rust and built for picometer-precision physical synthesis. It works at every scale, from millimeter PCBs to nanometer silicon chiplets, using the same language.
 
-**Current Reality (v0.2.1)**: Powered by an AST Arena database-driven compiler, `hwc` supports high-performance physical synthesis, topological obstacle-aware routing, via depth & array controls, Clippy-level error intelligence, range syntax, device definitions, BOM export, and comprehensive physics checks (DRC, LVS, crosstalk, thermal/EM, parasitic extraction).
+---
+
+## A Complete Example
+
+The following is a real, working Hardware Script file — a SKY130 P+ Polysilicon Resistor targeting the SkyWater open-source PDK:
 
 ```hw
+# simple_resistor_test.hw
+# Device: sky130_fd_pr__res_high_po (350 Ω/□)
+# Geometry: 4μm × 1.41μm ≈ ~1.0kΩ
+
+import * from @std/primitives/units
+import * from "./resistor_pdk"
+
+module SimpleResistor:
+    pins: [input In, output Out]
+    route In to Out
+
 space Simple_Resistor_Space implements SimpleResistor:
     dimensions: 20.0um by 10.0um
     profile: Resistor_3D
 
-    # 1. Single Anchor: Resistor Body
+    nets:
+        In:  { classification: signal, potential: 1.8V, current: 1.0uA }
+        Out: { classification: signal, potential: 0.0V, current: 1.0uA }
+        GND: { classification: ground, potential: 0.0V, current: 0.0uA }
+
+    device_nets R1:
+        BULK: GND
+
+    # Parametric dimensions — change one value, everything adjusts
+    let res_length = 4.0um
+    let res_width  = 1.41um    # SKY130 quantized width
+    let via_pitch  = 400nm
+
+    # 1. Single Anchor: The ONLY absolute 'at:' in the entire file
     add pour(Polysilicon) named Resistor_Body on layer: polyres:
         device: R1.A, R1.B
-        dimensions: 4.0um by 1.41um
+        dimensions: res_length by res_width
         at: [x: 10.0um, y: 5.0um]
 
-    # 2. Relational Contact (Anchored to Body Edge)
+    # 2. Relational RPM mask (anchored to body, zero-thickness)
+    add pour(Resistor_Poly_Mask) named RPM_Block on layer: rpm:
+        dimensions: res_length + 360nm by res_width + 360nm
+        align: center_x with Resistor_Body
+        align: center_y with Resistor_Body
+
+    # 3. Relational contact head (anchored to body edge)
     add pour(Titanium_Silicide) named Contact_A_LI on layer: li1:
         device: R1.A
         net: In
-        dimensions: 400nm by 1.41um
+        dimensions: 400nm by res_width
         align: center_x with Resistor_Body.left + 200nm
         align: center_y with Resistor_Body
 
-    # 3. Comptime Via Array Loop (polyres → li1)
+    # 4. Comptime via array loop (polyres → li1), 3 vias
     for i in 0..3:
         add contact(Tungsten) named Via_A_Poly_{i} spanning layer: polyres to li1:
             diameter: 170nm
             align: center_x with Contact_A_LI
-            align: center_y with Contact_A_LI.center_y + (i - 1) * 400nm
+            align: center_y with Contact_A_LI.center_y + (i - 1) * via_pitch
             net: In
 
-# SPICE Testbench (Auto-generates circuit.sp, dc.sp, ac.sp, tran.sp)
+# Testbench — generates circuit.sp, dc.sp, ac.sp, tran.sp automatically
 test Simple_Resistor_AC_Test for Simple_Resistor_Space:
     ac: { sweep: dec, points: 20, freq: 100Hz..100MHz }
     tran: { step: 10ps, stop: 200ns }
 ```
 
-**Compiles to**:
-- ✅ SPICE netlist (`.sp`) — Analog simulation & node verification
-- ✅ BOM (Bill of Materials) (`.csv`) — Manufacturer part numbers, pricing, tolerances
-- ✅ GLB / OBJ — 3D scene geometry visualization
-- ✅ DXF (2D CAD) — Board outlines & mechanical boundaries
-- ✅ Gerber X3 & Excellon — Industry manufacturing packages
-- ✅ GDSII — Silicon IC layout output
+**Compiles to** (from that single source file):
 
-| 2D Layout View (PixiJS Engine) | 3D Rendered View (Babylon.js Engine) |
-| :---: | :---: |
-| ![2D Resistor View](assets/resistor_2d_view.png) | ![3D Resistor View](assets/resistor_3d_view.png) |
-
-> 💡 **Full Example**: View the complete source file [`tests/Resistor-Basics/simple_resistor_test.hw`](tests/Resistor-Basics/simple_resistor_test.hw)
-
-
----
-
-## Why Hardware Script?
-
-### The Problem
-
-Traditional EDA tools (KiCad, Altium, Eagle) were built for clicking GUIs. This creates several problems:
-
-1. **Poor version control** — Binary and XML files don't diff or merge well in Git.
-2. **No programmatic access** — You can't script, template, or parameterize a GUI.
-3. **Slow iteration** — Manual placement and routing takes hours.
-4. **Tool lock-in** — Binary formats make sharing and collaboration difficult.
-
-### The Solution
-
-Hardware Script treats hardware like software:
-
-- ✅ **Plain text** — Write your design by hand, just like any source file.
-- ✅ **Deterministic compilation** — Same input = same output, every time.
-- ✅ **Physics validation** — Catch electrical errors at compile time.
-- ✅ **Multi-format export** — Gerber, DXF, GLB, SPICE from one source.
-- ✅ **Package ecosystem** — Reusable components like npm packages.
-- ✅ **Optional LLM assistance** — Because designs are plain text, you can paste a `.hw` file into any LLM and ask it to generate or modify hardware for you.
+| Output | File |
+|--------|------|
+| SPICE circuit netlist | `circuit.sp` |
+| DC operating point | `dc.sp` |
+| AC frequency sweep | `ac.sp` |
+| Transient analysis | `tran.sp` |
+| Bill of Materials | `bom.csv` |
+| 2D mechanical drawing | `board.dxf` |
+| Gerber X3 + Excellon | `*.gbr`, `*.drl` |
+| GDSII (silicon IC) | `*.gds` |
+| 3D model | `*.glb` |
 
 ---
 
-## Quick Start
+## The File System
 
-### Create a Design
+Hardware Script uses exactly **three file extensions**:
 
-Create `my_board.hw`:
+| Extension | Purpose |
+|-----------|---------|
+| `hw.toml` | Project manifest — name, version, targets, dependencies |
+| `hw.lock` | Deterministic lockfile — binary `rkyv` format, zero-copy loads |
+| `.hw` | Universal source — materials, profiles, devices, modules, spaces, tests |
+
+Everything lives in `.hw` files. There is no separate schematic format, no separate layout format.
+
+---
+
+## Core Language Concepts
+
+### `space` — Physical Layout
+
+A `space` is a physical design region. It declares dimensions, a stackup profile, nets, and geometry.
 
 ```hw
-space FirstBoard:
-    dimensions: 20mm by 20mm by 2.0mm
+space My_Board:
+    dimensions: 20mm by 20mm
     resolution: 1nm
-    origin: tl by t
-
-    route A to B:
-        path:
-            - [x: 5mm, y: 5mm, layer: l1]
-            - [x: 15mm, y: 5mm, layer: l1]
-            - [x: 15mm, y: 15mm, layer: l1]
+    profile: StandardPCB
 ```
 
-### Compile
+### `module` — Logical Interface
 
-```bash
-hwc build my_board.hw
+A `module` declares the logical schematic contract that a `space` must fulfill.
+
+```hw
+module Amplifier:
+    pins: [input VIN, power VDD, ground GND, output VOUT]
+    route VIN to VOUT
+
+space Amp_Layout implements Amplifier:
+    ...
 ```
 
-### Preview Live
+### `material` — Physical Properties
 
-```bash
-hsm build/my_board.hsx
+```hw
+export material Polysilicon:
+    category: conductor
+    symbol: Poly
+    properties:
+        resistivity: 7e-5ohm_m
+        thermal_conductivity: 30.0W_mK
+        max_current_density: 1e2A_mm2
 ```
 
-**Hardware Script Monitor** (`hsm`) opens and hot-reloads your board in under 50ms whenever you recompile.
+### `profile` — Stackup Definition
 
-### Generate Manufacturing Files
+A `profile` defines the physical layer stackup, via rules, trace constraints, and thermal limits. You reference it in a `space`.
 
-```bash
-hwc build my_board.hw --target pcb   # Gerber + drill files
-hwc build my_board.hw --target viz   # OBJ + GLB 3D models
-hwc build my_board.hw --target spice # SPICE netlist
+```hw
+export profile Resistor_3D:
+    technology: "ASIC"
+    substrate_net: GND
+    stackup:
+        pdiff:   [material: P_Plus_Diffusion, thickness: 200nm, routable: true]
+        polyres: [material: Polysilicon,       thickness: 180nm, routable: true]
+        li1:     [material: Titanium_Silicide, thickness: 100nm, routable: true]
+        metal1:  [material: Aluminum,          thickness: 360nm, routable: true]
+    via:
+        min_diameter: 170nm
+        min_spacing: 200nm
+    trace:
+        min_width: 300nm
+        min_spacing: 300nm
+    thermal:
+        ambient_temp: 25C
+        max_operating_temp: 125C
+```
+
+### `device` — Multi-Terminal Components
+
+A `device` declares the contract for a multi-terminal physical structure (resistor, capacitor, MOSFET). Unlike a plain `pour` (single net), a device lets different nets meet through physics.
+
+```hw
+export device Resistor:
+    terminals: [A, B, BULK]
+    materials:
+        A: [Polysilicon, Titanium_Silicide, Aluminum]
+        B: [Polysilicon, Titanium_Silicide, Aluminum]
+        BULK: [Air, P_Plus_Diffusion]
+    spice:
+        prefix: X
+        subcircuit: sky130_fd_pr__res_high_po
+        terminal_order: [A, B, BULK]
+        parameters: [W, L]
+        parameter_style: named
+```
+
+Geometry is bound to device terminals via the `device:` field on `pour` statements:
+
+```hw
+add pour(Polysilicon) named Resistor_Body on layer: polyres:
+    device: R1.A, R1.B     # body spans both terminals
+    dimensions: 4.0um by 1.41um
+    at: [x: 10.0um, y: 5.0um]
+```
+
+This grants automatic DRC exemption (intentional cross-net overlap) and enables correct SPICE parameter extraction without double-counting parasitic capacitance from the device body.
+
+### `subcircuit` — PDK Circuit Models
+
+PDK-provided SPICE subcircuits are declared natively in `.hw` files. The compiler emits them verbatim into the generated `.sp` netlist:
+
+```hw
+export subcircuit sky130_fd_pr__res_high_po:
+    terminals: [A, B, BULK]
+    parameters: [W = 1.0um, L = 1.0um]
+    elements:
+        R_head: Resistor(nodes: [A, node_1], value: 362.0ohm)
+        R_tail: Resistor(nodes: [node_2, B], value: 362.0ohm)
+        R_body: Resistor(nodes: [node_1, node_2], value: 350.0ohm * (L / W))
+        C_sub1: Capacitor(nodes: [A, BULK], value: 2.0fF * W * L)
+        C_sub2: Capacitor(nodes: [B, BULK], value: 2.0fF * W * L)
+```
+
+### `pour` and `contact` — Physical Geometry
+
+- `pour(Material)` — A filled region (conductor, semiconductor, mask layer)
+- `contact(Material)` — A via bridging two layers
+
+```hw
+# Pour: a rectangular region on a named layer
+add pour(Aluminum) named In_Pad on layer: metal1:
+    dimensions: 1.0um by 1.0um
+    align: center_x with Contact_A_Metal.left - 3.0um
+    align: center_y with Contact_A_Metal
+    net: In
+
+# Contact: a via spanning from one layer to another
+add contact(Tungsten) named Via_A spanning layer: polyres to li1:
+    diameter: 170nm
+    align: center_x with Contact_A_LI
+    align: center_y with Contact_A_LI
+    net: In
+```
+
+### `route` — Signal Routing
+
+Routes connect named geometry. The compiler's obstacle-aware topological router calculates the physical trace path.
+
+```hw
+route In_Pad to Contact_A_Metal:
+    net: In
+    width: 300nm
+    layer: metal1
+    intent: Signal
+```
+
+### `test` — SPICE Testbenches
+
+A `test` block configures SPICE analysis types for a space. The compiler automatically generates one `.sp` file per analysis type.
+
+```hw
+test Simple_Resistor_AC_Test for Simple_Resistor_Space:
+    ac:   { sweep: dec, points: 20, freq: 100Hz..100MHz }
+    tran: { step: 10ps, stop: 200ns }
 ```
 
 ---
 
-## The Vision: npm for Hardware
+## Placement System
 
-Imagine if hardware development worked like software:
+### Absolute Placement
 
-```bash
-# Install a component package
-hpm install @power/5v-regulator
+```hw
+add pour(Aluminum) named Pad_A on layer: metal1:
+    dimensions: 1.0um by 1.0um
+    at: [x: 5.0um, y: 5.0um]
+```
 
-# Use it in your design
-import Regulator5V from "@power/5v-regulator"
+### Relational Placement (Anchor Arithmetic)
+
+All geometry can be positioned relative to other named geometry using dot-notation anchor queries. This is the primary way to write self-healing, parametric layouts:
+
+```hw
+# Right edge of Pad_A, offset by 200nm
+add pour(Aluminum) named Pad_B on layer: metal1:
+    dimensions: 1.0um by 1.0um
+    at: [x: Pad_A.right + 200nm, y: Pad_A.center_y]
+
+# Midpoint between two pads (comptime anchor math)
+add pour(Aluminum) named Pad_Mid on layer: metal2:
+    dimensions: 500nm by 500nm
+    at: [x: (Pad_A.center_x + Pad_B.center_x) / 2, y: Pad_A.center_y]
+```
+
+Available anchor properties: `.left`, `.right`, `.top`, `.bottom`, `.center_x`, `.center_y`, `.width`, `.height`.
+
+Rules:
+- Dependencies form a **Directed Acyclic Graph** — circular references are a build error (`C22`)
+- All anchor math evaluates **once at compile time** to 64-bit integer picometers
+- Variables declared with `let` are **immutable** constants
+
+### `align:` Syntax
+
+```hw
+add pour(Titanium_Silicide) named Contact_A on layer: li1:
+    dimensions: 400nm by 1.41um
+    align: center_x with Resistor_Body.left + 200nm
+    align: center_y with Resistor_Body
+```
+
+### Multi-Line Declarations
+
+When placement constraints are long, use optional brace grouping:
+
+```hw
+add plane(Aluminum) named Metal_Pad {
+    align: center_x with Poly_Strip
+    align: center_y with Poly_Strip
+} on layer: metal1:
+    net: Signal
+```
+
+### Floorplanning Regions
+
+```hw
+region AnalogRegion:
+    at: space.bottom_left + [100um, 100um]
+
+region DigitalRegion:
+    right_of: AnalogRegion with spacing: 500um
+    align: top with AnalogRegion
+```
+
+---
+
+## Parametric Generation (`for`, `if`, `let`)
+
+Hardware Script supports **compile-time** parametric generation. These constructs evaluate during compilation; no runtime branching exists on the manufactured board.
+
+### `for` Loops — Via and Component Arrays
+
+```hw
+# Exclusive range: 0..3 runs 3 times (i = 0, 1, 2)
+for i in 0..3:
+    add contact(Tungsten) named Via_A_{i} spanning layer: polyres to li1:
+        diameter: 170nm
+        align: center_x with Contact_A_LI
+        align: center_y with Contact_A_LI.center_y + (i - 1) * 400nm
+        net: In
+
+# Inclusive range: 0..=4 runs 5 times (i = 0, 1, 2, 3, 4)
+for row in 0..=4:
+    for col in 0..=4:
+        add pour(Aluminum) named Pad_R{row}_C{col} on layer: metal1:
+            ...
+```
+
+Range semantics follow Rust: `0..N` is exclusive (N items), `0..=N` is inclusive (N+1 items).
+
+### `if` Inside Loops — Compile-Time Conditionals
+
+```hw
+for row in 0..5:
+    for col in 0..5:
+        if (row + col) mod 2 == 0:
+            add plane(Aluminum) named L1_R{row}_C{col} on layer: metal1:
+                ...
+        else:
+            add plane(Tungsten) named L1_R{row}_C{col} on layer: metal1:
+                ...
+```
+
+The `if` is evaluated at compile time during loop unrolling. The emitted `EntityGraph` is a static, deterministic geometry database — no conditional logic exists in the output.
+
+### `let` Constants
+
+```hw
+let res_length    = 4.0um
+let res_width     = 1.41um
+let contact_width = 400nm
+let via_pitch     = 400nm
+
+add pour(Polysilicon) named Body on layer: polyres:
+    dimensions: res_length by res_width
+    at: [x: 10.0um, y: 5.0um]
+```
+
+---
+
+## Module System and `export`
+
+All definitions are **private by default**. Use `export` to make them importable.
+
+```hw
+# materials.hw
+export material Polysilicon:
+    category: conductor
+    ...
+
+material _InternalHelper:   # Private — cannot be imported
+    ...
 ```
 
 ```hw
-space MyRobot:
-    dimensions: 100mm by 100mm by 2.0mm
-    resolution: 1nm
-    origin: tl by t
+# resistor_pdk.hw
+import Polysilicon, Aluminum from "./materials"
 
-    add Regulator5V named PowerSupply at [x: 50mm, y: 50mm] on layer: l1
+export Polysilicon           # Re-export as part of PDK API
+export Aluminum
 
-    route Battery.Plus to PowerSupply.VIN
-    route PowerSupply.VOUT to ESP32.VIN
+export profile Resistor_3D:
+    ...
 ```
 
-**That's where we are in v0.2.1.** The AST Arena database-driven architecture powers full physical synthesis and advanced routing engine features.
+```hw
+# design.hw
+import * from "./resistor_pdk"   # Only exported symbols are available
+```
 
-### The "Matrix Moment"
+Wildcard `import *` brings in all exported symbols. Selective imports are also supported:
 
-Hardware Script **v0.2.1** uses an **AST Arena database-driven architecture** with picometer precision. This architectural evolution unlocks capabilities impossible in traditional tools:
-
-- **AST Arena Database** — Zero-copy interning, arena-allocated nodes, and instant incremental query execution
-- **Picometer-precision database** — All coordinates stored as 64-bit integer picometers (1pm = 10⁻¹² m)
-- **Scale invariance** — Same tool for PCBs (millimeters) and silicon chips (nanometers)
-- **Deterministic compilation** — Same input always produces bit-identical output
-- **Zero-stamping scene graph** — Components stored once, instances as lightweight transforms
-- **Plain-text source** — Git-friendly, LLM-readable, human-editable
-
-**Read the full vision**: [VISION.md](VISION.md)
+```hw
+import Polysilicon, Resistor_3D from "./resistor_pdk"
+```
 
 ---
 
-## Features
+## Net Declarations
 
-### ✅ Core Compiler (v0.2.1)
+Every net used in a space must be declared with its electrical properties. The compiler uses these for physical validation, trace width derivation, and SPICE stimulus generation.
 
-**Syntax & Language (UHWSL v0.2.1):**
-- **Text-based design** — Write hardware like code in `.hw` files
-- **Unified 3-File Architecture** — `hw.toml`, `hw.lock`, and `.hw` source
-- **Range Syntax** — Indexing and vector slicing for signals and buses (`bus[0..7]`, `pin[1..4]`)
-- **Device Definitions** — Dedicated `device` keyword for multi-gate ICs and precise pin bindings
-- **Multi-Line Declarations** — Clean block definitions for modules, spaces, and components
-- **Export Control** — Explicit symbol export using `export module` and `export component`
-- **Native SI unit parsing** — `254µm`, `4.7kΩ`, `100nF` parsed directly in lexer
+```hw
+nets:
+    In:  { classification: signal, potential: 1.8V, current: 1.0uA }
+    Out: { classification: signal, potential: 0.0V, current: 1.0uA }
+    GND: { classification: ground, potential: 0.0V, current: 0.0uA }
+```
 
-**Compilation Pipeline:**
-- **AST Arena & Query Engine** — High-performance arena allocation with Salsa-inspired incremental queries
-- **Symbol table & Relational Placement** — Relative layout positioning (`named B at 5mm right of A`)
-- **Logical netlist synthesis** — `NetlistArena` module-to-schematic extraction
-- **Device binding validation** — Physical layout matches logical schematic (LVS)
-- **Physical continuity checking** — Verifies all nets are connected (no floating islands)
-- **Clippy-Level Error Intelligence** — `hwsd`-powered diagnostic engine with inline context snippets, fix hints, and JSON output mode for AI agents
-
-**Routing & Physical Synthesis:**
-- **Topological Obstacle-Aware Router** — Axis-Aligned Slab Method with connection interface routing
-- **Via Array & Depth Controls** — Multi-via arrays for high current and explicit blind/buried via depth limits across stackup layers
-- **Trace geometry** — Dynamic width, clearance, and spacing rule enforcement
-- **Pour support** — Polygon copper pours with thermal relief boundary definitions
-
-**Physics & Electrical Validation:**
-- **DRC & LVS** — Full physical rule checking and layout-versus-schematic verification
-- **Crosstalk Analysis** — Analytical parallel trace coupling and interference bounds
-- **Electromigration & Thermal** — Trace current-density checks against thermal limits
-- **RF Parasitics** — Wheeler-Sakurai BEM parasitic extraction (R/C/L/M)
-
-**Export Formats:**
-- **SPICE netlist (`.sp`)** — Full circuit netlist output
-- **BOM (`.csv`)** — Extended Bill of Materials with manufacturer part numbers, pricing, and tolerances
-- **Gerber X3 & Excellon** — Production-ready copper layers, silkscreen, solder mask, drill files
-- **GLB / OBJ** — 3D scene model export
-- **DXF 2D drawings** — Mechanical CAD outlines
-- **GDSII** — Silicon foundry IC format
-
-### 🔄 Active Development (v0.2.2+)
-
-- **Automatic BGA escape routing**
-- **Public HPM package registry deployment**
-- **Language Server Protocol (LSP) for VS Code**
-- **Live monitor (`hsm`) enhancements** — Babylon.js hot-reload performance improvements
+Classifications: `signal`, `power`, `ground`, `clock`.
 
 ---
 
-## The Unified File Architecture
+## What the Compiler Produces
 
-Hardware Script uses exactly **3 file extensions**:
+### SPICE Netlist
 
-| File | Purpose |
-|------|---------|
-| `hw.toml` | Project manifest — metadata, targets, dependencies |
-| `hw.lock` | Lockfile — reproducible builds, hashed dependencies |
-| `.hw` | Universal source — materials, profiles, components, modules, spaces, tests |
+The compiler generates a structured, multi-file SPICE package. The `circuit.sp` is the DUT (Device Under Test); analysis files include it:
 
-The compiler produces a **compiled exchange binary** (`.hsx`) which the live monitor (`hsm`) watches and hot-reloads.
+```spice
+* Generated by hwc v0.2.1
+* PDK SUBCIRCUIT
+.subckt sky130_fd_pr__res_high_po A B BULK W=1u L=1u
+RR_head A node_1 362ohm
+RR_body node_1 node_2 {350ohm * ({L / W})}
+RR_tail node_2 B 362ohm
+CC_sub1 A BULK {{2fF * W} * L}
+CC_sub2 B BULK {{2fF * W} * L}
+.ends sky130_fd_pr__res_high_po
+
+* EXTRACTED DEVICE
+XR1 In Out GND sky130_fd_pr__res_high_po W=1.41u L=3.20u
+
+* INTEGRATED TRACE PARASITICS (Sakurai/Wheeler BEM)
+RRtr_In_0 nIn_entry In 6.527778e-1
+CCgnd_In_0 In GND 1.726567e-16
+```
+
+Parasitic extraction uses the **Wheeler–Sakurai BEM method** on interconnect routing traces only. Device bodies (`add pour`) are architecturally excluded — no blocker layers needed.
+
+### Bill of Materials
+
+The BOM is a dual-table CSV covering both discrete component procurement and foundry fabrication material usage:
+
+```csv
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,0.02x0.01x0.00mm,,,,,1
+
+# MATERIAL USAGE (Fabrication)
+Reference,Type,Material,Layer,Area_nm2,Volume_nm3
+Resistor_Body,Pour,Polysilicon,polyres (z:200nm),5640000,1015200000
+Via_A_Poly_0,Contact,Tungsten,polyres (z:200nm),28900,8785600
+...
+
+# AGGREGATED MATERIAL TOTALS (Foundry Fabrication Summary)
+Material,Total_Area_nm2,Total_Volume_nm3,Layer_Count,Coverage_Percentage
+Aluminum,4628000,1666080000,6,2.3%
+Polysilicon,5640000,1015200000,1,2.8%
+```
 
 ---
 
-## Project Structure
+## Compiler Toolchain
+
+```bash
+# Compile a design
+hwc build my_design.hw
+
+# Compile to specific output targets
+hwc build my_design.hw --target spice    # SPICE netlists
+hwc build my_design.hw --target pcb     # Gerber + drill files
+hwc build my_design.hw --target gds     # GDSII IC format
+hwc build my_design.hw --target viz     # GLB/OBJ 3D model
+hwc build my_design.hw --target dxf     # DXF 2D drawing
+
+# Validate without full build
+hwc check my_design.hw
+
+# Inspect the binary lockfile
+hwc lock inspect build/my_design.hsx
+```
+
+The **Hardware Script Monitor** (`hsm`) opens the compiled `.hsx` binary and hot-reloads on recompile:
+
+```bash
+hsm build/my_design.hsx
+```
+
+---
+
+## Compilation Pipeline
+
+The following is the **actual pipeline log** for `hwc build simple_resistor_test.hw` — a 218-line `.hw` file targeting the SKY130 PDK, compiled in under 1 second:
 
 ```
-├── hwc/                     # Rust compiler workspace
-│   ├── Cargo.toml
-│   ├── crates/
-│   │   ├── hwc-cli/         # Command-line interface
-│   │   ├── hwc-parser/      # Lexer + AST parser
-│   │   ├── hwc-compiler/    # Two-pass compiler
-│   │   ├── hwc-engine/      # Voxel grid + routing engine
-│   │   ├── hwc-physics/     # DRC, LVS, thermal, electrical
-│   │   ├── hwc-export/      # Gerber, GDSII, DXF, GLB emitters
-│   │   ├── hwc-materials/   # Materials database
-│   │   └── hwc-stdlib/      # Standard library prelude
-│   ├── stdlib/              # .hw standard library files
-│   └── tests/               # Integration tests (written in Hardware Script)
+[    0.99ms] Source file read successfully (10136 bytes)
+[    2.88ms] Lexer complete (922 tokens)
+[    6.00ms] Parser complete (2 imports, 3 definitions)
+[   23.71ms] Symbol table built
+
+[ROUTING LAYER DB] 7 layers registered (4 routable):
+  pdiff   → BASE       centerline Z=100nm
+  polyres → BASE       centerline Z=290nm
+  li1     → INTERCONNECT centerline Z=630nm
+  metal1  → INTERCONNECT centerline Z=1010nm
+
+[PLACEMENT] 25 items placed in DAG-resolved order
+  - Relational resolver evaluates anchor expressions left-to-right
+  - Device-exempt: skipping clearance between R1.A, R1.B, R1.BULK (same device)
+  - Z-separated layers skip cross-layer clearance automatically
+
+[ROUTING] Topological obstacle-aware router
+  - Port scoring (East/West/North/South) via clearance × alignment formula
+  - In_Pad → Contact_A_Metal on metal1 @ Z=1010nm (intent: Signal)
+  - Out_Pad → Contact_B_Metal on metal1 @ Z=1010nm (intent: Signal)
+
+[VIA GEOMETRY] Per-via depth resolution
+  - Via_A_Poly_0: lower depth=54nm (Polysilicon 30%), upper depth=50nm (TiSi2 50%)
+  - Final span: Z=326nm → 630nm (304nm tall)
+
+[SUBSTRATE MESH] 23 unified copper pools extruded per layer
+  - 2 SiO₂ dielectric slabs with 13 polygon via cutouts each
+  - earcut triangulation: 64 vertices / 108 faces per slab
+
+[PARASITIC EXTRACTION]
+  - 2 analytic routes processed (Sakurai/Wheeler BEM)
+  - Net 'In'  seg 0: R=0.653Ω, C=0.173fF  (2.5µm × 300nm Al trace)
+  - Net 'Out' seg 0: R=0.653Ω, C=0.173fF  (symmetric layout)
+  - 4 parasitic elements total
+
+[PIVB] Physical interconnect verification in 2.74ms
+  - Net 'In':  1 device island + 1 non-device island → overlapping ✅
+  - Net 'Out': 1 device island + 1 non-device island → overlapping ✅
+  - Net 'GND': 1 device island + 1 non-device island → overlapping ✅
+
+[  699ms] Exporter started
+
+   ✅ GLB  exported in 153.8ms
+   ✅ DXF  exported in  89.1ms
+   ✅ SPICE Suite exported in 7.0ms   (21 components, 11 nets)
+      ├─ circuit.sp  (raw DUT)
+      ├─ dc.sp       (DC operating point)
+      ├─ ac.sp       (AC frequency response: 100Hz–100MHz, 20pts/dec)
+      └─ tran.sp     (transient: step=10ps, stop=200ns)
+   ✅ BOM  exported                   (0 discrete, 24 material items: 9 pours, 2 routes, 13 contacts)
+
+    Finished build in 0.95s
+```
+
+**Stages in order:**
+
+| Stage | What happens |
+|-------|-------------|
+| **Lex** | Source tokenized via Logos DFA. SI units parsed inline (e.g. `1.41um`, `400nm`, `1.0uA`). |
+| **Parse** | Tokens → immutable AST. Imports resolved, `for` loops and `if` blocks recorded as comptime generators. |
+| **Symbol table** | Materials, profiles, devices, modules, subcircuits registered. |
+| **Relational lowering** | `align:` / anchor-math expressions evaluated via DAG walk. All coordinates become 64-bit integer picometers. |
+| **Placement** | Every `pour`, `contact`, and loop-unrolled instance placed into the spatial index. Device-exempt DRC skips cross-terminal overlap errors. Z-layer separation skips cross-layer clearance. |
+| **Routing** | Topological Line-Search Router scores cardinal ports (clearance × alignment), selects exit/entry faces, then generates orthogonal trace paths via Axis-Aligned Slab Method. |
+| **Via geometry** | Per-contact depth resolution from `material_contact_depths` in the PDK profile. |
+| **3D mesh** | Copper pools extruded per layer; dielectric slabs built with polygon via cutouts; `earcut` triangulates for GLB export. |
+| **Parasitic extraction** | Sakurai/Wheeler BEM on `analytic_routes` only. Device bodies (`pour`) are architecturally excluded — no blocker layers needed. |
+| **PIVB** | Physical Interconnect Verification & Bridging — confirms every net has no floating islands. Device islands and non-device islands are bridged by bounding-box overlap. |
+| **Export** | GLB, DXF, SPICE suite, BOM emitted in parallel. |
+
+---
+
+## Project Layout
+
+```
+hwc/
+├── Cargo.toml
+├── crates/
+│   ├── hwc-cli/         # Command-line interface
+│   ├── hwc-parser/      # Logos lexer + AST parser
+│   ├── hwc-compiler/    # Two-pass compiler, Salsa query engine
+│   ├── hwc-engine/      # Topological router, physical synthesis
+│   ├── hwc-physics/     # DRC, LVS, thermal, EM, parasitic extraction
+│   ├── hwc-export/      # SPICE, BOM, Gerber, GDSII, DXF, GLB emitters
+│   ├── hwc-materials/   # Materials database
+│   └── hwc-stdlib/      # Standard library prelude
+├── stdlib/              # .hw standard library files
+└── tests/               # Integration tests written in Hardware Script
+    └── Resistor-Basics/ # SKY130 resistor — complete working example
 ```
 
 ---
 
 ## Technical Stack
 
-- **Compiler**: Rust (`logos`, `miette`, `rayon`, `rustc-hash`, `compact_str`, `smallvec`)
-- **Live Monitor**: Tauri v2 + SolidJS + Babylon.js + PixiJS + uPlot + `dxf-viewer`
-- **Testing**: Hardware Script `.hw` integration test files
-- **Viewing**: Babylon.js Sandbox (3D), LibreCAD (DXF), Gerbv Viewer (Gerber/Drill)
+| Component | Technology |
+|-----------|-----------|
+| Compiler | Rust — `logos`, `miette`, `rayon`, `rkyv`, `rstar`, `geo-index`, `clarabel`, `clipper2` |
+| Coordinates | 64-bit integer picometers (1pm = 10⁻¹² m); i128 intermediates for transforms |
+| Spatial index | Hybrid `rstar` (dynamic) + `geo-index` (static routing layers) |
+| Router | Topological Axis-Aligned Slab Method — O(log N) obstacle resolution |
+| Legalizer | `clarabel` IPM (macro) + DAG solver (local trace nudge) |
+| Parasitic extraction | Wheeler + Sakurai + Greenhouse BEM — 5–10% vs. 3D field solvers |
+| DRC | G-cell-local Morton-ordered sweep, AVX-512 SIMD, Rayon parallel |
+| Serialization | `rkyv` zero-copy binary lockfile |
+| Live monitor | Tauri v2 + SolidJS + Babylon.js (3D) + PixiJS (2D) + uPlot |
 
 ---
 
+## Physics Validation
 
-## Roadmap: The 5 Critical Problems
+The compiler enforces physics at build time. Errors are structured, with inline source spans and suggested fixes.
 
-### 1️⃣ Hardware Description Language ✅ (v0.1.x)
-
-A clean, text-based, unified language for describing hardware at any scale.
-
-```hw
-space Board:
-    dimensions: 20mm by 20mm by 2.0mm
-    grid: 200 by 200 by 4
-```
-
-### 2️⃣ Component Knowledge Database 🔄 (v0.2)
-
-A universal component library with electrical limits, pins, footprints, and 3D meshes.
-
-**Strategy**: GitHub-based registry (like Homebrew or Go modules).
-
-### 3️⃣ Physics/Electrical Validation ✅ (v0.1.x)
-
-Compiler-level physics validation with structured errors and fix hints.
-
-```
-Error E0042: Voltage mismatch
-  Expected: 3.3V  Got: 5V
-  Hint: Insert a 3.3V LDO between Battery.Out and ESP32.VIN
-  Install: hpm install power/ldo_3v3
-```
-
-### 4️⃣ Integrated Toolchain ✅ (v0.1.x)
-
-Single pipeline from source to manufacturing-ready outputs.
-
-```bash
-hwc check board.hw      # Validate
-hwc build board.hw      # Compile to .hsx
-hsm build/board.hsx     # Live preview
-hwc build --target pcb  # Manufacturing files
-```
-
-### 5️⃣ Parametric Hardware Modules 🔄 (v0.2+)
-
-The holy grail: reusable hardware components with parameters.
-
-```hw
-add BuckConverter (input: 12V, output: 5V, current: 2A) named Converter1
-```
-
-**Read the full roadmap**: [ROADMAP.md](ROADMAP.md)
-
-
-
-## License & Business Model
-
-### Open Source (AGPLv3)
-
-Hardware Script is **free and open source** under the **GNU AGPLv3** license.
-
-**You own your hardware designs.** We own the compiler. Think of it like Microsoft Word: Microsoft owns Word, but you own the documents you create with it.
-
-### When You Need a Commercial License
-
-You only need a Commercial License in these specific cases:
-
-- ✅ **Modifying the Compiler** — You change `hwc` source code and want to keep changes private.
-- ✅ **Hosting as a Service** — You run the compiler on a cloud server accessible via web/API.
-- ✅ **Enterprise Support** — You need dedicated support and SLA guarantees.
-- ✅ **Corporate AGPL Ban** — Your company's legal team prohibits AGPL software.
-
-**See full details**: [LICENSE-FAQ.md](LICENSE-FAQ.md) | [COMMERCIAL-LICENSE.md](COMMERCIAL-LICENSE.md)
+| Check | Description |
+|-------|-------------|
+| **DRC** | Clearance, minimum width, minimum spacing, annular ring |
+| **LVS** | Layout-versus-schematic — physical device bindings match logical module |
+| **PIVB** | Physical interconnect verification — all nets are fully connected |
+| **EM** | Electromigration — trace current density vs. material limits (`I_peak / J_limit`) |
+| **Thermal** | Temperature rise — IPC-2152 limits, G-cell-local thermal coupling |
+| **Crosstalk** | Analytical parallel trace coupling bounds (Sakurai) |
+| **RF Parasitics** | Wheeler–Sakurai microstrip R/C/L/M extraction |
 
 ---
 
-## Contributing
+## SI Unit Parsing
 
-We welcome contributions! This is an open-source project with a clear roadmap.
+SI units are parsed natively by the lexer. No conversion functions, no string parsing:
 
-### Priority Areas
+```hw
+let width   = 1.41um       # 1.41 micrometers
+let pitch   = 400nm        # 400 nanometers
+let current = 1.0uA        # 1 microamp
+let voltage = 1.8V         # 1.8 volts
+let resist  = 350ohm       # 350 ohms
+let cap     = 2.0fF        # 2 femtofarads
+let freq    = 100MHz       # 100 megahertz
+```
 
-1. **Component Library** — Define standard parts in `.hw` format.
-2. **Integration Tests** — Write tests in Hardware Script.
-3. **Export Formats** — Drill files, silkscreen, solder mask.
-4. **Documentation** — Examples, tutorials, and use cases.
+---
 
-### How to Contribute
+## License
 
-Hardware Script follows **The Lean Core Philosophy** — the compiler stays as lightweight and fast as possible. We operate on an **Issue-Driven Development** model. We do **not** accept Pull Requests for the core compiler code (`hwc`). This isn't about declining contributions — it's about ensuring **rigorous research and alignment** with our core philosophy before implementing. When you share an idea via Issue, we research it thoroughly (benchmarks, papers, edge cases) before writing the code.
+Hardware Script is open source under the **GNU AGPLv3** license.
 
-1. **Found a bug?** Open a [Bug Report Issue](../../issues/new?template=bug_report.md).
-2. **Have an optimization idea?** Open an [Issue](../../issues/new?template=optimization.md) — we'll research it and implement it if it aligns with our vision.
-3. **Want to write hardware code?** Build an [HPM package](../../issues/new?template=syntax_proposal.md) and publish it to the registry!
-4. **Want to fix a typo in the docs?** Submit a PR for the `Docs/` folder.
+You own your hardware designs. We own the compiler. The AGPLv3 applies to the compiler source itself — compiled designs and generated output files (Gerber, SPICE, DXF, GDSII) belong entirely to you.
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md) for the full guide.
+A commercial license is available for: modifying the compiler privately, hosting the compiler as a web service, or enterprise support agreements.
 
 ---
 
 ## Community
 
-- **GitHub**: https://github.com/HardwareScript
 - **Discord**: https://discord.gg/9zqH8nuCet
-- **Twitter**: @hwsl_lang
+- **GitHub**: https://github.com/HardwareScript
 - **Email**: hardwarescript@gmail.com
-
----
-
-## Links
-
-- **🔮 Vision**: [VISION.md](VISION.md) — The "Matrix moment" and where we're going
-- **🌐 Ecosystem**: [ECOSYSTEM.md](ECOSYSTEM.md) — The complete toolchain (`hwc`, `hpm`, `hsm`, `hwsd`)
-- **🗺️ Roadmap**: [ROADMAP.md](ROADMAP.md) — The 5-problem strategy
-- **📝 Changelog**: [CHANGELOG.md](CHANGELOG.md)
-- **🤝 Contributing**: [CONTRIBUTING.md](CONTRIBUTING.md)
-- **⚖️ License**: [LICENSE.md](LICENSE.md) — AGPLv3 + Commercial
-- **💡 Integration Tests**: [tests](tests)
-- **🔧 Compiler CLI**: [hwc/crates/hwc-cli](hwc/crates/hwc-cli)
-
----
-
-> "We proved that hardware design can be as simple as writing text."
-
-> "Same input, same output, every time. Hardware is now deterministic."
-
-> "From a `.hw` file to Gerber, GLB, SPICE, and DXF in milliseconds."
-
----
-
-**Hardware Script v0.2.1** — Making hardware design as simple as writing code.
