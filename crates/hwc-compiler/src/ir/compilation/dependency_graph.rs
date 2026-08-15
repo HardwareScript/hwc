@@ -121,9 +121,6 @@ pub fn build_and_sort(
                 if let Some(pos) = &contact.position {
                     graph.extract_dependencies_from_coord(node, pos, last_component);
                 }
-                if let Some(anchor) = &contact.relational_anchor {
-                    graph.add_dependency(node, anchor.region_name.as_str());
-                }
                 for constraint in &contact.relational_constraints {
                     add_relational_constraint(&mut graph, node, constraint, last_component);
                 }

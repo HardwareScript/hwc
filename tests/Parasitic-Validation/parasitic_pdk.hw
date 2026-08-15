@@ -65,6 +65,26 @@ export bridge Polysilicon to Aluminum_Met1:
     thickness: 5nm
     fill: Tungsten
 
+export bridge N_Well to Aluminum_Met1:
+    interface: Titanium_Silicide
+    thickness: 5nm
+    fill: Tungsten
+
+export bridge HV_N_Well to Aluminum_Met1:
+    interface: Titanium_Silicide
+    thickness: 5nm
+    fill: Tungsten
+
+export bridge N_Diffusion to Aluminum_Met1:
+    interface: Titanium_Silicide
+    thickness: 5nm
+    fill: Tungsten
+
+export bridge P_Diffusion to Aluminum_Met1:
+    interface: Titanium_Silicide
+    thickness: 5nm
+    fill: Tungsten
+
 export profile EM_Test_Profile:
     technology: "ASIC"
     substrate_net: GND
@@ -331,6 +351,10 @@ export profile Junction_Test_Profile:
         material_contact_depths:
             Polysilicon: 30%
             Aluminum_Met1: 30%
+            N_Well: 30%
+            HV_N_Well: 30%
+            N_Diffusion: 30%
+            P_Diffusion: 30%
 
     trace:
         min_width: 300nm
@@ -353,7 +377,7 @@ export profile Junction_Test_Profile:
 
     layer:
         min_thickness: 100nm
-        allowed_conductors: [Aluminum_Met1, Polysilicon]
+        allowed_conductors: [Aluminum_Met1, Polysilicon, N_Well, HV_N_Well, N_Diffusion, P_Diffusion]
         allowed_dielectrics: [Silicon_Dioxide, Air]
 
     routing:

@@ -118,7 +118,7 @@ impl<'a> AutoRouter<'a> {
         }
 
         // v0.1.9: Extract explicit segments WITH normals for perpendicular escape
-        let mut explicit_segments: Vec<(NetId, Vec<Point3D>)> = Vec::new();
+        let mut explicit_segments: Vec<(NetId, Vec<Point3D>, Option<i64>)> = Vec::new();
         let mut net_normals: FxHashMap<
             NetId,
             (
@@ -176,7 +176,8 @@ impl<'a> AutoRouter<'a> {
                     eprintln!("[ENGINE DEBUG] Route {} ({}): boundary resolution returned start=({},{},{}), goal=({},{},{})",
                         idx, resolved.net_name, start.x, start.y, start.z, goal.x, goal.y, goal.z);
 
-                    explicit_segments.push((resolved.net_id, vec![start, goal]));
+                    let target_z = self.space.routing_layer_db.get_routing_z(&resolved.layer_name).ok();
+                    explicit_segments.push((resolved.net_id, vec![start, goal], target_z));
 
                     eprintln!(
                         "[ENGINE DEBUG] Route {} ({}): pushed to explicit_segments",
@@ -296,11 +297,12 @@ impl<'a> AutoRouter<'a> {
             "[ENGINE DEBUG] About to call route_space with {} explicit segments:",
             explicit_segments.len()
         );
-        for (i, (net_id, points)) in explicit_segments.iter().enumerate() {
+        for (i, (net_id, points, target_z)) in explicit_segments.iter().enumerate() {
             eprintln!(
-                "[ENGINE DEBUG]   Segment {} (net {:?}): {} points",
+                "[ENGINE DEBUG]   Segment {} (net {:?}, target_z={:?}): {} points",
                 i,
                 net_id,
+                target_z,
                 points.len()
             );
             for (j, p) in points.iter().enumerate() {

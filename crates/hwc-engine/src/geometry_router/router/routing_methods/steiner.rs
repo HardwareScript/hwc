@@ -93,6 +93,7 @@ impl GeometryRouter {
                 net_id,
                 start: final_start,
                 goal: final_goal,
+                target_z: None,
             };
 
             // v0.1.9: If net has a routing pattern, use length-constrained routing

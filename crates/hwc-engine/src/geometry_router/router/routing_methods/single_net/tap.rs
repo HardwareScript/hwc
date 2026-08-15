@@ -95,6 +95,7 @@ impl GeometryRouter {
                 net_id: route.net_id,
                 start: route.start,
                 goal: *tap_start,
+                target_z: route.target_z,
             };
 
             // Use direct routing for tap connections (don't recurse)
@@ -105,6 +106,7 @@ impl GeometryRouter {
                 net_id: route.net_id,
                 start: *tap_goal,
                 goal: route.goal,
+                target_z: route.target_z,
             };
 
             let result_from_tap = self.route_net_direct(entity_graph, &route_from_tap)?;

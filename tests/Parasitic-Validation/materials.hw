@@ -132,6 +132,7 @@ export material Tungsten:
     symbol: W
     process: deposited
     properties:
+        thickness: 576nm                 # Via height (from Z=252nm to Z=828nm per SKY130)
         color: "#606080"
         metallic: 0.7
         roughness: 0.3

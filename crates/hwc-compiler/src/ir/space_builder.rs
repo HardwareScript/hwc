@@ -200,6 +200,35 @@ pub fn create_hardware_space(
                 .netlist
                 .get_or_create_net_with_technology(&net_decl.name, is_asic, min_width);
 
+        // v0.3.0: Store electrical properties for DRC validation
+        // Convert parser NetClassification to engine NetClassification
+        let engine_classification = match net_decl.classification {
+            hwc_parser::NetClassification::Power => hwc_engine::space::NetClassification::Power,
+            hwc_parser::NetClassification::Ground => hwc_engine::space::NetClassification::Ground,
+            hwc_parser::NetClassification::Signal => hwc_engine::space::NetClassification::Signal,
+            hwc_parser::NetClassification::HighVoltage => hwc_engine::space::NetClassification::HighVoltage,
+            hwc_parser::NetClassification::Unclassified => hwc_engine::space::NetClassification::Unclassified,
+        };
+        let mut electrical_props = hwc_engine::space::NetElectricalProperties::new(engine_classification);
+
+        // v0.3.0: Set net voltage/potential (for junction breakdown validation)
+        // v0.2.1: Convert using unit registry (uses to_millivolts then convert to V)
+        if let Some(ref potential_measurement) = net_decl.potential {
+            let potential_mv = potential_measurement
+                .to_millivolts(unit_registry)
+                .map_err(|e| IrError::UnitConversion {
+                    message: format!(
+                        "Failed to convert potential for net '{}': {}",
+                        net_decl.name, e
+                    ),
+                    span: Some(miette::SourceSpan::new(
+                        potential_measurement.span.start.into(),
+                        (potential_measurement.span.end - potential_measurement.span.start).into(),
+                    )),
+                })?;
+            electrical_props.potential_v = Some(potential_mv as f64 / 1000.0); // mV → V
+        }
+
         // v0.1.7: Set net frequency on the netlist (for SI-aware routing)
         // v0.2.1: Convert using unit registry
         if let Some(ref freq_measurement) = net_decl.frequency {
@@ -217,6 +246,7 @@ pub fn create_hardware_space(
                         )),
                     })?;
             space.netlist.set_net_frequency(net_id, freq_hz);
+            electrical_props.frequency_hz = Some(freq_hz);
         }
 
         // v0.1.8: Set net current on the netlist (for thermal/EM validation)
@@ -235,7 +265,11 @@ pub fn create_hardware_space(
                     )),
                 })?;
             space.netlist.set_net_current(net_id, current_ma);
+            electrical_props.current_ma = Some(current_ma);
         }
+
+        // v0.3.0: Store in space for DRC access
+        space.net_electrical_properties.insert(net_decl.name.clone(), electrical_props);
     }
 
     Ok(space)

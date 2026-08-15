@@ -109,6 +109,16 @@ pub enum DrcViolation {
         spacing_nm: i64,
         location: Point3D,
     },
+
+    /// Junction breakdown violation (P46: Voltage exceeds junction safe limit)
+    JunctionBreakdownViolation {
+        net: CompactString,
+        material: CompactString,
+        substrate_material: CompactString,
+        applied_voltage_v: f64,
+        max_voltage_v: f64,
+        location: Point3D,
+    },
 }
 
 impl fmt::Display for DrcViolation {
@@ -272,6 +282,20 @@ impl fmt::Display for DrcViolation {
                     f,
                     "Thermal rise violation for {} at {}: ΔT={:.1}°C (max: {:.1}°C), P={:.2}μW, R={:.2}Ω",
                     net, location, actual_temp_rise_c, max_temp_rise_c, power_uw, resistance_ohms
+                )
+            }
+            DrcViolation::JunctionBreakdownViolation {
+                net,
+                material,
+                substrate_material,
+                applied_voltage_v,
+                max_voltage_v,
+                location,
+            } => {
+                write!(
+                    f,
+                    "Junction breakdown violation for net {} at {}: {}-to-{} junction biased at {:.2}V (max: {:.2}V)",
+                    net, location, material, substrate_material, applied_voltage_v, max_voltage_v
                 )
             }
         }

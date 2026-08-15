@@ -12,7 +12,7 @@
 //! The engine queries contact metadata to identify endpoints that connect to
 //! vias/pads and preserves these connections by skipping miter on terminal segments.
 
-use super::coordinate_system::{get_routing_direction, CardinalDirection};
+
 use crate::geometry::{BoundingBox, Point3D};
 use crate::netlist::NetId;
 
@@ -146,57 +146,7 @@ impl MiterEngine {
         // overshoot artifacts).
 
         let first = deduped[0];
-        if deduped.len() >= 2 {
-            if let Some(via_bbox) = context.get_contact_bbox(&first, via_tolerance) {
-                eprintln!(
-                    "[MITER VIA COVERAGE] First point ({},{},{}) is via center",
-                    first.x, first.y, first.z
-                );
-                eprintln!(
-                    "[MITER VIA COVERAGE]   Via bbox: ({},{}) -> ({},{})",
-                    via_bbox.min.x, via_bbox.min.y, via_bbox.max.x, via_bbox.max.y
-                );
-
-                // Determine routing direction using coordinate system utilities
-                let second = deduped[1];
-                let direction = get_routing_direction(&first, &second);
-
-                eprintln!("[MITER VIA COVERAGE]   Routing direction: {:?}", direction);
-
-                // Calculate via edge point IN THE DIRECTION OF ROUTING
-                // This ensures the stroked trace (with flush ends) covers the via
-                let via_edge = match direction {
-                    CardinalDirection::East => {
-                        // Routing EAST - start waypoint at WEST edge of via
-                        // When stroked eastward with flush end, covers via fully
-                        Point3D::new(via_bbox.min.x, first.y, first.z)
-                    }
-                    CardinalDirection::West => {
-                        // Routing WEST - start waypoint at EAST edge of via
-                        Point3D::new(via_bbox.max.x, first.y, first.z)
-                    }
-                    CardinalDirection::North => {
-                        // Routing NORTH - start waypoint at SOUTH edge of via
-                        Point3D::new(first.x, via_bbox.min.y, first.z)
-                    }
-                    CardinalDirection::South => {
-                        // Routing SOUTH - start waypoint at NORTH edge of via
-                        Point3D::new(first.x, via_bbox.max.y, first.z)
-                    }
-                };
-
-                eprintln!(
-                    "[MITER VIA COVERAGE]   Using via edge waypoint: ({},{},{})",
-                    via_edge.x, via_edge.y, via_edge.z
-                );
-
-                mitered.push(via_edge);
-            } else {
-                mitered.push(first);
-            }
-        } else {
-            mitered.push(first);
-        }
+        mitered.push(first);
 
         let mut i = 1;
         while i < deduped.len() - 1 {
@@ -271,58 +221,9 @@ impl MiterEngine {
             i += 1;
         }
 
-        // **v0.2.0: Via pad coverage** - Check if last point is a via endpoint
-        // If so, extend the trace forward to cover the via pad
         let last = *deduped.last().unwrap();
         if last != *mitered.last().unwrap() {
             mitered.push(last);
-        }
-
-        // Add via edge extension for last point if it's a via
-        if deduped.len() >= 2 {
-            if let Some(via_bbox) = context.get_contact_bbox(&last, via_tolerance) {
-                eprintln!(
-                    "[MITER VIA COVERAGE] Last point ({},{},{}) is via center",
-                    last.x, last.y, last.z
-                );
-                eprintln!(
-                    "[MITER VIA COVERAGE]   Via bbox: ({},{}) -> ({},{})",
-                    via_bbox.min.x, via_bbox.min.y, via_bbox.max.x, via_bbox.max.y
-                );
-
-                // Determine routing direction using coordinate system utilities
-                let second_last = deduped[deduped.len() - 2];
-                let direction = get_routing_direction(&second_last, &last);
-
-                eprintln!("[MITER VIA COVERAGE]   Routing direction: {:?}", direction);
-
-                // Calculate via edge point based on routing direction
-                let via_edge = match direction {
-                    CardinalDirection::East => {
-                        // Routing east - extend to east edge of via
-                        Point3D::new(via_bbox.max.x, last.y, last.z)
-                    }
-                    CardinalDirection::West => {
-                        // Routing west - extend to west edge of via
-                        Point3D::new(via_bbox.min.x, last.y, last.z)
-                    }
-                    CardinalDirection::North => {
-                        // Routing north - extend to north edge of via
-                        Point3D::new(last.x, via_bbox.max.y, last.z)
-                    }
-                    CardinalDirection::South => {
-                        // Routing south - extend to south edge of via
-                        Point3D::new(last.x, via_bbox.min.y, last.z)
-                    }
-                };
-
-                eprintln!(
-                    "[MITER VIA COVERAGE]   Adding via edge point: ({},{},{})",
-                    via_edge.x, via_edge.y, via_edge.z
-                );
-
-                mitered.push(via_edge);
-            }
         }
 
         mitered

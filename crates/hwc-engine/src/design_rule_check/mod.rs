@@ -27,6 +27,7 @@ mod clearance;
 mod crosstalk; // v0.3.0: Signal integrity validation
 mod electromigration; // P21: Electromigration validation
 mod error;
+mod junction; // P46: Junction breakdown validation
 mod parallel;
 mod thermal; // P22: Thermal rise validation
 mod trace_width;
@@ -39,6 +40,7 @@ pub use clearance::validate_clearances;
 pub use crosstalk::validate_crosstalk; // v0.3.0
 pub use electromigration::validate_electromigration; // P21
 pub use error::{report_to_errors, violation_to_error, DrcError};
+pub use junction::validate_junction_breakdown; // P46
 pub use parallel::validate_physics_parallel;
 pub use thermal::validate_thermal_rise; // P22
 pub use trace_width::validate_trace_widths;

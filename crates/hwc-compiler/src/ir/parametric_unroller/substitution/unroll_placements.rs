@@ -338,7 +338,6 @@ pub fn unroll_contact(
         material: contact.material.clone(),
         name,
         position,
-        relational_anchor: contact.relational_anchor.clone(), // v0.2.0: Preserve relational anchor
         from_elevation,
         to_elevation,
         net,

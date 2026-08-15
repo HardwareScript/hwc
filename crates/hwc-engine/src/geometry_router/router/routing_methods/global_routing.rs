@@ -166,7 +166,9 @@ impl GeometryRouter {
         // We route on the preferred layer and stitch vertical segments to connect the pins.
         let start = clamp_coords(route.start);
         let goal = clamp_coords(route.goal);
-        let target_z_preference = self.net_layer_targets.get(&route.net_id).copied();
+        let target_z_preference = route
+            .target_z
+            .or_else(|| self.net_layer_targets.get(&route.net_id).copied());
 
         // Determine the search points for routing
         // If we have a layer preference, route on that layer, otherwise route at pin heights
@@ -346,11 +348,11 @@ impl GeometryRouter {
     pub fn route_all_nets_explicit_global(
         &mut self,
         entity_graph: &mut EntityGraph,
-        segments: &[(NetId, Vec<Point3D>)],
+        segments: &[(NetId, Vec<Point3D>, Option<i64>)],
     ) -> Result<RouteResult, RoutingError> {
         let mut result = RouteResult::new();
 
-        for (net_id, points) in segments {
+        for (net_id, points, target_z) in segments {
             if points.len() < 2 {
                 continue;
             }
@@ -366,6 +368,7 @@ impl GeometryRouter {
                     net_id: *net_id,
                     start,
                     goal,
+                    target_z: *target_z,
                 };
 
                 let routed = self.route_net_global(entity_graph, &route)?;

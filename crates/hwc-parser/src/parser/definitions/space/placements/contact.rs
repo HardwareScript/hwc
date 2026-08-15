@@ -34,7 +34,7 @@ impl crate::parser::Parser {
         };
 
         // Check for brace-grouped placement clauses or inline placement
-        let (position, relational_anchor, from_elevation, to_elevation) =
+        let (position, from_elevation, to_elevation) =
             if self.check(&Token::OpenBrace) {
                 // Multi-line syntax with braces: { at: ... \n spanning ... }
                 self.advance(); // consume '{'
@@ -47,15 +47,7 @@ impl crate::parser::Parser {
                 }
 
                 self.expect(&Token::At)?;
-
-                let (pos, anchor) = if self.check(&Token::Colon) {
-                    self.advance();
-                    let anchor = self.parse_region_anchor()?;
-                    (None, Some(anchor))
-                } else {
-                    let pos = self.parse_coordinate_optional_z()?;
-                    (Some(pos), None)
-                };
+                let pos = self.parse_coordinate_optional_z()?;
 
                 self.skip_whitespace();
                 if self.check(&Token::Newline) {
@@ -73,30 +65,22 @@ impl crate::parser::Parser {
                 self.expect(&Token::CloseBrace)?;
                 self.skip_whitespace();
 
-                (pos, anchor, from_elev, to_elev)
+                (Some(pos), from_elev, to_elev)
             } else {
                 // Inline syntax: at ... spanning ... OR just spanning with relational constraints
                 // v0.2.1: Make 'at' optional if relational constraints are provided in properties block
-                let (pos, anchor) = if self.check(&Token::At) {
+                let pos = if self.check(&Token::At) {
                     self.advance(); // consume 'at'
-
-                    if self.check(&Token::Colon) {
-                        self.advance();
-                        let anchor = self.parse_region_anchor()?;
-                        (None, Some(anchor))
-                    } else {
-                        let pos = self.parse_coordinate_optional_z()?;
-                        (Some(pos), None)
-                    }
+                    Some(self.parse_coordinate_optional_z()?)
                 } else {
                     // No 'at' clause - position will come from relational constraints
-                    (None, None)
+                    None
                 };
 
                 self.expect(&Token::Spanning)?;
                 let (from_elev, to_elev) = self.parse_spanning_clause()?;
 
-                (pos, anchor, from_elev, to_elev)
+                (pos, from_elev, to_elev)
             };
 
         // Optional: properties block
@@ -234,7 +218,6 @@ impl crate::parser::Parser {
             material: material.into(),
             name,
             position,
-            relational_anchor,
             from_elevation,
             to_elevation,
             net: net.or(net_in_block),
@@ -245,39 +228,6 @@ impl crate::parser::Parser {
         };
 
         Ok(self.arena.alloc_contact(contact))
-    }
-
-    /// Parse region anchor: `Region.center`, `Region.bottom_left`, etc.
-    fn parse_region_anchor(&mut self) -> Result<RelationalAnchor, ParseError> {
-        let start_pos = self.current_span().start;
-        let region_name = self.expect_identifier()?;
-        self.expect(&Token::Dot)?;
-        let anchor_str = self.expect_identifier_string()?;
-
-        let anchor_point = match anchor_str.as_str() {
-            "center" => AnchorPoint::Center,
-            "bottom_left" => AnchorPoint::BottomLeft,
-            "bottom_right" => AnchorPoint::BottomRight,
-            "top_left" => AnchorPoint::TopLeft,
-            "top_right" => AnchorPoint::TopRight,
-            "center_left" => AnchorPoint::CenterLeft,
-            "center_right" => AnchorPoint::CenterRight,
-            "top_center" => AnchorPoint::TopCenter,
-            "bottom_center" => AnchorPoint::BottomCenter,
-            _ => {
-                return Err(self.error(&format!(
-                    "Invalid anchor point '{}'. Expected: center, bottom_left, bottom_right, top_left, top_right, center_left, center_right, top_center, or bottom_center",
-                    anchor_str
-                )))
-            }
-        };
-
-        let end_pos = self.previous_span().end;
-        Ok(RelationalAnchor {
-            region_name,
-            anchor_point,
-            span: Span::new(start_pos, end_pos),
-        })
     }
 
     /// Parse spanning clause: `spanning layer: l1 to l2` or `spanning z: A to z: B`

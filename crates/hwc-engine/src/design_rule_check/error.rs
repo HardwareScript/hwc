@@ -169,6 +169,22 @@ pub enum DrcError {
         spacing_nm: i64,
         location: Point3D,
     },
+
+    /// P46: Junction Breakdown Violation
+    #[error("Junction breakdown: {applied_voltage_v:.2}V exceeds {material} rating ({max_voltage_v:.2}V)")]
+    #[diagnostic(
+        code(P46),
+        url("https://docs.hw-script.org/errors/P46"),
+        help("reduce operating voltage below {max_voltage_v:.2}V or use high-voltage material (e.g., HV_N_Well for >2V)")
+    )]
+    JunctionBreakdownViolation {
+        net: CompactString,
+        material: CompactString,
+        substrate_material: CompactString,
+        applied_voltage_v: f64,
+        max_voltage_v: f64,
+        location: Point3D,
+    },
 }
 
 /// Convert DRC violations to miette errors.
@@ -313,6 +329,21 @@ impl From<&DrcViolation> for DrcError {
                 max_temp_rise_c: *max_temp_rise_c,
                 power_uw: *power_uw,
                 resistance_ohms: *resistance_ohms,
+                location: *location,
+            },
+            DrcViolation::JunctionBreakdownViolation {
+                net,
+                material,
+                substrate_material,
+                applied_voltage_v,
+                max_voltage_v,
+                location,
+            } => DrcError::JunctionBreakdownViolation {
+                net: net.clone(),
+                material: material.clone(),
+                substrate_material: substrate_material.clone(),
+                applied_voltage_v: *applied_voltage_v,
+                max_voltage_v: *max_voltage_v,
                 location: *location,
             },
         }

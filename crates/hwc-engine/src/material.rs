@@ -273,6 +273,16 @@ impl MaterialRegistry {
         self.id_to_physical.get(&id)
     }
 
+    /// Get physical properties for a material by name.
+    ///
+    /// Convenience method that resolves name→ID→props in one call.
+    /// Returns `None` if material is unregistered or has no properties.
+    #[inline]
+    pub fn get_physical_props_by_name(&self, name: &str) -> Option<&MaterialPhysicalProps> {
+        let id = self.name_to_id.get(name.trim())?;
+        self.id_to_physical.get(id)
+    }
+
     /// Validate that a conductor material has all required physical properties.
     pub fn validate_conductor_props(&self, id: MaterialId, name: &str) -> Result<(), String> {
         if !self.is_conductor(id) {
@@ -307,11 +317,6 @@ impl MaterialRegistry {
                 missing.join(", ")
             ))
         }
-    }
-
-    /// Get physical properties by material name. Returns `None` if not found.
-    pub fn get_physical_props_by_name(&self, name: &str) -> Option<&MaterialPhysicalProps> {
-        self.get_id(name).and_then(|id| self.get_physical_props(id))
     }
 
     /// Get material physical properties by material ID (alias for get_physical_props).

@@ -79,113 +79,26 @@ pub fn execute_placement(
 
                     resolved_pour.position = Some(resolved_position.clone());
 
-                    // Create or update boundary from resolved position.
-                    // If boundary exists (from dimensions+at in parser), update its center.
-                    // If boundary is None (dimensions only, no at:), leave it None — place_pour
-                    // will build it from position + width/height in the position+dimensions path.
-                    if let Some(hwc_parser::PourBoundary::Rect(from, to)) = &resolved_pour.boundary
-                    {
-                        // Boundary exists - extract dimensions and recompute with new center
-                        let width_expr = hwc_parser::Expression::Binary {
-                            left: Box::new(to.x().clone()),
-                            operator: hwc_parser::BinaryOperator::Subtract,
-                            right: Box::new(from.x().clone()),
-                            span: hwc_parser::Span::new(0, 0),
-                        };
-
-                        let height_expr = hwc_parser::Expression::Binary {
-                            left: Box::new(to.y().clone()),
-                            operator: hwc_parser::BinaryOperator::Subtract,
-                            right: Box::new(from.y().clone()),
-                            span: hwc_parser::Span::new(0, 0),
-                        };
-
-                        // Use resolved position expressions directly
-                        let center_x = resolved_position.x().clone();
-                        let center_y = resolved_position.y().clone();
-
-                        let new_from = hwc_parser::Coordinate::Positional {
-                            x: hwc_parser::Expression::Binary {
-                                left: Box::new(center_x.clone()),
+                    // Extract width and height from boundary if not explicitly set
+                    if resolved_pour.width.is_none() && resolved_pour.height.is_none() {
+                        if let Some(hwc_parser::PourBoundary::Rect(from, to)) = &resolved_pour.boundary {
+                            resolved_pour.width = Some(hwc_parser::Expression::Binary {
+                                left: Box::new(to.x().clone()),
                                 operator: hwc_parser::BinaryOperator::Subtract,
-                                right: Box::new(hwc_parser::Expression::Binary {
-                                    left: Box::new(width_expr.clone()),
-                                    operator: hwc_parser::BinaryOperator::Divide,
-                                    right: Box::new(hwc_parser::Expression::Literal {
-                                        value: 2,
-                                        span: hwc_parser::Span::new(0, 0),
-                                    }),
-                                    span: hwc_parser::Span::new(0, 0),
-                                }),
+                                right: Box::new(from.x().clone()),
                                 span: hwc_parser::Span::new(0, 0),
-                            },
-                            y: hwc_parser::Expression::Binary {
-                                left: Box::new(center_y.clone()),
+                            });
+                            resolved_pour.height = Some(hwc_parser::Expression::Binary {
+                                left: Box::new(to.y().clone()),
                                 operator: hwc_parser::BinaryOperator::Subtract,
-                                right: Box::new(hwc_parser::Expression::Binary {
-                                    left: Box::new(height_expr.clone()),
-                                    operator: hwc_parser::BinaryOperator::Divide,
-                                    right: Box::new(hwc_parser::Expression::Literal {
-                                        value: 2,
-                                        span: hwc_parser::Span::new(0, 0),
-                                    }),
-                                    span: hwc_parser::Span::new(0, 0),
-                                }),
+                                right: Box::new(from.y().clone()),
                                 span: hwc_parser::Span::new(0, 0),
-                            },
-                            z: from.z().clone(),
-                            span: hwc_parser::Span::new(0, 0),
-                        };
-
-                        let new_to = hwc_parser::Coordinate::Positional {
-                            x: hwc_parser::Expression::Binary {
-                                left: Box::new(center_x),
-                                operator: hwc_parser::BinaryOperator::Add,
-                                right: Box::new(hwc_parser::Expression::Binary {
-                                    left: Box::new(width_expr),
-                                    operator: hwc_parser::BinaryOperator::Divide,
-                                    right: Box::new(hwc_parser::Expression::Literal {
-                                        value: 2,
-                                        span: hwc_parser::Span::new(0, 0),
-                                    }),
-                                    span: hwc_parser::Span::new(0, 0),
-                                }),
-                                span: hwc_parser::Span::new(0, 0),
-                            },
-                            y: hwc_parser::Expression::Binary {
-                                left: Box::new(center_y),
-                                operator: hwc_parser::BinaryOperator::Add,
-                                right: Box::new(hwc_parser::Expression::Binary {
-                                    left: Box::new(height_expr),
-                                    operator: hwc_parser::BinaryOperator::Divide,
-                                    right: Box::new(hwc_parser::Expression::Literal {
-                                        value: 2,
-                                        span: hwc_parser::Span::new(0, 0),
-                                    }),
-                                    span: hwc_parser::Span::new(0, 0),
-                                }),
-                                span: hwc_parser::Span::new(0, 0),
-                            },
-                            z: to.z().clone(),
-                            span: hwc_parser::Span::new(0, 0),
-                        };
-
-                        resolved_pour.boundary = Some(hwc_parser::PourBoundary::Rect(
-                            Box::new(new_from),
-                            Box::new(new_to),
-                        ));
+                            });
+                        }
                     }
 
-                    // v0.2.1 FIX: Clear relational_constraints after resolution.
-                    //
-                    // place_pour has this guard:
-                    //   if boundary.is_none() && !relational_constraints.is_empty() { return Ok(()); }
-                    //
-                    // This guard exists to defer pours whose constraints can't be resolved yet.
-                    // But at this point we've ALREADY resolved them and set `position`. If we
-                    // leave constraints non-empty, place_pour sees boundary=None + constraints≠empty
-                    // and early-returns without registering the entity in the bbox_tracker.
-                    // Clearing them signals "constraints resolved; proceed with position+dimensions."
+                    // Clear boundary & relational_constraints so place_pour computes bounds directly in integer picometers from position + dimensions
+                    resolved_pour.boundary = None;
                     resolved_pour.relational_constraints = smallvec::smallvec![];
                 }
 
@@ -230,7 +143,6 @@ pub fn execute_placement(
                 // v0.2.1: Resolve relational constraints if present
                 if !resolved_contact.relational_constraints.is_empty()
                     && resolved_contact.position.is_none()
-                    && resolved_contact.relational_anchor.is_none()
                 {
                     let resolved_position =
                         crate::ir::relational_resolver::compute_position_from_constraints(
@@ -258,6 +170,10 @@ pub fn execute_placement(
                         "[DEBUG] Resolved contact '{}' position from relational constraints: ({:?}, {:?})",
                         resolved_contact.name.base, resolved_position.x(), resolved_position.y()
                     );
+
+                    // ✅ CRITICAL FIX: Clear relational_constraints after resolution!
+                    // This signals to place_contact that constraints are resolved and to proceed with placement.
+                    resolved_contact.relational_constraints = smallvec::smallvec![];
                 }
 
                 crate::ir::placement::place_contact(crate::ir::placement::PlaceContactParams {

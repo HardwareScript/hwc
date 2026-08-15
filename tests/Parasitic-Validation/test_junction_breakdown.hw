@@ -44,119 +44,75 @@ module JunctionTest:
     pins: [input Vin, output Vout]
 
 # ============================================================================
-# Test Case A: Standard Diffusion Voltage Overstress
+# Test Case A: N-Well to P-Substrate Junction with High Voltage
 # ============================================================================
-# Operating a standard 1.8V digital diffusion at 3.3V causes breakdown risk
+# Standard N-Well at high voltage exceeds junction breakdown rating
 
 space Junction_Breakdown_Space_A implements JunctionTest:
-    dimensions: 6.0um by 4.0um by 2um
-    resolution: 10nm
-    origin: bl by b
-    profile: Junction_Test_Profile
-
-    # OVERVOLTAGE CONDITION: 3.3V applied to standard 1.8V-rated diffusion
-    nets:
-        Vin:  { classification: signal, potential: 3.3V, current: 10uA }  # OVERVOLTAGE!
-        Vout: { classification: signal, potential: 0.0V, current: 10uA }
-        GND:  { classification: power,  potential: 0.0V, current: 100uA }
-
-    # ========================================================================
-    # P-SUBSTRATE (grounded) - Acts as diode cathode
-    # ========================================================================
-    
-    # THE ONLY ABSOLUTE ANCHOR for this space
-    add pour(P_Substrate) named Substrate on layer: substrate:
-        net: GND
-        dimensions: 6.0um by 4.0um
-        at: [x: 0um, y: 0um]    # ← ONLY absolute 'at:' in this space
-
-    # ========================================================================
-    # N+ DIFFUSION - Forms p-n junction with substrate (diode anode)
-    # ========================================================================
-    # This N+ diffusion is a standard digital device (max 1.98V rating)
-    # Applying 3.3V creates 3.3V reverse bias → exceeds 1.98V limit
-    
-    add pour(N_Diffusion) named N_Region on layer: substrate:
-        net: Vin
-        dimensions: 2.0um by 2.0um
-        align: center_x with Substrate.left + 3.0um
-        align: center_y with Substrate.bottom + 2.0um
-
-    # ========================================================================
-    # METAL CONTACT TO N+ DIFFUSION - All RELATIONAL
-    # ========================================================================
-    
-    add pour(Polysilicon) named Poly_Contact on layer: poly:
-        net: Vin
-        dimensions: 1.5um by 1.5um
-        align: center_x with N_Region
-        align: center_y with N_Region
-
-    add pour(Aluminum_Met1) named Metal_Pad on layer: metal1:
-        net: Vin
-        dimensions: 1.8um by 1.8um
-        align: center_x with Poly_Contact
-        align: center_y with Poly_Contact
-
-    # Via from poly to metal - RELATIONAL
-    add contact(Tungsten) named Contact_Via spanning layer: poly to metal1:
-        net: Vin
-        diameter: 170nm
-        align: center_x with Poly_Contact
-        align: center_y with Poly_Contact
-
-    # Output reference pad - RELATIONAL
-    add pour(Aluminum_Met1) named Out_Pad on layer: metal1:
-        net: Vout
-        dimensions: 1.0um by 1.0um
-        align: center_x with Substrate.right - 1.0um
-        align: center_y with Substrate.center_y
-
-# ============================================================================
-# Test Case B: N-Well to P-Substrate Junction with High Voltage
-# ============================================================================
-# Creating an N-Well at high voltage without proper HV designation
-
-space Junction_Breakdown_Space_B implements JunctionTest:
-    dimensions: 8.0um by 6.0um by 2um
-    resolution: 10nm
-    origin: bl by b
+    dimensions: 8.0um by 6.0um
     profile: Junction_Test_Profile
 
     # HIGH VOLTAGE on standard N-Well (not HV_N_Well)
+    # This creates a 5.5V reverse bias across the N-Well to P-Substrate junction
     nets:
         Vin:  { classification: signal, potential: 5.5V, current: 50uA }  # 5V I/O overvoltage!
         Vout: { classification: signal, potential: 0.0V, current: 50uA }
-        GND:  { classification: power,  potential: 0.0V, current: 100uA }
-
-    # THE ONLY ABSOLUTE ANCHOR for this space
-    # P-Substrate (grounded)
-    add pour(P_Substrate) named Substrate on layer: substrate:
-        net: GND
-        dimensions: 8.0um by 6.0um
-        at: [x: 0um, y: 0um]    # ← ONLY absolute 'at:' in this space
+        GND:  { classification: ground, potential: 0.0V, current: 100uA }
 
     # Standard N-Well (max 1.98V rating) - SHOULD USE HV_N_Well instead!
-    # RELATIONAL to Substrate
+    # NOTE: P-Substrate is defined in profile stackup, not as a manual pour
+    # This N-Well at 5.5V will form a junction with substrate at 0V
     add pour(N_Well) named Standard_NWell on layer: nwell:
         net: Vin
         dimensions: 4.0um by 4.0um
-        align: center_x with Substrate.left + 4.0um
-        align: center_y with Substrate.bottom + 3.0um
+        at: [x: 4.0um, y: 3.0um]
 
-    # Metal contact to N-Well - RELATIONAL
+    # Metal contact to N-Well
     add pour(Aluminum_Met1) named NWell_Contact on layer: metal1:
         net: Vin
         dimensions: 3.0um by 3.0um
         align: center_x with Standard_NWell
         align: center_y with Standard_NWell
 
-    # Output pad - RELATIONAL
+    # Output pad
     add pour(Aluminum_Met1) named Out_Pad on layer: metal1:
         net: Vout
         dimensions: 1.0um by 1.0um
-        align: center_x with Substrate.right - 1.0um
-        align: center_y with Substrate.center_y
+        at: [x: 7.0um, y: 3.0um]
+
+# ============================================================================
+# Test Case B: N-Diffusion at Overvoltage
+# ============================================================================
+# N+ diffusion at 3.3V exceeds standard 1.98V rating
+
+space Junction_Breakdown_Space_B implements JunctionTest:
+    dimensions: 6.0um by 4.0um
+    profile: Junction_Test_Profile
+
+    # OVERVOLTAGE CONDITION: 3.3V applied to standard 1.8V-rated diffusion
+    nets:
+        Vin:  { classification: signal, potential: 3.3V, current: 10uA }  # OVERVOLTAGE!
+        Vout: { classification: signal, potential: 0.0V, current: 10uA }
+        GND:  { classification: ground, potential: 0.0V, current: 100uA }
+
+    # N+ Diffusion at high voltage - exceeds 1.98V rating
+    add pour(N_Diffusion) named N_Region on layer: nwell:
+        net: Vin
+        dimensions: 2.0um by 2.0um
+        at: [x: 3.0um, y: 2.0um]
+
+    # Metal contact
+    add pour(Aluminum_Met1) named Metal_Pad on layer: metal1:
+        net: Vin
+        dimensions: 1.8um by 1.8um
+        align: center_x with N_Region
+        align: center_y with N_Region
+
+    # Output pad
+    add pour(Aluminum_Met1) named Out_Pad on layer: metal1:
+        net: Vout
+        dimensions: 1.0um by 1.0um
+        at: [x: 5.0um, y: 2.0um]
 
 # ============================================================================
 # EXPECTED COMPILER BEHAVIOR
@@ -164,18 +120,7 @@ space Junction_Breakdown_Space_B implements JunctionTest:
 #
 # For Junction_Breakdown_Space_A:
 #   Error P46: Junction voltage violation
-#   N_Diffusion-to-P_Substrate junction at (2.0um, 1.0um)
-#   Applied voltage: 3.3V
-#   Maximum rated voltage for standard diffusion: 1.98V
-#   Reverse bias overstress: 3.3V - 1.98V = 1.32V beyond safe limit
-#   
-#   RECOMMENDATIONS:
-#   - Use HV_N_Well for 3.3V operation (rated to 5.5V)
-#   - Or reduce Vin to 1.8V nominal for standard digital
-#
-# For Junction_Breakdown_Space_B:
-#   Error P46: High-voltage junction violation
-#   N_Well-to-P_Substrate junction at (2.0um, 1.0um)
+#   N_Well-to-P_Substrate junction
 #   Applied voltage: 5.5V on standard N_Well (max 1.98V)
 #   Required: Use HV_N_Well material for 5V I/O domains
 #   
@@ -183,6 +128,17 @@ space Junction_Breakdown_Space_B implements JunctionTest:
 #   - Replace N_Well with HV_N_Well (rated to 11.0V)
 #   - Add proper HV guard rings and STI isolation
 #   - Ensure well bias is properly maintained
+#
+# For Junction_Breakdown_Space_B:
+#   Error P46: Junction voltage violation
+#   N_Diffusion-to-P_Substrate junction
+#   Applied voltage: 3.3V
+#   Maximum rated voltage for standard diffusion: 1.98V
+#   Reverse bias overstress: 3.3V - 1.98V = 1.32V beyond safe limit
+#   
+#   RECOMMENDATIONS:
+#   - Use HV_N_Well for 3.3V operation (rated to 5.5V)
+#   - Or reduce Vin to 1.8V nominal for standard digital
 #
 # ============================================================================
 # SKY130 DESIGN RULE CONTEXT

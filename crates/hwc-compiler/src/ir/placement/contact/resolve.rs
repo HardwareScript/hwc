@@ -1,69 +1,8 @@
 use super::helpers::{get_prop_nm, get_prop_string};
 use crate::ir::errors::IrError;
 use hwc_engine::HardwareSpace;
-use hwc_physics::geometry::Point2D;
 
-/// Resolve relational anchor (e.g., Region.center) to absolute coordinates (v0.2.0)
-pub(super) fn resolve_relational_anchor(
-    anchor: &hwc_parser::RelationalAnchor,
-    bbox_tracker: &crate::BoundingBoxTracker,
-    contact_name: &hwc_parser::ComponentName,
-) -> Result<Point2D, IrError> {
-    let region_name = anchor.region_name.as_str();
 
-    // Look up the region's bounding box
-    let region_bbox =
-        bbox_tracker
-            .get(region_name)
-            .ok_or_else(|| IrError::PlacementConstraint {
-                message: format!(
-                    "Contact '{}' references unknown region '{}'",
-                    contact_name.base.as_str(),
-                    region_name
-                ),
-                component: contact_name.base.as_str().to_string(),
-            })?;
-
-    // Calculate anchor point based on region bounding box
-    let (x_nm, y_nm) = match anchor.anchor_point {
-        hwc_parser::AnchorPoint::Center => {
-            let center_x = (region_bbox.min.x + region_bbox.max.x) / 2;
-            let center_y = (region_bbox.min.y + region_bbox.max.y) / 2;
-            (center_x, center_y)
-        }
-        hwc_parser::AnchorPoint::BottomLeft => (region_bbox.min.x, region_bbox.min.y),
-        hwc_parser::AnchorPoint::BottomRight => (region_bbox.max.x, region_bbox.min.y),
-        hwc_parser::AnchorPoint::TopLeft => (region_bbox.min.x, region_bbox.max.y),
-        hwc_parser::AnchorPoint::TopRight => (region_bbox.max.x, region_bbox.max.y),
-        hwc_parser::AnchorPoint::CenterLeft => {
-            let center_y = (region_bbox.min.y + region_bbox.max.y) / 2;
-            (region_bbox.min.x, center_y)
-        }
-        hwc_parser::AnchorPoint::CenterRight => {
-            let center_y = (region_bbox.min.y + region_bbox.max.y) / 2;
-            (region_bbox.max.x, center_y)
-        }
-        hwc_parser::AnchorPoint::TopCenter => {
-            let center_x = (region_bbox.min.x + region_bbox.max.x) / 2;
-            (center_x, region_bbox.max.y)
-        }
-        hwc_parser::AnchorPoint::BottomCenter => {
-            let center_x = (region_bbox.min.x + region_bbox.max.x) / 2;
-            (center_x, region_bbox.min.y)
-        }
-    };
-
-    println!(
-        "[RELATIONAL_ANCHOR] Resolved '{}.{:?}' to ({}, {}) for contact '{}'",
-        region_name,
-        anchor.anchor_point,
-        x_nm,
-        y_nm,
-        contact_name.base.as_str()
-    );
-
-    Ok(Point2D::new(x_nm, y_nm))
-}
 
 pub(super) fn check_material_collisions(
     space: &HardwareSpace,

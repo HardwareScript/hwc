@@ -83,3 +83,4 @@ export material P_Plus_Diffusion:
         resistivity: 5e-4ohm_m
         thermal_conductivity: 148.0W_mK
         max_current_density: 1e3A_mm2
+        max_junction_voltage: 1.98V

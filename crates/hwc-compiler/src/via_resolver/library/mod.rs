@@ -135,6 +135,41 @@ impl ViaLibrary {
                     bridge_table.all_rules().len()
                 );
 
+                // Helper to check if a material can be hosted on a layer
+                let is_material_compatible_with_layer = |mat_name: &str, layer_idx: usize| -> bool {
+                    if let Some(stack_mat) = stackup_manager.get_material_for_layer_index(layer_idx) {
+                        // 1. Exact string match (e.g. Aluminum_Met1 on metal1, Polysilicon on poly)
+                        if stack_mat == mat_name {
+                            return true;
+                        }
+
+                        // 2. Semiconductor Category Match:
+                        // Any semiconductor layer (nwell, substrate, active) can host semiconductor diffusions/wells
+                        if let Some(st) = symbol_table {
+                            if let (Ok(m1), Ok(m2)) = (st.get_material(mat_name), st.get_material(&stack_mat)) {
+                                if m1.category == m2.category && m1.category == hwc_parser::MaterialCategory::Semiconductor {
+                                    return true;
+                                }
+                            }
+                        }
+
+                        // 3. Profile allowed_conductors check
+                        if let Some(layer_constraints) = &profile.layer {
+                            if layer_constraints.allowed_conductors.iter().any(|m| m.as_str() == mat_name) {
+                                // Check if stackup layer is conductive/semiconductor
+                                if let Some(st) = symbol_table {
+                                    if let Ok(m) = st.get_material(&stack_mat) {
+                                        if matches!(m.category, hwc_parser::MaterialCategory::Conductor | hwc_parser::MaterialCategory::Semiconductor) {
+                                            return true;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    false
+                };
+
                 for (key, stack) in bridge_table.all_rules() {
                     let parts: Vec<&str> = key.split(':').collect();
                     if parts.len() != 2 {
@@ -143,32 +178,24 @@ impl ViaLibrary {
                     let from_material = parts[0];
                     let to_material = parts[1];
 
-                    // 1. Find layers whose declared material EXACTLY matches `from_material`
+                    // 1. Find layers that can host `from_material`
                     let from_layers: Vec<usize> = stackup_manager
                         .ordered_layers()
                         .iter()
                         .enumerate()
                         .filter(|(i, _layer_name)| {
-                            if let Some(stack_mat_name) = stackup_manager.get_material_for_layer_index(*i) {
-                                stack_mat_name == from_material
-                            } else {
-                                false
-                            }
+                            is_material_compatible_with_layer(from_material, *i)
                         })
                         .map(|(i, _)| i)
                         .collect();
 
-                    // 2. Find layers whose declared material EXACTLY matches `to_material`
+                    // 2. Find layers that can host `to_material`
                     let to_layers: Vec<usize> = stackup_manager
                         .ordered_layers()
                         .iter()
                         .enumerate()
                         .filter(|(i, _layer_name)| {
-                            if let Some(stack_mat_name) = stackup_manager.get_material_for_layer_index(*i) {
-                                stack_mat_name == to_material
-                            } else {
-                                false
-                            }
+                            is_material_compatible_with_layer(to_material, *i)
                         })
                         .map(|(i, _)| i)
                         .collect();

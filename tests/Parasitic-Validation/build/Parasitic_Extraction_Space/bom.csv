@@ -2,8 +2,20 @@ Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
 Wafer,Substrate,0.02x0.01x0.00mm,,,,,1
 
 # MATERIAL USAGE (Fabrication)
-Reference,Type,Material,Layer_Z_nm,Area_nm2,Volume_nm3
-In_Pad,Pour,Copper,z:0,4000000,2000000000
-Mid_Node,Pour,Copper,z:1000,4000000,2000000000
-Out_Pad,Pour,Copper,z:0,4000000,2000000000
-Dummy_Trace,Pour,Copper,z:0,5000000,2500000000
+Reference,Type,Material,Layer,Area_nm2,Volume_nm3
+In_Pad,Pour,Aluminum_Met1,metal1 (z:0nm),4000000,1440000000
+Out_Pad,Pour,Aluminum_Met1,metal1 (z:0nm),4000000,1440000000
+Via1_Pad_M1,Pour,Aluminum_Met1,metal1 (z:0nm),640000,230400000
+Via1_Pad_M2,Pour,Aluminum_Met2,metal2 (z:720nm),640000,230400000
+Via2_Pad_M1,Pour,Aluminum_Met1,metal1 (z:0nm),640000,230400000
+Via2_Pad_M2,Pour,Aluminum_Met2,metal2 (z:720nm),640000,230400000
+Dummy_Trace,Pour,Aluminum_Met1,metal1 (z:0nm),7000000,2520000000
+Route_In_on_metal1,Route,Aluminum_Met1,metal1 (trace),6640000,2390400000
+Via_Up,Contact,Tungsten,metal1 (z:0nm),72900,41990400
+Via_Down,Contact,Tungsten,metal1 (z:0nm),72900,41990400
+
+# AGGREGATED MATERIAL TOTALS (Foundry Fabrication Summary)
+Material,Total_Area_nm2,Total_Volume_nm3,Layer_Count,Coverage_Percentage
+Aluminum_Met1,22920000,8251200000,6,11.5%
+Aluminum_Met2,1280000,460800000,2,0.6%
+Tungsten,145800,83980800,2,0.1%

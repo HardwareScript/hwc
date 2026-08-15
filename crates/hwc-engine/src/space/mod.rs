@@ -140,6 +140,12 @@ pub struct HardwareSpace {
     /// Net classifications for physics validation (v0.1.6)
     pub net_classifications: FxHashMap<CompactString, NetClassification>,
 
+    /// **v0.3.0: Net electrical properties (voltage, current, frequency)**
+    ///
+    /// Stores potential_v, current_ma, frequency_hz from nets: declarations.
+    /// Used by DRC engines for junction breakdown, electromigration, crosstalk.
+    pub net_electrical_properties: FxHashMap<CompactString, NetElectricalProperties>,
+
     /// Substrate bounding box for overlap validation (v0.1.6 GAP2)
     pub substrate_bbox: Option<crate::geometry::BoundingBox>,
 
@@ -223,6 +229,7 @@ impl HardwareSpace {
             pours: Vec::new(),
             contacts: Vec::new(),
             net_classifications: FxHashMap::default(),
+            net_electrical_properties: FxHashMap::default(),
             substrate_bbox: None,
             component_bboxes: FxHashMap::default(),
             analytic_routes: Vec::new(),

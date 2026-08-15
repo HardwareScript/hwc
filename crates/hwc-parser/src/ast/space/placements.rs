@@ -150,8 +150,7 @@ pub enum CapType {
 pub struct ContactPlacement {
     pub material: CompactString,
     pub name: crate::ast::component::ComponentName, // v0.2.0: Required - no unnamed contacts
-    pub position: Option<Coordinate>, // v0.2.0: Optional - can be resolved from relational_anchor
-    pub relational_anchor: Option<RelationalAnchor>, // v0.2.0: Relational positioning (e.g., Region.center)
+    pub position: Option<Coordinate>,
     pub from_elevation: Elevation,
     pub to_elevation: Elevation,
     pub net: Option<NetName>,
@@ -162,28 +161,6 @@ pub struct ContactPlacement {
     #[serde(skip)]
     pub contour: Option<clipper2_rust::Path64>,
     pub span: Span,
-}
-
-/// Relational anchor for contact placement - references a specific point on a region (v0.2.0)
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct RelationalAnchor {
-    pub region_name: crate::ast::common::Identifier,
-    pub anchor_point: AnchorPoint,
-    pub span: Span,
-}
-
-/// Anchor points on a region (v0.2.0)
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum AnchorPoint {
-    Center,
-    BottomLeft,
-    BottomRight,
-    TopLeft,
-    TopRight,
-    CenterLeft,
-    CenterRight,
-    TopCenter,
-    BottomCenter,
 }
 
 /// Hierarchical sub-space instantiation (v0.2.1)

@@ -15,6 +15,7 @@ pub struct NetRoute {
     pub net_id: NetId,
     pub start: Point3D,
     pub goal: Point3D,
+    pub target_z: Option<i64>,
 }
 
 /// Routed net result.
