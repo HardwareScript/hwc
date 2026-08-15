@@ -2,12 +2,6 @@
 # Device: sky130_fd_pr__res_high_po (350 Ω/□)
 # Geometry: 4μm × 1.41μm = ~1.0kΩ expected (using PDK-compliant quantized width)
 #
-# DESIGN PHILOSOPHY: Single Anchor Law
-# - Resistor_Body is the ONE AND ONLY absolute 'at:' anchor
-# - 100% of geometry derives from Resistor_Body using align: and anchor queries
-# - Self-healing: Change res_length or res_width → everything adjusts automatically
-# - Via arrays use native comptime loops for proper current distribution
-#
 import * from @std/primitives/units
 import * from "./resistor_pdk"
 
@@ -39,31 +33,18 @@ space Simple_Resistor_Space implements SimpleResistor:
     let tap_offset_y = 2.5um
     let via_pitch = 400nm           # Via pitch: diameter (170nm) + min_spacing (230nm clearance)
 
-    # ========================================================================
-    # 1. THE ONLY ABSOLUTE ANCHOR: Resistor Body
-    # All other geometry derives from this single root anchor
-    # ========================================================================
+
     add pour(Polysilicon) named Resistor_Body on layer: polyres:
         device: R1.A, R1.B
         dimensions: res_length by res_width
-        at: [x: 10.0um, y: 5.0um]    # ← The ONE AND ONLY 'at:' in the entire file!
+        at: [x: 10.0um, y: 5.0um]    
 
-    # ========================================================================
-    # 2. RELATIONAL RESISTOR POLY MASK (RPM)
-    # Zero-thickness fabrication instruction, anchored to resistor body
-    # SKY130 DRC: rpm.1 requires ≥180nm enclosure on all sides
-    # ========================================================================
+
     add pour(Resistor_Poly_Mask) named RPM_Block on layer: rpm:
         dimensions: res_length + 360nm by res_width + 360nm
         align: center_x with Resistor_Body
         align: center_y with Resistor_Body
 
-    # ========================================================================
-    # 3. RELATIONAL CONTACT HEADS (Bound to Body Edges)
-    # Contact heads positioned at resistor body edges with mathematical precision
-    # ========================================================================
-    
-    # Left Contact A: Centered on Resistor_Body.left + half contact length
     add pour(Titanium_Silicide) named Contact_A_LI on layer: li1:
         device: R1.A
         net: In
@@ -79,24 +60,6 @@ space Simple_Resistor_Space implements SimpleResistor:
         align: center_x with Resistor_Body.right - contact_length / 2
         align: center_y with Resistor_Body
 
-    # ========================================================================
-    # 4. RELATIONAL VIA ARRAYS BRIDGING POLYRES → LI1 (Native Comptime Loops)
-    # SKY130 DRC requires multi-cut contact bar across 1.41μm width
-    # Via specifications:
-    #   - Diameter: 170nm (licon.1)
-    #   - Min spacing: 200nm edge-to-edge (licon.2)
-    #   - Annular ring: 0nm (silicon contact plugs, not PCB pads)
-    #   - Pitch: 400nm center-to-center
-    #   - Clearance: 400nm - 170nm = 230nm ≥ 200nm ✅
-    # Array: 3 vias symmetrically centered at [4.6µm, 5.0µm, 5.4µm]
-    #   - Via formula: Contact_A_LI.center_y + (i - 1) * via_pitch
-    #   - For i=0: Y = 5.0µm - 400nm = 4.6µm
-    #   - For i=1: Y = 5.0µm + 0nm = 5.0µm (centered)
-    #   - For i=2: Y = 5.0µm + 400nm = 5.4µm
-    # Effective R_contact ≈ 121Ω (vs. 362Ω single via)
-    # ========================================================================
-    
-    # Terminal A via array (3 vias symmetrically centered)
     for i in 0..3:
         add contact(Tungsten) named Via_A_Poly_{i} spanning layer: polyres to li1:
             diameter: 170nm
@@ -112,9 +75,6 @@ space Simple_Resistor_Space implements SimpleResistor:
             align: center_y with Contact_B_LI.center_y + (i - 1) * via_pitch
             net: Out
 
-    # ========================================================================
-    # 5. RELATIONAL METAL1 CONTACT PADS (Directly Above Li1 Contacts)
-    # ========================================================================
     add pour(Aluminum) named Contact_A_Metal on layer: metal1:
         dimensions: contact_length by res_width
         align: center_x with Contact_A_LI
@@ -127,12 +87,6 @@ space Simple_Resistor_Space implements SimpleResistor:
         align: center_y with Contact_B_LI
         net: Out
 
-    # ========================================================================
-    # 6. RELATIONAL VIA ARRAYS BRIDGING LI1 → METAL1 (Native Comptime Loops)
-    # Matching via array pattern on metal1 layer for consistent current distribution
-    # ========================================================================
-    
-    # Terminal A via array (3 vias symmetrically centered)
     for i in 0..3:
         add contact(Tungsten) named Via_A_Metal_{i} spanning layer: li1 to metal1:
             diameter: 170nm
@@ -148,10 +102,7 @@ space Simple_Resistor_Space implements SimpleResistor:
             align: center_y with Contact_B_LI.center_y + (i - 1) * via_pitch
             net: Out
 
-    # ========================================================================
-    # 7. RELATIONAL TEST PADS & ROUTING
-    # External pads positioned relative to metal1 contact pads
-    # ========================================================================
+
     add pour(Aluminum) named In_Pad on layer: metal1:
         dimensions: pad_size by pad_size
         align: center_x with Contact_A_Metal.left - pad_spacing
@@ -176,16 +127,7 @@ space Simple_Resistor_Space implements SimpleResistor:
         layer: metal1
         intent: Signal
 
-    # ========================================================================
-    # 8. RELATIONAL SUBSTRATE TAP FOR BULK CONNECTION (SKY130 LVS Requirement)
-    # Positioned relative to Resistor_Body center with parametric offset
-    # In SKY130, a proper substrate tap requires THREE layers:
-    #   1. P+ diffusion region (pdiff) - physical implant in substrate
-    #   2. Local interconnect contact (licon) - via connecting pdiff to li1
-    #   3. Local interconnect metal (li1) - connects to GND net
-    # ========================================================================
-    
-    # 8a. P+ DIFFUSION REGION (Physical substrate implant)
+
     add pour(P_Plus_Diffusion) named Bulk_Tap_Diff on layer: pdiff:
         dimensions: tap_size by tap_size
         align: center_x with Resistor_Body
@@ -207,11 +149,7 @@ space Simple_Resistor_Space implements SimpleResistor:
         align: center_y with Bulk_Tap_Diff
         net: GND
 
-# ========================================================================
-# TEST DEFINITION: AC FREQUENCY RESPONSE & TRANSIENT ANALYSIS
-# ========================================================================
-# v0.2.1 Zero-Fallback Compliance: Explicit testbench configuration required
-# for AC and Transient SPICE export. The compiler FAILS LOUDLY without this.
+
 test Simple_Resistor_AC_Test for Simple_Resistor_Space:
     ac: { sweep: dec, points: 20, freq: 100Hz..100MHz }
     tran: { step: 10ps, stop: 200ns }

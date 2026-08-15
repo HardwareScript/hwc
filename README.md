@@ -97,6 +97,16 @@ test Simple_Resistor_AC_Test for Simple_Resistor_Space:
 | GDSII (silicon IC) | `*.gds` |
 | 3D model | `*.glb` |
 
+### Visual Output Examples
+
+**2D Layout View:**
+
+![Resistor 2D Layout](assets/resistor_2d_view.png)
+
+**3D Model View:**
+
+![Resistor 3D Model](assets/resistor_3d_view.png)
+
 ---
 
 ## The File System
