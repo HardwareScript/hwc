@@ -1,4 +1,3 @@
-# Hardware Script
 
 **Text-Based Hardware Design Language** — `.hw`
 
@@ -688,3 +687,4 @@ A commercial license is available for: modifying the compiler privately, hosting
 - **Discord**: https://discord.gg/9zqH8nuCet
 - **GitHub**: https://github.com/HardwareScript
 - **Email**: hardwarescript@gmail.com
+
