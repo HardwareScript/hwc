@@ -62,6 +62,7 @@ use crate::space::HardwareSpace;
 ///
 /// # Returns
 /// Absolute area in nm² (always positive)
+#[cfg(test)]
 #[inline]
 fn calculate_polygon_area(polygon: &[(i64, i64)]) -> i128 {
     let n = polygon.len();

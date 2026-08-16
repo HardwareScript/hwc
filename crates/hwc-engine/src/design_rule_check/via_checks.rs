@@ -10,7 +10,7 @@
 //! Uses ContactMetadata bounding boxes (analytic geometry) for all checks.
 
 use crate::constraint_manager::ConstraintRulebook;
-use crate::geometry::{BoundingBox, Point3D};
+use crate::geometry::Point3D;
 use crate::ContactMetadata;
 use hwc_types::Technology;
 
@@ -19,18 +19,6 @@ use super::types::{DrcReport, DrcViolation};
 // ============================================================================
 // PRIMITIVES OVER PIXELS: Analytic Via Validation (v0.1.6)
 // ============================================================================
-
-/// Calculate via diameter from bounding box (analytic geometry).
-///
-/// Assumes circular via and calculates diameter from XY dimensions.
-/// For a rectangular via, uses the smaller dimension as diameter.
-fn calculate_via_diameter_from_bbox(bbox: &BoundingBox) -> i64 {
-    let width = bbox.max.x - bbox.min.x;
-    let height = bbox.max.y - bbox.min.y;
-
-    // Use the smaller dimension (conservative estimate)
-    width.min(height)
-}
 
 /// Validate via diameters using ContactMetadata (analytic geometry).
 ///
