@@ -163,7 +163,7 @@ pub struct ViaConstraints {
     pub max_diameter_nm: i64,
 
     /// Minimum annular ring width in nanometers
-    pub min_annular_ring_nm: i64,
+    pub min_enclosure_nm: i64,
 
     /// Minimum spacing between drill holes in nanometers (v0.1.7)
     pub min_spacing_nm: i64,

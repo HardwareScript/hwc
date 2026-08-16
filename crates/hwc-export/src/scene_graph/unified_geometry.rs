@@ -206,7 +206,7 @@ pub fn generate_copper_contours(space: &HardwareSpace) -> Vec<UnifiedCopperConto
         let z_end = via.from_z_nm.max(via.to_z_nm);
 
         // Annular ring: pad extends beyond via barrel
-        let pad_radius = via.diameter_nm / 2 + via.annular_ring_nm.max(via.diameter_nm / 4);
+        let pad_radius = via.diameter_nm / 2 + via.enclosure_nm.max(via.diameter_nm / 4);
 
         // Find the conductor material for pads
         let pad_material_id = if space.material_registry.is_conductive(via.material_id) {

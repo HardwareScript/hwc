@@ -16,7 +16,7 @@ profile ReasonableVia:
     
     via:
         min_diameter: 300µm
-        min_annular_ring: 150µm
+        min_enclosure: 150µm
 
 space TestViaPass:
     dimensions: 10mm by 10mm by 2mm

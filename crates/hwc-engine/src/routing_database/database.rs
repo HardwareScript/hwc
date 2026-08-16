@@ -71,6 +71,12 @@ impl HierarchicalRoutingDatabase {
         &self.parent_interconnects
     }
 
+    /// Get mutable parent interconnects
+    pub fn get_parent_interconnects_mut(&mut self) -> &mut [AnalyticTrace] {
+        &mut self.parent_interconnects
+    }
+
+
     /// Get all child instance names
     pub fn get_child_instances(&self) -> Vec<CompactString> {
         self.child_instance_routes

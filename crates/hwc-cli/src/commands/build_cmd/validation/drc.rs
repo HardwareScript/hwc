@@ -75,7 +75,7 @@ pub fn run_drc_check(
             min_trace_spacing_nm: constraints.trace.min_spacing_nm,
             min_via_diameter_nm: constraints.via.min_diameter_nm,
             default_via_diameter_nm: constraints.via.default_diameter_nm,
-            min_annular_ring_nm: constraints.via.min_annular_ring_nm,
+            min_enclosure_nm: constraints.via.min_enclosure_nm,
             min_spacing_nm: constraints.via.min_spacing_nm,
             low_voltage_clearance_nm: constraints.clearance.low_voltage_nm,
             medium_voltage_clearance_nm: constraints.clearance.medium_voltage_nm,

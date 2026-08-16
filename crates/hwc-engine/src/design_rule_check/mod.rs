@@ -28,6 +28,7 @@ mod crosstalk; // v0.3.0: Signal integrity validation
 mod electromigration; // P21: Electromigration validation
 mod error;
 mod junction; // P46: Junction breakdown validation
+mod min_area; // Gap 2: Minimum area validation (CMP peeling prevention)
 mod parallel;
 mod thermal; // P22: Thermal rise validation
 mod trace_width;
@@ -41,6 +42,7 @@ pub use crosstalk::validate_crosstalk; // v0.3.0
 pub use electromigration::validate_electromigration; // P21
 pub use error::{report_to_errors, violation_to_error, DrcError};
 pub use junction::validate_junction_breakdown; // P46
+pub use min_area::validate_min_area; // Gap 2: Minimum area validation
 pub use parallel::validate_physics_parallel;
 pub use thermal::validate_thermal_rise; // P22
 pub use trace_width::validate_trace_widths;

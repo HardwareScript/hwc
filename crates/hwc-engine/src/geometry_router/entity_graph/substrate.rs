@@ -168,8 +168,19 @@ impl EntityGraph {
             if *seg_net_id == net_id {
                 for seg in segments {
                     let bbox = BoundingBox::new(seg.start, seg.end);
+                    let mut mat: MaterialId = seg.material_id;
+                    if mat == 0 {
+                        let mid_z = (bbox.min.z + bbox.max.z) / 2;
+                        if let Some(matching) = self
+                            .substrate_layers
+                            .iter()
+                            .find(|l| mid_z >= l.bbox.min.z && mid_z <= l.bbox.max.z)
+                        {
+                            mat = matching.material;
+                        }
+                    }
                     let layer = SubstrateLayer::new(
-                        seg.material_id,
+                        mat,
                         net_id,
                         bbox,
                         SubstrateLayerType::Pour,
@@ -201,8 +212,19 @@ impl EntityGraph {
             if *seg_net_id == net_id {
                 for seg in segments {
                     let bbox = BoundingBox::new(seg.start, seg.end);
+                    let mut mat: MaterialId = seg.material_id;
+                    if mat == 0 {
+                        let mid_z = (bbox.min.z + bbox.max.z) / 2;
+                        if let Some(matching) = self
+                            .substrate_layers
+                            .iter()
+                            .find(|l| mid_z >= l.bbox.min.z && mid_z <= l.bbox.max.z)
+                        {
+                            mat = matching.material;
+                        }
+                    }
                     let layer = SubstrateLayer::new(
-                        seg.material_id,
+                        mat,
                         net_id,
                         bbox,
                         SubstrateLayerType::Pour,
@@ -233,8 +255,19 @@ impl EntityGraph {
             if *seg_net_id == net_id {
                 for seg in segments {
                     let bbox = BoundingBox::new(seg.start, seg.end);
+                    let mut mat: MaterialId = seg.material_id;
+                    if mat == 0 {
+                        let mid_z = (bbox.min.z + bbox.max.z) / 2;
+                        if let Some(matching) = self
+                            .substrate_layers
+                            .iter()
+                            .find(|l| mid_z >= l.bbox.min.z && mid_z <= l.bbox.max.z)
+                        {
+                            mat = matching.material;
+                        }
+                    }
                     let layer = SubstrateLayer::new(
-                        seg.material_id,
+                        mat,
                         net_id,
                         bbox,
                         SubstrateLayerType::Pour,

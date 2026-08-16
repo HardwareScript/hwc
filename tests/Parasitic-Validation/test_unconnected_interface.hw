@@ -24,11 +24,18 @@
 # NOTE: This test intentionally OMITS the bridge definition to trigger P45
 
 import * from @std/primitives/units
-import Aluminum_Met1, Polysilicon, Silicon_Dioxide, Air from "./materials"
+import Aluminum_Met1, Polysilicon, Silicon_Dioxide from "./materials"
+
+# Shape definition for via contacts
+shape SquareContact(width: Measurement):
+    geometry:
+        Rectangle(width: width, height: width)
 
 # Intentionally create a PDK WITHOUT the required bridge definition
+# NOTE: We import materials directly but NOT the bridge definitions from parasitic_pdk
 profile Unconnected_Interface_Profile:
-    technology: "SKY130A"
+    technology: "ASIC"
+    substrate_net: GND
     
     stackup:
         polyres:    [material: Polysilicon,        thickness: 200nm, routable: true]
@@ -37,9 +44,13 @@ profile Unconnected_Interface_Profile:
 
     via:
         min_diameter: 170nm
-        min_annular_ring: 60nm
+        min_enclosure: 60nm
         min_spacing: 170nm
-        contact_depth: 50nm
+        shape: SquareContact
+        contact_depth: 30%
+        material_contact_depths:
+            Polysilicon: 30%
+            Aluminum_Met1: 30%
 
     trace:
         min_width: 300nm
@@ -47,10 +58,9 @@ profile Unconnected_Interface_Profile:
         edge_clearance: 100nm
 
     manufacturing:
+        track_pitch: 10nm
         copper_thickness: 360nm
         circle_segments: 64
-        solder_mask_thickness: 0nm
-        solder_mask_expansion: 0nm
 
     clearance:
         high_voltage: 500nm
@@ -60,16 +70,13 @@ profile Unconnected_Interface_Profile:
         ambient_temp: 25C
         max_operating_temp: 125C
         max_temp_rise: 50C
-        clustering_threshold: 10um
-        substrate_thermal_resistance: 0.01K_W
 
     layer:
         min_thickness: 50nm
         allowed_conductors: [Aluminum_Met1, Polysilicon]
-        allowed_dielectrics: [Silicon_Dioxide, Air]
+        allowed_dielectrics: [Silicon_Dioxide]
 
     routing:
-        max_local_route_length: 50um
         min_segment_length: 300nm
         escape_stub: 0nm
         base_cost: 1
@@ -92,9 +99,7 @@ module UnconnectedInterfaceTest:
     route In to Out
 
 space Unconnected_Interface_Space implements UnconnectedInterfaceTest:
-    dimensions: 8.0um by 5.0um by 1um
-    resolution: 10nm
-    origin: bl by b
+    dimensions: 8.0um by 5.0um
     profile: Unconnected_Interface_Profile
 
     nets:

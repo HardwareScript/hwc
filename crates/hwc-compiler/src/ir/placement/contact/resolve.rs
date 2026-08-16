@@ -62,27 +62,27 @@ pub(super) fn resolve_net_id(
     }
 }
 
-pub(super) fn resolve_annular_ring(
+pub(super) fn resolve_enclosure(
     space: &HardwareSpace,
     contact: &hwc_parser::ContactPlacement,
     symbol_table: &crate::SymbolTable,
     eval_context: &hwc_parser::EvaluationContext,
 ) -> Result<i64, IrError> {
-    if let Some(nm) = get_prop_nm(contact, "annular_ring", symbol_table, eval_context) {
+    if let Some(nm) = get_prop_nm(contact, "enclosure", symbol_table, eval_context) {
         Ok(nm)
     } else if let Some(profile_ring) = space
         .fabrication_constraints
         .as_ref()
-        .map(|c| c.via.min_annular_ring_nm)
+        .map(|c| c.via.min_enclosure_nm)
     {
         Ok(profile_ring)
     } else {
         Err(IrError::MissingAsicConstraint {
             message: format!(
-                "Contact '{}' has no explicit annular_ring and no profile via.min_annular_ring.",
+                "Contact '{}' has no explicit enclosure and no profile via.min_enclosure.",
                 contact.name.as_str()
             ),
-            hint: "Add 'annular_ring: <value>' to the contact, or declare 'via: min_annular_ring: <value>' in the profile.".into(),
+            hint: "Add 'enclosure: <value>' to the contact, or declare 'via: min_enclosure: <value>' in the profile.".into(),
         })
     }
 }

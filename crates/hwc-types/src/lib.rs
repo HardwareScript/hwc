@@ -46,7 +46,7 @@ impl NetId {
 /// Technology type distinguishing between PCB and ASIC design rules.
 ///
 /// This enum determines manufacturing-specific behavior throughout the compiler:
-/// - Via geometry (drilled holes with annular rings vs photolithographic contacts)
+/// - Via geometry (drilled holes with enclosure pads vs photolithographic contacts)
 /// - Clearance rules (IPC standards vs process design rules)
 /// - Layer stack assumptions (copper + FR4 vs deposited metal + oxide)
 ///
@@ -113,12 +113,12 @@ impl Technology {
 impl Technology {
     /// Compute the contact expansion for this technology.
     ///
-    /// For PCB the expansion equals `min_annular_ring_nm`.
+    /// For PCB the expansion equals `min_enclosure_nm`.
     /// For ASIC the expansion is always zero.
     #[inline]
-    pub const fn contact_expansion(&self, min_annular_ring_nm: i64) -> i64 {
+    pub const fn contact_expansion(&self, min_enclosure_nm: i64) -> i64 {
         match self {
-            Self::Pcb => min_annular_ring_nm,
+            Self::Pcb => min_enclosure_nm,
             Self::Asic => 0,
         }
     }

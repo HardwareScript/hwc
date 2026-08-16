@@ -18,7 +18,7 @@ profile Staggered_Via_Test_Profile:
     
     via:
         min_diameter: 0.1mm
-        min_annular_ring: 0.05mm
+        min_enclosure: 0.05mm
         min_spacing: 0.1mm
 
     trace:

@@ -25,7 +25,7 @@ profile HEXAGONAL_TEST:
     
     via:
         min_diameter: 200nm
-        min_annular_ring: 50nm
+        min_enclosure: 50nm
         shape: HexagonalVia
     
     manufacturing:

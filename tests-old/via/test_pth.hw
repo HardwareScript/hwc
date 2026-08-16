@@ -16,7 +16,7 @@ profile PTH_Test_Profile:
     
     via:
         min_diameter: 0.3mm
-        min_annular_ring: 0.15mm
+        min_enclosure: 0.15mm
         min_spacing: 0.25mm
 
     trace:
@@ -49,6 +49,6 @@ space PTH_Test_Board implements PTH_Test_Module:
     add contact(ViaCopper) named PTH_Via at [x: 5mm, y: 5mm] spanning layer: bottom to top:
         net: SIG
         diameter: 0.6mm
-        annular_ring: 0.2mm
+        enclosure: 0.2mm
         top_cap: annular
         bottom_cap: annular

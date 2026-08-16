@@ -33,7 +33,7 @@ export profile Resistor_Flattened:
 
     via:
         min_diameter: 200nm
-        min_annular_ring: 50nm
+        min_enclosure: 50nm
         min_spacing: 300nm
         shape: SquareContact
         contact_depth: 10nm  # Match layer thickness to prevent substrate penetration
@@ -92,7 +92,7 @@ export profile Resistor_3D:
 
     via:
         min_diameter: 300nm
-        min_annular_ring: 50nm
+        min_enclosure: 50nm
         min_spacing: 400nm
         shape: SquareContact
         contact_depth: 100nm

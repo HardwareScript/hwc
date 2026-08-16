@@ -40,12 +40,12 @@ pub enum DrcError {
         location: Point3D,
     },
 
-    /// P21: Electromigration - Metal Atom Migration
-    #[error("Electromigration violation for '{net}'")]
+    /// P21: Electromigration - Metal Atom Migration (STATIC BUDGET CHECK)
+    #[error("Static EM violation: Declared budget for '{net}' exceeds wire capability")]
     #[diagnostic(
         code(P21),
         url("https://docs.hw-script.org/errors/P21"),
-        help("Physical Explanation: High current density causes electron momentum transfer that physically pushes metal atoms downstream (electron wind). Over time, this creates voids (opens) where atoms leave and hillocks (shorts) where they accumulate.\n\nActual Current Density: {actual_density_a_mm2:.2} A/mm²\nMaximum Allowed: {max_density_a_mm2:.2} A/mm²\n\nGoverning Equation: Black's Equation\n  MTTF = A / J^n × exp(Ea / kT)\n  Mean Time To Failure decreases exponentially with J and T\n\nSolution:\n1. Increase trace width (reduces current density)\n2. Reduce operating current\n3. Use material with higher EM threshold (e.g., Copper > Aluminum)\n\nTypical Limits:\n  • Aluminum: 1.0 mA/μm² (1000 A/mm²)\n  • Copper: 2.0 mA/μm² (2000 A/mm²)\n  • Polysilicon: 0.1 mA/μm² (100 A/mm²)")
+        help("Physical Explanation: High current density causes electron momentum transfer that physically pushes metal atoms downstream (electron wind). Over time, this creates voids (opens) where atoms leave and hillocks (shorts) where they accumulate.\n\n⚠️  ARCHITECTURAL NOTE: This is a STATIC BUDGET CHECK, not a dynamic simulation.\nThe compiler validates: \"Can this wire geometry support its DECLARED budget?\"\nThis does NOT validate simulated operating currents (that's P21-D in post-sim sign-off).\n\nDeclared Budget Current Density: {actual_density_a_mm2:.2} A/mm²\nWire Physical Capability: {max_density_a_mm2:.2} A/mm²\n\nGoverning Equation: Black's Equation\n  MTTF = A / J^n × exp(Ea / kT)\n  Mean Time To Failure decreases exponentially with J and T\n\nSolution:\n1. Increase trace width (reduces current density)\n2. Reduce declared current budget in nets: {{ current: X }}\n3. Use material with higher EM threshold (e.g., Copper > Aluminum)\n\nTypical Limits:\n  • Aluminum: 1.0 mA/μm² (1000 A/mm²)\n  • Copper: 2.0 mA/μm² (2000 A/mm²)\n  • Polysilicon: 0.1 mA/μm² (100 A/mm²)\n\nSee: ELECTROMIGRATION-AND-THERMAL.md for the three-tier validation architecture.")
     )]
     ElectromigrationViolation {
         net: CompactString,
@@ -54,12 +54,12 @@ pub enum DrcError {
         location: Point3D,
     },
 
-    /// P22: Thermal Rise Violation (I²R self-heating)
-    #[error("Thermal rise violation for '{net}'")]
+    /// P22: Thermal Rise Violation (STATIC BUDGET CHECK)
+    #[error("Static thermal violation: Declared budget for '{net}' would cause excessive heating")]
     #[diagnostic(
         code(P22),
         url("https://docs.hw-script.org/errors/P22"),
-        help("Physical Explanation: High current through a resistive trace generates Joule heat (P = I²R). When this heat cannot dissipate fast enough, local temperature rises above safe limits, causing dielectric delamination, dopant drift, or thermal runaway.\n\nTemperature Rise: {actual_temp_rise_c:.1}°C\nMaximum Allowed: {max_temp_rise_c:.1}°C\nPower Dissipation: {power_uw:.2}μW\nTrace Resistance: {resistance_ohms:.2}Ω\nLocation: {location}\n\nSolution:\n1. Reduce current (lower power)\n2. Increase trace width (lower resistance)\n3. Shorten trace length (lower resistance)\n4. Improve thermal path to substrate\n5. Use material with lower resistivity\n\nFormula: ΔT = (I²×R) / (k×Surface_Area) where k = thermal conductivity")
+        help("Physical Explanation: High current through a resistive trace generates Joule heat (P = I²R). When this heat cannot dissipate fast enough, local temperature rises above safe limits, causing dielectric delamination, dopant drift, or thermal runaway.\n\n⚠️  ARCHITECTURAL NOTE: This is a STATIC BUDGET CHECK, not a dynamic simulation.\nThe compiler validates: \"If this trace carried its DECLARED budget, would heating be safe?\"\nThis does NOT validate simulated power dissipation (that's P22-D in post-sim sign-off).\n\nHypothetical Temperature Rise (if trace carries declared budget): {actual_temp_rise_c:.1}°C\nMaximum Allowed: {max_temp_rise_c:.1}°C\nHypothetical Power Dissipation: {power_uw:.2}μW\nTrace Resistance: {resistance_ohms:.2}Ω\nLocation: {location}\n\nSolution:\n1. Reduce declared current budget in nets: {{ current: X }}\n2. Increase trace width (lower resistance)\n3. Shorten trace length (lower resistance)\n4. Improve thermal path to substrate\n5. Use material with lower resistivity\n\nFormula: ΔT = (I_budget²×R) / (k×Surface_Area) where k = thermal conductivity\n\nSee: ELECTROMIGRATION-AND-THERMAL.md for the three-tier validation architecture.")
     )]
     ThermalRiseViolation {
         net: CompactString,
@@ -183,6 +183,21 @@ pub enum DrcError {
         substrate_material: CompactString,
         applied_voltage_v: f64,
         max_voltage_v: f64,
+        location: Point3D,
+    },
+
+    /// Gap 2: Minimum Area Violation (CMP Peeling Prevention)
+    #[error("Minimum area violation for net '{net_name}' ({material_name})")]
+    #[diagnostic(
+        code(GAP2),
+        url("https://docs.hw-script.org/errors/GAP2"),
+        help("Physical Explanation: Foundry processes impose minimum area constraints to prevent CMP (Chemical Mechanical Polishing) damage during fabrication. Microscopic slivers of metal or polysilicon can be torn off during the polishing step, causing peeling, delamination, or process defects.\n\nActual Area: {actual_area_um2:.4}μm²\nRequired Area: {required_area_um2:.2}μm²\nLocation: {location}\n\nSolution:\n1. Increase pour/pad dimensions to meet minimum area\n2. Merge nearby islands of same material/net\n3. Remove microscopic slivers from design\n\nExamples from SKY130:\n  • poly.2: Minimum polysilicon area = 0.13 μm²\n  • m1.2: Minimum metal1 area = 0.14 μm²")
+    )]
+    MinAreaViolation {
+        net_name: String,
+        material_name: String,
+        actual_area_um2: f64,
+        required_area_um2: f64,
         location: Point3D,
     },
 }
@@ -344,6 +359,19 @@ impl From<&DrcViolation> for DrcError {
                 substrate_material: substrate_material.clone(),
                 applied_voltage_v: *applied_voltage_v,
                 max_voltage_v: *max_voltage_v,
+                location: *location,
+            },
+            DrcViolation::MinArea {
+                net_name,
+                material_name,
+                actual_area_nm2,
+                required_area_nm2,
+                location,
+            } => DrcError::MinAreaViolation {
+                net_name: net_name.clone(),
+                material_name: material_name.clone(),
+                actual_area_um2: actual_area_nm2 / 1_000_000.0,
+                required_area_um2: required_area_nm2 / 1_000_000.0,
                 location: *location,
             },
         }

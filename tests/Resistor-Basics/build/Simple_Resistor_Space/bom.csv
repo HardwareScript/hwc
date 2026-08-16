@@ -14,19 +14,19 @@ Bulk_Tap_Diff,Pour,P_Plus_Diffusion,pdiff (z:0nm),160000,32000000
 Bulk_Tap_LI,Pour,Titanium_Silicide,li1 (z:580nm),160000,16000000
 Route_Out_on_metal1,Route,Aluminum,metal1 (trace),750000,270000000
 Route_In_on_metal1,Route,Aluminum,metal1 (trace),750000,270000000
-Via_A_Poly_0,Contact,Tungsten,polyres (z:200nm),28900,8785600
-Via_A_Poly_1,Contact,Tungsten,polyres (z:200nm),28900,8785600
-Via_A_Poly_2,Contact,Tungsten,polyres (z:200nm),28900,8785600
-Via_B_Poly_0,Contact,Tungsten,polyres (z:200nm),28900,8785600
-Via_B_Poly_1,Contact,Tungsten,polyres (z:200nm),28900,8785600
-Via_B_Poly_2,Contact,Tungsten,polyres (z:200nm),28900,8785600
-Via_A_Metal_0,Contact,Tungsten,li1 (z:580nm),28900,8901200
-Via_A_Metal_1,Contact,Tungsten,li1 (z:580nm),28900,8901200
-Via_A_Metal_2,Contact,Tungsten,li1 (z:580nm),28900,8901200
-Via_B_Metal_0,Contact,Tungsten,li1 (z:580nm),28900,8901200
-Via_B_Metal_1,Contact,Tungsten,li1 (z:580nm),28900,8901200
-Via_B_Metal_2,Contact,Tungsten,li1 (z:580nm),28900,8901200
-Bulk_Tap_Contact,Contact,Tungsten,pdiff (z:0nm),28900,14161000
+Via_A_Poly_0,Contact,Tungsten,polyres (z:200nm),62500,19000000
+Via_A_Poly_1,Contact,Tungsten,polyres (z:200nm),62500,19000000
+Via_A_Poly_2,Contact,Tungsten,polyres (z:200nm),62500,19000000
+Via_B_Poly_0,Contact,Tungsten,polyres (z:200nm),62500,19000000
+Via_B_Poly_1,Contact,Tungsten,polyres (z:200nm),62500,19000000
+Via_B_Poly_2,Contact,Tungsten,polyres (z:200nm),62500,19000000
+Via_A_Metal_0,Contact,Tungsten,li1 (z:580nm),62500,19250000
+Via_A_Metal_1,Contact,Tungsten,li1 (z:580nm),62500,19250000
+Via_A_Metal_2,Contact,Tungsten,li1 (z:580nm),62500,19250000
+Via_B_Metal_0,Contact,Tungsten,li1 (z:580nm),62500,19250000
+Via_B_Metal_1,Contact,Tungsten,li1 (z:580nm),62500,19250000
+Via_B_Metal_2,Contact,Tungsten,li1 (z:580nm),62500,19250000
+Bulk_Tap_Contact,Contact,Tungsten,pdiff (z:0nm),62500,30625000
 
 # AGGREGATED MATERIAL TOTALS (Foundry Fabrication Summary)
 Material,Total_Area_nm2,Total_Volume_nm3,Layer_Count,Coverage_Percentage
@@ -34,4 +34,4 @@ Aluminum,4628000,1666080000,6,2.3%
 P_Plus_Diffusion,160000,32000000,1,0.1%
 Polysilicon,5640000,1015200000,1,2.8%
 Titanium_Silicide,1288000,128800000,3,0.6%
-Tungsten,375700,120281800,13,0.2%
+Tungsten,812500,260125000,13,0.4%

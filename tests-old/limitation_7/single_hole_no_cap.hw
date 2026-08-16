@@ -15,5 +15,5 @@ space SingleHoleNoCap:
     # A single bare drill hole without top/bottom annular rings
     add contact(Copper) named BareHole at [x: 5mm, y: 5mm] spanning z:1 to z:10:
         diameter: 1.0mm
-        annular_ring: 0mm
+        enclosure: 0mm
         caps: false

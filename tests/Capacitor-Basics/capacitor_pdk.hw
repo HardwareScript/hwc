@@ -79,7 +79,7 @@ export profile Capacitor_MIM:
 
     via:
         min_diameter: 170nm
-        min_annular_ring: 50nm
+        min_enclosure: 50nm
         min_spacing: 400nm
         shape: SquareContact
         contact_depth: 30%

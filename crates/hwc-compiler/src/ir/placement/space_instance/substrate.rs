@@ -151,7 +151,7 @@ pub(super) fn transform_vias(
             net_id: parent_net_id,
             material_id: via.material_id,
             via_type: via.via_type,
-            annular_ring_nm: via.annular_ring_nm,
+            enclosure_nm: via.enclosure_nm,
             properties: via.properties.clone(),
         });
     }

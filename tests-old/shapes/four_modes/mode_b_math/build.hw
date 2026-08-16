@@ -14,7 +14,7 @@ profile TEST:
         min_spacing: 10um
     via:
         min_diameter: 20um
-        min_annular_ring: 5um
+        min_enclosure: 5um
         shape: HexagonV2
     manufacturing:
         grid_snapping: true

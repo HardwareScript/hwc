@@ -54,7 +54,7 @@ pub fn profile_to_constraints(
         ViaConstraints {
             min_diameter_nm: measurement_to_nm(&via_def.min_diameter),
             max_diameter_nm: 0,
-            min_annular_ring_nm: measurement_to_nm(&via_def.min_annular_ring),
+            min_enclosure_nm: measurement_to_nm(&via_def.min_enclosure),
             min_spacing_nm: via_def
                 .min_spacing
                 .as_ref()
@@ -74,7 +74,7 @@ pub fn profile_to_constraints(
         }
     } else {
         return Err(ConversionError::MissingProfileConstraint(
-            "via (min_diameter, min_annular_ring, contact_depth)".into(),
+            "via (min_diameter, min_enclosure, contact_depth)".into(),
         ));
     };
 

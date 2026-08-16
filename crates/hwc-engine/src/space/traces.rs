@@ -186,21 +186,34 @@ impl CrossSection {
 
 /// Electrical current rating of a trace.
 ///
-/// Pairs the actual operating current with the route-declared capacity so
-/// both can be carried together and reasoned about as a single unit.
+/// **Field Semantics:**
+/// - `budget_ma`: User's declared current budget from `nets: { current: X }`
+/// - `capacity_ma`: Current capacity supported by the routed geometry
+///
+/// **What These Values Represent:**
+/// - `budget_ma`: "I want this trace to safely carry up to X mA" (user intent)
+/// - `capacity_ma`: "This trace geometry can physically carry Y mA" (geometric capability)
+///
+/// **What These Values Do NOT Represent:**
+/// - ❌ Simulated DC operating currents (requires SPICE solver)
+/// - ❌ Measured branch currents (requires .op/.tran analysis)
+/// - ❌ Actual power-on current draw (requires solving circuit)
+///
+/// Pairs the declared budget with the route-calculated capacity so both can be
+/// carried together and reasoned about as a single unit during static DRC.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CurrentRating {
-    /// Actual operating current in milliamps (from net declaration)
-    pub actual_ma: f64,
-    /// Maximum current capacity in milliamps (from `current_limit_ac.peak`)
-    pub limit_ma: f64,
+    /// Declared current budget in milliamps (from `nets: { current: X }`)
+    pub budget_ma: f64,
+    /// Maximum current capacity in milliamps supported by the routed geometry
+    pub capacity_ma: f64,
 }
 
 impl CurrentRating {
-    pub fn new(actual_ma: f64, limit_ma: f64) -> Self {
+    pub fn new(budget_ma: f64, capacity_ma: f64) -> Self {
         Self {
-            actual_ma,
-            limit_ma,
+            budget_ma,
+            capacity_ma,
         }
     }
 }

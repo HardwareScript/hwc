@@ -302,23 +302,23 @@ pub fn unroll_internal_features(
                             let inner_diameter_nm =
                                 (drill_diameter_nm - (2 * plating_thickness_nm)).max(0);
 
-                            let min_annular_ring_nm = space
+                            let min_enclosure_nm = space
                                 .fabrication_constraints
                                 .as_ref()
                                 .ok_or_else(|| {
                                     IrError::PlacementError(
                                         "PDK profile is missing 'fabrication_constraints' \
-                                         for via pad generation. Ensure the profile defines 'via.min_annular_ring'."
+                                         for via pad generation. Ensure the profile defines 'via.min_enclosure'."
                                             .into(),
                                     )
                                 })?
-                                .via.min_annular_ring_nm;
+                                .via.min_enclosure_nm;
 
                             // v0.2.0: Use technology strategy for contact expansion
-                            let effective_annular_ring = space
+                            let effective_enclosure = space
                                 .technology_strategy
-                                .contact_expansion(min_annular_ring_nm);
-                            let pad_diameter_nm = drill_diameter_nm + (2 * effective_annular_ring);
+                                .contact_expansion(min_enclosure_nm);
+                            let pad_diameter_nm = drill_diameter_nm + (2 * effective_enclosure);
 
                             let circle_segments = space
                                 .fabrication_constraints
@@ -408,7 +408,7 @@ pub fn unroll_internal_features(
                                 diameter_nm: drill_diameter_nm,
                                 net_id: via_net_id,
                                 material_id: copper_material_id,
-                                annular_ring_nm: min_annular_ring_nm,
+                                enclosure_nm: min_enclosure_nm,
                                 board_min_z_nm: 0,
                                 board_max_z_nm,
                             });

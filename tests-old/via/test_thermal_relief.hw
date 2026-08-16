@@ -18,7 +18,7 @@ profile Thermal_Relief_Test_Profile:
     
     via:
         min_diameter: 0.1mm
-        min_annular_ring: 0.05mm
+        min_enclosure: 0.05mm
         min_spacing: 0.15mm
 
     trace:
@@ -57,7 +57,7 @@ space Thermal_Relief_Test_Board implements Thermal_Relief_Test_Module:
         net: SIG
         drill_diameter: 0.3mm
         plating_thickness: 25um
-        annular_ring: 0.1mm
+        enclosure: 0.1mm
         thermal_relief: true
         spoke_width: 0.2mm
         antipad_diameter: 0.8mm

@@ -54,7 +54,7 @@ pub fn run_validation_checks(
 
     // Physical continuity check (P41) replaces the old connectivity checker.
     // It validates all nets including route segments, substrate layers, pours, and contacts.
-    if !config.skip_connectivity_check && !is_artist_mode {
+    if !config.skip_connectivity_check && !config.skip_physical_continuity && !is_artist_mode {
         let (physics_substrate_layers, physics_route_segments) =
             utils::convert_metadata_to_physics(space);
         match continuity::run_physical_continuity_check(

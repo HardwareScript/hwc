@@ -322,7 +322,7 @@ pub fn route_automatic(
     }
 
     // Register analytic trace
-    let net_actual_current_ma = space
+    let net_budget_current_ma = space
         .netlist
         .get_net(net_id)
         .and_then(|n| n.current_ma)
@@ -367,7 +367,7 @@ pub fn route_automatic(
             segments: segments.clone(),
             material: copper_id,
             net_name: net_name.clone(),
-            current: hwc_engine::space::CurrentRating::new(net_actual_current_ma, current_ma),
+            current: hwc_engine::space::CurrentRating::new(net_budget_current_ma, current_ma),
             layer_z_range: Some(layer_z_range),
             layer_name: route_layer_name, // v0.2.2: Explicit layer lineage
         });

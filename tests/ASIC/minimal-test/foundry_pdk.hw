@@ -18,7 +18,7 @@ profile Minimal_PDK:
     
     via:
         min_diameter: 180nm
-        min_annular_ring: 100nm
+        min_enclosure: 100nm
         min_spacing: 200nm
         shape: cylinder
     

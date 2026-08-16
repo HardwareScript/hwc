@@ -9,7 +9,7 @@ profile ASIC_TEST_10X:
     
     via:
         min_diameter: 2um
-        min_annular_ring: 500nm
+        min_enclosure: 500nm
     
     manufacturing:
         grid_snapping: true

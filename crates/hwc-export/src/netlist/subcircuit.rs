@@ -6,6 +6,7 @@
 use hwc_parser::{
     BinaryOperator, Expression, SubcircuitDefinition, SubcircuitElement, UnaryOperator, Unit,
 };
+use hwc_types::UnitRegistry;
 
 /// Generate SPICE subcircuit from typed AST
 ///
@@ -18,6 +19,7 @@ use hwc_parser::{
 pub fn generate_spice_subcircuit(
     output: &mut String,
     subckt: &SubcircuitDefinition,
+    unit_registry: &UnitRegistry,
 ) -> Result<(), String> {
     // If spice_include is present, emit .include directive only (foundry trust mode)
     if let Some(ref model_path) = subckt.spice_include {
@@ -48,7 +50,7 @@ pub fn generate_spice_subcircuit(
 
         // Format default value
         if let Some(ref default) = param.default_value {
-            format_expression_for_spice(output, default)?;
+            format_expression_for_spice(output, default, unit_registry)?;
         } else {
             output.push('1'); // SPICE requires a default
         }
@@ -58,7 +60,7 @@ pub fn generate_spice_subcircuit(
 
     // Generate circuit elements
     for element in &subckt.elements {
-        generate_spice_element(output, element)?;
+        generate_spice_element(output, element, unit_registry)?;
     }
 
     // Generate .ends footer
@@ -76,6 +78,7 @@ pub fn generate_spice_subcircuit(
 pub fn generate_spice_element(
     output: &mut String,
     element: &SubcircuitElement,
+    unit_registry: &UnitRegistry,
 ) -> Result<(), String> {
     // Determine SPICE prefix from element type
     let prefix = match element.element_type.chars().next() {
@@ -111,11 +114,11 @@ pub fn generate_spice_element(
         // For simple "value" parameter, emit value directly
         // For named parameters, emit name=value
         if param_name == "value" {
-            format_expression_for_spice(output, param_value)?;
+            format_expression_for_spice(output, param_value, unit_registry)?;
         } else {
             output.push_str(param_name);
             output.push('=');
-            format_expression_for_spice(output, param_value)?;
+            format_expression_for_spice(output, param_value, unit_registry)?;
         }
     }
 
@@ -128,7 +131,28 @@ pub fn generate_spice_element(
 ///
 /// Converts HardwareScript expressions to SPICE-compatible format.
 /// Handles units, arithmetic, and parameters.
-pub fn format_expression_for_spice(output: &mut String, expr: &Expression) -> Result<(), String> {
+///
+/// **CRITICAL FIX (v0.2.1):**
+/// When inside a math expression context (within { }), use PURE SCIENTIFIC NOTATION
+/// without unit suffixes. SPICE parsers treat "350ohm" as a variable name, not a value.
+/// Only emit unit suffixes in top-level parameter values (not inside expressions).
+///
+/// **DATA-DRIVEN UNIT CONVERSION:**
+/// Uses UnitRegistry for all unit conversions - no hardcoded multipliers.
+pub fn format_expression_for_spice(
+    output: &mut String,
+    expr: &Expression,
+    unit_registry: &UnitRegistry,
+) -> Result<(), String> {
+    format_expression_for_spice_internal(output, expr, unit_registry, false)
+}
+
+fn format_expression_for_spice_internal(
+    output: &mut String,
+    expr: &Expression,
+    unit_registry: &UnitRegistry,
+    inside_math: bool,
+) -> Result<(), String> {
     match expr {
         Expression::Literal { value, .. } => {
             output.push_str(&format!("{}", value));
@@ -136,10 +160,39 @@ pub fn format_expression_for_spice(output: &mut String, expr: &Expression) -> Re
         Expression::FloatLiteral { value, .. } => {
             output.push_str(&format!("{}", value));
         }
-        Expression::Measurement { value, unit, .. } => {
-            // Convert to SPICE units
-            let spice_value = convert_to_spice_units(*value, unit)?;
-            output.push_str(&spice_value);
+        Expression::Measurement { value, unit, ..} => {
+            if inside_math {
+                // Inside math expressions: use PURE scientific notation (no unit suffixes)
+                // Convert unit to its base SI value using UnitRegistry
+                let unit_symbol = unit.to_symbol();
+                let base_value = unit_registry
+                    .to_base_si(*value, &unit_symbol)
+                    .ok_or_else(|| {
+                        format!(
+                            "Cannot convert unit '{}' to base SI - not defined in unit registry",
+                            unit_symbol
+                        )
+                    })?;
+                output.push_str(&format!("{:.6e}", base_value));
+            } else {
+                // Top-level parameters: convert to base SI and use SPICE suffix
+                // SPICE elements like R, C, L use positional value parameters where:
+                // - The unit is IMPLIED by the element type (R=ohm, C=farad, L=henry)
+                // - Only SI prefixes are used: f, p, n, u, m, k, meg, g
+                // - NO full unit names like "ohm", "F", "H"
+                let unit_symbol = unit.to_symbol();
+                let base_value = unit_registry
+                    .to_base_si(*value, &unit_symbol)
+                    .ok_or_else(|| {
+                        format!(
+                            "Cannot convert unit '{}' to base SI - not defined in unit registry",
+                            unit_symbol
+                        )
+                    })?;
+                
+                // Format with appropriate SPICE SI prefix
+                output.push_str(&format_value_with_spice_prefix(base_value));
+            }
         }
         Expression::Variable { name, .. } => {
             // Parameter reference - emit as-is
@@ -152,8 +205,11 @@ pub fn format_expression_for_spice(output: &mut String, expr: &Expression) -> Re
             ..
         } => {
             // SPICE uses curly braces for expressions: {L / W}
-            output.push('{');
-            format_expression_for_spice(output, left)?;
+            // CRITICAL: Only emit ONE level of braces, not nested {{...}}
+            if !inside_math {
+                output.push('{');
+            }
+            format_expression_for_spice_internal(output, left, unit_registry, true)?;
             output.push(' ');
             output.push_str(match operator {
                 BinaryOperator::Add => "+",
@@ -168,8 +224,10 @@ pub fn format_expression_for_spice(output: &mut String, expr: &Expression) -> Re
                 }
             });
             output.push(' ');
-            format_expression_for_spice(output, right)?;
-            output.push('}');
+            format_expression_for_spice_internal(output, right, unit_registry, true)?;
+            if !inside_math {
+                output.push('}');
+            }
         }
         Expression::Unary {
             operator, operand, ..
@@ -184,11 +242,11 @@ pub fn format_expression_for_spice(output: &mut String, expr: &Expression) -> Re
                     ))
                 }
             }
-            format_expression_for_spice(output, operand)?;
+            format_expression_for_spice_internal(output, operand, unit_registry, inside_math)?;
         }
         Expression::Grouped { expression, .. } => {
             output.push('(');
-            format_expression_for_spice(output, expression)?;
+            format_expression_for_spice_internal(output, expression, unit_registry, inside_math)?;
             output.push(')');
         }
         _ => {
@@ -209,4 +267,58 @@ pub fn format_expression_for_spice(output: &mut String, expr: &Expression) -> Re
 pub fn convert_to_spice_units(value: f64, unit: &Unit) -> Result<String, String> {
     let suffix = unit.to_spice_suffix()?;
     Ok(format!("{}{}", value, suffix))
+}
+
+/// Format a base SI value with appropriate SPICE prefix
+///
+/// SPICE uses single-letter prefixes: f, p, n, u, m, k, meg, g
+/// This function converts a base SI value to the most readable format.
+///
+/// Examples:
+/// - 1e-15 → "1f"
+/// - 1e-12 → "1p"
+/// - 1e-9  → "1n"
+/// - 1e-6  → "1u"
+/// - 1e-3  → "1m"
+/// - 1.0   → "1"
+/// - 1e3   → "1k"
+/// - 1e6   → "1meg"
+/// - 1e9   → "1g"
+fn format_value_with_spice_prefix(value: f64) -> String {
+    let abs_val = value.abs();
+    
+    // Handle special cases
+    if abs_val == 0.0 {
+        return "0".to_string();
+    }
+    
+    // Determine appropriate prefix based on magnitude
+    let (scaled, suffix) = if abs_val >= 1e9 {
+        (value / 1e9, "g")
+    } else if abs_val >= 1e6 {
+        (value / 1e6, "meg")
+    } else if abs_val >= 1e3 {
+        (value / 1e3, "k")
+    } else if abs_val >= 1.0 {
+        (value, "")
+    } else if abs_val >= 1e-3 {
+        (value / 1e-3, "m")
+    } else if abs_val >= 1e-6 {
+        (value / 1e-6, "u")
+    } else if abs_val >= 1e-9 {
+        (value / 1e-9, "n")
+    } else if abs_val >= 1e-12 {
+        (value / 1e-12, "p")
+    } else {
+        (value / 1e-15, "f")
+    };
+    
+    // Format the scaled value, removing unnecessary decimal zeros
+    let formatted = if scaled.fract() == 0.0 && scaled.abs() < 1e10 {
+        format!("{:.0}", scaled)
+    } else {
+        format!("{:.6}", scaled).trim_end_matches('0').trim_end_matches('.').to_string()
+    };
+    
+    format!("{}{}", formatted, suffix)
 }

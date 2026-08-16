@@ -45,7 +45,7 @@ profile ZAxisTestStackup:
     
     via:
         min_diameter: 0.3mm
-        min_annular_ring: 0.0mm
+        min_enclosure: 0.0mm
 
     bridge TransSilver to TransCopper:
         interface: TransCopper

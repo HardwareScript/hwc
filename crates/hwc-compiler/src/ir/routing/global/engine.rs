@@ -252,10 +252,17 @@ impl<'a> AutoRouter<'a> {
                     // This represents the fact that the entities are already physically connected
                     // Clipper2 will weld them during geometry export
                     // Material ID will be determined during geometry export based on the layer Z coordinate
+                    let mat_id = self
+                        .space
+                        .routing_layer_db
+                        .get_layer(&resolved.layer_name)
+                        .map(|l| l.material_id)
+                        .unwrap_or(0u8);
+
                     self.space.entity_graph.register_route(
                         resolved.net_id,
                         &[overlap_point, overlap_point],
-                        0u8, // Placeholder material ID - will be resolved during export
+                        mat_id,
                         resolved.width_nm,
                     );
                 }
@@ -371,7 +378,7 @@ impl<'a> AutoRouter<'a> {
                 min_trace_spacing_nm: constraint_set.trace.min_spacing_nm,
                 min_via_diameter_nm: constraint_set.via.min_diameter_nm,
                 default_via_diameter_nm: constraint_set.via.default_diameter_nm,
-                min_annular_ring_nm: constraint_set.via.min_annular_ring_nm,
+                min_enclosure_nm: constraint_set.via.min_enclosure_nm,
                 min_spacing_nm: constraint_set.via.min_spacing_nm,
                 low_voltage_clearance_nm: constraint_set.clearance.low_voltage_nm,
                 medium_voltage_clearance_nm: constraint_set.clearance.medium_voltage_nm,

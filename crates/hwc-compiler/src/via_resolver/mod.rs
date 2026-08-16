@@ -304,7 +304,7 @@ impl ViaResolver {
             diameter_nm: (via_def.diameter_mm * 1_000_000.0) as i64,
             net_id,
             material_id: 0, // material_id will be filled in by the engine
-            annular_ring_nm: 0,
+            enclosure_nm: 0,
             board_min_z_nm: via_def.z_start_nm,
             board_max_z_nm: via_def.z_end_nm,
         });

@@ -115,6 +115,7 @@ pub fn export(
         symbol_table,
         physical_netlist,
         &physical_graph,
+        unit_registry,
     )?;
 
     // 1. Raw circuit (DUT only - no stimulus)

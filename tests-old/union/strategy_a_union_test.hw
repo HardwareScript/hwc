@@ -32,7 +32,7 @@ profile UnionTestProfile:
     via:
         min_diameter: 200µm
         default_diameter: 500µm
-        min_annular_ring: 100µm
+        min_enclosure: 100µm
     
     manufacturing:
         copper_thickness: 35µm
@@ -85,7 +85,7 @@ space UnionTestSpace implements UnionTestModule:
     add contact(Copper) named PadC at [x: 12mm, y: 3.5mm] spanning layer: top to top:
         net: UnionNet
         diameter: 0.5mm  # Standard 500um drill
-        annular_ring: 0.25mm # Generous 250um annular ring (Outer Pad = 1.0mm)
+        enclosure: 0.25mm # Generous 250um annular ring (Outer Pad = 1.0mm)
         caps: true
 
     # --- NET 2: ISOLATION TEST (TOP LAYER) ---

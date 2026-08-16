@@ -104,7 +104,7 @@ pub struct ContactMetadata {
     pub bridge: Option<CompactString>,
     pub bbox: Option<crate::geometry::BoundingBox>,
     /// Actual via drill diameter in nanometers (excludes annular ring/pad extension).
-    /// The bbox includes pad (drill + 2*annular_ring); this is the inner hole only.
+    /// The bbox includes pad (drill + 2*enclosure); this is the inner hole only.
     pub drill_diameter_nm: Option<i64>,
     /// Whether the via is tented (covered by solder mask) — v0.1.7
     pub is_tented: bool,

@@ -43,14 +43,14 @@ space MultiConnectedPCB:
     # A. Through-Hole Via: Spans the entire PCB (Z=1 to Z=20)
     add contact(Copper) named ThroughVia at [x: 2.5mm, y: 2.5mm] spanning z:1 to z:20:
         diameter: 0.6mm
-        annular_ring: 0.20mm
+        enclosure: 0.20mm
         
     # B. Buried Via: Spans only the middle substrate, connecting inner copper layers (Z=7 to Z=13)
     add contact(Copper) named BuriedVia at [x: 5.0mm, y: 2.5mm] spanning z:7 to z:13:
         diameter: 0.5mm
-        annular_ring: 0.15mm
+        enclosure: 0.15mm
         
     # C. Blind Via: Spans from top copper down to inner copper layer 1 (Z=13 to Z=20)
     add contact(Copper) named BlindVia at [x: 7.5mm, y: 2.5mm] spanning z:13 to z:20:
         diameter: 0.5mm
-        annular_ring: 0.15mm
+        enclosure: 0.15mm

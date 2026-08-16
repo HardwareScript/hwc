@@ -33,18 +33,32 @@ space Simple_Resistor_Space implements SimpleResistor:
     let tap_offset_y = 2.5um
     let via_pitch = 400nm           # Via pitch: diameter (170nm) + min_spacing (230nm clearance)
 
-
+    # ========================================================================
+    # 0. RESISTOR BODY (Polysilicon)
+    # ========================================================================
     add pour(Polysilicon) named Resistor_Body on layer: polyres:
         device: R1.A, R1.B
         dimensions: res_length by res_width
         at: [x: 10.0um, y: 5.0um]    
 
 
+    # ========================================================================
+    # 1. RESISTOR POLY MASK (RPM) - With Guaranteed 180nm Overhang (rpm.2)
+    # ========================================================================
+    # RPM must extend >= 180nm beyond poly body on all sides (rpm.2 compliance)
+    # Original body: res_length x res_width = 4.0um x 1.41um
+    # RPM dimensions: (4.0 + 2*0.18)um x (1.41 + 2*0.18)um = 4.36um x 1.77um
     add pour(Resistor_Poly_Mask) named RPM_Block on layer: rpm:
         dimensions: res_length + 360nm by res_width + 360nm
         align: center_x with Resistor_Body
         align: center_y with Resistor_Body
 
+    # ========================================================================
+    # 2. TERMINAL A CONTACT (Left Side) - With Guaranteed 40nm Via Enclosure
+    # ========================================================================
+    # Left Contact A: Centered on Resistor_Body.left + half contact length
+    # Via array: 3 vias @ 400nm pitch span 800nm vertically
+    # Contact dimensions: 400nm x 1.41um ensures (1410-170)/2 = 620nm enclosure > 40nm
     add pour(Titanium_Silicide) named Contact_A_LI on layer: li1:
         device: R1.A
         net: In
@@ -52,6 +66,9 @@ space Simple_Resistor_Space implements SimpleResistor:
         align: center_x with Resistor_Body.left + contact_length / 2
         align: center_y with Resistor_Body
     
+    # ========================================================================
+    # 3. TERMINAL B CONTACT (Right Side) - With Guaranteed 40nm Via Enclosure
+    # ========================================================================
     # Right Contact B: Centered on Resistor_Body.right - half contact length
     add pour(Titanium_Silicide) named Contact_B_LI on layer: li1:
         device: R1.B
@@ -60,6 +77,12 @@ space Simple_Resistor_Space implements SimpleResistor:
         align: center_x with Resistor_Body.right - contact_length / 2
         align: center_y with Resistor_Body
 
+    # ========================================================================
+    # 4. VIA ARRAYS (Poly to Local Interconnect)
+    # ========================================================================
+    # Terminal A via array (3 vias symmetrically centered)
+    # Each via: diameter=170nm, centered in 400nm x 1410nm contact pad
+    # Enclosure: min((1410-170)/2, (400-170)/2) = min(620nm, 115nm) = 115nm > 40nm ✓
     for i in 0..3:
         add contact(Tungsten) named Via_A_Poly_{i} spanning layer: polyres to li1:
             diameter: 170nm
@@ -75,6 +98,9 @@ space Simple_Resistor_Space implements SimpleResistor:
             align: center_y with Contact_B_LI.center_y + (i - 1) * via_pitch
             net: Out
 
+    # ========================================================================
+    # 5. METAL1 CONTACT PADS (With Guaranteed Via Enclosure)
+    # ========================================================================
     add pour(Aluminum) named Contact_A_Metal on layer: metal1:
         dimensions: contact_length by res_width
         align: center_x with Contact_A_LI
@@ -87,6 +113,9 @@ space Simple_Resistor_Space implements SimpleResistor:
         align: center_y with Contact_B_LI
         net: Out
 
+    # ========================================================================
+    # 6. VIA ARRAYS (Local Interconnect to Metal1)
+    # ========================================================================
     for i in 0..3:
         add contact(Tungsten) named Via_A_Metal_{i} spanning layer: li1 to metal1:
             diameter: 170nm
@@ -102,7 +131,9 @@ space Simple_Resistor_Space implements SimpleResistor:
             align: center_y with Contact_B_LI.center_y + (i - 1) * via_pitch
             net: Out
 
-
+    # ========================================================================
+    # 7. BOND PAD ROUTING
+    # ========================================================================
     add pour(Aluminum) named In_Pad on layer: metal1:
         dimensions: pad_size by pad_size
         align: center_x with Contact_A_Metal.left - pad_spacing
@@ -127,7 +158,10 @@ space Simple_Resistor_Space implements SimpleResistor:
         layer: metal1
         intent: Signal
 
-
+    # ========================================================================
+    # 8. SUBSTRATE/BULK TAP (Physical P+ Diffusion Contact for BULK Terminal)
+    # ========================================================================
+    # 8a. P+ DIFFUSION REGION (Substrate tap active area)
     add pour(P_Plus_Diffusion) named Bulk_Tap_Diff on layer: pdiff:
         dimensions: tap_size by tap_size
         align: center_x with Resistor_Body

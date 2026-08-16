@@ -23,7 +23,7 @@ profile JLCPCB_2Layer_Standard:
     
     via:
         min_diameter: 300µm
-        min_annular_ring: 150µm
+        min_enclosure: 150µm
     
     clearance:
         high_voltage: 2mm
@@ -61,7 +61,7 @@ profile JLCPCB_2Layer_Fine:
     
     via:
         min_diameter: 250µm
-        min_annular_ring: 125µm
+        min_enclosure: 125µm
     
     clearance:
         high_voltage: 2mm
@@ -99,7 +99,7 @@ profile PCBWay_2Layer_Standard:
     
     via:
         min_diameter: 300µm
-        min_annular_ring: 150µm
+        min_enclosure: 150µm
     
     clearance:
         high_voltage: 2mm
@@ -139,7 +139,7 @@ profile JLCPCB_4Layer_Standard:
     
     via:
         min_diameter: 300µm
-        min_annular_ring: 150µm
+        min_enclosure: 150µm
     
     clearance:
         high_voltage: 2mm
@@ -181,7 +181,7 @@ profile JLCPCB_4Layer_Impedance:
     
     via:
         min_diameter: 250µm
-        min_annular_ring: 125µm
+        min_enclosure: 125µm
     
     clearance:
         high_voltage: 2mm
@@ -223,7 +223,7 @@ profile PCBWay_4Layer_Standard:
     
     via:
         min_diameter: 300µm
-        min_annular_ring: 150µm
+        min_enclosure: 150µm
     
     clearance:
         high_voltage: 2mm
@@ -267,7 +267,7 @@ profile JLCPCB_6Layer_Standard:
     
     via:
         min_diameter: 250µm
-        min_annular_ring: 125µm
+        min_enclosure: 125µm
     
     clearance:
         high_voltage: 2mm
@@ -313,7 +313,7 @@ profile JLCPCB_6Layer_HighSpeed:
     
     via:
         min_diameter: 200µm
-        min_annular_ring: 100µm
+        min_enclosure: 100µm
     
     clearance:
         high_voltage: 2mm
@@ -359,7 +359,7 @@ profile PCBWay_6Layer_Standard:
     
     via:
         min_diameter: 250µm
-        min_annular_ring: 125µm
+        min_enclosure: 125µm
     
     clearance:
         high_voltage: 2mm
@@ -407,7 +407,7 @@ profile JLCPCB_2Layer_HeavyCopper:
     
     via:
         min_diameter: 400µm
-        min_annular_ring: 200µm
+        min_enclosure: 200µm
     
     clearance:
         high_voltage: 3mm
@@ -445,7 +445,7 @@ profile PCBWay_4Layer_HeavyCopper:
     
     via:
         min_diameter: 400µm
-        min_annular_ring: 200µm
+        min_enclosure: 200µm
     
     clearance:
         high_voltage: 3mm
@@ -489,7 +489,7 @@ profile JLCPCB_4Layer_HighTemp:
     
     via:
         min_diameter: 300µm
-        min_annular_ring: 150µm
+        min_enclosure: 150µm
     
     clearance:
         high_voltage: 2.5mm
@@ -533,7 +533,7 @@ profile JLCPCB_Flex_2Layer:
     
     via:
         min_diameter: 300µm
-        min_annular_ring: 150µm
+        min_enclosure: 150µm
     
     clearance:
         high_voltage: 1.5mm
@@ -571,7 +571,7 @@ profile PCBWay_Flex_4Layer:
     
     via:
         min_diameter: 250µm
-        min_annular_ring: 125µm
+        min_enclosure: 125µm
     
     clearance:
         high_voltage: 1.5mm
@@ -615,7 +615,7 @@ profile JLCPCB_4Layer_RF:
     
     via:
         min_diameter: 200µm
-        min_annular_ring: 100µm
+        min_enclosure: 100µm
     
     clearance:
         high_voltage: 2mm
@@ -657,7 +657,7 @@ profile PCBWay_2Layer_Rogers:
     
     via:
         min_diameter: 250µm
-        min_annular_ring: 125µm
+        min_enclosure: 125µm
     
     clearance:
         high_voltage: 2mm

@@ -17,7 +17,7 @@ profile StrictVia:
     
     via:
         min_diameter: 500µm  # Require 500µm minimum
-        min_annular_ring: 200µm
+        min_enclosure: 200µm
     
     thermal:
         ambient_temp: 25°C

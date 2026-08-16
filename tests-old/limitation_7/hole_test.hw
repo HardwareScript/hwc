@@ -36,7 +36,7 @@ space PerfectHoleTest:
     # Large Mounting Hole (3mm Drill, 4mm Pad)
     add contact(Copper) named MountHole at [x: 5mm, y: 5mm] spanning z:1 to z:16:
         diameter: 3.0mm
-        annular_ring: 0.5mm
+        enclosure: 0.5mm
         
     # Pattern of Small Vias to test N-Zone Triangulation
     # 2x2 grid of vias at the corners of the board
@@ -44,4 +44,4 @@ space PerfectHoleTest:
         for j in 0..1:
             add contact(Copper) at [x: 2mm + i*6mm, y: 2mm + j*6mm] spanning z:1 to z:16:
                 diameter: 0.6mm
-                annular_ring: 0.2mm
+                enclosure: 0.2mm

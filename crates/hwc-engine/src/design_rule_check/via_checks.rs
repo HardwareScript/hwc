@@ -168,9 +168,28 @@ pub fn validate_drill_to_drill_clearance(
                 let dy = (center_a_y - center_b_y) as f64;
                 let center_dist_nm = (dx * dx + dy * dy).sqrt() as i64;
 
-                // Calculate edge-to-edge drill clearance
-                let radius_a = calculate_via_diameter_from_bbox(bbox_a) / 2;
-                let radius_b = calculate_via_diameter_from_bbox(bbox_b) / 2;
+                // v0.2.1 FIX: Use actual drill diameter, not bounding box dimensions
+                // The bounding box includes enclosure (metal around via), but drill spacing
+                // rules (licon.2, mcon.2) measure cut-to-cut distance, not pad-to-pad.
+                // CORRECT: hole_edge_clearance = center_dist - (d1/2 + d2/2)
+                // WRONG:   using bbox dimensions double-counts the enclosure margin
+                let drill_diameter_a = via_a.drill_diameter_nm.ok_or_else(|| {
+                    format!(
+                        "[DRC] FATAL: via '{}' has no drill_diameter declared. \
+                         Add 'diameter: <value>nm' to the via definition.",
+                        via_a.name
+                    )
+                })?;
+                let drill_diameter_b = via_b.drill_diameter_nm.ok_or_else(|| {
+                    format!(
+                        "[DRC] FATAL: via '{}' has no drill_diameter declared. \
+                         Add 'diameter: <value>nm' to the via definition.",
+                        via_b.name
+                    )
+                })?;
+
+                let radius_a = drill_diameter_a / 2;
+                let radius_b = drill_diameter_b / 2;
                 let drill_clearance_nm = center_dist_nm - radius_a - radius_b;
 
                 if drill_clearance_nm < min_drill_spacing_nm {
@@ -240,7 +259,7 @@ pub fn validate_via_enclosure_analytic(
             .to_string()
     })?;
 
-    let min_annular_ring_nm = fabrication.min_annular_ring_nm;
+    let min_enclosure_nm = fabrication.min_enclosure_nm;
 
     // Check each contact/via
     for contact in contacts {
@@ -267,10 +286,10 @@ pub fn validate_via_enclosure_analytic(
             let pad_height = bbox.max.y - bbox.min.y;
             let pad_diameter_nm = pad_width.min(pad_height);
 
-            let actual_annular_ring_nm = (pad_diameter_nm - drill_diameter_nm) / 2;
+            let actual_enclosure_nm = (pad_diameter_nm - drill_diameter_nm) / 2;
 
             // Check against minimum annular ring constraint
-            if actual_annular_ring_nm < min_annular_ring_nm {
+            if actual_enclosure_nm < min_enclosure_nm {
                 let center = Point3D::new(
                     (bbox.min.x + bbox.max.x) / 2,
                     (bbox.min.y + bbox.max.y) / 2,
@@ -279,8 +298,8 @@ pub fn validate_via_enclosure_analytic(
 
                 report.add_violation(super::types::DrcViolation::EnclosureViolation {
                     net: net_name,
-                    actual_nm: actual_annular_ring_nm,
-                    required_nm: min_annular_ring_nm,
+                    actual_nm: actual_enclosure_nm,
+                    required_nm: min_enclosure_nm,
                     location: center,
                 });
             }

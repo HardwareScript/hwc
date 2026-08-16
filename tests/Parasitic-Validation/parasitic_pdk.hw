@@ -98,7 +98,7 @@ export profile EM_Test_Profile:
 
     via:
         min_diameter: 170nm
-        min_annular_ring: 60nm
+        min_enclosure: 60nm
         min_spacing: 170nm
         shape: SquareContact
         contact_depth: 30%
@@ -161,7 +161,7 @@ export profile Thermal_Test_Profile:
 
     via:
         min_diameter: 170nm
-        min_annular_ring: 60nm
+        min_enclosure: 60nm
         min_spacing: 170nm
         shape: SquareContact
         contact_depth: 30%
@@ -219,7 +219,7 @@ export profile Crosstalk_Test_Profile:
 
     via:
         min_diameter: 150nm
-        min_annular_ring: 60nm
+        min_enclosure: 60nm
         min_spacing: 170nm
         shape: SquareContact
         contact_depth: 30%
@@ -283,7 +283,7 @@ export profile Standard_Profile:
 
     via:
         min_diameter: 150nm
-        min_annular_ring: 60nm
+        min_enclosure: 60nm
         min_spacing: 170nm
         shape: SquareContact
         contact_depth: 30%
@@ -344,7 +344,7 @@ export profile Junction_Test_Profile:
 
     via:
         min_diameter: 170nm
-        min_annular_ring: 60nm
+        min_enclosure: 60nm
         min_spacing: 170nm
         shape: SquareContact
         contact_depth: 30%
@@ -410,7 +410,7 @@ export profile Unconnected_Interface_Profile:
 
     via:
         min_diameter: 170nm
-        min_annular_ring: 60nm
+        min_enclosure: 60nm
         min_spacing: 170nm
         contact_depth: 50nm
 

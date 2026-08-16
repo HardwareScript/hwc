@@ -135,6 +135,47 @@ fn generate_dc_stimulus(
         }
     }
     
+    // CRITICAL FIX (Issue #1): Add load termination for output pins
+    // Output pins with declared potential need a voltage source termination so current can flow
+    // Without this, the circuit is open and I = 0A (floating output)
+    if let Some(module) = module_def {
+        if let Some(space_def) = space_def {
+            for pin in &module.pins {
+                if pin.direction == PinDirection::Output {
+                    // Check if this output has a declared potential (expected operating point)
+                    if let Some(net_decl) = space_def.nets.iter().find(|n| n.name.as_str() == pin.name.as_str()) {
+                        if let Some(ref potential) = net_decl.potential {
+                            match potential.to_millivolts(unit_registry) {
+                                Ok(voltage_mv) => {
+                                    let net_name = net_decl.name.as_str();
+                                    let voltage_v = voltage_mv as f64 / 1000.0;
+
+                                    // Use physical entry node if routing exists
+                                    let node_name = physical_graph
+                                        .net_entry_points
+                                        .get(net_name)
+                                        .map(|s| s.as_str())
+                                        .unwrap_or(net_name);
+
+                                    stimulus.push_str(&format!(
+                                        "V_{} {} 0 DC {:.3}\n",
+                                        net_name, node_name, voltage_v
+                                    ));
+                                }
+                                Err(e) => {
+                                    return Err(format!(
+                                        "Failed to convert potential for output net '{}': {}",
+                                        net_decl.name, e
+                                    ));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
     // ZERO-MAGIC MEASUREMENT GUARD (v0.2.1):
     // Only generate DC resistance measurement (.measure R_actual) if the circuit 
     // contains physical devices whose PDK SPICE prefix is explicitly 'R' (Resistors).
@@ -351,6 +392,43 @@ fn generate_ac_stimulus(
     let stop_hz = measurement_to_base_si(&ac.stop_freq, unit_registry, "frequency")
         .map_err(|e| format!("Failed to resolve AC stop frequency: {}", e))?;
 
+    // CRITICAL FIX (Issue #1): Add load termination for output pins
+    if let Some(module) = module_def {
+        if let Some(space_def) = space_def {
+            for pin in &module.pins {
+                if pin.direction == PinDirection::Output {
+                    if let Some(net_decl) = space_def.nets.iter().find(|n| n.name.as_str() == pin.name.as_str()) {
+                        if let Some(ref potential) = net_decl.potential {
+                            match potential.to_millivolts(unit_registry) {
+                                Ok(voltage_mv) => {
+                                    let net_name = net_decl.name.as_str();
+                                    let voltage_v = voltage_mv as f64 / 1000.0;
+
+                                    let node_name = physical_graph
+                                        .net_entry_points
+                                        .get(net_name)
+                                        .map(|s| s.as_str())
+                                        .unwrap_or(net_name);
+
+                                    stimulus.push_str(&format!(
+                                        "V_{} {} 0 DC {:.3}\n",
+                                        net_name, node_name, voltage_v
+                                    ));
+                                }
+                                Err(e) => {
+                                    return Err(format!(
+                                        "Failed to convert potential for output net '{}': {}",
+                                        net_decl.name, e
+                                    ));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     let sweep_str = match ac.sweep_type {
         AcSweepType::Decade => "dec",
         AcSweepType::Octave => "oct",
@@ -372,6 +450,10 @@ fn generate_ac_stimulus(
 /// Transient step/stop (and optional start) are taken from the testbench's
 /// `tran:` block. The compiler FAILS LOUDLY if no explicit `tran:` configuration
 /// is provided (Zero-Hidden-Fallbacks mandate).
+///
+/// **CRITICAL FIX (Issue #3): Generate PULSE stimulus for transient analysis**
+/// Pure DC sources result in flat waveforms (no transitions to observe).
+/// For meaningful transient analysis, input pins should use PULSE waveforms.
 fn generate_transient_stimulus(
     space_def: Option<&SpaceDefinition>,
     unit_registry: &UnitRegistry,
@@ -411,6 +493,17 @@ fn generate_transient_stimulus(
         )
     })?;
 
+    // DATA-DRIVEN UNIT CONVERSION USING UNIT REGISTRY LOOKUP TABLE
+    let step_s = measurement_to_base_si(&tran.step, unit_registry, "time")
+        .map_err(|e| format!("Failed to resolve transient step time: {}", e))?;
+    let stop_s = measurement_to_base_si(&tran.stop, unit_registry, "time")
+        .map_err(|e| format!("Failed to resolve transient stop time: {}", e))?;
+
+    // Determine primary input that receives PULSE excitation
+    let primary_input = module_def
+        .and_then(|m| m.pins.iter().find(|p| p.direction == PinDirection::Input))
+        .map(|p| p.name.as_str());
+
     // Generate voltage sources for transient analysis
     if let Some(space_def) = space_def {
         for net_decl in &space_def.nets {
@@ -429,11 +522,30 @@ fn generate_transient_stimulus(
                                 .map(|s| s.as_str())
                                 .unwrap_or(net_name);
 
-                            // Generate DC sources (not PULSE) unless explicitly configured otherwise
-                            stimulus.push_str(&format!(
-                                "V_{} {} 0 DC {:.3}\n",
-                                net_name, node_name, voltage_v
-                            ));
+                            // CRITICAL FIX: Input pins use PULSE, not DC
+                            // PULSE(V_low V_high T_delay T_rise T_fall T_on T_period)
+                            let is_primary_input = module_def
+                                .and_then(|m| m.pins.iter().find(|p| p.name.as_str() == net_name))
+                                .map(|p| p.direction == PinDirection::Input && Some(net_name) == primary_input)
+                                .unwrap_or(false);
+
+                            if is_primary_input {
+                                // Generate PULSE waveform for input
+                                // Rise/fall times: 10ps (fast but realistic)
+                                // Pulse width: ~50% of simulation time
+                                let rise_fall = step_s * 10.0; // 10x step time for smooth edges
+                                let pulse_width = stop_s * 0.5; // 50% duty cycle
+                                stimulus.push_str(&format!(
+                                    "V_{} {} 0 PULSE(0 {:.3} 0 {:.3e} {:.3e} {:.3e} {:.3e})\n",
+                                    net_name, node_name, voltage_v, rise_fall, rise_fall, pulse_width, stop_s
+                                ));
+                            } else {
+                                // Non-input pins: DC bias
+                                stimulus.push_str(&format!(
+                                    "V_{} {} 0 DC {:.3}\n",
+                                    net_name, node_name, voltage_v
+                                ));
+                            }
                         }
                         Err(e) => {
                             return Err(format!(
@@ -447,11 +559,42 @@ fn generate_transient_stimulus(
         }
     }
 
-    // DATA-DRIVEN UNIT CONVERSION USING UNIT REGISTRY LOOKUP TABLE
-    let step_s = measurement_to_base_si(&tran.step, unit_registry, "time")
-        .map_err(|e| format!("Failed to resolve transient step time: {}", e))?;
-    let stop_s = measurement_to_base_si(&tran.stop, unit_registry, "time")
-        .map_err(|e| format!("Failed to resolve transient stop time: {}", e))?;
+    // CRITICAL FIX (Issue #1): Add load termination for output pins
+    if let Some(module) = module_def {
+        if let Some(space_def) = space_def {
+            for pin in &module.pins {
+                if pin.direction == PinDirection::Output {
+                    if let Some(net_decl) = space_def.nets.iter().find(|n| n.name.as_str() == pin.name.as_str()) {
+                        if let Some(ref potential) = net_decl.potential {
+                            match potential.to_millivolts(unit_registry) {
+                                Ok(voltage_mv) => {
+                                    let net_name = net_decl.name.as_str();
+                                    let voltage_v = voltage_mv as f64 / 1000.0;
+
+                                    let node_name = physical_graph
+                                        .net_entry_points
+                                        .get(net_name)
+                                        .map(|s| s.as_str())
+                                        .unwrap_or(net_name);
+
+                                    stimulus.push_str(&format!(
+                                        "V_{} {} 0 DC {:.3}\n",
+                                        net_name, node_name, voltage_v
+                                    ));
+                                }
+                                Err(e) => {
+                                    return Err(format!(
+                                        "Failed to convert potential for output net '{}': {}",
+                                        net_decl.name, e
+                                    ));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     if let Some(ref start) = tran.start {
         let start_s = measurement_to_base_si(start, unit_registry, "time")

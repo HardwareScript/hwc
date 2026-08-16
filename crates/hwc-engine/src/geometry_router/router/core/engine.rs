@@ -97,7 +97,6 @@ impl GeometryRouter {
                 net_frequencies,
             )?;
             result.merge(steiner_result);
-            self.apply_refinement_pipeline(entity_graph, &mut result);
 
             Ok(result)
         } else {
@@ -110,7 +109,6 @@ impl GeometryRouter {
                 net_frequencies,
             )?;
             result.merge(hierarchical_result);
-            self.apply_refinement_pipeline(entity_graph, &mut result);
 
             Ok(result)
         }

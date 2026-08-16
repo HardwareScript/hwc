@@ -204,12 +204,12 @@ impl BoundingBoxTracker {
             from_z_nm,
             to_z_nm,
             diameter_nm,
-            annular_ring_nm,
+            enclosure_nm,
             trace_width_nm,
             clearance_nm,
             net_name,
         } = params;
-        let radius = diameter_nm / 2 + annular_ring_nm;
+        let radius = diameter_nm / 2 + enclosure_nm;
         let bbox = BoundingBox {
             min: Point3D::new(x_nm - radius, y_nm - radius, from_z_nm.min(to_z_nm)),
             max: Point3D::new(x_nm + radius, y_nm + radius, from_z_nm.max(to_z_nm)),
@@ -382,7 +382,7 @@ pub struct ViaObstacleParams {
     /// Via drill diameter.
     pub diameter_nm: i64,
     /// Copper pad around the drill hole.
-    pub annular_ring_nm: i64,
+    pub enclosure_nm: i64,
     /// Width of trace being routed (for inflation).
     pub trace_width_nm: i64,
     /// Clearance for inflation.
@@ -569,7 +569,7 @@ mod tests {
             from_z_nm: 0,
             to_z_nm: 1_000_000,
             diameter_nm: 300_000,
-            annular_ring_nm: 100_000,
+            enclosure_nm: 100_000,
             trace_width_nm: 200_000,
             clearance_nm: 150_000,
             net_name: "NET_VIA".into(),
@@ -665,7 +665,7 @@ mod tests {
             from_z_nm: 0,
             to_z_nm: 100_000,
             diameter_nm: 200_000,
-            annular_ring_nm: 50_000,
+            enclosure_nm: 50_000,
             trace_width_nm: 200_000,
             clearance_nm: 100_000,
             net_name: "VIA_TOP".into(),
@@ -677,7 +677,7 @@ mod tests {
             from_z_nm: 0,
             to_z_nm: 1_000_000,
             diameter_nm: 300_000,
-            annular_ring_nm: 100_000,
+            enclosure_nm: 100_000,
             trace_width_nm: 200_000,
             clearance_nm: 100_000,
             net_name: "VIA_THROUGH".into(),

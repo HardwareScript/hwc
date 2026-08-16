@@ -1,6 +1,21 @@
-//! Thermal rise validation — P22: Self-heating validation (I²R Joule heating).
+//! Thermal rise validation — P22: STATIC BUDGET vs. Thermal Capacity Check
 //!
-//! **Physical Phenomenon:**
+//! **CRITICAL ARCHITECTURAL BOUNDARY:**
+//! This module validates DECLARED CURRENT BUDGETS vs. THERMAL CAPACITY, NOT simulated
+//! operating points. The `current` field in `.hw` files is a DESIGN CONSTRAINT, not
+//! a computed operating current.
+//!
+//! **What This Check Does:**
+//! - ✅ Validates: "If this trace carried its declared budget, would self-heating be safe?"
+//! - ✅ Formula: ΔT_budget = (I_declared² × R) / (k × Surface_Area)
+//! - ✅ Failure: "Declared budget would cause excessive temperature rise"
+//!
+//! **What This Check Does NOT Do:**
+//! - ❌ Calculate actual operating currents (requires SPICE matrix solver)
+//! - ❌ Solve I = V/R for the circuit (belongs to simulation layer)
+//! - ❌ Validate simulated power dissipation (belongs to dynamic sign-off)
+//!
+//! **Physical Phenomenon (For Reference):**
 //! - High RMS current through resistive traces generates Joule heat: P = I²R
 //! - Heat trapped in dielectric layers causes local temperature rise: ΔT
 //! - Excessive ΔT causes:
@@ -10,12 +25,14 @@
 //!
 //! **Governing Equations:**
 //!   R = ρ × (L / A)               [Trace resistance]
-//!   P = I_RMS² × R                [Joule heating power]
+//!   P = I_budget² × R             [Power if trace carries declared budget]
 //!   ΔT = P / (k × Surface_Area)   [1D substrate diffusion model]
 //!
-//! **Check:** ΔT ≤ Profile.max_temp_rise (user-declared, e.g., 20°C)
+//! **Static Check:** ΔT_budget ≤ Profile.max_temp_rise (user-declared, e.g., 20°C)
 //!
 //! **No Defaults:** The profile MUST declare max_temp_rise explicitly.
+//!
+//! **See:** ELECTROMIGRATION-AND-THERMAL.md for the three-tier architecture explanation.
 
 use crate::geometry::Point3D;
 use crate::material::MaterialRegistry;
@@ -23,10 +40,19 @@ use crate::space::AnalyticTrace;
 
 use super::types::DrcViolation;
 
-/// Validate thermal rise (ΔT) for all analytic routes.
+/// Validate thermal rise (ΔT) for all analytic routes (STATIC BUDGET CHECK).
 ///
-/// Calculates self-heating from I²R power dissipation and checks against thermal budget.
+/// **ARCHITECTURAL BOUNDARY:** This function validates DECLARED BUDGETS vs. THERMAL CAPACITY,
+/// not simulated operating points. The `current.budget_ma` field stores the user's
+/// declared budget from `nets: { current: X }`, NOT a computed operating current.
+///
+/// Calculates hypothetical self-heating if the trace carried its declared budget current:
+///   P_budget = I_declared² × R
+///   ΔT_budget = P_budget / (k × Surface_Area)
+///
 /// This is separate from electromigration (P21) which checks current density limits.
+///
+/// **Dynamic validation (simulated power dissipation) belongs to post-simulation sign-off (P22-D).**
 ///
 /// # Arguments
 /// * `routes` - All analytic traces in the design
@@ -51,8 +77,11 @@ pub fn validate_thermal_rise(
             let handle = s.spawn(move || {
                 let mut local_violations: Vec<DrcViolation> = Vec::new();
                 for route in chunk {
-                    // Skip routes with no current (Artist Mode)
-                    if route.current.actual_ma <= 0.0 {
+                    // Skip routes with no current budget declared (Artist Mode / NC nets)
+                    // NOTE: route.current.budget_ma is the DECLARED BUDGET from nets: { current: X },
+                    //       NOT a simulated operating current. This is a static capacity check.
+                    let budget_ma = route.current.budget_ma;
+                    if budget_ma <= 0.0 {
                         continue;
                     }
 
@@ -113,9 +142,11 @@ pub fn validate_thermal_rise(
                     // STEP 1: Calculate trace resistance: R = ρ × (L / A)
                     let resistance_ohms = resistivity * (length_m / area_m2);
 
-                    // STEP 2: Calculate Joule heating power: P = I_RMS² × R
-                    let current_rms_a = route.current.actual_ma * 1e-3;
-                    let power_watts = current_rms_a * current_rms_a * resistance_ohms;
+                    // STEP 2: Calculate hypothetical power if trace carried its declared budget
+                    // NOTE: This is NOT simulated power. It's "what if the trace carried its budget?"
+                    //       P_budget = I_declared² × R
+                    let current_budget_a = budget_ma * 1e-3;
+                    let power_watts = current_budget_a * current_budget_a * resistance_ohms;
 
                     // STEP 3: Calculate temperature rise using 1D substrate diffusion model
                     // ΔT = P / (k × Surface_Area)
@@ -128,10 +159,10 @@ pub fn validate_thermal_rise(
 
                     let delta_t_celsius = power_watts / (thermal_k * surface_area_m2);
 
-                    eprintln!("[DRC THERMAL DEBUG] • Net '{}': R={:.2e}Ω, P={:.2e}W, ΔT={:.2}°C (limit: {:.2}°C)", 
+                    eprintln!("[DRC THERMAL DEBUG] • Net '{}': R={:.2e}Ω, P_budget={:.2e}W, ΔT_budget={:.2}°C (limit: {:.2}°C)", 
                         route.net_name, resistance_ohms, power_watts, delta_t_celsius, max_temp_rise_c);
 
-                    // STEP 4: Check against thermal budget
+                    // STEP 4: Check hypothetical temperature rise against thermal budget
                     if delta_t_celsius > max_temp_rise_c {
                         let location = route
                             .segments
@@ -139,7 +170,7 @@ pub fn validate_thermal_rise(
                             .map(|s| s.start)
                             .unwrap_or(Point3D::new(0, 0, 0));
 
-                        eprintln!("[DRC THERMAL DEBUG] • Thermal violation for {}: ΔT={:.2}°C > {:.2}°C", 
+                        eprintln!("[DRC THERMAL DEBUG] • STATIC THERMAL VIOLATION for {}: ΔT_budget={:.2}°C > {:.2}°C", 
                             route.net_name, delta_t_celsius, max_temp_rise_c);
 
                         local_violations.push(DrcViolation::ThermalRiseViolation {

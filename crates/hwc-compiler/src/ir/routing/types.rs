@@ -76,11 +76,13 @@ pub struct ResolvedRoute {
     /// DEPRECATED in v0.2.0: Use layer_name + database instead
     pub target_layer_z: Option<i64>,
 
-    /// Operating current capability in milliamps (from current_limit_ac.peak)
-    pub current_capability_ma: f64,
+    /// Current capacity in milliamps supported by the routed geometry
+    /// (from `current_limit_ac.peak`)
+    pub current_capacity_ma: f64,
 
-    /// Actual operating current in milliamps (from net declaration)
-    pub actual_current_ma: f64,
+    /// Declared current budget in milliamps (from `nets: { current: X }`).
+    /// This is a design constraint, NOT a simulated operating current.
+    pub current_budget_ma: f64,
 
     /// Escape port for the source endpoint (resolved by chain-link logic)
     pub exit_escape: EscapeSpec,
@@ -109,8 +111,8 @@ impl ResolvedRoute {
             net_name,
             layer_name,
             target_layer_z: None,
-            current_capability_ma: 0.0,
-            actual_current_ma: 0.0,
+            current_capacity_ma: 0.0,
+            current_budget_ma: 0.0,
             exit_escape: EscapeSpec::default(),
             enter_escape: EscapeSpec::default(),
         }
@@ -123,9 +125,9 @@ impl ResolvedRoute {
     }
 
     /// Set current ratings
-    pub fn with_currents(mut self, capability_ma: f64, actual_ma: f64) -> Self {
-        self.current_capability_ma = capability_ma;
-        self.actual_current_ma = actual_ma;
+    pub fn with_currents(mut self, capacity_ma: f64, budget_ma: f64) -> Self {
+        self.current_capacity_ma = capacity_ma;
+        self.current_budget_ma = budget_ma;
         self
     }
 

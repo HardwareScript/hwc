@@ -31,7 +31,8 @@ pub enum DrcViolation {
     },
 
     /// Current density exceeds material limit (electromigration/ampacity)
-    /// **P21: Electromigration - Metal atom migration under high current density**
+    /// **P21: Electromigration - STATIC BUDGET CHECK**
+    /// Validates declared budget vs. wire capability, NOT simulated operating currents.
     ElectromigrationViolation {
         net: CompactString,
         actual_density_a_mm2: f64,
@@ -40,7 +41,7 @@ pub enum DrcViolation {
     },
 
     /// Thermal rise violation (I²R heating exceeds temperature budget)
-    /// **P22: Self-Heating Validation**
+    /// **P22: STATIC BUDGET CHECK - Hypothetical heating if trace carries declared budget**
     ThermalRiseViolation {
         net: CompactString,
         actual_temp_rise_c: f64,
@@ -119,6 +120,17 @@ pub enum DrcViolation {
         max_voltage_v: f64,
         location: Point3D,
     },
+
+    /// Minimum area violation (CMP peeling risk)
+    /// Foundries impose minimum area constraints to prevent microscopic metal/poly
+    /// slivers from being torn off during Chemical Mechanical Polishing (CMP).
+    MinArea {
+        net_name: String,
+        material_name: String,
+        actual_area_nm2: f64,
+        required_area_nm2: f64,
+        location: Point3D,
+    },
 }
 
 impl fmt::Display for DrcViolation {
@@ -164,7 +176,7 @@ impl fmt::Display for DrcViolation {
             } => {
                 write!(
                     f,
-                    "Electromigration violation for {} at {}: {:.2} A/mm² actual, {:.2} A/mm² max",
+                    "Static EM violation for {} at {}: Declared budget {:.2} A/mm², wire capability {:.2} A/mm²",
                     net, location, actual_density_a_mm2, max_density_a_mm2
                 )
             }
@@ -239,14 +251,16 @@ impl fmt::Display for DrcViolation {
                 required_nm,
                 location,
             } => {
+                // v0.2.1: Use nanometer precision for drill spacing to avoid truncation
+                // (150nm shown as "0.0001mm" is misleading; show "150nm < 200nm" instead)
                 write!(
                     f,
-                    "Drill clearance: {} ↔ {} at {} ({:.4}mm < {:.4}mm)",
+                    "Drill clearance: {} ↔ {} at {} ({}nm < {}nm)",
                     via_a,
                     via_b,
                     location,
-                    *actual_nm as f64 / 1_000_000.0,
-                    *required_nm as f64 / 1_000_000.0
+                    actual_nm,
+                    required_nm
                 )
             }
             DrcViolation::CrosstalkViolation {
@@ -280,7 +294,7 @@ impl fmt::Display for DrcViolation {
             } => {
                 write!(
                     f,
-                    "Thermal rise violation for {} at {}: ΔT={:.1}°C (max: {:.1}°C), P={:.2}μW, R={:.2}Ω",
+                    "Static thermal violation for {} at {}: Budget ΔT={:.1}°C (max: {:.1}°C), P_budget={:.2}μW, R={:.2}Ω",
                     net, location, actual_temp_rise_c, max_temp_rise_c, power_uw, resistance_ohms
                 )
             }
@@ -296,6 +310,22 @@ impl fmt::Display for DrcViolation {
                     f,
                     "Junction breakdown violation for net {} at {}: {}-to-{} junction biased at {:.2}V (max: {:.2}V)",
                     net, location, material, substrate_material, applied_voltage_v, max_voltage_v
+                )
+            }
+            DrcViolation::MinArea {
+                net_name,
+                material_name,
+                actual_area_nm2,
+                required_area_nm2,
+                location,
+            } => {
+                // Convert nm² to μm² for human readability
+                let actual_um2 = actual_area_nm2 / 1_000_000.0;
+                let required_um2 = required_area_nm2 / 1_000_000.0;
+                write!(
+                    f,
+                    "Minimum area violation for net {} ({}) at {}: {:.4}μm² actual, {:.2}μm² required (CMP peeling risk)",
+                    net_name, material_name, location, actual_um2, required_um2
                 )
             }
         }

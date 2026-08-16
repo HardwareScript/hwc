@@ -23,7 +23,7 @@ profile AdvancedPCBStackup:
     
     via: 
         min_diameter: 0.3mm 
-        min_annular_ring: 0.1mm 
+        min_enclosure: 0.1mm 
         min_spacing: 0.25mm 
 
     trace: 
@@ -44,13 +44,13 @@ profile AdvancedPCBStackup:
 
     via VddViaType: 
         diameter: 0.6mm 
-        annular_ring: 0.2mm 
+        enclosure: 0.2mm 
         spanning: layer: bottom to top 
         material: Copper 
 
     via SigViaType: 
         diameter: 0.3mm 
-        annular_ring: 0.1mm 
+        enclosure: 0.1mm 
         spanning: layer: bottom to top 
         material: Copper 
 

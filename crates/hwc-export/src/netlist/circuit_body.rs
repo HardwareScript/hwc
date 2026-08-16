@@ -40,6 +40,7 @@ pub fn generate_circuit_body(
     symbol_table: &SymbolTable,
     physical_netlist: Option<&PhysicalNetlist>,
     physical_graph: &PhysicalNetlistGraph,
+    unit_registry: &hwc_types::UnitRegistry,
 ) -> Result<String, Box<dyn std::error::Error>> {
     let mut netlist_str = String::new();
 
@@ -58,7 +59,7 @@ pub fn generate_circuit_body(
     // Emit .subckt definitions for PDK models used by devices
     // This section comes first so subcircuits are defined before they're instantiated
     if let Some(netlist) = physical_netlist {
-        emit_pdk_subcircuits(&mut netlist_str, netlist, symbol_table)?;
+        emit_pdk_subcircuits(&mut netlist_str, netlist, symbol_table, unit_registry)?;
     }
 
     // Emit nets as comments for reference
@@ -96,6 +97,7 @@ fn emit_pdk_subcircuits(
     netlist_str: &mut String,
     netlist: &PhysicalNetlist,
     symbol_table: &SymbolTable,
+    unit_registry: &hwc_types::UnitRegistry,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut emitted_subcircuits = FxHashSet::default();
 
@@ -118,8 +120,8 @@ fn emit_pdk_subcircuits(
                         if let Ok(subckt_def) =
                             symbol_table.get_subcircuit(subcircuit_name.as_str())
                         {
-                            // Generate SPICE from typed AST
-                            generate_spice_subcircuit(netlist_str, subckt_def)?;
+                            // Generate SPICE from typed AST with UnitRegistry for data-driven conversion
+                            generate_spice_subcircuit(netlist_str, subckt_def, unit_registry)?;
                             netlist_str.push('\n');
                         } else {
                             // Subcircuit referenced but not defined - this is an error

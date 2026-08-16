@@ -16,7 +16,7 @@ profile Capacitor_PDK:
     
     via:
         min_diameter: 300nm
-        min_annular_ring: 150nm
+        min_enclosure: 150nm
         min_spacing: 400nm
         shape: cylinder
     

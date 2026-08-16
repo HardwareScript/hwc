@@ -42,7 +42,7 @@ profile Silicon_250nm:
 
     via:
         min_diameter: 250nm
-        min_annular_ring: 100nm
+        min_enclosure: 100nm
         min_spacing: 300nm
         shape: cylinder
         default_via_fill: Tungsten

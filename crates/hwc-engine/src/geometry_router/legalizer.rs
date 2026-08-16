@@ -1,5 +1,5 @@
 use crate::geometry::{BoundingBox, Point3D, TraceSegment};
-use crate::geometry_router::spatial_index::DynamicSpatialIndex;
+use crate::geometry_router::spatial_index::{DynamicSpatialIndex, IndexedSegment};
 
 use crate::netlist::NetId;
 use rustc_hash::FxHashMap;
@@ -68,16 +68,27 @@ impl Legalizer {
     }
 
     /// Compute the required shift to separate two overlapping segments.
+    ///
+    /// **v0.2.3: Asymmetric Constraint Formulation**
+    /// Returns (shift_for_A, shift_for_B) based on frozen status:
+    /// - Both mutable: symmetric nudge (shift/2 for each)
+    /// - A frozen, B mutable: (0, full_shift) - B moves entirely
+    /// - A mutable, B frozen: (full_shift, 0) - A moves entirely
+    /// - Both frozen: (0, 0) - skip legalization, let DRC validate
     #[inline]
-    fn required_shift(seg_a: &TraceSegment, seg_b: &TraceSegment, min_clearance: i64) -> i64 {
+    fn required_shift_asymmetric(
+        seg_a: &TraceSegment,
+        seg_b: &TraceSegment,
+        min_clearance: i64,
+    ) -> (i64, i64) {
         let bbox_a = seg_a.bounding_box();
         let bbox_b = seg_b.bounding_box();
 
         let overlap_x = (bbox_a.max.x.min(bbox_b.max.x) - bbox_a.min.x.max(bbox_b.min.x)).max(0);
         let overlap_y = (bbox_a.max.y.min(bbox_b.max.y) - bbox_a.min.y.max(bbox_b.min.y)).max(0);
 
-        if overlap_x > 0 && overlap_y > 0 {
-            overlap_x.max(overlap_y) + min_clearance
+        let total_shift = if overlap_x > 0 && overlap_y > 0 {
+            overlap_x.min(overlap_y) + min_clearance
         } else if overlap_x > 0 {
             overlap_x + min_clearance
         } else if overlap_y > 0 {
@@ -98,6 +109,28 @@ impl Legalizer {
                 min_clearance - gap
             } else {
                 0
+            }
+        };
+
+        // **v0.2.3: Asymmetric distribution based on frozen status**
+        match (seg_a.is_frozen, seg_b.is_frozen) {
+            (false, false) => {
+                // Both mutable: symmetric nudge
+                let half_shift = total_shift / 2;
+                (half_shift, total_shift - half_shift)
+            }
+            (true, false) => {
+                // A is frozen (child route): B takes full shift
+                (0, total_shift)
+            }
+            (false, true) => {
+                // B is frozen (child route): A takes full shift
+                (total_shift, 0)
+            }
+            (true, true) => {
+                // Both frozen (child routes from same/neighboring cells)
+                // Skip legalization - let DRC validate placement spacing
+                (0, 0)
             }
         }
     }
@@ -138,24 +171,30 @@ impl Legalizer {
                     continue;
                 }
 
-                let neighbor_seg = TraceSegment {
-                    start: neighbor.start,
-                    end: neighbor.end,
-                    width_nm: neighbor.width_nm,
-                    material_id: 0,
-                };
+                let neighbor_seg = &segments[neighbor.segment_id];
 
-                // Skip same-net overlaps (these are legal T-junctions or taps)
+                // **Same-Net Clearance Exemption**
+                // Minimum clearance between elements of the SAME net is 0nm (touching, merging,
+                // and T-junction taps are physically legal). min_clearance_nm strictly applies
+                // to different nets (seg_net_id != neighbor_net_id).
                 if neighbor.net_id.raw() as usize == seg_net_id {
                     continue;
                 }
 
-                let shift = Self::required_shift(seg, &neighbor_seg, self.min_clearance_nm);
-                if shift <= 0 {
+                // **v0.2.3: Skip frozen-frozen pairs** - these are pre-verified child cells
+                if seg.is_frozen && neighbor_seg.is_frozen {
                     continue;
                 }
 
-                let overlap = Self::segment_overlap_bbox(seg, &neighbor_seg);
+                let (shift_a, shift_b) =
+                    Self::required_shift_asymmetric(seg, neighbor_seg, self.min_clearance_nm);
+
+                // Skip if no shift needed or both frozen
+                if shift_a == 0 && shift_b == 0 {
+                    continue;
+                }
+
+                let overlap = Self::segment_overlap_bbox(seg, neighbor_seg);
 
                 violations.push(ClearanceViolation {
                     violator_id: idx,
@@ -163,13 +202,14 @@ impl Legalizer {
                     violator_net: NetId(seg_net_id as u32),
                     victim_net: NetId::new(neighbor.net_id.raw()),
                     overlap_bbox: overlap,
-                    required_shift_nm: shift,
+                    required_shift_nm: shift_a.max(shift_b),
                 });
             }
         }
 
         violations
     }
+
 
     pub fn create_window(
         &self,
@@ -217,6 +257,11 @@ impl Legalizer {
             None => return (0, 0),
         };
 
+        // **v0.2.3: If violator is frozen, don't compute nudge for it**
+        if violator.is_frozen {
+            return (0, 0);
+        }
+
         let violator_cx = (violator.start.x + violator.end.x) / 2;
         let violator_cy = (violator.start.y + violator.end.y) / 2;
         let victim_cx = (victim.start.x + victim.end.x) / 2;
@@ -262,6 +307,9 @@ impl Legalizer {
         }
     }
 
+    /// Apply rigid-body nudges (uniform dx, dy per segment).
+    ///
+    /// Used by the flat `legalize()` path where elbow continuity is not tracked.
     pub fn apply_nudges(
         &self,
         segments: &[TraceSegment],
@@ -283,6 +331,192 @@ impl Legalizer {
                         end: Point3D::new(seg.end.x + dx, seg.end.y + dy, seg.end.z),
                         width_nm: seg.width_nm,
                         material_id: seg.material_id,
+                        is_frozen: seg.is_frozen, // Preserve frozen status
+                    }
+                } else {
+                    seg.clone()
+                }
+            })
+            .collect()
+    }
+
+    /// **Flaw 2 & Fatal Bug 4 Fix: Manhattan Orthogonal Elbow Continuity Propagation**
+    ///
+    /// Given a set of raw rigid-body displacements `(seg_idx, dx, dy)`, propagate
+    /// endpoint deltas to connected segments so that shared corner joints (elbows)
+    /// do not snap open or slant into off-grid diagonal angles.
+    ///
+    /// Rules for Manhattan Orthogonality:
+    /// - Nudging a horizontal segment in Y (perpendicular) adjusts the connected vertical segment's length.
+    /// - Nudging a horizontal segment in X (parallel) shifts the ENTIRE connected vertical segment in X (both endpoints).
+    /// - Nudging a vertical segment in X (perpendicular) adjusts the connected horizontal segment's length.
+    /// - Nudging a vertical segment in Y (parallel) shifts the ENTIRE connected horizontal segment in Y (both endpoints).
+    fn propagate_elbow_continuity(
+        segments: &[TraceSegment],
+        raw_displacements: &[(usize, i64, i64)],
+    ) -> Vec<(usize, i64, i64, i64, i64)> {
+        let mut start_dx = vec![0i64; segments.len()];
+        let mut start_dy = vec![0i64; segments.len()];
+        let mut end_dx = vec![0i64; segments.len()];
+        let mut end_dy = vec![0i64; segments.len()];
+        let mut has_delta = vec![false; segments.len()];
+
+        let mut queue = Vec::new();
+
+        for &(idx, dx, dy) in raw_displacements {
+            if idx >= segments.len() || (dx == 0 && dy == 0) {
+                continue;
+            }
+            start_dx[idx] += dx;
+            start_dy[idx] += dy;
+            end_dx[idx] += dx;
+            end_dy[idx] += dy;
+            has_delta[idx] = true;
+            queue.push((idx, dx, dy));
+        }
+
+        while let Some((i, dx, dy)) = queue.pop() {
+            if i >= segments.len() {
+                continue;
+            }
+            let seg_i = &segments[i];
+            let old_start_i = seg_i.start;
+            let old_end_i = seg_i.end;
+            let i_is_horiz = seg_i.is_horizontal();
+            let i_is_vert = seg_i.is_vertical();
+
+            for (j, seg_j) in segments.iter().enumerate() {
+                if j == i || seg_j.is_frozen {
+                    continue;
+                }
+
+                let j_touches_start = seg_j.start == old_start_i || seg_j.end == old_start_i;
+                let j_touches_end = seg_j.start == old_end_i || seg_j.end == old_end_i;
+
+                if !j_touches_start && !j_touches_end {
+                    continue;
+                }
+
+                let j_at_start = seg_j.start == old_start_i || seg_j.start == old_end_i;
+                let j_at_end = seg_j.end == old_start_i || seg_j.end == old_end_i;
+                let j_is_horiz = seg_j.is_horizontal();
+                let j_is_vert = seg_j.is_vertical();
+
+                let mut added_dx_start = 0i64;
+                let mut added_dy_start = 0i64;
+                let mut added_dx_end = 0i64;
+                let mut added_dy_end = 0i64;
+
+                if i_is_horiz {
+                    // Perpendicular Y shift -> adjusts vertical j's length at joint
+                    if dy != 0 {
+                        if j_at_start { added_dy_start += dy; }
+                        if j_at_end { added_dy_end += dy; }
+                    }
+                    // Parallel X shift -> shifts entire vertical j along X to preserve orthogonality
+                    if dx != 0 {
+                        if j_is_vert {
+                            added_dx_start += dx;
+                            added_dx_end += dx;
+                        } else {
+                            if j_at_start { added_dx_start += dx; }
+                            if j_at_end { added_dx_end += dx; }
+                        }
+                    }
+                } else if i_is_vert {
+                    // Perpendicular X shift -> adjusts horizontal j's length at joint
+                    if dx != 0 {
+                        if j_at_start { added_dx_start += dx; }
+                        if j_at_end { added_dx_end += dx; }
+                    }
+                    // Parallel Y shift -> shifts entire horizontal j along Y to preserve orthogonality
+                    if dy != 0 {
+                        if j_is_horiz {
+                            added_dy_start += dy;
+                            added_dy_end += dy;
+                        } else {
+                            if j_at_start { added_dy_start += dy; }
+                            if j_at_end { added_dy_end += dy; }
+                        }
+                    }
+                } else {
+                    // Non-orthogonal fallback
+                    if j_at_start {
+                        added_dx_start += dx;
+                        added_dy_start += dy;
+                    }
+                    if j_at_end {
+                        added_dx_end += dx;
+                        added_dy_end += dy;
+                    }
+                }
+
+                if added_dx_start != 0 || added_dy_start != 0 || added_dx_end != 0 || added_dy_end != 0 {
+                    start_dx[j] += added_dx_start;
+                    start_dy[j] += added_dy_start;
+                    end_dx[j] += added_dx_end;
+                    end_dy[j] += added_dy_end;
+
+                    if !has_delta[j] {
+                        has_delta[j] = true;
+                        let j_dx = (added_dx_start + added_dx_end) / 2;
+                        let j_dy = (added_dy_start + added_dy_end) / 2;
+                        if j_dx != 0 || j_dy != 0 {
+                            queue.push((j, j_dx, j_dy));
+                        }
+                    }
+                }
+            }
+        }
+
+        has_delta
+            .iter()
+            .enumerate()
+            .filter(|(_, &has)| has)
+            .map(|(idx, _)| (idx, start_dx[idx], start_dy[idx], end_dx[idx], end_dy[idx]))
+            .collect()
+    }
+
+    /// Apply per-endpoint nudges (Flaw 2 fix: elbow-aware application).
+    ///
+    /// Each entry is `(seg_idx, dx_start, dy_start, dx_end, dy_end)`.
+    /// Frozen segments are never moved.
+    fn apply_nudges_with_elbow(
+        segments: &[TraceSegment],
+        deltas: &[(usize, i64, i64, i64, i64)],
+    ) -> Vec<TraceSegment> {
+        // Build a lookup: seg_idx → (dx_start, dy_start, dx_end, dy_end)
+        let mut delta_map: FxHashMap<usize, (i64, i64, i64, i64)> = FxHashMap::default();
+        for &(idx, dxs, dys, dxe, dye) in deltas {
+            let entry = delta_map.entry(idx).or_insert((0, 0, 0, 0));
+            entry.0 += dxs;
+            entry.1 += dys;
+            entry.2 += dxe;
+            entry.3 += dye;
+        }
+
+        segments
+            .iter()
+            .enumerate()
+            .map(|(idx, seg)| {
+                if seg.is_frozen {
+                    return seg.clone();
+                }
+                if let Some(&(dxs, dys, dxe, dye)) = delta_map.get(&idx) {
+                    TraceSegment {
+                        start: Point3D::new(
+                            seg.start.x + dxs,
+                            seg.start.y + dys,
+                            seg.start.z,
+                        ),
+                        end: Point3D::new(
+                            seg.end.x + dxe,
+                            seg.end.y + dye,
+                            seg.end.z,
+                        ),
+                        width_nm: seg.width_nm,
+                        material_id: seg.material_id,
+                        is_frozen: seg.is_frozen,
                     }
                 } else {
                     seg.clone()
@@ -394,6 +628,172 @@ impl Legalizer {
 
         (current, current_net_ids)
     }
+
+    /// **v0.2.4: Hierarchical Legalization Engine (CORRECTED)**
+    ///
+    /// Legalizes parent-level routes while treating child-instance routes as static obstacles.
+    ///
+    /// # Flaw 1 Fix (Stale Spatial Index):
+    /// Takes ownership of the initial `spatial_index`. At the end of every iteration, the
+    /// parent region of the index is rebuilt from the updated `all_segments` positions before
+    /// the next `detect_violations` call. The frozen child/obstacle segments are kept verbatim.
+    ///
+    /// # Flaw 2 Fix (Elbow Continuity):
+    /// Uses `propagate_elbow_continuity` + `apply_nudges_with_elbow` so that nudging segment i
+    /// also stretches the shared corner joint with adjacent segments i-1 and i+1.
+    ///
+    /// # Arguments
+    /// * `parent_segments` - Mutable parent-level routes (can be nudged)
+    /// * `parent_net_ids` - Net IDs corresponding to parent segments
+    /// * `child_segments` - Immutable child-instance routes (fixed obstacles)
+    /// * `child_net_ids` - Net IDs corresponding to child segments
+    /// * `spatial_index` - Owned spatial index (will be rebuilt each iteration)
+    /// * `max_iterations` - Maximum number of legalization iterations
+    ///
+    /// # Returns
+    /// Legalized parent segments (child segments are unchanged)
+    pub fn legalize_hierarchical(
+        &self,
+        parent_segments: &[TraceSegment],
+        parent_net_ids: &[NetId],
+        child_segments: &[TraceSegment],
+        child_net_ids: &[NetId],
+        mut spatial_index: DynamicSpatialIndex, // **Flaw 1 Fix: owned, rebuilt each iteration**
+        max_iterations: usize,
+    ) -> (Vec<TraceSegment>, Vec<NetId>) {
+        // Combine parent and child segments for violation detection.
+        // Parent segments come first so indices 0..parent_count refer to parents.
+        let parent_count = parent_segments.len();
+        let mut all_segments = parent_segments.to_vec();
+        all_segments.extend_from_slice(child_segments);
+
+        let mut all_net_ids = parent_net_ids.to_vec();
+        all_net_ids.extend_from_slice(child_net_ids);
+
+        eprintln!(
+            "[HIERARCHICAL LEGALIZER] Starting legalization: {} parent segments, {} child segments (frozen)",
+            parent_count,
+            child_segments.len()
+        );
+
+        let z_ranges = spatial_index.layer_z_ranges();
+
+        for iter in 0..max_iterations {
+            // **Flaw 1 Fix: detect_violations always uses up-to-date positions**
+            let violations = self.detect_violations(&all_segments, &all_net_ids, &spatial_index);
+
+            // Filter to only violations involving at least one parent segment
+            let parent_violations: Vec<_> = violations
+                .into_iter()
+                .filter(|v| v.violator_id < parent_count || v.victim_id < parent_count)
+                .collect();
+
+            if parent_violations.is_empty() {
+                eprintln!(
+                    "[HIERARCHICAL LEGALIZER] No parent violations found - legalization complete at iteration {}",
+                    iter
+                );
+                break;
+            }
+
+            eprintln!(
+                "[HIERARCHICAL LEGALIZER] Iteration {}: {} violations involving parent routes",
+                iter,
+                parent_violations.len()
+            );
+
+            // Collect raw rigid-body nudges for parent segments only.
+            let mut raw_displacements: Vec<(usize, i64, i64)> = Vec::new();
+
+            for violation in &parent_violations {
+                let (dx, dy) = self.compute_nudge(violation, &all_segments);
+                if (dx != 0 || dy != 0) && violation.violator_id < parent_count {
+                    // Only nudge parent segments
+                    raw_displacements.push((violation.violator_id, dx, dy));
+                }
+            }
+
+            if raw_displacements.is_empty() {
+                eprintln!(
+                    "[HIERARCHICAL LEGALIZER] No nudges computed - legalization stalled at iteration {}",
+                    iter
+                );
+                break;
+            }
+
+            eprintln!(
+                "[HIERARCHICAL LEGALIZER] Applying {} raw nudges (with elbow continuity propagation)",
+                raw_displacements.len()
+            );
+
+            // **Flaw 2 Fix: Propagate corner elbow continuity before applying**
+            // This prevents connected segments from snapping open at shared joints.
+            let elbow_deltas =
+                Self::propagate_elbow_continuity(&all_segments, &raw_displacements);
+
+            // Apply per-endpoint nudges (preserves elbow joints, skips frozen segments)
+            all_segments = Self::apply_nudges_with_elbow(&all_segments, &elbow_deltas);
+
+            // **Flaw 1 & 3 Fix: Rebuild spatial index with preserved layer Z-ranges and stackup thickness.**
+            spatial_index = rebuild_spatial_index(&all_segments, &all_net_ids, z_ranges.as_deref());
+
+            eprintln!(
+                "[HIERARCHICAL LEGALIZER] Rebuilt spatial index with {} entries after iteration {}",
+                spatial_index.len(),
+                iter
+            );
+        }
+
+        // Extract legalized parent segments
+        let legalized_parent = all_segments[..parent_count].to_vec();
+        let parent_nets = all_net_ids[..parent_count].to_vec();
+
+        (legalized_parent, parent_nets)
+    }
+}
+
+/// **Spatial index rebuild helper.**
+///
+/// Constructs a fresh `DynamicSpatialIndex` from the current segment positions while
+/// preserving layer Z-ranges and stackup layer thickness to prevent false cross-layer 3D collisions.
+pub fn rebuild_spatial_index(
+    segments: &[TraceSegment],
+    net_ids: &[NetId],
+    z_ranges: Option<&[(i64, i64)]>,
+) -> DynamicSpatialIndex {
+    let mut index = DynamicSpatialIndex::new();
+    if let Some(ranges) = z_ranges {
+        index.set_layer_z_ranges(ranges);
+    }
+    for (idx, (seg, net_id)) in segments.iter().zip(net_ids.iter()).enumerate() {
+        let layer_z = seg.start.z;
+        let z_span = (seg.start.z - seg.end.z).abs();
+
+        let thickness_nm = if z_span > 0 {
+            z_span
+        } else if let Some(ranges) = z_ranges {
+            ranges
+                .iter()
+                .find(|&&(z_min, z_max)| layer_z >= z_min && layer_z <= z_max)
+                .map(|&(z_min, z_max)| (z_max - z_min).max(1))
+                .unwrap_or(10)
+        } else {
+            10
+        };
+
+        index.insert(IndexedSegment::new(
+            hwc_physics::SpatialEntitySource::RouteSegment {
+                net_idx: net_id.raw() as usize,
+                seg_idx: idx,
+            },
+            idx,
+            *net_id,
+            seg,
+            layer_z,
+            thickness_nm,
+        ));
+    }
+    index
 }
 
 /// Merge overlapping legalization windows to avoid redundant solving.

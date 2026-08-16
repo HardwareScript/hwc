@@ -29,4 +29,4 @@ space DreamPTH:
     # Plated through hole: diameter 0.3mm, with 0.15mm annular ring
     add contact(Copper) named Via1 at [x: 2.5mm, y: 2.5mm] spanning z:1 to z:10:
         diameter: 0.3mm
-        annular_ring: 0.15mm
+        enclosure: 0.15mm

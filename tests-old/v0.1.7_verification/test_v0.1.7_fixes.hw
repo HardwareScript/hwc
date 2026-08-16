@@ -19,7 +19,7 @@ profile VerificationProfile:
     via:
         min_diameter: 200µm
         default_diameter: 600µm  # Should be used by AutoViaInserter
-        min_annular_ring: 100µm  # 100µm annular ring requirement
+        min_enclosure: 100µm  # 100µm annular ring requirement
 
 module VerificationModule:
     pins: []
@@ -49,12 +49,12 @@ space VerificationSpace implements VerificationModule:
     # Pad diameter = 0.5 + 2*0.5 = 1.5mm. Ring = 0.5mm. Pass.
     add contact(Copper) named LargePad net: ManualNet at [x: 15mm, y: 15mm] spanning z:1 to z:1:
         diameter: 500µm
-        annular_ring: 500µm
+        enclosure: 500µm
         caps: true
 
     # Create a via that lands on the pad
     # It also touches layers 2-10 where it needs its own pad.
-    # We don't specify annular_ring, so it uses profile default (100um).
+    # We don't specify enclosure, so it uses profile default (100um).
     # Pad diameter = 0.8 + 2*0.1 = 1.0mm.
     # At z:1, it finds LargePad (1.5mm) -> ring 0.35mm.
     # At z:2-10, it finds its own pad (1.0mm) -> ring 0.1mm.

@@ -18,7 +18,7 @@ profile Solder_Mask_Test_Profile:
     
     via:
         min_diameter: 0.1mm
-        min_annular_ring: 0.05mm
+        min_enclosure: 0.05mm
         min_spacing: 0.15mm
 
     trace:
@@ -57,12 +57,12 @@ space Solder_Mask_Test_Board implements Solder_Mask_Test_Module:
     add contact(ViaCopper) named Exposed_Via at [x: 3.0mm, y: 5.0mm] spanning layer: top to bottom:
         net: GND
         drill_diameter: 0.3mm
-        annular_ring: 0.1mm
+        enclosure: 0.1mm
         is_tented: false
 
     # Tented via (solder mask stays intact) — also connected to GND plane
     add contact(ViaCopper) named Tented_Via at [x: 7.0mm, y: 5.0mm] spanning layer: top to bottom:
         net: GND
         drill_diameter: 0.3mm
-        annular_ring: 0.1mm
+        enclosure: 0.1mm
         is_tented: true

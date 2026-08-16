@@ -31,7 +31,8 @@ impl<'a> AutoRouter<'a> {
         }
 
         let trace_thickness_nm = self.resolve_trace_thickness(&result)?;
-        let trace_width = self.require_trace_width()?;
+        let _trace_width = self.require_trace_width()?;
+
 
         for (net_id_raw, segments) in &result.paths {
             let actual_net_id = if !self.config.auto_routes.is_empty() {
@@ -70,7 +71,7 @@ impl<'a> AutoRouter<'a> {
                 }
 
                 eprintln!(
-                    "[POST_PROCESS DEBUG] Net {:?} path BEFORE miter (len={}):",
+                    "[POST_PROCESS DEBUG] Net {:?} topological path (len={}):",
                     net_id_raw,
                     path.len()
                 );
@@ -78,32 +79,13 @@ impl<'a> AutoRouter<'a> {
                     eprintln!("[POST_PROCESS DEBUG]   [{}]: ({},{},{})", i, p.x, p.y, p.z);
                 }
 
-                let miter_engine = hwc_engine::MiterEngine::new(trace_width);
-
-                // **v0.2.0: Context-aware mitering** - query the space for via locations
-                // and pass as context to preserve via landing pad connections
-                let mitered_path = miter_engine.apply_miter_pass_with_context(
-                    path,
-                    &*self.space as &dyn hwc_engine::geometry_router::miter_pass::MiterContext,
-                    Some(*net_id_raw),
-                );
-
-                eprintln!(
-                    "[POST_PROCESS DEBUG] Net {:?} path AFTER miter (len={}):",
-                    net_id_raw,
-                    mitered_path.len()
-                );
-                for (i, p) in mitered_path.iter().enumerate().take(5) {
-                    eprintln!("[POST_PROCESS DEBUG]   [{}]: ({},{},{})", i, p.x, p.y, p.z);
-                }
-
+                // Process un-mitered path: refine Z & vertical transitions
                 let (refined_path, actual_thickness) =
-                    self.refine_path_z(mitered_path, trace_thickness_nm)?;
+                    self.refine_path_z(path.clone(), trace_thickness_nm)?;
 
                 let mut final_path = refined_path;
 
                 // STRUCTURAL FIX: Only add vertical transitions if the path doesn't already have them
-                // The new routing engine (v0.2.0) already includes vertical transitions in the path
                 let has_z_transitions = final_path.windows(2).any(|w| w[0].z != w[1].z);
                 if !has_z_transitions {
                     eprintln!("[POST_PROCESS] Path is planar - adding vertical transitions");
@@ -117,7 +99,7 @@ impl<'a> AutoRouter<'a> {
                     first_thickness = actual_thickness;
                 }
 
-                // Convert path to segments independently (avoiding concatenation bug)
+                // Convert path to un-mitered Manhattan segments independently
                 if final_path.len() >= 2 {
                     let min_seg_len_nm =
                         crate::ir::routing::helpers::require_min_segment_length_nm(self.profile)?;
@@ -127,7 +109,6 @@ impl<'a> AutoRouter<'a> {
                         let dx = (w[1].x - w[0].x).abs();
                         let dy = (w[1].y - w[0].y).abs();
                         let dz = (w[1].z - w[0].z).abs();
-                        // A segment is diagonal when it moves along more than one axis.
                         let moving_axes = (dx > 0) as u8 + (dy > 0) as u8 + (dz > 0) as u8;
                         moving_axes > 1
                     });
@@ -153,7 +134,7 @@ impl<'a> AutoRouter<'a> {
                 }
             }
 
-            // Register all segments as a single parent route
+            // Register all segments as a single parent route in routing_database
             if !all_segments.is_empty() {
                 let declared_width = data
                     .net_declared_widths
@@ -167,9 +148,9 @@ impl<'a> AutoRouter<'a> {
                     .get(&actual_net_id)
                     .ok_or_else(|| {
                         IrError::RoutingError(format!(
-                        "Could not determine routing layer for net '{}' - no layer name recorded",
-                        net_name
-                    ))
+                            "Could not determine routing layer for net '{}' - no layer name recorded",
+                            net_name
+                        ))
                     })?;
 
                 // Create a single AnalyticTrace with all segments
@@ -186,15 +167,81 @@ impl<'a> AutoRouter<'a> {
         }
 
         self.space.entity_graph.commit_route();
-        // v0.2.0: Routes are now registered directly in the routing database.
-        // No re-registration needed.
 
-        self.run_legalization()?;
+        // Step 2: Run Hierarchical Legalizer (QP/Nudge) with full obstacle spatial index
+        self.run_legalization(data)?;
+
+        // Step 3: Run 45° Miter Pass AFTER Legalization completes
+        self.apply_post_legalization_mitering()?;
+
+        // Step 4: Configure spatial & rebuild analytic routes for export
         self.configure_entity_graph_spatial()?;
         self.rebuild_analytic_routes()?;
 
         Ok(())
     }
+
+    /// Apply 45° miter chamfering to parent interconnects AFTER legalization.
+    ///
+    /// Pipeline Rule: Topological Route → Legalization → Compaction → 45° Miter Pass → Export
+    fn apply_post_legalization_mitering(&mut self) -> Result<(), IrError> {
+        let trace_width = self.require_trace_width()?;
+        let miter_engine = hwc_engine::MiterEngine::new(trace_width);
+
+        // Step 1: Extract parent trace paths first to avoid simultaneous mutable & immutable borrow of self.space
+        let parent_traces: Vec<_> = self
+            .space
+            .routing_database
+            .get_parent_interconnects()
+            .iter()
+            .map(|trace| {
+                let mut path = Vec::with_capacity(trace.segments.len() + 1);
+                if let Some(first) = trace.segments.first() {
+                    path.push(first.start);
+                }
+                for seg in &trace.segments {
+                    if path.last() != Some(&seg.end) {
+                        path.push(seg.end);
+                    }
+                }
+                (trace.net_id, path)
+            })
+            .collect();
+
+        let mut mitered_segments_by_net = rustc_hash::FxHashMap::default();
+
+        // Step 2: Apply context-aware mitering using immutable reference to self.space
+        for (net_id, path) in parent_traces {
+            if path.len() < 3 {
+                continue;
+            }
+
+            let mitered_path = miter_engine.apply_miter_pass_with_context(
+                &path,
+                &*self.space as &dyn hwc_engine::geometry_router::miter_pass::MiterContext,
+                Some(net_id),
+            );
+
+            let mut new_segments = Vec::new();
+            for window in mitered_path.windows(2) {
+                new_segments.push(hwc_engine::space::LineSegment::new(window[0], window[1]));
+            }
+
+            if !new_segments.is_empty() {
+                mitered_segments_by_net.insert(net_id, new_segments);
+            }
+        }
+
+        // Step 3: Update routing database with mitered segments
+        for trace in self.space.routing_database.get_parent_interconnects_mut() {
+            if let Some(new_segs) = mitered_segments_by_net.remove(&trace.net_id) {
+                trace.segments = new_segs;
+            }
+        }
+
+        Ok(())
+    }
+
 
     fn inject_meanders(
         &mut self,
@@ -219,38 +266,6 @@ impl<'a> AutoRouter<'a> {
             min_clearance,
         );
         let result = injector.inject(result);
-
-        // **v0.2.0: DO NOT CLEAR entity_graph routes here!**
-        // Child routes from hierarchical flattening are in entity_graph.routed_segments.
-        // Clearing them would break same-net obstacle detection for subsequent routes.
-        //
-        // Architecture principle: routing_database is the source of truth.
-        // entity_graph.routed_segments is a read-only view synced from the database.
-        // AutoRouter already registers routes in routing_database via register_autorouter_route().
-        //
-        // The old pattern was:
-        //   1. Clear entity_graph for this net
-        //   2. Re-register new routes in entity_graph
-        //
-        // The new pattern is:
-        //   1. Routes are registered in routing_database during routing
-        //   2. entity_graph stays synchronized (child + parent routes coexist)
-        //
-        // No action needed here - routes are already in the database.
-
-        // NOTE: The loop below is now a NO-OP since we don't clear or register.
-        // Keeping it commented for reference during transition.
-        // for (&net_id, mutated_paths) in &result.paths {
-        //     self.space.entity_graph.clear_routes_for_net(net_id);  // REMOVED
-        //     for path in mutated_paths {
-        //         self.space.entity_graph.register_route(  // REMOVED
-        //             net_id,
-        //             path,
-        //             routing_copper_id,
-        //             trace_width,
-        //         );
-        //     }
-        // }
 
         Ok(result)
     }
@@ -287,12 +302,9 @@ impl<'a> AutoRouter<'a> {
         mut path: Vec<Point3D>,
         default_thickness: i64,
     ) -> Result<(Vec<Point3D>, i64), IrError> {
-        // STRUCTURAL FIX: Check if path already has Z transitions BEFORE refining
         let has_z_transitions = path.windows(2).any(|w| w[0].z != w[1].z);
 
         if has_z_transitions {
-            // Path already has vertical transitions from the new router
-            // Don't flatten the Z coordinates - just determine the thickness
             let first_z = path.first().map(|p| p.z).unwrap_or(0);
             let first_layer = self.stackup_manager.get_layer_index_at_z(first_z);
             let actual_thickness = if let Some(layer_idx) = first_layer {
@@ -393,27 +405,395 @@ impl<'a> AutoRouter<'a> {
             })
     }
 
-    fn run_legalization(&mut self) -> Result<(), IrError> {
-        // **v0.2.0: Legalization should NOT modify entity_graph directly**
-        // entity_graph.routed_segments contains child routes that must be preserved.
-        // Legalization operates on PARENT routes only, which are in routing_database.
+    fn run_legalization(&mut self, data: &RoutingData) -> Result<(), IrError> {
+        // **v0.2.3: HIERARCHICAL LEGALIZATION OVERHAUL**
         //
-        // TODO: This legalization code needs refactoring to:
-        // 1. Get parent routes from routing_database (not entity_graph)
-        // 2. Legalize them
-        // 3. Update them in routing_database
-        // 4. Re-sync entity_graph from database
+        // Post-routing legalization with proper obstacle population and via/port sliding.
         //
-        // For now, we'll skip legalization in hierarchical designs to avoid data corruption.
-        eprintln!("[LEGALIZATION] Skipping post-routing legalization (hierarchical design - needs refactor)");
+        // Pipeline:
+        // 1. Fetch parent routes (mutable) and child routes (immutable) from routing_database.
+        // 2. Inject all static substrate pours, keepout zones, vias, and contacts as frozen obstacles.
+        // 3. Build comprehensive spatial index containing parent routes + ALL frozen obstacles.
+        // 4. Run hierarchical legalizer that nudges parent routes around obstacles.
+        // 5. Propagate displacement deltas (dx, dy) to connecting vias and docking escape stubs.
+        // 6. Update parent routes in routing_database.
+        
+        let min_clearance = self
+            .space
+            .fabrication_constraints
+            .as_ref()
+            .map(|c| c.trace.min_spacing_nm)
+            .ok_or_else(|| IrError::MissingAsicConstraint {
+                message: "Legalization requires spacing constraints.".into(),
+                hint: "Add 'trace:' block with min_spacing_nm.".into(),
+            })?;
 
-        // Original legalization code (DISABLED to prevent clearing child routes):
-        // let legalizer = hwc_engine::geometry_router::Legalizer::new(min_clearance);
-        // let all_routes = self.space.entity_graph.get_all_routes();
-        // ... (rest of legalization code that clears and re-registers)
+        eprintln!("[LEGALIZATION] Running hierarchical post-routing legalization");
+
+        // Step 1: Extract parent and child segments from routing database
+        let (parent_segments, parent_net_ids) = self
+            .space
+            .routing_database
+            .get_parent_segments_for_legalization(&self.space.routing_layer_db);
+
+        let (mut child_segments, mut child_net_ids) = self
+            .space
+            .routing_database
+            .get_child_segments_for_legalization();
+
+        let mut obstacle_count_substrate = 0;
+        let mut obstacle_count_contact = 0;
+        let mut obstacle_count_via = 0;
+        let mut obstacle_count_keepout = 0;
+
+        // Add substrate layers (pours, pads, bulk taps, diffusions) as frozen obstacles
+        for layer in self.space.entity_graph.get_substrate_layers().iter() {
+            let (seg, net_id) = bbox_to_frozen_segment(&layer.bbox, layer.net, layer.material);
+            child_segments.push(seg);
+            child_net_ids.push(net_id);
+            obstacle_count_substrate += 1;
+        }
+
+        // Add contacts as frozen obstacles
+        for contact in &self.space.contacts {
+            if let Some(bbox) = contact.bbox {
+                let net_id = contact
+                    .net
+                    .as_ref()
+                    .and_then(|name| self.space.netlist.get_net_by_name(name.as_str()))
+                    .unwrap_or(hwc_engine::netlist::NetId::UNCONNECTED);
+                let mat_id = self
+                    .space
+                    .material_registry
+                    .get_id(&contact.material_name)
+                    .unwrap_or(0);
+                let (seg, net) = bbox_to_frozen_segment(&bbox, net_id, mat_id);
+                child_segments.push(seg);
+                child_net_ids.push(net);
+                obstacle_count_contact += 1;
+            }
+        }
+
+        // Add vias as frozen obstacles
+        for via in &self.space.vias {
+            let r = via.footprint_radius_nm(via.enclosure_nm, 0);
+            let bbox = hwc_engine::geometry::BoundingBox::new(
+                hwc_engine::geometry::Point3D::new(
+                    via.position.0 - r,
+                    via.position.1 - r,
+                    via.from_z_nm.min(via.to_z_nm),
+                ),
+                hwc_engine::geometry::Point3D::new(
+                    via.position.0 + r,
+                    via.position.1 + r,
+                    via.from_z_nm.max(via.to_z_nm),
+                ),
+            );
+            let (seg, net) = bbox_to_frozen_segment(&bbox, via.net_id, via.material_id);
+            child_segments.push(seg);
+            child_net_ids.push(net);
+            obstacle_count_via += 1;
+        }
+
+        // Add keepout zones as frozen obstacles
+        for bbox in &data.obstacle_bboxes {
+            let (seg, net) = bbox_to_frozen_segment(bbox, hwc_engine::netlist::NetId::UNCONNECTED, 0);
+            child_segments.push(seg);
+            child_net_ids.push(net);
+            obstacle_count_keepout += 1;
+        }
+
+        eprintln!(
+            "[OBSTACLE-DEBUG]   {} substrate layers",
+            obstacle_count_substrate
+        );
+        eprintln!(
+            "[OBSTACLE-DEBUG]   {} contacts",
+            obstacle_count_contact
+        );
+        eprintln!(
+            "[OBSTACLE-DEBUG]   {} vias",
+            obstacle_count_via
+        );
+        eprintln!(
+            "[OBSTACLE-DEBUG]   {} keepout zones",
+            obstacle_count_keepout
+        );
+        eprintln!(
+            "[LEGALIZATION] Fetched {} parent segments, {} child/obstacle segments (frozen)",
+            parent_segments.len(),
+            child_segments.len()
+        );
+
+        if parent_segments.is_empty() {
+            eprintln!("[LEGALIZATION] No parent routes to legalize - skipping");
+            return Ok(());
+        }
+
+        // Step 2: Build spatial index with layer awareness
+        let profile_layers = self.stackup_manager.ordered_layers();
+        let mut z_ranges = Vec::with_capacity(profile_layers.len());
+        for i in 0..profile_layers.len() {
+            let z_min = self
+                .stackup_manager
+                .get_layer_start_z(&profile_layers[i])
+                .unwrap_or(0);
+            let z_max = if i + 1 < profile_layers.len() {
+                self.stackup_manager
+                    .get_layer_start_z(&profile_layers[i + 1])
+                    .unwrap_or(self.space.dimensions.depth_nm)
+            } else {
+                self.space.dimensions.depth_nm
+            };
+            z_ranges.push((z_min, z_max));
+        }
+
+        // Combine all segments for spatial indexing
+        let mut all_segments = parent_segments.clone();
+        all_segments.extend(child_segments.clone());
+        let mut all_net_ids = parent_net_ids.clone();
+        all_net_ids.extend(child_net_ids.clone());
+
+        // Build spatial index
+        let mut spatial_index = hwc_engine::geometry_router::DynamicSpatialIndex::new();
+        if !z_ranges.is_empty() {
+            spatial_index.set_layer_z_ranges(&z_ranges);
+        }
+
+        for (idx, (seg, net_id)) in all_segments.iter().zip(all_net_ids.iter()).enumerate() {
+            let layer_z = seg.start.z; // Use Z coordinate as layer identifier
+            
+            // Look up actual thickness from stackup
+            let thickness = self
+                .stackup_manager
+                .get_layer_index_at_z(layer_z)
+                .and_then(|layer_idx| {
+                    self.stackup_manager
+                        .get_thickness_for_layer_index(layer_idx)
+                        .ok()
+                })
+                .unwrap_or(self.space.manufacturing_grid_nm);
+            
+            spatial_index.insert(hwc_engine::geometry_router::IndexedSegment::new(
+                hwc_physics::SpatialEntitySource::RouteSegment {
+                    net_idx: net_id.raw() as usize,
+                    seg_idx: idx,
+                },
+                idx,
+                *net_id,
+                seg,
+                layer_z,
+                thickness,
+            ));
+        }
+
+        eprintln!(
+            "[LEGALIZATION] Built spatial index with {} segments",
+            spatial_index.len()
+        );
+
+        // Step 3: Run hierarchical legalization
+        // **Flaw 1 Fix: spatial_index is MOVED (owned) so legalize_hierarchical can rebuild it
+        //   at the end of each iteration with updated parent positions.**
+        let legalizer = hwc_engine::geometry_router::Legalizer::new(min_clearance);
+        let max_iterations = 50;
+
+        let (legalized_parent, legalized_net_ids) = legalizer.legalize_hierarchical(
+            &parent_segments,
+            &parent_net_ids,
+            &child_segments,
+            &child_net_ids,
+            spatial_index,        // ← moved (not borrowed) — Flaw 1 Fix
+            max_iterations,
+        );
+
+        eprintln!(
+            "[LEGALIZATION] Legalization complete: {} parent segments processed",
+            legalized_parent.len()
+        );
+
+        // Step 4: Dynamic Via and Port/Docking Sliding
+        let mut shifted_vias = Vec::new();
+        let mut shifted_contacts = Vec::new();
+
+        for (i, (orig_seg, leg_seg)) in parent_segments.iter().zip(legalized_parent.iter()).enumerate() {
+            let net_id = parent_net_ids[i];
+
+            let dx_start = leg_seg.start.x - orig_seg.start.x;
+            let dy_start = leg_seg.start.y - orig_seg.start.y;
+            let dx_end = leg_seg.end.x - orig_seg.end.x;
+            let dy_end = leg_seg.end.y - orig_seg.end.y;
+
+            if dx_start == 0 && dy_start == 0 && dx_end == 0 && dy_end == 0 {
+                continue;
+            }
+
+            let trace_r = orig_seg.width_nm / 2;
+
+            for via in &mut self.space.vias {
+                if via.net_id != net_id {
+                    continue;
+                }
+                let via_r = via.footprint_radius_nm(via.enclosure_nm, 0);
+                let capture_radius = trace_r + via_r;
+                let cap_sq = capture_radius * capture_radius;
+
+                let dist_start_sq = (via.position.0 - orig_seg.start.x).pow(2)
+                    + (via.position.1 - orig_seg.start.y).pow(2);
+                let dist_end_sq = (via.position.0 - orig_seg.end.x).pow(2)
+                    + (via.position.1 - orig_seg.end.y).pow(2);
+
+                if dist_start_sq <= cap_sq && (dx_start != 0 || dy_start != 0) {
+                    let old_vx = via.position.0;
+                    let old_vy = via.position.1;
+                    via.position.0 += dx_start;
+                    via.position.1 += dy_start;
+                    shifted_vias.push((via.net_id, old_vx, old_vy, dx_start, dy_start));
+                    eprintln!(
+                        "[DYNAMIC VIA SLIDING] Shifted via for net {:?} at start by ({},{}) nm",
+                        net_id, dx_start, dy_start
+                    );
+                } else if dist_end_sq <= cap_sq && (dx_end != 0 || dy_end != 0) {
+                    let old_vx = via.position.0;
+                    let old_vy = via.position.1;
+                    via.position.0 += dx_end;
+                    via.position.1 += dy_end;
+                    shifted_vias.push((via.net_id, old_vx, old_vy, dx_end, dy_end));
+                    eprintln!(
+                        "[DYNAMIC VIA SLIDING] Shifted via for net {:?} at end by ({},{}) nm",
+                        net_id, dx_end, dy_end
+                    );
+                }
+            }
+
+            for contact in &mut self.space.contacts {
+                let contact_net_id = contact
+                    .net
+                    .as_ref()
+                    .and_then(|name| self.space.netlist.get_net_by_name(name.as_str()));
+
+                if contact_net_id != Some(net_id) {
+                    continue;
+                }
+
+                if let Some(ref mut bbox) = contact.bbox {
+                    let center_x = (bbox.min.x + bbox.max.x) / 2;
+                    let center_y = (bbox.min.y + bbox.max.y) / 2;
+                    let contact_r = ((bbox.max.x - bbox.min.x).abs() / 2)
+                        .max((bbox.max.y - bbox.min.y).abs() / 2);
+                    let capture_radius = trace_r + contact_r;
+                    let cap_sq = capture_radius * capture_radius;
+
+                    let dist_start_sq = (center_x - orig_seg.start.x).pow(2)
+                        + (center_y - orig_seg.start.y).pow(2);
+                    let dist_end_sq =
+                        (center_x - orig_seg.end.x).pow(2) + (center_y - orig_seg.end.y).pow(2);
+
+                    if dist_start_sq <= cap_sq && (dx_start != 0 || dy_start != 0) {
+                        let old_cx = center_x;
+                        let old_cy = center_y;
+                        bbox.min.x += dx_start;
+                        bbox.max.x += dx_start;
+                        bbox.min.y += dy_start;
+                        bbox.max.y += dy_start;
+                        shifted_contacts.push((net_id, old_cx, old_cy, dx_start, dy_start));
+                        eprintln!(
+                            "[DYNAMIC CONTACT SLIDING] Shifted contact for net {:?} at start by ({},{}) nm",
+                            net_id, dx_start, dy_start
+                        );
+                    } else if dist_end_sq <= cap_sq && (dx_end != 0 || dy_end != 0) {
+                        let old_cx = center_x;
+                        let old_cy = center_y;
+                        bbox.min.x += dx_end;
+                        bbox.max.x += dx_end;
+                        bbox.min.y += dy_end;
+                        bbox.max.y += dy_end;
+                        shifted_contacts.push((net_id, old_cx, old_cy, dx_end, dy_end));
+                        eprintln!(
+                            "[DYNAMIC CONTACT SLIDING] Shifted contact for net {:?} at end by ({},{}) nm",
+                            net_id, dx_end, dy_end
+                        );
+                    }
+                }
+            }
+        }
+
+        // **Step 4b: Synchronise shifted contact bboxes → EntityGraph**
+        if !shifted_contacts.is_empty() {
+            use hwc_engine::geometry_router::substrate_types::SubstrateLayerType;
+            let grid = self.space.manufacturing_grid_nm;
+
+            for layer in self.space.entity_graph.get_substrate_layers_mut().iter_mut() {
+                if layer.layer_type != SubstrateLayerType::Contact {
+                    continue;
+                }
+                let layer_cx = (layer.bbox.min.x + layer.bbox.max.x) / 2;
+                let layer_cy = (layer.bbox.min.y + layer.bbox.max.y) / 2;
+
+                for &(net, old_cx, old_cy, dx, dy) in &shifted_contacts {
+                    if layer.net != net {
+                        continue;
+                    }
+                    if (old_cx - layer_cx).abs() <= grid && (old_cy - layer_cy).abs() <= grid {
+                        layer.bbox.min.x += dx;
+                        layer.bbox.max.x += dx;
+                        layer.bbox.min.y += dy;
+                        layer.bbox.max.y += dy;
+                        eprintln!(
+                            "[ENTITY_GRAPH SYNC] Contact for net {:?}: bbox shifted by ({},{})",
+                            net, dx, dy
+                        );
+                        break;
+                    }
+                }
+            }
+        }
+
+        // **Step 4c: Synchronise shifted via positions → EntityGraph**
+        if !shifted_vias.is_empty() {
+            use hwc_engine::geometry_router::substrate_types::SubstrateLayerType;
+            let grid = self.space.manufacturing_grid_nm;
+
+            for layer in self.space.entity_graph.get_substrate_layers_mut().iter_mut() {
+                if layer.layer_type != SubstrateLayerType::Contact {
+                    continue;
+                }
+                let layer_cx = (layer.bbox.min.x + layer.bbox.max.x) / 2;
+                let layer_cy = (layer.bbox.min.y + layer.bbox.max.y) / 2;
+
+                for &(net_id, old_vx, old_vy, dx, dy) in &shifted_vias {
+                    if layer.net != net_id {
+                        continue;
+                    }
+                    if (old_vx - layer_cx).abs() <= grid && (old_vy - layer_cy).abs() <= grid {
+                        layer.bbox.min.x += dx;
+                        layer.bbox.max.x += dx;
+                        layer.bbox.min.y += dy;
+                        layer.bbox.max.y += dy;
+                        eprintln!(
+                            "[ENTITY_GRAPH SYNC] Via for net {:?}: bbox shifted by ({},{})",
+                            net_id, dx, dy
+                        );
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Step 5: Update parent routes in routing database
+        self.space
+            .routing_database
+            .update_parent_segments_after_legalization(
+                legalized_parent,
+                legalized_net_ids,
+                &self.space.routing_layer_db,
+            );
+
+        eprintln!("[LEGALIZATION] Parent routes updated in routing database");
 
         Ok(())
     }
+
 
     fn configure_entity_graph_spatial(&mut self) -> Result<(), IrError> {
         if let Some(_profile) = self.profile {
@@ -524,7 +904,7 @@ impl<'a> AutoRouter<'a> {
                     })
             })?;
 
-        let net_actual_current_ma = self
+        let net_budget_current_ma = self
             .space
             .netlist
             .get_net(net_id)
@@ -544,7 +924,7 @@ impl<'a> AutoRouter<'a> {
             segments,
             material: material_id,
             net_name: net_name.into(),
-            current: hwc_engine::space::CurrentRating::new(net_actual_current_ma, current_limit_ma),
+            current: hwc_engine::space::CurrentRating::new(net_budget_current_ma, current_limit_ma),
             layer_z_range,
             layer_name: routing_layer_name.into(), // v0.2.2: Explicit layer lineage
         });
@@ -560,3 +940,33 @@ impl<'a> AutoRouter<'a> {
         Ok(())
     }
 }
+
+/// Convert a 3D bounding box obstacle into an exact frozen `TraceSegment` for legalization spatial indexing.
+fn bbox_to_frozen_segment(
+    bbox: &hwc_engine::geometry::BoundingBox,
+    net_id: hwc_engine::netlist::NetId,
+    material_id: u8,
+) -> (hwc_engine::geometry::TraceSegment, hwc_engine::netlist::NetId) {
+    use hwc_engine::geometry::{Point3D, TraceSegment};
+
+    let dx = (bbox.max.x - bbox.min.x).abs();
+    let dy = (bbox.max.y - bbox.min.y).abs();
+    let cx = (bbox.min.x + bbox.max.x) / 2;
+    let cy = (bbox.min.y + bbox.max.y) / 2;
+    let cz = (bbox.min.z + bbox.max.z) / 2;
+
+    let seg = if dx >= dy {
+        let half_w = dy / 2;
+        let start = Point3D::new(bbox.min.x + half_w, cy, cz);
+        let end = Point3D::new(bbox.max.x - half_w, cy, cz);
+        TraceSegment::new_frozen(start, end, dy.max(1), material_id)
+    } else {
+        let half_w = dx / 2;
+        let start = Point3D::new(cx, bbox.min.y + half_w, cz);
+        let end = Point3D::new(cx, bbox.max.y - half_w, cz);
+        TraceSegment::new_frozen(start, end, dx.max(1), material_id)
+    };
+
+    (seg, net_id)
+}
+

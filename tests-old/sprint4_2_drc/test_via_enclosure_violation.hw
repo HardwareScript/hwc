@@ -16,7 +16,7 @@ profile StrictEnclosure:
     
     via:
         min_diameter: 200µm
-        min_annular_ring: 500µm  # Require 500µm annular ring
+        min_enclosure: 500µm  # Require 500µm annular ring
 
 space TestViaEnclosure:
     dimensions: 10mm by 10mm by 2mm

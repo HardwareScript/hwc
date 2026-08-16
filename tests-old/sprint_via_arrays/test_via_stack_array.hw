@@ -27,7 +27,7 @@ profile PowerStackArray:
     
     via:
         min_diameter: 300µm
-        min_annular_ring: 150µm
+        min_enclosure: 150µm
         min_spacing: 2mm            # This + power net + deep stack = automatic arrays
 
 module ViaStackArrayTest:

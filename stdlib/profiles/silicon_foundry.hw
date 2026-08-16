@@ -24,7 +24,7 @@ profile TSMC_180nm:
     
     via:
         min_diameter: 200nm
-        min_annular_ring: 50nm
+        min_enclosure: 50nm
     
     clearance:
         high_voltage: 500nm
@@ -71,7 +71,7 @@ profile TSMC_90nm:
     
     via:
         min_diameter: 120nm
-        min_annular_ring: 30nm
+        min_enclosure: 30nm
     
     clearance:
         high_voltage: 300nm
@@ -122,7 +122,7 @@ profile TSMC_28nm:
     
     via:
         min_diameter: 40nm
-        min_annular_ring: 15nm
+        min_enclosure: 15nm
     
     clearance:
         high_voltage: 150nm
@@ -177,7 +177,7 @@ profile TSMC_16nm_FinFET:
     
     via:
         min_diameter: 25nm
-        min_annular_ring: 10nm
+        min_enclosure: 10nm
     
     clearance:
         high_voltage: 100nm
@@ -236,7 +236,7 @@ profile TSMC_7nm:
     
     via:
         min_diameter: 12nm
-        min_annular_ring: 5nm
+        min_enclosure: 5nm
     
     clearance:
         high_voltage: 50nm
@@ -301,7 +301,7 @@ profile TSMC_5nm:
     
     via:
         min_diameter: 10nm
-        min_annular_ring: 3nm
+        min_enclosure: 3nm
     
     clearance:
         high_voltage: 30nm
@@ -366,7 +366,7 @@ profile TSMC_3nm:
     
     via:
         min_diameter: 8nm
-        min_annular_ring: 2nm
+        min_enclosure: 2nm
     
     clearance:
         high_voltage: 20nm
@@ -441,7 +441,7 @@ profile Intel_22nm:
     
     via:
         min_diameter: 30nm
-        min_annular_ring: 12nm
+        min_enclosure: 12nm
     
     clearance:
         high_voltage: 120nm
@@ -498,7 +498,7 @@ profile Intel_10nm:
     
     via:
         min_diameter: 15nm
-        min_annular_ring: 6nm
+        min_enclosure: 6nm
     
     clearance:
         high_voltage: 60nm
@@ -559,7 +559,7 @@ profile Intel_7nm:
     
     via:
         min_diameter: 12nm
-        min_annular_ring: 5nm
+        min_enclosure: 5nm
     
     clearance:
         high_voltage: 50nm
@@ -628,7 +628,7 @@ profile Samsung_14nm:
     
     via:
         min_diameter: 20nm
-        min_annular_ring: 8nm
+        min_enclosure: 8nm
     
     clearance:
         high_voltage: 80nm
@@ -687,7 +687,7 @@ profile Samsung_5nm:
     
     via:
         min_diameter: 10nm
-        min_annular_ring: 3nm
+        min_enclosure: 3nm
     
     clearance:
         high_voltage: 30nm
@@ -756,7 +756,7 @@ profile Silicon_Extreme_1nm:
     
     via:
         min_diameter: 3nm
-        min_annular_ring: 1nm
+        min_enclosure: 1nm
     
     clearance:
         high_voltage: 10nm
@@ -831,7 +831,7 @@ profile Silicon_Picometer_Test:
     
     via:
         min_diameter: 500pm
-        min_annular_ring: 100pm
+        min_enclosure: 100pm
     
     clearance:
         high_voltage: 1nm
@@ -886,7 +886,7 @@ profile Silicon_Mixed_Scale:
     
     via:
         min_diameter: 10nm
-        min_annular_ring: 3nm
+        min_enclosure: 3nm
     
     clearance:
         high_voltage: 1mm

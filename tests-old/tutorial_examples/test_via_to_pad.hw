@@ -13,7 +13,7 @@ profile RoutingTestProfile:
         min_spacing: 0.2mm
     via:
         min_diameter: 0.3mm
-        min_annular_ring: 0.15mm
+        min_enclosure: 0.15mm
         min_spacing: 0.25mm
     manufacturing:
         copper_thickness: 35um
@@ -49,7 +49,7 @@ space ViaToPadBoard:
     add contact(Copper) named Via_A at [x: 2mm, y: 3mm] spanning layer: top to bottom:
         net: NET_VIA_PAD
         drill_diameter: 0.3mm
-        annular_ring: 0.2mm
+        enclosure: 0.2mm
 
     add Pin named Via_A_Anchor at [x: 2mm, y: 3mm] on layer: top:
         merge: true

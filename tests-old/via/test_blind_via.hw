@@ -20,7 +20,7 @@ profile Blind_Via_Test_Profile:
     
     via:
         min_diameter: 0.1mm
-        min_annular_ring: 0.05mm
+        min_enclosure: 0.05mm
         min_spacing: 0.15mm
 
     trace:
@@ -55,6 +55,6 @@ space Blind_Via_Test_Board implements Blind_Via_Test_Module:
         net: SIG
         drill_diameter: 0.3mm
         plating_thickness: 25um
-        annular_ring: 0.1mm
+        enclosure: 0.1mm
         top_cap: annular
         bottom_cap: solid

@@ -59,7 +59,7 @@ export profile Diode_Flattened:
 
     via:
         min_diameter: 200nm
-        min_annular_ring: 50nm
+        min_enclosure: 50nm
         min_spacing: 300nm
         shape: SquareContact
         contact_depth: 10nm

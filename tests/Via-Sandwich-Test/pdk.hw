@@ -37,7 +37,7 @@ export profile ViaSandwichProfile:
     
     via:
         min_diameter: 200nm
-        min_annular_ring: 0nm
+        min_enclosure: 0nm
         min_spacing: 300nm
         shape: SquareContact
         contact_depth: 50%  # v0.2.1: Global default (fallback)

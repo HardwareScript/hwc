@@ -36,7 +36,7 @@ profile TEST:
     
     via:
         min_diameter: 100um
-        min_annular_ring: 10um
+        min_enclosure: 10um
         shape: SunVia
     
     manufacturing:

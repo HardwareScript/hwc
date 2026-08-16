@@ -76,7 +76,7 @@ pub fn traces_to_lockfile(
                 z2: seg.end.z,
                 thickness_nm: trace.cross_section.thickness_nm,
                 material_name,
-                current_ma: (trace.current.actual_ma * 1000.0) as i64,
+                current_ma: (trace.current.budget_ma * 1000.0) as i64,
             });
         }
     }
@@ -169,7 +169,7 @@ pub fn lockfile_to_traces(
             .map(|a| a.thickness_nm)
             .ok_or_else(|| format!("[LOCK] FATAL: no arcs found for net {}", net_id_raw))?;
 
-        let net_actual_current_ma = netlist
+        let net_budget_current_ma = netlist
             .get_net(net_id)
             .and_then(|n| n.current_ma)
             .unwrap_or(0.0);
@@ -253,7 +253,7 @@ pub fn lockfile_to_traces(
                 segments,
                 material: material_id,
                 net_name,
-                current: crate::space::CurrentRating::new(net_actual_current_ma, current_ma),
+                current: crate::space::CurrentRating::new(net_budget_current_ma, current_ma),
                 layer_z_range,
                 layer_name: route_layer_name, // v0.2.2: Explicit layer lineage
             },

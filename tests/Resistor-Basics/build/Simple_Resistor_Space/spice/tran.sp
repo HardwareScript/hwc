@@ -8,7 +8,8 @@
 * ========================================
 * STIMULUS & ANALYSIS
 * ========================================
-V_In nIn_entry 0 DC 1.800
+V_In nIn_entry 0 PULSE(0 1.800 0 1.000e-10 1.000e-10 1.000e-7 2.000e-7)
 V_GND GND 0 DC 0.000
+V_Out nOut_entry 0 DC 0.000
 .tran 1.000e-11 2.000e-7
 .end

@@ -1,7 +1,7 @@
 //! Parasitic extraction: build the physical netlist graph from routed traces.
 //!
-//! Extracts trace resistance (R) and ground capacitance (C) from analytic routes
-//! and maps device terminals to physical nodes, producing a `PhysicalNetlistGraph`.
+//! Extracts trace resistance (R) and ground capacitance (C) from analytic routes,
+//! and via/contact resistance from contact metadata.
 
 use rustc_hash::FxHashMap;
 
@@ -41,6 +41,11 @@ pub fn build_physical_netlist_graph(
     eprintln!(
         "[NETLIST PARASITIC DEBUG] Found {} analytic routes - proceeding with parasitic extraction",
         space.analytic_routes.len()
+    );
+    
+    eprintln!(
+        "[NETLIST PARASITIC DEBUG] Found {} contacts for via resistance extraction",
+        space.contacts.len()
     );
 
     // Physical constants
@@ -273,6 +278,127 @@ pub fn build_physical_netlist_graph(
                         graph.device_nodes.insert(key, net_name.clone());
                     }
                 }
+            }
+        }
+    }
+
+    // ========================================
+    // Extract Via/Contact Resistance
+    // ========================================
+    // SkyWater 130nm typical values:
+    // - licon (diffusion/poly to LI): ~10-30Ω per contact
+    // - mcon (LI to Metal1): ~5-10Ω per contact
+    // - Via1 (Metal1 to Metal2): ~4-6Ω per via
+    //
+    // For arrays of N vias in parallel: R_total = R_single / N
+    eprintln!(
+        "[NETLIST PARASITIC DEBUG] Extracting via/contact resistance from {} contacts",
+        space.contacts.len()
+    );
+
+    // Group contacts by (net, from_layer, to_layer) to find via stacks
+    // This groups all vias connecting the same two layers on the same net
+    let mut via_stacks: FxHashMap<(String, String, String), Vec<&hwc_engine::space::ContactMetadata>> = FxHashMap::default();
+    
+    for contact in &space.contacts {
+        if let Some(net_name) = &contact.net {
+            if let (Some(from_layer), Some(to_layer)) = (&contact.from_layer, &contact.to_layer) {
+                let key = (net_name.to_string(), from_layer.to_string(), to_layer.to_string());
+                via_stacks.entry(key).or_default().push(contact);
+            }
+        }
+    }
+
+    eprintln!(
+        "[NETLIST PARASITIC DEBUG] Found {} via stacks after grouping by (net, from_layer, to_layer)",
+        via_stacks.len()
+    );
+
+    // Extract resistance for each via stack
+    for ((net_name, from_layer, to_layer), contacts_in_stack) in via_stacks {
+        let num_vias = contacts_in_stack.len();
+        
+        eprintln!(
+            "[NETLIST PARASITIC DEBUG] Processing via stack on net '{}' ({} -> {}) with {} parallel vias",
+            net_name, from_layer, to_layer, num_vias
+        );
+
+        // Get via material and lookup contact resistance
+        if let Some(first_contact) = contacts_in_stack.first() {
+            // Get material ID from material name
+            if let Some(material_id) = space.material_registry.get_id(&first_contact.material_name) {
+                if let Some(material_props) = space.material_registry.get_physical_props(material_id) {
+                    if let Some(contact_resistance_ohm_cm2) = material_props.get("contact_resistance") {
+                        // Calculate via area from drill diameter
+                        if let Some(drill_diameter_nm) = first_contact.drill_diameter_nm {
+                            let drill_radius_cm = (drill_diameter_nm as f64 * 1e-9 * 100.0) / 2.0; // nm to cm
+                            let via_area_cm2 = std::f64::consts::PI * drill_radius_cm * drill_radius_cm;
+                            
+                            // Single via resistance: R = ρ_c / A (contact_resistance is ρ_c, specific contact resistivity)
+                            let single_via_resistance = contact_resistance_ohm_cm2 / via_area_cm2;
+                            
+                            // Parallel via array: R_total = R_single / N
+                            let total_via_resistance = single_via_resistance / (num_vias as f64);
+                            
+                            eprintln!(
+                                "[NETLIST PARASITIC DEBUG] Via resistance calculation: material={}, diameter={}nm, area={:.3e}cm², ρ_c={:.3e}Ω·cm², R_single={:.3}Ω, R_parallel={:.3}Ω ({} vias)",
+                                first_contact.material_name,
+                                drill_diameter_nm,
+                                via_area_cm2,
+                                contact_resistance_ohm_cm2,
+                                single_via_resistance,
+                                total_via_resistance,
+                                num_vias
+                            );
+
+                            // Only extract if resistance is significant (> 0.1Ω)
+                            if total_via_resistance > 0.1 {
+                                // Create unique via resistance name based on net and layer transition
+                                let via_name = format!("via_{}_{}_{}", net_name, from_layer, to_layer);
+                                
+                                eprintln!(
+                                    "[NETLIST PARASITIC DEBUG] Adding via resistor: {} = {:.3}Ω",
+                                    via_name, total_via_resistance
+                                );
+
+                                // Via resistances are inserted in series with the net
+                                // The resistor connects the logical net to itself (effectively in series with traces)
+                                // SPICE topology: Entry → Trace_R → Net → Via_R → Net_post_via
+                                graph.parasitics.push(ParasiticElement::TraceResistor {
+                                    name: via_name.clone(),
+                                    node_a: net_name.clone(),
+                                    node_b: format!("{}_post_{}", net_name, via_name),
+                                    value_ohms: total_via_resistance,
+                                });
+                            } else {
+                                eprintln!(
+                                    "[NETLIST PARASITIC DEBUG] Via resistance {:.3}Ω is negligible, skipping",
+                                    total_via_resistance
+                                );
+                            }
+                        } else {
+                            eprintln!(
+                                "[NETLIST PARASITIC DEBUG] Warning: Contact '{}' missing drill_diameter_nm, skipping via resistance",
+                                first_contact.name
+                            );
+                        }
+                    } else {
+                        eprintln!(
+                            "[NETLIST PARASITIC DEBUG] Material '{}' has no 'contact_resistance' property, skipping via resistance for net '{}'",
+                            first_contact.material_name, net_name
+                        );
+                    }
+                } else {
+                    eprintln!(
+                        "[NETLIST PARASITIC DEBUG] Material '{}' has no physical properties, skipping via resistance",
+                        first_contact.material_name
+                    );
+                }
+            } else {
+                eprintln!(
+                    "[NETLIST PARASITIC DEBUG] Material '{}' not found in registry",
+                    first_contact.material_name
+                );
             }
         }
     }

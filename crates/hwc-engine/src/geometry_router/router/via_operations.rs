@@ -93,7 +93,7 @@ impl GeometryRouter {
                     .expect("FATAL: Fabrication constraints required for via extraction. Ensure a profile with 'trace:' and 'via:' constraints is declared in the space definition.");
 
                 let diameter_nm = fabrication.min_via_diameter_nm;
-                let annular_ring_nm = fabrication.min_annular_ring_nm;
+                let enclosure_nm = fabrication.min_enclosure_nm;
 
                 let via = Via::new(ViaSpec {
                     position: (x, y),
@@ -102,7 +102,7 @@ impl GeometryRouter {
                     diameter_nm,
                     net_id,
                     material_id: self.routing_material_id, // Use the active routing material context
-                    annular_ring_nm,
+                    enclosure_nm,
                     board_min_z_nm,
                     board_max_z_nm,
                 });
@@ -233,9 +233,9 @@ impl GeometryRouter {
         };
 
         let via_diameter = fabrication.min_via_diameter_nm;
-        let annular_ring = fabrication.min_annular_ring_nm;
+        let enclosure = fabrication.min_enclosure_nm;
         let clearance = fabrication.min_trace_spacing_nm;
-        let total_radius = (via_diameter + 2 * annular_ring + clearance) / 2;
+        let total_radius = (via_diameter + 2 * enclosure + clearance) / 2;
 
         let via = Via {
             position,
@@ -245,7 +245,7 @@ impl GeometryRouter {
             net_id: NetId::new(0),
             material_id: self.routing_material_id, // Use the active routing material context
             via_type: ViaType::ThroughHole,
-            annular_ring_nm: annular_ring,
+            enclosure_nm: enclosure,
             properties: rustc_hash::FxHashMap::default(),
         };
 
@@ -271,8 +271,8 @@ impl GeometryRouter {
             None => return,
         };
 
-        let annular_ring = fabrication.min_annular_ring_nm;
-        let total_radius = (via.diameter_nm + 2 * annular_ring) / 2;
+        let enclosure = fabrication.min_enclosure_nm;
+        let total_radius = (via.diameter_nm + 2 * enclosure) / 2;
 
         for z_nm in via.z_planes_between(&self.config.layer_z_positions, 0, self.bounds.depth_nm) {
             self.mark_circular_area_occupied(
@@ -415,7 +415,7 @@ impl GeometryRouter {
             .expect("FATAL: Fabrication constraints required for via tower unrolling. Ensure a profile with 'via:' constraints is declared in the space definition.");
 
         let diameter_nm = fabrication.min_via_diameter_nm;
-        let annular_ring = fabrication.min_annular_ring_nm;
+        let enclosure = fabrication.min_enclosure_nm;
 
         if is_manhattan {
             // ASIC: step one layer at a time, emit a Via per adjacent layer pair
@@ -443,7 +443,7 @@ impl GeometryRouter {
                         diameter_nm,
                         net_id,
                         material_id: self.routing_material_id, // Use the active routing material context
-                        annular_ring_nm: annular_ring,
+                        enclosure_nm: enclosure,
                         board_min_z_nm: 0,
                         board_max_z_nm: self.bounds.depth_nm,
                     },
@@ -465,7 +465,7 @@ impl GeometryRouter {
                     diameter_nm,
                     net_id,
                     material_id: self.routing_material_id, // Use the active routing material context
-                    annular_ring_nm: annular_ring,
+                    enclosure_nm: enclosure,
                     board_min_z_nm: 0,
                     board_max_z_nm: self.bounds.depth_nm,
                 },
@@ -501,7 +501,7 @@ impl GeometryRouter {
             None => return,
         };
 
-        let annular_ring = fabrication.min_annular_ring_nm;
+        let enclosure = fabrication.min_enclosure_nm;
 
         for via in via_tower {
             // For each intermediate Z plane (not the first or last), stamp a landing pad
@@ -513,7 +513,7 @@ impl GeometryRouter {
                 }
 
                 // Calculate landing pad radius: via_radius + enclosure
-                let enclosure = enclosures.values().next().copied().unwrap_or(annular_ring);
+                let enclosure = enclosures.values().next().copied().unwrap_or(enclosure);
                 let pad_radius = (via.diameter_nm / 2) + enclosure;
 
                 // Stamp the landing pad

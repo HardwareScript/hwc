@@ -27,7 +27,7 @@ profile PowerDistribution:
     
     via:
         min_diameter: 300µm
-        min_annular_ring: 150µm
+        min_enclosure: 150µm
         min_spacing: 1mm            # This + power net = automatic arrays
 
 module ViaArrayTest:

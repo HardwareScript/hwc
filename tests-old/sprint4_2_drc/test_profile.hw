@@ -10,7 +10,7 @@ profile TestProfile_Standard:
     
     via:
         min_diameter: 300µm
-        min_annular_ring: 150µm
+        min_enclosure: 150µm
     
     layer:
         max_count: 4

@@ -16,4 +16,4 @@ space CopperHoleTest:
     # the surface annular rings (pads) and the internal plating (tube).
     add contact(Copper) named SoloVia at [x: 1mm, y: 1mm] spanning z:1 to z:5:
         diameter: 0.5mm
-        annular_ring: 0.25mm
+        enclosure: 0.25mm

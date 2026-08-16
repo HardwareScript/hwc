@@ -10,15 +10,30 @@ pub enum NetClassification {
 
 /// **v0.3.0: Net electrical properties for physics validation**
 ///
-/// Stores voltage, current, and frequency constraints declared in the nets: section.
+/// Stores voltage, current budget, and frequency constraints declared in the nets: section.
 /// Used by DRC engines for junction breakdown, electromigration, and crosstalk validation.
+///
+/// **CRITICAL SEMANTIC CLARIFICATION (v0.2.2+):**
+/// The `current_ma` field stores the user's DECLARED BUDGET from `nets: { current: X }`,
+/// NOT a simulated operating current. This is a design constraint, not a computed value.
+///
+/// **What `current_ma` Represents:**
+/// - ✅ User's declared budget: "This net must safely carry up to X mA"
+/// - ✅ Static DRC constraint for trace width sizing
+/// - ✅ Capability validation input (budget vs. wire ampacity)
+///
+/// **What `current_ma` Does NOT Represent:**
+/// - ❌ Simulated DC operating current (requires SPICE matrix solver)
+/// - ❌ Measured branch current (requires .op/.tran simulation)
+/// - ❌ Actual power-on current draw (requires solving I = V/R for circuit)
 #[derive(Debug, Clone)]
 pub struct NetElectricalProperties {
     /// Net classification (power, ground, signal, etc.)
     pub classification: NetClassification,
     /// Voltage/potential in volts (V). None if not declared.
     pub potential_v: Option<f64>,
-    /// Current limit in milliamperes (mA). None if not declared.
+    /// Current budget in milliamps (mA) - user's declared capability constraint.
+    /// IMPORTANT: This is NOT simulated operating current, it's a design budget.
     pub current_ma: Option<f64>,
     /// Operating frequency in hertz (Hz). None if not declared.
     pub frequency_hz: Option<f64>,

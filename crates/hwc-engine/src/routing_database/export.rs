@@ -82,4 +82,101 @@ impl HierarchicalRoutingDatabase {
 
         net_segments.into_iter().collect()
     }
+
+    /// **v0.2.3: Get parent segments for hierarchical legalization**
+    ///
+    /// Returns mutable parent interconnect segments with net IDs.
+    /// These segments can be nudged during legalization.
+    pub fn get_parent_segments_for_legalization(
+        &self,
+        routing_layer_db: &RoutingLayerDatabase,
+    ) -> (Vec<TraceSegment>, Vec<NetId>) {
+        let mut segments = Vec::new();
+        let mut net_ids = Vec::new();
+
+        for trace in &self.parent_interconnects {
+            let layer_def = match routing_layer_db.get_layer(&trace.layer_name) {
+                Ok(layer) => layer,
+                Err(_) => continue,
+            };
+
+            let material_id = layer_def.material_id;
+
+            for line_seg in &trace.segments {
+                segments.push(TraceSegment::new(
+                    line_seg.start,
+                    line_seg.end,
+                    trace.cross_section.width_nm,
+                    material_id,
+                ));
+                net_ids.push(trace.net_id);
+            }
+        }
+
+        (segments, net_ids)
+    }
+
+    /// **v0.2.3: Get child segments for hierarchical legalization**
+    ///
+    /// Returns immutable child instance segments with net IDs.
+    /// These segments are marked as frozen and treated as static obstacles.
+    pub fn get_child_segments_for_legalization(&self) -> (Vec<TraceSegment>, Vec<NetId>) {
+        let mut segments = Vec::new();
+        let mut net_ids = Vec::new();
+
+        for ((_, net_id), segs) in &self.child_instance_routes {
+            for seg in segs {
+                // Mark child segments as frozen (immutable)
+                let mut frozen_seg = seg.clone();
+                frozen_seg.is_frozen = true;
+                segments.push(frozen_seg);
+                net_ids.push(*net_id);
+            }
+        }
+
+        (segments, net_ids)
+    }
+
+    /// **v0.2.3: Update parent segments after legalization**
+    ///
+    /// Replaces parent interconnect segments with legalized versions.
+    /// Maintains trace metadata (net_id, net_name, material, current, etc.)
+    pub fn update_parent_segments_after_legalization(
+        &mut self,
+        legalized_segments: Vec<TraceSegment>,
+        net_ids: Vec<NetId>,
+        _routing_layer_db: &RoutingLayerDatabase,
+    ) {
+        if legalized_segments.len() != net_ids.len() {
+            eprintln!(
+                "[ROUTING DB WARNING] Segment/NetID count mismatch in legalization update: {} segments, {} net_ids",
+                legalized_segments.len(),
+                net_ids.len()
+            );
+            return;
+        }
+
+        // Group legalized segments by net
+        let mut segments_by_net: FxHashMap<NetId, Vec<TraceSegment>> = FxHashMap::default();
+        for (seg, net_id) in legalized_segments.into_iter().zip(net_ids.iter()) {
+            segments_by_net.entry(*net_id).or_default().push(seg);
+        }
+
+        // Update each parent trace with legalized segments
+        for trace in &mut self.parent_interconnects {
+            if let Some(new_segments) = segments_by_net.remove(&trace.net_id) {
+                // Convert TraceSegment back to LineSegment
+                trace.segments = new_segments
+                    .into_iter()
+                    .map(|ts| crate::space::LineSegment::new(ts.start, ts.end))
+                    .collect();
+
+                eprintln!(
+                    "[ROUTING DB] Updated net {:?} with {} legalized segments",
+                    trace.net_id,
+                    trace.segments.len()
+                );
+            }
+        }
+    }
 }

@@ -27,7 +27,7 @@ profile AdvancedViaProfile:
         min_spacing: 0.2mm
     via:
         min_diameter: 0.3mm
-        min_annular_ring: 0.15mm
+        min_enclosure: 0.15mm
         min_spacing: 0.25mm
     manufacturing:
         copper_thickness: 35um
@@ -54,7 +54,7 @@ space AdvancedViaBoard:
     add contact(ViaCopper) named Via_A at [x: 2.0mm, y: 3.0mm] spanning layer: top to bottom:
         net: NET_ADV
         drill_diameter: 0.4mm
-        annular_ring: 0.2mm
+        enclosure: 0.2mm
         top_cap: annular
         bottom_cap: annular
 
@@ -66,7 +66,7 @@ space AdvancedViaBoard:
     add contact(ViaCopper) named Via_B at [x: 8.0mm, y: 3.0mm] spanning layer: top to inner1:
         net: NET_ADV
         drill_diameter: 0.3mm
-        annular_ring: 0.15mm
+        enclosure: 0.15mm
         top_cap: annular
         bottom_cap: solid
 

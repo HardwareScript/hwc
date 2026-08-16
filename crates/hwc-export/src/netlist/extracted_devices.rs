@@ -224,19 +224,24 @@ pub fn emit_parasitics(netlist_str: &mut String, physical_graph: &PhysicalNetlis
     netlist_str.push_str("* ========================================\n");
 
     for parasitic in &physical_graph.parasitics {
-        match parasitic {
-            super::types::ParasiticElement::TraceResistor {
-                name,
-                node_a,
-                node_b,
-                value_ohms,
-            } => {
-                netlist_str.push_str("* Trace resistance\n");
-                netlist_str.push_str(&format!(
-                    "R{} {} {} {:.6e}\n",
-                    name, node_a, node_b, value_ohms
-                ));
-            }
+                        match parasitic {
+                            super::types::ParasiticElement::TraceResistor {
+                                name,
+                                node_a,
+                                node_b,
+                                value_ohms,
+                            } => {
+                                // Distinguish via resistance from trace resistance
+                                if name.starts_with("Rvia_") {
+                                    netlist_str.push_str("* Via/Contact resistance\n");
+                                } else {
+                                    netlist_str.push_str("* Trace resistance\n");
+                                }
+                                netlist_str.push_str(&format!(
+                                    "R{} {} {} {:.6e}\n",
+                                    name, node_a, node_b, value_ohms
+                                ));
+                            }
             super::types::ParasiticElement::GroundCapacitance {
                 name,
                 node,

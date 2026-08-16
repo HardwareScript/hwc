@@ -9,7 +9,7 @@ profile TSMC_ASIC_180nm:
 
     via:
         min_diameter: 0.5um
-        min_annular_ring: 0.2um
+        min_enclosure: 0.2um
 
     manufacturing:
         grid_snapping: true

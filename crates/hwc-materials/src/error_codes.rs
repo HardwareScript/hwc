@@ -14,7 +14,7 @@ pub mod manufacturing {
     // M10-M19: Factory limit errors (trace too thin, hole too small)
     pub const TRACE_TOO_THIN_FOR_FAB: &str = "M11";
     pub const VIA_TOO_SMALL: &str = "M12";
-    pub const ANNULAR_RING_TOO_SMALL: &str = "M13";
+    pub const ENCLOSURE_TOO_SMALL: &str = "M13";
     pub const ASPECT_RATIO_EXCEEDED: &str = "M14";
     pub const PAD_SIZE_TOO_SMALL: &str = "M15";
 

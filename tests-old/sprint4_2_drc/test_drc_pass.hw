@@ -10,7 +10,7 @@ profile TestProfile_Pass:
     
     via:
         min_diameter: 200µm
-        min_annular_ring: 100µm
+        min_enclosure: 100µm
 
 space DRC_Pass_Test:
     dimensions: 10mm by 10mm by 2mm

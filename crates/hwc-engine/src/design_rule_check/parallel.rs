@@ -7,6 +7,7 @@ use super::clearance::validate_clearances;
 use super::crosstalk::validate_crosstalk; // v0.3.0: Signal integrity
 use super::electromigration::validate_electromigration; // P21
 use super::junction::validate_junction_breakdown; // P46
+use super::min_area::validate_min_area; // Gap 2: Minimum area (CMP peeling)
 use super::thermal::validate_thermal_rise; // P22
 use super::trace_width::validate_trace_widths;
 use super::types::DrcReport;
@@ -99,6 +100,12 @@ pub fn validate_physics_parallel(
     // 10. Junction Breakdown Validation (P46: Semiconductor junction voltage rating)
     let junction_violations = validate_junction_breakdown(space, &space.material_registry)?;
     for violation in junction_violations {
+        report.add_violation(violation);
+    }
+
+    // 11. Minimum Area Validation (Gap 2: CMP peeling prevention)
+    let min_area_violations = validate_min_area(space, &space.material_registry)?;
+    for violation in min_area_violations {
         report.add_violation(violation);
     }
 

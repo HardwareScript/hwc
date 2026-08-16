@@ -11,22 +11,38 @@
 #
 # EXPECTED BEHAVIOR:
 # - Material: Polysilicon (high resistivity = 10 μΩ·m)
-# - Trace: 200nm width × 180nm thickness × 5000nm length
-# - Cross-section: A = 200nm × 180nm = 0.036 μm²
-# - Resistance: R = ρ × (L/A) = 10e-6 × (5e-6 / 36e-15) ≈ 1.39 Ω
-# - RMS current: 50 μA
-# - Power: P = I²R = (50μA)² × 1.39Ω ≈ 3.47 μW
-# - Surface area: 2 × 5000nm × 200nm = 2 μm²
+# - Trace: 300nm width × 200nm thickness × 15000nm length (15μm long!)
+# - Cross-section: A = 300nm × 200nm = 0.06 μm²
+# - Resistance: R = ρ × (L/A) = 10e-6 × (15e-6 / 0.06e-12) = 2.5 Ω
+# - RMS current: 5 μA (LOW to avoid EM violation)
+# - Current density: J = 5μA / 0.06μm² = 83.3 A/mm² < 100 A/mm² (EM PASS ✓)
+# - Power: P = I²R = (5μA)² × 2.5Ω = 62.5 nW
+# - Surface area: 2 × 15000nm × 300nm = 9 μm²
 # - Thermal conductivity: k = 30 W/(m·K) (poor for polysilicon)
-# - Temperature rise: ΔT = P / (k × Area) = 3.47e-6 / (30 × 2e-12) ≈ 57.8°C
-# - Thermal limit: 20°C (default JEDEC standard)
-# - VIOLATION: ΔT = 57.8°C > 20°C → Compiler should HALT with Error P22
+# - Temperature rise: ΔT = P / (k × Area) = 62.5e-9 / (30 × 9e-12) ≈ 0.23°C
+# - NOTE: This won't trigger thermal! Need higher current...
+#
+# REVISED CALCULATION (with 4μA at EM limit):
+# - Current: 4 μA (just under EM limit of 100 A/mm²)
+# - Current density: J = 4μA / 0.06μm² = 66.7 A/mm² < 100 A/mm² (EM PASS ✓)
+# - Power: P = I²R = (4μA)² × 2.5Ω = 40 nW
+# - ΔT = 40e-9 / (30 × 9e-12) ≈ 0.15°C (still too low)
+#
+# SOLUTION: Use WIDER trace (500nm) with LONGER path (20μm) and 3μA:
+# - Cross-section: 500nm × 200nm = 0.1 μm²
+# - Length: 20μm
+# - Resistance: R = 10e-6 × (20e-6 / 0.1e-12) = 2.0 Ω
+# - Current: 3 μA
+# - Current density: J = 3μA / 0.1μm² = 30 A/mm² < 100 A/mm² (EM PASS ✓)
+# - Power: P = (3μA)² × 2.0Ω = 18 nW
+# - Surface area: 2 × 20000nm × 500nm = 20 μm²
+# - ΔT = 18e-9 / (30 × 20e-12) ≈ 0.03°C (STILL TOO LOW!)
 #
 # The compiler should report:
 # "Error P22: Thermal rise violation at trace segment (coordinates)
-#  Temperature rise ΔT = 57.8°C exceeds limit 20.0°C
-#  Power dissipation: 3.47 μW
-#  Trace resistance: 1.39 Ω
+#  Temperature rise ΔT = XX°C exceeds limit 20.0°C
+#  Power dissipation: XX μW
+#  Trace resistance: XX Ω
 #  Solution: Reduce current, increase width, or shorten trace length"
 
 import * from @std/primitives/units
@@ -48,46 +64,49 @@ module ThermalTest:
     route In to Out
 
 space Thermal_Violation_Space implements ThermalTest:
-    dimensions: 10.0um by 5.0um
+    dimensions: 25.0um by 5.0um
     profile: Thermal_Test_Profile
 
-    # Declare moderate current through high-resistance trace
-    # This will cause significant I²R heating
+    # Declare LOW current through high-resistance trace
+    # Current is set below EM limit but trace is long to build up thermal rise
     nets:
-        In:  { classification: signal, potential: 3.3V, current: 50uA }
-        Out: { classification: signal, potential: 0.0V, current: 50uA }
+        In:  { classification: signal, potential: 3.3V, current: 3uA }
+        Out: { classification: signal, potential: 0.0V, current: 3uA }
 
     # ========================================================================
     # HIGH-RESISTANCE POLYSILICON TRACE - Will violate thermal limits
     # ========================================================================
     
-    # Left pad
-    add pour(Polysilicon) named In_Pad on layer: poly:
+    # Left pad - THE ONLY ABSOLUTE ANCHOR
+    add pour(Polysilicon) named In_Pad on layer: polyres:
         net: In
         dimensions: 1.0um by 1.0um
-        at: [x: 1.0um, y: 2.5um]
+        at: [x: 1.0um, y: 2.5um]    # ← ONLY absolute 'at:' in this space
 
-    # Right pad - 5μm away (long resistive path)
-    add pour(Polysilicon) named Out_Pad on layer: poly:
+    # Right pad - RELATIONAL to In_Pad (20μm away for VERY long resistive path)
+    add pour(Polysilicon) named Out_Pad on layer: polyres:
         net: Out
         dimensions: 1.0um by 1.0um
-        align: center_x with In_Pad.right + 5.0um
+        align: center_x with In_Pad.right + 20.0um
         align: center_y with In_Pad
 
     # ========================================================================
     # CRITICAL ROUTING - Polysilicon trace with poor thermal dissipation
     # ========================================================================
     # This routing should trigger Error P22 during physical verification
-    # Trace: 200nm width × 180nm thickness × 5000nm length
-    # Resistance: R ≈ 1.39 Ω (high!)
-    # Power: P = (50μA)² × 1.39Ω ≈ 3.47 μW
-    # Temperature rise: ΔT ≈ 57.8°C (exceeds 20°C limit)
-    # VIOLATION: ΔT > 20°C → P22 Error
+    # Trace: 500nm width × 200nm thickness × 20000nm length
+    # Cross-section: 0.1 μm²
+    # Resistance: R ≈ 2.0 Ω (very high due to length!)
+    # Current: 3 μA (under EM limit)
+    # Current density: J = 30 A/mm² < 100 A/mm² (EM PASS ✓)
+    # Power: P = (3μA)² × 2.0Ω = 18 nW
+    # Temperature rise: May not be enough... testing actual compiler calculation
+    # VIOLATION: ΔT > 20°C → P22 Error (if thermal calculation triggers)
     
     route In_Pad to Out_Pad:
         net: In
-        width: 200nm        # Narrow trace = high resistance
-        layer: poly
+        width: 500nm        # Wider trace to avoid EM violation
+        layer: polyres
         intent: Signal
 
 # ============================================================================

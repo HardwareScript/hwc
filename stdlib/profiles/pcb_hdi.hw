@@ -25,7 +25,7 @@ profile JLCPCB_HDI_4Layer_1_2_1:
     
     via:
         min_diameter: 100µm
-        min_annular_ring: 50µm
+        min_enclosure: 50µm
     
     clearance:
         high_voltage: 1.5mm
@@ -67,7 +67,7 @@ profile JLCPCB_HDI_6Layer_1_4_1:
     
     via:
         min_diameter: 150µm
-        min_annular_ring: 75µm
+        min_enclosure: 75µm
     
     clearance:
         high_voltage: 1.5mm
@@ -113,7 +113,7 @@ profile JLCPCB_HDI_8Layer_2_4_2:
     
     via:
         min_diameter: 200µm
-        min_annular_ring: 100µm
+        min_enclosure: 100µm
     
     clearance:
         high_voltage: 1.5mm
@@ -167,7 +167,7 @@ profile PCBWay_HDI_4Layer_Standard:
     
     via:
         min_diameter: 150µm
-        min_annular_ring: 75µm
+        min_enclosure: 75µm
     
     clearance:
         high_voltage: 1.5mm
@@ -209,7 +209,7 @@ profile PCBWay_HDI_6Layer_Advanced:
     
     via:
         min_diameter: 150µm
-        min_annular_ring: 75µm
+        min_enclosure: 75µm
     
     clearance:
         high_voltage: 1.5mm
@@ -259,7 +259,7 @@ profile HDI_Extreme_Microvia:
     
     via:
         min_diameter: 75µm
-        min_annular_ring: 25µm
+        min_enclosure: 25µm
     
     clearance:
         high_voltage: 1mm
@@ -301,7 +301,7 @@ profile HDI_Any_Layer_Via:
     
     via:
         min_diameter: 150µm
-        min_annular_ring: 75µm
+        min_enclosure: 75µm
     
     clearance:
         high_voltage: 1.5mm
@@ -355,7 +355,7 @@ profile HDI_Ultra_Fine_Pitch:
     
     via:
         min_diameter: 100µm
-        min_annular_ring: 50µm
+        min_enclosure: 50µm
     
     clearance:
         high_voltage: 1mm
@@ -405,7 +405,7 @@ profile HDI_Extreme_Density:
     
     via:
         min_diameter: 75µm
-        min_annular_ring: 25µm
+        min_enclosure: 25µm
     
     clearance:
         high_voltage: 0.8mm
@@ -463,7 +463,7 @@ profile HDI_Mobile_Device:
     
     via:
         min_diameter: 100µm
-        min_annular_ring: 40µm
+        min_enclosure: 40µm
     
     clearance:
         high_voltage: 1mm

@@ -61,7 +61,7 @@ profile Generic:
     
     via:
         min_diameter: 0.4mm                   # Conservative via size
-        min_annular_ring: 0.2mm               # Large annular ring
+        min_enclosure: 0.2mm               # Large annular ring
         max_aspect_ratio: 10                  # Depth/diameter ratio
 
     ## ========================================================================
@@ -70,13 +70,13 @@ profile Generic:
     
     via StandardVia:
         diameter: 0.6mm
-        annular_ring: 0.2mm
+        enclosure: 0.2mm
         spanning: layer: bottom to top
         material: Copper
 
     via MicroVia:
         diameter: 0.3mm
-        annular_ring: 0.15mm
+        enclosure: 0.15mm
         spanning: layer: bottom to top
         material: Copper
 
@@ -233,7 +233,7 @@ profile Generic_IC:
     
     via:
         min_diameter: 200nm                   # Nanoscale vias
-        min_annular_ring: 50nm
+        min_enclosure: 50nm
 
     stackup:
         m1: [material: Aluminum, thickness: 500nm]
@@ -273,7 +273,7 @@ profile Generic_PCB:
     
     via:
         min_diameter: 0.4mm
-        min_annular_ring: 0.2mm
+        min_enclosure: 0.2mm
     
     manufacturing:
         copper_thickness: 35um                # 1oz copper
@@ -308,7 +308,7 @@ profile Generic_3D:
     
     via:
         min_diameter: 5um                     # TSV diameter
-        min_annular_ring: 2um
+        min_enclosure: 2um
         max_aspect_ratio: 20                  # High aspect ratio TSVs
     
     stackup:
@@ -340,7 +340,7 @@ profile Generic_Package:
     
     via:
         min_diameter: 100um
-        min_annular_ring: 50um
+        min_enclosure: 50um
     
     bridge Die to Package:
         interface: Copper_Pillar

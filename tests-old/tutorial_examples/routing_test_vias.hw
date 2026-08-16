@@ -13,7 +13,7 @@ profile RoutingTestProfile:
         min_spacing: 0.2mm
     via:
         min_diameter: 0.3mm
-        min_annular_ring: 0.15mm
+        min_enclosure: 0.15mm
         min_spacing: 0.25mm
     manufacturing:
         copper_thickness: 35um
@@ -63,7 +63,7 @@ space RoutingTestBoard:
     add contact(Copper) named Via_A at [x: 4mm, y: 7.5mm] spanning layer: top to bottom:
         net: NET_VIAS
         drill_diameter: 0.3mm
-        annular_ring: 0.2mm
+        enclosure: 0.2mm
 
     add Pin named Via_A_Anchor at [x: 4mm, y: 7.5mm] on layer: top:
         merge: true
@@ -71,7 +71,7 @@ space RoutingTestBoard:
     add contact(Copper) named Via_B at [x: 16mm, y: 7.5mm] spanning layer: top to bottom:
         net: NET_VIAS
         drill_diameter: 0.3mm
-        annular_ring: 0.2mm
+        enclosure: 0.2mm
 
     add Pin named Via_B_Anchor at [x: 16mm, y: 7.5mm] on layer: top:
         merge: true
@@ -82,7 +82,7 @@ space RoutingTestBoard:
     add contact(Copper) named Via_C at [x: 4mm, y: 12mm] spanning layer: top to bottom:
         net: NET_VIA_PAD
         drill_diameter: 0.3mm
-        annular_ring: 0.2mm
+        enclosure: 0.2mm
 
     add Pin named Via_C_Anchor at [x: 4mm, y: 12mm] on layer: top:
         merge: true

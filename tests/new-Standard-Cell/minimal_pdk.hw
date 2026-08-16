@@ -51,7 +51,7 @@ export profile ASIC_Flattened:
 
     via:
         min_diameter: 200nm
-        min_annular_ring: 0nm
+        min_enclosure: 0nm
         min_spacing: 300nm
         shape: SquareContact   # <--- THE FIX: Use our custom square shape!
 
@@ -119,7 +119,7 @@ export profile Silicon_180nm:
 
     via:
         min_diameter: 200nm
-        min_annular_ring: 0nm
+        min_enclosure: 0nm
         min_spacing: 300nm
         shape: SquareContact
 

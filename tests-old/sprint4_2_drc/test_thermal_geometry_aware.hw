@@ -18,7 +18,7 @@ profile ThermalTest:
     
     via:
         min_diameter: 300µm
-        min_annular_ring: 150µm
+        min_enclosure: 150µm
     
     clearance:
         high_voltage: 1.5mm  # Planes are 1.6mm apart, so this should pass

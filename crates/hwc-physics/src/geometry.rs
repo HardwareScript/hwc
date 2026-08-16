@@ -285,6 +285,10 @@ impl BoundingBox {
 }
 
 /// Manhattan-routed trace segment.
+///
+/// **v0.2.3: Hierarchical Legalization Support**
+/// - `is_frozen`: Marks child-instance routes and fixed macros as immutable during legalization.
+///   Child routes are pre-routed, tape-out verified blocks that must not be modified.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TraceSegment {
     pub start: Point3D,
@@ -292,6 +296,10 @@ pub struct TraceSegment {
     pub width_nm: i64,
     /// Material ID for thickness/electrical lookup (0 = Air, default)
     pub material_id: u8,
+    /// **v0.2.3**: Immutability flag for hierarchical legalization.
+    /// - `true`: Child-instance routes and fixed macros (immutable obstacles)
+    /// - `false`: Parent-level interconnects (can be nudged during legalization)
+    pub is_frozen: bool,
 }
 
 impl TraceSegment {
@@ -302,6 +310,19 @@ impl TraceSegment {
             end,
             width_nm,
             material_id,
+            is_frozen: false, // Default: mutable (parent-level routes)
+        }
+    }
+    
+    /// Create a frozen (immutable) trace segment for child instances or fixed macros.
+    #[inline]
+    pub const fn new_frozen(start: Point3D, end: Point3D, width_nm: i64, material_id: u8) -> Self {
+        Self {
+            start,
+            end,
+            width_nm,
+            material_id,
+            is_frozen: true,
         }
     }
 

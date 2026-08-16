@@ -24,7 +24,7 @@ profile ThickBoardProfile:
     
     via:
         min_diameter: 0.5mm
-        min_annular_ring: 0.0mm
+        min_enclosure: 0.0mm
 
 module ThickDrillModule:
     pins: []

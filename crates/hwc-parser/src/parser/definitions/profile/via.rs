@@ -8,7 +8,7 @@ impl super::super::super::Parser {
     pub(super) fn parse_via_constraints(&mut self) -> Result<ViaConstraints, ParseError> {
         let start_pos = self.current_span().start;
         let mut min_diameter = None;
-        let mut min_annular_ring = None;
+        let mut min_enclosure = None;
         let mut default_diameter = None;
         let mut min_spacing = None;
         let mut max_aspect_ratio = None;
@@ -38,8 +38,8 @@ impl super::super::super::Parser {
                     min_diameter = Some(self.parse_measurement()?);
                     self.skip_whitespace();
                 }
-                "min_annular_ring" => {
-                    min_annular_ring = Some(self.parse_measurement()?);
+                "min_enclosure" => {
+                    min_enclosure = Some(self.parse_measurement()?);
                     self.skip_whitespace();
                 }
                 "default_diameter" => {
@@ -116,9 +116,9 @@ impl super::super::super::Parser {
             message: "Via constraints must have 'min_diameter' field".into(),
         })?;
 
-        let min_annular_ring = min_annular_ring.ok_or_else(|| ParseError::General {
+        let min_enclosure = min_enclosure.ok_or_else(|| ParseError::General {
             span: span_to_source_span(&Span::new(start_pos, end_pos)),
-            message: "Via constraints must have 'min_annular_ring' field".into(),
+            message: "Via constraints must have 'min_enclosure' field".into(),
         })?;
 
         let contact_depth = contact_depth.ok_or_else(|| ParseError::General {
@@ -128,7 +128,7 @@ impl super::super::super::Parser {
 
         Ok(ViaConstraints {
             min_diameter,
-            min_annular_ring,
+            min_enclosure,
             default_diameter,
             min_spacing,
             max_aspect_ratio,
@@ -239,7 +239,7 @@ impl super::super::super::Parser {
         self.expect(&Token::Indent)?;
 
         let mut diameter = None;
-        let mut annular_ring = None;
+        let mut enclosure = None;
         let mut from_layer = None;
         let mut to_layer = None;
         let mut material = None;
@@ -259,8 +259,8 @@ impl super::super::super::Parser {
                     diameter = Some(self.parse_measurement()?);
                     self.skip_whitespace();
                 }
-                "annular_ring" => {
-                    annular_ring = Some(self.parse_measurement()?);
+                "enclosure" => {
+                    enclosure = Some(self.parse_measurement()?);
                     self.skip_whitespace();
                 }
                 "spanning" => {
@@ -293,8 +293,8 @@ impl super::super::super::Parser {
 
         let diameter =
             diameter.ok_or_else(|| self.error("Via definition must include 'diameter'"))?;
-        let annular_ring =
-            annular_ring.ok_or_else(|| self.error("Via definition must include 'annular_ring'"))?;
+        let enclosure =
+            enclosure.ok_or_else(|| self.error("Via definition must include 'enclosure'"))?;
         let from_layer =
             from_layer.ok_or_else(|| self.error("Via definition must include 'spanning'"))?;
         let to_layer =
@@ -303,7 +303,7 @@ impl super::super::super::Parser {
         Ok(ViaDefinition {
             name,
             diameter,
-            annular_ring,
+            enclosure,
             from_layer,
             to_layer,
             material,

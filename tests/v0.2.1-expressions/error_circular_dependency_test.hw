@@ -44,7 +44,7 @@ profile Minimal_Test_Profile:
         metal1: [material: Copper, thickness: 1000nm, routable: true]
     via:
         min_diameter: 200nm
-        min_annular_ring: 0nm
+        min_enclosure: 0nm
         min_spacing: 300nm
         shape: SquareContact
         contact_depth: 100nm

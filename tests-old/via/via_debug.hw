@@ -16,12 +16,12 @@ profile ViaTestProfile:
     
     via:
         min_diameter: 0.3mm
-        min_annular_ring: 0.1mm
+        min_enclosure: 0.1mm
         min_spacing: 0.25mm
 
     via StandardVia:
         diameter: 0.6mm
-        annular_ring: 0.2mm
+        enclosure: 0.2mm
         spanning: layer: bottom to top
         material: Copper
 
@@ -54,13 +54,13 @@ space ViaTestBoard implements ViaTestModule:
     add contact(Copper) named V1 at [x: 5mm, y: 5mm] spanning layer: bottom to top:
         net: P1
         diameter: 0.6mm
-        annular_ring: 0.2mm
+        enclosure: 0.2mm
     
     # Another via near the edge to test "slashing"
     add contact(Copper) named V2 at [x: 1mm, y: 5mm] spanning layer: bottom to top:
         net: P1
         diameter: 0.6mm
-        annular_ring: 0.2mm
+        enclosure: 0.2mm
 
     # Large copper pours to see flushing
     add pour(Copper) named TopPlane on layer: top:

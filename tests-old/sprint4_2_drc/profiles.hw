@@ -10,7 +10,7 @@ profile StandardPCB:
     
     via:
         min_diameter: 300µm
-        min_annular_ring: 150µm
+        min_enclosure: 150µm
     
     layer:
         max_count: 4
@@ -25,7 +25,7 @@ profile HighVoltage:
     
     via:
         min_diameter: 800µm
-        min_annular_ring: 400µm
+        min_enclosure: 400µm
     
     layer:
         max_count: 2

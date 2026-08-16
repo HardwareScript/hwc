@@ -198,6 +198,13 @@ unit Picofarad:
     dimension: capacitance
     description: "Common for very small capacitors"
 
+unit Femtofarad:
+    symbol: "fF"
+    base_si: "F"
+    multiplier: 1e-15
+    dimension: capacitance
+    description: "Common for parasitic capacitances in ICs"
+
 ## ============================================================================
 ## INDUCTANCE UNITS
 ## ============================================================================
@@ -315,6 +322,75 @@ unit Megawatt:
     base_si: "W"
     multiplier: 1e6
     dimension: power
+
+## ============================================================================
+## RESISTANCE UNITS
+## ============================================================================
+## Base unit: Ohm (Ω)
+
+unit Ohm:
+    symbol: "Ω"
+    aliases: ["ohm", "Ohm"]
+    base_si: "Ω"
+    dimension: resistance
+    multiplier: 1
+    description: "SI unit of electrical resistance"
+
+unit Milliohm:
+    symbol: "mΩ"
+    aliases: ["mohm", "mOhm"]
+    base_si: "Ω"
+    multiplier: 1e-3
+    dimension: resistance
+    description: "Common for low-value resistors and trace resistance"
+
+unit Kiloohm:
+    symbol: "kΩ"
+    aliases: ["kohm", "kOhm"]
+    base_si: "Ω"
+    multiplier: 1e3
+    dimension: resistance
+    description: "Common for moderate-value resistors"
+
+unit Megaohm:
+    symbol: "MΩ"
+    aliases: ["Mohm", "MOhm"]
+    base_si: "Ω"
+    multiplier: 1e6
+    dimension: resistance
+    description: "Common for high-value resistors"
+
+unit Gigaohm:
+    symbol: "GΩ"
+    aliases: ["Gohm", "GOhm"]
+    base_si: "Ω"
+    multiplier: 1e9
+    dimension: resistance
+    description: "Very high resistance values"
+
+## ============================================================================
+## CONDUCTANCE UNITS
+## ============================================================================
+## Base unit: Siemens (S) - reciprocal of Ohm
+
+unit Siemens:
+    symbol: "S"
+    base_si: "S"
+    dimension: conductance
+    description: "SI unit of electrical conductance"
+
+unit Millisiemens:
+    symbol: "mS"
+    base_si: "S"
+    multiplier: 1e-3
+    dimension: conductance
+
+unit Microsiemens:
+    symbol: "µS"
+    aliases: ["uS"]
+    base_si: "S"
+    multiplier: 1e-6
+    dimension: conductance
 
 ## ============================================================================
 ## ENERGY & BATTERY CAPACITY UNITS

@@ -383,7 +383,7 @@ pub fn place_contact(params: PlaceContactParams) -> Result<(), IrError> {
 
     let contour = resolve_shape(contact, eval_context, symbol_table, diameter_nm, profile)?;
 
-    let annular_ring_nm = resolve_annular_ring(space, contact, symbol_table, eval_context)?;
+    let enclosure_nm = resolve_enclosure(space, contact, symbol_table, eval_context)?;
 
     let board_max_z_nm = space.dimensions.depth_nm;
     let via_net_id = hwc_engine::netlist::NetId::new(net_id);
@@ -395,14 +395,14 @@ pub fn place_contact(params: PlaceContactParams) -> Result<(), IrError> {
         diameter_nm,
         net_id: via_net_id,
         material_id,
-        annular_ring_nm,
+        enclosure_nm,
         board_min_z_nm: 0,
         board_max_z_nm,
     });
     space.add_vias(vec![via]);
 
     let is_tented = get_prop_bool(contact, "is_tented", eval_context).unwrap_or(false);
-    let pad_diameter_nm = diameter_nm + (2 * annular_ring_nm);
+    let pad_diameter_nm = diameter_nm + (2 * enclosure_nm);
     let pad_radius_nm = pad_diameter_nm / 2;
     let pad_bbox = hwc_engine::geometry::BoundingBox::new(
         Point3D::new(

@@ -168,7 +168,7 @@ pub fn add_substrate(
         }
 
         // PCB via: Render plated through-hole barrel
-        let pad_dia_mm = (via.diameter_nm + 2 * via.annular_ring_nm.max(via.diameter_nm / 4))
+        let pad_dia_mm = (via.diameter_nm + 2 * via.enclosure_nm.max(via.diameter_nm / 4))
             as f64
             / 1_000_000.0;
         let barrel_thickness_mm = outer_dia_mm;

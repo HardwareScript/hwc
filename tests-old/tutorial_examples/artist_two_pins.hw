@@ -14,7 +14,7 @@ profile PadToViaProfile:
         min_spacing: 0.15mm
     via:
         min_diameter: 0.3mm
-        min_annular_ring: 0.15mm
+        min_enclosure: 0.15mm
         min_spacing: 0.25mm
     manufacturing:
         copper_thickness: 35um
@@ -56,7 +56,7 @@ space PadToViaBoard:
     add contact(Copper) named Target_Via at [x: 17mm, y: 5mm] spanning layer: top to bottom:
         net: SIG
         drill_diameter: 0.3mm
-        annular_ring: 0.15mm
+        enclosure: 0.15mm
         is_tented: false
 
     add Pin named B at [x: 17mm, y: 5mm] on layer: top:

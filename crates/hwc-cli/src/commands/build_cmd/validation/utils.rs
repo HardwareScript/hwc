@@ -12,11 +12,11 @@ pub fn convert_metadata_to_physics(
 
     // v0.2.0: Use technology strategy from space (set during compilation)
     let strategy = space.technology_strategy;
-    let annular_ring_nm = strategy.contact_expansion(
+    let enclosure_nm = strategy.contact_expansion(
         space
             .fabrication_constraints
             .as_ref()
-            .map(|c| c.via.min_annular_ring_nm)
+            .map(|c| c.via.min_enclosure_nm)
             .unwrap_or(0),
     );
 
@@ -61,10 +61,10 @@ pub fn convert_metadata_to_physics(
         // Connectivity metadata must use actual geometry, not rendering approximations.
 
         // v0.2.0 FIX: Apply annular ring expansion for Contact layers to account for
-        // PCB pad overhangs. For ASIC (annular_ring_nm == 0), this has no effect.
+        // PCB pad overhangs. For ASIC (enclosure_nm == 0), this has no effect.
         let is_contact = layer.layer_type
             == hwc_engine::geometry_router::substrate_types::SubstrateLayerType::Contact;
-        let expansion = if is_contact { annular_ring_nm } else { 0 };
+        let expansion = if is_contact { enclosure_nm } else { 0 };
 
         if layer.regions.is_empty() {
             let min_x = layer.bbox.min.x - expansion;
@@ -141,13 +141,13 @@ pub fn convert_metadata_to_physics(
                     net_name: contact.net.clone(),
                     bbox: BoundingBox::new(
                         Point3D::new(
-                            bbox.min.x - annular_ring_nm,
-                            bbox.min.y - annular_ring_nm,
+                            bbox.min.x - enclosure_nm,
+                            bbox.min.y - enclosure_nm,
                             bbox.min.z,
                         ),
                         Point3D::new(
-                            bbox.max.x + annular_ring_nm,
-                            bbox.max.y + annular_ring_nm,
+                            bbox.max.x + enclosure_nm,
+                            bbox.max.y + enclosure_nm,
                             bbox.max.z,
                         ),
                     ),
@@ -215,13 +215,13 @@ pub fn convert_metadata_to_physics(
         // v0.2.0 FIX: Apply annular ring expansion for vias
         let bbox = BoundingBox::new(
             Point3D::new(
-                via.position.0 - radius - annular_ring_nm,
-                via.position.1 - radius - annular_ring_nm,
+                via.position.0 - radius - enclosure_nm,
+                via.position.1 - radius - enclosure_nm,
                 via.from_z_nm,
             ),
             Point3D::new(
-                via.position.0 + radius + annular_ring_nm,
-                via.position.1 + radius + annular_ring_nm,
+                via.position.0 + radius + enclosure_nm,
+                via.position.1 + radius + enclosure_nm,
                 via.to_z_nm,
             ),
         );

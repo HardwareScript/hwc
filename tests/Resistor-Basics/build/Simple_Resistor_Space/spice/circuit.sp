@@ -7,11 +7,11 @@
 * PDK SUBCIRCUIT: sky130_fd_pr__res_high_po
 * ========================================
 .subckt sky130_fd_pr__res_high_po A B BULK W=1u L=1u
-RR_head A node_1 362ohm
-RR_tail node_2 B 362ohm
-RR_body node_1 node_2 {350ohm * ({L / W})}
-CC_sub1 A BULK {{2fF * W} * L}
-CC_sub2 B BULK {{2fF * W} * L}
+RR_head A node_1 362
+RR_tail node_2 B 362
+RR_body node_1 node_2 {3.500000e2 * (L / W)}
+CC_sub1 A BULK {2.000000e-15 * W * L}
+CC_sub2 B BULK {2.000000e-15 * W * L}
 .ends sky130_fd_pr__res_high_po
 
 * ========================================
@@ -78,7 +78,17 @@ CCgnd_In_0 In GND 1.726567e-16
 RRtr_Out_0 nOut_entry Out 6.527778e-1
 * Ground capacitance
 CCgnd_Out_0 Out GND 1.726567e-16
+* Trace resistance
+Rvia_In_polyres_li1 In In_post_via_In_polyres_li1 1.468558e1
+* Trace resistance
+Rvia_Out_polyres_li1 Out Out_post_via_Out_polyres_li1 1.468558e1
+* Trace resistance
+Rvia_GND_pdiff_li1 GND GND_post_via_GND_pdiff_li1 4.405673e1
+* Trace resistance
+Rvia_In_li1_metal1 In In_post_via_In_li1_metal1 1.468558e1
+* Trace resistance
+Rvia_Out_li1_metal1 Out Out_post_via_Out_li1_metal1 1.468558e1
 
-* Total parasitic elements: 4
+* Total parasitic elements: 9
 
 .end

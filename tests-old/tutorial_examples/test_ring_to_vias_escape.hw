@@ -19,7 +19,7 @@ profile RingViaProfile:
         min_spacing: 0.2mm
     via:
         min_diameter: 0.3mm
-        min_annular_ring: 0.15mm
+        min_enclosure: 0.15mm
         min_spacing: 0.25mm
     manufacturing:
         copper_thickness: 35um
@@ -67,7 +67,7 @@ space RingViaBoard:
     add contact(Copper) named ViaN at [x: 10mm, y: 14mm] spanning layer: top to bottom:
         net: NET_VIA_N
         drill_diameter: 0.3mm
-        annular_ring: 0.2mm
+        enclosure: 0.2mm
     add Pin named ViaNAnchor at [x: 10mm, y: 14mm] on layer: top:
         merge: true
 
@@ -75,7 +75,7 @@ space RingViaBoard:
     add contact(Copper) named ViaS at [x: 10mm, y: 4mm] spanning layer: top to bottom:
         net: NET_VIA_S
         drill_diameter: 0.3mm
-        annular_ring: 0.2mm
+        enclosure: 0.2mm
     add Pin named ViaSAnchor at [x: 10mm, y: 4mm] on layer: top:
         merge: true
 
@@ -83,7 +83,7 @@ space RingViaBoard:
     add contact(Copper) named ViaE at [x: 15mm, y: 10mm] spanning layer: top to bottom:
         net: NET_VIA_E
         drill_diameter: 0.3mm
-        annular_ring: 0.2mm
+        enclosure: 0.2mm
     add Pin named ViaEAnchor at [x: 15mm, y: 10mm] on layer: top:
         merge: true
 
@@ -91,7 +91,7 @@ space RingViaBoard:
     add contact(Copper) named ViaW at [x: 4mm, y: 10mm] spanning layer: top to bottom:
         net: NET_VIA_W
         drill_diameter: 0.3mm
-        annular_ring: 0.2mm
+        enclosure: 0.2mm
     add Pin named ViaWAnchor at [x: 4mm, y: 10mm] on layer: top:
         merge: true
 

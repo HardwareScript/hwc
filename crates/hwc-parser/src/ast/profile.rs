@@ -255,7 +255,7 @@ pub struct BridgeRule {
 /// ```hw
 /// via Microvia_1:
 ///     diameter: 0.3mm
-///     annular_ring: 0.15mm
+///     enclosure: 0.15mm
 ///     spanning: inner2 to inner1
 ///     material: Copper
 /// ```
@@ -263,7 +263,7 @@ pub struct BridgeRule {
 pub struct ViaDefinition {
     pub name: Identifier,
     pub diameter: Measurement,
-    pub annular_ring: Measurement,
+    pub enclosure: Measurement,
     pub from_layer: Identifier,
     pub to_layer: Identifier,
     pub material: Option<Identifier>,
@@ -313,7 +313,7 @@ pub struct TraceConstraints {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ViaConstraints {
     pub min_diameter: Measurement,
-    pub min_annular_ring: Measurement,
+    pub min_enclosure: Measurement,
 
     /// Default diameter to use when placing vias (if not specified)
     pub default_diameter: Option<Measurement>,
@@ -357,7 +357,7 @@ pub struct ViaConstraints {
     pub max_contact_depth: Option<Measurement>,
 
     // v0.1.7 ASIC Extensions
-    /// Per-layer enclosure (annular ring) constraints.
+    /// Per-layer enclosure constraints.
     /// Maps layer name to minimum enclosure distance.
     pub enclosures: Option<rustc_hash::FxHashMap<String, Measurement>>,
     /// Whether stacked vias are permitted (ASIC: false, PCB: true).

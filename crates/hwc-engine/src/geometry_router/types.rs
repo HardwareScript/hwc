@@ -110,7 +110,7 @@ pub struct Via {
     pub via_type: ViaType,
 
     /// Annular ring size in nanometers (copper pad around drill hole)
-    pub annular_ring_nm: i64,
+    pub enclosure_nm: i64,
 
     /// Generic via properties (e.g., thermal_relief)
     pub properties: FxHashMap<String, Expression>,
@@ -125,7 +125,7 @@ pub struct ViaSpec {
     pub diameter_nm: i64,
     pub net_id: NetId,
     pub material_id: u8,
-    pub annular_ring_nm: i64,
+    pub enclosure_nm: i64,
     /// Board bottom Z, used to auto-classify the via type.
     pub board_min_z_nm: i64,
     /// Board top Z, used to auto-classify the via type.
@@ -151,7 +151,7 @@ impl Via {
             net_id: spec.net_id,
             material_id: spec.material_id,
             via_type,
-            annular_ring_nm: spec.annular_ring_nm,
+            enclosure_nm: spec.enclosure_nm,
             properties: FxHashMap::default(),
         }
     }
@@ -166,7 +166,7 @@ impl Via {
             net_id: spec.net_id,
             material_id: spec.material_id,
             via_type,
-            annular_ring_nm: spec.annular_ring_nm,
+            enclosure_nm: spec.enclosure_nm,
             properties: FxHashMap::default(),
         }
     }
@@ -261,10 +261,10 @@ impl Via {
     /// Get the total footprint radius including annular ring and clearance.
     ///
     /// # Arguments
-    /// * `annular_ring_nm` - Copper pad around the drill hole
+    /// * `enclosure_nm` - Copper pad around the drill hole
     /// * `clearance_nm` - Additional clearance for manufacturing
-    pub fn footprint_radius_nm(&self, annular_ring_nm: i64, clearance_nm: i64) -> i64 {
-        (self.diameter_nm + 2 * annular_ring_nm + clearance_nm) / 2
+    pub fn footprint_radius_nm(&self, enclosure_nm: i64, clearance_nm: i64) -> i64 {
+        (self.diameter_nm + 2 * enclosure_nm + clearance_nm) / 2
     }
 }
 

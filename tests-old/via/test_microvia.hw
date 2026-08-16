@@ -18,7 +18,7 @@ profile Microvia_Test_Profile:
     
     via:
         min_diameter: 0.1mm
-        min_annular_ring: 0.05mm
+        min_enclosure: 0.05mm
         min_spacing: 0.1mm
 
     trace:
@@ -53,6 +53,6 @@ space Microvia_Test_Board implements Microvia_Test_Module:
         diameter: 0.15mm         # Top diameter
         bottom_diameter: 0.1mm    # Bottom diameter (tapered)
         plating_thickness: 20um
-        annular_ring: 0.05mm
+        enclosure: 0.05mm
         top_cap: annular
         bottom_cap: solid

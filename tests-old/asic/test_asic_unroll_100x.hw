@@ -9,7 +9,7 @@ profile ASIC_TEST_100X:
     
     via:
         min_diameter: 20um
-        min_annular_ring: 5um
+        min_enclosure: 5um
         shape: square  # ASIC: square vias (GDSII/mask convention)
     
     manufacturing:

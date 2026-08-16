@@ -57,7 +57,7 @@ export profile Resistor_3D:
 
     via:
         min_diameter: 170nm
-        min_annular_ring: 0nm        # Silicon contact plugs (no PCB pad overhang)
+        min_enclosure: 40nm          # SKY130 licon.4 / licon.5 / mcon.4 enclosure (metal/poly over contact)
         min_spacing: 200nm           # SKY130 DRC compliant (licon.2/mcon.2)
         shape: SquareContact
         contact_depth: 30%

@@ -68,7 +68,7 @@ profile KOCH_TEST:
         min_spacing: 1um
     via:
         min_diameter: 100um
-        min_annular_ring: 10um
+        min_enclosure: 10um
         shape: KochSnowflake
     manufacturing:
         grid_snapping: true

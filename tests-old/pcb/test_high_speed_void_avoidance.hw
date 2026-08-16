@@ -26,7 +26,7 @@ profile PCB_4_LAYER_SI:
 
     via:
         min_diameter: 0.3mm
-        min_annular_ring: 0.15mm
+        min_enclosure: 0.15mm
         min_spacing: 0.2mm
 
     trace:

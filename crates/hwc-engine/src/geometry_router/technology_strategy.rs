@@ -94,7 +94,7 @@ mod tests {
             min_trace_spacing_nm: 150_000,
             min_via_diameter_nm: 300_000,
             default_via_diameter_nm: 300_000,
-            min_annular_ring_nm: 150_000, // PCB: has annular ring
+            min_enclosure_nm: 150_000, // PCB: has annular ring
             min_spacing_nm: 300_000,
             low_voltage_clearance_nm: 200_000,
             medium_voltage_clearance_nm: 500_000,
@@ -110,7 +110,7 @@ mod tests {
             min_trace_spacing_nm: 0,
             min_via_diameter_nm: 200,
             default_via_diameter_nm: 200,
-            min_annular_ring_nm: 0, // ASIC: no annular ring
+            min_enclosure_nm: 0, // ASIC: no annular ring
             min_spacing_nm: 300,
             low_voltage_clearance_nm: 500,
             medium_voltage_clearance_nm: 500,
