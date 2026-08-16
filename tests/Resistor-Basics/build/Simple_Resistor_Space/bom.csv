@@ -12,8 +12,8 @@ In_Pad,Pour,Aluminum,metal1 (z:830nm),1000000,360000000
 Out_Pad,Pour,Aluminum,metal1 (z:830nm),1000000,360000000
 Bulk_Tap_Diff,Pour,P_Plus_Diffusion,pdiff (z:0nm),160000,32000000
 Bulk_Tap_LI,Pour,Titanium_Silicide,li1 (z:580nm),160000,16000000
-Route_Out_on_metal1,Route,Aluminum,metal1 (trace),750000,270000000
 Route_In_on_metal1,Route,Aluminum,metal1 (trace),750000,270000000
+Route_Out_on_metal1,Route,Aluminum,metal1 (trace),750000,270000000
 Via_A_Poly_0,Contact,Tungsten,polyres (z:200nm),62500,19000000
 Via_A_Poly_1,Contact,Tungsten,polyres (z:200nm),62500,19000000
 Via_A_Poly_2,Contact,Tungsten,polyres (z:200nm),62500,19000000

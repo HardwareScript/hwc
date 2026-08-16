@@ -147,7 +147,11 @@ pub fn export(
     }
 
     // v0.2.2: Include routed traces from analytic_routes
-    for (_trace_idx, trace) in space.analytic_routes.iter().enumerate() {
+    // Sort traces by net name for deterministic BOM output
+    let mut sorted_traces: Vec<_> = space.analytic_routes.iter().collect();
+    sorted_traces.sort_by(|a, b| a.net_name.as_str().cmp(b.net_name.as_str()));
+    
+    for trace in sorted_traces {
         // Calculate total trace length
         let total_length_nm: i64 = trace.segments.iter().map(|s| s.length()).sum();
         
