@@ -224,24 +224,29 @@ pub fn emit_parasitics(netlist_str: &mut String, physical_graph: &PhysicalNetlis
     netlist_str.push_str("* ========================================\n");
 
     for parasitic in &physical_graph.parasitics {
-                        match parasitic {
-                            super::types::ParasiticElement::TraceResistor {
-                                name,
-                                node_a,
-                                node_b,
-                                value_ohms,
-                            } => {
-                                // Distinguish via resistance from trace resistance
-                                if name.starts_with("Rvia_") {
-                                    netlist_str.push_str("* Via/Contact resistance\n");
-                                } else {
-                                    netlist_str.push_str("* Trace resistance\n");
-                                }
-                                netlist_str.push_str(&format!(
-                                    "R{} {} {} {:.6e}\n",
-                                    name, node_a, node_b, value_ohms
-                                ));
-                            }
+        match parasitic {
+            super::types::ParasiticElement::TraceResistor {
+                name,
+                node_a,
+                node_b,
+                value_ohms,
+            } => {
+                let (prefix, comment) = if name.starts_with("via_") || name.starts_with("Rvia_") {
+                    ("R", "* Via/Contact resistance\n")
+                } else {
+                    ("", "* Trace resistance\n")
+                };
+                netlist_str.push_str(comment);
+                let card_name = if name.starts_with('R') {
+                    name.clone()
+                } else {
+                    format!("{}{}", prefix, name)
+                };
+                netlist_str.push_str(&format!(
+                    "{} {} {} {:.6e}\n",
+                    card_name, node_a, node_b, value_ohms
+                ));
+            }
             super::types::ParasiticElement::GroundCapacitance {
                 name,
                 node,
@@ -249,9 +254,31 @@ pub fn emit_parasitics(netlist_str: &mut String, physical_graph: &PhysicalNetlis
                 value_farads,
             } => {
                 netlist_str.push_str("* Ground capacitance\n");
+                let card_name = if name.starts_with('C') {
+                    name.clone()
+                } else {
+                    format!("C{}", name)
+                };
                 netlist_str.push_str(&format!(
-                    "C{} {} {} {:.6e}\n",
-                    name, node, ref_node, value_farads
+                    "{} {} {} {:.6e}\n",
+                    card_name, node, ref_node, value_farads
+                ));
+            }
+            super::types::ParasiticElement::CouplingCapacitance {
+                name,
+                node_a,
+                node_b,
+                value_farads,
+            } => {
+                netlist_str.push_str("* Lateral coupling capacitance\n");
+                let card_name = if name.starts_with('C') {
+                    name.clone()
+                } else {
+                    format!("C{}", name)
+                };
+                netlist_str.push_str(&format!(
+                    "{} {} {} {:.6e}\n",
+                    card_name, node_a, node_b, value_farads
                 ));
             }
         }

@@ -42,20 +42,28 @@
 * ========================================
 * EXTRACTED DEVICES
 * ========================================
-XC1 In Out GND sky130_fd_pr__cap_mim_m3_1 W=10.00u L=10.00u
+XC1 nIn_capm nOut_metal3_tr1_end GND sky130_fd_pr__cap_mim_m3_1 W=10.00u L=10.00u
 
 * ========================================
 * INTEGRATED TRACE PARASITICS
 * ========================================
+* Via/Contact resistance
+Rvia_In_capm_metal4 nIn_metal4 nIn_capm 4.405673e1
 * Trace resistance
-RRtr_In_0 nIn_entry In 5.339645e-1
+Rtr_In_0_0 nIn_metal4 In 5.339645e-1
 * Ground capacitance
-CCgnd_In_0 In GND 3.315008e-16
+Cgnd_In_0_0 In GND 3.315008e-16
 * Trace resistance
-RRtr_Out_0 nOut_entry Out 3.337278e-1
+Rtr_Out_1_0 Out nOut_metal3_tr1_end 3.337278e-1
 * Ground capacitance
-CCgnd_Out_0 Out GND 2.071880e-16
+Cgnd_Out_1_0 nOut_metal3_tr1_end GND 2.071880e-16
+* Ground capacitance
+Cgnd_pour_Top_Contact_Metal4 nIn_metal4 GND 3.683342e-17
+* Ground capacitance
+Cgnd_pour_Out_Pad Out GND 9.208355e-16
+* Ground capacitance
+Cgnd_pour_In_Pad In GND 9.208355e-16
 
-* Total parasitic elements: 4
+* Total parasitic elements: 8
 
 .end

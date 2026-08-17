@@ -1,4 +1,4 @@
-//! Shape dimension resolution for shape-based plane placement (v0.1.9
+﻿//! Shape dimension resolution for shape-based plane placement (v0.1.9
 //! middle-level syntax).
 
 use super::super::super::errors::IrError;
@@ -27,14 +27,14 @@ pub fn resolve_shape_dimensions(
             shape: shape_inst.shape_name.clone(),
         })?;
 
-    eprintln!(
-        "[SHAPE DEBUG] Resolving dimensions for shape: {}",
-        shape_inst.shape_name
-    );
-    eprintln!(
-        "[SHAPE DEBUG] Parameters count: {}",
-        shape_inst.parameters.len()
-    );
+//     eprintln!(
+//         "[SHAPE DEBUG] Resolving dimensions for shape: {}",
+//         shape_inst.shape_name
+//     );
+//     eprintln!(
+//         "[SHAPE DEBUG] Parameters count: {}",
+//         shape_inst.parameters.len()
+//     );
 
     let mut eval_params: Vec<(String, i64)> = Vec::new();
     let mut width_nm = None;
@@ -42,7 +42,7 @@ pub fn resolve_shape_dimensions(
 
     for param in &shape_inst.parameters {
         let Parameter::Keyword { name, value } = param;
-        eprintln!("[SHAPE DEBUG] Processing parameter: {} = {:?}", name, value);
+//         eprintln!("[SHAPE DEBUG] Processing parameter: {} = {:?}", name, value);
 
         let value_nm = evaluate_parameter_nm(
             &shape_inst.shape_name,
@@ -56,11 +56,11 @@ pub fn resolve_shape_dimensions(
 
         match name.as_str() {
             "w" | "width" => {
-                eprintln!("[SHAPE DEBUG] Setting width = {}nm", value_nm);
+//                 eprintln!("[SHAPE DEBUG] Setting width = {}nm", value_nm);
                 width_nm = Some(value_nm);
             }
             "h" | "height" => {
-                eprintln!("[SHAPE DEBUG] Setting height = {}nm", value_nm);
+//                 eprintln!("[SHAPE DEBUG] Setting height = {}nm", value_nm);
                 height_nm = Some(value_nm);
             }
             _ => {}
@@ -72,10 +72,10 @@ pub fn resolve_shape_dimensions(
     if width_nm.is_none() || height_nm.is_none() {
         if let Some(ref csg_expr) = shape_def.csg {
             if let Some((evaluated_w, evaluated_h)) = evaluate_csg_extents(csg_expr, &eval_params) {
-                eprintln!(
-                    "[SHAPE DEBUG] Evaluated CSG geometry dimensions: {}nm x {}nm",
-                    evaluated_w, evaluated_h
-                );
+//                 eprintln!(
+//                     "[SHAPE DEBUG] Evaluated CSG geometry dimensions: {}nm x {}nm",
+//                     evaluated_w, evaluated_h
+//                 );
                 if width_nm.is_none() {
                     width_nm = Some(evaluated_w);
                 }
@@ -86,14 +86,14 @@ pub fn resolve_shape_dimensions(
         }
     }
 
-    eprintln!(
-        "[SHAPE DEBUG] Final: width={:?}, height={:?}",
-        width_nm, height_nm
-    );
+//     eprintln!(
+//         "[SHAPE DEBUG] Final: width={:?}, height={:?}",
+//         width_nm, height_nm
+//     );
 
     match (width_nm, height_nm) {
         (Some(w), Some(h)) => {
-            eprintln!("[SHAPE DEBUG] Returning dimensions: {}nm x {}nm", w, h);
+//             eprintln!("[SHAPE DEBUG] Returning dimensions: {}nm x {}nm", w, h);
             Ok((w, h))
         }
         _ => Err(IrError::ShapeResolutionFailed {
@@ -123,7 +123,7 @@ fn evaluate_parameter_nm(
                     reason: format!("Parameter '{}' has non-distance unit", param_name),
                 })?;
             let nm = pm / 1000; // Convert picometers to nanometers
-            eprintln!("[SHAPE DEBUG] Converted literal {}pm to {}nm", pm, nm);
+//             eprintln!("[SHAPE DEBUG] Converted literal {}pm to {}nm", pm, nm);
             Ok(nm)
         }
         ParameterValue::Expression(expr) => {
@@ -133,7 +133,7 @@ fn evaluate_parameter_nm(
                         shape: shape_name.into(),
                         reason: format!("Failed to evaluate parameter '{}': {}", param_name, e),
                     })?;
-            eprintln!("[SHAPE DEBUG] Evaluated expression to {}nm", nm);
+//             eprintln!("[SHAPE DEBUG] Evaluated expression to {}nm", nm);
             Ok(nm)
         }
         _ => Err(IrError::ShapeResolutionFailed {

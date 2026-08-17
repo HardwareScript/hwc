@@ -82,13 +82,14 @@ space Simple_Capacitor_Space implements SimpleCapacitor:
     # The bulk terminal must be tied to GND for proper substrate coupling
     # This is a virtual terminal that doesn't correspond to physical MIM geometry
     # but is required by the PDK model for substrate effects
-    # Positioned in corner, away from capacitor structure
+    # Positioned in corner, away from capacitor structure, using relational placement
     # ========================================================================
     add pour(Aluminum) named Bulk_Tie on layer: metal1:
         device: C1.b
         net: GND
         dimensions: 1.0um by 1.0um
-        at: [x: 2.0um, y: 2.0um]
+        align: left with Bottom_Plate.left - 10.0um
+        align: bottom with Bottom_Plate.bottom - 6.0um
 
     # ========================================================================
     # 4. RELATIONAL TERMINAL CONTACTS

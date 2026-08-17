@@ -1,4 +1,4 @@
-use super::super::layer::SymbolTable;
+﻿use super::super::layer::SymbolTable;
 use hwc_parser::{
     logic::{EnumDefinition, LogicDefinition, StructDefinition},
     BridgeDefinition, ComponentDefinition, InterfaceDefinition, MaterialAliasDefinition,
@@ -17,13 +17,13 @@ impl SymbolTable {
     pub fn register_import_space(&mut self, def: SpaceDefinition) {
         let name_str = def.name.as_str().to_string();
 
-        eprintln!(
-            "[DEBUG] register_import_space called for space: {}",
-            name_str
-        );
+//         eprintln!(
+//             "[DEBUG] register_import_space called for space: {}",
+//             name_str
+//         );
 
         if self.hpm.is_empty() {
-            eprintln!("[DEBUG] HPM is empty, creating new layer");
+//             eprintln!("[DEBUG] HPM is empty, creating new layer");
             self.hpm.push(super::super::layer::SymbolLayer::new());
         }
 
@@ -35,11 +35,11 @@ impl SymbolTable {
                 Definition::Space(id)
             });
 
-        eprintln!(
-            "[DEBUG] Space '{}' registered in HPM layer. Total HPM layers: {}",
-            name_str,
-            self.hpm.len()
-        );
+//         eprintln!(
+//             "[DEBUG] Space '{}' registered in HPM layer. Total HPM layers: {}",
+//             name_str,
+//             self.hpm.len()
+//         );
     }
 
     /// Register an imported bridge definition (in HPM layer) (v0.2.0)

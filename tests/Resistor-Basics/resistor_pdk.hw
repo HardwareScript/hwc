@@ -1,7 +1,7 @@
 # resistor_pdk.hw - SkyWater SKY130 Resistor PDK
 # Device: sky130_fd_pr__res_high_po (P+ Poly Precision Resistor, 350 Ω/□)
 import * from @std/primitives/units
-import Polysilicon, Aluminum, Tungsten, Titanium_Silicide, Silicon_Dioxide, Air, Resistor_Poly_Mask, P_Plus_Diffusion from "./materials"
+import Polysilicon, Aluminum, Tungsten, Titanium_Silicide, Silicon_Dioxide, Air, Resistor_Poly_Mask, P_Plus_Diffusion, P_Plus_Implant_Mask, N_Plus_Implant_Mask, Tap_Mask from "./materials"
 
 export Polysilicon
 export Aluminum
@@ -11,6 +11,9 @@ export Silicon_Dioxide
 export Air
 export Resistor_Poly_Mask
 export P_Plus_Diffusion
+export P_Plus_Implant_Mask
+export N_Plus_Implant_Mask
+export Tap_Mask
 
 export shape SquareContact(width: Measurement):
     geometry:
@@ -36,19 +39,21 @@ export bridge P_Plus_Diffusion to Titanium_Silicide:
     thickness: 5nm
     fill: Tungsten
 
-# SKY130-compliant layer stackup with local interconnect (li1)
+# SKY130-compliant layer stackup with local interconnect (li1) and fabrication masks
 export profile Resistor_3D:
     technology: "ASIC"
     substrate_net: GND
     
     stackup:
-        pdiff:      [material: P_Plus_Diffusion,   thickness: 200nm, routable: true]
-        polyres:    [material: Polysilicon,        thickness: 180nm, routable: true]
-        rpm:        [material: Resistor_Poly_Mask, thickness: 0nm,   routable: false] # Zero-thickness mask layer
-        ild0:       [material: Silicon_Dioxide,    thickness: 200nm, routable: false]
-        li1:        [material: Titanium_Silicide,  thickness: 100nm, routable: true]
-        ild1:       [material: Silicon_Dioxide,    thickness: 150nm, routable: false]
-        metal1:     [material: Aluminum,           thickness: 360nm, routable: true]
+        tap:        [material: Tap_Mask,            thickness: 0nm,   routable: false] # Zero-thickness substrate tap boundary mask (GDS 65/44)
+        psdm:       [material: P_Plus_Implant_Mask, thickness: 0nm,   routable: false] # Zero-thickness P+ implant mask (GDS 94/20)
+        pdiff:      [material: P_Plus_Diffusion,    thickness: 200nm, routable: true]
+        polyres:    [material: Polysilicon,         thickness: 180nm, routable: true]
+        rpm:        [material: Resistor_Poly_Mask,  thickness: 0nm,   routable: false] # Zero-thickness silicide block mask (GDS 86/20)
+        ild0:       [material: Silicon_Dioxide,     thickness: 200nm, routable: false]
+        li1:        [material: Titanium_Silicide,   thickness: 100nm, routable: true]
+        ild1:       [material: Silicon_Dioxide,     thickness: 150nm, routable: false]
+        metal1:     [material: Aluminum,            thickness: 360nm, routable: true]
 
     manufacturing:
         track_pitch: 10nm
@@ -112,7 +117,7 @@ export subcircuit sky130_fd_pr__res_high_po:
     elements:
         R_head: Resistor(nodes: [A, node_1], value: 362.0ohm)
         R_tail: Resistor(nodes: [node_2, B], value: 362.0ohm)
-        R_body: Resistor(nodes: [node_1, node_2], value: 350.0ohm * (L / W))
+        R_body: Resistor(nodes: [node_1, node_2], value: 350.0ohm * (L / W), tc1: -1.47e-3, tc2: 2.7e-6, vc1: -3.2e-4, vc2: 1.8e-5)
         C_sub1: Capacitor(nodes: [A, BULK], value: 2.0fF * W * L)
         C_sub2: Capacitor(nodes: [B, BULK], value: 2.0fF * W * L)
 

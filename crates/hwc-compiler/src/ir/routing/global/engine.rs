@@ -1,4 +1,4 @@
-use super::builder::RoutingData;
+﻿use super::builder::RoutingData;
 use super::config::AutoRouter;
 use crate::ir::errors::IrError;
 use hwc_engine::geometry::Point3D;
@@ -32,7 +32,7 @@ impl<'a> AutoRouter<'a> {
         for intent_name in data.net_intents.values() {
             if !geo_router.has_intent_composer(intent_name.as_str()) {
                 // CIR Phase 2.2: Look up intent from profile-declared intents.
-                // No hardcoded intents — everything comes from user-facing .hw files.
+                // No hardcoded intents â€” everything comes from user-facing .hw files.
                 let intent = self
                     .profile
                     .and_then(|p| p.intents.iter().find(|pi| pi.name.name == *intent_name))
@@ -173,16 +173,16 @@ impl<'a> AutoRouter<'a> {
                     start_normal,
                     goal_normal,
                 }) => {
-                    eprintln!("[ENGINE DEBUG] Route {} ({}): boundary resolution returned start=({},{},{}), goal=({},{},{})",
-                        idx, resolved.net_name, start.x, start.y, start.z, goal.x, goal.y, goal.z);
+//                     eprintln!("[ENGINE DEBUG] Route {} ({}): boundary resolution returned start=({},{},{}), goal=({},{},{})",
+//                         idx, resolved.net_name, start.x, start.y, start.z, goal.x, goal.y, goal.z);
 
                     let target_z = self.space.routing_layer_db.get_routing_z(&resolved.layer_name).ok();
                     explicit_segments.push((resolved.net_id, vec![start, goal], target_z));
 
-                    eprintln!(
-                        "[ENGINE DEBUG] Route {} ({}): pushed to explicit_segments",
-                        idx, resolved.net_name
-                    );
+//                     eprintln!(
+//                         "[ENGINE DEBUG] Route {} ({}): pushed to explicit_segments",
+//                         idx, resolved.net_name
+//                     );
 
                     // Normals are already i32 unit vectors scaled by 10^9
                     let start_normal_2d =
@@ -300,22 +300,10 @@ impl<'a> AutoRouter<'a> {
 
         let net_trace_widths_by_id = self.build_net_trace_widths(data);
 
-        eprintln!(
-            "[ENGINE DEBUG] About to call route_space with {} explicit segments:",
-            explicit_segments.len()
-        );
-        for (i, (net_id, points, target_z)) in explicit_segments.iter().enumerate() {
-            eprintln!(
-                "[ENGINE DEBUG]   Segment {} (net {:?}, target_z={:?}): {} points",
-                i,
-                net_id,
-                target_z,
-                points.len()
-            );
-            for (j, p) in points.iter().enumerate() {
-                eprintln!("[ENGINE DEBUG]     Point {}: ({},{},{})", j, p.x, p.y, p.z);
-            }
-        }
+//         eprintln!(
+//             "[ENGINE DEBUG] About to call route_space with {} explicit segments:",
+//             explicit_segments.len()
+//         );
 
         // Snapshot substrate layers from the entity graph before passing a mutable
         // borrow of the entity graph to route_space (avoids an aliasing borrow).

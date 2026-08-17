@@ -1,4 +1,4 @@
-//! Device Registry Population (v0.2.1)
+﻿//! Device Registry Population (v0.2.1)
 //!
 //! Populates the HardwareSpace.device_instances registry during compilation.
 //! This is the PROPER ARCHITECTURE - devices are discovered and stored once
@@ -19,7 +19,7 @@ pub fn populate_device_instances(
     symbol_table: &SymbolTable,
     space_def: Option<&hwc_parser::ast::SpaceDefinition>,
 ) -> Result<(), IrError> {
-    println!("   ├─ Populating device instance registry...");
+    println!("   â”œâ”€ Populating device instance registry...");
 
     // Step 1: Group pours by device instance name
     let mut device_groups: FxHashMap<CompactString, Vec<&PourMetadata>> = FxHashMap::default();
@@ -49,10 +49,10 @@ pub fn populate_device_instances(
                 .map_or(hwc_engine::space::BindingPriority::default(), |b| b.priority)
         });
 
-        println!("      ├─ Device '{}': Processing {} pours in priority order:", device_name, sorted_pours.len());
+        println!("      â”œâ”€ Device '{}': Processing {} pours in priority order:", device_name, sorted_pours.len());
         for pour in &sorted_pours {
             if let Some(ref binding) = pour.device_binding {
-                println!("      │  Pour '{}': priority={:?}, terminals={:?}, net={:?}", 
+                println!("      â”‚  Pour '{}': priority={:?}, terminals={:?}, net={:?}", 
                     pour.name, binding.priority, binding.terminals, pour.net);
             }
         }
@@ -87,12 +87,12 @@ pub fn populate_device_instances(
                         if binding.priority == hwc_engine::space::BindingPriority::Contact {
                             // Contact pour: Always set the net (contact heads have priority)
                             terminal_nets.insert(terminal.clone(), net.clone());
-                            println!("      │  Terminal '{}': Contact pour '{}' set net {:?} -> {:?}", 
+                            println!("      â”‚  Terminal '{}': Contact pour '{}' set net {:?} -> {:?}", 
                                 terminal, pour.name, before, net);
                         } else {
                             // Channel pour: Only set if not already defined by a contact
                             terminal_nets.entry(terminal.clone()).or_insert(net.clone());
-                            println!("      │  Terminal '{}': Channel pour '{}' set net {:?} -> {:?} (if not already set)", 
+                            println!("      â”‚  Terminal '{}': Channel pour '{}' set net {:?} -> {:?} (if not already set)", 
                                 terminal, pour.name, before, terminal_nets.get(terminal));
                         }
                     }
@@ -118,7 +118,7 @@ pub fn populate_device_instances(
                         terminal_materials.insert(terminal_name.clone(), "Air".into());
                         
                         println!(
-                            "      ├─ Device '{}' virtual terminal '{}' → net '{}'",
+                            "      â”œâ”€ Device '{}' virtual terminal '{}' â†’ net '{}'",
                             device_name, terminal_name, net_name
                         );
                     }
@@ -178,13 +178,13 @@ pub fn populate_device_instances(
         };
 
         println!(
-            "      ├─ Registered device '{}' of type '{}' with {} terminals",
+            "      â”œâ”€ Registered device '{}' of type '{}' with {} terminals",
             device_instance.name,
             device_instance.device_type,
             device_instance.terminals.len()
         );
         println!(
-            "      │  Terminal net mappings: {:?}",
+            "      â”‚  Terminal net mappings: {:?}",
             device_instance.terminal_nets
         );
 
@@ -192,7 +192,7 @@ pub fn populate_device_instances(
     }
 
     println!(
-        "   ├─ Device registry populated: {} devices",
+        "   â”œâ”€ Device registry populated: {} devices",
         space.device_instances.len()
     );
     Ok(())
@@ -302,7 +302,7 @@ fn calculate_device_parameters(
 /// NO HARDCODING - all extraction logic is driven by the device definition.
 fn extract_device_parameters_from_space(
     device_type: &str,
-    device_name: &CompactString,
+    _device_name: &CompactString,
     _terminals: &[CompactString],
     _space: &hwc_engine::HardwareSpace,
     symbol_table: Option<&crate::SymbolTable>,
@@ -311,14 +311,14 @@ fn extract_device_parameters_from_space(
 
     // Get device definition to see what parameters are needed
     let Some(symbol_table) = symbol_table else {
-        eprintln!("[PARAM EXTRACTION] No symbol table provided for device '{}'", device_name);
+//         eprintln!("[PARAM EXTRACTION] No symbol table provided for device '{}'", device_name);
         return parameters;
     };
 
     let device_def = match symbol_table.get_device(device_type) {
         Ok(def) => def,
         Err(_) => {
-            eprintln!("[PARAM EXTRACTION] Device type '{}' not found in symbol table", device_type);
+//             eprintln!("[PARAM EXTRACTION] Device type '{}' not found in symbol table", device_type);
             return parameters;
         }
     };
@@ -326,7 +326,7 @@ fn extract_device_parameters_from_space(
     // Get the SPICE parameters list from the device definition
     let spice_params = &device_def.spice_info.as_ref().map(|s| &s.parameters);
     let Some(_param_names) = spice_params else {
-        eprintln!("[PARAM EXTRACTION] Device '{}' has no SPICE parameters defined", device_type);
+//         eprintln!("[PARAM EXTRACTION] Device '{}' has no SPICE parameters defined", device_type);
         return parameters;
     };
 
@@ -337,10 +337,10 @@ fn extract_device_parameters_from_space(
     // system in hwc-export/src/device_extractor/parameter_extraction.rs
     //
     // The legacy system had critical flaws:
-    // 1. Measured width as "minimum across all pours" → extracted contact pad width (400nm)
-    //    instead of resistor body width (1μm)
-    // 2. No material awareness → couldn't distinguish resistive channel from contacts
-    // 3. Silent success with wrong data → no error detection for missing geometry
+    // 1. Measured width as "minimum across all pours" â†’ extracted contact pad width (400nm)
+    //    instead of resistor body width (1Î¼m)
+    // 2. No material awareness â†’ couldn't distinguish resistive channel from contacts
+    // 3. Silent success with wrong data â†’ no error detection for missing geometry
     //
     // The new registry-based system:
     // - Filters pours by material properties (resistive vs contact materials)
@@ -350,11 +350,11 @@ fn extract_device_parameters_from_space(
     // TODO: Remove this entire function once migration is complete (v0.3.0)
     // ============================================================================
     
-    eprintln!(
-        "[PARAM EXTRACTION] Legacy hardcoded extraction DISABLED for device '{}'. \
-         Parameters will be extracted by the registry-based system.",
-        device_name
-    );
+//     eprintln!(
+//         "[PARAM EXTRACTION] Legacy hardcoded extraction DISABLED for device '{}'. \
+//          Parameters will be extracted by the registry-based system.",
+//         device_name
+//     );
 
     parameters
 }

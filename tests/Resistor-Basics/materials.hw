@@ -1,4 +1,4 @@
-# materials.hw - SKY130 Material Definitions
+# materials.hw - SKY130 Material Definitions for Resistor Basics
 import * from @std/primitives/units
 
 export material Polysilicon:
@@ -72,6 +72,33 @@ export material Resistor_Poly_Mask:
     symbol: RPM
     properties:
         color: "#FF4040"
+        opacity: 0.3
+
+# PSDM (P+ Source/Drain Implant Mask) - GDS 94/20
+# Directs P-type dopant (Boron) implantation into diff and poly
+export material P_Plus_Implant_Mask:
+    category: mask
+    symbol: PSDM
+    properties:
+        color: "#FF80FF"
+        opacity: 0.3
+
+# NSDM (N+ Source/Drain Implant Mask) - GDS 93/44
+# Directs N-type dopant (Phosphorus/Arsenic) implantation into diff and poly
+export material N_Plus_Implant_Mask:
+    category: mask
+    symbol: NSDM
+    properties:
+        color: "#80FFFF"
+        opacity: 0.3
+
+# TAP (Substrate / Well Tap Identification Mask) - GDS 65/44
+# Defines ohmic contact boundary to P-substrate / N-well
+export material Tap_Mask:
+    category: mask
+    symbol: TAP
+    properties:
+        color: "#80FF80"
         opacity: 0.3
 
 # P+ Diffusion for Substrate/Bulk Taps

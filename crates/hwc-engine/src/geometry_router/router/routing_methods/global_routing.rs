@@ -374,21 +374,7 @@ impl GeometryRouter {
                 let routed = self.route_net_global(entity_graph, &route)?;
 
                 if let Some(path) = routed.paths.first() {
-                    eprintln!(
-                        "[EXPLICIT_GLOBAL DEBUG]   Returned path length: {}",
-                        path.len()
-                    );
-                    for (j, p) in path.iter().enumerate().take(4) {
-                        eprintln!(
-                            "[EXPLICIT_GLOBAL DEBUG]   path[{}]: ({},{},{})",
-                            j, p.x, p.y, p.z
-                        );
-                    }
                     if path.len() > 4 {
-                        eprintln!(
-                            "[EXPLICIT_GLOBAL DEBUG]   ... and {} more points",
-                            path.len() - 4
-                        );
                     }
                 }
                 if let Some(path) = routed.paths.into_iter().next() {
@@ -403,27 +389,6 @@ impl GeometryRouter {
 
             result.paths.entry(*net_id).or_default().push(net_path);
             result.vias.extend(net_vias);
-        }
-
-        for (net_id, path_segments) in &result.paths {
-            eprintln!(
-                "[EXPLICIT_GLOBAL DEBUG]   Net {:?}: {} segments",
-                net_id,
-                path_segments.len()
-            );
-            for (seg_idx, segment) in path_segments.iter().enumerate() {
-                eprintln!(
-                    "[EXPLICIT_GLOBAL DEBUG]     Segment {}: {} points",
-                    seg_idx,
-                    segment.len()
-                );
-                for (pt_idx, pt) in segment.iter().enumerate().take(2) {
-                    eprintln!(
-                        "[EXPLICIT_GLOBAL DEBUG]       Point {}: ({},{},{})",
-                        pt_idx, pt.x, pt.y, pt.z
-                    );
-                }
-            }
         }
 
         Ok(result)

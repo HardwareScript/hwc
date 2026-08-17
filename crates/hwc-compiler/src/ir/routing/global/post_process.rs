@@ -70,14 +70,11 @@ impl<'a> AutoRouter<'a> {
                     continue;
                 }
 
-                eprintln!(
-                    "[POST_PROCESS DEBUG] Net {:?} topological path (len={}):",
-                    net_id_raw,
-                    path.len()
-                );
-                for (i, p) in path.iter().enumerate().take(5) {
-                    eprintln!("[POST_PROCESS DEBUG]   [{}]: ({},{},{})", i, p.x, p.y, p.z);
-                }
+//                 eprintln!(
+//                     "[POST_PROCESS DEBUG] Net {:?} topological path (len={}):",
+//                     net_id_raw,
+//                     path.len()
+//                 );
 
                 // Process un-mitered path: refine Z & vertical transitions
                 let (refined_path, actual_thickness) =
@@ -171,7 +168,7 @@ impl<'a> AutoRouter<'a> {
         // Step 2: Run Hierarchical Legalizer (QP/Nudge) with full obstacle spatial index
         self.run_legalization(data)?;
 
-        // Step 3: Run 45° Miter Pass AFTER Legalization completes
+        // Step 3: Run 45Â° Miter Pass AFTER Legalization completes
         self.apply_post_legalization_mitering()?;
 
         // Step 4: Configure spatial & rebuild analytic routes for export
@@ -188,43 +185,60 @@ impl<'a> AutoRouter<'a> {
         let trace_width = self.require_trace_width()?;
         let miter_engine = hwc_engine::MiterEngine::new(trace_width);
 
-        // Step 1: Extract parent trace paths first to avoid simultaneous mutable & immutable borrow of self.space
+        // Step 1: Extract parent trace segment chains to avoid simultaneous mutable & immutable borrow of self.space.
+        // Trace segments are grouped into contiguous chains so disconnected routes or branches on the same net
+        // are not incorrectly connected into a single false path.
         let parent_traces: Vec<_> = self
             .space
             .routing_database
             .get_parent_interconnects()
             .iter()
             .map(|trace| {
-                let mut path = Vec::with_capacity(trace.segments.len() + 1);
-                if let Some(first) = trace.segments.first() {
-                    path.push(first.start);
-                }
+                let mut chains: Vec<Vec<Point3D>> = Vec::new();
+                let mut current_chain: Vec<Point3D> = Vec::new();
+
                 for seg in &trace.segments {
-                    if path.last() != Some(&seg.end) {
-                        path.push(seg.end);
+                    if current_chain.is_empty() {
+                        current_chain.push(seg.start);
+                        current_chain.push(seg.end);
+                    } else if current_chain.last() == Some(&seg.start) {
+                        current_chain.push(seg.end);
+                    } else {
+                        chains.push(current_chain);
+                        current_chain = vec![seg.start, seg.end];
                     }
                 }
-                (trace.net_id, path)
+                if !current_chain.is_empty() {
+                    chains.push(current_chain);
+                }
+
+                (trace.net_id, chains)
             })
             .collect();
 
         let mut mitered_segments_by_net = rustc_hash::FxHashMap::default();
 
-        // Step 2: Apply context-aware mitering using immutable reference to self.space
-        for (net_id, path) in parent_traces {
-            if path.len() < 3 {
-                continue;
-            }
-
-            let mitered_path = miter_engine.apply_miter_pass_with_context(
-                &path,
-                &*self.space as &dyn hwc_engine::geometry_router::miter_pass::MiterContext,
-                Some(net_id),
-            );
-
+        // Step 2: Apply context-aware mitering per contiguous chain
+        for (net_id, chains) in parent_traces {
             let mut new_segments = Vec::new();
-            for window in mitered_path.windows(2) {
-                new_segments.push(hwc_engine::space::LineSegment::new(window[0], window[1]));
+
+            for chain in chains {
+                if chain.len() < 3 {
+                    for window in chain.windows(2) {
+                        new_segments.push(hwc_engine::space::LineSegment::new(window[0], window[1]));
+                    }
+                    continue;
+                }
+
+                let mitered_path = miter_engine.apply_miter_pass_with_context(
+                    &chain,
+                    &*self.space as &dyn hwc_engine::geometry_router::miter_pass::MiterContext,
+                    Some(net_id),
+                );
+
+                for window in mitered_path.windows(2) {
+                    new_segments.push(hwc_engine::space::LineSegment::new(window[0], window[1]));
+                }
             }
 
             if !new_segments.is_empty() {
@@ -428,7 +442,7 @@ impl<'a> AutoRouter<'a> {
                 hint: "Add 'trace:' block with min_spacing_nm.".into(),
             })?;
 
-        eprintln!("[LEGALIZATION] Running hierarchical post-routing legalization");
+//         eprintln!("[LEGALIZATION] Running hierarchical post-routing legalization");
 
         // Step 1: Extract parent and child segments from routing database
         let (parent_segments, parent_net_ids) = self
@@ -441,17 +455,11 @@ impl<'a> AutoRouter<'a> {
             .routing_database
             .get_child_segments_for_legalization();
 
-        let mut obstacle_count_substrate = 0;
-        let mut obstacle_count_contact = 0;
-        let mut obstacle_count_via = 0;
-        let mut obstacle_count_keepout = 0;
-
         // Add substrate layers (pours, pads, bulk taps, diffusions) as frozen obstacles
         for layer in self.space.entity_graph.get_substrate_layers().iter() {
             let (seg, net_id) = bbox_to_frozen_segment(&layer.bbox, layer.net, layer.material);
             child_segments.push(seg);
             child_net_ids.push(net_id);
-            obstacle_count_substrate += 1;
         }
 
         // Add contacts as frozen obstacles
@@ -470,7 +478,6 @@ impl<'a> AutoRouter<'a> {
                 let (seg, net) = bbox_to_frozen_segment(&bbox, net_id, mat_id);
                 child_segments.push(seg);
                 child_net_ids.push(net);
-                obstacle_count_contact += 1;
             }
         }
 
@@ -492,7 +499,6 @@ impl<'a> AutoRouter<'a> {
             let (seg, net) = bbox_to_frozen_segment(&bbox, via.net_id, via.material_id);
             child_segments.push(seg);
             child_net_ids.push(net);
-            obstacle_count_via += 1;
         }
 
         // Add keepout zones as frozen obstacles
@@ -500,33 +506,11 @@ impl<'a> AutoRouter<'a> {
             let (seg, net) = bbox_to_frozen_segment(bbox, hwc_engine::netlist::NetId::UNCONNECTED, 0);
             child_segments.push(seg);
             child_net_ids.push(net);
-            obstacle_count_keepout += 1;
         }
 
-        eprintln!(
-            "[OBSTACLE-DEBUG]   {} substrate layers",
-            obstacle_count_substrate
-        );
-        eprintln!(
-            "[OBSTACLE-DEBUG]   {} contacts",
-            obstacle_count_contact
-        );
-        eprintln!(
-            "[OBSTACLE-DEBUG]   {} vias",
-            obstacle_count_via
-        );
-        eprintln!(
-            "[OBSTACLE-DEBUG]   {} keepout zones",
-            obstacle_count_keepout
-        );
-        eprintln!(
-            "[LEGALIZATION] Fetched {} parent segments, {} child/obstacle segments (frozen)",
-            parent_segments.len(),
-            child_segments.len()
-        );
-
+        
         if parent_segments.is_empty() {
-            eprintln!("[LEGALIZATION] No parent routes to legalize - skipping");
+//             eprintln!("[LEGALIZATION] No parent routes to legalize - skipping");
             return Ok(());
         }
 
@@ -587,10 +571,10 @@ impl<'a> AutoRouter<'a> {
             ));
         }
 
-        eprintln!(
-            "[LEGALIZATION] Built spatial index with {} segments",
-            spatial_index.len()
-        );
+//         eprintln!(
+//             "[LEGALIZATION] Built spatial index with {} segments",
+//             spatial_index.len()
+//         );
 
         // Step 3: Run hierarchical legalization
         // **Flaw 1 Fix: spatial_index is MOVED (owned) so legalize_hierarchical can rebuild it
@@ -603,14 +587,14 @@ impl<'a> AutoRouter<'a> {
             &parent_net_ids,
             &child_segments,
             &child_net_ids,
-            spatial_index,        // ← moved (not borrowed) — Flaw 1 Fix
+            spatial_index,        // â† moved (not borrowed) â€” Flaw 1 Fix
             max_iterations,
         );
 
-        eprintln!(
-            "[LEGALIZATION] Legalization complete: {} parent segments processed",
-            legalized_parent.len()
-        );
+//         eprintln!(
+//             "[LEGALIZATION] Legalization complete: {} parent segments processed",
+//             legalized_parent.len()
+//         );
 
         // Step 4: Dynamic Via and Port/Docking Sliding
         let mut shifted_vias = Vec::new();
@@ -718,7 +702,7 @@ impl<'a> AutoRouter<'a> {
             }
         }
 
-        // **Step 4b: Synchronise shifted contact bboxes → EntityGraph**
+        // **Step 4b: Synchronise shifted contact bboxes â†’ EntityGraph**
         if !shifted_contacts.is_empty() {
             use hwc_engine::geometry_router::substrate_types::SubstrateLayerType;
             let grid = self.space.manufacturing_grid_nm;
@@ -749,7 +733,7 @@ impl<'a> AutoRouter<'a> {
             }
         }
 
-        // **Step 4c: Synchronise shifted via positions → EntityGraph**
+        // **Step 4c: Synchronise shifted via positions â†’ EntityGraph**
         if !shifted_vias.is_empty() {
             use hwc_engine::geometry_router::substrate_types::SubstrateLayerType;
             let grid = self.space.manufacturing_grid_nm;
@@ -789,7 +773,7 @@ impl<'a> AutoRouter<'a> {
                 &self.space.routing_layer_db,
             );
 
-        eprintln!("[LEGALIZATION] Parent routes updated in routing database");
+//         eprintln!("[LEGALIZATION] Parent routes updated in routing database");
 
         Ok(())
     }

@@ -2,6 +2,7 @@
 //!
 //! This module implements EXPLICIT INTENT-BASED device extraction.
 
+pub mod continuity;
 pub mod error;
 pub mod extracted;
 pub mod geometry;
@@ -10,6 +11,10 @@ pub mod parameter_extraction;
 pub mod spice;
 pub mod validation;
 
+pub use continuity::{
+    ChannelContinuityReport, ChannelElement, ChannelIsland, ChannelNodeId, DeviceChannelGraph,
+    DeviceTopologyValidator,
+};
 pub use error::DeviceExtractionError;
 pub use extracted::ExtractedDevices;
 pub use spice::format_spice;
@@ -466,6 +471,7 @@ impl<'a> DeviceExtractor<'a> {
         // The spice.prefix is the single source of truth.
 
         self.validate_device_materials(device_name, device_type, terminal_pours)?;
+        self.validate_device_channel_continuity(device_name, device_type, terminal_pours)?;
 
         let terminal_pours_map: FxHashMap<CompactString, String> = terminal_pours
             .iter()

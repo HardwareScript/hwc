@@ -14,7 +14,8 @@
 # 1. Loop-based segment generation (for i in 0..5)
 # 2. Conditional geometry placement (if i mod 2 = 0)
 # 3. Inline coordinate expressions with proper device bindings
-# 4. Via arrays for low contact resistance and uniform current distribution
+# 4. SKY130 fabrication mask compliance (RPM, PSDM, TAP)
+# 5. Physical substrate tap with complete mask stack
 #
 # This design: 5 horizontal segments (10μm each) + 4 vertical connectors (2μm each)
 # Pitch: 3μm center-to-center between parallel segments (provides 2μm clearance)
@@ -92,7 +93,7 @@ space Serpentine_Resistor_Space_V2 implements SerpentineResistor:
     
     # 1c. Generate 4 Vertical Connectors (Aligned to Seg0 edges)
     # Connectors positioned to overlap adjacent segments, alternating left/right
-    for i in 0..3:
+    for i in 0..4:
         if i mod 2 = 0:
             add pour(Polysilicon) named Vert{i} on layer: polyres:
                 dimensions: vert_width by vert_len
@@ -111,13 +112,19 @@ space Serpentine_Resistor_Space_V2 implements SerpentineResistor:
     # This mask blocks silicide formation on the polysilicon resistor body
     # Category: mask → Z-thickness = 0nm, anchored to Z=180nm (top of polyres)
     # Exported to GDSII for fabrication, skipped in DXF/GLB by structural filter
-    # SKY130 DRC: rpm.1 requires ≥180nm enclosure on all sides (360nm total extension)
+    # SKY130 DRC: rpm.2 requires ≥180nm overhang on width (360nm total extension)
     # Total height: 5 segments @ 3μm pitch = 12μm + 1 segment height = 13μm
     # ========================================================================
     add pour(Resistor_Poly_Mask) named RPM_Serpentine on layer: rpm:
-        dimensions: seg_len + 360nm by 13.0um + 360nm
+        dimensions: seg_len by 13.0um + 360nm
         align: center_x with Seg2
         align: center_y with Seg2  # Center on Seg2 (middle of 5 segments)
+
+    # 1e. PSDM MASK (P+ Implant over Poly Resistor body with 130nm enclosure per SKY130 psdm.1/psdm.2)
+    add pour(P_Plus_Implant_Mask) named Serpentine_PSDM on layer: psdm:
+        dimensions: seg_len + 260nm by 13.0um + 260nm
+        align: center_x with Seg2
+        align: center_y with Seg2
     # ========================================================================
     # 2. TERMINAL CONTACTS (LEFT END OF BOTTOM SEGMENT → RIGHT END OF TOP)
     # Contact heads positioned at segment edges with mathematical precision
@@ -235,13 +242,27 @@ space Serpentine_Resistor_Space_V2 implements SerpentineResistor:
     # ========================================================================
     # 8. RELATIONAL SUBSTRATE TAP FOR BULK CONNECTION (SKY130 LVS Requirement)
     # Positioned relative to middle segment (Seg2) for central placement
-    # In SKY130, a proper substrate tap requires THREE layers:
-    #   1. P+ diffusion region (pdiff) - physical implant in substrate
-    #   2. Local interconnect contact (licon) - via connecting pdiff to li1
-    #   3. Local interconnect metal (li1) - connects to GND net
+    # In SKY130, a proper substrate tap requires FIVE layers:
+    #   1. TAP mask - substrate tap boundary mask (GDS 65/44)
+    #   2. PSDM mask - P+ implant mask (GDS 94/20)
+    #   3. P+ diffusion region (pdiff) - physical implant in substrate
+    #   4. Local interconnect contact (licon) - via connecting pdiff to li1
+    #   5. Local interconnect metal (li1) - connects to GND net
     # ========================================================================
     
-    # 8a. P+ DIFFUSION REGION (Physical substrate implant)
+    # 8a. TAP MASK (Substrate tap boundary mask - GDS 65/44)
+    add pour(Tap_Mask) named Bulk_Tap_Mask on layer: tap:
+        dimensions: tap_size by tap_size
+        align: center_x with Seg2
+        align: center_y with Seg2.center_y + 3.0um
+
+    # 8b. PSDM MASK (P+ implant mask with 130nm enclosure - GDS 94/20)
+    add pour(P_Plus_Implant_Mask) named Bulk_Tap_PSDM on layer: psdm:
+        dimensions: tap_size + 260nm by tap_size + 260nm
+        align: center_x with Seg2
+        align: center_y with Seg2.center_y + 3.0um
+
+    # 8c. P+ DIFFUSION REGION (Physical substrate implant)
     add pour(P_Plus_Diffusion) named Bulk_Tap_Diff on layer: pdiff:
         dimensions: tap_size by tap_size
         align: center_x with Seg2
@@ -249,18 +270,32 @@ space Serpentine_Resistor_Space_V2 implements SerpentineResistor:
         net: GND
         device: R1.BULK
     
-    # 8b. LOCAL INTERCONNECT CONTACT (licon - connects pdiff to li1)
+    # 8d. LOCAL INTERCONNECT CONTACT (licon - connects pdiff to li1)
     add contact(Tungsten) named Bulk_Tap_Contact spanning layer: pdiff to li1:
         diameter: 170nm
         align: center_x with Bulk_Tap_Diff
         align: center_y with Bulk_Tap_Diff
         net: GND
     
-    # 8c. LOCAL INTERCONNECT METAL (li1 layer)
+    # 8e. LOCAL INTERCONNECT METAL (li1 layer)
     add pour(Titanium_Silicide) named Bulk_Tap_LI on layer: li1:
         dimensions: tap_size by tap_size
         align: center_x with Bulk_Tap_Diff
         align: center_y with Bulk_Tap_Diff
+        net: GND
+
+    # 8f. METAL1 PAD (for improved connectivity)
+    add pour(Aluminum) named Bulk_Tap_Metal on layer: metal1:
+        dimensions: tap_size by tap_size
+        align: center_x with Bulk_Tap_LI
+        align: center_y with Bulk_Tap_LI
+        net: GND
+
+    # 8g. VIA (li1 to metal1)
+    add contact(Tungsten) named Bulk_Tap_Via spanning layer: li1 to metal1:
+        diameter: 170nm
+        align: center_x with Bulk_Tap_LI
+        align: center_y with Bulk_Tap_LI
         net: GND
 
 # ========================================================================

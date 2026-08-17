@@ -1,4 +1,4 @@
-use super::super::super::errors::IrError;
+﻿use super::super::super::errors::IrError;
 use super::super::context::{ComponentPlacementData, PlacementContext};
 use super::super::helpers::parse_rectangle_dimensions;
 use super::super::pour::place_pour;
@@ -62,7 +62,7 @@ fn offset_declarative_coord(
                     unit: hwc_parser::Unit::Millimeter,
                     span: *span,
                 },
-                // ✅ CRITICAL FIX: Do NOT add position.z offset for semantic layer declarations
+                // âœ… CRITICAL FIX: Do NOT add position.z offset for semantic layer declarations
                 // Internal geometry coordinates are component-relative in XY but absolute in Z
                 // when they have their own layer declaration
                 z: hwc_parser::Expression::Measurement {
@@ -425,7 +425,7 @@ pub fn unroll_internal_features(
                                     })
                             })()
                             .unwrap_or_else(|| panic!(
-                                "[VIA] FATAL: no material found for layer at z={}nm in stackup — declare stackup.layers with material in the PDK profile",
+                                "[VIA] FATAL: no material found for layer at z={}nm in stackup â€” declare stackup.layers with material in the PDK profile",
                                 absolute_z_nm
                             ));
 
@@ -547,8 +547,8 @@ pub fn unroll_internal_features(
                                 let p_max = anchor_z + copper_thickness;
 
                                 /*
-                                eprintln!("[DEBUG unroll] Pad '{}' (anchor={}) layer={:?} anchor_z={}nm -> thickness={}nm",
-                                    pour.name, anchor_name, layer_name, anchor_z, copper_thickness);
+//                                 eprintln!("[DEBUG unroll] Pad '{}' (anchor={}) layer={:?} anchor_z={}nm -> thickness={}nm",
+//                                     pour.name, anchor_name, layer_name, anchor_z, copper_thickness);
                                 */
 
                                 unrolled_pour.elevation = hwc_parser::Elevation::Physical {

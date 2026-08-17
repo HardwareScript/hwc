@@ -1,4 +1,4 @@
-//! Geometry routing: spatial index, path refinement, and segment creation.
+﻿//! Geometry routing: spatial index, path refinement, and segment creation.
 //!
 //! Phase 2 of the routing pipeline: builds the spatial index for obstacle
 //! detection, runs the topological router, and creates trace segments.
@@ -137,25 +137,19 @@ pub fn create_segments(
     _trace_width_nm: i64,
     profile: Option<&hwc_parser::ProfileDefinition>,
 ) -> Result<Vec<LineSegment>, IrError> {
-    eprintln!(
-        "[CREATE_SEGMENTS DEBUG] Called with {} waypoints:",
-        refined_path.len()
-    );
-    for (i, wp) in refined_path.iter().enumerate() {
-        eprintln!(
-            "[CREATE_SEGMENTS DEBUG]   refined_path[{}]: ({},{},{})",
-            i, wp.x, wp.y, wp.z
-        );
-    }
-    eprintln!(
-        "[CREATE_SEGMENTS DEBUG] start_boundary: ({},{},{})",
-        start_boundary.x, start_boundary.y, start_boundary.z
-    );
-    eprintln!(
-        "[CREATE_SEGMENTS DEBUG] goal_boundary: ({},{},{})",
-        goal_boundary.x, goal_boundary.y, goal_boundary.z
-    );
-    eprintln!("[CREATE_SEGMENTS DEBUG] target_z_nm: {:?}", target_z_nm);
+//     eprintln!(
+//         "[CREATE_SEGMENTS DEBUG] Called with {} waypoints:",
+//         refined_path.len()
+//     );
+//     eprintln!(
+//         "[CREATE_SEGMENTS DEBUG] start_boundary: ({},{},{})",
+//         start_boundary.x, start_boundary.y, start_boundary.z
+//     );
+//     eprintln!(
+//         "[CREATE_SEGMENTS DEBUG] goal_boundary: ({},{},{})",
+//         goal_boundary.x, goal_boundary.y, goal_boundary.z
+//     );
+//     eprintln!("[CREATE_SEGMENTS DEBUG] target_z_nm: {:?}", target_z_nm);
 
     let mut segs = Vec::new();
 
@@ -170,70 +164,58 @@ pub fn create_segments(
 
         if (pin_z - target_z).abs() > 50 {
             eprintln!(
-                "  ✅ Adding START via transition: {} -> {}",
+                "  âœ… Adding START via transition: {} -> {}",
                 pin_z, target_z
             );
             let start_up = Point3D::new(start_boundary.x, start_boundary.y, target_z);
             segs.push(hwc_engine::LineSegment::new(start_boundary, start_up));
         } else {
-            eprintln!("  ⏭️  Skipping START via: pin already on target layer");
+            eprintln!("  â­ï¸  Skipping START via: pin already on target layer");
         }
     }
 
     if refined_path.len() >= 2 {
         let min_seg_len_nm = crate::ir::routing::helpers::require_min_segment_length_nm(profile)?;
-        eprintln!(
-            "[CREATE_SEGMENTS DEBUG] Calling manhattan_path_to_segments with min_seg_len={}nm",
-            min_seg_len_nm
-        );
+//         eprintln!(
+//             "[CREATE_SEGMENTS DEBUG] Calling manhattan_path_to_segments with min_seg_len={}nm",
+//             min_seg_len_nm
+//         );
 
         // STRUCTURAL FIX: For 3D paths with Z transitions, create segments directly from waypoints
         // instead of using manhattan_path_to_segments which has buggy collinear logic for 3D
         let has_z_transitions = refined_path.windows(2).any(|w| w[0].z != w[1].z);
 
         if has_z_transitions {
-            eprintln!(
-                "[CREATE_SEGMENTS DEBUG] Path has Z transitions - creating segments directly"
-            );
+//             eprintln!(
+//                 "[CREATE_SEGMENTS DEBUG] Path has Z transitions - creating segments directly"
+//             );
             for i in 0..refined_path.len() - 1 {
                 segs.push(hwc_engine::LineSegment::new(
                     refined_path[i],
                     refined_path[i + 1],
                 ));
             }
-            eprintln!(
-                "[CREATE_SEGMENTS DEBUG] Created {} segments directly from waypoints",
-                segs.len()
-            );
+//             eprintln!(
+//                 "[CREATE_SEGMENTS DEBUG] Created {} segments directly from waypoints",
+//                 segs.len()
+//             );
         } else {
-            eprintln!("[CREATE_SEGMENTS DEBUG] Path is planar - using manhattan_path_to_segments");
+//             eprintln!("[CREATE_SEGMENTS DEBUG] Path is planar - using manhattan_path_to_segments");
             let path_segs = crate::ir::routing::helpers::manhattan_path_to_segments(
                 refined_path,
                 min_seg_len_nm,
             );
-            eprintln!(
-                "[CREATE_SEGMENTS DEBUG] manhattan_path_to_segments returned {} segments:",
-                path_segs.len()
-            );
-            for (i, seg) in path_segs.iter().enumerate() {
-                eprintln!(
-                    "[CREATE_SEGMENTS DEBUG]   seg[{}]: ({},{},{}) -> ({},{},{})",
-                    i, seg.start.x, seg.start.y, seg.start.z, seg.end.x, seg.end.y, seg.end.z
-                );
-            }
+//             eprintln!(
+//                 "[CREATE_SEGMENTS DEBUG] manhattan_path_to_segments returned {} segments:",
+//                 path_segs.len()
+//             );
             segs.extend(path_segs);
         }
 
-        eprintln!(
-            "[CREATE_SEGMENTS DEBUG] Final segment count: {}",
-            segs.len()
-        );
-        for (i, seg) in segs.iter().enumerate() {
-            eprintln!(
-                "[CREATE_SEGMENTS DEBUG]   final_seg[{}]: ({},{},{}) -> ({},{},{})",
-                i, seg.start.x, seg.start.y, seg.start.z, seg.end.x, seg.end.y, seg.end.z
-            );
-        }
+//         eprintln!(
+//             "[CREATE_SEGMENTS DEBUG] Final segment count: {}",
+//             segs.len()
+//         );
     }
 
     if let Some(target_z) = target_z_nm {
@@ -246,11 +228,11 @@ pub fn create_segments(
         );
 
         if (pin_z - target_z).abs() > 50 {
-            eprintln!("  ✅ Adding GOAL via transition: {} -> {}", target_z, pin_z);
+            eprintln!("  âœ… Adding GOAL via transition: {} -> {}", target_z, pin_z);
             let goal_down = Point3D::new(goal_boundary.x, goal_boundary.y, target_z);
             segs.push(hwc_engine::LineSegment::new(goal_down, goal_boundary));
         } else {
-            eprintln!("  ⏭️  Skipping GOAL via: pin already on target layer");
+            eprintln!("  â­ï¸  Skipping GOAL via: pin already on target layer");
         }
     }
 

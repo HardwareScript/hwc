@@ -1,4 +1,4 @@
-//! Transform and copy miscellaneous child-space metadata (pours, contacts, etc.).
+﻿//! Transform and copy miscellaneous child-space metadata (pours, contacts, etc.).
 
 use crate::ir::errors::IrError;
 use hwc_engine::netlist::NetId;
@@ -15,10 +15,10 @@ pub(super) fn transform_pours(
     net_map: &FxHashMap<compact_str::CompactString, compact_str::CompactString>,
     instance_name: &str,
 ) -> Result<(), IrError> {
-    eprintln!(
-        "[HIERARCHICAL] Transforming {} pours",
-        child_space.pours.len()
-    );
+//     eprintln!(
+//         "[HIERARCHICAL] Transforming {} pours",
+//         child_space.pours.len()
+//     );
 
     for pour in &child_space.pours {
         let parent_pour_name = format!("{}.{}", instance_name, pour.name);
@@ -72,10 +72,10 @@ pub(super) fn transform_contacts(
     net_map: &FxHashMap<compact_str::CompactString, compact_str::CompactString>,
     instance_name: &str,
 ) -> Result<(), IrError> {
-    eprintln!(
-        "[HIERARCHICAL] Transforming {} contacts",
-        child_space.contacts.len()
-    );
+//     eprintln!(
+//         "[HIERARCHICAL] Transforming {} contacts",
+//         child_space.contacts.len()
+//     );
 
     for contact in &child_space.contacts {
         let parent_contact_name = format!("{}.{}", instance_name, contact.name);
@@ -126,10 +126,10 @@ pub(super) fn transform_keep_out_zones(
     net_map: &FxHashMap<compact_str::CompactString, compact_str::CompactString>,
     instance_name: &str,
 ) -> Result<(), IrError> {
-    eprintln!(
-        "[HIERARCHICAL] Transforming {} keep-out zones",
-        child_space.keep_out_zones.len()
-    );
+//     eprintln!(
+//         "[HIERARCHICAL] Transforming {} keep-out zones",
+//         child_space.keep_out_zones.len()
+//     );
 
     for koz in &child_space.keep_out_zones {
         let parent_bbox = transform.transform_bbox(&koz.bbox)?;
@@ -173,10 +173,10 @@ pub(super) fn transform_component_bboxes(
     transform: &FixedTransform2D,
     instance_name: &str,
 ) -> Result<(), IrError> {
-    eprintln!(
-        "[HIERARCHICAL] Transforming {} component bounding boxes",
-        child_space.component_bboxes.len()
-    );
+//     eprintln!(
+//         "[HIERARCHICAL] Transforming {} component bounding boxes",
+//         child_space.component_bboxes.len()
+//     );
 
     for (child_comp_name, child_bbox) in &child_space.component_bboxes {
         let parent_comp_name = format!("{}.{}", instance_name, child_comp_name);

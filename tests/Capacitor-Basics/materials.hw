@@ -12,6 +12,7 @@ export material Aluminum:
         resistivity: 2.82e-8ohm_m
         thermal_conductivity: 237.0W_mK
         max_current_density: 1e3A_mm2
+        min_area: 0.14um2  # SKY130 m1.2/m3.2: Minimum metal area to prevent peeling in CMP
 
 export material Tungsten:
     category: conductor
@@ -24,6 +25,7 @@ export material Tungsten:
         resistivity: 5.6e-8ohm_m
         thermal_conductivity: 173.0W_mK
         max_current_density: 1e4A_mm2
+        contact_resistance: 1e-8ohm_cm2  # SKY130: ~5-10Ω per mcon, ~10-30Ω per licon (single via)
 
 export material Titanium_Silicide:
     category: conductor

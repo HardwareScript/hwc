@@ -215,4 +215,100 @@ impl EntityGraph {
         );
         eprintln!("[ENTITY_GRAPH SYNC]   Synchronization complete ✓");
     }
+
+    /// **v0.2.1: SPATIAL INDEX POPULATION**
+    ///
+    /// Index all routed segments into the spatial index for DRC and collision detection.
+    /// This method encapsulates the logic for creating IndexedSegment objects and avoids
+    /// borrow checker issues by working with owned data.
+    ///
+    /// # Arguments
+    ///
+    /// * `layer_resolver` - Closure that maps (z_nm) -> Result<(layer_name, thickness_nm), Error>
+    /// * `material_validator` - Closure that validates material_id exists
+    ///
+    /// # Returns
+    ///
+    /// Result with the number of segments indexed, or an error message
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// space.entity_graph.index_routes_into_spatial(
+    ///     |z| stackup_manager.get_layer_index_at_z(z)
+    ///         .and_then(|idx| {
+    ///             let name = stackup_manager.ordered_layers()[idx].clone();
+    ///             let thickness = stackup_manager.get_thickness_for_layer_index(idx)?;
+    ///             Ok((name, thickness))
+    ///         }),
+    ///     |mat_id| space.material_registry.get_material(mat_id).is_some(),
+    /// )?;
+    /// ```
+    pub fn index_routes_into_spatial<F, G, E>(
+        &mut self,
+        mut layer_resolver: F,
+        material_validator: G,
+    ) -> Result<usize, E>
+    where
+        F: FnMut(i64) -> Result<(String, i64), E>,
+        G: Fn(u8) -> bool,
+    {
+        // Collect route data first to avoid borrow conflicts
+        let route_data: Vec<(usize, NetId, Vec<TraceSegment>)> = self
+            .routed_segments
+            .iter()
+            .enumerate()
+            .map(|(net_idx, (net_id, segments))| (net_idx, *net_id, segments.clone()))
+            .collect();
+
+        let mut indexed_count = 0;
+
+        for (net_idx, net_id, segments) in route_data {
+            eprintln!(
+                "[COMPILATION DEBUG] Route net {} has {} segments",
+                net_id.raw(),
+                segments.len()
+            );
+
+            for (seg_idx, segment) in segments.iter().enumerate() {
+                // Validate material
+                if !material_validator(segment.material_id) {
+                    return Err(format!(
+                        "Route segment {}/{} on net {} references unknown material_id {}",
+                        net_idx,
+                        seg_idx,
+                        net_id.raw(),
+                        segment.material_id
+                    ))
+                    .map_err(|s| panic!("{}", s))
+                    .unwrap();
+                }
+
+                // Resolve layer information
+                let (layer_name, thickness_nm) = layer_resolver(segment.start.z)?;
+
+                let indexed_segment = hwc_physics::spatial_index::IndexedSegment::new(
+                    hwc_physics::spatial_index::SpatialEntitySource::RouteSegment {
+                        net_idx,
+                        seg_idx,
+                    },
+                    seg_idx,
+                    net_id,
+                    &segment,
+                    segment.start.z,
+                    thickness_nm,
+                );
+
+                eprintln!(
+                    "[COMPILATION DEBUG] Indexing route segment: net={}, seg={}, layer={}, Z={}, thickness={}nm",
+                    net_id.raw(), seg_idx, layer_name, segment.start.z, thickness_nm
+                );
+
+                self.spatial.insert(indexed_segment);
+                indexed_count += 1;
+            }
+        }
+
+        Ok(indexed_count)
+    }
 }

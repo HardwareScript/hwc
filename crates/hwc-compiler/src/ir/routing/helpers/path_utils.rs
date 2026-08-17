@@ -1,4 +1,4 @@
-use crate::ir::errors::IrError;
+﻿use crate::ir::errors::IrError;
 
 /// Resolve `routing.min_segment_length` from the PDK profile.
 pub fn require_min_segment_length_nm(
@@ -34,13 +34,13 @@ pub fn manhattan_path_to_segments(
     path: &[hwc_engine::Point3D],
     min_seg_len_nm: i64,
 ) -> Vec<hwc_engine::LineSegment> {
-    eprintln!(
-        "[MANHATTAN_TO_SEGMENTS] Input path has {} waypoints, min_seg_len_nm={}",
-        path.len(),
-        min_seg_len_nm
-    );
-    for (idx, p) in path.iter().enumerate() {
-        eprintln!("[MANHATTAN_TO_SEGMENTS]   waypoint[{}]: {:?}", idx, p);
+//     eprintln!(
+//         "[MANHATTAN_TO_SEGMENTS] Input path has {} waypoints, min_seg_len_nm={}",
+//         path.len(),
+//         min_seg_len_nm
+//     );
+    for (_idx, _p) in path.iter().enumerate() {
+//         eprintln!("[MANHATTAN_TO_SEGMENTS]   waypoint[{}]: {:?}", idx, p);
     }
 
     if path.len() < 2 {
@@ -48,10 +48,10 @@ pub fn manhattan_path_to_segments(
     }
 
     let min_seg_len_sq = min_seg_len_nm.saturating_mul(min_seg_len_nm);
-    eprintln!(
-        "[MANHATTAN_TO_SEGMENTS] min_seg_len_sq = {}",
-        min_seg_len_sq
-    );
+//     eprintln!(
+//         "[MANHATTAN_TO_SEGMENTS] min_seg_len_sq = {}",
+//         min_seg_len_sq
+//     );
     let mut segments = Vec::new();
     let mut start = path[0];
 
@@ -107,43 +107,43 @@ pub fn manhattan_path_to_segments(
         let dz = (p2.z - start.z).abs();
         let is_diagonal = (dz > 0 || dy > 0) && dx > 0 || (dy > 0 && dz > 0);
 
-        eprintln!("[MANHATTAN_TO_SEGMENTS] waypoint[{}] at {:?}:", i, p2);
-        eprintln!("[MANHATTAN_TO_SEGMENTS]   is_collinear={}, is_short={} (seg_len_sq={} vs min={}), is_diagonal={}", 
-                 is_collinear, is_short, seg_len_sq, min_seg_len_sq, is_diagonal);
+//         eprintln!("[MANHATTAN_TO_SEGMENTS] waypoint[{}] at {:?}:", i, p2);
+//         eprintln!("[MANHATTAN_TO_SEGMENTS]   is_collinear={}, is_short={} (seg_len_sq={} vs min={}), is_diagonal={}", 
+//                  is_collinear, is_short, seg_len_sq, min_seg_len_sq, is_diagonal);
 
         // Emit segment if:
         // 1. Not collinear AND (not short OR is diagonal)
         // 2. Not a duplicate point
         if !is_collinear && (!is_short || is_diagonal) && start != p2 {
-            eprintln!(
-                "[MANHATTAN_TO_SEGMENTS]   → Emitting segment: {:?} -> {:?}",
-                start, p2
-            );
+//             eprintln!(
+//                 "[MANHATTAN_TO_SEGMENTS]   â†’ Emitting segment: {:?} -> {:?}",
+//                 start, p2
+//             );
             segments.push(hwc_engine::LineSegment::new(start, p2));
             start = p2;
         } else {
-            eprintln!("[MANHATTAN_TO_SEGMENTS]   → Skipping this waypoint");
+//             eprintln!("[MANHATTAN_TO_SEGMENTS]   â†’ Skipping this waypoint");
         }
     }
 
     let last = path[path.len() - 1];
     if start != last {
-        eprintln!(
-            "[MANHATTAN_TO_SEGMENTS] Emitting final segment: {:?} -> {:?}",
-            start, last
-        );
+//         eprintln!(
+//             "[MANHATTAN_TO_SEGMENTS] Emitting final segment: {:?} -> {:?}",
+//             start, last
+//         );
         segments.push(hwc_engine::LineSegment::new(start, last));
     }
 
-    eprintln!(
-        "[MANHATTAN_TO_SEGMENTS] Final output: {} segments",
-        segments.len()
-    );
-    for (idx, seg) in segments.iter().enumerate() {
-        eprintln!(
-            "[MANHATTAN_TO_SEGMENTS]   segment[{}]: {:?} -> {:?}",
-            idx, seg.start, seg.end
-        );
+//     eprintln!(
+//         "[MANHATTAN_TO_SEGMENTS] Final output: {} segments",
+//         segments.len()
+//     );
+    for (_idx, _seg) in segments.iter().enumerate() {
+//         eprintln!(
+//             "[MANHATTAN_TO_SEGMENTS]   segment[{}]: {:?} -> {:?}",
+//             idx, seg.start, seg.end
+//         );
     }
 
     segments

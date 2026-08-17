@@ -1,4 +1,4 @@
-use super::helpers::{get_prop_nm, get_prop_string};
+﻿use super::helpers::{get_prop_nm, get_prop_string};
 use crate::ir::errors::IrError;
 use crate::SymbolTable;
 use hwc_engine::geometry::BoundingBox;
@@ -23,7 +23,6 @@ pub(super) struct SimpleViaCtx<'a> {
     pub contour: Option<clipper2_rust::Path64>,
     pub symbol_table: &'a SymbolTable,
     pub eval_context: &'a EvaluationContext,
-    pub contact_name_debug: compact_str::CompactString,
     pub is_tented: bool,
     pub clearance_nm: i64,
     pub resolution_nm: i64,
@@ -167,7 +166,6 @@ pub(super) fn place_etched_via(
     contact_bbox: hwc_engine::geometry::BoundingBox,
     diameter_nm: i64,
     clearance_nm: i64,
-    contact_name_debug: &str,
 ) -> Result<(), IrError> {
     space
         .entity_graph
@@ -179,7 +177,6 @@ pub(super) fn place_etched_via(
             is_tented: true,
             pad_diameter_nm: diameter_nm,
         });
-    let _ = contact_name_debug;
     Ok(())
 }
 
@@ -187,17 +184,15 @@ pub(super) fn place_deposited_via(
     space: &mut HardwareSpace,
     ctx: &SimpleViaCtx,
 ) -> Result<(), IrError> {
-    let contact = ctx.contact;
-    let contact_name_debug = &ctx.contact_name_debug;
-    println!(
-        "[PLACE_CONTACT] '{}' Deposited path: drilling via hole at bbox=({},{}-{},{}) dia={}",
-        contact_name_debug,
-        ctx.contact_bbox.min.x,
-        ctx.contact_bbox.min.y,
-        ctx.contact_bbox.max.x,
-        ctx.contact_bbox.max.y,
-        ctx.diameter_nm
-    );
+    // println!(
+    //     "[PLACE_CONTACT] '{}' Deposited path: drilling via hole at bbox=({},{}-{},{}) dia={}",
+    //     contact_name_debug,
+    //     ctx.contact_bbox.min.x,
+    //     ctx.contact_bbox.min.y,
+    //     ctx.contact_bbox.max.x,
+    //     ctx.contact_bbox.max.y,
+    //     ctx.diameter_nm
+    // );
     space
         .entity_graph
         .drill_via_hole(hwc_engine::geometry_router::entity_graph::ViaHoleSpec {
@@ -210,42 +205,42 @@ pub(super) fn place_deposited_via(
         });
 
     if let Some(path) = &ctx.contour {
-        println!("[PLACE_CONTACT] '{}' Placing polygon via: mat={}, net={}, start=({},{},{}) end=({},{},{}) dia={}",
-            contact_name_debug, contact.material, ctx.net_id,
-            ctx.start_point.x, ctx.start_point.y, ctx.start_point.z,
-            ctx.end_point.x, ctx.end_point.y, ctx.end_point.z, ctx.diameter_nm);
+        // println!("[PLACE_CONTACT] '{}' Placing polygon via: mat={}, net={}, start=({},{},{}) end=({},{},{}) dia={}",
+        //     contact_name_debug, contact.material, ctx.net_id,
+        //     ctx.start_point.x, ctx.start_point.y, ctx.start_point.z,
+        //     ctx.end_point.x, ctx.end_point.y, ctx.end_point.z, ctx.diameter_nm);
 
         // DEBUG: Show original polygon points from shape definition
-        println!(
-            "[PLACE_CONTACT_DEBUG] '{}' Original polygon points (local space):",
-            contact_name_debug
-        );
-        for (i, p) in path.iter().enumerate() {
-            println!("  Point {}: ({}, {})", i, p.x, p.y);
-        }
+//         println!(
+//             "[PLACE_CONTACT_DEBUG] '{}' Original polygon points (local space):",
+//             contact_name_debug
+//         );
+        // for (i, p) in path.iter().enumerate() {
+        //     println!("  Point {}: ({}, {})", i, p.x, p.y);
+        // }
 
         // Transform polygon points from local space to world space
         // The shape definition generates points centered at (0,0), but the via is placed at xy_point
         let cx = (ctx.contact_bbox.min.x + ctx.contact_bbox.max.x) / 2;
         let cy = (ctx.contact_bbox.min.y + ctx.contact_bbox.max.y) / 2;
 
-        println!(
-            "[PLACE_CONTACT_DEBUG] '{}' Translating by center: ({}, {})",
-            contact_name_debug, cx, cy
-        );
+//         println!(
+//             "[PLACE_CONTACT_DEBUG] '{}' Translating by center: ({}, {})",
+//             contact_name_debug, cx, cy
+//         );
 
         let world_space_points: Vec<hwc_engine::geometry::Point2D> = path
             .iter()
             .map(|p| hwc_engine::geometry::Point2D::new(p.x + cx, p.y + cy))
             .collect();
 
-        println!(
-            "[PLACE_CONTACT_DEBUG] '{}' Transformed polygon points (world space):",
-            contact_name_debug
-        );
-        for (i, p) in world_space_points.iter().enumerate() {
-            println!("  Point {}: ({}, {})", i, p.x, p.y);
-        }
+//         println!(
+//             "[PLACE_CONTACT_DEBUG] '{}' Transformed polygon points (world space):",
+//             contact_name_debug
+//         );
+        // for (i, p) in world_space_points.iter().enumerate() {
+        //     println!("  Point {}: ({}, {})", i, p.x, p.y);
+        // }
 
         let polygon = hwc_engine::geometry::Polygon::new(world_space_points);
 
@@ -256,10 +251,10 @@ pub(super) fn place_deposited_via(
             polygon,
         );
     } else {
-        println!("[PLACE_CONTACT] '{}' Placing cylinder via: mat={}, net={}, start=({},{},{}) end=({},{},{}) dia={}",
-            contact_name_debug, contact.material, ctx.net_id,
-            ctx.start_point.x, ctx.start_point.y, ctx.start_point.z,
-            ctx.end_point.x, ctx.end_point.y, ctx.end_point.z, ctx.diameter_nm);
+        // println!("[PLACE_CONTACT] '{}' Placing cylinder via: mat={}, net={}, start=({},{},{}) end=({},{},{}) dia={}",
+        //     contact_name_debug, contact.material, ctx.net_id,
+        //     ctx.start_point.x, ctx.start_point.y, ctx.start_point.z,
+        //     ctx.end_point.x, ctx.end_point.y, ctx.end_point.z, ctx.diameter_nm);
         space.entity_graph.add_cylinder_substrate_layer(
             ctx.material_id,
             hwc_engine::NetId::new(ctx.net_id),

@@ -174,26 +174,32 @@ impl MiterEngine {
                 let len1 = len1_f as i64;
                 let len2 = len2_f as i64;
 
-                if len1 > miter_dist && len2 > miter_dist {
+                // Max safe rollback distance is half of the shortest adjacent segment.
+                // This guarantees miters never overshoot, cross adjacent bends, or create acute notches/foldbacks.
+                let max_d = (len1 / 2).min(len2 / 2);
+                let actual_miter_dist = miter_dist.min(max_d);
+                let min_effective_dist = (self.trace_width_nm / 2).min(miter_dist / 2);
+
+                if actual_miter_dist >= min_effective_dist && actual_miter_dist > 0 {
                     let u1_x_f = v1_x as f64 / len1_f;
                     let u1_y_f = v1_y as f64 / len1_f;
                     let u2_x_f = v2_x as f64 / len2_f;
                     let u2_y_f = v2_y as f64 / len2_f;
 
                     let p_a = Point3D::new(
-                        p_curr.x - (u1_x_f * miter_dist as f64).round() as i64,
-                        p_curr.y - (u1_y_f * miter_dist as f64).round() as i64,
+                        p_curr.x - (u1_x_f * actual_miter_dist as f64).round() as i64,
+                        p_curr.y - (u1_y_f * actual_miter_dist as f64).round() as i64,
                         p_curr.z,
                     );
                     let p_b = Point3D::new(
-                        p_curr.x + (u2_x_f * miter_dist as f64).round() as i64,
-                        p_curr.y + (u2_y_f * miter_dist as f64).round() as i64,
+                        p_curr.x + (u2_x_f * actual_miter_dist as f64).round() as i64,
+                        p_curr.y + (u2_y_f * actual_miter_dist as f64).round() as i64,
                         p_curr.z,
                     );
 
                     eprintln!(
-                        "[MITER APPLY] Applying miter at ({},{},{})",
-                        p_curr.x, p_curr.y, p_curr.z
+                        "[MITER APPLY] Applying miter at ({},{},{}) with dist {}nm (nominal {}nm)",
+                        p_curr.x, p_curr.y, p_curr.z, actual_miter_dist, miter_dist
                     );
                     eprintln!("[MITER APPLY]   p_a=({},{},{})", p_a.x, p_a.y, p_a.z);
                     eprintln!("[MITER APPLY]   p_b=({},{},{})", p_b.x, p_b.y, p_b.z);
@@ -202,11 +208,11 @@ impl MiterEngine {
                     if p_a != *mitered.last().unwrap() {
                         mitered.push(p_a);
                     }
-                    if p_b != p_next {
+                    if p_b != p_next && p_b != *mitered.last().unwrap() {
                         mitered.push(p_b);
                     }
                 } else {
-                    eprintln!("[MITER SKIP] Segments too short for miter");
+                    eprintln!("[MITER SKIP] Segments too short for miter (len1={}, len2={}, required>={})", len1, len2, min_effective_dist);
                     // Segment too short for miter, keep original corner
                     if p_curr != *mitered.last().unwrap() {
                         mitered.push(p_curr);
@@ -226,7 +232,7 @@ impl MiterEngine {
             mitered.push(last);
         }
 
-        mitered
+        sanitize_mitered_path(mitered)
     }
 
     /// Apply 45° miter chamfers to all 90° corners in a path (backward-compatible version).
@@ -249,6 +255,88 @@ impl MiterEngine {
             }
         }
     }
+}
+
+/// Sanitize mitered path against consecutive duplicates, collinear points, and acute foldbacks.
+fn sanitize_mitered_path(path: Vec<Point3D>) -> Vec<Point3D> {
+    if path.len() < 3 {
+        return path;
+    }
+
+    // Pass 1: Deduplicate consecutive identical points
+    let mut deduped: Vec<Point3D> = Vec::with_capacity(path.len());
+    for p in path {
+        if deduped.last() != Some(&p) {
+            deduped.push(p);
+        }
+    }
+
+    if deduped.len() < 3 {
+        return deduped;
+    }
+
+    // Pass 2: Remove redundant collinear points and acute reversals
+    let mut cleaned: Vec<Point3D> = Vec::with_capacity(deduped.len());
+    cleaned.push(deduped[0]);
+
+    for i in 1..deduped.len() - 1 {
+        let p_prev = *cleaned.last().unwrap();
+        let p_curr = deduped[i];
+        let p_next = deduped[i + 1];
+
+        let v1_x = p_curr.x - p_prev.x;
+        let v1_y = p_curr.y - p_prev.y;
+        let v1_z = p_curr.z - p_prev.z;
+
+        let v2_x = p_next.x - p_curr.x;
+        let v2_y = p_next.y - p_curr.y;
+        let v2_z = p_next.z - p_curr.z;
+
+        if v1_x == 0 && v1_y == 0 && v1_z == 0 {
+            continue;
+        }
+        if v2_x == 0 && v2_y == 0 && v2_z == 0 {
+            continue;
+        }
+
+        // Collinearity check (same direction along line)
+        let is_collinear_same_dir = (v1_y * v2_z == v1_z * v2_y)
+            && (v1_z * v2_x == v1_x * v2_z)
+            && (v1_x * v2_y == v1_y * v2_x)
+            && (v1_x.signum() == v2_x.signum()
+                && v1_y.signum() == v2_y.signum()
+                && v1_z.signum() == v2_z.signum());
+
+        if is_collinear_same_dir {
+            continue;
+        }
+
+        // Reversal / foldback check along single axis
+        let is_axis_reversal = (v1_x != 0
+            && v2_x != 0
+            && v1_x.signum() != v2_x.signum()
+            && v1_y == 0
+            && v2_y == 0)
+            || (v1_y != 0
+                && v2_y != 0
+                && v1_y.signum() != v2_y.signum()
+                && v1_x == 0
+                && v2_x == 0);
+
+        if is_axis_reversal {
+            continue;
+        }
+
+        cleaned.push(p_curr);
+    }
+
+    if let Some(&last) = deduped.last() {
+        if cleaned.last() != Some(&last) {
+            cleaned.push(last);
+        }
+    }
+
+    cleaned
 }
 
 #[cfg(test)]
@@ -316,5 +404,27 @@ mod tests {
         let narrow_rollback = 10_000_000 - result_narrow[1].x;
         let wide_rollback = 10_000_000 - result_wide[1].x;
         assert!(wide_rollback > narrow_rollback);
+    }
+
+    #[test]
+    fn test_miter_short_segment_clamped() {
+        // Trace width = 300um, nominal miter distance = 450um
+        let engine = MiterEngine::new(300_000);
+        // Segment 1 is 2000um long, but Segment 2 is only 200um long (less than nominal miter distance)
+        let path = vec![
+            Point3D::new(0, 0, 0),
+            Point3D::new(2_000_000, 0, 0),
+            Point3D::new(2_000_000, 200_000, 0),
+            Point3D::new(3_000_000, 200_000, 0),
+        ];
+
+        let result = engine.apply_miter_pass(&path);
+        // Rollback on segment 2 must never exceed len2 / 2 = 100_000
+        for window in result.windows(2) {
+            // Assert all segments move forward or orthogonally, no negative backtracking
+            let dx = window[1].x - window[0].x;
+            let dy = window[1].y - window[0].y;
+            assert!(dx >= 0 && dy >= 0, "No negative backtracking or foldbacks allowed");
+        }
     }
 }

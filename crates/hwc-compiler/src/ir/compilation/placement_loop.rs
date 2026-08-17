@@ -1,4 +1,4 @@
-use crate::ir::errors::IrError;
+﻿use crate::ir::errors::IrError;
 use crate::ir::placement_item::PlacementItem;
 
 /// Execute the placement loop: place all non-route items.
@@ -9,10 +9,10 @@ pub fn execute_placement(
 ) -> Result<(), IrError> {
     let mut component_count = 0;
 
-    eprintln!(
-        "[DEBUG] Starting placement loop with {} sorted items",
-        ctx.sorted_indices.len()
-    );
+//     eprintln!(
+//         "[DEBUG] Starting placement loop with {} sorted items",
+//         ctx.sorted_indices.len()
+//     );
 
     // Pure integer iteration: no string keys, no hash lookups. `item_index` is
     // the item's own slot in `placement_items`, so this is a direct index.
@@ -36,7 +36,7 @@ pub fn execute_placement(
         match item {
             PlacementItem::Region(region_id) => {
                 let region = &ctx.arena.regions[region_id];
-                eprintln!("[DEBUG] Registering region: {}", region.name);
+//                 eprintln!("[DEBUG] Registering region: {}", region.name);
                 crate::ir::placement::register_region(
                     crate::ir::placement::RegisterRegionParams {
                         region,
@@ -50,13 +50,13 @@ pub fn execute_placement(
                 )?;
             }
             PlacementItem::Substrate(substrate_id) => {
-                eprintln!("[DEBUG] Placing substrate");
+//                 eprintln!("[DEBUG] Placing substrate");
                 let sub = &ctx.arena.substrates[substrate_id];
                 crate::ir::placement::place_substrate(space, sub, bbox_tracker, &place_ctx)?;
             }
             PlacementItem::Pour(pour_id) => {
                 let pour = &ctx.arena.pours[pour_id];
-                eprintln!("[DEBUG] Placing pour: {}", pour.name);
+//                 eprintln!("[DEBUG] Placing pour: {}", pour.name);
 
                 let mut resolved_pour = pour.clone();
 
@@ -72,10 +72,10 @@ pub fn execute_placement(
                             &space.dimensions,
                         )?;
 
-                    eprintln!(
-                        "[DEBUG] Resolved pour '{}' center position from relational constraints: ({:?}, {:?})",
-                        resolved_pour.name, resolved_position.x(), resolved_position.y()
-                    );
+//                     eprintln!(
+//                         "[DEBUG] Resolved pour '{}' center position from relational constraints: ({:?}, {:?})",
+//                         resolved_pour.name, resolved_position.x(), resolved_position.y()
+//                     );
 
                     resolved_pour.position = Some(resolved_position.clone());
 
@@ -103,14 +103,14 @@ pub fn execute_placement(
                 }
 
                 crate::ir::placement::place_pour(space, &resolved_pour, bbox_tracker, &place_ctx)?;
-                eprintln!(
-                    "[DEBUG] Pour placed successfully, entity count: {}",
-                    space.entity_graph.iter_entity_ids().count()
-                );
+//                 eprintln!(
+//                     "[DEBUG] Pour placed successfully, entity count: {}",
+//                     space.entity_graph.iter_entity_ids().count()
+//                 );
             }
             PlacementItem::Plane(plane_id) => {
                 let plane = &ctx.arena.planes[plane_id];
-                eprintln!("[DEBUG] Placing plane: {}", plane.name);
+//                 eprintln!("[DEBUG] Placing plane: {}", plane.name);
 
                 let mut resolved_plane = plane.clone();
                 if resolved_plane.from.is_none()
@@ -136,7 +136,7 @@ pub fn execute_placement(
                 )?;
             }
             PlacementItem::Contact(contact_id) => {
-                eprintln!("[DEBUG] Placing contact");
+//                 eprintln!("[DEBUG] Placing contact");
 
                 let mut resolved_contact = ctx.arena.contacts[contact_id].clone();
 
@@ -166,12 +166,12 @@ pub fn execute_placement(
                         span: hwc_parser::Span::new(0, 0),
                     });
 
-                    eprintln!(
-                        "[DEBUG] Resolved contact '{}' position from relational constraints: ({:?}, {:?})",
-                        resolved_contact.name.base, resolved_position.x(), resolved_position.y()
-                    );
+//                     eprintln!(
+//                         "[DEBUG] Resolved contact '{}' position from relational constraints: ({:?}, {:?})",
+//                         resolved_contact.name.base, resolved_position.x(), resolved_position.y()
+//                     );
 
-                    // ✅ CRITICAL FIX: Clear relational_constraints after resolution!
+                    // âœ… CRITICAL FIX: Clear relational_constraints after resolution!
                     // This signals to place_contact that constraints are resolved and to proceed with placement.
                     resolved_contact.relational_constraints = smallvec::smallvec![];
                 }
@@ -189,7 +189,7 @@ pub fn execute_placement(
             }
             PlacementItem::Component(component_id) => {
                 let component = &ctx.arena.components[component_id];
-                eprintln!("[DEBUG] Placing component: {:?}", component.name);
+//                 eprintln!("[DEBUG] Placing component: {:?}", component.name);
                 component_count += 1;
 
                 let mut resolved_component = component.clone();
@@ -219,10 +219,10 @@ pub fn execute_placement(
             PlacementItem::SpaceInstance(space_inst_id) => {
                 // v0.2.1: Hierarchical space instantiation
                 let space_inst = &ctx.arena.space_instances[space_inst_id];
-                eprintln!(
-                    "[DEBUG] Instantiating sub-space: {} as {}",
-                    space_inst.space_name, space_inst.instance_name.base
-                );
+//                 eprintln!(
+//                     "[DEBUG] Instantiating sub-space: {} as {}",
+//                     space_inst.space_name, space_inst.instance_name.base
+//                 );
 
                 // Pass the full space object so we have access to the netlist
                 crate::ir::placement::instantiate_sub_space(
@@ -235,7 +235,7 @@ pub fn execute_placement(
                 )?;
             }
             PlacementItem::Route(_) => {
-                eprintln!("[DEBUG] Skipping route during placement phase");
+//                 eprintln!("[DEBUG] Skipping route during placement phase");
                 continue;
             }
         }
@@ -250,9 +250,6 @@ pub fn check_static_shorts(space: &hwc_engine::HardwareSpace) -> Result<(), IrEr
     let guard_violations =
         hwc_engine::geometry_router::check_static_shorts(&space.entity_graph, &space.netlist);
     if !guard_violations.is_empty() {
-        for v in &guard_violations {
-            eprintln!("[STATIC GUARD] P42: {}", v);
-        }
         return Err(IrError::StaticGeometryShort {
             net_a: guard_violations[0].net_a.clone(),
             net_b: guard_violations[0].net_b.clone(),

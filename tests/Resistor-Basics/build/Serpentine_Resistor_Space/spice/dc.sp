@@ -8,9 +8,7 @@
 * ========================================
 * STIMULUS & ANALYSIS
 * ========================================
-V_In nIn_entry 0 DC 1.800
+V_In In 0 DC 1.800
 V_GND GND 0 DC 0.000
-V_Out nOut_entry 0 DC 0.000
-.measure dc R1_actual param='1.800 / abs(i(V_Out))'
 .op
 .end

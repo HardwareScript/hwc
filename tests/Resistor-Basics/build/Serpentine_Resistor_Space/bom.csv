@@ -20,16 +20,20 @@ In_Pad,Pour,Aluminum,metal1 (z:830nm),1000000,360000000
 Out_Pad,Pour,Aluminum,metal1 (z:830nm),1000000,360000000
 Bulk_Tap_Diff,Pour,P_Plus_Diffusion,pdiff (z:0nm),160000,32000000
 Bulk_Tap_LI,Pour,Titanium_Silicide,li1 (z:580nm),160000,16000000
-Via_A_Poly,Contact,Tungsten,polyres (z:200nm),72900,20703600
-Via_B_Poly,Contact,Tungsten,polyres (z:200nm),72900,20703600
-Via_A_Metal,Contact,Tungsten,li1 (z:580nm),72900,20995200
-Via_B_Metal,Contact,Tungsten,li1 (z:580nm),72900,20995200
-Bulk_Tap_Contact,Contact,Tungsten,pdiff (z:0nm),72900,34263000
+Bulk_Tap_Metal,Pour,Aluminum,metal1 (z:830nm),160000,57600000
+Route_In_on_metal1,Route,Aluminum,metal1 (trace),750000,270000000
+Route_Out_on_metal1,Route,Aluminum,metal1 (trace),750000,270000000
+Via_A_Poly,Contact,Tungsten,polyres (z:200nm),62500,19000000
+Via_B_Poly,Contact,Tungsten,polyres (z:200nm),62500,19000000
+Via_A_Metal,Contact,Tungsten,li1 (z:580nm),62500,19250000
+Via_B_Metal,Contact,Tungsten,li1 (z:580nm),62500,19250000
+Bulk_Tap_Contact,Contact,Tungsten,pdiff (z:0nm),62500,30625000
+Bulk_Tap_Via,Contact,Tungsten,li1 (z:580nm),62500,19250000
 
 # AGGREGATED MATERIAL TOTALS (Foundry Fabrication Summary)
 Material,Total_Area_nm2,Total_Volume_nm3,Layer_Count,Coverage_Percentage
-Aluminum,2320000,835200000,4,0.6%
+Aluminum,3980000,1432800000,7,1.0%
 P_Plus_Diffusion,160000,32000000,1,0.0%
 Polysilicon,58000000,10440000000,9,14.5%
 Titanium_Silicide,480000,48000000,3,0.1%
-Tungsten,364500,117660600,5,0.1%
+Tungsten,375000,126375000,6,0.1%

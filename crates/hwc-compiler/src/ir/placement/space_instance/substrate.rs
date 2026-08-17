@@ -1,4 +1,4 @@
-//! Transform and copy substrate layers, routing segments, and vias.
+﻿//! Transform and copy substrate layers, routing segments, and vias.
 
 use crate::ir::errors::IrError;
 use hwc_engine::geometry_router::entity_graph::EntityGraph;
@@ -21,10 +21,10 @@ pub(super) fn transform_substrate_layers(
     net_id_map: &FxHashMap<NetId, NetId>,
     _instance_name: &str, // Reserved for future use
 ) -> Result<(), IrError> {
-    eprintln!(
-        "[HIERARCHICAL] Transforming {} substrate layers",
-        child_graph.substrate_layers.len()
-    );
+//     eprintln!(
+//         "[HIERARCHICAL] Transforming {} substrate layers",
+//         child_graph.substrate_layers.len()
+//     );
 
     for child_layer in &child_graph.substrate_layers {
         // Clone the layer
@@ -48,10 +48,10 @@ pub(super) fn transform_substrate_layers(
         parent_graph.substrate_layers.push(transformed_layer);
     }
 
-    eprintln!(
-        "[HIERARCHICAL] Substrate layer transformation complete: {} layers added to parent",
-        child_graph.substrate_layers.len()
-    );
+//     eprintln!(
+//         "[HIERARCHICAL] Substrate layer transformation complete: {} layers added to parent",
+//         child_graph.substrate_layers.len()
+//     );
 
     Ok(())
 }
@@ -67,12 +67,10 @@ pub(super) fn transform_routing_segments(
     net_id_map: &FxHashMap<NetId, NetId>,
     _instance_name: &str, // Reserved for future use
 ) -> Result<(), IrError> {
-    eprintln!(
-        "[HIERARCHICAL] Transforming {} routing segment groups",
-        child_graph.routed_segment_count()
-    );
-
-    let mut total_segments = 0;
+//     eprintln!(
+//         "[HIERARCHICAL] Transforming {} routing segment groups",
+//         child_graph.routed_segment_count()
+//     );
 
     for (child_net_id, segments) in child_graph.iter_routed_segments() {
         // Remap net ID
@@ -103,17 +101,16 @@ pub(super) fn transform_routing_segments(
             transformed_seg.end.z = end_z;
 
             transformed_segments.push(transformed_seg);
-            total_segments += 1;
         }
 
         // Register in parent graph
         parent_graph.add_routed_segments(parent_net_id, transformed_segments);
     }
 
-    eprintln!(
-        "[HIERARCHICAL] Routing segment transformation complete: {} total segments added to parent",
-        total_segments
-    );
+//     eprintln!(
+//         "[HIERARCHICAL] Routing segment transformation complete: {} total segments added to parent",
+//         total_segments
+//     );
 
     Ok(())
 }
@@ -125,10 +122,10 @@ pub(super) fn transform_vias(
     transform: &FixedTransform2D,
     net_id_map: &FxHashMap<NetId, NetId>,
 ) -> Result<(), IrError> {
-    eprintln!(
-        "[HIERARCHICAL] Transforming {} vias",
-        child_space.vias.len()
-    );
+//     eprintln!(
+//         "[HIERARCHICAL] Transforming {} vias",
+//         child_space.vias.len()
+//     );
 
     for via in &child_space.vias {
         let (tx, ty, _) =

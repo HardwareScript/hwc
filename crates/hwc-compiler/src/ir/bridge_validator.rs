@@ -28,18 +28,51 @@ pub fn validate_bridges(
             None => continue,
         };
 
-        // Find pours on the lower connected plane that overlap in XY
+        let from_layer_name = contact.from_layer.as_deref();
+        let to_layer_name = contact.to_layer.as_deref();
+
+        // Find pours on the lower connected plane that overlap in XY and match from_layer
         let start_pours: Vec<_> = space
             .pours
             .iter()
-            .filter(|p| p.z_bottom_nm == contact.z_start_nm && overlaps_xy(p.bbox.as_ref(), bbox))
+            .filter(|p| {
+                p.z_bottom_nm == contact.z_start_nm
+                    && overlaps_xy(p.bbox.as_ref(), bbox)
+                    && space
+                        .material_registry
+                        .get_category_by_name(&p.material_name)
+                        .map_or(true, |cat| !cat.is_zero_thickness())
+                    && from_layer_name.map_or(true, |fl| {
+                        space.stackup_layers.iter().any(|l| {
+                            l.name == fl
+                                && (l.z_bottom == p.z_bottom_nm
+                                    || (l.z_bottom <= p.z_bottom_nm && p.z_bottom_nm < l.z_top))
+                                && l.material_name == p.material_name
+                        })
+                    })
+            })
             .collect();
 
-        // Find pours on the upper connected plane that overlap in XY
+        // Find pours on the upper connected plane that overlap in XY and match to_layer
         let end_pours: Vec<_> = space
             .pours
             .iter()
-            .filter(|p| p.z_bottom_nm == contact.z_end_nm && overlaps_xy(p.bbox.as_ref(), bbox))
+            .filter(|p| {
+                p.z_bottom_nm == contact.z_end_nm
+                    && overlaps_xy(p.bbox.as_ref(), bbox)
+                    && space
+                        .material_registry
+                        .get_category_by_name(&p.material_name)
+                        .map_or(true, |cat| !cat.is_zero_thickness())
+                    && to_layer_name.map_or(true, |tl| {
+                        space.stackup_layers.iter().any(|l| {
+                            l.name == tl
+                                && (l.z_bottom == p.z_bottom_nm
+                                    || (l.z_bottom <= p.z_bottom_nm && p.z_bottom_nm < l.z_top))
+                                && l.material_name == p.material_name
+                        })
+                    })
+            })
             .collect();
 
         // For every combination, check bridge compatibility

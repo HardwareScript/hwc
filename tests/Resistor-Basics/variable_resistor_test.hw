@@ -78,9 +78,15 @@ space Geometry_Variable_Resistor_Space implements GeometryVariableResistor:
     # This mask blocks silicide formation on the polysilicon resistor body
     # Category: mask → Z-thickness = 0nm, anchored to Z=180nm (top of polyres)
     # Exported to GDSII for fabrication, skipped in DXF/GLB by structural filter
-    # SKY130 DRC: rpm.1 requires ≥180nm enclosure on all sides (360nm total extension)
+    # SKY130 DRC: rpm.2 requires ≥180nm overhang on width (360nm total extension)
     add pour(Resistor_Poly_Mask) named R1_RPM_Block on layer: rpm:
-        dimensions: r1_length + 360nm by r1_width + 360nm
+        dimensions: r1_length by r1_width + 360nm
+        align: center_x with R1_Body
+        align: center_y with R1_Body
+
+    # 1b. PSDM MASK (P+ Implant over Poly Resistor body with 130nm enclosure per SKY130 psdm.1/psdm.2)
+    add pour(P_Plus_Implant_Mask) named R1_PSDM on layer: psdm:
+        dimensions: r1_length + 260nm by r1_width + 260nm
         align: center_x with R1_Body
         align: center_y with R1_Body
 
@@ -90,7 +96,7 @@ space Geometry_Variable_Resistor_Space implements GeometryVariableResistor:
     add pour(Titanium_Silicide) named R1_Contact_A_LI on layer: li1:
         device: R1.A
         net: In1
-        dimensions: r1_contact_size by r1_contact_size
+        dimensions: r1_contact_size by r1_width
         align: center_x with R1_Body.left + r1_contact_size / 2
         align: center_y with R1_Body
     
@@ -100,48 +106,53 @@ space Geometry_Variable_Resistor_Space implements GeometryVariableResistor:
     add pour(Titanium_Silicide) named R1_Contact_B_LI on layer: li1:
         device: R1.B
         net: Out1
-        dimensions: r1_contact_size by r1_contact_size
+        dimensions: r1_contact_size by r1_width
         align: center_x with R1_Body.right - r1_contact_size / 2
         align: center_y with R1_Body
 
-    # 4. VIAS BRIDGING POLYRES → LI1
-    add contact(Tungsten) named R1_Via_A_Poly spanning layer: polyres to li1:
-        diameter: 170nm
-        align: center_x with R1_Contact_A_LI
-        align: center_y with R1_Contact_A_LI
-        net: In1
+    # 4. VIAS BRIDGING POLYRES → LI1 (Via Arrays for Reliability)
+    let via_pitch = 400nm
+    for i in 0..3:
+        add contact(Tungsten) named R1_Via_A_Poly_{i} spanning layer: polyres to li1:
+            diameter: 170nm
+            align: center_x with R1_Contact_A_LI
+            align: center_y with R1_Contact_A_LI.center_y + (i - 1) * via_pitch
+            net: In1
 
-    add contact(Tungsten) named R1_Via_B_Poly spanning layer: polyres to li1:
-        diameter: 170nm
-        align: center_x with R1_Contact_B_LI
-        align: center_y with R1_Contact_B_LI
-        net: Out1
+    for i in 0..3:
+        add contact(Tungsten) named R1_Via_B_Poly_{i} spanning layer: polyres to li1:
+            diameter: 170nm
+            align: center_x with R1_Contact_B_LI
+            align: center_y with R1_Contact_B_LI.center_y + (i - 1) * via_pitch
+            net: Out1
 
     # 5. METAL1 PADS DIRECTLY ABOVE LI1 CONTACTS
     add pour(Aluminum) named R1_Contact_A_Metal on layer: metal1:
-        dimensions: r1_contact_size by r1_contact_size
+        dimensions: r1_contact_size by r1_width
         align: center_x with R1_Contact_A_LI
         align: center_y with R1_Contact_A_LI
         net: In1
 
     add pour(Aluminum) named R1_Contact_B_Metal on layer: metal1:
-        dimensions: r1_contact_size by r1_contact_size
+        dimensions: r1_contact_size by r1_width
         align: center_x with R1_Contact_B_LI
         align: center_y with R1_Contact_B_LI
         net: Out1
 
-    # 6. VIAS BRIDGING LI1 → METAL1
-    add contact(Tungsten) named R1_Via_A_Metal spanning layer: li1 to metal1:
-        diameter: 170nm
-        align: center_x with R1_Contact_A_LI
-        align: center_y with R1_Contact_A_LI
-        net: In1
+    # 6. VIAS BRIDGING LI1 → METAL1 (Via Arrays for Reliability)
+    for i in 0..3:
+        add contact(Tungsten) named R1_Via_A_Metal_{i} spanning layer: li1 to metal1:
+            diameter: 170nm
+            align: center_x with R1_Contact_A_LI
+            align: center_y with R1_Contact_A_LI.center_y + (i - 1) * via_pitch
+            net: In1
 
-    add contact(Tungsten) named R1_Via_B_Metal spanning layer: li1 to metal1:
-        diameter: 170nm
-        align: center_x with R1_Contact_B_LI
-        align: center_y with R1_Contact_B_LI
-        net: Out1
+    for i in 0..3:
+        add contact(Tungsten) named R1_Via_B_Metal_{i} spanning layer: li1 to metal1:
+            diameter: 170nm
+            align: center_x with R1_Contact_B_LI
+            align: center_y with R1_Contact_B_LI.center_y + (i - 1) * via_pitch
+            net: Out1
 
     # ========================================================================
     # RESISTOR 2: MEDIUM RESISTANCE (≈ 1704Ω)
@@ -164,9 +175,15 @@ space Geometry_Variable_Resistor_Space implements GeometryVariableResistor:
         at: [x: r2_center_x, y: r2_center_y]
 
     # 1a. RESISTOR POLY MASK (RPM) - ZERO-THICKNESS FABRICATION INSTRUCTION
-    # SKY130 DRC: rpm.1 requires ≥180nm enclosure on all sides (360nm total extension)
+    # SKY130 DRC: rpm.2 requires ≥180nm overhang on width (360nm total extension)
     add pour(Resistor_Poly_Mask) named R2_RPM_Block on layer: rpm:
-        dimensions: r2_length + 360nm by r2_width + 360nm
+        dimensions: r2_length by r2_width + 360nm
+        align: center_x with R2_Body
+        align: center_y with R2_Body
+
+    # 1b. PSDM MASK (P+ Implant over Poly Resistor body with 130nm enclosure per SKY130 psdm.1/psdm.2)
+    add pour(P_Plus_Implant_Mask) named R2_PSDM on layer: psdm:
+        dimensions: r2_length + 260nm by r2_width + 260nm
         align: center_x with R2_Body
         align: center_y with R2_Body
 
@@ -175,7 +192,7 @@ space Geometry_Variable_Resistor_Space implements GeometryVariableResistor:
     add pour(Titanium_Silicide) named R2_Contact_A_LI on layer: li1:
         device: R2.A
         net: In2
-        dimensions: r2_contact_size by r2_contact_size
+        dimensions: r2_contact_size by r2_width
         align: center_x with R2_Body.left + r2_contact_size / 2
         align: center_y with R2_Body
     
@@ -184,48 +201,52 @@ space Geometry_Variable_Resistor_Space implements GeometryVariableResistor:
     add pour(Titanium_Silicide) named R2_Contact_B_LI on layer: li1:
         device: R2.B
         net: Out2
-        dimensions: r2_contact_size by r2_contact_size
+        dimensions: r2_contact_size by r2_width
         align: center_x with R2_Body.right - r2_contact_size / 2
         align: center_y with R2_Body
 
-    # 4. VIAS BRIDGING POLYRES → LI1
-    add contact(Tungsten) named R2_Via_A_Poly spanning layer: polyres to li1:
-        diameter: 170nm
-        align: center_x with R2_Contact_A_LI
-        align: center_y with R2_Contact_A_LI
-        net: In2
+    # 4. VIAS BRIDGING POLYRES → LI1 (Via Arrays for Reliability)
+    for i in 0..3:
+        add contact(Tungsten) named R2_Via_A_Poly_{i} spanning layer: polyres to li1:
+            diameter: 170nm
+            align: center_x with R2_Contact_A_LI
+            align: center_y with R2_Contact_A_LI.center_y + (i - 1) * via_pitch
+            net: In2
 
-    add contact(Tungsten) named R2_Via_B_Poly spanning layer: polyres to li1:
-        diameter: 170nm
-        align: center_x with R2_Contact_B_LI
-        align: center_y with R2_Contact_B_LI
-        net: Out2
+    for i in 0..3:
+        add contact(Tungsten) named R2_Via_B_Poly_{i} spanning layer: polyres to li1:
+            diameter: 170nm
+            align: center_x with R2_Contact_B_LI
+            align: center_y with R2_Contact_B_LI.center_y + (i - 1) * via_pitch
+            net: Out2
 
     # 5. METAL1 PADS DIRECTLY ABOVE LI1 CONTACTS
     add pour(Aluminum) named R2_Contact_A_Metal on layer: metal1:
-        dimensions: r2_contact_size by r2_contact_size
+        dimensions: r2_contact_size by r2_width
         align: center_x with R2_Contact_A_LI
         align: center_y with R2_Contact_A_LI
         net: In2
 
     add pour(Aluminum) named R2_Contact_B_Metal on layer: metal1:
-        dimensions: r2_contact_size by r2_contact_size
+        dimensions: r2_contact_size by r2_width
         align: center_x with R2_Contact_B_LI
         align: center_y with R2_Contact_B_LI
         net: Out2
 
-    # 6. VIAS BRIDGING LI1 → METAL1
-    add contact(Tungsten) named R2_Via_A_Metal spanning layer: li1 to metal1:
-        diameter: 170nm
-        align: center_x with R2_Contact_A_LI
-        align: center_y with R2_Contact_A_LI
-        net: In2
+    # 6. VIAS BRIDGING LI1 → METAL1 (Via Arrays for Reliability)
+    for i in 0..3:
+        add contact(Tungsten) named R2_Via_A_Metal_{i} spanning layer: li1 to metal1:
+            diameter: 170nm
+            align: center_x with R2_Contact_A_LI
+            align: center_y with R2_Contact_A_LI.center_y + (i - 1) * via_pitch
+            net: In2
 
-    add contact(Tungsten) named R2_Via_B_Metal spanning layer: li1 to metal1:
-        diameter: 170nm
-        align: center_x with R2_Contact_B_LI
-        align: center_y with R2_Contact_B_LI
-        net: Out2
+    for i in 0..3:
+        add contact(Tungsten) named R2_Via_B_Metal_{i} spanning layer: li1 to metal1:
+            diameter: 170nm
+            align: center_x with R2_Contact_B_LI
+            align: center_y with R2_Contact_B_LI.center_y + (i - 1) * via_pitch
+            net: Out2
 
     # ========================================================================
     # RESISTOR 3: HIGH RESISTANCE (≈ 2754Ω)
@@ -248,9 +269,15 @@ space Geometry_Variable_Resistor_Space implements GeometryVariableResistor:
         at: [x: r3_center_x, y: r3_center_y]
 
     # 1a. RESISTOR POLY MASK (RPM) - ZERO-THICKNESS FABRICATION INSTRUCTION
-    # SKY130 DRC: rpm.1 requires ≥180nm enclosure on all sides (360nm total extension)
+    # SKY130 DRC: rpm.2 requires ≥180nm overhang on width (360nm total extension)
     add pour(Resistor_Poly_Mask) named R3_RPM_Block on layer: rpm:
-        dimensions: r3_length + 360nm by r3_width + 360nm
+        dimensions: r3_length by r3_width + 360nm
+        align: center_x with R3_Body
+        align: center_y with R3_Body
+
+    # 1b. PSDM MASK (P+ Implant over Poly Resistor body with 130nm enclosure per SKY130 psdm.1/psdm.2)
+    add pour(P_Plus_Implant_Mask) named R3_PSDM on layer: psdm:
+        dimensions: r3_length + 260nm by r3_width + 260nm
         align: center_x with R3_Body
         align: center_y with R3_Body
 
@@ -259,7 +286,7 @@ space Geometry_Variable_Resistor_Space implements GeometryVariableResistor:
     add pour(Titanium_Silicide) named R3_Contact_A_LI on layer: li1:
         device: R3.A
         net: In3
-        dimensions: r3_contact_size by r3_contact_size
+        dimensions: r3_contact_size by r3_width
         align: center_x with R3_Body.left + r3_contact_size / 2
         align: center_y with R3_Body
     
@@ -268,45 +295,189 @@ space Geometry_Variable_Resistor_Space implements GeometryVariableResistor:
     add pour(Titanium_Silicide) named R3_Contact_B_LI on layer: li1:
         device: R3.B
         net: Out3
-        dimensions: r3_contact_size by r3_contact_size
+        dimensions: r3_contact_size by r3_width
         align: center_x with R3_Body.right - r3_contact_size / 2
         align: center_y with R3_Body
 
-    # 4. VIAS BRIDGING POLYRES → LI1
-    add contact(Tungsten) named R3_Via_A_Poly spanning layer: polyres to li1:
-        diameter: 170nm
-        align: center_x with R3_Contact_A_LI
-        align: center_y with R3_Contact_A_LI
-        net: In3
+    # 4. VIAS BRIDGING POLYRES → LI1 (Via Arrays for Reliability)
+    for i in 0..3:
+        add contact(Tungsten) named R3_Via_A_Poly_{i} spanning layer: polyres to li1:
+            diameter: 170nm
+            align: center_x with R3_Contact_A_LI
+            align: center_y with R3_Contact_A_LI.center_y + (i - 1) * via_pitch
+            net: In3
 
-    add contact(Tungsten) named R3_Via_B_Poly spanning layer: polyres to li1:
-        diameter: 170nm
-        align: center_x with R3_Contact_B_LI
-        align: center_y with R3_Contact_B_LI
-        net: Out3
+    for i in 0..3:
+        add contact(Tungsten) named R3_Via_B_Poly_{i} spanning layer: polyres to li1:
+            diameter: 170nm
+            align: center_x with R3_Contact_B_LI
+            align: center_y with R3_Contact_B_LI.center_y + (i - 1) * via_pitch
+            net: Out3
 
     # 5. METAL1 PADS DIRECTLY ABOVE LI1 CONTACTS
     add pour(Aluminum) named R3_Contact_A_Metal on layer: metal1:
-        dimensions: r3_contact_size by r3_contact_size
+        dimensions: r3_contact_size by r3_width
         align: center_x with R3_Contact_A_LI
         align: center_y with R3_Contact_A_LI
         net: In3
 
     add pour(Aluminum) named R3_Contact_B_Metal on layer: metal1:
-        dimensions: r3_contact_size by r3_contact_size
+        dimensions: r3_contact_size by r3_width
         align: center_x with R3_Contact_B_LI
         align: center_y with R3_Contact_B_LI
         net: Out3
 
-    # 6. VIAS BRIDGING LI1 → METAL1
-    add contact(Tungsten) named R3_Via_A_Metal spanning layer: li1 to metal1:
-        diameter: 170nm
-        align: center_x with R3_Contact_A_LI
-        align: center_y with R3_Contact_A_LI
-        net: In3
+    # 6. VIAS BRIDGING LI1 → METAL1 (Via Arrays for Reliability)
+    for i in 0..3:
+        add contact(Tungsten) named R3_Via_A_Metal_{i} spanning layer: li1 to metal1:
+            diameter: 170nm
+            align: center_x with R3_Contact_A_LI
+            align: center_y with R3_Contact_A_LI.center_y + (i - 1) * via_pitch
+            net: In3
 
-    add contact(Tungsten) named R3_Via_B_Metal spanning layer: li1 to metal1:
+    for i in 0..3:
+        add contact(Tungsten) named R3_Via_B_Metal_{i} spanning layer: li1 to metal1:
+            diameter: 170nm
+            align: center_x with R3_Contact_B_LI
+            align: center_y with R3_Contact_B_LI.center_y + (i - 1) * via_pitch
+            net: Out3
+
+    # ========================================================================
+    # SUBSTRATE TAPS FOR BULK CONNECTION (SKY130 LVS Requirement)
+    # Each resistor needs its own substrate tap
+    # ========================================================================
+    
+    let tap_offset_y = 4.5um  # Position taps below resistor bodies
+    let tap_size = 400nm
+
+    # R1 substrate tap
+    add pour(Tap_Mask) named R1_Bulk_Tap_Mask on layer: tap:
+        dimensions: tap_size by tap_size
+        align: center_x with R1_Body
+        align: center_y with R1_Body.center_y + tap_offset_y
+
+    add pour(P_Plus_Implant_Mask) named R1_Bulk_Tap_PSDM on layer: psdm:
+        dimensions: tap_size + 260nm by tap_size + 260nm
+        align: center_x with R1_Body
+        align: center_y with R1_Body.center_y + tap_offset_y
+
+    add pour(P_Plus_Diffusion) named R1_Bulk_Tap_Diff on layer: pdiff:
+        dimensions: tap_size by tap_size
+        align: center_x with R1_Body
+        align: center_y with R1_Body.center_y + tap_offset_y
+        net: GND
+        device: R1.BULK
+
+    add contact(Tungsten) named R1_Bulk_Tap_Contact spanning layer: pdiff to li1:
         diameter: 170nm
-        align: center_x with R3_Contact_B_LI
-        align: center_y with R3_Contact_B_LI
-        net: Out3
+        align: center_x with R1_Bulk_Tap_Diff
+        align: center_y with R1_Bulk_Tap_Diff
+        net: GND
+
+    add pour(Titanium_Silicide) named R1_Bulk_Tap_LI on layer: li1:
+        dimensions: tap_size by tap_size
+        align: center_x with R1_Bulk_Tap_Diff
+        align: center_y with R1_Bulk_Tap_Diff
+        net: GND
+
+    add pour(Aluminum) named R1_Bulk_Tap_Metal on layer: metal1:
+        dimensions: tap_size by tap_size
+        align: center_x with R1_Bulk_Tap_LI
+        align: center_y with R1_Bulk_Tap_LI
+        net: GND
+
+    add contact(Tungsten) named R1_Bulk_Tap_Via spanning layer: li1 to metal1:
+        diameter: 170nm
+        align: center_x with R1_Bulk_Tap_LI
+        align: center_y with R1_Bulk_Tap_LI
+        net: GND
+
+    # R2 substrate tap
+    add pour(Tap_Mask) named R2_Bulk_Tap_Mask on layer: tap:
+        dimensions: tap_size by tap_size
+        align: center_x with R2_Body
+        align: center_y with R2_Body.center_y + tap_offset_y
+
+    add pour(P_Plus_Implant_Mask) named R2_Bulk_Tap_PSDM on layer: psdm:
+        dimensions: tap_size + 260nm by tap_size + 260nm
+        align: center_x with R2_Body
+        align: center_y with R2_Body.center_y + tap_offset_y
+
+    add pour(P_Plus_Diffusion) named R2_Bulk_Tap_Diff on layer: pdiff:
+        dimensions: tap_size by tap_size
+        align: center_x with R2_Body
+        align: center_y with R2_Body.center_y + tap_offset_y
+        net: GND
+        device: R2.BULK
+
+    add contact(Tungsten) named R2_Bulk_Tap_Contact spanning layer: pdiff to li1:
+        diameter: 170nm
+        align: center_x with R2_Bulk_Tap_Diff
+        align: center_y with R2_Bulk_Tap_Diff
+        net: GND
+
+    add pour(Titanium_Silicide) named R2_Bulk_Tap_LI on layer: li1:
+        dimensions: tap_size by tap_size
+        align: center_x with R2_Bulk_Tap_Diff
+        align: center_y with R2_Bulk_Tap_Diff
+        net: GND
+
+    add pour(Aluminum) named R2_Bulk_Tap_Metal on layer: metal1:
+        dimensions: tap_size by tap_size
+        align: center_x with R2_Bulk_Tap_LI
+        align: center_y with R2_Bulk_Tap_LI
+        net: GND
+
+    add contact(Tungsten) named R2_Bulk_Tap_Via spanning layer: li1 to metal1:
+        diameter: 170nm
+        align: center_x with R2_Bulk_Tap_LI
+        align: center_y with R2_Bulk_Tap_LI
+        net: GND
+
+    # R3 substrate tap
+    add pour(Tap_Mask) named R3_Bulk_Tap_Mask on layer: tap:
+        dimensions: tap_size by tap_size
+        align: center_x with R3_Body
+        align: center_y with R3_Body.center_y + tap_offset_y
+
+    add pour(P_Plus_Implant_Mask) named R3_Bulk_Tap_PSDM on layer: psdm:
+        dimensions: tap_size + 260nm by tap_size + 260nm
+        align: center_x with R3_Body
+        align: center_y with R3_Body.center_y + tap_offset_y
+
+    add pour(P_Plus_Diffusion) named R3_Bulk_Tap_Diff on layer: pdiff:
+        dimensions: tap_size by tap_size
+        align: center_x with R3_Body
+        align: center_y with R3_Body.center_y + tap_offset_y
+        net: GND
+        device: R3.BULK
+
+    add contact(Tungsten) named R3_Bulk_Tap_Contact spanning layer: pdiff to li1:
+        diameter: 170nm
+        align: center_x with R3_Bulk_Tap_Diff
+        align: center_y with R3_Bulk_Tap_Diff
+        net: GND
+
+    add pour(Titanium_Silicide) named R3_Bulk_Tap_LI on layer: li1:
+        dimensions: tap_size by tap_size
+        align: center_x with R3_Bulk_Tap_Diff
+        align: center_y with R3_Bulk_Tap_Diff
+        net: GND
+
+    add pour(Aluminum) named R3_Bulk_Tap_Metal on layer: metal1:
+        dimensions: tap_size by tap_size
+        align: center_x with R3_Bulk_Tap_LI
+        align: center_y with R3_Bulk_Tap_LI
+        net: GND
+
+    add contact(Tungsten) named R3_Bulk_Tap_Via spanning layer: li1 to metal1:
+        diameter: 170nm
+        align: center_x with R3_Bulk_Tap_LI
+        align: center_y with R3_Bulk_Tap_LI
+        net: GND
+
+    # Ground Bus (Connects all substrate taps)
+    add pour(Aluminum) named GND_Bus on layer: metal1:
+        dimensions: 17.0um by 600nm
+        at: [x: 15.0um, y: 7.5um]
+        net: GND

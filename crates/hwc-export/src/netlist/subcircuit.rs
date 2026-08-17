@@ -71,55 +71,89 @@ pub fn generate_spice_subcircuit(
     Ok(())
 }
 
+/// Classification of SPICE circuit elements with their standardized card syntax.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SpiceElementKind {
+    Resistor,
+    Capacitor,
+    Inductor,
+    VoltageSource,
+    CurrentSource,
+    Diode,
+    Mosfet,
+    Bjt,
+    SubcircuitInstance,
+}
+
+impl SpiceElementKind {
+    /// Parse element kind from AST element type identifier
+    pub fn from_type_name(name: &str) -> Self {
+        match name {
+            "Resistor" | "R" => Self::Resistor,
+            "Capacitor" | "C" => Self::Capacitor,
+            "Inductor" | "L" => Self::Inductor,
+            "VoltageSource" | "V" => Self::VoltageSource,
+            "CurrentSource" | "I" => Self::CurrentSource,
+            "Diode" | "D" => Self::Diode,
+            "Mosfet" | "MOSFET" | "M" => Self::Mosfet,
+            "Bjt" | "BJT" | "Q" => Self::Bjt,
+            _ => Self::SubcircuitInstance,
+        }
+    }
+
+    /// SPICE component prefix character
+    pub fn prefix(&self) -> char {
+        match self {
+            Self::Resistor => 'R',
+            Self::Capacitor => 'C',
+            Self::Inductor => 'L',
+            Self::VoltageSource => 'V',
+            Self::CurrentSource => 'I',
+            Self::Diode => 'D',
+            Self::Mosfet => 'M',
+            Self::Bjt => 'Q',
+            Self::SubcircuitInstance => 'X',
+        }
+    }
+}
+
 /// Generate a single SPICE element from the typed AST
 ///
-/// Uses the element_type to determine the SPICE prefix and format.
-/// This is compositional - it doesn't hardcode which types are valid.
+/// Uses the typed `SpiceElementKind` to format positional values and named parameters.
 pub fn generate_spice_element(
     output: &mut String,
     element: &SubcircuitElement,
     unit_registry: &UnitRegistry,
 ) -> Result<(), String> {
-    // Determine SPICE prefix from element type
-    let prefix = match element.element_type.chars().next() {
-        Some('R') => 'R', // Resistor
-        Some('C') => 'C', // Capacitor
-        Some('L') => 'L', // Inductor
-        Some('V') => 'V', // Voltage source
-        Some('I') => 'I', // Current source
-        Some('M') => 'M', // MOSFET
-        Some('X') => 'X', // Subcircuit instance
-        Some('D') => 'D', // Diode
-        Some('Q') => 'Q', // BJT
-        _ => {
-            // Default: use first character of element type
-            element.element_type.chars().next().unwrap_or('X')
-        }
-    };
+    let kind = SpiceElementKind::from_type_name(&element.element_type);
 
-    // Emit: <prefix><name> <nodes...> <params...>
-    output.push(prefix);
+    // Emit: <prefix><name> <nodes...>
+    output.push(kind.prefix());
     output.push_str(&element.name);
 
-    // Add nodes
     for node in &element.nodes {
         output.push(' ');
         output.push_str(&node.to_spice());
     }
 
-    // Add parameters
-    for (param_name, param_value) in &element.parameters {
-        output.push(' ');
+    // Separate primary positional "value" from named parameters
+    let (value_param, named_params): (Vec<_>, Vec<_>) = element
+        .parameters
+        .iter()
+        .partition(|(name, _)| name.as_str() == "value");
 
-        // For simple "value" parameter, emit value directly
-        // For named parameters, emit name=value
-        if param_name == "value" {
-            format_expression_for_spice(output, param_value, unit_registry)?;
-        } else {
-            output.push_str(param_name);
-            output.push('=');
-            format_expression_for_spice(output, param_value, unit_registry)?;
-        }
+    // Emit positional value first for passives (R, C, L)
+    for (_, val) in value_param {
+        output.push(' ');
+        format_expression_for_spice(output, val, unit_registry)?;
+    }
+
+    // Emit named parameters (e.g. tc1=..., tc2=..., W=..., L=...)
+    for (param_name, param_value) in named_params {
+        output.push(' ');
+        output.push_str(param_name);
+        output.push('=');
+        format_expression_for_spice(output, param_value, unit_registry)?;
     }
 
     output.push('\n');

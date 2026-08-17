@@ -1,181 +1,378 @@
-# voltage_divider.hw
-# Voltage Divider Test: Two 1μm x 1μm Polysilicon Resistors (400Ω each)
-# Expected SPICE Output: V(Mid) = 1.8V * (400 / (400 + 400)) = 0.9V
+# voltage_divider.hw - SKY130 Voltage Divider (100% Relational Layout)
+# Device: sky130_fd_pr__res_high_po (P+ Poly Precision Resistor, 350 Ω/□)
+# 
+# VOLTAGE DIVIDER DESIGN
+# Two resistors in series: R1 (In → Mid) and R2 (Mid → GND)
+# Using 4μm × 1.41μm polysilicon resistors
+# Expected resistance per resistor: (4μm / 1.41μm) × 350Ω/□ + 724Ω = 1,715Ω
+# Expected voltage at Mid: 1.8V × (1715Ω / (1715Ω + 1715Ω)) = 0.9V
 #
 # This test validates:
-# 1. Multi-device SPICE extraction (RR1 and RR2)
+# 1. Multi-device SPICE extraction (R1 and R2 with BULK terminals)
 # 2. Intermediate net resolution (Mid node)
-# 3. DC Operating Point simulation capability
-#
-# Physics: V_out = V_in * (R2 / (R1 + R2))
-# - R1 = 400Ω (top resistor: In to Mid)
-# - R2 = 400Ω (bottom resistor: Mid to GND)
-# - V_in = 1.8V
-# - V_mid = 1.8V * (400 / 800) = 0.9V
+# 3. Shared substrate connections (both resistors share GND via BULK)
+# 4. Relational layout with proper SKY130 compliance
 
 import * from @std/primitives/units
 import * from "./resistor_pdk"
 
-# ========================================================================
-# DEVICE DEFINITION - Polysilicon Resistor Contract
-# ========================================================================
-device Resistor:
-    terminals: [A, B]
-    materials:
-        A: Polysilicon
-        B: Polysilicon
-    spice:
-        prefix: R
-        terminal_order: [A, B]
-        parameters: [R]
-        parameter_style: positional
-
-# ========================================================================
-# MODULE - Logical Interface for Voltage Divider
-# ========================================================================
 module VoltageDivider:
-    pins: [input In, output Mid, ground GND]
+    pins: [input In, output Mid]
     route In to Mid
-    route Mid to GND
 
-# ========================================================================
-# SPACE - Physical Implementation of Voltage Divider
-# ========================================================================
 space Voltage_Divider_Space implements VoltageDivider:
-    dimensions: 8.0um by 4.0um by 100nm
-    resolution: 10nm
-    origin: bl by b
-    profile: Resistor_Flattened
+    dimensions: 20.0um by 10.0um
+    profile: Resistor_3D
 
     nets:
         In:  { classification: signal, potential: 1.8V, current: 1.0uA }
         Mid: { classification: signal, potential: 0.9V, current: 1.0uA }
         GND: { classification: ground, potential: 0.0V, current: 2.0uA }
 
-    # ========================================================================
-    # RESISTOR 1 (R1: 400 Ohms) - Top Resistor between In and Mid
-    # ========================================================================
-    # 1μm × 1μm square polysilicon resistor
-    # Split into two halves for terminal A and B
-    add pour(Polysilicon) named R1_Body_A on layer: polyres:
-        device: R1.A
-        dimensions: 500nm by 1.0um
-        at: [x: 1.75um, y: 2.0um]
-
-    add pour(Polysilicon) named R1_Body_B on layer: polyres:
-        device: R1.B
-        dimensions: 500nm by 1.0um
-        at: [x: 2.25um, y: 2.0um]
-
-    # Metal contacts for R1 terminals
-    add pour(Aluminum) named R1_Contact_A on layer: metal1:
-        net: In
-        dimensions: 400nm by 400nm
-        at: [x: 1.7um, y: 2.0um]
-
-    add pour(Aluminum) named R1_Contact_B on layer: metal1:
-        net: Mid
-        dimensions: 400nm by 400nm
-        at: [x: 2.3um, y: 2.0um]
-
-    # Vias for R1
-    add contact(Titanium_Silicide) named Via_R1_A spanning layer: polyres to metal1:
-        net: In
-        diameter: 200nm
-        plating_thickness: 5nm
-        align: center with R1_Contact_A
-
-    add contact(Titanium_Silicide) named Via_R1_B spanning layer: polyres to metal1:
-        net: Mid
-        diameter: 200nm
-        plating_thickness: 5nm
-        align: center with R1_Contact_B
+    # Device virtual terminal bindings (v0.2.2)
+    device_nets R1:
+        BULK: GND
+    
+    device_nets R2:
+        BULK: GND
 
     # ========================================================================
-    # RESISTOR 2 (R2: 400 Ohms) - Bottom Resistor between Mid and GND
+    # PARAMETRIC DIMENSIONS (Self-Healing Layout)
     # ========================================================================
-    # 1μm × 1μm square polysilicon resistor
-    # Split into two halves for terminal A and B
-    add pour(Polysilicon) named R2_Body_A on layer: polyres:
-        device: R2.A
-        dimensions: 500nm by 1.0um
-        at: [x: 4.75um, y: 2.0um]
-
-    add pour(Polysilicon) named R2_Body_B on layer: polyres:
-        device: R2.B
-        dimensions: 500nm by 1.0um
-        at: [x: 5.25um, y: 2.0um]
-
-    # Metal contacts for R2 terminals
-    add pour(Aluminum) named R2_Contact_A on layer: metal1:
-        net: Mid
-        dimensions: 400nm by 400nm
-        at: [x: 4.7um, y: 2.0um]
-
-    add pour(Aluminum) named R2_Contact_B on layer: metal1:
-        net: GND
-        dimensions: 400nm by 400nm
-        at: [x: 5.3um, y: 2.0um]
-
-    # Vias for R2
-    add contact(Titanium_Silicide) named Via_R2_A spanning layer: polyres to metal1:
-        net: Mid
-        diameter: 200nm
-        plating_thickness: 5nm
-        align: center with R2_Contact_A
-
-    add contact(Titanium_Silicide) named Via_R2_B spanning layer: polyres to metal1:
-        net: GND
-        diameter: 200nm
-        plating_thickness: 5nm
-        align: center with R2_Contact_B
+    let channel_length = 4.0um      # Effective resistive channel length (L in SPICE model)
+    let res_width = 1.41um          # SKY130 quantized width (W in SPICE model)
+    let contact_length = 400nm      # Length of each poly contact head
+    let res_length = channel_length + (2 * contact_length)  # 4.8um total drawn poly body length
+    let rpm_clearance = 200nm       # SKY130 rpm.1a / rpm.1b: clearance from RPM to contact heads
+    let rpm_length = channel_length - (2 * rpm_clearance)   # 3.6um central channel mask
+    let pad_size = 1.0um
+    let r1_x = 5.0um                # R1 horizontal position
+    let r2_x = 12.0um               # R2 horizontal position
+    let res_y = 5.0um               # Shared vertical position
+    let tap_offset_y = 2.5um
+    let tap_size = 400nm
+    let via_pitch = 400nm
 
     # ========================================================================
-    # PADS & ROUTING - External connections
+    # RESISTOR 1 (R1: In → Mid) - Top Resistor
     # ========================================================================
     
-    # Input pad (1.8V)
+    # R1 Polysilicon Body
+    add pour(Polysilicon) named R1_Body on layer: polyres:
+        device: R1.A, R1.B
+        dimensions: res_length by res_width
+        at: [x: r1_x, y: res_y]
+
+    # R1 RPM Mask (180nm overhang per SKY130 rpm.2 on width, clearing contact heads per rpm.1a/b)
+    add pour(Resistor_Poly_Mask) named R1_RPM on layer: rpm:
+        dimensions: rpm_length by res_width + 360nm
+        align: center_x with R1_Body
+        align: center_y with R1_Body
+
+    # R1 PSDM Mask (P+ Implant over Poly Resistor body with 130nm enclosure per SKY130 psdm.1/psdm.2)
+    add pour(P_Plus_Implant_Mask) named R1_PSDM on layer: psdm:
+        dimensions: res_length + 260nm by res_width + 260nm
+        align: center_x with R1_Body
+        align: center_y with R1_Body
+
+    # R1 Terminal A Contact (Left - connects to In)
+    add pour(Titanium_Silicide) named R1_Contact_A_LI on layer: li1:
+        device: R1.A
+        net: In
+        dimensions: contact_length by res_width
+        align: center_x with R1_Body.left + contact_length / 2
+        align: center_y with R1_Body
+
+    # R1 Terminal B Contact (Right - connects to Mid)
+    add pour(Titanium_Silicide) named R1_Contact_B_LI on layer: li1:
+        device: R1.B
+        net: Mid
+        dimensions: contact_length by res_width
+        align: center_x with R1_Body.right - contact_length / 2
+        align: center_y with R1_Body
+
+    # R1 Via Arrays (Poly to LI)
+    for i in 0..3:
+        add contact(Tungsten) named R1_Via_A_Poly_{i} spanning layer: polyres to li1:
+            diameter: 170nm
+            align: center_x with R1_Contact_A_LI
+            align: center_y with R1_Contact_A_LI.center_y + (i - 1) * via_pitch
+            net: In
+
+    for i in 0..3:
+        add contact(Tungsten) named R1_Via_B_Poly_{i} spanning layer: polyres to li1:
+            diameter: 170nm
+            align: center_x with R1_Contact_B_LI
+            align: center_y with R1_Contact_B_LI.center_y + (i - 1) * via_pitch
+            net: Mid
+
+    # R1 Metal1 Pads
+    add pour(Aluminum) named R1_Contact_A_Metal on layer: metal1:
+        dimensions: contact_length by res_width
+        align: center_x with R1_Contact_A_LI
+        align: center_y with R1_Contact_A_LI
+        net: In
+
+    add pour(Aluminum) named R1_Contact_B_Metal on layer: metal1:
+        dimensions: contact_length by res_width
+        align: center_x with R1_Contact_B_LI
+        align: center_y with R1_Contact_B_LI
+        net: Mid
+
+    # R1 Via Arrays (LI to Metal1)
+    for i in 0..3:
+        add contact(Tungsten) named R1_Via_A_Metal_{i} spanning layer: li1 to metal1:
+            diameter: 170nm
+            align: center_x with R1_Contact_A_LI
+            align: center_y with R1_Contact_A_LI.center_y + (i - 1) * via_pitch
+            net: In
+
+    for i in 0..3:
+        add contact(Tungsten) named R1_Via_B_Metal_{i} spanning layer: li1 to metal1:
+            diameter: 170nm
+            align: center_x with R1_Contact_B_LI
+            align: center_y with R1_Contact_B_LI.center_y + (i - 1) * via_pitch
+            net: Mid
+
+    # ========================================================================
+    # RESISTOR 2 (R2: Mid → GND) - Bottom Resistor
+    # ========================================================================
+    
+    # R2 Polysilicon Body
+    add pour(Polysilicon) named R2_Body on layer: polyres:
+        device: R2.A, R2.B
+        dimensions: res_length by res_width
+        at: [x: r2_x, y: res_y]
+
+    # R2 RPM Mask (180nm overhang per SKY130 rpm.2 on width, clearing contact heads per rpm.1a/b)
+    add pour(Resistor_Poly_Mask) named R2_RPM on layer: rpm:
+        dimensions: rpm_length by res_width + 360nm
+        align: center_x with R2_Body
+        align: center_y with R2_Body
+
+    # R2 PSDM Mask (P+ Implant over Poly Resistor body with 130nm enclosure per SKY130 psdm.1/psdm.2)
+    add pour(P_Plus_Implant_Mask) named R2_PSDM on layer: psdm:
+        dimensions: res_length + 260nm by res_width + 260nm
+        align: center_x with R2_Body
+        align: center_y with R2_Body
+
+    # R2 Terminal A Contact (Left - connects to Mid)
+    add pour(Titanium_Silicide) named R2_Contact_A_LI on layer: li1:
+        device: R2.A
+        net: Mid
+        dimensions: contact_length by res_width
+        align: center_x with R2_Body.left + contact_length / 2
+        align: center_y with R2_Body
+
+    # R2 Terminal B Contact (Right - connects to GND)
+    add pour(Titanium_Silicide) named R2_Contact_B_LI on layer: li1:
+        device: R2.B
+        net: GND
+        dimensions: contact_length by res_width
+        align: center_x with R2_Body.right - contact_length / 2
+        align: center_y with R2_Body
+
+    # R2 Via Arrays (Poly to LI)
+    for i in 0..3:
+        add contact(Tungsten) named R2_Via_A_Poly_{i} spanning layer: polyres to li1:
+            diameter: 170nm
+            align: center_x with R2_Contact_A_LI
+            align: center_y with R2_Contact_A_LI.center_y + (i - 1) * via_pitch
+            net: Mid
+
+    for i in 0..3:
+        add contact(Tungsten) named R2_Via_B_Poly_{i} spanning layer: polyres to li1:
+            diameter: 170nm
+            align: center_x with R2_Contact_B_LI
+            align: center_y with R2_Contact_B_LI.center_y + (i - 1) * via_pitch
+            net: GND
+
+    # R2 Metal1 Pads
+    add pour(Aluminum) named R2_Contact_A_Metal on layer: metal1:
+        dimensions: contact_length by res_width
+        align: center_x with R2_Contact_A_LI
+        align: center_y with R2_Contact_A_LI
+        net: Mid
+
+    add pour(Aluminum) named R2_Contact_B_Metal on layer: metal1:
+        dimensions: contact_length by res_width
+        align: center_x with R2_Contact_B_LI
+        align: center_y with R2_Contact_B_LI
+        net: GND
+
+    # R2 Via Arrays (LI to Metal1)
+    for i in 0..3:
+        add contact(Tungsten) named R2_Via_A_Metal_{i} spanning layer: li1 to metal1:
+            diameter: 170nm
+            align: center_x with R2_Contact_A_LI
+            align: center_y with R2_Contact_A_LI.center_y + (i - 1) * via_pitch
+            net: Mid
+
+    for i in 0..3:
+        add contact(Tungsten) named R2_Via_B_Metal_{i} spanning layer: li1 to metal1:
+            diameter: 170nm
+            align: center_x with R2_Contact_B_LI
+            align: center_y with R2_Contact_B_LI.center_y + (i - 1) * via_pitch
+            net: GND
+
+    # ========================================================================
+    # EXTERNAL TEST PADS & ROUTING
+    # ========================================================================
+    
+    # Input Pad (1.8V) - Positioned safely inside space (x = 1.0um to 2.0um)
     add pour(Aluminum) named In_Pad on layer: metal1:
+        dimensions: pad_size by pad_size
+        align: center_x with R1_Contact_A_Metal.left - 1.5um
+        align: center_y with R1_Contact_A_Metal
         net: In
-        dimensions: 600nm by 600nm
-        at: [x: 600nm, y: 2.0um]
 
-    # Mid-point pad (0.9V expected)
+    # Mid-point Pad (0.9V expected)
     add pour(Aluminum) named Mid_Pad on layer: metal1:
+        dimensions: pad_size by pad_size
+        align: center_x with R1_Body.right + 1.5um
+        align: center_y with R1_Body
         net: Mid
-        dimensions: 600nm by 600nm
-        at: [x: 3.5um, y: 2.0um]
 
-    # Ground pad (0V)
+    # Ground Pad (0V)
     add pour(Aluminum) named GND_Pad on layer: metal1:
+        dimensions: pad_size by pad_size
+        align: center_x with R2_Contact_B_Metal.right + 2.5um
+        align: center_y with R2_Contact_B_Metal
         net: GND
-        dimensions: 600nm by 600nm
-        at: [x: 6.5um, y: 2.0um]
+
+    # Ground Bus (Guarantees physical continuity across R1 bulk tap, R2 bulk tap, and GND pad)
+    add pour(Aluminum) named GND_Bus on layer: metal1:
+        dimensions: 12.7um by 600nm
+        at: [x: 11.15um, y: 7.5um]
+        net: GND
 
     # ========================================================================
-    # INTERCONNECTS - Route all pads to resistors
+    # SUBSTRATE TAPS FOR BULK CONNECTION (SKY130 LVS Requirement)
+    # Each resistor needs its own substrate tap
     # ========================================================================
+    
+    # R1 substrate tap
+    add pour(Tap_Mask) named R1_Bulk_Tap_Mask on layer: tap:
+        dimensions: tap_size by tap_size
+        align: center_x with R1_Body
+        align: center_y with R1_Body.center_y + tap_offset_y
 
-    # Input to R1 (In net)
-    route In_Pad to R1_Contact_A:
+    add pour(P_Plus_Implant_Mask) named R1_Bulk_Tap_PSDM on layer: psdm:
+        dimensions: tap_size + 260nm by tap_size + 260nm
+        align: center_x with R1_Body
+        align: center_y with R1_Body.center_y + tap_offset_y
+
+    add pour(P_Plus_Diffusion) named R1_Bulk_Tap_Diff on layer: pdiff:
+        dimensions: tap_size by tap_size
+        align: center_x with R1_Body
+        align: center_y with R1_Body.center_y + tap_offset_y
+        net: GND
+        device: R1.BULK
+
+    add contact(Tungsten) named R1_Bulk_Tap_Contact spanning layer: pdiff to li1:
+        diameter: 170nm
+        align: center_x with R1_Bulk_Tap_Diff
+        align: center_y with R1_Bulk_Tap_Diff
+        net: GND
+
+    add pour(Titanium_Silicide) named R1_Bulk_Tap_LI on layer: li1:
+        dimensions: tap_size by tap_size
+        align: center_x with R1_Bulk_Tap_Diff
+        align: center_y with R1_Bulk_Tap_Diff
+        net: GND
+
+    # R1 substrate tap metal1 pad and via
+    add pour(Aluminum) named R1_Bulk_Tap_Metal on layer: metal1:
+        dimensions: tap_size by tap_size
+        align: center_x with R1_Bulk_Tap_LI
+        align: center_y with R1_Bulk_Tap_LI
+        net: GND
+
+    add contact(Tungsten) named R1_Bulk_Tap_Via spanning layer: li1 to metal1:
+        diameter: 170nm
+        align: center_x with R1_Bulk_Tap_LI
+        align: center_y with R1_Bulk_Tap_LI
+        net: GND
+
+    # R2 substrate tap
+    add pour(Tap_Mask) named R2_Bulk_Tap_Mask on layer: tap:
+        dimensions: tap_size by tap_size
+        align: center_x with R2_Body
+        align: center_y with R2_Body.center_y + tap_offset_y
+
+    add pour(P_Plus_Implant_Mask) named R2_Bulk_Tap_PSDM on layer: psdm:
+        dimensions: tap_size + 260nm by tap_size + 260nm
+        align: center_x with R2_Body
+        align: center_y with R2_Body.center_y + tap_offset_y
+
+    add pour(P_Plus_Diffusion) named R2_Bulk_Tap_Diff on layer: pdiff:
+        dimensions: tap_size by tap_size
+        align: center_x with R2_Body
+        align: center_y with R2_Body.center_y + tap_offset_y
+        net: GND
+        device: R2.BULK
+
+    add contact(Tungsten) named R2_Bulk_Tap_Contact spanning layer: pdiff to li1:
+        diameter: 170nm
+        align: center_x with R2_Bulk_Tap_Diff
+        align: center_y with R2_Bulk_Tap_Diff
+        net: GND
+
+    add pour(Titanium_Silicide) named R2_Bulk_Tap_LI on layer: li1:
+        dimensions: tap_size by tap_size
+        align: center_x with R2_Bulk_Tap_Diff
+        align: center_y with R2_Bulk_Tap_Diff
+        net: GND
+
+    # R2 substrate tap metal1 pad and via
+    add pour(Aluminum) named R2_Bulk_Tap_Metal on layer: metal1:
+        dimensions: tap_size by tap_size
+        align: center_x with R2_Bulk_Tap_LI
+        align: center_y with R2_Bulk_Tap_LI
+        net: GND
+
+    add contact(Tungsten) named R2_Bulk_Tap_Via spanning layer: li1 to metal1:
+        diameter: 170nm
+        align: center_x with R2_Bulk_Tap_LI
+        align: center_y with R2_Bulk_Tap_LI
+        net: GND
+
+    # ========================================================================
+    # ROUTING - All routes defined after all geometry is placed
+    # ========================================================================
+    
+    # Routes
+    route In_Pad to R1_Contact_A_Metal:
         net: In
         width: 300nm
         layer: metal1
+        intent: Signal
 
-    # R1 to Mid pad (Mid net)
-    route R1_Contact_B to Mid_Pad:
+    route R1_Contact_B_Metal to Mid_Pad:
         net: Mid
         width: 300nm
         layer: metal1
+        intent: Signal
 
-    # Mid pad to R2 (Mid net)
-    route Mid_Pad to R2_Contact_A:
+    route Mid_Pad to R2_Contact_A_Metal:
         net: Mid
         width: 300nm
         layer: metal1
+        intent: Signal
 
-    # R2 to Ground (GND net)
-    route R2_Contact_B to GND_Pad:
+    route R2_Contact_B_Metal to GND_Pad:
         net: GND
         width: 300nm
         layer: metal1
+        intent: Signal
+
+    route GND_Bus to GND_Pad:
+        net: GND
+        width: 300nm
+        layer: metal1
+        intent: Signal
+
+# Test definition must be outside the space block
+test Voltage_Divider_Test for Voltage_Divider_Space:
+    ac: { sweep: dec, points: 20, freq: 100Hz..100MHz }
+    tran: { step: 10ps, stop: 200ns }

@@ -1,4 +1,4 @@
-//! Constraint Solver (Sprint 3, Task 3.1)
+﻿//! Constraint Solver (Sprint 3, Task 3.1)
 //!
 //! Resolves relative positions to absolute coordinates.
 //! Handles syntax like: `at M1.right + 1mm` or `at M1.top + [0.5mm, 1mm, 0mm]`
@@ -40,8 +40,8 @@ impl<'a> ConstraintSolver<'a> {
     /// rebuild it for every coordinate calculation.
     ///
     /// Performance Impact:
-    /// - Before: O(N × constants) where N = number of coordinate calculations
-    /// - After: O(1 × constants) + O(N × HashMap_lookup)
+    /// - Before: O(N Ã— constants) where N = number of coordinate calculations
+    /// - After: O(1 Ã— constants) + O(N Ã— HashMap_lookup)
     pub fn new(
         bbox_tracker: &'a BoundingBoxTracker,
         eval_context: &'a hwc_parser::EvaluationContext,
@@ -222,7 +222,7 @@ impl<'a> ConstraintSolver<'a> {
         };
 
         // GAP1 DEBUG: Log edge point calculation
-        // eprintln!($3"[DEBUG GAP1] Anchor '{}' edge {:?} → edge_point=({:.3}, {:.3}, {:.3})",
+        // eprintln!($3"[DEBUG GAP1] Anchor '{}' edge {:?} â†’ edge_point=({:.3}, {:.3}, {:.3})",
         // resolved_anchor_name,
         // rel_pos.edge,
         // edge_point.x as f64 / 1_000_000.0,
@@ -233,7 +233,7 @@ impl<'a> ConstraintSolver<'a> {
         let final_point = self.apply_offset(edge_point, &rel_pos.offset, rel_pos.edge)?;
 
         // GAP1 DEBUG: Log final resolved point
-        // eprintln!($3"[DEBUG GAP1] After offset → final=({:.3}, {:.3}, {:.3})",
+        // eprintln!($3"[DEBUG GAP1] After offset â†’ final=({:.3}, {:.3}, {:.3})",
         // final_point.x as f64 / 1_000_000.0,
         // final_point.y as f64 / 1_000_000.0,
         // final_point.z as f64 / 1_000_000.0,
@@ -261,7 +261,7 @@ impl<'a> ConstraintSolver<'a> {
         let mut chain = stack.to_vec();
         chain.push(current.into());
 
-        let cycle_display = chain.join(" → ");
+        let cycle_display = chain.join(" â†’ ");
 
         format!(
             "Circular dependency detected in relative positioning:\n\
@@ -423,10 +423,10 @@ impl<'a> ConstraintSolver<'a> {
                 // - INHERIT the other coordinates from the anchor (Y and Z stays the same)
                 //
                 // Before this fix:
-                // - Adder[0] at y: 5mm → Adder[1] at y: 40mm (WRONG - teleported!)
+                // - Adder[0] at y: 5mm â†’ Adder[1] at y: 40mm (WRONG - teleported!)
                 //
                 // After this fix:
-                // - Adder[0] at y: 5mm → Adder[1] at y: 5mm (CORRECT - stayed in line)
+                // - Adder[0] at y: 5mm â†’ Adder[1] at y: 5mm (CORRECT - stayed in line)
                 let offset_nm = self.measurement_to_nm(measurement)?;
 
                 // Special case: Center edge with zero offset is valid (just use center point)
@@ -502,7 +502,7 @@ impl<'a> ConstraintSolver<'a> {
             Unit::Nanometer => value as i64,
             _ => {
                 return Err(format!(
-                "Invalid unit for position offset: {:?}. Expected distance unit (mm, cm, µm, nm)",
+                "Invalid unit for position offset: {:?}. Expected distance unit (mm, cm, Âµm, nm)",
                 measurement.unit
             ))
             }
@@ -520,15 +520,15 @@ impl<'a> ConstraintSolver<'a> {
     /// - After: Single HashMap lookup (O(1) per call)
     fn expression_to_nm(&self, expr: &Expression) -> Result<i64, String> {
         // NATIVE FIX: Use the pre-built context instead of rebuilding it
-        eprintln!("[EXPR_TO_NM DEBUG] Evaluating expression: {:?}", expr);
-        eprintln!(
-            "[EXPR_TO_NM DEBUG] eval_context has {} entries",
-            self.eval_context.len()
-        );
+//         eprintln!("[EXPR_TO_NM DEBUG] Evaluating expression: {:?}", expr);
+//         eprintln!(
+//             "[EXPR_TO_NM DEBUG] eval_context has {} entries",
+//             self.eval_context.len()
+//         );
 
         let value = expr.evaluate(self.eval_context)?;
 
-        eprintln!("[EXPR_TO_NM DEBUG] Expression evaluated to: {:?}", value);
+//         eprintln!("[EXPR_TO_NM DEBUG] Expression evaluated to: {:?}", value);
 
         match value {
             Value::Number(n) => Ok(n),
@@ -541,7 +541,7 @@ impl<'a> ConstraintSolver<'a> {
                     Unit::Nanometer => value as i64,
                     _ => {
                         return Err(format!(
-                        "Invalid unit for position: {:?}. Expected distance unit (mm, cm, µm, nm)",
+                        "Invalid unit for position: {:?}. Expected distance unit (mm, cm, Âµm, nm)",
                         unit
                     ))
                     }

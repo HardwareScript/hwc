@@ -1,4 +1,4 @@
-use crate::ir::errors::IrError;
+﻿use crate::ir::errors::IrError;
 use crate::ir::routing::automatic::{select_routable_port_from_resolution, PortSelectionParams};
 use hwc_engine::geometry_router::port_escape::CardinalPort;
 use hwc_engine::{HardwareSpace, Point3D};
@@ -16,7 +16,7 @@ pub enum ResolvedEndpoints {
         start_normal: hwc_engine::geometry_router::connection_interface::Normal2D,
         goal_normal: hwc_engine::geometry_router::connection_interface::Normal2D,
     },
-    /// Entities already overlap in 2D on the same layer — route is satisfied by placement!
+    /// Entities already overlap in 2D on the same layer â€” route is satisfied by placement!
     /// Clipper2 will weld the overlapping copper automatically during geometry export.
     SatisfiedByPlacement {
         overlap_point: Point3D,
@@ -84,7 +84,7 @@ fn select_access_region_by_port<'a>(
 /// Resolve a ResolvedRoute's EntityId endpoints to boundary coordinates with normals.
 ///
 /// v0.1.9: Now uses the Connection Interface Routing (CIR) system with
-/// PhysicalInterface → AccessRegions → Boundary Points.
+/// PhysicalInterface â†’ AccessRegions â†’ Boundary Points.
 ///
 /// v0.2.0: Contact-Aware Routing - if an explicit contact exists on a pad,
 /// use its position as the routing point instead of the pad boundary edge.
@@ -394,7 +394,7 @@ pub fn resolve_route_boundary_points(
     // We need to recalculate for the actual trace width.
     //
     // LAW 1: Zero-Gap Contact Lock
-    //   The trace centerline is positioned exactly at (boundary ± trace_width/2)
+    //   The trace centerline is positioned exactly at (boundary Â± trace_width/2)
     //   This guarantees the trace edge touches the pad edge with 0nm gap.
     //
     // LAW 2: Mandatory Perpendicular Escape Segment
@@ -441,7 +441,7 @@ pub fn resolve_route_boundary_points(
         from_net_id,
     ) {
         eprintln!(
-            "  🔧 CONTACT OVERRIDE: Using explicit contact at ({},{}) instead of pad edge",
+            "  ðŸ”§ CONTACT OVERRIDE: Using explicit contact at ({},{}) instead of pad edge",
             contact_x, contact_y
         );
         Point3D::new(contact_x, contact_y, start_point.z)
@@ -456,7 +456,7 @@ pub fn resolve_route_boundary_points(
         to_net_id,
     ) {
         eprintln!(
-            "  🔧 CONTACT OVERRIDE: Using explicit contact at ({},{}) instead of pad edge",
+            "  ðŸ”§ CONTACT OVERRIDE: Using explicit contact at ({},{}) instead of pad edge",
             contact_x, contact_y
         );
         Point3D::new(contact_x, contact_y, goal_point.z)
@@ -495,7 +495,7 @@ fn resolve_boundary_entry(
     let (nx, ny) = normal.to_unit_direction(); // nx, ny in {-1, 0, 1}
     let half_width = actual_width_nm / 2;
 
-    eprintln!("[BOUNDARY DEBUG] resolve_boundary_entry (v0.2.1 DEBLOATED):");
+//     eprintln!("[BOUNDARY DEBUG] resolve_boundary_entry (v0.2.1 DEBLOATED):");
     eprintln!("  entry_point (edge center): ({},{},{})", entry_point.x, entry_point.y, entry_point.z);
     eprintln!("  normal: ({},{}) -> unit direction: ({},{})", normal.x, normal.y, nx, ny);
     eprintln!("  actual_width_nm: {}, half_width: {}", actual_width_nm, half_width);
@@ -619,7 +619,7 @@ fn find_contact_on_pad(
 
         if contact_spans_target {
             eprintln!(
-                "[CONTACT FOUND] Explicit contact layer {} at ({},{}) Z={}→{}nm spans target Z={}nm",
+                "[CONTACT FOUND] Explicit contact layer {} at ({},{}) Z={}â†’{}nm spans target Z={}nm",
                 idx, layer_center_x, layer_center_y, layer.bbox.min.z, layer.bbox.max.z, target_z
             );
             return Some((layer_center_x, layer_center_y));

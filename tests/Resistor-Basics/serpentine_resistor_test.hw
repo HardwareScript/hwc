@@ -13,6 +13,7 @@
 #
 # VERSION 1: Manual implementation (no loops) - intentionally different from V2
 # Every segment is explicitly written out to demonstrate base syntax
+# Includes full SKY130 fabrication mask compliance (RPM, PSDM, TAP)
 #
 # Reference: https://patents.justia.com/patent/20220271116
 
@@ -127,13 +128,19 @@ space Serpentine_Resistor_Space implements SerpentineResistor:
     # This mask blocks silicide formation on the polysilicon resistor body
     # Category: mask → Z-thickness = 0nm, anchored to Z=180nm (top of polyres)
     # Exported to GDSII for fabrication, skipped in DXF/GLB by structural filter
-    # SKY130 DRC: rpm.1 requires ≥180nm enclosure on all sides (360nm total extension)
+    # SKY130 DRC: rpm.2 requires ≥180nm overhang on width (360nm total extension)
     # Total height: 5 segments @ 3μm pitch = 12μm + 1 segment height = 13μm
     # ========================================================================
     add pour(Resistor_Poly_Mask) named RPM_Serpentine on layer: rpm:
-        dimensions: seg_length + 360nm by 13.0um + 360nm
+        dimensions: seg_length by 13.0um + 360nm
         align: center_x with Seg3
         align: center_y with Seg3  # Centers at middle segment
+
+    # 1b. PSDM MASK (P+ Implant over Poly Resistor body with 130nm enclosure per SKY130 psdm.1/psdm.2)
+    add pour(P_Plus_Implant_Mask) named Serpentine_PSDM on layer: psdm:
+        dimensions: seg_length + 260nm by 13.0um + 260nm
+        align: center_x with Seg3
+        align: center_y with Seg3
 
     # ========================================================================
     # 2. TERMINAL CONTACTS (LEFT END OF BOTTOM SEGMENT → RIGHT END OF TOP)
@@ -244,35 +251,63 @@ space Serpentine_Resistor_Space implements SerpentineResistor:
     # ========================================================================
     # 8. SUBSTRATE TAP FOR BULK CONNECTION (SKY130 LVS Requirement)
     # Precision poly resistors require physical bulk contact for LVS to pass.
-    # In SKY130, a proper substrate tap requires THREE layers:
-    #   1. P+ diffusion region (pdiff layer) - physical implant in substrate
-    #   2. Local interconnect contact (licon) - via connecting pdiff to li1
-    #   3. Local interconnect metal (li1) - connects to GND net
+    # In SKY130, a proper substrate tap requires FIVE layers:
+    #   1. TAP mask - substrate tap boundary mask (GDS 65/44)
+    #   2. PSDM mask - P+ implant mask (GDS 94/20)
+    #   3. P+ diffusion region (pdiff layer) - physical implant in substrate
+    #   4. Local interconnect contact (licon) - via connecting pdiff to li1
+    #   5. Local interconnect metal (li1) - connects to GND net
     # Positioned below the middle segment (Seg3) for central placement
     # ========================================================================
     let tap_size = 400nm
     let tap_x_pos = 10.0um  # Centered in X direction
     let tap_y_pos = 11.0um  # Below Seg3, clear of serpentine path
     
-    # 8a. P+ DIFFUSION REGION (Physical substrate implant)
-    add pour(P_Plus_Diffusion) named Bulk_Tap_Diff on layer: pdiff:
+    # 8a. TAP MASK (Substrate tap boundary mask - GDS 65/44)
+    add pour(Tap_Mask) named Bulk_Tap_Mask on layer: tap:
         dimensions: tap_size by tap_size
         at: [x: tap_x_pos, y: tap_y_pos]
+
+    # 8b. PSDM MASK (P+ implant mask with 130nm enclosure - GDS 94/20)
+    add pour(P_Plus_Implant_Mask) named Bulk_Tap_PSDM on layer: psdm:
+        dimensions: tap_size + 260nm by tap_size + 260nm
+        align: center_x with Bulk_Tap_Mask
+        align: center_y with Bulk_Tap_Mask
+
+    # 8c. P+ DIFFUSION REGION (Physical substrate implant)
+    add pour(P_Plus_Diffusion) named Bulk_Tap_Diff on layer: pdiff:
+        dimensions: tap_size by tap_size
+        align: center_x with Bulk_Tap_Mask
+        align: center_y with Bulk_Tap_Mask
         net: GND
         device: R1.BULK
     
-    # 8b. LOCAL INTERCONNECT CONTACT (licon - connects pdiff to li1)
+    # 8d. LOCAL INTERCONNECT CONTACT (licon - connects pdiff to li1)
     add contact(Tungsten) named Bulk_Tap_Contact spanning layer: pdiff to li1:
         diameter: 170nm
         align: center_x with Bulk_Tap_Diff
         align: center_y with Bulk_Tap_Diff
         net: GND
     
-    # 8c. LOCAL INTERCONNECT METAL (li1 layer)
+    # 8e. LOCAL INTERCONNECT METAL (li1 layer)
     add pour(Titanium_Silicide) named Bulk_Tap_LI on layer: li1:
         dimensions: tap_size by tap_size
         align: center_x with Bulk_Tap_Diff
         align: center_y with Bulk_Tap_Diff
+        net: GND
+
+    # 8f. METAL1 PAD (for improved connectivity)
+    add pour(Aluminum) named Bulk_Tap_Metal on layer: metal1:
+        dimensions: tap_size by tap_size
+        align: center_x with Bulk_Tap_LI
+        align: center_y with Bulk_Tap_LI
+        net: GND
+
+    # 8g. VIA (li1 to metal1)
+    add contact(Tungsten) named Bulk_Tap_Via spanning layer: li1 to metal1:
+        diameter: 170nm
+        align: center_x with Bulk_Tap_LI
+        align: center_y with Bulk_Tap_LI
         net: GND
 
 # ========================================================================

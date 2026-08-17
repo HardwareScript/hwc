@@ -1,4 +1,4 @@
-//! Net ID remapping and child-netlist flattening for space instantiation.
+﻿//! Net ID remapping and child-netlist flattening for space instantiation.
 
 use crate::ir::errors::IrError;
 use hwc_engine::netlist::NetId;
@@ -39,13 +39,13 @@ pub(super) fn build_net_id_map(
                 ))
             })?;
 
-        eprintln!(
-            "[HIERARCHICAL] Mapping net '{}' (child NetId {}) -> '{}' (parent NetId {})",
-            child_net_name,
-            child_net_id.raw(),
-            parent_net_name,
-            parent_net_id.raw()
-        );
+//         eprintln!(
+//             "[HIERARCHICAL] Mapping net '{}' (child NetId {}) -> '{}' (parent NetId {})",
+//             child_net_name,
+//             child_net_id.raw(),
+//             parent_net_name,
+//             parent_net_id.raw()
+//         );
 
         net_id_map.insert(child_net_id, parent_net_id);
     }
@@ -70,10 +70,10 @@ pub(super) fn transform_netlist(
     net_id_map: &FxHashMap<NetId, NetId>,
     instance_name: &str,
 ) -> Result<(), IrError> {
-    eprintln!(
-        "[HIERARCHICAL] Transforming child netlist: {} components",
-        child_netlist.component_count()
-    );
+//     eprintln!(
+//         "[HIERARCHICAL] Transforming child netlist: {} components",
+//         child_netlist.component_count()
+//     );
 
     // Single-pass: create each component and immediately add its pins.
     //
@@ -87,7 +87,6 @@ pub(super) fn transform_netlist(
     // pin name (__virtual_PMOS_Inst.VDD_Rail for all components instead of the
     // correct per-component name).  By interleaving component creation and pin
     // addition we ensure first_pin is always correct.
-    let mut virtual_pins_created = 0;
 
     for cid in 0..child_netlist.component_count() {
         let child_comp_id = hwc_engine::netlist::ComponentId::new(cid as u32);
@@ -109,10 +108,10 @@ pub(super) fn transform_netlist(
         // already exists, e.g. from a prior call).
         let parent_comp_id =
             if let Some(id) = parent_netlist.get_component_by_name(&parent_comp_name) {
-                eprintln!(
-                    "[HIERARCHICAL] Component '{}' already exists in parent",
-                    parent_comp_name
-                );
+//                 eprintln!(
+//                     "[HIERARCHICAL] Component '{}' already exists in parent",
+//                     parent_comp_name
+//                 );
                 id
             } else {
                 let id = parent_netlist.add_component(
@@ -120,22 +119,21 @@ pub(super) fn transform_netlist(
                     child_comp.component_type.clone(),
                     (tx, ty, tz),
                 );
-                eprintln!(
-                    "[HIERARCHICAL] Added component '{}' at ({}, {}, {})",
-                    parent_comp_name, tx, ty, tz
-                );
+//                 eprintln!(
+//                     "[HIERARCHICAL] Added component '{}' at ({}, {}, {})",
+//                     parent_comp_name, tx, ty, tz
+//                 );
                 id
             };
 
         // Immediately add this component's pins while first_pin is correct.
-        let child_comp_name_str = child_comp.name.as_str().to_owned();
         let child_pins = child_netlist.get_component_pins(child_comp_id);
 
-        eprintln!(
-            "[HIERARCHICAL] Processing pins for child component '{}' (child_id={})",
-            child_comp_name_str, cid
-        );
-        eprintln!("[HIERARCHICAL]   Child has {} pins", child_pins.len());
+//         eprintln!(
+//             "[HIERARCHICAL] Processing pins for child component '{}' (child_id={})",
+//             child_comp_name_str, cid
+//         );
+//         eprintln!("[HIERARCHICAL]   Child has {} pins", child_pins.len());
 
         // `child_pins` is a Vec<PinId>; consume it directly to avoid the
         // E0614 compile error that came from the old `*child_pin_id` deref
@@ -146,18 +144,17 @@ pub(super) fn transform_netlist(
                 None => continue,
             };
 
-            eprintln!("[HIERARCHICAL]   Processing child pin '{}'", child_pin.name);
+//             eprintln!("[HIERARCHICAL]   Processing child pin '{}'", child_pin.name);
 
             // Rename virtual pins with the hierarchical instance prefix.
             // e.g. "__virtual_Out_Pad" -> "__virtual_PMOS_Inst.Out_Pad"
             let parent_pin_name = if child_pin.name.starts_with("__virtual_") {
                 let core_name = &child_pin.name[10..]; // strip "__virtual_"
                 let hierarchical_name = format!("__virtual_{}.{}", instance_name, core_name);
-                eprintln!(
-                    "[HIERARCHICAL] Renaming virtual pin: '{}' -> '{}'",
-                    child_pin.name, hierarchical_name
-                );
-                virtual_pins_created += 1;
+//                 eprintln!(
+//                     "[HIERARCHICAL] Renaming virtual pin: '{}' -> '{}'",
+//                     child_pin.name, hierarchical_name
+//                 );
                 hierarchical_name.into()
             } else {
                 child_pin.name.clone()
@@ -174,20 +171,20 @@ pub(super) fn transform_netlist(
             if let Some(child_net_id) = child_pin.connected_net {
                 if let Some(&parent_net_id) = net_id_map.get(&child_net_id) {
                     parent_netlist.connect_pin(parent_pin_id, parent_net_id);
-                    eprintln!(
-                        "[HIERARCHICAL] Connected pin '{}' to net {}",
-                        parent_pin_name,
-                        parent_net_id.raw()
-                    );
+//                     eprintln!(
+//                         "[HIERARCHICAL] Connected pin '{}' to net {}",
+//                         parent_pin_name,
+//                         parent_net_id.raw()
+//                     );
                 }
             }
         }
     }
 
-    eprintln!(
-        "[HIERARCHICAL] Netlist transformation complete: {} virtual pins created",
-        virtual_pins_created
-    );
+//     eprintln!(
+//         "[HIERARCHICAL] Netlist transformation complete: {} virtual pins created",
+//         virtual_pins_created
+//     );
 
     Ok(())
 }

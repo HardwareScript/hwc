@@ -6,8 +6,13 @@
 * ========================================
 * PDK SUBCIRCUIT: sky130_fd_pr__res_high_po
 * ========================================
-* Subcircuit 'sky130_fd_pr__res_high_po' uses foundry model
-.include "sky130_fd_pr/models/sky130_fd_pr__res_high_po.model.spice"
+.subckt sky130_fd_pr__res_high_po A B BULK W=1u L=1u
+RR_head A node_1 362
+RR_tail node_2 B 362
+RR_body node_1 node_2 {3.500000e2 * (L / W)} tc1=-0.00147 tc2=0.0000027 vc1=-0.00032 vc2=0.000018
+CC_sub1 A BULK {2.000000e-15 * W * L}
+CC_sub2 B BULK {2.000000e-15 * W * L}
+.ends sky130_fd_pr__res_high_po
 
 * ========================================
 * NETS
@@ -24,62 +29,171 @@
 * Net: Out3 (pour: R3_Contact_B_LI, material: Titanium_Silicide, z: 580nm)
 * Net: In3 (pour: R3_Contact_A_Metal, material: Aluminum, z: 830nm)
 * Net: Out3 (pour: R3_Contact_B_Metal, material: Aluminum, z: 830nm)
+* Net: GND (pour: R1_Bulk_Tap_Diff, material: P_Plus_Diffusion, z: 0nm)
+* Net: GND (pour: R1_Bulk_Tap_LI, material: Titanium_Silicide, z: 580nm)
+* Net: GND (pour: R1_Bulk_Tap_Metal, material: Aluminum, z: 830nm)
+* Net: GND (pour: R2_Bulk_Tap_Diff, material: P_Plus_Diffusion, z: 0nm)
+* Net: GND (pour: R2_Bulk_Tap_LI, material: Titanium_Silicide, z: 580nm)
+* Net: GND (pour: R2_Bulk_Tap_Metal, material: Aluminum, z: 830nm)
+* Net: GND (pour: R3_Bulk_Tap_Diff, material: P_Plus_Diffusion, z: 0nm)
+* Net: GND (pour: R3_Bulk_Tap_LI, material: Titanium_Silicide, z: 580nm)
+* Net: GND (pour: R3_Bulk_Tap_Metal, material: Aluminum, z: 830nm)
+* Net: GND (pour: GND_Bus, material: Aluminum, z: 830nm)
 * Net: In1 (width=300nm, material=Tungsten)
 *   Connected pins:
 *     - R1_Contact_A_LI.anchor
 *     - R1_Contact_A_LI.__virtual_R1_Contact_A_LI
-*     - R1_Via_A_Poly.__virtual_R1_Via_A_Poly
+*     - R1_Via_A_Poly_0.__virtual_R1_Via_A_Poly_0
+*     - R1_Via_A_Poly_1.__virtual_R1_Via_A_Poly_1
+*     - R1_Via_A_Poly_2.__virtual_R1_Via_A_Poly_2
 *     - R1_Contact_A_Metal.anchor
 *     - R1_Contact_A_Metal.__virtual_R1_Contact_A_Metal
-*     - R1_Via_A_Metal.__virtual_R1_Via_A_Metal
+*     - R1_Via_A_Metal_0.__virtual_R1_Via_A_Metal_0
+*     - R1_Via_A_Metal_1.__virtual_R1_Via_A_Metal_1
+*     - R1_Via_A_Metal_2.__virtual_R1_Via_A_Metal_2
 * Net: Out1 (width=300nm, material=Tungsten)
 *   Connected pins:
 *     - R1_Contact_B_LI.anchor
 *     - R1_Contact_B_LI.__virtual_R1_Contact_B_LI
-*     - R1_Via_B_Poly.__virtual_R1_Via_B_Poly
+*     - R1_Via_B_Poly_0.__virtual_R1_Via_B_Poly_0
+*     - R1_Via_B_Poly_1.__virtual_R1_Via_B_Poly_1
+*     - R1_Via_B_Poly_2.__virtual_R1_Via_B_Poly_2
 *     - R1_Contact_B_Metal.anchor
 *     - R1_Contact_B_Metal.__virtual_R1_Contact_B_Metal
-*     - R1_Via_B_Metal.__virtual_R1_Via_B_Metal
+*     - R1_Via_B_Metal_0.__virtual_R1_Via_B_Metal_0
+*     - R1_Via_B_Metal_1.__virtual_R1_Via_B_Metal_1
+*     - R1_Via_B_Metal_2.__virtual_R1_Via_B_Metal_2
 * Net: In2 (width=300nm, material=Tungsten)
 *   Connected pins:
 *     - R2_Contact_A_LI.anchor
 *     - R2_Contact_A_LI.__virtual_R2_Contact_A_LI
-*     - R2_Via_A_Poly.__virtual_R2_Via_A_Poly
+*     - R2_Via_A_Poly_0.__virtual_R2_Via_A_Poly_0
+*     - R2_Via_A_Poly_1.__virtual_R2_Via_A_Poly_1
+*     - R2_Via_A_Poly_2.__virtual_R2_Via_A_Poly_2
 *     - R2_Contact_A_Metal.anchor
 *     - R2_Contact_A_Metal.__virtual_R2_Contact_A_Metal
-*     - R2_Via_A_Metal.__virtual_R2_Via_A_Metal
+*     - R2_Via_A_Metal_0.__virtual_R2_Via_A_Metal_0
+*     - R2_Via_A_Metal_1.__virtual_R2_Via_A_Metal_1
+*     - R2_Via_A_Metal_2.__virtual_R2_Via_A_Metal_2
 * Net: Out2 (width=300nm, material=Tungsten)
 *   Connected pins:
 *     - R2_Contact_B_LI.anchor
 *     - R2_Contact_B_LI.__virtual_R2_Contact_B_LI
-*     - R2_Via_B_Poly.__virtual_R2_Via_B_Poly
+*     - R2_Via_B_Poly_0.__virtual_R2_Via_B_Poly_0
+*     - R2_Via_B_Poly_1.__virtual_R2_Via_B_Poly_1
+*     - R2_Via_B_Poly_2.__virtual_R2_Via_B_Poly_2
 *     - R2_Contact_B_Metal.anchor
 *     - R2_Contact_B_Metal.__virtual_R2_Contact_B_Metal
-*     - R2_Via_B_Metal.__virtual_R2_Via_B_Metal
+*     - R2_Via_B_Metal_0.__virtual_R2_Via_B_Metal_0
+*     - R2_Via_B_Metal_1.__virtual_R2_Via_B_Metal_1
+*     - R2_Via_B_Metal_2.__virtual_R2_Via_B_Metal_2
 * Net: In3 (width=300nm, material=Tungsten)
 *   Connected pins:
 *     - R3_Contact_A_LI.anchor
 *     - R3_Contact_A_LI.__virtual_R3_Contact_A_LI
-*     - R3_Via_A_Poly.__virtual_R3_Via_A_Poly
+*     - R3_Via_A_Poly_0.__virtual_R3_Via_A_Poly_0
+*     - R3_Via_A_Poly_1.__virtual_R3_Via_A_Poly_1
+*     - R3_Via_A_Poly_2.__virtual_R3_Via_A_Poly_2
 *     - R3_Contact_A_Metal.anchor
 *     - R3_Contact_A_Metal.__virtual_R3_Contact_A_Metal
-*     - R3_Via_A_Metal.__virtual_R3_Via_A_Metal
+*     - R3_Via_A_Metal_0.__virtual_R3_Via_A_Metal_0
+*     - R3_Via_A_Metal_1.__virtual_R3_Via_A_Metal_1
+*     - R3_Via_A_Metal_2.__virtual_R3_Via_A_Metal_2
 * Net: Out3 (width=300nm, material=Tungsten)
 *   Connected pins:
 *     - R3_Contact_B_LI.anchor
 *     - R3_Contact_B_LI.__virtual_R3_Contact_B_LI
-*     - R3_Via_B_Poly.__virtual_R3_Via_B_Poly
+*     - R3_Via_B_Poly_0.__virtual_R3_Via_B_Poly_0
+*     - R3_Via_B_Poly_1.__virtual_R3_Via_B_Poly_1
+*     - R3_Via_B_Poly_2.__virtual_R3_Via_B_Poly_2
 *     - R3_Contact_B_Metal.anchor
 *     - R3_Contact_B_Metal.__virtual_R3_Contact_B_Metal
-*     - R3_Via_B_Metal.__virtual_R3_Via_B_Metal
+*     - R3_Via_B_Metal_0.__virtual_R3_Via_B_Metal_0
+*     - R3_Via_B_Metal_1.__virtual_R3_Via_B_Metal_1
+*     - R3_Via_B_Metal_2.__virtual_R3_Via_B_Metal_2
 * Net: GND (width=300nm, material=Tungsten)
+*   Connected pins:
+*     - R1_Bulk_Tap_Diff.anchor
+*     - R1_Bulk_Tap_Diff.__virtual_R1_Bulk_Tap_Diff
+*     - R1_Bulk_Tap_Contact.__virtual_R1_Bulk_Tap_Contact
+*     - R1_Bulk_Tap_LI.anchor
+*     - R1_Bulk_Tap_LI.__virtual_R1_Bulk_Tap_LI
+*     - R1_Bulk_Tap_Metal.anchor
+*     - R1_Bulk_Tap_Metal.__virtual_R1_Bulk_Tap_Metal
+*     - R1_Bulk_Tap_Via.__virtual_R1_Bulk_Tap_Via
+*     - R2_Bulk_Tap_Diff.anchor
+*     - R2_Bulk_Tap_Diff.__virtual_R2_Bulk_Tap_Diff
+*     - R2_Bulk_Tap_Contact.__virtual_R2_Bulk_Tap_Contact
+*     - R2_Bulk_Tap_LI.anchor
+*     - R2_Bulk_Tap_LI.__virtual_R2_Bulk_Tap_LI
+*     - R2_Bulk_Tap_Metal.anchor
+*     - R2_Bulk_Tap_Metal.__virtual_R2_Bulk_Tap_Metal
+*     - R2_Bulk_Tap_Via.__virtual_R2_Bulk_Tap_Via
+*     - R3_Bulk_Tap_Diff.anchor
+*     - R3_Bulk_Tap_Diff.__virtual_R3_Bulk_Tap_Diff
+*     - R3_Bulk_Tap_Contact.__virtual_R3_Bulk_Tap_Contact
+*     - R3_Bulk_Tap_LI.anchor
+*     - R3_Bulk_Tap_LI.__virtual_R3_Bulk_Tap_LI
+*     - R3_Bulk_Tap_Metal.anchor
+*     - R3_Bulk_Tap_Metal.__virtual_R3_Bulk_Tap_Metal
+*     - R3_Bulk_Tap_Via.__virtual_R3_Bulk_Tap_Via
+*     - GND_Bus.anchor
+*     - GND_Bus.__virtual_GND_Bus
 
 
 * ========================================
 * EXTRACTED DEVICES
 * ========================================
-XR2 In2 Out2 GND sky130_fd_pr__res_high_po W=1.41u L=4.00u
-XR3 In3 Out3 GND sky130_fd_pr__res_high_po W=0.69u L=4.00u
-XR1 In1 Out1 GND sky130_fd_pr__res_high_po W=2.85u L=4.00u
+XR2 nIn2_li1 nOut2_li1 nGND_pdiff_1 sky130_fd_pr__res_high_po W=1.41u L=3.20u
+XR3 nIn3_li1 nOut3_li1 nGND_pdiff_2 sky130_fd_pr__res_high_po W=0.69u L=3.20u
+XR1 nIn1_li1 nOut1_li1 nGND_pdiff_0 sky130_fd_pr__res_high_po W=2.85u L=3.20u
+
+* ========================================
+* INTEGRATED TRACE PARASITICS
+* ========================================
+* Via/Contact resistance
+Rvia_In1_li1_metal1 nIn1_metal1 nIn1_li1 1.468558e1
+* Via/Contact resistance
+Rvia_In3_li1_metal1 nIn3_metal1 nIn3_li1 1.468558e1
+* Via/Contact resistance
+Rvia_In2_li1_metal1 nIn2_metal1 nIn2_li1 1.468558e1
+* Via/Contact resistance
+Rvia_Out2_li1_metal1 nOut2_metal1 nOut2_li1 1.468558e1
+* Via/Contact resistance
+Rvia_Out1_li1_metal1 nOut1_metal1 nOut1_li1 1.468558e1
+* Via/Contact resistance
+Rvia_Out3_li1_metal1 nOut3_metal1 nOut3_li1 1.468558e1
+* Via/Contact resistance
+Rvia_GND_li1_metal1_0 nGND_metal1_0 nGND_li1_0 4.405673e1
+* Via/Contact resistance
+Rvia_GND_pdiff_li1_0 nGND_li1_0 nGND_pdiff_0 4.405673e1
+* Via/Contact resistance
+Rvia_GND_li1_metal1_1 nGND_metal1_1 nGND_li1_1 4.405673e1
+* Via/Contact resistance
+Rvia_GND_pdiff_li1_1 nGND_li1_1 nGND_pdiff_1 4.405673e1
+* Via/Contact resistance
+Rvia_GND_li1_metal1_2 nGND_metal1_2 nGND_li1_2 4.405673e1
+* Via/Contact resistance
+Rvia_GND_pdiff_li1_2 nGND_li1_2 nGND_pdiff_2 4.405673e1
+* Ground capacitance
+Cgnd_pour_R1_Contact_A_Metal nIn1_metal1 GND 2.624381e-16
+* Ground capacitance
+Cgnd_pour_R1_Contact_B_Metal nOut1_metal1 GND 2.624381e-16
+* Ground capacitance
+Cgnd_pour_R2_Contact_A_Metal nIn2_metal1 GND 1.298378e-16
+* Ground capacitance
+Cgnd_pour_R2_Contact_B_Metal nOut2_metal1 GND 1.298378e-16
+* Ground capacitance
+Cgnd_pour_R3_Contact_A_Metal nIn3_metal1 GND 6.353765e-17
+* Ground capacitance
+Cgnd_pour_R3_Contact_B_Metal nOut3_metal1 GND 6.353765e-17
+* Trace resistance
+Rbus_GND_Bus_0 nGND_metal1_0 nGND_metal1_1 1.044444e0
+* Trace resistance
+Rbus_GND_Bus_1 nGND_metal1_1 nGND_metal1_2 1.044444e0
+* Trace resistance
+Rbus_GND_Bus_to_GND nGND_metal1_2 GND 6.527778e-2
+
+* Total parasitic elements: 21
 
 .end

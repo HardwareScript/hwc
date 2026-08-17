@@ -1,4 +1,4 @@
-//! Transform and copy the entity registry, including PhysicalInterface (CIR) metadata.
+﻿//! Transform and copy the entity registry, including PhysicalInterface (CIR) metadata.
 
 use crate::ir::errors::IrError;
 use hwc_engine::geometry::entity_ids::EntityId;
@@ -26,10 +26,10 @@ pub(super) fn transform_entity_registry(
     net_id_map: &FxHashMap<NetId, NetId>,
     instance_name: &str,
 ) -> Result<(), IrError> {
-    eprintln!(
-        "[HIERARCHICAL] Transforming entity registry: {} entities",
-        child_graph.iter_entity_ids().count()
-    );
+//     eprintln!(
+//         "[HIERARCHICAL] Transforming entity registry: {} entities",
+//         child_graph.iter_entity_ids().count()
+//     );
 
     // Build a lookup: child entity name -> PhysicalInterface
     // We'll use this after registering each entity to also transfer its interface.
@@ -66,10 +66,10 @@ pub(super) fn transform_entity_registry(
                 (id_str, name)
             }
             _ => {
-                eprintln!(
-                    "[HIERARCHICAL WARN] Skipping un-routable entity type in child space: {:?}",
-                    child_entity_data.entity_type
-                );
+//                 eprintln!(
+//                     "[HIERARCHICAL WARN] Skipping un-routable entity type in child space: {:?}",
+//                     child_entity_data.entity_type
+//                 );
                 continue;
             }
         };
@@ -98,24 +98,24 @@ pub(super) fn transform_entity_registry(
         // Update the hierarchical name property inside the metadata
         parent_entity_data.name = hierarchical_name.clone().into();
 
-        eprintln!(
-            "[HIERARCHICAL DEBUG] Creating entity - ID: '{}', name: '{}', EntityId hash: {}",
-            new_id_str, parent_entity_data.name, parent_entity_id
-        );
+//         eprintln!(
+//             "[HIERARCHICAL DEBUG] Creating entity - ID: '{}', name: '{}', EntityId hash: {}",
+//             new_id_str, parent_entity_data.name, parent_entity_id
+//         );
 
         // Register in parent's entity registry
         match parent_graph.register_entity_from_data(parent_entity_id, parent_entity_data) {
             Ok(_) => {
-                eprintln!(
-                    "[HIERARCHICAL] ✓ Successfully registered: '{}' -> '{}' (hash: {})",
-                    child_entity_data.name, new_id_str, parent_entity_id
-                );
+//                 eprintln!(
+//                     "[HIERARCHICAL] âœ“ Successfully registered: '{}' -> '{}' (hash: {})",
+//                     child_entity_data.name, new_id_str, parent_entity_id
+//                 );
             }
             Err(e) => {
-                eprintln!(
-                    "[HIERARCHICAL ERROR] ✗ Failed to register: '{}' -> '{}' (hash: {}): {}",
-                    child_entity_data.name, new_id_str, parent_entity_id, e
-                );
+//                 eprintln!(
+//                     "[HIERARCHICAL ERROR] âœ— Failed to register: '{}' -> '{}' (hash: {}): {}",
+//                     child_entity_data.name, new_id_str, parent_entity_id, e
+//                 );
                 return Err(IrError::PlacementError(e));
             }
         }
@@ -209,17 +209,17 @@ pub(super) fn transform_entity_registry(
             // Register in the parent under the hierarchical entity name
             parent_graph.register_space_entity_interface(hierarchical_name.clone(), parent_iface);
 
-            eprintln!(
-                "[HIERARCHICAL] ✓ Transferred PhysicalInterface: '{}' -> '{}'",
-                child_entity_data.name, hierarchical_name
-            );
+//             eprintln!(
+//                 "[HIERARCHICAL] âœ“ Transferred PhysicalInterface: '{}' -> '{}'",
+//                 child_entity_data.name, hierarchical_name
+//             );
         }
     }
 
-    eprintln!(
-        "[HIERARCHICAL] Entity registry transformation complete: {} entities added to parent",
-        child_graph.iter_entity_ids().count()
-    );
+//     eprintln!(
+//         "[HIERARCHICAL] Entity registry transformation complete: {} entities added to parent",
+//         child_graph.iter_entity_ids().count()
+//     );
 
     Ok(())
 }

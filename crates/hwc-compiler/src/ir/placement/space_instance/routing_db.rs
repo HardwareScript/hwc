@@ -1,4 +1,4 @@
-//! Transfer layer-connection DB entries and register child routes in the routing DB.
+﻿//! Transfer layer-connection DB entries and register child routes in the routing DB.
 
 use crate::ir::errors::IrError;
 use hwc_engine::netlist::NetId;
@@ -18,13 +18,13 @@ pub(super) fn transfer_layer_connections(
     transform: &FixedTransform2D,
     instance_name: &str,
 ) -> Result<(), IrError> {
-    eprintln!(
-        "[HIERARCHICAL] Transferring layer connection database ({} entities)",
-        child_space
-            .layer_connection_db
-            .registered_entities()
-            .count()
-    );
+//     eprintln!(
+//         "[HIERARCHICAL] Transferring layer connection database ({} entities)",
+//         child_space
+//             .layer_connection_db
+//             .registered_entities()
+//             .count()
+//     );
 
     // Iterate over all entities that have registered connections in the child
     for entity_name in child_space.layer_connection_db.registered_entities() {
@@ -62,16 +62,16 @@ pub(super) fn transfer_layer_connections(
                         conn.connection_type,
                     );
 
-                    if let Err(e) = result {
-                        eprintln!(
-                            "[HIERARCHICAL] WARNING: Failed to transfer connection for '{}' on layer '{}': {}",
-                            hierarchical_name, conn.layer_name, e
-                        );
+                    if let Err(_) = result {
+//                         eprintln!(
+//                             "[HIERARCHICAL] WARNING: Failed to transfer connection for '{}' on layer '{}': {}",
+//                             hierarchical_name, conn.layer_name, e
+//                         );
                     } else {
-                        eprintln!(
-                            "[HIERARCHICAL] Transferred connection: '{}' -> '{}' on layer '{}' at Z={}nm",
-                            entity_name, hierarchical_name, conn.layer_name, new_z
-                        );
+//                         eprintln!(
+//                             "[HIERARCHICAL] Transferred connection: '{}' -> '{}' on layer '{}' at Z={}nm",
+//                             entity_name, hierarchical_name, conn.layer_name, new_z
+//                         );
                     }
                 }
             }

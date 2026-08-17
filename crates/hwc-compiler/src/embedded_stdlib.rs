@@ -1,4 +1,4 @@
-//! Embedded Standard Library (Runtime Parsing with Caching)
+﻿//! Embedded Standard Library (Runtime Parsing with Caching)
 //!
 //! The HardwareScript standard library is parsed on-demand at runtime
 //! and cached in memory for subsequent uses.
@@ -121,8 +121,8 @@ pub fn get_stdlib_definitions(path: &str) -> Option<(Vec<Definition>, hwc_parser
             cache.insert(path.into(), cached_module);
             Some((defs, arena))
         }
-        Err(e) => {
-            eprintln!("[STDLIB ERROR] Failed to load {}: {}", path, e);
+        Err(_) => {
+//             eprintln!("[STDLIB ERROR] Failed to load {}: {}", path, e);
             None
         }
     }

@@ -1,4 +1,4 @@
-//! Main routing pipeline orchestrator.
+﻿//! Main routing pipeline orchestrator.
 //!
 //! Coordinates the 3-phase automatic routing pipeline:
 //! 1. Constraint Manager
@@ -47,15 +47,15 @@ pub fn route_automatic(
     let (start_boundary, goal_boundary, start_dir, goal_dir) =
         super::boundary::calculate_boundary_points(space, route, trace_width_nm)?;
 
-    eprintln!("[BOUNDARY DEBUG] Route: {} -> {}", from_name, to_name);
-    eprintln!(
-        "[BOUNDARY DEBUG]   start_boundary: ({},{},{})",
-        start_boundary.x, start_boundary.y, start_boundary.z
-    );
-    eprintln!(
-        "[BOUNDARY DEBUG]   goal_boundary: ({},{},{})",
-        goal_boundary.x, goal_boundary.y, goal_boundary.z
-    );
+//     eprintln!("[BOUNDARY DEBUG] Route: {} -> {}", from_name, to_name);
+//     eprintln!(
+//         "[BOUNDARY DEBUG]   start_boundary: ({},{},{})",
+//         start_boundary.x, start_boundary.y, start_boundary.z
+//     );
+//     eprintln!(
+//         "[BOUNDARY DEBUG]   goal_boundary: ({},{},{})",
+//         goal_boundary.x, goal_boundary.y, goal_boundary.z
+//     );
 
     // v0.1.9: Extract normals from interfaces for perpendicular escape routing
     let (start_normal, goal_normal) = {
@@ -118,23 +118,23 @@ pub fn route_automatic(
         .name
         .clone();
 
-    eprintln!("[BOX-MODEL-DEBUG] Net: {}", net_name);
-    eprintln!(
-        "[BOX-MODEL-DEBUG]   Start Boundary (Contact Point): ({}, {}, {})",
-        start_boundary.x, start_boundary.y, start_boundary.z
-    );
-    eprintln!(
-        "[BOX-MODEL-DEBUG]   Start Normal: ({}, {})",
-        start_normal.x, start_normal.y
-    );
-    eprintln!(
-        "[BOX-MODEL-DEBUG]   Goal Boundary (Contact Point): ({}, {}, {})",
-        goal_boundary.x, goal_boundary.y, goal_boundary.z
-    );
-    eprintln!(
-        "[BOX-MODEL-DEBUG]   Goal Normal: ({}, {})",
-        goal_normal.x, goal_normal.y
-    );
+//     eprintln!("[BOX-MODEL-DEBUG] Net: {}", net_name);
+//     eprintln!(
+//         "[BOX-MODEL-DEBUG]   Start Boundary (Contact Point): ({}, {}, {})",
+//         start_boundary.x, start_boundary.y, start_boundary.z
+//     );
+//     eprintln!(
+//         "[BOX-MODEL-DEBUG]   Start Normal: ({}, {})",
+//         start_normal.x, start_normal.y
+//     );
+//     eprintln!(
+//         "[BOX-MODEL-DEBUG]   Goal Boundary (Contact Point): ({}, {}, {})",
+//         goal_boundary.x, goal_boundary.y, goal_boundary.z
+//     );
+//     eprintln!(
+//         "[BOX-MODEL-DEBUG]   Goal Normal: ({}, {})",
+//         goal_normal.x, goal_normal.y
+//     );
 
     // Resolve material
     let route_z = target_z_nm.unwrap_or(start_boundary.z);
@@ -295,13 +295,13 @@ pub fn route_automatic(
     )?;
 
     eprintln!(
-        "🔍 [PIPELINE SEGMENTS] Created {} segments from refined_path with {} points",
+        "ðŸ” [PIPELINE SEGMENTS] Created {} segments from refined_path with {} points",
         segments.len(),
         refined_path.len()
     );
     for (i, seg) in segments.iter().enumerate() {
         eprintln!(
-            "🔍   Segment[{}]: ({},{},{}) -> ({},{},{})",
+            "ðŸ”   Segment[{}]: ({},{},{}) -> ({},{},{})",
             i, seg.start.x, seg.start.y, seg.start.z, seg.end.x, seg.end.y, seg.end.z
         );
     }

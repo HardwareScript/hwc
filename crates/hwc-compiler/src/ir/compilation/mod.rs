@@ -1,4 +1,4 @@
-mod dependency_graph;
+﻿mod dependency_graph;
 mod finalization;
 pub mod placement_items;
 mod placement_loop;
@@ -28,7 +28,7 @@ pub struct CompileSpaceParams<'a> {
 /// Shared, read-only inputs threaded through the compilation passes.
 ///
 /// Bundles the compilation-wide context so individual pass functions
-/// (`execute_placement`, `process_routes`, …) take a single context argument
+/// (`execute_placement`, `process_routes`, â€¦) take a single context argument
 /// instead of a long parameter list.
 pub struct CompilationContext<'a> {
     /// Topologically sorted placement-item indices. Iterating this and indexing
@@ -195,7 +195,7 @@ pub fn compile_single_space(
             );
 
             eprintln!(
-                "[STACKUP→SUBSTRATE] Registering dielectric layer '{}' (Z={}→{}nm, material={}) as substrate base",
+                "[STACKUPâ†’SUBSTRATE] Registering dielectric layer '{}' (Z={}â†’{}nm, material={}) as substrate base",
                 stackup_layer.name, stackup_layer.z_bottom, stackup_layer.z_top, stackup_layer.material_name
             );
 
@@ -289,7 +289,7 @@ pub fn compile_single_space(
         .entity_graph
         .sync_from_routing_database(&space.routing_database, &space.routing_layer_db);
     eprintln!(
-        "[COMPILATION] Synchronization complete - router can now see child routes as same-net ✓"
+        "[COMPILATION] Synchronization complete - router can now see child routes as same-net âœ“"
     );
 
     let routes_loaded_from_lock =
@@ -356,18 +356,30 @@ pub fn compile_single_space(
         space.entity_graph.spatial_mut().insert(segment);
     }
     
-    // Also insert routed segments into spatial index
-    for (_net_idx, (net_id, segments)) in space.entity_graph.get_all_routes().iter().enumerate() {
-        for (_seg_idx, _segment) in segments.iter().enumerate() {
-            // Note: Segments are already in routed_segments, we just need to ensure they're in spatial
-            // The spatial index should have been populated during routing, but we ensure it here
-            eprintln!("[COMPILATION DEBUG] Route net {} has {} segments", net_id.raw(), segments.len());
-        }
-    }
+    // Also insert routed segments into spatial index  
+    // Routes must be indexed for PIVB (Physical Integrity Validation - Boro) to detect connectivity
+    let indexed_count = space.entity_graph.index_routes_into_spatial(
+        |z_nm| -> Result<(String, i64), IrError> {
+            let layer_idx = stackup_manager
+                .get_layer_index_at_z(z_nm)
+                .ok_or_else(|| {
+                    IrError::RoutingError(format!(
+                        "Route segment has Z={} which doesn't map to any layer in stackup",
+                        z_nm
+                    ))
+                })?;
+            
+            let layer_name = stackup_manager.ordered_layers()[layer_idx].clone();
+            let thickness_nm = stackup_manager.get_thickness_for_layer_index(layer_idx)?;
+            
+            Ok((layer_name, thickness_nm))
+        },
+        |material_id| space.material_registry.get_material(material_id).is_some(),
+    )?;
 
-    
     eprintln!(
-        "[COMPILATION] Spatial index populated: {} entities ready for DRC",
+        "[COMPILATION] Spatial index populated: {} route segments + substrate entities = {} total entities ready for DRC",
+        indexed_count,
         space.entity_graph.spatial().len()
     );
 
@@ -499,21 +511,19 @@ pub fn save_routes_to_lockfile(
     let binary_lockfile = match hwc_engine::geometry_router::traces_to_lockfile(space, fingerprint)
     {
         Ok(lockfile) => lockfile,
-        Err(e) => {
-            eprintln!("[LOCK] FATAL: failed to build lockfile: {}", e);
+        Err(_) => {
+//             eprintln!("[LOCK] FATAL: failed to build lockfile: {}", e);
             return;
         }
     };
 
-    let route_count = binary_lockfile.arcs.len();
-
-    if let Err(e) = hwc_engine::geometry_router::write_lockfile(&binary_lockfile, path) {
-        eprintln!("[LOCK] Failed to save binary lockfile: {}", e);
+    if let Err(_) = hwc_engine::geometry_router::write_lockfile(&binary_lockfile, path) {
+//         eprintln!("[LOCK] Failed to save binary lockfile: {}", e);
     } else {
-        eprintln!(
-            "[LOCK] Saved {} arc segments to {} (rkyv binary)",
-            route_count,
-            path.display()
-        );
+//         eprintln!(
+//             "[LOCK] Saved {} arc segments to {} (rkyv binary)",
+//             route_count,
+//             path.display()
+//         );
     }
 }

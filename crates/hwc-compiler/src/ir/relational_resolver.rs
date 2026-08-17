@@ -1,4 +1,4 @@
-//! Relational constraint resolver (v0.1.9)
+﻿//! Relational constraint resolver (v0.1.9)
 //!
 //! Resolves middle-level relational placement constraints (align, above, below,
 //! right_of, left_of) into absolute coordinates using the BoundingBoxTracker.
@@ -301,7 +301,7 @@ pub fn compute_position_from_constraints(
     eval_context: &hwc_parser::EvaluationContext,
     space_dimensions: &hwc_engine::Dimensions,
 ) -> Result<Coordinate, IrError> {
-    // v0.2.1: Canonical Bottom-Left origin — +X is rightward and +Y is upward,
+    // v0.2.1: Canonical Bottom-Left origin â€” +X is rightward and +Y is upward,
     // so physical directions map to coordinate deltas with no inversion.
     let (x_multiplier, y_multiplier) = (1i64, 1i64);
 
@@ -528,14 +528,14 @@ fn resolve_target_bbox(
 ) -> Result<hwc_engine::geometry::BoundingBox, IrError> {
     let target_name: CompactString = target.base.clone();
 
-    eprintln!(
-        "[RELATIONAL_RESOLVER DEBUG] Resolving target: '{}'",
-        target_name
-    );
-    eprintln!(
-        "[RELATIONAL_RESOLVER DEBUG] Available entities in bbox_tracker: {:?}",
-        bbox_tracker.all_names()
-    );
+//     eprintln!(
+//         "[RELATIONAL_RESOLVER DEBUG] Resolving target: '{}'",
+//         target_name
+//     );
+//     eprintln!(
+//         "[RELATIONAL_RESOLVER DEBUG] Available entities in bbox_tracker: {:?}",
+//         bbox_tracker.all_names()
+//     );
 
     bbox_tracker
         .get(&target_name)

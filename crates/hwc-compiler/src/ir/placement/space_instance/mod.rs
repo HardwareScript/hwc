@@ -1,4 +1,4 @@
-//! Hierarchical space instantiation (v0.2.1)
+﻿//! Hierarchical space instantiation (v0.2.1)
 //!
 //! Implements the "Affine Flat-Blitter" pattern for hierarchical space composition.
 //! It performs coordinate transformation and net remapping to flatten a pre-compiled
@@ -55,11 +55,11 @@ pub fn instantiate_sub_space(
     unit_registry: &UnitRegistry,
     arena: &hwc_parser::ast::arena::AstArena,
 ) -> Result<(), IrError> {
-    eprintln!("[HIERARCHICAL v0.2.1 FIX] ==== START instantiate_sub_space ====");
-    eprintln!(
-        "[HIERARCHICAL] Instantiating space '{}' as instance '{}'",
-        placement.space_name, placement.instance_name.base
-    );
+//     eprintln!("[HIERARCHICAL v0.2.1 FIX] ==== START instantiate_sub_space ====");
+//     eprintln!(
+//         "[HIERARCHICAL] Instantiating space '{}' as instance '{}'",
+//         placement.space_name, placement.instance_name.base
+//     );
 
     // STEP 1: Look up the child space definition from symbol table
     // NO FALLBACK: If space doesn't exist, this is a compilation error
@@ -67,12 +67,12 @@ pub fn instantiate_sub_space(
         .get_space(placement.space_name.as_str())
         .map_err(|_| {
             // DEBUG: List all available spaces
-            eprintln!("[DEBUG] Available spaces in symbol table:");
-            eprintln!(
-                "[DEBUG]   Local layer: {:?}",
-                symbol_table.list_local_spaces()
-            );
-            eprintln!("[DEBUG]   HPM layers: {:?}", symbol_table.list_hpm_spaces());
+//             eprintln!("[DEBUG] Available spaces in symbol table:");
+//             eprintln!(
+//                 "[DEBUG]   Local layer: {:?}",
+//                 symbol_table.list_local_spaces()
+//             );
+//             eprintln!("[DEBUG]   HPM layers: {:?}", symbol_table.list_hpm_spaces());
 
             IrError::PlacementError(format!(
                 "Space '{}' not found in symbol table. Did you import it?",
@@ -80,22 +80,22 @@ pub fn instantiate_sub_space(
             ))
         })?;
 
-    eprintln!(
-        "[HIERARCHICAL] Found space definition '{}' with {} statements",
-        space_def.name,
-        space_def.statements.len()
-    );
+//     eprintln!(
+//         "[HIERARCHICAL] Found space definition '{}' with {} statements",
+//         space_def.name,
+//         space_def.statements.len()
+//     );
 
     // STEP 2: Recursively compile the child space
     // This will populate a HardwareSpace with all entities
     let child_space =
         compile_child_space(space_def, symbol_table, eval_context, unit_registry, arena)?;
 
-    eprintln!(
-        "[HIERARCHICAL] Child space compiled: {} substrate layers, {} routed segment groups",
-        child_space.entity_graph.substrate_layers.len(),
-        child_space.entity_graph.routed_segment_count()
-    );
+//     eprintln!(
+//         "[HIERARCHICAL] Child space compiled: {} substrate layers, {} routed segment groups",
+//         child_space.entity_graph.substrate_layers.len(),
+//         child_space.entity_graph.routed_segment_count()
+//     );
 
     // STEP 3: Evaluate position and construct transformation matrix
     let (x_nm, y_nm, z_layer) = evaluate_coordinate_nm(&placement.position, eval_context)?;
@@ -109,10 +109,10 @@ pub fn instantiate_sub_space(
 
     let transform = FixedTransform2D::new(x_nm, y_nm, z_layer as i64, rotation);
 
-    eprintln!(
-        "[HIERARCHICAL] Transform: offset=({}, {}, {}), rotation={}°",
-        x_nm, y_nm, z_layer, transform.rotation_deg
-    );
+//     eprintln!(
+//         "[HIERARCHICAL] Transform: offset=({}, {}, {}), rotation={}Â°",
+//         x_nm, y_nm, z_layer, transform.rotation_deg
+//     );
 
     // STEP 4: Build net ID remapping table
     // Maps child's local NetIds to parent's NetIds using net_map
@@ -145,10 +145,10 @@ pub fn instantiate_sub_space(
         }
     }
 
-    eprintln!(
-        "[HIERARCHICAL] Net mapping: {} nets remapped",
-        net_id_map.len()
-    );
+//     eprintln!(
+//         "[HIERARCHICAL] Net mapping: {} nets remapped",
+//         net_id_map.len()
+//     );
 
     // STEP 4.5: Transform and copy child netlist into parent (v0.2.1)
     transform_netlist(
@@ -243,10 +243,10 @@ pub fn instantiate_sub_space(
         &placement.instance_name.base,
     )?;
 
-    eprintln!(
-        "[HIERARCHICAL] Successfully instantiated space '{}' as '{}'",
-        placement.space_name, placement.instance_name.base
-    );
+//     eprintln!(
+//         "[HIERARCHICAL] Successfully instantiated space '{}' as '{}'",
+//         placement.space_name, placement.instance_name.base
+//     );
 
     Ok(())
 }
@@ -262,7 +262,7 @@ pub(super) fn compile_child_space(
     unit_registry: &UnitRegistry,
     arena: &hwc_parser::ast::arena::AstArena,
 ) -> Result<HardwareSpace, IrError> {
-    eprintln!("[HIERARCHICAL] Compiling child space '{}'", space_def.name);
+//     eprintln!("[HIERARCHICAL] Compiling child space '{}'", space_def.name);
 
     // Create a fresh compilation context for the child space
     // This ensures the child has its own isolated netlist and entity graph
@@ -274,17 +274,17 @@ pub(super) fn compile_child_space(
         arena,
     )?;
 
-    eprintln!(
-        "[HIERARCHICAL] Child space '{}' compilation complete",
-        space_def.name
-    );
+//     eprintln!(
+//         "[HIERARCHICAL] Child space '{}' compilation complete",
+//         space_def.name
+//     );
 
     Ok(child_space)
 }
 
 /// Evaluate a coordinate expression to nanometers
 ///
-/// Converts physical measurements (nm, µm, mm) to integer nanometers.
+/// Converts physical measurements (nm, Âµm, mm) to integer nanometers.
 /// NO FALLBACKS: All coordinates must be valid physical measurements.
 pub(super) fn evaluate_coordinate_nm(
     coord: &hwc_parser::Coordinate,

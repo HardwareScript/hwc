@@ -4,7 +4,7 @@
 
 use rustc_hash::FxHashMap;
 
-/// Parasitic element extracted from routing
+/// Parasitic element extracted from routing and layout geometry
 #[derive(Debug, Clone)]
 pub enum ParasiticElement {
     TraceResistor {
@@ -17,6 +17,12 @@ pub enum ParasiticElement {
         name: String,
         node: String,
         ref_node: String,
+        value_farads: f64,
+    },
+    CouplingCapacitance {
+        name: String,
+        node_a: String,
+        node_b: String,
         value_farads: f64,
     },
 }

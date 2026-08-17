@@ -2,6 +2,7 @@ use compact_str::CompactString;
 use hwc_engine::space::PourMetadata;
 use rustc_hash::FxHashMap;
 
+use super::continuity::DeviceTopologyValidator;
 use super::error::DeviceExtractionError;
 use super::DeviceExtractor;
 
@@ -90,5 +91,21 @@ impl<'a> DeviceExtractor<'a> {
             "      ├─ Material validation: All terminals match contract ✓"
         );
         Ok(())
+    }
+
+    /// Validate device channel topological continuity.
+    ///
+    /// Delegates to the strongly-typed `DeviceTopologyValidator` to verify that
+    /// the physical layout forms an unbroken conduction path between paired terminals.
+    pub(super) fn validate_device_channel_continuity(
+        &self,
+        device_name: &str,
+        device_type: &str,
+        terminal_pours: &FxHashMap<CompactString, Vec<PourMetadata>>,
+    ) -> Result<(), DeviceExtractionError> {
+        let validator = DeviceTopologyValidator::new(self.space);
+        validator
+            .validate_channel_continuity(device_name, device_type, terminal_pours)
+            .map(|_| ())
     }
 }

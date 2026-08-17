@@ -1,4 +1,4 @@
-use crate::ir::errors::IrError;
+﻿use crate::ir::errors::IrError;
 use crate::ir::placement_item::PlacementItem;
 use crate::SymbolTable;
 
@@ -12,7 +12,7 @@ pub fn try_load_lockfile(
         return Ok(false);
     };
     if force_reroute {
-        eprintln!("[LOCK] --force-reroute: Skipping lockfile load, will compute all routes fresh");
+//         eprintln!("[LOCK] --force-reroute: Skipping lockfile load, will compute all routes fresh");
         return Ok(false);
     }
 
@@ -21,10 +21,10 @@ pub fn try_load_lockfile(
     match hwc_engine::geometry_router::load_lockfile(path) {
         Ok(loaded) => {
             if !hwc_engine::geometry_router::is_valid(&loaded, &current_fingerprint) {
-                eprintln!(
-                    "[LOCK] Lockfile fingerprint mismatch for '{}'. Will compute routes fresh.",
-                    space.name
-                );
+//                 eprintln!(
+//                     "[LOCK] Lockfile fingerprint mismatch for '{}'. Will compute routes fresh.",
+//                     space.name
+//                 );
                 return Ok(false);
             }
             match hwc_engine::geometry_router::lockfile_to_traces(
@@ -67,21 +67,21 @@ pub fn try_load_lockfile(
                     // so DXF export and parasitic extraction can see the geometry.
                     space.sync_analytic_routes_from_database();
 
-                    eprintln!(
-                        "[LOCK] Valid lockfile loaded for '{}'. Skipping all routing (manual + auto).",
-                        space.name
-                    );
-                    eprintln!(
-                        "[LOCK] Synchronized analytic_routes: {} traces available for export",
-                        space.get_analytic_routes().len()
-                    );
+//                     eprintln!(
+//                         "[LOCK] Valid lockfile loaded for '{}'. Skipping all routing (manual + auto).",
+//                         space.name
+//                     );
+//                     eprintln!(
+//                         "[LOCK] Synchronized analytic_routes: {} traces available for export",
+//                         space.get_analytic_routes().len()
+//                     );
                     Ok(true)
                 }
-                Err(e) => {
-                    eprintln!(
-                        "[LOCK] Lockfile load failed: {}. Will compute routes fresh.",
-                        e
-                    );
+                Err(_) => {
+//                     eprintln!(
+//                         "[LOCK] Lockfile load failed: {}. Will compute routes fresh.",
+//                         e
+//                     );
                     Ok(false)
                 }
             }
@@ -192,39 +192,33 @@ pub fn auto_route(
 
     // v0.2.0: PRE-ROUTING VALIDATION CHECKPOINT
     // Verify all routing layers are valid before starting routing
-    eprintln!("[VALIDATION] Checking routing layer database...");
+//     eprintln!("[VALIDATION] Checking routing layer database...");
     if let Err(errors) = space.routing_layer_db.validate() {
-        for err in &errors {
-            eprintln!("[VALIDATION] ERROR: {}", err);
-        }
         return Err(IrError::RoutingLayerError {
             message: format!("{} routing layer validation errors", errors.len()),
             hint: "Fix the stackup definition to ensure all routable layers have valid Z ranges."
                 .into(),
         });
     }
-    eprintln!(
-        "[VALIDATION] Routing layer database OK: {} routable layers",
-        space.routing_layer_db.routable_layer_count()
-    );
+//     eprintln!(
+//         "[VALIDATION] Routing layer database OK: {} routable layers",
+//         space.routing_layer_db.routable_layer_count()
+//     );
 
     // Verify all vias have connection points
-    eprintln!("[VALIDATION] Checking via connection points...");
+//     eprintln!("[VALIDATION] Checking via connection points...");
     let routing_z_map = space.routing_layer_db.routing_z_map();
     let stackup = &space.stackup_layers;
-    if let Err(errors) = space.layer_connection_db.validate(&routing_z_map, stackup) {
-        for err in &errors {
-            eprintln!("[VALIDATION] WARNING: {}", err);
-        }
-        eprintln!(
-            "[VALIDATION] {} via connection mismatches detected (routing may produce incorrect geometry)",
-            errors.len()
-        );
+    if let Err(_errors) = space.layer_connection_db.validate(&routing_z_map, stackup) {
+//         eprintln!(
+//             "[VALIDATION] {} via connection mismatches detected (routing may produce incorrect geometry)",
+//             errors.len()
+//         );
     } else {
-        eprintln!(
-            "[VALIDATION] Via connection database OK: {} connections",
-            space.layer_connection_db.connection_count()
-        );
+//         eprintln!(
+//             "[VALIDATION] Via connection database OK: {} connections",
+//             space.layer_connection_db.connection_count()
+//         );
     }
 
     eprintln!(
@@ -249,12 +243,12 @@ pub fn auto_route(
 
     // v0.2.0: POST-ROUTING VALIDATION CHECKPOINT
     // Verify trace Z elevations are within layer bounds
-    eprintln!("[VALIDATION] Post-routing: checking trace Z elevations...");
+//     eprintln!("[VALIDATION] Post-routing: checking trace Z elevations...");
     let mut post_errors = Vec::new();
     for trace in &space.analytic_routes {
         for seg in &trace.segments {
             if seg.start.z == seg.end.z {
-                // Horizontal segment — verify Z is within a valid layer
+                // Horizontal segment â€” verify Z is within a valid layer
                 let seg_z = seg.start.z;
                 let in_valid_layer = space
                     .stackup_layers
@@ -271,16 +265,13 @@ pub fn auto_route(
     }
 
     if !post_errors.is_empty() {
-        for err in &post_errors {
-            eprintln!("[VALIDATION] ERROR: {}", err);
-        }
         return Err(IrError::PostRoutingValidationFailed {
             net: "multiple".into(),
             problem: format!("{} trace segments have Z coordinates outside routing layer bounds", post_errors.len()),
             hint: "This indicates via connection Z mismatches. Check that all vias connect to the correct routing layers.".into(),
         });
     }
-    eprintln!("[VALIDATION] Post-routing checks passed");
+//     eprintln!("[VALIDATION] Post-routing checks passed");
 
     Ok(())
 }

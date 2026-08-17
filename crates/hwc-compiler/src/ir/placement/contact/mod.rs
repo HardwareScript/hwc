@@ -1,4 +1,4 @@
-mod depth_resolver;
+﻿mod depth_resolver;
 mod helpers;
 mod netlist_ops;
 mod place_drilled;
@@ -109,12 +109,12 @@ pub fn place_contact(params: PlaceContactParams) -> Result<(), IrError> {
         });
     };
 
-    println!(
-        "[PLACE_CONTACT_DEBUG] Resolved xy_point for '{}': x={}, y={}",
-        contact.name.base.as_str(),
-        xy_point.x,
-        xy_point.y
-    );
+//     println!(
+//         "[PLACE_CONTACT_DEBUG] Resolved xy_point for '{}': x={}, y={}",
+//         contact.name.base.as_str(),
+//         xy_point.x,
+//         xy_point.y
+//     );
 
     let diameter_nm = get_prop_nm(contact, "drill_diameter", symbol_table, eval_context)
         .or_else(|| get_prop_nm(contact, "diameter", symbol_table, eval_context))
@@ -258,10 +258,8 @@ pub fn place_contact(params: PlaceContactParams) -> Result<(), IrError> {
     let (lower_depth_nm, upper_depth_nm) =
         depth_resolver::resolve_contact_depths(depth_resolver::ContactDepthParams {
             contact,
-            lower_layer_name: &lower_layer_name,
             lower_layer_thickness_nm: lower_thickness_nm,
             lower_material,
-            upper_layer_name: &upper_layer_name,
             upper_layer_thickness_nm: upper_thickness_nm,
             upper_material,
             profile: profile.ok_or_else(|| IrError::MissingAsicConstraint {
@@ -357,11 +355,11 @@ pub fn place_contact(params: PlaceContactParams) -> Result<(), IrError> {
         ),
     );
 
-    println!("[PLACE_CONTACT_DEBUG] '{}' contact_bbox calculated: min=({},{},{}) max=({},{},{}), radius={}nm",
-        contact_name_debug,
-        contact_bbox.min.x, contact_bbox.min.y, contact_bbox.min.z,
-        contact_bbox.max.x, contact_bbox.max.y, contact_bbox.max.z,
-        radius_nm);
+//     println!("[PLACE_CONTACT_DEBUG] '{}' contact_bbox calculated: min=({},{},{}) max=({},{},{}), radius={}nm",
+//         contact_name_debug,
+//         contact_bbox.min.x, contact_bbox.min.y, contact_bbox.min.z,
+//         contact_bbox.max.x, contact_bbox.max.y, contact_bbox.max.z,
+//         radius_nm);
 
     check_material_collisions(space, contact, &contact_bbox, from_bottom_nm, to_bottom_nm)?;
 
@@ -435,7 +433,6 @@ pub fn place_contact(params: PlaceContactParams) -> Result<(), IrError> {
                 contour,
                 symbol_table,
                 eval_context,
-                contact_name_debug: contact_name_debug.into(),
                 is_tented,
                 clearance_nm,
                 resolution_nm: space.manufacturing_grid_nm,
@@ -458,7 +455,6 @@ pub fn place_contact(params: PlaceContactParams) -> Result<(), IrError> {
                 contour,
                 symbol_table,
                 eval_context,
-                contact_name_debug: contact_name_debug.into(),
                 is_tented,
                 clearance_nm,
                 resolution_nm: space.manufacturing_grid_nm,
@@ -513,7 +509,6 @@ pub fn place_contact(params: PlaceContactParams) -> Result<(), IrError> {
                 contact_bbox,
                 diameter_nm,
                 clearance_nm,
-                contact_name_debug,
             )?;
         } else {
             place_simple::place_deposited_via(
@@ -531,7 +526,6 @@ pub fn place_contact(params: PlaceContactParams) -> Result<(), IrError> {
                     contour,
                     symbol_table,
                     eval_context,
-                    contact_name_debug: contact_name_debug.into(),
                     is_tented,
                     clearance_nm,
                     resolution_nm: space.manufacturing_grid_nm,
@@ -743,10 +737,10 @@ pub fn place_contact(params: PlaceContactParams) -> Result<(), IrError> {
             .register_space_entity_interface(contact.name.base.clone(), interface);
     }
 
-    println!(
-        "[DEBUG] Registered contact '{}' as routing endpoint with net_id={:?}",
-        contact_name_str, net_id
-    );
+//     println!(
+//         "[DEBUG] Registered contact '{}' as routing endpoint with net_id={:?}",
+//         contact_name_str, net_id
+//     );
 
     // v0.2.2: Register contact bbox in bbox_tracker for relational placement
     // This enables contacts to be used as anchors (e.g., align: center_x with Via_Up.center_x)
@@ -757,12 +751,12 @@ pub fn place_contact(params: PlaceContactParams) -> Result<(), IrError> {
         contact_center,
     );
     
-    println!(
-        "[DEBUG] Registered contact '{}' in bbox_tracker for relational anchoring: bbox=({},{},{}) to ({},{},{})",
-        contact_name_str,
-        contact_bbox.min.x, contact_bbox.min.y, contact_bbox.min.z,
-        contact_bbox.max.x, contact_bbox.max.y, contact_bbox.max.z
-    );
+//     println!(
+//         "[DEBUG] Registered contact '{}' in bbox_tracker for relational anchoring: bbox=({},{},{}) to ({},{},{})",
+//         contact_name_str,
+//         contact_bbox.min.x, contact_bbox.min.y, contact_bbox.min.z,
+//         contact_bbox.max.x, contact_bbox.max.y, contact_bbox.max.z
+//     );
 
     Ok(())
 }

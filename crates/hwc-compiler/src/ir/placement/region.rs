@@ -1,4 +1,4 @@
-//! Region placement and anchor registration (v0.2.0)
+﻿//! Region placement and anchor registration (v0.2.0)
 //!
 //! Regions are logical floorplanning zones that can be used as anchors
 //! for component placement. This module resolves region positions and
@@ -85,7 +85,7 @@ pub fn register_region(params: RegisterRegionParams) -> Result<(), IrError> {
         //   let pad_h = 150um
         //   region MyRegion:
         //       at: space.center
-        //       boundary: [pad_w, pad_h]  # ← Explicit, single-pass resolvable
+        //       boundary: [pad_w, pad_h]  # â† Explicit, single-pass resolvable
         //
         return Err(IrError::CoordinateResolutionFailed {
             coordinate_str: format!("region {}", region_name),
@@ -186,7 +186,7 @@ fn resolve_region_from_constraints(ctx: &RegionResolveCtx) -> Result<Point3D, Ir
         (0, 0)
     };
 
-    // v0.2.1: Canonical Bottom-Left origin — +X rightward, +Y upward.
+    // v0.2.1: Canonical Bottom-Left origin â€” +X rightward, +Y upward.
     let (x_multiplier, y_multiplier) = (1i64, 1i64);
 
     use crate::ir::relational_resolver::{
@@ -289,7 +289,7 @@ fn resolve_region_from_constraints(ctx: &RegionResolveCtx) -> Result<Point3D, Ir
                 }
             }
             RegionConstraintType::Above => {
-                // "above" means physically higher — start at target's high edge + spacing
+                // "above" means physically higher â€” start at target's high edge + spacing
                 let formula = RelationalPlacementFormula::get(
                     SpatialRelation::Above,
                     x_multiplier,
@@ -373,7 +373,7 @@ fn resolve_region_from_constraints(ctx: &RegionResolveCtx) -> Result<Point3D, Ir
     }
 
     // The resolved values are in USER SPACE (matching the declared origin).
-    // Emit them directly as a Point3D — NO secondary coordinate_to_point call,
+    // Emit them directly as a Point3D â€” NO secondary coordinate_to_point call,
     // which would incorrectly apply the origin flip a second time.
     // The caller (register_region) constructs the BoundingBox directly from this point.
     Ok(Point3D {
@@ -476,12 +476,12 @@ fn resolve_region_anchor(
                     }
                 };
 
-                eprintln!(
-                    "[REGION OFFSET] Region '{}', operator={:?}",
-                    anchor_ref.name, operator
-                );
-                eprintln!("[REGION OFFSET]   offset_x: {:?}", offset_x);
-                eprintln!("[REGION OFFSET]   offset_y: {:?}", offset_y);
+//                 eprintln!(
+//                     "[REGION OFFSET] Region '{}', operator={:?}",
+//                     anchor_ref.name, operator
+//                 );
+//                 eprintln!("[REGION OFFSET]   offset_x: {:?}", offset_x);
+//                 eprintln!("[REGION OFFSET]   offset_y: {:?}", offset_y);
 
                 // CLEAN ARCHITECTURE FIX: Use unary negation instead of `0 - expr`
                 //
@@ -520,8 +520,8 @@ fn resolve_region_anchor(
                     }
                 };
 
-                eprintln!("[REGION OFFSET]   final_offset_x: {:?}", final_offset_x);
-                eprintln!("[REGION OFFSET]   final_offset_y: {:?}", final_offset_y);
+//                 eprintln!("[REGION OFFSET]   final_offset_x: {:?}", final_offset_x);
+//                 eprintln!("[REGION OFFSET]   final_offset_y: {:?}", final_offset_y);
 
                 // Create a relative coordinate from the base anchor + offset
                 let relative_coord =

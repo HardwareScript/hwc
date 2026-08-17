@@ -7,11 +7,11 @@
 * PDK SUBCIRCUIT: sky130_fd_pr__res_high_po
 * ========================================
 .subckt sky130_fd_pr__res_high_po A B BULK W=1u L=1u
-RR_head A node_1 362ohm
-RR_tail node_2 B 362ohm
-RR_body node_1 node_2 {350ohm * ({L / W})}
-CC_sub1 A BULK {{2fF * W} * L}
-CC_sub2 B BULK {{2fF * W} * L}
+RR_head A node_1 362
+RR_tail node_2 B 362
+RR_body node_1 node_2 {3.500000e2 * (L / W)} tc1=-0.00147 tc2=0.0000027 vc1=-0.00032 vc2=0.000018
+CC_sub1 A BULK {2.000000e-15 * W * L}
+CC_sub2 B BULK {2.000000e-15 * W * L}
 .ends sky130_fd_pr__res_high_po
 
 * ========================================
@@ -25,6 +25,7 @@ CC_sub2 B BULK {{2fF * W} * L}
 * Net: Out (pour: Out_Pad, material: Aluminum, z: 830nm)
 * Net: GND (pour: Bulk_Tap_Diff, material: P_Plus_Diffusion, z: 0nm)
 * Net: GND (pour: Bulk_Tap_LI, material: Titanium_Silicide, z: 580nm)
+* Net: GND (pour: Bulk_Tap_Metal, material: Aluminum, z: 830nm)
 * Net: In (width=300nm, material=Tungsten)
 *   Connected pins:
 *     - Contact_A_LI.anchor
@@ -52,25 +53,44 @@ CC_sub2 B BULK {{2fF * W} * L}
 *     - Bulk_Tap_Contact.__virtual_Bulk_Tap_Contact
 *     - Bulk_Tap_LI.anchor
 *     - Bulk_Tap_LI.__virtual_Bulk_Tap_LI
+*     - Bulk_Tap_Metal.anchor
+*     - Bulk_Tap_Metal.__virtual_Bulk_Tap_Metal
+*     - Bulk_Tap_Via.__virtual_Bulk_Tap_Via
 
 
 * ========================================
 * EXTRACTED DEVICES
 * ========================================
-XR1 In Out GND sky130_fd_pr__res_high_po W=10.00u L=11.60u
+XR1 nIn_li1 nOut_li1 nGND_pdiff sky130_fd_pr__res_high_po W=10.00u L=11.60u
 
 * ========================================
 * INTEGRATED TRACE PARASITICS
 * ========================================
+* Via/Contact resistance
+Rvia_In_li1_metal1 nIn_metal1 nIn_li1 4.405673e1
+* Via/Contact resistance
+Rvia_Out_li1_metal1 nOut_metal1 nOut_li1 4.405673e1
+* Via/Contact resistance
+Rvia_GND_li1_metal1 nGND_metal1 nGND_li1 4.405673e1
+* Via/Contact resistance
+Rvia_GND_pdiff_li1 nGND_li1 nGND_pdiff 4.405673e1
 * Trace resistance
-RRtr_In_0 nIn_entry In 6.527778e-1
+Rtr_Out_0_0 nOut_metal1 Out 6.527778e-1
 * Ground capacitance
-CCgnd_In_0 In GND 1.726567e-16
+Cgnd_Out_0_0 Out GND 1.726567e-16
 * Trace resistance
-RRtr_Out_0 nOut_entry Out 6.527778e-1
+Rtr_In_1_0 In nIn_metal1 6.527778e-1
 * Ground capacitance
-CCgnd_Out_0 Out GND 1.726567e-16
+Cgnd_In_1_0 nIn_metal1 GND 1.726567e-16
+* Ground capacitance
+Cgnd_pour_Contact_A_Metal nIn_metal1 GND 3.683342e-17
+* Ground capacitance
+Cgnd_pour_Contact_B_Metal nOut_metal1 GND 3.683342e-17
+* Ground capacitance
+Cgnd_pour_In_Pad In GND 2.302089e-16
+* Ground capacitance
+Cgnd_pour_Out_Pad Out GND 2.302089e-16
 
-* Total parasitic elements: 4
+* Total parasitic elements: 12
 
 .end

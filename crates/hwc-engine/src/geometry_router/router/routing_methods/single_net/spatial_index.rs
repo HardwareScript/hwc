@@ -48,23 +48,9 @@ impl GeometryRouter {
 
         // 1. Insert component boundaries as layer-aware keepout obstacles
         // Reference: Docs/v0.1.9/13-PHYSICAL-SYNTHESIS-GUARDRAILS.md (Interior Lockout Rule)
-        eprintln!(
-            "[OBSTACLE-DEBUG] net {:?}: {} component metadata entries",
-            active_route.net_id,
-            entity_graph.get_component_metadata().len()
-        );
+        
         for meta in entity_graph.get_component_metadata() {
-            eprintln!(
-                "[OBSTACLE-DEBUG]   meta '{}' type='{}' bbox=({},{},{})-({},{},{})",
-                meta.name,
-                meta.component_type,
-                meta.bbox.min.x,
-                meta.bbox.min.y,
-                meta.bbox.min.z,
-                meta.bbox.max.x,
-                meta.bbox.max.y,
-                meta.bbox.max.z
-            );
+            
             // EXEMPTION GUARD: Only exclude the start and goal components of the active route.
             // Even if other components are on the same net, they are physical obstacles
             // that should be routed around unless we are specifically tapping into them.
@@ -124,23 +110,6 @@ impl GeometryRouter {
         // v0.1.9: Use self.substrate_layers (populated by route_space) instead of
         // entity_graph.get_substrate_layers() which is empty during routing.
         if let Some(substrate_layers) = &self.substrate_layers {
-            eprintln!(
-                "[OBSTACLE-DEBUG]   {} substrate layers",
-                substrate_layers.len()
-            );
-            for (i, sub_layer) in substrate_layers.iter().enumerate() {
-                eprintln!(
-                    "[OBSTACLE-DEBUG]     sub[{}] net={:?} bbox=({},{},{})-({},{},{})",
-                    i,
-                    sub_layer.net,
-                    sub_layer.bbox.min.x,
-                    sub_layer.bbox.min.y,
-                    sub_layer.bbox.min.z,
-                    sub_layer.bbox.max.x,
-                    sub_layer.bbox.max.y,
-                    sub_layer.bbox.max.z
-                );
-            }
             for (substrate_idx, sub_layer) in substrate_layers.iter().enumerate() {
                 // v0.2.3: Use centralized obstacle query system (NO inline conditionals!)
                 let route_context = crate::geometry_router::obstacle_query::RouteContext {
@@ -153,30 +122,17 @@ impl GeometryRouter {
                 use crate::geometry_router::obstacle_query::{ObstacleDecision, ObstacleQuery};
 
                 match ObstacleQuery::is_obstacle_for(sub_layer, &route_context) {
-                    Ok(ObstacleDecision::Exempt { reason }) => {
-                        eprintln!(
-                            "[OBSTACLE-DEBUG]     sub[{}] EXEMPTED: {:?}",
-                            substrate_idx, reason
-                        );
+                    Ok(ObstacleDecision::Exempt { reason: _ }) => {
+                       
                         continue;
                     }
-                    Ok(ObstacleDecision::IsObstacle { reason }) => {
-                        eprintln!(
-                            "[OBSTACLE-DEBUG]     sub[{}] IS OBSTACLE: {:?}",
-                            substrate_idx, reason
-                        );
+                    Ok(ObstacleDecision::IsObstacle { reason: _ }) => {
+                        
                         // Continue to obstacle insertion below
                     }
                     Err(err) => {
                         // FAIL LOUDLY: Obstacle logic is ambiguous
-                        eprintln!(
-                            "[OBSTACLE-DEBUG] ERROR: Obstacle query failed for sub[{}]: {}",
-                            substrate_idx, err
-                        );
-                        eprintln!(
-                            "[OBSTACLE-DEBUG]   Layer: net={:?}, type={:?}, bbox={:?}",
-                            sub_layer.net, sub_layer.layer_type, sub_layer.bbox
-                        );
+                       
                         panic!(
                             "Routing obstacle query encountered unhandled state. This is a compiler bug.\n\
                              Fix the obstacle query system to handle this case explicitly.\n\

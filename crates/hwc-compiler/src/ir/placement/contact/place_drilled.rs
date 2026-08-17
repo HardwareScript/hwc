@@ -111,10 +111,10 @@ pub(super) fn place_drilled_via(args: DrilledViaPlacement) -> Result<(), IrError
         }
     };
 
-    println!("[PLACE_CONTACT] '{}' Adding tube substrate: pad_bbox=({},{}-{},{}), outer_dia={}, inner_dia={}, pad_dia={}, top_cap={:?}, bottom_cap={:?}",
-        contact_name_debug,
-        contact_bbox.min.x, contact_bbox.min.y, contact_bbox.max.x, contact_bbox.max.y,
-        diameter_nm, inner_diameter_nm, pad_diameter_nm, top_cap, bottom_cap);
+    // println!("[PLACE_CONTACT] '{}' Adding tube substrate: pad_bbox=({},{}-{},{}), outer_dia={}, inner_dia={}, pad_dia={}, top_cap={:?}, bottom_cap={:?}",
+    //     contact_name_debug,
+    //     contact_bbox.min.x, contact_bbox.min.y, contact_bbox.max.x, contact_bbox.max.y,
+    //     diameter_nm, inner_diameter_nm, pad_diameter_nm, top_cap, bottom_cap);
     let circle_segments = super::helpers::resolve_circle_segments(space)?;
 
     space.entity_graph.add_tube_substrate_layer(

@@ -628,6 +628,38 @@ impl crate::geometry_router::miter_pass::MiterContext for HardwareSpace {
                 }
             }
         }
+
+        // Check vias
+        for via in &self.vias {
+            if let Some(query_net) = net_id {
+                if via.net_id != query_net {
+                    continue;
+                }
+            }
+            let dx = (point.x - via.position.0).abs();
+            let dy = (point.y - via.position.1).abs();
+            if dx <= tolerance_nm && dy <= tolerance_nm {
+                return true;
+            }
+        }
+
+        // Check substrate pours, pads, and terminals
+        for layer in self.entity_graph.get_substrate_layers() {
+            if let Some(query_net) = net_id {
+                if layer.net != query_net {
+                    continue;
+                }
+            }
+            // Check if point is inside or on the boundary of the substrate pad/pour
+            if point.x >= layer.bbox.min.x - tolerance_nm
+                && point.x <= layer.bbox.max.x + tolerance_nm
+                && point.y >= layer.bbox.min.y - tolerance_nm
+                && point.y <= layer.bbox.max.y + tolerance_nm
+            {
+                return true;
+            }
+        }
+
         false
     }
 

@@ -1,16 +1,64 @@
 Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
-Wafer,Substrate,0.01x0.00x0.00mm,,,,,1
+Wafer,Substrate,0.02x0.01x0.00mm,,,,,1
 
 # MATERIAL USAGE (Fabrication)
-Reference,Type,Material,Layer_Z_nm,Area_nm2,Volume_nm3
-R1_Body_A,Pour,Polysilicon,z:0,500000,5000000
-R1_Body_B,Pour,Polysilicon,z:0,500000,5000000
-R1_Contact_A,Pour,Aluminum,z:20,160000,1600000
-R1_Contact_B,Pour,Aluminum,z:20,160000,1600000
-R2_Body_A,Pour,Polysilicon,z:0,500000,5000000
-R2_Body_B,Pour,Polysilicon,z:0,500000,5000000
-R2_Contact_A,Pour,Aluminum,z:20,160000,1600000
-R2_Contact_B,Pour,Aluminum,z:20,160000,1600000
-In_Pad,Pour,Aluminum,z:20,360000,3600000
-Mid_Pad,Pour,Aluminum,z:20,360000,3600000
-GND_Pad,Pour,Aluminum,z:20,360000,3600000
+Reference,Type,Material,Layer,Area_nm2,Volume_nm3
+R1_Body,Pour,Polysilicon,polyres (z:200nm),6768000,1218240000
+R1_Contact_A_LI,Pour,Titanium_Silicide,li1 (z:580nm),564000,56400000
+R1_Contact_B_LI,Pour,Titanium_Silicide,li1 (z:580nm),564000,56400000
+R1_Contact_A_Metal,Pour,Aluminum,metal1 (z:830nm),564000,203040000
+R1_Contact_B_Metal,Pour,Aluminum,metal1 (z:830nm),564000,203040000
+R2_Body,Pour,Polysilicon,polyres (z:200nm),6768000,1218240000
+R2_Contact_A_LI,Pour,Titanium_Silicide,li1 (z:580nm),564000,56400000
+R2_Contact_B_LI,Pour,Titanium_Silicide,li1 (z:580nm),564000,56400000
+R2_Contact_A_Metal,Pour,Aluminum,metal1 (z:830nm),564000,203040000
+R2_Contact_B_Metal,Pour,Aluminum,metal1 (z:830nm),564000,203040000
+In_Pad,Pour,Aluminum,metal1 (z:830nm),1000000,360000000
+Mid_Pad,Pour,Aluminum,metal1 (z:830nm),1000000,360000000
+GND_Pad,Pour,Aluminum,metal1 (z:830nm),1000000,360000000
+GND_Bus,Pour,Aluminum,metal1 (z:830nm),7620000,2743200000
+R1_Bulk_Tap_Diff,Pour,P_Plus_Diffusion,pdiff (z:0nm),160000,32000000
+R1_Bulk_Tap_LI,Pour,Titanium_Silicide,li1 (z:580nm),160000,16000000
+R1_Bulk_Tap_Metal,Pour,Aluminum,metal1 (z:830nm),160000,57600000
+R2_Bulk_Tap_Diff,Pour,P_Plus_Diffusion,pdiff (z:0nm),160000,32000000
+R2_Bulk_Tap_LI,Pour,Titanium_Silicide,li1 (z:580nm),160000,16000000
+R2_Bulk_Tap_Metal,Pour,Aluminum,metal1 (z:830nm),160000,57600000
+Route_GND_on_metal1,Route,Aluminum,metal1 (trace),1680000,604800000
+Route_In_on_metal1,Route,Aluminum,metal1 (trace),300000,108000000
+Route_Mid_on_metal1,Route,Aluminum,metal1 (trace),360000,129600000
+R1_Via_A_Poly_0,Contact,Tungsten,polyres (z:200nm),62500,19000000
+R1_Via_A_Poly_1,Contact,Tungsten,polyres (z:200nm),62500,19000000
+R1_Via_A_Poly_2,Contact,Tungsten,polyres (z:200nm),62500,19000000
+R1_Via_B_Poly_0,Contact,Tungsten,polyres (z:200nm),62500,19000000
+R1_Via_B_Poly_1,Contact,Tungsten,polyres (z:200nm),62500,19000000
+R1_Via_B_Poly_2,Contact,Tungsten,polyres (z:200nm),62500,19000000
+R1_Via_A_Metal_0,Contact,Tungsten,li1 (z:580nm),62500,19250000
+R1_Via_A_Metal_1,Contact,Tungsten,li1 (z:580nm),62500,19250000
+R1_Via_A_Metal_2,Contact,Tungsten,li1 (z:580nm),62500,19250000
+R1_Via_B_Metal_0,Contact,Tungsten,li1 (z:580nm),62500,19250000
+R1_Via_B_Metal_1,Contact,Tungsten,li1 (z:580nm),62500,19250000
+R1_Via_B_Metal_2,Contact,Tungsten,li1 (z:580nm),62500,19250000
+R2_Via_A_Poly_0,Contact,Tungsten,polyres (z:200nm),62500,19000000
+R2_Via_A_Poly_1,Contact,Tungsten,polyres (z:200nm),62500,19000000
+R2_Via_A_Poly_2,Contact,Tungsten,polyres (z:200nm),62500,19000000
+R2_Via_B_Poly_0,Contact,Tungsten,polyres (z:200nm),62500,19000000
+R2_Via_B_Poly_1,Contact,Tungsten,polyres (z:200nm),62500,19000000
+R2_Via_B_Poly_2,Contact,Tungsten,polyres (z:200nm),62500,19000000
+R2_Via_A_Metal_0,Contact,Tungsten,li1 (z:580nm),62500,19250000
+R2_Via_A_Metal_1,Contact,Tungsten,li1 (z:580nm),62500,19250000
+R2_Via_A_Metal_2,Contact,Tungsten,li1 (z:580nm),62500,19250000
+R2_Via_B_Metal_0,Contact,Tungsten,li1 (z:580nm),62500,19250000
+R2_Via_B_Metal_1,Contact,Tungsten,li1 (z:580nm),62500,19250000
+R2_Via_B_Metal_2,Contact,Tungsten,li1 (z:580nm),62500,19250000
+R1_Bulk_Tap_Contact,Contact,Tungsten,pdiff (z:0nm),62500,30625000
+R1_Bulk_Tap_Via,Contact,Tungsten,li1 (z:580nm),62500,19250000
+R2_Bulk_Tap_Contact,Contact,Tungsten,pdiff (z:0nm),62500,30625000
+R2_Bulk_Tap_Via,Contact,Tungsten,li1 (z:580nm),62500,19250000
+
+# AGGREGATED MATERIAL TOTALS (Foundry Fabrication Summary)
+Material,Total_Area_nm2,Total_Volume_nm3,Layer_Count,Coverage_Percentage
+Aluminum,15536000,5592960000,13,7.8%
+P_Plus_Diffusion,320000,64000000,2,0.2%
+Polysilicon,13536000,2436480000,2,6.8%
+Titanium_Silicide,2576000,257600000,6,1.3%
+Tungsten,1750000,558750000,28,0.9%

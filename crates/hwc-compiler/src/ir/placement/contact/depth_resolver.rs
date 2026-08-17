@@ -1,4 +1,4 @@
-//! Via depth resolution with material-aware penetration control (v0.2.1)
+﻿//! Via depth resolution with material-aware penetration control (v0.2.1)
 //!
 //! This module evaluates depth expressions (percentages, absolute measurements)
 //! and resolves material-specific penetration depths for via contacts.
@@ -12,8 +12,8 @@
 //!
 //! # Expression Types
 //!
-//! - **Percentage**: `50%` → 50% of layer thickness
-//! - **Absolute**: `150nm` → exactly 150nm
+//! - **Percentage**: `50%` â†’ 50% of layer thickness
+//! - **Absolute**: `150nm` â†’ exactly 150nm
 //! - **0%**: Surface contact (no penetration)
 //! - **100%**: Complete penetration through layer
 //!
@@ -184,10 +184,8 @@ impl DepthEvaluationContext {
 /// Parameters for contact depth resolution
 pub struct ContactDepthParams<'a> {
     pub contact: &'a hwc_parser::ContactPlacement,
-    pub lower_layer_name: &'a str,
     pub lower_layer_thickness_nm: i64,
     pub lower_material: &'a str,
-    pub upper_layer_name: &'a str,
     pub upper_layer_thickness_nm: i64,
     pub upper_material: &'a str,
     pub profile: &'a hwc_parser::ProfileDefinition,
@@ -208,10 +206,8 @@ pub struct ContactDepthParams<'a> {
 pub fn resolve_contact_depths(params: ContactDepthParams) -> Result<(i64, i64), IrError> {
     let ContactDepthParams {
         contact,
-        lower_layer_name,
         lower_layer_thickness_nm,
         lower_material,
-        upper_layer_name,
         upper_layer_thickness_nm,
         upper_material,
         profile,
@@ -219,10 +215,10 @@ pub fn resolve_contact_depths(params: ContactDepthParams) -> Result<(i64, i64), 
     } = params;
     // PRIORITY 1: Per-instance override
     if let Some(depth_prop) = get_contact_depth_property(contact) {
-        println!(
-            "[DEPTH_RESOLVER] Contact '{}': Using per-instance depth override",
-            contact.name.base.as_str()
-        );
+//         println!(
+//             "[DEPTH_RESOLVER] Contact '{}': Using per-instance depth override",
+//             contact.name.base.as_str()
+//         );
         return evaluate_depth_specification(&depth_prop, context);
     }
 
@@ -234,25 +230,25 @@ pub fn resolve_contact_depths(params: ContactDepthParams) -> Result<(i64, i64), 
     {
         // Look up lower layer material
         if let Some(lower_expr) = material_depths.get(lower_material) {
-            println!(
-                "[DEPTH_RESOLVER] Contact '{}': Using material-specific depth for lower layer '{}' ({})",
-                contact.name.base.as_str(), lower_layer_name, lower_material
-            );
+//             println!(
+//                 "[DEPTH_RESOLVER] Contact '{}': Using material-specific depth for lower layer '{}' ({})",
+//                 contact.name.base.as_str(), lower_layer_name, lower_material
+//             );
             let lower_depth = context.evaluate_for_layer(lower_expr, lower_layer_thickness_nm)?;
 
             // Look up upper layer material
             let upper_depth = if let Some(upper_expr) = material_depths.get(upper_material) {
-                println!(
-                    "[DEPTH_RESOLVER] Contact '{}': Using material-specific depth for upper layer '{}' ({})",
-                    contact.name.base.as_str(), upper_layer_name, upper_material
-                );
+//                 println!(
+//                     "[DEPTH_RESOLVER] Contact '{}': Using material-specific depth for upper layer '{}' ({})",
+//                     contact.name.base.as_str(), upper_layer_name, upper_material
+//                 );
                 context.evaluate_for_layer(upper_expr, upper_layer_thickness_nm)?
             } else {
                 // Upper material not in map, use global default
-                println!(
-                    "[DEPTH_RESOLVER] Contact '{}': Upper material '{}' not in map, using global default",
-                    contact.name.base.as_str(), upper_material
-                );
+//                 println!(
+//                     "[DEPTH_RESOLVER] Contact '{}': Upper material '{}' not in map, using global default",
+//                     contact.name.base.as_str(), upper_material
+//                 );
                 let global_expr = profile
                     .via
                     .as_ref()
@@ -270,10 +266,10 @@ pub fn resolve_contact_depths(params: ContactDepthParams) -> Result<(i64, i64), 
 
         // Lower material not in map, check upper
         if let Some(upper_expr) = material_depths.get(upper_material) {
-            println!(
-                "[DEPTH_RESOLVER] Contact '{}': Using material-specific depth for upper layer '{}' ({}), global for lower",
-                contact.name.base.as_str(), upper_layer_name, upper_material
-            );
+//             println!(
+//                 "[DEPTH_RESOLVER] Contact '{}': Using material-specific depth for upper layer '{}' ({}), global for lower",
+//                 contact.name.base.as_str(), upper_layer_name, upper_material
+//             );
             let upper_depth = context.evaluate_for_layer(upper_expr, upper_layer_thickness_nm)?;
 
             // Use global default for lower
@@ -293,10 +289,10 @@ pub fn resolve_contact_depths(params: ContactDepthParams) -> Result<(i64, i64), 
     }
 
     // PRIORITY 3: Global PDK default
-    println!(
-        "[DEPTH_RESOLVER] Contact '{}': Using global PDK default depth",
-        contact.name.base.as_str()
-    );
+//     println!(
+//         "[DEPTH_RESOLVER] Contact '{}': Using global PDK default depth",
+//         contact.name.base.as_str()
+//     );
     let global_expr = profile.via.as_ref()
         .ok_or_else(|| IrError::MissingAsicConstraint {
             message: format!(
