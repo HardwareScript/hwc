@@ -168,7 +168,8 @@ pub fn compile_single_space(
     // **v0.2.0: Populate stackup layers in HardwareSpace (single source of truth)**
     // Export stackup metadata so it's available during export and validation without
     // needing to pass the full StackupManager everywhere.
-    space.stackup_layers = stackup_manager.export_stackup_layers();
+    // **v0.3.0: Pass material_registry for pure type-driven LayerKind derivation**
+    space.stackup_layers = stackup_manager.export_stackup_layers(&space.material_registry);
 
     // **v0.2.2: Register dielectric stackup layers as substrate base layers in entity graph**
     // This allows the substrate rendering code to find and render dielectric layers with via cutouts
@@ -212,7 +213,17 @@ pub fn compile_single_space(
     space.routing_layer_db = hwc_engine::RoutingLayerDatabase::from_stackup(
         &space.stackup_layers,
         &space.material_registry,
-    );
+    )
+    .map_err(|errors| {
+        let error_messages: Vec<String> = errors.iter().map(|e| e.to_string()).collect();
+        IrError::RoutingLayerError {
+            message: format!(
+                "Failed to build routing layer database from stackup ({}  errors)",
+                errors.len()
+            ),
+            hint: error_messages.join("\n  • "),
+        }
+    })?;
     eprintln!(
         "[DB] Routing layer database built: {} routable layers",
         space.routing_layer_db.routable_layer_count()

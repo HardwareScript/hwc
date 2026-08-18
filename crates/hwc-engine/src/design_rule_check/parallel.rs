@@ -103,9 +103,15 @@ pub fn validate_physics_parallel(
         report.add_violation(violation);
     }
 
-    // 11. Minimum Area Validation (Gap 2: CMP peeling prevention)
+// 11. Minimum Area Validation (Gap 2: CMP peeling prevention)
     let min_area_violations = validate_min_area(space, &space.material_registry)?;
     for violation in min_area_violations {
+        report.add_violation(violation);
+    }
+
+    // 12. Substrate Tap Proximity Validation (P47: Latch-up prevention)
+    let tap_proximity_violations = super::tap_proximity::validate_tap_proximity(space, constraints)?;
+    for violation in tap_proximity_violations {
         report.add_violation(violation);
     }
 

@@ -309,7 +309,12 @@ pub fn place_pour(
     register_pour_interface(space, pour.name.base.as_str(), bbox, ctx)?;
 
     // v0.2.0: Register pour surface in layer connection database
-    register_pour_surface(space, pour, &layer_name, bbox);
+    if let Err(e) = register_pour_surface(space, pour, &layer_name, bbox) {
+        return Err(IrError::PlacementError(format!(
+            "Failed to register pour '{}': {}",
+            pour.name, e
+        )));
+    }
 
     check_pour_collisions(space, pour, bbox, z_start_nm, ctx.collector)?;
 

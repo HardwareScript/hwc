@@ -129,14 +129,19 @@ pub fn place_plane(
     );
 
     // v0.2.0: Register plane surface in layer connection database
-    register_plane_surface(
+    if let Err(e) = register_plane_surface(
         space,
         &plane.name.base,
         &layer_name,
         start_with_z,
         end_with_z,
         material_id,
-    );
+    ) {
+        return Err(IrError::PlacementError(format!(
+            "Failed to register plane '{}': {}",
+            plane.name, e
+        )));
+    }
 
     // v0.1.9: Register as substrate layer so routing can see it as an obstacle.
     // Planes with net_id are conductive pours; planes without are keepout zones.

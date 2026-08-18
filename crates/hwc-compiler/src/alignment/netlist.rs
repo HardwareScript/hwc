@@ -175,7 +175,7 @@ pub struct PhysicalDevice {
     pub name: CompactString,
     pub device_type_id: DeviceTypeId, // Dynamic ID, not hardcoded enum
     pub terminals: FxHashMap<CompactString, String>, // terminal_name -> net_name
-    pub parameters: FxHashMap<CompactString, f64>, // W, L, AS, AD, PS, PD
+    pub parameters: FxHashMap<CompactString, hwc_engine::PhysicalQuantity>, // Strongly-typed W, L, AS, AD, etc.
     /// Pour names for each terminal (for spatial error reporting)
     pub terminal_pours: FxHashMap<CompactString, String>, // terminal_name -> pour_name
 }

@@ -390,6 +390,7 @@ pub struct ClearanceConstraints {
     pub low_voltage_threshold: Option<Measurement>,
     pub medium_voltage_threshold: Option<Measurement>,
     pub high_voltage_threshold: Option<Measurement>,
+    pub max_substrate_tap_distance: Option<Measurement>,
     pub span: Span,
 }
 

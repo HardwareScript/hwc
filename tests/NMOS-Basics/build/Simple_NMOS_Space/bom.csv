@@ -1,0 +1,47 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,0.02x0.01x0.00mm,,,,,1
+
+# MATERIAL USAGE (Fabrication)
+Reference,Type,Material,Layer,Area_nm2,Volume_nm3
+Source_Diff,Pour,N_Plus_Diffusion,diff (z:0nm),650000,97500000
+Drain_Diff,Pour,N_Plus_Diffusion,diff (z:0nm),650000,97500000
+Gate_Poly,Pour,Polysilicon,poly (z:150nm),390000,70200000
+Gate_Poly_Head,Pour,Polysilicon,poly (z:150nm),160000,28800000
+Source_LI,Pour,Titanium_Silicide,li1 (z:530nm),400000,40000000
+Source_Metal,Pour,Aluminum,metal1 (z:780nm),400000,144000000
+Drain_LI,Pour,Titanium_Silicide,li1 (z:530nm),400000,40000000
+Drain_Metal,Pour,Aluminum,metal1 (z:780nm),400000,144000000
+Gate_Contact_LI,Pour,Titanium_Silicide,li1 (z:530nm),160000,16000000
+Gate_Contact_Metal,Pour,Aluminum,metal1 (z:780nm),160000,57600000
+Bulk_Tap_Diff,Pour,P_Plus_Diffusion,diff (z:0nm),160000,24000000
+Bulk_Tap_LI,Pour,Titanium_Silicide,li1 (z:530nm),160000,16000000
+Bulk_Tap_Metal,Pour,Aluminum,metal1 (z:780nm),160000,57600000
+Source_Pad,Pour,Aluminum,metal1 (z:780nm),1440000,518400000
+Drain_Pad,Pour,Aluminum,metal1 (z:780nm),1440000,518400000
+Gate_Pad,Pour,Aluminum,metal1 (z:780nm),1440000,518400000
+Bulk_Pad,Pour,Aluminum,metal1 (z:780nm),1440000,518400000
+Route_Bulk_on_metal1,Route,Aluminum,metal1 (trace),915000,329400000
+Route_Drain_on_metal1,Route,Aluminum,metal1 (trace),952500,342900000
+Route_Gate_on_metal1,Route,Aluminum,metal1 (trace),290000,104400000
+Route_Source_on_metal1,Route,Aluminum,metal1 (trace),952500,342900000
+Source_Via_LI_0,Contact,Tungsten,diff (z:0nm),62500,29687500
+Source_Via_LI_1,Contact,Tungsten,diff (z:0nm),62500,29687500
+Source_Via_M1_0,Contact,Tungsten,li1 (z:530nm),62500,19250000
+Source_Via_M1_1,Contact,Tungsten,li1 (z:530nm),62500,19250000
+Drain_Via_LI_0,Contact,Tungsten,diff (z:0nm),62500,29687500
+Drain_Via_LI_1,Contact,Tungsten,diff (z:0nm),62500,29687500
+Drain_Via_M1_0,Contact,Tungsten,li1 (z:530nm),62500,19250000
+Drain_Via_M1_1,Contact,Tungsten,li1 (z:530nm),62500,19250000
+Gate_Via_LI,Contact,Tungsten,poly (z:150nm),62500,19000000
+Gate_Via_M1,Contact,Tungsten,li1 (z:530nm),62500,19250000
+Bulk_Tap_Licon,Contact,Tungsten,diff (z:0nm),62500,29687500
+Bulk_Tap_Mcon,Contact,Tungsten,li1 (z:530nm),62500,19250000
+
+# AGGREGATED MATERIAL TOTALS (Foundry Fabrication Summary)
+Material,Total_Area_nm2,Total_Volume_nm3,Layer_Count,Coverage_Percentage
+Aluminum,9990000,3596400000,12,4.2%
+N_Plus_Diffusion,1300000,195000000,2,0.5%
+P_Plus_Diffusion,160000,24000000,1,0.1%
+Polysilicon,550000,99000000,2,0.2%
+Titanium_Silicide,1120000,112000000,4,0.5%
+Tungsten,750000,282937500,12,0.3%

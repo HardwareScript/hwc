@@ -137,6 +137,12 @@ pub struct FabricationConstraints {
     /// Used for ASIC device layers that require larger enclosure than standard annular ring.
     /// Example: SKY130 capm.5 rule requires 500nm enclosure of Via3 by CAPM layer.
     pub layer_via_enclosures: rustc_hash::FxHashMap<compact_str::CompactString, i64>,
+
+    /// Maximum distance from active channel to substrate tap for latch-up prevention in nanometers (optional)
+    pub max_substrate_tap_distance_nm: Option<i64>,
+
+    /// Substrate/bulk net name (e.g. "Bulk" or "GND") declared in profile.
+    pub substrate_net: Option<compact_str::CompactString>,
 }
 
 /// Complete constraint rulebook for the routing engine.

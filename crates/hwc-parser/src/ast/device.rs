@@ -29,9 +29,90 @@ pub struct DeviceDefinition {
     /// Parameter tolerance specifications (e.g., W: 1%, L: 1%, AS: 5%)
     /// Values are relative tolerances (0.01 = 1%)
     pub tolerance: Option<FxHashMap<CompactString, f64>>,
+    /// Declarative physical metric extraction rules (v0.2.1+)
+    pub metrics: Option<FxHashMap<CompactString, MetricExpression>>,
     /// SPICE export metadata (v0.2.1)
     pub spice_info: Option<SpiceExportInfo>,
     pub span: Span,
+}
+
+/// Strongly-typed 2D Manifold Set Expression
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum ManifoldExpr {
+    /// Terminal polygon reference (e.g. `D`, `G`, `S`, `B`)
+    Terminal(CompactString),
+
+    /// Boolean Intersection: A ∩ B (`A & B`)
+    Intersect(Box<ManifoldExpr>, Box<ManifoldExpr>),
+
+    /// Boolean Union: A ∪ B (`A | B`)
+    Union(Box<ManifoldExpr>, Box<ManifoldExpr>),
+
+    /// Boolean Difference: A \ B (`A - B`)
+    Difference(Box<ManifoldExpr>, Box<ManifoldExpr>),
+
+    /// 2D Convex Hull Envelope bridging two manifolds (`hull(A, B)`)
+    Hull(Box<ManifoldExpr>, Box<ManifoldExpr>),
+}
+
+impl ManifoldExpr {
+    /// Collect all terminal names referenced in this manifold expression
+    pub fn collect_terminals<'a>(&'a self, out: &mut Vec<&'a CompactString>) {
+        match self {
+            Self::Terminal(name) => out.push(name),
+            Self::Intersect(a, b)
+            | Self::Union(a, b)
+            | Self::Difference(a, b)
+            | Self::Hull(a, b) => {
+                a.collect_terminals(out);
+                b.collect_terminals(out);
+            }
+        }
+    }
+}
+
+/// Universal topological geometric extraction metrics (v0.2.1+)
+///
+/// Declares the physical measurement rules in user-space without hardcoded compiler heuristics.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum MetricExpression {
+    /// Reference to another metric identifier within the device block (e.g. `SA`, `W`)
+    Ref(CompactString),
+
+    /// Extent of a manifold along carrier transport flux vector: span(manifold, along: flux(from, to))
+    SpanAlongFlux {
+        manifold: ManifoldExpr,
+        from: CompactString,
+        to: CompactString,
+    },
+
+    /// Extent of a manifold along transverse normal vector: span(manifold, along: transverse(from, to))
+    SpanAlongTransverse {
+        manifold: ManifoldExpr,
+        from: CompactString,
+        to: CompactString,
+    },
+
+    /// 2D surface area of a manifold (in m²)
+    Area(ManifoldExpr),
+
+    /// 1D boundary perimeter of a manifold (in m)
+    Perimeter(ManifoldExpr),
+
+    /// Algebraic dimensional division: Metric / Metric -> (e.g. Length / Length = Dimensionless)
+    Divide(Box<MetricExpression>, Box<MetricExpression>),
+
+    /// Maxwell resistance integral: R = ρ · (L / A) across resistive channel
+    Resistance {
+        from: CompactString,
+        to: CompactString,
+    },
+
+    /// Electrostatic parallel-plate capacitance integral: C = ε₀ · εᵣ · (A / d)
+    Capacitance {
+        plate_a: CompactString,
+        plate_b: CompactString,
+    },
 }
 
 /// SPICE parameter formatting style
@@ -98,5 +179,10 @@ impl DeviceDefinition {
     /// Callers should error if attempting to export a device without SPICE info.
     pub fn spice_info(&self) -> Option<&SpiceExportInfo> {
         self.spice_info.as_ref()
+    }
+
+    /// Get declarative physical extraction metrics
+    pub fn metrics(&self) -> Option<&FxHashMap<CompactString, MetricExpression>> {
+        self.metrics.as_ref()
     }
 }

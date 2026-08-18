@@ -1,15 +1,10 @@
-//! Test definition parsing (setup, execute, assertions)
+//! Test Definition Parser
 
 use super::super::error::ParseError;
 use crate::ast::*;
 use crate::lexer::{Span, Token};
 
 impl super::super::Parser {
-    // ========================================================================
-    // Test Definition Parsing
-    // ========================================================================
-
-    /// Parse test definition: `define test "Short Circuit Protection":`
     pub(in super::super) fn parse_test(
         &mut self,
         collector: &crate::DiagnosticCollector,
@@ -32,7 +27,6 @@ impl super::super::Parser {
             }
         };
 
-        // Optional target space: "for SpaceName"
         let target_space = if self.check_identifier("for") {
             self.advance();
             match self.expect_identifier() {
@@ -66,106 +60,131 @@ impl super::super::Parser {
         let mut setup = Vec::new();
         let mut execute = Vec::new();
         let mut assertions = Vec::new();
-        let mut ac_config = None;
-        let mut tran_config = None;
+        let mut directives = Vec::new();
 
-        // Parse test blocks
-        let mut loop_iterations = 0;
         while !self.is_at_end() && !self.check(&Token::Dedent) {
-            loop_iterations += 1;
-            let position_before = self.current;
-
-            if loop_iterations > 1000 {
-                // eprintln!("[DEBUG] CRITICAL: Test parser infinite loop detected! Breaking.");
-                collector.report(
-                    self.error("Test parser stuck in infinite loop - this is a compiler bug"),
-                );
-                break;
-            }
-
             self.skip_whitespace();
-
             if self.check(&Token::Dedent) || self.is_at_end() {
                 break;
             }
 
-            // v0.1.6: Check for test block identifiers (context-aware: ac/tran are
-            // also parsed as identifiers, zero new lexer tokens per the Bloat Purge)
-            if let Some(current) = self.current() {
+            let key = if let Some(current) = self.current() {
                 if let Token::Identifier(name) = &current.token {
-                    match name.as_str() {
-                        "setup" => {
-                            self.advance();
-                            if let Err(e) = self.expect(&Token::Colon) {
-                                collector.report(e);
-                                self.sync_to_next_definition();
-                                continue;
-                            }
-                            setup = self.parse_test_actions().unwrap_or_default();
-                            continue;
-                        }
-                        "execute" => {
-                            self.advance();
-                            if let Err(e) = self.expect(&Token::Colon) {
-                                collector.report(e);
-                                self.sync_to_next_definition();
-                                continue;
-                            }
-                            execute = self.parse_test_actions().unwrap_or_default();
-                            continue;
-                        }
-                        "assert" => {
-                            self.advance();
-                            if let Err(e) = self.expect(&Token::Colon) {
-                                collector.report(e);
-                                self.sync_to_next_definition();
-                                continue;
-                            }
-                            assertions = self.parse_test_assertions().unwrap_or_default();
-                            continue;
-                        }
-                        "ac" => {
-                            self.advance();
-                            if let Err(e) = self.expect(&Token::Colon) {
-                                collector.report(e);
-                                self.sync_to_next_definition();
-                                continue;
-                            }
-                            ac_config = Some(self.parse_ac_config());
-                            continue;
-                        }
-                        "tran" => {
-                            self.advance();
-                            if let Err(e) = self.expect(&Token::Colon) {
-                                collector.report(e);
-                                self.sync_to_next_definition();
-                                continue;
-                            }
-                            tran_config = Some(self.parse_tran_config());
-                            continue;
-                        }
-                        _ => {
-                            let field_name = name.clone();
-                            let err = self.error(&format!("Unknown test field: '{}'", field_name));
-                            collector.report(err);
+                    Some(name.clone())
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
+            if let Some(directive_name) = key {
+                match directive_name.as_str() {
+                    "setup" => {
+                        self.advance();
+                        if let Err(e) = self.expect(&Token::Colon) {
+                            collector.report(e);
                             self.sync_to_next_definition();
                             continue;
                         }
+                        setup = self.parse_test_actions().unwrap_or_default();
+                    }
+                    "execute" => {
+                        self.advance();
+                        if let Err(e) = self.expect(&Token::Colon) {
+                            collector.report(e);
+                            self.sync_to_next_definition();
+                            continue;
+                        }
+                        execute = self.parse_test_actions().unwrap_or_default();
+                    }
+                    "assert" => {
+                        self.advance();
+                        if let Err(e) = self.expect(&Token::Colon) {
+                            collector.report(e);
+                            self.sync_to_next_definition();
+                            continue;
+                        }
+                        assertions = self.parse_test_assertions().unwrap_or_default();
+                    }
+                    "dc" => {
+                        self.advance();
+                        if let Err(e) = self.expect(&Token::Colon) {
+                            collector.report(e);
+                            self.sync_to_next_definition();
+                            continue;
+                        }
+                        match self.parse_dc_analysis() {
+                            Ok(dc) => directives.push(SimulationDirective::Dc(dc)),
+                            Err(e) => collector.report(e),
+                        }
+                    }
+                    "ac" => {
+                        self.advance();
+                        if let Err(e) = self.expect(&Token::Colon) {
+                            collector.report(e);
+                            self.sync_to_next_definition();
+                            continue;
+                        }
+                        match self.parse_ac_analysis() {
+                            Ok(ac) => directives.push(SimulationDirective::Ac(ac)),
+                            Err(e) => collector.report(e),
+                        }
+                    }
+                    "tran" => {
+                        self.advance();
+                        if let Err(e) = self.expect(&Token::Colon) {
+                            collector.report(e);
+                            self.sync_to_next_definition();
+                            continue;
+                        }
+                        match self.parse_tran_analysis() {
+                            Ok(tran) => directives.push(SimulationDirective::Tran(tran)),
+                            Err(e) => collector.report(e),
+                        }
+                    }
+                    "noise" => {
+                        self.advance();
+                        if let Err(e) = self.expect(&Token::Colon) {
+                            collector.report(e);
+                            self.sync_to_next_definition();
+                            continue;
+                        }
+                        match self.parse_noise_analysis() {
+                            Ok(noise) => directives.push(SimulationDirective::Noise(noise)),
+                            Err(e) => collector.report(e),
+                        }
+                    }
+                    "op" => {
+                        let span = self.current_span();
+                        self.advance();
+                        if let Err(e) = self.expect(&Token::Colon) {
+                            collector.report(e);
+                            self.sync_to_next_definition();
+                            continue;
+                        }
+                        directives.push(SimulationDirective::Op(OpAnalysis { span }));
+                    }
+                    custom => {
+                        let span = self.current_span();
+                        let custom_id = Identifier::new(custom.into(), span);
+                        self.advance();
+                        if let Err(e) = self.expect(&Token::Colon) {
+                            collector.report(e);
+                            self.sync_to_next_definition();
+                            continue;
+                        }
+                        match self.parse_generic_analysis(custom_id) {
+                            Ok(gen) => directives.push(SimulationDirective::Generic(gen)),
+                            Err(e) => collector.report(e),
+                        }
                     }
                 }
-            }
-
-            // Safety: Ensure we're making progress
-            if self.current == position_before {
-                // eprintln!("[DEBUG] Test parser didn't advance, forcing progress");
+            } else {
                 self.advance();
             }
-
-            // If we get here, it's not an identifier - break
-            break;
         }
 
-        // Consume the dedent that ends the test definition
         if self.check(&Token::Dedent) {
             self.advance();
         }
@@ -176,8 +195,7 @@ impl super::super::Parser {
             name,
             is_exported,
             target_space,
-            ac_config,
-            tran_config,
+            directives,
             setup,
             execute,
             assertions,
@@ -185,34 +203,136 @@ impl super::super::Parser {
         })
     }
 
-    /// Parse AC sweep config: { sweep: dec, points: 20, freq: 100Hz..100MHz }
-    ///
-    /// Context-aware: `sweep`, `points`, `freq`, `dec`/`oct`/`lin` are all parsed
-    /// as identifiers. Zero new lexer tokens (HardwareScript Bloat Purge).
-    fn parse_ac_config(&mut self) -> AcConfig {
-        let start_span = self.current_span();
-        // Mandatory braces; report and return a default on failure so the parent
-        // loop can continue instead of getting stuck.
-        if self.expect(&Token::OpenBrace).is_err() {
-            return AcConfig {
-                sweep_type: AcSweepType::Decade,
-                points: 20,
-                start_freq: Measurement {
-                    value: 100.0,
-                    unit: crate::ast::Unit::Custom("Hz".into()),
-                    span: start_span,
-                },
-                stop_freq: Measurement {
-                    value: 100_000_000.0,
-                    unit: crate::ast::Unit::Custom("Hz".into()),
-                    span: start_span,
-                },
-                span: start_span,
-            };
+    /// Parse DC Analysis: `{ sweep: Gate, start: 0V, stop: 1.8V, step: 0.05V }`
+    /// or with range syntax: `{ sweep: Gate, range: 0V..1.8V, step: 0.05V }`
+    fn parse_dc_analysis(&mut self) -> Result<DcAnalysis, ParseError> {
+        let span = self.current_span();
+        self.expect(&Token::OpenBrace)?;
+
+        let mut sweeps = Vec::new();
+        self.parse_dc_sweep_level(&mut sweeps)?;
+
+        Ok(DcAnalysis { sweeps, span })
+    }
+
+    fn parse_dc_sweep_level(&mut self, sweeps: &mut Vec<DcSweep>) -> Result<(), ParseError> {
+        let span = self.current_span();
+        let mut target = None;
+        let mut start = None;
+        let mut stop = None;
+        let mut step = None;
+        let mut scale = SweepScale::Linear;
+
+        while !self.check(&Token::CloseBrace) && !self.is_at_end() {
+            self.skip_whitespace();
+            if self.check(&Token::CloseBrace) || self.is_at_end() {
+                break;
+            }
+
+            let key = self.expect_identifier()?;
+            self.expect(&Token::Colon)?;
+
+            match key.as_str() {
+                "sweep" => {
+                    target = Some(self.parse_sweep_target()?);
+                }
+                "range" => {
+                    let r_start = self.parse_measurement()?;
+                    self.expect(&Token::Range)?;
+                    let r_stop = self.parse_measurement()?;
+                    start = Some(r_start);
+                    stop = Some(r_stop);
+                }
+                "start" => start = Some(self.parse_measurement()?),
+                "stop" => stop = Some(self.parse_measurement()?),
+                "step" => step = Some(self.parse_measurement()?),
+                "scale" => {
+                    let s_id = self.expect_identifier()?;
+                    scale = match s_id.as_str() {
+                        "dec" => SweepScale::Decade,
+                        "oct" => SweepScale::Octave,
+                        "lin" => SweepScale::Linear,
+                        other => {
+                            return Err(self.error(&format!(
+                                "Unknown sweep scale '{}'. Expected 'lin', 'dec', or 'oct'",
+                                other
+                            )))
+                        }
+                    };
+                }
+                "nested" => {
+                    self.expect(&Token::OpenBrace)?;
+                    self.parse_dc_sweep_level(sweeps)?;
+                }
+                unknown => {
+                    return Err(self.error(&format!(
+                        "Unknown DC analysis field '{}'. Valid fields: sweep, start, stop, step, range, scale, nested",
+                        unknown
+                    )))
+                }
+            }
+
+            if self.check(&Token::Comma) {
+                self.advance();
+            }
         }
 
-        let mut sweep_type = AcSweepType::Decade;
-        let mut points = 20u32;
+        self.expect(&Token::CloseBrace)?;
+
+        let target = target.ok_or_else(|| {
+            self.error("DC sweep missing required field 'sweep: <NetOrParam>'")
+        })?;
+        let start = start.ok_or_else(|| {
+            self.error("DC sweep missing required field 'start: <Value>' (or 'range: Start..Stop')")
+        })?;
+        let stop = stop.ok_or_else(|| {
+            self.error("DC sweep missing required field 'stop: <Value>' (or 'range: Start..Stop')")
+        })?;
+        let step = step.ok_or_else(|| {
+            self.error("DC sweep missing required field 'step: <Value>'")
+        })?;
+
+        sweeps.insert(
+            0,
+            DcSweep {
+                target,
+                start,
+                stop,
+                step,
+                scale,
+                span,
+            },
+        );
+
+        Ok(())
+    }
+
+    fn parse_sweep_target(&mut self) -> Result<SweepTarget, ParseError> {
+        let first_id = self.expect_identifier()?;
+
+        if first_id.as_str().eq_ignore_ascii_case("temp") {
+            return Ok(SweepTarget::Temperature);
+        }
+
+        if self.check(&Token::Dot) {
+            self.advance();
+            let param_id = self.expect_identifier()?;
+            return Ok(SweepTarget::DeviceParam {
+                device: first_id,
+                param: param_id,
+            });
+        }
+
+        Ok(SweepTarget::Net(first_id))
+    }
+
+    /// Parse AC Analysis: `{ sweep: dec, points: 20, freq: 100Hz..100MHz }`
+    fn parse_ac_analysis(&mut self) -> Result<AcAnalysis, ParseError> {
+        let span = self.current_span();
+        self.expect(&Token::OpenBrace)?;
+
+        let mut scale = SweepScale::Decade;
+        let mut points = None;
         let mut start_freq = None;
         let mut stop_freq = None;
 
@@ -222,39 +342,39 @@ impl super::super::Parser {
                 break;
             }
 
-            let key = match self.expect_identifier() {
-                Ok(k) => k,
-                Err(_) => break,
-            };
-            let _ = self.expect(&Token::Colon);
+            let key = self.expect_identifier()?;
+            self.expect(&Token::Colon)?;
 
             match key.as_str() {
                 "sweep" => {
-                    if let Some(sweep_str) = self.current() {
-                        if let Token::Identifier(s) = &sweep_str.token {
-                            sweep_type = match s.as_str() {
-                                "dec" => AcSweepType::Decade,
-                                "oct" => AcSweepType::Octave,
-                                "lin" => AcSweepType::Linear,
-                                _ => AcSweepType::Decade,
-                            };
-                            self.advance();
+                    let s_id = self.expect_identifier()?;
+                    scale = match s_id.as_str() {
+                        "dec" => SweepScale::Decade,
+                        "oct" => SweepScale::Octave,
+                        "lin" => SweepScale::Linear,
+                        other => {
+                            return Err(self.error(&format!(
+                                "Unknown AC sweep scale '{}'. Expected 'dec', 'oct', or 'lin'",
+                                other
+                            )))
                         }
-                    }
+                    };
                 }
-                "points" => {
-                    if let Ok(p) = self.expect_number() {
-                        points = p as u32;
-                    }
-                }
+                "points" => points = Some(self.expect_number()? as u32),
                 "freq" => {
-                    start_freq = self.parse_measurement().ok();
-                    let _ = self.expect(&Token::Range); // existing Token::Range ('..')
-                    stop_freq = self.parse_measurement().ok();
+                    let f_start = self.parse_measurement()?;
+                    self.expect(&Token::Range)?;
+                    let f_stop = self.parse_measurement()?;
+                    start_freq = Some(f_start);
+                    stop_freq = Some(f_stop);
                 }
-                _ => {
-                    // Unknown AC property: skip a value token to maintain progress
-                    self.advance();
+                "start" => start_freq = Some(self.parse_measurement()?),
+                "stop" => stop_freq = Some(self.parse_measurement()?),
+                unknown => {
+                    return Err(self.error(&format!(
+                        "Unknown AC analysis field '{}'. Valid fields: sweep, points, freq, start, stop",
+                        unknown
+                    )))
                 }
             }
 
@@ -263,51 +383,30 @@ impl super::super::Parser {
             }
         }
 
-        let _ = self.expect(&Token::CloseBrace);
+        self.expect(&Token::CloseBrace)?;
 
-        let start_freq = start_freq.unwrap_or(Measurement {
-            value: 100.0,
-            unit: crate::ast::Unit::Custom("Hz".into()),
-            span: start_span,
-        });
-        let stop_freq = stop_freq.unwrap_or(Measurement {
-            value: 100_000_000.0,
-            unit: crate::ast::Unit::Custom("Hz".into()),
-            span: start_span,
-        });
+        let points = points.ok_or_else(|| self.error("AC analysis missing required field 'points: <Count>'"))?;
+        let start_freq = start_freq.ok_or_else(|| self.error("AC analysis missing required field 'freq: <Start>..<Stop>'"))?;
+        let stop_freq = stop_freq.ok_or_else(|| self.error("AC analysis missing required stop frequency"))?;
 
-        AcConfig {
-            sweep_type,
+        Ok(AcAnalysis {
+            scale,
             points,
             start_freq,
             stop_freq,
-            span: start_span,
-        }
+            span,
+        })
     }
 
-    /// Parse transient config: { step: 10ps, stop: 200ns }
-    fn parse_tran_config(&mut self) -> TranConfig {
-        let start_span = self.current_span();
-        if self.expect(&Token::OpenBrace).is_err() {
-            return TranConfig {
-                step: Measurement {
-                    value: 1.0,
-                    unit: crate::ast::Unit::Custom("ns".into()),
-                    span: start_span,
-                },
-                stop: Measurement {
-                    value: 200.0,
-                    unit: crate::ast::Unit::Custom("ns".into()),
-                    span: start_span,
-                },
-                start: None,
-                span: start_span,
-            };
-        }
+    /// Parse Transient Analysis: `{ step: 10ps, stop: 50ns, start: 0s, uic: true }`
+    fn parse_tran_analysis(&mut self) -> Result<TranAnalysis, ParseError> {
+        let span = self.current_span();
+        self.expect(&Token::OpenBrace)?;
 
         let mut step = None;
         let mut stop = None;
         let mut start = None;
+        let mut use_initial_conditions = false;
 
         while !self.check(&Token::CloseBrace) && !self.is_at_end() {
             self.skip_whitespace();
@@ -315,18 +414,22 @@ impl super::super::Parser {
                 break;
             }
 
-            let key = match self.expect_identifier() {
-                Ok(k) => k,
-                Err(_) => break,
-            };
-            let _ = self.expect(&Token::Colon);
+            let key = self.expect_identifier()?;
+            self.expect(&Token::Colon)?;
 
             match key.as_str() {
-                "step" => step = self.parse_measurement().ok(),
-                "stop" => stop = self.parse_measurement().ok(),
-                "start" => start = self.parse_measurement().ok(),
-                _ => {
-                    self.advance();
+                "step" => step = Some(self.parse_measurement()?),
+                "stop" => stop = Some(self.parse_measurement()?),
+                "start" => start = Some(self.parse_measurement()?),
+                "uic" => {
+                    let val = self.expect_identifier()?;
+                    use_initial_conditions = val.as_str() == "true";
+                }
+                unknown => {
+                    return Err(self.error(&format!(
+                        "Unknown transient analysis field '{}'. Valid fields: step, stop, start, uic",
+                        unknown
+                    )))
                 }
             }
 
@@ -335,28 +438,161 @@ impl super::super::Parser {
             }
         }
 
-        let _ = self.expect(&Token::CloseBrace);
+        self.expect(&Token::CloseBrace)?;
 
-        let step = step.unwrap_or(Measurement {
-            value: 1.0,
-            unit: crate::ast::Unit::Custom("ns".into()),
-            span: start_span,
-        });
-        let stop = stop.unwrap_or(Measurement {
-            value: 200.0,
-            unit: crate::ast::Unit::Custom("ns".into()),
-            span: start_span,
-        });
+        let step = step.ok_or_else(|| self.error("Transient analysis missing required field 'step: <Time>'"))?;
+        let stop = stop.ok_or_else(|| self.error("Transient analysis missing required field 'stop: <Time>'"))?;
 
-        TranConfig {
+        Ok(TranAnalysis {
             step,
             stop,
             start,
-            span: start_span,
-        }
+            use_initial_conditions,
+            span,
+        })
     }
 
-    /// Parse test actions (setup or execute block)
+    /// Parse Small-Signal Noise Analysis
+    fn parse_noise_analysis(&mut self) -> Result<NoiseAnalysis, ParseError> {
+        let span = self.current_span();
+        self.expect(&Token::OpenBrace)?;
+
+        let mut output_net = None;
+        let mut ref_net = None;
+        let mut scale = SweepScale::Decade;
+        let mut points = None;
+        let mut start_freq = None;
+        let mut stop_freq = None;
+
+        while !self.check(&Token::CloseBrace) && !self.is_at_end() {
+            self.skip_whitespace();
+            if self.check(&Token::CloseBrace) || self.is_at_end() {
+                break;
+            }
+
+            let key = self.expect_identifier()?;
+            self.expect(&Token::Colon)?;
+
+            match key.as_str() {
+                "output" => output_net = Some(self.expect_identifier()?),
+                "ref" => ref_net = Some(self.expect_identifier()?),
+                "sweep" => {
+                    let s_id = self.expect_identifier()?;
+                    scale = match s_id.as_str() {
+                        "dec" => SweepScale::Decade,
+                        "oct" => SweepScale::Octave,
+                        "lin" => SweepScale::Linear,
+                        other => return Err(self.error(&format!("Unknown scale '{}'", other))),
+                    };
+                }
+                "points" => points = Some(self.expect_number()? as u32),
+                "freq" => {
+                    let f_start = self.parse_measurement()?;
+                    self.expect(&Token::Range)?;
+                    let f_stop = self.parse_measurement()?;
+                    start_freq = Some(f_start);
+                    stop_freq = Some(f_stop);
+                }
+                unknown => {
+                    return Err(self.error(&format!(
+                        "Unknown noise analysis field '{}'",
+                        unknown
+                    )))
+                }
+            }
+
+            if self.check(&Token::Comma) {
+                self.advance();
+            }
+        }
+
+        self.expect(&Token::CloseBrace)?;
+
+        let output_net = output_net.ok_or_else(|| self.error("Noise analysis missing required field 'output: <Net>'"))?;
+        let points = points.ok_or_else(|| self.error("Noise analysis missing required field 'points: <Count>'"))?;
+        let start_freq = start_freq.ok_or_else(|| self.error("Noise analysis missing required field 'freq: <Start>..<Stop>'"))?;
+        let stop_freq = stop_freq.ok_or_else(|| self.error("Noise analysis missing stop frequency"))?;
+
+        Ok(NoiseAnalysis {
+            output_net,
+            ref_net,
+            scale,
+            points,
+            start_freq,
+            stop_freq,
+            span,
+        })
+    }
+
+    /// Parse Generic EDA/SPICE Directive
+    fn parse_generic_analysis(&mut self, name: Identifier) -> Result<GenericAnalysis, ParseError> {
+        let span = self.current_span();
+        let mut parameters = Vec::new();
+
+        if self.check(&Token::OpenBrace) {
+            self.advance();
+            while !self.check(&Token::CloseBrace) && !self.is_at_end() {
+                self.skip_whitespace();
+                if self.check(&Token::CloseBrace) || self.is_at_end() {
+                    break;
+                }
+
+                let key = self.expect_identifier()?;
+                self.expect(&Token::Colon)?;
+                let val = self.parse_directive_value()?;
+                parameters.push((key, val));
+
+                if self.check(&Token::Comma) {
+                    self.advance();
+                }
+            }
+            self.expect(&Token::CloseBrace)?;
+        }
+
+        Ok(GenericAnalysis {
+            name,
+            parameters,
+            span,
+        })
+    }
+
+    fn parse_directive_value(&mut self) -> Result<DirectiveValue, ParseError> {
+        if self.check(&Token::OpenBrace) {
+            self.advance();
+            let mut nested = Vec::new();
+            while !self.check(&Token::CloseBrace) && !self.is_at_end() {
+                self.skip_whitespace();
+                if self.check(&Token::CloseBrace) || self.is_at_end() {
+                    break;
+                }
+                let key = self.expect_identifier()?;
+                self.expect(&Token::Colon)?;
+                let val = self.parse_directive_value()?;
+                nested.push((key, val));
+                if self.check(&Token::Comma) {
+                    self.advance();
+                }
+            }
+            self.expect(&Token::CloseBrace)?;
+            return Ok(DirectiveValue::Nested(nested));
+        }
+
+        if let Ok(m) = self.parse_measurement() {
+            return Ok(DirectiveValue::Measure(m));
+        }
+        if let Ok(num) = self.expect_number() {
+            return Ok(DirectiveValue::Number(num));
+        }
+        if let Ok(s) = self.expect_string() {
+            return Ok(DirectiveValue::StringLit(s));
+        }
+        if let Ok(id) = self.expect_identifier() {
+            return Ok(DirectiveValue::Ident(id));
+        }
+
+        Err(self.error("Expected measurement, number, string, identifier, or nested block in directive value"))
+    }
+
     fn parse_test_actions(&mut self) -> Result<Vec<TestAction>, ParseError> {
         self.expect(&Token::Newline)?;
         self.expect(&Token::Indent)?;
@@ -365,7 +601,6 @@ impl super::super::Parser {
 
         while !self.check(&Token::Dedent) && !self.is_at_end() {
             self.skip_whitespace();
-
             if self.check(&Token::Dedent) || self.is_at_end() {
                 break;
             }
@@ -375,30 +610,23 @@ impl super::super::Parser {
 
             let action_type = match action_keyword.as_str() {
                 "apply" => {
-                    // apply 12V to PowerSource.VIN
                     let voltage = self.parse_measurement()?;
-
                     self.expect(&Token::To)?;
-
                     let pin = self.parse_pin_reference()?;
                     TestActionType::Apply { voltage, pin }
                 }
                 "short" => {
-                    // short Regulator.VOUT to GND
                     let from = self.parse_pin_reference()?;
-
                     self.expect(&Token::To)?;
-
                     let to = self.parse_pin_reference()?;
                     TestActionType::Short { from, to }
                 }
                 "wait" => {
-                    // wait 1ms
                     let duration = self.parse_measurement()?;
                     TestActionType::Wait { duration }
                 }
-                _ => {
-                    return Err(self.error(&format!("Unknown test action: '{}'", action_keyword)));
+                unknown => {
+                    return Err(self.error(&format!("Unknown test action: '{}'", unknown)));
                 }
             };
 
@@ -418,7 +646,6 @@ impl super::super::Parser {
         Ok(actions)
     }
 
-    /// Parse test assertions
     fn parse_test_assertions(&mut self) -> Result<Vec<TestAssertion>, ParseError> {
         self.expect(&Token::Newline)?;
         self.expect(&Token::Indent)?;
@@ -427,16 +654,13 @@ impl super::super::Parser {
 
         while !self.check(&Token::Dedent) && !self.is_at_end() {
             self.skip_whitespace();
-
             if self.check(&Token::Dedent) || self.is_at_end() {
                 break;
             }
 
-            // Expect: Regulator.VOUT < 0.5V
             let start_pos = self.current_span().start;
             let pin = self.parse_pin_reference()?;
 
-            // Parse comparison operator (<, >, =)
             let condition = if self.check(&Token::LessThan) {
                 self.advance();
                 TestCondition::LessThan(self.parse_measurement()?)
@@ -445,13 +669,12 @@ impl super::super::Parser {
                 TestCondition::GreaterThan(self.parse_measurement()?)
             } else if self.check(&Token::Equals) {
                 self.advance();
-                // Optional double equals support by checking if there's another
                 if self.check(&Token::Equals) {
                     self.advance();
                 }
                 TestCondition::Equals(self.parse_measurement()?)
             } else {
-                return Err(self.error("Expected comparison operator (<, >, or =)"));
+                return Err(self.error("Expected comparison operator (<, >, or =) in test assertion"));
             };
 
             self.skip_whitespace();

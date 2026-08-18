@@ -1,4 +1,6 @@
 //! Emits SPICE cards for extracted physical devices and integrated trace parasitics.
+//! 
+//! Uses strongly-typed PhysicalQuantity to format parameters with zero string matching.
 
 use hwc_compiler::alignment::PhysicalNetlist;
 use hwc_compiler::SymbolTable;
@@ -10,6 +12,8 @@ use super::types::PhysicalNetlistGraph;
 ///
 /// Devices are extracted from explicit device: bindings during alignment validation.
 /// This section outputs devices using their SPICE metadata from device definitions.
+/// 
+/// ✅ ZERO STRING MATCHING: Parameter formatting is driven purely by PhysicalQuantity type.
 pub fn emit_extracted_devices(
     netlist_str: &mut String,
     netlist: &PhysicalNetlist,
@@ -132,15 +136,15 @@ pub fn emit_extracted_devices(
             // Add subcircuit parameters using named style (W=1.0u L=4.0u)
             // These come from the device's calculated geometry
             for param in &subcircuit_def.parameters {
-                let param_value = device.parameters.get(param.name.as_str()).ok_or_else(|| {
+                let param_quantity = device.parameters.get(param.name.as_str()).ok_or_else(|| {
                     format!(
                         "Device '{}' missing parameter '{}' required by subcircuit '{}'",
                         device.name, param.name, subcircuit_name
                     )
                 })?;
 
-                // Format with SI prefix (u for micro, m for milli, etc.)
-                netlist_str.push_str(&format!(" {}={:.2}u", param.name, param_value));
+                // Format with strongly-typed PhysicalQuantity (zero string matching)
+                netlist_str.push_str(&format!(" {}={}", param.name, param_quantity.to_spice_repr()));
             }
         } else if let Some(ref model) = spice_info.model_name {
             // Add model name if specified (and not in subcircuit mode)
@@ -149,7 +153,7 @@ pub fn emit_extracted_devices(
 
             // Add parameters for non-subcircuit devices
             for param_name in &spice_info.parameters {
-                let param_value = device.parameters.get(param_name.as_str()).ok_or_else(|| {
+                let param_quantity = device.parameters.get(param_name.as_str()).ok_or_else(|| {
                     format!(
                         "Device '{}' missing required parameter '{}' (device type: {})",
                         device.name, param_name, device_type_name
@@ -159,22 +163,18 @@ pub fn emit_extracted_devices(
                 match spice_info.parameter_style {
                     SpiceParameterStyle::Positional => {
                         // Positional values: R1 n1 n2 1000
-                        if param_value.abs() < 1e-3 || param_value.abs() > 1e6 {
-                            netlist_str.push_str(&format!(" {:.2e}", param_value));
-                        } else {
-                            netlist_str.push_str(&format!(" {:.2}", param_value));
-                        }
+                        netlist_str.push_str(&format!(" {}", param_quantity.to_spice_repr()));
                     }
                     SpiceParameterStyle::Named => {
                         // Named parameters: M1 d g s b NMOS W=1u L=0.18u
-                        netlist_str.push_str(&format!(" {}={:.2}u", param_name, param_value));
+                        netlist_str.push_str(&format!(" {}={}", param_name, param_quantity.to_spice_repr()));
                     }
                 }
             }
         } else {
             // Flat device mode (no model, no subcircuit) - just parameters
             for param_name in &spice_info.parameters {
-                let param_value = device.parameters.get(param_name.as_str()).ok_or_else(|| {
+                let param_quantity = device.parameters.get(param_name.as_str()).ok_or_else(|| {
                     format!(
                         "Device '{}' missing required parameter '{}' (device type: {})",
                         device.name, param_name, device_type_name
@@ -184,15 +184,11 @@ pub fn emit_extracted_devices(
                 match spice_info.parameter_style {
                     SpiceParameterStyle::Positional => {
                         // Positional values: R1 n1 n2 1000
-                        if param_value.abs() < 1e-3 || param_value.abs() > 1e6 {
-                            netlist_str.push_str(&format!(" {:.2e}", param_value));
-                        } else {
-                            netlist_str.push_str(&format!(" {:.2}", param_value));
-                        }
+                        netlist_str.push_str(&format!(" {}", param_quantity.to_spice_repr()));
                     }
                     SpiceParameterStyle::Named => {
                         // Named parameters: M1 d g s b NMOS W=1u L=0.18u
-                        netlist_str.push_str(&format!(" {}={:.2}u", param_name, param_value));
+                        netlist_str.push_str(&format!(" {}={}", param_name, param_quantity.to_spice_repr()));
                     }
                 }
             }

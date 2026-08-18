@@ -78,6 +78,8 @@ pub fn execute(input: PathBuf, _build_dir: PathBuf) -> Result<()> {
             stackup,
             technology: constraints.technology,
             layer_via_enclosures: constraints.via.layer_enclosures_nm.clone(),
+            max_substrate_tap_distance_nm: constraints.clearance.max_substrate_tap_distance_nm,
+            substrate_net: constraints.substrate_net.clone(),
         };
 
         constraint_rulebook.set_fabrication_constraints(fab_constraints);

@@ -217,14 +217,14 @@ impl ViaResolver {
                         net_id, from_layer_name, to_layer_name
                     );
 
-                    if space.via_instance_db.has_via_at(
+                    if space.via_instance_db.has_via_in_bbox(
                         net_id,
                         from_layer_name,
                         to_layer_name,
-                        (center_x, center_y),
+                        (xy_x_min, xy_y_min, xy_x_max, xy_y_max),
                     ) {
                         println!(
-                            "   ✓ Skipping auto-via at ({}, {}) - explicit contact already bridges {} and {}",
+                            "   ✓ Skipping auto-via at ({}, {}) - explicit contact already bridges {} and {} within overlap region",
                             center_x, center_y, from_layer_name, to_layer_name
                         );
                         continue;

@@ -5,10 +5,12 @@ pub mod geometry_router;
 pub mod layer_connection_database;
 pub mod material;
 pub mod netlist;
+pub mod physics;
 pub mod placement;
 pub mod routing_database;
 pub mod routing_layer_database;
 pub mod space;
+pub mod stackup;
 pub mod via_instance_database;
 pub mod via_layer_mapping_database;
 
@@ -92,7 +94,11 @@ pub use space::{
     AnalyticTrace, ContactMetadata, Dimensions, HardwareSpace, KeepOutZone, LineSegment, PadShape,
     PourMetadata, SpaceView,
 };
+pub use stackup::{LayerKind, RoutingSurfacePolicy};
 pub use via_instance_database::{ViaInstance, ViaInstanceDatabase};
 pub use via_layer_mapping_database::{
     BridgeRuleInput, ViaConnection, ViaLayerMappingDatabase, ViaLayerMappingError,
 };
+
+// Re-export physics types
+pub use physics::PhysicalQuantity;

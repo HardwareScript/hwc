@@ -30,4 +30,4 @@ pub mod unified_geometry; // v0.2.2: Single source of truth for copper contours
 pub use materials::SceneGraphError;
 pub use scene_graph_impl::SceneGraph;
 pub use types::{BoxParams, Color, Face, MaterialNode, MeshNode, Vertex};
-pub use unified_geometry::{generate_copper_contours, CopperPoolKey, UnifiedCopperContour};
+pub use unified_geometry::{generate_copper_contours, LayerId, PhysicalLayer};

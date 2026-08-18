@@ -127,6 +127,9 @@ export device Resistor:
         A: [Polysilicon, Titanium_Silicide, Aluminum]  # Accept resistor body OR contact materials
         B: [Polysilicon, Titanium_Silicide, Aluminum]  # Accept resistor body OR contact materials
         BULK: [Air, P_Plus_Diffusion, Titanium_Silicide]  # Virtual terminal (Air) OR physical substrate tap (P+ + TiSi2)
+    metrics:
+        L: span(A | B, along: flux(A, B))
+        W: span(A | B, along: transverse(A, B))
     spice:
         prefix: X
         subcircuit: sky130_fd_pr__res_high_po

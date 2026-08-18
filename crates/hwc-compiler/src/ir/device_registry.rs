@@ -306,7 +306,7 @@ fn extract_device_parameters_from_space(
     _terminals: &[CompactString],
     _space: &hwc_engine::HardwareSpace,
     symbol_table: Option<&crate::SymbolTable>,
-) -> FxHashMap<CompactString, f64> {
+) -> FxHashMap<CompactString, hwc_engine::PhysicalQuantity> {
     let parameters = FxHashMap::default();
 
     // Get device definition to see what parameters are needed

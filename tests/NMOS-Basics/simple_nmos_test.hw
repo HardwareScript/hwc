@@ -1,0 +1,297 @@
+# simple_nmos_test.hw - SKY130 1.8V NMOS Characterization Test
+# Device: sky130_fd_pr__nfet_01v8 (W = 1.0μm, L = 0.15μm)
+
+import * from @std/primitives/units
+import * from "./nmos_pdk"
+
+module NMOS_Transistor:
+    pins: [input Gate, output Drain, ground Source, ground Bulk]
+
+space Simple_NMOS_Space implements NMOS_Transistor:
+    dimensions: 20.0um by 12.0um
+    profile: SKY130_1V8_NMOS
+
+    nets:
+        Drain:  { classification: signal, potential: 1.8V, current: 10.0uA }
+        Gate:   { classification: signal, potential: 1.8V, current: 0.1uA }
+        Source: { classification: ground, potential: 0.0V, current: 10.0uA }
+        Bulk:   { classification: ground, potential: 0.0V, current: 0.0uA }
+
+    device_nets M1:
+        B: Bulk
+
+    # ========================================================================
+    # PARAMETRIC DIMENSIONS
+    # ========================================================================
+    
+    let gate_length = 150nm        # L = 150nm (SKY130 minimum gate length)
+    let gate_width = 1.0um         # W = 1.0μm
+    let sd_len = 650nm             # Source / Drain diffusion bed length
+    let poly_overhang = 800nm      # Poly extension beyond active area
+    let tap_size = 400nm
+    let tap_offset_y = 3.0um
+    let pad_size = 1.2um
+    let via_pitch = 380nm          # 380nm pitch - 170nm dia = 210nm clearance (> 200nm min)
+    let via_offset = via_pitch / 2 # 190nm offset for symmetrical 2-via array
+    
+    let diff_total_len = (2 * sd_len) + gate_length  # 1.45um
+
+    # ========================================================================
+    # 1. ROOT ANCHOR: Source & Drain N+ Diffusions (Physical Semiconductor Pours)
+    # ========================================================================
+    
+    # Source N+ Active Region (Left side of channel)
+    add pour(N_Plus_Diffusion) named Source_Diff on layer: diff:
+        device: M1.S
+        net: Source
+        dimensions: sd_len by gate_width
+        at: [x: 10.0um - (gate_length / 2) - (sd_len / 2), y: 6.0um]
+
+    # Drain N+ Active Region (Right side of channel)
+    add pour(N_Plus_Diffusion) named Drain_Diff on layer: diff:
+        device: M1.D
+        net: Drain
+        dimensions: sd_len by gate_width
+        at: [x: 10.0um + (gate_length / 2) + (sd_len / 2), y: 6.0um]
+
+    # NSDM Mask: N+ source/drain implant mask enclosure over diffusions
+    add pour(N_Plus_Implant_Mask) named M1_NSDM on layer: nsdm:
+        dimensions: diff_total_len + 260nm by gate_width + 260nm
+        at: [x: 10.0um, y: 6.0um]
+
+    # ========================================================================
+    # 2. POLYSILICON GATE (Crosses Channel Between Source and Drain)
+    # ========================================================================
+    
+    # Active Gate channel strip crossing between Source and Drain (L = 150nm)
+    add pour(Polysilicon) named Gate_Poly on layer: poly:
+        device: M1.G
+        net: Gate
+        dimensions: gate_length by gate_width + (2 * poly_overhang)
+        at: [x: 10.0um, y: 6.0um]
+
+    # Gate Poly Landing Pad (Dogbone extension for >= 50nm enclosure around 170nm via)
+    # SKY130 rule licon.4 / poly.8 requires minimum poly enclosure around poly contacts
+    let gate_head_size = 400nm  # 400nm - 170nm via = 115nm enclosure on all sides (DRC clean)
+    
+    add pour(Polysilicon) named Gate_Poly_Head on layer: poly:
+        device: M1.G
+        net: Gate
+        dimensions: gate_head_size by gate_head_size
+        align: center_x with Gate_Poly
+        align: center_y with Gate_Poly.top - (gate_head_size / 2)
+
+    # ========================================================================
+    # 3. SOURCE CONTACT & VIAS (Over Source Diffusion)
+    # ========================================================================
+    
+    add pour(Titanium_Silicide) named Source_LI on layer: li1:
+        device: M1.S
+        net: Source
+        dimensions: 400nm by gate_width
+        align: center_x with Source_Diff
+        align: center_y with Source_Diff
+
+    # Diffusion to Local Interconnect (2 vias @ 380nm pitch)
+    for i in 0..2:
+        add contact(Tungsten) named Source_Via_LI_{i} spanning layer: diff to li1:
+            diameter: 170nm
+            align: center_x with Source_LI
+            align: center_y with Source_LI.center_y - via_offset + (i * via_pitch)
+            net: Source
+
+    # Metal1 Landing Pad over Source
+    add pour(Aluminum) named Source_Metal on layer: metal1:
+        dimensions: 400nm by gate_width
+        align: center_x with Source_LI
+        align: center_y with Source_LI
+        net: Source
+
+    # LI to Metal1 (2 vias @ 380nm pitch)
+    for i in 0..2:
+        add contact(Tungsten) named Source_Via_M1_{i} spanning layer: li1 to metal1:
+            diameter: 170nm
+            align: center_x with Source_LI
+            align: center_y with Source_LI.center_y - via_offset + (i * via_pitch)
+            net: Source
+
+    # ========================================================================
+    # 4. DRAIN CONTACT & VIAS (Over Drain Diffusion)
+    # ========================================================================
+    
+    add pour(Titanium_Silicide) named Drain_LI on layer: li1:
+        device: M1.D
+        net: Drain
+        dimensions: 400nm by gate_width
+        align: center_x with Drain_Diff
+        align: center_y with Drain_Diff
+
+    # Diffusion to Local Interconnect (2 vias @ 380nm pitch)
+    for i in 0..2:
+        add contact(Tungsten) named Drain_Via_LI_{i} spanning layer: diff to li1:
+            diameter: 170nm
+            align: center_x with Drain_LI
+            align: center_y with Drain_LI.center_y - via_offset + (i * via_pitch)
+            net: Drain
+
+    # Metal1 Landing Pad over Drain
+    add pour(Aluminum) named Drain_Metal on layer: metal1:
+        dimensions: 400nm by gate_width
+        align: center_x with Drain_LI
+        align: center_y with Drain_LI
+        net: Drain
+
+    # LI to Metal1 (2 vias @ 380nm pitch)
+    for i in 0..2:
+        add contact(Tungsten) named Drain_Via_M1_{i} spanning layer: li1 to metal1:
+            diameter: 170nm
+            align: center_x with Drain_LI
+            align: center_y with Drain_LI.center_y - via_offset + (i * via_pitch)
+            net: Drain
+
+    # ========================================================================
+    # 5. GATE EXTENSION CONTACT (Outside Channel on Top Poly Overhang)
+    # ========================================================================
+    
+    add pour(Titanium_Silicide) named Gate_Contact_LI on layer: li1:
+        dimensions: 400nm by 400nm
+        align: center_x with Gate_Poly
+        align: center_y with Gate_Poly.top - 200nm
+        net: Gate
+
+    add contact(Tungsten) named Gate_Via_LI spanning layer: poly to li1:
+        diameter: 170nm
+        align: center_x with Gate_Contact_LI
+        align: center_y with Gate_Contact_LI
+        net: Gate
+
+    add pour(Aluminum) named Gate_Contact_Metal on layer: metal1:
+        dimensions: 400nm by 400nm
+        align: center_x with Gate_Contact_LI
+        align: center_y with Gate_Contact_LI
+        net: Gate
+
+    add contact(Tungsten) named Gate_Via_M1 spanning layer: li1 to metal1:
+        diameter: 170nm
+        align: center_x with Gate_Contact_LI
+        align: center_y with Gate_Contact_LI
+        net: Gate
+
+    # ========================================================================
+    # 6. SUBSTRATE TAP (BULK Connection to P-Substrate GND)
+    # ========================================================================
+    # Uses the unified 'diff' layer with PSDM mask to define P+ doping
+    
+    # 2D TAP Window Mask
+    add pour(Tap_Mask) named Bulk_Tap_Mask on layer: tap:
+        dimensions: tap_size by tap_size
+        align: center_x with Gate_Poly
+        align: center_y with Gate_Poly.center_y - tap_offset_y
+
+    # 2D P+ Implant Mask (defines P+ doping in the active region)
+    add pour(P_Plus_Implant_Mask) named Bulk_Tap_PSDM on layer: psdm:
+        dimensions: tap_size + 260nm by tap_size + 260nm
+        align: center_x with Gate_Poly
+        align: center_y with Gate_Poly.center_y - tap_offset_y
+
+    # Physical Diffusion Pour placed on the unified 'diff' layer
+    # The PSDM mask above determines this is P+ doped (substrate tap)
+    add pour(P_Plus_Diffusion) named Bulk_Tap_Diff on layer: diff:
+        dimensions: tap_size by tap_size
+        align: center_x with Gate_Poly
+        align: center_y with Gate_Poly.center_y - tap_offset_y
+        net: Bulk
+        device: M1.B
+
+    # Contact: diff (P+ tap) to Local Interconnect (li1)
+    add contact(Tungsten) named Bulk_Tap_Licon spanning layer: diff to li1:
+        diameter: 170nm
+        align: center_x with Bulk_Tap_Diff
+        align: center_y with Bulk_Tap_Diff
+        net: Bulk
+
+    add pour(Titanium_Silicide) named Bulk_Tap_LI on layer: li1:
+        dimensions: tap_size by tap_size
+        align: center_x with Bulk_Tap_Diff
+        align: center_y with Bulk_Tap_Diff
+        net: Bulk
+
+    add pour(Aluminum) named Bulk_Tap_Metal on layer: metal1:
+        dimensions: tap_size by tap_size
+        align: center_x with Bulk_Tap_LI
+        align: center_y with Bulk_Tap_LI
+        net: Bulk
+
+    add contact(Tungsten) named Bulk_Tap_Mcon spanning layer: li1 to metal1:
+        diameter: 170nm
+        align: center_x with Bulk_Tap_LI
+        align: center_y with Bulk_Tap_LI
+        net: Bulk
+
+    # ========================================================================
+    # 7. EXTERNAL TEST PADS & INTERCONNECT
+    # ========================================================================
+    
+    # Source Pad (Left)
+    add pour(Aluminum) named Source_Pad on layer: metal1:
+        dimensions: pad_size by pad_size
+        align: center_x with Source_Diff.left - 3.5um
+        align: center_y with Source_Diff
+        net: Source
+
+    # Drain Pad (Right)
+    add pour(Aluminum) named Drain_Pad on layer: metal1:
+        dimensions: pad_size by pad_size
+        align: center_x with Drain_Diff.right + 3.5um
+        align: center_y with Drain_Diff
+        net: Drain
+
+    # Gate Pad (Top)
+    add pour(Aluminum) named Gate_Pad on layer: metal1:
+        dimensions: pad_size by pad_size
+        align: center_x with Gate_Poly
+        align: center_y with Gate_Poly.top + 2.0um
+        net: Gate
+
+    # Bulk Pad (Bottom)
+    add pour(Aluminum) named Bulk_Pad on layer: metal1:
+        dimensions: pad_size by pad_size
+        align: center_x with Bulk_Tap_Metal.right + 3.5um
+        align: center_y with Bulk_Tap_Metal
+        net: Bulk
+
+    # ========================================================================
+    # 8. ROUTING
+    # ========================================================================
+    
+    route Source_Pad to Source_Metal:
+        net: Source
+        width: 300nm
+        layer: metal1
+        intent: Power
+
+    route Drain_Metal to Drain_Pad:
+        net: Drain
+        width: 300nm
+        layer: metal1
+        intent: Power
+
+    route Gate_Contact_Metal to Gate_Pad:
+        net: Gate
+        width: 200nm
+        layer: metal1
+        intent: Signal
+
+    route Bulk_Tap_Metal to Bulk_Pad:
+        net: Bulk
+        width: 300nm
+        layer: metal1
+        intent: Power
+
+# ========================================================================
+# 9. SIMULATION TESTBENCHES
+# ========================================================================
+
+test NMOS_Characterization_Test for Simple_NMOS_Space:
+    dc: { sweep: Gate, start: 0.0V, stop: 1.8V, step: 0.05V }
+    tran: { step: 10ps, stop: 50ns }

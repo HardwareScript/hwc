@@ -53,6 +53,8 @@ device Resistor:
     materials:
         A: Polysilicon
         B: Polysilicon
+    metrics:
+        R: resistance(from: A, to: B)
     spice:
         prefix: R
         terminal_order: [A, B]

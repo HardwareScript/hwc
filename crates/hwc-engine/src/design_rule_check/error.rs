@@ -200,6 +200,20 @@ pub enum DrcError {
         required_area_um2: f64,
         location: Point3D,
     },
+
+    /// P47: Latch-Up Substrate Tap Distance Violation (SKY130 latchup.1)
+    #[error("Latch-up tap distance violation for device '{device}'")]
+    #[diagnostic(
+        code(P47),
+        url("https://docs.hw-script.org/errors/P47"),
+        help("Physical Explanation: In CMOS semiconductor layouts, every active channel must have a substrate tap (bulk connection) within a maximum distance (e.g., 20.0µm for SKY130 latchup.1). Without this, parasitic bipolar NPN/PNP structures trigger CMOS latch-up.\n\nActual Distance: {actual_um:.2}µm\nMaximum Allowed: {max_allowed_um:.2}µm\nLocation: {location}\n\nSolution: Move Bulk_Tap closer to the channel or insert intermediate substrate tap guard rings.")
+    )]
+    LatchUpTapTooDistant {
+        device: CompactString,
+        actual_um: f64,
+        max_allowed_um: f64,
+        location: Point3D,
+    },
 }
 
 /// Convert DRC violations to miette errors.
@@ -372,6 +386,17 @@ impl From<&DrcViolation> for DrcError {
                 material_name: material_name.clone(),
                 actual_area_um2: actual_area_nm2 / 1_000_000.0,
                 required_area_um2: required_area_nm2 / 1_000_000.0,
+                location: *location,
+            },
+            DrcViolation::LatchUpTapTooDistant {
+                device,
+                actual_nm,
+                max_allowed_nm,
+                location,
+            } => DrcError::LatchUpTapTooDistant {
+                device: device.clone(),
+                actual_um: *actual_nm as f64 / 1_000.0,
+                max_allowed_um: *max_allowed_nm as f64 / 1_000.0,
                 location: *location,
             },
         }

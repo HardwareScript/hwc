@@ -65,7 +65,7 @@ pub struct MaterialAliasDefinition {
 ///
 /// All bridge categories are electrically conductive, but carry distinct semantic
 /// meaning that enables bridge-specific DRC rules and profile lookup.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MaterialCategory {
     // === Fundamental categories ===
     Conductor,

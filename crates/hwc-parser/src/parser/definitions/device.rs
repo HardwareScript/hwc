@@ -59,6 +59,7 @@ impl super::super::Parser {
         let mut terminals = None;
         let mut materials = None;
         let mut tolerance = None;
+        let mut metrics = None;
         let mut spice_info = None;
 
         while !self.check(&Token::Dedent) && !self.is_at_end() {
@@ -151,6 +152,37 @@ impl super::super::Parser {
                             }
                             continue;
                         }
+                        "metrics" => {
+                            self.advance(); // consume 'metrics'
+                            if let Err(e) = self.expect(&Token::Colon) {
+                                collector.report(e);
+                                continue;
+                            }
+                            if let Err(e) = self.expect(&Token::Newline) {
+                                collector.report(e);
+                                continue;
+                            }
+                            while self.check(&Token::Newline) {
+                                self.advance();
+                            }
+                            if let Err(e) = self.expect(&Token::Indent) {
+                                collector.report(e);
+                                continue;
+                            }
+                            match self.parse_metrics_mappings() {
+                                Ok(m) => metrics = Some(m),
+                                Err(e) => {
+                                    collector.report(e);
+                                    while !self.check(&Token::Dedent) && !self.is_at_end() {
+                                        self.advance();
+                                    }
+                                }
+                            }
+                            if self.check(&Token::Dedent) {
+                                self.advance();
+                            }
+                            continue;
+                        }
                         "spice" => {
                             self.advance(); // consume 'spice'
                             if let Err(e) = self.expect(&Token::Colon) {
@@ -229,6 +261,26 @@ impl super::super::Parser {
             }
         };
 
+        // Validate metrics terminal references if present
+        if let Some(ref m_map) = metrics {
+            for (metric_name, expr) in m_map {
+                let mut term_refs = Vec::new();
+                Self::collect_metric_terminals(expr, &mut term_refs);
+                for term in term_refs {
+                    if !terminals.contains(term) {
+                        collector.report(ParseError::General {
+                            span: span_to_source_span(&Span::new(start_pos, end_pos)),
+                            message: format!(
+                                "Metric '{}' references terminal '{}' which is not in device terminals: {:?}",
+                                metric_name, term, terminals
+                            ).into(),
+                        });
+                        return None;
+                    }
+                }
+            }
+        }
+
         // Validate spice block if present
         if let Some(ref spice) = spice_info {
             // Check that terminal_order references valid terminals
@@ -239,6 +291,36 @@ impl super::super::Parser {
                         message: format!("SPICE terminal_order references '{}' which is not in device terminals: {:?}", terminal, terminals).into(),
                     });
                     return None;
+                }
+            }
+
+            // Strict Contract Enforcement: Any requested SPICE parameter MUST be declared in metrics:
+            if !spice.parameters.is_empty() {
+                match metrics {
+                    Some(ref m_map) => {
+                        for param in &spice.parameters {
+                            if !m_map.contains_key(param) {
+                                collector.report(ParseError::General {
+                                    span: span_to_source_span(&Span::new(start_pos, end_pos)),
+                                    message: format!(
+                                        "Device '{}' requests SPICE parameter '{}' but no corresponding extraction rule is declared in 'metrics:' block",
+                                        name.as_str(), param
+                                    ).into(),
+                                });
+                                return None;
+                            }
+                        }
+                    }
+                    None => {
+                        collector.report(ParseError::General {
+                            span: span_to_source_span(&Span::new(start_pos, end_pos)),
+                            message: format!(
+                                "Device '{}' requests SPICE parameters {:?} but is missing the REQUIRED 'metrics:' block",
+                                name.as_str(), spice.parameters
+                            ).into(),
+                        });
+                        return None;
+                    }
                 }
             }
 
@@ -262,6 +344,7 @@ impl super::super::Parser {
             terminals: terminals.clone(),
             materials,
             tolerance,
+            metrics,
             spice_info,
             span: Span::new(start_pos, end_pos),
         })
@@ -583,5 +666,310 @@ impl super::super::Parser {
         }
 
         Ok(mappings)
+    }
+
+    fn parse_metrics_mappings(&mut self) -> Result<FxHashMap<CompactString, MetricExpression>, ParseError> {
+        let mut mappings = FxHashMap::default();
+
+        while !self.check(&Token::Dedent) && !self.is_at_end() {
+            self.skip_whitespace();
+
+            if self.check(&Token::Dedent) || self.is_at_end() {
+                break;
+            }
+
+            let metric_name = self.expect_identifier_string()?;
+            self.expect(&Token::Colon)?;
+            self.skip_whitespace();
+
+            let expr = self.parse_single_metric_expression()?;
+            self.skip_whitespace();
+
+            if mappings.contains_key(metric_name.as_str()) {
+                return Err(self.error(&format!(
+                    "Duplicate metric specification for parameter '{}'",
+                    metric_name
+                )));
+            }
+
+            mappings.insert(metric_name.into(), expr);
+        }
+
+        if mappings.is_empty() {
+            return Err(self.error("Metrics block cannot be empty"));
+        }
+
+        Ok(mappings)
+    }
+
+    fn parse_single_metric_expression(&mut self) -> Result<MetricExpression, ParseError> {
+        self.parse_metric_expr()
+    }
+
+    fn parse_metric_expr(&mut self) -> Result<MetricExpression, ParseError> {
+        let mut left = self.parse_metric_primary()?;
+        self.skip_whitespace();
+
+        while self.check(&Token::Slash) {
+            self.advance(); // consume '/'
+            self.skip_whitespace();
+            let right = self.parse_metric_primary()?;
+            self.skip_whitespace();
+            left = MetricExpression::Divide(Box::new(left), Box::new(right));
+        }
+
+        Ok(left)
+    }
+
+    fn parse_metric_primary(&mut self) -> Result<MetricExpression, ParseError> {
+        self.skip_whitespace();
+
+        if self.check(&Token::OpenParen) {
+            self.advance();
+            self.skip_whitespace();
+            let expr = self.parse_metric_expr()?;
+            self.skip_whitespace();
+            self.expect(&Token::CloseParen)?;
+            return Ok(expr);
+        }
+
+        let ident = self.expect_identifier_string()?;
+        self.skip_whitespace();
+
+        if !self.check(&Token::OpenParen) {
+            // Identifier reference to another metric in the block (e.g. `SA`, `W`)
+            return Ok(MetricExpression::Ref(ident.into()));
+        }
+
+        self.expect(&Token::OpenParen)?;
+        self.skip_whitespace();
+
+        match ident.as_str() {
+            "span" => {
+                let manifold = self.parse_manifold_expr()?;
+                self.skip_whitespace();
+                self.expect(&Token::Comma)?;
+                self.skip_whitespace();
+
+                let along_key = self.expect_identifier_string()?;
+                if along_key != "along" {
+                    return Err(self.error("Expected 'along:' argument in span()"));
+                }
+                self.expect(&Token::Colon)?;
+                self.skip_whitespace();
+
+                let mode = self.expect_identifier_string()?;
+                self.skip_whitespace();
+                self.expect(&Token::OpenParen)?;
+                self.skip_whitespace();
+                let from = self.expect_identifier_string()?;
+                self.skip_whitespace();
+                self.expect(&Token::Comma)?;
+                self.skip_whitespace();
+                let to = self.expect_identifier_string()?;
+                self.skip_whitespace();
+                self.expect(&Token::CloseParen)?;
+                self.skip_whitespace();
+                self.expect(&Token::CloseParen)?;
+
+                match mode.as_str() {
+                    "flux" => Ok(MetricExpression::SpanAlongFlux {
+                        manifold,
+                        from: from.into(),
+                        to: to.into(),
+                    }),
+                    "transverse" => Ok(MetricExpression::SpanAlongTransverse {
+                        manifold,
+                        from: from.into(),
+                        to: to.into(),
+                    }),
+                    other => Err(self.error(&format!(
+                        "Unknown span direction '{}'. Expected 'flux(from, to)' or 'transverse(from, to)'",
+                        other
+                    ))),
+                }
+            }
+            "area" => {
+                let manifold = self.parse_manifold_expr()?;
+                self.skip_whitespace();
+                self.expect(&Token::CloseParen)?;
+                Ok(MetricExpression::Area(manifold))
+            }
+            "perimeter" => {
+                let manifold = self.parse_manifold_expr()?;
+                self.skip_whitespace();
+                self.expect(&Token::CloseParen)?;
+                Ok(MetricExpression::Perimeter(manifold))
+            }
+            "resistance" => {
+                let mut from = None;
+                let mut to = None;
+                let mut pos = Vec::new();
+
+                while !self.check(&Token::CloseParen) && !self.is_at_end() {
+                    while self.check(&Token::Newline) {
+                        self.advance();
+                    }
+                    if self.check(&Token::CloseParen) {
+                        break;
+                    }
+
+                    let arg_name = self.expect_identifier_string()?;
+                    self.skip_whitespace();
+
+                    if self.check(&Token::Colon) {
+                        self.advance();
+                        self.skip_whitespace();
+                        let val = self.expect_identifier_string()?;
+                        match arg_name.as_str() {
+                            "from" => from = Some(val.into()),
+                            "to" => to = Some(val.into()),
+                            other => return Err(self.error(&format!("Unknown resistance argument: '{}'", other))),
+                        }
+                    } else {
+                        pos.push(arg_name.into());
+                    }
+
+                    self.skip_whitespace();
+                    if self.check(&Token::Comma) {
+                        self.advance();
+                        self.skip_whitespace();
+                    } else if !self.check(&Token::CloseParen) {
+                        return Err(self.error("Expected ',' or ')' in resistance arguments"));
+                    }
+                }
+                self.expect(&Token::CloseParen)?;
+
+                let from = from.or_else(|| pos.get(0).cloned()).ok_or_else(|| self.error("resistance requires 'from' argument"))?;
+                let to = to.or_else(|| pos.get(1).cloned()).ok_or_else(|| self.error("resistance requires 'to' argument"))?;
+                Ok(MetricExpression::Resistance { from, to })
+            }
+            "capacitance" => {
+                let mut plate_a = None;
+                let mut plate_b = None;
+                let mut pos = Vec::new();
+
+                while !self.check(&Token::CloseParen) && !self.is_at_end() {
+                    while self.check(&Token::Newline) {
+                        self.advance();
+                    }
+                    if self.check(&Token::CloseParen) {
+                        break;
+                    }
+
+                    let arg_name = self.expect_identifier_string()?;
+                    self.skip_whitespace();
+
+                    if self.check(&Token::Colon) {
+                        self.advance();
+                        self.skip_whitespace();
+                        let val = self.expect_identifier_string()?;
+                        match arg_name.as_str() {
+                            "plate_a" | "a" | "terminal_a" => plate_a = Some(val.into()),
+                            "plate_b" | "b" | "terminal_b" => plate_b = Some(val.into()),
+                            other => return Err(self.error(&format!("Unknown capacitance argument: '{}'", other))),
+                        }
+                    } else {
+                        pos.push(arg_name.into());
+                    }
+
+                    self.skip_whitespace();
+                    if self.check(&Token::Comma) {
+                        self.advance();
+                        self.skip_whitespace();
+                    } else if !self.check(&Token::CloseParen) {
+                        return Err(self.error("Expected ',' or ')' in capacitance arguments"));
+                    }
+                }
+                self.expect(&Token::CloseParen)?;
+
+                let plate_a = plate_a.or_else(|| pos.get(0).cloned()).ok_or_else(|| self.error("capacitance requires first plate argument"))?;
+                let plate_b = plate_b.or_else(|| pos.get(1).cloned()).ok_or_else(|| self.error("capacitance requires second plate argument"))?;
+                Ok(MetricExpression::Capacitance { plate_a, plate_b })
+            }
+            other => Err(self.error(&format!(
+                "Unknown metric operator: '{}'. Expected: span, area, perimeter, resistance, capacitance, or metric identifier",
+                other
+            ))),
+        }
+    }
+
+    /// Parse 2D manifold composition: `D - G`, `G & hull(S, D)`, `S | D`
+    pub(crate) fn parse_manifold_expr(&mut self) -> Result<ManifoldExpr, ParseError> {
+        let mut left = self.parse_manifold_primary()?;
+        self.skip_whitespace();
+
+        while self.check(&Token::Hyphen) || self.check(&Token::Ampersand) || self.check(&Token::Pipe) {
+            let op = self.current().map(|t| t.token.clone()).unwrap();
+            self.advance();
+            self.skip_whitespace();
+            let right = self.parse_manifold_primary()?;
+            self.skip_whitespace();
+            left = match op {
+                Token::Hyphen => ManifoldExpr::Difference(Box::new(left), Box::new(right)),
+                Token::Ampersand => ManifoldExpr::Intersect(Box::new(left), Box::new(right)),
+                Token::Pipe => ManifoldExpr::Union(Box::new(left), Box::new(right)),
+                _ => unreachable!(),
+            };
+        }
+
+        Ok(left)
+    }
+
+    fn parse_manifold_primary(&mut self) -> Result<ManifoldExpr, ParseError> {
+        self.skip_whitespace();
+        if self.check(&Token::OpenParen) {
+            self.advance();
+            self.skip_whitespace();
+            let expr = self.parse_manifold_expr()?;
+            self.skip_whitespace();
+            self.expect(&Token::CloseParen)?;
+            return Ok(expr);
+        }
+
+        let name = self.expect_identifier_string()?;
+        self.skip_whitespace();
+
+        if name == "hull" && self.check(&Token::OpenParen) {
+            self.advance(); // consume '('
+            self.skip_whitespace();
+            let a = self.parse_manifold_expr()?;
+            self.skip_whitespace();
+            self.expect(&Token::Comma)?;
+            self.skip_whitespace();
+            let b = self.parse_manifold_expr()?;
+            self.skip_whitespace();
+            self.expect(&Token::CloseParen)?;
+            return Ok(ManifoldExpr::Hull(Box::new(a), Box::new(b)));
+        }
+
+        Ok(ManifoldExpr::Terminal(name.into()))
+    }
+
+    fn collect_metric_terminals<'b>(expr: &'b MetricExpression, out: &mut Vec<&'b CompactString>) {
+        match expr {
+            MetricExpression::Ref(_) => {}
+            MetricExpression::SpanAlongFlux { manifold, from, to }
+            | MetricExpression::SpanAlongTransverse { manifold, from, to } => {
+                manifold.collect_terminals(out);
+                out.push(from);
+                out.push(to);
+            }
+            MetricExpression::Area(m) | MetricExpression::Perimeter(m) => {
+                m.collect_terminals(out);
+            }
+            MetricExpression::Divide(a, b) => {
+                Self::collect_metric_terminals(a, out);
+                Self::collect_metric_terminals(b, out);
+            }
+            MetricExpression::Resistance { from, to } => {
+                out.push(from);
+                out.push(to);
+            }
+            MetricExpression::Capacitance { plate_a, plate_b } => {
+                out.push(plate_a);
+                out.push(plate_b);
+            }
+        }
     }
 }

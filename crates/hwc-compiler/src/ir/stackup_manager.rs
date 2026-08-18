@@ -252,9 +252,19 @@ impl StackupManager {
     /// Z-coordinates accessible during export and validation without needing the full
     /// StackupManager.
     ///
+    /// **v0.3.0: Zero Heuristics Architecture**
+    /// Derives LayerKind from MaterialCategory using pure type-driven logic.
+    /// NO string matching, NO layer counting.
+    ///
+    /// # Arguments
+    /// * `material_registry` - Material registry to look up MaterialCategory
+    ///
     /// # Panics
     /// Never panics - returns an empty Vec if stackup is empty.
-    pub fn export_stackup_layers(&self) -> Vec<hwc_engine::space::StackupLayer> {
+    pub fn export_stackup_layers(
+        &self,
+        material_registry: &hwc_engine::material::MaterialRegistry,
+    ) -> Vec<hwc_engine::space::StackupLayer> {
         self.ordered_layers
             .iter()
             .filter_map(|name| {
@@ -266,6 +276,14 @@ impl StackupManager {
                 // conductivity, because they carry no physical Z-height.
                 let is_routable = !is_mask && self.conductive_layers.contains(name);
 
+                // v0.3.0: Derive LayerKind from MaterialCategory (ZERO HEURISTICS)
+                // 1. Get material ID from registry
+                let mat_id = material_registry.get_id(material_name)?;
+                // 2. Get MaterialCategory from registry
+                let category = material_registry.get_category(mat_id)?;
+                // 3. Pure type derivation: MaterialCategory → LayerKind
+                let kind = hwc_engine::stackup::LayerKind::from_material_category(category);
+
                 Some(hwc_engine::space::StackupLayer::new(
                     name.as_str().into(),
                     *z_bottom,
@@ -274,6 +292,7 @@ impl StackupManager {
                     material_name.as_str().into(),
                     is_routable,
                     is_mask,
+                    kind,
                 ))
             })
             .collect()

@@ -1,4 +1,4 @@
-﻿use super::builder::RoutingData;
+use super::builder::RoutingData;
 use super::config::AutoRouter;
 use crate::ir::errors::IrError;
 use hwc_engine::geometry::Point3D;
@@ -375,6 +375,8 @@ impl<'a> AutoRouter<'a> {
                 stackup,
                 technology: constraint_set.technology,
                 layer_via_enclosures: constraint_set.via.layer_enclosures_nm.clone(),
+                max_substrate_tap_distance_nm: constraint_set.clearance.max_substrate_tap_distance_nm,
+                substrate_net: constraint_set.substrate_net.clone(),
             };
             constraints.set_fabrication_constraints(fab_constraints);
         }

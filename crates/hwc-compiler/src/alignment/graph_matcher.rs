@@ -417,7 +417,10 @@ impl<'a> GraphMatcher<'a> {
 
             // Check each parameter in logical device
             for (param_name, expected_value) in &logical_device.parameters {
-                if let Some(&actual_value) = physical_device.parameters.get(param_name) {
+                if let Some(actual_quantity) = physical_device.parameters.get(param_name) {
+                    // Extract raw SI value for comparison
+                    let actual_value = actual_quantity.as_raw_si();
+                    
                     // Calculate percentage difference
                     let diff_percent =
                         ((actual_value - expected_value).abs() / expected_value) * 100.0;

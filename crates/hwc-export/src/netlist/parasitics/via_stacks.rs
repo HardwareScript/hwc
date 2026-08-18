@@ -1,64 +1,24 @@
 //! Stage 1: Spatial via clustering and parallel contact resistance calculation.
 
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashMap;
 
 use super::geometry::{distance_2d, get_bbox_centroid};
 use super::types::{ExtractedClusterNode, VIA_CLUSTER_RADIUS_NM};
 use crate::netlist::types::{ParasiticElement, PhysicalNetlistGraph};
 use hwc_compiler::alignment::PhysicalNetlist;
-use hwc_engine::space::{ContactMetadata, PourMetadata};
+use hwc_engine::space::ContactMetadata;
 use hwc_engine::HardwareSpace;
 
-/// Spatially cluster via arrays, exempt internal device contacts, and compute parallel via stack resistance.
+/// Spatially cluster via arrays and compute parallel via stack resistance.
 pub fn extract_via_stacks(
     space: &HardwareSpace,
-    physical_netlist: Option<&PhysicalNetlist>,
+    _physical_netlist: Option<&PhysicalNetlist>,
     graph: &mut PhysicalNetlistGraph,
     extracted_layer_nodes: &mut FxHashMap<(String, String), Vec<ExtractedClusterNode>>,
 ) {
-    // Collect internal contact indices under device channel bodies
-    let mut internal_contact_indices: FxHashSet<usize> = FxHashSet::default();
-    if let Some(netlist) = physical_netlist {
-        for device in &netlist.devices {
-            let body_pours: Vec<&PourMetadata> = space
-                .pours
-                .iter()
-                .filter(|p| {
-                    p.device_binding
-                        .as_ref()
-                        .map_or(false, |b| b.device_name == device.name)
-                })
-                .collect();
-
-            for (c_idx, contact) in space.contacts.iter().enumerate() {
-                if let (Some(from_l), Some(to_l)) = (&contact.from_layer, &contact.to_layer) {
-                    let c_point = get_bbox_centroid(contact.bbox.as_ref());
-                    for bp in &body_pours {
-                        if let Some(ref bb) = bp.bbox {
-                            if (c_point.0 >= bb.min.x as f64 - 100.0)
-                                && (c_point.0 <= bb.max.x as f64 + 100.0)
-                                && (c_point.1 >= bb.min.y as f64 - 100.0)
-                                && (c_point.1 <= bb.max.y as f64 + 100.0)
-                            {
-                                if (from_l == "polyres" && to_l == "li1")
-                                    || (from_l == "poly" && to_l == "li1")
-                                {
-                                    internal_contact_indices.insert(c_idx);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
     // Group contacts by net
     let mut contacts_by_net: FxHashMap<String, Vec<&ContactMetadata>> = FxHashMap::default();
-    for (c_idx, contact) in space.contacts.iter().enumerate() {
-        if internal_contact_indices.contains(&c_idx) {
-            continue;
-        }
+    for contact in &space.contacts {
         if let Some(net_name) = &contact.net {
             if contact.from_layer.is_some() && contact.to_layer.is_some() {
                 contacts_by_net

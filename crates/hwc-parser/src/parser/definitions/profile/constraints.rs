@@ -167,6 +167,7 @@ impl super::super::super::Parser {
         let mut low_voltage_threshold = None;
         let mut medium_voltage_threshold = None;
         let mut high_voltage_threshold = None;
+        let mut max_substrate_tap_distance = None;
 
         while !self.check(&Token::Dedent) && !self.is_at_end() {
             self.skip_whitespace();
@@ -199,6 +200,10 @@ impl super::super::super::Parser {
                     high_voltage_threshold = Some(self.parse_measurement()?);
                     self.skip_whitespace();
                 }
+                "max_substrate_tap_distance" => {
+                    max_substrate_tap_distance = Some(self.parse_measurement()?);
+                    self.skip_whitespace();
+                }
                 _ => {
                     return Err(
                         self.error(&format!("Unknown clearance constraint: '{}'", field_name))
@@ -215,6 +220,7 @@ impl super::super::super::Parser {
             low_voltage_threshold,
             medium_voltage_threshold,
             high_voltage_threshold,
+            max_substrate_tap_distance,
             span: Span::new(start_pos, end_pos),
         })
     }

@@ -25,6 +25,9 @@ device CustomNMOS:
         AD: 10%
         PS: 10%
         PD: 10%
+    metrics:
+        L: channel_length(from: source, to: drain, control: gate)
+        W: channel_width(from: source, to: drain, control: gate)
 
 ## Module with slightly mismatched dimensions (within 2% tolerance)
 module TestCircuit:

@@ -1,0 +1,192 @@
+# nmos_pdk.hw - SkyWater SKY130 1.8V NMOS PDK Profile & Device Definition
+import * from @std/primitives/units
+import Polysilicon, Aluminum, Tungsten, Titanium_Silicide, Silicon_Dioxide, Air from "./materials"
+import P_Substrate, N_Plus_Diffusion, P_Plus_Diffusion from "./materials"
+import N_Plus_Implant_Mask, P_Plus_Implant_Mask, Tap_Mask from "./materials"
+
+export Polysilicon
+export Aluminum
+export Tungsten
+export Titanium_Silicide
+export Silicon_Dioxide
+export Air
+export P_Substrate
+export N_Plus_Diffusion
+export P_Plus_Diffusion
+export N_Plus_Implant_Mask
+export P_Plus_Implant_Mask
+export Tap_Mask
+
+export shape SquareContact(width: Measurement):
+    geometry:
+        Rectangle(width: width, height: width)
+
+# Contact Bridges
+export bridge N_Plus_Diffusion to Titanium_Silicide:
+    interface: Titanium_Silicide
+    thickness: 5nm
+    fill: Tungsten
+
+export bridge P_Plus_Diffusion to Titanium_Silicide:
+    interface: Titanium_Silicide
+    thickness: 5nm
+    fill: Tungsten
+
+export bridge Polysilicon to Titanium_Silicide:
+    interface: Titanium_Silicide
+    thickness: 5nm
+    fill: Tungsten
+
+export bridge Titanium_Silicide to Aluminum:
+    interface: Titanium_Silicide
+    thickness: 5nm
+    fill: Tungsten
+
+# SKY130 1.8V Stackup Profile
+export profile SKY130_1V8_NMOS:
+    technology: "ASIC"
+    substrate_net: Bulk
+    
+    stackup:
+        # ============================================================================
+        # Zero-Thickness 2D Fabrication & Doping Masks (Anchor at Z=0nm)
+        # ============================================================================
+        # These are lithographic masks that define doping regions and fabrication
+        # windows. They have no physical height and do not participate in routing.
+        tap:     [material: Tap_Mask,            thickness: 0nm,   routable: false, is_mask: true]
+        psdm:    [material: P_Plus_Implant_Mask, thickness: 0nm,   routable: false, is_mask: true]
+        nsdm:    [material: N_Plus_Implant_Mask, thickness: 0nm,   routable: false, is_mask: true]
+        
+        # ============================================================================
+        # Silicon Active Diffusion Base Layer (NMOS channel & Substrate Tap)
+        # ============================================================================
+        # Both N+ diffusion (NMOS source/drain) and P+ diffusion (substrate tap)
+        # exist on the same coplanar active surface at Z = 0 to 150nm.
+        # The doping polarity is determined by the nsdm and psdm masks above.
+        diff:    [material: N_Plus_Diffusion,    thickness: 150nm, routable: true]
+        
+        # ============================================================================
+        # Polysilicon Gate Layer
+        # ============================================================================
+        poly:    [material: Polysilicon,         thickness: 180nm, routable: true]
+        
+        # ============================================================================
+        # Inter-Layer Dielectric 0 (Pre-Metal Dielectric)
+        # ============================================================================
+        ild0:    [material: Silicon_Dioxide,     thickness: 200nm, routable: false]
+        
+        # ============================================================================
+        # Local Interconnect (Titanium Silicide / TiN)
+        # ============================================================================
+        li1:     [material: Titanium_Silicide,   thickness: 100nm, routable: true]
+        
+        # ============================================================================
+        # Inter-Layer Dielectric 1
+        # ============================================================================
+        ild1:    [material: Silicon_Dioxide,     thickness: 150nm, routable: false]
+        
+        # ============================================================================
+        # Metal 1 (Aluminum)
+        # ============================================================================
+        metal1:  [material: Aluminum,            thickness: 360nm, routable: true]
+
+    manufacturing:
+        track_pitch: 10nm
+        copper_thickness: 360nm
+        circle_segments: 64
+
+    via:
+        min_diameter: 170nm
+        min_enclosure: 40nm
+        min_spacing: 200nm
+        shape: SquareContact
+        contact_depth: 30%
+        material_contact_depths:
+            Aluminum: 30%
+            Polysilicon: 30%
+            Titanium_Silicide: 50%
+            N_Plus_Diffusion: 30%
+            P_Plus_Diffusion: 30%
+
+    trace:
+        min_width: 150nm
+        min_spacing: 140nm
+        edge_clearance: 100nm
+
+    clearance:
+        high_voltage: 500nm
+        safety_factor: 1.5
+        max_substrate_tap_distance: 20.0um
+
+    thermal:
+        ambient_temp: 25C
+        max_operating_temp: 125C
+        max_temp_rise: 20C
+
+    layer:
+        min_thickness: 50nm
+        allowed_conductors: [Aluminum, Polysilicon, Titanium_Silicide, N_Plus_Diffusion, P_Plus_Diffusion]
+        allowed_dielectrics: [Silicon_Dioxide, Air]
+
+    routing:
+        min_segment_length: 150nm
+        escape_stub: 0nm
+        base_cost: 1
+        via_penalty: 50
+        direction_penalty: 10
+        tight_clearance_penalty: 2
+        crosstalk_penalty: 3
+        impedance_penalty: 1
+        reference_void_penalty: 5000000
+
+    net_type Signal:
+        routing_style: auto
+        escape_stub: 0nm
+
+    net_type Power:
+        routing_style: auto
+        escape_stub: 0nm
+
+# Foundry SPICE Subcircuit Definition Contract
+export subcircuit sky130_fd_pr__nfet_01v8:
+    terminals: [D, G, S, B]
+    parameters: [
+        W = 1.0um,
+        L = 0.15um,
+        AD = 0.65p,
+        AS = 0.65p,
+        PD = 3.3u,
+        PS = 3.3u,
+        NRD = 0.65,
+        NRS = 0.65,
+        SA = 0.65u,
+        SB = 0.65u
+    ]
+    spice_include: "sky130_fd_pr/models/sky130_fd_pr__nfet_01v8.model.spice"
+
+# 4-Terminal NMOS Device Declaration with Full BSIM4 Layout Stress & Area Metrics
+export device NMOS:
+    terminals: [D, G, S, B]
+    materials:
+        D: [N_Plus_Diffusion, Titanium_Silicide, Aluminum]
+        G: [Polysilicon, Titanium_Silicide, Aluminum]
+        S: [N_Plus_Diffusion, Titanium_Silicide, Aluminum]
+        B: [P_Plus_Diffusion, N_Plus_Diffusion, Titanium_Silicide, Aluminum]  # Bulk tap uses diff layer with psdm mask
+    # Universal 2D Manifold Metric Algebra
+    metrics:
+        L:   span(G & hull(S, D), along: flux(S, D))
+        W:   span(G & hull(S, D), along: transverse(S, D))
+        AD:  area(D - G)
+        AS:  area(S - G)
+        PD:  perimeter(D - G)
+        PS:  perimeter(S - G)
+        SA:  span(S - G, along: flux(S, D))
+        SB:  span(D - G, along: flux(S, D))
+        NRD: SB / W
+        NRS: SA / W
+    spice:
+        prefix: X
+        subcircuit: sky130_fd_pr__nfet_01v8
+        terminal_order: [D, G, S, B]
+        parameters: [W, L, AD, AS, PD, PS, NRD, NRS, SA, SB]
+        parameter_style: named

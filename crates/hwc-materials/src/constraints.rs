@@ -115,6 +115,8 @@ pub struct ConstraintSet {
     /// `manufacturing.min_feature_size`). Replaces the purged user-facing
     /// `resolution:` declaration so the profile is the sole manufacturing authority.
     pub manufacturing_grid_nm: i64,
+    /// Substrate/bulk net name (e.g. "Bulk" or "GND") declared in profile.
+    pub substrate_net: Option<CompactString>,
 }
 
 /// Stackup constraints for impedance-controlled routing
@@ -218,6 +220,9 @@ pub struct ClearanceConstraints {
 
     /// Safety factor multiplier (typically 2.0)
     pub safety_factor: f64,
+
+    /// Maximum distance from active channel to substrate tap for latch-up prevention in nanometers (optional)
+    pub max_substrate_tap_distance_nm: Option<i64>,
 }
 
 /// Layer thickness and material constraints

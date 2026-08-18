@@ -162,6 +162,11 @@ export device Capacitor:
         c0: [CAPM, Titanium_Silicide, Aluminum]        # Top plate: CAPM OR contact materials
         c1: [Aluminum, Titanium_Silicide, CAPM]        # Bottom plate: Metal-3 OR contact materials
         b: [Aluminum, Titanium_Silicide]               # Bulk/substrate terminal (typically GND)
+    metrics:
+        W: span(c0 | c1, along: transverse(c0, c1))
+        L: span(c0 | c1, along: flux(c0, c1))
+        AREA: area(c0 & c1)
+        PJ: perimeter(c0 & c1)
     spice:
         prefix: X
         subcircuit: sky130_fd_pr__cap_mim_m3_1

@@ -1,0 +1,135 @@
+# materials.hw - SkyWater SKY130 Materials Database for 1.8V NMOS
+import * from @std/primitives/units
+
+# ============================================================================
+# CONDUCTORS & INTERCONNECT
+# ============================================================================
+
+export material Polysilicon:
+    category: conductor
+    symbol: Poly
+    process: deposited
+    properties:
+        color: "#FF6060"
+        metallic: 0.3
+        roughness: 0.8
+        resistivity: 7.0e-5ohm_m
+        thermal_conductivity: 30.0W_mK
+        max_current_density: 1e2A_mm2
+        min_area: 0.13um2
+
+export material Aluminum:
+    category: conductor
+    symbol: Al
+    process: deposited
+    properties:
+        color: "#C0C0C0"
+        metallic: 0.8
+        roughness: 0.2
+        resistivity: 2.82e-8ohm_m
+        thermal_conductivity: 237.0W_mK
+        max_current_density: 1e3A_mm2
+        min_area: 0.14um2
+
+export material Titanium_Silicide:
+    category: conductor
+    symbol: TiSi2
+    process: deposited
+    properties:
+        color: "#404040"
+        resistivity: 1.5e-7ohm_m
+        thermal_conductivity: 30.0W_mK
+        max_current_density: 5e3A_mm2
+
+export material Tungsten:
+    category: conductor
+    symbol: W
+    process: deposited
+    properties:
+        color: "#8080FF"
+        metallic: 0.7
+        roughness: 0.3
+        resistivity: 5.6e-8ohm_m
+        thermal_conductivity: 173.0W_mK
+        max_current_density: 1e4A_mm2
+        contact_resistance: 1e-8ohm_cm2
+
+# ============================================================================
+# SEMICONDUCTORS (ACTIVE DIFFUSIONS & SUBSTRATE)
+# ============================================================================
+
+export material P_Substrate:
+    category: semiconductor
+    symbol: p_Si
+    properties:
+        color: "#8B4513"
+        resistivity: 1.0e-2ohm_m
+        thermal_conductivity: 148.0W_mK
+        max_junction_voltage: 1.98V
+
+export material N_Plus_Diffusion:
+    category: semiconductor
+    symbol: NDiff
+    process: deposited
+    properties:
+        color: "#90EE90"
+        opacity: 0.6
+        resistivity: 5.0e-5ohm_m
+        thermal_conductivity: 148.0W_mK
+        max_current_density: 1e3A_mm2
+        max_junction_voltage: 1.98V
+
+export material P_Plus_Diffusion:
+    category: semiconductor
+    symbol: PDiff
+    process: deposited
+    properties:
+        color: "#FF8080"
+        opacity: 0.6
+        resistivity: 5.0e-4ohm_m
+        thermal_conductivity: 148.0W_mK
+        max_current_density: 1e3A_mm2
+        max_junction_voltage: 1.98V
+
+# ============================================================================
+# DIELECTRICS & INSULATORS
+# ============================================================================
+
+export material Silicon_Dioxide:
+    category: insulator
+    symbol: SiO2
+    properties:
+        color: "#E0E8FF"
+        opacity: 0.05
+        relative_permittivity: 3.9
+
+export material Air:
+    category: insulator
+    symbol: Air
+    properties:
+        relative_permittivity: 1.0
+
+# ============================================================================
+# ZERO-THICKNESS FABRICATION MASKS (v0.2.1 Boolean Mask System)
+# ============================================================================
+
+export material N_Plus_Implant_Mask:
+    category: mask
+    symbol: NSDM
+    properties:
+        color: "#80FFFF"
+        opacity: 0.3
+
+export material P_Plus_Implant_Mask:
+    category: mask
+    symbol: PSDM
+    properties:
+        color: "#FF80FF"
+        opacity: 0.3
+
+export material Tap_Mask:
+    category: mask
+    symbol: TAP
+    properties:
+        color: "#80FF80"
+        opacity: 0.3

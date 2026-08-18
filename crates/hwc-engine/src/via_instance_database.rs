@@ -105,6 +105,30 @@ impl ViaInstanceDatabase {
         }
     }
 
+    /// Check if an explicit via exists that connects two layers on a specific net
+    /// and intersects the given 2D query bounding box.
+    pub fn has_via_in_bbox(
+        &self,
+        net_id: NetId,
+        from_layer: &str,
+        to_layer: &str,
+        query_bbox: (i64, i64, i64, i64), // (min_x, min_y, max_x, max_y)
+    ) -> bool {
+        let layer_key = (from_layer.into(), to_layer.into());
+        if let Some(vias) = self.vias_by_layers.get(&layer_key) {
+            vias.iter().any(|via| {
+                if via.net_id != net_id {
+                    return false;
+                }
+                let (v_min_x, v_min_y, v_max_x, v_max_y) = via.xy_bbox;
+                let (q_min_x, q_min_y, q_max_x, q_max_y) = query_bbox;
+                v_min_x <= q_max_x && v_max_x >= q_min_x && v_min_y <= q_max_y && v_max_y >= q_min_y
+            })
+        } else {
+            false
+        }
+    }
+
     /// Get all vias connecting two layers for a specific net.
     pub fn get_vias_for_layers(
         &self,

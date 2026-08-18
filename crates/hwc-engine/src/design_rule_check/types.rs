@@ -131,6 +131,14 @@ pub enum DrcViolation {
         required_area_nm2: f64,
         location: Point3D,
     },
+
+    /// Latch-up prevention: Substrate tap is too distant from active channel (SKY130 latchup.1)
+    LatchUpTapTooDistant {
+        device: CompactString,
+        actual_nm: i64,
+        max_allowed_nm: i64,
+        location: Point3D,
+    },
 }
 
 impl fmt::Display for DrcViolation {
@@ -326,6 +334,21 @@ impl fmt::Display for DrcViolation {
                     f,
                     "Minimum area violation for net {} ({}) at {}: {:.4}μm² actual, {:.2}μm² required (CMP peeling risk)",
                     net_name, material_name, location, actual_um2, required_um2
+                )
+            }
+            DrcViolation::LatchUpTapTooDistant {
+                device,
+                actual_nm,
+                max_allowed_nm,
+                location,
+            } => {
+                write!(
+                    f,
+                    "Latch-up tap distance violation for device '{}' at {}: {:.2}μm actual, max allowed {:.2}μm (latchup.1)",
+                    device,
+                    location,
+                    *actual_nm as f64 / 1_000.0,
+                    *max_allowed_nm as f64 / 1_000.0
                 )
             }
         }

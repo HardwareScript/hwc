@@ -66,16 +66,16 @@ pub fn add_substrate(
 
     // Extrude each unified copper contour into 3D meshes
     for contour_data in copper_contours {
-        let z_min_mm = contour_data.key.z_min as f64 / 1_000_000.0;
-        let depth_mm = (contour_data.key.z_max - contour_data.key.z_min) as f64 / 1_000_000.0;
+        let z_min_mm = contour_data.id.z_min as f64 / 1_000_000.0;
+        let depth_mm = (contour_data.id.z_max - contour_data.id.z_min) as f64 / 1_000_000.0;
 
         let material_name = space
             .material_registry
-            .get_name(contour_data.key.material)
+            .get_name(contour_data.id.material)
             .unwrap_or_else(|| {
                 panic!(
                     "Material ID {:?} not found in registry for substrate mesh",
-                    contour_data.key.material
+                    contour_data.id.material
                 )
             });
 
@@ -92,9 +92,9 @@ pub fn add_substrate(
         eprintln!(
             "[SUBSTRATE MESH] Extruding {} contours for net={:?}, Z={}→{}nm, material={}",
             contour_data.contours.len(),
-            contour_data.key.net_id,
-            contour_data.key.z_min,
-            contour_data.key.z_max,
+            contour_data.id.net_id,
+            contour_data.id.z_min,
+            contour_data.id.z_max,
             material_name
         );
 
@@ -111,7 +111,7 @@ pub fn add_substrate(
             meshes.push(extrude_polygon_mesh(
                 &format!(
                     "Copper_Net{}_Contour{}",
-                    contour_data.key.net_id.raw(),
+                    contour_data.id.net_id.raw(),
                     c_idx
                 ),
                 &outer_points,

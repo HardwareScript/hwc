@@ -173,6 +173,10 @@ pub fn profile_to_constraints(
             safety_factor: clearance_def.safety_factor.ok_or_else(|| {
                 ConversionError::MissingProfileConstraint("clearance.safety_factor".into())
             })?,
+            max_substrate_tap_distance_nm: clearance_def
+                .max_substrate_tap_distance
+                .as_ref()
+                .map(measurement_to_nm),
         }
     } else {
         return Err(ConversionError::MissingProfileConstraint(
@@ -313,5 +317,6 @@ pub fn profile_to_constraints(
         max_local_route_length_nm,
         intents,
         manufacturing_grid_nm,
+        substrate_net: profile.substrate_net.clone(),
     })
 }

@@ -1,251 +1,287 @@
-# Hardware Script Commercial Licensing
+# HardwareScript Commercial Licensing
 
-## Simple Rule: Free for These Groups, Everyone Else Pays
-
-If you are using Hardware Script for **proprietary/closed-source hardware development** (not sharing your source code under AGPLv3), you need a commercial license **UNLESS** you fall into one of the free categories below.
-
-## Who Gets FREE Use (No Commercial License Required)
-
-You can use Hardware Script for free under AGPLv3 if you are:
-
-### 1. Open Source Hardware Projects
-- Your hardware design files (`.hwx` and related files) are publicly available
-- You comply with AGPLv3 (share your modifications)
-- **No restrictions on company size or revenue**
-
-### 2. Individual Hobbyists & Makers
-- Personal projects and learning
-- Not selling hardware commercially
-- Prototyping for yourself
-- Educational exploration
-
-### 3. Academic & Research Institutions
-- Universities and colleges
-- Research laboratories (public or private)
-- Educational use and teaching
-- Academic publications and papers
-- **Includes industry-sponsored research**
-
-### 4. Early-Stage Startups (Pre-Revenue)
-- Companies with less than $100,000 USD in total funding or revenue
-- Still in prototype/development phase
-- Not yet manufacturing for customers
-- **Once you reach $100K in funding or revenue, a Tier 1 Commercial License is required**
-
-### 5. Non-Profit Organizations
-- Registered non-profit entities
-- Charitable organizations
-- Community projects
-- Open hardware initiatives
+HardwareScript's core engines (`hwc` compiler and `hsm` runtime) are dual-licensed under the **GNU Affero General Public License v3.0 (AGPLv3)** and a **Commercial Enterprise License**.
 
 ---
 
-## Commercial License Required
+## 1. When You Can Use HardwareScript for FREE
 
-**If you don't fit the free categories above, you need a commercial license.**
+You do **NOT** need a commercial license if you are:
 
-This includes:
-- Any company selling hardware products (even 1 unit)
-- Contractors/consultants doing paid hardware design work
-- Startups after 12-month grace period
-- Any business keeping their `.hwx` files proprietary
+- Using the official `hwc` compiler locally on your machine or CI/CD pipelines to build hardware designs.
+- Designing physical circuit boards (PCBs) or integrated circuits (ASICs) and selling the physical hardware.
+- Keeping your hardware design files (`.hw`, `.hwx`, DXF, GDSII, Gerber, SPICE) proprietary and closed-source.
+- Contributing to or building packages for the open HardwareScript registry under permissive licenses (MIT/Apache 2.0).
 
-**No exceptions, no loopholes, no complex calculations.**
+**Local CLI usage is completely free for everyone—individuals, startups, and Fortune 500 companies alike.**
 
-## Commercial License Tiers
+---
 
-To provide predictable pricing, our commercial licenses are structured into three transparent tiers based on your company's size and revenue:
+## 2. When You MUST Obtain a Commercial License
 
-### Tier 1: Startup & Small Business
+A Commercial License is legally required if your organization wants an exemption from AGPLv3 copyleft terms in any of the following scenarios:
 
-**For**: Companies with under $1M USD Annual Revenue (or PPP equivalent)
+### A. Cloud, AI & Hosted SaaS Platforms (AGPLv3 Section 13)
 
-**Pricing**: $500 - $2,000 USD per year (flat fee, adjusted for local purchasing power)
+If you run `hwc`, `hwc-engine`, or `hsm` on a network server to provide cloud compilation, automated AI layout synthesis, remote DRC, or web-based EDA services to third parties, AGPLv3 mandates that you make your **entire surrounding backend service, API wrapper, and orchestration code publicly available under AGPLv3**. 
+
+If you wish to offer a hosted or AI-driven hardware service while keeping your server stack, backend infrastructure, and platform proprietary, you **must obtain a Commercial Cloud License**.
+
+**Examples requiring a license:**
+- "Prompt-to-Silicon" AI platforms that use HardwareScript behind an API
+- Cloud PCB/ASIC synthesis services with web interfaces
+- Hosted EDA platforms offering automated layout generation
+- SaaS tools that run `hwc` on remote servers for customers
+
+### B. Proprietary Tool Embedding & Integration
+
+If you embed or link `hwc-engine`, `hwc-compiler`, or `hwc-parser` directly into closed-source commercial software, EDA toolchains, or proprietary desktop applications where you cannot disclose your software's source code under AGPLv3.
+
+**Examples requiring a license:**
+- EDA vendors integrating HardwareScript into commercial tools
+- Silicon foundries embedding `hwc` in proprietary design flows
+- Hardware companies building closed-source design automation platforms
+
+### C. Proprietary Engine Forks & Modifications
+
+If you modify the internal Rust compiler source code of `hwc` or `hsm` and distribute those binaries to employees, customers, or third parties without releasing your modified engine source code.
+
+### D. Corporate Legal Compliance
+
+If your enterprise has strict internal legal policies forbidding the installation or use of copyleft/AGPLv3 licensed software.
+
+---
+
+## 3. Commercial License Tiers
+
+We offer commercial exemptions, dedicated SLAs, and legal indemnification:
+
+### Tier 1: Startup / Cloud Integrator
+
+**For**: Startups offering hosted tools, SaaS backends, or AI layout services
+
+**Pricing**: $5,000 - $15,000 USD per year
 
 **Includes**:
-- Commercial use rights for proprietary hardware development
+- AGPLv3 exemption for cloud/SaaS deployments
 - Access to stable releases and updates
 - Email support (48-hour response time)
-- License covers up to 5 developers
+- License covers up to 10 developers
+- Patent grant protection
 
-**Perfect for**: Early-stage startups, small design firms, consultants
+**Perfect for**: AI/ML startups, cloud EDA platforms, hosted synthesis services
 
 ---
 
-### Tier 2: Growth & Mid-Market
+### Tier 2: EDA Vendor / Tool Embedding
 
-**For**: Companies with $1M - $50M USD Annual Revenue
+**For**: Software vendors embedding the HardwareScript compiler engine into proprietary desktop or enterprise tools
 
-**Pricing**: $5,000 - $25,000 USD per year (tiered by developer seats)
+**Pricing**: $25,000 - $100,000 USD per year
 
 **Includes**:
 - All Tier 1 benefits
+- Proprietary embedding rights
 - Priority email support (24-hour response time)
 - Feature request consideration
-- Quarterly check-in calls
-- License covers up to 25 developers
+- Quarterly technical sync calls
+- License covers up to 50 developers
 
-**Perfect for**: Growing companies, mid-size manufacturers, design agencies
+**Perfect for**: EDA tool vendors, design automation companies, CAD platforms
 
 ---
 
-### Tier 3: Enterprise & Foundries
+### Tier 3: Enterprise & Foundry Compliance
 
-**For**: Companies over $50M USD Annual Revenue, silicon foundries, or EDA vendors
+**For**: Companies over $50M USD revenue, silicon foundries, or enterprises requiring custom agreements
 
-**Pricing**: Custom negotiated agreements (typically $50,000+ USD per year)
+**Pricing**: Custom negotiated agreements (typically $100,000+ USD per year)
 
 **Includes**:
 - All Tier 2 benefits
 - Dedicated account manager
 - Custom integrations and consulting
 - Priority feature development
-- Legal indemnification and warranties
+- Full legal indemnification and warranties
 - Service Level Agreements (SLA)
 - Unlimited developers
+- Multi-year volume discounts
 
-**Perfect for**: Large corporations, semiconductor foundries, EDA tool vendors
+**Perfect for**: Large corporations, semiconductor foundries, defense contractors, enterprise legal compliance
 
 ---
 
-## Transparent Pricing Philosophy
-
-We believe in predictable, fair pricing:
-
-- **No hidden fees**: The price you see is the price you pay
-- **PPP adjustments**: Tier 1 pricing adjusted for local purchasing power
-- **Volume discounts**: Multi-year agreements receive 10-20% discounts
-- **Non-profit discounts**: 50% off for registered non-profit organizations
-- **Academic pricing**: Special rates for universities and research institutions
-
-## What's Included in All Tiers
+## 4. What's Included in All Commercial Tiers
 
 Every commercial license includes:
 
 ✅ **Legal Rights**
-- Use Hardware Script for proprietary/closed-source development
-- No requirement to open-source your designs
+- AGPLv3 exemption for your specific use case
+- No requirement to open-source your backend, API, or proprietary integrations
 - Sublicensing rights for your products
+- Patent grant protection
 
 ✅ **Technical Access**
 - All stable releases and updates
 - Bug fixes and security patches
 - Access to documentation and examples
+- Priority bug reports
 
 ✅ **Support**
 - Email support (response time varies by tier)
-- Bug report prioritization
+- Technical implementation guidance
 - Community forum access
+- Legal compliance assistance
 
 ✅ **Protection**
 - Patent grant (see PATENTS file)
-- Warranty and indemnification (Tier 3 only)
+- Warranty and indemnification (Tier 3)
 - Legal compliance assistance
 
-## Self-Assessment Examples
+---
+
+## 5. Self-Assessment: Do You Need a License?
 
 ### ✅ FREE - No License Needed
-- **Nigerian student** building a robot for university project
-- **US maker** sharing PCB designs on GitHub under open source license
-- **German startup** with $50K in funding, still prototyping (under $100K threshold)
-- **Indian research lab** publishing academic papers
-- **Brazilian non-profit** building educational electronics kits
 
-### ❌ NEEDS LICENSE - Contact Sales
-- **Nigerian company** with ₦100M revenue selling IoT devices → Tier 2
-- **US defense contractor** building proprietary military hardware → Tier 3
-- **German startup** that just raised $500K seed round → Tier 1
-- **Indian electronics manufacturer** with 500 employees → Tier 3
-- **Brazilian consultant** designing custom PCBs for clients → Tier 1
+- **Hardware engineers** using `hwc` locally to design proprietary PCBs or ASICs
+- **Startups** building IoT devices with closed-source `.hw` files
+- **Defense contractors** designing classified hardware on air-gapped systems
+- **Universities** teaching circuit design and semiconductor physics
+- **Hobbyists** prototyping personal electronics projects
+- **Open-source projects** sharing designs under AGPLv3 or permissive licenses
 
-## Why This Simple Model?
+**Key principle**: If you run `hwc` on your own computer or CI/CD to generate hardware designs, you never need a license—even if you sell millions of physical devices.
 
-### Predictable Pricing
-- Three clear tiers based on company size
-- Transparent pricing ranges published upfront
-- No surprises or hidden fees
-- Easy to budget and plan
+---
 
-### Globally Fair
-- Same tier structure applies everywhere
-- PPP adjustments for Tier 1 ensure local affordability
-- Local economic conditions considered
-- Payment options adapted to your market
+### ❌ LICENSE REQUIRED
 
-### Easy to Understand
-- Self-assessment takes 30 seconds
-- Clear examples for every situation
-- No lawyers needed to interpret terms
-- Know your tier immediately
+- **AI startup** offering "Prompt-to-Silicon" cloud service → **Tier 1**
+- **SaaS platform** providing web-based PCB synthesis via API → **Tier 1**
+- **EDA vendor** embedding `hwc-engine` in proprietary desktop software → **Tier 2**
+- **Silicon foundry** integrating HardwareScript into closed-source design flow → **Tier 3**
+- **Enterprise** with corporate policy banning AGPLv3 software → **Tier 3**
+- **Cloud provider** offering hosted EDA tools with HardwareScript backend → **Tier 1**
 
-### Flexible Options
-- Multi-year discounts available
-- Non-profit and academic pricing
-- Volume licensing for large teams
-- Custom agreements for unique needs
+---
 
-## Contact for Commercial Licensing
+## 6. Why This Licensing Model?
 
-**Ready to get started? Contact our sales team:**
+### Protects Against AI SaaS Free-Riding
 
-**Email**: hardwarescript@gmail.com  
+The biggest threat to open-source compilers is not traditional software piracy—it's cloud AI platforms that wrap your engine in a proprietary API and capture 100% of the commercial value while contributing nothing back.
+
+AGPLv3 Section 13 specifically addresses this: if you run HardwareScript on a server and let users interact with it over a network, you must open-source your entire platform—or buy a commercial license.
+
+### Enables Frictionless Local Adoption
+
+Hardware engineers, especially in defense and semiconductor sectors, work in air-gapped environments and will never adopt software that "phones home" or tracks usage. Our model requires zero telemetry and zero tracking.
+
+You can use `hwc` locally forever, for free, without ever telling us—even if you're a Fortune 500 company shipping millions of devices.
+
+### Transparent and Globally Fair
+
+- No revenue thresholds that require financial audits
+- No hidden usage tracking or phone-home requirements
+- No complex per-seat or per-chip calculations
+- Three clear tiers based on use case, not company size
+
+## 7. Contact for Commercial Licensing
+
+For commercial licensing inquiries: **hardwarescript@gmail.com**
+
 **Subject Line**: "Commercial License Request - [Your Company Name]"
 
 **Please include**:
 1. Company name and location
-2. Annual revenue (approximate range is fine)
-3. Number of developers who will use Hardware Script
-4. Brief description of your hardware products/services
-5. Which tier you believe applies to you
+2. Brief description of your use case (cloud/SaaS, embedding, fork, compliance)
+3. Number of developers who will use HardwareScript
+4. Which tier you believe applies to you (Tier 1, 2, or 3)
+5. Any specific technical requirements or integration needs
 
 **Response time**: We typically respond within 48 hours with:
 - Confirmation of appropriate tier
-- Exact pricing quote (including any PPP adjustments)
+- Exact pricing quote
 - License agreement draft
 - Payment options and next steps
 
-## Frequently Asked Questions
+---
 
-### "How do I know if I need a commercial license?"
-If you're not in one of the five free categories above and you're using Hardware Script for proprietary hardware development, you need a commercial license. Check the tier structure to see which applies to you.
+## 8. Frequently Asked Questions
 
-### "What tier do I fall into?"
-Based on your company's annual revenue:
-- Under $1M → Tier 1
-- $1M - $50M → Tier 2
-- Over $50M → Tier 3
+### "I'm building IoT devices and selling them. Do I need a license?"
 
-### "Can you give me an exact price?"
-Tier 1 and Tier 2 have published price ranges. Contact us with your specific details (revenue, team size, location) for an exact quote including any PPP adjustments.
+**No.** If you use `hwc` locally to design hardware and sell physical products, you never need a license—even if you keep your `.hw` files proprietary. This applies regardless of company size or revenue.
 
-### "We're a small company in a developing country. Will pricing be fair?"
-Yes. We consider local economic conditions and your organization's capacity when structuring agreements.
+### "I'm building an AI tool that generates HardwareScript code. Do I need a license?"
 
-### "What if we want to switch from commercial to open source later?"
-You can always switch to AGPLv3 by open sourcing your hardware designs. Contact us to discuss transitioning your license.
+**It depends.** If your AI only generates `.hw` text files and users run `hwc` on their own machines, you don't need a license. If your cloud backend runs `hwc` to compile designs for users, you need a **Tier 1 Cloud License**.
 
-### "Do you offer trial licenses?"
-Yes. We can provide evaluation licenses for testing and proof-of-concept work. Contact us to discuss terms.
+### "We want to embed HardwareScript in our proprietary EDA tool. What do we need?"
 
-### "Can we pay in local currency?"
-We work with organizations globally and can accommodate various payment methods and currencies. This will be discussed during the licensing process.
+You need a **Tier 2 Tool Embedding License** that grants you AGPLv3 exemption for proprietary integration.
 
-## Legal Clarity
+### "Can we evaluate HardwareScript before committing to a license?"
 
-This commercial licensing policy supplements the AGPLv3 license. If you cannot or will not comply with AGPLv3 requirements (sharing your source code), you must obtain a commercial license to use Hardware Script legally.
+Yes. For cloud/SaaS evaluation, you can test locally or use AGPLv3-compliant open-source prototypes. For commercial evaluation licenses, contact us to discuss terms.
 
-**The determination of licensing terms, including pricing, is at the sole discretion of the copyright holder (currently Olowookere Olamide, and in the future, the Hardware Script Foundation).**
+### "What if we're a university or non-profit?"
 
-## Future: Foundation-Based Licensing
+Academic and non-profit use is free under AGPLv3. If you need a commercial exemption for specific partnerships, contact us for special academic pricing.
 
-Once the Hardware Script Foundation is established:
-- All licensing revenue goes to the foundation (non-profit)
-- Licensing policies will be reviewed periodically
-- Community input on licensing approach
-- Transparent reporting on licensing program
+### "Our company policy prohibits AGPLv3 software. Can we still use HardwareScript?"
+
+Yes. A **Tier 3 Enterprise Compliance License** provides full AGPLv3 exemption and legal indemnification for corporate environments with restrictive policies.
+
+### "Can we pay in local currency or get PPP adjustments?"
+
+Tier 1 and Tier 2 pricing can be adjusted for purchasing power parity and local economic conditions. Contact us to discuss payment options.
 
 ---
 
-**Last Updated**: March 16, 2026  
-**Version**: 2.0  
+## 9. Legal Clarity
+
+This commercial licensing policy supplements the AGPLv3 license. If you cannot or will not comply with AGPLv3 requirements (specifically Section 13 for network use), you must obtain a commercial license to use HardwareScript legally.
+
+**The determination of licensing terms, including pricing, is at the sole discretion of the copyright holder (currently Olowookere Olamide, and in the future, the HardwareScript Foundation).**
+
+**Key Legal Points:**
+- Local CLI use is **always free** under AGPLv3
+- Selling physical hardware designed with HardwareScript is **always free**
+- Keeping your `.hw`/`.hwx` design files private is **always free**
+- Running `hwc` on a server for others requires either AGPLv3 compliance or a commercial license
+- Embedding in proprietary software requires a commercial license
+- Forking/modifying the engine for distribution requires either AGPLv3 compliance or a commercial license
+
+---
+
+## 10. Future: Foundation-Based Licensing
+
+Once the HardwareScript Foundation is established:
+- All licensing revenue goes to the foundation (non-profit)
+- Licensing policies will be reviewed periodically by the community
+- Transparent reporting on licensing revenue and usage
+- Community input on licensing approach and pricing
+
+---
+
+**Last Updated**: August 18, 2026  
+**Version**: 3.0  
 **Maintained by**: Olowookere Olamide
+
+---
+
+## Summary: The AGPLv3 + Commercial Dual License Advantage
+
+This licensing model gives HardwareScript the best of both worlds:
+
+✅ **Frictionless Grassroots Adoption**: Hardware engineers, startups, and hobbyists can download `hwc` and build proprietary boards/ASICs without paying a cent or fearing licensing traps.
+
+✅ **Ironclad Protection Against AI Cloud Free-Riders**: Any venture-backed AI service that tries to wrap the engine into a cloud product will be stopped by AGPLv3 Section 13 and must pay for a commercial license.
+
+✅ **No Telemetry or Usage Tracking**: Engineers in defense, semiconductor, and security sectors can use HardwareScript in air-gapped environments without phone-home requirements.
+
+✅ **Sustainable Revenue**: Cloud platforms, EDA vendors, and enterprises that capture commercial value are required to contribute back through commercial licensing.
+
+This is the same proven model used by Qt, MongoDB, and other successful dual-licensed infrastructure software.

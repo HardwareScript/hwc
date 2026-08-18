@@ -35,6 +35,9 @@ pub struct HardwareSpaceParams {
 ///
 /// Minimal stackup metadata embedded in HardwareSpace so export and validation
 /// code can resolve layer Z-coordinates without needing the full StackupManager.
+///
+/// **v0.3.0: Strongly-typed layer classification**
+/// Now includes `kind: LayerKind` for explicit domain model classification.
 #[derive(Debug, Clone)]
 pub struct StackupLayer {
     /// Layer name (e.g., "metal1", "poly", "active")
@@ -56,6 +59,11 @@ pub struct StackupLayer {
     /// never participate in routing, and are excluded from physical collision
     /// and 3D mesh generation.
     pub is_mask: bool,
+    /// **v0.3.0: Strongly-typed layer classification**
+    ///
+    /// Replaces ad-hoc heuristics with explicit domain models.
+    /// Populated during stackup processing, cached for all consumers.
+    pub kind: crate::stackup::LayerKind,
 }
 
 impl StackupLayer {
@@ -67,6 +75,7 @@ impl StackupLayer {
         material_name: CompactString,
         is_routable: bool,
         is_mask: bool,
+        kind: crate::stackup::LayerKind,
     ) -> Self {
         Self {
             name,
@@ -76,6 +85,7 @@ impl StackupLayer {
             material_name,
             is_routable,
             is_mask,
+            kind,
         }
     }
 

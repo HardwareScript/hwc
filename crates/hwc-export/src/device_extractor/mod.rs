@@ -7,6 +7,7 @@ pub mod error;
 pub mod extracted;
 pub mod geometry;
 pub mod mapping;
+pub mod metrics;
 pub mod parameter_extraction;
 pub mod spice;
 pub mod validation;

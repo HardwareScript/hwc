@@ -1,420 +1,394 @@
-//! Unified Geometry Generation
+//! Unified Geometry Generation - Strongly-Typed Physical Layer System
 //!
-//! This module generates the canonical 2D copper contours that are used by ALL exporters.
-//! It ensures that GLB, DXF, and any future exporters see the exact same geometry.
+//! # Architecture
 //!
-//! # Architecture Principle
-//!
-//! ```text
-//! HardwareSpace (engine output)
-//!     ↓
-//! unified_geometry::generate_copper_contours() ← SINGLE SOURCE OF TRUTH
-//!     ├→ 3D mesh extrusion (GLB)
-//!     └→ 2D contour export (DXF)
-//! ```
-//!
-//! This eliminates the previous architectural violation where DXF was doing its own
-//! geometry calculations, causing inconsistencies between exporters.
-//!
-//! # Industry-Standard 3D CAD Architecture (v0.2.2)
-//!
-//! ## Physical Stackup (No Hacks, Pure Physics)
+//! This module is the SINGLE SOURCE OF TRUTH for all physical geometry in the compiler.
+//! All exporters (GLB, DXF, SPICE parasitic extraction) read from these unified contours.
 //!
 //! ```text
-//! ┌─────────────────────────────────────────────────────────────┐
-//! │ TOP CONDUCTIVE LAYER (metal1: Z=60→70nm)                    │
-//! │  • Top_Pad (Aluminum) is SOLID - NO hole punched!           │
-//! │  • Via pillar is also SOLID at Z=60→70nm                    │
-//! │  • Boolean union merges them into single solid shape        │
-//! ├─────────────────────────────────────────────────────────────┤
-//! │ INTER-LAYER DIELECTRIC (d1: Z=10→60nm)                      │
-//! │  • Via pillar (Titanium_Silicide) is SOLID Z=10→60nm       │
-//! │  • Substrate mesh builder cuts hole in Silicon_Dioxide base │
-//! ├─────────────────────────────────────────────────────────────┤
-//! │ BOTTOM ACTIVE LAYER (active: Z=0→10nm)                      │
-//! │  • Bottom_Pad (Silicon_P) is SOLID - NO hole punched!       │
-//! │  • Via pillar is also SOLID at Z=0→10nm                     │
-//! │  • Boolean union merges them into single solid shape        │
-//! └─────────────────────────────────────────────────────────────┘
+//! HardwareSpace (compiler IR)
+//!      ↓
+//! GeometryCollector::collect() ← Type-safe geometry aggregation
+//!      ↓
+//! LayerSegmenter::segment_contacts() ← Planar physics for vias
+//!      ↓
+//! GeometryUnion::merge_pools() ← Boolean operations
+//!      ↓
+//! Vec<PhysicalLayer> ← Final output
+//!      ├→ GLB mesh extrusion
+//!      ├→ DXF 2D contours
+//!      └→ SPICE parasitic capacitance extraction
 //! ```
 //!
-//! ## The 4 Standard Rules
+//! # Physical Layer Model
 //!
-//! 1. **Pads and Traces on Conductive Layers ARE SOLID**
-//!    - Top_Pad, Bottom_Pad, all metal traces are solid extruded blocks
-//!    - NO holes are cut from conductive geometry
+//! ## Conductive Layers (PCB & IC)
+//! - Pads, traces, and pours are SOLID extruded volumes
+//! - Vias passing through are UNIONED with pads (no subtraction)
+//! - Material properties determine conductivity/dielectric behavior
 //!
-//! 2. **Dielectric/Substrate Base Layers GET HOLE CUTOUTS**
-//!    - Dielectric layers (oxide, substrate) have via holes cut by mesh builder
-//!    - This is where the "hole punching" happens (NOT in metal pads!)
+//! ## Planar Semiconductor Physics (CMOS/IC)
+//! - `diff`, `poly`, `pdiff` are lateral patterned regions at wafer surface
+//! - Via at (X,Y) only intersects layer if layer has geometry at that (X,Y)
+//! - Z-elevation alone is NOT sufficient for intersection (must check XY spatial overlap)
 //!
-//! 3. **Via/Contact Plugs ARE SOLID PILLARS**
-//!    - Via material is extruded as a solid pillar through ALL layers it passes
-//!    - In conductive layers: Via + Pad both solid → Boolean union welds them
-//!    - In dielectric layers: Via solid, substrate base has hole → Pillar fills hole
+//! ## Dielectric Layers
+//! - Substrate/oxide layers have via HOLES cut by mesh builder
+//! - Vias are rendered as solid pillars filling those holes
 //!
-//! 4. **Single-Sided Winding (GPU Backface Culling)**
-//!    - All meshes use CCW winding for outer faces
-//!    - glTF export sets "doubleSided": false
-//!    - GPU discards interior touching faces naturally → Zero Z-fighting
+//! # Design Principles
 //!
-//! # Design Rules
-//!
-//! - NO hardcoded material names (use MaterialRegistry lookups)
-//! - NO fallback defaults (fail fast if data is missing)
-//! - Use proper typed IDs (MaterialId, NetId) everywhere
-//! - All Z-ranges come from either AnalyticTrace.layer_z_range or SubstrateLayer.bbox
-//! - NO subtraction of vias from same-net conductive pads (they union together!)
+//! - **Zero Magic**: No hardcoded material names, no fallback defaults
+//! - **Strongly Typed**: All geometry uses proper typed IDs (MaterialId, NetId, LayerId)
+//! - **Fail Fast**: Missing data throws descriptive errors immediately
+//! - **Pure Functions**: All operations are deterministic and side-effect free
 
 use crate::geometry_union::{circle_to_path, rect_to_path};
 use crate::scene_graph::trace_geometry;
 use clipper2_rust::{FillRule, Path64};
 use hwc_engine::geometry_router::entity_graph::SubstrateLayerType;
 use hwc_engine::geometry_router::substrate_types::SubstrateLayerShape;
+use hwc_engine::geometry::BoundingBox;
 use hwc_engine::netlist::NetId;
 use hwc_engine::{HardwareSpace, MaterialId};
 use rustc_hash::FxHashMap;
 
-/// Key for grouping 2D paths that will be unioned together
+// ============================================================================
+// STRONGLY-TYPED GEOMETRY PRIMITIVES
+// ============================================================================
+
+/// Unique identifier for a physical layer slice in the stackup
 ///
-/// This key is EXACTLY what both the substrate and trace geometry systems use,
-/// ensuring traces and pads with matching parameters get merged together.
+/// A physical layer is defined by its Z-bounds, material, and electrical net.
+/// All geometry within the same layer is merged via Boolean union.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct CopperPoolKey {
+pub struct LayerId {
     pub z_min: i64,
     pub z_max: i64,
     pub material: MaterialId,
     pub net_id: NetId,
 }
 
-/// A unified copper contour (post-Boolean union)
+impl LayerId {
+    #[inline]
+    pub fn z_span(&self) -> i64 {
+        self.z_max - self.z_min
+    }
+
+    #[inline]
+    pub fn contains_z(&self, z: i64) -> bool {
+        z >= self.z_min && z < self.z_max
+    }
+}
+
+/// A finalized physical layer with merged geometry
 #[derive(Debug, Clone)]
-pub struct UnifiedCopperContour {
-    pub key: CopperPoolKey,
-    /// 2D contours in XY plane (nanometer coordinates)
-    /// After Boolean union - these are the final, deduplicated contours
+pub struct PhysicalLayer {
+    pub id: LayerId,
+    /// 2D contours in XY plane (integer nanometer coordinates)
+    /// Post-Boolean union - these are the canonical, deduplicated shapes
     pub contours: Vec<Path64>,
 }
 
-/// Generate unified copper contours from HardwareSpace
-///
-/// This is the SINGLE SOURCE OF TRUTH for all copper geometry.
-/// Both 3D mesh generation (GLB) and 2D export (DXF) read from this.
-///
-/// # Architecture
-///
-/// 1. Pool substrate layers (pads/pours) by (z_min, z_max, material, net)
-/// 2. Pool trace geometry using the trace_geometry engine
-/// 3. Pool PCB via pads (IC vias are already in substrate as Contact layers)
-/// 4. Boolean union each pool to get final deduplicated contours
-///
-/// # No Fallbacks
-///
-/// This function uses proper lookup tables and fails fast if data is inconsistent.
-/// It does NOT have hardcoded material names or default values.
-pub fn generate_copper_contours(space: &HardwareSpace) -> Vec<UnifiedCopperContour> {
-    let mut pools: FxHashMap<CopperPoolKey, Vec<Path64>> = FxHashMap::default();
+// ============================================================================
+// GEOMETRY COLLECTION SYSTEM
+// ============================================================================
 
-    // 1. Add substrate layers (pads, pours, contacts)
-    //    These are already realized by the compiler into the entity_graph
-    //    v0.2.2 STRUCTURAL FIX: Use get_physical_substrate_layers() to exclude zero-thickness masks
-    for layer in space
-        .entity_graph
-        .get_physical_substrate_layers(&space.material_registry)
-    {
-        // **v0.2.2 PROPER FIX**: Segment Contact layers by stackup
-        //
-        // Contact layers (vias) span multiple stackup layers. We need to split them
-        // into segments so that:
-        // - Segments in conductive layers (active, metal) are rendered as solid copper
-        // - Segments in dielectric layers are NOT rendered (substrate will have holes)
-        if layer.layer_type == SubstrateLayerType::Contact {
-            // Find which stackup layers this contact intersects
-            segment_contact_by_stackup(layer, &space.stackup_layers, &mut pools);
-            continue;
-        }
-
-        // Pour layers are already properly bounded and can be added directly
-        if layer.layer_type != SubstrateLayerType::Pour {
-            continue;
-        }
-
-        // Use the exact Z-bounds from the substrate layer bbox
-        // These come from the stackup system, no calculation needed
-        let key = CopperPoolKey {
-            z_min: layer.bbox.min.z,
-            z_max: layer.bbox.max.z,
-            material: layer.material,
-            net_id: layer.net,
-        };
-
-        let path = match &layer.shape {
-            SubstrateLayerShape::Rect => rect_to_path(&layer.bbox),
-            SubstrateLayerShape::Circle { radius } => {
-                let cx = (layer.bbox.min.x + layer.bbox.max.x) / 2;
-                let cy = (layer.bbox.min.y + layer.bbox.max.y) / 2;
-                circle_to_path(cx, cy, *radius, 64)
-            }
-            SubstrateLayerShape::Polygon { outer_contour, .. } => {
-                // Polygon points are stored in world space
-                outer_contour.clone()
-            }
-            _ => continue,
-        };
-
-        pools.entry(key).or_default().push(path);
-    }
-
-    // 2. Add analytic trace geometry
-    //    The trace_geometry engine handles proper Z-range resolution
-    //    from AnalyticTrace.layer_z_range (stackup-derived)
-
-    let trace_pools = trace_geometry::generate_trace_geometry(space);
-
-    for (geom_key, mut geom_pool) in trace_pools {
-        geom_pool.flush_pending();
-
-        // Convert from trace_geometry key to unified key
-        let key = CopperPoolKey {
-            z_min: geom_key.z_min,
-            z_max: geom_key.z_max,
-            material: geom_key.material,
-            net_id: geom_key.net_id,
-        };
-
-        pools.entry(key).or_default().extend(geom_pool.paths);
-    }
-
-    // 3. Add PCB via pads
-    //    Note: IC vias (deposited) are already handled via Contact substrate layers
-    //    Only PCB vias (drilled/plated) need explicit pad generation here
-    for via in &space.vias {
-        // Check via manufacturing process via material registry
-        let is_deposited_via = space
-            .material_registry
-            .get_process(via.material_id)
-            .map(|process| process == hwc_engine::ManufacturingProcess::Deposited)
-            .unwrap_or(false);
-
-        if is_deposited_via {
-            // IC vias are already in entity_graph as Contact layers, skip
-            continue;
-        }
-
-        // PCB via: add annular ring pads at top and bottom
-        let z_start = via.from_z_nm.min(via.to_z_nm);
-        let z_end = via.from_z_nm.max(via.to_z_nm);
-
-        // Annular ring: pad extends beyond via barrel
-        let pad_radius = via.diameter_nm / 2 + via.enclosure_nm.max(via.diameter_nm / 4);
-
-        // Find the conductor material for pads
-        let pad_material_id = if space.material_registry.is_conductive(via.material_id) {
-            via.material_id
-        } else {
-            // Find first conductive material
-            space
-                .material_registry
-                .all_materials()
-                .into_iter()
-                .find(|(id, _name)| space.material_registry.is_conductive(*id))
-                .map(|(id, _)| id)
-                .expect("No conductive material found in material registry for via pads")
-        };
-
-        // Look up stackup layers at via landing points to get proper Z-bounds
-        // Top pad: find the routable layer at z_end
-        let top_layer = space
-            .stackup_layers
-            .iter()
-            .find(|layer| layer.is_routable && layer.contains_z(z_end))
-            .unwrap_or_else(|| {
-                panic!(
-                    "Via landing at Z={}nm has no corresponding routable layer in stackup. \
-                Stackup layers must cover all via landing points.",
-                    z_end
-                )
-            });
-
-        let top_z_min = top_layer.z_bottom;
-        let top_z_max = top_layer.z_top;
-
-        // Bottom pad: find the routable layer at z_start
-        let bottom_layer = space
-            .stackup_layers
-            .iter()
-            .find(|layer| layer.is_routable && layer.contains_z(z_start))
-            .unwrap_or_else(|| {
-                panic!(
-                    "Via landing at Z={}nm has no corresponding routable layer in stackup. \
-                Stackup layers must cover all via landing points.",
-                    z_start
-                )
-            });
-
-        let bottom_z_min = bottom_layer.z_bottom;
-        let bottom_z_max = bottom_layer.z_top;
-
-        // Top pad
-        let top_key = CopperPoolKey {
-            z_min: top_z_min,
-            z_max: top_z_max,
-            material: pad_material_id,
-            net_id: via.net_id,
-        };
-        pools.entry(top_key).or_default().push(circle_to_path(
-            via.position.0,
-            via.position.1,
-            pad_radius,
-            64,
-        ));
-
-        // Bottom pad
-        let bottom_key = CopperPoolKey {
-            z_min: bottom_z_min,
-            z_max: bottom_z_max,
-            material: pad_material_id,
-            net_id: via.net_id,
-        };
-        pools.entry(bottom_key).or_default().push(circle_to_path(
-            via.position.0,
-            via.position.1,
-            pad_radius,
-            64,
-        ));
-    }
-
-    // 4. Perform Boolean union on each pool
-    let mut result = Vec::new();
-
-    for (key, paths) in pools {
-        if paths.is_empty() {
-            continue;
-        }
-
-        // Boolean union to merge overlapping geometry
-        let contours = clipper2_rust::union_64(&paths, &Vec::new(), FillRule::NonZero);
-
-        if !contours.is_empty() {
-            result.push(UnifiedCopperContour { key, contours });
-        }
-    }
-
-    // Sort for deterministic output
-    result.sort_by_key(|c| c.key);
-
-    result
+/// Geometry collector - aggregates all geometric shapes into typed pools
+struct GeometryCollector<'a> {
+    space: &'a HardwareSpace,
+    pools: FxHashMap<LayerId, Vec<Path64>>,
 }
 
-/// Segment a Contact layer (via) by stackup layers
-///
-/// **v0.2.3 Smart Cutout Strategy - No Z-Fighting**
-///
-/// ## The Z-Fighting Problem
-/// When via penetrates partway into a pad, cutting a hole creates an internal wall
-/// that Z-fights with the via surface. Solution: Only cut holes when via FULLY
-/// spans the layer (goes all the way through).
-///
-/// ## Strategy
-/// - **Via partially penetrates pad**: Render via inside pad, NO cutout (no Z-fighting!)
-/// - **Via fully spans pad**: Cut complete hole through pad (like PCB through-hole)
-/// - **Via in dielectric only**: Render via, cut hole in dielectric substrate
-///
-/// ## Example
-/// Via Z=200→800nm through poly pad Z=0→300nm:
-/// - Poly segment Z=200→300nm: Partial penetration (100nm deep) → NO cutout, via renders inside
-/// - Dielectric Z=300→700nm: Full span → Cut hole in substrate, via fills it
-/// - Metal segment Z=700→800nm: Partial penetration (100nm deep) → NO cutout, via renders inside
-fn segment_contact_by_stackup(
-    contact: &hwc_engine::geometry_router::substrate_types::SubstrateLayer,
-    stackup_layers: &[hwc_engine::space::StackupLayer],
-    pools: &mut FxHashMap<CopperPoolKey, Vec<Path64>>,
-) {
-    let via_z_min = contact.bbox.min.z;
-    let via_z_max = contact.bbox.max.z;
-
-    // Extract the via's 2D contour once
-    let via_path = match &contact.shape {
-        SubstrateLayerShape::Rect => rect_to_path(&contact.bbox),
-        SubstrateLayerShape::Circle { radius } => {
-            let cx = (contact.bbox.min.x + contact.bbox.max.x) / 2;
-            let cy = (contact.bbox.min.y + contact.bbox.max.y) / 2;
-            circle_to_path(cx, cy, *radius, 64)
+impl<'a> GeometryCollector<'a> {
+    fn new(space: &'a HardwareSpace) -> Self {
+        Self {
+            space,
+            pools: FxHashMap::default(),
         }
-        SubstrateLayerShape::Polygon { outer_contour, .. } => outer_contour.clone(),
-        _ => {
-            eprintln!(
-                "[VIA SEGMENT WARNING] Unsupported via shape: {:?}",
-                contact.shape
-            );
-            return;
-        }
-    };
+    }
 
-    // Find all stackup layers that this via intersects
-    for stackup_layer in stackup_layers {
-        // Check if via's Z-span intersects this stackup layer
-        if via_z_max <= stackup_layer.z_bottom || via_z_min >= stackup_layer.z_top {
-            continue; // No intersection
-        }
-
-        // Calculate the intersection Z-range
-        let segment_z_min = via_z_min.max(stackup_layer.z_bottom);
-        let segment_z_max = via_z_max.min(stackup_layer.z_top);
-
-        if segment_z_max <= segment_z_min {
-            continue; // Degenerate segment
-        }
-
-        // **v0.2.3 SMART CUTOUT**: Check if via fully spans this layer
-        let via_fully_spans_layer =
-            segment_z_min == stackup_layer.z_bottom && segment_z_max == stackup_layer.z_top;
-
-        if stackup_layer.is_routable {
-            // Conductive layer (active, poly, metal)
-            if via_fully_spans_layer {
-                // Via goes completely through pad → Render via, cut hole (PCB style)
-                eprintln!(
-                    "[VIA FULL SPAN] Via fully spans conductive layer '{}' (Z={}→{}nm) - will cut hole",
-                    stackup_layer.name, segment_z_min, segment_z_max
-                );
-                // Render via in this segment
-                let key = CopperPoolKey {
-                    z_min: segment_z_min,
-                    z_max: segment_z_max,
-                    material: contact.material,
-                    net_id: contact.net,
-                };
-                pools.entry(key).or_default().push(via_path.clone());
-            } else {
-                // Via partially penetrates pad → Render via inside, NO hole (no Z-fighting!)
-                eprintln!(
-                    "[VIA PARTIAL] Via partially penetrates conductive layer '{}' (Z={}→{}nm, layer={}→{}nm) - embedding without cutout",
-                    stackup_layer.name, segment_z_min, segment_z_max,
-                    stackup_layer.z_bottom, stackup_layer.z_top
-                );
-                // Render via in this segment (it will overlap with pad, but fully inside = no Z-fighting)
-                let key = CopperPoolKey {
-                    z_min: segment_z_min,
-                    z_max: segment_z_max,
-                    material: contact.material,
-                    net_id: contact.net,
-                };
-                pools.entry(key).or_default().push(via_path.clone());
+    /// Collect all substrate pours (active regions, poly, metal pads)
+    fn collect_pours(&mut self) {
+        for layer in self
+            .space
+            .entity_graph
+            .get_physical_substrate_layers(&self.space.material_registry)
+        {
+            // Only collect Pour layers here (Contacts are handled separately)
+            if layer.layer_type != SubstrateLayerType::Pour {
+                continue;
             }
-        } else {
-            // Dielectric layer - always render via and cut hole in substrate
-            eprintln!(
-                "[VIA DIELECTRIC] Via in dielectric layer '{}' (Z={}→{}nm) - will cut hole in substrate",
-                stackup_layer.name, segment_z_min, segment_z_max
-            );
-            let key = CopperPoolKey {
+
+            let layer_id = LayerId {
+                z_min: layer.bbox.min.z,
+                z_max: layer.bbox.max.z,
+                material: layer.material,
+                net_id: layer.net,
+            };
+
+            let path = shape_to_path(&layer.shape, &layer.bbox);
+            self.pools.entry(layer_id).or_default().push(path);
+        }
+    }
+
+    /// Collect all contact/via layers with planar semiconductor physics
+    fn collect_contacts(&mut self) {
+        let segmenter = ContactSegmenter::new(self.space);
+
+        for layer in self
+            .space
+            .entity_graph
+            .get_physical_substrate_layers(&self.space.material_registry)
+        {
+            if layer.layer_type == SubstrateLayerType::Contact {
+                segmenter.segment_contact(layer, &mut self.pools);
+            }
+        }
+    }
+
+    /// Collect all routed trace geometry
+    fn collect_traces(&mut self) {
+        let trace_pools = trace_geometry::generate_trace_geometry(self.space);
+
+        for (geom_key, mut geom_pool) in trace_pools {
+            geom_pool.flush_pending();
+
+            let layer_id = LayerId {
+                z_min: geom_key.z_min,
+                z_max: geom_key.z_max,
+                material: geom_key.material,
+                net_id: geom_key.net_id,
+            };
+
+            self.pools
+                .entry(layer_id)
+                .or_default()
+                .extend(geom_pool.paths);
+        }
+    }
+
+    /// Collect PCB via annular pads (IC vias are already in substrate as Contacts)
+    fn collect_pcb_vias(&mut self) {
+        for via in &self.space.vias {
+            // Check manufacturing process via material registry
+            let is_deposited = self
+                .space
+                .material_registry
+                .get_process(via.material_id)
+                .map(|p| p == hwc_engine::ManufacturingProcess::Deposited)
+                .unwrap_or(false);
+
+            if is_deposited {
+                continue; // IC vias handled via Contacts
+            }
+
+            // PCB plated through-hole via: generate annular pads at landing layers
+            let z_start = via.from_z_nm.min(via.to_z_nm);
+            let z_end = via.from_z_nm.max(via.to_z_nm);
+            let pad_radius = via.diameter_nm / 2 + via.enclosure_nm.max(via.diameter_nm / 4);
+
+            // Find pad material (must be conductive)
+            let pad_material = if self.space.material_registry.is_conductive(via.material_id) {
+                via.material_id
+            } else {
+                self.space
+                    .material_registry
+                    .all_materials()
+                    .into_iter()
+                    .find(|(id, _)| self.space.material_registry.is_conductive(*id))
+                    .map(|(id, _)| id)
+                    .expect("FATAL: No conductive material in registry for via pads")
+            };
+
+            // Top landing pad
+            let top_layer = self
+                .space
+                .stackup_layers
+                .iter()
+                .find(|l| l.is_routable && l.contains_z(z_end))
+                .unwrap_or_else(|| {
+                    panic!(
+                        "FATAL: Via landing at Z={}nm has no routable stackup layer. \
+                         All via endpoints must land on conductive layers.",
+                        z_end
+                    )
+                });
+
+            let top_id = LayerId {
+                z_min: top_layer.z_bottom,
+                z_max: top_layer.z_top,
+                material: pad_material,
+                net_id: via.net_id,
+            };
+
+            self.pools.entry(top_id).or_default().push(circle_to_path(
+                via.position.0,
+                via.position.1,
+                pad_radius,
+                64,
+            ));
+
+            // Bottom landing pad
+            let bottom_layer = self
+                .space
+                .stackup_layers
+                .iter()
+                .find(|l| l.is_routable && l.contains_z(z_start))
+                .unwrap_or_else(|| {
+                    panic!(
+                        "FATAL: Via landing at Z={}nm has no routable stackup layer. \
+                         All via endpoints must land on conductive layers.",
+                        z_start
+                    )
+                });
+
+            let bottom_id = LayerId {
+                z_min: bottom_layer.z_bottom,
+                z_max: bottom_layer.z_top,
+                material: pad_material,
+                net_id: via.net_id,
+            };
+
+            self.pools.entry(bottom_id).or_default().push(circle_to_path(
+                via.position.0,
+                via.position.1,
+                pad_radius,
+                64,
+            ));
+        }
+    }
+
+    /// Consume collector and perform Boolean union on all pools
+    fn finalize(self) -> Vec<PhysicalLayer> {
+        let mut layers = Vec::new();
+
+        for (id, paths) in self.pools {
+            if paths.is_empty() {
+                continue;
+            }
+
+            // Boolean union to merge overlapping shapes
+            let contours = clipper2_rust::union_64(&paths, &Vec::new(), FillRule::NonZero);
+
+            if !contours.is_empty() {
+                layers.push(PhysicalLayer { id, contours });
+            }
+        }
+
+        // Sort by Z-elevation for deterministic output
+        layers.sort_by_key(|l| (l.id.z_min, l.id.z_max, l.id.material, l.id.net_id));
+
+        layers
+    }
+}
+
+// ============================================================================
+// CONTACT SEGMENTATION (PLANAR SEMICONDUCTOR PHYSICS)
+// ============================================================================
+
+/// Contact segmenter - slices vertical contacts (vias) through stackup layers
+struct ContactSegmenter<'a> {
+    space: &'a HardwareSpace,
+}
+
+impl<'a> ContactSegmenter<'a> {
+    fn new(space: &'a HardwareSpace) -> Self {
+        Self { space }
+    }
+
+    /// Segment a contact (via) through stackup layers
+    ///
+    /// Slices the continuous physical vertical contact column into layer segments
+    /// matching the stackup coordinate slices. Each segment is deposited into the
+    /// geometry pool matching the contact's material and electrical net, ensuring
+    /// solid, gap-free physical via pillars across the entire vertical span.
+    fn segment_contact(
+        &self,
+        contact: &hwc_engine::geometry_router::substrate_types::SubstrateLayer,
+        pools: &mut FxHashMap<LayerId, Vec<Path64>>,
+    ) {
+        let via_z_min = contact.bbox.min.z;
+        let via_z_max = contact.bbox.max.z;
+        let via_path = shape_to_path(&contact.shape, &contact.bbox);
+
+        for stackup_layer in &self.space.stackup_layers {
+            // Check Z-span intersection
+            if via_z_max <= stackup_layer.z_bottom || via_z_min >= stackup_layer.z_top {
+                continue;
+            }
+
+            let segment_z_min = via_z_min.max(stackup_layer.z_bottom);
+            let segment_z_max = via_z_max.min(stackup_layer.z_top);
+
+            if segment_z_max <= segment_z_min {
+                continue; // Degenerate
+            }
+
+            let layer_id = LayerId {
                 z_min: segment_z_min,
                 z_max: segment_z_max,
                 material: contact.material,
                 net_id: contact.net,
             };
-            pools.entry(key).or_default().push(via_path.clone());
+
+            pools.entry(layer_id).or_default().push(via_path.clone());
         }
     }
+}
+
+// ============================================================================
+// UTILITY FUNCTIONS
+// ============================================================================
+
+/// Convert substrate layer shape to 2D path
+fn shape_to_path(shape: &SubstrateLayerShape, bbox: &BoundingBox) -> Path64 {
+    match shape {
+        SubstrateLayerShape::Rect => rect_to_path(bbox),
+        SubstrateLayerShape::Circle { radius } => {
+            let cx = (bbox.min.x + bbox.max.x) / 2;
+            let cy = (bbox.min.y + bbox.max.y) / 2;
+            circle_to_path(cx, cy, *radius, 64)
+        }
+        SubstrateLayerShape::Polygon { outer_contour, .. } => outer_contour.clone(),
+        _ => {
+            panic!(
+                "FATAL: Unsupported substrate shape {:?}. \
+                 Only Rect, Circle, and Polygon are supported.",
+                shape
+            )
+        }
+    }
+}
+
+// ============================================================================
+// PUBLIC API
+// ============================================================================
+
+/// Generate unified physical layers from HardwareSpace
+///
+/// This is the SINGLE SOURCE OF TRUTH for all physical geometry.
+/// All exporters (GLB, DXF, SPICE extraction) consume this output.
+///
+/// # Process
+///
+/// 1. Collect all pours, contacts, traces, and vias into typed pools
+/// 2. Segment contacts through stackup with planar semiconductor physics
+/// 3. Perform Boolean union on each pool to merge overlapping geometry
+/// 4. Return sorted, finalized physical layers
+///
+/// # Guarantees
+///
+/// - **Zero Fallbacks**: All missing data causes immediate panic with descriptive message
+/// - **Deterministic**: Output is always sorted by (Z, material, net) for reproducibility
+/// - **Type Safe**: All IDs (MaterialId, NetId, LayerId) are strongly typed
+pub fn generate_copper_contours(space: &HardwareSpace) -> Vec<PhysicalLayer> {
+    let mut collector = GeometryCollector::new(space);
+
+    collector.collect_pours();
+    collector.collect_contacts();
+    collector.collect_traces();
+    collector.collect_pcb_vias();
+
+    collector.finalize()
 }

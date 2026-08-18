@@ -98,23 +98,14 @@ pub fn validate_clearances(
                 continue;
             }
 
-            // v0.2.2: DEVICE-AWARE CLEARANCE EXEMPTION
-            // If both entities are part of the same device (different terminals),
-            // skip clearance check - device terminals are MEANT to interact
-            if let (Some(ref entity_device), Some(ref cand_device)) =
-                (&entity.device_binding, &cand.device_binding)
-            {
-                if entity_device.device_name == cand_device.device_name {
-                    // Same device, different terminals - intentional interaction, not a short circuit
-                    // v0.2.2: Format terminals list for display
-                    let entity_terms = entity_device.terminals.join(",");
-                    let cand_terms = cand_device.terminals.join(",");
-                    eprintln!("[DRC DEVICE EXEMPT] Skipping clearance check between {}.{} and {}.{} (same device)",
-                        entity_device.device_name, entity_terms,
-                        cand_device.device_name, cand_terms);
-                    continue;
-                }
+            let cand_bbox = BoundingBox::new(cand.start, cand.end);
+
+            // Layer-Aware Clearance: only check entities that have overlapping Z ranges
+            let z_overlap = bbox.max.z > cand_bbox.min.z && cand_bbox.max.z > bbox.min.z;
+            if !z_overlap {
+                continue;
             }
+
             let (net_a, net_b) = if entity.net_id < cand.net_id {
                 (entity.net_id.raw(), cand.net_id.raw())
             } else {
@@ -125,7 +116,6 @@ pub fn validate_clearances(
                 continue;
             }
 
-            let cand_bbox = BoundingBox::new(cand.start, cand.end);
             let dist = bbox.distance_to(&cand_bbox);
 
             if dist < clearance_nm {

@@ -30,6 +30,7 @@ mod error;
 mod junction; // P46: Junction breakdown validation
 mod min_area; // Gap 2: Minimum area validation (CMP peeling prevention)
 mod parallel;
+mod tap_proximity;
 mod thermal; // P22: Thermal rise validation
 mod trace_width;
 mod types;
@@ -44,6 +45,7 @@ pub use error::{report_to_errors, violation_to_error, DrcError};
 pub use junction::validate_junction_breakdown; // P46
 pub use min_area::validate_min_area; // Gap 2: Minimum area validation
 pub use parallel::validate_physics_parallel;
+pub use tap_proximity::validate_tap_proximity;
 pub use thermal::validate_thermal_rise; // P22
 pub use trace_width::validate_trace_widths;
 pub use types::{DrcReport, DrcViolation};

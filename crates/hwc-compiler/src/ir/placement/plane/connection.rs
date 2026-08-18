@@ -1,18 +1,20 @@
 //! Layer connection database surface registration for planes.
 
 use hwc_engine::layer_connection_database::ConnectionType;
+use hwc_engine::stackup::LayerKind;
 use hwc_engine::space::HardwareSpace;
 use hwc_engine::Point3D;
 
 /// Register the plane surface in the layer connection database so the router can
 /// resolve connections on the plane's routing layer.
 ///
-/// v0.2.0: Planes exist on a single Z plane, so they register as a
-/// `PourSurface` type.
+/// **v0.2.3**: Uses strong typing to handle mask layers and non-routable layers.
+/// **v0.3.0**: Updated to use LayerKind (pure type-driven classification).
+/// Only routable conductive layers participate in routing registration.
 ///
-/// v0.2.1 FIX: Uses the routing layer's official `routing_z`, not
-/// `start_with_z.z`. Base layers (polyres, active) route at `z_top` while
-/// interconnect layers (metal1+) route at `z_bottom`.
+/// # Returns
+/// - `Ok(())` if the plane was registered or correctly skipped
+/// - `Err` if the layer doesn't exist in the stackup
 pub fn register_plane_surface(
     space: &mut HardwareSpace,
     plane_name: &str,
@@ -20,38 +22,53 @@ pub fn register_plane_surface(
     start_with_z: Point3D,
     end_with_z: Point3D,
     material_id: u8,
-) {
-    let plane_center_x = (start_with_z.x + end_with_z.x) / 2;
-    let plane_center_y = (start_with_z.y + end_with_z.y) / 2;
+) -> Result<(), String> {
+    // Get layer definition from routing database
+    let layer = space
+        .routing_layer_db
+        .get_layer(layer_name)
+        .map_err(|e| format!("Layer lookup failed for '{}': {}", layer_name, e))?;
 
-    let routing_z = match space.routing_layer_db.get_routing_z(layer_name) {
-        Ok(z) => z,
-        Err(_) => {
-            // Layer not found or not routable - use z_bottom as fallback
+    // Handle based on layer kind using pattern matching
+    match layer.kind {
+        LayerKind::LithoMask | LayerKind::Dielectric => {
+            // Non-routable layers: log and skip registration
             eprintln!(
-                "[PLACE_PLANE] WARNING: Layer '{}' not found in routing database, using z_bottom={}nm",
-                layer_name, start_with_z.z
+                "[PLACE_PLANE] Plane '{}' on non-routable layer '{}' (kind={:?}, Z={}nm) - skipped routing registration",
+                plane_name, layer_name, layer.kind, layer.z_bottom
             );
-            start_with_z.z
+            Ok(())
         }
-    };
+        LayerKind::SemiconductorActive | LayerKind::ConductiveInterconnect => {
+            // Routable layers: register surface for pathfinder
+            let plane_center_x = (start_with_z.x + end_with_z.x) / 2;
+            let plane_center_y = (start_with_z.y + end_with_z.y) / 2;
+            let routing_z = layer.routing_z;
 
-    if let Err(e) = space.layer_connection_db.register_surface(
-        plane_name,
-        layer_name,
-        routing_z,
-        (plane_center_x, plane_center_y),
-        material_id,
-        ConnectionType::PourSurface,
-    ) {
-        eprintln!(
-            "[PLACE_PLANE] WARNING: Failed to register plane '{}' connection: {}",
-            plane_name, e
-        );
-    } else {
-        eprintln!(
-            "[PLACE_PLANE] Registered plane '{}' surface on layer '{}' at routing Z={}nm (routing layer elevation)",
-            plane_name, layer_name, routing_z
-        );
+            space
+                .layer_connection_db
+                .register_surface(
+                    plane_name,
+                    layer_name,
+                    routing_z,
+                    (plane_center_x, plane_center_y),
+                    material_id,
+                    ConnectionType::PourSurface,
+                )
+                .map_err(|e| format!("Failed to register plane '{}': {}", plane_name, e))?;
+
+            eprintln!(
+                "[PLACE_PLANE] Registered plane '{}' on {} layer '{}' at routing Z={}nm",
+                plane_name,
+                match layer.kind {
+                    LayerKind::SemiconductorActive => "SEMICONDUCTOR ACTIVE",
+                    LayerKind::ConductiveInterconnect => "CONDUCTIVE INTERCONNECT",
+                    _ => unreachable!(),
+                },
+                layer_name,
+                routing_z
+            );
+            Ok(())
+        }
     }
 }

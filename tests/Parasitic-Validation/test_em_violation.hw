@@ -42,6 +42,8 @@ device Resistor:
     materials:
         A: Aluminum_Met1
         B: Aluminum_Met1
+    metrics:
+        R: resistance(from: A, to: B)
     spice:
         prefix: R
         terminal_order: [A, B]

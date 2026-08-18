@@ -50,20 +50,6 @@ impl EntityGraph {
                     continue;
                 }
 
-                // DEVICE TERMINAL EXEMPTION (v0.2.2): If both pours belong to same device instance,
-                // skip clearance check (intentional overlap for capacitors, transistors, etc.)
-                if let Some((dev_name, _terminal)) = config.device_binding {
-                    // Check if existing layer has device binding to same device
-                    if let Some((ref existing_dev, ref _existing_term)) = existing.device_binding {
-                        if existing_dev == dev_name {
-                            // Same device instance - allow overlap (e.g., capacitor plates)
-                            eprintln!("[PLACEMENT DEVICE EXEMPT] Skipping clearance check between {}.{} and {}.{} (same device)",
-                                dev_name, _terminal, existing_dev, _existing_term);
-                            continue;
-                        }
-                    }
-                }
-
                 // v0.2.3: LAYER-AWARE CLEARANCE
                 // Only check clearance for conductors on overlapping Z-ranges.
                 // Layers separated by dielectric don't need lateral clearance.

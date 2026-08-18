@@ -91,8 +91,8 @@ pub fn export(
 
     // Export each unified copper contour pool
     for contour_data in &copper_contours {
-        let z_min_nm = contour_data.key.z_min;
-        let material_id = contour_data.key.material;
+        let z_min_nm = contour_data.id.z_min;
+        let material_id = contour_data.id.material;
 
         let mat_name = space
             .material_registry
