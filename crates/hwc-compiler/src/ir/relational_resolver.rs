@@ -1,4 +1,4 @@
-﻿//! Relational constraint resolver (v0.1.9)
+//! Relational constraint resolver (v0.1.9)
 //!
 //! Resolves middle-level relational placement constraints (align, above, below,
 //! right_of, left_of) into absolute coordinates using the BoundingBoxTracker.
@@ -292,19 +292,46 @@ pub fn target_bbox_to_user_ranges(
 /// - For directional placement: Returns the computed offset position
 ///
 /// The CALLER (plane.rs/component placement) is responsible for dimension-aware
-/// adjustments (e.g., subtracting half-width for center_x alignment).
+/// Compute position from relational constraints, taking into account self-dimensions for edge alignments.
 pub fn compute_position_from_constraints(
     constraints: &[RelationalConstraint],
-    _component_name: &Option<ComponentName>,
+    component_name: &Option<ComponentName>,
     bbox_tracker: &BoundingBoxTracker,
     symbol_table: &crate::SymbolTable,
     eval_context: &hwc_parser::EvaluationContext,
     space_dimensions: &hwc_engine::Dimensions,
 ) -> Result<Coordinate, IrError> {
-    // v0.2.1: Canonical Bottom-Left origin â€” +X is rightward and +Y is upward,
-    // so physical directions map to coordinate deltas with no inversion.
-    let (x_multiplier, y_multiplier) = (1i64, 1i64);
+    compute_position_from_constraints_with_dimensions(
+        constraints,
+        component_name,
+        None,
+        bbox_tracker,
+        symbol_table,
+        eval_context,
+        space_dimensions,
+    )
+}
 
+/// Compute position from relational constraints with explicit self-dimensions (width_nm, height_nm).
+///
+/// When placing pours/components whose center is stored in the placement coordinate:
+/// - `align: bottom with <target>` offsets by `+ height / 2`
+/// - `align: top with <target>` offsets by `- height / 2`
+/// - `align: left with <target>` offsets by `+ width / 2`
+/// - `align: right with <target>` offsets by `- width / 2`
+/// - `above <target>` offsets by `+ height / 2`
+/// - `below <target>` offsets by `- height / 2`
+/// - `right_of <target>` offsets by `+ width / 2`
+/// - `left_of <target>` offsets by `- width / 2`
+pub fn compute_position_from_constraints_with_dimensions(
+    constraints: &[RelationalConstraint],
+    _component_name: &Option<ComponentName>,
+    dimensions: Option<(i64, i64)>,
+    bbox_tracker: &BoundingBoxTracker,
+    symbol_table: &crate::SymbolTable,
+    eval_context: &hwc_parser::EvaluationContext,
+    space_dimensions: &hwc_engine::Dimensions,
+) -> Result<Coordinate, IrError> {
     let mut x_nm: Option<i64> = None;
     let mut y_nm: Option<i64> = None;
     let mut z_nm: Option<i64> = None;
@@ -312,18 +339,14 @@ pub fn compute_position_from_constraints(
     for constraint in constraints {
         match constraint {
             RelationalConstraint::Align { axis, target, .. } => {
-                // v0.2.1: Handle both entity targets and expression targets
                 let resolved_value_nm = match target {
                     hwc_parser::AlignmentTarget::Entity(component_name) => {
-                        // Traditional entity-based alignment
                         let target_bbox = resolve_target_bbox(component_name, bbox_tracker)?;
                         let (tx_min, tx_max, ty_min, ty_max) =
                             target_bbox_to_user_ranges(&target_bbox, space_dimensions);
 
-                        // Return the appropriate coordinate based on axis
                         match axis {
                             AlignmentAxis::Center => {
-                                // Center aligns BOTH X and Y
                                 x_nm = Some((tx_min + tx_max) / 2);
                                 y_nm = Some((ty_min + ty_max) / 2);
                                 return Ok(Coordinate::Declarative {
@@ -348,43 +371,13 @@ pub fn compute_position_from_constraints(
                             AlignmentAxis::X => (tx_min + tx_max) / 2,
                             AlignmentAxis::Y => (ty_min + ty_max) / 2,
                             AlignmentAxis::Z => (target_bbox.min.z + target_bbox.max.z) / 2,
-                            AlignmentAxis::Top => {
-                                let formula = RelationalPlacementFormula::get(
-                                    SpatialRelation::AlignTop,
-                                    x_multiplier,
-                                    y_multiplier,
-                                );
-                                formula.resolve(ty_min, ty_max, 0, 0)
-                            }
-                            AlignmentAxis::Bottom => {
-                                let formula = RelationalPlacementFormula::get(
-                                    SpatialRelation::AlignBottom,
-                                    x_multiplier,
-                                    y_multiplier,
-                                );
-                                formula.resolve(ty_min, ty_max, 0, 0)
-                            }
-                            AlignmentAxis::Left => {
-                                let formula = RelationalPlacementFormula::get(
-                                    SpatialRelation::AlignLeft,
-                                    x_multiplier,
-                                    y_multiplier,
-                                );
-                                formula.resolve(tx_min, tx_max, 0, 0)
-                            }
-                            AlignmentAxis::Right => {
-                                let formula = RelationalPlacementFormula::get(
-                                    SpatialRelation::AlignRight,
-                                    x_multiplier,
-                                    y_multiplier,
-                                );
-                                formula.resolve(tx_min, tx_max, 0, 0)
-                            }
+                            AlignmentAxis::Top => ty_max,
+                            AlignmentAxis::Bottom => ty_min,
+                            AlignmentAxis::Left => tx_min,
+                            AlignmentAxis::Right => tx_max,
                         }
                     }
                     hwc_parser::AlignmentTarget::Expression(expr) => {
-                        // v0.2.1: Expression-based alignment - evaluate the expression
-                        // The expression should evaluate to a coordinate value (e.g., (A.center_x + B.center_x) / 2)
                         use crate::ir::placement::coordinate_evaluation::{
                             evaluate_coordinate_with_anchors, CoordinateAxis,
                         };
@@ -409,7 +402,7 @@ pub fn compute_position_from_constraints(
                                     },
                                     span: hwc_parser::Span::new(0, 0),
                                 })
-                            } // Already handled above
+                            }
                             AlignmentAxis::X | AlignmentAxis::Left | AlignmentAxis::Right => {
                                 CoordinateAxis::X
                             }
@@ -429,14 +422,30 @@ pub fn compute_position_from_constraints(
                     }
                 };
 
-                // Assign to the appropriate axis
+                // Assign to the appropriate axis, accounting for self-dimension when aligning edges
                 match axis {
                     AlignmentAxis::Center => unreachable!("Center handled earlier"),
-                    AlignmentAxis::X | AlignmentAxis::Left | AlignmentAxis::Right => {
+                    AlignmentAxis::X => {
                         x_nm = Some(resolved_value_nm);
                     }
-                    AlignmentAxis::Y | AlignmentAxis::Top | AlignmentAxis::Bottom => {
+                    AlignmentAxis::Left => {
+                        let self_w_offset = dimensions.map_or(0, |(w, _)| w / 2);
+                        x_nm = Some(resolved_value_nm + self_w_offset);
+                    }
+                    AlignmentAxis::Right => {
+                        let self_w_offset = dimensions.map_or(0, |(w, _)| w / 2);
+                        x_nm = Some(resolved_value_nm - self_w_offset);
+                    }
+                    AlignmentAxis::Y => {
                         y_nm = Some(resolved_value_nm);
+                    }
+                    AlignmentAxis::Bottom => {
+                        let self_h_offset = dimensions.map_or(0, |(_, h)| h / 2);
+                        y_nm = Some(resolved_value_nm + self_h_offset);
+                    }
+                    AlignmentAxis::Top => {
+                        let self_h_offset = dimensions.map_or(0, |(_, h)| h / 2);
+                        y_nm = Some(resolved_value_nm - self_h_offset);
                     }
                     AlignmentAxis::Z => {
                         z_nm = Some(resolved_value_nm);
@@ -444,19 +453,11 @@ pub fn compute_position_from_constraints(
                 }
             }
             RelationalConstraint::Directional(dir) => {
-                let (target, spacing_expr, relation) = match dir {
-                    DirectionalConstraint::Above { target, spacing } => {
-                        (target, spacing, SpatialRelation::Above)
-                    }
-                    DirectionalConstraint::Below { target, spacing } => {
-                        (target, spacing, SpatialRelation::Below)
-                    }
-                    DirectionalConstraint::RightOf { target, spacing } => {
-                        (target, spacing, SpatialRelation::RightOf)
-                    }
-                    DirectionalConstraint::LeftOf { target, spacing } => {
-                        (target, spacing, SpatialRelation::LeftOf)
-                    }
+                let (target, spacing_expr, is_y_axis, is_positive_dir) = match dir {
+                    DirectionalConstraint::Above { target, spacing } => (target, spacing, true, true),
+                    DirectionalConstraint::Below { target, spacing } => (target, spacing, true, false),
+                    DirectionalConstraint::RightOf { target, spacing } => (target, spacing, false, true),
+                    DirectionalConstraint::LeftOf { target, spacing } => (target, spacing, false, false),
                 };
 
                 let target_bbox = resolve_target_bbox(target, bbox_tracker)?;
@@ -468,14 +469,25 @@ pub fn compute_position_from_constraints(
                     0
                 };
 
-                let formula = RelationalPlacementFormula::get(relation, x_multiplier, y_multiplier);
-                if formula.is_y_axis {
-                    y_nm = Some(formula.resolve(ty_min, ty_max, spacing_nm, 0));
+                if is_y_axis {
+                    let self_h_half = dimensions.map_or(0, |(_, h)| h / 2);
+                    let center_y = if is_positive_dir {
+                        ty_max + spacing_nm + self_h_half
+                    } else {
+                        ty_min - spacing_nm - self_h_half
+                    };
+                    y_nm = Some(center_y);
                     if x_nm.is_none() {
                         x_nm = Some((tx_min + tx_max) / 2);
                     }
                 } else {
-                    x_nm = Some(formula.resolve(tx_min, tx_max, spacing_nm, 0));
+                    let self_w_half = dimensions.map_or(0, |(w, _)| w / 2);
+                    let center_x = if is_positive_dir {
+                        tx_max + spacing_nm + self_w_half
+                    } else {
+                        tx_min - spacing_nm - self_w_half
+                    };
+                    x_nm = Some(center_x);
                     if y_nm.is_none() {
                         y_nm = Some((ty_min + ty_max) / 2);
                     }

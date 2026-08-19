@@ -66,7 +66,32 @@ pub fn extract_via_stacks(
                                 if let Some(drill_diameter_nm) = first_contact.drill_diameter_nm {
                                     let drill_radius_cm = (drill_diameter_nm as f64 * 1e-9 * 100.0) / 2.0;
                                     let via_area_cm2 = std::f64::consts::PI * drill_radius_cm * drill_radius_cm;
-                                    let single_via_resistance = contact_resistance / via_area_cm2;
+
+                                    // Strongly-typed material interface resolution:
+                                    // Query the materials of the connecting layers from space pour metadata
+                                    let from_mat_name = space.pours.iter()
+                                        .find(|p| p.layer_name == from_layer)
+                                        .map(|p| p.material_name.as_str());
+
+                                    let to_mat_name = space.pours.iter()
+                                        .find(|p| p.layer_name == to_layer)
+                                        .map(|p| p.material_name.as_str());
+
+                                    let from_mat_id = from_mat_name.and_then(|name| space.material_registry.get_id(name));
+                                    let to_mat_id = to_mat_name.and_then(|name| space.material_registry.get_id(name));
+
+                                    // Check if either connecting material defines an interfacial contact_resistance
+                                    let effective_contact_res = from_mat_id
+                                        .and_then(|id| space.material_registry.get_physical_props(id))
+                                        .and_then(|props| props.get("contact_resistance"))
+                                        .or_else(|| {
+                                            to_mat_id
+                                                .and_then(|id| space.material_registry.get_physical_props(id))
+                                                .and_then(|props| props.get("contact_resistance"))
+                                        })
+                                        .unwrap_or(contact_resistance);
+
+                                    let single_via_resistance = effective_contact_res / via_area_cm2;
                                     let total_via_resistance = single_via_resistance / (num_vias as f64);
 
                                     if total_via_resistance > 0.001 {

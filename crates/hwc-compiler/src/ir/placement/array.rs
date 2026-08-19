@@ -452,10 +452,16 @@ fn merge_pour_across_instances(
             hwc_engine::geometry_router::substrate_types::SubstrateLayerType::Pour,
         );
 
+        let layer_name: compact_str::CompactString = match &pour.elevation {
+            hwc_parser::Elevation::Semantic(id) => id.to_string().into(),
+            _ => "top_copper".into(),
+        };
+
         let area_nm2 = (bbox.max.x - bbox.min.x) * (bbox.max.y - bbox.min.y);
         space.pours.push(hwc_engine::space::PourMetadata {
             name: merged_name.into(),
             material_name: pour.material.clone(),
+            layer_name,
             z_bottom_nm: ctx.stackup_manager.resolve_elevation(
                 &pour.elevation,
                 ctx.symbol_table,

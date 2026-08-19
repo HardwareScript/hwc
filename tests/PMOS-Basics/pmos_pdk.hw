@@ -1,9 +1,9 @@
-# nmos_pdk.hw - SkyWater SKY130 1.8V NMOS PDK Profile & Device Definition
+# pmos_pdk.hw - SkyWater SKY130 1.8V PMOS PDK Profile & Device Definition
 
 import * from @std/primitives/units
 import Polysilicon, Aluminum, Copper, Tungsten, Titanium_Nitride, Titanium_Silicide, Silicon_Dioxide, Air from "./materials"
-import P_Substrate, N_Plus_Diffusion, P_Plus_Diffusion from "./materials"
-import N_Plus_Implant_Mask, P_Plus_Implant_Mask, Tap_Mask, Nitride_Poly_Cut_Mask, High_Vt_Mask from "./materials"
+import P_Substrate, P_Plus_Diffusion, N_Plus_Diffusion from "./materials"
+import N_Well_Mask, P_Plus_Implant_Mask, N_Plus_Implant_Mask, Tap_Mask, Nitride_Poly_Cut_Mask, High_Vt_Mask from "./materials"
 
 export Polysilicon
 export Aluminum
@@ -14,10 +14,11 @@ export Titanium_Silicide
 export Silicon_Dioxide
 export Air
 export P_Substrate
-export N_Plus_Diffusion
 export P_Plus_Diffusion
-export N_Plus_Implant_Mask
+export N_Plus_Diffusion
+export N_Well_Mask
 export P_Plus_Implant_Mask
+export N_Plus_Implant_Mask
 export Tap_Mask
 export Nitride_Poly_Cut_Mask
 export High_Vt_Mask
@@ -27,12 +28,13 @@ export shape SquareContact(width: Measurement):
         Rectangle(width: width, height: width)
 
 # Contact Bridges
-export bridge N_Plus_Diffusion to Titanium_Nitride:
+
+export bridge P_Plus_Diffusion to Titanium_Nitride:
     interface: Titanium_Nitride
     thickness: 5nm
     fill: Tungsten
 
-export bridge P_Plus_Diffusion to Titanium_Nitride:
+export bridge N_Plus_Diffusion to Titanium_Nitride:
     interface: Titanium_Nitride
     thickness: 5nm
     fill: Tungsten
@@ -52,9 +54,9 @@ export bridge Copper to Aluminum:
     thickness: 5nm
     fill: Tungsten
 
-# SKY130 1.8V NMOS Stackup Profile
+# SKY130 1.8V PMOS Stackup Profile
 
-export profile SKY130_1V8_NMOS:
+export profile SKY130_1V8_PMOS:
     technology: "ASIC"
     substrate_net: Bulk
 
@@ -62,16 +64,17 @@ export profile SKY130_1V8_NMOS:
         # ====================================================================
         # Zero-Thickness 2D Fabrication & Doping Masks (Anchor at Z=0nm)
         # ====================================================================
+        nwell:      [material: N_Well_Mask,           thickness: 0nm,   routable: false, is_mask: true]
         tap:        [material: Tap_Mask,              thickness: 0nm,   routable: false, is_mask: true]
         psdm:       [material: P_Plus_Implant_Mask,   thickness: 0nm,   routable: false, is_mask: true]
         nsdm:       [material: N_Plus_Implant_Mask,   thickness: 0nm,   routable: false, is_mask: true]
         npc:        [material: Nitride_Poly_Cut_Mask, thickness: 0nm,   routable: false, is_mask: true]
-        hvtn:       [material: High_Vt_Mask,          thickness: 0nm,   routable: false, is_mask: true]
+        hvtp:       [material: High_Vt_Mask,          thickness: 0nm,   routable: false, is_mask: true]
 
         # ====================================================================
-        # Silicon Active Diffusion Base Layer (NMOS channel & Substrate Tap)
+        # Silicon Active Diffusion Base Layer (PMOS channel & N-Well Tap)
         # ====================================================================
-        diff:       [material: N_Plus_Diffusion,      thickness: 150nm, routable: true]
+        diff:       [material: P_Plus_Diffusion,      thickness: 150nm, routable: true]
 
         # ====================================================================
         # Polysilicon Gate Layer
@@ -115,8 +118,8 @@ export profile SKY130_1V8_NMOS:
             Polysilicon: 30%
             Titanium_Nitride: 50%
             Titanium_Silicide: 50%
-            N_Plus_Diffusion: 30%
             P_Plus_Diffusion: 30%
+            N_Plus_Diffusion: 30%
 
     trace:
         min_width: 150nm
@@ -135,7 +138,7 @@ export profile SKY130_1V8_NMOS:
 
     layer:
         min_thickness: 50nm
-        allowed_conductors: [Copper, Aluminum, Polysilicon, Titanium_Nitride, Titanium_Silicide, N_Plus_Diffusion, P_Plus_Diffusion]
+        allowed_conductors: [Copper, Aluminum, Polysilicon, Titanium_Nitride, Titanium_Silicide, P_Plus_Diffusion, N_Plus_Diffusion]
         allowed_dielectrics: [Silicon_Dioxide, Air]
 
     routing:
@@ -158,7 +161,8 @@ export profile SKY130_1V8_NMOS:
         escape_stub: 0nm
 
 # Foundry SPICE Subcircuit Definition Contract
-export subcircuit sky130_fd_pr__nfet_01v8:
+
+export subcircuit sky130_fd_pr__pfet_01v8:
     terminals: [D, G, S, B]
     parameters: [
         W = 1.0um,
@@ -172,17 +176,17 @@ export subcircuit sky130_fd_pr__nfet_01v8:
         SA = 0.65u,
         SB = 0.65u
     ]
-    spice_include: "sky130_fd_pr/models/sky130_fd_pr__nfet_01v8.model.spice"
+    spice_include: "sky130_fd_pr/models/sky130_fd_pr__pfet_01v8.model.spice"
 
-# 4-Terminal NMOS Device Declaration with Full BSIM4 Layout Stress & Area Metrics
+# 4-Terminal PMOS Device Declaration with Full BSIM4 Layout Stress & Area Metrics
 
-export device NMOS:
+export device PMOS:
     terminals: [D, G, S, B]
     materials:
-        D: [N_Plus_Diffusion, Titanium_Nitride, Titanium_Silicide, Copper, Aluminum]
+        D: [P_Plus_Diffusion, Titanium_Nitride, Titanium_Silicide, Copper, Aluminum]
         G: [Polysilicon, Titanium_Nitride, Titanium_Silicide, Copper, Aluminum]
-        S: [N_Plus_Diffusion, Titanium_Nitride, Titanium_Silicide, Copper, Aluminum]
-        B: [P_Plus_Diffusion, N_Plus_Diffusion, Titanium_Nitride, Titanium_Silicide, Copper, Aluminum]
+        S: [P_Plus_Diffusion, Titanium_Nitride, Titanium_Silicide, Copper, Aluminum]
+        B: [N_Plus_Diffusion, P_Plus_Diffusion, Titanium_Nitride, Titanium_Silicide, Copper, Aluminum]
 
     # Universal 2D Manifold Metric Algebra
     metrics:
@@ -199,7 +203,7 @@ export device NMOS:
 
     spice:
         prefix: X
-        subcircuit: sky130_fd_pr__nfet_01v8
+        subcircuit: sky130_fd_pr__pfet_01v8
         terminal_order: [D, G, S, B]
         parameters: [W, L, AD, AS, PD, PS, NRD, NRS, SA, SB]
         parameter_style: named

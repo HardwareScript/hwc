@@ -69,7 +69,7 @@ pub fn generate_circuit_body(
     // If a physical netlist is present, skip schematic-level components to avoid
     // conflicting with extracted M devices (prevents LTspice subcircuit conflicts)
     let is_physical_mode = physical_netlist.is_some();
-    emit_components(&mut netlist_str, space, is_physical_mode);
+    emit_components(&mut netlist_str, space, symbol_table, is_physical_mode)?;
 
     // GAP 7 Phase 4: EXTRACTED DEVICES (Intent-Based Atom Architecture)
     // Devices are extracted from explicit device: bindings during alignment validation
@@ -254,11 +254,19 @@ fn emit_net_comments(netlist_str: &mut String, space: &HardwareSpace) {
     }
 }
 
-/// Emit schematic-level components as SPICE subcircuit/MOSFET cards.
-fn emit_components(netlist_str: &mut String, space: &HardwareSpace, is_physical_mode: bool) {
+/// Emit schematic-level components as SPICE subcircuit/device cards.
+///
+/// Fully generic: Driven by SymbolTable and explicit `spice:` metadata.
+/// Zero string pattern matching, zero pin order assumptions, and zero silent "0" fallbacks.
+fn emit_components(
+    netlist_str: &mut String,
+    space: &HardwareSpace,
+    symbol_table: &SymbolTable,
+    is_physical_mode: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
     let component_count = space.netlist.component_count();
     if component_count == 0 || is_physical_mode {
-        return;
+        return Ok(());
     }
 
     netlist_str.push_str("* ========================================\n");
@@ -268,16 +276,12 @@ fn emit_components(netlist_str: &mut String, space: &HardwareSpace, is_physical_
     for i in 0..component_count {
         let comp_id = hwc_engine::netlist::ComponentId::new(i as u32);
         if let Some(component) = space.netlist.get_component(comp_id) {
-            // Get component pins
             let pins = space.netlist.get_component_pins(comp_id);
 
-            // Build net list for this component
-            // v0.1.6 Item #13: Use pin net assignments from entity graph (from net: block)
-            let mut net_names = Vec::new();
+            // Map pin names to assigned nets
+            let mut pin_net_map = rustc_hash::FxHashMap::default();
             for pin_id in &pins {
                 if let Some(pin) = space.netlist.get_pin(*pin_id) {
-                    // First, try to get net assignment from entity graph component pins
-                    // (these come from the net: block in component placement)
                     let entity_graph_net = space
                         .entity_graph
                         .get_component_pins()
@@ -286,55 +290,84 @@ fn emit_components(netlist_str: &mut String, space: &HardwareSpace, is_physical_
                         .and_then(|vp| vp.net.clone());
 
                     if let Some(net_name) = entity_graph_net {
-                        // Use net assignment from net: block
-                        net_names.push(net_name);
+                        pin_net_map.insert(pin.name.to_string(), net_name.to_string());
                     } else if let Some(net_id) = pin.connected_net {
-                        // Fall back to netlist arena connection (from routing)
                         if let Some(net) = space.netlist.get_net(net_id) {
-                            net_names.push(net.name.clone());
-                        } else {
-                            net_names.push(format!("node_{}", net_id.raw()).into());
+                            pin_net_map.insert(pin.name.to_string(), net.name.to_string());
                         }
-                    } else {
-                        // No connection - floating pin
-                        net_names.push(format!("nc_{}", pin_id.raw()).into());
                     }
                 }
             }
 
-            // Emit SPICE device based on component type
-            match component.component_type.to_uppercase().as_str() {
-                "NMOS" | "PMOS" => {
-                    // MOSFET: M<name> <drain> <gate> <source> <bulk> <model>
-                    // Assume pin order: Gate, Source, Drain, Bulk
-                    if net_names.len() >= 3 {
-                        let gate = net_names.first().cloned().unwrap_or_else(|| "0".into());
-                        let source = net_names.get(1).cloned().unwrap_or_else(|| "0".into());
-                        let drain = net_names.get(2).cloned().unwrap_or_else(|| "0".into());
-                        let bulk = net_names.get(3).cloned().unwrap_or_else(|| "0".into());
+            // Look up device or subcircuit in SymbolTable
+            if let Ok(device_def) = symbol_table.get_device(component.component_type.as_str()) {
+                if let Some(spice_info) = device_def.spice_info() {
+                    let prefix = if spice_info.subcircuit.is_some() { 'X' } else { spice_info.prefix };
+                    netlist_str.push(prefix);
+                    netlist_str.push_str(&component.name);
 
-                        netlist_str.push_str(&format!(
-                            "M{} {} {} {} {} {}\n",
-                            component.name, drain, gate, source, bulk, component.component_type
-                        ));
-                    } else {
-                        netlist_str.push_str(&format!(
-                            "* WARNING: {} has insufficient pins for MOSFET\n",
-                            component.name
-                        ));
+                    // Emit terminals in explicit SPICE terminal_order
+                    for term in &spice_info.terminal_order {
+                        let net = pin_net_map.get(term.as_str()).ok_or_else(|| {
+                            format!(
+                                "Component '{}' of type '{}' is missing required terminal '{}' defined in its SPICE terminal_order: {:?}",
+                                component.name, component.component_type, term, spice_info.terminal_order
+                            )
+                        })?;
+                        netlist_str.push(' ');
+                        netlist_str.push_str(net);
                     }
+
+                    if let Some(ref subckt) = spice_info.subcircuit {
+                        netlist_str.push(' ');
+                        netlist_str.push_str(subckt);
+                    } else if let Some(ref model) = spice_info.model_name {
+                        netlist_str.push(' ');
+                        netlist_str.push_str(model);
+                    }
+                    netlist_str.push('\n');
+                    continue;
                 }
-                _ => {
-                    // Generic subcircuit: X<name> <nets...> <type>
-                    netlist_str.push_str(&format!(
-                        "X{} {} {}\n",
-                        component.name,
-                        net_names.join(" "),
-                        component.component_type
-                    ));
+            } else if let Ok(subckt_def) = symbol_table.get_subcircuit(component.component_type.as_str()) {
+                netlist_str.push('X');
+                netlist_str.push_str(&component.name);
+
+                for term in &subckt_def.terminals {
+                    let net = pin_net_map.get(term.as_str()).ok_or_else(|| {
+                        format!(
+                            "Component '{}' of subcircuit '{}' is missing required terminal '{}'",
+                            component.name, component.component_type, term
+                        )
+                    })?;
+                    netlist_str.push(' ');
+                    netlist_str.push_str(net);
+                }
+                netlist_str.push(' ');
+                netlist_str.push_str(&component.component_type);
+                netlist_str.push('\n');
+                continue;
+            }
+
+            // Generic subcircuit fallback using pin order declared on component
+            netlist_str.push('X');
+            netlist_str.push_str(&component.name);
+            for pin_id in &pins {
+                if let Some(pin) = space.netlist.get_pin(*pin_id) {
+                    let net = pin_net_map.get(pin.name.as_str()).ok_or_else(|| {
+                        format!(
+                            "Component '{}' pin '{}' has no connected net",
+                            component.name, pin.name
+                        )
+                    })?;
+                    netlist_str.push(' ');
+                    netlist_str.push_str(net);
                 }
             }
+            netlist_str.push(' ');
+            netlist_str.push_str(&component.component_type);
+            netlist_str.push('\n');
         }
     }
     netlist_str.push('\n');
+    Ok(())
 }

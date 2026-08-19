@@ -1,4 +1,4 @@
-﻿use crate::ir::errors::IrError;
+use crate::ir::errors::IrError;
 use crate::ir::placement_item::PlacementItem;
 
 /// Execute the placement loop: place all non-route items.
@@ -62,10 +62,23 @@ pub fn execute_placement(
 
                 // v0.2.1: Resolve relational constraints if present
                 if !resolved_pour.relational_constraints.is_empty() {
+                    // Evaluate pour dimensions if available for edge-aware relational resolution
+                    let width_nm = resolved_pour.width.as_ref().and_then(|w| {
+                        crate::ir::conversions::evaluate_expression_to_nm(w, ctx.symbol_table, item_eval_context).ok()
+                    });
+                    let height_nm = resolved_pour.height.as_ref().and_then(|h| {
+                        crate::ir::conversions::evaluate_expression_to_nm(h, ctx.symbol_table, item_eval_context).ok()
+                    });
+                    let dimensions = match (width_nm, height_nm) {
+                        (Some(w), Some(h)) => Some((w, h)),
+                        _ => None,
+                    };
+
                     let resolved_position =
-                        crate::ir::relational_resolver::compute_position_from_constraints(
+                        crate::ir::relational_resolver::compute_position_from_constraints_with_dimensions(
                             &resolved_pour.relational_constraints,
                             &Some(resolved_pour.name.clone()),
+                            dimensions,
                             bbox_tracker,
                             ctx.symbol_table,
                             item_eval_context,

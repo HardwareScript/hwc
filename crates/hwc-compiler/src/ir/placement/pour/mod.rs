@@ -325,6 +325,7 @@ pub fn place_pour(
         space,
         pour,
         resolved_net_name,
+        layer_name.clone().into(),
         z_start_nm,
         start_with_z,
         end_with_z,

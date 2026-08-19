@@ -1,4 +1,4 @@
-﻿use crate::ir::errors::IrError;
+use crate::ir::errors::IrError;
 use crate::ir::routing::automatic::{select_routable_port_from_resolution, PortSelectionParams};
 use hwc_engine::geometry_router::port_escape::CardinalPort;
 use hwc_engine::{HardwareSpace, Point3D};
@@ -429,19 +429,19 @@ pub fn resolve_route_boundary_points(
         to_z, // Use database Z, not entry_point.z
     );
 
-    // v0.2.0: Contact-Aware Routing Override
-    // If an explicit contact exists on the pad that connects to the target layer,
-    // use the contact's position instead of the pad boundary edge.
-    // This prevents the router from creating duplicate vias at the wrong location.
+    let from_is_on_routing_layer = from_entity_data.bbox.min.z <= start_point.z
+        && start_point.z <= from_entity_data.bbox.max.z;
 
-    let final_start_point = if let Some((contact_x, contact_y)) = find_contact_on_pad(
+    let final_start_point = if from_is_on_routing_layer {
+        start_point
+    } else if let Some((contact_x, contact_y)) = find_contact_on_pad(
         space,
         &from_entity_data.bbox,
         start_point.z, // Use the routing layer Z
         from_net_id,
     ) {
         eprintln!(
-            "  ðŸ”§ CONTACT OVERRIDE: Using explicit contact at ({},{}) instead of pad edge",
+            "  🔧 CONTACT OVERRIDE: Using explicit contact at ({},{}) instead of pad edge",
             contact_x, contact_y
         );
         Point3D::new(contact_x, contact_y, start_point.z)
@@ -449,14 +449,19 @@ pub fn resolve_route_boundary_points(
         start_point
     };
 
-    let final_goal_point = if let Some((contact_x, contact_y)) = find_contact_on_pad(
+    let to_is_on_routing_layer =
+        to_entity_data.bbox.min.z <= goal_point.z && goal_point.z <= to_entity_data.bbox.max.z;
+
+    let final_goal_point = if to_is_on_routing_layer {
+        goal_point
+    } else if let Some((contact_x, contact_y)) = find_contact_on_pad(
         space,
         &to_entity_data.bbox,
         goal_point.z, // Use the routing layer Z
         to_net_id,
     ) {
         eprintln!(
-            "  ðŸ”§ CONTACT OVERRIDE: Using explicit contact at ({},{}) instead of pad edge",
+            "  🔧 CONTACT OVERRIDE: Using explicit contact at ({},{}) instead of pad edge",
             contact_x, contact_y
         );
         Point3D::new(contact_x, contact_y, goal_point.z)
@@ -474,40 +479,31 @@ pub fn resolve_route_boundary_points(
 
 /// Apply direct edge-anchor projection with Zero-Gap Contact Lock.
 ///
-/// v0.2.1 BLOAT PURGE: Eliminated fragile reverse-math guesswork.
-/// The entry_point from AccessRegion is the edge midpoint.
-/// 
-/// This function:
-/// 1. Takes the edge center directly (no reverse calculation)
-/// 2. Steps INWARD by exactly (trace_width/2) along the normal to position
-///    the trace centerline so that its edge touches the pad edge with 0nm gap
-/// 3. Uses the database-provided Z elevation
+/// The entry_point from AccessRegion was shifted outward by PDK min_width / 2:
+/// entry_point = edge_center + normal * (pdk_min_width / 2)
 ///
-/// INVARIANT: Position the trace centerline flush with the pad boundary edge.
-/// Normal points OUTWARD from the pad, so stepping INWARD requires subtracting normal * half_width.
+/// This function:
+/// 1. Recovers the true pad boundary edge center by subtracting normal * (pdk_min_width / 2)
+/// 2. Uses the database-provided Z elevation
+///
+/// INVARIANT: Position the trace centerline exactly at the pad boundary edge.
 fn resolve_boundary_entry(
     entry_point: Point3D,
     normal: hwc_engine::geometry_router::connection_interface::Normal2D,
-    _default_width_nm: i64, // DEPRECATED: No longer used (v0.2.1)
-    actual_width_nm: i64,
+    pdk_min_width_nm: i64,
+    _actual_width_nm: i64,
     database_z: i64, // v0.2.0: Use database-queried Z, not cached AccessRegion Z
 ) -> Point3D {
     let (nx, ny) = normal.to_unit_direction(); // nx, ny in {-1, 0, 1}
-    let half_width = actual_width_nm / 2;
+    let pdk_half_width = pdk_min_width_nm / 2;
 
-//     eprintln!("[BOUNDARY DEBUG] resolve_boundary_entry (v0.2.1 DEBLOATED):");
-    eprintln!("  entry_point (edge center): ({},{},{})", entry_point.x, entry_point.y, entry_point.z);
-    eprintln!("  normal: ({},{}) -> unit direction: ({},{})", normal.x, normal.y, nx, ny);
-    eprintln!("  actual_width_nm: {}, half_width: {}", actual_width_nm, half_width);
+    // Recover the exact pad boundary edge center
+    let edge_x = entry_point.x - nx * pdk_half_width;
+    let edge_y = entry_point.y - ny * pdk_half_width;
 
-    // Step INWARD by half_width to position trace centerline so edge touches pad edge
-    // Since normal points outward, we SUBTRACT to move inward
-    let corrected_x = entry_point.x - nx * half_width;
-    let corrected_y = entry_point.y - ny * half_width;
+    eprintln!("  edge center (boundary): ({},{},{})", edge_x, edge_y, database_z);
 
-    eprintln!("  corrected position (centerline): ({},{},{})", corrected_x, corrected_y, database_z);
-
-    Point3D::new(corrected_x, corrected_y, database_z)
+    Point3D::new(edge_x, edge_y, database_z)
 }
 
 /// Resolve pin center positions from a ResolvedRoute by querying the EntityGraph.
@@ -614,13 +610,14 @@ fn find_contact_on_pad(
             continue;
         }
 
-        // Check if contact spans to the target Z layer (with tolerance)
-        let contact_spans_target = layer.bbox.min.z <= target_z && layer.bbox.max.z >= target_z;
+        // Check if contact spans to the pad's Z extent (overlaps in Z)
+        let contact_spans_target =
+            layer.bbox.min.z <= pad_bbox.max.z && layer.bbox.max.z >= pad_bbox.min.z;
 
         if contact_spans_target {
             eprintln!(
-                "[CONTACT FOUND] Explicit contact layer {} at ({},{}) Z={}â†’{}nm spans target Z={}nm",
-                idx, layer_center_x, layer_center_y, layer.bbox.min.z, layer.bbox.max.z, target_z
+                "[CONTACT FOUND] Explicit contact layer {} at ({},{}) Z={}→{}nm touches pad Z={}→{}nm (routing Z={}nm)",
+                idx, layer_center_x, layer_center_y, layer.bbox.min.z, layer.bbox.max.z, pad_bbox.min.z, pad_bbox.max.z, target_z
             );
             return Some((layer_center_x, layer_center_y));
         }

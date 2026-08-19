@@ -19,40 +19,6 @@ pub struct ConstraintResult {
     pub escape_stub_nm: i64,
 }
 
-/// Resolve the conductor material for a trace at the given Z position.
-///
-/// Looks up the stackup layer at that Z and returns the material ID from the registry.
-pub fn resolve_material_for_z(
-    z_nm: i64,
-    stackup_manager: &crate::ir::stackup_manager::StackupManager,
-    material_registry: &hwc_engine::material::MaterialRegistry,
-    profile: Option<&hwc_parser::ProfileDefinition>,
-) -> Result<hwc_engine::material::MaterialId, IrError> {
-    if let Some(layer_name) = stackup_manager.get_layer_name_at_z(z_nm) {
-        if let Some(mat_name) = profile
-            .and_then(|p| p.stackup.as_ref())
-            .and_then(|stackup| {
-                stackup
-                    .layers
-                    .iter()
-                    .find(|l| l.name.name == layer_name)
-                    .map(|l| l.material.clone())
-            })
-        {
-            return material_registry
-                .get_id(&mat_name)
-                .ok_or_else(|| IrError::UndeclaredMaterial { material: mat_name });
-        }
-    }
-    Err(IrError::UndeclaredMaterial {
-        material: format!(
-            "No material found at Z={}nm (check stackup definition)",
-            z_nm
-        )
-        .into(),
-    })
-}
-
 /// Evaluate routing constraints from the PDK profile and route declaration.
 ///
 /// Extracts clearance, current limit, trace width, and thermal parameters.
@@ -217,15 +183,32 @@ pub fn evaluate_constraints(
     })
 }
 
+/// Resolve the conductor material directly from the routing layer definition.
+///
+/// Pure type-driven resolution from the RoutingLayerDatabase (single source of truth).
+/// Fails loudly if the layer does not exist in the routing layer database.
+pub fn resolve_material_for_layer(
+    layer_name: &str,
+    routing_layer_db: &hwc_engine::RoutingLayerDatabase,
+) -> Result<hwc_engine::material::MaterialId, IrError> {
+    routing_layer_db
+        .get_layer(layer_name)
+        .map(|layer| layer.material_id)
+        .map_err(|_| IrError::InvalidRoutingLayer {
+            layer: layer_name.into(),
+            available_layers: routing_layer_db.list_routable_layers().join(", ").into(),
+        })
+}
+
 /// Resolve target layer override from route declaration.
 ///
-/// v0.2.0: Queries the routing layer database for the exact Z coordinate.
-/// NO fallback to bbox midpoint or centerline. If the layer isn't in the
-/// database, routing fails with a clear error.
+/// Queries the routing layer database for the exact Z coordinate.
+/// ZERO heuristics, ZERO fallbacks. If the layer is not routable or missing,
+/// routing immediately fails with an error.
 pub fn resolve_target_layer(
     route: &hwc_parser::Route,
     routing_layer_db: &hwc_engine::RoutingLayerDatabase,
-    stackup_manager: &crate::ir::stackup_manager::StackupManager,
+    _stackup_manager: &crate::ir::stackup_manager::StackupManager,
     start_boundary: Point3D,
 ) -> Result<Option<i64>, IrError> {
     if let Some(ref layer_id) = route.layer {
@@ -235,29 +218,17 @@ pub fn resolve_target_layer(
             layer_name
         );
 
-        // v0.2.0: Query the routing layer database FIRST (single source of truth)
-        let z = match routing_layer_db.get_routing_z(layer_name) {
-            Ok(routing_z) => {
-                eprintln!(
-                    "[ROUTER] Resolved layer '{}' -> Z={}nm from routing layer database (pin_z={})",
-                    layer_name, routing_z, start_boundary.z
-                );
-                routing_z
-            }
-            Err(_) => {
-                // Fall back to stackup manager centerline (legacy path)
-                eprintln!(
-                    "[ROUTER] Layer '{}' not in routing layer database, falling back to stackup manager",
-                    layer_name
-                );
-                stackup_manager
-                    .get_layer_centerline_z(layer_name)
-                    .ok_or_else(|| IrError::InvalidRoutingLayer {
-                        layer: layer_name.into(),
-                        available_layers: routing_layer_db.list_routable_layers().join(", ").into(),
-                    })?
-            }
-        };
+        let z = routing_layer_db
+            .get_routing_z(layer_name)
+            .map_err(|_| IrError::InvalidRoutingLayer {
+                layer: layer_name.into(),
+                available_layers: routing_layer_db.list_routable_layers().join(", ").into(),
+            })?;
+
+        eprintln!(
+            "[ROUTER] Resolved layer '{}' -> Z={}nm from routing layer database (pin_z={})",
+            layer_name, z, start_boundary.z
+        );
 
         Ok(Some(z))
     } else {

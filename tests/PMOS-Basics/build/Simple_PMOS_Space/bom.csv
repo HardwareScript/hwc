@@ -3,7 +3,7 @@ Wafer,Substrate,0.02x0.01x0.00mm,,,,,1
 
 # MATERIAL USAGE (Fabrication)
 Reference,Type,Material,Layer,Area_nm2,Volume_nm3
-Active_Diff,Pour,N_Plus_Diffusion,diff (z:0nm),1450000,217500000
+Active_Diff,Pour,P_Plus_Diffusion,diff (z:0nm),1450000,217500000
 Gate_Poly,Pour,Polysilicon,poly (z:150nm),277500,49950000
 Gate_Poly_Head,Pour,Polysilicon,poly (z:150nm),160000,28800000
 Source_LI,Pour,Titanium_Nitride,li1 (z:530nm),400000,40000000
@@ -12,7 +12,7 @@ Drain_LI,Pour,Titanium_Nitride,li1 (z:530nm),400000,40000000
 Drain_Metal,Pour,Copper,metal1 (z:780nm),400000,144000000
 Gate_Contact_LI,Pour,Titanium_Nitride,li1 (z:530nm),160000,16000000
 Gate_Contact_Metal,Pour,Copper,metal1 (z:780nm),160000,57600000
-Bulk_Tap_Diff,Pour,P_Plus_Diffusion,diff (z:0nm),160000,24000000
+Bulk_Tap_Diff,Pour,N_Plus_Diffusion,diff (z:0nm),160000,24000000
 Bulk_Tap_LI,Pour,Titanium_Nitride,li1 (z:530nm),160000,16000000
 Bulk_Tap_Metal,Pour,Copper,metal1 (z:780nm),160000,57600000
 Source_Pad,Pour,Copper,metal1 (z:780nm),1440000,518400000
@@ -39,8 +39,8 @@ Bulk_Tap_Mcon,Contact,Tungsten,li1 (z:530nm),62500,19250000
 # AGGREGATED MATERIAL TOTALS (Foundry Fabrication Summary)
 Material,Total_Area_nm2,Total_Volume_nm3,Layer_Count,Coverage_Percentage
 Copper,13400000,4824000000,12,4.8%
-N_Plus_Diffusion,1450000,217500000,1,0.5%
-P_Plus_Diffusion,160000,24000000,1,0.1%
+N_Plus_Diffusion,160000,24000000,1,0.1%
+P_Plus_Diffusion,1450000,217500000,1,0.5%
 Polysilicon,437500,78750000,2,0.2%
 Titanium_Nitride,1120000,112000000,4,0.4%
 Tungsten,750000,282937500,12,0.3%

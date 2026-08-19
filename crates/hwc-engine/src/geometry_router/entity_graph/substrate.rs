@@ -104,7 +104,7 @@ impl EntityGraph {
 
     /// Get an iterator over only physical substrate layers (excludes zero-thickness masks).
     /// 
-    /// This is the CORRECT method for export operations (DXF, GDSII, GLB, STL).
+    /// This is the CORRECT method for 3D export operations (GLB, STL).
     /// Mask materials are fabrication instructions and must never be exported as physical geometry.
     /// 
     /// **Architecture (v0.2.2 - Mask Filtering)**:
@@ -124,6 +124,26 @@ impl EntityGraph {
                 true
             }
         })
+    }
+
+    /// Get an iterator over ALL substrate layers including zero-thickness masks (v0.2.3).
+    /// 
+    /// **USE CASE**: 2D lithography export (DXF/GDSII) for silicon fabrication.
+    /// Mask layers (nwell, psdm, npc, etc.) MUST be exported as 2D polygons for
+    /// foundry photolithography steppers, even though they have zero Z-thickness
+    /// and are excluded from 3D physics simulations.
+    /// 
+    /// **CRITICAL**: This method is for 2D fabrication export ONLY.
+    /// - For 3D geometry export (GLB, STL): use `get_physical_substrate_layers()`
+    /// - For parasitic extraction: use `get_physical_substrate_layers()`
+    /// - For DXF/GDSII export: use this method
+    /// 
+    /// **Architecture**:
+    /// - Returns both physical layers (thickness > 0nm) AND mask layers (thickness = 0nm)
+    /// - Mask layers carry 2D polygon boundaries that map to GDSII layer/datatype tuples
+    /// - Physical layers represent actual 3D solids with Z-height
+    pub fn get_all_substrate_layers_including_masks(&self) -> impl Iterator<Item = &SubstrateLayer> {
+        self.substrate_layers.iter()
     }
 
     /// Add component metadata.
@@ -193,22 +213,17 @@ impl EntityGraph {
             }
         }
 
-        // Routed segments are always Pour type
+        // Routed segments are always Pour type with explicit material from layer lineage
         for (seg_net_id, segments) in &self.routed_segments {
             if *seg_net_id == net_id {
                 for seg in segments {
                     let bbox = BoundingBox::new(seg.start, seg.end);
-                    let mut mat: MaterialId = seg.material_id;
-                    if mat == 0 {
-                        let mid_z = (bbox.min.z + bbox.max.z) / 2;
-                        if let Some(matching) = self
-                            .substrate_layers
-                            .iter()
-                            .find(|l| mid_z >= l.bbox.min.z && mid_z <= l.bbox.max.z)
-                        {
-                            mat = matching.material;
-                        }
-                    }
+                    let mat: MaterialId = seg.material_id;
+                    debug_assert!(
+                        mat != 0,
+                        "CRITICAL: Routed segment on net {:?} has unassigned (0) material ID",
+                        net_id
+                    );
                     let layer = SubstrateLayer::new(
                         mat,
                         net_id,
@@ -241,17 +256,7 @@ impl EntityGraph {
             if *seg_net_id == net_id {
                 for seg in segments {
                     let bbox = BoundingBox::new(seg.start, seg.end);
-                    let mut mat: MaterialId = seg.material_id;
-                    if mat == 0 {
-                        let mid_z = (bbox.min.z + bbox.max.z) / 2;
-                        if let Some(matching) = self
-                            .substrate_layers
-                            .iter()
-                            .find(|l| mid_z >= l.bbox.min.z && mid_z <= l.bbox.max.z)
-                        {
-                            mat = matching.material;
-                        }
-                    }
+                    let mat: MaterialId = seg.material_id;
                     let layer = SubstrateLayer::new(
                         mat,
                         net_id,

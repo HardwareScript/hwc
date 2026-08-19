@@ -87,18 +87,30 @@ impl<'a> AutoRouter<'a> {
                                 net_id_to_name.insert(actual_net_id, net_name.clone());
 
                                 if let Some(ref layer_id) = route.layer {
-                                    // v0.2.0: Query routing layer database for routing Z elevation
-                                    // Use the layer bottom Z (routing elevation) not the centerline
-                                    if let Ok(routing_z) =
-                                        self.space.routing_layer_db.get_routing_z(&layer_id.name)
-                                    {
-                                        net_layer_targets.insert(net_name.clone(), routing_z);
-                                        net_layer_targets_by_id.insert(actual_net_id, routing_z);
-                                        net_layer_names_by_id
-                                            .insert(actual_net_id, layer_id.name.clone()); // NEW: Store layer name
-                                        eprintln!("[ROUTING BUILDER] Route for net '{}' (id={}) targets layer '{}' at routing Z={}nm", 
-                                            net_name, actual_net_id.raw(), layer_id.name, routing_z);
-                                    }
+                                    let routing_z = self
+                                        .space
+                                        .routing_layer_db
+                                        .get_routing_z(&layer_id.name)
+                                        .map_err(|_| IrError::InvalidRoutingLayer {
+                                            layer: layer_id.name.clone(),
+                                            available_layers: self
+                                                .space
+                                                .routing_layer_db
+                                                .list_routable_layers()
+                                                .join(", ")
+                                                .into(),
+                                        })?;
+                                    net_layer_targets.insert(net_name.clone(), routing_z);
+                                    net_layer_targets_by_id.insert(actual_net_id, routing_z);
+                                    net_layer_names_by_id
+                                        .insert(actual_net_id, layer_id.name.clone());
+                                    eprintln!(
+                                        "[ROUTING BUILDER] Route for net '{}' (id={}) targets layer '{}' at routing Z={}nm",
+                                        net_name,
+                                        actual_net_id.raw(),
+                                        layer_id.name,
+                                        routing_z
+                                    );
                                 }
                                 if let Some(ref width_expr) = route.width {
                                     if let Ok(w_nm) =

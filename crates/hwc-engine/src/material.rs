@@ -109,6 +109,9 @@ pub struct MaterialRegistry {
     id_to_process: Vec<ManufacturingProcess>,
     /// Fast lookup for physics: ID → Physical properties (resistivity, thermal conductivity)
     id_to_physical: FxHashMap<MaterialId, MaterialPhysicalProps>,
+    /// Fast lookup for GDSII export: ID → (layer, datatype) tuple (v0.2.3)
+    /// Only populated for mask materials used in 2D lithography export
+    id_to_gds_mapping: FxHashMap<MaterialId, (u32, u32)>,
 }
 
 impl MaterialRegistry {
@@ -124,6 +127,7 @@ impl MaterialRegistry {
             id_to_category: vec![MaterialCategory::Insulator],
             id_to_process: vec![ManufacturingProcess::Deposited],
             id_to_physical: FxHashMap::default(),
+            id_to_gds_mapping: FxHashMap::default(), // v0.2.3
         };
         registry.name_to_id.insert("Air".into(), AIR_MATERIAL_ID);
         registry
@@ -324,6 +328,49 @@ impl MaterialRegistry {
     #[inline]
     pub fn get_material(&self, id: MaterialId) -> Option<&MaterialPhysicalProps> {
         self.get_physical_props(id)
+    }
+
+    /// Store GDSII layer mapping for a material (v0.2.3)
+    ///
+    /// Used for 2D lithography export. Maps a mask material to its GDSII layer/datatype.
+    /// 
+    /// # Arguments
+    /// * `id` - Material ID
+    /// * `layer` - GDSII layer number (e.g., 64 for NWELL)
+    /// * `datatype` - GDSII datatype number (e.g., 20 for drawing layer)
+    pub fn set_gds_mapping(&mut self, id: MaterialId, layer: u32, datatype: u32) {
+        self.id_to_gds_mapping.insert(id, (layer, datatype));
+    }
+
+    /// Get GDSII layer mapping for a material (v0.2.3)
+    ///
+    /// Returns `Some((layer, datatype))` if the material has a GDS mapping, `None` otherwise.
+    /// Typically only mask materials have GDS mappings.
+    #[inline]
+    pub fn get_gds_mapping(&self, id: MaterialId) -> Option<(u32, u32)> {
+        self.id_to_gds_mapping.get(&id).copied()
+    }
+
+    /// Get GDSII layer mapping by material name (v0.2.3)
+    ///
+    /// Convenience method that resolves name→ID→gds_mapping in one call.
+    #[inline]
+    pub fn get_gds_mapping_by_name(&self, name: &str) -> Option<(u32, u32)> {
+        let id = self.name_to_id.get(name.trim())?;
+        self.id_to_gds_mapping.get(id).copied()
+    }
+
+    /// Check if a material is a zero-thickness fabrication mask (v0.2.3)
+    ///
+    /// Mask materials are used for lithography process instructions but do not
+    /// participate in 3D physics calculations (meshing, parasitic extraction).
+    ///
+    /// Returns `true` if the material category is `MaterialCategory::Mask`.
+    #[inline]
+    pub fn is_mask(&self, id: MaterialId) -> bool {
+        self.get_category(id)
+            .map(|cat| matches!(cat, MaterialCategory::Mask))
+            .unwrap_or(false)
     }
 }
 

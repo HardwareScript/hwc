@@ -63,12 +63,6 @@ impl EntityGraph {
                 let seg_material_id = if start.z == end.z {
                     if let Some(ref resolver) = z_to_material {
                         resolver(start.z).unwrap_or(default_material_id)
-                    } else if default_material_id == 0 {
-                        self.substrate_layers
-                            .iter()
-                            .find(|l| start.z >= l.bbox.min.z && start.z <= l.bbox.max.z)
-                            .map(|l| l.material)
-                            .unwrap_or(default_material_id)
                     } else {
                         default_material_id
                     }

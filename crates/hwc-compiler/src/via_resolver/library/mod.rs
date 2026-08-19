@@ -205,10 +205,21 @@ impl ViaLibrary {
                     }
 
                     // 3. Generate via transitions for valid ascending layer pairs (from_idx < to_idx)
+                    // PHYSICAL PROCESS INVARIANT: A single via cannot span across intermediate conductive routing layers.
+                    // Transitions must be adjacent conductive strata across dielectric gaps (or stacked ladders).
                     for &from_idx in &from_layers {
                         for &to_idx in &to_layers {
                             if from_idx >= to_idx {
                                 continue; // Ascending stackup order only
+                            }
+
+                            // Reject pairs that have an intermediate conductive layer between them
+                            let has_intervening_conductive = (from_idx + 1..to_idx).any(|k| {
+                                let layer_name = &stackup_manager.ordered_layers()[k];
+                                stackup_manager.is_layer_conductive(layer_name)
+                            });
+                            if has_intervening_conductive {
+                                continue;
                             }
 
                             let from_layer_name = &stackup_manager.ordered_layers()[from_idx];

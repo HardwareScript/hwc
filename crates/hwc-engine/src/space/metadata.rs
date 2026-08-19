@@ -26,6 +26,8 @@ pub struct KeepOutZone {
 pub struct PourMetadata {
     pub name: CompactString,
     pub material_name: CompactString,
+    /// Stackup layer name where the pour resides
+    pub layer_name: CompactString,
     /// Bottom Z elevation of the pour in nanometers (v0.1.7 physical truth).
     pub z_bottom_nm: i64,
     pub net: Option<CompactString>,

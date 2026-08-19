@@ -48,6 +48,7 @@ pub fn register_pour_netlist(
     space: &mut HardwareSpace,
     pour: &PourPlacement,
     resolved_net_name: Option<CompactString>,
+    layer_name: CompactString,
     z_start_nm: i64,
     start_with_z: Point3D,
     end_with_z: Point3D,
@@ -62,6 +63,7 @@ pub fn register_pour_netlist(
     space.pours.push(PourMetadata {
         name: pour.name.to_string(),
         material_name: pour.material.clone(),
+        layer_name,
         z_bottom_nm: z_start_nm,
         net: resolved_net_name.clone(),
         area_nm2: 0,

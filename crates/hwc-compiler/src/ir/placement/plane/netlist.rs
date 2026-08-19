@@ -19,9 +19,15 @@ pub fn push_plane_metadata(
     area_nm2: i64,
     bbox: BoundingBox,
 ) {
+    let layer_name: CompactString = match &plane.elevation {
+        hwc_parser::Elevation::Semantic(id) => id.to_string().into(),
+        _ => "top_copper".into(),
+    };
+
     space.pours.push(PourMetadata {
         name: plane.name.to_string(),
         material_name: plane.material.clone(),
+        layer_name,
         z_bottom_nm: z_start_nm,
         net: resolved_net_name,
         area_nm2,

@@ -68,27 +68,65 @@ pub fn validate_junction_breakdown(
 
     // 3. Evaluate each semiconductor pour
     for pour in &semiconductor_pours {
-        // Enforce explicit net declaration (Fail Loudly)
-        let net_name = pour.net.as_ref().ok_or_else(|| {
-            format!(
-                "[DRC JUNCTION] FATAL: Semiconductor pour '{}' has no net assignment. \
-                 All semiconductor regions must declare a net connection.",
-                pour.name
-            )
-        })?;
+        // Enforce explicit net declaration or multi-terminal device binding
+        let (net_name, applied_voltage) = if let Some(ref net) = pour.net {
+            let v = space
+                .net_electrical_properties
+                .get(net)
+                .and_then(|props| props.potential_v)
+                .ok_or_else(|| {
+                    format!(
+                        "[DRC JUNCTION] FATAL: Net '{}' on semiconductor pour '{}' is missing required 'potential' declaration. \
+                         Add 'potential: <value>V' to your nets: section.",
+                        net, pour.name
+                    )
+                })?;
+            (net.as_str(), v)
+        } else if let Some(ref binding) = pour.device_binding {
+            // Multi-terminal semiconductor channel pour (e.g. Active_Diff bound to M1.S, M1.D)
+            // Resolve worst-case potential among the device's connected terminals
+            let dev_instance = space
+                .device_instances
+                .iter()
+                .find(|d| d.name == binding.device_name);
 
-        // Enforce explicit net voltage (No default to 0V - Fail Loudly)
-        let applied_voltage = space
-            .net_electrical_properties
-            .get(net_name)
-            .and_then(|props| props.potential_v)
-            .ok_or_else(|| {
-                format!(
-                    "[DRC JUNCTION] FATAL: Net '{}' on semiconductor pour '{}' is missing required 'potential' declaration. \
-                     Add 'potential: <value>V' to your nets: section.",
-                    net_name, pour.name
-                )
-            })?;
+            let mut max_abs_v = -1.0;
+            let mut resolved_v = 0.0;
+            let mut resolved_net = None;
+
+            if let Some(dev) = dev_instance {
+                for term in &binding.terminals {
+                    if let Some(term_net) = dev.terminal_nets.get(term) {
+                        if let Some(v) = space
+                            .net_electrical_properties
+                            .get(term_net)
+                            .and_then(|p| p.potential_v)
+                        {
+                            if v.abs() >= max_abs_v {
+                                max_abs_v = v.abs();
+                                resolved_v = v;
+                                resolved_net = Some(term_net.as_str());
+                            }
+                        }
+                    }
+                }
+            }
+
+            if let Some(net) = resolved_net {
+                (net, resolved_v)
+            } else {
+                return Err(format!(
+                    "[DRC JUNCTION] FATAL: Semiconductor pour '{}' has no net assignment and device binding '{:?}' could not resolve terminal potentials.",
+                    pour.name, binding
+                ));
+            }
+        } else {
+            return Err(format!(
+                "[DRC JUNCTION] FATAL: Semiconductor pour '{}' has no net assignment. \
+                 All semiconductor regions must declare a net connection or device binding.",
+                pour.name
+            ));
+        };
 
         // Query breakdown voltage using standard property name
         let props = material_registry
@@ -179,7 +217,7 @@ pub fn validate_junction_breakdown(
                         );
 
                         violations.push(DrcViolation::JunctionBreakdownViolation {
-                            net: net_name.clone(),
+                            net: net_name.into(),
                             material: pour.material_name.clone(),
                             substrate_material: other.material_name.clone(),
                             applied_voltage_v: delta_v,
@@ -215,7 +253,7 @@ pub fn validate_junction_breakdown(
                     );
 
                     violations.push(DrcViolation::JunctionBreakdownViolation {
-                        net: net_name.clone(),
+                        net: net_name.into(),
                         material: pour.material_name.clone(),
                         substrate_material: ground_net_name.clone(),
                         applied_voltage_v: delta_v,

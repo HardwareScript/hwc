@@ -1,4 +1,4 @@
-﻿mod dependency_graph;
+mod dependency_graph;
 mod finalization;
 pub mod placement_items;
 mod placement_loop;
@@ -172,10 +172,11 @@ pub fn compile_single_space(
     space.stackup_layers = stackup_manager.export_stackup_layers(&space.material_registry);
 
     // **v0.2.2: Register dielectric stackup layers as substrate base layers in entity graph**
-    // This allows the substrate rendering code to find and render dielectric layers with via cutouts
+    // Strictly register ONLY physical 3D dielectric volumes (LayerKind::Dielectric with thickness > 0).
+    // 2D Lithographic masks (LayerKind::LithoMask) are processing directives and MUST NOT pollute the substrate mesh.
     for stackup_layer in &space.stackup_layers {
-        if !stackup_layer.is_routable {
-            // This is a dielectric layer - register it as a substrate base layer
+        if stackup_layer.kind == hwc_engine::stackup::LayerKind::Dielectric && stackup_layer.thickness > 0 {
+            // This is a true dielectric layer - register it as a substrate base layer
             let material_id = space
                 .material_registry
                 .get_id(&stackup_layer.material_name)
@@ -196,7 +197,7 @@ pub fn compile_single_space(
             );
 
             eprintln!(
-                "[STACKUPâ†’SUBSTRATE] Registering dielectric layer '{}' (Z={}â†’{}nm, material={}) as substrate base",
+                "[STACKUP→SUBSTRATE] Registering dielectric layer '{}' (Z={}→{}nm, material={}) as substrate base",
                 stackup_layer.name, stackup_layer.z_bottom, stackup_layer.z_top, stackup_layer.material_name
             );
 
@@ -331,6 +332,12 @@ pub fn compile_single_space(
             profile.as_ref(),
         )?;
     }
+
+    // Synchronize entity_graph with the single source of truth (routing_database)
+    // so via_resolver, DRC, and finalization operate on exact layer-lineage materials.
+    space
+        .entity_graph
+        .sync_from_routing_database(&space.routing_database, &space.routing_layer_db);
 
     finalization::finalize(
         &mut space,

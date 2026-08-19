@@ -84,6 +84,13 @@ pub fn create_hardware_space(
         };
         material_registry.register_with_properties(&name, category, process);
 
+        // v0.2.3: Store GDSII layer mapping if present
+        if let Some((layer, datatype)) = mat_def.get_gds_mapping() {
+            if let Some(id) = material_registry.get_id(&name) {
+                material_registry.set_gds_mapping(id, layer, datatype);
+            }
+        }
+
         // Extract ALL physical properties dynamically (no hardcoding!)
         let mut props = hwc_engine::material::MaterialPhysicalProps::new();
 

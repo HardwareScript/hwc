@@ -153,39 +153,32 @@ pub fn route_manual(
         None,
     )?;
 
-    // v0.1.7: Resolve material dynamically from the stackup layer
-    // This ensures that manual traces merge perfectly with via rings/pours on the same layer.
-    let first_wp_z = waypoints.first().map(|p| p.z).unwrap_or(0);
-    let (material_name, route_layer_name): (
-        compact_str::CompactString,
-        compact_str::CompactString,
-    ) = (|| -> Option<(compact_str::CompactString, compact_str::CompactString)> {
-        let layer_name = stackup_manager.get_layer_name_at_z(first_wp_z)?;
-        let material = profile
-            .and_then(|p| p.stackup.as_ref())
-            .and_then(|stackup| {
-                stackup
-                    .layers
-                    .iter()
-                    .find(|l| l.name.name == layer_name)
-                    .map(|l| l.material.clone())
+    // Resolve routing layer & material directly from RoutingLayerDatabase (ZERO HEURISTICS)
+    let (route_layer_name, copper_id) = if let Some(ref layer_id) = route.layer {
+        let layer_name = layer_id.name.clone();
+        let layer_def = space
+            .routing_layer_db
+            .get_layer(&layer_name)
+            .map_err(|_| IrError::InvalidRoutingLayer {
+                layer: layer_name.clone(),
+                available_layers: space.routing_layer_db.list_routable_layers().join(", ").into(),
             })?;
-        Some((material, layer_name.into()))
-    })()
-    .ok_or_else(|| IrError::InvalidRouteExpression {
-        expression: "manual route".into(),
-        reason: format!(
-            "Could not resolve material at Z={}nm from stackup",
-            first_wp_z
-        ),
-    })?;
-
-    let copper_id = space
-        .material_registry
-        .get_id(&material_name)
-        .ok_or_else(|| IrError::UndeclaredMaterial {
-            material: material_name.clone(),
+        (layer_name, layer_def.material_id)
+    } else {
+        let first_wp_z = waypoints.first().map(|p| p.z).unwrap_or(0);
+        let layer = space.find_layer_at_z(first_wp_z).ok_or_else(|| IrError::InvalidRouteExpression {
+            expression: "manual route".into(),
+            reason: format!("No routing layer found at Z={}nm", first_wp_z),
         })?;
+        let layer_def = space
+            .routing_layer_db
+            .get_layer(&layer.name)
+            .map_err(|_| IrError::InvalidRoutingLayer {
+                layer: layer.name.clone(),
+                available_layers: space.routing_layer_db.list_routable_layers().join(", ").into(),
+            })?;
+        (layer.name.clone(), layer_def.material_id)
+    };
 
     // v0.1.7: Create analytic trace for substrate layer realization
     // (manual routes must use the same analytic → substrate pipeline as auto routes)

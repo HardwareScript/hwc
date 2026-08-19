@@ -384,10 +384,17 @@ impl<'a> DeviceGeometryContext<'a> {
         space: Option<&'a HardwareSpace>,
     ) -> Result<Self, String> {
         let mut terminals = FxHashMap::default();
+        let partitioned_paths = Self::partition_terminal_geometries(terminal_pours);
 
-        for (term_name, pours) in terminal_pours {
-            let geom = TerminalGeometry::from_pours(term_name.as_str(), pours)?;
-            terminals.insert(term_name.clone(), geom);
+        for (term_name, paths) in partitioned_paths {
+            if !paths.is_empty() {
+                terminals.insert(term_name.clone(), TerminalGeometry::from_paths(term_name.as_str(), paths));
+            } else if let Some(pours) = terminal_pours.get(&term_name) {
+                if !pours.is_empty() {
+                    let geom = TerminalGeometry::from_pours(term_name.as_str(), pours)?;
+                    terminals.insert(term_name.clone(), geom);
+                }
+            }
         }
 
         Ok(Self {
@@ -396,6 +403,199 @@ impl<'a> DeviceGeometryContext<'a> {
             terminal_pours,
             space,
         })
+    }
+
+    /// Partitions shared multi-terminal channel pours using single-terminal contact pours as geometric seeds.
+    ///
+    /// ## Zero-Magic Seed-Projected Manifold Partitioning (v0.2.2)
+    ///
+    /// Instead of string matching on "g" or "gate", this function:
+    /// 1. Separates single-terminal contact pours (spatial seeds) from multi-terminal channel pours
+    /// 2. For shared channel pours bound to 2+ terminals, partitions them using Voronoi/half-plane bisectors
+    /// 3. Assigns each partitioned region to the terminal with the closest contact seed centroid
+    ///
+    /// This mathematically partitions a continuous Active_Diff pour bound to [S, D] into exact
+    /// Source and Drain diffusion islands without heuristics.
+    fn partition_terminal_geometries(
+        terminal_pours: &FxHashMap<CompactString, Vec<PourMetadata>>,
+    ) -> FxHashMap<CompactString, Paths64> {
+        let mut terminal_paths: FxHashMap<CompactString, Paths64> = FxHashMap::default();
+        let mut single_terminal_seeds: FxHashMap<CompactString, Vec<Vector2D>> = FxHashMap::default();
+        let mut shared_pours: Vec<&PourMetadata> = Vec::new();
+
+        // 1. Separate single-terminal contact pours from multi-terminal channel pours
+        for (term, pours) in terminal_pours {
+            for pour in pours {
+                // Skip pours without device bindings (they won't be partitioned)
+                let binding_term_count = pour
+                    .device_binding
+                    .as_ref()
+                    .map(|b| b.terminals.len())
+                    .unwrap_or(1); // Default to 1 if no binding (treated as single-terminal)
+
+                if binding_term_count >= 2 {
+                    // Multi-terminal channel pour (e.g. Active_Diff bound to [S, D])
+                    if !shared_pours.iter().any(|p| p.name == pour.name) {
+                        shared_pours.push(pour);
+                    }
+                } else {
+                    // Single-terminal contact pour (e.g. Source_LI bound to [S])
+                    if let Some(ref bbox) = pour.bbox {
+                        let mut path = Path64::new();
+                        path.push(Point64::new(bbox.min.x, bbox.min.y));
+                        path.push(Point64::new(bbox.max.x, bbox.min.y));
+                        path.push(Point64::new(bbox.max.x, bbox.max.y));
+                        path.push(Point64::new(bbox.min.x, bbox.max.y));
+                        let mut raw = Paths64::new();
+                        raw.push(path);
+                        let unioned = clipper2_rust::union_64(&raw, &Paths64::new(), FillRule::NonZero);
+
+                        terminal_paths.entry(term.clone()).or_default().extend(unioned.clone());
+                        
+                        let cx = (bbox.min.x + bbox.max.x) as f64 / 2.0;
+                        let cy = (bbox.min.y + bbox.max.y) as f64 / 2.0;
+                        single_terminal_seeds
+                            .entry(term.clone())
+                            .or_default()
+                            .push(Vector2D::new(cx, cy));
+                    }
+                }
+            }
+        }
+
+        // 2. Partition shared channel pours among their bound terminals using geometric seeds
+        for shared_pour in shared_pours {
+            let bbox = match shared_pour.bbox.as_ref() {
+                Some(b) => b,
+                None => continue,
+            };
+
+            let bound_terminals = shared_pour
+                .device_binding
+                .as_ref()
+                .map(|b| b.terminals.clone())
+                .unwrap_or_default();
+
+            if bound_terminals.len() < 2 {
+                continue;
+            }
+
+            // Find seeds belonging to the bound terminals
+            let seeds: Vec<(CompactString, Vector2D)> = bound_terminals
+                .iter()
+                .filter_map(|t| {
+                    single_terminal_seeds.get(t).and_then(|pts| {
+                        if pts.is_empty() {
+                            None
+                        } else {
+                            let avg_x = pts.iter().map(|p| p.x).sum::<f64>() / pts.len() as f64;
+                            let avg_y = pts.iter().map(|p| p.y).sum::<f64>() / pts.len() as f64;
+                            Some((t.clone(), Vector2D::new(avg_x, avg_y)))
+                        }
+                    })
+                })
+                .collect();
+
+            // If we have distinct spatial seeds for the terminals, partition using Voronoi bisector
+            if seeds.len() >= 2 {
+                let mut channel_path = Path64::new();
+                channel_path.push(Point64::new(bbox.min.x, bbox.min.y));
+                channel_path.push(Point64::new(bbox.max.x, bbox.min.y));
+                channel_path.push(Point64::new(bbox.max.x, bbox.max.y));
+                channel_path.push(Point64::new(bbox.min.x, bbox.max.y));
+                let mut channel_paths = Paths64::new();
+                channel_paths.push(channel_path);
+
+                // Compute separating hyperplane between seed A and seed B
+                let (term_a, seed_a) = &seeds[0];
+                let (term_b, seed_b) = &seeds[1];
+                let mid_x = (seed_a.x + seed_b.x) / 2.0;
+                let mid_y = (seed_a.y + seed_b.y) / 2.0;
+                let dx = seed_b.x - seed_a.x;
+                let dy = seed_b.y - seed_a.y;
+                let is_horizontal_flux = dx.abs() >= dy.abs();
+
+                // Construct half-plane clipper boxes
+                let (half_plane_a, half_plane_b) = if is_horizontal_flux {
+                    let split_x = mid_x.round() as i64;
+                    let (min_x_a, max_x_a, min_x_b, max_x_b) = if seed_a.x < seed_b.x {
+                        (bbox.min.x, split_x, split_x, bbox.max.x)
+                    } else {
+                        (split_x, bbox.max.x, bbox.min.x, split_x)
+                    };
+
+                    let mut pa = Path64::new();
+                    pa.push(Point64::new(min_x_a, bbox.min.y));
+                    pa.push(Point64::new(max_x_a, bbox.min.y));
+                    pa.push(Point64::new(max_x_a, bbox.max.y));
+                    pa.push(Point64::new(min_x_a, bbox.max.y));
+
+                    let mut pb = Path64::new();
+                    pb.push(Point64::new(min_x_b, bbox.min.y));
+                    pb.push(Point64::new(max_x_b, bbox.min.y));
+                    pb.push(Point64::new(max_x_b, bbox.max.y));
+                    pb.push(Point64::new(min_x_b, bbox.max.y));
+
+                    (pa, pb)
+                } else {
+                    let split_y = mid_y.round() as i64;
+                    let (min_y_a, max_y_a, min_y_b, max_y_b) = if seed_a.y < seed_b.y {
+                        (bbox.min.y, split_y, split_y, bbox.max.y)
+                    } else {
+                        (split_y, bbox.max.y, bbox.min.y, split_y)
+                    };
+
+                    let mut pa = Path64::new();
+                    pa.push(Point64::new(bbox.min.x, min_y_a));
+                    pa.push(Point64::new(bbox.max.x, min_y_a));
+                    pa.push(Point64::new(bbox.max.x, max_y_a));
+                    pa.push(Point64::new(bbox.min.x, max_y_a));
+
+                    let mut pb = Path64::new();
+                    pb.push(Point64::new(bbox.min.x, min_y_b));
+                    pb.push(Point64::new(bbox.max.x, min_y_b));
+                    pb.push(Point64::new(bbox.max.x, max_y_b));
+                    pb.push(Point64::new(bbox.min.x, max_y_b));
+
+                    (pa, pb)
+                };
+
+                let mut box_a = Paths64::new();
+                box_a.push(half_plane_a);
+                let mut box_b = Paths64::new();
+                box_b.push(half_plane_b);
+
+                let geom_a = clipper2_rust::intersect_64(&channel_paths, &box_a, FillRule::NonZero);
+                let geom_b = clipper2_rust::intersect_64(&channel_paths, &box_b, FillRule::NonZero);
+
+                let entry_a = terminal_paths.entry(term_a.clone()).or_default();
+                *entry_a = clipper2_rust::union_64(entry_a, &geom_a, FillRule::NonZero);
+
+                let entry_b = terminal_paths.entry(term_b.clone()).or_default();
+                *entry_b = clipper2_rust::union_64(entry_b, &geom_b, FillRule::NonZero);
+            } else {
+                // If no distinct terminal seeds exist, assign channel to all bound terminals (e.g. 2-terminal resistor)
+                let mut channel_path = Path64::new();
+                channel_path.push(Point64::new(bbox.min.x, bbox.min.y));
+                channel_path.push(Point64::new(bbox.max.x, bbox.min.y));
+                channel_path.push(Point64::new(bbox.max.x, bbox.max.y));
+                channel_path.push(Point64::new(bbox.min.x, bbox.max.y));
+                let mut channel_paths = Paths64::new();
+                channel_paths.push(channel_path);
+
+                for term in &bound_terminals {
+                    let entry = terminal_paths.entry(term.clone()).or_default();
+                    *entry = clipper2_rust::union_64(entry, &channel_paths, FillRule::NonZero);
+                }
+            }
+        }
+
+        // Ensure all terminals have an entry
+        for term in terminal_pours.keys() {
+            terminal_paths.entry(term.clone()).or_default();
+        }
+
+        terminal_paths
     }
 
     /// Evaluates the carrier conduction flux vector between two terminal centroids

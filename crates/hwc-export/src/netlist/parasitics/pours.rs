@@ -2,7 +2,7 @@
 
 use rustc_hash::FxHashMap;
 
-use super::geometry::{find_dielectric_below, find_stackup_layer};
+use super::geometry::{find_dielectric_below, find_stackup_layer, find_stackup_layer_by_name};
 use super::types::{ExtractedClusterNode, EPS_0};
 use crate::netlist::types::{ParasiticElement, PhysicalNetlistGraph};
 use hwc_engine::HardwareSpace;
@@ -27,7 +27,13 @@ pub fn extract_interconnect_pours(
             None => continue,
         };
 
-        if let Some(stackup_layer) = find_stackup_layer(space, &pour.material_name, pour.z_bottom_nm) {
+        let stackup_layer_opt = if !pour.layer_name.is_empty() {
+            find_stackup_layer_by_name(space, pour.layer_name.as_str())
+        } else {
+            find_stackup_layer(space, &pour.material_name, pour.z_bottom_nm)
+        };
+
+        if let Some(stackup_layer) = stackup_layer_opt {
             let pour_layer_name = stackup_layer.name.as_str();
 
             if let Some(ref bb) = pour.bbox {

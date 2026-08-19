@@ -1,4 +1,4 @@
-﻿//! Main routing pipeline orchestrator.
+//! Main routing pipeline orchestrator.
 //!
 //! Coordinates the 3-phase automatic routing pipeline:
 //! 1. Constraint Manager
@@ -136,14 +136,20 @@ pub fn route_automatic(
 //         goal_normal.x, goal_normal.y
 //     );
 
-    // Resolve material
-    let route_z = target_z_nm.unwrap_or(start_boundary.z);
-    let copper_id = super::constraints::resolve_material_for_z(
-        route_z,
-        stackup_manager,
-        &space.material_registry,
-        profile,
-    )?;
+    // Resolve routing layer & material directly from RoutingLayerDatabase (ZERO HEURISTICS)
+    let (_route_layer_name, route_material_id) = if let Some(ref layer_id) = route.layer {
+        let layer_name = layer_id.name.clone();
+        let mat_id = super::constraints::resolve_material_for_layer(&layer_name, &space.routing_layer_db)?;
+        (layer_name, mat_id)
+    } else {
+        let route_z = target_z_nm.unwrap_or(start_boundary.z);
+        let layer = space.find_layer_at_z(route_z).ok_or_else(|| IrError::InvalidRouteExpression {
+            expression: "automatic route layer".into(),
+            reason: format!("No routing layer found at Z={}nm for net '{}'", route_z, net_name),
+        })?;
+        let mat_id = super::constraints::resolve_material_for_layer(&layer.name, &space.routing_layer_db)?;
+        (layer.name.clone(), mat_id)
+    };
 
     let from_component_name = crate::ir::routing::helpers::construct_entity_name(&route.from)?;
     let to_component_name = crate::ir::routing::helpers::construct_entity_name(&route.to)?;
@@ -365,7 +371,7 @@ pub fn route_automatic(
             net_id,
             cross_section: hwc_engine::space::CrossSection::new(trace_width_nm, trace_thickness_nm),
             segments: segments.clone(),
-            material: copper_id,
+            material: route_material_id,
             net_name: net_name.clone(),
             current: hwc_engine::space::CurrentRating::new(net_budget_current_ma, current_ma),
             layer_z_range: Some(layer_z_range),

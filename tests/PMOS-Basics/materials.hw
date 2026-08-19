@@ -1,4 +1,5 @@
-# materials.hw - SkyWater SKY130 Materials Database for 1.8V NMOS
+# materials.hw - SkyWater SKY130 Materials Database for 1.8V PMOS
+
 import * from @std/primitives/units
 
 # ============================================================================
@@ -95,19 +96,6 @@ export material P_Substrate:
         thermal_conductivity: 148.0W_mK
         max_junction_voltage: 1.98V
 
-export material N_Plus_Diffusion:
-    category: semiconductor
-    symbol: NDiff
-    process: deposited
-    properties:
-        color: "#90EE90"
-        opacity: 0.6
-        resistivity: 5.0e-5ohm_m
-        thermal_conductivity: 148.0W_mK
-        max_current_density: 1e3A_mm2
-        max_junction_voltage: 1.98V
-        contact_resistance: 3.63e-8ohm_cm2
-
 export material P_Plus_Diffusion:
     category: semiconductor
     symbol: PDiff
@@ -116,6 +104,19 @@ export material P_Plus_Diffusion:
         color: "#FF8080"
         opacity: 0.6
         resistivity: 5.0e-4ohm_m
+        thermal_conductivity: 148.0W_mK
+        max_current_density: 1e3A_mm2
+        max_junction_voltage: 1.98V
+        contact_resistance: 3.63e-8ohm_cm2
+
+export material N_Plus_Diffusion:
+    category: semiconductor
+    symbol: NDiff
+    process: deposited
+    properties:
+        color: "#90EE90"
+        opacity: 0.6
+        resistivity: 5.0e-5ohm_m
         thermal_conductivity: 148.0W_mK
         max_current_density: 1e3A_mm2
         max_junction_voltage: 1.98V
@@ -143,13 +144,13 @@ export material Air:
 # ZERO-THICKNESS FABRICATION & DOPING MASKS
 # ============================================================================
 
-export material N_Plus_Implant_Mask:
+export material N_Well_Mask:
     category: mask
-    symbol: NSDM
-    gds_mapping: [layer: 68, datatype: 44]
+    symbol: NWELL
+    gds_mapping: [layer: 64, datatype: 20]
     properties:
-        color: "#80FFFF"
-        opacity: 0.3
+        color: "#6495ED"
+        opacity: 0.25
 
 export material P_Plus_Implant_Mask:
     category: mask
@@ -157,6 +158,14 @@ export material P_Plus_Implant_Mask:
     gds_mapping: [layer: 68, datatype: 20]
     properties:
         color: "#FF80FF"
+        opacity: 0.3
+
+export material N_Plus_Implant_Mask:
+    category: mask
+    symbol: NSDM
+    gds_mapping: [layer: 68, datatype: 44]
+    properties:
+        color: "#80FFFF"
         opacity: 0.3
 
 export material Tap_Mask:
@@ -177,8 +186,8 @@ export material Nitride_Poly_Cut_Mask:
 
 export material High_Vt_Mask:
     category: mask
-    symbol: HVTN
-    gds_mapping: [layer: 78, datatype: 45]
+    symbol: HVTP
+    gds_mapping: [layer: 78, datatype: 44]
     properties:
         color: "#9370DB"
         opacity: 0.3

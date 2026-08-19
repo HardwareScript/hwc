@@ -33,6 +33,11 @@ pub struct MaterialDefinition {
     pub anisotropy: Option<f64>,      // 0.0-1.0 (v0.1.7)
     pub anisotropy_rotation: Option<f64>, // 0.0-2PI (v0.1.7)
     pub texture: Option<CompactString>, // Procedural texture name (v0.1.7)
+
+    /// GDSII layer mapping for 2D lithography export (v0.2.3)
+    /// Format: (layer, datatype) e.g., (64, 20) for NWELL layer
+    /// Only used for mask categories during DXF/GDSII export
+    pub gds_mapping: Option<(u32, u32)>,
 }
 
 /// Manufacturing process behavior for Z-axis placement (v0.1.7)
@@ -224,5 +229,11 @@ impl MaterialDefinition {
     /// Get procedural texture name (v0.1.7)
     pub fn get_texture(&self) -> Option<CompactString> {
         self.texture.clone()
+    }
+
+    /// Get GDSII layer mapping (v0.2.3)
+    /// Returns (layer, datatype) tuple for 2D lithography export
+    pub fn get_gds_mapping(&self) -> Option<(u32, u32)> {
+        self.gds_mapping
     }
 }

@@ -306,14 +306,6 @@ fn generate_transient_stimulus(
     if let Some(space_def) = space_def {
         for net_decl in &space_def.nets {
             if let Some(ref potential) = net_decl.potential {
-                // In transient analysis, do not attach ideal DC sources to output pins to allow switching dynamics
-                let is_output_pin = module_def.map_or(false, |m| {
-                    m.pins.iter().any(|p| p.name.as_str() == net_decl.name.as_str() && p.direction == PinDirection::Output)
-                });
-                if is_output_pin {
-                    continue;
-                }
-
                 if should_generate_voltage_source(net_decl, module_def) {
                     let mv = potential.to_millivolts(unit_registry)
                         .map_err(|e| format!("Failed to convert potential for net '{}': {}", net_decl.name, e))?;

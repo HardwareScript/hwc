@@ -12,6 +12,18 @@
 //! **v0.2.2 Architecture**: DXF is now a pure reader of unified geometry.
 //! All copper contours come from the unified_geometry module (single source of truth).
 //! No geometry calculations or Boolean operations happen here.
+//!
+//! **v0.2.3 Dual-Path Export Architecture**:
+//! - **PCB Mode**: Exports only physical layers (masks excluded)
+//! - **ASIC Mode**: Exports ALL layers including zero-thickness masks for lithography
+//!   - Mask layers (N_Well_Mask, P_Plus_Implant_Mask, Nitride_Poly_Cut_Mask, etc.) are exported as 2D polygons
+//!   - GDS mapping comments (999 group code) document layer/datatype for foundry conversion
+//!   - Physical layers represent actual 3D solids
+//!   - Masks are identified by MaterialCategory::Mask and exported even if SubstrateLayerType::Pour
+//!
+//! This ensures mask layers are:
+//! - ❌ Excluded from 3D physics (GLB, parasitic extraction, Z-height calculations)
+//! - ✅ Included in 2D fabrication export (DXF → GDSII workflow for silicon tape-out)
 
 use hwc_compiler::SymbolTable;
 use hwc_engine::geometry_router::entity_graph::SubstrateLayerType;
@@ -45,14 +57,14 @@ pub fn export(
         .is_some_and(|c| c.technology.is_asic());
 
     if is_asic {
-        // ASIC Mode: Write only the physical semiconductor mask layers from the stackup
-        // v0.2.2: Use get_physical_substrate_layers() to exclude zero-thickness masks
-        let physical_layers: Vec<_> = space
+        // ASIC Mode: Register all physical layers AND zero-thickness mask layers
+        // v0.2.3: Use get_all_substrate_layers_including_masks() to include masks for lithography
+        let all_layers: Vec<_> = space
             .entity_graph
-            .get_physical_substrate_layers(&space.material_registry)
+            .get_all_substrate_layers_including_masks()
             .collect();
         let mut seen_materials = rustc_hash::FxHashSet::default();
-        for layer in &physical_layers {
+        for layer in &all_layers {
             if seen_materials.insert(layer.material) {
                 let mat_name = space
                     .material_registry
@@ -63,7 +75,10 @@ pub fn export(
                             layer.material
                         )
                     });
-                writeln!(w, "  0\nLAYER\n  2\n{}\n 70\n0\n 62\n7", mat_name)?;
+                // Skip void/air from layer list
+                if mat_name.to_lowercase() != "void" && mat_name.to_lowercase() != "air" {
+                    writeln!(w, "  0\nLAYER\n  2\n{}\n 70\n0\n 62\n7", mat_name)?;
+                }
             }
         }
     } else {
@@ -142,12 +157,22 @@ pub fn export(
     }
 
     // Export substrate base, pads, and via drill holes (non-trace geometry)
-    // v0.2.2 STRUCTURAL FIX: Use get_physical_substrate_layers() instead of get_substrate_layers()
-    // This ensures zero-thickness masks are NEVER exported as physical geometry.
-    for layer in space
-        .entity_graph
-        .get_physical_substrate_layers(&space.material_registry)
-    {
+    // v0.2.3 DUAL-PATH ARCHITECTURE:
+    // - For PCB: Use get_physical_substrate_layers() (excludes masks)
+    // - For ASIC: Use get_all_substrate_layers_including_masks() (includes masks for lithography)
+    let substrate_layers: Vec<_> = if is_asic {
+        space
+            .entity_graph
+            .get_all_substrate_layers_including_masks()
+            .collect()
+    } else {
+        space
+            .entity_graph
+            .get_physical_substrate_layers(&space.material_registry)
+            .collect()
+    };
+
+    for layer in substrate_layers {
         let mat_name = space
             .material_registry
             .get_name(layer.material)
@@ -162,9 +187,15 @@ pub fn export(
             continue;
         }
 
-        // Export substrate base
-        // Skip Contact and Pour types since they're already exported as part of analytic routes (unioned with traces)
-        if layer.layer_type != SubstrateLayerType::Substrate {
+        // Check if this is a zero-thickness mask material
+        let is_mask = space.material_registry.is_mask(layer.material);
+
+        // In ASIC mode, export:
+        // 1. Dielectric substrate slabs (SubstrateLayerType::Substrate)
+        // 2. Zero-thickness fabrication masks (is_mask == true, even if SubstrateLayerType::Pour)
+        //
+        // In PCB mode, only export substrate bases (skip pours since they're in unified copper)
+        if !is_mask && layer.layer_type != SubstrateLayerType::Substrate {
             continue;
         }
 
@@ -180,6 +211,16 @@ pub fn export(
         let true_color = parse_true_color(&color_hex);
 
         let layer_name = if is_asic { mat_name } else { "PCB_LAYERS" };
+
+        // v0.2.3: Add GDS mapping comment for mask layers in ASIC mode
+        if is_asic {
+            if let Some((gds_layer, gds_datatype)) = space.material_registry.get_gds_mapping(layer.material) {
+                // Write a comment with GDS layer/datatype information
+                // This helps with DXF → GDSII conversion workflows
+                writeln!(w, "999")?;
+                writeln!(w, "GDS_MAPPING: {} → Layer:{} Datatype:{}", mat_name, gds_layer, gds_datatype)?;
+            }
+        }
 
         match &layer.shape {
             SubstrateLayerShape::Rect => {

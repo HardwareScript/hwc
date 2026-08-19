@@ -1,4 +1,4 @@
-﻿//! Transform and copy miscellaneous child-space metadata (pours, contacts, etc.).
+//! Transform and copy miscellaneous child-space metadata (pours, contacts, etc.).
 
 use crate::ir::errors::IrError;
 use hwc_engine::netlist::NetId;
@@ -51,6 +51,7 @@ pub(super) fn transform_pours(
         parent_space.pours.push(hwc_engine::space::PourMetadata {
             name: parent_pour_name.into(),
             material_name: pour.material_name.clone(),
+            layer_name: pour.layer_name.clone(),
             z_bottom_nm: pour.z_bottom_nm + transform.offset_z_nm,
             net: parent_net,
             area_nm2: pour.area_nm2,

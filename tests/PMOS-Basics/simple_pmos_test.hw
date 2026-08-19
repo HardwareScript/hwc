@@ -1,32 +1,34 @@
-# simple_nmos_test.hw - SKY130 1.8V NMOS Characterization Test
-# Device: sky130_fd_pr__nfet_01v8 (W = 1.0μm, L = 0.15μm)
+# simple_pmos_test.hw - SKY130 1.8V PMOS Characterization Test
+# Device: sky130_fd_pr__pfet_01v8 (W = 1.0μm, L = 0.15μm)
 #
 # DESIGN HIGHLIGHTS:
 # 1. Single Anchor Law: Active_Diff is the root anchor at (10.0um, 6.0um)
-# 2. P-Substrate grounded through dedicated P+ Substrate Tap (PSDM + TAP)
-# 3. NPC (Nitride Poly Cut) mask enclosing gate poly contact head (SKY130 npc.2)
-# 4. Concentric Stacked Vias: All contacts use 1:1 coincident stacking (licon -> mcon)
+# 2. Continuous N-Well enclosure covering PMOS active island and N-well tap
+# 3. Dedicated N+ Well Tap (NSDM + TAP) connecting N-Well Bulk to VDD (1.8V)
+# 4. NPC (Nitride Poly Cut) mask enclosing gate poly contact head (SKY130 npc.2)
+# 5. Concentric Stacked Vias: All contacts use 1:1 coincident stacking (licon -> mcon)
 #    per SKY130 standard practice (no staggering required)
-# 5. Full DRC/LVS clean layout:
+# 6. Full DRC/LVS clean layout:
 #    - poly.4 (poly overhang >= 150nm)
-#    - nsdm.1 / nsdm.2 (NSDM enclosure >= 130nm)
+#    - psdm.1 / psdm.2 (PSDM enclosure >= 130nm)
+#    - nwell.4 (N-Well enclosure of active >= 330nm)
 #    - licon.4 / poly.8 (Contact to poly edge >= 115nm)
 
 import * from @std/primitives/units
-import * from "./nmos_pdk"
+import * from "./pmos_pdk"
 
-module NMOS_Transistor:
-    pins: [input Gate, output Drain, ground Source, ground Bulk]
+module PMOS_Transistor:
+    pins: [input Gate, ground Drain, power Source, power Bulk]
 
-space Simple_NMOS_Space implements NMOS_Transistor:
+space Simple_PMOS_Space implements PMOS_Transistor:
     dimensions: 20.0um by 14.0um
-    profile: SKY130_1V8_NMOS
+    profile: SKY130_1V8_PMOS
 
     nets:
-        Drain:  { classification: signal, potential: 1.8V, current: 10.0uA }
-        Gate:   { classification: signal, potential: 1.8V, current: 0.1uA }
-        Source: { classification: ground, potential: 0.0V, current: 10.0uA }
-        Bulk:   { classification: ground, potential: 0.0V, current: 0.0uA }
+        Source: { classification: power,  potential: 1.8V, current: 10.0uA }
+        Bulk:   { classification: power,  potential: 1.8V, current: 0.0uA }
+        Gate:   { classification: signal, potential: 0.0V, current: 0.1uA }
+        Drain:  { classification: ground, potential: 0.0V, current: 10.0uA }
 
     device_nets M1:
         B: Bulk
@@ -34,7 +36,7 @@ space Simple_NMOS_Space implements NMOS_Transistor:
     # ========================================================================
     # PARAMETRIC DIMENSIONS (Self-Healing Layout)
     # ========================================================================
-    
+
     let gate_length = 150nm        # L = 150nm (SKY130 minimum gate length)
     let gate_width = 1.0um         # W = 1.0μm
     let sd_len = 650nm             # Source / Drain diffusion bed length
@@ -44,30 +46,40 @@ space Simple_NMOS_Space implements NMOS_Transistor:
     let npc_enclosure = 90nm       # SKY130 npc.2 >= 90nm enclosure around poly contact
     let npc_size = gate_head_size + (2 * npc_enclosure) # 580nm x 580nm NPC mask
     let tap_size = 400nm
-    let tap_offset_y = 1.4um       # Optimized tight Substrate tap spacing (minimizes latch-up)
+    let tap_offset_y = 1.4um       # Optimized tight N-Well tap spacing (minimizes Rwell and latch-up)
     let pad_size = 1.2um
     let via_pitch = 450nm          # 450nm pitch for staggered via array
     let via_offset = via_pitch / 2 # 225nm offset
     let diff_total_len = (2 * sd_len) + gate_length  # 1.45um
+    let nwell_margin = 600nm       # Generous N-Well enclosure (DRC min >= 330nm)
     let gate_poly_height = gate_width + poly_overhang + poly_pad_clearance + gate_head_size # 1.85um
 
     # ========================================================================
     # 1. ROOT ANCHOR: Continuous Active Silicon Island (Source + Channel + Drain)
     # ========================================================================
 
-    add pour(N_Plus_Diffusion) named Active_Diff on layer: diff:
+    add pour(P_Plus_Diffusion) named Active_Diff on layer: diff:
         device: M1.S, M1.D
         dimensions: diff_total_len by gate_width
         at: [x: 10.0um, y: 6.0um]    # ← ONLY absolute 'at:' in this space
 
-    # NSDM Mask: N+ implant enclosing NMOS active source/drain regions (SKY130 nsdm.1 >= 125nm)
-    add pour(N_Plus_Implant_Mask) named M1_NSDM on layer: nsdm:
+    # ========================================================================
+    # 2. N-WELL REGION (2D Mask enclosing PMOS channel and N-Well Tap)
+    # ========================================================================
+
+    add pour(N_Well_Mask) named PMOS_NWell on layer: nwell:
+        dimensions: (diff_total_len + 2 * nwell_margin) by (gate_width + tap_offset_y + 2 * nwell_margin)
+        align: center_x with Active_Diff
+        align: center_y with Active_Diff.center_y - (tap_offset_y / 2)
+
+    # PSDM Mask: P+ implant enclosing PMOS active source/drain regions (SKY130 psdm.1 >= 125nm)
+    add pour(P_Plus_Implant_Mask) named M1_PSDM on layer: psdm:
         dimensions: diff_total_len + 260nm by gate_width + 260nm
         align: center_x with Active_Diff
         align: center_y with Active_Diff
 
     # ========================================================================
-    # 2. POLYSILICON GATE & NPC (NITRIDE POLY CUT) MASK
+    # 3. POLYSILICON GATE & NPC (NITRIDE POLY CUT) MASK
     # ========================================================================
 
     # Active Gate strip: Spans across channel with bottom overhang and top landing head
@@ -93,7 +105,7 @@ space Simple_NMOS_Space implements NMOS_Transistor:
         align: center_y with Gate_Poly_Head
 
     # ========================================================================
-    # 3. SOURCE CONTACT & VIAS (Over Source Diffusion at Left Side)
+    # 4. SOURCE CONTACT & VIAS (Over Source Diffusion at Left Side)
     # ========================================================================
 
     add pour(Titanium_Nitride) named Source_LI on layer: li1:
@@ -127,7 +139,7 @@ space Simple_NMOS_Space implements NMOS_Transistor:
             net: Source
 
     # ========================================================================
-    # 4. DRAIN CONTACT & VIAS (Over Drain Diffusion at Right Side)
+    # 5. DRAIN CONTACT & VIAS (Over Drain Diffusion at Right Side)
     # ========================================================================
 
     add pour(Titanium_Nitride) named Drain_LI on layer: li1:
@@ -161,7 +173,7 @@ space Simple_NMOS_Space implements NMOS_Transistor:
             net: Drain
 
     # ========================================================================
-    # 5. GATE EXTENSION CONTACT (Poly Head Outside Channel)
+    # 6. GATE EXTENSION CONTACT (Poly Head Outside Channel)
     # ========================================================================
 
     add pour(Titanium_Nitride) named Gate_Contact_LI on layer: li1:
@@ -192,10 +204,10 @@ space Simple_NMOS_Space implements NMOS_Transistor:
         net: Gate
 
     # ========================================================================
-    # 6. SUBSTRATE TAP (BULK Connection to P-Substrate / GND)
+    # 7. N-WELL TAP (BULK Connection to N-Well / VDD)
     # ========================================================================
 
-    # Uses diff active area with PSDM mask to create P+ ohmic contact to Substrate
+    # Uses diff active area with NSDM mask to create N+ ohmic contact to N-Well
     
     # 2D Tap Window Mask
     add pour(Tap_Mask) named Bulk_Tap_Mask on layer: tap:
@@ -203,14 +215,14 @@ space Simple_NMOS_Space implements NMOS_Transistor:
         align: center_x with Gate_Poly
         align: center_y with Gate_Poly.center_y - tap_offset_y
 
-    # 2D P+ Implant Mask (defines P+ doping for ohmic substrate contact)
-    add pour(P_Plus_Implant_Mask) named Bulk_Tap_PSDM on layer: psdm:
+    # 2D N+ Implant Mask (defines N+ doping for ohmic well contact)
+    add pour(N_Plus_Implant_Mask) named Bulk_Tap_NSDM on layer: nsdm:
         dimensions: tap_size + 260nm by tap_size + 260nm
         align: center_x with Gate_Poly
         align: center_y with Gate_Poly.center_y - tap_offset_y
 
-    # Active diffusion island for the Substrate tap
-    add pour(P_Plus_Diffusion) named Bulk_Tap_Diff on layer: diff:
+    # Active diffusion island for the N-Well tap
+    add pour(N_Plus_Diffusion) named Bulk_Tap_Diff on layer: diff:
         dimensions: tap_size by tap_size
         align: center_x with Gate_Poly
         align: center_y with Gate_Poly.center_y - tap_offset_y
@@ -230,7 +242,7 @@ space Simple_NMOS_Space implements NMOS_Transistor:
         net: Bulk
 
     # Concentric Stacked Via: diff -> li1 -> metal1
-    # Licon: diff (P+ tap) to Local Interconnect (centered)
+    # Licon: diff (N+ tap) to Local Interconnect (centered)
     add contact(Tungsten) named Bulk_Tap_Licon spanning layer: diff to li1:
         diameter: 170nm
         align: center_x with Bulk_Tap_Diff
@@ -245,17 +257,17 @@ space Simple_NMOS_Space implements NMOS_Transistor:
         net: Bulk
 
     # ========================================================================
-    # 7. EXTERNAL TEST PADS & INTERCONNECT
+    # 8. EXTERNAL TEST PADS & INTERCONNECT
     # ========================================================================
     
-    # Source Pad (Left - Connected to Ground)
+    # Source Pad (Left - Connected to 1.8V VDD)
     add pour(Copper) named Source_Pad on layer: metal1:
         dimensions: pad_size by pad_size
         align: center_x with Active_Diff.left - 3.5um
         align: center_y with Active_Diff
         net: Source
 
-    # Drain Pad (Right - Connected to Output / 1.8V Load)
+    # Drain Pad (Right - Connected to Output / Ground Load)
     add pour(Copper) named Drain_Pad on layer: metal1:
         dimensions: pad_size by pad_size
         align: center_x with Active_Diff.right + 3.5um
@@ -269,7 +281,7 @@ space Simple_NMOS_Space implements NMOS_Transistor:
         align: center_y with Gate_Poly_Head.top + 2.0um
         net: Gate
 
-    # Bulk Pad (Bottom - Connected to Ground for P-Substrate)
+    # Bulk Pad (Bottom - Connected to 1.8V VDD for N-Well)
     add pour(Copper) named Bulk_Pad on layer: metal1:
         dimensions: pad_size by pad_size
         align: center_x with Bulk_Tap_Metal
@@ -277,7 +289,7 @@ space Simple_NMOS_Space implements NMOS_Transistor:
         net: Bulk
 
     # ========================================================================
-    # 8. ROUTING (Low IR-Drop Traces)
+    # 9. ROUTING (Low IR-Drop Traces)
     # ========================================================================
     
     route Source_Pad to Source_Metal:
@@ -305,9 +317,9 @@ space Simple_NMOS_Space implements NMOS_Transistor:
         intent: Power
 
 # ========================================================================
-# 9. SIMULATION TESTBENCHES
+# 10. SIMULATION TESTBENCHES
 # ========================================================================
 
-test NMOS_Characterization_Test for Simple_NMOS_Space:
-    dc: { sweep: Gate, start: 0.0V, stop: 1.8V, step: 0.05V }
+test PMOS_Characterization_Test for Simple_PMOS_Space:
+    dc: { sweep: Gate, start: 1.8V, stop: 0.0V, step: -0.05V }
     tran: { step: 10ps, stop: 50ns }

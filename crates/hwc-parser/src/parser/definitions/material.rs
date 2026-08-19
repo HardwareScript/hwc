@@ -188,6 +188,24 @@ impl super::super::Parser {
             }
 
             match field_name.as_str() {
+                "gds_mapping" => {
+                    // v0.2.3: Parse GDSII layer mapping: [layer: X, datatype: Y]
+                    match self.parse_gds_mapping() {
+                        Ok(mapping) => {
+                            // Store in temporary variable, will be added to MaterialDefinition
+                            // For now, we'll extract it after the loop
+                            properties.push(Property {
+                                key: "gds_mapping".into(),
+                                value: PropertyValue::String(format!("{}:{}", mapping.0, mapping.1)),
+                                span: self.previous_span(),
+                            });
+                        }
+                        Err(e) => {
+                            collector.report(e);
+                        }
+                    }
+                    self.skip_whitespace();
+                }
                 "symbol" => {
                     // v0.2.1: Reject quoted string literals. The symbol must be a
                     // bare identifier (e.g. `symbol: Poly`, not `symbol: "Poly"`).
@@ -273,6 +291,7 @@ impl super::super::Parser {
         let mut anisotropy = None;
         let mut anisotropy_rotation = None;
         let mut texture = None;
+        let mut gds_mapping = None; // v0.2.3
 
         for prop in &properties {
             match prop.key.as_str() {
@@ -425,6 +444,16 @@ impl super::super::Parser {
                         texture = Some(s.clone());
                     }
                 }
+                "gds_mapping" => {
+                    // v0.2.3: Extract GDS mapping from stored string format "layer:datatype"
+                    if let PropertyValue::String(s) = &prop.value {
+                        if let Some((layer_str, datatype_str)) = s.split_once(':') {
+                            if let (Ok(layer), Ok(datatype)) = (layer_str.parse::<u32>(), datatype_str.parse::<u32>()) {
+                                gds_mapping = Some((layer, datatype));
+                            }
+                        }
+                    }
+                }
                 _ => {} // Other properties are kept in the properties vector
             }
         }
@@ -450,6 +479,7 @@ impl super::super::Parser {
             anisotropy,
             anisotropy_rotation,
             texture: texture.map(|s: String| s.into()),
+            gds_mapping, // v0.2.3
         })
     }
 
@@ -593,5 +623,65 @@ impl super::super::Parser {
                 span: span_to_source_span(&self.previous_span()),
             })
         }
+    }
+
+    /// Parse GDSII layer mapping: `[layer: X, datatype: Y]`
+    /// 
+    /// v0.2.3: Parses the standardized GDSII layer/datatype tuple format used for
+    /// 2D lithography export. This maps HardwareScript mask materials to their
+    /// corresponding GDSII layer numbers in the foundry PDK.
+    /// 
+    /// # Syntax
+    /// ```text
+    /// gds_mapping: [layer: 64, datatype: 20]
+    /// ```
+    /// 
+    /// # Returns
+    /// `(layer, datatype)` tuple on success
+    fn parse_gds_mapping(&mut self) -> Result<(u32, u32), ParseError> {
+        // Expect opening bracket
+        self.expect(&Token::OpenBracket)?;
+        
+        // Expect "layer" keyword
+        let layer_keyword = self.expect_identifier()?;
+        if layer_keyword.as_str() != "layer" {
+            return Err(self.error("Expected 'layer' keyword in gds_mapping"));
+        }
+        
+        self.expect(&Token::Colon)?;
+        
+        // Parse layer number
+        let layer = match self.current() {
+            Some(s) if matches!(s.token, Token::Integer(_)) => {
+                let n = self.expect_number()? as u32;
+                n
+            }
+            _ => return Err(self.error("Expected integer for layer number")),
+        };
+        
+        // Expect comma
+        self.expect(&Token::Comma)?;
+        
+        // Expect "datatype" keyword
+        let datatype_keyword = self.expect_identifier()?;
+        if datatype_keyword.as_str() != "datatype" {
+            return Err(self.error("Expected 'datatype' keyword in gds_mapping"));
+        }
+        
+        self.expect(&Token::Colon)?;
+        
+        // Parse datatype number
+        let datatype = match self.current() {
+            Some(s) if matches!(s.token, Token::Integer(_)) => {
+                let n = self.expect_number()? as u32;
+                n
+            }
+            _ => return Err(self.error("Expected integer for datatype number")),
+        };
+        
+        // Expect closing bracket
+        self.expect(&Token::CloseBracket)?;
+        
+        Ok((layer, datatype))
     }
 }

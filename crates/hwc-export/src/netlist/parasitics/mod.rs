@@ -29,11 +29,13 @@ use self::via_stacks::extract_via_stacks;
 
 use crate::netlist::types::PhysicalNetlistGraph;
 use hwc_compiler::alignment::PhysicalNetlist;
+use hwc_compiler::SymbolTable;
 use hwc_engine::HardwareSpace;
 
 /// Core parasitic extraction orchestrator.
 pub struct ParasiticExtractor<'a> {
     space: &'a HardwareSpace,
+    symbol_table: &'a SymbolTable,
     physical_netlist: Option<&'a PhysicalNetlist>,
     substrate_net: String,
     graph: PhysicalNetlistGraph,
@@ -44,11 +46,13 @@ impl<'a> ParasiticExtractor<'a> {
     /// Create a new ParasiticExtractor instance.
     pub fn new(
         space: &'a HardwareSpace,
+        symbol_table: &'a SymbolTable,
         physical_netlist: Option<&'a PhysicalNetlist>,
         substrate_net: &str,
     ) -> Self {
         Self {
             space,
+            symbol_table,
             physical_netlist,
             substrate_net: substrate_net.to_string(),
             graph: PhysicalNetlistGraph::new(),
@@ -92,6 +96,7 @@ impl<'a> ParasiticExtractor<'a> {
         // Stage 5: Intent-Driven Device Terminal Mapping
         map_device_terminals(
             self.space,
+            self.symbol_table,
             self.physical_netlist,
             &mut self.graph,
             &self.extracted_layer_nodes,
@@ -104,10 +109,10 @@ impl<'a> ParasiticExtractor<'a> {
 /// Public entry point for parasitic extraction into a PhysicalNetlistGraph.
 pub fn build_physical_netlist_graph(
     space: &HardwareSpace,
-    _symbol_table: &hwc_compiler::SymbolTable,
+    symbol_table: &hwc_compiler::SymbolTable,
     physical_netlist: Option<&PhysicalNetlist>,
     substrate_net: &str,
 ) -> Result<PhysicalNetlistGraph, Box<dyn std::error::Error>> {
-    let extractor = ParasiticExtractor::new(space, physical_netlist, substrate_net);
+    let extractor = ParasiticExtractor::new(space, symbol_table, physical_netlist, substrate_net);
     extractor.extract()
 }

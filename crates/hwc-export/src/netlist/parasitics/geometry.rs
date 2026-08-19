@@ -4,15 +4,34 @@ use hwc_engine::geometry::BoundingBox;
 use hwc_engine::space::{PourMetadata, StackupLayer};
 use hwc_engine::HardwareSpace;
 
-/// Lookup a stackup layer by material name and Z position.
+/// Lookup a stackup layer by layer name.
+pub fn find_stackup_layer_by_name<'a>(
+    space: &'a HardwareSpace,
+    layer_name: &str,
+) -> Option<&'a StackupLayer> {
+    space.stackup_layers.iter().find(|l| l.name == layer_name)
+}
+
+/// Lookup a stackup layer by layer name, material name, or Z elevation window.
 pub fn find_stackup_layer<'a>(
     space: &'a HardwareSpace,
-    material_name: &str,
+    layer_name_or_material: &str,
     z_bottom: i64,
 ) -> Option<&'a StackupLayer> {
-    space.stackup_layers.iter().find(|l| {
-        l.material_name == material_name
+    // 1. Exact layer name match
+    if let Some(l) = space.stackup_layers.iter().find(|l| l.name == layer_name_or_material) {
+        return Some(l);
+    }
+    // 2. Exact material match at elevation
+    if let Some(l) = space.stackup_layers.iter().find(|l| {
+        l.material_name == layer_name_or_material
             && (l.z_bottom == z_bottom || (l.z_bottom <= z_bottom && z_bottom < l.z_top))
+    }) {
+        return Some(l);
+    }
+    // 3. Elevation window on routable layer
+    space.stackup_layers.iter().find(|l| {
+        !l.is_mask && (l.z_bottom == z_bottom || (l.z_bottom <= z_bottom && z_bottom < l.z_top))
     })
 }
 
@@ -55,17 +74,23 @@ pub fn find_pour_at_point<'a>(
     for pour in &space.pours {
         if let Some(ref p_net) = pour.net {
             if p_net == net_name {
-                if let Some(stackup_l) = find_stackup_layer(space, &pour.material_name, pour.z_bottom_nm) {
-                    if stackup_l.name == layer_name {
-                        if let Some(ref bb) = pour.bbox {
-                            let eps = 100.0; // 100nm margin for boundary precision
-                            if point.0 >= (bb.min.x as f64 - eps)
-                                && point.0 <= (bb.max.x as f64 + eps)
-                                && point.1 >= (bb.min.y as f64 - eps)
-                                && point.1 <= (bb.max.y as f64 + eps)
-                            {
-                                candidates.push(pour);
-                            }
+                let pour_matches_layer = if !pour.layer_name.is_empty() {
+                    pour.layer_name == layer_name
+                } else if let Some(stackup_l) = find_stackup_layer(space, &pour.material_name, pour.z_bottom_nm) {
+                    stackup_l.name == layer_name
+                } else {
+                    false
+                };
+
+                if pour_matches_layer {
+                    if let Some(ref bb) = pour.bbox {
+                        let eps = 100.0; // 100nm margin for boundary precision
+                        if point.0 >= (bb.min.x as f64 - eps)
+                            && point.0 <= (bb.max.x as f64 + eps)
+                            && point.1 >= (bb.min.y as f64 - eps)
+                            && point.1 <= (bb.max.y as f64 + eps)
+                        {
+                            candidates.push(pour);
                         }
                     }
                 }

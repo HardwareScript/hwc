@@ -58,14 +58,26 @@ impl TopologicalRouter {
     /// If the segment is vertical (start.z != end.z), it represents a via transition.
     /// Vias are exempt from collision checks with obstacles on intermediate Z layers,
     /// as they must pass through non-routable dielectric layers by definition.
+    ///
+    /// Z-LAYER CONSISTENCY (v0.2.4):
+    /// Mirrors the Z-tolerance check in `slab_intersect`: for planar (non-via) route segments,
+    /// obstacle candidates are filtered by their `layer` Z field within a tolerance. This prevents
+    /// component bbox obstacles (which span Z=0 to full stack height for conservative 3D coverage)
+    /// from blocking traces on routing layers far above their actual physical location.
     pub(crate) fn segment_intersects_obstacle(
         &self,
         a: Point3D,
         b: Point3D,
         obstacles: &DynamicSpatialIndex,
     ) -> bool {
+        // Z-LAYER CONSISTENCY: Must match the tolerance used in slab_intersect.
+        // A planar trace at Z=960nm must NOT be blocked by a component bbox whose
+        // layer Z is 0nm (spanning the full device stack), just as slab_intersect skips it.
+        const Z_LAYER_TOLERANCE_NM: i64 = 50;
+
         let inflate = self.trace_width_nm / 2 + self.min_clearance_nm;
 
+        let route_z = a.z; // For planar routes, a.z == b.z
         let route_z_min = a.z.min(b.z);
         let route_z_max = a.z.max(b.z);
 
@@ -103,8 +115,40 @@ impl TopologicalRouter {
             let obs_z_min = seg.start.z.min(seg.end.z);
             let obs_z_max = seg.start.z.max(seg.end.z);
 
-            if route_z_min > obs_z_max || obs_z_min > route_z_max {
-                continue;
+            // v0.2.4 Z-LAYER CONSISTENCY FIX (source-type-aware):
+            //
+            // Different obstacle sources require different Z-level filtering:
+            //
+            // ComponentInstance obstacles are conservative 3D bboxes spanning the entire Z stack
+            // (z_min=0 to z_max=full_stack_height). Their `seg.layer` == z_min == 0.
+            // A metal1 trace at Z=960nm must NOT be blocked by a transistor body bbox whose
+            // layer is 0nm. Apply the same 50nm point-Z check as slab_intersect.
+            //
+            // SubstrateLayer and RouteSegment obstacles have real physical Z geometry:
+            // their z_min..z_max is the actual material extent on a specific conductive layer.
+            // These use Z-range overlap to correctly detect collisions.
+            if !is_vertical_via {
+                let is_component_bbox = matches!(
+                    seg.source,
+                    crate::geometry_router::spatial_index::SpatialEntitySource::ComponentInstance { .. }
+                );
+                if is_component_bbox {
+                    // ComponentInstance: apply point-Z tolerance (mirrors slab_intersect).
+                    let obs_layer_z = seg.layer; // == z_min, typically 0 for full-stack keepouts
+                    if (route_z - obs_layer_z).abs() > Z_LAYER_TOLERANCE_NM {
+                        continue; // Component is on a different Z layer — not an obstacle here.
+                    }
+                } else {
+                    // SubstrateLayer / RouteSegment: real Z geometry, use range overlap.
+                    if route_z_min > obs_z_max || obs_z_min > route_z_max {
+                        continue;
+                    }
+                }
+            } else {
+                // For vias (vertical segments), retain raw Z-range overlap for all sources.
+                if route_z_min > obs_z_max || obs_z_min > route_z_max {
+                    continue;
+                }
             }
 
             // VERTICAL VIA EXEMPTION: If this is a vertical via and the obstacle is on
