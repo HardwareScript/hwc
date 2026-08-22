@@ -70,21 +70,44 @@ impl FixedTransform2D {
 
     /// Transform a bounding box
     pub(super) fn transform_bbox(&self, bbox: &BoundingBox) -> Result<BoundingBox, IrError> {
-        // Transform all 8 corners and reconstruct the bounding box
-        let (min_x, min_y, min_z) = self.transform_point(bbox.min.x, bbox.min.y, bbox.min.z)?;
-        let (max_x, max_y, max_z) = self.transform_point(bbox.max.x, bbox.max.y, bbox.max.z)?;
+        let corners = [
+            (bbox.min.x, bbox.min.y, bbox.min.z),
+            (bbox.min.x, bbox.max.y, bbox.min.z),
+            (bbox.max.x, bbox.min.y, bbox.min.z),
+            (bbox.max.x, bbox.max.y, bbox.min.z),
+            (bbox.min.x, bbox.min.y, bbox.max.z),
+            (bbox.min.x, bbox.max.y, bbox.max.z),
+            (bbox.max.x, bbox.min.y, bbox.max.z),
+            (bbox.max.x, bbox.max.y, bbox.max.z),
+        ];
 
-        // Ensure min < max after rotation
+        let mut min_x = i64::MAX;
+        let mut min_y = i64::MAX;
+        let mut min_z = i64::MAX;
+        let mut max_x = i64::MIN;
+        let mut max_y = i64::MIN;
+        let mut max_z = i64::MIN;
+
+        for &(cx, cy, cz) in &corners {
+            let (tx, ty, tz) = self.transform_point(cx, cy, cz)?;
+            min_x = min_x.min(tx);
+            min_y = min_y.min(ty);
+            min_z = min_z.min(tz);
+            max_x = max_x.max(tx);
+            max_y = max_y.max(ty);
+            max_z = max_z.max(tz);
+        }
+
         Ok(BoundingBox {
             min: hwc_physics::Point3D {
-                x: min_x.min(max_x),
-                y: min_y.min(max_y),
-                z: min_z.min(max_z),
+                x: min_x,
+                y: min_y,
+                z: min_z,
             },
             max: hwc_physics::Point3D {
-                x: min_x.max(max_x),
-                y: min_y.max(max_y),
-                z: min_z.max(max_z),
+                x: max_x,
+                y: max_y,
+                z: max_z,
             },
         })
     }

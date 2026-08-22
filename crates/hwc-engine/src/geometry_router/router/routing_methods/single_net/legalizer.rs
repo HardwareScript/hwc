@@ -99,8 +99,11 @@ impl GeometryRouter {
                 }
             }
         }
-        // Slide vias that belong to displaced nets
+        // Slide vias that belong to displaced nets, skipping frozen and child-instance vias
         for via in &mut self.vias {
+            if via.is_frozen || via.parent_instance.is_some() {
+                continue;
+            }
             if let Some(&(dx, dy)) = net_displacements.get(&via.net_id) {
                 if dx != 0 || dy != 0 {
                     via.position.0 += dx;

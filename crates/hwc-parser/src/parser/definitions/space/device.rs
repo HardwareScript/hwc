@@ -7,6 +7,36 @@ use crate::parser::error::ParseError;
 use compact_str::CompactString;
 
 impl crate::parser::Parser {
+    /// Parse first-class nominal device instance declaration in a space: `device DeviceType named InstanceName`
+    ///
+    /// # Syntax
+    /// ```hardware
+    /// device NMOS named M_NMOS
+    /// device PMOS named M_PMOS
+    /// ```
+    pub(in crate::parser) fn parse_space_device_instance(
+        &mut self,
+    ) -> Result<DeviceInstanceDeclaration, ParseError> {
+        let start_pos = self.current_span().start;
+        self.expect(&Token::Device)?;
+        self.skip_whitespace();
+
+        let device_type = self.expect_identifier_string()?;
+        self.skip_whitespace();
+
+        self.expect(&Token::Named)?;
+        self.skip_whitespace();
+
+        let instance_name = self.expect_identifier_string()?;
+        let end_pos = self.previous_span().end;
+
+        Ok(DeviceInstanceDeclaration {
+            device_type: device_type.into(),
+            instance_name: instance_name.into(),
+            span: Span::new(start_pos, end_pos),
+        })
+    }
+
     /// Parse device binding: `device: DeviceName.terminal` or `device: DeviceName.termA, DeviceName.termB`
     ///
     /// Phase 4 (Silent Atom): Explicit intent-based device binding

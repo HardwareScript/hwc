@@ -247,6 +247,8 @@ impl GeometryRouter {
             via_type: ViaType::ThroughHole,
             enclosure_nm: enclosure,
             properties: rustc_hash::FxHashMap::default(),
+            is_frozen: false,
+            parent_instance: None,
         };
 
         for z_nm in via.z_planes_between(&self.config.layer_z_positions, 0, self.bounds.depth_nm) {

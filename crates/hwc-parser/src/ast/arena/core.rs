@@ -150,6 +150,12 @@ impl<I: Idx, T> IndexVec<I, T> {
     pub fn reserve(&mut self, additional: usize) {
         self.raw.reserve(additional);
     }
+
+    /// Append all elements from another IndexVec into this one
+    #[inline]
+    pub fn extend_from(&mut self, mut other: IndexVec<I, T>) {
+        self.raw.append(&mut other.raw);
+    }
 }
 
 // =============================================================================

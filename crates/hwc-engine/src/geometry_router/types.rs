@@ -16,6 +16,24 @@ pub struct NetRoute {
     pub start: Point3D,
     pub goal: Point3D,
     pub target_z: Option<i64>,
+    pub normals: Option<(
+        crate::geometry_router::connection_interface::Normal2D,
+        crate::geometry_router::connection_interface::Normal2D,
+    )>,
+    pub escape_stub_nm: Option<i64>,
+}
+
+/// Explicit route segment for pre-determined or compiler-resolved routes.
+#[derive(Debug, Clone)]
+pub struct ExplicitRouteSegment {
+    pub net_id: NetId,
+    pub waypoints: Vec<Point3D>,
+    pub target_z: Option<i64>,
+    pub normals: Option<(
+        crate::geometry_router::connection_interface::Normal2D,
+        crate::geometry_router::connection_interface::Normal2D,
+    )>,
+    pub escape_stub_nm: Option<i64>,
 }
 
 /// Routed net result.
@@ -82,6 +100,8 @@ impl ViaType {
     }
 }
 
+use compact_str::CompactString;
+
 /// Via (Vertical Interconnect Access) for PCB manufacturing.
 ///
 /// Represents a physical drill hole with copper plating between two Z elevations.
@@ -114,6 +134,12 @@ pub struct Via {
 
     /// Generic via properties (e.g., thermal_relief)
     pub properties: FxHashMap<String, Expression>,
+
+    /// Immutability flag for hierarchical legalization / explicit contacts.
+    pub is_frozen: bool,
+
+    /// Optional parent instance name if this via belongs to a child cell/instance.
+    pub parent_instance: Option<CompactString>,
 }
 
 /// Geometric specification for constructing a [`Via`].
@@ -153,6 +179,8 @@ impl Via {
             via_type,
             enclosure_nm: spec.enclosure_nm,
             properties: FxHashMap::default(),
+            is_frozen: false,
+            parent_instance: None,
         }
     }
 
@@ -168,6 +196,8 @@ impl Via {
             via_type,
             enclosure_nm: spec.enclosure_nm,
             properties: FxHashMap::default(),
+            is_frozen: false,
+            parent_instance: None,
         }
     }
 

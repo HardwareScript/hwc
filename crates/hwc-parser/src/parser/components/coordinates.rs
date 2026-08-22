@@ -105,21 +105,63 @@ impl crate::parser::Parser {
     fn parse_relative_coordinate(&mut self) -> Result<Coordinate, ParseError> {
         let start_pos = self.current_span().start;
 
+        let mut segments = Vec::new();
+
         // Parse anchor name (may be 'substrate', 'space' keywords or identifier with optional array syntax)
         // v0.2.1: 'last' is now an identifier, matched contextually
-        let anchor_name = if self.check_identifier("last") {
+        if self.check_identifier("last") {
             self.advance(); // consume 'last'
-            "last".to_string()
+            segments.push("last".to_string());
         } else if self.check(&Token::Substrate) {
             self.advance(); // consume 'substrate'
-            "substrate".to_string()
+            segments.push("substrate".to_string());
         } else if self.check(&Token::Space) {
             self.advance(); // consume 'space'
-            "space".to_string()
+            segments.push("space".to_string());
         } else {
-            self.parse_anchor_name()?
-        };
-        let anchor_span = self.previous_span();
+            segments.push(self.parse_anchor_name()?);
+        }
+
+        while self.check(&Token::Dot) {
+            // Check if what follows Dot is an edge name and NOT followed by another Dot
+            if let Some(next_tok) = self.tokens.get(self.current + 1) {
+                if let Token::Identifier(next_id) = &next_tok.token {
+                    let is_edge = matches!(
+                        next_id.as_str(),
+                        "left"
+                            | "right"
+                            | "top"
+                            | "bottom"
+                            | "front"
+                            | "back"
+                            | "min_z"
+                            | "max_z"
+                            | "top_left"
+                            | "top_right"
+                            | "bottom_left"
+                            | "bottom_right"
+                            | "center"
+                            | "center_x"
+                            | "center_y"
+                            | "center_z"
+                    );
+                    if is_edge {
+                        if let Some(after) = self.tokens.get(self.current + 2) {
+                            if !matches!(after.token, Token::Dot) {
+                                break;
+                            }
+                        } else {
+                            break;
+                        }
+                    }
+                }
+            }
+            self.advance(); // consume Dot
+            segments.push(self.parse_anchor_name()?);
+        }
+
+        let anchor_span = Span::new(start_pos, self.previous_span().end);
+        let anchor_name = segments.join(".");
 
         // Expect dot
         self.expect(&Token::Dot)?;

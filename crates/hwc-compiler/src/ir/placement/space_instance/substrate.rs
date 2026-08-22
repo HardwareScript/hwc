@@ -1,4 +1,4 @@
-﻿//! Transform and copy substrate layers, routing segments, and vias.
+//! Transform and copy substrate layers, routing segments, and vias.
 
 use crate::ir::errors::IrError;
 use hwc_engine::geometry_router::entity_graph::EntityGraph;
@@ -33,11 +33,52 @@ pub(super) fn transform_substrate_layers(
         // Transform bounding box
         transformed_layer.bbox = transform.transform_bbox(&child_layer.bbox)?;
 
+        // Transform sub-regions if present
+        let mut transformed_regions = smallvec::SmallVec::new();
+        for region in &child_layer.regions {
+            transformed_regions.push(transform.transform_bbox(region)?);
+        }
+        transformed_layer.regions = transformed_regions;
+
+        // Transform Polygon shape coordinates (outer_contour and holes) to parent world space
+        if let hwc_engine::geometry_router::substrate_types::SubstrateLayerShape::Polygon {
+            outer_contour,
+            holes,
+            segments,
+        } = &child_layer.shape
+        {
+            let mut transformed_contour = clipper2_rust::Path64::new();
+            for pt in outer_contour {
+                let (tx, ty, _) = transform.transform_point(pt.x, pt.y, 0)?;
+                transformed_contour.push(clipper2_rust::Point64::new(tx, ty));
+            }
+
+            let mut transformed_holes = clipper2_rust::Paths64::new();
+            for hole in holes {
+                let mut transformed_hole = clipper2_rust::Path64::new();
+                for pt in hole {
+                    let (tx, ty, _) = transform.transform_point(pt.x, pt.y, 0)?;
+                    transformed_hole.push(clipper2_rust::Point64::new(tx, ty));
+                }
+                transformed_holes.push(transformed_hole);
+            }
+
+            transformed_layer.shape =
+                hwc_engine::geometry_router::substrate_types::SubstrateLayerShape::Polygon {
+                    outer_contour: transformed_contour,
+                    holes: transformed_holes,
+                    segments: *segments,
+                };
+        }
+
         // Remap net ID
-        if let Some(&parent_net_id) = net_id_map.get(&child_layer.net) {
+        // NetId(0) is the "no-net" sentinel used by dielectric/mask substrate layers;
+        // pass it through unchanged without requiring a net_map entry.
+        if child_layer.net == NetId(0) {
+            transformed_layer.net = NetId(0);
+        } else if let Some(&parent_net_id) = net_id_map.get(&child_layer.net) {
             transformed_layer.net = parent_net_id;
         } else {
-            // Net not in map - this is an error (no implicit behavior)
             return Err(IrError::PlacementError(format!(
                 "Substrate layer with net {:?} has no mapping in net_map",
                 child_layer.net
@@ -73,13 +114,17 @@ pub(super) fn transform_routing_segments(
 //     );
 
     for (child_net_id, segments) in child_graph.iter_routed_segments() {
-        // Remap net ID
-        let parent_net_id = net_id_map.get(child_net_id).copied().ok_or_else(|| {
-            IrError::PlacementError(format!(
-                "Routing segment with net {:?} has no mapping in net_map",
-                child_net_id
-            ))
-        })?;
+        // Remap net ID. NetId(0) = no-net sentinel; pass through unchanged.
+        let parent_net_id = if *child_net_id == NetId(0) {
+            NetId(0)
+        } else {
+            net_id_map.get(child_net_id).copied().ok_or_else(|| {
+                IrError::PlacementError(format!(
+                    "Routing segment with net {:?} has no mapping in net_map",
+                    child_net_id
+                ))
+            })?
+        };
 
         // Transform each segment
         let mut transformed_segments = Vec::new();
@@ -99,6 +144,7 @@ pub(super) fn transform_routing_segments(
             transformed_seg.end.x = end_x;
             transformed_seg.end.y = end_y;
             transformed_seg.end.z = end_z;
+            transformed_seg.is_frozen = true;
 
             transformed_segments.push(transformed_seg);
         }
@@ -121,6 +167,7 @@ pub(super) fn transform_vias(
     parent_space: &mut hwc_engine::HardwareSpace,
     transform: &FixedTransform2D,
     net_id_map: &FxHashMap<NetId, NetId>,
+    instance_name: &str,
 ) -> Result<(), IrError> {
 //     eprintln!(
 //         "[HIERARCHICAL] Transforming {} vias",
@@ -133,12 +180,17 @@ pub(super) fn transform_vias(
         let parent_from_z = via.from_z_nm + transform.offset_z_nm;
         let parent_to_z = via.to_z_nm + transform.offset_z_nm;
 
-        let parent_net_id = net_id_map.get(&via.net_id).copied().ok_or_else(|| {
-            IrError::PlacementError(format!(
-                "Via with net {:?} has no mapping in net_map",
-                via.net_id
-            ))
-        })?;
+        // NetId(0) = no-net sentinel; pass through unchanged.
+        let parent_net_id = if via.net_id == NetId(0) {
+            NetId(0)
+        } else {
+            net_id_map.get(&via.net_id).copied().ok_or_else(|| {
+                IrError::PlacementError(format!(
+                    "Via with net {:?} has no mapping in net_map",
+                    via.net_id
+                ))
+            })?
+        };
 
         parent_space.vias.push(hwc_engine::geometry_router::Via {
             position: (tx, ty),
@@ -150,6 +202,8 @@ pub(super) fn transform_vias(
             via_type: via.via_type,
             enclosure_nm: via.enclosure_nm,
             properties: via.properties.clone(),
+            is_frozen: true,
+            parent_instance: Some(instance_name.into()),
         });
     }
 

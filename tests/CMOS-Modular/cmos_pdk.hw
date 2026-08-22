@@ -1,0 +1,234 @@
+# cmos_pdk.hw - SkyWater SKY130 Dual-Gate CMOS PDK Profile & Subcircuits
+
+import * from @std/primitives/units
+import Polysilicon, Aluminum, Copper, Tungsten, Titanium_Nitride, Titanium_Silicide, Silicon_Dioxide, Air from "./materials"
+import P_Substrate, P_Plus_Diffusion, N_Plus_Diffusion from "./materials"
+import N_Well_Mask, P_Plus_Implant_Mask, N_Plus_Implant_Mask, Tap_Mask, Nitride_Poly_Cut_Mask, High_Vt_Mask from "./materials"
+
+export Polysilicon
+export Aluminum
+export Copper
+export Tungsten
+export Titanium_Nitride
+export Titanium_Silicide
+export Silicon_Dioxide
+export Air
+export P_Substrate
+export P_Plus_Diffusion
+export N_Plus_Diffusion
+export N_Well_Mask
+export P_Plus_Implant_Mask
+export N_Plus_Implant_Mask
+export Tap_Mask
+export Nitride_Poly_Cut_Mask
+export High_Vt_Mask
+
+export shape SquareContact(width: Measurement):
+    geometry:
+        Rectangle(width: width, height: width)
+
+# ============================================================================
+# CONTACT BRIDGES (Physical Transition Rules)
+# ============================================================================
+
+export bridge P_Plus_Diffusion to Titanium_Nitride:
+    interface: Titanium_Nitride
+    thickness: 5nm
+    fill: Tungsten
+
+export bridge N_Plus_Diffusion to Titanium_Nitride:
+    interface: Titanium_Nitride
+    thickness: 5nm
+    fill: Tungsten
+
+export bridge Polysilicon to Titanium_Nitride:
+    interface: Titanium_Nitride
+    thickness: 5nm
+    fill: Tungsten
+
+export bridge Titanium_Nitride to Aluminum:
+    interface: Titanium_Nitride
+    thickness: 5nm
+    fill: Tungsten
+
+# ============================================================================
+# SKY130 1.8V FULL CMOS STACKUP PROFILE
+# ============================================================================
+
+export profile SKY130_1V8_CMOS:
+    technology: "ASIC"
+    substrate_net: VSS
+    stackup:
+        # Zero-Thickness 2D Masks
+        nwell:      [material: N_Well_Mask,           thickness: 0nm,   routable: false, is_mask: true]
+        tap:        [material: Tap_Mask,              thickness: 0nm,   routable: false, is_mask: true]
+        psdm:       [material: P_Plus_Implant_Mask,   thickness: 0nm,   routable: false, is_mask: true]
+        nsdm:       [material: N_Plus_Implant_Mask,   thickness: 0nm,   routable: false, is_mask: true]
+        npc:        [material: Nitride_Poly_Cut_Mask, thickness: 0nm,   routable: false, is_mask: true]
+        hvt:        [material: High_Vt_Mask,          thickness: 0nm,   routable: false, is_mask: true]
+
+        # Active Diffusion Layer
+        diff:       [material: N_Plus_Diffusion,      thickness: 150nm, routable: true]
+
+        # Gate Polysilicon
+        poly:       [material: Polysilicon,           thickness: 180nm, routable: true]
+
+        # Pre-Metal Dielectric
+        ild0:       [material: Silicon_Dioxide,       thickness: 200nm, routable: false]
+
+        # Local Interconnect 1 (TiN)
+        li1:        [material: Titanium_Nitride,      thickness: 100nm, routable: true]
+
+        # Inter-Layer Dielectric 1
+        ild1:       [material: Silicon_Dioxide,       thickness: 150nm, routable: false]
+
+        # Metal 1 (Aluminum - SKY130 m1 is Al-Cu alloy, GDS layer 68/20)
+        metal1:     [material: Aluminum,              thickness: 360nm, routable: true]
+
+    manufacturing:
+        track_pitch: 5nm
+        circle_segments: 64
+
+    via:
+        min_diameter: 170nm
+        min_enclosure: 40nm
+        min_spacing: 200nm
+        shape: SquareContact
+        contact_depth: 30%
+        material_contact_depths:
+            Copper: 30%
+            Aluminum: 30%
+            Polysilicon: 30%
+            Titanium_Nitride: 50%
+            Titanium_Silicide: 50%
+            P_Plus_Diffusion: 30%
+            N_Plus_Diffusion: 30%
+
+    trace:
+        min_width: 140nm
+        min_spacing: 140nm
+        edge_clearance: 100nm
+
+    clearance:
+        high_voltage: 500nm
+        safety_factor: 1.5
+        max_substrate_tap_distance: 20.0um
+
+    thermal:
+        ambient_temp: 25C
+        max_operating_temp: 125C
+        max_temp_rise: 20C
+
+    layer:
+        min_thickness: 50nm
+        allowed_conductors: [Copper, Aluminum, Polysilicon, Titanium_Nitride, Titanium_Silicide, P_Plus_Diffusion, N_Plus_Diffusion]
+        allowed_dielectrics: [Silicon_Dioxide, Air]
+
+    routing:
+        min_segment_length: 150nm
+        escape_stub: 0nm
+        base_cost: 1
+        via_penalty: 50
+        direction_penalty: 10
+        tight_clearance_penalty: 2
+        crosstalk_penalty: 3
+        impedance_penalty: 1
+        reference_void_penalty: 5000000
+
+    net_type Signal:
+        routing_style: auto
+        escape_stub: 0nm
+
+    net_type Power:
+        routing_style: auto
+        escape_stub: 0nm
+
+# ============================================================================
+# FOUNDRY SPICE SUBCIRCUITS
+# ============================================================================
+
+export subcircuit sky130_fd_pr__nfet_01v8:
+    terminals: [D, G, S, B]
+    parameters: [
+        W = 1.0um,
+        L = 0.15um,
+        AD = 0.65p,
+        AS = 0.65p,
+        PD = 3.3u,
+        PS = 3.3u,
+        NRD = 0.65,
+        NRS = 0.65,
+        SA = 0.65u,
+        SB = 0.65u
+    ]
+    spice_include: "sky130_fd_pr/models/sky130_fd_pr__nfet_01v8.model.spice"
+
+export subcircuit sky130_fd_pr__pfet_01v8:
+    terminals: [D, G, S, B]
+    parameters: [
+        W = 2.0um,
+        L = 0.15um,
+        AD = 1.3p,
+        AS = 1.3p,
+        PD = 5.3u,
+        PS = 5.3u,
+        NRD = 0.325,
+        NRS = 0.325,
+        SA = 0.65u,
+        SB = 0.65u
+    ]
+    spice_include: "sky130_fd_pr/models/sky130_fd_pr__pfet_01v8.model.spice"
+
+# ============================================================================
+# NATIVE DEVICE CONTRACTS
+# ============================================================================
+
+export device NMOS:
+    terminals: [D, G, S, B]
+    materials:
+        D: [N_Plus_Diffusion, Titanium_Nitride, Titanium_Silicide, Copper, Aluminum]
+        G: [Polysilicon, Titanium_Nitride, Titanium_Silicide, Copper, Aluminum]
+        S: [N_Plus_Diffusion, Titanium_Nitride, Titanium_Silicide, Copper, Aluminum]
+        B: [P_Plus_Diffusion, N_Plus_Diffusion, Titanium_Nitride, Titanium_Silicide, Copper, Aluminum]
+    metrics:
+        L:   span(G & hull(S, D), along: flux(S, D))
+        W:   span(G & hull(S, D), along: transverse(S, D))
+        AD:  area(D - G)
+        AS:  area(S - G)
+        PD:  perimeter(D - G)
+        PS:  perimeter(S - G)
+        SA:  span(S - G, along: flux(S, D))
+        SB:  span(D - G, along: flux(S, D))
+        NRD: SB / W
+        NRS: SA / W
+    spice:
+        prefix: X
+        subcircuit: sky130_fd_pr__nfet_01v8
+        terminal_order: [D, G, S, B]
+        parameters: [W, L, AD, AS, PD, PS, NRD, NRS, SA, SB]
+        parameter_style: named
+
+export device PMOS:
+    terminals: [D, G, S, B]
+    materials:
+        D: [P_Plus_Diffusion, Titanium_Nitride, Titanium_Silicide, Copper, Aluminum]
+        G: [Polysilicon, Titanium_Nitride, Titanium_Silicide, Copper, Aluminum]
+        S: [P_Plus_Diffusion, Titanium_Nitride, Titanium_Silicide, Copper, Aluminum]
+        B: [N_Plus_Diffusion, P_Plus_Diffusion, Titanium_Nitride, Titanium_Silicide, Copper, Aluminum]
+    metrics:
+        L:   span(G & hull(S, D), along: flux(S, D))
+        W:   span(G & hull(S, D), along: transverse(S, D))
+        AD:  area(D - G)
+        AS:  area(S - G)
+        PD:  perimeter(D - G)
+        PS:  perimeter(S - G)
+        SA:  span(S - G, along: flux(S, D))
+        SB:  span(D - G, along: flux(S, D))
+        NRD: SB / W
+        NRS: SA / W
+    spice:
+        prefix: X
+        subcircuit: sky130_fd_pr__pfet_01v8
+        terminal_order: [D, G, S, B]
+        parameters: [W, L, AD, AS, PD, PS, NRD, NRS, SA, SB]
+        parameter_style: named

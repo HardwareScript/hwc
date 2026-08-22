@@ -323,21 +323,9 @@ pub fn evaluate_coordinate_with_anchors(
                     CoordinateAxis::Y => (anchor_bbox.min.y + anchor_bbox.max.y) / 2,
                     CoordinateAxis::Z => (anchor_bbox.min.z + anchor_bbox.max.z) / 2,
                 },
-                hwc_parser::Edge::CenterX => match context_axis {
-                    CoordinateAxis::X => (anchor_bbox.min.x + anchor_bbox.max.x) / 2,
-                    CoordinateAxis::Y => anchor_bbox.min.y,
-                    CoordinateAxis::Z => anchor_bbox.min.z,
-                },
-                hwc_parser::Edge::CenterY => match context_axis {
-                    CoordinateAxis::X => anchor_bbox.min.x,
-                    CoordinateAxis::Y => (anchor_bbox.min.y + anchor_bbox.max.y) / 2,
-                    CoordinateAxis::Z => anchor_bbox.min.z,
-                },
-                hwc_parser::Edge::CenterZ => match context_axis {
-                    CoordinateAxis::X => anchor_bbox.min.x,
-                    CoordinateAxis::Y => anchor_bbox.min.y,
-                    CoordinateAxis::Z => (anchor_bbox.min.z + anchor_bbox.max.z) / 2,
-                },
+                hwc_parser::Edge::CenterX => (anchor_bbox.min.x + anchor_bbox.max.x) / 2,
+                hwc_parser::Edge::CenterY => (anchor_bbox.min.y + anchor_bbox.max.y) / 2,
+                hwc_parser::Edge::CenterZ => (anchor_bbox.min.z + anchor_bbox.max.z) / 2,
                 hwc_parser::Edge::Front
                 | hwc_parser::Edge::Back
                 | hwc_parser::Edge::MinZ

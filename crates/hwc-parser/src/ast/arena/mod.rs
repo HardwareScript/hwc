@@ -18,6 +18,6 @@ mod id_types;
 mod serde_impl;
 
 // Re-export all public types
-pub use ast_arena::AstArena;
+pub use ast_arena::{AstArena, AstArenaOffsets};
 pub use core::{Idx, IndexVec};
 pub use id_types::*;

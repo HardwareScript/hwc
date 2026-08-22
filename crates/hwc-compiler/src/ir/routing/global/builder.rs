@@ -174,7 +174,9 @@ impl<'a> AutoRouter<'a> {
 
         let mut obstacle_bboxes = Vec::new();
         for metadata in self.space.entity_graph.get_component_metadata() {
-            obstacle_bboxes.push(metadata.bbox);
+            if !metadata.name.contains('.') {
+                obstacle_bboxes.push(metadata.bbox);
+            }
         }
         for layer in self.space.entity_graph.get_substrate_layers().iter() {
             if layer.net == hwc_engine::NetId::UNCONNECTED

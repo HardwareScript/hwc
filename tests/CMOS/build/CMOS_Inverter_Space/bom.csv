@@ -1,0 +1,70 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,0.02x0.02x0.00mm,,,,,1
+
+# MATERIAL USAGE (Fabrication)
+Reference,Type,Material,Layer,Area_nm2,Volume_nm3
+NMOS_Diff,Pour,N_Plus_Diffusion,diff (z:0nm),1650000,247500000
+PMOS_Diff,Pour,P_Plus_Diffusion,diff (z:0nm),3300000,495000000
+NMOS_Gate,Pour,Polysilicon,poly (z:150nm),210000,37800000
+PMOS_Gate,Pour,Polysilicon,poly (z:150nm),360000,64800000
+Gate_Bridge,Pour,Polysilicon,poly (z:150nm),750000,135000000
+Gate_Input_Head,Pour,Polysilicon,poly (z:150nm),160000,28800000
+Gate_Contact_LI,Pour,Titanium_Nitride,li1 (z:530nm),160000,16000000
+Gate_Contact_M1,Pour,Aluminum,metal1 (z:780nm),160000,57600000
+NMOS_Source_LI,Pour,Titanium_Nitride,li1 (z:530nm),400000,40000000
+NMOS_Source_M1,Pour,Aluminum,metal1 (z:780nm),400000,144000000
+NMOS_Drain_LI,Pour,Titanium_Nitride,li1 (z:530nm),400000,40000000
+PMOS_Source_LI,Pour,Titanium_Nitride,li1 (z:530nm),800000,80000000
+PMOS_Source_M1,Pour,Aluminum,metal1 (z:780nm),800000,288000000
+PMOS_Drain_LI,Pour,Titanium_Nitride,li1 (z:530nm),800000,80000000
+Output_LI_Strap,Pour,Titanium_Nitride,li1 (z:530nm),2600000,260000000
+Output_M1_Pad,Pour,Aluminum,metal1 (z:780nm),640000,230400000
+Output_M1_Bridge,Pour,Aluminum,metal1 (z:780nm),2600000,936000000
+Sub_Tap_Diff,Pour,P_Plus_Diffusion,diff (z:0nm),90000,13500000
+Sub_Tap_LI,Pour,Titanium_Nitride,li1 (z:530nm),90000,9000000
+Sub_Tap_M1,Pour,Aluminum,metal1 (z:780nm),90000,32400000
+Well_Tap_Diff,Pour,N_Plus_Diffusion,diff (z:0nm),90000,13500000
+Well_Tap_LI,Pour,Titanium_Nitride,li1 (z:530nm),90000,9000000
+Well_Tap_M1,Pour,Aluminum,metal1 (z:780nm),90000,32400000
+VDD_Pad,Pour,Aluminum,metal1 (z:780nm),1440000,518400000
+VSS_Pad,Pour,Aluminum,metal1 (z:780nm),1440000,518400000
+Input_Pad,Pour,Aluminum,metal1 (z:780nm),1440000,518400000
+Output_Pad,Pour,Aluminum,metal1 (z:780nm),1440000,518400000
+Route_In_on_metal1,Route,Aluminum,metal1 (trace),400000,144000000
+Route_Out_on_metal1,Route,Aluminum,metal1 (trace),760000,273600000
+Route_VDD_on_metal1,Route,Aluminum,metal1 (trace),590000,212400000
+Route_VSS_on_metal1,Route,Aluminum,metal1 (trace),690000,248400000
+Gate_Via_Poly_LI,Contact,Tungsten,poly (z:150nm),62500,19000000
+Gate_Via_LI_M1,Contact,Tungsten,li1 (z:530nm),62500,19250000
+NMOS_S_Via_Diff_0,Contact,Tungsten,diff (z:0nm),62500,29687500
+NMOS_S_Via_M1_0,Contact,Tungsten,li1 (z:530nm),62500,19250000
+NMOS_S_Via_Diff_1,Contact,Tungsten,diff (z:0nm),62500,29687500
+NMOS_S_Via_M1_1,Contact,Tungsten,li1 (z:530nm),62500,19250000
+NMOS_D_Via_Diff_0,Contact,Tungsten,diff (z:0nm),62500,29687500
+NMOS_D_Via_Diff_1,Contact,Tungsten,diff (z:0nm),62500,29687500
+PMOS_S_Via_Diff_0,Contact,Tungsten,diff (z:0nm),62500,29687500
+PMOS_S_Via_M1_0,Contact,Tungsten,li1 (z:530nm),62500,19250000
+PMOS_S_Via_Diff_1,Contact,Tungsten,diff (z:0nm),62500,29687500
+PMOS_S_Via_M1_1,Contact,Tungsten,li1 (z:530nm),62500,19250000
+PMOS_S_Via_Diff_2,Contact,Tungsten,diff (z:0nm),62500,29687500
+PMOS_S_Via_M1_2,Contact,Tungsten,li1 (z:530nm),62500,19250000
+PMOS_D_Via_Diff_0,Contact,Tungsten,diff (z:0nm),62500,29687500
+PMOS_D_Via_Diff_1,Contact,Tungsten,diff (z:0nm),62500,29687500
+PMOS_D_Via_Diff_2,Contact,Tungsten,diff (z:0nm),62500,29687500
+Output_Via_M1_0,Contact,Tungsten,li1 (z:530nm),62500,19250000
+Output_Via_M1_1,Contact,Tungsten,li1 (z:530nm),62500,19250000
+Output_Bridge_Bot_Via,Contact,Tungsten,li1 (z:530nm),62500,19250000
+Output_Bridge_Top_Via,Contact,Tungsten,li1 (z:530nm),62500,19250000
+Sub_Tap_Licon,Contact,Tungsten,diff (z:0nm),62500,29687500
+Sub_Tap_Mcon,Contact,Tungsten,li1 (z:530nm),62500,19250000
+Well_Tap_Licon,Contact,Tungsten,diff (z:0nm),62500,29687500
+Well_Tap_Mcon,Contact,Tungsten,li1 (z:530nm),62500,19250000
+
+# AGGREGATED MATERIAL TOTALS (Foundry Fabrication Summary)
+Material,Total_Area_nm2,Total_Volume_nm3,Layer_Count,Coverage_Percentage
+Aluminum,12980000,4672800000,15,3.6%
+N_Plus_Diffusion,1740000,261000000,2,0.5%
+P_Plus_Diffusion,3390000,508500000,2,0.9%
+Polysilicon,1480000,266400000,4,0.4%
+Titanium_Nitride,5340000,534000000,8,1.5%
+Tungsten,1562500,606250000,25,0.4%

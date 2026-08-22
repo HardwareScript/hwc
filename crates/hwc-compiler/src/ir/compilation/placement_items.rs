@@ -99,7 +99,8 @@ pub fn collect_placement_items(
             | SpaceTopLevelStatement::Expose(_)
             | SpaceTopLevelStatement::RouteNetPolicy(_)
             | SpaceTopLevelStatement::Let(_)
-            | SpaceTopLevelStatement::Const(_) => {
+            | SpaceTopLevelStatement::Const(_)
+            | SpaceTopLevelStatement::DeviceInstance(_) => {
                 // Regions were collected above; the rest is metadata already
                 // folded into `eval_context` — nothing to place.
             }

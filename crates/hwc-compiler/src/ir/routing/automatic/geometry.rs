@@ -1,4 +1,4 @@
-﻿//! Geometry routing: spatial index, path refinement, and segment creation.
+//! Geometry routing: spatial index, path refinement, and segment creation.
 //!
 //! Phase 2 of the routing pipeline: builds the spatial index for obstacle
 //! detection, runs the topological router, and creates trace segments.
@@ -67,6 +67,10 @@ pub fn build_spatial_index(
 
     for meta in config.space.entity_graph.get_component_metadata() {
         if meta.name == config.from_component_name || meta.name == config.to_component_name {
+            continue;
+        }
+
+        if meta.name.as_str().contains('.') {
             continue;
         }
 

@@ -94,6 +94,8 @@ impl GeometryRouter {
                 start: final_start,
                 goal: final_goal,
                 target_z: None,
+                normals: None,
+                escape_stub_nm: None,
             };
 
             // v0.1.9: If net has a routing pattern, use length-constrained routing

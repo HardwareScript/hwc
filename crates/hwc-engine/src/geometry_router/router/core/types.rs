@@ -16,7 +16,7 @@ use rustc_hash::FxHashMap;
 pub struct RouteSpaceRequest<'a> {
     pub grid_bbox: &'a crate::geometry::BoundingBox,
     pub nets: &'a FxHashMap<crate::netlist::NetId, Vec<crate::geometry::Point3D>>,
-    pub explicit_segments: Option<&'a [(crate::netlist::NetId, Vec<Point3D>, Option<i64>)]>,
+    pub explicit_segments: Option<&'a [crate::geometry_router::ExplicitRouteSegment]>,
     pub obstacle_bboxes: &'a [crate::geometry::BoundingBox],
     pub substrate_layers: Option<&'a [SubstrateLayer]>,
     pub net_frequencies: &'a FxHashMap<crate::netlist::NetId, f64>,

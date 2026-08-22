@@ -78,14 +78,11 @@ pub fn profile_to_constraints(
         ));
     };
 
-    let copper_thickness_nm = profile
+    let default_conductor_thickness_nm = profile
         .manufacturing
         .as_ref()
-        .and_then(|m| m.copper_thickness.as_ref())
-        .map(measurement_to_nm)
-        .ok_or_else(|| {
-            ConversionError::MissingProfileConstraint("manufacturing.copper_thickness".into())
-        })?;
+        .and_then(|m| m.conductor_thickness.as_ref().or(m.copper_thickness.as_ref()))
+        .map(measurement_to_nm);
 
     let _ipc2221_k_external = profile
         .manufacturing
@@ -185,12 +182,15 @@ pub fn profile_to_constraints(
     };
 
     let layer = if let Some(layer_def) = &profile.layer {
+        let min_thickness_nm = layer_def
+            .min_thickness
+            .as_ref()
+            .map(measurement_to_nm)
+            .or(default_conductor_thickness_nm)
+            .unwrap_or(0);
+
         LayerConstraints {
-            min_thickness_nm: layer_def
-                .min_thickness
-                .as_ref()
-                .map(measurement_to_nm)
-                .unwrap_or(copper_thickness_nm),
+            min_thickness_nm,
             max_thickness_nm: 0,
             allowed_conductors: layer_def.allowed_conductors.clone(),
             allowed_dielectrics: layer_def.allowed_dielectrics.clone(),

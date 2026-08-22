@@ -96,6 +96,24 @@ impl UnitRegistry {
             .ok_or_else(|| format!("Cannot convert unit '{}' (no multiplier defined)", unit_str))
     }
 
+    /// Picometers per SI base meter (1 m = 10^12 pm)
+    pub const PICOMETERS_PER_METER: f64 = 1_000_000_000_000.0;
+
+    /// Nanometers per SI base meter (1 m = 10^9 nm)
+    pub const NANOMETERS_PER_METER: f64 = 1_000_000_000.0;
+
+    /// Convert a distance measurement value to picometers using base SI meters.
+    pub fn to_picometers(&self, value: f64, unit_str: &str) -> Result<i64, String> {
+        let meters = self.convert_with_validation(value, unit_str, "length")?;
+        Ok((meters * Self::PICOMETERS_PER_METER).round() as i64)
+    }
+
+    /// Convert a distance measurement value to nanometers using base SI meters.
+    pub fn to_nanometers(&self, value: f64, unit_str: &str) -> Result<i64, String> {
+        let meters = self.convert_with_validation(value, unit_str, "length")?;
+        Ok((meters * Self::NANOMETERS_PER_METER).round() as i64)
+    }
+
     /// Get all registered unit symbols.
     pub fn all_symbols(&self) -> Vec<&str> {
         self.units.keys().map(|s| s.as_str()).collect()

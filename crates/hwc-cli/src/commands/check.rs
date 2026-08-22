@@ -14,11 +14,16 @@ pub fn execute(
 ) -> Result<()> {
     if foundry {
         println!(
-            "🔍 Checking: {} (v0.1.6 syntax + foundry validation)",
-            input.display()
+            "🔍 Checking: {} (v{} syntax + foundry validation)",
+            input.display(),
+            env!("CARGO_PKG_VERSION")
         );
     } else {
-        println!("🔍 Checking: {} (v0.1.6 syntax)", input.display());
+        println!(
+            "🔍 Checking: {} (v{} syntax)",
+            input.display(),
+            env!("CARGO_PKG_VERSION")
+        );
     }
 
     let source = std::fs::read_to_string(&input)
@@ -60,14 +65,16 @@ pub fn execute(
         }
         eprintln!("\n{}", collector.summary());
 
-        // Check if this looks like v0.1.5 syntax and provide migration hint
-        eprintln!("\n💡 Hint: This file may use v0.1.5 syntax.");
-        eprintln!("   v0.1.6 changes:");
-        eprintln!("   - Remove 'define' keyword: component Name: (not define component \"Name\":)");
+        eprintln!(
+            "\n💡 Hint: This file may use outdated syntax (current: v{}).",
+            env!("CARGO_PKG_VERSION")
+        );
+        eprintln!("   Syntax rules:");
+        eprintln!("   - Use 'component Name:' (no 'define' keyword)");
         eprintln!("   - Use bare identifiers (no quotes on type names)");
         eprintln!("   - Use single '=' for comparison (not '==')");
         eprintln!("   - Use lowercase 'reg' (not 'Reg')");
-        eprintln!("\n   See: https://docs.hw-script.org/v0.1.6/migration\n");
+        eprintln!("\n   See: https://docs.hw-script.org/v{}/migration\n", env!("CARGO_PKG_VERSION"));
 
         return Err(miette::miette!("Syntax errors found"));
     }
@@ -84,7 +91,7 @@ pub fn execute(
         return Err(miette::miette!("Warnings found with --deny-warnings"));
     }
 
-    println!("✅ Syntax valid (v0.1.6)");
+    println!("✅ Syntax valid (v{})", env!("CARGO_PKG_VERSION"));
 
     // Build symbol table for semantic validation
     use hwc_compiler::{ModuleResolver, SymbolTable};

@@ -122,27 +122,31 @@ impl fmt::Display for Unit {
 }
 
 impl DistanceUnit {
+    /// Base SI multiplier in meters (1 m = 1.0)
+    pub const fn base_si_multiplier(&self) -> f64 {
+        match self {
+            Self::Picometers => 1e-12,
+            Self::Nanometers => 1e-9,
+            Self::Micrometers => 1e-6,
+            Self::Millimeters => 1e-3,
+            Self::Centimeters => 1e-2,
+        }
+    }
+
+    /// Convert a value in this unit to base SI meters (f64).
+    pub fn to_base_si(&self, value: f64) -> f64 {
+        value * self.base_si_multiplier()
+    }
+
     /// Convert a value in this unit to nanometers (f64).
     pub fn to_nanometers(&self, value: f64) -> f64 {
-        match self {
-            Self::Millimeters => value * 1_000_000.0,
-            Self::Centimeters => value * 10_000_000.0,
-            Self::Micrometers => value * 1_000.0,
-            Self::Nanometers => value,
-            Self::Picometers => value * 0.001,
-        }
+        self.to_base_si(value) * 1_000_000_000.0
     }
 
     /// Convert a value in this unit to picometers (i64).
     /// This is the engine's internal coordinate representation.
     pub fn to_picometers(&self, value: f64) -> i64 {
-        match self {
-            Self::Millimeters => (value * 1_000_000.0) as i64,
-            Self::Centimeters => (value * 10_000_000.0) as i64,
-            Self::Micrometers => (value * 1_000.0) as i64,
-            Self::Nanometers => value as i64,
-            Self::Picometers => value as i64,
-        }
+        (self.to_base_si(value) * 1_000_000_000_000.0).round() as i64
     }
 }
 
@@ -217,22 +221,22 @@ mod tests {
 
     #[test]
     fn test_mm_to_picometers() {
-        assert_eq!(DistanceUnit::Millimeters.to_picometers(1.0), 1_000_000);
+        assert_eq!(DistanceUnit::Millimeters.to_picometers(1.0), 1_000_000_000);
     }
 
     #[test]
     fn test_cm_to_picometers() {
-        assert_eq!(DistanceUnit::Centimeters.to_picometers(1.0), 10_000_000);
+        assert_eq!(DistanceUnit::Centimeters.to_picometers(1.0), 10_000_000_000);
     }
 
     #[test]
     fn test_um_to_picometers() {
-        assert_eq!(DistanceUnit::Micrometers.to_picometers(1.0), 1_000);
+        assert_eq!(DistanceUnit::Micrometers.to_picometers(1.0), 1_000_000);
     }
 
     #[test]
     fn test_nm_to_picometers() {
-        assert_eq!(DistanceUnit::Nanometers.to_picometers(1.0), 1);
+        assert_eq!(DistanceUnit::Nanometers.to_picometers(1.0), 1_000);
     }
 
     #[test]

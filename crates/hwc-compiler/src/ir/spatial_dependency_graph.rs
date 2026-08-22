@@ -78,13 +78,20 @@ impl SpatialDependencyGraph {
     }
 
     /// Resolve an entity name to a node index, tolerating array syntax
-    /// (e.g. `J0[0]` falls back to `J0`).
+    /// (e.g. `J0[0]` falls back to `J0`) and hierarchical instance paths (e.g. `PMOS_Inst.Source_Pad` falls back to `PMOS_Inst`).
     fn resolve(&self, name: &str) -> Option<usize> {
         if let Some(&idx) = self.name_to_index.get(name) {
             return Some(idx);
         }
         if let Some(open_bracket) = name.find('[') {
-            return self.name_to_index.get(&name[..open_bracket]).copied();
+            if let Some(&idx) = self.name_to_index.get(&name[..open_bracket]) {
+                return Some(idx);
+            }
+        }
+        if let Some((instance, _)) = name.split_once('.') {
+            if let Some(&idx) = self.name_to_index.get(instance) {
+                return Some(idx);
+            }
         }
         None
     }

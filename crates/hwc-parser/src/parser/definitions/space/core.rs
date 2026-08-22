@@ -95,6 +95,7 @@ impl crate::parser::Parser {
         let mut nets = Vec::new();
         let mut regions: Vec<crate::ast::arena::RegionId> = Vec::new(); // v0.2.0: Region declarations
         let mut device_nets_map: rustc_hash::FxHashMap<CompactString, rustc_hash::FxHashMap<CompactString, CompactString>> = rustc_hash::FxHashMap::default(); // v0.2.1: Virtual terminal bindings
+        let mut declared_devices = Vec::new(); // First-class nominal device instance declarations
 
         // Parse space body
         let mut loop_iterations = 0;
@@ -123,6 +124,19 @@ impl crate::parser::Parser {
             // Unified control flow - single if-else chain
             if self.check(&Token::Dimensions) {
                 dimensions = self.parse_dimensions().ok();
+            } else if self.check(&Token::Device) {
+                // First-class nominal device instance declaration: `device PMOS named M_PMOS`
+                match self.parse_space_device_instance() {
+                    Ok(dev_inst) => {
+                        declared_devices.push(dev_inst.clone());
+                        statements.push(SpaceTopLevelStatement::DeviceInstance(dev_inst));
+                    }
+                    Err(err) => {
+                        collector.report(err);
+                        self.sync_to_next_definition();
+                        continue;
+                    }
+                }
             } else if self.check(&Token::Let) {
                 // v0.2.0: Parse local variable binding: `let pad_w = 150um`
                 match self.parse_space_let_binding() {
@@ -432,6 +446,7 @@ impl crate::parser::Parser {
             nets,
             regions, // v0.2.0: Region declarations
             device_nets: device_nets_map, // v0.2.1: Virtual terminal bindings
+            declared_devices, // First-class nominal device instance declarations
             span: Span::new(start_pos, end_pos),
         })
     }

@@ -124,7 +124,7 @@ enum Commands {
         parallel: bool,
     },
 
-    /// Check syntax without building (v0.1.6 syntax validation)
+    /// Check syntax without building (current syntax validation)
     Check {
         /// Input .hw file
         #[arg(value_name = "FILE")]

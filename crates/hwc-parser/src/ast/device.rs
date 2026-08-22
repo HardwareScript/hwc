@@ -36,6 +36,14 @@ pub struct DeviceDefinition {
     pub span: Span,
 }
 
+/// First-class nominal device instance declaration in a space (e.g. `device PMOS named M_PMOS`)
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct DeviceInstanceDeclaration {
+    pub device_type: CompactString,   // e.g. "PMOS", "NMOS", "Resistor"
+    pub instance_name: CompactString, // e.g. "M_PMOS", "M_NMOS", "R1"
+    pub span: Span,
+}
+
 /// Strongly-typed 2D Manifold Set Expression
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ManifoldExpr {

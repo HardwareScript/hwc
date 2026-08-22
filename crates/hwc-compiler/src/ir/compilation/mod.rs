@@ -79,7 +79,7 @@ pub fn compile_space_recursive(
         force_reroute: true,
         query_store: None,
         unit_registry,
-        arena,
+        arena: symbol_table.arena(),
     })?;
 
     // Check if any errors were collected during child compilation
@@ -506,7 +506,7 @@ pub fn program_to_spaces_with_lockfile(
             force_reroute,
             query_store: shared_qs.take(),
             unit_registry,
-            arena: &program.arena,
+            arena: symbol_table.arena(),
         })?;
 
         shared_qs = qs;

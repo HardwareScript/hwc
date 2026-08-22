@@ -1,4 +1,4 @@
-﻿//! Hierarchical space instantiation (v0.2.1)
+//! Hierarchical space instantiation (v0.2.1)
 //!
 //! Implements the "Affine Flat-Blitter" pattern for hierarchical space composition.
 //! It performs coordinate transformation and net remapping to flatten a pre-compiled
@@ -54,48 +54,23 @@ pub fn instantiate_sub_space(
     parent_space: &mut HardwareSpace,
     unit_registry: &UnitRegistry,
     arena: &hwc_parser::ast::arena::AstArena,
+    bbox_tracker: &mut crate::bounding_box_tracker::BoundingBoxTracker,
 ) -> Result<(), IrError> {
-//     eprintln!("[HIERARCHICAL v0.2.1 FIX] ==== START instantiate_sub_space ====");
-//     eprintln!(
-//         "[HIERARCHICAL] Instantiating space '{}' as instance '{}'",
-//         placement.space_name, placement.instance_name.base
-//     );
-
     // STEP 1: Look up the child space definition from symbol table
     // NO FALLBACK: If space doesn't exist, this is a compilation error
     let space_def = symbol_table
         .get_space(placement.space_name.as_str())
         .map_err(|_| {
-            // DEBUG: List all available spaces
-//             eprintln!("[DEBUG] Available spaces in symbol table:");
-//             eprintln!(
-//                 "[DEBUG]   Local layer: {:?}",
-//                 symbol_table.list_local_spaces()
-//             );
-//             eprintln!("[DEBUG]   HPM layers: {:?}", symbol_table.list_hpm_spaces());
-
             IrError::PlacementError(format!(
                 "Space '{}' not found in symbol table. Did you import it?",
                 placement.space_name
             ))
         })?;
 
-//     eprintln!(
-//         "[HIERARCHICAL] Found space definition '{}' with {} statements",
-//         space_def.name,
-//         space_def.statements.len()
-//     );
-
     // STEP 2: Recursively compile the child space
     // This will populate a HardwareSpace with all entities
     let child_space =
         compile_child_space(space_def, symbol_table, eval_context, unit_registry, arena)?;
-
-//     eprintln!(
-//         "[HIERARCHICAL] Child space compiled: {} substrate layers, {} routed segment groups",
-//         child_space.entity_graph.substrate_layers.len(),
-//         child_space.entity_graph.routed_segment_count()
-//     );
 
     // STEP 3: Evaluate position and construct transformation matrix
     let (x_nm, y_nm, z_layer) = evaluate_coordinate_nm(&placement.position, eval_context)?;
@@ -108,6 +83,68 @@ pub fn instantiate_sub_space(
     })?;
 
     let transform = FixedTransform2D::new(x_nm, y_nm, z_layer as i64, rotation);
+
+    // Register the entire child space as an instance in BoundingBoxTracker
+    let origin_point = hwc_engine::Point3D::new(x_nm, y_nm, z_layer as i64);
+    let instance_bbox = hwc_engine::geometry::BoundingBox::new(
+        hwc_physics::Point3D::new(x_nm, y_nm, z_layer as i64),
+        hwc_physics::Point3D::new(
+            x_nm + child_space.dimensions.width_nm,
+            y_nm + child_space.dimensions.height_nm,
+            z_layer as i64 + child_space.dimensions.depth_nm,
+        ),
+    );
+    bbox_tracker.register(
+        placement.instance_name.base.clone(),
+        instance_bbox,
+        origin_point,
+    );
+
+    // Register all child pours with namespaced names (e.g., "PMOS_Inst.Source_Pad")
+    for pour in &child_space.pours {
+        let parent_pour_name = format!("{}.{}", placement.instance_name.base, pour.name);
+        if let Some(ref child_bbox) = pour.bbox {
+            let parent_bbox = transform.transform_bbox(child_bbox)?;
+            let child_origin = hwc_engine::Point3D::new(
+                child_bbox.min.x,
+                child_bbox.min.y,
+                child_bbox.min.z,
+            );
+            let (px, py, pz) = transform.transform_point(child_origin.x, child_origin.y, child_origin.z)?;
+            let parent_origin = hwc_engine::Point3D::new(px, py, pz);
+            bbox_tracker.register(parent_pour_name.into(), parent_bbox, parent_origin);
+        }
+    }
+
+    // Register all child components with namespaced names
+    for (child_comp_name, child_bbox) in &child_space.component_bboxes {
+        let parent_comp_name = format!("{}.{}", placement.instance_name.base, child_comp_name);
+        let parent_bbox = transform.transform_bbox(child_bbox)?;
+        let child_origin = hwc_engine::Point3D::new(
+            child_bbox.min.x,
+            child_bbox.min.y,
+            child_bbox.min.z,
+        );
+        let (px, py, pz) = transform.transform_point(child_origin.x, child_origin.y, child_origin.z)?;
+        let parent_origin = hwc_engine::Point3D::new(px, py, pz);
+        bbox_tracker.register(parent_comp_name.into(), parent_bbox, parent_origin);
+    }
+
+    // Register all child contacts with namespaced names
+    for contact in &child_space.contacts {
+        let parent_contact_name = format!("{}.{}", placement.instance_name.base, contact.name);
+        if let Some(ref child_bbox) = contact.bbox {
+            let parent_bbox = transform.transform_bbox(child_bbox)?;
+            let child_origin = hwc_engine::Point3D::new(
+                child_bbox.min.x,
+                child_bbox.min.y,
+                child_bbox.min.z,
+            );
+            let (px, py, pz) = transform.transform_point(child_origin.x, child_origin.y, child_origin.z)?;
+            let parent_origin = hwc_engine::Point3D::new(px, py, pz);
+            bbox_tracker.register(parent_contact_name.into(), parent_bbox, parent_origin);
+        }
+    }
 
 //     eprintln!(
 //         "[HIERARCHICAL] Transform: offset=({}, {}, {}), rotation={}Â°",
@@ -219,7 +256,13 @@ pub fn instantiate_sub_space(
         &placement.instance_name.base,
     )?;
 
-    transform_vias(&child_space, parent_space, &transform, &net_id_map)?;
+    transform_vias(
+        &child_space,
+        parent_space,
+        &transform,
+        &net_id_map,
+        &placement.instance_name.base,
+    )?;
 
     // v0.2.0: Transfer layer connection database entries from child to parent
     // This ensures that pours and vias registered in the child space are available
@@ -282,22 +325,18 @@ pub(super) fn compile_child_space(
     Ok(child_space)
 }
 
-/// Evaluate a coordinate expression to nanometers
+/// Evaluate a coordinate expression to nanometers for space instance placement.
 ///
-/// Converts physical measurements (nm, Âµm, mm) to integer nanometers.
-/// NO FALLBACKS: All coordinates must be valid physical measurements.
+/// Accepts both integer layer indices and physical measurements (e.g. `z: 0nm`)
+/// for the Z axis, since space instances are placed at a physical origin in the
+/// parent coordinate system rather than at a logical layer index.
 pub(super) fn evaluate_coordinate_nm(
     coord: &hwc_parser::Coordinate,
     eval_context: &EvaluationContext,
 ) -> Result<(i64, i64, i32), IrError> {
-    // Evaluate coordinate using the existing evaluation infrastructure
-    let (x_pm, y_pm, z_layer) = coord
-        .evaluate_picometers(eval_context)
+    let (x_nm, y_nm, z_nm) = coord
+        .evaluate_for_space_instance(eval_context)
         .map_err(|e| IrError::PlacementError(format!("Failed to evaluate coordinate: {}", e)))?;
 
-    // Convert picometers to nanometers (1nm = 1000pm)
-    let x_nm = x_pm / 1000;
-    let y_nm = y_pm / 1000;
-
-    Ok((x_nm, y_nm, z_layer))
+    Ok((x_nm, y_nm, z_nm as i32))
 }

@@ -232,12 +232,8 @@ pub fn execute_placement(
             PlacementItem::SpaceInstance(space_inst_id) => {
                 // v0.2.1: Hierarchical space instantiation
                 let space_inst = &ctx.arena.space_instances[space_inst_id];
-//                 eprintln!(
-//                     "[DEBUG] Instantiating sub-space: {} as {}",
-//                     space_inst.space_name, space_inst.instance_name.base
-//                 );
 
-                // Pass the full space object so we have access to the netlist
+                // Pass the full space object and bbox_tracker
                 crate::ir::placement::instantiate_sub_space(
                     space_inst,
                     ctx.symbol_table,
@@ -245,6 +241,7 @@ pub fn execute_placement(
                     space,
                     ctx.unit_registry,
                     ctx.arena,
+                    bbox_tracker,
                 )?;
             }
             PlacementItem::Route(_) => {

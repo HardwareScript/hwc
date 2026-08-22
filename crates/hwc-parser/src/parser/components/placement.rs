@@ -51,6 +51,104 @@ impl crate::parser::Parser {
         }
     }
 
+    /// Parse alignment target: either an expression or an entity name (including namespaced entities)
+    pub(in crate::parser) fn parse_alignment_target(&mut self) -> Result<AlignmentTarget, ParseError> {
+        if self.check(&Token::OpenParen) {
+            let expr = self.parse_expression()?;
+            Ok(AlignmentTarget::Expression(expr))
+        } else if self
+            .current()
+            .map(|t| matches!(t.token, Token::Identifier(_)))
+            .unwrap_or(false)
+        {
+            let is_expr = {
+                let mut lookahead = 0;
+                let mut found_edge_or_op = false;
+                while let Some(t) = self.tokens.get(self.current + lookahead) {
+                    match &t.token {
+                        Token::Identifier(id) => {
+                            let is_edge = matches!(
+                                id.as_str(),
+                                "left"
+                                    | "right"
+                                    | "top"
+                                    | "bottom"
+                                    | "front"
+                                    | "back"
+                                    | "min_z"
+                                    | "max_z"
+                                    | "top_left"
+                                    | "top_right"
+                                    | "bottom_left"
+                                    | "bottom_right"
+                                    | "center"
+                                    | "center_x"
+                                    | "center_y"
+                                    | "center_z"
+                            );
+                            if is_edge
+                                && lookahead > 0
+                                && matches!(
+                                    self.tokens.get(self.current + lookahead - 1).map(|x| &x.token),
+                                    Some(Token::Dot)
+                                )
+                            {
+                                found_edge_or_op = true;
+                                break;
+                            }
+                            lookahead += 1;
+                        }
+                        Token::Dot => {
+                            lookahead += 1;
+                        }
+                        Token::OpenBracket => {
+                            let mut depth = 1;
+                            lookahead += 1;
+                            while depth > 0 && self.current + lookahead < self.tokens.len() {
+                                if let Some(bt) = self.tokens.get(self.current + lookahead) {
+                                    match bt.token {
+                                        Token::OpenBracket => depth += 1,
+                                        Token::CloseBracket => depth -= 1,
+                                        _ => {}
+                                    }
+                                }
+                                lookahead += 1;
+                            }
+                        }
+                        Token::Plus
+                        | Token::Hyphen
+                        | Token::Asterisk
+                        | Token::Slash
+                        | Token::Percent => {
+                            found_edge_or_op = true;
+                            break;
+                        }
+                        _ => break,
+                    }
+                }
+                found_edge_or_op
+            };
+
+            if is_expr {
+                let expr = self.parse_expression()?;
+                Ok(AlignmentTarget::Expression(expr))
+            } else {
+                let start_span = self.current_span().start;
+                let mut segments = Vec::new();
+                segments.push(self.expect_identifier_string()?);
+                while self.check(&Token::Dot) {
+                    self.advance(); // consume '.'
+                    segments.push(self.expect_identifier_string()?);
+                }
+                let full_name = segments.join(".");
+                let span = Span::new(start_span, self.previous_span().end);
+                Ok(AlignmentTarget::Entity(ComponentName::simple(full_name.into(), span)))
+            }
+        } else {
+            Err(self.error("Expected entity name or expression after 'with'"))
+        }
+    }
+
     /// Streamlined string expression parser using standard operator precedence
     fn parse_expression_from_str(
         &self,

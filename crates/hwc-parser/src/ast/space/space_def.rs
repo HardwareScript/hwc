@@ -55,6 +55,9 @@ pub struct SpaceDefinition {
     /// Maps device_name -> (terminal_name -> net_name)
     /// Example: device_nets R1: { BULK: GND }
     pub device_nets: FxHashMap<CompactString, FxHashMap<CompactString, CompactString>>,
+
+    /// First-class nominal device instance declarations (e.g. `device PMOS named M_PMOS`)
+    pub declared_devices: Vec<crate::ast::device::DeviceInstanceDeclaration>,
     
     pub span: Span,
 }
@@ -77,6 +80,7 @@ pub enum SpaceTopLevelStatement {
     Region(RegionId),    // v0.2.0: Region declaration (arena-allocated)
     Let(LetBinding),     // v0.2.0: Local variable binding
     Const(ConstBinding), // v0.2.1: Immutable constant binding
+    DeviceInstance(crate::ast::device::DeviceInstanceDeclaration), // First-class nominal device declaration
 }
 
 /// v0.1.8: Prescriptive net-scoped route policy

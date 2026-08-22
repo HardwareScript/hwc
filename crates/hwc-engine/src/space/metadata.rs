@@ -73,6 +73,8 @@ pub struct DeviceBinding {
     pub device_name: CompactString, // e.g., "M1", "R1"
     pub terminals: Vec<CompactString>, // e.g., ["gate"], or ["A", "B"] for resistors
     pub priority: BindingPriority, // v0.2.2: Processing order priority
+    /// Canonical hierarchical definition path (e.g., `CMOS_Inverter::PMOS_Inst::M_PMOS`)
+    pub def_path: Option<hwc_types::DefPath>,
 }
 
 /// Device instance metadata (v0.2.1: Native Device Support)
@@ -83,6 +85,8 @@ pub struct DeviceBinding {
 pub struct DeviceInstance {
     /// Instance name (e.g., "R1", "M1")
     pub name: CompactString,
+    /// Canonical hierarchical definition path (e.g., `CMOS_Inverter::PMOS_Inst::M_PMOS`)
+    pub def_path: Option<hwc_types::DefPath>,
     /// Device type name (e.g., "Resistor", "NMOS", "Capacitor")
     pub device_type: CompactString,
     /// Terminal names (e.g., ["A", "B"] for resistor, ["gate", "source", "drain", "bulk"] for MOSFET)

@@ -42,10 +42,28 @@ pub(super) fn transform_pours(
         let parent_device_binding =
             pour.device_binding
                 .as_ref()
-                .map(|db| hwc_engine::space::DeviceBinding {
-                    device_name: format!("{}.{}", instance_name, db.device_name).into(),
-                    terminals: db.terminals.clone(), // v0.2.2: Clone all terminals
-                    priority: db.priority, // v0.2.2: Already engine type, no conversion needed
+                .map(|db| {
+                    let def_path = db.def_path.as_ref().map(|p| {
+                        let mut new_path = hwc_types::DefPath::root(parent_space.name.as_str());
+                        new_path.push_mut(instance_name);
+                        for segment in &p.segments {
+                            if segment.as_str() != child_space.name.as_str() {
+                                new_path.push_mut(segment.clone());
+                            }
+                        }
+                        new_path
+                    }).unwrap_or_else(|| {
+                        hwc_types::DefPath::root(parent_space.name.as_str())
+                            .push(instance_name)
+                            .push(db.device_name.as_str())
+                    });
+
+                    hwc_engine::space::DeviceBinding {
+                        device_name: format!("{}.{}", instance_name, db.device_name).into(),
+                        terminals: db.terminals.clone(), // v0.2.2: Clone all terminals
+                        priority: db.priority, // v0.2.2: Already engine type, no conversion needed
+                        def_path: Some(def_path),
+                    }
                 });
 
         parent_space.pours.push(hwc_engine::space::PourMetadata {
@@ -96,6 +114,42 @@ pub(super) fn transform_contacts(
         } else {
             None
         };
+
+        // Register transformed contact in parent ViaInstanceDatabase to prevent auto-via insertion duplicates
+        if let (Some(ref p_bbox), Some(ref from_layer), Some(ref to_layer), Some(ref p_net_name)) =
+            (&parent_bbox, &contact.from_layer, &contact.to_layer, &parent_net)
+        {
+            let parent_net_id = parent_space
+                .netlist
+                .get_net_by_name(p_net_name.as_str())
+                .unwrap_or_else(|| {
+                    parent_space.netlist.add_net(
+                        p_net_name.clone(),
+                        100_000,
+                        0,
+                    )
+                });
+
+            let xy_bbox = (
+                p_bbox.min.x,
+                p_bbox.min.y,
+                p_bbox.max.x,
+                p_bbox.max.y,
+            );
+            let z_range = (
+                contact.z_start_nm + transform.offset_z_nm,
+                contact.z_end_nm + transform.offset_z_nm,
+            );
+
+            parent_space.via_instance_db.register(
+                &parent_contact_name,
+                parent_net_id,
+                from_layer.as_str(),
+                to_layer.as_str(),
+                xy_bbox,
+                z_range,
+            );
+        }
 
         parent_space
             .contacts

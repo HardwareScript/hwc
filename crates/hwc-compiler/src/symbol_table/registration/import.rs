@@ -1,4 +1,4 @@
-﻿use super::super::layer::SymbolTable;
+use super::super::layer::SymbolTable;
 use hwc_parser::{
     logic::{EnumDefinition, LogicDefinition, StructDefinition},
     BridgeDefinition, ComponentDefinition, InterfaceDefinition, MaterialAliasDefinition,
@@ -9,7 +9,40 @@ use hwc_parser::{
 
 use super::super::Definition;
 
+use compact_str::CompactString;
+
 impl SymbolTable {
+    /// Register an imported definition (already present in arena) into the HPM layer
+    pub fn register_import_definition(&mut self, def: Definition) {
+        if self.hpm.is_empty() {
+            self.hpm.push(super::super::layer::SymbolLayer::new());
+        }
+        let name: CompactString = match def {
+            Definition::Bridge(id) => format!("{}_{}", self.arena.bridge_defs[id].from, self.arena.bridge_defs[id].to).into(),
+            Definition::Material(id) => self.arena.material_defs[id].name.as_str().to_string().into(),
+            Definition::Profile(id) => self.arena.profile_defs[id].name.as_str().to_string().into(),
+            Definition::Component(id) => self.arena.component_defs[id].name.as_str().to_string().into(),
+            Definition::Module(id) => self.arena.module_defs[id].name.as_str().to_string().into(),
+            Definition::Logic(id) => self.arena.logic_defs[id].name.as_str().to_string().into(),
+            Definition::Enum(id) => self.arena.enum_defs[id].name.as_str().to_string().into(),
+            Definition::Struct(id) => self.arena.struct_defs[id].name.as_str().to_string().into(),
+            Definition::Mechanical(id) => self.arena.mechanical_defs[id].name.as_str().to_string().into(),
+            Definition::Interface(id) | Definition::PolymorphicInterface(id) => self.arena.interface_defs[id].name.as_str().to_string().into(),
+            Definition::Test(id) => self.arena.test_defs[id].name.as_str().to_string().into(),
+            Definition::SignalGroup(id) => self.arena.signal_group_defs[id].name.as_str().to_string().into(),
+            Definition::Pattern(id) => self.arena.pattern_defs[id].name.as_str().to_string().into(),
+            Definition::Strategy(id) => self.arena.strategy_defs[id].name.as_str().to_string().into(),
+            Definition::Unit(id) => self.arena.unit_defs[id].symbol.clone(),
+            Definition::Device(id) => self.arena.device_defs[id].name.as_str().to_string().into(),
+            Definition::Const(id) => self.arena.const_defs[id].name.clone(),
+            Definition::Shape(id) => self.arena.shape_defs[id].name.as_str().to_string().into(),
+            Definition::MaterialAlias(id) => self.arena.material_alias_defs[id].name.as_str().to_string().into(),
+            Definition::Space(id) => self.arena.space_defs[id].name.as_str().to_string().into(),
+            Definition::SpiceModel(id) => self.arena.spice_model_defs[id].name.as_str().to_string().into(),
+            Definition::Subcircuit(id) => self.arena.subcircuit_defs[id].name.as_str().to_string().into(),
+        };
+        self.hpm.last_mut().unwrap().insert(name, def);
+    }
     /// Register an imported space definition (in HPM layer) (v0.2.1)
     ///
     /// v0.2.1: Hierarchical Space Composition support

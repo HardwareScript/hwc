@@ -300,6 +300,7 @@ impl super::super::super::Parser {
         &mut self,
     ) -> Result<ManufacturingConstraints, ParseError> {
         let start_pos = self.current_span().start;
+        let mut conductor_thickness = None;
         let mut copper_thickness = None;
         let mut ipc2221_k_external = None;
         let mut ipc2221_k_internal = None;
@@ -324,8 +325,16 @@ impl super::super::super::Parser {
             self.expect(&Token::Colon)?;
 
             match field_name.as_str() {
+                "conductor_thickness" => {
+                    let measurement = self.parse_measurement()?;
+                    conductor_thickness = Some(measurement.clone());
+                    copper_thickness = Some(measurement);
+                    self.skip_whitespace();
+                }
                 "copper_thickness" => {
-                    copper_thickness = Some(self.parse_measurement()?);
+                    let measurement = self.parse_measurement()?;
+                    conductor_thickness = Some(measurement.clone());
+                    copper_thickness = Some(measurement);
                     self.skip_whitespace();
                 }
                 "ipc2221_k_external" => {
@@ -381,6 +390,7 @@ impl super::super::super::Parser {
         let end_pos = self.previous_span().end;
 
         Ok(ManufacturingConstraints {
+            conductor_thickness,
             copper_thickness,
             ipc2221_k_external,
             ipc2221_k_internal,

@@ -1,0 +1,195 @@
+# nmos_cell.hw - Modular Parameterized SKY130 1.8V NMOS Standard Cell
+# Full Physical Synthesis with Relational Anchoring, BSIM4 Binding & P-Substrate Tap
+
+import * from @std/primitives/units
+import * from "./cmos_pdk"
+
+export module NMOSTransistor:
+    pins: [input In, output Out, ground VSS]
+    route Out to VSS
+
+export space NMOS_Cell implements NMOSTransistor:
+    dimensions: 6.0um by 6.0um
+    profile: SKY130_1V8_CMOS
+
+    nets:
+        In:  { classification: signal, potential: 1.8V, current: 0.1uA }
+        Out: { classification: signal, current: 20.0uA }
+        VSS: { classification: ground, potential: 0.0V, current: 20.0uA }
+
+    # Bind nominal BSIM4 NMOS device
+    device NMOS named M_NMOS
+
+    device_nets M_NMOS:
+        B: VSS
+
+    # Geometric parameters (matched to approved monolith: SKY130 tapeout-ready)
+    let L_gate = 150nm              # Minimum SKY130 channel length
+    let W_nmos = 1.0um              # NMOS channel width
+    let sd_len = 750nm              # Active diffusion contact pad length (SKY130 clearance)
+    let diff_len = (2 * sd_len) + L_gate
+    let poly_overhang = 200nm       # Poly extension beyond active (SKY130 poly.4 >= 150nm)
+    let tap_size = 300nm            # Tap diffusion size
+    let tap_offset_y = 2.2um        # Distance from active to substrate tap (gate clearance)
+    let gate_head_size = 400nm      # Gate input landing pad size
+    let npc_enclosure = 90nm        # SKY130 npc.2 enclosure
+    let npc_size = gate_head_size + (2 * npc_enclosure)
+
+    # 1. Active Silicon Island
+    add pour(N_Plus_Diffusion) named NMOS_Diff on layer: diff:
+        device: M_NMOS.S, M_NMOS.D
+        dimensions: diff_len by W_nmos
+        at: [x: 3.0um, y: 3.2um]
+
+    # NSDM Mask
+    add pour(N_Plus_Implant_Mask) named NMOS_NSDM on layer: nsdm:
+        dimensions: diff_len + 260nm by W_nmos + 260nm
+        align: center_x with NMOS_Diff
+        align: center_y with NMOS_Diff
+
+    # 2. Gate Polysilicon Channel
+    add pour(Polysilicon) named NMOS_Gate on layer: poly:
+        device: M_NMOS.G
+        net: In
+        dimensions: L_gate by W_nmos + (2 * poly_overhang)
+        align: center_x with NMOS_Diff
+        align: center_y with NMOS_Diff
+
+    # Gate Input Head & Pad (Metal1 interface for hierarchy - above NMOS gate, pointing outward)
+    add pour(Polysilicon) named Gate_Input_Head on layer: poly:
+        net: In
+        dimensions: gate_head_size by gate_head_size
+        align: center_x with NMOS_Gate
+        align: bottom with NMOS_Gate.top
+
+    add pour(Nitride_Poly_Cut_Mask) named Gate_NPC on layer: npc:
+        dimensions: npc_size by npc_size
+        align: center_x with Gate_Input_Head
+        align: center_y with Gate_Input_Head
+
+    add pour(Titanium_Nitride) named Gate_Contact_LI on layer: li1:
+        dimensions: gate_head_size by gate_head_size
+        align: center_x with Gate_Input_Head
+        align: center_y with Gate_Input_Head
+        net: In
+
+    add pour(Aluminum) named Gate_Pad on layer: metal1:
+        dimensions: gate_head_size by gate_head_size
+        align: center_x with Gate_Contact_LI
+        align: center_y with Gate_Contact_LI
+        net: In
+
+    add contact(Tungsten) named Gate_Via_Poly_LI spanning layer: poly to li1:
+        diameter: 170nm
+        align: center_x with Gate_Contact_LI
+        align: center_y with Gate_Contact_LI
+        net: In
+
+    add contact(Tungsten) named Gate_Via_LI_M1 spanning layer: li1 to metal1:
+        diameter: 170nm
+        align: center_x with Gate_Pad
+        align: center_y with Gate_Pad
+        net: In
+
+    # 3. Source Terminal (Left side - VSS)
+    add pour(Titanium_Nitride) named NMOS_Source_LI on layer: li1:
+        device: M_NMOS.S
+        net: VSS
+        dimensions: 400nm by W_nmos
+        align: center_x with NMOS_Diff.left + (sd_len / 2)
+        align: center_y with NMOS_Diff
+
+    add pour(Aluminum) named Source_Pad on layer: metal1:
+        dimensions: 400nm by W_nmos
+        align: center_x with NMOS_Source_LI
+        align: center_y with NMOS_Source_LI
+        net: VSS
+
+    for i in 0..2:
+        add contact(Tungsten) named NMOS_S_Via_Diff_{i} spanning layer: diff to li1:
+            diameter: 170nm
+            align: center_x with NMOS_Source_LI
+            align: center_y with NMOS_Source_LI.center_y - 200nm + (i * 400nm)
+            net: VSS
+        
+        add contact(Tungsten) named NMOS_S_Via_M1_{i} spanning layer: li1 to metal1:
+            diameter: 170nm
+            align: center_x with Source_Pad
+            align: center_y with Source_Pad.center_y - 200nm + (i * 400nm)
+            net: VSS
+
+    # 4. Drain Terminal (Right side - Out)
+    add pour(Titanium_Nitride) named NMOS_Drain_LI on layer: li1:
+        device: M_NMOS.D
+        net: Out
+        dimensions: 400nm by W_nmos
+        align: center_x with NMOS_Diff.right - (sd_len / 2)
+        align: center_y with NMOS_Diff
+
+    add pour(Aluminum) named Out_Pad on layer: metal1:
+        dimensions: 400nm by W_nmos
+        align: center_x with NMOS_Drain_LI
+        align: center_y with NMOS_Drain_LI
+        net: Out
+
+    for i in 0..2:
+        add contact(Tungsten) named NMOS_D_Via_Diff_{i} spanning layer: diff to li1:
+            diameter: 170nm
+            align: center_x with NMOS_Drain_LI
+            align: center_y with NMOS_Drain_LI.center_y - 200nm + (i * 400nm)
+            net: Out
+
+        add contact(Tungsten) named NMOS_D_Via_M1_{i} spanning layer: li1 to metal1:
+            diameter: 170nm
+            align: center_x with Out_Pad
+            align: center_y with Out_Pad.center_y - 200nm + (i * 400nm)
+            net: Out
+
+    # 5. P-Substrate Tap (VSS bulk, latch-up prevention)
+    add pour(Tap_Mask) named Sub_Tap_Mask on layer: tap:
+        dimensions: tap_size by tap_size
+        align: center_x with NMOS_Diff.left + (sd_len / 2)
+        align: center_y with NMOS_Diff.center_y - tap_offset_y
+
+    add pour(P_Plus_Implant_Mask) named Sub_Tap_PSDM on layer: psdm:
+        dimensions: tap_size + 260nm by tap_size + 260nm
+        align: center_x with Sub_Tap_Mask
+        align: center_y with Sub_Tap_Mask
+
+    add pour(P_Plus_Diffusion) named Sub_Tap_Diff on layer: diff:
+        net: VSS
+        device: M_NMOS.B
+        dimensions: tap_size by tap_size
+        align: center_x with Sub_Tap_Mask
+        align: center_y with Sub_Tap_Mask
+
+    add pour(Titanium_Nitride) named Sub_Tap_LI on layer: li1:
+        net: VSS
+        dimensions: tap_size by tap_size
+        align: center_x with Sub_Tap_Diff
+        align: center_y with Sub_Tap_Diff
+
+    add pour(Aluminum) named Sub_Tap_M1 on layer: metal1:
+        net: VSS
+        dimensions: tap_size by tap_size
+        align: center_x with Sub_Tap_LI
+        align: center_y with Sub_Tap_LI
+
+    add contact(Tungsten) named Sub_Tap_Licon spanning layer: diff to li1:
+        diameter: 170nm
+        align: center_x with Sub_Tap_Diff
+        align: center_y with Sub_Tap_Diff
+        net: VSS
+
+    add contact(Tungsten) named Sub_Tap_Mcon spanning layer: li1 to metal1:
+        diameter: 170nm
+        align: center_x with Sub_Tap_LI
+        align: center_y with Sub_Tap_LI
+        net: VSS
+
+    # Route Ground from Source Pad to Substrate Tap
+    route Source_Pad to Sub_Tap_M1:
+        net: VSS
+        width: 200nm
+        layer: metal1
+        intent: Power

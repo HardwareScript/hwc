@@ -128,7 +128,7 @@ impl<'a> AnchorEvaluator<'a> {
                 span: _,
                 ..
             } => {
-                let pm = measurement_to_picometers(*value, unit);
+                let pm = unit.to_picometers(*value).unwrap_or(*value as i64);
                 Ok(pm)
             }
 
@@ -250,19 +250,6 @@ impl<'a> AnchorEvaluator<'a> {
             }
         }
     }
-}
-
-/// Convert a measurement value to picometers based on its unit
-fn measurement_to_picometers(value: f64, unit: &hwc_parser::Unit) -> i64 {
-    let pm = match unit {
-        hwc_parser::Unit::Picometer => value,
-        hwc_parser::Unit::Nanometer => value * 1_000.0,
-        hwc_parser::Unit::Micrometer => value * 1_000_000.0,
-        hwc_parser::Unit::Millimeter => value * 1_000_000_000.0,
-        hwc_parser::Unit::Centimeter => value * 10_000_000_000.0,
-        _ => value, // Default: assume picometers for custom/unknown units
-    };
-    pm as i64
 }
 
 #[cfg(test)]

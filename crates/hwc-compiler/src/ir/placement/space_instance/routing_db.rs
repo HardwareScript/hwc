@@ -1,4 +1,4 @@
-﻿//! Transfer layer-connection DB entries and register child routes in the routing DB.
+//! Transfer layer-connection DB entries and register child routes in the routing DB.
 
 use crate::ir::errors::IrError;
 use hwc_engine::netlist::NetId;
@@ -105,13 +105,17 @@ pub(super) fn register_child_routes_in_database(
     );
 
     for route in &child_space.analytic_routes {
-        // Remap net ID
-        let parent_net_id = net_id_map.get(&route.net_id).copied().ok_or_else(|| {
-            IrError::PlacementError(format!(
-                "Analytic route with net {:?} has no mapping in net_map for instance '{}'",
-                route.net_id, instance_name
-            ))
-        })?;
+        // Remap net ID. NetId(0) = no-net sentinel; pass through unchanged.
+        let parent_net_id = if route.net_id == NetId(0) {
+            NetId(0)
+        } else {
+            net_id_map.get(&route.net_id).copied().ok_or_else(|| {
+                IrError::PlacementError(format!(
+                    "Analytic route with net {:?} has no mapping in net_map for instance '{}'",
+                    route.net_id, instance_name
+                ))
+            })?
+        };
 
         // Get original child net name for provenance
         let original_net_name = route.net_name.clone();
@@ -131,7 +135,7 @@ pub(super) fn register_child_routes_in_database(
             let (end_x, end_y, end_z) =
                 transform.transform_point(seg.end.x, seg.end.y, seg.end.z)?;
 
-            trace_segments.push(hwc_engine::geometry::TraceSegment::new(
+            trace_segments.push(hwc_engine::geometry::TraceSegment::new_frozen(
                 hwc_engine::geometry::Point3D::new(start_x, start_y, start_z),
                 hwc_engine::geometry::Point3D::new(end_x, end_y, end_z),
                 route.cross_section.width_nm,

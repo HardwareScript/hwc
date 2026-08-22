@@ -3,8 +3,10 @@
 //! This crate contains fundamental types that need to be shared across
 //! multiple crates without creating circular dependencies.
 
+mod def_path;
 mod unit_registry;
 
+pub use def_path::DefPath;
 pub use unit_registry::{UnitInfo, UnitRegistry};
 
 /// Strongly-typed net ID (newtype wrapper around u32).

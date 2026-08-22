@@ -103,8 +103,36 @@ pub enum Definition {
     Subcircuit(arena::SubcircuitDefId),
 }
 
-// REMOVED (pre-release cleanup): Legacy AST struct (the old non-Program wrapper).
-// Why it existed: Early design before unified Program/Definition enum (v0.1.4).
-// Why removed: No longer referenced anywhere (grep confirmed zero uses). Pre-1.0, dead code for compat is forbidden.
-// Pattern avoided: Don't leave #[deprecated] stubs "just in case"; delete when unused. Future: if reintroducing old API,
-// use versioned crates or feature flags, not deprecated items in main tree.
+impl Program {
+    /// Rebase all definition IDs in this program using the provided arena offsets.
+    pub fn rebase_arena_ids(&mut self, offsets: &arena::AstArenaOffsets) {
+        use arena::Idx;
+        for def in &mut self.definitions {
+            match def {
+                Definition::Bridge(id) => *id = arena::BridgeDefId::new(id.index() + offsets.bridge_defs),
+                Definition::Material(id) => *id = arena::MaterialDefId::new(id.index() + offsets.material_defs),
+                Definition::Profile(id) => *id = arena::ProfileDefId::new(id.index() + offsets.profile_defs),
+                Definition::Component(id) => *id = arena::ComponentDefId::new(id.index() + offsets.component_defs),
+                Definition::Module(id) => *id = arena::ModuleDefId::new(id.index() + offsets.module_defs),
+                Definition::Mechanical(id) => *id = arena::MechanicalDefId::new(id.index() + offsets.mechanical_defs),
+                Definition::Interface(id) => *id = arena::InterfaceDefId::new(id.index() + offsets.interface_defs),
+                Definition::PolymorphicInterface(id) => *id = arena::InterfaceDefId::new(id.index() + offsets.polymorphic_interface_defs),
+                Definition::Test(id) => *id = arena::TestDefId::new(id.index() + offsets.test_defs),
+                Definition::Space(id) => *id = arena::SpaceDefId::new(id.index() + offsets.space_defs),
+                Definition::Unit(id) => *id = arena::UnitDefId::new(id.index() + offsets.unit_defs),
+                Definition::Device(id) => *id = arena::DeviceDefId::new(id.index() + offsets.device_defs),
+                Definition::Const(id) => *id = arena::ConstDefId::new(id.index() + offsets.const_defs),
+                Definition::SignalGroup(id) => *id = arena::SignalGroupDefId::new(id.index() + offsets.signal_group_defs),
+                Definition::Pattern(id) => *id = arena::PatternDefId::new(id.index() + offsets.pattern_defs),
+                Definition::Strategy(id) => *id = arena::StrategyDefId::new(id.index() + offsets.strategy_defs),
+                Definition::MaterialAlias(id) => *id = arena::MaterialAliasDefId::new(id.index() + offsets.material_alias_defs),
+                Definition::Enum(id) => *id = arena::EnumDefId::new(id.index() + offsets.enum_defs),
+                Definition::Struct(id) => *id = arena::StructDefId::new(id.index() + offsets.struct_defs),
+                Definition::Logic(id) => *id = arena::LogicDefId::new(id.index() + offsets.logic_defs),
+                Definition::Shape(id) => *id = arena::ShapeDefId::new(id.index() + offsets.shape_defs),
+                Definition::SpiceModel(id) => *id = arena::SpiceModelDefId::new(id.index() + offsets.spice_model_defs),
+                Definition::Subcircuit(id) => *id = arena::SubcircuitDefId::new(id.index() + offsets.subcircuit_defs),
+            }
+        }
+    }
+}

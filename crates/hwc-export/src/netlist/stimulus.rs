@@ -20,8 +20,9 @@ pub fn should_generate_voltage_source(
         if let Some(pin) = module.pins.iter().find(|p| p.name.as_str() == net_decl.name.as_str()) {
             return match pin.direction {
                 PinDirection::Input | PinDirection::Power | PinDirection::Ground => true,
-                // Output pins generate a DC voltage source if the space explicitly declared a potential in nets
-                PinDirection::Output => net_decl.potential.is_some(),
+                // Output pins are DUT-driven nodes. Never inject a voltage source here,
+                // even if `potential:` is declared in nets — that would dead-short the output.
+                PinDirection::Output => false,
                 PinDirection::Inout | PinDirection::Passive => false,
             };
         }

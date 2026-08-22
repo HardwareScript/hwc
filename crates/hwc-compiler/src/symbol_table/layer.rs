@@ -107,6 +107,11 @@ impl SymbolTable {
         &self.arena
     }
 
+    /// Merge another AstArena into this symbol table's arena and return the offsets
+    pub fn merge_arena(&mut self, arena: AstArena) -> hwc_parser::ast::arena::AstArenaOffsets {
+        self.arena.merge(arena)
+    }
+
     /// Add a new HPM layer (for imported libraries)
     pub fn push_hpm_layer(&mut self) {
         self.hpm.push(SymbolLayer::new());

@@ -1,4 +1,4 @@
-﻿use super::super::super::errors::IrError;
+use super::super::super::errors::IrError;
 use super::super::context::{ComponentPlacementData, PlacementContext};
 use super::super::helpers::parse_rectangle_dimensions;
 use super::super::pour::place_pour;
@@ -514,7 +514,7 @@ pub fn unroll_internal_features(
 
                                 let layer_name = ctx.stackup_manager.get_layer_name_at_z(anchor_z);
 
-                                let copper_thickness = if let Some(t_expr) = &pour.thickness {
+                                let pad_thickness = if let Some(t_expr) = &pour.thickness {
                                     crate::ir::conversions::evaluate_expression_to_nm(
                                         t_expr,
                                         ctx.symbol_table,
@@ -544,11 +544,11 @@ pub fn unroll_internal_features(
                                 };
 
                                 let p_min = anchor_z;
-                                let p_max = anchor_z + copper_thickness;
+                                let p_max = anchor_z + pad_thickness;
 
                                 /*
 //                                 eprintln!("[DEBUG unroll] Pad '{}' (anchor={}) layer={:?} anchor_z={}nm -> thickness={}nm",
-//                                     pour.name, anchor_name, layer_name, anchor_z, copper_thickness);
+//                                     pour.name, anchor_name, layer_name, anchor_z, pad_thickness);
                                 */
 
                                 unrolled_pour.elevation = hwc_parser::Elevation::Physical {
@@ -566,7 +566,7 @@ pub fn unroll_internal_features(
 
                                 unrolled_pour.thickness =
                                     Some(hwc_parser::Expression::Measurement {
-                                        value: copper_thickness as f64 / 1_000_000.0,
+                                        value: pad_thickness as f64 / 1_000_000.0,
                                         unit: hwc_parser::Unit::Millimeter,
                                         span: pour.span,
                                     });

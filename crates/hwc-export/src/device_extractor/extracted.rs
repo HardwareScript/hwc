@@ -61,43 +61,63 @@ impl ExtractedDevices {
     /// Extract devices from pour device bindings
     ///
     /// Scans pour bindings to discover which devices exist and their terminals.
-    /// This supports the native `device` keyword pattern where pours are bound
-    /// to device terminals using `device: DeviceName.terminal`.
-    ///
-    /// Queries the symbol table to find the correct device type by matching terminal names.
+    /// This supports both first-class nominal device declarations and
+    /// material-constrained type inference with ambiguity guards (Rustc E0282 pattern).
     pub fn from_pour_bindings(
         bindings: &FxHashMap<
             CompactString,
             FxHashMap<CompactString, Vec<hwc_engine::space::PourMetadata>>,
         >,
         symbol_table: &hwc_compiler::SymbolTable,
-    ) -> Self {
+        space_def: Option<&hwc_parser::SpaceDefinition>,
+    ) -> (Self, Vec<super::error::DeviceExtractionError>) {
         let mut extracted = Self::new();
+        let mut errors = Vec::new();
 
         for (device_name, terminals_map) in bindings {
             let terminal_names: Vec<CompactString> = terminals_map.keys().cloned().collect();
 
-            // Query symbol table to find which device definition matches these terminals
-            match find_device_type_by_terminals(&terminal_names, symbol_table) {
-                Some(device_type) => {
-                    println!("      ├─ Discovered device '{}' of type '{}' from pour bindings (matched {} terminals)", 
-                             device_name, device_type, terminal_names.len());
+            // 1. Check for first-class nominal declaration in space block
+            let nominal = space_def.and_then(|sd| {
+                sd.declared_devices
+                    .iter()
+                    .find(|d| d.instance_name == *device_name)
+            });
 
+            if let Some(decl) = nominal {
+                if symbol_table.get_device(decl.device_type.as_str()).is_ok() {
+                    extracted.devices.push((device_name.clone(), decl.device_type.clone()));
+                    extracted
+                        .device_terminals
+                        .insert(device_name.clone(), terminal_names);
+                    continue;
+                }
+            }
+
+            // 2. Material-constrained inference with ambiguity guard
+            match find_device_type_by_terminals_and_materials(
+                device_name,
+                &terminal_names,
+                terminals_map,
+                symbol_table,
+            ) {
+                Ok(device_type) => {
+                    println!(
+                        "      ├─ Discovered device '{}' of type '{}' from pour bindings (matched {} terminals)",
+                        device_name, device_type, terminal_names.len()
+                    );
                     extracted.devices.push((device_name.clone(), device_type));
                     extracted
                         .device_terminals
                         .insert(device_name.clone(), terminal_names);
                 }
-                None => {
-                    // No matching device definition found - this is an error
-                    println!("      ├─ ERROR: Device '{}' has terminals {:?} that don't match any device definition in symbol table", 
-                             device_name, terminal_names);
-                    // Don't add to extracted devices - will fail with clear error later
+                Err(err) => {
+                    errors.push(err);
                 }
             }
         }
 
-        extracted
+        (extracted, errors)
     }
 }
 
@@ -107,59 +127,87 @@ impl Default for ExtractedDevices {
     }
 }
 
-/// Find device type by matching terminal names against device definitions in symbol table
+/// Find device type by matching terminal names AND physical materials against PDK definitions
 ///
-/// **v0.2.2: Partial Matching with Virtual Terminal Support**
+/// **Material-Constrained Inference with Ambiguity Guard (Rustc E0282 pattern)**
 ///
-/// This performs a **subset match**: the terminal names from pour bindings must be a subset
-/// of the terminals defined in a device definition. Missing terminals are allowed if they
-/// are virtual terminals (material: Air).
-///
-/// This allows devices with virtual terminals (like BULK, SUBSTRATE) to be discovered even
-/// when only physical terminals (A, B, GATE, etc.) have pour bindings.
-///
-/// Returns the device type name if a match is found, None otherwise.
-fn find_device_type_by_terminals(
+/// 1. Checks that all bound terminals exist in the candidate device definition
+/// 2. Checks that physical pour materials match the candidate's allowed terminal materials
+/// 3. Checks that any unbound terminals are virtual (e.g. Air/Vacuum)
+/// 4. Fails fast with AmbiguousDeviceType if >1 candidate matches
+fn find_device_type_by_terminals_and_materials(
+    device_name: &CompactString,
     terminals: &[CompactString],
+    terminals_map: &FxHashMap<CompactString, Vec<hwc_engine::space::PourMetadata>>,
     symbol_table: &hwc_compiler::SymbolTable,
-) -> Option<CompactString> {
-    // Convert terminals to a set for fast lookup
-    let terminal_set: std::collections::HashSet<&str> = 
+) -> Result<CompactString, super::error::DeviceExtractionError> {
+    let terminal_set: std::collections::HashSet<&str> =
         terminals.iter().map(|s| s.as_str()).collect();
 
+    let mut matching_candidates = Vec::new();
+
     // Iterate through all device definitions in the symbol table
-    for (device_name, device_def) in symbol_table.iter_all_devices() {
+    for (cand_name, device_def) in symbol_table.iter_all_devices() {
         // Check if all bound terminals exist in the device definition
         let all_bound_terminals_valid = terminal_set.iter().all(|t| {
             device_def.terminals.iter().any(|def_t| def_t.as_str() == *t)
         });
 
         if !all_bound_terminals_valid {
-            // Some bound terminals don't exist in this device definition - skip
             continue;
         }
 
-        // Check if all missing terminals are virtual (material: Air)
+        // Check physical materials of all bound pours
+        let mut materials_compatible = true;
+        for (term_name, pours) in terminals_map {
+            for pour in pours {
+                if !device_def.is_material_allowed(term_name.as_str(), pour.material_name.as_str()) {
+                    materials_compatible = false;
+                    break;
+                }
+            }
+            if !materials_compatible {
+                break;
+            }
+        }
+
+        if !materials_compatible {
+            continue;
+        }
+
+        // Check if all missing terminals are virtual (material: Air/Vacuum)
         let missing_terminals: Vec<&CompactString> = device_def
             .terminals
             .iter()
             .filter(|t| !terminal_set.contains(t.as_str()))
             .collect();
 
-        // All missing terminals must be virtual (allowed material: Air)
         let all_missing_are_virtual = missing_terminals.iter().all(|terminal| {
             if let Some(allowed_materials) = device_def.materials.get(*terminal) {
                 allowed_materials.iter().any(|mat| mat.as_str() == "Air" || mat.as_str() == "Vacuum")
             } else {
-                false // No material constraint = physical terminal required
+                false
             }
         });
 
         if all_missing_are_virtual {
-            return Some(device_name.clone());
+            matching_candidates.push(cand_name.clone());
         }
     }
 
-    // No matching device definition found
-    None
+    match matching_candidates.len() {
+        1 => Ok(matching_candidates.remove(0)),
+        0 => Err(super::error::DeviceExtractionError::NoMatchingContract {
+            instance: device_name.clone(),
+            details: format!(
+                "Physical layout materials/terminals for instance '{}' do not satisfy any registered PDK device contract.",
+                device_name
+            ),
+        }),
+        _ => Err(super::error::DeviceExtractionError::AmbiguousDeviceType {
+            instance: device_name.clone(),
+            candidates: matching_candidates,
+            hint: format!("Explicitly declare device type: 'device <Type> named {}'", device_name),
+        }),
+    }
 }

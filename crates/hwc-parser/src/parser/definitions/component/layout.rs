@@ -300,17 +300,14 @@ impl super::super::super::Parser {
 
     /// Convert a Measurement to millimeters (canonical unit for pin positions)
     fn measurement_to_mm(m: &Measurement) -> f64 {
-        match m.unit {
-            Unit::Millimeter => m.value,
-            Unit::Micrometer => m.value / 1000.0,
-            Unit::Centimeter => m.value * 10.0,
-            Unit::Nanometer => m.value / 1_000_000.0,
-            Unit::Picometer => m.value / 1_000_000_000.0,
-            _ => panic!(
+        if !m.unit.is_distance() {
+            panic!(
                 "measurement_to_mm: cannot convert {:?} to millimeters (not a length unit)",
                 m.unit
-            ),
+            );
         }
+        let mult = m.unit.base_si_multiplier().unwrap(); // meters
+        m.value * mult * 1000.0 // meters to mm
     }
 
     /// Parse a for loop inside pin_positions block and expand it inline.

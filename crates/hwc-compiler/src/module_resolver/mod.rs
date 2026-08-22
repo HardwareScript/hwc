@@ -16,7 +16,6 @@
 mod errors;
 mod loading;
 mod paths;
-mod register_definition;
 mod registration;
 
 pub use errors::ResolverError;
@@ -80,7 +79,7 @@ impl ModuleResolver {
         }
 
         // 2. Load Program (parse fresh each time - no cache)
-        let program = self.parse_program(&file_path)?;
+        let mut program = self.parse_program(&file_path)?;
 
         // 3. Push to resolution stack before processing sub-imports
         self.resolution_stack.push(file_path.clone());
@@ -94,7 +93,12 @@ impl ModuleResolver {
         // 5. Pop from resolution stack
         self.resolution_stack.pop();
 
-        // 6. Register Symbols (ALWAYS EXECUTED)
+        // 6. Merge this program's arena into the symbol table arena and rebase definition IDs
+        let arena_to_merge = std::mem::take(&mut program.arena);
+        let offsets = symbol_table.merge_arena(arena_to_merge);
+        program.rebase_arena_ids(&offsets);
+
+        // 7. Register Symbols (ALWAYS EXECUTED)
         // Symbol registration is per-import, not per-file.
         self.register_import_targets(
             &import.targets,

@@ -140,33 +140,7 @@ impl crate::parser::Parser {
                     };
 
                     self.expect(&Token::With)?;
-
-                    // Parse target (entity name or expression)
-                    let target = if self.check(&Token::OpenParen) {
-                        let expr = self.parse_expression()?;
-                        AlignmentTarget::Expression(expr)
-                    } else if self
-                        .current()
-                        .map(|t| matches!(t.token, Token::Identifier(_)))
-                        .unwrap_or(false)
-                    {
-                        let checkpoint = self.current;
-                        let _ = self.expect_identifier_string()?;
-
-                        if self.check(&Token::Dot) {
-                            // Anchor reference - parse as expression
-                            self.current = checkpoint;
-                            let expr = self.parse_expression()?;
-                            AlignmentTarget::Expression(expr)
-                        } else {
-                            // Simple entity name
-                            self.current = checkpoint;
-                            let component_name = self.parse_component_name()?;
-                            AlignmentTarget::Entity(component_name)
-                        }
-                    } else {
-                        return Err(self.error("Expected entity name or expression after 'with'"));
-                    };
+                    let target = self.parse_alignment_target()?;
 
                     let span = Span::new(start_pos, self.previous_span().end);
                     relational_constraints.push(RelationalConstraint::Align { axis, target, span });

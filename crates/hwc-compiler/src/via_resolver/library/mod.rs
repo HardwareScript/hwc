@@ -277,12 +277,8 @@ impl ViaLibrary {
     }
 
     fn measurement_to_mm(m: &hwc_parser::Measurement) -> f64 {
-        match m.unit {
-            hwc_parser::Unit::Nanometer => m.value / 1_000_000.0,
-            hwc_parser::Unit::Micrometer => m.value / 1_000.0,
-            hwc_parser::Unit::Millimeter => m.value,
-            _ => m.value * 10.0, // cm
-        }
+        let mult = m.unit.base_si_multiplier().unwrap_or(1e-3); // default to mm if unknown
+        m.value * mult * 1000.0 // meters to mm
     }
 
     pub fn find_via_for_layers(&self, from: usize, to: usize, _is_power: bool) -> Option<&ViaType> {

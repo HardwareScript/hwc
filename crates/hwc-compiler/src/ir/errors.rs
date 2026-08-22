@@ -815,6 +815,55 @@ pub enum IrError {
     )]
     DeviceRegistryError { message: String },
 
+    /// Ambiguous device type inference (E0282 pattern).
+    #[error("Ambiguous device type for instance '{instance}': matches multiple candidates [{candidates}]")]
+    #[diagnostic(
+        code(E0282),
+        url("https://docs.hw-script.org/errors/E0282"),
+        help("Explicitly declare the device type in the space block: 'device <Type> named {instance}'")
+    )]
+    AmbiguousDeviceType {
+        instance: CompactString,
+        candidates: String,
+    },
+
+    /// No registered PDK device matches the observed layout contract.
+    #[error("Physical layout for instance '{instance}' does not satisfy any registered PDK device contract:\n{details}")]
+    #[diagnostic(
+        code(D02),
+        url("https://docs.hw-script.org/errors/D02"),
+        help("Check that terminal names and pour materials match the device definition contract.")
+    )]
+    NoMatchingDeviceContract {
+        instance: CompactString,
+        details: String,
+    },
+
+    /// Declared nominal device type was not found in the symbol table.
+    #[error("Declared device type '{device_type}' for instance '{instance}' not found in symbol table")]
+    #[diagnostic(
+        code(D01),
+        url("https://docs.hw-script.org/errors/D01"),
+        help("Check that the device definition is imported or defined in the current file.")
+    )]
+    UndefinedDeviceType {
+        instance: CompactString,
+        device_type: CompactString,
+    },
+
+    /// Observed layout geometry/materials violate declared nominal device contract.
+    #[error("Device instance '{instance}' declared as '{device_type}' violates device contract: {details}")]
+    #[diagnostic(
+        code(D04),
+        url("https://docs.hw-script.org/errors/D04"),
+        help("Ensure layout terminal bindings and materials satisfy the declared device contract.")
+    )]
+    DeviceContractViolation {
+        instance: CompactString,
+        device_type: CompactString,
+        details: String,
+    },
+
     /// Layer connection database error.
     #[error("Layer connection database error: {message}")]
     #[diagnostic(

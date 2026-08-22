@@ -1,4 +1,4 @@
-﻿//! Device Registry Population (v0.2.1)
+//! Device Registry Population (v0.2.1)
 //!
 //! Populates the HardwareSpace.device_instances registry during compilation.
 //! This is the PROPER ARCHITECTURE - devices are discovered and stored once
@@ -126,51 +126,23 @@ pub fn populate_device_instances(
             }
         }
 
-        // Look up device type from symbol table by matching terminals and materials
-        let device_type = match lookup_device_type_from_symbol_table(
-            symbol_table,
+        // Step 3: Resolve device type (Nominal First, then Material-Constrained Inference)
+        let (device_type, def_path) = resolve_device_type(
+            &device_name,
             &terminals,
             &terminal_materials,
-        ) {
-            Some(name) => name,
-            None => {
-                // Try to find close matches for better error message
-                let available_devices = find_similar_devices(symbol_table, &terminals, &terminal_materials);
-                
-                let mut error_msg = format!(
-                    "Device '{}' bindings do not match any device definition in the symbol table.\n\
-                     \n\
-                     Device bindings found in layout:\n\
-                     - Terminals: {:?}\n\
-                     - Materials: {:?}\n",
-                    device_name, terminals, terminal_materials
-                );
-
-                if !available_devices.is_empty() {
-                    error_msg.push_str("\nPossible matches with terminal/material mismatches:\n");
-                    for (dev_name, mismatch) in available_devices {
-                        error_msg.push_str(&format!("  - device '{}': {}\n", dev_name, mismatch));
-                    }
-                } else {
-                    error_msg.push_str("\nNo device definitions found with matching terminals.\n");
-                }
-
-                error_msg.push_str(
-                    "\nTo fix this:\n\
-                     1. Check that you've imported the device definition (import MyDevice from \"./pdk\")\n\
-                     2. Verify the device contract materials match your layout's pour materials\n\
-                     3. Ensure all terminals in the device definition are bound to pours with the correct materials\n"
-                );
-
-                return Err(IrError::DeviceRegistryError { message: error_msg });
-            }
-        };
+            symbol_table,
+            space_def,
+            &space.name,
+            &sorted_pours,
+        )?;
 
         // Calculate parameters based on geometry and device type
         let parameters = calculate_device_parameters(&device_type, &pours);
 
         let device_instance = DeviceInstance {
             name: device_name.clone(),
+            def_path: Some(def_path),
             device_type,
             terminals,
             terminal_nets,
@@ -178,13 +150,14 @@ pub fn populate_device_instances(
         };
 
         println!(
-            "      â”œâ”€ Registered device '{}' of type '{}' with {} terminals",
+            "      ├── Registered device '{}' of type '{}' with {} terminals (path: {:?})",
             device_instance.name,
             device_instance.device_type,
-            device_instance.terminals.len()
+            device_instance.terminals.len(),
+            device_instance.def_path
         );
         println!(
-            "      â”‚  Terminal net mappings: {:?}",
+            "      │  Terminal net mappings: {:?}",
             device_instance.terminal_nets
         );
 
@@ -192,24 +165,89 @@ pub fn populate_device_instances(
     }
 
     println!(
-        "   â”œâ”€ Device registry populated: {} devices",
+        "   ├── Device registry populated: {} devices",
         space.device_instances.len()
     );
     Ok(())
 }
 
-/// Look up device type from symbol table by matching terminals and materials
-///
-/// This searches all device definitions in the symbol table and finds the one
-/// that matches the observed terminals and materials from the pours.
-fn lookup_device_type_from_symbol_table(
-    symbol_table: &SymbolTable,
+/// Resolve device type using nominal declarations or material-constrained inference with ambiguity guard.
+fn resolve_device_type(
+    device_name: &CompactString,
     terminals: &[CompactString],
     terminal_materials: &FxHashMap<CompactString, CompactString>,
-) -> Option<CompactString> {
-    // Iterate through all device definitions in priority order
+    symbol_table: &SymbolTable,
+    space_def: Option<&hwc_parser::ast::SpaceDefinition>,
+    space_name: &CompactString,
+    sorted_pours: &[&PourMetadata],
+) -> Result<(CompactString, hwc_types::DefPath), IrError> {
+    // 1. Determine canonical DefPath
+    let def_path = sorted_pours
+        .iter()
+        .find_map(|p| p.device_binding.as_ref().and_then(|b| b.def_path.clone()))
+        .unwrap_or_else(|| {
+            if device_name.contains('.') || device_name.contains("::") {
+                hwc_types::DefPath::parse(device_name.as_str())
+            } else {
+                hwc_types::DefPath::root(space_name.as_str()).push(device_name.as_str())
+            }
+        });
+
+    // 2. Check for explicit first-class nominal declaration in space block
+    let nominal_decl = space_def.and_then(|sd| {
+        sd.declared_devices
+            .iter()
+            .find(|d| d.instance_name == *device_name || def_path.leaf() == Some(d.instance_name.as_str()))
+    });
+
+    if let Some(decl) = nominal_decl {
+        // Nominal type explicitly specified: look up in symbol table
+        let device_def = symbol_table
+            .get_device(decl.device_type.as_str())
+            .map_err(|_| IrError::UndefinedDeviceType {
+                instance: device_name.clone(),
+                device_type: decl.device_type.clone(),
+            })?;
+
+        // Validate that physical geometry satisfies nominal contract
+        for terminal in terminals {
+            if !device_def.has_terminal(terminal.as_str()) {
+                return Err(IrError::DeviceContractViolation {
+                    instance: device_name.clone(),
+                    device_type: decl.device_type.clone(),
+                    details: format!(
+                        "Bound terminal '{}' is not defined on device contract '{}' (allowed: {:?})",
+                        terminal, decl.device_type, device_def.terminals
+                    ),
+                });
+            }
+        }
+
+        for (terminal, actual_material) in terminal_materials {
+            if !device_def.is_material_allowed(terminal.as_str(), actual_material.as_str()) {
+                let allowed = device_def
+                    .get_terminal_materials(terminal.as_str())
+                    .map(|mats| mats.join(", "))
+                    .unwrap_or_default();
+                return Err(IrError::DeviceContractViolation {
+                    instance: device_name.clone(),
+                    device_type: decl.device_type.clone(),
+                    details: format!(
+                        "Terminal '{}' requires material [{}], but layout bound pour with '{}'",
+                        terminal, allowed, actual_material
+                    ),
+                });
+            }
+        }
+
+        return Ok((decl.device_type.clone(), def_path));
+    }
+
+    // 3. Fallback to Material-Constrained Inference with Ambiguity Guard (Rustc E0282 pattern)
+    let mut matching_candidates: Vec<(CompactString, &hwc_parser::ast::DeviceDefinition)> = Vec::new();
+
     for (name, device_def) in symbol_table.iter_all_devices() {
-        // Check if all observed terminals exist in the device definition
+        // Check terminal name subset/equivalence
         let all_terminals_match = terminals
             .iter()
             .all(|terminal| device_def.has_terminal(terminal.as_str()));
@@ -218,17 +256,52 @@ fn lookup_device_type_from_symbol_table(
             continue;
         }
 
-        // Check if materials match the device definition's requirements
+        // Check physical material compatibility
         let all_materials_match = terminal_materials.iter().all(|(terminal, material)| {
             device_def.is_material_allowed(terminal.as_str(), material.as_str())
         });
 
         if all_materials_match {
-            return Some(name.clone());
+            matching_candidates.push((name.clone(), device_def));
         }
     }
 
-    None
+    match matching_candidates.len() {
+        1 => {
+            let (matched_name, _) = matching_candidates.remove(0);
+            Ok((matched_name, def_path))
+        }
+        0 => {
+            let similar = find_similar_devices(symbol_table, terminals, terminal_materials);
+            let mut details = format!(
+                "Observed layout bindings for instance '{}':\n- Terminals: {:?}\n- Materials: {:?}\n",
+                device_name, terminals, terminal_materials
+            );
+            if !similar.is_empty() {
+                details.push_str("Close candidates with material mismatches:\n");
+                for (cand_name, mismatch) in similar {
+                    details.push_str(&format!("  - {}: {}\n", cand_name, mismatch));
+                }
+            } else {
+                details.push_str("No registered device definitions match these terminal names.\n");
+            }
+            Err(IrError::NoMatchingDeviceContract {
+                instance: device_name.clone(),
+                details,
+            })
+        }
+        _ => {
+            let candidates_str = matching_candidates
+                .iter()
+                .map(|(name, _)| name.as_str())
+                .collect::<Vec<_>>()
+                .join(", ");
+            Err(IrError::AmbiguousDeviceType {
+                instance: device_name.clone(),
+                candidates: candidates_str,
+            })
+        }
+    }
 }
 
 /// Find devices with similar terminals but mismatched materials to provide helpful error messages

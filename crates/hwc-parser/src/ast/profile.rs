@@ -270,9 +270,12 @@ pub struct ViaDefinition {
     pub span: Span,
 }
 
-/// Manufacturing constraints (IPC-2221 formulas, copper thickness, etc.)
+/// Manufacturing constraints (IPC-2221 formulas, conductor/copper thickness, etc.)
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ManufacturingConstraints {
+    /// Default conductor thickness (e.g. copper, aluminum, or metal layer thickness).
+    pub conductor_thickness: Option<Measurement>,
+    /// Legacy alias for conductor_thickness (maintained for backwards compatibility).
     pub copper_thickness: Option<Measurement>,
     pub ipc2221_k_external: Option<f64>,
     pub ipc2221_k_internal: Option<f64>,

@@ -408,4 +408,183 @@ impl AstArena {
             + self.module_internals.len() * std::mem::size_of::<ModuleInternalPlacement>()
             + self.component_defs.len() * std::mem::size_of::<ComponentDefinition>()
     }
+
+    /// Merge another AstArena into this one, rebasing all internal IDs and returning the offsets.
+    pub fn merge(&mut self, mut other: AstArena) -> AstArenaOffsets {
+        use super::core::Idx;
+
+        let offsets = AstArenaOffsets {
+            components: self.components.len(),
+            pours: self.pours.len(),
+            planes: self.planes.len(),
+            polygons: self.polygons.len(),
+            contacts: self.contacts.len(),
+            routes: self.routes.len(),
+            space_instances: self.space_instances.len(),
+            for_loops: self.for_loops.len(),
+            regions: self.regions.len(),
+            substrates: self.substrates.len(),
+            module_components: self.module_components.len(),
+            module_internals: self.module_internals.len(),
+            component_defs: self.component_defs.len(),
+            material_defs: self.material_defs.len(),
+            module_defs: self.module_defs.len(),
+            profile_defs: self.profile_defs.len(),
+            space_defs: self.space_defs.len(),
+            bridge_defs: self.bridge_defs.len(),
+            mechanical_defs: self.mechanical_defs.len(),
+            interface_defs: self.interface_defs.len(),
+            test_defs: self.test_defs.len(),
+            device_defs: self.device_defs.len(),
+            unit_defs: self.unit_defs.len(),
+            const_defs: self.const_defs.len(),
+            pattern_defs: self.pattern_defs.len(),
+            strategy_defs: self.strategy_defs.len(),
+            signal_group_defs: self.signal_group_defs.len(),
+            material_alias_defs: self.material_alias_defs.len(),
+            enum_defs: self.enum_defs.len(),
+            struct_defs: self.struct_defs.len(),
+            logic_defs: self.logic_defs.len(),
+            shape_defs: self.shape_defs.len(),
+            spice_model_defs: self.spice_model_defs.len(),
+            subcircuit_defs: self.subcircuit_defs.len(),
+            polymorphic_interface_defs: self.polymorphic_interface_defs.len(),
+        };
+
+        // Helper to rebase a SpaceStatement
+        fn rebase_space_statement(stmt: &mut crate::ast::space::SpaceStatement, offsets: &AstArenaOffsets) {
+            use crate::ast::space::SpaceStatement;
+            match stmt {
+                SpaceStatement::Component(id) => *id = ComponentId::new(id.index() + offsets.components),
+                SpaceStatement::Pour(id) => *id = PourId::new(id.index() + offsets.pours),
+                SpaceStatement::Plane(id) => *id = PlaneId::new(id.index() + offsets.planes),
+                SpaceStatement::Polygon(id) => *id = PolygonId::new(id.index() + offsets.polygons),
+                SpaceStatement::Contact(id) => *id = ContactId::new(id.index() + offsets.contacts),
+                SpaceStatement::SpaceInstance(id) => *id = SpaceInstanceId::new(id.index() + offsets.space_instances),
+                SpaceStatement::Route(id) => *id = RouteId::new(id.index() + offsets.routes),
+                SpaceStatement::ForLoop(id) => *id = ForLoopId::new(id.index() + offsets.for_loops),
+                SpaceStatement::If(cond) => {
+                    for s in &mut cond.then_body {
+                        rebase_space_statement(s, offsets);
+                    }
+                    for s in &mut cond.else_body {
+                        rebase_space_statement(s, offsets);
+                    }
+                }
+                SpaceStatement::Let(_) => {}
+            }
+        }
+
+        // Rebase statements in other.for_loops
+        for for_loop in other.for_loops.iter_mut() {
+            for stmt in &mut for_loop.body {
+                rebase_space_statement(stmt, &offsets);
+            }
+        }
+
+        // Rebase definitions in other.space_defs
+        for space_def in other.space_defs.iter_mut() {
+            if let Some(ref mut sub) = space_def.substrate {
+                *sub = SubstrateId::new(sub.index() + offsets.substrates);
+            }
+            for reg in &mut space_def.regions {
+                *reg = RegionId::new(reg.index() + offsets.regions);
+            }
+            for top_stmt in &mut space_def.statements {
+                use crate::ast::space::SpaceTopLevelStatement;
+                match top_stmt {
+                    SpaceTopLevelStatement::Substrate(id) => *id = SubstrateId::new(id.index() + offsets.substrates),
+                    SpaceTopLevelStatement::Component(id) => *id = ComponentId::new(id.index() + offsets.components),
+                    SpaceTopLevelStatement::Pour(id) => *id = PourId::new(id.index() + offsets.pours),
+                    SpaceTopLevelStatement::Plane(id) => *id = PlaneId::new(id.index() + offsets.planes),
+                    SpaceTopLevelStatement::Polygon(id) => *id = PolygonId::new(id.index() + offsets.polygons),
+                    SpaceTopLevelStatement::Contact(id) => *id = ContactId::new(id.index() + offsets.contacts),
+                    SpaceTopLevelStatement::SpaceInstance(id) => *id = SpaceInstanceId::new(id.index() + offsets.space_instances),
+                    SpaceTopLevelStatement::ForLoop(id) => *id = ForLoopId::new(id.index() + offsets.for_loops),
+                    SpaceTopLevelStatement::Route(id) => *id = RouteId::new(id.index() + offsets.routes),
+                    SpaceTopLevelStatement::Region(id) => *id = RegionId::new(id.index() + offsets.regions),
+                    _ => {}
+                }
+            }
+        }
+
+        // Append all tables
+        self.components.extend_from(other.components);
+        self.pours.extend_from(other.pours);
+        self.planes.extend_from(other.planes);
+        self.polygons.extend_from(other.polygons);
+        self.contacts.extend_from(other.contacts);
+        self.routes.extend_from(other.routes);
+        self.space_instances.extend_from(other.space_instances);
+        self.for_loops.extend_from(other.for_loops);
+        self.regions.extend_from(other.regions);
+        self.substrates.extend_from(other.substrates);
+        self.module_components.extend_from(other.module_components);
+        self.module_internals.extend_from(other.module_internals);
+        self.component_defs.extend_from(other.component_defs);
+        self.material_defs.extend_from(other.material_defs);
+        self.module_defs.extend_from(other.module_defs);
+        self.profile_defs.extend_from(other.profile_defs);
+        self.space_defs.extend_from(other.space_defs);
+        self.bridge_defs.extend_from(other.bridge_defs);
+        self.mechanical_defs.extend_from(other.mechanical_defs);
+        self.interface_defs.extend_from(other.interface_defs);
+        self.test_defs.extend_from(other.test_defs);
+        self.device_defs.extend_from(other.device_defs);
+        self.unit_defs.extend_from(other.unit_defs);
+        self.const_defs.extend_from(other.const_defs);
+        self.pattern_defs.extend_from(other.pattern_defs);
+        self.strategy_defs.extend_from(other.strategy_defs);
+        self.signal_group_defs.extend_from(other.signal_group_defs);
+        self.material_alias_defs.extend_from(other.material_alias_defs);
+        self.enum_defs.extend_from(other.enum_defs);
+        self.struct_defs.extend_from(other.struct_defs);
+        self.logic_defs.extend_from(other.logic_defs);
+        self.shape_defs.extend_from(other.shape_defs);
+        self.spice_model_defs.extend_from(other.spice_model_defs);
+        self.subcircuit_defs.extend_from(other.subcircuit_defs);
+        self.polymorphic_interface_defs.extend_from(other.polymorphic_interface_defs);
+
+        offsets
+    }
+}
+
+/// Offsets calculated during AstArena::merge to rebase external references
+#[derive(Debug, Clone, Copy, Default)]
+pub struct AstArenaOffsets {
+    pub components: usize,
+    pub pours: usize,
+    pub planes: usize,
+    pub polygons: usize,
+    pub contacts: usize,
+    pub routes: usize,
+    pub space_instances: usize,
+    pub for_loops: usize,
+    pub regions: usize,
+    pub substrates: usize,
+    pub module_components: usize,
+    pub module_internals: usize,
+    pub component_defs: usize,
+    pub material_defs: usize,
+    pub module_defs: usize,
+    pub profile_defs: usize,
+    pub space_defs: usize,
+    pub bridge_defs: usize,
+    pub mechanical_defs: usize,
+    pub interface_defs: usize,
+    pub test_defs: usize,
+    pub device_defs: usize,
+    pub unit_defs: usize,
+    pub const_defs: usize,
+    pub pattern_defs: usize,
+    pub strategy_defs: usize,
+    pub signal_group_defs: usize,
+    pub material_alias_defs: usize,
+    pub enum_defs: usize,
+    pub struct_defs: usize,
+    pub logic_defs: usize,
+    pub shape_defs: usize,
+    pub spice_model_defs: usize,
+    pub subcircuit_defs: usize,
+    pub polymorphic_interface_defs: usize,
 }

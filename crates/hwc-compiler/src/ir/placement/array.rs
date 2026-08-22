@@ -477,6 +477,7 @@ fn merge_pour_across_instances(
                     device_name: binding.device_name.clone(),
                     terminals: binding.terminals.clone(), // v0.2.2: Clone all terminals
                     priority: binding.priority.into(), // v0.2.2: Convert parser priority to engine priority
+                    def_path: None, // populated by device_registry pass
                 }),
             merged_region_id,
             waivers: pour.waivers.clone(),

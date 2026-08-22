@@ -1,0 +1,76 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,0.02x0.02x0.00mm,,,,,1
+
+# MATERIAL USAGE (Fabrication)
+Reference,Type,Material,Layer,Area_nm2,Volume_nm3
+PMOS_Inst.PMOS_Diff,Pour,P_Plus_Diffusion,diff (z:0nm),3700000,555000000
+PMOS_Inst.PMOS_Gate,Pour,Polysilicon,poly (z:150nm),360000,64800000
+PMOS_Inst.Gate_Input_Head,Pour,Polysilicon,poly (z:150nm),90000,16200000
+PMOS_Inst.Gate_Contact_LI,Pour,Titanium_Nitride,li1 (z:530nm),90000,9000000
+PMOS_Inst.Gate_Pad,Pour,Aluminum,metal1 (z:780nm),90000,32400000
+PMOS_Inst.PMOS_Source_LI,Pour,Titanium_Nitride,li1 (z:530nm),600000,60000000
+PMOS_Inst.Source_Pad,Pour,Aluminum,metal1 (z:780nm),600000,216000000
+PMOS_Inst.PMOS_Drain_LI,Pour,Titanium_Nitride,li1 (z:530nm),600000,60000000
+PMOS_Inst.Out_Pad,Pour,Aluminum,metal1 (z:780nm),600000,216000000
+PMOS_Inst.Well_Tap_Diff,Pour,N_Plus_Diffusion,diff (z:0nm),90000,13500000
+PMOS_Inst.Well_Tap_LI,Pour,Titanium_Nitride,li1 (z:530nm),90000,9000000
+PMOS_Inst.Well_Tap_M1,Pour,Aluminum,metal1 (z:780nm),90000,32400000
+NMOS_Inst.NMOS_Diff,Pour,N_Plus_Diffusion,diff (z:0nm),1850000,277500000
+NMOS_Inst.NMOS_Gate,Pour,Polysilicon,poly (z:150nm),210000,37800000
+NMOS_Inst.Gate_Input_Head,Pour,Polysilicon,poly (z:150nm),90000,16200000
+NMOS_Inst.Gate_Contact_LI,Pour,Titanium_Nitride,li1 (z:530nm),90000,9000000
+NMOS_Inst.Gate_Pad,Pour,Aluminum,metal1 (z:780nm),90000,32400000
+NMOS_Inst.NMOS_Source_LI,Pour,Titanium_Nitride,li1 (z:530nm),300000,30000000
+NMOS_Inst.Source_Pad,Pour,Aluminum,metal1 (z:780nm),300000,108000000
+NMOS_Inst.NMOS_Drain_LI,Pour,Titanium_Nitride,li1 (z:530nm),300000,30000000
+NMOS_Inst.Out_Pad,Pour,Aluminum,metal1 (z:780nm),300000,108000000
+NMOS_Inst.Sub_Tap_Diff,Pour,P_Plus_Diffusion,diff (z:0nm),90000,13500000
+NMOS_Inst.Sub_Tap_LI,Pour,Titanium_Nitride,li1 (z:530nm),90000,9000000
+NMOS_Inst.Sub_Tap_M1,Pour,Aluminum,metal1 (z:780nm),90000,32400000
+VDD_Pad,Pour,Aluminum,metal1 (z:780nm),1440000,518400000
+VSS_Pad,Pour,Aluminum,metal1 (z:780nm),1440000,518400000
+Input_Pad,Pour,Aluminum,metal1 (z:780nm),1440000,518400000
+Output_Pad,Pour,Aluminum,metal1 (z:780nm),1440000,518400000
+Route_In_on_metal1,Route,Aluminum,metal1 (trace),2340000,842400000
+Route_Out_on_metal1,Route,Aluminum,metal1 (trace),2590000,932400000
+Route_VDD_on_metal1,Route,Aluminum,metal1 (trace),2450000,882000000
+Route_VDD_on_metal1,Route,Aluminum,metal1 (trace),90000,36000000
+Route_VSS_on_metal1,Route,Aluminum,metal1 (trace),2450000,882000000
+Route_VSS_on_metal1,Route,Aluminum,metal1 (trace),190000,76000000
+PMOS_Inst.Gate_Via_Poly_LI,Contact,Tungsten,poly (z:150nm),62500,19000000
+PMOS_Inst.Gate_Via_LI_M1,Contact,Tungsten,li1 (z:530nm),62500,19250000
+PMOS_Inst.PMOS_S_Via_Diff_0,Contact,Tungsten,diff (z:0nm),62500,29687500
+PMOS_Inst.PMOS_S_Via_M1_0,Contact,Tungsten,li1 (z:530nm),62500,19250000
+PMOS_Inst.PMOS_S_Via_Diff_1,Contact,Tungsten,diff (z:0nm),62500,29687500
+PMOS_Inst.PMOS_S_Via_M1_1,Contact,Tungsten,li1 (z:530nm),62500,19250000
+PMOS_Inst.PMOS_S_Via_Diff_2,Contact,Tungsten,diff (z:0nm),62500,29687500
+PMOS_Inst.PMOS_S_Via_M1_2,Contact,Tungsten,li1 (z:530nm),62500,19250000
+PMOS_Inst.PMOS_D_Via_Diff_0,Contact,Tungsten,diff (z:0nm),62500,29687500
+PMOS_Inst.PMOS_D_Via_M1_0,Contact,Tungsten,li1 (z:530nm),62500,19250000
+PMOS_Inst.PMOS_D_Via_Diff_1,Contact,Tungsten,diff (z:0nm),62500,29687500
+PMOS_Inst.PMOS_D_Via_M1_1,Contact,Tungsten,li1 (z:530nm),62500,19250000
+PMOS_Inst.PMOS_D_Via_Diff_2,Contact,Tungsten,diff (z:0nm),62500,29687500
+PMOS_Inst.PMOS_D_Via_M1_2,Contact,Tungsten,li1 (z:530nm),62500,19250000
+PMOS_Inst.Well_Tap_Licon,Contact,Tungsten,diff (z:0nm),62500,29687500
+PMOS_Inst.Well_Tap_Mcon,Contact,Tungsten,li1 (z:530nm),62500,19250000
+NMOS_Inst.Gate_Via_Poly_LI,Contact,Tungsten,poly (z:150nm),62500,19000000
+NMOS_Inst.Gate_Via_LI_M1,Contact,Tungsten,li1 (z:530nm),62500,19250000
+NMOS_Inst.NMOS_S_Via_Diff_0,Contact,Tungsten,diff (z:0nm),62500,29687500
+NMOS_Inst.NMOS_S_Via_M1_0,Contact,Tungsten,li1 (z:530nm),62500,19250000
+NMOS_Inst.NMOS_S_Via_Diff_1,Contact,Tungsten,diff (z:0nm),62500,29687500
+NMOS_Inst.NMOS_S_Via_M1_1,Contact,Tungsten,li1 (z:530nm),62500,19250000
+NMOS_Inst.NMOS_D_Via_Diff_0,Contact,Tungsten,diff (z:0nm),62500,29687500
+NMOS_Inst.NMOS_D_Via_M1_0,Contact,Tungsten,li1 (z:530nm),62500,19250000
+NMOS_Inst.NMOS_D_Via_Diff_1,Contact,Tungsten,diff (z:0nm),62500,29687500
+NMOS_Inst.NMOS_D_Via_M1_1,Contact,Tungsten,li1 (z:530nm),62500,19250000
+NMOS_Inst.Sub_Tap_Licon,Contact,Tungsten,diff (z:0nm),62500,29687500
+NMOS_Inst.Sub_Tap_Mcon,Contact,Tungsten,li1 (z:530nm),62500,19250000
+
+# AGGREGATED MATERIAL TOTALS (Foundry Fabrication Summary)
+Material,Total_Area_nm2,Total_Volume_nm3,Layer_Count,Coverage_Percentage
+Aluminum,18030000,6502000000,18,4.5%
+N_Plus_Diffusion,1940000,291000000,2,0.5%
+P_Plus_Diffusion,3790000,568500000,2,0.9%
+Polysilicon,750000,135000000,4,0.2%
+Titanium_Nitride,2160000,216000000,8,0.5%
+Tungsten,1750000,663750000,28,0.4%

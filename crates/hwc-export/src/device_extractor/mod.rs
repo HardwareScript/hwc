@@ -84,7 +84,9 @@ impl<'a> DeviceExtractor<'a> {
 
         // Step 2: Extract devices from BOTH module statements AND pour bindings
         let mut extracted = ExtractedDevices::from_module(module, self.arena);
-        let from_bindings = ExtractedDevices::from_pour_bindings(&bindings, self.symbol_table);
+        let (from_bindings, binding_errors) =
+            ExtractedDevices::from_pour_bindings(&bindings, self.symbol_table, self.space_def);
+        errors.extend(binding_errors);
 
         // Merge devices from bindings into extracted
         for (device_name, device_type) in from_bindings.devices {

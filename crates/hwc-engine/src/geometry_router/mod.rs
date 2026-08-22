@@ -152,7 +152,8 @@ pub use topological_router::{
     RayDirection, RayIntersection, SearchRay, TopologicalPath, TopologicalRouter,
 };
 pub use types::{
-    NetRoute, RouteResult, RoutedNet, RoutingError, RoutingHeuristics, Via, ViaSpec, ViaType,
+    ExplicitRouteSegment, NetRoute, RouteResult, RoutedNet, RoutingError, RoutingHeuristics, Via,
+    ViaSpec, ViaType,
 };
 
 // Re-export Technology from hwc-types

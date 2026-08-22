@@ -615,6 +615,9 @@ impl<'a> AutoRouter<'a> {
             let trace_r = orig_seg.width_nm / 2;
 
             for via in &mut self.space.vias {
+                if via.is_frozen || via.parent_instance.is_some() {
+                    continue;
+                }
                 if via.net_id != net_id {
                     continue;
                 }
@@ -651,6 +654,11 @@ impl<'a> AutoRouter<'a> {
             }
 
             for contact in &mut self.space.contacts {
+                // Immutable child cell contacts must never be slid by parent routing
+                if contact.name.contains('.') {
+                    continue;
+                }
+
                 let contact_net_id = contact
                     .net
                     .as_ref()

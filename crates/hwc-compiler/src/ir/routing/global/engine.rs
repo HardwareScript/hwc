@@ -118,7 +118,8 @@ impl<'a> AutoRouter<'a> {
         }
 
         // v0.1.9: Extract explicit segments WITH normals for perpendicular escape
-        let mut explicit_segments: Vec<(NetId, Vec<Point3D>, Option<i64>)> = Vec::new();
+        let mut explicit_segments: Vec<hwc_engine::geometry_router::ExplicitRouteSegment> =
+            Vec::new();
         let mut net_normals: FxHashMap<
             NetId,
             (
@@ -173,16 +174,7 @@ impl<'a> AutoRouter<'a> {
                     start_normal,
                     goal_normal,
                 }) => {
-//                     eprintln!("[ENGINE DEBUG] Route {} ({}): boundary resolution returned start=({},{},{}), goal=({},{},{})",
-//                         idx, resolved.net_name, start.x, start.y, start.z, goal.x, goal.y, goal.z);
-
                     let target_z = self.space.routing_layer_db.get_routing_z(&resolved.layer_name).ok();
-                    explicit_segments.push((resolved.net_id, vec![start, goal], target_z));
-
-//                     eprintln!(
-//                         "[ENGINE DEBUG] Route {} ({}): pushed to explicit_segments",
-//                         idx, resolved.net_name
-//                     );
 
                     // Normals are already i32 unit vectors scaled by 10^9
                     let start_normal_2d =
@@ -205,7 +197,6 @@ impl<'a> AutoRouter<'a> {
                         route_escape_stubs.get(idx)
                     {
                         // Route-specific escape_stub takes highest priority
-
                         *route_override
                     } else if let Some(intent_name) = data.net_intents.get(&resolved.net_name) {
                         // Look up intent's escape_stub
@@ -227,11 +218,18 @@ impl<'a> AutoRouter<'a> {
                             .unwrap_or_else(|| global_escape_stub_nm)
                     } else {
                         // No route override, no intent -> use global (which is required to exist)
-
                         global_escape_stub_nm
                     };
 
                     net_escape_stubs.insert(resolved.net_id, escape_stub_nm);
+
+                    explicit_segments.push(hwc_engine::geometry_router::ExplicitRouteSegment {
+                        net_id: resolved.net_id,
+                        waypoints: vec![start, goal],
+                        target_z,
+                        normals: Some((start_normal_2d, goal_normal_2d)),
+                        escape_stub_nm: Some(escape_stub_nm),
+                    });
                 }
                 Ok(crate::ir::routing::helpers::boundary_resolution::ResolvedEndpoints::SatisfiedByPlacement {
                     overlap_point,

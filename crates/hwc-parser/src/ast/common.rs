@@ -70,14 +70,13 @@ impl Measurement {
     /// The engine always works in picometers internally.
     /// Returns `None` if the unit is not a distance unit.
     pub fn to_picometers_i64(&self) -> Option<i64> {
-        match &self.unit {
-            Unit::Millimeter => Some((self.value * 1_000_000_000.0) as i64), // 1mm = 1,000,000,000 pm
-            Unit::Centimeter => Some((self.value * 10_000_000_000.0) as i64), // 1cm = 10,000,000,000 pm
-            Unit::Micrometer => Some((self.value * 1_000_000.0) as i64), // 1µm = 1,000,000 pm (FIXED!)
-            Unit::Nanometer => Some((self.value * 1_000.0) as i64),      // 1nm = 1,000 pm
-            Unit::Picometer => Some(self.value as i64),                  // 1pm = 1 pm
-            _ => None,
-        }
+        self.unit.to_picometers(self.value).ok()
+    }
+
+    /// Convert this measurement to nanometers (i64).
+    /// Returns `None` if the unit is not a distance unit.
+    pub fn to_nanometers_i64(&self) -> Option<i64> {
+        self.unit.to_nanometers(self.value).ok()
     }
 }
 
@@ -220,6 +219,63 @@ impl Unit {
                 Ok(Box::leak(s.clone().into_boxed_str()))
             }
         }
+    }
+
+    /// Check if this unit represents a physical distance dimension.
+    pub fn is_distance(&self) -> bool {
+        matches!(
+            self,
+            Unit::Millimeter
+                | Unit::Centimeter
+                | Unit::Micrometer
+                | Unit::Nanometer
+                | Unit::Picometer
+        )
+    }
+
+    /// Get the canonical base SI multiplier (meters, volts, amperes, etc.)
+    pub fn base_si_multiplier(&self) -> Option<f64> {
+        match self {
+            Unit::Picometer => Some(1e-12),
+            Unit::Nanometer => Some(1e-9),
+            Unit::Micrometer => Some(1e-6),
+            Unit::Millimeter => Some(1e-3),
+            Unit::Centimeter => Some(1e-2),
+            Unit::Volt => Some(1.0),
+            Unit::Millivolt => Some(1e-3),
+            Unit::Kilovolt => Some(1e3),
+            Unit::Ampere => Some(1.0),
+            Unit::Milliampere => Some(1e-3),
+            Unit::Microampere => Some(1e-6),
+            Unit::Celsius => None,
+            Unit::Custom(_) => None,
+        }
+    }
+
+    /// Convert a measurement value in this unit to picometers (i64).
+    /// Returns an error if this is not a distance unit.
+    pub fn to_picometers(&self, value: f64) -> Result<i64, String> {
+        if !self.is_distance() {
+            return Err(format!("Cannot convert unit {:?} to picometers (not a distance unit)", self));
+        }
+        let mult = self.base_si_multiplier().ok_or_else(|| {
+            format!("Cannot convert custom unit {:?} to picometers without UnitRegistry", self)
+        })?;
+        let meters = value * mult;
+        Ok((meters * 1_000_000_000_000.0).round() as i64)
+    }
+
+    /// Convert a measurement value in this unit to nanometers (i64).
+    /// Returns an error if this is not a distance unit.
+    pub fn to_nanometers(&self, value: f64) -> Result<i64, String> {
+        if !self.is_distance() {
+            return Err(format!("Cannot convert unit {:?} to nanometers (not a distance unit)", self));
+        }
+        let mult = self.base_si_multiplier().ok_or_else(|| {
+            format!("Cannot convert custom unit {:?} to nanometers without UnitRegistry", self)
+        })?;
+        let meters = value * mult;
+        Ok((meters * 1_000_000_000.0).round() as i64)
     }
 }
 
@@ -603,6 +659,72 @@ impl Coordinate {
         let z_idx = z_val.as_integer()? as i32;
 
         Ok((x_pm, y_pm, z_idx))
+    }
+
+    /// Evaluate coordinate expressions for space instance placement.
+    ///
+    /// Like `evaluate_picometers` but Z may also be a physical measurement
+    /// (e.g. `z: 0nm`), in which case it is converted to nanometers and used
+    /// directly as the Z origin offset in nm (not a layer index). This is
+    /// needed because hierarchical `add space ... at [...]` placements place
+    /// the child origin in the parent's physical coordinate system.
+    pub fn evaluate_for_space_instance(
+        &self,
+        context: &EvaluationContext,
+    ) -> Result<(i64, i64, i64), String> {
+        // Re-implement evaluate() without the strict Z-must-be-integer enforcement
+        if let Coordinate::Relative(_) = self {
+            return Err(
+                "Relative coordinates must be resolved to absolute coordinates before evaluation.\n\
+                 Use ConstraintSolver::resolve_position() to convert relative to absolute coordinates."
+                    .to_string(),
+            );
+        }
+        match self {
+            Coordinate::Positional { .. } => {
+                return Err(
+                    "Raw grid indices are deprecated to ensure scale-invariant designs.\n\
+                     Use named physical measurements for X and Y, and an integer for Z layer.\n\
+                     Example: [x: 5.0mm, y: 5.0mm, z: 0nm]"
+                        .to_string(),
+                );
+            }
+            Coordinate::Declarative { .. } => {}
+            Coordinate::Relative(_) => unreachable!("Already checked above"),
+        }
+
+        let x_val = self.x().evaluate(context)?;
+        let y_val = self.y().evaluate(context)?;
+        let z_val = self.z().evaluate(context)?;
+
+        if !x_val.is_physical_or_relative() {
+            return Err(
+                "X coordinate must be a physical measurement (e.g., 10mm, 500nm) or percentage (e.g., 50%).\n\
+                 Raw numbers are not allowed to ensure physics-grounded designs.\n\
+                 Example: [x: 10mm, y: 15mm, z: 0nm]".into()
+            );
+        }
+        if !y_val.is_physical_or_relative() {
+            return Err(
+                "Y coordinate must be a physical measurement (e.g., 10mm, 500nm) or percentage (e.g., 50%).\n\
+                 Raw numbers are not allowed to ensure physics-grounded designs.\n\
+                 Example: [x: 10mm, y: 15mm, z: 0nm]".into()
+            );
+        }
+
+        let x_nm = x_val.to_picometers()? / 1000;
+        let y_nm = y_val.to_picometers()? / 1000;
+
+        // Z: accept either an integer (layer 0 = no Z offset) or a physical measurement
+        let z_nm = match &z_val {
+            super::expression::Value::Number(n) => *n as i64,
+            super::expression::Value::Measurement { .. } => z_val.to_picometers()? / 1000,
+            _ => return Err(
+                "Z coordinate for space placement must be either a layer index integer or a physical measurement (e.g. 0nm).".into()
+            ),
+        };
+
+        Ok((x_nm, y_nm, z_nm))
     }
 
     /// Evaluate coordinate expressions to picometer values with resolution snapping.

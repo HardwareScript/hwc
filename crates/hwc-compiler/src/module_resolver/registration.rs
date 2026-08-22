@@ -18,8 +18,6 @@ impl super::ModuleResolver {
         alias: Option<&hwc_parser::Identifier>,
         symbol_table: &mut SymbolTable,
     ) -> Result<(), ResolverError> {
-        let arena = &program.arena;
-
         // If this import has an alias, create a new HPM layer for the namespace
         if alias.is_some() {
             symbol_table.push_hpm_layer();
@@ -29,8 +27,8 @@ impl super::ModuleResolver {
             ImportTargets::Star => {
                 // Wildcard import: register all EXPORTED definitions
                 for definition in &program.definitions {
-                    if self.is_exported(definition, arena) {
-                        self.register_definition(definition, arena, symbol_table)?;
+                    if self.is_exported(definition, symbol_table.arena()) {
+                        symbol_table.register_import_definition(*definition);
                     }
                 }
             }
@@ -43,11 +41,12 @@ impl super::ModuleResolver {
                     let def = program
                         .definitions
                         .iter()
-                        .find(|d| self.def_matches_name(d, name_str, arena));
+                        .copied()
+                        .find(|d| self.def_matches_name(d, name_str, symbol_table.arena()));
 
                     if let Some(definition) = def {
                         // Found as a local definition - check if it's exported
-                        if !self.is_exported(definition, arena) {
+                        if !self.is_exported(&definition, symbol_table.arena()) {
                             return Err(ResolverError::PrivateSymbolAccess {
                                 symbol: name_str.to_string(),
                                 path: file_path.display().to_string(),
@@ -59,7 +58,7 @@ impl super::ModuleResolver {
                             });
                         }
 
-                        self.register_definition(definition, arena, symbol_table)?;
+                        symbol_table.register_import_definition(definition);
                     } else {
                         // Not found in definitions - check if it's re-exported
                         let is_reexported = program

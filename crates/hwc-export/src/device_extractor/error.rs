@@ -23,6 +23,17 @@ pub enum DeviceExtractionError {
         bulk_net: CompactString,
         expected_net: CompactString,
     },
+    /// Ambiguous device type (E0282 pattern)
+    AmbiguousDeviceType {
+        instance: CompactString,
+        candidates: Vec<CompactString>,
+        hint: String,
+    },
+    /// Physical DRC/contract failure
+    NoMatchingContract {
+        instance: CompactString,
+        details: String,
+    },
 }
 
 impl fmt::Display for DeviceExtractionError {
@@ -60,6 +71,24 @@ impl fmt::Display for DeviceExtractionError {
                     f,
                     "Bulk biasing violation for {} '{}': bulk connected to '{}', expected '{}'",
                     device_type_name, transistor, bulk_net, expected_net
+                )
+            }
+            Self::AmbiguousDeviceType {
+                instance,
+                candidates,
+                hint,
+            } => {
+                write!(
+                    f,
+                    "Ambiguous device type for instance '{}': matches multiple PDK definitions {:?}. Hint: {}",
+                    instance, candidates, hint
+                )
+            }
+            Self::NoMatchingContract { instance, details } => {
+                write!(
+                    f,
+                    "Layout for instance '{}' does not satisfy any registered PDK device contract: {}",
+                    instance, details
                 )
             }
         }

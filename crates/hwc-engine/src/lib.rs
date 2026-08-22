@@ -102,3 +102,6 @@ pub use via_layer_mapping_database::{
 
 // Re-export physics types
 pub use physics::PhysicalQuantity;
+
+// Re-export DefPath
+pub use hwc_types::DefPath;

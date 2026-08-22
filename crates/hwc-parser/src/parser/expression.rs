@@ -191,100 +191,128 @@ impl Parser {
                         });
                     }
 
-                    // Check if this is an anchor reference: ComponentName.edge or ComponentName[i].edge
-                    // We need to look ahead to see if there's a dot followed by a valid spatial edge name
-                    let is_anchor = if let Some(next) = self.peek_ahead(1) {
-                        match &next.token {
-                            Token::Dot => {
-                                if let Some(edge_token) = self.peek_ahead(2) {
-                                    if let Token::Identifier(edge_name) = &edge_token.token {
-                                        matches!(
-                                            edge_name.as_str(),
-                                            "left"
-                                                | "right"
-                                                | "top"
-                                                | "bottom"
-                                                | "front"
-                                                | "back"
-                                                | "min_z"
-                                                | "max_z"
-                                                | "top_left"
-                                                | "top_right"
-                                                | "bottom_left"
-                                                | "bottom_right"
-                                                | "center"
-                                                // v0.2.1: Comptime anchor arithmetic properties
-                                                | "center_x"
-                                                | "center_y"
-                                                | "center_z"
-                                        )
-                                    } else {
-                                        false
+                    // Check if this is an anchor reference: ComponentName.edge, Instance.SubEntity.edge, or ComponentName[i].edge
+                    let is_anchor = {
+                        let mut lookahead = 0;
+                        let mut found_anchor = false;
+
+                        while let Some(t) = self.tokens.get(self.current + lookahead) {
+                            if matches!(t.token, Token::Identifier(_)) {
+                                lookahead += 1;
+                                // Skip optional array brackets: [i] or [0]
+                                if let Some(tok_bracket) = self.tokens.get(self.current + lookahead) {
+                                    if matches!(tok_bracket.token, Token::OpenBracket) {
+                                        let mut depth = 1;
+                                        lookahead += 1;
+                                        while depth > 0 && self.current + lookahead < self.tokens.len() {
+                                            if let Some(bt) = self.tokens.get(self.current + lookahead) {
+                                                match bt.token {
+                                                    Token::OpenBracket => depth += 1,
+                                                    Token::CloseBracket => depth -= 1,
+                                                    _ => {}
+                                                }
+                                            }
+                                            lookahead += 1;
+                                        }
                                     }
-                                } else {
-                                    false
                                 }
-                            }
-                            Token::OpenBracket => {
-                                // Array syntax: Name[...].edge
-                                let mut lookahead = 1;
-                                let mut depth = 0;
-                                let mut found_anchor = false;
-                                while let Some(t) = self.tokens.get(self.current + lookahead) {
-                                    match &t.token {
-                                        Token::OpenBracket => depth += 1,
-                                        Token::CloseBracket => {
-                                            depth -= 1;
-                                            if depth == 0 {
-                                                if let Some(after) =
-                                                    self.tokens.get(self.current + lookahead + 1)
-                                                {
-                                                    if matches!(after.token, Token::Dot) {
-                                                        if let Some(edge_tok) = self
-                                                            .tokens
-                                                            .get(self.current + lookahead + 2)
-                                                        {
-                                                            if let Token::Identifier(edge_name) =
-                                                                &edge_tok.token
-                                                            {
-                                                                found_anchor = matches!(
-                                                                    edge_name.as_str(),
-                                                                    "left"
-                                                                        | "right"
-                                                                        | "top"
-                                                                        | "bottom"
-                                                                        | "front"
-                                                                        | "back"
-                                                                        | "min_z"
-                                                                        | "max_z"
-                                                                        | "top_left"
-                                                                        | "top_right"
-                                                                        | "bottom_left"
-                                                                        | "bottom_right"
-                                                                        | "center"
-                                                                );
-                                                            }
+
+                                // Must be followed by a dot
+                                if let Some(tok_dot) = self.tokens.get(self.current + lookahead) {
+                                    if matches!(tok_dot.token, Token::Dot) {
+                                        lookahead += 1;
+                                        // Check if the next token is an edge name
+                                        if let Some(next_tok) = self.tokens.get(self.current + lookahead) {
+                                            if let Token::Identifier(next_id) = &next_tok.token {
+                                                let is_edge = matches!(
+                                                    next_id.as_str(),
+                                                    "left"
+                                                        | "right"
+                                                        | "top"
+                                                        | "bottom"
+                                                        | "front"
+                                                        | "back"
+                                                        | "min_z"
+                                                        | "max_z"
+                                                        | "top_left"
+                                                        | "top_right"
+                                                        | "bottom_left"
+                                                        | "bottom_right"
+                                                        | "center"
+                                                        | "center_x"
+                                                        | "center_y"
+                                                        | "center_z"
+                                                );
+                                                if is_edge {
+                                                    // Check if there's another dot after this edge name
+                                                    if let Some(after_edge) =
+                                                        self.tokens.get(self.current + lookahead + 1)
+                                                    {
+                                                        if !matches!(after_edge.token, Token::Dot) {
+                                                            found_anchor = true;
+                                                            break;
                                                         }
+                                                    } else {
+                                                        found_anchor = true;
+                                                        break;
                                                     }
                                                 }
-                                                break;
                                             }
                                         }
-                                        _ => {}
+                                    } else {
+                                        break;
                                     }
-                                    lookahead += 1;
+                                } else {
+                                    break;
                                 }
-                                found_anchor
+                            } else {
+                                break;
                             }
-                            _ => false,
                         }
-                    } else {
-                        false
+                        found_anchor
                     };
 
                     if is_anchor {
-                        let anchor_name = self.parse_anchor_name()?;
-                        let anchor_span = self.previous_span();
+                        let mut segments = Vec::new();
+                        segments.push(self.parse_anchor_name()?);
+
+                        while self.check(&Token::Dot) {
+                            // Check if what follows Dot is an edge name and NOT followed by another Dot
+                            if let Some(next_tok) = self.tokens.get(self.current + 1) {
+                                if let Token::Identifier(next_id) = &next_tok.token {
+                                    let is_edge = matches!(
+                                        next_id.as_str(),
+                                        "left"
+                                            | "right"
+                                            | "top"
+                                            | "bottom"
+                                            | "front"
+                                            | "back"
+                                            | "min_z"
+                                            | "max_z"
+                                            | "top_left"
+                                            | "top_right"
+                                            | "bottom_left"
+                                            | "bottom_right"
+                                            | "center"
+                                            | "center_x"
+                                            | "center_y"
+                                            | "center_z"
+                                    );
+                                    if is_edge {
+                                        if let Some(after) = self.tokens.get(self.current + 2) {
+                                            if !matches!(after.token, Token::Dot) {
+                                                break;
+                                            }
+                                        } else {
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                            self.advance(); // consume Dot
+                            segments.push(self.parse_anchor_name()?);
+                        }
 
                         self.expect(&Token::Dot)?;
 
@@ -316,11 +344,12 @@ impl Parser {
                             }
                         };
 
+                        let anchor_name = segments.join(".");
                         let end_pos = self.previous_span().end;
                         Ok(Expression::AnchorReference {
                             anchor: crate::ast::AnchorReference {
                                 name: anchor_name.into(),
-                                span: anchor_span,
+                                span: Span::new(start_pos, end_pos),
                             },
                             edge,
                             span: Span::new(start_pos, end_pos),

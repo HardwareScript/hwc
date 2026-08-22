@@ -202,14 +202,17 @@ impl GeometryRouter {
             TopologicalRouter::new(trace_width, track_pitch, fabrication.min_trace_spacing_nm);
         let exempt_net_ids = vec![route.net_id.raw() as usize];
 
+        let resolved_normals = route
+            .normals
+            .or_else(|| self.net_normals.get(&route.net_id).copied());
+
         // Route on the search layer (either pin heights or preferred routing layer)
         let routing_path =
-            if let Some(&(start_normal, goal_normal)) = self.net_normals.get(&route.net_id) {
-                let escape_stub_nm = self
-                    .net_escape_stubs
-                    .get(&route.net_id)
-                    .copied()
-                    .expect("COMPILER BUG: Net has normals but no escape_stub");
+            if let Some((start_normal, goal_normal)) = resolved_normals {
+                let escape_stub_nm = route
+                    .escape_stub_nm
+                    .or_else(|| self.net_escape_stubs.get(&route.net_id).copied())
+                    .unwrap_or(0);
 
                 eprintln!(
                     "[GLOBAL ROUTING] Net {} using perpendicular escape: stub={}nm",
@@ -348,27 +351,29 @@ impl GeometryRouter {
     pub fn route_all_nets_explicit_global(
         &mut self,
         entity_graph: &mut EntityGraph,
-        segments: &[(NetId, Vec<Point3D>, Option<i64>)],
+        segments: &[crate::geometry_router::ExplicitRouteSegment],
     ) -> Result<RouteResult, RoutingError> {
         let mut result = RouteResult::new();
 
-        for (net_id, points, target_z) in segments {
-            if points.len() < 2 {
+        for seg in segments {
+            if seg.waypoints.len() < 2 {
                 continue;
             }
 
             let mut net_path = Vec::new();
             let mut net_vias = Vec::new();
 
-            for i in 0..points.len() - 1 {
-                let start = points[i];
-                let goal = points[i + 1];
+            for i in 0..seg.waypoints.len() - 1 {
+                let start = seg.waypoints[i];
+                let goal = seg.waypoints[i + 1];
 
                 let route = NetRoute {
-                    net_id: *net_id,
+                    net_id: seg.net_id,
                     start,
                     goal,
-                    target_z: *target_z,
+                    target_z: seg.target_z,
+                    normals: seg.normals,
+                    escape_stub_nm: seg.escape_stub_nm,
                 };
 
                 let routed = self.route_net_global(entity_graph, &route)?;
@@ -387,7 +392,7 @@ impl GeometryRouter {
                 net_vias.extend(routed.vias);
             }
 
-            result.paths.entry(*net_id).or_default().push(net_path);
+            result.paths.entry(seg.net_id).or_default().push(net_path);
             result.vias.extend(net_vias);
         }
 
