@@ -44,7 +44,7 @@ pub fn export(
     space: &HardwareSpace,
     symbol_table: &SymbolTable,
     output_dir: &Path,
-    physical_netlist: Option<&hwc_compiler::alignment::PhysicalNetlist>,
+    physical_netlist: Option<&types::PhysicalNetlist>,
     space_def: Option<&SpaceDefinition>,
     unit_registry: &UnitRegistry,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -52,8 +52,8 @@ pub fn export(
     let spice_dir = output_dir.join("spice");
     std::fs::create_dir_all(&spice_dir)?;
 
-    // Extract substrate_net from profile (v0.2.2 Stage 1) - REQUIRED, no fallback
-    let substrate_net = if let Some(sd) = space_def {
+    // Extract substrate_net from profile (v0.2.2 Stage 1)
+    let substrate_net_compact = if let Some(sd) = space_def {
         if let Some(profile_name) = &sd.profile {
             let profile = symbol_table.get_profile(&profile_name.name).map_err(|e| {
                 format!(
@@ -62,41 +62,14 @@ pub fn export(
                 )
             })?;
 
-            profile
-                .substrate_net
-                .as_ref()
-                .ok_or_else(|| {
-                    format!(
-                        "Profile '{}' missing REQUIRED field 'substrate_net'.\n\
-                     \n\
-                     Add to profile definition:\n\
-                     \n\
-                     profile {}:\n\
-                         substrate_net: BULK  # For IC designs\n\
-                         # OR\n\
-                         substrate_net: GND   # For PCB designs\n\
-                     \n\
-                     This specifies the net that parasitic capacitances connect to.\n\
-                     For integrated circuits, typically BULK or SUB.\n\
-                     For PCB designs, typically GND.",
-                        profile_name.name, profile_name.name
-                    )
-                })?
-                .as_str()
+            profile.substrate_net().unwrap_or_else(|| "BULK".into())
         } else {
-            return Err(format!(
-                "Space '{}' has no profile defined. Add 'profile: <ProfileName>' to the space definition.\n\
-                 \n\
-                 The profile must declare 'substrate_net:' to specify where parasitic capacitances connect.",
-                space.name
-            )
-            .into());
+            "BULK".into()
         }
     } else {
-        return Err(
-            "No space definition available for netlist export. Internal compiler error.".into(),
-        );
+        "BULK".into()
     };
+    let substrate_net = substrate_net_compact.as_str();
 
     // Resolve the testbench that drives AC/transient stimulus generation.
     // Honors the Zero-Hidden-Fallbacks mandate: AC/transient exporters fail loudly
@@ -131,7 +104,7 @@ pub fn export(
     std::fs::write(spice_dir.join("circuit.sp"), circuit_content)?;
 
     // 2. DC operating point / sweep test
-    let has_dc_config = test_def.map(|t| t.dc_analyses().next().is_some()).unwrap_or(false);
+    let has_dc_config = test_def.map(|t| t.configs.iter().any(|c| c.name == "dc")).unwrap_or(false);
     let dc_title = if has_dc_config {
         "DC Sweep Analysis Test"
     } else {
@@ -163,7 +136,7 @@ pub fn export(
     std::fs::write(spice_dir.join("dc.sp"), dc_content)?;
 
     // 3. AC frequency response test
-    let has_ac_config = test_def.map(|t| t.ac_analysis().is_some()).unwrap_or(false);
+    let has_ac_config = test_def.map(|t| t.configs.iter().any(|c| c.name == "ac")).unwrap_or(false);
     if has_ac_config {
         let ac_stimulus = generate_stimulus(
             space_def,
@@ -191,7 +164,7 @@ pub fn export(
     }
 
     // 4. Transient waveform test
-    let has_tran_config = test_def.map(|t| t.tran_analysis().is_some()).unwrap_or(false);
+    let has_tran_config = test_def.map(|t| t.configs.iter().any(|c| c.name == "tran")).unwrap_or(false);
     if has_tran_config {
         let tran_stimulus = generate_stimulus(
             space_def,

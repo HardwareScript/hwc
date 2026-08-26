@@ -57,14 +57,6 @@ impl Default for BindingPriority {
     }
 }
 
-impl From<hwc_parser::BindingPriority> for BindingPriority {
-    fn from(parser_priority: hwc_parser::BindingPriority) -> Self {
-        match parser_priority {
-            hwc_parser::BindingPriority::Channel => Self::Channel,
-            hwc_parser::BindingPriority::Contact => Self::Contact,
-        }
-    }
-}
 
 /// Binds a pour to device terminal(s), eliminating geometric guessing.
 /// v0.2.2: Supports multi-terminal binding (e.g., R1.A and R1.B on same pour) with priority

@@ -15,7 +15,6 @@
 mod ast_arena;
 mod core;
 mod id_types;
-mod serde_impl;
 
 // Re-export all public types
 pub use ast_arena::{AstArena, AstArenaOffsets};

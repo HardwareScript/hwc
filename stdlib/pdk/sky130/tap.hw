@@ -1,0 +1,42 @@
+# @std/pdk/sky130/tap.hw
+import * from @std/primitives/units
+import * from @std/primitives/math
+import { TransistorPort } from @std/pdk/sky130/nmos
+
+export enum TapType {
+    P_Sub,
+    N_Well,
+}
+
+export struct TapLayout {
+    port: TransistorPort,
+    bbox: BoundingBox,
+}
+
+export fn sky130_tap(type: TapType, at: Point2D, net: Net, size: Measurement = 300nm) -> TapLayout {
+    let implant_margin = 130nm
+
+    space.add_polygon(layer: "tap", rect: [at.x - size/2, at.y - size/2, size, size])
+
+    match type {
+        TapType::P_Sub => {
+            space.add_polygon(layer: "psdm", rect: [at.x - size/2 - implant_margin, at.y - size/2 - implant_margin, size + (2*implant_margin), size + (2*implant_margin)])
+            space.add_polygon(layer: "diff", net: net, rect: [at.x - size/2, at.y - size/2, size, size])
+        },
+        TapType::N_Well => {
+            space.add_polygon(layer: "nsdm", rect: [at.x - size/2 - implant_margin, at.y - size/2 - implant_margin, size + (2*implant_margin), size + (2*implant_margin)])
+            space.add_polygon(layer: "diff", net: net, rect: [at.x - size/2, at.y - size/2, size, size])
+        }
+    }
+
+    space.add_polygon(layer: "li1",    net: net, rect: [at.x - size/2, at.y - size/2, size, size])
+    space.add_polygon(layer: "metal1", net: net, rect: [at.x - size/2, at.y - size/2, size, size])
+
+    space.add_contact(from: "diff", to: "li1",    at: at, diameter: 170nm, net: net)
+    space.add_contact(from: "li1",  to: "metal1", at: at, diameter: 170nm, net: net)
+
+    return TapLayout {
+        port: TransistorPort { center: at, x: at.x, y: at.y, layer: "metal1", net: net },
+        bbox: BoundingBox { min_x: at.x - size/2 - implant_margin, max_x: at.x + size/2 + implant_margin, min_y: at.y - size/2 - implant_margin, max_y: at.y + size/2 + implant_margin }
+    }
+}

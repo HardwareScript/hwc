@@ -10,7 +10,7 @@ use std::path::Path;
 /// Generate Bill of Materials (BOM) from HardwareSpace
 pub fn export(
     space: &HardwareSpace,
-    symbol_table: &SymbolTable,
+    _symbol_table: &SymbolTable,
     output_dir: &Path,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let path = output_dir.join("bom.csv");
@@ -48,36 +48,12 @@ pub fn export(
                 continue;
             }
 
-            // Try to get metadata from symbol table
-            let metadata = symbol_table
-                .get_component(&component.component_type)
-                .ok()
-                .and_then(|comp_def| comp_def.metadata.as_ref());
+            let value = "";
+            let package = "";
+            let manufacturer = "";
+            let part_number = "";
 
-            let value = metadata
-                .and_then(|m| m.value.as_ref())
-                .map(|s| s.as_str())
-                .unwrap_or("");
-
-            let package = metadata
-                .and_then(|m| m.package.as_ref())
-                .map(|s| s.as_str())
-                .unwrap_or("");
-
-            let manufacturer = metadata
-                .and_then(|m| m.manufacturer.as_ref())
-                .map(|s| s.as_str())
-                .unwrap_or("");
-
-            let part_number = metadata
-                .and_then(|m| m.part_number.as_ref())
-                .map(|s| s.as_str())
-                .unwrap_or("");
-
-            let description = metadata
-                .and_then(|m| m.description.as_ref())
-                .map(|s| s.as_str())
-                .unwrap_or("");
+            let description = "";
 
             bom.push_str(&format!(
                 "{},{},{},{},{},{},{},1\n",

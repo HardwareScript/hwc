@@ -21,7 +21,7 @@ mod registration;
 pub use errors::ResolverError;
 
 use crate::symbol_table::SymbolTable;
-use hwc_parser::Import;
+use hwc_parser::ImportDecl;
 use miette::SourceSpan;
 use std::path::{Path, PathBuf};
 
@@ -54,11 +54,11 @@ impl ModuleResolver {
     /// No caching - ensures files are always up-to-date.
     pub fn resolve_import(
         &mut self,
-        import: &Import,
+        import: &ImportDecl,
         source_file: &Path,
         symbol_table: &mut SymbolTable,
     ) -> Result<(), ResolverError> {
-        let file_path = self.resolve_path(&import.path, source_file)?;
+        let file_path = self.resolve_import_path(&import.from, source_file)?;
 
         // 1. Circular Import Detection
         if self.resolution_stack.contains(&file_path) {
@@ -79,7 +79,7 @@ impl ModuleResolver {
         }
 
         // 2. Load Program (parse fresh each time - no cache)
-        let mut program = self.parse_program(&file_path)?;
+        let program = self.parse_program(&file_path)?;
 
         // 3. Push to resolution stack before processing sub-imports
         self.resolution_stack.push(file_path.clone());
@@ -93,18 +93,12 @@ impl ModuleResolver {
         // 5. Pop from resolution stack
         self.resolution_stack.pop();
 
-        // 6. Merge this program's arena into the symbol table arena and rebase definition IDs
-        let arena_to_merge = std::mem::take(&mut program.arena);
-        let offsets = symbol_table.merge_arena(arena_to_merge);
-        program.rebase_arena_ids(&offsets);
-
-        // 7. Register Symbols (ALWAYS EXECUTED)
+        // 6. Register Symbols (ALWAYS EXECUTED)
         // Symbol registration is per-import, not per-file.
         self.register_import_targets(
-            &import.targets,
+            &import.symbols,
             &program,
             &file_path,
-            import.alias.as_ref(),
             symbol_table,
         )?;
 

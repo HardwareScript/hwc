@@ -5,6 +5,7 @@
 //! the standard library (stdlib/units.hw).
 
 use compact_str::CompactString;
+use serde::{Deserialize, Serialize};
 use std::fmt;
 
 /// Distance units - REQUIRED for placement and routing
@@ -12,7 +13,7 @@ use std::fmt;
 /// All distance units can be converted to picometers (pm), which is the
 /// engine's internal coordinate representation. Maximum addressable range:
 /// +/-9,220 km (i64 pm range).
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum DistanceUnit {
     Millimeters,
     Centimeters,
@@ -34,7 +35,7 @@ impl fmt::Display for DistanceUnit {
 }
 
 /// Voltage units - REQUIRED for safety clearance calculations
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum VoltageUnit {
     Volts,
     Millivolts,
@@ -52,7 +53,7 @@ impl fmt::Display for VoltageUnit {
 }
 
 /// Current units - REQUIRED for trace width calculations (IPC-2221)
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum CurrentUnit {
     Amperes,
     Milliamperes,
@@ -70,7 +71,7 @@ impl fmt::Display for CurrentUnit {
 }
 
 /// Temperature units - REQUIRED for thermal limit calculations
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum TemperatureUnit {
     Celsius,
 }
@@ -85,7 +86,7 @@ impl fmt::Display for TemperatureUnit {
 
 /// Core unit enum - only essential units for compiler operations
 /// All other units are handled via Custom(String) and defined in stdlib/units.hw
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Unit {
     // === CORE COMPILER UNITS (needed for geometry/safety) ===
     Distance(DistanceUnit),
@@ -107,6 +108,87 @@ pub enum Unit {
     /// - Angle (°, rad)
     /// - And any future user-defined units
     Custom(String),
+}
+
+impl Unit {
+    /// Check if this unit represents a physical distance dimension.
+    pub fn is_distance(&self) -> bool {
+        matches!(self, Self::Distance(_))
+    }
+
+    /// Convert a measurement value in this unit to picometers (i64).
+    pub fn to_picometers(&self, value: f64) -> Result<i64, String> {
+        match self {
+            Self::Distance(d) => Ok(d.to_picometers(value)),
+            _ => Err(format!("Cannot convert unit {:?} to picometers (not a distance unit)", self)),
+        }
+    }
+
+    /// Convert a measurement value in this unit to nanometers (i64).
+    pub fn to_nanometers(&self, value: f64) -> Result<i64, String> {
+        match self {
+            Self::Distance(d) => Ok(d.to_nanometers(value).round() as i64),
+            _ => Err(format!("Cannot convert unit {:?} to nanometers (not a distance unit)", self)),
+        }
+    }
+
+    /// Get canonical base SI multiplier (meters, volts, amperes, etc.)
+    pub fn base_si_multiplier(&self) -> Option<f64> {
+        match self {
+            Self::Distance(d) => Some(d.base_si_multiplier()),
+            Self::Voltage(VoltageUnit::Volts) => Some(1.0),
+            Self::Voltage(VoltageUnit::Millivolts) => Some(1e-3),
+            Self::Voltage(VoltageUnit::Kilovolts) => Some(1e3),
+            Self::Current(CurrentUnit::Amperes) => Some(1.0),
+            Self::Current(CurrentUnit::Milliamperes) => Some(1e-3),
+            Self::Current(CurrentUnit::Microamperes) => Some(1e-6),
+            _ => None,
+        }
+    }
+
+    pub fn to_symbol(&self) -> String {
+        format!("{}", self)
+    }
+
+    pub fn to_spice_suffix(&self) -> Result<&'static str, String> {
+        match self {
+            Self::Distance(DistanceUnit::Picometers) => Ok("p"),
+            Self::Distance(DistanceUnit::Nanometers) => Ok("n"),
+            Self::Distance(DistanceUnit::Micrometers) => Ok("u"),
+            Self::Distance(DistanceUnit::Millimeters) => Ok("m"),
+            Self::Distance(DistanceUnit::Centimeters) => Ok("c"),
+            Self::Voltage(VoltageUnit::Millivolts) => Ok("m"),
+            Self::Voltage(VoltageUnit::Kilovolts) => Ok("k"),
+            Self::Voltage(VoltageUnit::Volts) => Ok(""),
+            Self::Current(CurrentUnit::Microamperes) => Ok("u"),
+            Self::Current(CurrentUnit::Milliamperes) => Ok("m"),
+            Self::Current(CurrentUnit::Amperes) => Ok(""),
+            Self::Custom(s) => match s.as_str() {
+                "fF" => Ok("f"),
+                "pF" => Ok("p"),
+                "nF" => Ok("n"),
+                "uF" | "µF" => Ok("u"),
+                "mF" => Ok("m"),
+                "F" => Ok(""),
+                "pH" => Ok("p"),
+                "nH" => Ok("n"),
+                "uH" | "µH" => Ok("u"),
+                "mH" => Ok("m"),
+                "H" => Ok(""),
+                "mΩ" | "mohm" => Ok("m"),
+                "Ω" | "ohm" => Ok(""),
+                "kΩ" | "kohm" => Ok("k"),
+                "MΩ" | "megohm" => Ok("meg"),
+                "GΩ" | "gohm" => Ok("g"),
+                "Hz" => Ok(""),
+                "kHz" => Ok("k"),
+                "MHz" => Ok("meg"),
+                "GHz" => Ok("g"),
+                _ => Ok(""),
+            },
+            _ => Ok(""),
+        }
+    }
 }
 
 impl fmt::Display for Unit {

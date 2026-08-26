@@ -1,0 +1,116 @@
+# materials.hw - SKY130 Material Definitions for Resistor Basics
+import * from @std/primitives/units
+
+export material Polysilicon:
+    category: conductor
+    symbol: Poly
+    process: deposited
+    properties:
+        color: "#FF6060"
+        metallic: 0.3
+        roughness: 0.8
+        resistivity: 7e-5ohm_m
+        thermal_conductivity: 30.0W_mK
+        max_current_density: 1e2A_mm2
+        min_area: 0.13um2  # SKY130 poly.2: Minimum polysilicon area to prevent CMP damage
+
+export material Aluminum:
+    category: conductor
+    symbol: Al
+    process: deposited
+    properties:
+        color: "#C0C0C0"
+        metallic: 0.8
+        roughness: 0.2
+        resistivity: 2.82e-8ohm_m
+        thermal_conductivity: 237.0W_mK
+        max_current_density: 1e3A_mm2
+        min_area: 0.14um2  # SKY130 m1.2: Minimum metal1 area to prevent peeling in CMP
+
+export material Tungsten:
+    category: conductor
+    symbol: W
+    process: deposited
+    properties:
+        color: "#8080FF"
+        metallic: 0.7
+        roughness: 0.3
+        resistivity: 5.6e-8ohm_m
+        thermal_conductivity: 173.0W_mK
+        max_current_density: 1e4A_mm2
+        contact_resistance: 1e-8ohm_cm2  # SKY130: ~5-10Ω per mcon, ~10-30Ω per licon (single via)
+
+export material Titanium_Silicide:
+    category: conductor
+    symbol: TiSi2
+    process: deposited
+    properties:
+        color: "#404040"
+        resistivity: 1.5e-7ohm_m
+        thermal_conductivity: 30.0W_mK
+        max_current_density: 5e3A_mm2
+
+export material Silicon_Dioxide:
+    category: insulator
+    symbol: SiO2
+    properties:
+        color: "#E0E8FF"
+        opacity: 0.05
+        relative_permittivity: 3.9
+
+export material Air:
+    category: insulator
+    symbol: Air
+    properties:
+        relative_permittivity: 1.0
+
+# Zero-Thickness Mask Material (v0.2.1 - Zero-Thickness Mask System)
+# RPM (Resistor Poly Mask) blocks silicide formation on polysilicon
+# This is a fabrication instruction, not a physical layer
+export material Resistor_Poly_Mask:
+    category: mask
+    symbol: RPM
+    properties:
+        color: "#FF4040"
+        opacity: 0.3
+
+# PSDM (P+ Source/Drain Implant Mask) - GDS 94/20
+# Directs P-type dopant (Boron) implantation into diff and poly
+export material P_Plus_Implant_Mask:
+    category: mask
+    symbol: PSDM
+    properties:
+        color: "#FF80FF"
+        opacity: 0.3
+
+# NSDM (N+ Source/Drain Implant Mask) - GDS 93/44
+# Directs N-type dopant (Phosphorus/Arsenic) implantation into diff and poly
+export material N_Plus_Implant_Mask:
+    category: mask
+    symbol: NSDM
+    properties:
+        color: "#80FFFF"
+        opacity: 0.3
+
+# TAP (Substrate / Well Tap Identification Mask) - GDS 65/44
+# Defines ohmic contact boundary to P-substrate / N-well
+export material Tap_Mask:
+    category: mask
+    symbol: TAP
+    properties:
+        color: "#80FF80"
+        opacity: 0.3
+
+# P+ Diffusion for Substrate/Bulk Taps
+# Used to form physical substrate contacts (P+ implant in P-substrate)
+export material P_Plus_Diffusion:
+    category: semiconductor
+    symbol: PDiff
+    process: deposited
+    properties:
+        color: "#80FF80"
+        opacity: 0.6
+        resistivity: 5e-4ohm_m
+        thermal_conductivity: 148.0W_mK
+        max_current_density: 1e3A_mm2
+        max_junction_voltage: 1.98V

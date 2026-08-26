@@ -63,7 +63,7 @@ pub fn add_materials_from_symbol_table(
 ) -> Result<(), SceneGraphError> {
     for (name, material_def) in symbol_table.materials() {
         // Extract color (with fallback to material's get_color method)
-        let color_hex = material_def.get_color();
+        let color_hex = material_def.get_color().unwrap_or_else(|| "#808080".into());
         let color = parse_hex_color(&color_hex)?;
 
         // Extract visual properties with defaults (v0.1.6 God-Tier Visual API)
@@ -71,17 +71,9 @@ pub fn add_materials_from_symbol_table(
 
         eprintln!(
             "[MATERIAL DEBUG] Material '{}': category={:?}, initial_opacity={}",
-            name, material_def.category, opacity
+            name, material_def.category(), opacity
         );
 
-        // v0.1.7: Force components and semiconductor bodies to be Opaque
-        // DISABLED: Allow semiconductors to be transparent for visualization
-        // if material_def.category == hwc_parser::MaterialCategory::Semiconductor
-        //     || name.to_lowercase().contains("body")
-        //     || name.to_lowercase().contains("component")
-        // {
-        //     opacity = 1.0;
-        // }
         if name.to_lowercase().contains("body") || name.to_lowercase().contains("component") {
             eprintln!(
                 "[MATERIAL DEBUG] Material '{}': Forcing opacity to 1.0 (body/component)",
@@ -111,7 +103,7 @@ pub fn add_materials_from_symbol_table(
         // Level 2: Semiconductors
         // Level 3: Protective Layers (Solder Mask)
         // Level 4: Substrates
-        let precedence = match material_def.category {
+        let precedence = match material_def.category() {
             hwc_parser::MaterialCategory::Conductor
             | hwc_parser::MaterialCategory::OhmicContact
             | hwc_parser::MaterialCategory::DieInterconnect
@@ -127,7 +119,6 @@ pub fn add_materials_from_symbol_table(
                     4
                 }
             }
-            // v0.2.1: Zero-thickness masks are protective/process overlay layers.
             hwc_parser::MaterialCategory::Mask => 3,
         };
 

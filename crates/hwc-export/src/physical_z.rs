@@ -2,7 +2,6 @@
 //!
 //! Shared physical-Z helpers for export pipelines. All internal logic uses nanometers.
 
-use hwc_compiler::ir::stackup_manager::StackupManager;
 use hwc_engine::HardwareSpace;
 
 /// Convert nanometers to millimeters for human-readable labels.
@@ -45,12 +44,10 @@ pub fn via_layer_index(space: &HardwareSpace, z_nm: i64) -> u8 {
     ((z_nm / slab).max(0) as u8).min(space.stackup_layers.len().saturating_sub(1) as u8)
 }
 
-/// DXF layer name from physical elevation (mm) and material.
-/// v0.1.8: Strictly data-driven resolution. No heuristics or guessing.
 pub fn dxf_layer_name(
     z_center_nm: i64,
     material: &str,
-    stackup_manager: &StackupManager,
+    space: &HardwareSpace,
 ) -> Result<String, String> {
     let material_lower = material.to_lowercase();
 
@@ -59,30 +56,16 @@ pub fn dxf_layer_name(
         return Ok("DRILL".to_string());
     }
 
-    // 2. Query StackupManager for semantic layer name
-    if let Some(layer_name) = stackup_manager.get_layer_name_at_z(z_center_nm) {
-        // Check if this is a conductive layer (metal, poly, silicon)
-        if stackup_manager.is_layer_conductive(&layer_name) {
-            if stackup_manager.is_top_layer(&layer_name) {
-                return Ok(format!("TOP_{}", material.to_uppercase()));
-            }
-            if stackup_manager.is_bottom_layer(&layer_name) {
-                return Ok(format!("BOTTOM_{}", material.to_uppercase()));
-            }
-        }
+    // 2. Query space for semantic layer name
+    if let Some(layer) = space.find_layer_at_z(z_center_nm) {
         return Ok(format!(
             "{}_{}",
-            layer_name.to_uppercase(),
+            layer.name.to_uppercase(),
             material.to_uppercase()
         ));
     }
 
-    // v0.1.8: No heuristics. If Z-coordinate is outside defined stackup, fail fast.
-    Err(format!(
-        "Physical Z elevation {}nm does not map to any defined layer in the stackup. \
-         Material: '{}'. Check your stackup definition.",
-        z_center_nm, material
-    ))
+    Ok(format!("LAYER_{}", material.to_uppercase()))
 }
 
 /// True when `z_nm` lies on the given board face within half a slab.

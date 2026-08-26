@@ -4,8 +4,7 @@ use rustc_hash::FxHashMap;
 
 use super::geometry::{distance_2d, get_bbox_centroid};
 use super::types::{ExtractedClusterNode, VIA_CLUSTER_RADIUS_NM};
-use crate::netlist::types::{ParasiticElement, PhysicalNetlistGraph};
-use hwc_compiler::alignment::PhysicalNetlist;
+use crate::netlist::types::{ParasiticElement, PhysicalNetlist, PhysicalNetlistGraph};
 use hwc_engine::space::ContactMetadata;
 use hwc_engine::HardwareSpace;
 

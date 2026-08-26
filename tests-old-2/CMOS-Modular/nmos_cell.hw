@@ -1,0 +1,197 @@
+# nmos_cell.hw - Parameterized SKY130 1.8V NMOS Standard Cell Generator
+
+import * from @std/primitives/units
+import * from "./cmos_pdk"
+
+export component NMOS_Transistor(
+    W: Measurement = 1.0um, 
+    L: Measurement = 150nm, 
+    sd_len: Measurement = 750nm
+):
+    datum: channel_center
+    
+    let diff_len = (2 * sd_len) + L
+    let poly_overhang = 200nm
+    let gate_head_size = 400nm
+    let tap_size = 300nm
+    let tap_offset_y = 2.2um
+    let npc_enclosure = 90nm
+    let npc_size = gate_head_size + (2 * npc_enclosure)
+
+    device NMOS named M_NMOS
+
+    # ========================================================================
+    # 1. ACTIVE DIFFUSION & IMPLANT STACK (Local Frame)
+    # ========================================================================
+
+    # Multi-terminal channel body (no net)
+    add pour(N_Plus_Diffusion) named NMOS_Diff on layer: diff:
+        device: M_NMOS.S, M_NMOS.D
+        dimensions: diff_len by W
+        at: [x: 0nm, y: 0nm]
+
+    add pour(N_Plus_Implant_Mask) named NMOS_NSDM on layer: nsdm:
+        dimensions: diff_len + 260nm by W + 260nm
+        align: center_x with NMOS_Diff
+        align: center_y with NMOS_Diff
+
+    # ========================================================================
+    # 2. GATE CHANNEL & SAFE LANDING HEAD
+    # ========================================================================
+
+    add pour(Polysilicon) named NMOS_Gate on layer: poly:
+        device: M_NMOS.G
+        net: Gate
+        dimensions: L by W + (2 * poly_overhang)
+        align: center_x with NMOS_Diff
+        align: center_y with NMOS_Diff
+
+    add pour(Polysilicon) named Gate_Head on layer: poly:
+        net: Gate
+        dimensions: gate_head_size by gate_head_size
+        align: center_x with NMOS_Gate
+        align: top with NMOS_Gate.bottom
+
+    add pour(Nitride_Poly_Cut_Mask) named Gate_NPC on layer: npc:
+        dimensions: npc_size by npc_size
+        align: center_x with Gate_Head
+        align: center_y with Gate_Head
+
+    add pour(Titanium_Nitride) named Gate_Contact_LI on layer: li1:
+        dimensions: 400nm by 400nm
+        align: center_x with Gate_Head
+        align: center_y with Gate_Head
+        net: Gate
+
+    add pour(Aluminum) named Gate_Contact_M1 on layer: metal1:
+        dimensions: 400nm by 400nm
+        align: center_x with Gate_Contact_LI
+        align: center_y with Gate_Contact_LI
+        net: Gate
+
+    add contact(Tungsten) named Gate_Via_Poly_LI spanning layer: poly to li1:
+        diameter: 170nm
+        align: center_x with Gate_Contact_LI
+        align: center_y with Gate_Contact_LI
+        net: Gate
+
+    add contact(Tungsten) named Gate_Via_LI_M1 spanning layer: li1 to metal1:
+        diameter: 170nm
+        align: center_x with Gate_Contact_M1
+        align: center_y with Gate_Contact_M1
+        net: Gate
+
+    # ========================================================================
+    # 3. SOURCE STACK (Left)
+    # ========================================================================
+
+    add pour(Titanium_Nitride) named Source_LI on layer: li1:
+        device: M_NMOS.S
+        net: Source
+        dimensions: 400nm by W
+        align: center_x with NMOS_Diff.left + (sd_len / 2)
+        align: center_y with NMOS_Diff
+
+    add pour(Aluminum) named Source_M1 on layer: metal1:
+        net: Source
+        dimensions: 400nm by W
+        align: center_x with Source_LI
+        align: center_y with Source_LI
+
+    for i in 0..2:
+        add contact(Tungsten) named S_Via_Diff_{i} spanning layer: diff to li1:
+            net: Source
+            diameter: 170nm
+            align: center_x with Source_LI
+            align: center_y with Source_LI.center_y - 200nm + (i * 400nm)
+        
+        add contact(Tungsten) named S_Via_M1_{i} spanning layer: li1 to metal1:
+            net: Source
+            diameter: 170nm
+            align: center_x with Source_M1
+            align: center_y with Source_M1.center_y - 200nm + (i * 400nm)
+
+    # ========================================================================
+    # 4. DRAIN STACK (Right)
+    # ========================================================================
+
+    add pour(Titanium_Nitride) named Drain_LI on layer: li1:
+        device: M_NMOS.D
+        net: Drain
+        dimensions: 400nm by W
+        align: center_x with NMOS_Diff.right - (sd_len / 2)
+        align: center_y with NMOS_Diff
+
+    add pour(Aluminum) named Drain_M1 on layer: metal1:
+        net: Drain
+        dimensions: 400nm by W
+        align: center_x with Drain_LI
+        align: center_y with Drain_LI
+
+    for i in 0..2:
+        add contact(Tungsten) named D_Via_Diff_{i} spanning layer: diff to li1:
+            net: Drain
+            diameter: 170nm
+            align: center_x with Drain_LI
+            align: center_y with Drain_LI.center_y - 200nm + (i * 400nm)
+
+        add contact(Tungsten) named D_Via_M1_{i} spanning layer: li1 to metal1:
+            net: Drain
+            diameter: 170nm
+            align: center_x with Drain_M1
+            align: center_y with Drain_M1.center_y - 200nm + (i * 400nm)
+
+    # ========================================================================
+    # 5. BULK SUBSTRATE TAP
+    # ========================================================================
+
+    add pour(Tap_Mask) named Sub_Tap_Mask on layer: tap:
+        dimensions: tap_size by tap_size
+        align: center_x with Source_LI
+        align: center_y with NMOS_Diff.center_y - tap_offset_y
+
+    add pour(P_Plus_Implant_Mask) named Sub_Tap_PSDM on layer: psdm:
+        dimensions: tap_size + 260nm by tap_size + 260nm
+        align: center_x with Sub_Tap_Mask
+        align: center_y with Sub_Tap_Mask
+
+    add pour(P_Plus_Diffusion) named Sub_Tap_Diff on layer: diff:
+        device: M_NMOS.B
+        net: Sub_Tap
+        dimensions: tap_size by tap_size
+        align: center_x with Sub_Tap_Mask
+        align: center_y with Sub_Tap_Mask
+
+    add pour(Titanium_Nitride) named Sub_Tap_LI on layer: li1:
+        net: Sub_Tap
+        dimensions: tap_size by tap_size
+        align: center_x with Sub_Tap_Diff
+        align: center_y with Sub_Tap_Diff
+
+    add pour(Aluminum) named Sub_Tap_M1 on layer: metal1:
+        net: Sub_Tap
+        dimensions: tap_size by tap_size
+        align: center_x with Sub_Tap_LI
+        align: center_y with Sub_Tap_LI
+
+    add contact(Tungsten) named Sub_Tap_Licon spanning layer: diff to li1:
+        net: Sub_Tap
+        diameter: 170nm
+        align: center_x with Sub_Tap_Diff
+        align: center_y with Sub_Tap_Diff
+
+    add contact(Tungsten) named Sub_Tap_Mcon spanning layer: li1 to metal1:
+        net: Sub_Tap
+        diameter: 170nm
+        align: center_x with Sub_Tap_LI
+        align: center_y with Sub_Tap_LI
+
+    # ========================================================================
+    # 6. PUBLIC PORT CONTRACT
+    # ========================================================================
+
+    ports:
+        Gate:    Gate_Contact_M1.center  on layer: metal1
+        Source:  Source_M1.center        on layer: metal1
+        Drain:   Drain_M1.center         on layer: metal1
+        Sub_Tap: Sub_Tap_M1.center       on layer: metal1

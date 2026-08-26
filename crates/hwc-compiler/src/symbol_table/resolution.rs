@@ -1,20 +1,41 @@
 //! Symbol resolution methods (Pass 2) - Arena-Based Architecture
-//!
-//! v0.2.1: All lookups use Definition IDs, then arena dereference for actual data
 
 use super::{definition::DefinitionExt, error::SymbolError, layer::SymbolTable, Definition};
-use compact_str::CompactString;
 use hwc_parser::{
-    logic::{EnumDefinition, LogicDefinition, StructDefinition},
-    BridgeDefinition, ComponentDefinition, ConstDefinition, DeviceDefinition, InterfaceDefinition,
-    MaterialDefinition, MechanicalDefinition, ModuleDefinition, PatternDefinition,
-    ProfileDefinition, ShapeDefinition, SignalGroupDefinition, SpaceDefinition,
-    SpiceModelDefinition, StrategyDefinition, SubcircuitDefinition, TestDefinition, UnitDefinition,
+    DeviceDecl, EnumDecl, FunctionDecl, MaterialDecl, ModuleDecl, ProfileDecl, SpaceDecl,
+    StructDecl, TestDecl,
 };
 
 impl SymbolTable {
-    /// Get a space definition by name
-    pub fn get_space(&self, name: &str) -> Result<&SpaceDefinition, SymbolError> {
+    /// Get a function declaration by name
+    pub fn get_function(&self, name: &str) -> Result<&FunctionDecl, SymbolError> {
+        match self.get_symbol(name) {
+            Some(Definition::Function(id)) => Ok(&self.arena.function_defs[id]),
+            Some(other) => Err(SymbolError::type_mismatch(name, "function", other.kind_str())),
+            None => Err(SymbolError::undefined(name.into(), "function", None)),
+        }
+    }
+
+    /// Get a struct declaration by name
+    pub fn get_struct(&self, name: &str) -> Result<&StructDecl, SymbolError> {
+        match self.get_symbol(name) {
+            Some(Definition::Struct(id)) => Ok(&self.arena.struct_defs[id]),
+            Some(other) => Err(SymbolError::type_mismatch(name, "struct", other.kind_str())),
+            None => Err(SymbolError::undefined(name.into(), "struct", None)),
+        }
+    }
+
+    /// Get an enum declaration by name
+    pub fn get_enum(&self, name: &str) -> Result<&EnumDecl, SymbolError> {
+        match self.get_symbol(name) {
+            Some(Definition::Enum(id)) => Ok(&self.arena.enum_defs[id]),
+            Some(other) => Err(SymbolError::type_mismatch(name, "enum", other.kind_str())),
+            None => Err(SymbolError::undefined(name.into(), "enum", None)),
+        }
+    }
+
+    /// Get a space declaration by name
+    pub fn get_space(&self, name: &str) -> Result<&SpaceDecl, SymbolError> {
         match self.get_symbol(name) {
             Some(Definition::Space(id)) => Ok(&self.arena.space_defs[id]),
             Some(other) => Err(SymbolError::type_mismatch(name, "space", other.kind_str())),
@@ -22,15 +43,19 @@ impl SymbolTable {
         }
     }
 
-    /// Get a material definition by name
-    pub fn get_material(&self, name: &str) -> Result<&MaterialDefinition, SymbolError> {
+    /// Get a module declaration by name
+    pub fn get_module(&self, name: &str) -> Result<&ModuleDecl, SymbolError> {
+        match self.get_symbol(name) {
+            Some(Definition::Module(id)) => Ok(&self.arena.module_defs[id]),
+            Some(other) => Err(SymbolError::type_mismatch(name, "module", other.kind_str())),
+            None => Err(SymbolError::undefined(name.into(), "module", None)),
+        }
+    }
+
+    /// Get a material declaration by name
+    pub fn get_material(&self, name: &str) -> Result<&MaterialDecl, SymbolError> {
         match self.get_symbol(name) {
             Some(Definition::Material(id)) => Ok(&self.arena.material_defs[id]),
-            Some(Definition::MaterialAlias(id)) => {
-                // Follow alias chain (target is an Identifier, convert to &str)
-                let alias = &self.arena.material_alias_defs[id];
-                self.get_material(alias.target.as_str())
-            }
             Some(other) => Err(SymbolError::type_mismatch(
                 name,
                 "material",
@@ -40,8 +65,8 @@ impl SymbolTable {
         }
     }
 
-    /// Get a profile definition by name
-    pub fn get_profile(&self, name: &str) -> Result<&ProfileDefinition, SymbolError> {
+    /// Get a profile declaration by name
+    pub fn get_profile(&self, name: &str) -> Result<&ProfileDecl, SymbolError> {
         match self.get_symbol(name) {
             Some(Definition::Profile(id)) => Ok(&self.arena.profile_defs[id]),
             Some(other) => Err(SymbolError::type_mismatch(
@@ -53,30 +78,8 @@ impl SymbolTable {
         }
     }
 
-    /// Get a component definition by name
-    pub fn get_component(&self, name: &str) -> Result<&ComponentDefinition, SymbolError> {
-        match self.get_symbol(name) {
-            Some(Definition::Component(id)) => Ok(&self.arena.component_defs[id]),
-            Some(other) => Err(SymbolError::type_mismatch(
-                name,
-                "component",
-                other.kind_str(),
-            )),
-            None => Err(SymbolError::undefined(name.into(), "component", None)),
-        }
-    }
-
-    /// Get a module definition by name
-    pub fn get_module(&self, name: &str) -> Result<&ModuleDefinition, SymbolError> {
-        match self.get_symbol(name) {
-            Some(Definition::Module(id)) => Ok(&self.arena.module_defs[id]),
-            Some(other) => Err(SymbolError::type_mismatch(name, "module", other.kind_str())),
-            None => Err(SymbolError::undefined(name.into(), "module", None)),
-        }
-    }
-
-    /// Get a device definition by name
-    pub fn get_device(&self, name: &str) -> Result<&DeviceDefinition, SymbolError> {
+    /// Get a device declaration by name
+    pub fn get_device(&self, name: &str) -> Result<&DeviceDecl, SymbolError> {
         match self.get_symbol(name) {
             Some(Definition::Device(id)) => Ok(&self.arena.device_defs[id]),
             Some(other) => Err(SymbolError::type_mismatch(name, "device", other.kind_str())),
@@ -84,36 +87,8 @@ impl SymbolTable {
         }
     }
 
-    /// Get a mechanical definition by name
-    pub fn get_mechanical(&self, name: &str) -> Result<&MechanicalDefinition, SymbolError> {
-        match self.get_symbol(name) {
-            Some(Definition::Mechanical(id)) => Ok(&self.arena.mechanical_defs[id]),
-            Some(other) => Err(SymbolError::type_mismatch(
-                name,
-                "mechanical",
-                other.kind_str(),
-            )),
-            None => Err(SymbolError::undefined(name.into(), "mechanical", None)),
-        }
-    }
-
-    /// Get an interface definition by name
-    pub fn get_interface(&self, name: &str) -> Result<&InterfaceDefinition, SymbolError> {
-        match self.get_symbol(name) {
-            Some(Definition::Interface(id)) | Some(Definition::PolymorphicInterface(id)) => {
-                Ok(&self.arena.interface_defs[id])
-            }
-            Some(other) => Err(SymbolError::type_mismatch(
-                name,
-                "interface",
-                other.kind_str(),
-            )),
-            None => Err(SymbolError::undefined(name.into(), "interface", None)),
-        }
-    }
-
-    /// Get a test definition by name
-    pub fn get_test(&self, name: &str) -> Result<&TestDefinition, SymbolError> {
+    /// Get a test declaration by name
+    pub fn get_test(&self, name: &str) -> Result<&TestDecl, SymbolError> {
         match self.get_symbol(name) {
             Some(Definition::Test(id)) => Ok(&self.arena.test_defs[id]),
             Some(other) => Err(SymbolError::type_mismatch(name, "test", other.kind_str())),
@@ -121,337 +96,65 @@ impl SymbolTable {
         }
     }
 
-    /// Find the test definition that targets a given space.
-    ///
-    /// A test targets a space via its `for SpaceName` clause (`target_space`).
-    /// If no test declares a matching target, returns the first registered test
-    /// (for single-test designs). Returns `None` if no tests are defined.
-    pub fn find_test_for_space(&self, space_name: &str) -> Option<&TestDefinition> {
-        let mut fallback: Option<&TestDefinition> = None;
-        for test in self.arena.test_defs.iter() {
-            if test.target_space.as_ref().map(|t| t.as_str()) == Some(space_name) {
-                return Some(test);
-            }
-            if fallback.is_none() {
-                fallback = Some(test);
-            }
-        }
-        fallback
+    /// Find a test declaration for a given space by target name
+    pub fn find_test_for_space(&self, space_name: &str) -> Option<&TestDecl> {
+        self.arena.test_defs.iter().find(|t| t.target.as_str() == space_name)
     }
 
-    /// Get a signal group definition by name
-    pub fn get_signal_group(&self, name: &str) -> Result<&SignalGroupDefinition, SymbolError> {
-        match self.get_symbol(name) {
-            Some(Definition::SignalGroup(id)) => Ok(&self.arena.signal_group_defs[id]),
-            Some(other) => Err(SymbolError::type_mismatch(
-                name,
-                "signal_group",
-                other.kind_str(),
-            )),
-            None => Err(SymbolError::undefined(name.into(), "signal_group", None)),
-        }
+    /// Iterate over all materials
+    pub fn materials(&self) -> impl Iterator<Item = (&compact_str::CompactString, &MaterialDecl)> {
+        self.arena.material_defs.iter().map(|m| (&m.name.name, m))
     }
 
-    /// Get a pattern definition by name
-    pub fn get_pattern(&self, name: &str) -> Result<&PatternDefinition, SymbolError> {
-        match self.get_symbol(name) {
-            Some(Definition::Pattern(id)) => Ok(&self.arena.pattern_defs[id]),
-            Some(other) => Err(SymbolError::type_mismatch(
-                name,
-                "pattern",
-                other.kind_str(),
-            )),
-            None => Err(SymbolError::undefined(name.into(), "pattern", None)),
-        }
+    /// Iterate over all profiles
+    pub fn profiles(&self) -> impl Iterator<Item = (&compact_str::CompactString, &ProfileDecl)> {
+        self.arena.profile_defs.iter().map(|p| (&p.name.name, p))
     }
 
-    /// Get a strategy definition by name
-    pub fn get_strategy(&self, name: &str) -> Result<&StrategyDefinition, SymbolError> {
-        match self.get_symbol(name) {
-            Some(Definition::Strategy(id)) => Ok(&self.arena.strategy_defs[id]),
-            Some(other) => Err(SymbolError::type_mismatch(
-                name,
-                "strategy",
-                other.kind_str(),
-            )),
-            None => Err(SymbolError::undefined(name.into(), "strategy", None)),
-        }
+    /// Iterate over all devices
+    pub fn iter_all_devices(&self) -> impl Iterator<Item = (&compact_str::CompactString, &DeviceDecl)> {
+        self.arena.device_defs.iter().map(|d| (&d.name.name, d))
     }
 
-    /// Get a logic definition by name
-    pub fn get_logic(&self, name: &str) -> Result<&LogicDefinition, SymbolError> {
-        match self.get_symbol(name) {
-            Some(Definition::Logic(id)) => Ok(&self.arena.logic_defs[id]),
-            Some(other) => Err(SymbolError::type_mismatch(name, "logic", other.kind_str())),
-            None => Err(SymbolError::undefined(name.into(), "logic", None)),
-        }
+    /// Iterate over all modules
+    pub fn modules(&self) -> impl Iterator<Item = (&compact_str::CompactString, &ModuleDecl)> {
+        self.arena.module_defs.iter().map(|m| (&m.name.name, m))
     }
 
-    /// Get an enum definition by name
-    pub fn get_enum(&self, name: &str) -> Result<&EnumDefinition, SymbolError> {
-        match self.get_symbol(name) {
-            Some(Definition::Enum(id)) => Ok(&self.arena.enum_defs[id]),
-            Some(other) => Err(SymbolError::type_mismatch(name, "enum", other.kind_str())),
-            None => Err(SymbolError::undefined(name.into(), "enum", None)),
-        }
+    /// Legacy / compatibility: get all constants (empty in v0.3.0 since constants are evaluated in Comptime Engine)
+    pub fn get_all_constants(&self) -> rustc_hash::FxHashMap<compact_str::CompactString, f64> {
+        rustc_hash::FxHashMap::default()
     }
 
-    /// Get a struct definition by name
-    pub fn get_struct(&self, name: &str) -> Result<&StructDefinition, SymbolError> {
-        match self.get_symbol(name) {
-            Some(Definition::Struct(id)) => Ok(&self.arena.struct_defs[id]),
-            Some(other) => Err(SymbolError::type_mismatch(name, "struct", other.kind_str())),
-            None => Err(SymbolError::undefined(name.into(), "struct", None)),
-        }
+    /// Legacy / compatibility: get all bridges
+    pub fn get_all_bridges(&self) -> Vec<&DeviceDecl> {
+        self.arena.device_defs.iter().collect()
     }
 
-    /// Get a unit definition by name
-    pub fn get_unit(&self, name: &str) -> Option<&UnitDefinition> {
-        match self.get_symbol(name) {
-            Some(Definition::Unit(id)) => Some(&self.arena.unit_defs[id]),
-            _ => None,
-        }
+    /// Legacy / compatibility: get component (now devices / modules)
+    pub fn get_component(&self, name: &str) -> Result<&DeviceDecl, SymbolError> {
+        self.get_device(name)
     }
 
-    /// Get a constant definition by name
-    pub fn get_const(&self, name: &str) -> Option<&ConstDefinition> {
-        match self.get_symbol(name) {
-            Some(Definition::Const(id)) => Some(&self.arena.const_defs[id]),
-            _ => None,
-        }
+    /// Legacy / compatibility: get shape
+    pub fn get_shape(&self, name: &str) -> Option<&SpaceDecl> {
+        self.get_space(name).ok()
     }
 
-    /// Get a shape definition by name
-    pub fn get_shape(&self, name: &str) -> Option<&ShapeDefinition> {
-        match self.get_symbol(name) {
-            Some(Definition::Shape(id)) => Some(&self.arena.shape_defs[id]),
-            _ => None,
-        }
+    /// Legacy / compatibility: get pattern
+    pub fn get_pattern(&self, name: &str) -> Result<&ModuleDecl, SymbolError> {
+        self.get_module(name)
     }
 
-    /// Get a SPICE model definition by name
-    pub fn get_spice_model(&self, name: &str) -> Result<&SpiceModelDefinition, SymbolError> {
-        match self.get_symbol(name) {
-            Some(Definition::SpiceModel(id)) => Ok(&self.arena.spice_model_defs[id]),
-            Some(other) => Err(SymbolError::type_mismatch(
-                name,
-                "spice_model",
-                other.kind_str(),
-            )),
-            None => Err(SymbolError::undefined(name.into(), "spice_model", None)),
-        }
-    }
-
-    /// Get a SPICE subcircuit definition by name
-    pub fn get_subcircuit(&self, name: &str) -> Result<&SubcircuitDefinition, SymbolError> {
-        match self.get_symbol(name) {
-            Some(Definition::Subcircuit(id)) => Ok(&self.arena.subcircuit_defs[id]),
-            Some(other) => Err(SymbolError::type_mismatch(
-                name,
-                "subcircuit",
-                other.kind_str(),
-            )),
-            None => Err(SymbolError::undefined(name.into(), "subcircuit", None)),
-        }
-    }
-
-    /// Helper methods for specific checks
-    pub fn has_material(&self, name: &str) -> bool {
-        matches!(
-            self.get_symbol(name),
-            Some(Definition::Material(_)) | Some(Definition::MaterialAlias(_))
-        )
-    }
-
-    pub fn has_profile(&self, name: &str) -> bool {
-        matches!(self.get_symbol(name), Some(Definition::Profile(_)))
-    }
-
-    pub fn has_component(&self, name: &str) -> bool {
-        matches!(self.get_symbol(name), Some(Definition::Component(_)))
-    }
-
-    pub fn has_module(&self, name: &str) -> bool {
-        matches!(self.get_symbol(name), Some(Definition::Module(_)))
-    }
-
-    pub fn has_device(&self, name: &str) -> bool {
-        matches!(self.get_symbol(name), Some(Definition::Device(_)))
-    }
-
-    pub fn has_mechanical(&self, name: &str) -> bool {
-        matches!(self.get_symbol(name), Some(Definition::Mechanical(_)))
-    }
-
-    pub fn has_interface(&self, name: &str) -> bool {
-        matches!(self.get_symbol(name), Some(Definition::Interface(_)))
-    }
-
-    pub fn has_test(&self, name: &str) -> bool {
-        matches!(self.get_symbol(name), Some(Definition::Test(_)))
-    }
-
-    pub fn has_signal_group(&self, name: &str) -> bool {
-        matches!(self.get_symbol(name), Some(Definition::SignalGroup(_)))
-    }
-
-    pub fn has_pattern(&self, name: &str) -> bool {
-        matches!(self.get_symbol(name), Some(Definition::Pattern(_)))
-    }
-
-    pub fn has_strategy(&self, name: &str) -> bool {
-        matches!(self.get_symbol(name), Some(Definition::Strategy(_)))
-    }
-
-    pub fn has_logic(&self, name: &str) -> bool {
-        matches!(self.get_symbol(name), Some(Definition::Logic(_)))
-    }
-
-    pub fn has_enum(&self, name: &str) -> bool {
-        matches!(self.get_symbol(name), Some(Definition::Enum(_)))
-    }
-
-    pub fn has_struct(&self, name: &str) -> bool {
-        matches!(self.get_symbol(name), Some(Definition::Struct(_)))
-    }
-
-    pub fn has_shape(&self, name: &str) -> bool {
-        matches!(self.get_symbol(name), Some(Definition::Shape(_)))
-    }
-
-    pub fn has_spice_model(&self, name: &str) -> bool {
-        matches!(self.get_symbol(name), Some(Definition::SpiceModel(_)))
-    }
-
-    pub fn has_spice_subcircuit(&self, name: &str) -> bool {
-        matches!(self.get_symbol(name), Some(Definition::Subcircuit(_)))
-    }
-
-    /// Collect all materials (for database population)
-    pub fn materials(&self) -> rustc_hash::FxHashMap<CompactString, MaterialDefinition> {
-        let mut all_materials = rustc_hash::FxHashMap::default();
-
-        for (_name, def) in self.iter_all_symbols() {
-            if let Definition::Material(id) = def {
-                let mat = &self.arena.material_defs[*id];
-                all_materials.insert(mat.name.as_str().into(), mat.clone());
-            }
-        }
-
-        all_materials
-    }
-
-    /// Collect all bridges (for via resolver)
-    pub fn get_all_bridges(&self) -> Vec<BridgeDefinition> {
-        self.iter_all_symbols()
-            .filter_map(|(_name, def)| {
-                if let Definition::Bridge(id) = def {
-                    Some(self.arena.bridge_defs[*id].clone())
-                } else {
-                    None
-                }
-            })
-            .collect()
-    }
-
-    /// Iterate over all device definitions
-    pub fn iter_all_devices(&self) -> impl Iterator<Item = (&CompactString, &DeviceDefinition)> {
-        self.iter_all_symbols().filter_map(|(name, def)| {
-            if let Definition::Device(id) = def {
-                Some((name, &self.arena.device_defs[*id]))
-            } else {
-                None
-            }
+    /// Legacy / compatibility: measurement_to_nm
+    pub fn measurement_to_nm(&self, measurement: &hwc_parser::Measurement) -> Result<i64, SymbolError> {
+        measurement.to_nanometers_i64().ok_or_else(|| {
+            SymbolError::undefined("unit".into(), "length unit", None)
         })
     }
 
-    /// Debug: List all profile names
-    pub fn debug_list_profiles(&self) -> Vec<String> {
-        self.iter_all_symbols()
-            .filter_map(|(name, def)| {
-                if matches!(def, Definition::Profile(_)) {
-                    Some(name.to_string())
-                } else {
-                    None
-                }
-            })
-            .collect()
-    }
-
-    /// Debug: List all space names in local layer
-    pub fn list_local_spaces(&self) -> Vec<String> {
-        self.local
-            .iter()
-            .filter_map(|(name, def)| {
-                if matches!(def, Definition::Space(_)) {
-                    Some(name.to_string())
-                } else {
-                    None
-                }
-            })
-            .collect()
-    }
-
-    /// Debug: List all space names in HPM layers
-    pub fn list_hpm_spaces(&self) -> Vec<Vec<String>> {
-        self.hpm
-            .iter()
-            .map(|layer| {
-                layer
-                    .iter()
-                    .filter_map(|(name, def)| {
-                        if matches!(def, Definition::Space(_)) {
-                            Some(name.to_string())
-                        } else {
-                            None
-                        }
-                    })
-                    .collect()
-            })
-            .collect()
-    }
-
-    /// Add a unit to the prelude layer (for standard library loading)
-    pub fn add_prelude_unit(&mut self, name: CompactString, unit: UnitDefinition) {
-        // Allocate to arena first, then store ID
-        let id = self.arena.unit_defs.push(unit);
-        self.prelude.insert(name, Definition::Unit(id));
-    }
-
-    /// Add a constant to the prelude layer (for standard library loading)
-    pub fn add_prelude_constant(&mut self, name: CompactString, constant: ConstDefinition) {
-        // Allocate to arena first, then store ID
-        let id = self.arena.const_defs.push(constant);
-        self.prelude.insert(name, Definition::Const(id));
-    }
-
-    /// Get all constants from all layers (for constraint solver, via resolver, etc.)
-    /// Returns a map of constant name -> value
-    pub fn get_all_constants(&self) -> rustc_hash::FxHashMap<CompactString, f64> {
-        let mut constants = rustc_hash::FxHashMap::default();
-
-        for (_name, def) in self.iter_all_symbols() {
-            if let Definition::Const(id) = def {
-                let c = &self.arena.const_defs[*id];
-                constants.insert(c.name.clone(), c.value);
-            }
-        }
-
-        constants
-    }
-
-    /// Resolve a unit symbol by looking it up across all layers
-    /// Returns the UnitDefinition if found
-    pub fn resolve_unit_symbol(&self, symbol: &str) -> Option<&UnitDefinition> {
-        match self.get_symbol(symbol) {
-            Some(Definition::Unit(id)) => Some(&self.arena.unit_defs[id]),
-            _ => None,
-        }
-    }
-
-    /// Convert a measurement to nanometers using the symbol table for unit resolution.
-    /// This delegates to the canonical ir::conversions::measurement_to_nm function.
-    pub fn measurement_to_nm(&self, measurement: &hwc_parser::Measurement) -> Result<i64, String> {
-        crate::ir::conversions::measurement_to_nm_simple(measurement, self)
+    /// Legacy / compatibility: resolve_unit_symbol
+    pub fn resolve_unit_symbol(&self, _symbol: &str) -> Option<hwc_parser::Unit> {
+        None
     }
 }

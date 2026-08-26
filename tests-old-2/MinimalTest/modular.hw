@@ -1,0 +1,48 @@
+# Minimal modular test - three component instances connected by routes
+
+import * from @std/primitives/units
+import SimplePad from "./simple_cell"
+import * from "./simple_pdk"
+
+module SimpleModule:
+    pins: [input A, output B, output C, ground GND]
+    route A to B
+    route B to C
+    route A to C
+
+space SimpleSpace implements SimpleModule:
+    dimensions: 10um by 10um
+    profile: SimpleProfile
+    
+    nets:
+        A:   { classification: signal, current: 0.1uA }
+        B:   { classification: signal, current: 0.1uA }
+        C:   { classification: signal, current: 0.1uA }
+        GND: { classification: ground, potential: 0.0V, current: 0.1uA }
+    
+    # First pad instance - anchored absolutely
+    add SimplePad() named Pad_A_Inst at [x: 2um, y: 5um] rotated 0deg:
+        ports: { PadNet: A }
+    
+    # Second pad instance - positioned absolutely
+    add SimplePad() named Pad_B_Inst at [x: 5um, y: 5um] rotated 0deg:
+        ports: { PadNet: A }
+    
+    # Third pad instance - positioned absolutely
+    add SimplePad() named Pad_C_Inst at [x: 5um, y: 3um] rotated 0deg:
+        ports: { PadNet: A }
+    
+    # Ground pad instance
+    add SimplePad() named Pad_GND_Inst at [x: 2um, y: 3um] rotated 0deg:
+        ports: { PadNet: GND }
+    
+    # Route connecting them - this should work just like the monolithic version
+    route Pad_A_Inst.PadNet to Pad_B_Inst.PadNet:
+        net: A
+        width: 300nm
+        layer: metal1
+    
+    route Pad_B_Inst.PadNet to Pad_C_Inst.PadNet:
+        net: A
+        width: 300nm
+        layer: metal1

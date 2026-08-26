@@ -27,30 +27,34 @@ impl super::ModuleResolver {
         Ok(stdlib_path)
     }
 
-    /// Resolve a module path to a file path
-    pub(super) fn resolve_path(
+    /// Resolve a module path to a file path (from string)
+    pub(super) fn resolve_import_path(
         &self,
-        path: &hwc_parser::ModulePath,
+        from_str: &str,
         source_file: &Path,
     ) -> Result<PathBuf, ResolverError> {
-        match path {
-            hwc_parser::ModulePath::Package { org, name } => {
-                if org == "std" {
-                    self.resolve_stdlib_path(name)
-                } else {
-                    Err(ResolverError::ExternalPackageNotSupported {
-                        org: org.clone(),
-                        name: name.clone(),
-                        span: None,
-                    })
-                }
+        let clean = from_str.trim_matches('"');
+        if clean.starts_with("@std/") {
+            self.resolve_stdlib_path(&clean["@std/".len()..])
+        } else if clean.starts_with('@') {
+            let parts: Vec<&str> = clean.splitn(2, '/').collect();
+            let org = parts[0].trim_start_matches('@').to_string();
+            let name = parts.get(1).unwrap_or(&"").to_string();
+            if org == "std" {
+                self.resolve_stdlib_path(&name)
+            } else {
+                Err(ResolverError::ExternalPackageNotSupported {
+                    org: org.into(),
+                    name: name.into(),
+                    span: None,
+                })
             }
-            hwc_parser::ModulePath::Relative(path_str)
-            | hwc_parser::ModulePath::Quoted(path_str) => {
-                self.resolve_relative_path(path_str, source_file)
-            }
+        } else {
+            self.resolve_relative_path(clean, source_file)
         }
     }
+
+
 
     /// Resolve a path relative to the source file's directory
     pub(super) fn resolve_relative_path(

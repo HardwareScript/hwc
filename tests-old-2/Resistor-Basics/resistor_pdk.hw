@@ -1,0 +1,138 @@
+# resistor_pdk.hw - SkyWater SKY130 Resistor PDK
+# Device: sky130_fd_pr__res_high_po (P+ Poly Precision Resistor, 350 Ω/□)
+import * from @std/primitives/units
+import Polysilicon, Aluminum, Tungsten, Titanium_Silicide, Silicon_Dioxide, Air, Resistor_Poly_Mask, P_Plus_Diffusion, P_Plus_Implant_Mask, N_Plus_Implant_Mask, Tap_Mask from "./materials"
+
+export Polysilicon
+export Aluminum
+export Tungsten
+export Titanium_Silicide
+export Silicon_Dioxide
+export Air
+export Resistor_Poly_Mask
+export P_Plus_Diffusion
+export P_Plus_Implant_Mask
+export N_Plus_Implant_Mask
+export Tap_Mask
+
+export shape SquareContact(width: Measurement):
+    geometry:
+        Rectangle(width: width, height: width)
+
+export bridge Polysilicon to Aluminum:
+    interface: Titanium_Silicide
+    thickness: 5nm
+    fill: Tungsten
+
+export bridge Polysilicon to Titanium_Silicide:
+    interface: Titanium_Silicide
+    thickness: 5nm
+    fill: Tungsten
+
+export bridge Titanium_Silicide to Aluminum:
+    interface: Titanium_Silicide
+    thickness: 5nm
+    fill: Tungsten
+
+export bridge P_Plus_Diffusion to Titanium_Silicide:
+    interface: Titanium_Silicide
+    thickness: 5nm
+    fill: Tungsten
+
+# SKY130-compliant layer stackup with local interconnect (li1) and fabrication masks
+export profile Resistor_3D:
+    technology: "ASIC"
+    substrate_net: GND
+    
+    stackup:
+        tap:        [material: Tap_Mask,            thickness: 0nm,   routable: false] # Zero-thickness substrate tap boundary mask (GDS 65/44)
+        psdm:       [material: P_Plus_Implant_Mask, thickness: 0nm,   routable: false] # Zero-thickness P+ implant mask (GDS 94/20)
+        pdiff:      [material: P_Plus_Diffusion,    thickness: 200nm, routable: true]
+        polyres:    [material: Polysilicon,         thickness: 180nm, routable: true]
+        rpm:        [material: Resistor_Poly_Mask,  thickness: 0nm,   routable: false] # Zero-thickness silicide block mask (GDS 86/20)
+        ild0:       [material: Silicon_Dioxide,     thickness: 200nm, routable: false]
+        li1:        [material: Titanium_Silicide,   thickness: 100nm, routable: true]
+        ild1:       [material: Silicon_Dioxide,     thickness: 150nm, routable: false]
+        metal1:     [material: Aluminum,            thickness: 360nm, routable: true]
+
+    manufacturing:
+        track_pitch: 10nm
+        copper_thickness: 500nm
+        circle_segments: 64
+
+    via:
+        min_diameter: 170nm
+        min_enclosure: 40nm          # SKY130 licon.4 / licon.5 / mcon.4 enclosure (metal/poly over contact)
+        min_spacing: 200nm           # SKY130 DRC compliant (licon.2/mcon.2)
+        shape: SquareContact
+        contact_depth: 30%
+        material_contact_depths:
+            Aluminum: 30%
+            Polysilicon: 30%
+            Titanium_Silicide: 50%
+            P_Plus_Diffusion: 30%
+
+    trace:
+        min_width: 300nm
+        min_spacing: 300nm
+        edge_clearance: 200nm
+
+    clearance:
+        high_voltage: 1um
+        safety_factor: 2.0
+
+    thermal:
+        ambient_temp: 25C
+        max_operating_temp: 125C
+        max_temp_rise: 50C
+        clustering_threshold: 10um
+
+    layer:
+        min_thickness: 50nm
+        allowed_conductors: [Aluminum, Polysilicon]
+        allowed_dielectrics: [Silicon_Dioxide, Air]
+
+    routing:
+        min_segment_length: 300nm
+        escape_stub: 0nm
+        base_cost: 1
+        via_penalty: 50
+        direction_penalty: 10
+        tight_clearance_penalty: 2
+        crosstalk_penalty: 3
+        impedance_penalty: 1
+        reference_void_penalty: 5000000
+
+    net_type Signal:
+        routing_style: auto
+        escape_stub: 0nm
+
+# SKY130 P+ Poly Precision Resistor Subcircuit
+# Sheet resistance: 350 Ω/□, End contacts: 362 Ω each, Parasitic cap: 2 fF/μm²
+#
+# Self-contained subcircuit: allows LTSpice to simulate without external PDK files
+export subcircuit sky130_fd_pr__res_high_po:
+    terminals: [A, B, BULK]
+    parameters: [W = 1.0um, L = 1.0um]
+    elements:
+        R_head: Resistor(nodes: [A, node_1], value: 362.0ohm)
+        R_tail: Resistor(nodes: [node_2, B], value: 362.0ohm)
+        R_body: Resistor(nodes: [node_1, node_2], value: 350.0ohm * (L / W), tc1: -1.47e-3, tc2: 2.7e-6, vc1: -3.2e-4, vc2: 1.8e-5)
+        C_sub1: Capacitor(nodes: [A, BULK], value: 2.0fF * W * L)
+        C_sub2: Capacitor(nodes: [B, BULK], value: 2.0fF * W * L)
+
+export device Resistor:
+    terminals: [A, B, BULK]
+    materials:
+        A: [Polysilicon, Titanium_Silicide, Aluminum]  # Accept resistor body OR contact materials
+        B: [Polysilicon, Titanium_Silicide, Aluminum]  # Accept resistor body OR contact materials
+        BULK: [Air, P_Plus_Diffusion, Titanium_Silicide]  # Virtual terminal (Air) OR physical substrate tap (P+ + TiSi2)
+    metrics:
+        L: span(A | B, along: flux(A, B))
+        W: span(A | B, along: transverse(A, B))
+    spice:
+        prefix: X
+        subcircuit: sky130_fd_pr__res_high_po
+        terminal_order: [A, B, BULK]
+        parameters: [W, L]
+        parameter_style: named

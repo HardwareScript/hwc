@@ -1,7 +1,6 @@
 //! Core types for the Geometry Router
 
 use crate::constraint_manager::{ConstraintRulebook, LayerDirection};
-use crate::geometry::Point3D;
 use crate::geometry_router::bounding_box_tracker::BoundingBoxTracker;
 use crate::geometry_router::neighbor_generation::GridBounds;
 use crate::geometry_router::partition::PartitionGrid;

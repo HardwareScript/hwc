@@ -121,13 +121,9 @@ pub fn export(
 
         let color_hex = symbol_table
             .get_material(mat_name)
-            .map(|m| m.get_color())
-            .unwrap_or_else(|_| {
-                panic!(
-                    "Material '{}' not found in symbol table during DXF export",
-                    mat_name
-                )
-            });
+            .ok()
+            .and_then(|m| m.get_color())
+            .unwrap_or_else(|| "#C0C0C0".into());
         let true_color = parse_true_color(&color_hex);
 
         for path in &contour_data.contours {
@@ -201,13 +197,9 @@ pub fn export(
 
         let color_hex = symbol_table
             .get_material(mat_name)
-            .map(|m| m.get_color())
-            .unwrap_or_else(|_| {
-                panic!(
-                    "Material '{}' not found in symbol table during DXF substrate export",
-                    mat_name
-                )
-            });
+            .ok()
+            .and_then(|m| m.get_color())
+            .unwrap_or_else(|| "#C0C0C0".into());
         let true_color = parse_true_color(&color_hex);
 
         let layer_name = if is_asic { mat_name } else { "PCB_LAYERS" };

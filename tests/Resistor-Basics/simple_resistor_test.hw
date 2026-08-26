@@ -1,227 +1,299 @@
-# simple_resistor_test.hw - SKY130 P+ Poly Resistor Test (100% Relational Layout)
-# Device: sky130_fd_pr__res_high_po (P+ Poly Precision Resistor, 350 Ω/□)
-# Geometry: 4μm × 1.41μm = ~1.7kΩ expected (L/W × 350Ω/□ + 724Ω contact resistance)
+# simple_resistor_test.hw - SKY130 P+ Poly Resistor Test (v0.3.0)
+# Device: sky130_fd_pr__res_high_po (P+ Poly Precision Resistor, 350 Ohm/sq)
+# Geometry: 4um x 1.41um body -> ~1.7kOhm expected (L/W * 350 + 724 Ohm contact)
 #
 # This test validates:
 # 1. Single device SPICE extraction with BULK terminal
 # 2. Physical substrate tap implementation (TAP + PSDM + P+ diffusion)
-# 3. Via arrays for improved reliability
+# 3. Via arrays for improved contact reliability
 # 4. SKY130 fabrication mask compliance (RPM, PSDM, TAP)
 #
+# v0.3.0 Migration Notes:
+#   - Old 'add pour / add contact / align:' replaced by space.add_polygon() / space.add_contact()
+#   - All positions computed explicitly in-code using comptime arithmetic (no solver)
+#   - Old 'dimensions: W by H' replaced by 'dimensions: [W, H]'
+#   - Old 'nets:' block replaced by 'nets { }' block
+#   - Old 'for i in 0..3:' replaced by 'for i in 0..3 { }'
+#   - Module and space use brace-delimited blocks throughout
+
 import * from @std/primitives/units
-import * from "./resistor_pdk"
+import { Resistor } from "./resistor_pdk"
 
-module SimpleResistor:
+# ── Module Interface ──────────────────────────────────────────────────────────
+
+module SimpleResistor {
     pins: [input In, output Out]
-    route In to Out
+}
 
-space Simple_Resistor_Space implements SimpleResistor:
-    dimensions: 20.0um by 10.0um
+# ── Physical Layout Space ─────────────────────────────────────────────────────
+
+space Simple_Resistor_Space implements SimpleResistor {
+    dimensions: [20.0um, 10.0um]
     profile: Resistor_3D
 
-    nets:
-        In:  { classification: signal, potential: 1.8V, current: 1.0uA }
-        Out: { classification: signal, potential: 0.0V, current: 1.0uA }
-        GND: { classification: ground, potential: 0.0V, current: 0.0uA }
+    nets {
+        In:  { classification: "signal", potential: 1.8V, current: 1.0uA }
+        Out: { classification: "signal", potential: 0.0V, current: 1.0uA }
+        GND: { classification: "ground", potential: 0.0V, current: 0.0uA }
+    }
 
-    device_nets R1:
-        BULK: GND
+    # ── Register SPICE Device (R1) ────────────────────────────────────────────
+    # The Resistor device requires A, B (signal terminals) and BULK (substrate).
+    # Terminals are bound to nets by passing NetHandles as parameters.
+    space.add_device(
+        type: "Resistor",
+        name: "R1",
+        terminals: { A: In, B: Out, BULK: GND },
+        params: { W: 1.41um, L: 4.0um }
+    )
 
     # ========================================================================
-    # PARAMETRIC DIMENSIONS (Self-Healing Layout)
+    # PARAMETRIC DIMENSIONS (Comptime Constants - Self-Documenting Layout)
     # ========================================================================
-    let res_length = 4.0um
-    let res_width = 1.41um          # SKY130 quantized width (W ∈ {0.35, 0.69, 1.41, 2.85, 5.73}μm)
+    let res_length     = 4.0um      # Resistor body length along current flow
+    let res_width      = 1.41um     # SKY130 quantized width {0.35, 0.69, 1.41, 2.85, 5.73 um}
     let contact_length = 400nm      # Contact head length along current flow direction
-    let pad_size = 1.0um
-    let pad_spacing = 3.0um
-    let tap_size = 400nm
-    let tap_offset_y = 2.5um
-    let via_pitch = 400nm           # Via pitch: diameter (170nm) + min_spacing (230nm clearance)
+    let pad_size       = 1.0um      # Bond pad square side length
+    let pad_spacing    = 3.0um      # Pad center-to-contact-edge spacing
+    let tap_size       = 400nm      # Substrate tap square side length
+    let tap_offset_y   = 2.5um      # Substrate tap vertical offset from resistor center
+    let via_pitch      = 400nm      # Via pitch: 170nm dia + 230nm spacing clearance
+
+    # ── Derived Anchor Coordinates (all comptime arithmetic) ─────────────────
+    # Resistor body is centered at (10um, 5um) in the 20um x 10um space.
+    let center_x = 10.0um
+    let center_y = 5.0um
+
+    # Contact center X positions: A is on the left, B is on the right of the body.
+    let contact_a_x = center_x - res_length / 2 + contact_length / 2
+    let contact_b_x = center_x + res_length / 2 - contact_length / 2
+
+    # Substrate tap center position (below resistor center)
+    let tap_cx = center_x
+    let tap_cy = center_y + tap_offset_y
 
     # ========================================================================
-    # 0. RESISTOR BODY (Polysilicon)
+    # 0. RESISTOR BODY (Polysilicon on 'polyres' layer)
     # ========================================================================
-    add pour(Polysilicon) named Resistor_Body on layer: polyres:
-        device: R1.A, R1.B
-        dimensions: res_length by res_width
-        at: [x: 10.0um, y: 5.0um]    
-
+    space.add_polygon(
+        layer: "polyres",
+        net:   In,
+        rect:  [center_x - res_length / 2, center_y - res_width / 2, res_length, res_width]
+    )
 
     # ========================================================================
     # 1. RESISTOR POLY MASK (RPM) - Zero-Thickness Fabrication Instruction
     # ========================================================================
-    # RPM blocks silicide formation on the polysilicon resistor body
-    # SKY130 DRC: rpm.2 requires ≥180nm overhang on width (360nm total extension)
-    # Category: mask → Z-thickness = 0nm, anchored to Z=180nm (top of polyres)
-    add pour(Resistor_Poly_Mask) named RPM_Block on layer: rpm:
-        dimensions: res_length by res_width + 360nm
-        align: center_x with Resistor_Body
-        align: center_y with Resistor_Body
+    # RPM blocks silicide formation on the polysilicon resistor body.
+    # SKY130 DRC: rpm.2 requires >=180nm overhang on width sides (360nm total extension).
+    space.add_polygon(
+        layer: "rpm",
+        rect:  [center_x - res_length / 2,
+                center_y - (res_width + 360nm) / 2,
+                res_length,
+                res_width + 360nm]
+    )
 
-    # 1b. PSDM MASK (P+ Implant over Poly Resistor body with 130nm enclosure per SKY130 psdm.1/psdm.2)
-    add pour(P_Plus_Implant_Mask) named R1_PSDM on layer: psdm:
-        dimensions: res_length + 260nm by res_width + 260nm
-        align: center_x with Resistor_Body
-        align: center_y with Resistor_Body
-
-    # ========================================================================
-    # 2. TERMINAL A CONTACT (Left Side) - With Guaranteed 40nm Via Enclosure
-    # ========================================================================
-    # Left Contact A: Centered on Resistor_Body.left + half contact length
-    # Via array: 3 vias @ 400nm pitch span 800nm vertically
-    # Contact dimensions: 400nm x 1.41um ensures (1410-170)/2 = 620nm enclosure > 40nm
-    add pour(Titanium_Silicide) named Contact_A_LI on layer: li1:
-        device: R1.A
-        net: In
-        dimensions: contact_length by res_width
-        align: center_x with Resistor_Body.left + contact_length / 2
-        align: center_y with Resistor_Body
-    
-    # ========================================================================
-    # 3. TERMINAL B CONTACT (Right Side) - With Guaranteed 40nm Via Enclosure
-    # ========================================================================
-    # Right Contact B: Centered on Resistor_Body.right - half contact length
-    add pour(Titanium_Silicide) named Contact_B_LI on layer: li1:
-        device: R1.B
-        net: Out
-        dimensions: contact_length by res_width
-        align: center_x with Resistor_Body.right - contact_length / 2
-        align: center_y with Resistor_Body
+    # 1b. PSDM MASK - P+ Implant over Poly Resistor body.
+    # SKY130 psdm.1/psdm.2: 130nm enclosure on all sides (260nm total per axis).
+    space.add_polygon(
+        layer: "psdm",
+        rect:  [center_x - res_length / 2 - 130nm,
+                center_y - res_width / 2 - 130nm,
+                res_length + 260nm,
+                res_width + 260nm]
+    )
 
     # ========================================================================
-    # 4. VIA ARRAYS (Poly to Local Interconnect)
+    # 2. TERMINAL A CONTACT - Left Side (Local Interconnect li1)
     # ========================================================================
-    # Terminal A via array (3 vias symmetrically centered)
-    # Each via: diameter=170nm, centered in 400nm x 1410nm contact pad
-    # Enclosure: min((1410-170)/2, (400-170)/2) = min(620nm, 115nm) = 115nm > 40nm ✓
-    for i in 0..3:
-        add contact(Tungsten) named Via_A_Poly_{i} spanning layer: polyres to li1:
-            diameter: 170nm
-            align: center_x with Contact_A_LI
-            align: center_y with Contact_A_LI.center_y + (i - 1) * via_pitch
-            net: In
-    
-    # Terminal B via array (3 vias symmetrically centered)
-    for i in 0..3:
-        add contact(Tungsten) named Via_B_Poly_{i} spanning layer: polyres to li1:
-            diameter: 170nm
-            align: center_x with Contact_B_LI
-            align: center_y with Contact_B_LI.center_y + (i - 1) * via_pitch
-            net: Out
+    # Covers: [left edge of body .. left edge + contact_length] x full body width.
+    # Via enclosure: min((res_width - 170nm)/2, (contact_length - 170nm)/2)
+    #              = min(620nm, 115nm) = 115nm > 40nm SKY130 min. Compliant.
+    space.add_polygon(
+        layer: "li1",
+        net:   In,
+        rect:  [contact_a_x - contact_length / 2,
+                center_y - res_width / 2,
+                contact_length,
+                res_width]
+    )
 
     # ========================================================================
-    # 5. METAL1 CONTACT PADS (With Guaranteed Via Enclosure)
+    # 3. TERMINAL B CONTACT - Right Side (Local Interconnect li1)
     # ========================================================================
-    add pour(Aluminum) named Contact_A_Metal on layer: metal1:
-        dimensions: contact_length by res_width
-        align: center_x with Contact_A_LI
-        align: center_y with Contact_A_LI
-        net: In
-
-    add pour(Aluminum) named Contact_B_Metal on layer: metal1:
-        dimensions: contact_length by res_width
-        align: center_x with Contact_B_LI
-        align: center_y with Contact_B_LI
-        net: Out
+    space.add_polygon(
+        layer: "li1",
+        net:   Out,
+        rect:  [contact_b_x - contact_length / 2,
+                center_y - res_width / 2,
+                contact_length,
+                res_width]
+    )
 
     # ========================================================================
-    # 6. VIA ARRAYS (Local Interconnect to Metal1)
+    # 4. VIA ARRAYS: Poly to Local Interconnect (polyres -> li1)
     # ========================================================================
-    for i in 0..3:
-        add contact(Tungsten) named Via_A_Metal_{i} spanning layer: li1 to metal1:
-            diameter: 170nm
-            align: center_x with Contact_A_LI
-            align: center_y with Contact_A_LI.center_y + (i - 1) * via_pitch
-            net: In
-    
-    # Terminal B via array (3 vias symmetrically centered)
-    for i in 0..3:
-        add contact(Tungsten) named Via_B_Metal_{i} spanning layer: li1 to metal1:
-            diameter: 170nm
-            align: center_x with Contact_B_LI
-            align: center_y with Contact_B_LI.center_y + (i - 1) * via_pitch
-            net: Out
+    # 3 vias per terminal, symmetrically centered on the contact pad.
+    # Via pitch = 400nm; 3 vias span 2*400nm = 800nm centred on contact_y.
+    # Enclosure >= 115nm on all sides. Compliant with SKY130 licon.4 (40nm min).
+
+    # Terminal A via array (polyres -> li1)
+    for i in 0..3 {
+        let vy = center_y + (i - 1) * via_pitch
+        space.add_contact(
+            from:     "polyres",
+            to:       "li1",
+            at:       [contact_a_x, vy],
+            diameter: 170nm,
+            net:      In
+        )
+    }
+
+    # Terminal B via array (polyres -> li1)
+    for i in 0..3 {
+        let vy = center_y + (i - 1) * via_pitch
+        space.add_contact(
+            from:     "polyres",
+            to:       "li1",
+            at:       [contact_b_x, vy],
+            diameter: 170nm,
+            net:      Out
+        )
+    }
 
     # ========================================================================
-    # 7. BOND PAD ROUTING
+    # 5. METAL1 CONTACT PADS (li1 -> metal1)
     # ========================================================================
-    add pour(Aluminum) named In_Pad on layer: metal1:
-        dimensions: pad_size by pad_size
-        align: center_x with Contact_A_Metal.left - pad_spacing
-        align: center_y with Contact_A_Metal
-        net: In
+    space.add_polygon(
+        layer: "metal1",
+        net:   In,
+        rect:  [contact_a_x - contact_length / 2,
+                center_y - res_width / 2,
+                contact_length,
+                res_width]
+    )
 
-    add pour(Aluminum) named Out_Pad on layer: metal1:
-        dimensions: pad_size by pad_size
-        align: center_x with Contact_B_Metal.right + pad_spacing
-        align: center_y with Contact_B_Metal
-        net: Out
-
-    route In_Pad to Contact_A_Metal:
-        net: In
-        width: 300nm
-        layer: metal1
-        intent: Signal
-
-    route Contact_B_Metal to Out_Pad:
-        net: Out
-        width: 300nm
-        layer: metal1
-        intent: Signal
+    space.add_polygon(
+        layer: "metal1",
+        net:   Out,
+        rect:  [contact_b_x - contact_length / 2,
+                center_y - res_width / 2,
+                contact_length,
+                res_width]
+    )
 
     # ========================================================================
-    # 8. SUBSTRATE/BULK TAP (Physical P+ Diffusion Contact for BULK Terminal)
+    # 6. VIA ARRAYS: Local Interconnect to Metal1 (li1 -> metal1)
     # ========================================================================
-    # 8a. TAP MASK (Substrate tap boundary mask - GDS 65/44)
-    add pour(Tap_Mask) named Bulk_Tap_Mask on layer: tap:
-        dimensions: tap_size by tap_size
-        align: center_x with Resistor_Body
-        align: center_y with Resistor_Body.center_y + tap_offset_y
+    # Terminal A: li1 -> metal1
+    for i in 0..3 {
+        let vy = center_y + (i - 1) * via_pitch
+        space.add_contact(
+            from:     "li1",
+            to:       "metal1",
+            at:       [contact_a_x, vy],
+            diameter: 170nm,
+            net:      In
+        )
+    }
+
+    # Terminal B: li1 -> metal1
+    for i in 0..3 {
+        let vy = center_y + (i - 1) * via_pitch
+        space.add_contact(
+            from:     "li1",
+            to:       "metal1",
+            at:       [contact_b_x, vy],
+            diameter: 170nm,
+            net:      Out
+        )
+    }
+
+    # ========================================================================
+    # 7. BOND PAD ROUTING (Metal1)
+    # ========================================================================
+    # In_Pad: placed pad_spacing to the left of the Terminal A contact left edge.
+    let in_pad_cx  = contact_a_x - contact_length / 2 - pad_spacing - pad_size / 2
+    let out_pad_cx = contact_b_x + contact_length / 2 + pad_spacing + pad_size / 2
+
+    space.add_polygon(
+        layer: "metal1",
+        net:   In,
+        rect:  [in_pad_cx - pad_size / 2, center_y - pad_size / 2, pad_size, pad_size]
+    )
+
+    space.add_polygon(
+        layer: "metal1",
+        net:   Out,
+        rect:  [out_pad_cx - pad_size / 2, center_y - pad_size / 2, pad_size, pad_size]
+    )
+
+    # Route bond pads to contact pads on metal1.
+    route [in_pad_cx, center_y] to [contact_a_x - contact_length / 2, center_y] with intent: Signal
+    route [contact_b_x + contact_length / 2, center_y] to [out_pad_cx, center_y] with intent: Signal
+
+    # ========================================================================
+    # 8. SUBSTRATE / BULK TAP (Physical P+ Diffusion Contact for BULK Terminal)
+    # ========================================================================
+    # 8a. TAP MASK (substrate tap boundary mask - GDS 65/44)
+    space.add_polygon(
+        layer: "tap",
+        rect:  [tap_cx - tap_size / 2, tap_cy - tap_size / 2, tap_size, tap_size]
+    )
 
     # 8b. PSDM MASK (P+ implant mask with 130nm enclosure - GDS 94/20)
-    add pour(P_Plus_Implant_Mask) named Bulk_Tap_PSDM on layer: psdm:
-        dimensions: tap_size + 260nm by tap_size + 260nm
-        align: center_x with Resistor_Body
-        align: center_y with Resistor_Body.center_y + tap_offset_y
+    space.add_polygon(
+        layer: "psdm",
+        rect:  [tap_cx - tap_size / 2 - 130nm,
+                tap_cy - tap_size / 2 - 130nm,
+                tap_size + 260nm,
+                tap_size + 260nm]
+    )
 
-    # 8c. P+ DIFFUSION REGION (Substrate tap active area)
-    add pour(P_Plus_Diffusion) named Bulk_Tap_Diff on layer: pdiff:
-        dimensions: tap_size by tap_size
-        align: center_x with Resistor_Body
-        align: center_y with Resistor_Body.center_y + tap_offset_y
-        net: GND
-        device: R1.BULK
-    
-    # 8d. LOCAL INTERCONNECT CONTACT (licon - connects pdiff to li1)
-    add contact(Tungsten) named Bulk_Tap_Contact spanning layer: pdiff to li1:
-        diameter: 170nm
-        align: center_x with Bulk_Tap_Diff
-        align: center_y with Bulk_Tap_Diff
-        net: GND
-    
-    # 8e. LOCAL INTERCONNECT METAL (li1 layer)
-    add pour(Titanium_Silicide) named Bulk_Tap_LI on layer: li1:
-        dimensions: tap_size by tap_size
-        align: center_x with Bulk_Tap_Diff
-        align: center_y with Bulk_Tap_Diff
-        net: GND
+    # 8c. P+ DIFFUSION REGION (substrate tap active area)
+    space.add_polygon(
+        layer: "pdiff",
+        net:   GND,
+        rect:  [tap_cx - tap_size / 2, tap_cy - tap_size / 2, tap_size, tap_size]
+    )
 
-    # 8f. METAL1 PAD (for improved connectivity)
-    add pour(Aluminum) named Bulk_Tap_Metal on layer: metal1:
-        dimensions: tap_size by tap_size
-        align: center_x with Bulk_Tap_LI
-        align: center_y with Bulk_Tap_LI
-        net: GND
+    # 8d. LOCAL INTERCONNECT CONTACT (licon: pdiff -> li1)
+    space.add_contact(
+        from:     "pdiff",
+        to:       "li1",
+        at:       [tap_cx, tap_cy],
+        diameter: 170nm,
+        net:      GND
+    )
 
-    # 8g. VIA (li1 to metal1)
-    add contact(Tungsten) named Bulk_Tap_Via spanning layer: li1 to metal1:
-        diameter: 170nm
-        align: center_x with Bulk_Tap_LI
-        align: center_y with Bulk_Tap_LI
-        net: GND
+    # 8e. LOCAL INTERCONNECT METAL (li1 fill over tap)
+    space.add_polygon(
+        layer: "li1",
+        net:   GND,
+        rect:  [tap_cx - tap_size / 2, tap_cy - tap_size / 2, tap_size, tap_size]
+    )
 
+    # 8f. METAL1 PAD over substrate tap (improved connectivity)
+    space.add_polygon(
+        layer: "metal1",
+        net:   GND,
+        rect:  [tap_cx - tap_size / 2, tap_cy - tap_size / 2, tap_size, tap_size]
+    )
 
-test Simple_Resistor_AC_Test for Simple_Resistor_Space:
-    ac: { sweep: dec, points: 20, freq: 100Hz..100MHz }
+    # 8g. VIA: li1 -> metal1 over substrate tap
+    space.add_contact(
+        from:     "li1",
+        to:       "metal1",
+        at:       [tap_cx, tap_cy],
+        diameter: 170nm,
+        net:      GND
+    )
+}
+
+# ── Simulation Testbench ──────────────────────────────────────────────────────
+
+test Simple_Resistor_AC_Test for Simple_Resistor_Space {
+    ac:   { sweep: "dec", points: 20, start: 100Hz, stop: 100MHz }
     tran: { step: 10ps, stop: 200ns }
+}

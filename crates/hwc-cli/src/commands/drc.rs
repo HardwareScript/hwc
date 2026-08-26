@@ -44,7 +44,8 @@ pub fn execute(input: PathBuf, _build_dir: PathBuf) -> Result<()> {
     }
 
     // Transform AST to hardware space (includes routing)
-    let symbol_table = SymbolTable::new(ast.arena.clone());
+    // v0.3.0: Program no longer has an `arena` field; SymbolTable owns its own arena.
+    let symbol_table = SymbolTable::default();
     let unit_registry = hwc_types::UnitRegistry::new(vec![]);
     let space = program_to_space(&ast, &symbol_table, &collector, &unit_registry)
         .map_err(|e| miette::miette!("Failed to create hardware space: {}", e))?;

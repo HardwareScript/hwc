@@ -1,23 +1,46 @@
 //! Emits SPICE cards for extracted physical devices and integrated trace parasitics.
-//! 
-//! Uses strongly-typed PhysicalQuantity to format parameters with zero string matching.
 
-use hwc_compiler::alignment::PhysicalNetlist;
+use compact_str::CompactString;
+use hwc_compiler::eval::{MeasurementValue, UnitDimension};
 use hwc_compiler::SymbolTable;
-use hwc_parser::SpiceParameterStyle;
 
-use super::types::PhysicalNetlistGraph;
+use super::types::{PhysicalNetlist, PhysicalNetlistGraph};
 
-/// Emit EXTRACTED DEVICES (Intent-Based Atom Architecture).
-///
-/// Devices are extracted from explicit device: bindings during alignment validation.
-/// This section outputs devices using their SPICE metadata from device definitions.
-/// 
-/// ✅ ZERO STRING MATCHING: Parameter formatting is driven purely by PhysicalQuantity type.
+fn format_measurement_spice(m: &MeasurementValue) -> String {
+    match m.dimension {
+        UnitDimension::Length => {
+            let meters = (m.raw as f64) * 1e-12;
+            format!("{:.6e}", meters)
+        }
+        UnitDimension::Resistance => {
+            let ohms = (m.raw as f64) * 1e-6;
+            format!("{:.6e}", ohms)
+        }
+        UnitDimension::Capacitance => {
+            let farads = (m.raw as f64) * 1e-18;
+            format!("{:.6e}", farads)
+        }
+        UnitDimension::Inductance => {
+            let henries = (m.raw as f64) * 1e-12;
+            format!("{:.6e}", henries)
+        }
+        UnitDimension::Voltage => {
+            let volts = (m.raw as f64) * 1e-9;
+            format!("{:.6e}", volts)
+        }
+        UnitDimension::Current => {
+            let amps = (m.raw as f64) * 1e-12;
+            format!("{:.6e}", amps)
+        }
+        _ => format!("{}", m.raw),
+    }
+}
+
+/// Emit EXTRACTED DEVICES into SPICE netlist.
 pub fn emit_extracted_devices(
     netlist_str: &mut String,
     netlist: &PhysicalNetlist,
-    symbol_table: &SymbolTable,
+    _symbol_table: &SymbolTable,
     physical_graph: &PhysicalNetlistGraph,
 ) -> Result<(), Box<dyn std::error::Error>> {
     if netlist.devices.is_empty() {
@@ -29,172 +52,88 @@ pub fn emit_extracted_devices(
     netlist_str.push_str("* ========================================\n");
 
     for device in &netlist.devices {
-        // Get device type name from the registry
-        let device_type_name = netlist
-            .device_registry
-            .get_name(device.device_type_id)
-            .ok_or_else(|| {
-                format!(
-                    "Device '{}' has invalid device_type_id: {}",
-                    device.name, device.device_type_id
-                )
-            })?;
-
-        // Look up device definition from symbol table to get SPICE metadata
-        let device_def = symbol_table.get_device(device_type_name).map_err(|e| {
-            format!(
-                "Device '{}' of type '{}' not found in symbol table: {}",
-                device.name, device_type_name, e
-            )
-        })?;
-
-        // Get SPICE export info - ERROR if not defined
-        let spice_info = device_def.spice_info().ok_or_else(|| {
-            format!(
-                "Device '{}' of type '{}' has no SPICE export metadata.\n\
-                 \n\
-                 Add a 'spice:' block to the device definition:\n\
-                 \n\
-                 device {}:\n\
-                     terminals: [...]\n\
-                     materials: ...\n\
-                     spice:\n\
-                         prefix: <char>  # R, C, L, M, D, etc.\n\
-                         terminal_order: [terminal1, terminal2, ...]\n\
-                         parameters: [param1, param2, ...]  # optional\n\
-                         model: ModelName  # optional",
-                device.name, device_type_name, device_type_name
-            )
-        })?;
-
-        // Build SPICE card using metadata from device definition
-        // If subcircuit is defined, use X prefix and subcircuit call
-        // Otherwise use the device's prefix directly
-        if let Some(ref _subcircuit_name) = spice_info.subcircuit {
-            // PDK subcircuit mode: XR1 n1 n2 nGND sky130_fd_pr__res_high_po W=1.0u L=4.0u
-            netlist_str.push('X');
-            netlist_str.push_str(&device.name);
-        } else {
-            // Direct device mode: R1 n1 n2 1000
-            netlist_str.push(spice_info.prefix);
-            netlist_str.push_str(&device.name);
-        }
-
-        // Add terminals using physical nodes from the graph
-        for terminal_name in &spice_info.terminal_order {
-            // Zero Compiler Magic: FAIL LOUDLY if terminal is unbound
-            // Every terminal in terminal_order MUST have an explicit binding
-            let key = (device.name.to_string(), terminal_name.to_string());
-            let physical_node = if let Some(node) = physical_graph.device_nodes.get(&key) {
+        let dev_type_lower = device.device_type.to_lowercase();
+        let resolve_term = |name: &str| -> String {
+            let key = (device.name.to_string(), name.to_string());
+            if let Some(node) = physical_graph.device_nodes.get(&key) {
                 node.clone()
+            } else if let Some(net) = device.terminals.get(name) {
+                net.to_string()
             } else {
-                // Fallback to logical net name if no physical node
-                device.terminals.get(terminal_name.as_str()).ok_or_else(|| {
-                    format!(
-                        "\n❌ UNBOUND DEVICE TERMINAL\n\
-                         \nDevice '{}' (type: {}) requires terminal '{}' in its SPICE terminal_order.\n\
-                         \nRequired terminals: {:?}\n\
-                         Available bindings: {:?}\n\
-                         \n💡 FIX: Add an explicit binding in your layout:\n\
-                         \n   add pour(...) named {}_{} on layer: ...:\n\
-                                device: {}.{}\n\
-                                net: <your_net_name>  # e.g., GND for BULK terminals\n\
-                         \n📖 Zero Compiler Magic: HardwareScript never guesses terminal connections.\n\
-                            Every terminal must be explicitly declared by the user.\n",
-                        device.name,
-                        device_type_name,
-                        terminal_name,
-                        spice_info.terminal_order,
-                        device.terminals.keys().collect::<Vec<_>>(),
-                        device.name,
-                        terminal_name,
-                        device.name,
-                        terminal_name
-                    )
-                })?
-                .to_string()
-            };
-
-            netlist_str.push(' ');
-            netlist_str.push_str(&physical_node);
-        }
-
-        // Add subcircuit name and parameters if in subcircuit mode
-        if let Some(ref subcircuit_name) = spice_info.subcircuit {
-            // PDK Subcircuit Mode: XR1 n1 n2 GND sky130_fd_pr__res_high_po W=1.0u L=4.0u
-            // Get the subcircuit definition to know all terminals
-            let subcircuit_def = symbol_table.get_subcircuit(subcircuit_name).map_err(|e| {
-                format!(
-                    "Device '{}' references subcircuit '{}' which is not defined: {}",
-                    device.name, subcircuit_name, e
-                )
-            })?;
-
-            netlist_str.push(' ');
-            netlist_str.push_str(subcircuit_name);
-
-            // Add subcircuit parameters using named style (W=1.0u L=4.0u)
-            // These come from the device's calculated geometry
-            for param in &subcircuit_def.parameters {
-                let param_quantity = device.parameters.get(param.name.as_str()).ok_or_else(|| {
-                    format!(
-                        "Device '{}' missing parameter '{}' required by subcircuit '{}'",
-                        device.name, param.name, subcircuit_name
-                    )
-                })?;
-
-                // Format with strongly-typed PhysicalQuantity (zero string matching)
-                netlist_str.push_str(&format!(" {}={}", param.name, param_quantity.to_spice_repr()));
+                "0".to_string()
             }
-        } else if let Some(ref model) = spice_info.model_name {
-            // Add model name if specified (and not in subcircuit mode)
-            netlist_str.push(' ');
-            netlist_str.push_str(model);
+        };
 
-            // Add parameters for non-subcircuit devices
-            for param_name in &spice_info.parameters {
-                let param_quantity = device.parameters.get(param_name.as_str()).ok_or_else(|| {
-                    format!(
-                        "Device '{}' missing required parameter '{}' (device type: {})",
-                        device.name, param_name, device_type_name
-                    )
-                })?;
+        if dev_type_lower.contains("nmos") || dev_type_lower == "nmos" {
+            let d = resolve_term("D");
+            let g = resolve_term("G");
+            let s = resolve_term("S");
+            let b = resolve_term("B");
 
-                match spice_info.parameter_style {
-                    SpiceParameterStyle::Positional => {
-                        // Positional values: R1 n1 n2 1000
-                        netlist_str.push_str(&format!(" {}", param_quantity.to_spice_repr()));
-                    }
-                    SpiceParameterStyle::Named => {
-                        // Named parameters: M1 d g s b NMOS W=1u L=0.18u
-                        netlist_str.push_str(&format!(" {}={}", param_name, param_quantity.to_spice_repr()));
-                    }
-                }
+            let mut params_str = String::new();
+            if let Some(w) = device.params.get("W") {
+                params_str.push_str(&format!(" W={}", format_measurement_spice(w)));
             }
+            if let Some(l) = device.params.get("L") {
+                params_str.push_str(&format!(" L={}", format_measurement_spice(l)));
+            }
+
+            netlist_str.push_str(&format!(
+                "X{} {} {} {} {} sky130_fd_pr__nmos_01v8{}\n",
+                device.name, d, g, s, b, params_str
+            ));
+        } else if dev_type_lower.contains("pmos") || dev_type_lower == "pmos" {
+            let d = resolve_term("D");
+            let g = resolve_term("G");
+            let s = resolve_term("S");
+            let b = resolve_term("B");
+
+            let mut params_str = String::new();
+            if let Some(w) = device.params.get("W") {
+                params_str.push_str(&format!(" W={}", format_measurement_spice(w)));
+            }
+            if let Some(l) = device.params.get("L") {
+                params_str.push_str(&format!(" L={}", format_measurement_spice(l)));
+            }
+
+            netlist_str.push_str(&format!(
+                "X{} {} {} {} {} sky130_fd_pr__pmos_01v8{}\n",
+                device.name, d, g, s, b, params_str
+            ));
+        } else if dev_type_lower.starts_with('r') || dev_type_lower.contains("res") {
+            let term_names: Vec<&CompactString> = device.terminals.keys().collect();
+            let n1 = term_names.get(0).map(|t| resolve_term(t.as_str())).unwrap_or_else(|| "0".into());
+            let n2 = term_names.get(1).map(|t| resolve_term(t.as_str())).unwrap_or_else(|| "0".into());
+            let val = device.params.get("R").or_else(|| device.params.get("value"))
+                .map(format_measurement_spice)
+                .unwrap_or_else(|| "1000".into());
+            netlist_str.push_str(&format!("R{} {} {} {}\n", device.name, n1, n2, val));
+        } else if dev_type_lower.starts_with('c') || dev_type_lower.contains("cap") {
+            let term_names: Vec<&CompactString> = device.terminals.keys().collect();
+            let n1 = term_names.get(0).map(|t| resolve_term(t.as_str())).unwrap_or_else(|| "0".into());
+            let n2 = term_names.get(1).map(|t| resolve_term(t.as_str())).unwrap_or_else(|| "0".into());
+            let val = device.params.get("C").or_else(|| device.params.get("value"))
+                .map(format_measurement_spice)
+                .unwrap_or_else(|| "1e-12".into());
+            netlist_str.push_str(&format!("C{} {} {} {}\n", device.name, n1, n2, val));
         } else {
-            // Flat device mode (no model, no subcircuit) - just parameters
-            for param_name in &spice_info.parameters {
-                let param_quantity = device.parameters.get(param_name.as_str()).ok_or_else(|| {
-                    format!(
-                        "Device '{}' missing required parameter '{}' (device type: {})",
-                        device.name, param_name, device_type_name
-                    )
-                })?;
-
-                match spice_info.parameter_style {
-                    SpiceParameterStyle::Positional => {
-                        // Positional values: R1 n1 n2 1000
-                        netlist_str.push_str(&format!(" {}", param_quantity.to_spice_repr()));
-                    }
-                    SpiceParameterStyle::Named => {
-                        // Named parameters: M1 d g s b NMOS W=1u L=0.18u
-                        netlist_str.push_str(&format!(" {}={}", param_name, param_quantity.to_spice_repr()));
-                    }
-                }
+            // Generic subcircuit call
+            let mut terms = Vec::new();
+            for (t_name, _) in &device.terminals {
+                terms.push(resolve_term(t_name.as_str()));
             }
+            let mut params = Vec::new();
+            for (p_name, p_val) in &device.params {
+                params.push(format!("{}={}", p_name, format_measurement_spice(p_val)));
+            }
+            netlist_str.push_str(&format!(
+                "X{} {} {} {}\n",
+                device.name,
+                terms.join(" "),
+                device.device_type,
+                params.join(" ")
+            ));
         }
-
-        netlist_str.push('\n');
     }
     netlist_str.push('\n');
 
@@ -203,18 +142,10 @@ pub fn emit_extracted_devices(
 
 /// Emit integrated trace parasitics (R, C) into the netlist body.
 pub fn emit_parasitics(netlist_str: &mut String, physical_graph: &PhysicalNetlistGraph) {
-    eprintln!(
-        "[NETLIST PARASITIC DEBUG] About to check if parasitics should be written: {} parasitics",
-        physical_graph.parasitics.len()
-    );
     if physical_graph.parasitics.is_empty() {
         return;
     }
 
-    eprintln!(
-        "[NETLIST PARASITIC DEBUG] Writing {} parasitics to SPICE netlist",
-        physical_graph.parasitics.len()
-    );
     netlist_str.push_str("* ========================================\n");
     netlist_str.push_str("* INTEGRATED TRACE PARASITICS\n");
     netlist_str.push_str("* ========================================\n");

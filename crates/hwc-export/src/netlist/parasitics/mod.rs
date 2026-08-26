@@ -27,8 +27,7 @@ use self::terminals::map_device_terminals;
 use self::types::ExtractedClusterNode;
 use self::via_stacks::extract_via_stacks;
 
-use crate::netlist::types::PhysicalNetlistGraph;
-use hwc_compiler::alignment::PhysicalNetlist;
+use crate::netlist::types::{PhysicalNetlist, PhysicalNetlistGraph};
 use hwc_compiler::SymbolTable;
 use hwc_engine::HardwareSpace;
 

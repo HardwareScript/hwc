@@ -67,12 +67,13 @@ pub fn execute(input: PathBuf, _build_dir: PathBuf, verbose: bool, parallel: boo
     if verbose {
         println!("🏗️  Building hardware space and symbol table...");
     }
-    let mut symbol_table = SymbolTable::new(ast.arena.clone());
+    // v0.3.0: Program no longer has an `arena` field; SymbolTable owns its own arena.
+    let mut symbol_table = SymbolTable::default();
 
-    // Register materials from AST
-    for def in &ast.definitions {
-        if let hwc_parser::ast::Definition::Material(mat_id) = def {
-            let m = &ast.arena.material_defs[*mat_id];
+    // Register materials from AST items
+    // v0.3.0: Program::items is Vec<TopLevelItem>; each variant carries inline data.
+    for item in &ast.items {
+        if let hwc_parser::TopLevelItem::Material(m) = item {
             symbol_table.register_material(&collector, m.clone());
         }
     }

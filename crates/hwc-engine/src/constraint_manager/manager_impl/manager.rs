@@ -209,13 +209,13 @@ impl ConstraintManager {
         )
     }
 
-    /// Calculate the bounding box for a module instance from its layout block.
+    /// Calculate the bounding box for a module instance from its declaration.
     pub fn calculate_module_bounding_box(
         &self,
-        layout: &hwc_parser::ModuleLayoutBlock,
+        module: &hwc_parser::ModuleDecl,
         arena: &hwc_parser::ast::arena::AstArena,
     ) -> BoundingBox {
-        calculate_module_bounding_box(layout, self.manufacturing_grid_nm, arena)
+        calculate_module_bounding_box(module, self.manufacturing_grid_nm, arena)
     }
 
     /// Classify all nets as internal (within a module) or global (crossing boundaries).

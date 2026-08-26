@@ -18,7 +18,6 @@ define_id_type!(PlaneId);
 define_id_type!(PolygonId);
 define_id_type!(ContactId);
 define_id_type!(RouteId);
-define_id_type!(SpaceInstanceId);
 define_id_type!(ForLoopId);
 define_id_type!(RegionId);
 define_id_type!(SubstrateId);
@@ -34,6 +33,7 @@ define_id_type!(ModuleInternalId);
 // Top-Level Definition ID Types
 // =============================================================================
 
+define_id_type!(FunctionDefId);
 define_id_type!(ComponentDefId);
 define_id_type!(MaterialDefId);
 define_id_type!(ModuleDefId);

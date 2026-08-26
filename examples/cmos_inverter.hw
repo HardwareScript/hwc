@@ -1,0 +1,71 @@
+# HardwareScript v0.3.0 Canonical CMOS Inverter Example
+# Demonstrates compile-time evaluation, curly-brace block scoping, physical measurements, and PCell synthesis.
+
+import { sky130_nmos, sky130_pmos, sky130_tap, pad, route_strap } from @std/pdk/sky130
+import * from @std/primitives/units
+
+module CMOS_Inverter {
+    pins: [input In, output Out, power VDD, ground VSS]
+}
+
+space CMOS_Inverter_Space implements CMOS_Inverter {
+    dimensions: [20.0um, 18.0um]
+    profile: SKY130_1V8_CMOS
+
+    nets {
+        VDD: { classification: power,  potential: 1.8V, current: 20.0uA }
+        VSS: { classification: ground, potential: 0.0V, current: 20.0uA }
+        In:  { classification: signal, potential: 1.8V, current: 0.1uA }
+        Out: { classification: signal, current: 20.0uA }
+    }
+
+    # 1. Parametric Cell Instantiation (Comptime Evaluation)
+    let nmos = sky130_nmos(
+        name: "M_NMOS", W: 1.0um, L: 150nm, at: [10.0um, 5.0um],
+        source: VSS, drain: Out, gate: In, bulk: VSS
+    )
+
+    let pmos = sky130_pmos(
+        name: "M_PMOS", W: 2.0um, L: 150nm, at: [10.0um, 10.5um],
+        source: VDD, drain: Out, gate: In, bulk: VDD
+    )
+
+    # 2. Substrate & Well Taps
+    let sub_tap  = sky130_tap(type: TapType::P_Sub,  at: [nmos.source.x, nmos.source.y - 2.2um], net: VSS)
+    let well_tap = sky130_tap(type: TapType::N_Well, at: [pmos.source.x, pmos.source.y + 2.2um], net: VDD)
+
+    # 3. Direct Gate Interconnect & Output Drain Strap
+    space.add_polygon(
+        layer: "poly", 
+        net: In, 
+        points: rect_between(nmos.gate_head, pmos.gate_head, width: 150nm)
+    )
+
+    route_strap(
+        from: nmos.drain, 
+        to: pmos.drain, 
+        net: Out, 
+        layer: "li1", 
+        bridge_layer: "metal1"
+    )
+
+    # 4. Power Delivery Routing
+    route sub_tap.port to nmos.source { intent: Power }
+    route well_tap.port to pmos.source { intent: Power }
+
+    # 5. External I/O Bonding Pads
+    let pad_vss = pad(name: "VSS_Pad", at: [nmos.source.x - 2.5um, nmos.source.y], net: VSS)
+    let pad_vdd = pad(name: "VDD_Pad", at: [pmos.source.x - 2.5um, pmos.source.y], net: VDD)
+    let pad_in  = pad(name: "In_Pad",  at: [pmos.gate.x, pmos.gate.y + 2.5um],     net: In)
+    let pad_out = pad(name: "Out_Pad", at: [pmos.drain.x + 2.5um, (nmos.drain.y + pmos.drain.y)/2], net: Out)
+
+    route pad_vss to nmos.source { intent: Power }
+    route pad_vdd to pmos.source { intent: Power }
+    route pad_in to pmos.gate_head { intent: Signal }
+    route pad_out to pmos.drain { intent: Signal }
+}
+
+test CMOS_Inverter_VTC_Test for CMOS_Inverter_Space {
+    dc: { sweep: In, start: 0.0V, stop: 1.8V, step: 0.02V }
+    tran: { step: 5ps, stop: 10ns }
+}

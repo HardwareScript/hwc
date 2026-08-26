@@ -1,0 +1,60 @@
+# Simple PDK for minimal test
+
+import * from @std/primitives/units
+
+export material Copper:
+    category: conductor
+    symbol: Cu
+    properties:
+        resistivity: 1.7e-8ohm_m
+        thermal_conductivity: 400.0W_mK
+        max_current_density: 1e4A_mm2
+
+export material Air:
+    category: insulator
+    symbol: Air
+    properties:
+        relative_permittivity: 1.0
+
+export profile SimpleProfile:
+    technology: "ASIC"
+    substrate_net: GND
+    stackup:
+        metal1: [material: Copper, thickness: 500nm, routable: true]
+    manufacturing:
+        track_pitch: 5nm
+        circle_segments: 32
+    via:
+        min_diameter: 100nm
+        min_enclosure: 50nm
+        min_spacing: 200nm
+        contact_depth: 30%
+    trace:
+        min_width: 200nm
+        min_spacing: 200nm
+        edge_clearance: 100nm
+    clearance:
+        high_voltage: 500nm
+        safety_factor: 1.5
+        max_substrate_tap_distance: 20.0um
+    thermal:
+        ambient_temp: 25C
+        max_operating_temp: 125C
+        max_temp_rise: 20C
+    layer:
+        min_thickness: 50nm
+        allowed_conductors: [Copper]
+        allowed_dielectrics: [Air]
+    routing:
+        min_segment_length: 150nm
+        escape_stub: 0nm
+        base_cost: 1
+        via_penalty: 50
+        direction_penalty: 10
+        tight_clearance_penalty: 2
+        crosstalk_penalty: 3
+        impedance_penalty: 1
+        reference_void_penalty: 5000000
+    net_type Signal:
+        routing_style: auto
+        escape_stub: 0nm

@@ -10,24 +10,12 @@ pub enum LexError {
     #[diagnostic(
         code(S11),
         url("https://docs.hw-script.org/errors/S11"),
-        help("Character '{text}' is not valid in Hardware Script syntax. Check for typos or unexpected symbols.")
+        help("Character '{text}' is not valid in HardwareScript v0.3.0 syntax. Check for typos or unexpected symbols.")
     )]
     InvalidToken {
         #[label("Invalid character here")]
         span: miette::SourceSpan,
         text: CompactString,
-    },
-
-    #[error("Inconsistent indentation level")]
-    #[diagnostic(
-        code(S12),
-        url("https://docs.hw-script.org/errors/S12"),
-        help("Hardware Script uses significant indentation. Use exactly 4 spaces per indentation level.")
-    )]
-    IndentationError {
-        #[label("{message}")]
-        span: miette::SourceSpan,
-        message: CompactString,
     },
 }
 

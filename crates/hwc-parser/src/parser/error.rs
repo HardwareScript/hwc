@@ -5,7 +5,7 @@ use compact_str::CompactString;
 use miette::{Diagnostic, SourceSpan};
 use thiserror::Error;
 
-/// Current version from Cargo.toml workspace
+#[allow(dead_code)]
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Parser errors with authoritative, professional miette diagnostics
@@ -243,15 +243,14 @@ pub(crate) fn span_to_source_span(span: &Span) -> SourceSpan {
 }
 
 // Context-Aware Error Helpers for v0.1.6
-
-/// Create error for '=' found in property block (should be ':')
+#[allow(dead_code)]
 pub(crate) fn error_expected_colon_in_property(span: &Span) -> ParseError {
     ParseError::ExpectedColonInProperty {
         span: span_to_source_span(span),
     }
 }
 
-/// Create error for quoted identifier (should be bare identifier)
+#[allow(dead_code)]
 pub(crate) fn error_expected_identifier_not_string(span: &Span) -> ParseError {
     ParseError::ExpectedIdentifierNotString {
         span: span_to_source_span(span),
@@ -262,7 +261,7 @@ pub(crate) fn error_expected_identifier_not_string(span: &Span) -> ParseError {
     }
 }
 
-/// Create error for 'define' keyword (removed in current version)
+#[allow(dead_code)]
 pub(crate) fn error_define_keyword_removed(span: &Span) -> ParseError {
     ParseError::DefineKeywordRemoved {
         span: span_to_source_span(span),
@@ -273,7 +272,7 @@ pub(crate) fn error_define_keyword_removed(span: &Span) -> ParseError {
     }
 }
 
-/// Create error for '%' used as binary operator (should use 'mod' keyword)
+#[allow(dead_code)]
 pub(crate) fn error_percent_as_operator(span: &Span) -> ParseError {
     ParseError::PercentAsOperator {
         span: span_to_source_span(span),

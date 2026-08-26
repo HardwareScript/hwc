@@ -7,6 +7,7 @@ pub mod material;
 pub mod netlist;
 pub mod physics;
 pub mod placement;
+pub mod routing;
 pub mod routing_database;
 pub mod routing_layer_database;
 pub mod space;
@@ -105,3 +106,12 @@ pub use physics::PhysicalQuantity;
 
 // Re-export DefPath
 pub use hwc_types::DefPath;
+
+// Re-export DOPHR 3-Stage Guided Routing types
+pub use routing::{
+    ColorScheduler, ColorSet, DetailedSegment, DetailedTerminal, DophrConfig, DophrEngine,
+    DophrRoutingResult, GCellVolume3D, GlobalPath, GlobalTerminal, GuidedDetailedRouter,
+    NetInterval, Panel, PanelTrackAssigner, PathFinderGlobalRouter, RoutingGuide, TrackAnchor,
+    VolumetricTensor3D,
+};
+

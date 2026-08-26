@@ -1,6 +1,6 @@
 use crate::commands::build_cmd::BuildConfig;
 use hwc_compiler::SymbolTable;
-use hwc_parser::{Lexer, Parser, Program};
+use hwc_parser::{Lexer, Parser, Program, TopLevelItem};
 use miette::Result;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -91,10 +91,10 @@ pub fn compile_source(
     }
 
     println!(
-        "[{:>8.2}ms] Parser complete ({} imports, {} definitions)",
+        "[{:>8.2}ms] Parser complete ({} imports, {} items)",
         start_time.elapsed().as_secs_f64() * 1000.0,
         ast.imports.len(),
-        ast.definitions.len()
+        ast.items.len()
     );
 
     // Build symbol table
@@ -127,20 +127,14 @@ fn build_symbol_table(
     config: &BuildConfig,
     start_time: Instant,
 ) -> Result<(SymbolTable, hwc_compiler::Prelude)> {
-    // Create symbol table with the arena from the parsed AST
-    let mut symbol_table = SymbolTable::new(ast.arena.clone());
+    // v0.3.0: SymbolTable owns its own arena; items are pushed in via register_* calls.
+    let mut symbol_table = SymbolTable::default();
 
-    // Load prelude
+    // Load prelude: `units` → UnitInfo values for UnitRegistry; `constants` → f64 math values.
+    // Neither type maps to SymbolTable registration in v0.3.0 — the comptime evaluator
+    // injects physical units and constants directly into the EvaluationContext scope.
     let prelude = hwc_compiler::Prelude::load()
         .map_err(|e| miette::miette!("Failed to load prelude: {}", e))?;
-
-    // Register prelude units and constants
-    for unit in &prelude.units {
-        symbol_table.register_prelude_unit(unit.clone());
-    }
-    for (name, value) in &prelude.constants {
-        symbol_table.register_prelude_constant(name.clone(), *value);
-    }
 
     let mut resolver = hwc_compiler::ModuleResolver::new()
         .map_err(|e| miette::miette!("Failed to initialize module resolver: {}", e))?;
@@ -148,7 +142,6 @@ fn build_symbol_table(
     // Process imports
     for import in &ast.imports {
         if let Err(e) = resolver.resolve_import(import, input, &mut symbol_table) {
-            // Add source code for better error display
             let e_with_src = e.with_source(
                 collector.source.to_string(),
                 collector.file_name.to_string(),
@@ -163,63 +156,38 @@ fn build_symbol_table(
         return Err(miette::miette!("Import resolution failed"));
     }
 
-    // Register local definitions (all now use arena lookup for uniform access)
-    for definition in &ast.definitions {
-        match definition {
-            hwc_parser::Definition::Bridge(id) => {
-                let bridge = &ast.arena.bridge_defs[*id];
-                symbol_table.register_bridge(collector, bridge.clone());
+    // Register local top-level items.
+    // v0.3.0: `Program::items` is a flat `Vec<TopLevelItem>` — each variant carries
+    // its inline data. No arena indirection is needed from the call site.
+    for item in &ast.items {
+        match item {
+            TopLevelItem::Function(f) => {
+                symbol_table.register_function(collector, f.clone());
             }
-            hwc_parser::Definition::Unit(id) => {
-                let unit = &ast.arena.unit_defs[*id];
-                symbol_table.register_unit(collector, unit.clone());
+            TopLevelItem::Struct(s) => {
+                symbol_table.register_struct(collector, s.clone());
             }
-            hwc_parser::Definition::Device(id) => {
-                let device = &ast.arena.device_defs[*id];
-                symbol_table.register_device(collector, device.clone());
+            TopLevelItem::Enum(e) => {
+                symbol_table.register_enum(collector, e.clone());
             }
-            hwc_parser::Definition::Material(id) => {
-                let mat = &ast.arena.material_defs[*id];
-                symbol_table.register_material(collector, mat.clone());
+            TopLevelItem::Space(s) => {
+                symbol_table.register_space(collector, s.clone());
             }
-            hwc_parser::Definition::Profile(id) => {
-                let profile = &ast.arena.profile_defs[*id];
-                symbol_table.register_profile(collector, profile.clone());
+            TopLevelItem::Module(m) => {
+                symbol_table.register_module(collector, m.clone());
             }
-            hwc_parser::Definition::Component(component_id) => {
-                // Look up the actual ComponentDefinition from the arena
-                let component_def = &ast.arena.component_defs[*component_id];
-                symbol_table.register_component(collector, component_def.clone());
+            TopLevelItem::Material(m) => {
+                symbol_table.register_material(collector, m.clone());
             }
-            hwc_parser::Definition::Module(id) => {
-                let module = &ast.arena.module_defs[*id];
-                symbol_table.register_module(collector, module.clone());
+            TopLevelItem::Profile(p) => {
+                symbol_table.register_profile(collector, p.clone());
             }
-            hwc_parser::Definition::Mechanical(id) => {
-                let mechanical = &ast.arena.mechanical_defs[*id];
-                symbol_table.register_mechanical(collector, mechanical.clone());
+            TopLevelItem::Device(d) => {
+                symbol_table.register_device(collector, d.clone());
             }
-            hwc_parser::Definition::Interface(id) => {
-                let interface = &ast.arena.interface_defs[*id];
-                symbol_table.register_interface(collector, interface.clone());
+            TopLevelItem::Test(t) => {
+                symbol_table.register_test(collector, t.clone());
             }
-            hwc_parser::Definition::Test(test_id) => {
-                let test = &ast.arena.test_defs[*test_id];
-                symbol_table.register_test(collector, test.clone());
-            }
-            hwc_parser::Definition::Shape(shape_id) => {
-                let shape = &ast.arena.shape_defs[*shape_id];
-                symbol_table.register_shape(collector, shape.clone());
-            }
-            hwc_parser::Definition::SpiceModel(spice_model_id) => {
-                let spice_model = &ast.arena.spice_model_defs[*spice_model_id];
-                symbol_table.register_spice_model(collector, spice_model.clone());
-            }
-            hwc_parser::Definition::Subcircuit(subcircuit_id) => {
-                let subcircuit = &ast.arena.subcircuit_defs[*subcircuit_id];
-                symbol_table.register_subcircuit(collector, subcircuit.clone());
-            }
-            _ => {}
         }
     }
 

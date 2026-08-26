@@ -1,0 +1,16 @@
+# Simple component with a single pad
+
+import * from @std/primitives/units
+import Copper from "./simple_pdk"
+
+export component SimplePad():
+    datum: center
+    
+    # Single pad
+    add pour(Copper) named Pad on layer: metal1:
+        dimensions: 1um by 1um
+        at: [x: 0nm, y: 0nm]
+        net: PadNet
+    
+    ports:
+        PadNet: Pad.center on layer: metal1

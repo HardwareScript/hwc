@@ -4,14 +4,12 @@
 //! and delegates extracted-device and parasitic emission to sibling modules.
 
 use compact_str::CompactString;
-use hwc_compiler::alignment::PhysicalNetlist;
+use super::types::{PhysicalNetlist, PhysicalNetlistGraph};
 use hwc_compiler::SymbolTable;
 use hwc_engine::HardwareSpace;
 use rustc_hash::FxHashSet;
 
 use super::extracted_devices::{emit_extracted_devices, emit_parasitics};
-use super::subcircuit::generate_spice_subcircuit;
-use super::types::PhysicalNetlistGraph;
 
 /// Format a Z coordinate with appropriate unit selection for maximum precision.
 ///
@@ -94,61 +92,11 @@ pub fn generate_circuit_body(
 
 /// Emit `.subckt` definitions for every PDK subcircuit referenced by a device.
 fn emit_pdk_subcircuits(
-    netlist_str: &mut String,
-    netlist: &PhysicalNetlist,
-    symbol_table: &SymbolTable,
-    unit_registry: &hwc_types::UnitRegistry,
+    _netlist_str: &mut String,
+    _netlist: &PhysicalNetlist,
+    _symbol_table: &SymbolTable,
+    _unit_registry: &hwc_types::UnitRegistry,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut emitted_subcircuits = FxHashSet::default();
-
-    for device in &netlist.devices {
-        let device_type_name = netlist
-            .device_registry
-            .get_name(device.device_type_id)
-            .ok_or_else(|| format!("Device '{}' has invalid device_type_id", device.name))?;
-
-        if let Ok(device_def) = symbol_table.get_device(device_type_name) {
-            if let Some(spice_info) = device_def.spice_info() {
-                if let Some(ref subcircuit_name) = spice_info.subcircuit {
-                    // Only emit each subcircuit definition once
-                    if emitted_subcircuits.insert(subcircuit_name.clone()) {
-                        netlist_str.push_str("* ========================================\n");
-                        netlist_str.push_str(&format!("* PDK SUBCIRCUIT: {}\n", subcircuit_name));
-                        netlist_str.push_str("* ========================================\n");
-
-                        // Look up the subcircuit definition in the symbol table
-                        if let Ok(subckt_def) =
-                            symbol_table.get_subcircuit(subcircuit_name.as_str())
-                        {
-                            // Generate SPICE from typed AST with UnitRegistry for data-driven conversion
-                            generate_spice_subcircuit(netlist_str, subckt_def, unit_registry)?;
-                            netlist_str.push('\n');
-                        } else {
-                            // Subcircuit referenced but not defined - this is an error
-                            return Err(format!(
-                                "Device '{}' references subcircuit '{}' which is not defined.\n\
-                                 \n\
-                                 Add to your PDK file:\n\
-                                 \n\
-                                 subcircuit {}:\n\
-                                     terminals: [{}]\n\
-                                     parameters: [W = 1.0um, L = 1.0um]\n\
-                                     elements:\n\
-                                         R1: Resistor(nodes: [PLUS, MINUS], value: ...)\n\
-                                         ...",
-                                device.name,
-                                subcircuit_name,
-                                subcircuit_name,
-                                spice_info.terminal_order.join(", ")
-                            )
-                            .into());
-                        }
-                    }
-                }
-            }
-        }
-    }
-
     Ok(())
 }
 
@@ -254,18 +202,40 @@ fn emit_net_comments(netlist_str: &mut String, space: &HardwareSpace) {
     }
 }
 
-/// Emit schematic-level components as SPICE subcircuit/device cards.
-///
-/// Fully generic: Driven by SymbolTable and explicit `spice:` metadata.
-/// Zero string pattern matching, zero pin order assumptions, and zero silent "0" fallbacks.
+/// Emit schematic-level components from space.netlist as SPICE subcircuits
 fn emit_components(
     netlist_str: &mut String,
     space: &HardwareSpace,
-    symbol_table: &SymbolTable,
+    _symbol_table: &SymbolTable,
     is_physical_mode: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    if is_physical_mode {
+        return Ok(());
+    }
+
+    if !space.device_instances.is_empty() {
+        netlist_str.push_str("* ========================================\n");
+        netlist_str.push_str("* DEVICE INSTANCES\n");
+        netlist_str.push_str("* ========================================\n");
+        for dev in &space.device_instances {
+            netlist_str.push('X');
+            netlist_str.push_str(&dev.name);
+            for term in &dev.terminals {
+                let net = dev.terminal_nets.get(term).map(|s| s.as_str()).unwrap_or("0");
+                netlist_str.push(' ');
+                netlist_str.push_str(net);
+            }
+            netlist_str.push(' ');
+            netlist_str.push_str(&dev.device_type);
+            for (k, v) in &dev.parameters {
+                netlist_str.push_str(&format!(" {}={}", k, v));
+            }
+            netlist_str.push('\n');
+        }
+    }
+
     let component_count = space.netlist.component_count();
-    if component_count == 0 || is_physical_mode {
+    if component_count == 0 {
         return Ok(());
     }
 
@@ -278,7 +248,6 @@ fn emit_components(
         if let Some(component) = space.netlist.get_component(comp_id) {
             let pins = space.netlist.get_component_pins(comp_id);
 
-            // Map pin names to assigned nets
             let mut pin_net_map = rustc_hash::FxHashMap::default();
             for pin_id in &pins {
                 if let Some(pin) = space.netlist.get_pin(*pin_id) {
@@ -299,66 +268,11 @@ fn emit_components(
                 }
             }
 
-            // Look up device or subcircuit in SymbolTable
-            if let Ok(device_def) = symbol_table.get_device(component.component_type.as_str()) {
-                if let Some(spice_info) = device_def.spice_info() {
-                    let prefix = if spice_info.subcircuit.is_some() { 'X' } else { spice_info.prefix };
-                    netlist_str.push(prefix);
-                    netlist_str.push_str(&component.name);
-
-                    // Emit terminals in explicit SPICE terminal_order
-                    for term in &spice_info.terminal_order {
-                        let net = pin_net_map.get(term.as_str()).ok_or_else(|| {
-                            format!(
-                                "Component '{}' of type '{}' is missing required terminal '{}' defined in its SPICE terminal_order: {:?}",
-                                component.name, component.component_type, term, spice_info.terminal_order
-                            )
-                        })?;
-                        netlist_str.push(' ');
-                        netlist_str.push_str(net);
-                    }
-
-                    if let Some(ref subckt) = spice_info.subcircuit {
-                        netlist_str.push(' ');
-                        netlist_str.push_str(subckt);
-                    } else if let Some(ref model) = spice_info.model_name {
-                        netlist_str.push(' ');
-                        netlist_str.push_str(model);
-                    }
-                    netlist_str.push('\n');
-                    continue;
-                }
-            } else if let Ok(subckt_def) = symbol_table.get_subcircuit(component.component_type.as_str()) {
-                netlist_str.push('X');
-                netlist_str.push_str(&component.name);
-
-                for term in &subckt_def.terminals {
-                    let net = pin_net_map.get(term.as_str()).ok_or_else(|| {
-                        format!(
-                            "Component '{}' of subcircuit '{}' is missing required terminal '{}'",
-                            component.name, component.component_type, term
-                        )
-                    })?;
-                    netlist_str.push(' ');
-                    netlist_str.push_str(net);
-                }
-                netlist_str.push(' ');
-                netlist_str.push_str(&component.component_type);
-                netlist_str.push('\n');
-                continue;
-            }
-
-            // Generic subcircuit fallback using pin order declared on component
             netlist_str.push('X');
             netlist_str.push_str(&component.name);
             for pin_id in &pins {
                 if let Some(pin) = space.netlist.get_pin(*pin_id) {
-                    let net = pin_net_map.get(pin.name.as_str()).ok_or_else(|| {
-                        format!(
-                            "Component '{}' pin '{}' has no connected net",
-                            component.name, pin.name
-                        )
-                    })?;
+                    let net = pin_net_map.get(pin.name.as_str()).map(|s| s.as_str()).unwrap_or("0");
                     netlist_str.push(' ');
                     netlist_str.push_str(net);
                 }

@@ -1,0 +1,30 @@
+# @std/pdk/sky130/strap.hw
+import * from @std/primitives/units
+import * from @std/primitives/math
+import { TransistorPort } from @std/pdk/sky130/nmos
+
+export fn route_strap(from: TransistorPort, to: TransistorPort, net: Net, layer: String, bridge_layer: String = "") {
+    # 1. Primary Low-Layer Conductor Strap (e.g. li1)
+    let min_y = min(from.y, to.y)
+    let max_y = max(from.y, to.y)
+    let height = max_y - min_y
+    let width = 400nm
+
+    space.add_polygon(
+        layer: layer, 
+        net: net, 
+        rect: [from.x - width/2, min_y, width, height]
+    )
+
+    # 2. High-Conductivity Metal Bridge (Bypasses TiN high sheet resistance)
+    if bridge_layer != "" {
+        space.add_polygon(
+            layer: bridge_layer, 
+            net: net, 
+            rect: [from.x - width/2, min_y, width, height]
+        )
+        
+        space.add_contact(from: layer, to: bridge_layer, at: from.center, diameter: 170nm, net: net)
+        space.add_contact(from: layer, to: bridge_layer, at: to.center,   diameter: 170nm, net: net)
+    }
+}

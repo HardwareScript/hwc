@@ -1,10 +1,10 @@
 //! Property extraction helpers for material definitions.
 //!
-//! This module provides utilities to extract physical properties from MaterialDefinition
+//! This module provides utilities to extract physical properties from MaterialDecl
 //! AST nodes with proper unit handling and error reporting.
 
 use compact_str::CompactString;
-use hwc_parser::{MaterialDefinition, Property, PropertyValue, Unit};
+use hwc_parser::{Expression, MaterialDecl, Unit};
 use thiserror::Error;
 
 /// Errors that can occur during property extraction
@@ -40,39 +40,34 @@ pub enum PropertyError {
 /// - Custom("Ω/m") (legacy, will convert)
 ///
 /// Returns resistivity in ohm-meters (Ω·m)
-pub fn extract_resistivity(material: &MaterialDefinition) -> Result<f64, PropertyError> {
-    let property = find_property(&material.properties, "resistivity").ok_or_else(|| {
+pub fn extract_resistivity(material: &MaterialDecl) -> Result<f64, PropertyError> {
+    let expr = find_property(&material.properties, "resistivity").ok_or_else(|| {
         PropertyError::MissingProperty {
-            material: material.name.to_string().into(),
+            material: material.name.name.clone(),
             property: "resistivity".into(),
         }
     })?;
 
-    match &property.value {
-        PropertyValue::Measurement(measurement) => {
-            let value = measurement.value;
-            match &measurement.unit {
-                Unit::Custom(unit_str) if unit_str == "Ω·m" || unit_str == "Ohm·m" => Ok(value),
-                Unit::Custom(unit_str) if unit_str == "Ω/m" => {
-                    // Legacy notation, treat as Ω·m
-                    Ok(value)
-                }
+    match expr {
+        Expression::Measurement { value, unit, .. } => {
+            match unit {
+                Unit::Custom(unit_str) if unit_str == "Ω·m" || unit_str == "Ohm·m" || unit_str == "Ω/m" => Ok(*value),
                 Unit::Custom(unit_str) => Err(PropertyError::InvalidUnit {
-                    material: material.name.to_string().into(),
+                    material: material.name.name.clone(),
                     property: "resistivity".into(),
                     expected: "Ω·m".into(),
                     actual: unit_str.clone().into(),
                 }),
                 _ => Err(PropertyError::InvalidUnit {
-                    material: material.name.to_string().into(),
+                    material: material.name.name.clone(),
                     property: "resistivity".into(),
                     expected: "Ω·m".into(),
-                    actual: format!("{:?}", measurement.unit).into(),
+                    actual: format!("{:?}", unit).into(),
                 }),
             }
         }
         _ => Err(PropertyError::InvalidPropertyType {
-            material: material.name.to_string().into(),
+            material: material.name.name.clone(),
             property: "resistivity".into(),
         }),
     }
@@ -84,36 +79,35 @@ pub fn extract_resistivity(material: &MaterialDefinition) -> Result<f64, Propert
 /// - Custom("W/mK") or Custom("W/m·K")
 ///
 /// Returns thermal conductivity in watts per meter-kelvin (W/mK)
-pub fn extract_thermal_conductivity(material: &MaterialDefinition) -> Result<f64, PropertyError> {
-    let property =
+pub fn extract_thermal_conductivity(material: &MaterialDecl) -> Result<f64, PropertyError> {
+    let expr =
         find_property(&material.properties, "thermal_conductivity").ok_or_else(|| {
             PropertyError::MissingProperty {
-                material: material.name.to_string().into(),
+                material: material.name.name.clone(),
                 property: "thermal_conductivity".into(),
             }
         })?;
 
-    match &property.value {
-        PropertyValue::Measurement(measurement) => {
-            let value = measurement.value;
-            match &measurement.unit {
-                Unit::Custom(unit_str) if unit_str == "W/mK" || unit_str == "W/m·K" => Ok(value),
+    match expr {
+        Expression::Measurement { value, unit, .. } => {
+            match unit {
+                Unit::Custom(unit_str) if unit_str == "W/mK" || unit_str == "W/m·K" => Ok(*value),
                 Unit::Custom(unit_str) => Err(PropertyError::InvalidUnit {
-                    material: material.name.to_string().into(),
+                    material: material.name.name.clone(),
                     property: "thermal_conductivity".into(),
                     expected: "W/mK".into(),
                     actual: unit_str.clone().into(),
                 }),
                 _ => Err(PropertyError::InvalidUnit {
-                    material: material.name.to_string().into(),
+                    material: material.name.name.clone(),
                     property: "thermal_conductivity".into(),
                     expected: "W/mK".into(),
-                    actual: format!("{:?}", measurement.unit).into(),
+                    actual: format!("{:?}", unit).into(),
                 }),
             }
         }
         _ => Err(PropertyError::InvalidPropertyType {
-            material: material.name.to_string().into(),
+            material: material.name.name.clone(),
             property: "thermal_conductivity".into(),
         }),
     }
@@ -126,23 +120,21 @@ pub fn extract_thermal_conductivity(material: &MaterialDefinition) -> Result<f64
 /// - Measurement with Custom("") (dimensionless)
 ///
 /// Returns relative permittivity (dimensionless)
-pub fn extract_relative_permittivity(material: &MaterialDefinition) -> Result<f64, PropertyError> {
-    let property =
+pub fn extract_relative_permittivity(material: &MaterialDecl) -> Result<f64, PropertyError> {
+    let expr =
         find_property(&material.properties, "relative_permittivity").ok_or_else(|| {
             PropertyError::MissingProperty {
-                material: material.name.to_string().into(),
+                material: material.name.name.clone(),
                 property: "relative_permittivity".into(),
             }
         })?;
 
-    match &property.value {
-        PropertyValue::Number(value) => Ok(*value),
-        PropertyValue::Measurement(measurement) => {
-            // Accept dimensionless measurements
-            Ok(measurement.value)
-        }
+    match expr {
+        Expression::Literal { value, .. } => Ok(*value as f64),
+        Expression::FloatLiteral { value, .. } => Ok(*value),
+        Expression::Measurement { value, .. } => Ok(*value),
         _ => Err(PropertyError::InvalidPropertyType {
-            material: material.name.to_string().into(),
+            material: material.name.name.clone(),
             property: "relative_permittivity".into(),
         }),
     }
@@ -154,41 +146,40 @@ pub fn extract_relative_permittivity(material: &MaterialDefinition) -> Result<f6
 /// - Custom("kV/mm")
 ///
 /// Returns dielectric strength in kilovolts per millimeter (kV/mm)
-pub fn extract_dielectric_strength(material: &MaterialDefinition) -> Result<f64, PropertyError> {
-    let property = find_property(&material.properties, "dielectric_strength").ok_or_else(|| {
+pub fn extract_dielectric_strength(material: &MaterialDecl) -> Result<f64, PropertyError> {
+    let expr = find_property(&material.properties, "dielectric_strength").ok_or_else(|| {
         PropertyError::MissingProperty {
-            material: material.name.to_string().into(),
+            material: material.name.name.clone(),
             property: "dielectric_strength".into(),
         }
     })?;
 
-    match &property.value {
-        PropertyValue::Measurement(measurement) => {
-            let value = measurement.value;
-            match &measurement.unit {
-                Unit::Custom(unit_str) if unit_str == "kV/mm" => Ok(value),
+    match expr {
+        Expression::Measurement { value, unit, .. } => {
+            match unit {
+                Unit::Custom(unit_str) if unit_str == "kV/mm" => Ok(*value),
                 Unit::Custom(unit_str) => Err(PropertyError::InvalidUnit {
-                    material: material.name.to_string().into(),
+                    material: material.name.name.clone(),
                     property: "dielectric_strength".into(),
                     expected: "kV/mm".into(),
                     actual: unit_str.clone().into(),
                 }),
                 _ => Err(PropertyError::InvalidUnit {
-                    material: material.name.to_string().into(),
+                    material: material.name.name.clone(),
                     property: "dielectric_strength".into(),
                     expected: "kV/mm".into(),
-                    actual: format!("{:?}", measurement.unit).into(),
+                    actual: format!("{:?}", unit).into(),
                 }),
             }
         }
         _ => Err(PropertyError::InvalidPropertyType {
-            material: material.name.to_string().into(),
+            material: material.name.name.clone(),
             property: "dielectric_strength".into(),
         }),
     }
 }
 
-/// Helper function to find a property by key
-fn find_property<'a>(properties: &'a [Property], key: &str) -> Option<&'a Property> {
-    properties.iter().find(|p| p.key == key)
+/// Helper function to find a property expression by key
+fn find_property<'a>(properties: &'a [(CompactString, Expression)], key: &str) -> Option<&'a Expression> {
+    properties.iter().find(|(k, _)| k == key).map(|(_, expr)| expr)
 }

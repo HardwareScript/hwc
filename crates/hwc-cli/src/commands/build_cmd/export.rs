@@ -1,7 +1,8 @@
-use hwc_compiler::{alignment::PhysicalNetlist, SymbolTable};
+use hwc_compiler::SymbolTable;
 use hwc_engine::HardwareSpace;
+use hwc_export::netlist::types::PhysicalNetlist;
 use hwc_export::{CompiledOutput, ExportFormat, Exporter};
-use hwc_parser::Program;
+use hwc_parser::{Program, TopLevelItem};
 use miette::Result;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -32,12 +33,24 @@ pub fn export_all(params: ExportParams) -> Result<()> {
     } = params;
 
     // Extract space definition for compiled output
-    let space_def = ast.definitions.iter().find_map(|def| {
-        if let hwc_parser::Definition::Space(space_id) = def {
-            Some(&ast.arena.space_defs[*space_id])
+    let space_def = ast.items.iter().find_map(|item| {
+        if let TopLevelItem::Space(s) = item {
+            if s.name.as_str() == space.name.as_str() {
+                Some(s)
+            } else {
+                None
+            }
         } else {
             None
         }
+    }).or_else(|| {
+        ast.items.iter().find_map(|item| {
+            if let TopLevelItem::Space(s) = item {
+                Some(s)
+            } else {
+                None
+            }
+        })
     });
 
     let compiled = CompiledOutput {
@@ -52,20 +65,9 @@ pub fn export_all(params: ExportParams) -> Result<()> {
         "[{:>8.2}ms] About to create exporter...",
         start_time.elapsed().as_secs_f64() * 1000.0
     );
-    // println!($3"[DEBUG] Creating exporter...");
     let exporter = Exporter::new();
-    // println!($3"[DEBUG] Exporter created");
 
-    // Export requested formats
-    // println!($3"[DEBUG] Starting export of {} format(s)...",
-    //      export_formats.len()
-    // );
     for format in formats.iter() {
-        // println!($3"[DEBUG] Exporting format {}/{}: {:?}",
-        // idx + 1,
-        // export_formats.len(),
-        //      format
-        //  );
         let format_start = Instant::now();
         exporter
             .export(&compiled, output_dir, *format)
@@ -96,21 +98,17 @@ fn auto_export_utilities(
     export_formats: &[ExportFormat],
 ) -> Result<()> {
     if !export_formats.contains(&ExportFormat::Bom) {
-        // println!($3"[DEBUG] Auto-exporting BOM...");
         let _start = Instant::now();
         exporter
             .export(compiled, space_output_dir, ExportFormat::Bom)
             .map_err(|e| miette::miette!("BOM export failed: {}", e))?;
-        // println!($3"[DEBUG] BOM exported in {:?}", start.elapsed());
     }
 
     if !export_formats.contains(&ExportFormat::Excellon) {
-        // println!($3"[DEBUG] Auto-exporting Excellon drill file...");
         let _start = Instant::now();
         exporter
             .export(compiled, space_output_dir, ExportFormat::Excellon)
             .map_err(|e| miette::miette!("Drill file export failed: {}", e))?;
-        // println!($3"[DEBUG] Excellon exported in {:?}", start.elapsed());
     }
 
     Ok(())

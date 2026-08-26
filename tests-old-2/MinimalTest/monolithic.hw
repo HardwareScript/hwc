@@ -1,0 +1,55 @@
+# Minimal monolithic test - three pours connected by routes
+
+import * from @std/primitives/units
+import * from "./simple_pdk"
+
+module SimpleModule:
+    pins: [input A, output B, output C, ground GND]
+    route A to B
+    route B to C
+    route A to C
+
+space SimpleSpace implements SimpleModule:
+    dimensions: 10um by 10um
+    profile: SimpleProfile
+    
+    nets:
+        A:   { classification: signal, current: 0.1uA }
+        B:   { classification: signal, current: 0.1uA }
+        C:   { classification: signal, current: 0.1uA }
+        GND: { classification: ground, potential: 0.0V, current: 0.1uA }
+    
+    # First pour - anchored absolutely
+    add pour(Copper) named Pad_A on layer: metal1:
+        dimensions: 1um by 1um
+        at: [x: 2um, y: 5um]
+        net: A
+    
+    # Second pour - positioned absolutely
+    add pour(Copper) named Pad_B on layer: metal1:
+        dimensions: 1um by 1um
+        at: [x: 5um, y: 5um]
+        net: A
+    
+    # Third pour - positioned absolutely
+    add pour(Copper) named Pad_C on layer: metal1:
+        dimensions: 1um by 1um
+        at: [x: 5um, y: 3um]
+        net: A
+    
+    # Ground pad
+    add pour(Copper) named Pad_GND on layer: metal1:
+        dimensions: 1um by 1um
+        at: [x: 2um, y: 3um]
+        net: GND
+    
+    # Route connecting them on the same net
+    route Pad_A to Pad_B:
+        net: A
+        width: 300nm
+        layer: metal1
+    
+    route Pad_B to Pad_C:
+        net: A
+        width: 300nm
+        layer: metal1

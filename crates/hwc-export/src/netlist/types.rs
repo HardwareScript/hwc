@@ -65,3 +65,88 @@ pub enum StimulusMode {
     /// Pulsed voltage sources with .tran directive
     Transient,
 }
+
+use compact_str::CompactString;
+use hwc_compiler::eval::MeasurementValue;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PortDirection {
+    Input,
+    Output,
+    Inout,
+    Power,
+    Ground,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PortInfo {
+    pub name: CompactString,
+    pub direction: PortDirection,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PhysicalDevice {
+    pub name: CompactString,
+    pub device_type: CompactString,
+    pub device_type_id: usize,
+    pub terminals: FxHashMap<CompactString, CompactString>,
+    pub params: FxHashMap<CompactString, MeasurementValue>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct DeviceTypeRegistry {
+    pub types: Vec<CompactString>,
+}
+
+impl DeviceTypeRegistry {
+    pub fn new() -> Self {
+        Self { types: Vec::new() }
+    }
+
+    pub fn get_or_register(&mut self, name: &str) -> usize {
+        if let Some(pos) = self.types.iter().position(|t| t.as_str() == name) {
+            pos
+        } else {
+            let id = self.types.len();
+            self.types.push(CompactString::new(name));
+            id
+        }
+    }
+
+    pub fn get_name(&self, id: usize) -> Option<&str> {
+        self.types.get(id).map(|s| s.as_str())
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct PhysicalNetlist {
+    pub devices: Vec<PhysicalDevice>,
+    pub device_registry: DeviceTypeRegistry,
+    pub nets: FxHashMap<CompactString, Vec<CompactString>>,
+}
+
+impl PhysicalNetlist {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn from_emitter_records(records: &[hwc_compiler::eval::DeviceRecord]) -> Self {
+        let mut netlist = Self::new();
+        for rec in records {
+            let type_id = netlist.device_registry.get_or_register(rec.device_type.as_str());
+            let mut terms = FxHashMap::default();
+            for (t_name, net_id) in &rec.terminals {
+                terms.insert(t_name.clone(), CompactString::new(format!("net_{}", net_id.0)));
+            }
+            netlist.devices.push(PhysicalDevice {
+                name: rec.name.clone(),
+                device_type: rec.device_type.clone(),
+                device_type_id: type_id,
+                terminals: terms,
+                params: rec.params.clone(),
+            });
+        }
+        netlist
+    }
+}
+

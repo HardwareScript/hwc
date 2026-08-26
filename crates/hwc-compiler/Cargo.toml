@@ -10,6 +10,7 @@ thiserror = { workspace = true }
 miette = { workspace = true }
 rustc-hash = { workspace = true }
 compact_str = { workspace = true }
+serde = { workspace = true }
 smallvec = { workspace = true }
 clipper2-rust = "1.0"
 bumpalo = "3.20.2"

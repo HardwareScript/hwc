@@ -1,6 +1,3 @@
-//! Symbol table error types
-
-use crate::logic_synthesizer::SynthesisError;
 use compact_str::CompactString;
 use miette::{Diagnostic, SourceSpan};
 use thiserror::Error;
@@ -35,10 +32,6 @@ pub enum SymbolError {
         #[label("used here")]
         span: Option<SourceSpan>,
     },
-
-    #[error(transparent)]
-    #[diagnostic(transparent)]
-    LogicValidationError(Box<SynthesisError>),
 
     /// Warning: Local definition shadows an imported definition (Rule 1: Local Beats Global)
     #[error("Local {kind} '{name}' shadows imported definition")]
@@ -138,11 +131,5 @@ impl SymbolError {
             expected,
             found,
         }
-    }
-}
-
-impl From<SynthesisError> for SymbolError {
-    fn from(err: SynthesisError) -> Self {
-        Self::LogicValidationError(Box::new(err))
     }
 }

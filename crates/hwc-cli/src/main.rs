@@ -151,6 +151,28 @@ enum Commands {
         deny_warnings: bool,
     },
 
+    /// Execute comptime functions without physical meshing (<10ms)
+    Eval {
+        /// Input .hw file
+        #[arg(value_name = "FILE")]
+        input: PathBuf,
+
+        /// Verbose evaluation output
+        #[arg(short, long)]
+        verbose: bool,
+    },
+
+    /// Run layout synthesis testbenches and assertions (<100ms)
+    Test {
+        /// Input .hw file
+        #[arg(value_name = "FILE")]
+        input: PathBuf,
+
+        /// Verbose test output
+        #[arg(short, long)]
+        verbose: bool,
+    },
+
     /// Initialize a new hardware project
     Init {
         /// Project name
@@ -287,6 +309,8 @@ fn run() -> Result<()> {
             verbose,
             deny_warnings,
         } => commands::check::execute(input, foundry, limit, all, verbose, deny_warnings),
+        Commands::Eval { input, verbose } => commands::eval::execute(input, verbose),
+        Commands::Test { input, verbose } => commands::test_cmd::execute(input, verbose),
         Commands::Init { name, path } => commands::init::execute(name, path),
         Commands::Materials { action } => commands::materials::execute(action),
         Commands::Simulate { input, params } => commands::simulate::execute(input, params),

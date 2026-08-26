@@ -39,7 +39,7 @@ use rustc_hash::FxHashMap;
 fn is_mask_material(symbol_table: &SymbolTable, material_name: &str) -> bool {
     symbol_table
         .get_material(material_name)
-        .map(|mat_def| mat_def.category.is_zero_thickness())
+        .map(|mat_def| mat_def.category().is_zero_thickness())
         .unwrap_or(false)
 }
 

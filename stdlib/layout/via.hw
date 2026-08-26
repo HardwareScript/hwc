@@ -1,0 +1,64 @@
+# @std/layout/via.hw
+import * from @std/primitives/units
+import * from @std/primitives/math
+
+export fn via_matrix(
+    from_layer: String, 
+    to_layer: String, 
+    rows: Int, 
+    cols: Int, 
+    pitch: Measurement, 
+    diameter: Measurement, 
+    at: Point2D, 
+    net: Net
+) {
+    let offset_x = (cols - 1) * pitch / 2
+    let offset_y = (rows - 1) * pitch / 2
+
+    for r in 0..rows {
+        for c in 0..cols {
+            let vx = at.x - offset_x + (c * pitch)
+            let vy = at.y - offset_y + (r * pitch)
+            
+            space.add_contact(
+                from: from_layer,
+                to: to_layer,
+                at: Point2D { x: vx, y: vy },
+                diameter: diameter,
+                net: net
+            )
+        }
+    }
+}
+
+export fn fill_vias_in_box(
+    from_layer: String,
+    to_layer: String,
+    box_w: Measurement,
+    box_h: Measurement,
+    diameter: Measurement,
+    min_spacing: Measurement,
+    enclosure: Measurement,
+    at: Point2D,
+    net: Net
+) -> Int {
+    let usable_w = box_w - (2 * enclosure)
+    let usable_h = box_h - (2 * enclosure)
+    let pitch = diameter + min_spacing
+
+    let cols = max(1, (usable_w + min_spacing) / pitch)
+    let rows = max(1, (usable_h + min_spacing) / pitch)
+
+    via_matrix(
+        from_layer: from_layer,
+        to_layer: to_layer,
+        rows: rows,
+        cols: cols,
+        pitch: pitch,
+        diameter: diameter,
+        at: at,
+        net: net
+    )
+
+    return rows * cols
+}

@@ -12,14 +12,13 @@ impl Serialize for AstArena {
         S: serde::Serializer,
     {
         use serde::ser::SerializeStruct;
-        let mut state = serializer.serialize_struct("AstArena", 34)?;
+        let mut state = serializer.serialize_struct("AstArena", 33)?;
         state.serialize_field("components", &self.components)?;
         state.serialize_field("pours", &self.pours)?;
         state.serialize_field("planes", &self.planes)?;
         state.serialize_field("polygons", &self.polygons)?;
         state.serialize_field("contacts", &self.contacts)?;
         state.serialize_field("routes", &self.routes)?;
-        state.serialize_field("space_instances", &self.space_instances)?;
         state.serialize_field("for_loops", &self.for_loops)?;
         state.serialize_field("regions", &self.regions)?;
         state.serialize_field("substrates", &self.substrates)?;
@@ -69,7 +68,6 @@ impl<'de> Deserialize<'de> for AstArena {
             Polygons,
             Contacts,
             Routes,
-            SpaceInstances,
             ForLoops,
             Regions,
             Substrates,
@@ -119,7 +117,6 @@ impl<'de> Deserialize<'de> for AstArena {
                 let mut polygons = None;
                 let mut contacts = None;
                 let mut routes = None;
-                let mut space_instances = None;
                 let mut for_loops = None;
                 let mut regions = None;
                 let mut substrates = None;
@@ -157,7 +154,6 @@ impl<'de> Deserialize<'de> for AstArena {
                         Field::Polygons => polygons = Some(map.next_value()?),
                         Field::Contacts => contacts = Some(map.next_value()?),
                         Field::Routes => routes = Some(map.next_value()?),
-                        Field::SpaceInstances => space_instances = Some(map.next_value()?),
                         Field::ForLoops => for_loops = Some(map.next_value()?),
                         Field::Regions => regions = Some(map.next_value()?),
                         Field::Substrates => substrates = Some(map.next_value()?),
@@ -198,7 +194,6 @@ impl<'de> Deserialize<'de> for AstArena {
                     polygons: polygons.unwrap_or_default(),
                     contacts: contacts.unwrap_or_default(),
                     routes: routes.unwrap_or_default(),
-                    space_instances: space_instances.unwrap_or_default(),
                     for_loops: for_loops.unwrap_or_default(),
                     regions: regions.unwrap_or_default(),
                     substrates: substrates.unwrap_or_default(),
@@ -238,7 +233,6 @@ impl<'de> Deserialize<'de> for AstArena {
             "polygons",
             "contacts",
             "routes",
-            "space_instances",
             "for_loops",
             "regions",
             "substrates",

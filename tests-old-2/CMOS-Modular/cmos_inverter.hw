@@ -1,0 +1,143 @@
+# cmos_inverter.hw - Tapeout-Ready Modular SKY130 Inverter (The Crate Root)
+
+import * from @std/primitives/units
+import * from "./cmos_pdk"
+import NMOS_Transistor from "./nmos_cell"
+import PMOS_Transistor from "./pmos_cell"
+
+# ============================================================================
+# LOGICAL MODULE (Schematic Interface)
+# ============================================================================
+
+module CMOS_Inverter:
+    pins: [input In, output Out, power VDD, ground VSS]
+
+# ============================================================================
+# PHYSICAL SYNTHESIS SPACE (Single Master Space)
+# ============================================================================
+
+space CMOS_Inverter_Space implements CMOS_Inverter:
+    dimensions: 20.0um by 18.0um
+    profile: SKY130_1V8_CMOS
+
+    nets:
+        VDD: { classification: power,  potential: 1.8V, current: 20.0uA }
+        VSS: { classification: ground, potential: 0.0V, current: 20.0uA }
+        In:  { classification: signal, potential: 1.8V, current: 0.1uA }
+        Out: { classification: signal, current: 20.0uA }
+
+    # ========================================================================
+    # 1. CELL INSTANTIATION WITH CORRECT DEVICE BINDING
+    # ========================================================================
+    
+    # NMOS pull-down transistor
+    add NMOS_Transistor(W: 1.0um, L: 150nm) named NMOS_1 at [x: 10.0um, y: 5.0um]:
+        ports: { Gate: In, Source: VSS, Drain: Out, Sub_Tap: VSS }
+
+    # PMOS pull-up transistor (positioned 6.5um above NMOS)
+    add PMOS_Transistor(W: 2.0um, L: 150nm) named PMOS_1 at [x: 10.0um, y: 11.5um]:
+        ports: { Gate_Poly: In, Gate: In, Source: VDD, Drain: Out, Well_Tap: VDD }
+
+    # ========================================================================
+    # 2. EXTERNAL BONDING & TEST PADS
+    # ========================================================================
+
+    let pad_size = 1.2um
+
+    add pour(Aluminum) named VDD_Pad on layer: metal1:
+        dimensions: pad_size by pad_size
+        align: center_x with PMOS_1.Source.left - 2.5um
+        align: center_y with PMOS_1.Source
+        net: VDD
+
+    add pour(Aluminum) named VSS_Pad on layer: metal1:
+        dimensions: pad_size by pad_size
+        align: center_x with NMOS_1.Source.left - 2.5um
+        align: center_y with NMOS_1.Source
+        net: VSS
+
+    # Input Pad (Top-Center, straight above PMOS Gate Contact)
+    add pour(Aluminum) named Input_Pad on layer: metal1:
+        dimensions: pad_size by pad_size
+        align: center_x with PMOS_1.Gate
+        align: bottom with PMOS_1.Gate.top + 1.5um
+        net: In
+
+    # Output Pad (Right-Center)
+    add pour(Aluminum) named Output_Pad on layer: metal1:
+        dimensions: pad_size by pad_size
+        align: center_x with PMOS_1.Drain.right + 2.5um
+        align: center_y with (NMOS_1.Drain.center_y + PMOS_1.Drain.center_y) / 2
+        net: Out
+
+    # ========================================================================
+    # 3. INTERCONNECT ROUTING (Single-Pass Deterministic)
+    # ========================================================================
+    
+    # CRITICAL: Explicit poly bridge pour required due to component boundary crossing
+    # The route statement alone doesn't create physical geometry across component instances
+    let gate_bridge_height = 6.5um
+    
+    add pour(Polysilicon) named Gate_Bridge on layer: poly:
+        net: In
+        dimensions: 150nm by gate_bridge_height
+        align: center_x with NMOS_1.Gate
+        align: center_y with (NMOS_1.Gate.center_y + PMOS_1.Gate_Poly.center_y) / 2
+
+    # Low-resistance drain output strap (metal1 to metal1)
+    route PMOS_1.Drain to NMOS_1.Drain:
+        net: Out
+        layer: metal1
+        width: 400nm
+
+    # Power Delivery
+    route VDD_Pad to PMOS_1.Source:
+        net: VDD
+        width: 500nm
+        layer: metal1
+        intent: Power
+
+    route PMOS_1.Source to PMOS_1.Well_Tap:
+        net: VDD
+        width: 200nm
+        layer: metal1
+        intent: Power
+
+    route VSS_Pad to NMOS_1.Source:
+        net: VSS
+        width: 500nm
+        layer: metal1
+        intent: Power
+
+    route NMOS_1.Source to NMOS_1.Sub_Tap:
+        net: VSS
+        width: 200nm
+        layer: metal1
+        intent: Power
+
+    # I/O Feeds (metal1 to metal1 on pre-placed contact stack)
+    # Both gate M1 stacks must connect to Input_Pad independently —
+    # Gate_Bridge only bridges polysilicon (Z=150-330nm); metal1 (Z=780-1140nm)
+    # needs its own continuous path for PIVB to see the net as connected.
+    route PMOS_1.Gate to Input_Pad:
+        net: In
+        width: 200nm
+        layer: metal1
+
+    route NMOS_1.Gate to Input_Pad:
+        net: In
+        width: 200nm
+        layer: metal1
+
+    route PMOS_1.Drain to Output_Pad:
+        net: Out
+        width: 400nm
+        layer: metal1
+
+# ============================================================================
+# 4. SIMULATION TESTBENCH
+# ============================================================================
+
+test CMOS_Inverter_VTC_Test for CMOS_Inverter_Space:
+    dc: { sweep: In, start: 0.0V, stop: 1.8V, step: 0.02V }
+    tran: { step: 5ps, stop: 10ns }

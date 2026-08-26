@@ -15,8 +15,7 @@ use rustc_hash::FxHashMap;
 
 use super::geometry::{distance_2d, find_stackup_layer, get_bbox_centroid};
 use super::types::ExtractedClusterNode;
-use crate::netlist::types::PhysicalNetlistGraph;
-use hwc_compiler::alignment::PhysicalNetlist;
+use crate::netlist::types::{PhysicalNetlist, PhysicalNetlistGraph};
 use hwc_compiler::SymbolTable;
 use hwc_engine::HardwareSpace;
 
@@ -72,23 +71,8 @@ pub fn map_device_terminals(
                 continue;
             }
 
-            // Determine intrinsic target material from device definition contract
-            // This replaces heuristic priority sorting with declarative material matching
-            let target_material = device_def
-                .and_then(|def| def.materials.get(term_name))
-                .and_then(|mats| mats.first());
-
-            // Select pour matching the declared intrinsic material; fallback to lowest Z layer
-            let intrinsic_pour = if let Some(mat) = target_material {
-                term_pours
-                    .iter()
-                    .find(|p| p.material_name == *mat)
-                    .or_else(|| term_pours.iter().min_by_key(|p| p.z_bottom_nm))
-            } else {
-                term_pours.iter().min_by_key(|p| p.z_bottom_nm)
-            };
-
-            let selected_pour = match intrinsic_pour {
+            // Select pour with lowest Z layer
+            let selected_pour = match term_pours.iter().min_by_key(|p| p.z_bottom_nm) {
                 Some(p) => *p,
                 None => continue,
             };
