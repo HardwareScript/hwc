@@ -84,6 +84,34 @@ impl Parser {
         })
     }
 
+    /// Parse an export list: `export { Item1, Item2, Item3 }`
+    pub fn parse_export_list(&mut self, start_pos: usize) -> Result<ExportDecl, ParseError> {
+        self.expect_token(&Token::OpenBrace, "Expected '{' for export list")?;
+        
+        let mut symbols = Vec::new();
+        while !self.check(&Token::CloseBrace) && !self.is_at_end() {
+            let ident = self.expect_identifier()?;
+            symbols.push(CompactString::from(ident.name.as_str()));
+            if self.check(&Token::Comma) {
+                self.advance();
+            } else {
+                break;
+            }
+        }
+        
+        let close_span = self.expect_token(&Token::CloseBrace, "Expected '}' after export symbol list")?;
+        
+        // Optional trailing semicolon
+        if self.check(&Token::Semicolon) {
+            self.advance();
+        }
+        
+        Ok(ExportDecl {
+            symbols,
+            span: Span::new(start_pos, close_span.end),
+        })
+    }
+
     /// Parse a top-level function declaration
     pub fn parse_function_decl(&mut self, is_exported: bool, start_pos: usize) -> Result<FunctionDecl, ParseError> {
         self.expect_token(&Token::Fn, "Expected 'fn'")?;
@@ -239,6 +267,38 @@ impl Parser {
             name,
             variants,
             span: Span::new(start_pos, close_span.end),
+        })
+    }
+
+    /// Parse a constant declaration: `(export)? const NAME: Type = value`
+    pub fn parse_const_decl(&mut self, is_exported: bool, start_pos: usize) -> Result<ConstDecl, ParseError> {
+        self.expect_token(&Token::Const, "Expected 'const'")?;
+        let name = self.expect_identifier()?;
+
+        // Optional type annotation
+        let type_annotation = if self.check(&Token::Colon) {
+            self.advance();
+            Some(self.parse_type_expr()?)
+        } else {
+            None
+        };
+
+        self.expect_token(&Token::Equals, "Expected '=' after const name")?;
+        let value = self.parse_expression()?;
+
+        // Optional trailing semicolon
+        if self.check(&Token::Semicolon) {
+            self.advance();
+        }
+
+        let end_pos = self.previous_span().end;
+
+        Ok(ConstDecl {
+            is_exported,
+            name,
+            type_annotation,
+            value,
+            span: Span::new(start_pos, end_pos),
         })
     }
 
@@ -488,9 +548,16 @@ impl Parser {
             let sec_type_ident = self.expect_identifier()?;
             let sec_type: CompactString = sec_type_ident.name.as_str().into();
 
+            // Section name can be an identifier or string literal
             let sec_name = if !self.check(&Token::OpenBrace) {
-                let id = self.expect_identifier()?;
-                Some(CompactString::from(id.name.as_str()))
+                if let Some(Token::String(s)) = self.current().map(|t| &t.token) {
+                    let name = s.clone();
+                    self.advance();
+                    Some(CompactString::from(name))
+                } else {
+                    let id = self.expect_identifier()?;
+                    Some(CompactString::from(id.name.as_str()))
+                }
             } else {
                 None
             };
@@ -499,14 +566,71 @@ impl Parser {
             let mut fields = Vec::new();
 
             while !self.check(&Token::CloseBrace) && !self.is_at_end() {
-                let fld_ident = self.expect_identifier()?;
-                let fld_name: CompactString = fld_ident.name.as_str().into();
-                self.expect_token(&Token::Colon, "Expected ':' after profile field name")?;
-                let fld_val = self.parse_expression()?;
-                fields.push((fld_name, fld_val));
+                // Check if this is a nested subsection (identifier followed by {)
+                // or a field (identifier followed by :)
+                let is_subsection = if let Some(Token::Identifier(_)) = self.current().map(|t| &t.token) {
+                    // Look ahead to see if next token after identifier is '{' or ':'
+                    if self.current + 1 < self.tokens.len() {
+                        matches!(self.tokens[self.current + 1].token, Token::OpenBrace)
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                };
 
-                if self.check(&Token::Semicolon) {
-                    self.advance();
+                if is_subsection {
+                    // Parse nested subsection: layer_name { field: value, ... }
+                    let subsec_start = self.current_span().start;
+                    let subsec_ident = self.expect_identifier()?;
+                    let subsec_name: CompactString = subsec_ident.name.as_str().into();
+                    
+                    self.expect_token(&Token::OpenBrace, "Expected '{' for nested subsection")?;
+                    let mut subsec_fields = Vec::new();
+                    
+                    while !self.check(&Token::CloseBrace) && !self.is_at_end() {
+                        let fld_ident = self.expect_identifier()?;
+                        let fld_name: CompactString = fld_ident.name.as_str().into();
+                        self.expect_token(&Token::Colon, "Expected ':' after field name")?;
+                        let fld_val = self.parse_expression()?;
+                        subsec_fields.push((fld_name, fld_val));
+
+                        if self.check(&Token::Semicolon) {
+                            self.advance();
+                        }
+                        if self.check(&Token::Comma) {
+                            self.advance();
+                        }
+                    }
+                    
+                    let subsec_close = self.expect_token(&Token::CloseBrace, "Expected '}' to close nested subsection")?;
+                    
+                    // Add the nested subsection as a special field entry
+                    // Store it as a struct-like expression
+                    let subsec_expr = Expression::StructInstance {
+                        name: subsec_name.clone(),
+                        fields: subsec_fields.into_iter().map(|(k, v)| {
+                            let span = v.span();
+                            FieldInit {
+                                name: k,
+                                value: Some(v),
+                                span,
+                            }
+                        }).collect(),
+                        span: Span::new(subsec_start, subsec_close.end),
+                    };
+                    fields.push((subsec_name, subsec_expr));
+                } else {
+                    // Parse regular field: field_name: value
+                    let fld_ident = self.expect_identifier()?;
+                    let fld_name: CompactString = fld_ident.name.as_str().into();
+                    self.expect_token(&Token::Colon, "Expected ':' after profile field name")?;
+                    let fld_val = self.parse_expression()?;
+                    fields.push((fld_name, fld_val));
+
+                    if self.check(&Token::Semicolon) {
+                        self.advance();
+                    }
                 }
             }
 

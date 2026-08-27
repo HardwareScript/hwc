@@ -102,6 +102,21 @@ impl ModuleResolver {
             symbol_table,
         )?;
 
+        // Also register all module structs and enums into the arena so type checking and
+        // comptime evaluation have full schema definitions for imported module types
+        for item in &program.items {
+            if let hwc_parser::TopLevelItem::Struct(s) = item {
+                if !symbol_table.arena().struct_defs.iter().any(|existing| existing.name.name == s.name.name) {
+                    symbol_table.arena_mut().struct_defs.push(s.clone());
+                }
+            }
+            if let hwc_parser::TopLevelItem::Enum(e) = item {
+                if !symbol_table.arena().enum_defs.iter().any(|existing| existing.name.name == e.name.name) {
+                    symbol_table.arena_mut().enum_defs.push(e.clone());
+                }
+            }
+        }
+
         Ok(())
     }
 }

@@ -81,10 +81,6 @@ enum Commands {
         #[arg(long)]
         deny_warnings: bool,
 
-        /// Alignment validation tolerance for device parameters (default: 0.01 = 1%)
-        #[arg(long)]
-        tolerance: Option<f64>,
-
         /// Debug net identity: trace LogicalNet → RouteSegments → PhysicalRegions decomposition
         #[arg(long)]
         debug_identity: bool,
@@ -151,11 +147,30 @@ enum Commands {
         deny_warnings: bool,
     },
 
-    /// Execute comptime functions without physical meshing (<10ms)
-    Eval {
-        /// Input .hw file
+    /// Execute standalone compute scripts or main() (<2ms, zero physical synthesis)
+    Run {
+        /// Input .hw script file
         #[arg(value_name = "FILE")]
         input: PathBuf,
+
+        /// Optional function name to execute
+        #[arg(short, long = "fn")]
+        r#fn: Option<CompactString>,
+
+        /// Verbose output
+        #[arg(short, long)]
+        verbose: bool,
+    },
+
+    /// Quick interactive expression or comptime function evaluator (e.g. "4.0um / 1.41um * 350.0")
+    Eval {
+        /// Expression string (e.g. "4.0um / 1.41um * 350.0") or .hw file
+        #[arg(value_name = "TARGET")]
+        target: String,
+
+        /// Optional function name to execute if evaluating a file
+        #[arg(short, long = "fn")]
+        r#fn: Option<CompactString>,
 
         /// Verbose evaluation output
         #[arg(short, long)]
@@ -269,7 +284,6 @@ fn run() -> Result<()> {
             limit,
             all,
             deny_warnings,
-            tolerance,
             debug_identity,
             verify_only,
         } => commands::build::execute(
@@ -289,7 +303,6 @@ fn run() -> Result<()> {
                 all,
                 deny_warnings,
                 space,
-                tolerance,
                 debug_identity,
                 verify_only,
             },
@@ -309,7 +322,8 @@ fn run() -> Result<()> {
             verbose,
             deny_warnings,
         } => commands::check::execute(input, foundry, limit, all, verbose, deny_warnings),
-        Commands::Eval { input, verbose } => commands::eval::execute(input, verbose),
+        Commands::Run { input, r#fn, verbose } => commands::run::execute(input, r#fn, verbose),
+        Commands::Eval { target, r#fn, verbose } => commands::eval::execute(target, r#fn, verbose),
         Commands::Test { input, verbose } => commands::test_cmd::execute(input, verbose),
         Commands::Init { name, path } => commands::init::execute(name, path),
         Commands::Materials { action } => commands::materials::execute(action),

@@ -1,0 +1,35 @@
+# tests/basic/test_eval.hw
+import * from @std/primitives/units
+import * from @std/primitives/math
+
+fn main() {
+    # 1. Pure integer arithmetic
+    let a = 1
+    let b = 1
+    let ans = a + b
+    println("Basic Math: 1 + 1 = {ans}")
+
+    # 2. String interpolation with inline expressions
+    println("Multiplication: 25 * 4 = {25 * 4}")
+
+    # 3. Physical Dimensional Algebra
+    let length = 4.0um
+    let width  = 1.41um
+    let sheet_r = 350.0   # Ohm per square
+    let r_body = (length / width) * sheet_r
+    println("Physical Math: R_body for (4um / 1.41um) = {r_body} Ohms")
+
+    # 4. Standard Built-ins (sqrt, min, max, abs)
+    let hypotenuse = sqrt(3.0 * 3.0 + 4.0 * 4.0)
+    println("Builtin Math: sqrt(3^2 + 4^2) = {hypotenuse}")
+
+    let smallest = min(100nm, 50nm)
+    println("Minimum check: min(100nm, 50nm) = {smallest}")
+
+    # 5. Loops in pure compute
+    println("--- Loop Test ---")
+    for i in 0..5 {
+        let current_offset = i * 400nm
+        println("  Via #{i}: offset = {current_offset}")
+    }
+}

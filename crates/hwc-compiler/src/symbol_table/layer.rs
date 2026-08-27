@@ -107,6 +107,11 @@ impl SymbolTable {
         &self.arena
     }
 
+    /// Get mutable reference to the arena
+    pub fn arena_mut(&mut self) -> &mut AstArena {
+        &mut self.arena
+    }
+
     /// Merge another AstArena into this symbol table's arena and return the offsets
     pub fn merge_arena(&mut self, arena: AstArena) -> hwc_parser::ast::arena::AstArenaOffsets {
         self.arena.merge(arena)

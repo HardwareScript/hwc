@@ -44,6 +44,23 @@ pub struct Block {
     pub span: Span,
 }
 
+/// Pattern in match arms
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum Pattern {
+    /// Matches a specific value or enum variant: `TapType.P_Sub`
+    Expr(Expression),
+    /// Wildcard fallback: `_`
+    Wildcard { span: Span },
+}
+
+/// Match arm: `pattern => { body }`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MatchArm {
+    pub pattern: Pattern,
+    pub body: Block,
+    pub span: Span,
+}
+
 /// Statement inside a function or block
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Statement {
@@ -77,6 +94,13 @@ pub enum Statement {
         variables: Vec<CompactString>,
         iterable: Expression,
         body: Block,
+        span: Span,
+    },
+
+    /// Match statement: `match target { pattern => { ... }, ... }`
+    Match {
+        target: Expression,
+        arms: Vec<MatchArm>,
         span: Span,
     },
 
@@ -134,6 +158,7 @@ impl Statement {
             | Statement::Assignment { span, .. }
             | Statement::If { span, .. }
             | Statement::For { span, .. }
+            | Statement::Match { span, .. }
             | Statement::Return { span, .. }
             | Statement::Assert { span, .. }
             | Statement::Expression { span, .. }

@@ -62,8 +62,12 @@ pub fn add_materials_from_symbol_table(
     symbol_table: &SymbolTable,
 ) -> Result<(), SceneGraphError> {
     for (name, material_def) in symbol_table.materials() {
-        // Extract color (with fallback to material's get_color method)
-        let color_hex = material_def.get_color().unwrap_or_else(|| "#808080".into());
+        let color_hex = material_def.get_color().ok_or_else(|| {
+            SceneGraphError::InvalidColor(format!(
+                "Material '{}' is missing required 'color' property in materials declaration",
+                name
+            ))
+        })?;
         let color = parse_hex_color(&color_hex)?;
 
         // Extract visual properties with defaults (v0.1.6 God-Tier Visual API)

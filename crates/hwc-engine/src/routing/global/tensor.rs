@@ -87,7 +87,7 @@ impl VolumetricTensor3D {
     }
 
     /// Calculate edge cost with PathFinder negotiated congestion formula
-    pub fn edge_cost(&self, from_idx: usize, to_idx: usize, is_horizontal: bool) -> f32 {
+    pub fn edge_cost(&self, _from_idx: usize, to_idx: usize, is_horizontal: bool) -> f32 {
         let base = self.base_cost[to_idx] as f32;
         let (cap, occ, hist) = if is_horizontal {
             (
@@ -373,7 +373,7 @@ impl<'a> PathFinderGlobalRouter<'a> {
     /// Add occupancy along global path
     fn commit_path_occupancy(&mut self, path: &GlobalPath) {
         for window in path.cells.windows(2) {
-            let (x1, y1, z1) = window[0];
+            let (x1, y1, _z1) = window[0];
             let (x2, y2, _z2) = window[1];
 
             let idx = self.tensor.cell_index(x2, y2, _z2);

@@ -15,7 +15,7 @@ export fn pad(name: String, at: Point2D, net: Net, size: Measurement = 2.0um) ->
     space.add_polygon(layer: "pad", rect: [at.x - pad_opening/2, at.y - pad_opening/2, pad_opening, pad_opening])
 
     return PadLayout {
-        port: TransistorPort { center: at, x: at.x, y: at.y, layer: "metal1", net: net },
+        port: TransistorPort { center: at, layer: "metal1", net: net },
         bbox: BoundingBox { min_x: at.x - size/2, max_x: at.x + size/2, min_y: at.y - size/2, max_y: at.y + size/2 }
     }
 }

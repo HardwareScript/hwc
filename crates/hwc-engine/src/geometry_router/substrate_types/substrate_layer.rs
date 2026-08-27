@@ -73,6 +73,20 @@ impl SubstrateLayer {
         }
     }
 
+    pub fn new_contact_circle(material: MaterialId, net: NetId, bbox: BoundingBox, radius: i64) -> Self {
+        Self {
+            material,
+            net,
+            bbox,
+            cutouts: SmallVec::new(),
+            layer_type: SubstrateLayerType::Contact,
+            shape: SubstrateLayerShape::Circle { radius },
+            koz_radius_nm: 0,
+            regions: SmallVec::new(),
+            device_binding: None,
+        }
+    }
+
     pub fn new_square_via(material: MaterialId, net: NetId, bbox: BoundingBox, size: i64) -> Self {
         Self {
             material,

@@ -92,11 +92,55 @@ pub fn generate_circuit_body(
 
 /// Emit `.subckt` definitions for every PDK subcircuit referenced by a device.
 fn emit_pdk_subcircuits(
-    _netlist_str: &mut String,
-    _netlist: &PhysicalNetlist,
-    _symbol_table: &SymbolTable,
+    netlist_str: &mut String,
+    netlist: &PhysicalNetlist,
+    symbol_table: &SymbolTable,
     _unit_registry: &hwc_types::UnitRegistry,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let mut emitted_subckts = rustc_hash::FxHashSet::default();
+
+    for dev in &netlist.devices {
+        let device_decl = symbol_table.get_device(&dev.device_type).ok();
+        let mut subcircuit_name = None;
+        if let Some(decl) = device_decl {
+            for sec in &decl.sections {
+                if sec.name == "spice" {
+                    for (fname, fexpr) in &sec.fields {
+                        if fname.as_str() == "subcircuit" {
+                            if let hwc_parser::ast::Expression::StringLiteral { value, .. } = fexpr {
+                                subcircuit_name = Some(value.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if let Some(subckt) = subcircuit_name {
+            if emitted_subckts.insert(subckt.clone()) {
+                netlist_str.push_str("* ========================================\n");
+                netlist_str.push_str(&format!("* PDK SUBCIRCUIT: {}\n", subckt));
+                netlist_str.push_str("* ========================================\n");
+
+                if subckt == "sky130_fd_pr__res_high_po" {
+                    netlist_str.push_str(".subckt sky130_fd_pr__res_high_po A B BULK W=1u L=1u\n");
+                    netlist_str.push_str("RR_head A node_1 362\n");
+                    netlist_str.push_str("RR_tail node_2 B 362\n");
+                    netlist_str.push_str("RR_body node_1 node_2 {3.500000e2 * (L / W)} tc1=-0.00147 tc2=0.0000027 vc1=-0.00032 vc2=0.000018\n");
+                    netlist_str.push_str("CC_sub1 A BULK {2.000000e-15 * W * L}\n");
+                    netlist_str.push_str("CC_sub2 B BULK {2.000000e-15 * W * L}\n");
+                    netlist_str.push_str(".ends sky130_fd_pr__res_high_po\n\n");
+                } else if subckt.contains("nfet") || subckt.contains("nmos") {
+                    netlist_str.push_str(&format!("* Subcircuit '{}' uses foundry model\n", subckt));
+                    netlist_str.push_str(&format!(".include \"sky130_fd_pr/models/{}.model.spice\"\n\n", subckt));
+                } else if subckt.contains("pfet") || subckt.contains("pmos") {
+                    netlist_str.push_str(&format!("* Subcircuit '{}' uses foundry model\n", subckt));
+                    netlist_str.push_str(&format!(".include \"sky130_fd_pr/models/{}.model.spice\"\n\n", subckt));
+                }
+            }
+        }
+    }
+
     Ok(())
 }
 

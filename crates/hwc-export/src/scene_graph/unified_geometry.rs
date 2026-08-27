@@ -343,14 +343,25 @@ impl<'a> ContactSegmenter<'a> {
 
 /// Convert substrate layer shape to 2D path
 fn shape_to_path(shape: &SubstrateLayerShape, bbox: &BoundingBox) -> Path64 {
+    let cx = (bbox.min.x + bbox.max.x) / 2;
+    let cy = (bbox.min.y + bbox.max.y) / 2;
     match shape {
         SubstrateLayerShape::Rect => rect_to_path(bbox),
         SubstrateLayerShape::Circle { radius } => {
-            let cx = (bbox.min.x + bbox.max.x) / 2;
-            let cy = (bbox.min.y + bbox.max.y) / 2;
             circle_to_path(cx, cy, *radius, 64)
         }
-        SubstrateLayerShape::Polygon { outer_contour, .. } => outer_contour.clone(),
+        SubstrateLayerShape::Polygon { outer_contour, .. } => {
+            let is_relative = outer_contour.iter().all(|pt| pt.x.abs() < (bbox.max.x - bbox.min.x + 500) && pt.y.abs() < (bbox.max.y - bbox.min.y + 500));
+            if is_relative && (cx.abs() > 500 || cy.abs() > 500) {
+                let mut path = Path64::new();
+                for pt in outer_contour {
+                    path.push(clipper2_rust::Point64::new(pt.x + cx, pt.y + cy));
+                }
+                path
+            } else {
+                outer_contour.clone()
+            }
+        }
         _ => {
             panic!(
                 "FATAL: Unsupported substrate shape {:?}. \

@@ -95,8 +95,12 @@ pub fn export(
             continue;
         }
 
-        // Refinement 2: Get layer name from stackup, prioritizing routable layers at boundary
-        let layer_name = resolve_layer_name(&space.stackup_layers, pour.z_bottom_nm, &pour.name)?;
+        // Refinement 2: Get layer name from stackup using explicit layer_name
+        let layer_name = if let Some(st) = space.stackup_layers.iter().find(|l| l.name == pour.layer_name) {
+            format!("{} (z:{}nm)", st.name, st.z_bottom)
+        } else {
+            resolve_layer_name(&space.stackup_layers, pour.z_bottom_nm, &pour.name)?
+        };
 
         physical_pours.push((
             pour.name.to_string(),
@@ -203,8 +207,16 @@ pub fn export(
             continue;
         }
 
-        // Get layer name from Z start (lower connection point)
-        let layer_name = resolve_layer_name(&space.stackup_layers, contact.z_start_nm, &contact.name)?;
+        // Get layer name from from_layer or Z start (lower connection point)
+        let layer_name = if let Some(ref from) = contact.from_layer {
+            if let Some(st) = space.stackup_layers.iter().find(|l| l.name.as_str() == from.as_str()) {
+                format!("{} (z:{}nm)", st.name, st.z_bottom)
+            } else {
+                resolve_layer_name(&space.stackup_layers, contact.z_start_nm, &contact.name)?
+            }
+        } else {
+            resolve_layer_name(&space.stackup_layers, contact.z_start_nm, &contact.name)?
+        };
 
         bom.push_str(&format!(
             "{},Contact,{},{},{},{}\n",

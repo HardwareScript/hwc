@@ -92,10 +92,14 @@ pub enum TopLevelItem {
     Function(FunctionDecl),
     Struct(StructDecl),
     Enum(EnumDecl),
+    Const(ConstDecl),
+    Export(ExportDecl),
     Space(SpaceDecl),
     Module(ModuleDecl),
     Material(MaterialDecl),
     Profile(ProfileDecl),
     Device(DeviceDecl),
     Test(TestDecl),
+    Statement(Statement),
 }
+

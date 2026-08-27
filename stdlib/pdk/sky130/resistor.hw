@@ -1,0 +1,200 @@
+# @std/pdk/sky130/resistor.hw - SKY130 P+ Poly Precision Resistor PCell
+# Device: sky130_fd_pr__res_high_po (P+ Poly Precision Resistor, 350 Ohm/sq)
+#
+# This is a foundry-certified PCell generator. User test files should NEVER
+# emit raw polygons or contacts; they should call this function instead.
+
+import * from @std/primitives/units
+import * from @std/primitives/math
+import { via_matrix } from @std/layout/via
+import { sky130_tap, TapType } from @std/pdk/sky130/tap
+
+# ── SKY130 P+ Poly Resistor Design Rule Constants ────────────────────────────
+
+export const RES_HIGH_PO_SHEET_R = 350.0      # Ohm per square (dimensionless ratio)
+export const RES_HIGH_PO_HEAD_R  = 362.0      # Ohm (fixed end contact resistance each side)
+export const RES_HIGH_PO_C_SUB   = 2.0        # fF / um^2 parasitic substrate capacitance
+
+# ── Return Type Structures ───────────────────────────────────────────────────
+
+export struct ResistorPort {
+    center: Point2D,
+    layer: String,
+    net: Net,
+}
+
+export struct ResistorLayout {
+    a: ResistorPort,
+    b: ResistorPort,
+    bulk: ResistorPort,
+    bbox: BoundingBox,
+}
+
+# ── PCell Generator: sky130_res_high_po ──────────────────────────────────────
+#
+# This function encapsulates ALL layout generation for a P+ poly resistor.
+# It emits:
+#   1. SPICE device registration (with BULK terminal)
+#   2. Polysilicon resistor body (polyres layer)
+#   3. Fabrication masks (rpm, psdm)
+#   4. Terminal contacts (li1, metal1)
+#   5. Via arrays for improved reliability
+#   6. Physical substrate tap
+#
+# Parameters:
+#   name:   SPICE device name (e.g., "R1")
+#   W:      Resistor width (SKY130 quantized: {0.35, 0.69, 1.41, 2.85, 5.73} um)
+#   L:      Total resistor length including contacts (e.g., 4.0um)
+#   at:     Center position
+#   term_a: Net for terminal A (left/input)
+#   term_b: Net for terminal B (right/output)
+#   bulk:   Net for substrate connection (usually GND)
+#
+# Returns: ResistorLayout with typed port information for routing
+
+export fn sky130_res_high_po(
+    name: String,
+    W: Measurement = 1.41um,
+    L: Measurement = 4.0um,
+    at: Point2D,
+    term_a: Net,
+    term_b: Net,
+    bulk: Net
+) -> ResistorLayout {
+    # ── Derived Dimensions ────────────────────────────────────────────────────
+    let contact_len = 400nm
+    let body_len = L - (2 * contact_len)  # High-resistance body only (excludes silicided heads)
+    let via_pitch = 400nm
+    let tap_offset_y = 2.5um
+    let tap_size = 400nm
+
+    let cx = at.x
+    let cy = at.y
+
+    # Contact centers: A is on the left, B is on the right
+    let a_x = cx - L / 2 + contact_len / 2
+    let b_x = cx + L / 2 - contact_len / 2
+
+    # ── 1. Register SPICE Device (R_body = 350 * L_body / W) ─────────────────
+    # CRITICAL: Use body_len (excludes contact heads), NOT total length L.
+    # The silicided contact heads have fixed resistance (362 Ohm each) and are
+    # already captured by R_head/R_tail in the SKY130 subcircuit model.
+    space.add_device(
+        type: "Resistor",
+        name: name,
+        terminals: { A: term_a, B: term_b, BULK: bulk },
+        params: { W: W, L: body_len }
+    )
+
+    # ── 2. Resistor Body & Fabrication Masks ─────────────────────────────────
+    # 2a. Polysilicon body
+    space.add_polygon(
+        layer: "polyres",
+        rect:  [cx - L / 2, cy - W / 2, L, W]
+    )
+
+    # 2b. RPM (Resistor Poly Mask): blocks silicide formation
+    # SKY130 DRC rpm.2: >=180nm overhang on width sides (360nm total extension)
+    space.add_polygon(
+        layer: "rpm",
+        rect:  [cx - L / 2, cy - (W + 360nm) / 2, L, W + 360nm]
+    )
+
+    # 2c. PSDM (P+ Implant Mask): 130nm enclosure on all sides
+    space.add_polygon(
+        layer: "psdm",
+        rect:  [cx - L / 2 - 130nm, cy - W / 2 - 130nm, L + 260nm, W + 260nm]
+    )
+
+    # ── 3. Terminal A Contact (Left Side) ────────────────────────────────────
+    space.add_polygon(
+        layer: "li1",
+        net:   term_a,
+        rect:  [a_x - contact_len / 2, cy - W / 2, contact_len, W]
+    )
+
+    space.add_polygon(
+        layer: "metal1",
+        net:   term_a,
+        rect:  [a_x - contact_len / 2, cy - W / 2, contact_len, W]
+    )
+
+    # Via arrays: polyres -> li1 -> metal1 (3 vias each for reliability)
+    via_matrix(
+        from_layer: "polyres",
+        to_layer:   "li1",
+        rows:       3,
+        cols:       1,
+        pitch:      via_pitch,
+        diameter:   170nm,
+        at:         [a_x, cy],
+        net:        term_a
+    )
+
+    via_matrix(
+        from_layer: "li1",
+        to_layer:   "metal1",
+        rows:       3,
+        cols:       1,
+        pitch:      via_pitch,
+        diameter:   170nm,
+        at:         [a_x, cy],
+        net:        term_a
+    )
+
+    # ── 4. Terminal B Contact (Right Side) ───────────────────────────────────
+    space.add_polygon(
+        layer: "li1",
+        net:   term_b,
+        rect:  [b_x - contact_len / 2, cy - W / 2, contact_len, W]
+    )
+
+    space.add_polygon(
+        layer: "metal1",
+        net:   term_b,
+        rect:  [b_x - contact_len / 2, cy - W / 2, contact_len, W]
+    )
+
+    via_matrix(
+        from_layer: "polyres",
+        to_layer:   "li1",
+        rows:       3,
+        cols:       1,
+        pitch:      via_pitch,
+        diameter:   170nm,
+        at:         [b_x, cy],
+        net:        term_b
+    )
+
+    via_matrix(
+        from_layer: "li1",
+        to_layer:   "metal1",
+        rows:       3,
+        cols:       1,
+        pitch:      via_pitch,
+        diameter:   170nm,
+        at:         [b_x, cy],
+        net:        term_b
+    )
+
+    # ── 5. Physical Substrate Tap (P+ diffusion for BULK terminal) ───────────
+    let tap = sky130_tap(
+        type: TapType.P_Sub,
+        at:   [cx, cy + tap_offset_y],
+        net:  bulk,
+        size: tap_size
+    )
+
+    # ── 6. Return Port Information for Routing ───────────────────────────────
+    let body_bbox = bbox_from_rect(
+        center: [cx, cy],
+        size:   [L + 260nm, W + 260nm]
+    )
+    
+    return ResistorLayout {
+        a:    ResistorPort { center: [a_x, cy], layer: "metal1", net: term_a },
+        b:    ResistorPort { center: [b_x, cy], layer: "metal1", net: term_b },
+        bulk: tap.port,
+        bbox: bbox_union(body_bbox, tap.bbox),
+    }
+}

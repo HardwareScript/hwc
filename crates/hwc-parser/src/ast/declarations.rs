@@ -68,6 +68,16 @@ pub enum EnumVariantPayload {
     Struct(Vec<StructFieldDecl>),
 }
 
+/// Constant declaration: `(export)? const NAME: Type = value`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ConstDecl {
+    pub is_exported: bool,
+    pub name: Identifier,
+    pub type_annotation: Option<TypeExpr>,
+    pub value: Expression,
+    pub span: Span,
+}
+
 /// Space declaration: `space Name (implements Interface)? { ... }`
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SpaceDecl {
@@ -239,74 +249,155 @@ impl MaterialDecl {
     }
 
     pub fn get_opacity(&self) -> f64 {
-        if let Some(Expression::Measurement { value, .. }) = self.get_property("opacity") {
-            *value
-        } else if let Some(Expression::Literal { value, .. }) = self.get_property("opacity") {
-            *value as f64
-        } else {
-            match self.category() {
-                MaterialCategory::Insulator | MaterialCategory::Mask => 0.8,
-                _ => 1.0,
+        if let Some(prop) = self.get_property("opacity") {
+            match prop {
+                Expression::FloatLiteral { value, .. } => *value,
+                Expression::Measurement { value, .. } => *value,
+                Expression::Literal { value, .. } => *value as f64,
+                _ => {
+                    panic!(
+                        "Material '{}': opacity property has unexpected expression type: {:?}. Expected FloatLiteral, Measurement, or Literal.",
+                        self.name.name, prop
+                    );
+                }
             }
+        } else {
+            panic!(
+                "Material '{}': Missing required 'opacity' property. All materials must explicitly define opacity (0.0-1.0).",
+                self.name.name
+            );
         }
     }
 
     pub fn get_outline_opacity(&self) -> f64 {
-        if let Some(Expression::Measurement { value, .. }) = self.get_property("outline_opacity") {
-            *value
+        if let Some(prop) = self.get_property("outline_opacity") {
+            match prop {
+                Expression::FloatLiteral { value, .. } => *value,
+                Expression::Measurement { value, .. } => *value,
+                Expression::Literal { value, .. } => *value as f64,
+                _ => {
+                    panic!(
+                        "Material '{}': outline_opacity property has unexpected expression type: {:?}",
+                        self.name.name, prop
+                    );
+                }
+            }
         } else {
-            1.0
+            1.0  // Optional: default to fully opaque outlines
         }
     }
 
     pub fn get_roughness(&self) -> f64 {
-        if let Some(Expression::Measurement { value, .. }) = self.get_property("roughness") {
-            *value
+        if let Some(prop) = self.get_property("roughness") {
+            match prop {
+                Expression::FloatLiteral { value, .. } => *value,
+                Expression::Measurement { value, .. } => *value,
+                Expression::Literal { value, .. } => *value as f64,
+                _ => {
+                    panic!(
+                        "Material '{}': roughness property has unexpected expression type: {:?}",
+                        self.name.name, prop
+                    );
+                }
+            }
         } else {
-            0.5
+            panic!(
+                "Material '{}': Missing required 'roughness' property (0.0-1.0).",
+                self.name.name
+            );
         }
     }
 
     pub fn get_metallic(&self) -> f64 {
-        if let Some(Expression::Measurement { value, .. }) = self.get_property("metallic") {
-            *value
-        } else {
-            match self.category() {
-                MaterialCategory::Conductor => 0.9,
-                _ => 0.1,
+        if let Some(prop) = self.get_property("metallic") {
+            match prop {
+                Expression::FloatLiteral { value, .. } => *value,
+                Expression::Measurement { value, .. } => *value,
+                Expression::Literal { value, .. } => *value as f64,
+                _ => {
+                    panic!(
+                        "Material '{}': metallic property has unexpected expression type: {:?}",
+                        self.name.name, prop
+                    );
+                }
             }
+        } else {
+            panic!(
+                "Material '{}': Missing required 'metallic' property (0.0-1.0).",
+                self.name.name
+            );
         }
     }
 
     pub fn get_ior(&self) -> f64 {
-        if let Some(Expression::Measurement { value, .. }) = self.get_property("ior") {
-            *value
+        if let Some(prop) = self.get_property("ior") {
+            match prop {
+                Expression::FloatLiteral { value, .. } => *value,
+                Expression::Measurement { value, .. } => *value,
+                Expression::Literal { value, .. } => *value as f64,
+                _ => {
+                    panic!(
+                        "Material '{}': ior property has unexpected expression type: {:?}",
+                        self.name.name, prop
+                    );
+                }
+            }
         } else {
-            1.5
+            1.5  // Optional: default IOR for glass-like materials
         }
     }
 
     pub fn get_clearcoat(&self) -> f64 {
-        if let Some(Expression::Measurement { value, .. }) = self.get_property("clearcoat") {
-            *value
+        if let Some(prop) = self.get_property("clearcoat") {
+            match prop {
+                Expression::FloatLiteral { value, .. } => *value,
+                Expression::Measurement { value, .. } => *value,
+                Expression::Literal { value, .. } => *value as f64,
+                _ => {
+                    panic!(
+                        "Material '{}': clearcoat property has unexpected expression type: {:?}",
+                        self.name.name, prop
+                    );
+                }
+            }
         } else {
-            0.0
+            0.0  // Optional: no clearcoat by default
         }
     }
 
     pub fn get_clearcoat_roughness(&self) -> f64 {
-        if let Some(Expression::Measurement { value, .. }) = self.get_property("clearcoat_roughness") {
-            *value
+        if let Some(prop) = self.get_property("clearcoat_roughness") {
+            match prop {
+                Expression::FloatLiteral { value, .. } => *value,
+                Expression::Measurement { value, .. } => *value,
+                Expression::Literal { value, .. } => *value as f64,
+                _ => {
+                    panic!(
+                        "Material '{}': clearcoat_roughness property has unexpected expression type: {:?}",
+                        self.name.name, prop
+                    );
+                }
+            }
         } else {
-            0.1
+            0.1  // Optional: slight roughness if clearcoat is used
         }
     }
 
     pub fn get_subsurface(&self) -> f64 {
-        if let Some(Expression::Measurement { value, .. }) = self.get_property("subsurface") {
-            *value
+        if let Some(prop) = self.get_property("subsurface") {
+            match prop {
+                Expression::FloatLiteral { value, .. } => *value,
+                Expression::Measurement { value, .. } => *value,
+                Expression::Literal { value, .. } => *value as f64,
+                _ => {
+                    panic!(
+                        "Material '{}': subsurface property has unexpected expression type: {:?}",
+                        self.name.name, prop
+                    );
+                }
+            }
         } else {
-            0.0
+            0.0  // Optional: no subsurface scattering by default
         }
     }
 
@@ -418,6 +509,13 @@ pub struct TestConfig {
 pub struct ImportDecl {
     pub symbols: ImportSymbols,
     pub from: String,
+    pub span: Span,
+}
+
+/// Export declaration: `export { a, b, c }` (re-export symbols)
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ExportDecl {
+    pub symbols: Vec<CompactString>,
     pub span: Span,
 }
 

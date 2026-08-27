@@ -170,6 +170,25 @@ fn build_symbol_table(
             TopLevelItem::Enum(e) => {
                 symbol_table.register_enum(collector, e.clone());
             }
+            TopLevelItem::Const(c) => {
+                // Register constant declarations
+                // For now, treat them as zero-parameter functions that return their value
+                symbol_table.register_function(collector, hwc_parser::FunctionDecl {
+                    is_exported: c.is_exported,
+                    name: c.name.clone(),
+                    parameters: vec![],
+                    return_type: c.type_annotation.clone(),
+                    body: hwc_parser::Block {
+                        statements: vec![],
+                        span: c.span,
+                    },
+                    span: c.span,
+                });
+            }
+            TopLevelItem::Export(_) => {
+                // Export declarations are re-exports, they don't register new symbols
+                // Skip them during registration phase
+            }
             TopLevelItem::Space(s) => {
                 symbol_table.register_space(collector, s.clone());
             }
@@ -187,6 +206,10 @@ fn build_symbol_table(
             }
             TopLevelItem::Test(t) => {
                 symbol_table.register_test(collector, t.clone());
+            }
+            TopLevelItem::Statement(_) => {
+                // Top-level script statements are not physical design symbols;
+                // they are handled by `hwc run`, not `hwc build`.
             }
         }
     }

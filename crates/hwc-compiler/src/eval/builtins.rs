@@ -5,22 +5,69 @@ use super::value::{MeasurementValue, UnitDimension, Value};
 
 /// Check if a name is a standard built-in function
 pub fn is_builtin(name: &str) -> bool {
-    matches!(
-        name,
-        "println"
-            | "eprintln"
-            | "dbg"
-            | "assert"
-            | "min"
-            | "max"
-            | "abs"
-            | "sin"
-            | "cos"
-            | "tan"
-            | "sqrt"
-            | "rect_between"
-            | "pad"
-    )
+    get_builtin_id(name).is_some()
+}
+
+/// Map function name to standard builtin ID
+pub fn get_builtin_id(name: &str) -> Option<u8> {
+    match name {
+        "println" => Some(0x01),
+        "eprintln" => Some(0x02),
+        "dbg" => Some(0x03),
+        "assert" => Some(0x04),
+        "min" => Some(0x05),
+        "max" => Some(0x06),
+        "abs" => Some(0x07),
+        "sqrt" => Some(0x08),
+        "sin" => Some(0x09),
+        "cos" => Some(0x0A),
+        "tan" => Some(0x0B),
+        "rect_between" => Some(0x0C),
+        "range" => Some(0x0D),
+        _ => None,
+    }
+}
+
+/// Dispatch builtin by ID
+pub fn dispatch_builtin(id: u8, args: Vec<Value>) -> Result<Value, EvalError> {
+    match id {
+        0x01 => call_builtin("println", args),
+        0x02 => call_builtin("eprintln", args),
+        0x03 => call_builtin("dbg", args),
+        0x04 => call_builtin("assert", args),
+        0x05 => call_builtin("min", args),
+        0x06 => call_builtin("max", args),
+        0x07 => call_builtin("abs", args),
+        0x08 => call_builtin("sqrt", args),
+        0x09 => call_builtin("sin", args),
+        0x0A => call_builtin("cos", args),
+        0x0B => call_builtin("tan", args),
+        0x0C => call_builtin("rect_between", args),
+        0x0D => {
+            // Range builtin: args[0] = start, args[1] = end, args[2] = inclusive
+            let start = match args.first() {
+                Some(Value::Int(i)) => *i,
+                _ => 0,
+            };
+            let end = match args.get(1) {
+                Some(Value::Int(i)) => *i,
+                _ => 0,
+            };
+            let inclusive = match args.get(2) {
+                Some(Value::Bool(b)) => *b,
+                _ => false,
+            };
+            let range_vec: Vec<Value> = if inclusive {
+                (start..=end).map(Value::Int).collect()
+            } else {
+                (start..end).map(Value::Int).collect()
+            };
+            Ok(Value::Array(std::sync::Arc::new(range_vec)))
+        }
+        _ => Err(EvalError::General {
+            message: format!("Unknown builtin id 0x{:02X}", id),
+        }),
+    }
 }
 
 /// Call a built-in function with arguments
@@ -46,14 +93,27 @@ pub fn call_builtin(name: &str, args: Vec<Value>) -> Result<Value, EvalError> {
         }
 
         "eprintln" => {
-            let items: Vec<String> = args.iter().map(|a| format!("{}", a)).collect();
-            eprintln!("{}", items.join(" "));
+            if let Some(first) = args.first() {
+                if let Value::String(fmt_str) = first {
+                    let mut rendered = fmt_str.to_string();
+                    for (i, arg) in args.iter().skip(1).enumerate() {
+                        let placeholder = format!("{{{}}}", i);
+                        rendered = rendered.replace(&placeholder, &format!("{}", arg));
+                    }
+                    eprintln!("{}", rendered);
+                } else {
+                    let items: Vec<String> = args.iter().map(|a| format!("{}", a)).collect();
+                    eprintln!("{}", items.join(" "));
+                }
+            } else {
+                eprintln!();
+            }
             Ok(Value::Void)
         }
 
         "dbg" => {
             if let Some(val) = args.first() {
-                eprintln!("[DEBUG] {:?}", val);
+                eprintln!("[DBG] {:?}", val);
                 Ok(val.clone())
             } else {
                 Ok(Value::Void)

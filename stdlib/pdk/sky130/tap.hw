@@ -13,30 +13,54 @@ export struct TapLayout {
     bbox: BoundingBox,
 }
 
-export fn sky130_tap(type: TapType, at: Point2D, net: Net, size: Measurement = 300nm) -> TapLayout {
+export fn sky130_tap(type: TapType, at: Point2D, net: Net, size: Measurement) -> TapLayout {
     let implant_margin = 130nm
+    let half_size = size / 2
 
-    space.add_polygon(layer: "tap", rect: [at.x - size/2, at.y - size/2, size, size])
+    space.add_polygon(layer: "tap", rect: [at.x - half_size, at.y - half_size, size, size])
 
+    # ── Native match statement with dot notation ──
     match type {
-        TapType::P_Sub => {
-            space.add_polygon(layer: "psdm", rect: [at.x - size/2 - implant_margin, at.y - size/2 - implant_margin, size + (2*implant_margin), size + (2*implant_margin)])
-            space.add_polygon(layer: "diff", net: net, rect: [at.x - size/2, at.y - size/2, size, size])
+        TapType.P_Sub => {
+            space.add_polygon(
+                layer: "psdm",
+                rect:  [at.x - half_size - implant_margin, at.y - half_size - implant_margin, size + (2*implant_margin), size + (2*implant_margin)]
+            )
+            space.add_polygon(
+                layer: "pdiff",
+                net:   net,
+                rect:  [at.x - half_size, at.y - half_size, size, size]
+            )
         },
-        TapType::N_Well => {
-            space.add_polygon(layer: "nsdm", rect: [at.x - size/2 - implant_margin, at.y - size/2 - implant_margin, size + (2*implant_margin), size + (2*implant_margin)])
-            space.add_polygon(layer: "diff", net: net, rect: [at.x - size/2, at.y - size/2, size, size])
+        TapType.N_Well => {
+            space.add_polygon(
+                layer: "nsdm",
+                rect:  [at.x - half_size - implant_margin, at.y - half_size - implant_margin, size + (2*implant_margin), size + (2*implant_margin)]
+            )
+            space.add_polygon(
+                layer: "ndiff",
+                net:   net,
+                rect:  [at.x - half_size, at.y - half_size, size, size]
+            )
+        },
+        _ => {
+            # Catch-all fallback
         }
     }
 
-    space.add_polygon(layer: "li1",    net: net, rect: [at.x - size/2, at.y - size/2, size, size])
-    space.add_polygon(layer: "metal1", net: net, rect: [at.x - size/2, at.y - size/2, size, size])
+    space.add_polygon(layer: "li1",    net: net, rect: [at.x - half_size, at.y - half_size, size, size])
+    space.add_polygon(layer: "metal1", net: net, rect: [at.x - half_size, at.y - half_size, size, size])
 
-    space.add_contact(from: "diff", to: "li1",    at: at, diameter: 170nm, net: net)
-    space.add_contact(from: "li1",  to: "metal1", at: at, diameter: 170nm, net: net)
+    space.add_contact(from: "pdiff", to: "li1",    at: at, diameter: 170nm, net: net)
+    space.add_contact(from: "li1",   to: "metal1", at: at, diameter: 170nm, net: net)
 
     return TapLayout {
-        port: TransistorPort { center: at, x: at.x, y: at.y, layer: "metal1", net: net },
-        bbox: BoundingBox { min_x: at.x - size/2 - implant_margin, max_x: at.x + size/2 + implant_margin, min_y: at.y - size/2 - implant_margin, max_y: at.y + size/2 + implant_margin }
+        port: TransistorPort { center: at, layer: "metal1", net: net },
+        bbox: BoundingBox {
+            min_x: at.x - half_size - implant_margin,
+            max_x: at.x + half_size + implant_margin,
+            min_y: at.y - half_size - implant_margin,
+            max_y: at.y + half_size + implant_margin,
+        },
     }
 }

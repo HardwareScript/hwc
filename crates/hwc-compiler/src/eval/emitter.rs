@@ -9,8 +9,8 @@ use hwc_types::NetId;
 use rustc_hash::FxHashMap;
 use std::sync::Arc;
 
-use super::bytecode::Chunk;
 use super::context::EvalError;
+use super::opcodes::Chunk;
 use super::value::{FunctionId, MeasurementValue, Value};
 
 /// Native Emitter Trait bridging compile-time `space.*` operations directly to the physical DB.
@@ -36,6 +36,7 @@ pub trait SpaceEmitter: std::fmt::Debug {
         layer: &str,
         net: Option<NetId>,
         points: Vec<(i64, i64)>,
+        semantic_name: Option<CompactString>,
     ) -> Result<(), EvalError>;
 
     /// Add vertical contact/via pillar between layers.
@@ -47,6 +48,7 @@ pub trait SpaceEmitter: std::fmt::Debug {
         at: (i64, i64),
         diameter_pm: i64,
         net: Option<NetId>,
+        semantic_name: Option<CompactString>,
     ) -> Result<(), EvalError>;
 
     /// Bind semiconductor device contract for SPICE extraction.
@@ -88,6 +90,7 @@ pub struct PolygonRecord {
     pub layer: CompactString,
     pub net: Option<NetId>,
     pub points: Vec<(i64, i64)>,
+    pub semantic_name: Option<CompactString>,  // v0.3.0: User-defined name for BOM/netlist
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -98,6 +101,7 @@ pub struct ContactRecord {
     pub at: (i64, i64),
     pub diameter_pm: i64,
     pub net: Option<NetId>,
+    pub semantic_name: Option<CompactString>,  // v0.3.0: User-defined name for BOM/netlist
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -179,12 +183,14 @@ impl SpaceEmitter for MemoryEmitter {
         layer: &str,
         net: Option<NetId>,
         points: Vec<(i64, i64)>,
+        semantic_name: Option<CompactString>,
     ) -> Result<(), EvalError> {
         self.polygons.push(PolygonRecord {
             space_id,
             layer: CompactString::new(layer),
             net,
             points,
+            semantic_name,
         });
         Ok(())
     }
@@ -197,6 +203,7 @@ impl SpaceEmitter for MemoryEmitter {
         at: (i64, i64),
         diameter_pm: i64,
         net: Option<NetId>,
+        semantic_name: Option<CompactString>,
     ) -> Result<(), EvalError> {
         self.contacts.push(ContactRecord {
             space_id,
@@ -205,6 +212,7 @@ impl SpaceEmitter for MemoryEmitter {
             at,
             diameter_pm,
             net,
+            semantic_name,
         });
         Ok(())
     }

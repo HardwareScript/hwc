@@ -52,7 +52,7 @@ pub fn map_device_terminals(
             .ok();
 
         // Query the device contract from the SymbolTable to get terminal material declarations
-        let device_def = device_type_name
+        let _ = device_type_name
             .and_then(|name| symbol_table.get_device(name).ok());
 
         for (term_name, term_net) in &device.terminals {

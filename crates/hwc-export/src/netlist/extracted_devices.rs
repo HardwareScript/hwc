@@ -6,31 +6,31 @@ use hwc_compiler::SymbolTable;
 
 use super::types::{PhysicalNetlist, PhysicalNetlistGraph};
 
-fn format_measurement_spice(m: &MeasurementValue) -> String {
+fn format_measurement_spice_unit(m: &MeasurementValue) -> String {
     match m.dimension {
         UnitDimension::Length => {
-            let meters = (m.raw as f64) * 1e-12;
-            format!("{:.6e}", meters)
+            let um = (m.raw as f64) * 1e-6;
+            format!("{:.2}u", um)
         }
         UnitDimension::Resistance => {
             let ohms = (m.raw as f64) * 1e-6;
-            format!("{:.6e}", ohms)
+            format!("{:.2}", ohms)
         }
         UnitDimension::Capacitance => {
-            let farads = (m.raw as f64) * 1e-18;
-            format!("{:.6e}", farads)
+            let pf = (m.raw as f64) * 1e-6;
+            format!("{:.2}p", pf)
         }
         UnitDimension::Inductance => {
-            let henries = (m.raw as f64) * 1e-12;
-            format!("{:.6e}", henries)
+            let nh = (m.raw as f64) * 1e-3;
+            format!("{:.2}n", nh)
         }
         UnitDimension::Voltage => {
-            let volts = (m.raw as f64) * 1e-9;
-            format!("{:.6e}", volts)
+            let v = (m.raw as f64) * 1e-9;
+            format!("{:.2}V", v)
         }
         UnitDimension::Current => {
-            let amps = (m.raw as f64) * 1e-12;
-            format!("{:.6e}", amps)
+            let ua = (m.raw as f64) * 1e-6;
+            format!("{:.2}uA", ua)
         }
         _ => format!("{}", m.raw),
     }
@@ -40,7 +40,7 @@ fn format_measurement_spice(m: &MeasurementValue) -> String {
 pub fn emit_extracted_devices(
     netlist_str: &mut String,
     netlist: &PhysicalNetlist,
-    _symbol_table: &SymbolTable,
+    symbol_table: &SymbolTable,
     physical_graph: &PhysicalNetlistGraph,
 ) -> Result<(), Box<dyn std::error::Error>> {
     if netlist.devices.is_empty() {
@@ -52,7 +52,6 @@ pub fn emit_extracted_devices(
     netlist_str.push_str("* ========================================\n");
 
     for device in &netlist.devices {
-        let dev_type_lower = device.device_type.to_lowercase();
         let resolve_term = |name: &str| -> String {
             let key = (device.name.to_string(), name.to_string());
             if let Some(node) = physical_graph.device_nodes.get(&key) {
@@ -64,7 +63,107 @@ pub fn emit_extracted_devices(
             }
         };
 
-        if dev_type_lower.contains("nmos") || dev_type_lower == "nmos" {
+        // 1. Look up device definition from symbol table
+        let device_decl = symbol_table.get_device(&device.device_type).ok();
+
+        let mut prefix = "X".to_string();
+        let mut subcircuit_name = None;
+        let mut terminal_order: Vec<CompactString> = Vec::new();
+        let mut param_names: Vec<CompactString> = Vec::new();
+        let mut param_style = "named".to_string();
+
+        if let Some(decl) = device_decl {
+            for sec in &decl.sections {
+                if sec.name == "terminals" {
+                    for (_, expr) in &sec.fields {
+                        if let hwc_parser::ast::Expression::ArrayLiteral { elements, .. } = expr {
+                            for elem in elements {
+                                if let hwc_parser::ast::Expression::Variable { name, .. } = elem {
+                                    terminal_order.push(name.clone());
+                                }
+                            }
+                        }
+                    }
+                } else if sec.name == "spice" {
+                    for (fname, fexpr) in &sec.fields {
+                        match fname.as_str() {
+                            "prefix" => {
+                                if let hwc_parser::ast::Expression::StringLiteral { value, .. } = fexpr {
+                                    prefix = value.to_string();
+                                }
+                            }
+                            "subcircuit" => {
+                                if let hwc_parser::ast::Expression::StringLiteral { value, .. } = fexpr {
+                                    subcircuit_name = Some(value.to_string());
+                                }
+                            }
+                            "terminal_order" => {
+                                if let hwc_parser::ast::Expression::ArrayLiteral { elements, .. } = fexpr {
+                                    terminal_order.clear();
+                                    for elem in elements {
+                                        if let hwc_parser::ast::Expression::Variable { name, .. } = elem {
+                                            terminal_order.push(name.clone());
+                                        }
+                                    }
+                                }
+                            }
+                            "parameters" => {
+                                if let hwc_parser::ast::Expression::ArrayLiteral { elements, .. } = fexpr {
+                                    for elem in elements {
+                                        if let hwc_parser::ast::Expression::Variable { name, .. } = elem {
+                                            param_names.push(name.clone());
+                                        }
+                                    }
+                                }
+                            }
+                            "parameter_style" => {
+                                if let hwc_parser::ast::Expression::StringLiteral { value, .. } = fexpr {
+                                    param_style = value.to_string();
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+        }
+
+        if terminal_order.is_empty() {
+            terminal_order = device.terminals.keys().cloned().collect();
+        }
+
+        let dev_type_lower = device.device_type.to_lowercase();
+
+        // 2. If subcircuit is specified, emit subcircuit call (X-prefix)
+        if let Some(subckt) = subcircuit_name {
+            let terms_str = terminal_order
+                .iter()
+                .map(|t| resolve_term(t.as_str()))
+                .collect::<Vec<_>>()
+                .join(" ");
+
+            let mut params_str = String::new();
+            if !param_names.is_empty() {
+                for p in &param_names {
+                    if let Some(val) = device.params.get(p) {
+                        if param_style == "named" {
+                            params_str.push_str(&format!(" {}={}", p, format_measurement_spice_unit(val)));
+                        } else {
+                            params_str.push_str(&format!(" {}", format_measurement_spice_unit(val)));
+                        }
+                    }
+                }
+            } else {
+                for (p, val) in &device.params {
+                    params_str.push_str(&format!(" {}={}", p, format_measurement_spice_unit(val)));
+                }
+            }
+
+            netlist_str.push_str(&format!(
+                "{}{} {} {}{}\n",
+                prefix, device.name, terms_str, subckt, params_str
+            ));
+        } else if dev_type_lower.contains("nmos") || dev_type_lower == "nmos" {
             let d = resolve_term("D");
             let g = resolve_term("G");
             let s = resolve_term("S");
@@ -72,10 +171,10 @@ pub fn emit_extracted_devices(
 
             let mut params_str = String::new();
             if let Some(w) = device.params.get("W") {
-                params_str.push_str(&format!(" W={}", format_measurement_spice(w)));
+                params_str.push_str(&format!(" W={}", format_measurement_spice_unit(w)));
             }
             if let Some(l) = device.params.get("L") {
-                params_str.push_str(&format!(" L={}", format_measurement_spice(l)));
+                params_str.push_str(&format!(" L={}", format_measurement_spice_unit(l)));
             }
 
             netlist_str.push_str(&format!(
@@ -90,46 +189,31 @@ pub fn emit_extracted_devices(
 
             let mut params_str = String::new();
             if let Some(w) = device.params.get("W") {
-                params_str.push_str(&format!(" W={}", format_measurement_spice(w)));
+                params_str.push_str(&format!(" W={}", format_measurement_spice_unit(w)));
             }
             if let Some(l) = device.params.get("L") {
-                params_str.push_str(&format!(" L={}", format_measurement_spice(l)));
+                params_str.push_str(&format!(" L={}", format_measurement_spice_unit(l)));
             }
 
             netlist_str.push_str(&format!(
                 "X{} {} {} {} {} sky130_fd_pr__pmos_01v8{}\n",
                 device.name, d, g, s, b, params_str
             ));
-        } else if dev_type_lower.starts_with('r') || dev_type_lower.contains("res") {
-            let term_names: Vec<&CompactString> = device.terminals.keys().collect();
-            let n1 = term_names.get(0).map(|t| resolve_term(t.as_str())).unwrap_or_else(|| "0".into());
-            let n2 = term_names.get(1).map(|t| resolve_term(t.as_str())).unwrap_or_else(|| "0".into());
-            let val = device.params.get("R").or_else(|| device.params.get("value"))
-                .map(format_measurement_spice)
-                .unwrap_or_else(|| "1000".into());
-            netlist_str.push_str(&format!("R{} {} {} {}\n", device.name, n1, n2, val));
-        } else if dev_type_lower.starts_with('c') || dev_type_lower.contains("cap") {
-            let term_names: Vec<&CompactString> = device.terminals.keys().collect();
-            let n1 = term_names.get(0).map(|t| resolve_term(t.as_str())).unwrap_or_else(|| "0".into());
-            let n2 = term_names.get(1).map(|t| resolve_term(t.as_str())).unwrap_or_else(|| "0".into());
-            let val = device.params.get("C").or_else(|| device.params.get("value"))
-                .map(format_measurement_spice)
-                .unwrap_or_else(|| "1e-12".into());
-            netlist_str.push_str(&format!("C{} {} {} {}\n", device.name, n1, n2, val));
         } else {
             // Generic subcircuit call
-            let mut terms = Vec::new();
-            for (t_name, _) in &device.terminals {
-                terms.push(resolve_term(t_name.as_str()));
-            }
+            let terms_str = terminal_order
+                .iter()
+                .map(|t| resolve_term(t.as_str()))
+                .collect::<Vec<_>>()
+                .join(" ");
             let mut params = Vec::new();
             for (p_name, p_val) in &device.params {
-                params.push(format!("{}={}", p_name, format_measurement_spice(p_val)));
+                params.push(format!("{}={}", p_name, format_measurement_spice_unit(p_val)));
             }
             netlist_str.push_str(&format!(
                 "X{} {} {} {}\n",
                 device.name,
-                terms.join(" "),
+                terms_str,
                 device.device_type,
                 params.join(" ")
             ));

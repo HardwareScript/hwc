@@ -391,6 +391,10 @@ pub enum Value {
         variant_name: CompactString,
         payload: Option<Arc<Vec<Value>>>,
     },
+    EnumType {
+        name: CompactString,
+        variants: Arc<rustc_hash::FxHashMap<CompactString, Value>>,
+    },
     FunctionRef(FunctionId),
 
     // ── Hardware Domain Handles ──
@@ -429,6 +433,7 @@ impl Value {
             Value::Array(_) => "Array",
             Value::StructInstance { .. } => "StructInstance",
             Value::EnumVariant { .. } => "EnumVariant",
+            Value::EnumType { .. } => "EnumType",
             Value::FunctionRef(_) => "Function",
             Value::NetHandle(_) => "Net",
             Value::SpaceHandle(_) => "Space",
@@ -440,6 +445,53 @@ impl Value {
     pub fn coerce_to_point2d(&self) -> Result<Value, EvalError> {
         match self {
             Value::Point2D { .. } => Ok(self.clone()),
+            Value::StructInstance { name, fields } if name.as_str() == "Point2D" => {
+                // Extract x and y fields from the Point2D struct
+                let x_val = fields.iter()
+                    .find(|(k, _)| k.as_str() == "x")
+                    .map(|(_, v)| v)
+                    .ok_or_else(|| EvalError::General {
+                        message: "Point2D struct missing 'x' field".to_string(),
+                    })?;
+                let y_val = fields.iter()
+                    .find(|(k, _)| k.as_str() == "y")
+                    .map(|(_, v)| v)
+                    .ok_or_else(|| EvalError::General {
+                        message: "Point2D struct missing 'y' field".to_string(),
+                    })?;
+                
+                match (x_val, y_val) {
+                    (Value::Measurement(mx), Value::Measurement(my)) 
+                        if mx.dimension == UnitDimension::Length && my.dimension == UnitDimension::Length =>
+                    {
+                        Ok(Value::Point2D {
+                            x: mx.raw as i64,
+                            y: my.raw as i64,
+                        })
+                    }
+                    (Value::Int(ix), Value::Int(iy)) => {
+                        Ok(Value::Point2D {
+                            x: *ix,
+                            y: *iy,
+                        })
+                    }
+                    _ => Err(EvalError::CoercionFailed {
+                        expected: "Point2D with Length measurements",
+                        found: format!("Point2D {{ x: {:?}, y: {:?} }}", x_val, y_val),
+                        hint: "Point2D fields must be Length measurements",
+                    })
+                }
+            }
+            Value::StructInstance { fields, .. } if fields.iter().any(|(k, _)| k.as_str() == "center") => {
+                if let Some((_, center_val)) = fields.iter().find(|(k, _)| k.as_str() == "center") {
+                    center_val.coerce_to_point2d()
+                } else {
+                    Err(EvalError::TypeMismatch {
+                        expected: "Point2D or struct with 'center'",
+                        found: format!("{:?}", self),
+                    })
+                }
+            }
             Value::Array(items) => {
                 if items.len() != 2 {
                     return Err(EvalError::CoercionFailed {
@@ -456,6 +508,12 @@ impl Value {
                         Ok(Value::Point2D {
                             x: m.raw as i64,
                             y: n.raw as i64,
+                        })
+                    }
+                    (Value::Int(m), Value::Int(n)) => {
+                        Ok(Value::Point2D {
+                            x: *m,
+                            y: *n,
                         })
                     }
                     (a, b) => Err(EvalError::CoercionFailed {
@@ -640,6 +698,7 @@ impl Value {
     }
 
     pub fn div(&self, other: &Value) -> Result<Value, EvalError> {
+        eprintln!("[VALUE DEBUG] Division: {:?} / {:?}", self.type_name(), other.type_name());
         match (self, other) {
             (Value::Int(a), Value::Int(b)) => {
                 if *b == 0 {
@@ -666,10 +725,13 @@ impl Value {
                 Ok(Value::Measurement(m.mul_scalar(1.0 / n)))
             }
             (Value::Measurement(a), Value::Measurement(b)) => a.div_measurement(*b),
-            (a, b) => Err(EvalError::TypeMismatch {
-                expected: "Dividable types",
-                found: format!("{} / {}", a.type_name(), b.type_name()),
-            }),
+            (a, b) => {
+                eprintln!("[VALUE DEBUG] Division failed - detailed: {:?} / {:?}", a, b);
+                Err(EvalError::TypeMismatch {
+                    expected: "Dividable types",
+                    found: format!("{} / {}", a.type_name(), b.type_name()),
+                })
+            }
         }
     }
 
@@ -711,7 +773,150 @@ impl std::fmt::Display for Value {
             Value::Int(i) => write!(f, "{}", i),
             Value::Float(fl) => write!(f, "{}", fl),
             Value::String(s) => write!(f, "{}", s),
-            Value::Measurement(m) => write!(f, "{:?}({})", m.dimension, m.raw),
+            Value::Measurement(m) => {
+                // Human-readable engineering unit formatting
+                match m.dimension {
+                    UnitDimension::Length => {
+                        let pm = m.raw;
+                        if pm.abs() >= 1_000_000_000_000 {
+                            write!(f, "{:.2}m", pm as f64 / 1e12)
+                        } else if pm.abs() >= 1_000_000_000 {
+                            write!(f, "{:.2}mm", pm as f64 / 1e9)
+                        } else if pm.abs() >= 1_000_000 {
+                            write!(f, "{:.2}um", pm as f64 / 1e6)
+                        } else if pm.abs() >= 1_000 {
+                            write!(f, "{:.2}nm", pm as f64 / 1e3)
+                        } else {
+                            write!(f, "{}pm", pm)
+                        }
+                    }
+                    UnitDimension::Voltage => {
+                        let nv = m.raw;
+                        if nv.abs() >= 1_000_000_000 {
+                            write!(f, "{:.2}kV", nv as f64 / 1e12)
+                        } else if nv.abs() >= 1_000_000 {
+                            write!(f, "{:.2}V", nv as f64 / 1e9)
+                        } else if nv.abs() >= 1_000 {
+                            write!(f, "{:.2}mV", nv as f64 / 1e6)
+                        } else {
+                            write!(f, "{:.2}uV", nv as f64 / 1e3)
+                        }
+                    }
+                    UnitDimension::Current => {
+                        let pa = m.raw;
+                        if pa.abs() >= 1_000_000_000_000 {
+                            write!(f, "{:.2}A", pa as f64 / 1e12)
+                        } else if pa.abs() >= 1_000_000_000 {
+                            write!(f, "{:.2}mA", pa as f64 / 1e9)
+                        } else if pa.abs() >= 1_000_000 {
+                            write!(f, "{:.2}uA", pa as f64 / 1e6)
+                        } else if pa.abs() >= 1_000 {
+                            write!(f, "{:.2}nA", pa as f64 / 1e3)
+                        } else {
+                            write!(f, "{}pA", pa)
+                        }
+                    }
+                    UnitDimension::Resistance => {
+                        let uohm = m.raw;
+                        if uohm.abs() >= 1_000_000_000 {
+                            write!(f, "{:.2}MOhm", uohm as f64 / 1e9)
+                        } else if uohm.abs() >= 1_000_000 {
+                            write!(f, "{:.2}kOhm", uohm as f64 / 1e6)
+                        } else if uohm.abs() >= 1_000 {
+                            write!(f, "{:.2}Ohm", uohm as f64 / 1e3)
+                        } else {
+                            write!(f, "{:.2}mOhm", uohm as f64 / 1.0)
+                        }
+                    }
+                    UnitDimension::Capacitance => {
+                        let af = m.raw;
+                        if af.abs() >= 1_000_000_000_000 {
+                            write!(f, "{:.2}uF", af as f64 / 1e18)
+                        } else if af.abs() >= 1_000_000_000 {
+                            write!(f, "{:.2}nF", af as f64 / 1e15)
+                        } else if af.abs() >= 1_000_000 {
+                            write!(f, "{:.2}pF", af as f64 / 1e12)
+                        } else if af.abs() >= 1_000 {
+                            write!(f, "{:.2}fF", af as f64 / 1e3)
+                        } else {
+                            write!(f, "{}aF", af)
+                        }
+                    }
+                    UnitDimension::Inductance => {
+                        let ph = m.raw;
+                        if ph.abs() >= 1_000_000_000 {
+                            write!(f, "{:.2}mH", ph as f64 / 1e12)
+                        } else if ph.abs() >= 1_000_000 {
+                            write!(f, "{:.2}uH", ph as f64 / 1e9)
+                        } else if ph.abs() >= 1_000 {
+                            write!(f, "{:.2}nH", ph as f64 / 1e6)
+                        } else {
+                            write!(f, "{}pH", ph)
+                        }
+                    }
+                    UnitDimension::Time => {
+                        let fs = m.raw;
+                        if fs.abs() >= 1_000_000_000_000 {
+                            write!(f, "{:.2}s", fs as f64 / 1e15)
+                        } else if fs.abs() >= 1_000_000_000 {
+                            write!(f, "{:.2}ms", fs as f64 / 1e12)
+                        } else if fs.abs() >= 1_000_000 {
+                            write!(f, "{:.2}us", fs as f64 / 1e9)
+                        } else if fs.abs() >= 1_000 {
+                            write!(f, "{:.2}ns", fs as f64 / 1e6)
+                        } else {
+                            write!(f, "{}fs", fs)
+                        }
+                    }
+                    UnitDimension::Frequency => {
+                        let hz = m.raw as f64;
+                        if hz.abs() >= 1e9 {
+                            write!(f, "{:.2}GHz", hz / 1e9)
+                        } else if hz.abs() >= 1e6 {
+                            write!(f, "{:.2}MHz", hz / 1e6)
+                        } else if hz.abs() >= 1e3 {
+                            write!(f, "{:.2}kHz", hz / 1e3)
+                        } else {
+                            write!(f, "{:.2}Hz", hz)
+                        }
+                    }
+                    UnitDimension::Power => {
+                        let pw = m.raw;
+                        if pw.abs() >= 1_000_000_000 {
+                            write!(f, "{:.2}mW", pw as f64 / 1e12)
+                        } else if pw.abs() >= 1_000_000 {
+                            write!(f, "{:.2}uW", pw as f64 / 1e9)
+                        } else if pw.abs() >= 1_000 {
+                            write!(f, "{:.2}nW", pw as f64 / 1e6)
+                        } else {
+                            write!(f, "{}pW", pw)
+                        }
+                    }
+                    UnitDimension::Angle => {
+                        let udeg = m.raw;
+                        write!(f, "{:.2}deg", udeg as f64 / 1e6)
+                    }
+                    UnitDimension::Temperature => {
+                        let mk = m.raw;
+                        write!(f, "{:.2}K", mk as f64 / 1e3)
+                    }
+                    UnitDimension::Area => {
+                        let pm2 = m.raw;
+                        if pm2.abs() >= 1_000_000_000_000_000_000_000_000 {
+                            write!(f, "{:.2}m^2", pm2 as f64 / 1e24)
+                        } else if pm2.abs() >= 1_000_000_000_000_000_000 {
+                            write!(f, "{:.2}mm^2", pm2 as f64 / 1e18)
+                        } else if pm2.abs() >= 1_000_000_000_000 {
+                            write!(f, "{:.2}um^2", pm2 as f64 / 1e12)
+                        } else if pm2.abs() >= 1_000_000 {
+                            write!(f, "{:.2}nm^2", pm2 as f64 / 1e6)
+                        } else {
+                            write!(f, "{}pm^2", pm2)
+                        }
+                    }
+                    _ => write!(f, "{:?}({})", m.dimension, m.raw),
+                }
+            }
             Value::Point2D { x, y } => write!(f, "Point2D[{}, {}]", x, y),
             Value::Point3D { x, y, z } => write!(f, "Point3D[{}, {}, {}]", x, y, z),
             Value::Vector2D { dx, dy } => write!(f, "Vector2D[{}, {}]", dx, dy),
@@ -755,6 +960,7 @@ impl std::fmt::Display for Value {
                 Some(p) => write!(f, "{}::{}({:?})", enum_name, variant_name, p),
                 None => write!(f, "{}::{}", enum_name, variant_name),
             },
+            Value::EnumType { name, .. } => write!(f, "<enum {}>", name),
             Value::FunctionRef(id) => write!(f, "<fn {:?}>", id),
             Value::NetHandle(id) => write!(f, "<net #{}>", id.0),
             Value::SpaceHandle(id) => write!(f, "<space #{}>", id.0),

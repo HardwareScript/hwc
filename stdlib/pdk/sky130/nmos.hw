@@ -5,8 +5,6 @@ import { SKY130_RULES } from @std/pdk/sky130/rules
 
 export struct TransistorPort {
     center: Point2D,
-    x: Measurement,
-    y: Measurement,
     layer: String,
     net: Net,
 }
@@ -99,10 +97,10 @@ export fn sky130_nmos(
     }
 
     return NMOSLayout {
-        source:    TransistorPort { center: Point2D { x: src_x, y: at.y }, x: src_x, y: at.y, layer: "metal1", net: source },
-        drain:     TransistorPort { center: Point2D { x: drn_x, y: at.y }, x: drn_x, y: at.y, layer: "li1",    net: drain },
-        gate:      TransistorPort { center: Point2D { x: gate_x, y: at.y }, x: gate_x, y: at.y, layer: "poly", net: gate },
-        gate_head: TransistorPort { center: Point2D { x: gate_x, y: head_y + gate_head_size/2 }, x: gate_x, y: head_y + gate_head_size/2, layer: "poly", net: gate },
+        source:    TransistorPort { center: Point2D { x: src_x, y: at.y }, layer: "metal1", net: source },
+        drain:     TransistorPort { center: Point2D { x: drn_x, y: at.y }, layer: "li1",    net: drain },
+        gate:      TransistorPort { center: Point2D { x: gate_x, y: at.y }, layer: "poly", net: gate },
+        gate_head: TransistorPort { center: Point2D { x: gate_x, y: head_y + gate_head_size/2 }, layer: "poly", net: gate },
         bbox:      BoundingBox { min_x: at.x - diff_len/2, max_x: at.x + diff_len/2, min_y: at.y - W/2 - poly_overhang, max_y: head_y + gate_head_size },
         num_vias:  num_vias
     }

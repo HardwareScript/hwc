@@ -50,6 +50,17 @@ impl Parser {
             let start_item_pos = self.current_span().start;
             let is_exported = if self.check(&Token::Export) {
                 self.advance();
+                // Check if this is `export { ... }` re-export syntax
+                if self.check(&Token::OpenBrace) {
+                    match self.parse_export_list(start_item_pos) {
+                        Ok(exp) => items.push(TopLevelItem::Export(exp)),
+                        Err(e) => {
+                            collector.report(e);
+                            self.synchronize_top_level();
+                        }
+                    }
+                    continue;
+                }
                 true
             } else {
                 false
@@ -86,6 +97,15 @@ impl Parser {
                 Some(Token::Enum) => {
                     match self.parse_enum_decl(is_exported, start_item_pos) {
                         Ok(en) => items.push(TopLevelItem::Enum(en)),
+                        Err(e) => {
+                            collector.report(e);
+                            self.synchronize_top_level();
+                        }
+                    }
+                }
+                Some(Token::Const) => {
+                    match self.parse_const_decl(is_exported, start_item_pos) {
+                        Ok(c) => items.push(TopLevelItem::Const(c)),
                         Err(e) => {
                             collector.report(e);
                             self.synchronize_top_level();
@@ -146,13 +166,15 @@ impl Parser {
                         }
                     }
                 }
-                Some(other) => {
-                    let err = self.error(&format!(
-                        "Unexpected token '{}' at top level. Expected import, fn, struct, enum, space, module, material, profile, device, or test.",
-                        other
-                    ));
-                    collector.report(err);
-                    self.synchronize_top_level();
+                Some(_) => {
+                    // Top-level statement (e.g., let, println(...), for, if, etc.)
+                    match self.parse_statement() {
+                        Ok(stmt) => items.push(TopLevelItem::Statement(stmt)),
+                        Err(e) => {
+                            collector.report(e);
+                            self.synchronize_top_level();
+                        }
+                    }
                 }
                 None => break,
             }
@@ -190,7 +212,13 @@ impl Parser {
                     | Token::Material
                     | Token::Profile
                     | Token::Device
-                    | Token::Test => break,
+                    | Token::Test
+                    | Token::Let
+                    | Token::For
+                    | Token::If
+                    | Token::Match
+                    | Token::Assert
+                    | Token::Semicolon => break,
                     _ => self.advance(),
                 }
             } else {

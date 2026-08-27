@@ -15,6 +15,9 @@ pub fn extract_via_stacks(
     graph: &mut PhysicalNetlistGraph,
     extracted_layer_nodes: &mut FxHashMap<(String, String), Vec<ExtractedClusterNode>>,
 ) {
+    eprintln!("[VIA STACKS] Starting via stack extraction...");
+    eprintln!("[VIA STACKS] Total contacts in space: {}", space.contacts.len());
+    
     // Group contacts by net
     let mut contacts_by_net: FxHashMap<String, Vec<&ContactMetadata>> = FxHashMap::default();
     for contact in &space.contacts {
@@ -27,13 +30,21 @@ pub fn extract_via_stacks(
             }
         }
     }
+    
+    eprintln!("[VIA STACKS] Contacts grouped by net: {} nets", contacts_by_net.len());
+    for (net_name, contacts) in &contacts_by_net {
+        eprintln!("[VIA STACKS]   Net '{}': {} contacts", net_name, contacts.len());
+    }
 
     // Process spatial clusters per net
     for (net_name, net_contacts) in contacts_by_net {
+        eprintln!("[VIA STACKS] Processing net '{}' with {} contacts", net_name, net_contacts.len());
         let cluster_groups = cluster_contacts_spatially(&net_contacts, VIA_CLUSTER_RADIUS_NM);
         let total_clusters = cluster_groups.len();
+        eprintln!("[VIA STACKS]   Formed {} spatial clusters", total_clusters);
 
         for (cluster_idx, cluster_contacts) in cluster_groups.into_iter().enumerate() {
+            eprintln!("[VIA STACKS]   Cluster {}: {} contacts", cluster_idx, cluster_contacts.len());
             let mut sum_x = 0.0;
             let mut sum_y = 0.0;
             for c in &cluster_contacts {
@@ -55,14 +66,24 @@ pub fn extract_via_stacks(
                         .push(contact);
                 }
             }
+            eprintln!("[VIA STACKS]     Transitions: {}", transitions.len());
 
             for ((from_layer, to_layer), contacts_in_stack) in transitions {
                 let num_vias = contacts_in_stack.len();
+                eprintln!("[VIA STACKS]     Transition {}→{}: {} vias", from_layer, to_layer, num_vias);
                 if let Some(first_contact) = contacts_in_stack.first() {
+                    eprintln!("[VIA STACKS]       Material: {}", first_contact.material_name);
+                    eprintln!("[VIA STACKS]       Drill diameter: {:?}", first_contact.drill_diameter_nm);
+                    
                     if let Some(mat_id) = space.material_registry.get_id(&first_contact.material_name) {
+                        eprintln!("[VIA STACKS]       ✓ Material ID found");
                         if let Some(mat_props) = space.material_registry.get_physical_props(mat_id) {
+                            eprintln!("[VIA STACKS]       ✓ Material props found");
                             if let Some(contact_resistance) = mat_props.get("contact_resistance") {
+                                eprintln!("[VIA STACKS]       ✓ Contact resistance: {}", contact_resistance);
                                 if let Some(drill_diameter_nm) = first_contact.drill_diameter_nm {
+                                    eprintln!("[VIA STACKS]       ✓ Processing via resistance calculation...");
+                                    
                                     let drill_radius_cm = (drill_diameter_nm as f64 * 1e-9 * 100.0) / 2.0;
                                     let via_area_cm2 = std::f64::consts::PI * drill_radius_cm * drill_radius_cm;
 
@@ -139,9 +160,17 @@ pub fn extract_via_stacks(
                                             });
                                         }
                                     }
+                                } else {
+                                    eprintln!("[VIA STACKS]       ✗ drill_diameter_nm is None");
                                 }
+                            } else {
+                                eprintln!("[VIA STACKS]       ✗ No contact_resistance property");
                             }
+                        } else {
+                            eprintln!("[VIA STACKS]       ✗ Material props not found");
                         }
+                    } else {
+                        eprintln!("[VIA STACKS]       ✗ Material ID not found");
                     }
                 }
             }

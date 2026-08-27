@@ -1,7 +1,7 @@
 //! HardwareScript v0.3.0 Statement and Block Parser
 
 use crate::ast::{
-    AssignmentOperator, Block, ElseBranch, Statement, TypeExpr,
+    AssignmentOperator, Block, ElseBranch, MatchArm, Pattern, Statement, TypeExpr,
 };
 use crate::lexer::Token;
 use crate::parser::{ParseError, Parser};
@@ -53,6 +53,8 @@ impl Parser {
             self.parse_if_statement(start_pos)
         } else if self.check(&Token::For) {
             self.parse_for_statement(start_pos)
+        } else if self.check(&Token::Match) {
+            self.parse_match_statement(start_pos)
         } else if self.check(&Token::Return) {
             self.parse_return_statement(start_pos)
         } else if self.check(&Token::Assert) {
@@ -275,6 +277,59 @@ impl Parser {
             intent,
             body,
             span: crate::ast::Span::new(start_pos, end_pos),
+        })
+    }
+
+    /// Parse match statement: `match target { pattern => { ... }, ... }`
+    fn parse_match_statement(&mut self, start_pos: usize) -> Result<Statement, ParseError> {
+        self.expect_token(&Token::Match, "Expected 'match'")?;
+        let target = self.parse_expression()?;
+        self.expect_token(&Token::OpenBrace, "Expected '{' after match target")?;
+
+        let mut arms = Vec::new();
+
+        while !self.check(&Token::CloseBrace) && !self.is_at_end() {
+            let arm_start = self.current_span().start;
+
+            // 1. Parse pattern: either `_` or an expression (like `TapType.P_Sub`)
+            let pattern = if let Some(Token::Identifier(id)) = self.current().map(|t| &t.token) {
+                if id.as_str() == "_" {
+                    let span = self.current_span();
+                    self.advance();
+                    Pattern::Wildcard { span }
+                } else {
+                    Pattern::Expr(self.parse_expression()?)
+                }
+            } else {
+                Pattern::Expr(self.parse_expression()?)
+            };
+
+            // 2. Expect `=>` fat arrow
+            self.expect_token(&Token::FatArrow, "Expected '=>' after match pattern")?;
+
+            // 3. Parse block body `{ ... }`
+            let body = self.parse_block()?;
+
+            let arm_end = body.span.end;
+
+            // Optional trailing comma between match arms
+            if self.check(&Token::Comma) {
+                self.advance();
+            }
+
+            arms.push(MatchArm {
+                pattern,
+                body,
+                span: crate::ast::Span::new(arm_start, arm_end),
+            });
+        }
+
+        let close_span = self.expect_token(&Token::CloseBrace, "Expected '}' to close match")?;
+
+        Ok(Statement::Match {
+            target,
+            arms,
+            span: crate::ast::Span::new(start_pos, close_span.end),
         })
     }
 

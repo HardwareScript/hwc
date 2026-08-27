@@ -63,6 +63,24 @@ pub fn add_substrate(
         "[SUBSTRATE MESH] Processing {} unified copper pools",
         copper_contours.len()
     );
+    
+    // v0.3.0 DEBUG: Check if we're missing dielectric layers
+    eprintln!("[DIELECTRIC DEBUG] Checking stackup for non-routable dielectric layers...");
+    for layer in &space.stackup_layers {
+        let material_name = &layer.material_name;
+        eprintln!("[DIELECTRIC DEBUG] Layer '{}': material='{}', z_range=[{}, {}]nm, thickness={}nm", 
+            layer.name, material_name, layer.z_bottom, layer.z_top, layer.z_top - layer.z_bottom);
+        
+        // Check if this is a dielectric/insulator layer
+        if let Ok(mat_def) = symbol_table.get_material(material_name) {
+            if mat_def.category() == hwc_parser::ast::MaterialCategory::Insulator {
+                eprintln!("[DIELECTRIC DEBUG] ⚠️  INSULATOR LAYER '{}' (material: '{}') is NOT being exported to 3D!", 
+                    layer.name, material_name);
+                eprintln!("[DIELECTRIC DEBUG]     This layer should appear as transparent glass in the GLB file");
+                eprintln!("[DIELECTRIC DEBUG]     Current behavior: Only conductive layers are exported");
+            }
+        }
+    }
 
     // Extrude each unified copper contour into 3D meshes
     for contour_data in copper_contours {
@@ -121,6 +139,64 @@ pub fn add_substrate(
                 material_name,
                 space.view,
             ));
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // v0.3.0 FIX: EXPORT DIELECTRIC LAYERS (Transparent Glass Slabs)
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Issue: Insulator layers (ILD0, ILD1 - Silicon Dioxide) were not being exported,
+    // causing the "missing glass" visualization bug. These layers fill the space between
+    // conductive layers and should appear as transparent slabs in the 3D view.
+    eprintln!("[DIELECTRIC EXPORT] Generating transparent dielectric layer slabs...");
+    
+    for layer in &space.stackup_layers {
+        let material_name = &layer.material_name;
+        
+        // Only export insulator layers with non-zero thickness
+        if layer.thickness == 0 {
+            continue;
+        }
+        
+        // Check if this is an insulator/dielectric layer
+        if let Ok(mat_def) = symbol_table.get_material(material_name) {
+            if mat_def.category() == hwc_parser::ast::MaterialCategory::Insulator {
+                let z_min_mm = layer.z_bottom as f64 / 1_000_000.0;
+                let depth_mm = (layer.z_top - layer.z_bottom) as f64 / 1_000_000.0;
+                
+                eprintln!(
+                    "[DIELECTRIC EXPORT] Layer '{}' (material: '{}'): Z={}→{}nm (thickness={}nm)",
+                    layer.name, material_name, layer.z_bottom, layer.z_top, layer.thickness
+                );
+                
+                // Create a full-space rectangular slab for the dielectric layer
+                // This represents the continuous glass/oxide layer between conductors
+                let space_width_mm = space.dimensions.width_nm as f64 / 1_000_000.0;
+                let space_height_mm = space.dimensions.height_nm as f64 / 1_000_000.0;
+                
+                // Create rectangular slab covering entire space XY footprint
+                let dielectric_rect: Vec<(f64, f64)> = vec![
+                    (0.0, 0.0),
+                    (space_width_mm, 0.0),
+                    (space_width_mm, space_height_mm),
+                    (0.0, space_height_mm),
+                ];
+                
+                meshes.push(extrude_polygon_mesh(
+                    &format!("Dielectric_{}", layer.name),
+                    &dielectric_rect,
+                    &[], // No holes in this simple version (vias punch through visually)
+                    z_min_mm,
+                    depth_mm,
+                    material_name,
+                    space.view,
+                ));
+                
+                eprintln!(
+                    "[DIELECTRIC EXPORT] ✓ Exported dielectric slab: '{}' ({}x{}mm, depth={}mm)",
+                    layer.name, space_width_mm, space_height_mm, depth_mm
+                );
+            }
         }
     }
 

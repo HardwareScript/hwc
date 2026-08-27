@@ -88,12 +88,15 @@ impl super::ModuleResolver {
             TopLevelItem::Function(f) => f.is_exported,
             TopLevelItem::Struct(s) => s.is_exported,
             TopLevelItem::Enum(e) => e.is_exported,
+            TopLevelItem::Const(c) => c.is_exported,
+            TopLevelItem::Export(_) => true, // Export declarations are always exported
             TopLevelItem::Space(_) => true,
             TopLevelItem::Module(_) => true,
             TopLevelItem::Material(m) => m.is_exported,
             TopLevelItem::Profile(p) => p.is_exported,
             TopLevelItem::Device(d) => d.is_exported,
             TopLevelItem::Test(_) => true,
+            TopLevelItem::Statement(_) => false,
         }
     }
 
@@ -102,12 +105,18 @@ impl super::ModuleResolver {
             TopLevelItem::Function(f) => f.name.name.as_str() == name,
             TopLevelItem::Struct(s) => s.name.name.as_str() == name,
             TopLevelItem::Enum(e) => e.name.name.as_str() == name,
+            TopLevelItem::Const(c) => c.name.name.as_str() == name,
+            TopLevelItem::Export(exp) => {
+                // Export declarations export symbols, check if name is in the list
+                exp.symbols.iter().any(|sym| sym.as_str() == name)
+            }
             TopLevelItem::Space(sp) => sp.name.name.as_str() == name,
             TopLevelItem::Module(m) => m.name.name.as_str() == name,
             TopLevelItem::Material(m) => m.name.name.as_str() == name,
             TopLevelItem::Profile(p) => p.name.name.as_str() == name,
             TopLevelItem::Device(d) => d.name.name.as_str() == name,
             TopLevelItem::Test(t) => t.name.name.as_str() == name,
+            TopLevelItem::Statement(_) => false,
         }
     }
 
@@ -116,12 +125,33 @@ impl super::ModuleResolver {
             TopLevelItem::Function(f) => symbol_table.register_import_function(f.clone()),
             TopLevelItem::Struct(s) => symbol_table.register_import_struct(s.clone()),
             TopLevelItem::Enum(e) => symbol_table.register_import_enum(e.clone()),
+            TopLevelItem::Const(c) => {
+                // Register constants - for now, treat them similar to variables
+                // TODO: Proper constant handling in symbol table
+                symbol_table.register_import_function(hwc_parser::FunctionDecl {
+                    is_exported: c.is_exported,
+                    name: c.name.clone(),
+                    parameters: vec![],
+                    return_type: c.type_annotation.clone(),
+                    body: hwc_parser::Block {
+                        statements: vec![],
+                        span: c.span,
+                    },
+                    span: c.span,
+                });
+            }
+            TopLevelItem::Export(_) => {
+                // Export declarations don't register themselves, they re-export other symbols
+                // The symbols they export should be resolved when needed
+            }
             TopLevelItem::Space(sp) => symbol_table.register_import_space(sp.clone()),
             TopLevelItem::Module(m) => symbol_table.register_import_module(m.clone()),
             TopLevelItem::Material(m) => symbol_table.register_import_material(m.clone()),
             TopLevelItem::Profile(p) => symbol_table.register_import_profile(p.clone()),
             TopLevelItem::Device(d) => symbol_table.register_import_device(d.clone()),
             TopLevelItem::Test(t) => symbol_table.register_import_test(t.clone()),
+            TopLevelItem::Statement(_) => {}
         }
     }
 }
+

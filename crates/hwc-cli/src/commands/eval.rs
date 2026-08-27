@@ -1,67 +1,39 @@
 //! `hwc eval` Command
 //!
-//! Executes HardwareScript v0.3.0 comptime functions, evaluates `println()` / `dbg()` diagnostics,
-//! and runs the `hwc-eval` virtual machine without physical meshing (< 10ms).
+//! Quick interactive expression evaluator (like `node -e` or `python -c`)
+//! or comptime function evaluator.
+//!
+//! Example:
+//!   `hwc eval "4.0um / 1.41um * 350.0"` -> `992.9078 Ohm`
+//!   `hwc eval "1 + 1"` -> `2`
+//!   `hwc eval file.hw --fn test_math`
 
 use compact_str::CompactString;
-use hwc_compiler::eval::{EvaluationContext, Evaluator, MemoryEmitter};
-use hwc_parser::{Lexer, Parser};
 use miette::Result;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-pub fn execute(input: PathBuf, verbose: bool) -> Result<()> {
+pub fn execute(target: String, target_fn: Option<CompactString>, verbose: bool) -> Result<()> {
     let start_time = Instant::now();
 
-    let source = std::fs::read_to_string(&input)
-        .map_err(|e| miette::miette!("Failed to read source file: {}", e))?;
-
-    let file_name = input.to_string_lossy();
-
-    // 1. Tokenize
-    let lexer = Lexer::new(&source);
-    let tokens = match lexer.tokenize() {
-        Ok(t) => t,
-        Err(e) => {
-            let printer = hwc_diagnostics::printer::DiagnosticPrinter::new(&source, &file_name);
-            eprintln!("{}", printer.format_diagnostic(&e));
-            return Err(miette::miette!("Lexical analysis failed"));
-        }
-    };
-
-    // 2. Parse
-    let collector = hwc_compiler::DiagnosticCollector::new_with_file(&source, &file_name, 50);
-    let mut parser = Parser::new(tokens);
-    let program = parser.parse(&collector);
-
-    if collector.has_errors() {
-        collector.print_all();
-        return Err(miette::miette!("Parsing failed"));
+    let target_path = Path::new(&target);
+    // If target is an existing file or ends in .hw, execute as a file/script
+    if target_path.exists() || target.ends_with(".hw") {
+        return super::run_cmd::execute(PathBuf::from(target), target_fn, verbose);
     }
 
-    // 3. Comptime Evaluation via hwc-eval VM
-    let emitter = Box::new(MemoryEmitter::new());
-    let mut ctx = EvaluationContext::with_emitter(emitter);
-    let mut evaluator = Evaluator::new(&mut ctx);
+    // Otherwise, treat as an inline expression string
+    let unit_registry = hwc_stdlib::load_stdlib_registry()
+        .unwrap_or_else(|_| hwc_types::UnitRegistry::new(vec![]));
 
-    evaluator
-        .eval_program(&program)
-        .map_err(|e| miette::miette!("Evaluation runtime error: {}", e))?;
+    let result = hwc_compiler::eval_expression_str(&target, Some(&unit_registry))
+        .map_err(|e| miette::miette!("Expression evaluation failed: {}", e))?;
+
+    println!("{}", result);
 
     if verbose {
         let elapsed_ms = start_time.elapsed().as_secs_f64() * 1000.0;
-        println!("\n✅ Comptime evaluation completed in {:.2}ms", elapsed_ms);
-        let mem = evaluator.ctx.emitter.as_any().downcast_ref::<MemoryEmitter>();
-        if let Some(mem) = mem {
-            println!(
-                "   Emitted: {} polygons, {} contacts, {} devices, {} routes, {} nets",
-                mem.polygons.len(),
-                mem.contacts.len(),
-                mem.devices.len(),
-                mem.routes.len(),
-                mem.nets.len(),
-            );
-        }
+        eprintln!("✅ Evaluation completed in {:.2}ms", elapsed_ms);
     }
 
     Ok(())
